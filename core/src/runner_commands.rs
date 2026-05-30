@@ -301,6 +301,8 @@ fn prepare_external_spawn_args(
     mut args: SpawnArgs,
     app: &AppHandle,
 ) -> Result<SpawnArgs, RunnerSpawnError> {
+    args.ga_path = normalize_external_ga_path(&args.ga_path)?;
+
     // bridgeCwd is Galley's implementation detail, not user GA state.
     // Dev should run from the repo root; production should run from the
     // packaged resources dir. Ignore stale persisted bridgeCwd values such as
@@ -311,6 +313,25 @@ fn prepare_external_spawn_args(
         }
     })?;
     Ok(args)
+}
+
+fn normalize_external_ga_path(raw: &PathBuf) -> Result<PathBuf, RunnerSpawnError> {
+    let raw = raw.to_str().ok_or_else(|| RunnerSpawnError::PathEncoding {
+        detail: format!("ga_path not UTF-8: {}", raw.display()),
+    })?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(RunnerSpawnError::GaPathInvalid {
+            detail: "ga_path is empty".into(),
+        });
+    }
+    let path = PathBuf::from(trimmed);
+    if !path.is_dir() {
+        return Err(RunnerSpawnError::GaPathInvalid {
+            detail: format!("not a directory: {}", path.display()),
+        });
+    }
+    Ok(path)
 }
 
 #[tauri::command]
@@ -523,6 +544,25 @@ mod tests {
         assert!(parsed.runtime_kind.is_none());
         assert!(parsed.env.is_empty());
         assert!(parsed.active_session_id.is_none());
+    }
+
+    #[test]
+    fn external_ga_path_normalization_trims_pasted_whitespace() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let raw = PathBuf::from(format!(" {} ", dir.path().display()));
+        let normalized = normalize_external_ga_path(&raw).expect("normalize");
+        assert_eq!(normalized, dir.path());
+    }
+
+    #[test]
+    fn external_ga_path_normalization_rejects_empty_after_trim() {
+        match normalize_external_ga_path(&PathBuf::from("  ")) {
+            Err(RunnerSpawnError::GaPathInvalid { detail }) => {
+                assert_eq!(detail, "ga_path is empty");
+            }
+            Err(other) => panic!("expected GaPathInvalid, got {}", other),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
     }
 
     #[test]

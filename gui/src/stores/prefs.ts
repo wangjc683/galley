@@ -179,6 +179,15 @@ interface PrefsActions {
 
 export type PrefsStore = PrefsState & PrefsActions;
 
+function normalizeGAConfig(config: GAConfig): GAConfig {
+  return {
+    ...config,
+    python: config.python.trim(),
+    gaPath: config.gaPath.trim(),
+    bridgeCwd: config.bridgeCwd.trim(),
+  };
+}
+
 export const usePrefsStore = create<PrefsStore>((set, get) => ({
   // ---- Initial state (demo fixtures until hydratePrefs) ----
   gaConfig: DEFAULT_GA_CONFIG,
@@ -277,7 +286,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
 
   // ---- GA config ----
   setGAConfig: async (partial) => {
-    const merged = { ...get().gaConfig, ...partial };
+    const merged = normalizeGAConfig({ ...get().gaConfig, ...partial });
     // Translate the python alias (Tauri shell-capability `name` like
     // "python-framework-3-14") to its resolved display path for the
     // Settings → Runtime "Python" field. Falls back to the raw alias
@@ -408,19 +417,19 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       }>("ga_config");
       if (saved && saved.gaPath) {
         hasGAConfig = true;
-        const displayCandidate = await findCandidateByAlias(saved.python);
-        const pythonDisplay = displayCandidate?.displayPath ?? saved.python;
         // Migrate legacy alpha.2 configs (no useExternalPython field).
         // Default to false so upgrading users automatically pick up
         // the bundled Python — they keep their old `python` alias on
         // file as the escape hatch if anything goes sideways.
-        const migrated: GAConfig = {
+        const migrated = normalizeGAConfig({
           ...saved,
           useExternalPython: saved.useExternalPython ?? false,
-        };
+        });
+        const displayCandidate = await findCandidateByAlias(migrated.python);
+        const pythonDisplay = displayCandidate?.displayPath ?? migrated.python;
         set({ gaConfig: migrated });
         useRuntimeStore.getState().patchRuntimeInfo({
-          gaPath: saved.gaPath,
+          gaPath: migrated.gaPath,
           pythonVersion: pythonDisplay,
         });
       }
