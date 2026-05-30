@@ -47,7 +47,7 @@ use crate::runner_manager::{
 };
 use crate::{credential_store, managed_model_config, managed_prompt, managed_runtime};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::broadcast::error::RecvError;
@@ -315,7 +315,17 @@ fn prepare_external_spawn_args(
     Ok(args)
 }
 
-fn normalize_external_ga_path(raw: &PathBuf) -> Result<PathBuf, RunnerSpawnError> {
+pub(crate) fn normalize_external_ga_path(raw: &PathBuf) -> Result<PathBuf, RunnerSpawnError> {
+    normalize_external_ga_path_with_home(
+        raw,
+        directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf()),
+    )
+}
+
+fn normalize_external_ga_path_with_home(
+    raw: &PathBuf,
+    home_dir: Option<PathBuf>,
+) -> Result<PathBuf, RunnerSpawnError> {
     let raw = raw.to_str().ok_or_else(|| RunnerSpawnError::PathEncoding {
         detail: format!("ga_path not UTF-8: {}", raw.display()),
     })?;
@@ -325,13 +335,28 @@ fn normalize_external_ga_path(raw: &PathBuf) -> Result<PathBuf, RunnerSpawnError
             detail: "ga_path is empty".into(),
         });
     }
-    let path = PathBuf::from(trimmed);
+    let path = expand_home_relative_path(trimmed, home_dir.as_deref())
+        .unwrap_or_else(|| PathBuf::from(trimmed));
     if !path.is_dir() {
         return Err(RunnerSpawnError::GaPathInvalid {
             detail: format!("not a directory: {}", path.display()),
         });
     }
     Ok(path)
+}
+
+fn expand_home_relative_path(raw: &str, home_dir: Option<&Path>) -> Option<PathBuf> {
+    let suffix = match raw {
+        "~" => "",
+        s if s.starts_with("~/") || s.starts_with("~\\") => &s[2..],
+        _ => return None,
+    };
+    let home = home_dir?;
+    if suffix.is_empty() {
+        Some(home.to_path_buf())
+    } else {
+        Some(home.join(suffix))
+    }
 }
 
 #[tauri::command]
@@ -563,6 +588,32 @@ mod tests {
             Err(other) => panic!("expected GaPathInvalid, got {}", other),
             Ok(_) => panic!("expected error, got Ok"),
         }
+    }
+
+    #[test]
+    fn external_ga_path_normalization_expands_home_relative_paths() {
+        let home = tempfile::TempDir::new().expect("home tempdir");
+        let dir = home.path().join("GenericAgent");
+        std::fs::create_dir(&dir).expect("ga dir");
+        let normalized = normalize_external_ga_path_with_home(
+            &PathBuf::from(" ~/GenericAgent "),
+            Some(home.path().to_path_buf()),
+        )
+        .expect("normalize");
+        assert_eq!(normalized, dir);
+    }
+
+    #[test]
+    fn external_ga_path_normalization_expands_windows_style_home_relative_paths() {
+        let home = tempfile::TempDir::new().expect("home tempdir");
+        let dir = home.path().join("GenericAgent");
+        std::fs::create_dir(&dir).expect("ga dir");
+        let normalized = normalize_external_ga_path_with_home(
+            &PathBuf::from(" ~\\GenericAgent "),
+            Some(home.path().to_path_buf()),
+        )
+        .expect("normalize");
+        assert_eq!(normalized, dir);
     }
 
     #[test]

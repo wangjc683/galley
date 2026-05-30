@@ -61,7 +61,9 @@ use crate::api::{
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};
 use crate::managed_runtime;
-use crate::runner_commands::{prepare_managed_spawn_args, spawn_emit_task};
+use crate::runner_commands::{
+    normalize_external_ga_path, prepare_managed_spawn_args, spawn_emit_task,
+};
 use crate::runner_manager::{
     BroadcastItem, RunnerManager, RunnerSpawnError, SendCommandError, SpawnArgs,
 };
@@ -868,14 +870,11 @@ async fn spawn_args_for_session_new(
     let config: GaConfigPref = serde_json::from_value(raw).map_err(|e| {
         SocketResponseLite::runner_error(format!("ga_config pref shape mismatch: {e}"))
     })?;
-    let ga_path = non_empty_pref(config.ga_path.as_deref(), "gaPath")?;
-    let ga_path = PathBuf::from(ga_path);
-    if !ga_path.is_dir() {
-        return Err(SocketResponseLite::runner_error(format!(
-            "GA path invalid: not a directory: {}",
-            ga_path.display()
-        )));
-    }
+    let ga_path = normalize_external_ga_path(&PathBuf::from(non_empty_pref(
+        config.ga_path.as_deref(),
+        "gaPath",
+    )?))
+    .map_err(SocketResponseLite::runner_spawn_error)?;
 
     let bridge_cwd = resolve_bridge_cwd(&config, app)?;
     let python = resolve_python_for_socket(&config, app)?;
