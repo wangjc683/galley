@@ -1,3 +1,3 @@
 Galley beta update channel.
 
-Current tag: v0.2.0
+Current tag: v0.2.1
