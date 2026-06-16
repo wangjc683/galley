@@ -75,6 +75,11 @@ behavior changes until an implementation slice explicitly lands them.
   read-only executor, records the tool result, runs one continuation model
   request, updates the same assistant turn, and emits a final `turn_end`.
   [devlog](../devlog/2026-06-16-galley-native-slice-4b3-approved-file-read-continuation.md).
+- Slice 4B4 landed preview-first `file_patch` on 2026-06-16: hidden native
+  accepts GA-style `path` / `old_content` / `new_content`, shows that diff in
+  the existing approval card, and only writes after approval when `old_content`
+  still matches exactly once.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4b4-file-patch-preview.md).
 
 ## Document Roles
 
@@ -104,11 +109,11 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4B3, native can answer from both auto-approved workspace `file_read`
-and approval-gated absolute `file_read` in the non-stream path. The next local
+After Slice 4B4, native can read files, answer from read results, and apply
+approval-gated targeted file patches with visible diff previews. The next local
 work is still deliberately narrow:
 
-1. implement preview-first `file_patch` behind approval gates;
-2. implement `file_write` only after patch preview semantics are stable;
+1. implement `file_write` only with a visible preview/replacement contract;
+2. decide whether successful `file_patch` should trigger a model continuation;
 3. keep Browser Control as Slice 4C, separate from file/code executors;
 4. keep memory, Goal Hive, and Morphling in later slices.

@@ -547,14 +547,21 @@ Semantics:
   project/global allow-policy storage is not implemented yet.
 - Since Slice 4B1, approved hidden-native `file_read` may perform a real
   read-only file read. `sideEffectsPerformed` remains `false` because no file,
-  process, browser, memory, or Goal state is modified. Other native executors
-  remain deterministic stubs until their own slices land.
+  process, browser, memory, or Goal state is modified.
 - Since Slice 4B3, a successful approved hidden-native `file_read` can make one
   non-stream continuation model request in the same response. The tool result
   stays on the assistant turn for audit, and the returned `assistantMessage`
   carries the updated `finalAnswer`. If the continuation model is unavailable
   or fails, Galley records the approved `toolResult`, emits a `runtime_error`
   event, and completes with the tool-result content instead of losing the read.
+- Since Slice 4B4, approved hidden-native `file_patch` may perform a real
+  workspace or explicitly addressed file modification. Native `file_patch`
+  follows GA's targeted replacement shape: `path`, `old_content`,
+  `new_content`. It writes only when `old_content` matches exactly once at
+  approval time; successful writes set `toolResult.sideEffectsPerformed = true`.
+  Missing or opaque patch args fail without approval instead of asking the user
+  to approve a black-box edit. `file_write`, `code_run`, browser, memory, Goal,
+  and Morphling executors remain deterministic stubs until their own slices land.
 - A successful response publishes native events ending in
   `native_run_complete`; `session watch` can replay those same-process events.
 

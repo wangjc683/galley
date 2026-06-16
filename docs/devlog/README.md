@@ -111,6 +111,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-16 | [Galley Native Slice 4B1 File Read](./2026-06-16-galley-native-slice-4b1-file-read.md) | Hidden native 第一个真实 executor 落地：`file_read` 支持 Project workspace 相对只读、workspace 外绝对路径 approval-gated 只读、行范围和 256 KiB cap；不猜 process cwd，不恢复 managed/external Project cwd 绑定。写文件、跑代码、浏览器、memory、Goal Hive、Morphling 仍关闭或 stub。 |
 | 2026-06-16 | [Galley Native Slice 4B2 Tool Result Continuation](./2026-06-16-galley-native-slice-4b2-tool-result-continuation.md) | Hidden native `file_read` 后的一次 continuation 落地：非 streaming native model turn 在拿到 `file_read` tool result 后会把结果回灌给模型，并把 continuation answer 作为 assistant finalAnswer 持久化；tool_calls/tool_results 保留审计。approval 后 continuation、streaming-aware tool loop、多步自主循环仍 deferred。 |
 | 2026-06-16 | [Galley Native Slice 4B3 Approved File Read Continuation](./2026-06-16-galley-native-slice-4b3-approved-file-read-continuation.md) | Hidden native approval 后 `file_read` continuation 落地：operator allow 后 Core 执行只读读取、保留 toolResult、做一次非 streaming model continuation，并更新同一 assistant turn / `turn_end`；失败时不丢工具结果，写入、代码执行、浏览器、memory、Goal Hive、Morphling 仍关闭或 stub。 |
+| 2026-06-16 | [Galley Native Slice 4B4 File Patch Preview](./2026-06-16-galley-native-slice-4b4-file-patch-preview.md) | Hidden native 首个真实写入 executor 落地：`file_patch` 对齐 GA `path` / `old_content` / `new_content`，approval 前复用 GUI split diff preview，allow 后只在 `old_content` 唯一匹配时写入并记录 `sideEffectsPerformed=true`；opaque patch-only 请求直接失败不进审批。 |
 
 ## 格式约定
 

@@ -429,7 +429,8 @@ Tasks:
   non-stream turns without pending approval or `ask_user`;
 - continue after approved `file_read`; landed in Slice 4B3 for approval-gated
   read-only paths, updating the same assistant turn and event stream;
-- implement `file_patch`;
+- implement `file_patch`; landed in Slice 4B4 with GA-style
+  `old_content` / `new_content` preview and approval-gated unique replacement;
 - implement `file_write`;
 - implement `code_run` with explicit cwd policy;
 - add timeout, cancellation, stdout/stderr, and exit-status capture;
@@ -461,6 +462,22 @@ Landed in Slice 4B3 follow-up:
   result; Core emits `runtime_error` and completes with the tool-result content;
 - write/process/browser/memory/Goal/Morphling executors remain disabled or
   stubbed.
+
+Landed in Slice 4B4 follow-up:
+
+- hidden native `file_patch` now accepts the GA-compatible targeted replacement
+  contract: `path`, `old_content`, and `new_content`;
+- Core normalizes `oldContent` / `newContent` aliases into snake_case before
+  events and persistence, so the existing GUI `PatchView` can render a diff in
+  the approval card;
+- missing or opaque `patch`-only calls fail without approval, avoiding black-box
+  write prompts;
+- approved `file_patch` rereads the file at execution time and writes only when
+  `old_content` matches exactly once;
+- successful patch results set `sideEffectsPerformed: true` and are recorded in
+  the assistant turn's `tool_results`;
+- `file_write`, `code_run`, Browser Control, memory, Goal Hive, and Morphling
+  remain disabled or stubbed.
 
 Rollback:
 

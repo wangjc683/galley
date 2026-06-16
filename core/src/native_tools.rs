@@ -4,6 +4,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const FILE_READ_MAX_BYTES: u64 = 256 * 1024;
+const FILE_PATCH_MAX_BYTES: u64 = 256 * 1024;
 
 pub const PARITY_TOOL_NAMES: [&str; 9] = [
     "code_run",
@@ -132,10 +133,11 @@ pub fn parity_tool_specs() -> Vec<NativeToolSpec> {
             "risk_based",
             serde_json::json!({
                 "type": "object",
-                "required": ["path", "patch"],
+                "required": ["path", "old_content", "new_content"],
                 "properties": {
                     "path": { "type": "string" },
-                    "patch": { "type": "string" },
+                    "old_content": { "type": "string" },
+                    "new_content": { "type": "string" },
                     "explanation": { "type": "string" }
                 }
             }),
@@ -244,6 +246,9 @@ pub fn approval_for_tool_call(
     if call.name == "file_read" && file_read_requires_approval(call, context) {
         return "risk_based".to_string();
     }
+    if call.name == "file_patch" && !file_patch_has_preview_args(call) {
+        return "none".to_string();
+    }
     call.risk_hint
         .as_deref()
         .filter(|hint| is_approval_policy(hint))
@@ -319,12 +324,21 @@ pub fn parse_text_tool_calls(text: &str) -> NativeToolParseOutcome {
     }
 }
 
+pub fn normalize_native_tool_call(mut call: NativeToolCall) -> NativeToolCall {
+    if call.name == "file_patch" {
+        call.arguments_json = normalize_file_patch_arguments(call.arguments_json);
+        call.raw_arguments_text = Some(call.arguments_json.to_string());
+    }
+    call
+}
+
 pub fn execute_native_tool(
     call: &NativeToolCall,
     context: &NativeToolExecutionContext,
 ) -> NativeToolStubResult {
     match call.name.as_str() {
         "file_read" => file_read_result(call, context),
+        "file_patch" => file_patch_result(call, context),
         _ => stub_tool_result(call),
     }
 }
@@ -418,7 +432,7 @@ fn file_read_content(
 ) -> std::result::Result<String, String> {
     let path = file_read_path_arg(call)
         .ok_or_else(|| "file_read requires a non-empty string `path` argument.".to_string())?;
-    let resolved = resolve_file_read_path(&path, context)?;
+    let resolved = resolve_existing_file_path(&path, context, "file_read")?;
     let metadata = std::fs::metadata(&resolved)
         .map_err(|err| format!("file_read could not stat {}: {err}", resolved.display()))?;
     if !metadata.is_file() {
@@ -439,47 +453,195 @@ fn file_read_content(
 }
 
 fn file_read_path_arg(call: &NativeToolCall) -> Option<PathBuf> {
-    call.arguments_json
-        .get("path")
-        .and_then(Value::as_str)
-        .map(str::trim)
+    path_arg(call)
+}
+
+fn file_patch_result(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> NativeToolStubResult {
+    let approval = approval_for_tool_call(call, context);
+    let result = file_patch_content(call, context);
+    let (status, content, side_effects_performed) = match result {
+        Ok((content, side_effects_performed)) => (
+            if side_effects_performed {
+                "success"
+            } else {
+                "success_no_change"
+            },
+            content,
+            side_effects_performed,
+        ),
+        Err(message) => ("failed", message, false),
+    };
+    NativeToolStubResult {
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        status: status.to_string(),
+        content,
+        side_effects_performed,
+        requires_user_response: false,
+        approval,
+    }
+}
+
+fn file_patch_content(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<(String, bool), String> {
+    let path = path_arg(call)
+        .ok_or_else(|| "file_patch requires a non-empty string `path` argument.".to_string())?;
+    let old_content = file_patch_old_content_arg(call).ok_or_else(|| {
+        "file_patch requires a non-empty string `old_content` argument.".to_string()
+    })?;
+    let new_content = file_patch_new_content_arg(call)
+        .ok_or_else(|| "file_patch requires a string `new_content` argument.".to_string())?;
+    let resolved = resolve_existing_file_path(&path, context, "file_patch")?;
+    let metadata = std::fs::metadata(&resolved)
+        .map_err(|err| format!("file_patch could not stat {}: {err}", resolved.display()))?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "file_patch expected a regular file, got {}.",
+            resolved.display()
+        ));
+    }
+    if metadata.len() > FILE_PATCH_MAX_BYTES {
+        return Err(format!(
+            "file_patch refused {} because it is larger than {} bytes.",
+            resolved.display(),
+            FILE_PATCH_MAX_BYTES
+        ));
+    }
+    let full_text = std::fs::read_to_string(&resolved).map_err(|err| {
+        format!(
+            "file_patch could not read {} as UTF-8 text: {err}",
+            resolved.display()
+        )
+    })?;
+    let count = full_text.matches(&old_content).count();
+    if count == 0 {
+        return Err("file_patch found no matching old_content block; read the file again and provide an exact, smaller patch.".to_string());
+    }
+    if count > 1 {
+        return Err(format!(
+            "file_patch found {count} matching old_content blocks; provide a longer, unique block with surrounding context."
+        ));
+    }
+    if old_content == new_content {
+        return Ok((
+            format!(
+                "file_patch: {}\nstatus: no_change\nmatched: 1\nold_content and new_content are identical; no file change was written.",
+                resolved.display()
+            ),
+            false,
+        ));
+    }
+    let updated_text = full_text.replacen(&old_content, &new_content, 1);
+    std::fs::write(&resolved, updated_text.as_bytes())
+        .map_err(|err| format!("file_patch could not write {}: {err}", resolved.display()))?;
+    Ok((
+        format!(
+            "file_patch: {}\nstatus: success\nmatched: 1\nold_bytes: {}\nnew_bytes: {}",
+            resolved.display(),
+            old_content.len(),
+            new_content.len()
+        ),
+        true,
+    ))
+}
+
+fn path_arg(call: &NativeToolCall) -> Option<PathBuf> {
+    string_arg_any(call, &["path", "file_path", "filePath"])
+        .map(|path| path.trim().to_string())
         .filter(|path| !path.is_empty())
         .map(PathBuf::from)
 }
 
-fn resolve_file_read_path(
+fn file_patch_has_preview_args(call: &NativeToolCall) -> bool {
+    path_arg(call).is_some()
+        && file_patch_old_content_arg(call)
+            .map(|value| !value.is_empty())
+            .unwrap_or(false)
+        && file_patch_new_content_arg(call).is_some()
+}
+
+fn file_patch_old_content_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["old_content", "oldContent"])
+}
+
+fn file_patch_new_content_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["new_content", "newContent"])
+}
+
+fn string_arg_any(call: &NativeToolCall, names: &[&str]) -> Option<String> {
+    names.iter().find_map(|name| {
+        call.arguments_json
+            .get(*name)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    })
+}
+
+fn normalize_file_patch_arguments(value: Value) -> Value {
+    let Some(object) = value.as_object() else {
+        return value;
+    };
+    let mut object = object.clone();
+    copy_string_alias(&mut object, "path", &["file_path", "filePath"]);
+    copy_string_alias(&mut object, "old_content", &["oldContent"]);
+    copy_string_alias(&mut object, "new_content", &["newContent"]);
+    Value::Object(object)
+}
+
+fn copy_string_alias(
+    object: &mut serde_json::Map<String, Value>,
+    canonical: &str,
+    aliases: &[&str],
+) {
+    if object.get(canonical).and_then(Value::as_str).is_some() {
+        return;
+    }
+    if let Some(value) = aliases
+        .iter()
+        .find_map(|alias| object.get(*alias).and_then(Value::as_str))
+    {
+        object.insert(canonical.to_string(), Value::String(value.to_string()));
+    }
+}
+
+fn resolve_existing_file_path(
     path: &Path,
     context: &NativeToolExecutionContext,
+    tool_name: &str,
 ) -> std::result::Result<PathBuf, String> {
     if path.is_absolute() {
         return path
             .canonicalize()
-            .map_err(|err| format!("file_read could not resolve {}: {err}", path.display()));
+            .map_err(|err| format!("{tool_name} could not resolve {}: {err}", path.display()));
     }
 
     let Some(raw_root) = context.workspace_root.as_ref() else {
-        return Err(
-            "file_read relative paths require a Galley Native Project workspace; use an absolute path and approve the read, or bind a workspace in a later native workspace slice."
-                .to_string(),
-        );
+        return Err(format!(
+            "{tool_name} relative paths require a Galley Native Project workspace; use an absolute path and approve it, or bind a workspace in a later native workspace slice."
+        ));
     };
     let root = raw_root.canonicalize().map_err(|err| {
         format!(
-            "file_read Project workspace {} is unavailable: {err}",
+            "{tool_name} Project workspace {} is unavailable: {err}",
             raw_root.display()
         )
     })?;
     let resolved = root.join(path);
     let canonical = resolved.canonicalize().map_err(|err| {
         format!(
-            "file_read could not resolve {} inside workspace {}: {err}",
+            "{tool_name} could not resolve {} inside workspace {}: {err}",
             path.display(),
             root.display()
         )
     })?;
     if !canonical.starts_with(&root) {
         return Err(format!(
-            "file_read refused {} because it resolves outside workspace {}.",
+            "{tool_name} refused {} because it resolves outside workspace {}.",
             path.display(),
             root.display()
         ));
@@ -609,7 +771,15 @@ fn spec(
         input_schema,
         native_owner: native_owner.to_string(),
         default_approval: default_approval.to_string(),
-        side_effect_mode: "slice_4a_stub_no_side_effects".to_string(),
+        side_effect_mode: side_effect_mode(name).to_string(),
+    }
+}
+
+fn side_effect_mode(name: &str) -> &'static str {
+    match name {
+        "file_read" | "web_scan" => "read_only",
+        "file_patch" => "approval_gated_write",
+        _ => "slice_4a_stub_no_side_effects",
     }
 }
 
@@ -1009,5 +1179,107 @@ mod tests {
 
         assert_eq!(result.status, "failed");
         assert!(result.content.contains("invalid line range"));
+    }
+
+    #[test]
+    fn file_patch_normalizes_camel_case_args_for_preview() {
+        let call = tool_call(
+            "file_patch",
+            serde_json::json!({
+                "filePath": "notes.txt",
+                "oldContent": "alpha",
+                "newContent": "bravo"
+            }),
+        );
+
+        let call = normalize_native_tool_call(call);
+
+        assert_eq!(call.arguments_json["path"], "notes.txt");
+        assert_eq!(call.arguments_json["old_content"], "alpha");
+        assert_eq!(call.arguments_json["new_content"], "bravo");
+        assert_eq!(
+            approval_for_tool_call(&call, &NativeToolExecutionContext::default()),
+            "risk_based"
+        );
+    }
+
+    #[test]
+    fn file_patch_without_preview_args_fails_without_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "alpha\n").unwrap();
+        let call = tool_call(
+            "file_patch",
+            serde_json::json!({
+                "path": "notes.txt",
+                "patch": "@@ opaque patch @@"
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+
+        assert_eq!(approval_for_tool_call(&call, &context), "none");
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("old_content"));
+        assert_eq!(
+            fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
+            "alpha\n"
+        );
+    }
+
+    #[test]
+    fn file_patch_applies_unique_workspace_relative_replacement() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "alpha\nbeta\ngamma\n").unwrap();
+        let call = tool_call(
+            "file_patch",
+            serde_json::json!({
+                "path": "notes.txt",
+                "old_content": "beta\n",
+                "new_content": "bravo\n"
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+
+        assert_eq!(approval_for_tool_call(&call, &context), "risk_based");
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "risk_based");
+        assert!(result.side_effects_performed);
+        assert!(result.content.contains("matched: 1"));
+        assert_eq!(
+            fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
+            "alpha\nbravo\ngamma\n"
+        );
+    }
+
+    #[test]
+    fn file_patch_rejects_ambiguous_old_content_without_writing() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "alpha\nalpha\n").unwrap();
+        let call = tool_call(
+            "file_patch",
+            serde_json::json!({
+                "path": "notes.txt",
+                "old_content": "alpha\n",
+                "new_content": "bravo\n"
+            }),
+        );
+
+        let result = execute_native_tool(
+            &call,
+            &NativeToolExecutionContext::new(Some(dir.path().to_path_buf())),
+        );
+
+        assert_eq!(result.status, "failed");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("2 matching"));
+        assert_eq!(
+            fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
+            "alpha\nalpha\n"
+        );
     }
 }

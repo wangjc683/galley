@@ -5,8 +5,8 @@ use crate::db::{PersistAssistantMessage, PersistToolEventPending, SqliteGalley, 
 use crate::error::{GalleyError, Result};
 use crate::native_model::{NativeModelConfig, NativeModelResponse};
 use crate::native_tools::{
-    approval_for_tool_call, approval_required, execute_native_tool, parse_text_tool_calls,
-    NativeToolCall, NativeToolExecutionContext, NativeToolStubResult,
+    approval_for_tool_call, approval_required, execute_native_tool, normalize_native_tool_call,
+    parse_text_tool_calls, NativeToolCall, NativeToolExecutionContext, NativeToolStubResult,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -1286,7 +1286,8 @@ fn native_tool_trace(
     let mut awaiting_user = false;
     let mut pending_approval = None;
 
-    for mut call in outcome.calls {
+    for call in outcome.calls {
+        let mut call = normalize_native_tool_call(call);
         call.id = scoped_tool_call_id(session_id, turn_index, &call.id);
         let approval = approval_for_tool_call(&call, tool_context);
         tool_calls.push(tool_call_value(&call));
@@ -1424,10 +1425,17 @@ fn approval_pending_event(
         tool_call_id: call.id.clone(),
         tool_name: call.name.clone(),
         policy: approval.to_string(),
-        reason: "Slice 4A records the approval surface but routes only to a no-side-effect stub."
-            .to_string(),
+        reason: native_approval_reason(&call.name).to_string(),
         timestamp,
     })
+}
+
+fn native_approval_reason(tool_name: &str) -> &'static str {
+    match tool_name {
+        "file_patch" => "Review the diff before Galley Native modifies this file.",
+        "file_read" => "Approve this read before Galley Native opens a path outside the workspace.",
+        _ => "Approve this native tool call before Galley Core resumes execution.",
+    }
 }
 
 fn approval_resolved_event(
@@ -1862,6 +1870,58 @@ mod tests {
         assert_eq!(turn_end["toolResults"], serde_json::json!([]));
         let complete = serde_json::to_value(trace.events.last().unwrap()).unwrap();
         assert_eq!(complete["exitReason"]["result"], "APPROVAL_REQUIRED");
+    }
+
+    #[test]
+    fn file_patch_waits_for_approval_with_preview_args() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "alpha\nbeta\n").unwrap();
+        let final_answer = r#"```json
+{"tool":"file_patch","arguments":{"path":"notes.txt","oldContent":"beta\n","newContent":"bravo\n"}}
+```"#;
+
+        let trace = native_event_trace_with_context(
+            "s-native-file-patch",
+            1,
+            final_answer,
+            "file patch summary",
+            "2026-06-16T00:00:00.000Z".to_string(),
+            "Galley Native mock",
+            "mock_model",
+            "mock",
+            None,
+            None,
+            &NativeToolExecutionContext::new(Some(dir.path().to_path_buf())),
+        );
+
+        assert!(trace.pending_approval.is_some());
+        assert_eq!(
+            event_kind_sequence(&trace.events),
+            vec![
+                "runtime_ready",
+                "turn_start",
+                "turn_progress",
+                "tool_pending",
+                "approval_pending",
+                "turn_end",
+                "run_complete"
+            ]
+        );
+        let pending = serde_json::to_value(&trace.events[3]).unwrap();
+        assert_eq!(pending["toolName"], "file_patch");
+        assert_eq!(pending["arguments"]["path"], "notes.txt");
+        assert_eq!(pending["arguments"]["old_content"], "beta\n");
+        assert_eq!(pending["arguments"]["new_content"], "bravo\n");
+        let turn_end = serde_json::to_value(&trace.events[5]).unwrap();
+        assert_eq!(
+            turn_end["toolCalls"][0]["argumentsJson"]["old_content"],
+            "beta\n"
+        );
+        assert_eq!(turn_end["toolResults"], serde_json::json!([]));
+        assert_eq!(
+            fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
+            "alpha\nbeta\n"
+        );
     }
 
     #[test]
