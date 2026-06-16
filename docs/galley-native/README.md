@@ -117,6 +117,11 @@ behavior changes until an implementation slice explicitly lands them.
   sees the landed file/code/browser tool surface instead of the old
   `file_read`-only slice boundary.
   [devlog](../devlog/2026-06-17-galley-native-tool-prompt-alignment.md).
+- Slice 4C3 added Browser Control recovery hints on 2026-06-17: failed native
+  browser tool results can now distinguish missing desktop browser context,
+  connected-with-no-tabs, and extension-not-connected states through a
+  `recovery` JSON object.
+  [devlog](../devlog/2026-06-17-galley-native-slice-4c3-browser-recovery-hints.md).
 
 ## Document Roles
 
@@ -155,6 +160,6 @@ still deliberately narrow:
 
 1. decide whether approval execution should move to a background/live event
    publishing lifecycle before long-running browser actions;
-2. add richer Browser Control recovery states for disconnected extension,
-   sleeping service worker, and no-tab cases;
+2. decide whether Browser Control recovery hints should become first-class GUI
+   actions;
 3. keep memory, Goal Hive, and Morphling in later slices.

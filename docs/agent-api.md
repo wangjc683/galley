@@ -647,6 +647,11 @@ workspace, approval policy, and Browser Control bridge described in
 [Galley Native](./galley-native/README.md). Memory, Goal, and Morphling side
 effects remain disabled or stubbed until later slices.
 
+For hidden native browser tools, failed `tool_end.content` may include a
+`recovery` JSON object with a stable `status` such as `host_unavailable`,
+`connected_no_tabs`, or `not_connected`, plus a human-actionable next step. This
+is currently content-level guidance, not a new event schema field.
+
 For hidden native `code_run`, `tool_progress` can include additive output fields
 before `tool_end`:
 

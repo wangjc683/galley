@@ -584,7 +584,8 @@ Tasks:
 - implement `web_execute_js`; landed in Slice 4C2 as an approval-gated browser
   action executor through the existing `TMWebDriver` / `simphtml` bridge;
 - surface missing extension, sleeping service worker, reconnect, and no-tab
-  states as actionable runtime events;
+  states as actionable recovery; landed partly in Slice 4C3 as failed tool
+  result recovery hints, with first-class runtime events still deferred;
 - add deterministic safe JS scenario, such as reading `document.title`; landed
   in Slice 4C2 at the native tool unit-test level;
 - keep managed Browser Control behavior unchanged.
@@ -631,6 +632,20 @@ Landed in Slice 4C2 follow-up:
 - granular read-only-vs-action browser approval, dedicated disconnected /
   service-worker recovery events, and live browser-action progress remain
   deferred.
+
+Landed in Slice 4C3 follow-up:
+
+- failed native browser tool results can include a `recovery` JSON object;
+- `host_unavailable` covers no Tauri host / missing browser bridge context;
+- `connected_no_tabs` covers an extension connection with no operable page and
+  points the operator to open a normal page or the Browser Control test page;
+- `not_connected` covers the extension not connecting to `TMWebDriver` and
+  points the operator to open the configured Chrome / Edge browser or test the
+  Browser Control connection;
+- `web_execute_js` keeps `sideEffectsPerformed=false` when JavaScript was never
+  delivered because the browser bridge had no connected tab/session;
+- dedicated runtime recovery events and GUI action buttons remain deferred until
+  the UI model is clearer.
 
 Rollback:
 

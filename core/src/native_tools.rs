@@ -16,6 +16,8 @@ const FILE_WRITE_MAX_BYTES: u64 = 256 * 1024;
 const NATIVE_BROWSER_TOOL_SCRIPT: &str = r#"
 import importlib, json, os, sys, time, traceback
 
+ATTEMPTED_EXECUTION = False
+
 code_root = os.environ.get("GALLEY_NATIVE_BROWSER_CODE_ROOT")
 if code_root:
     sys.path.insert(0, code_root)
@@ -30,7 +32,27 @@ def format_error(error):
         return f"{type(error).__name__}: {error} @ {os.path.basename(frame.filename)}:{frame.lineno}, {frame.name}"
     return f"{type(error).__name__}: {error}"
 
+def browser_recovery(status):
+    if status == "connected_no_tabs":
+        return {
+            "status": "connected_no_tabs",
+            "next_action": "Open any normal webpage in the connected Chrome or Edge browser, or use Settings > Browser Control > Open test page, then retry.",
+            "setup_surface": "Settings > Browser Control",
+        }
+    if status == "not_connected":
+        return {
+            "status": "not_connected",
+            "next_action": "Open the Chrome or Edge browser where the Galley Browser Control extension is installed, then retry. If it still fails, run Settings > Browser Control > Test connection.",
+            "setup_surface": "Settings > Browser Control",
+        }
+    return {
+        "status": status,
+        "next_action": "Check Settings > Browser Control, then retry.",
+        "setup_surface": "Settings > Browser Control",
+    }
+
 def main():
+    global ATTEMPTED_EXECUTION
     tool = os.environ.get("GALLEY_NATIVE_BROWSER_TOOL", "web_scan")
     request = json.loads(os.environ.get("GALLEY_NATIVE_BROWSER_REQUEST", "{}"))
     wait_seconds = float(os.environ.get("GALLEY_NATIVE_BROWSER_TIMEOUT_SECONDS", "35"))
@@ -54,8 +76,20 @@ def main():
         raise RuntimeError(f"Unsupported native browser tool: {tool}")
     if not sessions:
         if bridge_status.get("extension_connected"):
-            raise RuntimeError("Browser Control is connected, but no operable webpage is open.")
-        raise RuntimeError("Browser Control extension is not connected.")
+            emit({
+                "ok": False,
+                "error": "Browser Control is connected, but no operable webpage is open.",
+                "recovery": browser_recovery("connected_no_tabs"),
+                "attempted_execution": False,
+            })
+            return
+        emit({
+            "ok": False,
+            "error": "Browser Control extension is not connected.",
+            "recovery": browser_recovery("not_connected"),
+            "attempted_execution": False,
+        })
+        return
 
     switch_tab_id = request.get("switch_tab_id")
     if switch_tab_id:
@@ -67,6 +101,7 @@ def main():
             raise RuntimeError("web_execute_js requires a non-empty script.")
         import simphtml
         importlib.reload(simphtml)
+        ATTEMPTED_EXECUTION = True
         result = simphtml.execute_js_rich(
             script,
             driver,
@@ -105,7 +140,11 @@ def main():
 try:
     main()
 except Exception as error:
-    emit({"ok": False, "error": format_error(error)})
+    emit({
+        "ok": False,
+        "error": format_error(error),
+        "attempted_execution": ATTEMPTED_EXECUTION,
+    })
 "#;
 
 pub const PARITY_TOOL_NAMES: [&str; 9] = [
@@ -1200,12 +1239,12 @@ fn web_scan_content(
     context: &NativeToolExecutionContext,
 ) -> std::result::Result<String, String> {
     let Some(browser) = context.browser.as_ref() else {
-        return Err(format!(
-            "web_scan cannot run because Browser Control is unavailable: {}",
+        return Err(format_browser_host_unavailable_content(
+            "web_scan",
             context
                 .browser_unavailable_reason
                 .as_deref()
-                .unwrap_or("native runtime host did not provide a browser bridge")
+                .unwrap_or("native runtime host did not provide a browser bridge"),
         ));
     };
     let request = serde_json::json!({
@@ -1215,6 +1254,7 @@ fn web_scan_content(
         "maxlen": 35_000
     });
     run_browser_python_tool(browser, "web_scan", request)
+        .map_err(|error| error.format_content("web_scan"))
 }
 
 fn web_execute_js_result(
@@ -1266,13 +1306,15 @@ fn web_execute_js_content(
     context: &NativeToolExecutionContext,
 ) -> std::result::Result<String, BrowserToolExecutionError> {
     let Some(browser) = context.browser.as_ref() else {
-        return Err(BrowserToolExecutionError::preflight(format!(
-            "web_execute_js cannot run because Browser Control is unavailable: {}",
-            context
-                .browser_unavailable_reason
-                .as_deref()
-                .unwrap_or("native runtime host did not provide a browser bridge")
-        )));
+        return Err(BrowserToolExecutionError::preflight(
+            format_browser_host_unavailable_content(
+                "web_execute_js",
+                context
+                    .browser_unavailable_reason
+                    .as_deref()
+                    .unwrap_or("native runtime host did not provide a browser bridge"),
+            ),
+        ));
     };
     let script = web_execute_js_script_arg(call).ok_or_else(|| {
         BrowserToolExecutionError::preflight(
@@ -1289,8 +1331,13 @@ fn web_execute_js_content(
         "switch_tab_id": web_execute_js_switch_tab_id_arg(call),
         "no_monitor": web_execute_js_no_monitor_arg(call),
     });
-    let result = run_browser_python_tool_result(browser, "web_execute_js", request)
-        .map_err(BrowserToolExecutionError::attempted)?;
+    let result =
+        run_browser_python_tool_result(browser, "web_execute_js", request).map_err(|error| {
+            BrowserToolExecutionError {
+                message: error.format_content("web_execute_js"),
+                attempted_execution: error.attempted_execution,
+            }
+        })?;
     let content = format_web_execute_js_content(&result);
     if matches!(
         result.get("status").and_then(Value::as_str),
@@ -1301,11 +1348,23 @@ fn web_execute_js_content(
     Ok(content)
 }
 
+fn format_browser_host_unavailable_content(tool_name: &str, reason: &str) -> String {
+    let recovery = serde_json::json!({
+        "status": "host_unavailable",
+        "next_action": "Open this session in the Galley desktop app and check Settings > Browser Control, then retry.",
+        "setup_surface": "Settings > Browser Control"
+    });
+    format!(
+        "{tool_name} failed:\nBrowser Control is unavailable: {reason}\n\nrecovery:\n{}",
+        serde_json::to_string_pretty(&recovery).unwrap_or_else(|_| recovery.to_string())
+    )
+}
+
 fn run_browser_python_tool(
     browser: &NativeBrowserExecutionContext,
     tool_name: &str,
     request: Value,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<String, BrowserToolHelperError> {
     let result = run_browser_python_tool_result(browser, tool_name, request)?;
     Ok(match tool_name {
         "web_execute_js" => format_web_execute_js_content(&result),
@@ -1317,7 +1376,7 @@ fn run_browser_python_tool_result(
     browser: &NativeBrowserExecutionContext,
     tool_name: &str,
     request: Value,
-) -> std::result::Result<Value, String> {
+) -> std::result::Result<Value, BrowserToolHelperError> {
     let mut child = Command::new(&browser.python)
         .arg("-c")
         .arg(NATIVE_BROWSER_TOOL_SCRIPT)
@@ -1336,20 +1395,18 @@ fn run_browser_python_tool_result(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| {
-            format!(
+            BrowserToolHelperError::message(format!(
                 "{tool_name} could not start Browser Control helper {}: {err}",
                 browser.python.display()
-            )
+            ))
         })?;
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| format!("{tool_name} could not capture helper stdout."))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| format!("{tool_name} could not capture helper stderr."))?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        BrowserToolHelperError::message(format!("{tool_name} could not capture helper stdout."))
+    })?;
+    let stderr = child.stderr.take().ok_or_else(|| {
+        BrowserToolHelperError::message(format!("{tool_name} could not capture helper stderr."))
+    })?;
     let stdout_handle = thread::spawn(move || read_capped_output(stdout));
     let stderr_handle = thread::spawn(move || read_capped_output(stderr));
     let timeout = Duration::from_secs(browser.wait_timeout_seconds.saturating_add(3));
@@ -1360,12 +1417,16 @@ fn run_browser_python_tool_result(
             Ok(None) if start.elapsed() >= timeout => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(format!(
+                return Err(BrowserToolHelperError::message(format!(
                     "{tool_name} timed out while waiting for Browser Control."
-                ));
+                )));
             }
             Ok(None) => thread::sleep(Duration::from_millis(25)),
-            Err(err) => return Err(format!("{tool_name} could not poll helper status: {err}")),
+            Err(err) => {
+                return Err(BrowserToolHelperError::message(format!(
+                    "{tool_name} could not poll helper status: {err}"
+                )));
+            }
         }
     };
     let stdout = join_capped_output(stdout_handle, "browser stdout")?;
@@ -1377,25 +1438,66 @@ fn run_browser_python_tool_result(
         .rev()
         .find_map(|line| serde_json::from_str::<Value>(line).ok())
         .ok_or_else(|| {
-            format!(
+            BrowserToolHelperError::message(format!(
                 "{tool_name} helper returned no JSON result. stderr: {}",
                 stderr_text.trim().chars().take(240).collect::<String>()
-            )
+            ))
         })?;
     if !status.success() {
-        return Err(format!(
+        return Err(BrowserToolHelperError::message(format!(
             "{tool_name} helper exited with {status}. stderr: {}",
             stderr_text.trim().chars().take(240).collect::<String>()
-        ));
+        )));
     }
     if parsed.get("ok").and_then(Value::as_bool) != Some(true) {
         let message = parsed
             .get("error")
             .and_then(Value::as_str)
             .unwrap_or("Browser Control helper failed");
-        return Err(message.to_string());
+        return Err(BrowserToolHelperError {
+            message: message.to_string(),
+            recovery: parsed.get("recovery").cloned(),
+            attempted_execution: parsed
+                .get("attempted_execution")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        });
     }
     Ok(parsed.get("result").cloned().unwrap_or(Value::Null))
+}
+
+#[derive(Debug)]
+struct BrowserToolHelperError {
+    message: String,
+    recovery: Option<Value>,
+    attempted_execution: bool,
+}
+
+impl BrowserToolHelperError {
+    fn message(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            recovery: None,
+            attempted_execution: false,
+        }
+    }
+
+    fn format_content(&self, tool_name: &str) -> String {
+        let mut output = format!("{tool_name} failed:\n{}", self.message);
+        if let Some(recovery) = &self.recovery {
+            output.push_str("\n\nrecovery:\n");
+            output.push_str(
+                &serde_json::to_string_pretty(recovery).unwrap_or_else(|_| recovery.to_string()),
+            );
+        }
+        output
+    }
+}
+
+impl From<String> for BrowserToolHelperError {
+    fn from(message: String) -> Self {
+        Self::message(message)
+    }
 }
 
 fn format_web_scan_content(result: &Value) -> String {
@@ -2588,6 +2690,7 @@ mod tests {
         assert_eq!(result.approval, "none");
         assert!(!result.side_effects_performed);
         assert!(result.content.contains("Browser Control is unavailable"));
+        assert!(result.content.contains("\"status\": \"host_unavailable\""));
         assert!(!result.content.contains("Slice 4A deterministic stub"));
     }
 
@@ -2655,6 +2758,48 @@ class TMWebDriver:
     }
 
     #[test]
+    fn web_scan_connected_no_tabs_returns_recovery_hint() {
+        let dir = tempfile::tempdir().unwrap();
+        let code_root = dir.path().join("code");
+        let state_root = dir.path().join("state");
+        fs::create_dir_all(&code_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+        fs::write(
+            code_root.join("TMWebDriver.py"),
+            r#"
+class TMWebDriver:
+    def get_all_sessions(self):
+        return []
+    def get_status(self):
+        return {"extension_connected": True, "tab_count": 0}
+"#,
+        )
+        .unwrap();
+        let python = std::env::var_os("PYTHON")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "python" } else { "python3" }));
+        let context = NativeToolExecutionContext::with_browser(
+            None,
+            NativeBrowserExecutionContext {
+                python,
+                code_root,
+                state_root,
+                wait_timeout_seconds: 1,
+            },
+        );
+        let call = tool_call("web_scan", serde_json::json!({ "tabs_only": true }));
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("recovery:"));
+        assert!(result.content.contains("\"status\": \"connected_no_tabs\""));
+        assert!(result.content.contains("Open any normal webpage"));
+    }
+
+    #[test]
     fn web_execute_js_without_browser_context_fails_without_stub() {
         let call = normalize_native_tool_call(
             tool_call(
@@ -2673,6 +2818,7 @@ class TMWebDriver:
         assert_eq!(result.approval, "none");
         assert!(!result.side_effects_performed);
         assert!(result.content.contains("Browser Control is unavailable"));
+        assert!(result.content.contains("\"status\": \"host_unavailable\""));
         assert!(!result.content.contains("Slice 4A deterministic stub"));
     }
 
@@ -2707,6 +2853,55 @@ class TMWebDriver:
         assert_eq!(result.approval, "none");
         assert!(!result.side_effects_performed);
         assert!(result.content.contains("save_to_file"));
+    }
+
+    #[test]
+    fn web_execute_js_not_connected_returns_recovery_without_side_effects() {
+        let dir = tempfile::tempdir().unwrap();
+        let code_root = dir.path().join("code");
+        let state_root = dir.path().join("state");
+        fs::create_dir_all(&code_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+        fs::write(
+            code_root.join("TMWebDriver.py"),
+            r#"
+class TMWebDriver:
+    def get_all_sessions(self):
+        return []
+    def get_status(self):
+        return {"extension_connected": False, "tab_count": 0}
+"#,
+        )
+        .unwrap();
+        let python = std::env::var_os("PYTHON")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "python" } else { "python3" }));
+        let context = NativeToolExecutionContext::with_browser(
+            None,
+            NativeBrowserExecutionContext {
+                python,
+                code_root,
+                state_root,
+                wait_timeout_seconds: 1,
+            },
+        );
+        let call = normalize_native_tool_call(
+            tool_call(
+                "web_execute_js",
+                serde_json::json!({ "script": "document.title" }),
+            ),
+            &context,
+        );
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(approval_for_tool_call(&call, &context), "risk_based");
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "risk_based");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("recovery:"));
+        assert!(result.content.contains("\"status\": \"not_connected\""));
+        assert!(result.content.contains("Test connection"));
     }
 
     #[test]
