@@ -113,6 +113,10 @@ behavior changes until an implementation slice explicitly lands them.
   feeds approved results into one continuation request. `save_to_file` is
   explicitly deferred so browser tools cannot bypass file-write previews.
   [devlog](../devlog/2026-06-17-galley-native-slice-4c2-web-execute-js.md).
+- The native initial system prompt was aligned after 4C2 so the selected model
+  sees the landed file/code/browser tool surface instead of the old
+  `file_read`-only slice boundary.
+  [devlog](../devlog/2026-06-17-galley-native-tool-prompt-alignment.md).
 
 ## Document Roles
 
