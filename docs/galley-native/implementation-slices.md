@@ -427,6 +427,8 @@ Tasks:
   workspace;
 - feed `file_read` results back to the model once; landed in Slice 4B2 for
   non-stream turns without pending approval or `ask_user`;
+- continue after approved `file_read`; landed in Slice 4B3 for approval-gated
+  read-only paths, updating the same assistant turn and event stream;
 - implement `file_patch`;
 - implement `file_write`;
 - implement `code_run` with explicit cwd policy;
@@ -444,6 +446,21 @@ Exit gate:
 - `code_run` handles timeout, cancellation, exit status, stdout, and stderr;
 - managed/external file/code behavior is unchanged;
 - Browser Control is not part of this gate.
+
+Landed in Slice 4B3 follow-up:
+
+- hidden native `session.approval_response` now runs one continuation model
+  request after an approved successful `file_read`;
+- the approved read stays read-only and records `sideEffectsPerformed: false`;
+- the same assistant message row is updated with the continuation answer while
+  retaining `tool_results` for audit;
+- `session.watch` can replay approval resolution, tool execution,
+  `turn_progress(source=model_continuation)`, final `turn_end`, and
+  `run_complete(mode=approval_response_continuation)`;
+- failed or unavailable continuation models do not drop the approved tool
+  result; Core emits `runtime_error` and completes with the tool-result content;
+- write/process/browser/memory/Goal/Morphling executors remain disabled or
+  stubbed.
 
 Rollback:
 

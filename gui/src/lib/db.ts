@@ -298,6 +298,7 @@ export interface NativeApprovalResponseResult {
   approvalId: string;
   decision: ApprovalDecision;
   toolResult: unknown;
+  assistantMessage?: unknown;
   dispatch: "completed_native_approval";
 }
 

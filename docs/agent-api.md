@@ -537,6 +537,7 @@ Response shape:
 | `approvalId` | string         | The resolved approval id.                                |
 | `decision`   | string         | The accepted decision value.                             |
 | `toolResult` | object         | Native tool result payload written onto the assistant turn. |
+| `assistantMessage` | `MessageBrief`? | Present when hidden native continues after an approved tool and updates the assistant turn. |
 | `dispatch`   | string enum    | `"completed_native_approval"`.                           |
 
 Semantics:
@@ -548,9 +549,12 @@ Semantics:
   read-only file read. `sideEffectsPerformed` remains `false` because no file,
   process, browser, memory, or Goal state is modified. Other native executors
   remain deterministic stubs until their own slices land.
-- Slice 4B2 continuation does not run on this approval-response path yet:
-  allowing a pending `file_read` writes the tool result, but does not make a
-  second model request in the same response.
+- Since Slice 4B3, a successful approved hidden-native `file_read` can make one
+  non-stream continuation model request in the same response. The tool result
+  stays on the assistant turn for audit, and the returned `assistantMessage`
+  carries the updated `finalAnswer`. If the continuation model is unavailable
+  or fails, Galley records the approved `toolResult`, emits a `runtime_error`
+  event, and completes with the tool-result content instead of losing the read.
 - A successful response publishes native events ending in
   `native_run_complete`; `session watch` can replay those same-process events.
 

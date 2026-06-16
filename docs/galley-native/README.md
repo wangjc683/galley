@@ -70,6 +70,11 @@ behavior changes until an implementation slice explicitly lands them.
   pending approval or `ask_user`, Core sends those results back to the model and
   persists the continuation answer as the assistant final answer.
   [devlog](../devlog/2026-06-16-galley-native-slice-4b2-tool-result-continuation.md).
+- Slice 4B3 landed approved `file_read` continuation on 2026-06-16: when a
+  hidden native `file_read` pauses for approval and is allowed, Core performs the
+  read-only executor, records the tool result, runs one continuation model
+  request, updates the same assistant turn, and emits a final `turn_end`.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4b3-approved-file-read-continuation.md).
 
 ## Document Roles
 
@@ -99,11 +104,11 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4B2, native can read a workspace file and answer from the result in
-the non-stream path. The next local work is still deliberately narrow:
+After Slice 4B3, native can answer from both auto-approved workspace `file_read`
+and approval-gated absolute `file_read` in the non-stream path. The next local
+work is still deliberately narrow:
 
-1. decide whether approval-resolved `file_read` gets continuation before write
-   tools;
-2. implement `file_patch` / `file_write` behind preview and approval gates;
+1. implement preview-first `file_patch` behind approval gates;
+2. implement `file_write` only after patch preview semantics are stable;
 3. keep Browser Control as Slice 4C, separate from file/code executors;
 4. keep memory, Goal Hive, and Morphling in later slices.

@@ -399,6 +399,20 @@ function upsertToolInTurns(
   return next;
 }
 
+function appendOrReplaceAgentTurn(turns: Turn[], turn: AgentTurn): Turn[] {
+  if (typeof turn.turnIndex === "number") {
+    const existing = turns.findIndex(
+      (item) => item.role === "agent" && item.turnIndex === turn.turnIndex,
+    );
+    if (existing >= 0) {
+      const next = turns.slice();
+      next[existing] = turn;
+      return next;
+    }
+  }
+  return [...turns, turn];
+}
+
 // ============================================================
 // Store
 // ============================================================
@@ -656,7 +670,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const state = get();
     const { byId, next } = patchMessages(state, sid, (m) => ({
       ...m,
-      turns: [...m.turns, turn],
+      turns: appendOrReplaceAgentTurn(m.turns, turn),
       // turn_end is per-step inside GA's agent_runner_loop, NOT the
       // terminal signal — a single user message can produce 20+
       // turn_end events before the run actually exits. Keep

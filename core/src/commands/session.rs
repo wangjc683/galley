@@ -490,6 +490,8 @@ pub(crate) struct NativeApprovalResponseResult {
     approval_id: String,
     decision: String,
     tool_result: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    assistant_message: Option<MessageBrief>,
     dispatch: &'static str,
 }
 
@@ -606,6 +608,7 @@ pub(crate) async fn native_approval_response(
         approval_id: input.approval_id,
         decision: decision.to_string(),
         tool_result: resolution.tool_result,
+        assistant_message: resolution.assistant_message,
         dispatch: "completed_native_approval",
     })
 }

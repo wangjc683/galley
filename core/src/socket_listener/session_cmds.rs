@@ -306,16 +306,18 @@ pub(super) async fn dispatch_session_approval_response(
             },
         );
     }
-    SocketResponse::ok(
-        request_id,
-        serde_json::json!({
-            "session": resolution.session,
-            "approvalId": parsed.approval_id,
-            "decision": decision,
-            "toolResult": resolution.tool_result,
-            "dispatch": "completed_native_approval",
-        }),
-    )
+    let mut result = serde_json::json!({
+        "session": resolution.session,
+        "approvalId": parsed.approval_id,
+        "decision": decision,
+        "toolResult": resolution.tool_result,
+        "dispatch": "completed_native_approval",
+    });
+    if let Some(message) = resolution.assistant_message {
+        result["assistantMessage"] =
+            serde_json::to_value(message).unwrap_or(serde_json::Value::Null);
+    }
+    SocketResponse::ok(request_id, result)
 }
 
 pub(super) async fn dispatch_session_checkpoint(

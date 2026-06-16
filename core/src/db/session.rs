@@ -862,6 +862,87 @@ impl SqliteGalley {
         Ok(())
     }
 
+    pub async fn update_native_assistant_after_approval(
+        &self,
+        session_id: SessionId,
+        turn_index: u32,
+        final_answer: &str,
+        summary: &str,
+        tool_results: Vec<serde_json::Value>,
+    ) -> Result<MessageBrief> {
+        let id = format!("msg_{}_{}_assistant", session_id.as_str(), turn_index);
+        let tool_results_json =
+            serde_json::to_string(&tool_results).map_err(|err| GalleyError::Internal {
+                message: format!("serialize native tool results: {err}"),
+            })?;
+        let res = sqlx::query(
+            "UPDATE messages \
+               SET content = ?, final_answer = ?, summary = ?, tool_results = ? \
+             WHERE id = ? AND session_id = ? AND turn_index = ? AND role = 'assistant'",
+        )
+        .bind(final_answer)
+        .bind(final_answer)
+        .bind(summary)
+        .bind(tool_results_json)
+        .bind(&id)
+        .bind(session_id.as_str())
+        .bind(i64::from(turn_index))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!(
+                    "native assistant message not found for {session_id} turn {turn_index}"
+                ),
+            });
+        }
+        self.index_message_fts(
+            &id,
+            session_id.as_str(),
+            "assistant",
+            turn_index,
+            final_answer,
+        )
+        .await;
+        self.session_messages(session_id, Some(1))
+            .await?
+            .into_iter()
+            .find(|message| message.role == MessageRole::Agent)
+            .ok_or_else(|| GalleyError::Internal {
+                message: format!(
+                    "native approval updated assistant message but could not reread {id}"
+                ),
+            })
+    }
+
+    pub async fn update_native_session_summary(
+        &self,
+        id: SessionId,
+        summary: &str,
+    ) -> Result<SessionBrief> {
+        let summary = truncate_summary(summary.trim());
+        let now = chrono_now_iso();
+        let res = sqlx::query(
+            "UPDATE sessions \
+               SET summary = ?, last_activity_at = ?, updated_at = ? \
+             WHERE id = ?",
+        )
+        .bind(&summary)
+        .bind(&now)
+        .bind(&now)
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!("native session {id} not found"),
+            });
+        }
+        self.session_brief(id).await
+    }
+
     pub(super) async fn clear_session_unread_db(&self, id: SessionId) -> Result<()> {
         let now = chrono_now_iso();
         let res = sqlx::query("UPDATE sessions SET has_unread = 0, updated_at = ? WHERE id = ?")

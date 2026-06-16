@@ -1358,6 +1358,217 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn dispatch_session_approval_response_native_file_read_continues_to_final_answer() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let outside_dir = tempfile::tempdir().unwrap();
+        let outside_path = outside_dir.path().join("outside.txt");
+        std::fs::write(&outside_path, "approved outside file\nsecond line\n").unwrap();
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let tool_answer = format!(
+            "```json\n{}\n```",
+            serde_json::json!({
+                "tool": "file_read",
+                "arguments": {
+                    "path": outside_path.to_string_lossy().to_string(),
+                    "startLine": 1,
+                    "endLine": 1
+                }
+            })
+        );
+        let final_answer = "The approved file says: approved outside file.";
+        let api_base = start_fake_openai_sequence_server(vec![
+            ("Approve outside file read", tool_answer.clone()),
+            ("approved outside file", final_answer.to_string()),
+        ])
+        .await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_approved_file_read_openai".into(),
+                display_name: "Native Approved File Read OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_approved_file_read_openai".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_approved_file_read_openai",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_approved_file_read_openai".into(),
+                provider_id: "mp_native_approved_file_read_openai".into(),
+                display_name: "Native Approved File Read Model".into(),
+                model: "gpt-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&db_path)
+                    .create_if_missing(false),
+            )
+            .await
+            .unwrap();
+        let mgr = RunnerManager::new();
+        let new_line = serde_json::json!({
+            "command": "session.new",
+            "args": {
+                "task": "Approve outside file read",
+                "runtimeKind": "galley_native",
+                "llmName": "Native Approved File Read Model"
+            },
+            "requestId": "native-approved-file-read-new"
+        })
+        .to_string();
+        let new_resp = expect_unary(dispatch_line(&new_line, None, &mgr).await);
+        assert!(new_resp.ok, "response: {new_resp:?}");
+        let new_result = new_resp.result.expect("result");
+        assert_eq!(new_result["dispatch"], "completed_native");
+        assert_eq!(new_result["session"]["status"], "waiting_approval");
+        assert_eq!(new_result["assistantMessage"]["finalAnswer"], tool_answer);
+        let session_id = new_result["session"]["id"].as_str().unwrap().to_string();
+        let approval_id: String = sqlx::query_scalar(
+            "SELECT id FROM tool_events WHERE session_id = ? AND status = 'waiting_approval'",
+        )
+        .bind(&session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let allow_line = serde_json::json!({
+            "command": "session.approval_response",
+            "args": {
+                "sessionId": session_id.clone(),
+                "approvalId": approval_id.clone(),
+                "decision": "allow_once"
+            },
+            "requestId": "native-approved-file-read-allow"
+        })
+        .to_string();
+        let allow_resp = expect_unary(dispatch_line(&allow_line, None, &mgr).await);
+        assert!(allow_resp.ok, "response: {allow_resp:?}");
+        let allow_result = allow_resp.result.expect("result");
+        assert_eq!(allow_result["dispatch"], "completed_native_approval");
+        assert_eq!(allow_result["session"]["status"], "idle");
+        assert_eq!(
+            allow_result["assistantMessage"]["finalAnswer"],
+            final_answer
+        );
+        assert_eq!(allow_result["toolResult"]["toolName"], "file_read");
+        assert_eq!(allow_result["toolResult"]["status"], "success");
+        assert_eq!(
+            allow_result["toolResult"]["sideEffectsPerformed"].as_bool(),
+            Some(false)
+        );
+        assert!(allow_result["toolResult"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("approved outside file"));
+
+        let (assistant_content, assistant_final_answer, tool_results_raw): (
+            String,
+            String,
+            String,
+        ) = sqlx::query_as(
+            "SELECT content, final_answer, tool_results FROM messages \
+             WHERE session_id = ? AND role = 'assistant'",
+        )
+        .bind(&session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(assistant_content, final_answer);
+        assert_eq!(assistant_final_answer, final_answer);
+        let tool_results: serde_json::Value = serde_json::from_str(&tool_results_raw).unwrap();
+        assert_eq!(tool_results.as_array().unwrap().len(), 1);
+        assert_eq!(tool_results[0]["toolName"], "file_read");
+        assert_eq!(tool_results[0]["status"], "success");
+        assert!(tool_results[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("approved outside file"));
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": session_id },
+            "requestId": "native-approved-file-read-watch"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut kinds = Vec::new();
+        let mut saw_continuation_progress = false;
+        let mut saw_turn_end = false;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    kinds.push(event.kind());
+                    if value["kind"] == "turn_progress" {
+                        assert_eq!(value["source"], "model_continuation");
+                        assert_eq!(value["delta"], final_answer);
+                        saw_continuation_progress = true;
+                    }
+                    if value["kind"] == "turn_end" {
+                        assert_eq!(value["responseContent"], final_answer);
+                        assert_eq!(value["toolResults"][0]["status"], "success");
+                        saw_turn_end = true;
+                    }
+                    if value["kind"] == "run_complete" {
+                        assert_eq!(value["exitReason"]["result"], "CURRENT_TASK_DONE");
+                        assert_eq!(
+                            value["exitReason"]["data"]["mode"],
+                            "approval_response_continuation"
+                        );
+                        assert_eq!(value["finalContent"], final_answer);
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_run_complete");
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            kinds,
+            vec![
+                "approval_resolved",
+                "tool_start",
+                "tool_progress",
+                "tool_end",
+                "turn_progress",
+                "turn_end",
+                "run_complete"
+            ]
+        );
+        assert!(saw_continuation_progress);
+        assert!(saw_turn_end);
+    }
+
+    #[tokio::test]
     async fn dispatch_session_approval_response_native_allows_and_denies_pending_tool() {
         let _env_lock = socket_env_lock().lock().await;
         let dir = tempfile::tempdir().unwrap();

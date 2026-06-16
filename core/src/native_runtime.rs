@@ -809,6 +809,7 @@ pub struct NativeApprovalResolution {
     pub session: SessionBrief,
     pub events: Vec<NativeRuntimeEvent>,
     pub tool_result: serde_json::Value,
+    pub assistant_message: Option<MessageBrief>,
     pub close_reason: String,
 }
 
@@ -876,12 +877,9 @@ pub async fn resolve_native_approval(
         timestamp.clone(),
     ));
     let tool_result = tool_result_value(&result);
+    let tool_results = vec![tool_result.clone()];
     galley
-        .update_native_assistant_tool_results(
-            session_id.clone(),
-            turn_index,
-            vec![tool_result.clone()],
-        )
+        .update_native_assistant_tool_results(session_id.clone(), turn_index, tool_results.clone())
         .await?;
     galley
         .complete_native_tool_event_approval(
@@ -896,21 +894,78 @@ pub async fn resolve_native_approval(
             &timestamp,
         )
         .await?;
+    let mut assistant_message = None;
+    let mut final_content = result.content.clone();
+    let mut mode = "approval_response".to_string();
+    let mut stop_reason = None;
+    let mut usage = None;
+    if decision != "deny" && result.tool_name == "file_read" && result.status == "success" {
+        match continue_after_approved_file_read(
+            galley,
+            &session_id,
+            turn_index,
+            &call,
+            &tool_results,
+        )
+        .await
+        {
+            Ok(Some(continuation)) => {
+                final_content = continuation.final_answer;
+                mode = "approval_response_continuation".to_string();
+                stop_reason = continuation.stop_reason;
+                usage = continuation.usage;
+                assistant_message = Some(continuation.assistant_message);
+                events.push(turn_progress_event(
+                    session_id.as_str(),
+                    turn_index,
+                    &final_content,
+                    "model_continuation",
+                    native_now_iso(),
+                ));
+                events.push(turn_end_event(
+                    session_id.as_str(),
+                    turn_index,
+                    &final_content,
+                    &continuation.summary,
+                    vec![tool_call_value(&call)],
+                    tool_results.clone(),
+                    native_now_iso(),
+                ));
+            }
+            Ok(None) => {
+                events.push(runtime_error_event(
+                    session_id.as_str(),
+                    "model_continuation",
+                    "approved file_read continuation skipped because no usable native model is available",
+                    Some("The approved file_read result was recorded, but Galley Native could not produce a follow-up answer.".to_string()),
+                ));
+            }
+            Err(err) => {
+                events.push(runtime_error_event(
+                    session_id.as_str(),
+                    "model_continuation",
+                    format!("approved file_read continuation failed: {err}"),
+                    Some("The approved file_read result was recorded, but Galley Native could not produce a follow-up answer.".to_string()),
+                ));
+            }
+        }
+    }
     let session = galley.set_native_session_idle(session_id.clone()).await?;
     events.push(run_complete_event(
         session_id.as_str(),
-        &result.content,
-        "approval_response",
+        &final_content,
+        &mode,
         false,
         false,
-        None,
-        None,
+        stop_reason,
+        usage,
         timestamp,
     ));
     Ok(NativeApprovalResolution {
         session,
         events,
         tool_result,
+        assistant_message,
         close_reason: "native_run_complete".to_string(),
     })
 }
@@ -983,6 +1038,95 @@ struct NativeRuntimeTrace {
 struct NativePendingApproval {
     call: NativeToolCall,
     approval: String,
+}
+
+struct NativeApprovalContinuation {
+    assistant_message: MessageBrief,
+    final_answer: String,
+    summary: String,
+    stop_reason: Option<String>,
+    usage: Option<serde_json::Value>,
+}
+
+async fn continue_after_approved_file_read(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+    turn_index: u32,
+    call: &NativeToolCall,
+    tool_results: &[serde_json::Value],
+) -> Result<Option<NativeApprovalContinuation>> {
+    let session = galley.session_brief(session_id.clone()).await?;
+    let Some(model) = crate::native_model::load_selected_or_default_model(
+        galley,
+        session.selected_llm_key.as_deref(),
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    let (task, assistant_tool_request) =
+        native_turn_continuation_context(galley, session_id, turn_index, call).await?;
+    let response = crate::native_model::complete_tool_result_turn(
+        &model,
+        &task,
+        &assistant_tool_request,
+        tool_results,
+    )
+    .await?;
+    let final_answer = response.content.trim().to_string();
+    let summary = model_summary(&task, &final_answer);
+    let assistant_message = galley
+        .update_native_assistant_after_approval(
+            session_id.clone(),
+            turn_index,
+            &final_answer,
+            &summary,
+            tool_results.to_vec(),
+        )
+        .await?;
+    let _ = galley
+        .update_native_session_summary(session_id.clone(), &summary)
+        .await?;
+    Ok(Some(NativeApprovalContinuation {
+        assistant_message,
+        final_answer,
+        summary,
+        stop_reason: response.stop_reason,
+        usage: response.usage,
+    }))
+}
+
+async fn native_turn_continuation_context(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+    turn_index: u32,
+    call: &NativeToolCall,
+) -> Result<(String, String)> {
+    let messages = galley.session_messages(session_id.clone(), None).await?;
+    let task = messages
+        .iter()
+        .find(|message| {
+            message.role == MessageRole::User && message.turn_index == Some(turn_index)
+        })
+        .map(|message| message.content.clone())
+        .ok_or_else(|| GalleyError::Internal {
+            message: format!("native approval continuation missing user message for {session_id} turn {turn_index}"),
+        })?;
+    let fallback_request = tool_call_value(call).to_string();
+    let assistant_tool_request = messages
+        .iter()
+        .find(|message| {
+            message.role == MessageRole::Agent && message.turn_index == Some(turn_index)
+        })
+        .and_then(|message| {
+            message
+                .final_answer
+                .as_deref()
+                .or(Some(message.content.as_str()))
+        })
+        .map(str::to_string)
+        .unwrap_or(fallback_request);
+    Ok((task, assistant_tool_request))
 }
 
 fn should_continue_after_file_read(trace: &NativeToolTrace) -> bool {
