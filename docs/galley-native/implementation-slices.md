@@ -574,9 +574,13 @@ Primary RFCs:
 
 Tasks:
 
-- implement Browser Control readiness probe;
-- connect native runtime to the existing browser bridge direction;
-- implement `web_scan`;
+- implement Browser Control readiness probe; landed partly in Slice 4C1 by
+  reusing Galley's existing `TMWebDriver` layout/context for native tools;
+- connect native runtime to the existing browser bridge direction; landed in
+  Slice 4C1 through an injectable native browser execution context;
+- implement `web_scan`; landed in Slice 4C1 for tab metadata and simplified
+  page content, including one continuation model request after successful
+  scans;
 - implement `web_execute_js`;
 - surface missing extension, sleeping service worker, reconnect, and no-tab
   states as actionable runtime events;
@@ -591,6 +595,22 @@ Exit gate:
 - `web_scan` and `web_execute_js` events flow through the same runtime event
   stream as local tools;
 - managed Browser Control still passes its existing checks.
+
+Landed in Slice 4C1 follow-up:
+
+- GUI and socket hidden native runs now pass a native host context into the
+  runtime; when Tauri `AppHandle` is available, that context points at the same
+  prepared `TMWebDriver` extension bridge used by managed GA Browser Control;
+- `web_scan` no longer routes to the Slice 4A stub. Without a browser context it
+  fails explicitly with a Browser Control unavailable result; with a browser
+  context it invokes bundled `TMWebDriver.py` and returns GA-shaped tab metadata
+  and optional simplified page content;
+- `web_scan` accepts GA-compatible `tabs_only`, `switch_tab_id`, and
+  `text_only`, while retaining `tabId` as an alias;
+- successful `web_scan` results join `file_read` in the one-pass read-only
+  continuation path, so the selected native model can answer from page content;
+- `web_execute_js`, granular browser approvals, live browser-action progress,
+  and richer service-worker recovery are still deferred.
 
 Rollback:
 

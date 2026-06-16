@@ -640,11 +640,12 @@ optional Slice 4A tool-control-plane events (`tool_pending`,
 model/selection failures emit `runtime_error` and close with
 `native_runtime_error`.
 
-Native tool events started as Slice 4A deterministic stubs. As of Slice 4B,
-hidden native `file_read`, `file_patch`, `file_write`, and `code_run` can
-execute inside the Project workspace and approval policy described in
-[Galley Native](./galley-native/README.md). Browser, memory, Goal, and Morphling
-side effects remain disabled or stubbed until later slices.
+Native tool events started as Slice 4A deterministic stubs. As of Slice 4B /
+4C1, hidden native `file_read`, `file_patch`, `file_write`, `code_run`, and
+read-only `web_scan` can execute inside the Project workspace, approval policy,
+and Browser Control bridge described in [Galley Native](./galley-native/README.md).
+`web_execute_js`, memory, Goal, and Morphling side effects remain disabled or
+stubbed until later slices.
 
 For hidden native `code_run`, `tool_progress` can include additive output fields
 before `tool_end`:

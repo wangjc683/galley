@@ -13,6 +13,84 @@ const CODE_RUN_PROGRESS_CHUNK_MAX_BYTES: usize = 8 * 1024;
 const FILE_READ_MAX_BYTES: u64 = 256 * 1024;
 const FILE_PATCH_MAX_BYTES: u64 = 256 * 1024;
 const FILE_WRITE_MAX_BYTES: u64 = 256 * 1024;
+const NATIVE_BROWSER_TOOL_SCRIPT: &str = r#"
+import importlib, json, os, sys, time, traceback
+
+code_root = os.environ.get("GALLEY_NATIVE_BROWSER_CODE_ROOT")
+if code_root:
+    sys.path.insert(0, code_root)
+
+def emit(payload):
+    print(json.dumps(payload, ensure_ascii=False))
+
+def format_error(error):
+    tb = traceback.extract_tb(sys.exc_info()[2])
+    if tb:
+        frame = tb[-1]
+        return f"{type(error).__name__}: {error} @ {os.path.basename(frame.filename)}:{frame.lineno}, {frame.name}"
+    return f"{type(error).__name__}: {error}"
+
+def main():
+    tool = os.environ.get("GALLEY_NATIVE_BROWSER_TOOL", "web_scan")
+    request = json.loads(os.environ.get("GALLEY_NATIVE_BROWSER_REQUEST", "{}"))
+    wait_seconds = float(os.environ.get("GALLEY_NATIVE_BROWSER_TIMEOUT_SECONDS", "35"))
+    from TMWebDriver import TMWebDriver
+    driver = TMWebDriver()
+    deadline = time.time() + max(0.5, wait_seconds)
+    sessions = []
+    bridge_status = {}
+    while time.time() < deadline:
+        sessions = driver.get_all_sessions()
+        if sessions:
+            break
+        try:
+            bridge_status = driver.get_status()
+            if bridge_status.get("extension_connected"):
+                break
+        except Exception:
+            bridge_status = {}
+        time.sleep(0.25)
+    if tool != "web_scan":
+        raise RuntimeError(f"Unsupported native browser tool: {tool}")
+    if not sessions:
+        if bridge_status.get("extension_connected"):
+            raise RuntimeError("Browser Control is connected, but no operable webpage is open.")
+        raise RuntimeError("Browser Control extension is not connected.")
+    tabs = []
+    for session in driver.get_all_sessions():
+        item = dict(session)
+        item.pop("connected_at", None)
+        item.pop("type", None)
+        url = item.get("url", "") or ""
+        item["url"] = url[:50] + ("..." if len(url) > 50 else "")
+        tabs.append(item)
+    switch_tab_id = request.get("switch_tab_id")
+    if switch_tab_id:
+        driver.default_session_id = str(switch_tab_id)
+    result = {
+        "status": "success",
+        "metadata": {
+            "tabs_count": len(tabs),
+            "tabs": tabs,
+            "active_tab": driver.default_session_id,
+        },
+    }
+    if not request.get("tabs_only", False):
+        import simphtml
+        importlib.reload(simphtml)
+        result["content"] = simphtml.get_html(
+            driver,
+            cutlist=True,
+            maxchars=int(request.get("maxlen", 35000)),
+            text_only=bool(request.get("text_only", False)),
+        )
+    emit({"ok": True, "result": result})
+
+try:
+    main()
+except Exception as error:
+    emit({"ok": False, "error": format_error(error)})
+"#;
 
 pub const PARITY_TOOL_NAMES: [&str; 9] = [
     "code_run",
@@ -95,12 +173,48 @@ pub struct NativeToolProgressChunk {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NativeToolExecutionContext {
     pub workspace_root: Option<PathBuf>,
+    pub browser: Option<NativeBrowserExecutionContext>,
+    pub browser_unavailable_reason: Option<String>,
 }
 
 impl NativeToolExecutionContext {
     pub fn new(workspace_root: Option<PathBuf>) -> Self {
-        Self { workspace_root }
+        Self {
+            workspace_root,
+            browser: None,
+            browser_unavailable_reason: None,
+        }
     }
+
+    pub fn with_browser(
+        workspace_root: Option<PathBuf>,
+        browser: NativeBrowserExecutionContext,
+    ) -> Self {
+        Self {
+            workspace_root,
+            browser: Some(browser),
+            browser_unavailable_reason: None,
+        }
+    }
+
+    pub fn with_browser_unavailable(
+        workspace_root: Option<PathBuf>,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self {
+            workspace_root,
+            browser: None,
+            browser_unavailable_reason: Some(reason.into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeBrowserExecutionContext {
+    pub python: PathBuf,
+    pub code_root: PathBuf,
+    pub state_root: PathBuf,
+    pub wait_timeout_seconds: u64,
 }
 
 #[derive(Debug)]
@@ -182,7 +296,9 @@ pub fn parity_tool_specs() -> Vec<NativeToolSpec> {
             serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "target": { "type": "string" },
+                    "tabs_only": { "type": "boolean" },
+                    "switch_tab_id": { "type": "string" },
+                    "text_only": { "type": "boolean" },
                     "tabId": { "type": "string" }
                 }
             }),
@@ -364,6 +480,10 @@ pub fn normalize_native_tool_call(
             call.arguments_json = normalize_file_write_arguments(call.arguments_json, context);
             call.raw_arguments_text = Some(call.arguments_json.to_string());
         }
+        "web_scan" => {
+            call.arguments_json = normalize_web_scan_arguments(call.arguments_json);
+            call.raw_arguments_text = Some(call.arguments_json.to_string());
+        }
         _ => {}
     }
     call
@@ -378,6 +498,7 @@ pub fn execute_native_tool(
         "file_read" => file_read_result(call, context),
         "file_patch" => file_patch_result(call, context),
         "file_write" => file_write_result(call, context),
+        "web_scan" => web_scan_result(call, context),
         _ => stub_tool_result(call),
     }
 }
@@ -1021,6 +1142,142 @@ fn file_write_content(
     }
 }
 
+fn web_scan_result(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> NativeToolStubResult {
+    let approval = approval_for_tool_call(call, context);
+    let result = web_scan_content(call, context);
+    let (status, content) = match result {
+        Ok(content) => ("success", content),
+        Err(message) => ("failed", message),
+    };
+    NativeToolStubResult {
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        status: status.to_string(),
+        content,
+        side_effects_performed: false,
+        requires_user_response: false,
+        approval,
+        progress_chunks: Vec::new(),
+    }
+}
+
+fn web_scan_content(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<String, String> {
+    let Some(browser) = context.browser.as_ref() else {
+        return Err(format!(
+            "web_scan cannot run because Browser Control is unavailable: {}",
+            context
+                .browser_unavailable_reason
+                .as_deref()
+                .unwrap_or("native runtime host did not provide a browser bridge")
+        ));
+    };
+    let request = serde_json::json!({
+        "tabs_only": web_scan_bool_arg(call, "tabs_only", false),
+        "switch_tab_id": web_scan_switch_tab_id_arg(call),
+        "text_only": web_scan_bool_arg(call, "text_only", false),
+        "maxlen": 35_000
+    });
+    run_browser_python_tool(browser, "web_scan", request)
+}
+
+fn run_browser_python_tool(
+    browser: &NativeBrowserExecutionContext,
+    tool_name: &str,
+    request: Value,
+) -> std::result::Result<String, String> {
+    let mut child = Command::new(&browser.python)
+        .arg("-c")
+        .arg(NATIVE_BROWSER_TOOL_SCRIPT)
+        .current_dir(&browser.code_root)
+        .env("PYTHONDONTWRITEBYTECODE", "1")
+        .env("GALLEY_NATIVE_BROWSER_CODE_ROOT", &browser.code_root)
+        .env("GALLEY_GA_STATE_ROOT", &browser.state_root)
+        .env("GALLEY_NATIVE_BROWSER_TOOL", tool_name)
+        .env("GALLEY_NATIVE_BROWSER_REQUEST", request.to_string())
+        .env(
+            "GALLEY_NATIVE_BROWSER_TIMEOUT_SECONDS",
+            browser.wait_timeout_seconds.to_string(),
+        )
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| {
+            format!(
+                "{tool_name} could not start Browser Control helper {}: {err}",
+                browser.python.display()
+            )
+        })?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| format!("{tool_name} could not capture helper stdout."))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| format!("{tool_name} could not capture helper stderr."))?;
+    let stdout_handle = thread::spawn(move || read_capped_output(stdout));
+    let stderr_handle = thread::spawn(move || read_capped_output(stderr));
+    let timeout = Duration::from_secs(browser.wait_timeout_seconds.saturating_add(3));
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if start.elapsed() >= timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "{tool_name} timed out while waiting for Browser Control."
+                ));
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+            Err(err) => return Err(format!("{tool_name} could not poll helper status: {err}")),
+        }
+    };
+    let stdout = join_capped_output(stdout_handle, "browser stdout")?;
+    let stderr = join_capped_output(stderr_handle, "browser stderr")?;
+    let stdout_text = String::from_utf8_lossy(&stdout.bytes);
+    let stderr_text = String::from_utf8_lossy(&stderr.bytes);
+    let parsed = stdout_text
+        .lines()
+        .rev()
+        .find_map(|line| serde_json::from_str::<Value>(line).ok())
+        .ok_or_else(|| {
+            format!(
+                "{tool_name} helper returned no JSON result. stderr: {}",
+                stderr_text.trim().chars().take(240).collect::<String>()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!(
+            "{tool_name} helper exited with {status}. stderr: {}",
+            stderr_text.trim().chars().take(240).collect::<String>()
+        ));
+    }
+    if parsed.get("ok").and_then(Value::as_bool) != Some(true) {
+        let message = parsed
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("Browser Control helper failed");
+        return Err(message.to_string());
+    }
+    let result = parsed.get("result").cloned().unwrap_or(Value::Null);
+    Ok(format_web_scan_content(&result))
+}
+
+fn format_web_scan_content(result: &Value) -> String {
+    let mut output = String::from("web_scan:\n");
+    output.push_str(&serde_json::to_string_pretty(result).unwrap_or_else(|_| result.to_string()));
+    output
+}
+
 fn path_arg(call: &NativeToolCall) -> Option<PathBuf> {
     string_arg_any(call, &["path", "file_path", "filePath"])
         .map(|path| path.trim().to_string())
@@ -1102,6 +1359,19 @@ fn file_write_preview_error_arg(call: &NativeToolCall) -> Option<String> {
 
 fn file_write_mode_arg(call: &NativeToolCall) -> Option<String> {
     file_write_mode_value(&call.arguments_json)
+}
+
+fn web_scan_bool_arg(call: &NativeToolCall, name: &str, default: bool) -> bool {
+    call.arguments_json
+        .get(name)
+        .and_then(Value::as_bool)
+        .unwrap_or(default)
+}
+
+fn web_scan_switch_tab_id_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["switch_tab_id", "switchTabId", "tabId", "tab_id"])
+        .map(|tab_id| tab_id.trim().to_string())
+        .filter(|tab_id| !tab_id.is_empty())
 }
 
 fn string_arg_any(call: &NativeToolCall, names: &[&str]) -> Option<String> {
@@ -1216,6 +1486,21 @@ fn normalize_file_write_arguments(value: Value, context: &NativeToolExecutionCon
         }
     }
 
+    Value::Object(object)
+}
+
+fn normalize_web_scan_arguments(value: Value) -> Value {
+    let Some(object) = value.as_object() else {
+        return value;
+    };
+    let mut object = object.clone();
+    copy_bool_alias(&mut object, "tabs_only", &["tabsOnly"]);
+    copy_bool_alias(&mut object, "text_only", &["textOnly"]);
+    copy_string_alias(
+        &mut object,
+        "switch_tab_id",
+        &["switchTabId", "tabId", "tab_id"],
+    );
     Value::Object(object)
 }
 
@@ -1348,6 +1633,18 @@ fn copy_number_alias(
         .and_then(serde_json::Number::from_f64)
     {
         object.insert(canonical.to_string(), Value::Number(value));
+    }
+}
+
+fn copy_bool_alias(object: &mut serde_json::Map<String, Value>, canonical: &str, aliases: &[&str]) {
+    if object.get(canonical).and_then(Value::as_bool).is_some() {
+        return;
+    }
+    if let Some(value) = aliases
+        .iter()
+        .find_map(|alias| object.get(*alias).and_then(Value::as_bool))
+    {
+        object.insert(canonical.to_string(), Value::Bool(value));
     }
 }
 
@@ -2099,6 +2396,84 @@ mod tests {
         assert_eq!(result.status, "timed_out");
         assert!(result.side_effects_performed);
         assert!(result.content.contains("timed_out: true"));
+    }
+
+    #[test]
+    fn web_scan_without_browser_context_fails_without_stub() {
+        let call = tool_call("web_scan", serde_json::json!({ "tabs_only": true }));
+        let context =
+            NativeToolExecutionContext::with_browser_unavailable(None, "Browser Control not ready");
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("Browser Control is unavailable"));
+        assert!(!result.content.contains("Slice 4A deterministic stub"));
+    }
+
+    #[test]
+    fn web_scan_tabs_only_uses_browser_bridge_context() {
+        let dir = tempfile::tempdir().unwrap();
+        let code_root = dir.path().join("code");
+        let state_root = dir.path().join("state");
+        fs::create_dir_all(&code_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+        fs::write(
+            code_root.join("TMWebDriver.py"),
+            r#"
+class TMWebDriver:
+    def __init__(self):
+        self.default_session_id = None
+    def get_all_sessions(self):
+        return [{
+            "id": "101",
+            "url": "https://example.com/some/very/long/path/that/gets/truncated",
+            "title": "Example",
+            "connected_at": 1,
+            "type": "ext_ws",
+        }]
+    def get_status(self):
+        return {"extension_connected": True, "tab_count": 1}
+"#,
+        )
+        .unwrap();
+        let python = std::env::var_os("PYTHON")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "python" } else { "python3" }));
+        let context = NativeToolExecutionContext::with_browser(
+            None,
+            NativeBrowserExecutionContext {
+                python,
+                code_root,
+                state_root,
+                wait_timeout_seconds: 1,
+            },
+        );
+        let call = normalize_native_tool_call(
+            tool_call(
+                "web_scan",
+                serde_json::json!({
+                    "tabsOnly": true,
+                    "tabId": "101",
+                    "textOnly": true
+                }),
+            ),
+            &context,
+        );
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(call.arguments_json["tabs_only"], true);
+        assert_eq!(call.arguments_json["switch_tab_id"], "101");
+        assert_eq!(call.arguments_json["text_only"], true);
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("\"tabs_count\": 1"));
+        assert!(result.content.contains("\"active_tab\": \"101\""));
+        assert!(result.content.contains("\"id\": \"101\""));
     }
 
     #[test]

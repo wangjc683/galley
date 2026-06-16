@@ -6,8 +6,8 @@ use crate::error::{GalleyError, Result};
 use crate::native_model::{NativeModelConfig, NativeModelResponse};
 use crate::native_tools::{
     approval_for_tool_call, approval_required, execute_native_tool, normalize_native_tool_call,
-    parse_text_tool_calls, NativeToolCall, NativeToolExecutionContext, NativeToolProgressChunk,
-    NativeToolStubResult,
+    parse_text_tool_calls, NativeBrowserExecutionContext, NativeToolCall,
+    NativeToolExecutionContext, NativeToolProgressChunk, NativeToolStubResult,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -379,6 +379,28 @@ pub struct NativeRuntimeErrorEvent {
     pub timestamp: String,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct NativeRuntimeHostContext {
+    pub browser: Option<NativeBrowserExecutionContext>,
+    pub browser_unavailable_reason: Option<String>,
+}
+
+impl NativeRuntimeHostContext {
+    pub fn with_browser(browser: NativeBrowserExecutionContext) -> Self {
+        Self {
+            browser: Some(browser),
+            browser_unavailable_reason: None,
+        }
+    }
+
+    pub fn with_browser_unavailable(reason: impl Into<String>) -> Self {
+        Self {
+            browser: None,
+            browser_unavailable_reason: Some(reason.into()),
+        }
+    }
+}
+
 pub async fn run_turn(
     galley: &SqliteGalley,
     session_id: SessionId,
@@ -387,10 +409,20 @@ pub async fn run_turn(
     command_name: &str,
     mark_unread: bool,
     model: Option<NativeModelConfig>,
+    host_context: NativeRuntimeHostContext,
 ) -> Result<NativeTurn> {
     match model {
         Some(model) => {
-            run_model_turn(galley, session_id, turn_index, task, mark_unread, model).await
+            run_model_turn(
+                galley,
+                session_id,
+                turn_index,
+                task,
+                mark_unread,
+                model,
+                host_context,
+            )
+            .await
         }
         None => {
             run_mock_turn(
@@ -400,6 +432,7 @@ pub async fn run_turn(
                 task,
                 command_name,
                 mark_unread,
+                host_context,
             )
             .await
         }
@@ -413,6 +446,7 @@ pub async fn run_mock_turn(
     task: &str,
     command_name: &str,
     mark_unread: bool,
+    host_context: NativeRuntimeHostContext,
 ) -> Result<NativeTurn> {
     let final_answer = mock_final_answer(task, command_name);
     let summary = mock_summary(task);
@@ -420,7 +454,7 @@ pub async fn run_mock_turn(
         NativeMessage::text(NativeRole::User, task.trim()),
         NativeMessage::text(NativeRole::Assistant, final_answer.clone()),
     ];
-    let tool_context = native_tool_context(galley, &session_id).await?;
+    let tool_context = native_tool_context(galley, &session_id, &host_context).await?;
     let trace = native_event_trace_with_context(
         session_id.as_str(),
         turn_index,
@@ -461,10 +495,19 @@ async fn run_model_turn(
     task: &str,
     mark_unread: bool,
     model: NativeModelConfig,
+    host_context: NativeRuntimeHostContext,
 ) -> Result<NativeTurn> {
     if model.streaming_enabled() {
-        return run_streaming_model_turn(galley, session_id, turn_index, task, mark_unread, model)
-            .await;
+        return run_streaming_model_turn(
+            galley,
+            session_id,
+            turn_index,
+            task,
+            mark_unread,
+            model,
+            host_context,
+        )
+        .await;
     }
 
     let model_response = crate::native_model::complete_no_tool_turn(&model, task).await?;
@@ -475,7 +518,7 @@ async fn run_model_turn(
         usage: first_usage,
         ..
     } = model_response;
-    let tool_context = native_tool_context(galley, &session_id).await?;
+    let tool_context = native_tool_context(galley, &session_id, &host_context).await?;
     let session_id_str = session_id.as_str().to_string();
     let first_timestamp = native_now_iso();
     let tool_trace = native_tool_trace(
@@ -507,7 +550,7 @@ async fn run_model_turn(
     ];
     events.extend(tool_trace.events.clone());
 
-    if should_continue_after_file_read(&tool_trace) {
+    if should_continue_after_read_only_tool(&tool_trace) {
         let continuation_response = crate::native_model::complete_tool_result_turn(
             &model,
             task,
@@ -589,9 +632,10 @@ async fn run_streaming_model_turn(
     task: &str,
     mark_unread: bool,
     model: NativeModelConfig,
+    host_context: NativeRuntimeHostContext,
 ) -> Result<NativeTurn> {
     let session_id_str = session_id.as_str().to_string();
-    let tool_context = native_tool_context(galley, &session_id).await?;
+    let tool_context = native_tool_context(galley, &session_id, &host_context).await?;
     let mut events = Vec::new();
     let ready = runtime_ready_event(&session_id_str, &model.display_name, native_now_iso());
     event_bus().publish(&session_id_str, ready.clone());
@@ -795,6 +839,7 @@ pub fn runtime_error_event(
 async fn native_tool_context(
     galley: &SqliteGalley,
     session_id: &SessionId,
+    host_context: &NativeRuntimeHostContext,
 ) -> Result<NativeToolExecutionContext> {
     let session = galley.session_brief(session_id.clone()).await?;
     let workspace_root = if let Some(project_id) = session.project_id.as_deref() {
@@ -808,7 +853,12 @@ async fn native_tool_context(
     } else {
         None
     };
-    Ok(NativeToolExecutionContext::new(workspace_root))
+    let mut context = match host_context.browser.clone() {
+        Some(browser) => NativeToolExecutionContext::with_browser(workspace_root, browser),
+        None => NativeToolExecutionContext::new(workspace_root),
+    };
+    context.browser_unavailable_reason = host_context.browser_unavailable_reason.clone();
+    Ok(context)
 }
 
 #[derive(Debug, Clone)]
@@ -825,6 +875,7 @@ pub async fn resolve_native_approval(
     session_id: SessionId,
     approval_id: &str,
     decision: &str,
+    host_context: NativeRuntimeHostContext,
 ) -> Result<NativeApprovalResolution> {
     let row = galley
         .native_tool_event_by_approval_id(&session_id, approval_id)
@@ -838,7 +889,7 @@ pub async fn resolve_native_approval(
         message: format!("invalid native approval turn index: {}", row.turn_index),
     })?;
     let call = native_tool_call_from_row(&row)?;
-    let tool_context = native_tool_context(galley, &session_id).await?;
+    let tool_context = native_tool_context(galley, &session_id, &host_context).await?;
     let timestamp = native_now_iso();
     let mut events = Vec::new();
     events.push(approval_resolved_event(
@@ -999,8 +1050,8 @@ fn mock_final_answer(task: &str, command_name: &str) -> String {
          Command: {command_name}\n\
          Runtime: galley_native\n\n\
          Received task:\n{task}\n\n\
-         Slice 2 has created the native session and persisted this deterministic answer. \
-         Real model adapters, tools, memory, browser control, Goal Hive, and Morphling are not active in this slice."
+         Galley Native used the deterministic mock-model fallback for this turn. \
+         Some native tools may be active depending on the current implementation slice, but memory, Goal Hive, and Morphling remain deferred."
     )
 }
 
@@ -1116,7 +1167,7 @@ async fn continue_after_approved_tool_result(
 
 fn should_continue_after_approved_tool_result(result: &NativeToolStubResult) -> bool {
     match result.tool_name.as_str() {
-        "file_read" => result.status == "success",
+        "file_read" | "web_scan" => result.status == "success",
         "file_patch" | "file_write" => {
             matches!(
                 result.status.as_str(),
@@ -1161,11 +1212,14 @@ async fn native_turn_continuation_context(
     Ok((task, assistant_tool_request))
 }
 
-fn should_continue_after_file_read(trace: &NativeToolTrace) -> bool {
+fn should_continue_after_read_only_tool(trace: &NativeToolTrace) -> bool {
     !trace.awaiting_user
         && trace.pending_approval.is_none()
         && trace.tool_results.iter().any(|result| {
-            result.get("toolName").and_then(serde_json::Value::as_str) == Some("file_read")
+            matches!(
+                result.get("toolName").and_then(serde_json::Value::as_str),
+                Some("file_read" | "web_scan")
+            ) && result.get("status").and_then(serde_json::Value::as_str) == Some("success")
         })
 }
 
@@ -1778,7 +1832,7 @@ mod tests {
         let answer = mock_final_answer("Investigate", "session.new");
         assert!(answer.contains("Galley Native mock response"));
         assert!(answer.contains("Runtime: galley_native"));
-        assert!(answer.contains("Real model adapters"));
+        assert!(answer.contains("mock-model fallback"));
     }
 
     #[test]
@@ -1814,7 +1868,7 @@ mod tests {
     }
 
     #[test]
-    fn mock_event_trace_routes_no_approval_tools_to_stubs() {
+    fn mock_event_trace_routes_no_approval_tools_without_side_effects() {
         let tool_calls = ["file_read", "web_scan", "update_working_checkpoint"]
             .iter()
             .map(|name| {
@@ -1861,6 +1915,33 @@ mod tests {
             .unwrap()
             .iter()
             .all(|result| result["sideEffectsPerformed"].as_bool() == Some(false)));
+        let web_scan = turn_end["toolResults"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| result["toolName"] == "web_scan")
+            .unwrap();
+        assert_eq!(web_scan["status"], "failed");
+        assert!(web_scan["content"]
+            .as_str()
+            .unwrap()
+            .contains("Browser Control is unavailable"));
+    }
+
+    #[test]
+    fn successful_web_scan_result_requests_continuation() {
+        let trace = NativeToolTrace {
+            events: Vec::new(),
+            tool_calls: Vec::new(),
+            tool_results: vec![serde_json::json!({
+                "toolName": "web_scan",
+                "status": "success"
+            })],
+            awaiting_user: false,
+            pending_approval: None,
+        };
+
+        assert!(should_continue_after_read_only_tool(&trace));
     }
 
     #[test]

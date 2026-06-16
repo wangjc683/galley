@@ -880,7 +880,7 @@ mod tests {
             .final_answer
             .as_deref()
             .unwrap()
-            .contains("Real model adapters"));
+            .contains("mock-model fallback"));
 
         let watch_line = serde_json::json!({
             "command": "session.watch",

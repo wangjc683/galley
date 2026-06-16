@@ -1,9 +1,10 @@
-//! Browser Control capability for the managed GenericAgent runtime.
+//! Galley-owned Browser Control capability.
 //!
 //! Galley ships the upstream `tmwd_cdp_bridge` extension as managed GA code,
 //! but Chromium should load it from a stable user-data directory rather than
 //! directly from the app bundle. This module owns that synced directory and a
-//! small probe that verifies the extension can connect to TMWebDriver.
+//! small probe that verifies the extension can connect to TMWebDriver. Hidden
+//! native runtime browser tools reuse the same prepared bridge.
 
 #[cfg(target_os = "windows")]
 use std::env;
@@ -18,6 +19,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::time;
 
+use crate::native_tools::NativeBrowserExecutionContext;
 use crate::{managed_runtime, process_command};
 
 #[derive(Debug, Clone, Serialize)]
@@ -242,6 +244,19 @@ pub async fn probe_for_app(
         tab_count: parsed.tab_count,
         sample_title: parsed.sample_title,
         message: parsed.message,
+    })
+}
+
+pub fn native_execution_context_for_app(
+    app: &AppHandle,
+) -> std::io::Result<NativeBrowserExecutionContext> {
+    let _layout = ensure_for_app(app)?;
+    let diagnostics = managed_runtime::ensure_for_app(app)?;
+    Ok(NativeBrowserExecutionContext {
+        python: resolve_python(app),
+        code_root: PathBuf::from(diagnostics.paths.code_root),
+        state_root: PathBuf::from(diagnostics.paths.state_root),
+        wait_timeout_seconds: BrowserControlProbeContext::Manual.wait_duration().as_secs(),
     })
 }
 

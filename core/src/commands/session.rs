@@ -539,6 +539,7 @@ pub(crate) async fn native_session_run_turn(
         "gui.native_session_run_turn",
         false,
         model,
+        native_host_context(Some(&app)),
     )
     .await
     {
@@ -594,6 +595,7 @@ pub(crate) async fn native_approval_response(
         input.session_id.clone(),
         &input.approval_id,
         decision,
+        native_host_context(Some(&app)),
     )
     .await
     .map_err(stringify_error)?;
@@ -619,6 +621,22 @@ fn emit_native_runtime_events(
 ) {
     for event in events {
         let _ = app.emit("native-runtime-event", event);
+    }
+}
+
+fn native_host_context(
+    app: Option<&tauri::AppHandle>,
+) -> crate::native_runtime::NativeRuntimeHostContext {
+    let Some(app) = app else {
+        return crate::native_runtime::NativeRuntimeHostContext::with_browser_unavailable(
+            "Tauri app handle is unavailable",
+        );
+    };
+    match crate::browser_control::native_execution_context_for_app(app) {
+        Ok(browser) => crate::native_runtime::NativeRuntimeHostContext::with_browser(browser),
+        Err(err) => crate::native_runtime::NativeRuntimeHostContext::with_browser_unavailable(
+            err.to_string(),
+        ),
     }
 }
 

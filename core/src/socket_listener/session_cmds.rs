@@ -108,6 +108,20 @@ fn emit_native_runtime_events(
     }
 }
 
+fn native_host_context(app: Option<&AppHandle>) -> crate::native_runtime::NativeRuntimeHostContext {
+    let Some(app) = app else {
+        return crate::native_runtime::NativeRuntimeHostContext::with_browser_unavailable(
+            "Tauri app handle is unavailable",
+        );
+    };
+    match crate::browser_control::native_execution_context_for_app(app) {
+        Ok(browser) => crate::native_runtime::NativeRuntimeHostContext::with_browser(browser),
+        Err(err) => crate::native_runtime::NativeRuntimeHostContext::with_browser_unavailable(
+            err.to_string(),
+        ),
+    }
+}
+
 pub(super) async fn dispatch_session_send(
     request_id: Option<String>,
     args: Value,
@@ -164,6 +178,7 @@ pub(super) async fn dispatch_session_send(
             "session.send",
             true,
             session.selected_llm_key.as_deref(),
+            app,
         )
         .await
         {
@@ -286,6 +301,7 @@ pub(super) async fn dispatch_session_approval_response(
         session_id.clone(),
         &parsed.approval_id,
         decision,
+        native_host_context(app),
     )
     .await
     {
@@ -680,6 +696,7 @@ async fn run_hidden_native_turn(
     command_name: &str,
     mark_unread: bool,
     selected_llm_key: Option<&str>,
+    app: Option<&AppHandle>,
 ) -> crate::error::Result<crate::native_runtime::NativeTurn> {
     crate::native_runtime::event_bus().start_session(session_id.as_str());
     let native_model =
@@ -698,6 +715,7 @@ async fn run_hidden_native_turn(
         command_name,
         mark_unread,
         native_model,
+        native_host_context(app),
     )
     .await
     {
@@ -1253,6 +1271,7 @@ async fn dispatch_session_new_inner(
             command_name,
             true,
             brief.selected_llm_key.as_deref(),
+            app,
         )
         .await
         {
