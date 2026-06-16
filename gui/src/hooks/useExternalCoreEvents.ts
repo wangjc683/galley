@@ -1,9 +1,11 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
 
+import { dispatchNativeRuntimeEvent } from "@/lib/ipc-handlers";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
+import type { NativeRuntimeEvent } from "@/types/ipc";
 
 export function useExternalCoreEvents(): void {
   const appendUserTurnExternal = useMessagesStore(
@@ -95,6 +97,28 @@ export function useExternalCoreEvents(): void {
       unlisten?.();
     };
   }, [attachExternalBridge]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      const fn = await listen<NativeRuntimeEvent>(
+        "native-runtime-event",
+        (e) => {
+          dispatchNativeRuntimeEvent(e.payload);
+        },
+      );
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

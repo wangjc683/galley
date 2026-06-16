@@ -305,6 +305,161 @@ export type IPCEvent =
   | PetDetachedEvent
   | SystemMessageEvent;
 
+// ---------------- Native runtime events (Core → desktop) ----------------
+
+export interface NativeRuntimeReadyEvent {
+  kind: "runtime_ready";
+  sessionId: string;
+  runtimeKind: "galley_native";
+  modelName: string;
+  timestamp: string;
+}
+
+export interface NativeTurnStartEvent {
+  kind: "turn_start";
+  sessionId: string;
+  turnIndex: number;
+  visibility?: MessageVisibility;
+  timestamp: string;
+}
+
+export interface NativeTurnProgressEvent {
+  kind: "turn_progress";
+  sessionId: string;
+  turnIndex: number;
+  delta: string;
+  source: string;
+  visibility?: MessageVisibility;
+  timestamp: string;
+}
+
+export interface NativeToolPendingEvent {
+  kind: "tool_pending";
+  sessionId: string;
+  turnIndex: number;
+  toolCallId: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+  source: string;
+  riskHint?: string | null;
+  approval: string;
+  timestamp: string;
+}
+
+export interface NativeApprovalPendingEvent {
+  kind: "approval_pending";
+  sessionId: string;
+  turnIndex: number;
+  toolCallId: string;
+  toolName: string;
+  policy: string;
+  reason: string;
+  timestamp: string;
+}
+
+export interface NativeApprovalResolvedEvent {
+  kind: "approval_resolved";
+  sessionId: string;
+  turnIndex: number;
+  toolCallId: string;
+  toolName: string;
+  decision: ApprovalDecision;
+  decidedBy: string;
+  note: string;
+  timestamp: string;
+}
+
+export interface NativeToolStartEvent {
+  kind: "tool_start";
+  sessionId: string;
+  turnIndex: number;
+  toolCallId: string;
+  toolName: string;
+  executor: string;
+  timestamp: string;
+}
+
+export interface NativeToolProgressEvent {
+  kind: "tool_progress";
+  sessionId: string;
+  turnIndex: number;
+  toolCallId: string;
+  toolName: string;
+  message: string;
+  timestamp: string;
+}
+
+export interface NativeToolEndEvent {
+  kind: "tool_end";
+  sessionId: string;
+  turnIndex: number;
+  toolCallId: string;
+  toolName: string;
+  status: string;
+  result: Record<string, unknown>;
+  sideEffectsPerformed: boolean;
+  timestamp: string;
+}
+
+export interface NativeAskUserEvent {
+  kind: "ask_user";
+  sessionId: string;
+  turnIndex: number;
+  toolCallId: string;
+  question: string;
+  candidates: string[];
+  timestamp: string;
+}
+
+export interface NativeTurnEndEvent {
+  kind: "turn_end";
+  sessionId: string;
+  turnIndex: number;
+  summary: string;
+  responseContent: string;
+  output: ConversationMessage;
+  toolCalls: Record<string, unknown>[];
+  toolResults: Record<string, unknown>[];
+  visibility?: MessageVisibility;
+  timestamp: string;
+}
+
+export interface NativeRunCompleteEvent {
+  kind: "run_complete";
+  sessionId: string;
+  exitReason: ExitReason;
+  finalContent: string;
+  totalTurns: number;
+  visibility?: MessageVisibility;
+  stopReason?: string | null;
+  usage?: Record<string, unknown> | null;
+  timestamp: string;
+}
+
+export interface NativeRuntimeErrorEvent {
+  kind: "runtime_error";
+  sessionId: string;
+  category: string;
+  message: string;
+  hint?: string | null;
+  timestamp: string;
+}
+
+export type NativeRuntimeEvent =
+  | NativeRuntimeReadyEvent
+  | NativeTurnStartEvent
+  | NativeTurnProgressEvent
+  | NativeToolPendingEvent
+  | NativeApprovalPendingEvent
+  | NativeApprovalResolvedEvent
+  | NativeToolStartEvent
+  | NativeToolProgressEvent
+  | NativeToolEndEvent
+  | NativeAskUserEvent
+  | NativeTurnEndEvent
+  | NativeRunCompleteEvent
+  | NativeRuntimeErrorEvent;
+
 // ---------------- Commands (desktop → bridge) ----------------
 
 export interface UserMessageCommand {

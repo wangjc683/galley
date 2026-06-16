@@ -379,6 +379,21 @@ pub(crate) enum SessionCmd {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Respond to a pending native tool approval. Currently supports
+    /// hidden `galley_native` sessions; managed/external approvals are
+    /// handled by the live GUI/runner IPC path.
+    ApprovalResponse {
+        /// Session id.
+        id: String,
+        /// Approval id from the pending approval event.
+        approval_id: String,
+        /// Decision: allow_once / deny / always_allow_project / always_allow_global.
+        decision: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Stream live IPC events from a session's runner (B2 M4). NDJSON
     /// on stdout — one event per line. Exits cleanly when the
     /// subprocess terminates (`{"stream":"end",...}`) or the user
@@ -500,7 +515,7 @@ pub(crate) enum RuntimeArg {
     Current,
     Managed,
     External,
-    #[value(alias = "galley_native")]
+    #[value(alias = "galley_native", hide = true)]
     GalleyNative,
     All,
 }

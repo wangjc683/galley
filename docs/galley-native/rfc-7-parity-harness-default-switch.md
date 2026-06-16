@@ -148,10 +148,12 @@ Native should preserve the useful event rhythm:
 runtime_ready
 turn_start
 turn_progress
-tool_call_pending
-tool_call_start
-tool_call_progress
-tool_call_end
+tool_pending
+approval_pending
+approval_resolved
+tool_start
+tool_progress
+tool_end
 ask_user
 turn_end
 run_complete

@@ -15,6 +15,8 @@ import type {
   ConversationMessage,
   IPCEvent,
   MessageVisibility,
+  NativeRuntimeEvent,
+  NativeTurnEndEvent,
   ToolCall as IPCToolCall,
   ToolResult as IPCToolResult,
 } from "@/types/ipc";
@@ -42,7 +44,9 @@ const HISTORY_REPLAY_TIMEOUT_MS = 8_000;
 const _historyReplayPending = new Map<string, HistoryReplayState>();
 const _historyReplayReady = new Set<string>();
 
-function eventVisibility(event: { visibility?: MessageVisibility }): MessageVisibility {
+function eventVisibility(event: {
+  visibility?: MessageVisibility;
+}): MessageVisibility {
   return event.visibility ?? "visible";
 }
 
@@ -475,13 +479,197 @@ export function dispatchIPCEvent(event: IPCEvent): void {
   }
 }
 
+type NativeToolDraft = {
+  sessionId: string;
+  turnIndex: number;
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  approval: string;
+};
+
+const _nativeToolDrafts = new Map<string, NativeToolDraft>();
+
+function nativeToolKey(sessionId: string, toolCallId: string): string {
+  return `${sessionId}::${toolCallId}`;
+}
+
+export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
+  const messages = useMessagesStore.getState();
+
+  switch (event.kind) {
+    case "runtime_ready": {
+      console.info("[native] runtime_ready", {
+        sessionId: event.sessionId,
+        model: event.modelName,
+      });
+      return;
+    }
+
+    case "turn_start": {
+      if (eventVisibility(event) === "internal") return;
+      messages.setAgentRunning(event.sessionId, true);
+      messages.setCurrentTurnIndex(event.sessionId, event.turnIndex);
+      messages.clearInFlightContent(event.sessionId);
+      return;
+    }
+
+    case "turn_progress": {
+      if (eventVisibility(event) === "internal") return;
+      messages.appendInFlightDelta(event.sessionId, event.delta);
+      return;
+    }
+
+    case "tool_pending": {
+      const args = recordFromUnknown(event.arguments);
+      _nativeToolDrafts.set(nativeToolKey(event.sessionId, event.toolCallId), {
+        sessionId: event.sessionId,
+        turnIndex: event.turnIndex,
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        args,
+        approval: event.approval,
+      });
+      if (!nativeApprovalRequired(event.approval)) {
+        messages.upsertToolEvent(
+          event.sessionId,
+          {
+            id: event.toolCallId,
+            name: event.toolName,
+            status: "running",
+            args,
+            riskLevel: riskLevelFromNativePolicy(event.approval),
+          },
+          event.turnIndex,
+        );
+      }
+      return;
+    }
+
+    case "approval_pending": {
+      const draft = _nativeToolDrafts.get(
+        nativeToolKey(event.sessionId, event.toolCallId),
+      );
+      messages.addPendingApproval(event.sessionId, {
+        approvalId: event.toolCallId,
+        toolName: event.toolName,
+        target: pickTarget(draft?.args ?? {}),
+        riskLevel: riskLevelFromNativePolicy(event.policy),
+        args: draft?.args,
+      });
+      return;
+    }
+
+    case "approval_resolved": {
+      messages.recordApprovalDecisionLocal(
+        event.sessionId,
+        event.toolCallId,
+        event.decision,
+      );
+      messages.removePendingApproval(event.sessionId, event.toolCallId);
+      return;
+    }
+
+    case "tool_start": {
+      const draft = _nativeToolDrafts.get(
+        nativeToolKey(event.sessionId, event.toolCallId),
+      );
+      messages.upsertToolEvent(
+        event.sessionId,
+        {
+          id: event.toolCallId,
+          name: event.toolName,
+          status: "running",
+          args: draft?.args,
+          riskLevel: riskLevelFromNativePolicy(draft?.approval),
+          approvalId: event.toolCallId,
+        },
+        event.turnIndex,
+      );
+      return;
+    }
+
+    case "tool_progress": {
+      console.debug("[native] tool_progress", event);
+      return;
+    }
+
+    case "tool_end": {
+      const draft = _nativeToolDrafts.get(
+        nativeToolKey(event.sessionId, event.toolCallId),
+      );
+      const tool = nativeToolEventFromEnd(event, draft);
+      messages.upsertToolEvent(event.sessionId, tool, event.turnIndex);
+      if (tool.status === "denied") {
+        messages.recordApprovalDecisionLocal(
+          event.sessionId,
+          event.toolCallId,
+          "deny",
+        );
+      }
+      messages.removePendingApproval(event.sessionId, event.toolCallId);
+      _nativeToolDrafts.delete(
+        nativeToolKey(event.sessionId, event.toolCallId),
+      );
+      return;
+    }
+
+    case "ask_user": {
+      messages.setPendingAskUser(event.sessionId, {
+        question: event.question,
+        candidates: event.candidates,
+      });
+      return;
+    }
+
+    case "turn_end": {
+      if (eventVisibility(event) === "internal") return;
+      messages.appendAgentTurn(event.sessionId, turnFromNativeTurnEnd(event));
+      return;
+    }
+
+    case "run_complete": {
+      if (eventVisibility(event) === "internal") return;
+      messages.setAgentRunning(event.sessionId, false);
+      messages.setCurrentTurnIndex(event.sessionId, null);
+      messages.clearInFlightContent(event.sessionId);
+      return;
+    }
+
+    case "runtime_error": {
+      console.warn("[native] runtime_error", event);
+      useUiStore.getState().pushToast(
+        makeAppError({
+          category: "runtime",
+          severity: "error",
+          title: currentCopy().errors.runtimeTitle,
+          message: event.message,
+          hint: null,
+          retryable: true,
+          context: event.category,
+          traceback: null,
+        }),
+      );
+      messages.setAgentRunning(event.sessionId, false);
+      messages.setCurrentTurnIndex(event.sessionId, null);
+      messages.clearInFlightContent(event.sessionId);
+      return;
+    }
+
+    default: {
+      const exhaustive: never = event;
+      console.warn("[native] unknown event kind", exhaustive);
+    }
+  }
+}
+
 // ---------------- Turn-end → AgentTurn ----------------
 
 function turnFromTurnEnd(event: {
   turnIndex: number;
   summary: string;
-  toolCalls: IPCToolCall[];
-  toolResults: IPCToolResult[];
+  toolCalls: Array<Record<string, unknown>>;
+  toolResults: Array<Record<string, unknown>>;
   responseContent: string;
 }): AgentTurn {
   const tools = event.toolCalls.map((tc, i) =>
@@ -517,13 +705,17 @@ function turnFromTurnEnd(event: {
 }
 
 function toolEventFromIPC(
-  tc: IPCToolCall,
-  result: IPCToolResult | undefined,
+  tc: Record<string, unknown>,
+  result: Record<string, unknown> | undefined,
   index: number,
 ): ConversationToolEvent {
+  const toolName = toolNameFromCall(tc);
   const id =
-    (typeof result?.toolUseId === "string" && result.toolUseId) ||
-    (typeof tc.toolUseId === "string" && tc.toolUseId) ||
+    stringField(result, "toolUseId") ||
+    stringField(result, "toolCallId") ||
+    stringField(tc, "toolUseId") ||
+    stringField(tc, "toolCallId") ||
+    stringField(tc, "id") ||
     `t-${index}`;
 
   let resultPreview: string | undefined;
@@ -540,14 +732,119 @@ function toolEventFromIPC(
 
   return {
     id,
-    name: tc.toolName,
+    name: toolName,
     // turn_end is the post-completion state — by definition every
     // tool here finished. The conversation view fades older success
     // tools via "success-historical".
-    status: "success-historical",
-    args: tc.args,
+    status: toolStatusFromResult(result),
+    args: argsFromCall(tc),
     resultPreview,
+    approvalId: id.startsWith("native_") ? id : undefined,
   };
+}
+
+function turnFromNativeTurnEnd(event: NativeTurnEndEvent): AgentTurn {
+  const pendingIds = new Set(
+    useMessagesStore
+      .getState()
+      .byId[event.sessionId]?.pendingApprovals.map((item) => item.approvalId) ??
+      [],
+  );
+  const toolCalls = event.toolCalls.filter((call) => {
+    const id = stringField(call, "id") || stringField(call, "toolCallId");
+    return !id || !pendingIds.has(id);
+  });
+  const turn = turnFromTurnEnd({
+    turnIndex: event.turnIndex,
+    summary: event.summary,
+    toolCalls,
+    toolResults: event.toolResults,
+    responseContent: event.responseContent,
+  });
+  if (event.toolCalls.length > 0 && event.toolResults.length === 0) {
+    return {
+      ...turn,
+      preamble: extractPreamble(event.responseContent),
+      finalAnswer: null,
+    };
+  }
+  return turn;
+}
+
+function nativeToolEventFromEnd(
+  event: Extract<NativeRuntimeEvent, { kind: "tool_end" }>,
+  draft: NativeToolDraft | undefined,
+): ConversationToolEvent {
+  return {
+    id: event.toolCallId,
+    name: event.toolName,
+    status: toolStatusFromResult(event.result, event.status),
+    args: draft?.args,
+    resultPreview: previewFromContent(event.result.content),
+    riskLevel: riskLevelFromNativePolicy(draft?.approval),
+    approvalId: event.toolCallId,
+  };
+}
+
+function stringField(
+  value: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const raw = value?.[key];
+  return typeof raw === "string" && raw.trim() ? raw : undefined;
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function argsFromCall(call: Record<string, unknown>): Record<string, unknown> {
+  return recordFromUnknown(
+    call.args ?? call.argumentsJson ?? call.arguments ?? {},
+  );
+}
+
+function toolNameFromCall(call: Record<string, unknown>): string {
+  return (
+    stringField(call, "toolName") ?? stringField(call, "name") ?? "(unknown)"
+  );
+}
+
+function toolStatusFromResult(
+  result: Record<string, unknown> | undefined,
+  explicitStatus?: string,
+): ConversationToolEvent["status"] {
+  const status = explicitStatus ?? stringField(result, "status");
+  if (status === "denied") return "denied";
+  if (status === "failed" || status === "error") return "failed";
+  if (status === "cancelled") return "denied";
+  if (!result && !explicitStatus) return "running";
+  return "success-historical";
+}
+
+function previewFromContent(content: unknown): string | undefined {
+  if (content === undefined || content === null) return undefined;
+  if (typeof content === "string") return content.slice(0, 500);
+  try {
+    return JSON.stringify(content).slice(0, 500);
+  } catch {
+    return String(content).slice(0, 500);
+  }
+}
+
+function nativeApprovalRequired(policy: string | undefined): boolean {
+  return policy === "risk_based" || policy === "durable_write";
+}
+
+function riskLevelFromNativePolicy(
+  policy: string | undefined,
+): NonNullable<ConversationToolEvent["riskLevel"]> {
+  if (policy === "durable_write") return "high";
+  if (policy === "risk_based") return "medium";
+  return "low";
 }
 
 function pickTarget(args: Record<string, unknown>): string | undefined {
@@ -1065,10 +1362,7 @@ export async function ensureHistoryReplayComplete(
   return await promise;
 }
 
-function setSendPhaseIfRunning(
-  sessionId: string,
-  phase: "restoring",
-): void {
+function setSendPhaseIfRunning(sessionId: string, phase: "restoring"): void {
   const messages = useMessagesStore.getState();
   if (messages.byId[sessionId]?.agentRunning) {
     messages.setSendPhase(sessionId, phase);

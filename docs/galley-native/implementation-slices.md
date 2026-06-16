@@ -139,8 +139,18 @@ Rollback:
 
 ## Slice 2: Native Loop Skeleton
 
+Status: implemented as narrowed Slice 2A/2B steps on 2026-06-16. See
+[Slice 2 Native Worker Skeleton](../devlog/2026-06-16-galley-native-slice-2-native-worker-skeleton.md).
+
 Goal: start a native session that can stream a final answer with a mock model
 and no tools.
+
+Implementation note: the landed version proves the native session worker path,
+DB transcript persistence, and internal `NativeMessage` / `NativeRuntimeEvent`
+contract. Slice 2B adds a Core-owned native event bus so hidden native
+`session.watch` can replay the deterministic mock trace and close with
+`native_run_complete`. GUI projection and follow-up commands such as
+`session.send` remain deferred.
 
 Primary RFC:
 
@@ -148,19 +158,32 @@ Primary RFC:
 
 Tasks:
 
-- define canonical `NativeMessage` and `ContentBlock`;
-- add mock-model adapter;
-- add minimal native worker lifecycle;
-- emit `runtime_ready`, `turn_start`, `turn_progress`, `turn_end`,
-  `run_complete`, and `runtime_error`;
-- persist visible assistant messages through existing session paths;
-- add mock-model loop tests.
+- allow explicit hidden `runtimeKind: "galley_native"` session creation behind
+  `GALLEY_NATIVE_EXPERIMENTAL=1`;
+- add `core::native_runtime` with a deterministic mock worker and no tools;
+- persist the first user message and visible mock assistant message;
+- bump the session turn count and summary after the native mock turn;
+- keep managed/external `session.new` on the existing Python runner path;
+- keep native Goal unavailable even when the native session gate is enabled;
+- define canonical `NativeMessage`, `NativeContentBlock`, and internal
+  `NativeRuntimeEvent` shapes;
+- generate a deterministic mock event trace in GA-shaped order:
+  `runtime_ready`, `turn_start`, `turn_progress`, `turn_end`, `run_complete`;
+- add a Core-owned `NativeRuntimeEventBus` with same-process backlog replay for
+  hidden native sessions;
+- let `session.watch` fall back to the native bus for `galley_native` sessions
+  without changing managed/external RunnerManager watch behavior.
 
 Exit gate:
 
 - native hidden session can answer a trivial prompt;
 - managed/external behavior unchanged;
-- event order is deterministic under mock model;
+- persisted transcript contains the visible mock assistant final answer;
+- internal mock event order is deterministic and no-tool;
+- hidden native `session.watch` can replay the mock event trace and end with
+  `native_run_complete`;
+- native session rows are allowed by SQLite, but Goal rows are still
+  managed/external-only;
 - no native memory/tool claims yet.
 
 Rollback:
@@ -168,6 +191,11 @@ Rollback:
 - disable native session start while keeping router skeleton.
 
 ## Slice 3: Model Adapter V1
+
+Status: implemented as Slice 3A/3B/3C on 2026-06-16. See
+[Slice 3A Model Adapter](../devlog/2026-06-16-galley-native-slice-3a-model-adapter.md)
+and [Slice 3B Streaming](../devlog/2026-06-16-galley-native-slice-3b-streaming.md)
+and [Slice 3C Anthropic Adapter](../devlog/2026-06-16-galley-native-slice-3c-anthropic-adapter.md).
 
 Goal: use configured Galley model records from native without introducing new
 first-run setup.
@@ -180,7 +208,10 @@ Tasks:
 
 - implement OpenAI-compatible adapter first or decide Anthropic first during
   Slice 0;
-- normalize streaming deltas into native content blocks;
+- reuse existing Galley Provider/Model records and encrypted credentials;
+- allow native `--llm` to resolve managed model display names, model names, and
+  ids;
+- preserve mock fallback when no supported model is configured;
 - capture usage and stop reasons;
 - handle blank/incomplete/max-token responses;
 - keep provider-specific details out of loop semantics;
@@ -192,11 +223,87 @@ Exit gate:
 - errors become actionable runtime events;
 - model configuration still uses existing Galley Provider/Model records.
 
+Landed in Slice 3A:
+
+- OpenAI-compatible API-key chat completions with `stream: false`;
+- same native transcript persistence and event-bus replay as Slice 2;
+- `run_complete.stopReason` and `run_complete.usage`;
+- local fake OpenAI socket test for config -> credential -> HTTP -> transcript
+  -> event path.
+
+Landed in Slice 3B:
+
+- OpenAI-compatible SSE parsing for `data:` frames and `[DONE]`;
+- `"stream": true` advanced option produces multiple live
+  `turn_progress` events with `source: "model_stream"`;
+- streamed deltas are accumulated into the final visible assistant transcript;
+- optional streaming usage and finish reason flow into `run_complete`;
+- non-stream model behavior and mock fallback remain available.
+
+Landed in Slice 3C:
+
+- Anthropic-compatible API-key `/messages` adapter;
+- Anthropic non-stream content-block response parsing;
+- Anthropic SSE parsing for `message_start`, `content_block_delta`,
+  `message_delta`, and `message_stop`;
+- `sk-ant-*` credentials use `x-api-key`, matching managed model probes;
+- Anthropic streaming deltas use the same `source: "model_stream"` native event
+  path as OpenAI-compatible streaming;
+- usage from Anthropic start/delta events is merged into `run_complete.usage`.
+
+Deferred to Slice 3C+:
+
+- ChatGPT Codex OAuth native adapter;
+- Responses API native adapter;
+- richer incomplete/max-token recovery policy beyond explicit stop reason and
+  empty-response errors.
+
 Rollback:
 
 - fall back to mock-model dogfood only.
 
 ## Slice 4A: Tool Control Plane
+
+Status: implemented as a hidden control-plane skeleton on 2026-06-16. See
+[Slice 4A Tool Control Plane](../devlog/2026-06-16-galley-native-slice-4a-tool-control-plane.md).
+The landed slice proves parsing, registry metadata, event ordering, and
+no-side-effect stubs. Human-driven approval decisions remain deferred before
+real executors are enabled.
+
+Follow-up 4A2A landed on 2026-06-16. See
+[Slice 4A2A Native Interaction State](../devlog/2026-06-16-galley-native-slice-4a2a-interaction-state.md).
+It lets hidden native `session.send` run a follow-up native turn and makes
+`ask_user` enter a persisted waiting state that the next `session.send` can
+resume.
+
+Follow-up 4A2B landed on 2026-06-16. See
+[Slice 4A2B Native Approval State](../devlog/2026-06-16-galley-native-slice-4a2b-approval-state.md).
+It lets risky native tool calls pause as pending approvals, and lets hidden
+native `session.approval_response` / CLI `session approval-response` allow or
+deny the suspended call. Executors still return deterministic no-side-effect
+stubs.
+
+Follow-up 4A2C landed on 2026-06-16. See
+[Slice 4A2C GUI Projection](../devlog/2026-06-16-galley-native-slice-4a2c-gui-projection.md).
+It projects native runtime events into the existing GUI conversation,
+approval, ask-user, and ToolCallout surfaces. GUI native sends and approvals
+route to Rust Core instead of the Python bridge, but executors remain
+deterministic no-side-effect stubs.
+
+Follow-up 4B1 landed on 2026-06-16. See
+[Slice 4B1 File Read Executor](../devlog/2026-06-16-galley-native-slice-4b1-file-read.md).
+It switches only `file_read` from stub to a read-only native executor.
+Workspace-relative reads are allowed when the hidden native session has a
+Project `root_path`; existing absolute paths outside that workspace pause for
+approval before reading. All write, process, browser, memory, Goal Hive, and
+Morphling executors remain disabled or stubbed.
+
+Follow-up 4B2 landed on 2026-06-16. See
+[Slice 4B2 Tool Result Continuation](../devlog/2026-06-16-galley-native-slice-4b2-tool-result-continuation.md).
+It adds one non-stream continuation pass after `file_read`: when Core has a
+`file_read` result and no pending approval/user-input wait, it sends the tool
+result back to the model and persists the continuation answer as the
+assistant-facing final answer.
 
 Goal: let native understand, route, and report tool use without real file,
 process, browser, or memory side effects.
@@ -219,12 +326,84 @@ Tasks:
 - route most tool executors to deterministic stubs;
 - keep `start_long_term_update` as a stub until Slice 5.
 
-Exit gate:
+Landed in Slice 4A skeleton:
+
+- `core::native_tools` with the 9 GA parity tool schemas and default approval
+  metadata;
+- structured JSON and text-fallback parsers for common `tool_calls`,
+  `tool_call`, `tool` / `name`, and OpenAI-style `function.arguments` shapes;
+- recoverable `no_tool` and malformed-tool classifications;
+- hidden native runtime events in deterministic order:
+  `tool_pending`, optional `approval_pending`, `tool_start`, `tool_progress`,
+  `tool_end`;
+- assistant `turn_end.toolCalls` / `turn_end.toolResults` and persisted
+  `messages.tool_calls` / `messages.tool_results` payloads;
+- no-op deterministic results for all 9 parity tools with
+  `sideEffectsPerformed: false`;
+- socket-level coverage for `session.new` + `session.watch` replaying native
+  tool stub events.
+
+Landed in Slice 4A2A follow-up:
+
+- hidden native `session.send` runs a new Rust-native turn instead of becoming
+  `persisted_only`;
+- native event bus replay is refreshed for the latest native turn;
+- `ask_user` emits a dedicated `ask_user` event instead of approval events;
+- `run_complete.exitReason.result = "ASK_USER"` and stream close reason
+  `native_waiting_user` mark user-input wait state;
+- native sessions persist `status = waiting_approval` while waiting and return
+  to `idle` after the next native `session.send` completes;
+- socket tests cover follow-up turns and ask-user wait/resume.
+
+Landed in Slice 4A2B follow-up:
+
+- risky native tools persist a pending `tool_events` row and end the stream with
+  `native_waiting_approval` before any tool result is produced;
+- `session.approval_response` accepts `allow_once`, `deny`,
+  `always_allow_project`, and `always_allow_global` decisions for hidden native
+  sessions;
+- allow decisions emit `approval_resolved`, `tool_start`, `tool_progress`,
+  `tool_end`, and `run_complete`, update the assistant message's
+  `tool_results`, complete the pending tool event, and return the session to
+  `idle`;
+- deny decisions emit `approval_resolved`, a denied `tool_end`, and
+  `run_complete`, record `status: "denied"`, and perform no side effect;
+- native tool call ids are scoped by session and turn so approval ids cannot
+  collide across sessions.
+
+Landed in Slice 4A2C follow-up:
+
+- Rust Core emits `native-runtime-event` Tauri events for hidden native turns
+  and approval resolutions;
+- GUI maps native `tool_pending` / `approval_pending` / `ask_user` /
+  `tool_end` / `turn_end` / `run_complete` into the existing conversation
+  store instead of creating a parallel native UI;
+- GUI native session sends call `native_session_run_turn` after the existing
+  user-message persistence path, skipping Python bridge spawn and history
+  replay;
+- GUI native approvals call `native_approval_response`, letting Rust Core own
+  tool-event persistence and approval resolution;
+- restored native assistant rows can read native-shaped `tool_calls` /
+  `tool_results` payloads.
+
+Deferred from the full 4A gate:
+
+- provider-native tool-choice request wiring;
+- durable allow-policy persistence for `always_allow_project` /
+  `always_allow_global`;
+- real file, process, browser, memory, Goal Hive, or Morphling side effects.
+
+Exit gate for the skeleton:
 
 - mock-model tests cover tool-call routing for each 9-tool schema;
 - tool pending/start/progress/end events are ordered and persisted as expected;
-- approval events match GUI/CLI expectations;
-- `ask_user` can suspend and resume the loop;
+- approval events expose the future GUI/CLI shape without executing side
+  effects;
+- approval allow/deny can resume or deny the exact suspended native tool call;
+- `ask_user` is recognized and can enter a waiting state that the next native
+  `session.send` resumes;
+- GUI projection can display native pending approvals, ask-user prompts, and
+  settled stub tool results without spawning a Python bridge;
 - `no_tool` recovery cases have deterministic tests;
 - no real file/code/browser side effects occur in this slice.
 
@@ -243,7 +422,11 @@ Primary RFCs:
 
 Tasks:
 
-- implement `file_read`;
+- implement `file_read`; landed in Slice 4B1 with read-only execution,
+  workspace-relative resolution, and approval-gated absolute paths outside the
+  workspace;
+- feed `file_read` results back to the model once; landed in Slice 4B2 for
+  non-stream turns without pending approval or `ask_user`;
 - implement `file_patch`;
 - implement `file_write`;
 - implement `code_run` with explicit cwd policy;
@@ -256,7 +439,8 @@ Exit gate:
 
 - temp workspace file read/write/patch tests pass;
 - patch/write show diff or preview material before risky writes;
-- risky local action can enter approval flow and resume after allow/deny;
+- risky local action reuses the landed approval flow and resumes after
+  allow/deny;
 - `code_run` handles timeout, cancellation, exit status, stdout, and stderr;
 - managed/external file/code behavior is unchanged;
 - Browser Control is not part of this gate.

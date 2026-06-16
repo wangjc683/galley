@@ -35,6 +35,7 @@ const MIG_017: &str = include_str!("../migrations/017_message_visibility.sql");
 const MIG_018: &str = include_str!("../migrations/018_goal_deliverable.sql");
 const MIG_019: &str = include_str!("../migrations/019_goal_workspace.sql");
 const MIG_020: &str = include_str!("../migrations/020_message_attachments.sql");
+const MIG_021: &str = include_str!("../migrations/021_native_session_runtime.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -43,6 +44,7 @@ async fn fresh_pool() -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)

@@ -17,7 +17,11 @@ pub fn route_for_runtime(kind: RuntimeKind) -> RuntimeRoute {
 }
 
 pub fn galley_native_experimental_enabled() -> bool {
-    galley_native_enabled_from_value(std::env::var(GALLEY_NATIVE_EXPERIMENTAL_ENV).ok().as_deref())
+    galley_native_enabled_from_value(
+        std::env::var(GALLEY_NATIVE_EXPERIMENTAL_ENV)
+            .ok()
+            .as_deref(),
+    )
 }
 
 pub fn galley_native_enabled_from_value(raw: Option<&str>) -> bool {
@@ -37,7 +41,12 @@ pub fn galley_native_gate_disabled_message() -> String {
 }
 
 pub fn galley_native_execution_unavailable_message() -> String {
-    "galley_native runtime is recognized, but native session execution is not implemented in Slice 1"
+    "galley_native runtime is recognized, but it does not use the Python GenericAgent runner"
+        .to_string()
+}
+
+pub fn galley_native_goal_unavailable_message() -> String {
+    "galley_native runtime is recognized, but native Goal execution is not implemented in Slice 2"
         .to_string()
 }
 
@@ -59,9 +68,17 @@ pub fn ensure_runtime_execution_available(kind: RuntimeKind) -> Result<(), Galle
             message: galley_native_gate_disabled_message(),
         });
     }
-    Err(GalleyError::InvalidArgs {
-        message: galley_native_execution_unavailable_message(),
-    })
+    Ok(())
+}
+
+pub fn ensure_goal_runtime_available(kind: RuntimeKind) -> Result<(), GalleyError> {
+    ensure_runtime_filter_available(kind)?;
+    if kind == RuntimeKind::GalleyNative {
+        return Err(GalleyError::InvalidArgs {
+            message: galley_native_goal_unavailable_message(),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -66,14 +66,23 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         const resultPreview = previewFromContent(result?.content);
         const id =
           (typeof result?.toolUseId === "string" && result.toolUseId) ||
+          (typeof result?.toolCallId === "string" && result.toolCallId) ||
           (typeof tc.toolUseId === "string" && tc.toolUseId) ||
+          (typeof tc.toolCallId === "string" && tc.toolCallId) ||
+          (typeof tc.id === "string" && tc.id) ||
           `t-${row.turn_index}-${i}`;
         return {
           id,
-          name: typeof tc.toolName === "string" ? tc.toolName : "(unknown)",
-          status: "success-historical",
-          args: (tc.args as Record<string, unknown>) ?? {},
+          name:
+            typeof tc.toolName === "string"
+              ? tc.toolName
+              : typeof tc.name === "string"
+                ? tc.name
+                : "(unknown)",
+          status: statusFromResult(result),
+          args: argsFromCall(tc),
           resultPreview,
+          approvalId: id.startsWith("native_") ? id : undefined,
         };
       });
       const displayStep =
@@ -161,4 +170,21 @@ function previewFromContent(content: unknown): string | undefined {
   } catch {
     return String(content).slice(0, 500);
   }
+}
+
+function argsFromCall(call: Record<string, unknown>): Record<string, unknown> {
+  const raw = call.args ?? call.argumentsJson ?? call.arguments;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return {};
+}
+
+function statusFromResult(
+  result: Record<string, unknown> | undefined,
+): ConversationToolEvent["status"] {
+  const status = result?.status;
+  if (status === "denied") return "denied";
+  if (status === "failed" || status === "error") return "failed";
+  return "success-historical";
 }

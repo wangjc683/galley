@@ -1,5 +1,6 @@
 use super::*;
 use base64::Engine as _;
+use tauri::Emitter;
 
 const MAX_MESSAGE_IMAGES: usize = 4;
 const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
@@ -456,6 +457,189 @@ pub(crate) async fn load_tool_events_by_session(
         .tool_event_rows_by_session(&session_id)
         .await
         .map_err(stringify_error)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NativeSessionRunTurnInput {
+    session_id: SessionId,
+    content: String,
+    turn_index: u32,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NativeSessionRunTurnResult {
+    session: SessionBrief,
+    assistant_message: MessageBrief,
+    dispatch: &'static str,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NativeApprovalResponseInput {
+    session_id: SessionId,
+    approval_id: String,
+    decision: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NativeApprovalResponseResult {
+    session: SessionBrief,
+    approval_id: String,
+    decision: String,
+    tool_result: serde_json::Value,
+    dispatch: &'static str,
+}
+
+#[derive(Debug, serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SessionExternalPayload {
+    session: SessionBrief,
+    via: &'static str,
+}
+
+#[tauri::command]
+pub(crate) async fn native_session_run_turn(
+    app: tauri::AppHandle,
+    input: NativeSessionRunTurnInput,
+) -> std::result::Result<NativeSessionRunTurnResult, String> {
+    let galley = SqliteGalley::open().await.map_err(stringify_error)?;
+    let session = galley
+        .session_brief(input.session_id.clone())
+        .await
+        .map_err(stringify_error)?;
+    if session.ga_runtime_kind != RuntimeKind::GalleyNative {
+        return Err(stringify_error(crate::error::GalleyError::InvalidArgs {
+            message: "native_session_run_turn supports only galley_native sessions".into(),
+        }));
+    }
+
+    crate::native_runtime::event_bus().start_session(input.session_id.as_str());
+    let model = match crate::native_model::load_selected_or_default_model(
+        &galley,
+        session.selected_llm_key.as_deref(),
+    )
+    .await
+    {
+        Ok(model) => model,
+        Err(e) => {
+            publish_native_gui_error(&app, input.session_id.as_str(), &e);
+            return Err(stringify_error(e));
+        }
+    };
+    let native_turn = match crate::native_runtime::run_turn(
+        &galley,
+        input.session_id.clone(),
+        input.turn_index,
+        &input.content,
+        "gui.native_session_run_turn",
+        false,
+        model,
+    )
+    .await
+    {
+        Ok(turn) => turn,
+        Err(e) => {
+            publish_native_gui_error(&app, input.session_id.as_str(), &e);
+            return Err(stringify_error(e));
+        }
+    };
+    if !native_turn.events_already_published {
+        crate::native_runtime::event_bus()
+            .publish_many(input.session_id.as_str(), &native_turn.events);
+    }
+    crate::native_runtime::event_bus()
+        .close_session(input.session_id.as_str(), native_turn.close_reason.clone());
+    emit_native_runtime_events(&app, &native_turn.events);
+    emit_session_updated(&app, native_turn.session.clone(), "native_session_run_turn");
+    Ok(NativeSessionRunTurnResult {
+        session: native_turn.session,
+        assistant_message: native_turn.assistant_message,
+        dispatch: "completed_native",
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn native_approval_response(
+    app: tauri::AppHandle,
+    input: NativeApprovalResponseInput,
+) -> std::result::Result<NativeApprovalResponseResult, String> {
+    let decision = input.decision.trim();
+    if !matches!(
+        decision,
+        "allow_once" | "deny" | "always_allow_project" | "always_allow_global"
+    ) {
+        return Err(stringify_error(crate::error::GalleyError::InvalidArgs {
+            message:
+                "native_approval_response decision must be allow_once, deny, always_allow_project, or always_allow_global"
+                    .into(),
+        }));
+    }
+    let galley = SqliteGalley::open().await.map_err(stringify_error)?;
+    let session = galley
+        .session_brief(input.session_id.clone())
+        .await
+        .map_err(stringify_error)?;
+    if session.ga_runtime_kind != RuntimeKind::GalleyNative {
+        return Err(stringify_error(crate::error::GalleyError::InvalidArgs {
+            message: "native_approval_response supports only galley_native sessions".into(),
+        }));
+    }
+    let resolution = crate::native_runtime::resolve_native_approval(
+        &galley,
+        input.session_id.clone(),
+        &input.approval_id,
+        decision,
+    )
+    .await
+    .map_err(stringify_error)?;
+    crate::native_runtime::event_bus().start_session(input.session_id.as_str());
+    crate::native_runtime::event_bus().publish_many(input.session_id.as_str(), &resolution.events);
+    crate::native_runtime::event_bus()
+        .close_session(input.session_id.as_str(), resolution.close_reason.clone());
+    emit_native_runtime_events(&app, &resolution.events);
+    emit_session_updated(&app, resolution.session.clone(), "native_approval_response");
+    Ok(NativeApprovalResponseResult {
+        session: resolution.session,
+        approval_id: input.approval_id,
+        decision: decision.to_string(),
+        tool_result: resolution.tool_result,
+        dispatch: "completed_native_approval",
+    })
+}
+
+fn emit_native_runtime_events(
+    app: &tauri::AppHandle,
+    events: &[crate::native_runtime::NativeRuntimeEvent],
+) {
+    for event in events {
+        let _ = app.emit("native-runtime-event", event);
+    }
+}
+
+fn emit_session_updated(app: &tauri::AppHandle, session: SessionBrief, via: &'static str) {
+    let _ = app.emit(
+        "session-updated-external",
+        SessionExternalPayload { session, via },
+    );
+}
+
+fn publish_native_gui_error(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    error: &crate::error::GalleyError,
+) {
+    let event = crate::native_runtime::runtime_error_event(
+        session_id,
+        "runtime",
+        error.to_string(),
+        Some("Check the native model configuration and retry.".to_string()),
+    );
+    crate::native_runtime::event_bus().publish(session_id, event.clone());
+    crate::native_runtime::event_bus().close_session(session_id, "native_runtime_error");
+    let _ = app.emit("native-runtime-event", event);
 }
 
 #[tauri::command]

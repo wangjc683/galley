@@ -44,6 +44,7 @@ const MIG_017: &str = include_str!("../migrations/017_message_visibility.sql");
 const MIG_018: &str = include_str!("../migrations/018_goal_deliverable.sql");
 const MIG_019: &str = include_str!("../migrations/019_goal_workspace.sql");
 const MIG_020: &str = include_str!("../migrations/020_message_attachments.sql");
+const MIG_021: &str = include_str!("../migrations/021_native_session_runtime.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -83,6 +84,7 @@ async fn run_migrations(pool: &SqlitePool) {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -266,6 +268,34 @@ async fn goal_proposal_worker_limit_is_capped_at_official_hive_max() {
         .expect("create goal proposal");
 
     assert_eq!(proposal.worker_limit, MAX_GOAL_WORKER_LIMIT);
+}
+
+#[tokio::test]
+async fn goal_proposal_rejects_native_runtime_before_db_insert() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+
+    let err = galley
+        .create_goal_proposal(
+            CreateGoalProposalInput {
+                objective: "Try native Goal".into(),
+                project_id: None,
+                master_session_id: None,
+                budget_seconds: None,
+                worker_limit: None,
+                runtime_kind: Some(RuntimeKind::GalleyNative),
+                write_mode: None,
+                expires_in_seconds: None,
+            },
+            Origin::cli(None, Some("native gate test".into())),
+        )
+        .await
+        .expect_err("native Goal is not executable in Slice 2");
+
+    assert!(matches!(
+        err,
+        GalleyError::InvalidArgs { message } if message.contains("galley_native runtime")
+    ));
 }
 
 #[tokio::test]
@@ -772,7 +802,7 @@ async fn create_session_can_snapshot_explicit_external_runtime() {
 }
 
 #[tokio::test]
-async fn create_session_rejects_native_runtime_before_db_insert() {
+async fn create_session_rejects_native_runtime_when_gate_disabled() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool);
     let err = galley
@@ -791,12 +821,34 @@ async fn create_session_rejects_native_runtime_before_db_insert() {
             Origin::gui(),
         )
         .await
-        .expect_err("native runtime is not executable in Slice 1");
+        .expect_err("native runtime is gated");
 
     assert!(matches!(
         err,
         GalleyError::InvalidArgs { message } if message.contains("galley_native runtime")
     ));
+}
+
+#[tokio::test]
+async fn sessions_table_accepts_native_runtime_after_migration() {
+    let pool = fresh_pool().await;
+    sqlx::query(
+        "INSERT INTO sessions (id, title, status, turn_count, pending_approval_count, \
+            error_count, pinned, last_activity_at, created_at, updated_at, ga_runtime_kind) \
+         VALUES ('sess_native_schema', 'Native schema', 'idle', 0, 0, 0, 0, \
+            '2026-06-16T00:00:00Z', '2026-06-16T00:00:00Z', \
+            '2026-06-16T00:00:00Z', 'galley_native')",
+    )
+    .execute(&pool)
+    .await
+    .expect("native runtime CHECK should allow session rows");
+
+    let stored: String =
+        sqlx::query_scalar("SELECT ga_runtime_kind FROM sessions WHERE id = 'sess_native_schema'")
+            .fetch_one(&pool)
+            .await
+            .expect("read native session runtime");
+    assert_eq!(stored, "galley_native");
 }
 
 #[tokio::test]
@@ -1099,11 +1151,12 @@ async fn delete_session_cascades_messages_and_attachments() {
         .await
         .unwrap();
     assert_eq!(n, 0);
-    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM message_attachments WHERE session_id = ?")
-        .bind("s1")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let n: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM message_attachments WHERE session_id = ?")
+            .bind("s1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(n, 0);
 }
 

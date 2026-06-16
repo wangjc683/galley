@@ -354,7 +354,10 @@ interface SessionsActions {
   createSession: (projectId?: string) => string;
   /** Create and await the Rust row. Used when another Core command must
    * reference the session immediately, such as desktop Goal master launch. */
-  createSessionPersisted: (projectId?: string, title?: string) => Promise<string>;
+  createSessionPersisted: (
+    projectId?: string,
+    title?: string,
+  ) => Promise<string>;
   archiveSession: (sessionId: string) => void;
   unarchiveSession: (sessionId: string) => void;
   renameSession: (sessionId: string, newTitle: string) => void;
@@ -551,6 +554,15 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
           turnCount: session?.turnCount ?? 0,
         });
       }
+    }
+    if (runtimeKind === "galley_native") {
+      logPerf("sessions.activateSession", activateStartedAt, {
+        sessionId: id,
+        hasHistory,
+        needsSpawn: false,
+        runtimeKind,
+      });
+      return;
     }
     // Step 5: auto-spawn the bridge when this session has no live
     // one. Re-spawn on `closed` / `error` lets a kill or crash

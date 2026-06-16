@@ -88,8 +88,7 @@ fn conversation_attachment_dir_from_base(
     session_id: &str,
     message_id: &str,
 ) -> PathBuf {
-    conversation_attachment_session_dir_from_base(base, session_id)
-        .join(message_id)
+    conversation_attachment_session_dir_from_base(base, session_id).join(message_id)
 }
 
 #[cfg(test)]

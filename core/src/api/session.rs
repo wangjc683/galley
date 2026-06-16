@@ -43,7 +43,8 @@ pub enum RuntimeKind {
     Managed,
     /// User-owned attached GenericAgent checkout.
     External,
-    /// Galley-owned native runtime. Hidden and non-executable in Slice 1.
+    /// Galley-owned native runtime. Hidden and experimental until the
+    /// native worker reaches managed-GA parity.
     GalleyNative,
 }
 

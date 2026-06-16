@@ -12,6 +12,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import { rowsToTurns } from "@/stores/messages/rowsToTurns";
 import type {
   AgentTurn,
+  ConversationToolEvent,
   MessageAttachment,
   Origin,
   PendingApproval,
@@ -281,6 +282,17 @@ interface MessagesActions {
     approvalId: string,
     decision: ApprovalDecision,
   ) => void;
+  recordApprovalDecisionLocal: (
+    sid: string,
+    approvalId: string,
+    decision: ApprovalDecision,
+  ) => void;
+  upsertToolEvent: (
+    sid: string,
+    tool: ConversationToolEvent,
+    turnIndex?: number,
+    summary?: string,
+  ) => void;
 }
 
 export type MessagesStore = MessagesState & MessagesActions;
@@ -352,6 +364,39 @@ function replaceLastPendingUserAttachments(
     return next;
   }
   return turns;
+}
+
+function upsertToolInTurns(
+  turns: Turn[],
+  tool: ConversationToolEvent,
+  turnIndex?: number,
+  summary?: string,
+): Turn[] {
+  const next = turns.slice();
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const turn = next[i];
+    if (turn.role !== "agent") continue;
+    if (turnIndex !== undefined && turn.turnIndex !== turnIndex) continue;
+    const tools = turn.tools.slice();
+    const existing = tools.findIndex(
+      (item) => item.id === tool.id || item.approvalId === tool.approvalId,
+    );
+    if (existing >= 0) {
+      tools[existing] = { ...tools[existing], ...tool };
+    } else {
+      tools.push(tool);
+    }
+    next[i] = { ...turn, tools };
+    return next;
+  }
+  next.push({
+    role: "agent",
+    tools: [tool],
+    finalAnswer: null,
+    turnIndex,
+    summary,
+  } as AgentTurn);
+  return next;
 }
 
 // ============================================================
@@ -449,18 +494,20 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       sessionsState.sessions.find((s) => s.id === sid)?.turnCount ?? 0;
     const state = get();
     const persistRequestId = state.userSubmitTick + 1;
-    const optimisticAttachments: MessageAttachment[] = attachments.map((image) => ({
-      id: image.id,
-      messageId: "",
-      sessionId: sid,
-      kind: "image",
-      path: image.dataUrl,
-      mimeType: image.mimeType,
-      byteSize: image.byteSize,
-      width: image.width,
-      height: image.height,
-      createdAt: new Date().toISOString(),
-    }));
+    const optimisticAttachments: MessageAttachment[] = attachments.map(
+      (image) => ({
+        id: image.id,
+        messageId: "",
+        sessionId: sid,
+        kind: "image",
+        path: image.dataUrl,
+        mimeType: image.mimeType,
+        byteSize: image.byteSize,
+        width: image.width,
+        height: image.height,
+        createdAt: new Date().toISOString(),
+      }),
+    );
     const { byId, next } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [
@@ -505,49 +552,50 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       sessionId: sid,
       content: text,
       attachments,
-    })
-      .then((message) => {
-        const persistedTurnIndex =
-          typeof message.turnIndex === "number" ? message.turnIndex : null;
-        if (persistedTurnIndex === null) {
-          throw new Error("Core did not return a durable turnIndex.");
-        }
-        const persistedOffset = persistedTurnIndex - 1;
-        const persistedAttachments = message.attachments ?? [];
-        const latest = get();
-        const latestMessages = latest.byId[sid];
-        if (
-          persistedOffset !== currentTurnCount &&
-          latestMessages?.lastUserPersistRequestId === persistRequestId
-        ) {
-          const { byId: adjusted } = patchMessages(latest, sid, (m) => ({
-            ...m,
-            turns: replaceLastPendingUserAttachments(
-              m.turns,
-              text,
-              persistedAttachments,
-            ),
-            turnIndexOffset: persistedOffset,
-            sendPhase: m.sendPhase === "saving" ? "starting" : m.sendPhase,
-          }));
-          set({ byId: adjusted });
-        } else if (latestMessages?.lastUserPersistRequestId === persistRequestId) {
-          const { byId: adjusted } = patchMessages(latest, sid, (m) => ({
-            ...m,
-            turns: replaceLastPendingUserAttachments(
-              m.turns,
-              text,
-              persistedAttachments,
-            ),
-            sendPhase: m.sendPhase === "saving" ? "starting" : m.sendPhase,
-          }));
-          set({ byId: adjusted });
-        }
-        return {
-          turnIndex: persistedTurnIndex,
-          attachments: persistedAttachments,
-        };
-      });
+    }).then((message) => {
+      const persistedTurnIndex =
+        typeof message.turnIndex === "number" ? message.turnIndex : null;
+      if (persistedTurnIndex === null) {
+        throw new Error("Core did not return a durable turnIndex.");
+      }
+      const persistedOffset = persistedTurnIndex - 1;
+      const persistedAttachments = message.attachments ?? [];
+      const latest = get();
+      const latestMessages = latest.byId[sid];
+      if (
+        persistedOffset !== currentTurnCount &&
+        latestMessages?.lastUserPersistRequestId === persistRequestId
+      ) {
+        const { byId: adjusted } = patchMessages(latest, sid, (m) => ({
+          ...m,
+          turns: replaceLastPendingUserAttachments(
+            m.turns,
+            text,
+            persistedAttachments,
+          ),
+          turnIndexOffset: persistedOffset,
+          sendPhase: m.sendPhase === "saving" ? "starting" : m.sendPhase,
+        }));
+        set({ byId: adjusted });
+      } else if (
+        latestMessages?.lastUserPersistRequestId === persistRequestId
+      ) {
+        const { byId: adjusted } = patchMessages(latest, sid, (m) => ({
+          ...m,
+          turns: replaceLastPendingUserAttachments(
+            m.turns,
+            text,
+            persistedAttachments,
+          ),
+          sendPhase: m.sendPhase === "saving" ? "starting" : m.sendPhase,
+        }));
+        set({ byId: adjusted });
+      }
+      return {
+        turnIndex: persistedTurnIndex,
+        attachments: persistedAttachments,
+      };
+    });
   },
 
   appendUserTurnExternal: (
@@ -795,6 +843,27 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     ).catch((e) => {
       console.debug("[messages] persistToolEventApprovalDecision failed.", e);
     });
+  },
+
+  recordApprovalDecisionLocal: (sid, approvalId, decision) => {
+    const state = get();
+    const { byId, next } = patchMessages(state, sid, (m) => ({
+      ...m,
+      approvalDecisions: { ...m.approvalDecisions, [approvalId]: decision },
+    }));
+    set({ byId });
+    fireSessionMirror(sid, next);
+  },
+
+  upsertToolEvent: (sid, tool, turnIndex, summary) => {
+    invalidateMessageRowsCache(sid);
+    const state = get();
+    const { byId, next } = patchMessages(state, sid, (m) => ({
+      ...m,
+      turns: upsertToolInTurns(m.turns, tool, turnIndex, summary),
+    }));
+    set({ byId });
+    fireSessionMirror(sid, next);
   },
 }));
 

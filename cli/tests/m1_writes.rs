@@ -50,6 +50,7 @@ const MIG_017: &str = include_str!("../../core/migrations/017_message_visibility
 const MIG_018: &str = include_str!("../../core/migrations/018_goal_deliverable.sql");
 const MIG_019: &str = include_str!("../../core/migrations/019_goal_workspace.sql");
 const MIG_020: &str = include_str!("../../core/migrations/020_message_attachments.sql");
+const MIG_021: &str = include_str!("../../core/migrations/021_native_session_runtime.sql");
 
 async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     let opts = SqliteConnectOptions::new()
@@ -59,6 +60,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)
@@ -261,7 +263,13 @@ async fn session_new_rejects_native_runtime_when_gate_disabled() {
     let (stdout, code) = run_galley_isolated(
         &db,
         td.path(),
-        &["session", "new", "investigate", "--runtime", "galley-native"],
+        &[
+            "session",
+            "new",
+            "investigate",
+            "--runtime",
+            "galley-native",
+        ],
     );
     assert_eq!(code, Some(2), "stdout: {stdout}");
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
@@ -273,22 +281,24 @@ async fn session_new_rejects_native_runtime_when_gate_disabled() {
 }
 
 #[tokio::test]
-async fn session_new_rejects_native_runtime_when_gate_enabled() {
+async fn session_new_accepts_native_runtime_when_gate_enabled_and_reaches_socket() {
     let td = tempdir();
     let db = td.path().join("test.db");
     drop(seeded_db_at(&db).await);
     let (stdout, code) = run_galley_isolated_native_enabled(
         &db,
         td.path(),
-        &["session", "new", "investigate", "--runtime", "galley-native"],
+        &[
+            "session",
+            "new",
+            "investigate",
+            "--runtime",
+            "galley-native",
+        ],
     );
-    assert_eq!(code, Some(2), "stdout: {stdout}");
+    assert_eq!(code, Some(4), "stdout: {stdout}");
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(parsed["error"], "invalid_args");
-    assert!(parsed["message"]
-        .as_str()
-        .expect("message")
-        .contains("not implemented in Slice 1"));
+    assert_eq!(parsed["error"], "db_unavailable");
 }
 
 #[tokio::test]
@@ -716,6 +726,58 @@ async fn goal_propose_caps_workers_to_official_hive_max() {
     assert_eq!(code, Some(0), "stdout: {stdout}");
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
     assert_eq!(parsed["workerLimit"], 5);
+}
+
+#[tokio::test]
+async fn goal_propose_rejects_native_runtime_when_gate_disabled() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    drop(seeded_db_at(&db).await);
+
+    let (stdout, code) = run_galley_isolated(
+        &db,
+        td.path(),
+        &[
+            "goal",
+            "propose",
+            "Try native goal",
+            "--runtime",
+            "galley-native",
+        ],
+    );
+    assert_eq!(code, Some(2), "stdout: {stdout}");
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(parsed["error"], "invalid_args");
+    assert!(parsed["message"]
+        .as_str()
+        .expect("message")
+        .contains("GALLEY_NATIVE_EXPERIMENTAL"));
+}
+
+#[tokio::test]
+async fn goal_propose_rejects_native_runtime_when_gate_enabled() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    drop(seeded_db_at(&db).await);
+
+    let (stdout, code) = run_galley_isolated_native_enabled(
+        &db,
+        td.path(),
+        &[
+            "goal",
+            "propose",
+            "Try native goal",
+            "--runtime",
+            "galley-native",
+        ],
+    );
+    assert_eq!(code, Some(2), "stdout: {stdout}");
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(parsed["error"], "invalid_args");
+    assert!(parsed["message"]
+        .as_str()
+        .expect("message")
+        .contains("native Goal execution is not implemented in Slice 2"));
 }
 
 #[tokio::test]

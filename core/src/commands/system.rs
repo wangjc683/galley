@@ -115,8 +115,8 @@ pub(crate) async fn get_im_supervisor_status(
 }
 
 #[tauri::command]
-pub(crate) async fn get_feishu_im_config()
--> std::result::Result<im_supervisor::FeishuImConfig, String> {
+pub(crate) async fn get_feishu_im_config(
+) -> std::result::Result<im_supervisor::FeishuImConfig, String> {
     im_supervisor::get_feishu_im_config().await
 }
 

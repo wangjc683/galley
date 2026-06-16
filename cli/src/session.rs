@@ -156,6 +156,39 @@ pub(crate) async fn session_send_value(
     }
 }
 
+pub(crate) async fn session_approval_response(
+    id: String,
+    approval_id: String,
+    decision: String,
+    supervisor: Option<String>,
+    reason: Option<String>,
+) -> Result<(), GalleyError> {
+    let req = serde_json::json!({
+        "command": "session.approval_response",
+        "args": {
+            "sessionId": id,
+            "approvalId": approval_id,
+            "decision": decision,
+            "supervisor": supervisor,
+            "reason": reason,
+        },
+        "schemaVersion": SCHEMA_VERSION,
+    });
+    let resp_line = socket_send_recv(req).await?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&resp_line).map_err(|e| GalleyError::Internal {
+            message: format!("malformed socket response: {e}"),
+        })?;
+    if parsed["ok"] == serde_json::Value::Bool(true) {
+        println!("{}", parsed["result"]);
+        Ok(())
+    } else {
+        let tag = parsed["error"].as_str().unwrap_or("internal");
+        let msg = parsed["message"].as_str().unwrap_or("").to_string();
+        Err(map_error_tag(tag, msg))
+    }
+}
+
 pub(crate) async fn session_watch(id: String) -> Result<(), GalleyError> {
     let mut lines = open_watch_lines(&id).await?;
     while let Some(line) = lines

@@ -1,8 +1,8 @@
 use super::*;
 
 #[tauri::command]
-pub(crate) async fn list_managed_model_providers()
--> std::result::Result<Vec<api::ManagedModelProviderRecord>, String> {
+pub(crate) async fn list_managed_model_providers(
+) -> std::result::Result<Vec<api::ManagedModelProviderRecord>, String> {
     let galley = SqliteGalley::open().await.map_err(stringify_error)?;
     galley
         .list_managed_model_providers()
@@ -11,8 +11,8 @@ pub(crate) async fn list_managed_model_providers()
 }
 
 #[tauri::command]
-pub(crate) async fn list_managed_models()
--> std::result::Result<Vec<api::ManagedModelRecord>, String> {
+pub(crate) async fn list_managed_models(
+) -> std::result::Result<Vec<api::ManagedModelRecord>, String> {
     let galley = SqliteGalley::open().await.map_err(stringify_error)?;
     galley.list_managed_models().await.map_err(stringify_error)
 }
@@ -205,8 +205,8 @@ pub(crate) async fn test_managed_model_connection(
 }
 
 #[tauri::command]
-pub(crate) async fn start_chatgpt_codex_login()
--> std::result::Result<codex_oauth::CodexDeviceLoginStart, String> {
+pub(crate) async fn start_chatgpt_codex_login(
+) -> std::result::Result<codex_oauth::CodexDeviceLoginStart, String> {
     codex_oauth::start_device_login()
         .await
         .map_err(stringify_error)

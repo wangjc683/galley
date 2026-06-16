@@ -710,7 +710,8 @@ pub(super) fn goal_project_name(objective: &str) -> String {
 
 // ---------------- trait impl ----------------
 
-pub(super) const SESSIONS_SELECT_COLS: &str = "id, project_id, title, status, summary, turn_count, \
+pub(super) const SESSIONS_SELECT_COLS: &str =
+    "id, project_id, title, status, summary, turn_count, \
     pinned, has_unread, last_activity_at, created_at, updated_at, \
     created_via, created_by_supervisor, created_origin_note, \
     llm_index, llm_key, llm_display_name, ga_runtime_kind, ga_runtime_id, prompt_profile";

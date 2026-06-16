@@ -15,6 +15,18 @@ struct SessionSendArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SessionApprovalResponseArgs {
+    session_id: String,
+    approval_id: String,
+    decision: String,
+    #[serde(default)]
+    supervisor: Option<String>,
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SessionCheckpointArgs {
     session_id: String,
     content: String,
@@ -85,6 +97,17 @@ struct RunnerSpawnedExternalPayload {
     via: &'static str,
 }
 
+fn emit_native_runtime_events(
+    app: Option<&AppHandle>,
+    events: &[crate::native_runtime::NativeRuntimeEvent],
+) {
+    if let Some(app) = app {
+        for event in events {
+            let _ = app.emit("native-runtime-event", event);
+        }
+    }
+}
+
 pub(super) async fn dispatch_session_send(
     request_id: Option<String>,
     args: Value,
@@ -117,6 +140,57 @@ pub(super) async fn dispatch_session_send(
         Ok(b) => b,
         Err(e) => return map_galley_err(request_id, e),
     };
+    let session = match galley
+        .session_brief(SessionId(parsed.session_id.clone()))
+        .await
+    {
+        Ok(session) => session,
+        Err(e) => return map_galley_err(request_id, e),
+    };
+
+    if session.ga_runtime_kind == RuntimeKind::GalleyNative {
+        let Some(turn_index) = brief.turn_index else {
+            return SocketResponse::err(
+                request_id,
+                "internal",
+                "session.send native turn missing turn_index",
+            );
+        };
+        let native_turn = match run_hidden_native_turn(
+            &galley,
+            &session.id,
+            turn_index,
+            &parsed.content,
+            "session.send",
+            true,
+            session.selected_llm_key.as_deref(),
+        )
+        .await
+        {
+            Ok(turn) => turn,
+            Err(e) => return map_galley_err(request_id, e),
+        };
+        emit_user_message_persisted(app, &parsed.session_id, &brief, "persisted_only");
+        emit_native_runtime_events(app, &native_turn.events);
+        if let Some(app) = app {
+            let _ = app.emit(
+                "session-updated-external",
+                SessionExternalPayload {
+                    session: native_turn.session.clone(),
+                    via: "session.send",
+                },
+            );
+        }
+        return SocketResponse::ok(
+            request_id,
+            serde_json::json!({
+                "message": brief,
+                "session": native_turn.session,
+                "assistantMessage": native_turn.assistant_message,
+                "dispatch": "completed_native",
+            }),
+        );
+    }
 
     // 2. Best-effort dispatch to runner. If the session's runner isn't
     // alive (LRU evicted, never spawned, crashed), the message is still
@@ -159,6 +233,89 @@ pub(super) async fn dispatch_session_send(
         "dispatch": dispatch_status,
     });
     SocketResponse::ok(request_id, result)
+}
+
+pub(super) async fn dispatch_session_approval_response(
+    request_id: Option<String>,
+    args: Value,
+    app: Option<&AppHandle>,
+) -> SocketResponse {
+    let parsed: SessionApprovalResponseArgs = match serde_json::from_value(args) {
+        Ok(a) => a,
+        Err(e) => {
+            return SocketResponse::err(
+                request_id,
+                "invalid_args",
+                format!("session.approval_response args: {e}"),
+            );
+        }
+    };
+    let decision = parsed.decision.trim();
+    if !matches!(
+        decision,
+        "allow_once" | "deny" | "always_allow_project" | "always_allow_global"
+    ) {
+        return SocketResponse::err(
+            request_id,
+            "invalid_args",
+            "session.approval_response: decision must be allow_once, deny, always_allow_project, or always_allow_global",
+        );
+    }
+    let _origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
+    let galley = match SqliteGalley::open().await {
+        Ok(g) => g,
+        Err(e) => {
+            return SocketResponse::err(request_id, "db_unavailable", format!("open: {e}"));
+        }
+    };
+    let session_id = SessionId(parsed.session_id.clone());
+    let session = match galley.session_brief(session_id.clone()).await {
+        Ok(session) => session,
+        Err(e) => return map_galley_err(request_id, e),
+    };
+    if session.ga_runtime_kind != RuntimeKind::GalleyNative {
+        return SocketResponse::err(
+            request_id,
+            "invalid_args",
+            "session.approval_response currently supports only galley_native sessions",
+        );
+    }
+
+    let resolution = match crate::native_runtime::resolve_native_approval(
+        &galley,
+        session_id.clone(),
+        &parsed.approval_id,
+        decision,
+    )
+    .await
+    {
+        Ok(resolution) => resolution,
+        Err(e) => return map_galley_err(request_id, e),
+    };
+    crate::native_runtime::event_bus().start_session(session_id.as_str());
+    crate::native_runtime::event_bus().publish_many(session_id.as_str(), &resolution.events);
+    crate::native_runtime::event_bus()
+        .close_session(session_id.as_str(), resolution.close_reason.clone());
+    emit_native_runtime_events(app, &resolution.events);
+    if let Some(app) = app {
+        let _ = app.emit(
+            "session-updated-external",
+            SessionExternalPayload {
+                session: resolution.session.clone(),
+                via: "session.approval_response",
+            },
+        );
+    }
+    SocketResponse::ok(
+        request_id,
+        serde_json::json!({
+            "session": resolution.session,
+            "approvalId": parsed.approval_id,
+            "decision": decision,
+            "toolResult": resolution.tool_result,
+            "dispatch": "completed_native_approval",
+        }),
+    )
 }
 
 pub(super) async fn dispatch_session_checkpoint(
@@ -467,12 +624,93 @@ pub(super) async fn dispatch_session_watch(
     };
     match manager.subscribe(&parsed.session_id).await {
         Some(rx) => DispatchResult::Stream { request_id, rx },
-        None => DispatchResult::Unary(SocketResponse::err(
-            request_id,
-            "not_found",
-            format!("no live runner for session {}", parsed.session_id),
-        )),
+        None => {
+            if let Some(rx) = crate::native_runtime::event_bus().subscribe(&parsed.session_id) {
+                return DispatchResult::NativeStream { request_id, rx };
+            }
+            DispatchResult::Unary(SocketResponse::err(
+                request_id,
+                "not_found",
+                format!(
+                    "no live runner or native event stream for session {}",
+                    parsed.session_id
+                ),
+            ))
+        }
     }
+}
+
+fn publish_native_runtime_error(session_id: &str, error: &crate::error::GalleyError) {
+    let (category, hint) = match error {
+        crate::error::GalleyError::InvalidArgs { .. } => (
+            "model_configuration",
+            Some("Open Settings > Models and check the selected managed model.".to_string()),
+        ),
+        crate::error::GalleyError::RunnerError { .. } => (
+            "model_request",
+            Some("Check the model endpoint, credential, and provider availability.".to_string()),
+        ),
+        crate::error::GalleyError::DbUnavailable { .. } => (
+            "database",
+            Some("Restart Galley Core and retry the native session.".to_string()),
+        ),
+        crate::error::GalleyError::NotFound { .. } => (
+            "not_found",
+            Some("Check that the selected model or session still exists.".to_string()),
+        ),
+        crate::error::GalleyError::Internal { .. } => (
+            "internal",
+            Some("Retry once; if it repeats, inspect the Galley Core logs.".to_string()),
+        ),
+    };
+    crate::native_runtime::event_bus().publish(
+        session_id,
+        crate::native_runtime::runtime_error_event(session_id, category, error.to_string(), hint),
+    );
+    crate::native_runtime::event_bus().close_session(session_id, "native_runtime_error");
+}
+
+async fn run_hidden_native_turn(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+    turn_index: u32,
+    task: &str,
+    command_name: &str,
+    mark_unread: bool,
+    selected_llm_key: Option<&str>,
+) -> crate::error::Result<crate::native_runtime::NativeTurn> {
+    crate::native_runtime::event_bus().start_session(session_id.as_str());
+    let native_model =
+        match crate::native_model::load_selected_or_default_model(galley, selected_llm_key).await {
+            Ok(model) => model,
+            Err(e) => {
+                publish_native_runtime_error(session_id.as_str(), &e);
+                return Err(e);
+            }
+        };
+    let native_turn = match crate::native_runtime::run_turn(
+        galley,
+        session_id.clone(),
+        turn_index,
+        task,
+        command_name,
+        mark_unread,
+        native_model,
+    )
+    .await
+    {
+        Ok(turn) => turn,
+        Err(e) => {
+            publish_native_runtime_error(session_id.as_str(), &e);
+            return Err(e);
+        }
+    };
+    if !native_turn.events_already_published {
+        crate::native_runtime::event_bus().publish_many(session_id.as_str(), &native_turn.events);
+    }
+    crate::native_runtime::event_bus()
+        .close_session(session_id.as_str(), native_turn.close_reason.clone());
+    Ok(native_turn)
 }
 
 // ---------------- B4 M1 · session write handlers ----------------
@@ -620,9 +858,8 @@ async fn spawn_args_for_session_new(
         crate::runtime::RuntimeRoute::PythonGa(RuntimeKind::External) => {}
         crate::runtime::RuntimeRoute::PythonGa(RuntimeKind::GalleyNative)
         | crate::runtime::RuntimeRoute::GalleyNative => {
-            return Err(SocketResponseLite::from_err(
-                crate::runtime::ensure_runtime_execution_available(runtime_kind)
-                    .expect_err("native execution is unavailable in Slice 1"),
+            return Err(SocketResponseLite::runner_error(
+                "galley_native session.new uses the native worker; Python spawn was requested unexpectedly",
             ));
         }
     }
@@ -927,18 +1164,24 @@ async fn dispatch_session_new_inner(
             format!("{command_name}: rendered task is empty"),
         );
     }
-    let spawn_args = match spawn_args_for_session_new(
-        &galley,
-        app,
-        &id,
-        llm_selection.index,
-        llm_selection.key.clone(),
-        target_runtime_kind,
-    )
-    .await
-    {
-        Ok(args) => args,
-        Err(resp) => return resp.with_request_id(request_id),
+    let runtime_route = crate::runtime::route_for_runtime(target_runtime_kind);
+    let spawn_args = match runtime_route {
+        crate::runtime::RuntimeRoute::PythonGa(_) => {
+            match spawn_args_for_session_new(
+                &galley,
+                app,
+                &id,
+                llm_selection.index,
+                llm_selection.key.clone(),
+                target_runtime_kind,
+            )
+            .await
+            {
+                Ok(args) => Some(args),
+                Err(resp) => return resp.with_request_id(request_id),
+            }
+        }
+        crate::runtime::RuntimeRoute::GalleyNative => None,
     };
 
     let input = CreateSessionInput {
@@ -991,6 +1234,60 @@ async fn dispatch_session_new_inner(
         };
         let _ = app.emit("session-created-external", payload);
     }
+
+    if matches!(runtime_route, crate::runtime::RuntimeRoute::GalleyNative) {
+        let Some(turn_index) = msg.turn_index else {
+            return SocketResponse::err(
+                request_id,
+                "internal",
+                format!("{command_name} native turn missing turn_index"),
+            );
+        };
+        let native_turn = match run_hidden_native_turn(
+            &galley,
+            &brief.id,
+            turn_index,
+            &task,
+            command_name,
+            true,
+            brief.selected_llm_key.as_deref(),
+        )
+        .await
+        {
+            Ok(turn) => turn,
+            Err(e) => return map_galley_err(request_id, e),
+        };
+        emit_user_message_persisted(app, &brief.id.0, &msg, "persisted_only");
+        emit_native_runtime_events(app, &native_turn.events);
+        if let Some(app) = app {
+            let _ = app.emit(
+                "session-updated-external",
+                SessionExternalPayload {
+                    session: native_turn.session.clone(),
+                    via: command_name,
+                },
+            );
+        }
+
+        let mut result = serde_json::json!({
+            "session": native_turn.session,
+            "message": msg,
+            "assistantMessage": native_turn.assistant_message,
+            "dispatch": "completed_native",
+        });
+        if let Some(warning) = runtime_warning {
+            result["warning"] = warning;
+        }
+        return SocketResponse::ok(request_id, result);
+    }
+
+    let Some(spawn_args) = spawn_args else {
+        return SocketResponse::err(
+            request_id,
+            "internal",
+            format!("{command_name} missing Python spawn args"),
+        );
+    };
 
     let pid = match manager.spawn(spawn_args, Some(&brief.id.0)).await {
         Ok(pid) => pid,

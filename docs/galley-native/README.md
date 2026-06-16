@@ -20,6 +20,57 @@ behavior changes until an implementation slice explicitly lands them.
 10. [Implementation Slices](./implementation-slices.md)
 11. [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md)
 
+## Implementation Status
+
+- Slice 1 landed the hidden runtime identity/router gate on 2026-06-16:
+  [devlog](../devlog/2026-06-16-galley-native-slice-1-runtime-router.md).
+- Slice 2 landed the hidden native mock worker/session path, internal native
+  message/event contract, and same-process native `session.watch` bus on
+  2026-06-16:
+  [devlog](../devlog/2026-06-16-galley-native-slice-2-native-worker-skeleton.md).
+- Slice 3A landed the first hidden native model adapter on 2026-06-16:
+  OpenAI-compatible API-key managed model records can complete a no-tool native
+  turn, while unsupported/no-model setups keep the mock fallback.
+  [devlog](../devlog/2026-06-16-galley-native-slice-3a-model-adapter.md).
+- Slice 3B landed OpenAI-compatible streaming on 2026-06-16: native no-tool
+  turns can emit multiple `turn_progress` deltas through the native event bus
+  when the selected managed model enables `"stream": true`.
+  [devlog](../devlog/2026-06-16-galley-native-slice-3b-streaming.md).
+- Slice 3C landed Anthropic-compatible API-key adapter parity on 2026-06-16:
+  native no-tool turns can use Anthropic `/messages` responses and streaming
+  events through the same native event bus.
+  [devlog](../devlog/2026-06-16-galley-native-slice-3c-anthropic-adapter.md).
+- Slice 4A landed the hidden native tool-control-plane skeleton on
+  2026-06-16: native can parse GA parity tool intent, emit tool/approval
+  events, persist `tool_calls` / `tool_results`, and route all 9 tools to
+  deterministic no-side-effect stubs.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4a-tool-control-plane.md).
+- Slice 4A2A landed hidden native interaction state on 2026-06-16:
+  `session.send` can run follow-up native turns, and `ask_user` can enter a
+  persisted waiting state that the next `session.send` resumes.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4a2a-interaction-state.md).
+- Slice 4A2B landed hidden native approval state on 2026-06-16: risky native
+  tool calls now pause as pending approvals, and
+  `session approval-response` can allow or deny the suspended call while all
+  executors still return no-side-effect stubs.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4a2b-approval-state.md).
+- Slice 4A2C landed GUI projection for hidden native on 2026-06-16: Core emits
+  native runtime events to the desktop, the GUI maps them into the existing
+  conversation / approval / ask-user surfaces, and native sessions no longer
+  try to spawn a Python bridge.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4a2c-gui-projection.md).
+- Slice 4B1 landed the first real local executor on 2026-06-16: hidden native
+  `file_read` can read workspace-relative files when a Project `root_path` is
+  present, and absolute paths outside that workspace pause for approval before
+  reading. Write/process/browser/memory/Goal/Morphling executors remain
+  disabled or stubbed.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4b1-file-read.md).
+- Slice 4B2 landed one-pass tool-result continuation on 2026-06-16: when a
+  hidden native non-stream model turn produces `file_read` results without
+  pending approval or `ask_user`, Core sends those results back to the model and
+  persists the continuation answer as the assistant final answer.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4b2-tool-result-continuation.md).
+
 ## Document Roles
 
 - [Runtime Charter](./runtime.md): semantic charter for what native must
@@ -46,12 +97,13 @@ behavior changes until an implementation slice explicitly lands them.
 - [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md): current codebase
   coupling map and Goal-mode boundary for the runtime router skeleton.
 
-## Next After Review
+## Next
 
-After these RFCs settle, convert the accepted design into implementation slices:
+After Slice 4B2, native can read a workspace file and answer from the result in
+the non-stream path. The next local work is still deliberately narrow:
 
-1. review [Open Decisions](./open-decisions.md);
-2. review [Implementation Slices](./implementation-slices.md);
-3. review [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md);
-4. accept or revise the slice gates, including the 4A/4B/4C tool split;
-5. start with Slice 1 only: runtime router skeleton.
+1. decide whether approval-resolved `file_read` gets continuation before write
+   tools;
+2. implement `file_patch` / `file_write` behind preview and approval gates;
+3. keep Browser Control as Slice 4C, separate from file/code executors;
+4. keep memory, Goal Hive, and Morphling in later slices.

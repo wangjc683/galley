@@ -21,6 +21,7 @@ import {
   EditProjectDialog,
 } from "@/components/screens/project/EditProjectDialog";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
+import { nativeApprovalResponse, nativeSessionRunTurn } from "@/lib/db";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useBrowserControlStartupEffect } from "@/hooks/useBrowserControlStartupEffect";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
@@ -63,6 +64,7 @@ import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
 import type { PendingImageAttachment } from "@/types/conversation";
 import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
+import type { RuntimeKind } from "@/types/session";
 
 function goalMasterSessionTitle(objective: string): string {
   const normalized = objective.replace(/\s+/g, " ").trim();
@@ -80,7 +82,9 @@ function aggregateChannelsState(
     return "error";
   }
   if (present.includes("waiting_scan")) return "waiting_scan";
-  if (present.some((state) => state === "starting" || state === "reconnecting")) {
+  if (
+    present.some((state) => state === "starting" || state === "reconnecting")
+  ) {
     return "starting";
   }
   if (present.includes("running")) return "running";
@@ -984,7 +988,8 @@ function App() {
             }
             channelsLoadError={
               activeRuntimeKind === "managed"
-                ? (wechatChannelsStatus.loadError ?? feishuChannelsStatus.loadError)
+                ? (wechatChannelsStatus.loadError ??
+                  feishuChannelsStatus.loadError)
                 : null
             }
             onOpenChannelsSettings={
@@ -1169,6 +1174,7 @@ function App() {
                       activateSession,
                       appendUserTurn,
                       sendIPCCommand,
+                      activeRuntimeKind,
                       setScreen,
                       reportUserSendFailure,
                       copy.errors.sendFailed,
@@ -1255,9 +1261,7 @@ function App() {
                           | "sent",
                       ) => {
                         if (showPhase) {
-                          useMessagesStore
-                            .getState()
-                            .setSendPhase(sid, phase);
+                          useMessagesStore.getState().setSendPhase(sid, phase);
                         }
                       };
                       const runtime = useRuntimeStore.getState();
@@ -1284,8 +1288,7 @@ function App() {
                           setSendPhase("starting");
                           await activateSession(sid);
                           setSendPhase("restoring");
-                          historyReady =
-                            await ensureHistoryReplayComplete(sid);
+                          historyReady = await ensureHistoryReplayComplete(sid);
                           if (!historyReady) {
                             throw new Error(copy.app.restoreTimeout);
                           }
@@ -1347,6 +1350,14 @@ function App() {
                     void (async () => {
                       const persisted = await appendUserTurn(sid, t, images);
                       const absoluteTurnIndex = persisted.turnIndex;
+                      if (activeSession?.gaRuntimeKind === "galley_native") {
+                        useMessagesStore
+                          .getState()
+                          .setSendPhase(sid, "waiting_agent");
+                        await nativeSessionRunTurn(sid, t, absoluteTurnIndex);
+                        useMessagesStore.getState().setSendPhase(sid, "sent");
+                        return;
+                      }
                       if (wasAskUser) {
                         await ensureBridgeThenSend({
                           kind: "ask_user_response",
@@ -1367,6 +1378,31 @@ function App() {
                   }}
                   onApprove={(approvalId, decision) => {
                     if (!activeSessionId) return;
+                    if (activeSession?.gaRuntimeKind === "galley_native") {
+                      void nativeApprovalResponse(
+                        activeSessionId,
+                        approvalId,
+                        decision,
+                      )
+                        .then(() => {
+                          useMessagesStore
+                            .getState()
+                            .recordApprovalDecisionLocal(
+                              activeSessionId,
+                              approvalId,
+                              decision,
+                            );
+                          removePendingApproval(activeSessionId, approvalId);
+                        })
+                        .catch((e) =>
+                          reportUserSendFailure(
+                            activeSessionId,
+                            "native_approval_response",
+                            e,
+                          ),
+                        );
+                      return;
+                    }
                     recordApprovalDecision(
                       activeSessionId,
                       approvalId,
@@ -1697,6 +1733,7 @@ async function submitOnEmpty(
       absoluteTurnIndex?: number | null;
     },
   ) => Promise<void>,
+  runtimeKind: RuntimeKind,
   setScreen: (s: import("@/stores/ui").Screen) => void,
   reportSendFailure: (
     sessionId: string,
@@ -1721,6 +1758,17 @@ async function submitOnEmpty(
     const persisted = await appendUserTurn(id, text, attachments);
     const absoluteTurnIndex = persisted.turnIndex;
     const messages = useMessagesStore.getState();
+    if (runtimeKind === "galley_native") {
+      messages.setSendPhase(id, "waiting_agent");
+      await nativeSessionRunTurn(id, text, absoluteTurnIndex);
+      messages.setSendPhase(id, "sent");
+      logPerf("app.submitOnEmpty", submitStartedAt, {
+        sessionId: id,
+        createdSession: existingId === undefined,
+        runtimeKind,
+      });
+      return;
+    }
     const runtime = useRuntimeStore.getState();
     const status = runtime.byId[id]?.bridgeStatus ?? "idle";
     if (

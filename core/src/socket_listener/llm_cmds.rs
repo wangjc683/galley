@@ -1,4 +1,4 @@
-use super::common::{SocketResponseLite, map_galley_err};
+use super::common::{map_galley_err, SocketResponseLite};
 use super::session_cmds::SessionExternalPayload;
 use super::*;
 
@@ -30,10 +30,17 @@ pub(super) async fn resolve_llm_selection(
     match runtime_kind {
         RuntimeKind::Managed => resolve_managed_llm_name(galley, name).await,
         RuntimeKind::External => resolve_external_llm_name(galley, name).await,
-        RuntimeKind::GalleyNative => Err(SocketResponseLite::from_err(
-            crate::runtime::ensure_runtime_execution_available(runtime_kind)
-                .expect_err("native model adapter is unavailable in Slice 1"),
-        )),
+        RuntimeKind::GalleyNative => {
+            let selection =
+                crate::native_model::resolve_native_model_selection(galley, name.as_deref())
+                    .await
+                    .map_err(SocketResponseLite::from_err)?;
+            Ok(ResolvedLlmSelection {
+                index: selection.index,
+                key: selection.key,
+                display_name: selection.display_name,
+            })
+        }
     }
 }
 

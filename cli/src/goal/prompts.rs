@@ -198,7 +198,7 @@ fn goal_master_duty_prompt(runtime_kind: RuntimeKind) -> String {
             }
         }
         RuntimeKind::GalleyNative => {
-            "Galley Native Goal Hive is not executable in Slice 1; use managed or external runtime."
+            "Galley Native Goal Hive is not executable yet; use managed or external runtime."
                 .to_string()
         }
     }
@@ -264,7 +264,7 @@ pub(crate) fn goal_memory_policy_prompt(runtime_kind: RuntimeKind) -> &'static s
         }
         RuntimeKind::GalleyNative => {
             r#"Memory/SOP policy:
-- Galley Native memory is not executable in Slice 1.
+- Galley Native memory is not executable yet.
 - Do not create native Goal protocol state until the native Goal Hive slice lands."#
         }
     }

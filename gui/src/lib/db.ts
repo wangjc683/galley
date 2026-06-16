@@ -3,7 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import type { MessageRow, ToolEventRow } from "@/types/db";
 import type { ApprovalDecision } from "@/types/ipc";
 import type { RuntimeKind } from "@/types/session";
-import type { MessageAttachment, PendingImageAttachment } from "@/types/conversation";
+import type {
+  MessageAttachment,
+  PendingImageAttachment,
+} from "@/types/conversation";
 
 /**
  * Thin GUI wrappers over Galley Core Tauri commands. The GUI does not
@@ -267,6 +270,48 @@ export async function persistToolEventApprovalDecision(
     approvalId,
     decision,
     decidedAt,
+  });
+}
+
+export interface NativeSessionRunTurnResult {
+  session: unknown;
+  assistantMessage: unknown;
+  dispatch: "completed_native";
+}
+
+export async function nativeSessionRunTurn(
+  sessionId: string,
+  content: string,
+  turnIndex: number,
+): Promise<NativeSessionRunTurnResult> {
+  return invoke<NativeSessionRunTurnResult>("native_session_run_turn", {
+    input: {
+      sessionId,
+      content,
+      turnIndex,
+    },
+  });
+}
+
+export interface NativeApprovalResponseResult {
+  session: unknown;
+  approvalId: string;
+  decision: ApprovalDecision;
+  toolResult: unknown;
+  dispatch: "completed_native_approval";
+}
+
+export async function nativeApprovalResponse(
+  sessionId: string,
+  approvalId: string,
+  decision: ApprovalDecision,
+): Promise<NativeApprovalResponseResult> {
+  return invoke<NativeApprovalResponseResult>("native_approval_response", {
+    input: {
+      sessionId,
+      approvalId,
+      decision,
+    },
   });
 }
 

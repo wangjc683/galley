@@ -92,9 +92,7 @@ pub(crate) async fn runtime_kind_for_goal(
         RuntimeArg::Managed => Ok(RuntimeKind::Managed),
         RuntimeArg::External => Ok(RuntimeKind::External),
         RuntimeArg::GalleyNative => {
-            galley_core_lib::runtime::ensure_runtime_execution_available(
-                RuntimeKind::GalleyNative,
-            )?;
+            galley_core_lib::runtime::ensure_goal_runtime_available(RuntimeKind::GalleyNative)?;
             Ok(RuntimeKind::GalleyNative)
         }
         RuntimeArg::All => Err(GalleyError::InvalidArgs {

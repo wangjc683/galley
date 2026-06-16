@@ -762,6 +762,106 @@ impl SqliteGalley {
         self.session_brief(id).await
     }
 
+    pub async fn set_native_session_waiting_for_user(&self, id: SessionId) -> Result<SessionBrief> {
+        let now = chrono_now_iso();
+        let res = sqlx::query(
+            "UPDATE sessions SET \
+                status = 'waiting_approval', \
+                pending_approval_count = 0, \
+                updated_at = ? \
+             WHERE id = ? AND ga_runtime_kind = 'galley_native'",
+        )
+        .bind(&now)
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!("native session {id} not found"),
+            });
+        }
+        self.session_brief(id).await
+    }
+
+    pub async fn set_native_session_waiting_for_approval(
+        &self,
+        id: SessionId,
+    ) -> Result<SessionBrief> {
+        let now = chrono_now_iso();
+        let res = sqlx::query(
+            "UPDATE sessions SET \
+                status = 'waiting_approval', \
+                pending_approval_count = 1, \
+                updated_at = ? \
+             WHERE id = ? AND ga_runtime_kind = 'galley_native'",
+        )
+        .bind(&now)
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!("native session {id} not found"),
+            });
+        }
+        self.session_brief(id).await
+    }
+
+    pub async fn set_native_session_idle(&self, id: SessionId) -> Result<SessionBrief> {
+        let now = chrono_now_iso();
+        let res = sqlx::query(
+            "UPDATE sessions SET \
+                status = 'idle', \
+                pending_approval_count = 0, \
+                updated_at = ? \
+             WHERE id = ? AND ga_runtime_kind = 'galley_native'",
+        )
+        .bind(&now)
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!("native session {id} not found"),
+            });
+        }
+        self.session_brief(id).await
+    }
+
+    pub async fn update_native_assistant_tool_results(
+        &self,
+        session_id: SessionId,
+        turn_index: u32,
+        tool_results: Vec<serde_json::Value>,
+    ) -> Result<()> {
+        let tool_results_json =
+            serde_json::to_string(&tool_results).map_err(|err| GalleyError::Internal {
+                message: format!("serialize native tool results: {err}"),
+            })?;
+        let res = sqlx::query(
+            "UPDATE messages \
+               SET tool_results = ? \
+             WHERE session_id = ? AND turn_index = ? AND role = 'assistant'",
+        )
+        .bind(tool_results_json)
+        .bind(session_id.as_str())
+        .bind(i64::from(turn_index))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!(
+                    "native assistant message not found for {session_id} turn {turn_index}"
+                ),
+            });
+        }
+        Ok(())
+    }
+
     pub(super) async fn clear_session_unread_db(&self, id: SessionId) -> Result<()> {
         let now = chrono_now_iso();
         let res = sqlx::query("UPDATE sessions SET has_unread = 0, updated_at = ? WHERE id = ?")

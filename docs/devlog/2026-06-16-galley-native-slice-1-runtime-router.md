@@ -30,6 +30,7 @@ rows, or any default switch.
   - Goal proposal creation.
 - Added CLI `--runtime galley-native` with `galley_native` alias.
 - Kept native hidden:
+  - ordinary CLI help does not list `galley-native`;
   - gate off: native filters/requests return `invalid_args`;
   - gate on: read filters can recognize native, but session/Goal execution
     still returns `invalid_args` because no native worker exists.
@@ -41,6 +42,7 @@ rows, or any default switch.
 
 - No SQLite migration was added.
 - Native session rows are not persisted yet.
+- Native Goal proposals are not persisted yet.
 - `active_runtime_kind` does not become native by default. If a dogfood pref is
   left as native while the env gate is off, Core falls back to the managed or
   external default.

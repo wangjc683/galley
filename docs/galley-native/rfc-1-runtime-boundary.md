@@ -92,20 +92,23 @@ Python subprocess.
 
 ### Event Shape
 
-The current `IpcEvent` vocabulary is useful for the GUI:
+The current `IpcEvent` vocabulary is useful for the GUI, but native should own
+normalized event names instead of copying Python IPC names:
 
 ```text
-ready
+runtime_ready
 turn_start
-tool_call_pending
-tool_call_start
-tool_call_progress
-tool_call_end
 turn_progress
+tool_pending
+approval_pending
+approval_resolved
+tool_start
+tool_progress
+tool_end
 turn_end
 ask_user
 run_complete
-error
+runtime_error
 history_loaded
 llm_changed
 tools_reinjected

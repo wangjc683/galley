@@ -85,7 +85,8 @@ mislead. SOPs branch per command:
 | Command                          | Possible `dispatch` values                         |
 | -------------------------------- | -------------------------------------------------- |
 | `session send`                   | `dispatched` / `persisted_only`                    |
-| `session new`                    | `dispatched` (exit 5 if runner cannot start/send)  |
+| `session approval-response`      | hidden native `completed_native_approval`          |
+| `session new`                    | `dispatched` / hidden native `completed_native` (managed/external exit 5 if runner cannot start/send) |
 | `session btw`                    | `dispatched` (only — exit 5 on no bridge)          |
 | `session stop`                   | `abort_sent` / `already_stopped`                   |
 | `llm set`                        | `dispatched` / `persisted_only`                    |
@@ -105,6 +106,10 @@ For NDJSON stream-end frames on `session watch` (§5.5b),
 | `socket_closed`      | Watch socket closed without a stream-end frame   |
 | `no_live_sessions`   | Project follow found no live stream output       |
 | `all_live_sessions_ended` | Project follow consumed all live subscriptions |
+| `native_run_complete` | Hidden native turn or approval response completed |
+| `native_waiting_user` | Hidden native `ask_user` is waiting for user input |
+| `native_waiting_approval` | Hidden native risky tool call is waiting for approval |
+| `native_runtime_error` | Hidden native model/runtime failed before completion |
 
 ### 1.2 Schema pinning
 
@@ -463,13 +468,19 @@ Response shape:
 | Field      | Type          | Notes                                                                             |
 | ---------- | ------------- | --------------------------------------------------------------------------------- |
 | `message`  | `MessageBrief`| The persisted row, including server-assigned `id` + `createdAt`                   |
-| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) — the row is in SQLite either way |
+| `session`  | `SessionBrief`? | Present for hidden native sessions after the native turn completes, waits for user input, or waits for approval. |
+| `assistantMessage` | `MessageBrief`? | Present for hidden native sessions after the native assistant message is persisted. |
+| `dispatch` | string enum   | `"dispatched"` if the managed/external runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned); hidden native returns `"completed_native"`. |
 
-**Semantics**: fire-and-forget. The CLI returns as soon as the message
-is persisted; it does **not** wait for the runner to complete the
-agent turn. Pair with `galley session watch <id>` if you need to see
-the resulting events. See [B2 playbook running note N34] for the
-rationale.
+**Semantics**: managed/external is fire-and-forget. The CLI returns as soon as
+the message is persisted; it does **not** wait for the runner to complete the
+agent turn. Hidden native currently runs the Rust-native turn inline and returns
+after that native turn completes, enters `ask_user` waiting state, or pauses on
+a risky tool approval. Since Slice 4B2, a hidden native non-stream turn that
+auto-executes `file_read` can make one continuation model request and persist
+that continuation as `assistantMessage.finalAnswer`. Pair with
+`galley session watch <id>` if you need to see the resulting events. See [B2
+playbook running note N34] for the managed/external rationale.
 
 **Origin handling**: if you pass `--supervisor`, the stored
 `origin.via` is `supervisor`. Without it, it's `cli`. Use
@@ -480,39 +491,135 @@ Exit codes: `0` success / `3 not_found` (session missing) /
 `2 invalid_args` (session archived, malformed args) /
 `4 db_unavailable` (Galley Core not running).
 
+### 5.5a · `galley session approval-response <id> <approval_id> <decision> [--supervisor=<x>] [--reason=<y>]`
+
+**Write command** — responds to a pending hidden native tool approval. This is
+currently scoped to `galley_native` sessions. Managed/external GA approvals keep
+using the existing GUI / runner IPC path.
+
+| Argument / Flag  | Notes                                                                 |
+| ---------------- | --------------------------------------------------------------------- |
+| `id`             | Session id. The session must be a hidden native session.              |
+| `approval_id`    | Pending approval id from the native `approval_pending` event / tool event row. |
+| `decision`       | `allow_once`, `deny`, `always_allow_project`, or `always_allow_global`. |
+| `--supervisor`   | Optional supervisor label for audit origin.                           |
+| `--reason`       | Optional free-text rationale.                                         |
+
+```bash
+$ galley session approval-response sess_abc native_sess_abc_0_native_tool_1_code_run allow_once \
+    --supervisor=ga-claude-1 --reason="operator approved stubbed native call"
+{"session":{...},"approvalId":"native_sess_abc_0_native_tool_1_code_run", \
+"decision":"allow_once","toolResult":{"status":"stubbed_no_side_effects",...}, \
+"dispatch":"completed_native_approval"}
+```
+
+Socket command:
+
+```json
+{
+  "command": "session.approval_response",
+  "args": {
+    "sessionId": "sess_abc",
+    "approvalId": "native_sess_abc_0_native_tool_1_code_run",
+    "decision": "allow_once",
+    "supervisor": "ga-claude-1",
+    "reason": "operator approved stubbed native call"
+  },
+  "schemaVersion": 1
+}
+```
+
+Response shape:
+
+| Field        | Type           | Notes                                                    |
+| ------------ | -------------- | -------------------------------------------------------- |
+| `session`    | `SessionBrief` | Updated session, normally back to `idle`.                |
+| `approvalId` | string         | The resolved approval id.                                |
+| `decision`   | string         | The accepted decision value.                             |
+| `toolResult` | object         | Native tool result payload written onto the assistant turn. |
+| `dispatch`   | string enum    | `"completed_native_approval"`.                           |
+
+Semantics:
+
+- `deny` records a denied result and performs no side effect.
+- Allow decisions currently unblock this one suspended call only; durable
+  project/global allow-policy storage is not implemented yet.
+- Since Slice 4B1, approved hidden-native `file_read` may perform a real
+  read-only file read. `sideEffectsPerformed` remains `false` because no file,
+  process, browser, memory, or Goal state is modified. Other native executors
+  remain deterministic stubs until their own slices land.
+- Slice 4B2 continuation does not run on this approval-response path yet:
+  allowing a pending `file_read` writes the tool result, but does not make a
+  second model request in the same response.
+- A successful response publishes native events ending in
+  `native_run_complete`; `session watch` can replay those same-process events.
+
+Exit codes: `0` success / `2 invalid_args` (bad decision, non-native session,
+approval not waiting) / `3 not_found` (session or approval missing) /
+`4 db_unavailable` (Galley Core not running).
+
 ### 5.5b · `galley session watch <id>`
 
-**Subscription command** — streams live IPC events from a session's
-runner subprocess on stdout (one event per line, NDJSON). The
-connection stays open until either:
+**Subscription command** — streams runtime events on stdout (one event per
+line, NDJSON). Managed/external sessions stream live IPC events from the Python
+runner subprocess. Hidden `galley-native` sessions stream native
+`NativeRuntimeEvent` frames from the Core-owned native event bus.
+
+The connection stays open until either:
 
 - the subprocess exits (server sends `{"stream":"end","reason":"subprocess_exited"}` then closes), or
+- the hidden native stream closes (native sessions send `{"stream":"end","reason":"native_run_complete"}`), or
+- the hidden native stream waits for human input after `ask_user` (native sends `{"stream":"end","reason":"native_waiting_user"}`), or
+- the hidden native stream waits for a tool approval (native sends `{"stream":"end","reason":"native_waiting_approval"}`), or
 - the client sends SIGINT (Ctrl-C) / the process exits
 
-Requires Galley Core to be running and a live runner for the target
-session.
+Requires Galley Core to be running. Managed/external sessions require a live
+runner for the target session. Hidden native sessions require a same-process
+native event stream for the target session; the Slice 2 bus is not persisted
+across Core restart.
 
 ```bash
 $ galley session watch sess_abc
 {"stream":"event","requestId":null,"data":{"kind":"turn_start","sessionId":"sess_abc",…}}
-{"stream":"event","requestId":null,"data":{"kind":"tool_call_start",…}}
-{"stream":"event","requestId":null,"data":{"kind":"tool_call_end",…}}
+{"stream":"event","requestId":null,"data":{"kind":"tool_pending",…}}
+{"stream":"event","requestId":null,"data":{"kind":"tool_start",…}}
+{"stream":"event","requestId":null,"data":{"kind":"tool_end",…}}
 {"stream":"event","requestId":null,"data":{"kind":"turn_end",…}}
-{"stream":"end","requestId":null,"reason":"subprocess_exited"}
+{"stream":"end","requestId":null,"reason":"native_run_complete"}
 $ # exit 0
 ```
 
-The `data` payload mirrors the runner ↔ Galley Core IPC event shape
-defined in [`docs/ipc-protocol.md`](./ipc-protocol.md) §4 — same
-`kind` discriminator and per-event field set.
+For managed/external sessions, the `data` payload mirrors the runner ↔ Galley
+Core IPC event shape defined in [`docs/ipc-protocol.md`](./ipc-protocol.md)
+§4 — same `kind` discriminator and per-event field set.
 
-**No backlog support yet.** Subscribers see events from subscribe-time
-forward only. Catching up on the recent history requires
-`galley session show <id> --tail=N` first. A `--from=<event-index>`
+For hidden native sessions, the `data` payload is the internal native event
+shape and currently emits: `runtime_ready`, `turn_start`, `turn_progress`,
+optional Slice 4A tool-control-plane events (`tool_pending`,
+`approval_pending`, `approval_resolved`, `tool_start`, `tool_progress`,
+`tool_end`), optional `ask_user`, `turn_end`, and `run_complete`;
+model/selection failures emit `runtime_error` and close with
+`native_runtime_error`.
+
+Slice 4A / 4A2B native tool events are deterministic stubs: they expose parsed
+tool intent, approval shape, approval-response flow, and result payloads, but do
+not execute file, process, browser, memory, or Goal side effects.
+
+When the selected hidden native OpenAI-compatible or Anthropic-compatible
+managed model has `"stream": true` in advanced options, `turn_progress` can
+appear as multiple delta events with `source: "model_stream"`. Non-stream
+native model turns still emit one final `turn_progress` with `source: "model"`.
+
+**No durable backlog support yet.** Managed/external subscribers see events
+from subscribe-time forward only. Hidden native subscribers can replay the
+same-process native event trace, but this is not a persisted event log and does
+not survive Core restart. Catching up on recent transcript history still
+requires `galley session show <id> --tail=N` first. A `--from=<event-index>`
 flag is planned (see [B2 playbook running note N35]).
 
-Exit codes: `0` clean stream end / `3 not_found` (no live runner for
-that session id) / `4 db_unavailable` (Galley Core not running).
+Exit codes: `0` clean stream end / `3 not_found` (no live runner or native
+event stream for that session id) / `4 db_unavailable` (Galley Core not
+running).
 
 ### 5.5c · `galley session follow <id> [--tail=N]`
 
@@ -616,17 +723,20 @@ startup as the stronger signal").
 
 ### 5.8 · `galley session new "<task>" [--runtime=current|managed|external|galley-native] [--project=<id>] [--llm=<name>] [--supervisor=<x>] [--reason=<y>]`
 
-**Write command** — creates a session, persists the first user message
-in **one SQLite transaction**, starts a runner, and dispatches the first
-task. Either both DB rows commit or neither does; once the rows commit,
-runner spawn/dispatch failures surface as `runner_error` (exit 5) so
-agents know the delegated task did not actually start.
+**Write command** — creates a session and persists the first user message in
+**one SQLite transaction**. Managed/external runtimes then start a Python runner
+and dispatch the first task; runner spawn/dispatch failures surface as
+`runner_error` (exit 5) so agents know the delegated task did not actually
+start. Hidden `galley-native` runs a Rust-native no-tool turn instead of
+Python: it uses the first usable OpenAI-compatible API-key managed model, or an
+explicit native `--llm` selection, and falls back to the Slice 2 mock worker
+when no supported model is configured.
 
 | Flag           | Default                              | Notes                                                                                          |
 | -------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | `--project`    | (none → ungrouped)                   | Project id. Invalid id → `invalid_args`.                                                       |
-| `--llm`        | (none → bridge default at spawn)     | LLM display name (case-insensitive). Resolved against the cached `llm_list` pref.              |
-| `--runtime`    | `current`                            | Follows GUI active runtime by default. `managed` / `external` are explicit cross-runtime writes. Hidden `galley-native` is recognized only for Slice 1 gating and returns `invalid_args` until native execution exists. |
+| `--llm`        | (none → runtime default)             | LLM display name (case-insensitive). Resolved against the runtime's model source. Hidden native resolves managed model display names, model names, or ids; Slice 3 supports OpenAI-compatible and Anthropic-compatible API-key models. |
+| `--runtime`    | `current`                            | Follows GUI active runtime by default. `managed` / `external` are explicit cross-runtime writes. Hidden `galley-native` requires `GALLEY_NATIVE_EXPERIMENTAL=1` and currently runs a no-tool native model/mock turn. |
 | `--supervisor` | (none → `origin.via = cli`)          | Supervisor label. Sets `origin.via = supervisor` on the session row + the first message.       |
 | `--reason`     | (none)                               | Free-text rationale on `origin.reason`.                                                        |
 
@@ -644,11 +754,12 @@ Response:
 | ---------- | -------------- | ------------------------------------------------------------------------------------------------------ |
 | `session`  | `SessionBrief` | Newly-created row. `title` is the seed `新对话`; the bridge derives a better one after the first turn. |
 | `message`  | `MessageBrief` | The persisted first user message.                                                                      |
-| `dispatch` | string enum    | `"dispatched"` on success. Runner start/send failure returns exit 5 instead of a success envelope.     |
+| `assistantMessage` | `MessageBrief`? | Present for hidden native sessions after the native turn completes. Since Slice 4B2, auto-executed `file_read` can produce a continuation final answer here. |
+| `dispatch` | string enum    | `"dispatched"` for managed/external runner success; hidden native returns `"completed_native"`. Runner/model start/send failure returns exit 5 instead of a success envelope. |
 | `warning`  | object?        | Present when the caller explicitly writes to a non-current runtime.                                  |
 
 Exit codes: `0` success / `2 invalid_args` (empty `task`, unknown
-`--llm`, unknown project, empty `llm_list` cache) / `3 not_found` /
+`--llm`, unsupported native model, unknown project, empty `llm_list` cache) / `3 not_found` /
 `4 db_unavailable` / `5 runner_error` (session/message may be saved,
 but the task did not start) / `1 internal` (commit failure — both rows
 roll back).
@@ -1014,7 +1125,7 @@ surface.
 Creates a pending conversational-confirmation proposal. It does **not** start
 work.
 
-Hidden `galley-native` is rejected with `invalid_args` in Slice 1. Native Goal
+Hidden `galley-native` is rejected with `invalid_args` in Slice 2. Native Goal
 Hive semantics land in a later Galley Native slice.
 
 ```bash

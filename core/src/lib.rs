@@ -16,6 +16,9 @@ pub mod managed_model_probe;
 mod managed_prompt;
 pub mod managed_runtime;
 pub mod migration_backup;
+pub mod native_model;
+pub mod native_runtime;
+pub mod native_tools;
 pub mod path_install;
 mod process_command;
 pub mod runner_commands;
@@ -516,7 +519,8 @@ pub fn run() {
         },
         Migration {
             version: 7,
-            description: "add sessions origin (created_via, created_by_supervisor, created_origin_note)",
+            description:
+                "add sessions origin (created_via, created_by_supervisor, created_origin_note)",
             sql: include_str!("../migrations/007_sessions_origin.sql"),
             kind: MigrationKind::Up,
         },
@@ -596,6 +600,12 @@ pub fn run() {
             version: 20,
             description: "add message attachments",
             sql: include_str!("../migrations/020_message_attachments.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 21,
+            description: "allow Galley Native session runtime",
+            sql: include_str!("../migrations/021_native_session_runtime.sql"),
             kind: MigrationKind::Up,
         },
     ];
@@ -687,6 +697,8 @@ pub fn run() {
             persist_tool_event_pending,
             persist_tool_event_approval_decision,
             load_tool_events_by_session,
+            native_session_run_turn,
+            native_approval_response,
             get_pref_json,
             set_pref_json,
             set_close_hint_copy,

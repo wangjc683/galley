@@ -92,11 +92,11 @@ mod wire;
 use llm_cmds::*;
 use project_cmds::*;
 use session_cmds::*;
-use wire::{CONNECTION_IDLE_TIMEOUT, StreamEnvelope, write_stream_line};
-pub use wire::{SCHEMA_VERSION, SocketRequest, SocketResponse};
+use wire::{write_stream_line, StreamEnvelope, CONNECTION_IDLE_TIMEOUT};
+pub use wire::{SocketRequest, SocketResponse, SCHEMA_VERSION};
 
 #[allow(unused_imports)]
-pub(crate) use llm_cmds::{ResolvedLlmSelection, resolve_llm_selection_for_runtime};
+pub(crate) use llm_cmds::{resolve_llm_selection_for_runtime, ResolvedLlmSelection};
 
 const GOAL_WORKER_SESSION_ID_PLACEHOLDER: &str = "{{GALLEY_SESSION_ID}}";
 
@@ -376,6 +376,29 @@ async fn handle_stream<R, W>(
                     }
                 }
             }
+            DispatchResult::NativeStream { request_id, mut rx } => {
+                while let Some(item) = rx.recv().await {
+                    match item {
+                        crate::native_runtime::NativeRuntimeStreamItem::Event(boxed) => {
+                            let payload = StreamEnvelope::event(
+                                request_id.clone(),
+                                serde_json::to_value(&*boxed).unwrap_or(Value::Null),
+                            );
+                            if write_stream_line(&mut write_half, &payload).await.is_err() {
+                                return;
+                            }
+                        }
+                        crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                            let payload = StreamEnvelope::end(request_id.clone(), &reason);
+                            let _ = write_stream_line(&mut write_half, &payload).await;
+                            return;
+                        }
+                    }
+                }
+                let payload = StreamEnvelope::end(request_id.clone(), "native_stream_closed");
+                let _ = write_stream_line(&mut write_half, &payload).await;
+                return;
+            }
         }
     }
 }
@@ -387,6 +410,10 @@ enum DispatchResult {
     Stream {
         request_id: Option<String>,
         rx: broadcast::Receiver<BroadcastItem>,
+    },
+    NativeStream {
+        request_id: Option<String>,
+        rx: tokio::sync::mpsc::UnboundedReceiver<crate::native_runtime::NativeRuntimeStreamItem>,
     },
 }
 
@@ -450,6 +477,9 @@ async fn dispatch_line(
         "session.send" => {
             DispatchResult::Unary(dispatch_session_send(request_id, req.args, app, manager).await)
         }
+        "session.approval_response" => DispatchResult::Unary(
+            dispatch_session_approval_response(request_id, req.args, app).await,
+        ),
         "session.checkpoint" => {
             DispatchResult::Unary(dispatch_session_checkpoint(request_id, req.args, app).await)
         }
@@ -674,6 +704,72 @@ mod tests {
         match r {
             DispatchResult::Unary(resp) => resp,
             DispatchResult::Stream { .. } => panic!("expected Unary, got Stream"),
+            DispatchResult::NativeStream { .. } => panic!("expected Unary, got NativeStream"),
+        }
+    }
+
+    const TEST_MIGRATIONS: &[&str] = &[
+        include_str!("../../migrations/001_init.sql"),
+        include_str!("../../migrations/002_add_has_unread.sql"),
+        include_str!("../../migrations/003_add_message_summary.sql"),
+        include_str!("../../migrations/004_add_messages_fts.sql"),
+        include_str!("../../migrations/005_add_message_preamble.sql"),
+        include_str!("../../migrations/006_messages_origin.sql"),
+        include_str!("../../migrations/007_sessions_origin.sql"),
+        include_str!("../../migrations/008_runtime_identity.sql"),
+        include_str!("../../migrations/009_managed_models.sql"),
+        include_str!("../../migrations/010_managed_model_providers.sql"),
+        include_str!("../../migrations/011_managed_model_sort_order.sql"),
+        include_str!("../../migrations/012_managed_model_local_secrets.sql"),
+        include_str!("../../migrations/013_session_llm_key.sql"),
+        include_str!("../../migrations/014_managed_model_auth_kind.sql"),
+        include_str!("../../migrations/015_goal_v1.sql"),
+        include_str!("../../migrations/016_goal_master_session.sql"),
+        include_str!("../../migrations/017_message_visibility.sql"),
+        include_str!("../../migrations/018_goal_deliverable.sql"),
+        include_str!("../../migrations/019_goal_workspace.sql"),
+        include_str!("../../migrations/020_message_attachments.sql"),
+        include_str!("../../migrations/021_native_session_runtime.sql"),
+    ];
+
+    struct EnvGuard {
+        key: &'static str,
+        old: Option<std::ffi::OsString>,
+    }
+
+    fn socket_env_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+            let old = std::env::var_os(key);
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, old }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.old {
+                    Some(value) => std::env::set_var(self.key, value),
+                    None => std::env::remove_var(self.key),
+                }
+            }
+        }
+    }
+
+    async fn seed_socket_test_db(path: &std::path::Path) {
+        let opts = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true);
+        let pool = sqlx::SqlitePool::connect_with(opts).await.unwrap();
+        for sql in TEST_MIGRATIONS {
+            sqlx::raw_sql(sql).execute(&pool).await.unwrap();
         }
     }
 
@@ -739,6 +835,1438 @@ mod tests {
         let resp = expect_unary(dispatch_line(line, None, &mgr).await);
         assert!(!resp.ok);
         assert_eq!(resp.error.as_deref(), Some("invalid_args"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_new_native_mock_persists_visible_turn() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+
+        let mgr = RunnerManager::new();
+        let line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Investigate native path",
+                "runtimeKind":"galley_native"
+            },
+            "requestId":"native-r1"
+        }"#;
+        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
+        assert!(resp.ok, "response: {resp:?}");
+        assert_eq!(resp.request_id.as_deref(), Some("native-r1"));
+        let result = resp.result.expect("result");
+        assert_eq!(result["dispatch"], "completed_native");
+        assert_eq!(result["session"]["gaRuntimeKind"], "galley_native");
+        assert_eq!(result["session"]["turnCount"], 1);
+        assert!(result["assistantMessage"]["finalAnswer"]
+            .as_str()
+            .unwrap()
+            .contains("Galley Native mock response"));
+
+        let session_id = result["session"]["id"].as_str().unwrap().to_string();
+        let galley = SqliteGalley::open().await.unwrap();
+        let messages = galley
+            .session_messages(SessionId(session_id), None)
+            .await
+            .unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content, "Investigate native path");
+        assert_eq!(messages[1].role, crate::api::MessageRole::Agent);
+        assert!(messages[1]
+            .final_answer
+            .as_deref()
+            .unwrap()
+            .contains("Real model adapters"));
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": result["session"]["id"].as_str().unwrap() },
+            "requestId": "native-watch-r1"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { request_id, mut rx } = watch else {
+            panic!("expected native stream");
+        };
+        assert_eq!(request_id.as_deref(), Some("native-watch-r1"));
+        let mut kinds = Vec::new();
+        let mut end_reason = None;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    kinds.push(event.kind());
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    end_reason = Some(reason);
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            kinds,
+            vec![
+                "runtime_ready",
+                "turn_start",
+                "turn_progress",
+                "turn_end",
+                "run_complete"
+            ]
+        );
+        assert_eq!(end_reason.as_deref(), Some("native_run_complete"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_new_native_uses_configured_openai_model() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let api_base = start_fake_openai_server("Native real model answer").await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_openai".into(),
+                display_name: "Native OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_openai".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_openai",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_openai".into(),
+                provider_id: "mp_native_openai".into(),
+                display_name: "Native Test Model".into(),
+                model: "gpt-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Answer from configured model",
+                "runtimeKind":"galley_native",
+                "llmName":"Native Test Model"
+            },
+            "requestId":"native-model-r1"
+        }"#;
+        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
+        assert!(resp.ok, "response: {resp:?}");
+        let result = resp.result.expect("result");
+        assert_eq!(result["dispatch"], "completed_native");
+        assert!(result["session"]["selectedLlmIndex"].is_null());
+        assert_eq!(result["session"]["selectedLlmKey"], "mm_native_openai");
+        assert_eq!(
+            result["session"]["selectedLlmDisplayName"],
+            "Native Test Model"
+        );
+        assert_eq!(
+            result["assistantMessage"]["finalAnswer"],
+            "Native real model answer"
+        );
+
+        let session_id = result["session"]["id"].as_str().unwrap().to_string();
+        let messages = galley
+            .session_messages(SessionId(session_id), None)
+            .await
+            .unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[1].final_answer.as_deref(),
+            Some("Native real model answer")
+        );
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": result["session"]["id"].as_str().unwrap() },
+            "requestId": "native-model-watch-r1"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut saw_model_progress = false;
+        let mut saw_usage = false;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    if value["kind"] == "turn_progress" {
+                        assert_eq!(value["source"], "model");
+                        assert_eq!(value["delta"], "Native real model answer");
+                        saw_model_progress = true;
+                    }
+                    if value["kind"] == "run_complete" {
+                        assert_eq!(value["stopReason"], "stop");
+                        assert_eq!(value["usage"]["total_tokens"], 9);
+                        saw_usage = true;
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_run_complete");
+                    break;
+                }
+            }
+        }
+        assert!(saw_model_progress);
+        assert!(saw_usage);
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_new_native_waits_for_approval_on_risky_tool() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let tool_answer = r#"```json
+{"tool":"code_run","arguments":{"command":"echo hi"}}
+```"#;
+        let api_base =
+            start_fake_openai_server_for("Route native tool call", tool_answer.to_string()).await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_tool_openai".into(),
+                display_name: "Native Tool OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_tool_openai".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_tool_openai",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_tool_openai".into(),
+                provider_id: "mp_native_tool_openai".into(),
+                display_name: "Native Tool Model".into(),
+                model: "gpt-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Route native tool call",
+                "runtimeKind":"galley_native",
+                "llmName":"Native Tool Model"
+            },
+            "requestId":"native-tool-r1"
+        }"#;
+        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
+        assert!(resp.ok, "response: {resp:?}");
+        let result = resp.result.expect("result");
+        assert_eq!(result["dispatch"], "completed_native");
+        assert_eq!(result["session"]["status"], "waiting_approval");
+        assert_eq!(result["assistantMessage"]["finalAnswer"], tool_answer);
+
+        let session_id = result["session"]["id"].as_str().unwrap().to_string();
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&db_path)
+                    .create_if_missing(false),
+            )
+            .await
+            .unwrap();
+        let (tool_calls_raw, tool_results_raw): (String, String) = sqlx::query_as(
+            "SELECT tool_calls, tool_results FROM messages \
+             WHERE session_id = ? AND role = 'assistant'",
+        )
+        .bind(&session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let tool_calls: serde_json::Value = serde_json::from_str(&tool_calls_raw).unwrap();
+        let tool_results: serde_json::Value = serde_json::from_str(&tool_results_raw).unwrap();
+        assert_eq!(tool_calls.as_array().unwrap().len(), 1);
+        assert_eq!(tool_calls[0]["name"], "code_run");
+        let approval_id = tool_calls[0]["id"].as_str().unwrap().to_string();
+        assert_eq!(tool_results, serde_json::json!([]));
+        let tool_row: (String, String, String) =
+            sqlx::query_as("SELECT status, tool_name, risk_level FROM tool_events WHERE id = ?")
+                .bind(&approval_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            tool_row,
+            (
+                "waiting_approval".into(),
+                "code_run".into(),
+                "medium".into()
+            )
+        );
+        let pending_count: i64 =
+            sqlx::query_scalar("SELECT pending_approval_count FROM sessions WHERE id = ?")
+                .bind(&session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(pending_count, 1);
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": session_id },
+            "requestId": "native-tool-watch-r1"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut kinds = Vec::new();
+        let mut saw_approval_required = false;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    kinds.push(event.kind());
+                    if value["kind"] == "run_complete" {
+                        assert_eq!(value["exitReason"]["result"], "APPROVAL_REQUIRED");
+                        saw_approval_required = true;
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_waiting_approval");
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            kinds,
+            vec![
+                "runtime_ready",
+                "turn_start",
+                "turn_progress",
+                "tool_pending",
+                "approval_pending",
+                "turn_end",
+                "run_complete"
+            ]
+        );
+        assert!(saw_approval_required);
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_new_native_file_read_continues_to_final_answer() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let workspace = tempfile::tempdir().unwrap();
+        std::fs::write(
+            workspace.path().join("notes.txt"),
+            "hello from fixture\nsecond line\n",
+        )
+        .unwrap();
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let tool_answer = r#"```json
+{"tool":"file_read","arguments":{"path":"notes.txt","startLine":1,"endLine":1}}
+```"#;
+        let final_answer = "The file says: hello from fixture.";
+        let api_base = start_fake_openai_sequence_server(vec![
+            ("Read workspace note", tool_answer.to_string()),
+            ("hello from fixture", final_answer.to_string()),
+        ])
+        .await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .create_project(
+                CreateProjectInput {
+                    id: "proj_native_file_read".into(),
+                    name: "Native File Read".into(),
+                    root_path: Some(workspace.path().to_string_lossy().to_string()),
+                    icon: None,
+                    color: None,
+                },
+                Origin::gui(),
+            )
+            .await
+            .unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_file_read_openai".into(),
+                display_name: "Native File Read OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_file_read_openai".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_file_read_openai",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_file_read_openai".into(),
+                provider_id: "mp_native_file_read_openai".into(),
+                display_name: "Native File Read Model".into(),
+                model: "gpt-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Read workspace note",
+                "projectId":"proj_native_file_read",
+                "runtimeKind":"galley_native",
+                "llmName":"Native File Read Model"
+            },
+            "requestId":"native-file-read-r1"
+        }"#;
+        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
+        assert!(resp.ok, "response: {resp:?}");
+        let result = resp.result.expect("result");
+        assert_eq!(result["dispatch"], "completed_native");
+        assert_eq!(result["session"]["status"], "idle");
+        assert_eq!(result["assistantMessage"]["finalAnswer"], final_answer);
+
+        let session_id = result["session"]["id"].as_str().unwrap().to_string();
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&db_path)
+                    .create_if_missing(false),
+            )
+            .await
+            .unwrap();
+        let (assistant_final_answer, tool_calls_raw, tool_results_raw): (String, String, String) =
+            sqlx::query_as(
+                "SELECT final_answer, tool_calls, tool_results FROM messages \
+             WHERE session_id = ? AND role = 'assistant'",
+            )
+            .bind(&session_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(assistant_final_answer, final_answer);
+        let tool_calls: serde_json::Value = serde_json::from_str(&tool_calls_raw).unwrap();
+        let tool_results: serde_json::Value = serde_json::from_str(&tool_results_raw).unwrap();
+        assert_eq!(tool_calls.as_array().unwrap().len(), 1);
+        assert_eq!(tool_calls[0]["name"], "file_read");
+        assert_eq!(tool_results.as_array().unwrap().len(), 1);
+        assert_eq!(tool_results[0]["toolName"], "file_read");
+        assert_eq!(tool_results[0]["status"], "success");
+        assert!(tool_results[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("hello from fixture"));
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": session_id },
+            "requestId": "native-file-read-watch-r1"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut progress_sources = Vec::new();
+        let mut progress_deltas = Vec::new();
+        let mut saw_file_read_tool_end = false;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    if value["kind"] == "turn_progress" {
+                        progress_sources.push(value["source"].as_str().unwrap().to_string());
+                        progress_deltas.push(value["delta"].as_str().unwrap().to_string());
+                    }
+                    if value["kind"] == "tool_end" {
+                        assert_eq!(value["toolName"], "file_read");
+                        assert_eq!(value["status"], "success");
+                        saw_file_read_tool_end = true;
+                    }
+                    if value["kind"] == "run_complete" {
+                        assert_eq!(value["exitReason"]["result"], "CURRENT_TASK_DONE");
+                        assert_eq!(value["finalContent"], final_answer);
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_run_complete");
+                    break;
+                }
+            }
+        }
+        assert_eq!(progress_sources, vec!["model", "model_continuation"]);
+        assert!(progress_deltas[0].contains("file_read"));
+        assert_eq!(progress_deltas[1], final_answer);
+        assert!(saw_file_read_tool_end);
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_approval_response_native_allows_and_denies_pending_tool() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let tool_answer = r#"```json
+{"tool":"code_run","arguments":{"command":"echo hi"}}
+```"#;
+        let api_base = start_fake_openai_sequence_server(vec![
+            ("Allow risky tool", tool_answer.to_string()),
+            ("Deny risky tool", tool_answer.to_string()),
+        ])
+        .await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_approval_openai".into(),
+                display_name: "Native Approval OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_approval_openai".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_approval_openai",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_approval_openai".into(),
+                provider_id: "mp_native_approval_openai".into(),
+                display_name: "Native Approval Model".into(),
+                model: "gpt-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&db_path)
+                    .create_if_missing(false),
+            )
+            .await
+            .unwrap();
+        let mgr = RunnerManager::new();
+
+        let allow_line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Allow risky tool",
+                "runtimeKind":"galley_native",
+                "llmName":"Native Approval Model"
+            },
+            "requestId":"native-approval-allow-new"
+        }"#;
+        let allow_new = expect_unary(dispatch_line(allow_line, None, &mgr).await);
+        assert!(allow_new.ok, "response: {allow_new:?}");
+        let allow_session_id = allow_new.result.as_ref().unwrap()["session"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let allow_approval_id: String =
+            sqlx::query_scalar("SELECT id FROM tool_events WHERE session_id = ?")
+                .bind(&allow_session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let allow_response = serde_json::json!({
+            "command": "session.approval_response",
+            "args": {
+                "sessionId": allow_session_id,
+                "approvalId": allow_approval_id,
+                "decision": "allow_once"
+            },
+            "requestId": "native-approval-allow"
+        })
+        .to_string();
+        let allow_resp = expect_unary(dispatch_line(&allow_response, None, &mgr).await);
+        assert!(allow_resp.ok, "response: {allow_resp:?}");
+        let allow_result = allow_resp.result.expect("result");
+        assert_eq!(allow_result["dispatch"], "completed_native_approval");
+        assert_eq!(allow_result["session"]["status"], "idle");
+        assert_eq!(
+            allow_result["toolResult"]["status"],
+            "stubbed_no_side_effects"
+        );
+        assert_eq!(
+            allow_result["toolResult"]["sideEffectsPerformed"].as_bool(),
+            Some(false)
+        );
+        let allow_tool_row: (String, String) =
+            sqlx::query_as("SELECT status, approval_decision FROM tool_events WHERE id = ?")
+                .bind(&allow_approval_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(allow_tool_row, ("success".into(), "allow_once".into()));
+        let allow_pending_count: i64 =
+            sqlx::query_scalar("SELECT pending_approval_count FROM sessions WHERE id = ?")
+                .bind(&allow_session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(allow_pending_count, 0);
+
+        let allow_watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": allow_session_id },
+            "requestId": "native-approval-allow-watch"
+        })
+        .to_string();
+        let allow_watch = dispatch_line(&allow_watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = allow_watch else {
+            panic!("expected native stream");
+        };
+        let mut kinds = Vec::new();
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    kinds.push(event.kind());
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_run_complete");
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            kinds,
+            vec![
+                "approval_resolved",
+                "tool_start",
+                "tool_progress",
+                "tool_end",
+                "run_complete"
+            ]
+        );
+
+        let deny_line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Deny risky tool",
+                "runtimeKind":"galley_native",
+                "llmName":"Native Approval Model"
+            },
+            "requestId":"native-approval-deny-new"
+        }"#;
+        let deny_new = expect_unary(dispatch_line(deny_line, None, &mgr).await);
+        assert!(deny_new.ok, "response: {deny_new:?}");
+        let deny_session_id = deny_new.result.as_ref().unwrap()["session"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let deny_approval_id: String =
+            sqlx::query_scalar("SELECT id FROM tool_events WHERE session_id = ?")
+                .bind(&deny_session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let deny_response = serde_json::json!({
+            "command": "session.approval_response",
+            "args": {
+                "sessionId": deny_session_id,
+                "approvalId": deny_approval_id,
+                "decision": "deny"
+            },
+            "requestId": "native-approval-deny"
+        })
+        .to_string();
+        let deny_resp = expect_unary(dispatch_line(&deny_response, None, &mgr).await);
+        assert!(deny_resp.ok, "response: {deny_resp:?}");
+        let deny_result = deny_resp.result.expect("result");
+        assert_eq!(deny_result["session"]["status"], "idle");
+        assert_eq!(deny_result["toolResult"]["status"], "denied");
+        assert_eq!(
+            deny_result["toolResult"]["sideEffectsPerformed"].as_bool(),
+            Some(false)
+        );
+        let deny_tool_row: (String, String) =
+            sqlx::query_as("SELECT status, approval_decision FROM tool_events WHERE id = ?")
+                .bind(&deny_approval_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(deny_tool_row, ("denied".into(), "deny".into()));
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_send_native_runs_follow_up_turn() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let api_base = start_fake_openai_sequence_server(vec![
+            ("First native turn", "First native answer".to_string()),
+            ("Second native turn", "Second native answer".to_string()),
+        ])
+        .await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_send_openai".into(),
+                display_name: "Native Send OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_send_openai".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_send_openai",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_send_openai".into(),
+                provider_id: "mp_native_send_openai".into(),
+                display_name: "Native Send Model".into(),
+                model: "gpt-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let new_line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"First native turn",
+                "runtimeKind":"galley_native",
+                "llmName":"Native Send Model"
+            },
+            "requestId":"native-send-new"
+        }"#;
+        let new_resp = expect_unary(dispatch_line(new_line, None, &mgr).await);
+        assert!(new_resp.ok, "response: {new_resp:?}");
+        let new_result = new_resp.result.expect("result");
+        assert_eq!(
+            new_result["assistantMessage"]["finalAnswer"],
+            "First native answer"
+        );
+        let session_id = new_result["session"]["id"].as_str().unwrap().to_string();
+
+        let send_line = serde_json::json!({
+            "command": "session.send",
+            "args": {
+                "sessionId": session_id,
+                "content": "Second native turn"
+            },
+            "requestId": "native-send-follow-up"
+        })
+        .to_string();
+        let send_resp = expect_unary(dispatch_line(&send_line, None, &mgr).await);
+        assert!(send_resp.ok, "response: {send_resp:?}");
+        let send_result = send_resp.result.expect("result");
+        assert_eq!(send_result["dispatch"], "completed_native");
+        assert_eq!(
+            send_result["assistantMessage"]["finalAnswer"],
+            "Second native answer"
+        );
+        assert_eq!(send_result["session"]["status"], "idle");
+        assert_eq!(send_result["session"]["turnCount"], 2);
+
+        let session_id = send_result["session"]["id"].as_str().unwrap().to_string();
+        let messages = galley
+            .session_messages(SessionId(session_id.clone()), None)
+            .await
+            .unwrap();
+        assert_eq!(messages.len(), 4);
+        assert_eq!(messages[2].content, "Second native turn");
+        assert_eq!(
+            messages[3].final_answer.as_deref(),
+            Some("Second native answer")
+        );
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": session_id },
+            "requestId": "native-send-watch"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut saw_second_progress = false;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    if value["kind"] == "turn_progress" {
+                        assert_eq!(value["delta"], "Second native answer");
+                        saw_second_progress = true;
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_run_complete");
+                    break;
+                }
+            }
+        }
+        assert!(saw_second_progress);
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_send_native_resumes_after_ask_user() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let ask_answer = r#"```json
+{"tool":"ask_user","arguments":{"question":"Which workspace should I use?","candidates":["A","B"]}}
+```"#;
+        let api_base = start_fake_openai_sequence_server(vec![
+            ("Need input", ask_answer.to_string()),
+            ("Use workspace A", "Continuing with workspace A".to_string()),
+        ])
+        .await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_ask_openai".into(),
+                display_name: "Native Ask OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_ask_openai".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_ask_openai",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_ask_openai".into(),
+                provider_id: "mp_native_ask_openai".into(),
+                display_name: "Native Ask Model".into(),
+                model: "gpt-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let new_line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Need input",
+                "runtimeKind":"galley_native",
+                "llmName":"Native Ask Model"
+            },
+            "requestId":"native-ask-new"
+        }"#;
+        let new_resp = expect_unary(dispatch_line(new_line, None, &mgr).await);
+        assert!(new_resp.ok, "response: {new_resp:?}");
+        let new_result = new_resp.result.expect("result");
+        assert_eq!(new_result["dispatch"], "completed_native");
+        assert_eq!(new_result["session"]["status"], "waiting_approval");
+        assert_eq!(new_result["assistantMessage"]["finalAnswer"], ask_answer);
+        let session_id = new_result["session"]["id"].as_str().unwrap().to_string();
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": session_id },
+            "requestId": "native-ask-watch"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut saw_ask_user = false;
+        let mut saw_waiting_exit = false;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    if value["kind"] == "ask_user" {
+                        assert_eq!(value["question"], "Which workspace should I use?");
+                        assert_eq!(value["candidates"], serde_json::json!(["A", "B"]));
+                        saw_ask_user = true;
+                    }
+                    if value["kind"] == "run_complete" {
+                        assert_eq!(value["exitReason"]["result"], "ASK_USER");
+                        saw_waiting_exit = true;
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_waiting_user");
+                    break;
+                }
+            }
+        }
+        assert!(saw_ask_user);
+        assert!(saw_waiting_exit);
+
+        let send_line = serde_json::json!({
+            "command": "session.send",
+            "args": {
+                "sessionId": session_id,
+                "content": "Use workspace A"
+            },
+            "requestId": "native-ask-resume"
+        })
+        .to_string();
+        let send_resp = expect_unary(dispatch_line(&send_line, None, &mgr).await);
+        assert!(send_resp.ok, "response: {send_resp:?}");
+        let send_result = send_resp.result.expect("result");
+        assert_eq!(send_result["dispatch"], "completed_native");
+        assert_eq!(send_result["session"]["status"], "idle");
+        assert_eq!(send_result["session"]["turnCount"], 2);
+        assert_eq!(
+            send_result["assistantMessage"]["finalAnswer"],
+            "Continuing with workspace A"
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_new_native_streams_openai_deltas() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let api_base = start_fake_openai_stream_server().await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_stream".into(),
+                display_name: "Native Stream OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_stream".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_stream",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_stream".into(),
+                provider_id: "mp_native_stream".into(),
+                display_name: "Native Stream Model".into(),
+                model: "gpt-test-stream".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5,
+                    "stream": true
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Stream from configured model",
+                "runtimeKind":"galley_native"
+            },
+            "requestId":"native-stream-r1"
+        }"#;
+        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
+        assert!(resp.ok, "response: {resp:?}");
+        let result = resp.result.expect("result");
+        assert_eq!(
+            result["assistantMessage"]["finalAnswer"],
+            "Native stream answer"
+        );
+
+        let session_id = result["session"]["id"].as_str().unwrap().to_string();
+        let messages = galley
+            .session_messages(SessionId(session_id), None)
+            .await
+            .unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[1].final_answer.as_deref(),
+            Some("Native stream answer")
+        );
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": result["session"]["id"].as_str().unwrap() },
+            "requestId": "native-stream-watch-r1"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut deltas = Vec::new();
+        let mut stop_reason = None;
+        let mut usage_total = None;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    if value["kind"] == "turn_progress" {
+                        deltas.push(value["delta"].as_str().unwrap().to_string());
+                        assert_eq!(value["source"], "model_stream");
+                    }
+                    if value["kind"] == "run_complete" {
+                        stop_reason = value["stopReason"].as_str().map(str::to_string);
+                        usage_total = value["usage"]["total_tokens"].as_u64();
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_run_complete");
+                    break;
+                }
+            }
+        }
+        assert_eq!(deltas, vec!["Native ", "stream ", "answer"]);
+        assert_eq!(stop_reason.as_deref(), Some("stop"));
+        assert_eq!(usage_total, Some(11));
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_new_native_uses_configured_anthropic_model() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let api_base = start_fake_anthropic_server("Claude real model answer").await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_anthropic_nonstream".into(),
+                display_name: "Native Anthropic".into(),
+                protocol: crate::api::ManagedModelProtocol::Anthropic,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_anthropic_nonstream".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_anthropic_nonstream",
+            "sk-ant-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_anthropic_nonstream".into(),
+                provider_id: "mp_native_anthropic_nonstream".into(),
+                display_name: "Native Claude Nonstream".into(),
+                model: "claude-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Answer from Anthropic model",
+                "runtimeKind":"galley_native",
+                "llmName":"Native Claude Nonstream"
+            },
+            "requestId":"native-anthropic-nonstream-r1"
+        }"#;
+        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
+        assert!(resp.ok, "response: {resp:?}");
+        let result = resp.result.expect("result");
+        assert_eq!(
+            result["assistantMessage"]["finalAnswer"],
+            "Claude real model answer"
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_new_native_streams_anthropic_deltas() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let api_base = start_fake_anthropic_stream_server().await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_anthropic".into(),
+                display_name: "Native Anthropic".into(),
+                protocol: crate::api::ManagedModelProtocol::Anthropic,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_anthropic".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_anthropic",
+            "sk-ant-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_anthropic".into(),
+                provider_id: "mp_native_anthropic".into(),
+                display_name: "Native Claude".into(),
+                model: "claude-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5,
+                    "stream": true
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"Stream from Anthropic model",
+                "runtimeKind":"galley_native",
+                "llmName":"Native Claude"
+            },
+            "requestId":"native-anthropic-r1"
+        }"#;
+        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
+        assert!(resp.ok, "response: {resp:?}");
+        let result = resp.result.expect("result");
+        assert_eq!(
+            result["assistantMessage"]["finalAnswer"],
+            "Claude stream answer"
+        );
+
+        let session_id = result["session"]["id"].as_str().unwrap().to_string();
+        let messages = galley
+            .session_messages(SessionId(session_id), None)
+            .await
+            .unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[1].final_answer.as_deref(),
+            Some("Claude stream answer")
+        );
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": result["session"]["id"].as_str().unwrap() },
+            "requestId": "native-anthropic-watch-r1"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut deltas = Vec::new();
+        let mut stop_reason = None;
+        let mut usage_output = None;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    if value["kind"] == "turn_progress" {
+                        deltas.push(value["delta"].as_str().unwrap().to_string());
+                        assert_eq!(value["source"], "model_stream");
+                    }
+                    if value["kind"] == "run_complete" {
+                        stop_reason = value["stopReason"].as_str().map(str::to_string);
+                        usage_output = value["usage"]["output_tokens"].as_u64();
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_run_complete");
+                    break;
+                }
+            }
+        }
+        assert_eq!(deltas, vec!["Claude ", "stream ", "answer"]);
+        assert_eq!(stop_reason.as_deref(), Some("end_turn"));
+        assert_eq!(usage_output, Some(6));
+    }
+
+    async fn start_fake_openai_server(answer: &'static str) -> String {
+        start_fake_openai_server_for("Answer from configured model", answer.to_string()).await
+    }
+
+    async fn start_fake_openai_server_for(expected_task: &'static str, answer: String) -> String {
+        start_fake_openai_sequence_server(vec![(expected_task, answer)]).await
+    }
+
+    async fn start_fake_openai_sequence_server(responses: Vec<(&'static str, String)>) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            for (expected_task, answer) in responses {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0_u8; 8192];
+                let n = socket.read(&mut buf).await.unwrap();
+                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                let request_lower = request.to_ascii_lowercase();
+                assert!(request.starts_with("POST /v1/chat/completions "));
+                assert!(request_lower.contains("authorization: bearer sk-native-test"));
+                assert!(request.contains("\"model\":\"gpt-test\""));
+                assert!(request.contains(expected_task));
+                assert!(request.contains("\"stream\":false"));
+
+                let body = serde_json::json!({
+                    "model": "gpt-test",
+                    "choices": [
+                        {
+                            "message": { "role": "assistant", "content": answer },
+                            "finish_reason": "stop"
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 4,
+                        "completion_tokens": 5,
+                        "total_tokens": 9
+                    }
+                })
+                .to_string();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    async fn start_fake_openai_stream_server() -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0_u8; 8192];
+            let n = socket.read(&mut buf).await.unwrap();
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            let request_lower = request.to_ascii_lowercase();
+            assert!(request.starts_with("POST /v1/chat/completions "));
+            assert!(request_lower.contains("authorization: bearer sk-native-test"));
+            assert!(request.contains("\"model\":\"gpt-test-stream\""));
+            assert!(request.contains("Stream from configured model"));
+            assert!(request.contains("\"stream\":true"));
+
+            let body = concat!(
+                "data: {\"model\":\"gpt-test-stream\",\"choices\":[{\"delta\":{\"content\":\"Native \"},\"finish_reason\":null}]}\n\n",
+                "data: {\"model\":\"gpt-test-stream\",\"choices\":[{\"delta\":{\"content\":\"stream \"},\"finish_reason\":null}]}\n\n",
+                "data: {\"model\":\"gpt-test-stream\",\"choices\":[{\"delta\":{\"content\":[{\"type\":\"text\",\"text\":\"answer\"}]},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":6,\"total_tokens\":11}}\n\n",
+                "data: [DONE]\n\n"
+            );
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n{:X}\r\n{}\r\n0\r\n\r\n",
+                body.len(),
+                body
+            );
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        format!("http://{addr}")
+    }
+
+    async fn start_fake_anthropic_server(answer: &'static str) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0_u8; 8192];
+            let n = socket.read(&mut buf).await.unwrap();
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            let request_lower = request.to_ascii_lowercase();
+            assert!(request.starts_with("POST /v1/messages?beta=true "));
+            assert!(request_lower.contains("x-api-key: sk-ant-native-test"));
+            assert!(request_lower.contains("anthropic-version: 2023-06-01"));
+            assert!(request.contains("\"model\":\"claude-test\""));
+            assert!(request.contains("Answer from Anthropic model"));
+            assert!(request.contains("\"stream\":false"));
+
+            let body = serde_json::json!({
+                "model": "claude-test",
+                "content": [
+                    { "type": "text", "text": answer }
+                ],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 4,
+                    "output_tokens": 5
+                }
+            })
+            .to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        format!("http://{addr}")
+    }
+
+    async fn start_fake_anthropic_stream_server() -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0_u8; 8192];
+            let n = socket.read(&mut buf).await.unwrap();
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            let request_lower = request.to_ascii_lowercase();
+            assert!(request.starts_with("POST /v1/messages?beta=true "));
+            assert!(request_lower.contains("x-api-key: sk-ant-native-test"));
+            assert!(request_lower.contains("anthropic-version: 2023-06-01"));
+            assert!(request.contains("\"model\":\"claude-test\""));
+            assert!(request.contains("Stream from Anthropic model"));
+            assert!(request.contains("\"stream\":true"));
+
+            let body = concat!(
+                "event: message_start\n",
+                "data: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-test\",\"usage\":{\"input_tokens\":5}}}\n\n",
+                "event: content_block_delta\n",
+                "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"Claude \"}}\n\n",
+                "event: content_block_delta\n",
+                "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"stream \"}}\n\n",
+                "event: content_block_delta\n",
+                "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"answer\"}}\n\n",
+                "event: message_delta\n",
+                "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":6}}\n\n",
+                "event: message_stop\n",
+                "data: {\"type\":\"message_stop\"}\n\n"
+            );
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n{:X}\r\n{}\r\n0\r\n\r\n",
+                body.len(),
+                body
+            );
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        format!("http://{addr}")
     }
 
     #[test]
