@@ -899,8 +899,8 @@ pub async fn resolve_native_approval(
     let mut mode = "approval_response".to_string();
     let mut stop_reason = None;
     let mut usage = None;
-    if decision != "deny" && result.tool_name == "file_read" && result.status == "success" {
-        match continue_after_approved_file_read(
+    if decision != "deny" && should_continue_after_approved_tool_result(&result) {
+        match continue_after_approved_tool_result(
             galley,
             &session_id,
             turn_index,
@@ -936,16 +936,19 @@ pub async fn resolve_native_approval(
                 events.push(runtime_error_event(
                     session_id.as_str(),
                     "model_continuation",
-                    "approved file_read continuation skipped because no usable native model is available",
-                    Some("The approved file_read result was recorded, but Galley Native could not produce a follow-up answer.".to_string()),
+                    format!(
+                        "approved {} continuation skipped because no usable native model is available",
+                        result.tool_name
+                    ),
+                    Some("The approved tool result was recorded, but Galley Native could not produce a follow-up answer.".to_string()),
                 ));
             }
             Err(err) => {
                 events.push(runtime_error_event(
                     session_id.as_str(),
                     "model_continuation",
-                    format!("approved file_read continuation failed: {err}"),
-                    Some("The approved file_read result was recorded, but Galley Native could not produce a follow-up answer.".to_string()),
+                    format!("approved {} continuation failed: {err}", result.tool_name),
+                    Some("The approved tool result was recorded, but Galley Native could not produce a follow-up answer.".to_string()),
                 ));
             }
         }
@@ -1048,7 +1051,7 @@ struct NativeApprovalContinuation {
     usage: Option<serde_json::Value>,
 }
 
-async fn continue_after_approved_file_read(
+async fn continue_after_approved_tool_result(
     galley: &SqliteGalley,
     session_id: &SessionId,
     turn_index: u32,
@@ -1094,6 +1097,20 @@ async fn continue_after_approved_file_read(
         stop_reason: response.stop_reason,
         usage: response.usage,
     }))
+}
+
+fn should_continue_after_approved_tool_result(result: &NativeToolStubResult) -> bool {
+    match result.tool_name.as_str() {
+        "file_read" => result.status == "success",
+        "file_patch" | "file_write" => {
+            matches!(
+                result.status.as_str(),
+                "success" | "success_no_change" | "failed"
+            )
+        }
+        "code_run" => matches!(result.status.as_str(), "success" | "failed" | "timed_out"),
+        _ => false,
+    }
 }
 
 async fn native_turn_continuation_context(

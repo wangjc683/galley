@@ -1581,10 +1581,11 @@ mod tests {
         let tool_answer = r#"```json
 {"tool":"file_patch","arguments":{"path":"notes.txt","oldContent":"beta\n","newContent":"bravo\n","explanation":"rename beta"}}
 ```"#;
-        let api_base = start_fake_openai_sequence_server(vec![(
-            "Patch workspace note",
-            tool_answer.to_string(),
-        )])
+        let final_answer = "Patch applied; notes.txt now uses bravo.".to_string();
+        let api_base = start_fake_openai_sequence_server(vec![
+            ("Patch workspace note", tool_answer.to_string()),
+            ("Patch workspace note", final_answer.clone()),
+        ])
         .await;
 
         let galley = SqliteGalley::open().await.unwrap();
@@ -1694,7 +1695,10 @@ mod tests {
         let allow_result = allow_resp.result.expect("result");
         assert_eq!(allow_result["dispatch"], "completed_native_approval");
         assert_eq!(allow_result["session"]["status"], "idle");
-        assert!(allow_result.get("assistantMessage").is_none());
+        assert_eq!(
+            allow_result["assistantMessage"]["finalAnswer"],
+            final_answer
+        );
         assert_eq!(allow_result["toolResult"]["toolName"], "file_patch");
         assert_eq!(allow_result["toolResult"]["status"], "success");
         assert_eq!(
@@ -1717,13 +1721,14 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(tool_row, ("success".into(), "allow_once".into()));
-        let tool_results_raw: String = sqlx::query_scalar(
-            "SELECT tool_results FROM messages WHERE session_id = ? AND role = 'assistant'",
+        let (assistant_final_answer, tool_results_raw): (String, String) = sqlx::query_as(
+            "SELECT final_answer, tool_results FROM messages WHERE session_id = ? AND role = 'assistant'",
         )
         .bind(&session_id)
         .fetch_one(&pool)
         .await
         .unwrap();
+        assert_eq!(assistant_final_answer, final_answer);
         let tool_results: serde_json::Value = serde_json::from_str(&tool_results_raw).unwrap();
         assert_eq!(tool_results[0]["toolName"], "file_patch");
         assert_eq!(tool_results[0]["status"], "success");
@@ -1740,6 +1745,7 @@ mod tests {
             panic!("expected native stream");
         };
         let mut kinds = Vec::new();
+        let mut saw_continuation_progress = false;
         while let Some(item) = rx.recv().await {
             match item {
                 crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
@@ -1750,9 +1756,22 @@ mod tests {
                         assert_eq!(value["status"], "success");
                         assert_eq!(value["sideEffectsPerformed"], true);
                     }
+                    if value["kind"] == "turn_progress" {
+                        assert_eq!(value["source"], "model_continuation");
+                        assert_eq!(value["delta"], final_answer);
+                        saw_continuation_progress = true;
+                    }
+                    if value["kind"] == "turn_end" {
+                        assert_eq!(value["responseContent"], final_answer);
+                        assert_eq!(value["toolResults"][0]["toolName"], "file_patch");
+                    }
                     if value["kind"] == "run_complete" {
                         assert_eq!(value["exitReason"]["result"], "CURRENT_TASK_DONE");
-                        assert_eq!(value["exitReason"]["data"]["mode"], "approval_response");
+                        assert_eq!(
+                            value["exitReason"]["data"]["mode"],
+                            "approval_response_continuation"
+                        );
+                        assert_eq!(value["finalContent"], final_answer);
                     }
                 }
                 crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
@@ -1768,9 +1787,12 @@ mod tests {
                 "tool_start",
                 "tool_progress",
                 "tool_end",
+                "turn_progress",
+                "turn_end",
                 "run_complete"
             ]
         );
+        assert!(saw_continuation_progress);
     }
 
     #[tokio::test]
@@ -1785,10 +1807,11 @@ mod tests {
         let tool_answer = r#"```json
 {"tool":"file_write","arguments":{"path":"draft.txt","content":"hello\n","mode":"create"}}
 ```"#;
-        let api_base = start_fake_openai_sequence_server(vec![(
-            "Write workspace note",
-            tool_answer.to_string(),
-        )])
+        let final_answer = "Created draft.txt with hello.".to_string();
+        let api_base = start_fake_openai_sequence_server(vec![
+            ("Write workspace note", tool_answer.to_string()),
+            ("Write workspace note", final_answer.clone()),
+        ])
         .await;
 
         let galley = SqliteGalley::open().await.unwrap();
@@ -1897,7 +1920,10 @@ mod tests {
         let allow_result = allow_resp.result.expect("result");
         assert_eq!(allow_result["dispatch"], "completed_native_approval");
         assert_eq!(allow_result["session"]["status"], "idle");
-        assert!(allow_result.get("assistantMessage").is_none());
+        assert_eq!(
+            allow_result["assistantMessage"]["finalAnswer"],
+            final_answer
+        );
         assert_eq!(allow_result["toolResult"]["toolName"], "file_write");
         assert_eq!(allow_result["toolResult"]["status"], "success");
         assert_eq!(
@@ -1920,13 +1946,14 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(tool_row, ("success".into(), "allow_once".into()));
-        let tool_results_raw: String = sqlx::query_scalar(
-            "SELECT tool_results FROM messages WHERE session_id = ? AND role = 'assistant'",
+        let (assistant_final_answer, tool_results_raw): (String, String) = sqlx::query_as(
+            "SELECT final_answer, tool_results FROM messages WHERE session_id = ? AND role = 'assistant'",
         )
         .bind(&session_id)
         .fetch_one(&pool)
         .await
         .unwrap();
+        assert_eq!(assistant_final_answer, final_answer);
         let tool_results: serde_json::Value = serde_json::from_str(&tool_results_raw).unwrap();
         assert_eq!(tool_results[0]["toolName"], "file_write");
         assert_eq!(tool_results[0]["status"], "success");
@@ -1943,6 +1970,7 @@ mod tests {
             panic!("expected native stream");
         };
         let mut kinds = Vec::new();
+        let mut saw_continuation_progress = false;
         while let Some(item) = rx.recv().await {
             match item {
                 crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
@@ -1953,9 +1981,22 @@ mod tests {
                         assert_eq!(value["status"], "success");
                         assert_eq!(value["sideEffectsPerformed"], true);
                     }
+                    if value["kind"] == "turn_progress" {
+                        assert_eq!(value["source"], "model_continuation");
+                        assert_eq!(value["delta"], final_answer);
+                        saw_continuation_progress = true;
+                    }
+                    if value["kind"] == "turn_end" {
+                        assert_eq!(value["responseContent"], final_answer);
+                        assert_eq!(value["toolResults"][0]["toolName"], "file_write");
+                    }
                     if value["kind"] == "run_complete" {
                         assert_eq!(value["exitReason"]["result"], "CURRENT_TASK_DONE");
-                        assert_eq!(value["exitReason"]["data"]["mode"], "approval_response");
+                        assert_eq!(
+                            value["exitReason"]["data"]["mode"],
+                            "approval_response_continuation"
+                        );
+                        assert_eq!(value["finalContent"], final_answer);
                     }
                 }
                 crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
@@ -1971,9 +2012,12 @@ mod tests {
                 "tool_start",
                 "tool_progress",
                 "tool_end",
+                "turn_progress",
+                "turn_end",
                 "run_complete"
             ]
         );
+        assert!(saw_continuation_progress);
     }
 
     #[tokio::test]
@@ -1988,10 +2032,11 @@ mod tests {
         let tool_answer = r#"```json
 {"tool":"code_run","arguments":{"command":"echo hi","timeoutSeconds":2}}
 ```"#;
-        let api_base = start_fake_openai_sequence_server(vec![(
-            "Run workspace command",
-            tool_answer.to_string(),
-        )])
+        let final_answer = "Command completed and printed hi.".to_string();
+        let api_base = start_fake_openai_sequence_server(vec![
+            ("Run workspace command", tool_answer.to_string()),
+            ("Run workspace command", final_answer.clone()),
+        ])
         .await;
 
         let galley = SqliteGalley::open().await.unwrap();
@@ -2107,7 +2152,10 @@ mod tests {
         let allow_result = allow_resp.result.expect("result");
         assert_eq!(allow_result["dispatch"], "completed_native_approval");
         assert_eq!(allow_result["session"]["status"], "idle");
-        assert!(allow_result.get("assistantMessage").is_none());
+        assert_eq!(
+            allow_result["assistantMessage"]["finalAnswer"],
+            final_answer
+        );
         assert_eq!(allow_result["toolResult"]["toolName"], "code_run");
         assert_eq!(allow_result["toolResult"]["status"], "success");
         assert_eq!(
@@ -2126,13 +2174,14 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(tool_row, ("success".into(), "allow_once".into()));
-        let tool_results_raw: String = sqlx::query_scalar(
-            "SELECT tool_results FROM messages WHERE session_id = ? AND role = 'assistant'",
+        let (assistant_final_answer, tool_results_raw): (String, String) = sqlx::query_as(
+            "SELECT final_answer, tool_results FROM messages WHERE session_id = ? AND role = 'assistant'",
         )
         .bind(&session_id)
         .fetch_one(&pool)
         .await
         .unwrap();
+        assert_eq!(assistant_final_answer, final_answer);
         let tool_results: serde_json::Value = serde_json::from_str(&tool_results_raw).unwrap();
         assert_eq!(tool_results[0]["toolName"], "code_run");
         assert_eq!(tool_results[0]["status"], "success");
@@ -2149,6 +2198,7 @@ mod tests {
             panic!("expected native stream");
         };
         let mut kinds = Vec::new();
+        let mut saw_continuation_progress = false;
         while let Some(item) = rx.recv().await {
             match item {
                 crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
@@ -2159,9 +2209,22 @@ mod tests {
                         assert_eq!(value["status"], "success");
                         assert_eq!(value["sideEffectsPerformed"], true);
                     }
+                    if value["kind"] == "turn_progress" {
+                        assert_eq!(value["source"], "model_continuation");
+                        assert_eq!(value["delta"], final_answer);
+                        saw_continuation_progress = true;
+                    }
+                    if value["kind"] == "turn_end" {
+                        assert_eq!(value["responseContent"], final_answer);
+                        assert_eq!(value["toolResults"][0]["toolName"], "code_run");
+                    }
                     if value["kind"] == "run_complete" {
                         assert_eq!(value["exitReason"]["result"], "CURRENT_TASK_DONE");
-                        assert_eq!(value["exitReason"]["data"]["mode"], "approval_response");
+                        assert_eq!(
+                            value["exitReason"]["data"]["mode"],
+                            "approval_response_continuation"
+                        );
+                        assert_eq!(value["finalContent"], final_answer);
                     }
                 }
                 crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
@@ -2177,9 +2240,12 @@ mod tests {
                 "tool_start",
                 "tool_progress",
                 "tool_end",
+                "turn_progress",
+                "turn_end",
                 "run_complete"
             ]
         );
+        assert!(saw_continuation_progress);
     }
 
     #[tokio::test]

@@ -90,6 +90,11 @@ behavior changes until an implementation slice explicitly lands them.
   with stdin closed, stdout/stderr captured, exit status recorded, and timeout
   kill support.
   [devlog](../devlog/2026-06-16-galley-native-slice-4b6-code-run.md).
+- Slice 4B7 landed approved local-tool continuation on 2026-06-16: approved
+  `file_patch`, `file_write`, and `code_run` results are fed back to the selected
+  native model once, updating the same assistant turn while keeping tool results
+  for audit.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4b7-approved-tool-continuation.md).
 
 ## Document Roles
 
@@ -119,12 +124,11 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4B6, native can read files, answer from read results, apply targeted
+After Slice 4B7, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, and run approval-gated
 local commands with bounded output. The next work is still deliberately narrow:
 
-1. decide whether successful write tools should trigger a model continuation;
-2. decide whether `code_run` should stream stdout/stderr progress before
+1. decide whether `code_run` should stream stdout/stderr progress before
    `tool_end`;
-3. keep Browser Control as Slice 4C, separate from file/code executors;
-4. keep memory, Goal Hive, and Morphling in later slices.
+2. keep Browser Control as Slice 4C, separate from file/code executors;
+3. keep memory, Goal Hive, and Morphling in later slices.

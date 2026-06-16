@@ -429,6 +429,8 @@ Tasks:
   non-stream turns without pending approval or `ask_user`;
 - continue after approved `file_read`; landed in Slice 4B3 for approval-gated
   read-only paths, updating the same assistant turn and event stream;
+- continue after approved local write/process tools; landed in Slice 4B7 for
+  `file_patch`, `file_write`, and `code_run`;
 - implement `file_patch`; landed in Slice 4B4 with GA-style
   `old_content` / `new_content` preview and approval-gated unique replacement;
 - implement `file_write`; landed in Slice 4B5 with preview-first create and
@@ -518,6 +520,21 @@ Landed in Slice 4B6 follow-up:
   exit code, timeout state, and duration, and kills timed-out commands;
 - once a process is spawned, `sideEffectsPerformed` is `true` even if the command
   exits non-zero or times out;
+- Browser Control, memory, Goal Hive, and Morphling remain disabled or stubbed.
+
+Landed in Slice 4B7 follow-up:
+
+- hidden native `session.approval_response` now runs one continuation model
+  request after approved `file_patch`, `file_write`, and `code_run` results;
+- the approved tool result remains in the response `toolResult` and assistant
+  `tool_results` audit payload;
+- the same assistant message row is updated with the continuation answer, and
+  `assistantMessage` is returned in the approval response;
+- `session.watch` can replay approval resolution, tool execution,
+  `turn_progress(source=model_continuation)`, final `turn_end`, and
+  `run_complete(mode=approval_response_continuation)` for local write/process
+  tools;
+- `deny` decisions still record a denied result and do not continue;
 - Browser Control, memory, Goal Hive, and Morphling remain disabled or stubbed.
 
 Rollback:

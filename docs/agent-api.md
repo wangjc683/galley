@@ -581,6 +581,14 @@ Semantics:
   `toolResult.sideEffectsPerformed = true` once a process is spawned. Browser,
   memory, Goal, and Morphling executors remain deterministic stubs until their
   own slices land.
+- Since Slice 4B7, approved hidden-native `file_patch`, `file_write`, and
+  `code_run` also make one non-stream continuation model request after execution.
+  The original tool result remains in `toolResult` and assistant
+  `tool_results`; the continuation updates the same assistant turn's
+  `finalAnswer`, returns `assistantMessage`, and emits
+  `turn_progress(source=model_continuation)`, `turn_end`, then
+  `run_complete(mode=approval_response_continuation)`. `deny` decisions do not
+  continue.
 - A successful response publishes native events ending in
   `native_run_complete`; `session watch` can replay those same-process events.
 
@@ -784,7 +792,7 @@ Response:
 | ---------- | -------------- | ------------------------------------------------------------------------------------------------------ |
 | `session`  | `SessionBrief` | Newly-created row. `title` is the seed `新对话`; the bridge derives a better one after the first turn. |
 | `message`  | `MessageBrief` | The persisted first user message.                                                                      |
-| `assistantMessage` | `MessageBrief`? | Present for hidden native sessions after the native turn completes. Since Slice 4B2, auto-executed `file_read` can produce a continuation final answer here. |
+| `assistantMessage` | `MessageBrief`? | Present for hidden native sessions after the native turn completes. Since Slice 4B2/4B7, tool-result continuations can update the final answer here. |
 | `dispatch` | string enum    | `"dispatched"` for managed/external runner success; hidden native returns `"completed_native"`. Runner/model start/send failure returns exit 5 instead of a success envelope. |
 | `warning`  | object?        | Present when the caller explicitly writes to a non-current runtime.                                  |
 
