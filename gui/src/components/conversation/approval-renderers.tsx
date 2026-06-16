@@ -25,6 +25,8 @@ export function ApprovalRenderer({ tool }: { tool: ConversationToolEvent }) {
       return <FileWriteRenderer tool={tool} />;
     case "code_run":
       return <CodeRunRenderer tool={tool} />;
+    case "web_execute_js":
+      return <WebExecuteJsRenderer tool={tool} />;
     case "start_long_term_update":
       return <StartLongTermUpdateRenderer tool={tool} />;
     default:
@@ -142,6 +144,43 @@ function CodeRunRenderer({ tool }: { tool: ConversationToolEvent }) {
   );
 }
 
+// ---------------- web_execute_js ----------------
+
+function WebExecuteJsRenderer({ tool }: { tool: ConversationToolEvent }) {
+  const copy = useCopy();
+  const script = stringArg(tool, "script") || stringArg(tool, "code") || "";
+  const tabId =
+    stringArg(tool, "switch_tab_id") ||
+    stringArg(tool, "switchTabId") ||
+    stringArg(tool, "tabId") ||
+    stringArg(tool, "tab_id");
+  const noMonitor =
+    booleanArg(tool, "no_monitor") ?? booleanArg(tool, "noMonitor");
+
+  return (
+    <div className="mb-3 overflow-hidden rounded-callout border border-line bg-surface">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-1.5 text-[11px]">
+        <span className="font-mono uppercase tracking-[0.08em] text-ink-muted">
+          javascript
+        </span>
+        {tabId && (
+          <span className="min-w-0 select-text truncate font-mono text-ink-soft">
+            tab {tabId}
+          </span>
+        )}
+        {noMonitor === true && (
+          <span className="shrink-0 rounded-full bg-info/[var(--opacity-soft)] px-2 py-0.5 text-[10px] font-medium text-info">
+            no_monitor
+          </span>
+        )}
+      </div>
+      <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink">
+        {script || copy.conversation.emptyContent}
+      </pre>
+    </div>
+  );
+}
+
 // ---------------- start_long_term_update ----------------
 
 function StartLongTermUpdateRenderer({
@@ -209,4 +248,9 @@ function optionalStringArg(
 function numberArg(tool: ConversationToolEvent, key: string): number | null {
   const v = tool.args?.[key];
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function booleanArg(tool: ConversationToolEvent, key: string): boolean | null {
+  const v = tool.args?.[key];
+  return typeof v === "boolean" ? v : null;
 }

@@ -117,6 +117,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-16 | [Galley Native Slice 4B7 Approved Tool Continuation](./2026-06-16-galley-native-slice-4b7-approved-tool-continuation.md) | Hidden native approved local-tool continuation 落地：`file_patch` / `file_write` / `code_run` allow 后会把 tool result 回灌给 selected native model，一次性更新同一 assistant turn finalAnswer，同时保留 `toolResult` / `tool_results` 审计；deny 不 continuation。 |
 | 2026-06-16 | [Galley Native Slice 4B8 Code Run Progress](./2026-06-16-galley-native-slice-4b8-code-run-progress.md) | Hidden native `code_run` stdout/stderr progress materialization 落地：Core 在 `tool_end` 前发带 `stream` / `delta` / `truncated` 的 `tool_progress`，GUI 复用 tool card result preview，CLI watch 可 replay；真正 live approval execution 仍留给后续 lifecycle slice。 |
 | 2026-06-17 | [Galley Native Slice 4C1 Web Scan](./2026-06-17-galley-native-slice-4c1-web-scan.md) | Hidden native 首个 Browser Control executor 落地：`web_scan` 复用 Galley 准备好的 `TMWebDriver` bridge 读取标签页和简化页面内容，成功结果进入一次 continuation；`web_execute_js`、浏览器审批细分和 live browser progress 继续后置。 |
+| 2026-06-17 | [Galley Native Slice 4C2 Web Execute JS](./2026-06-17-galley-native-slice-4c2-web-execute-js.md) | Hidden native approval-gated `web_execute_js` 落地：Core 通过现有 `TMWebDriver` / `simphtml.execute_js_rich` 执行浏览器 JavaScript，支持 GA 风格 script/tab/no-monitor 参数和别名；可执行请求先停 approval，结果进入一次 continuation，`save_to_file` 明确后置以保留 file_write / file_patch 预览审批。 |
 
 ## 格式约定
 

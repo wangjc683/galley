@@ -1175,6 +1175,7 @@ fn should_continue_after_approved_tool_result(result: &NativeToolStubResult) -> 
             )
         }
         "code_run" => matches!(result.status.as_str(), "success" | "failed" | "timed_out"),
+        "web_execute_js" => matches!(result.status.as_str(), "success" | "failed"),
         _ => false,
     }
 }
@@ -2242,6 +2243,57 @@ mod tests {
                     .as_ref()
             )
         );
+        assert_eq!(turn_end["toolResults"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn web_execute_js_waits_for_approval_when_browser_context_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let final_answer = r#"```json
+{"tool":"web_execute_js","arguments":{"code":"document.title","tabId":"101"}}
+```"#;
+        let context = NativeToolExecutionContext::with_browser(
+            None,
+            NativeBrowserExecutionContext {
+                python: PathBuf::from(if cfg!(windows) { "python" } else { "python3" }),
+                code_root: dir.path().join("code"),
+                state_root: dir.path().join("state"),
+                wait_timeout_seconds: 1,
+            },
+        );
+
+        let trace = native_event_trace_with_context(
+            "s-native-web-js",
+            1,
+            final_answer,
+            "web execute js summary",
+            "2026-06-17T00:00:00.000Z".to_string(),
+            "Galley Native mock",
+            "mock_model",
+            "mock",
+            None,
+            None,
+            &context,
+        );
+
+        assert!(trace.pending_approval.is_some());
+        assert_eq!(
+            event_kind_sequence(&trace.events),
+            vec![
+                "runtime_ready",
+                "turn_start",
+                "turn_progress",
+                "tool_pending",
+                "approval_pending",
+                "turn_end",
+                "run_complete"
+            ]
+        );
+        let pending = serde_json::to_value(&trace.events[3]).unwrap();
+        assert_eq!(pending["toolName"], "web_execute_js");
+        assert_eq!(pending["arguments"]["script"], "document.title");
+        assert_eq!(pending["arguments"]["switch_tab_id"], "101");
+        let turn_end = serde_json::to_value(&trace.events[5]).unwrap();
         assert_eq!(turn_end["toolResults"], serde_json::json!([]));
     }
 

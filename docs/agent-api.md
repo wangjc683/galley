@@ -641,11 +641,11 @@ model/selection failures emit `runtime_error` and close with
 `native_runtime_error`.
 
 Native tool events started as Slice 4A deterministic stubs. As of Slice 4B /
-4C1, hidden native `file_read`, `file_patch`, `file_write`, `code_run`, and
-read-only `web_scan` can execute inside the Project workspace, approval policy,
-and Browser Control bridge described in [Galley Native](./galley-native/README.md).
-`web_execute_js`, memory, Goal, and Morphling side effects remain disabled or
-stubbed until later slices.
+4C2, hidden native `file_read`, `file_patch`, `file_write`, `code_run`,
+`web_scan`, and approval-gated `web_execute_js` can execute inside the Project
+workspace, approval policy, and Browser Control bridge described in
+[Galley Native](./galley-native/README.md). Memory, Goal, and Morphling side
+effects remain disabled or stubbed until later slices.
 
 For hidden native `code_run`, `tool_progress` can include additive output fields
 before `tool_end`:

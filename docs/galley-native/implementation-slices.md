@@ -581,10 +581,12 @@ Tasks:
 - implement `web_scan`; landed in Slice 4C1 for tab metadata and simplified
   page content, including one continuation model request after successful
   scans;
-- implement `web_execute_js`;
+- implement `web_execute_js`; landed in Slice 4C2 as an approval-gated browser
+  action executor through the existing `TMWebDriver` / `simphtml` bridge;
 - surface missing extension, sleeping service worker, reconnect, and no-tab
   states as actionable runtime events;
-- add deterministic safe JS scenario, such as reading `document.title`;
+- add deterministic safe JS scenario, such as reading `document.title`; landed
+  in Slice 4C2 at the native tool unit-test level;
 - keep managed Browser Control behavior unchanged.
 
 Exit gate:
@@ -596,7 +598,7 @@ Exit gate:
   stream as local tools;
 - managed Browser Control still passes its existing checks.
 
-Landed in Slice 4C1 follow-up:
+State after Slice 4C1:
 
 - GUI and socket hidden native runs now pass a native host context into the
   runtime; when Tauri `AppHandle` is available, that context points at the same
@@ -611,6 +613,24 @@ Landed in Slice 4C1 follow-up:
   continuation path, so the selected native model can answer from page content;
 - `web_execute_js`, granular browser approvals, live browser-action progress,
   and richer service-worker recovery are still deferred.
+
+Landed in Slice 4C2 follow-up:
+
+- `web_execute_js` no longer routes to the Slice 4A stub when Browser Control is
+  available. It normalizes GA-compatible `script`, `switch_tab_id`, and
+  `no_monitor` arguments, with `code`, `tabId`, `tab_id`, `switchTabId`, and
+  `noMonitor` aliases retained for model drift and existing Galley prompts;
+- executable `web_execute_js` calls are `risk_based` and pause for approval
+  before JavaScript is sent to the browser;
+- missing Browser Control, missing script, and unsupported `save_to_file`
+  requests fail without approval and without side effects;
+- approved `web_execute_js` results enter the same one-pass continuation path as
+  approved file/code executors, so the selected native model can interpret the
+  browser result in the same assistant turn;
+- GUI approval projection now shows the JavaScript body directly;
+- granular read-only-vs-action browser approval, dedicated disconnected /
+  service-worker recovery events, and live browser-action progress remain
+  deferred.
 
 Rollback:
 

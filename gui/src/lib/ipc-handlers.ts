@@ -577,9 +577,7 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
 
     case "tool_start": {
       const key = nativeToolKey(event.sessionId, event.toolCallId);
-      const draft = _nativeToolDrafts.get(
-        key,
-      );
+      const draft = _nativeToolDrafts.get(key);
       _nativeToolProgressPreviews.delete(key);
       messages.upsertToolEvent(
         event.sessionId,
@@ -634,9 +632,7 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
 
     case "tool_end": {
       const key = nativeToolKey(event.sessionId, event.toolCallId);
-      const draft = _nativeToolDrafts.get(
-        key,
-      );
+      const draft = _nativeToolDrafts.get(key);
       const tool = nativeToolEventFromEnd(event, draft);
       messages.upsertToolEvent(event.sessionId, tool, event.turnIndex);
       if (tool.status === "denied") {
@@ -908,6 +904,7 @@ function riskLevelFromNativePolicy(
 function pickTarget(args: Record<string, unknown>): string | undefined {
   if (typeof args.path === "string") return args.path;
   if (typeof args.command === "string") return args.command.slice(0, 60);
+  if (typeof args.script === "string") return args.script.slice(0, 60);
   if (typeof args.code === "string") return args.code.slice(0, 60);
   return undefined;
 }

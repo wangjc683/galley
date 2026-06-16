@@ -50,12 +50,31 @@ def main():
         except Exception:
             bridge_status = {}
         time.sleep(0.25)
-    if tool != "web_scan":
+    if tool not in ("web_scan", "web_execute_js"):
         raise RuntimeError(f"Unsupported native browser tool: {tool}")
     if not sessions:
         if bridge_status.get("extension_connected"):
             raise RuntimeError("Browser Control is connected, but no operable webpage is open.")
         raise RuntimeError("Browser Control extension is not connected.")
+
+    switch_tab_id = request.get("switch_tab_id")
+    if switch_tab_id:
+        driver.default_session_id = str(switch_tab_id)
+
+    if tool == "web_execute_js":
+        script = request.get("script", "")
+        if not isinstance(script, str) or not script.strip():
+            raise RuntimeError("web_execute_js requires a non-empty script.")
+        import simphtml
+        importlib.reload(simphtml)
+        result = simphtml.execute_js_rich(
+            script,
+            driver,
+            no_monitor=bool(request.get("no_monitor", False)),
+        )
+        emit({"ok": True, "result": result})
+        return
+
     tabs = []
     for session in driver.get_all_sessions():
         item = dict(session)
@@ -64,9 +83,6 @@ def main():
         url = item.get("url", "") or ""
         item["url"] = url[:50] + ("..." if len(url) > 50 else "")
         tabs.append(item)
-    switch_tab_id = request.get("switch_tab_id")
-    if switch_tab_id:
-        driver.default_session_id = str(switch_tab_id)
     result = {
         "status": "success",
         "metadata": {
@@ -310,10 +326,15 @@ pub fn parity_tool_specs() -> Vec<NativeToolSpec> {
             "risk_based",
             serde_json::json!({
                 "type": "object",
-                "required": ["code"],
+                "required": ["script"],
                 "properties": {
+                    "script": { "type": "string" },
+                    "code": { "type": "string" },
+                    "switch_tab_id": { "type": "string" },
                     "tabId": { "type": "string" },
-                    "code": { "type": "string" }
+                    "tab_id": { "type": "string" },
+                    "no_monitor": { "type": "boolean" },
+                    "save_to_file": { "type": "string" }
                 }
             }),
         ),
@@ -386,6 +407,11 @@ pub fn approval_for_tool_call(
         return "none".to_string();
     }
     if call.name == "code_run" && !code_run_has_executable_args(call) {
+        return "none".to_string();
+    }
+    if call.name == "web_execute_js"
+        && (context.browser.is_none() || !web_execute_js_has_executable_args(call))
+    {
         return "none".to_string();
     }
     call.risk_hint
@@ -484,6 +510,10 @@ pub fn normalize_native_tool_call(
             call.arguments_json = normalize_web_scan_arguments(call.arguments_json);
             call.raw_arguments_text = Some(call.arguments_json.to_string());
         }
+        "web_execute_js" => {
+            call.arguments_json = normalize_web_execute_js_arguments(call.arguments_json);
+            call.raw_arguments_text = Some(call.arguments_json.to_string());
+        }
         _ => {}
     }
     call
@@ -499,6 +529,7 @@ pub fn execute_native_tool(
         "file_patch" => file_patch_result(call, context),
         "file_write" => file_write_result(call, context),
         "web_scan" => web_scan_result(call, context),
+        "web_execute_js" => web_execute_js_result(call, context),
         _ => stub_tool_result(call),
     }
 }
@@ -1186,11 +1217,107 @@ fn web_scan_content(
     run_browser_python_tool(browser, "web_scan", request)
 }
 
+fn web_execute_js_result(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> NativeToolStubResult {
+    let approval = approval_for_tool_call(call, context);
+    let result = web_execute_js_content(call, context);
+    let (status, content, side_effects_performed) = match result {
+        Ok(content) => ("success", content, true),
+        Err(error) => ("failed", error.message, error.attempted_execution),
+    };
+    NativeToolStubResult {
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        status: status.to_string(),
+        content,
+        side_effects_performed,
+        requires_user_response: false,
+        approval,
+        progress_chunks: Vec::new(),
+    }
+}
+
+#[derive(Debug)]
+struct BrowserToolExecutionError {
+    message: String,
+    attempted_execution: bool,
+}
+
+impl BrowserToolExecutionError {
+    fn preflight(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            attempted_execution: false,
+        }
+    }
+
+    fn attempted(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            attempted_execution: true,
+        }
+    }
+}
+
+fn web_execute_js_content(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<String, BrowserToolExecutionError> {
+    let Some(browser) = context.browser.as_ref() else {
+        return Err(BrowserToolExecutionError::preflight(format!(
+            "web_execute_js cannot run because Browser Control is unavailable: {}",
+            context
+                .browser_unavailable_reason
+                .as_deref()
+                .unwrap_or("native runtime host did not provide a browser bridge")
+        )));
+    };
+    let script = web_execute_js_script_arg(call).ok_or_else(|| {
+        BrowserToolExecutionError::preflight(
+            "web_execute_js requires a non-empty string `script` argument.",
+        )
+    })?;
+    if web_execute_js_save_to_file_arg(call).is_some() {
+        return Err(BrowserToolExecutionError::preflight(
+            "web_execute_js `save_to_file` is not supported in Galley Native yet. Use file_write or file_patch so local file writes stay previewed and approval-gated.",
+        ));
+    }
+    let request = serde_json::json!({
+        "script": script,
+        "switch_tab_id": web_execute_js_switch_tab_id_arg(call),
+        "no_monitor": web_execute_js_no_monitor_arg(call),
+    });
+    let result = run_browser_python_tool_result(browser, "web_execute_js", request)
+        .map_err(BrowserToolExecutionError::attempted)?;
+    let content = format_web_execute_js_content(&result);
+    if matches!(
+        result.get("status").and_then(Value::as_str),
+        Some("error" | "failed")
+    ) {
+        return Err(BrowserToolExecutionError::attempted(content));
+    }
+    Ok(content)
+}
+
 fn run_browser_python_tool(
     browser: &NativeBrowserExecutionContext,
     tool_name: &str,
     request: Value,
 ) -> std::result::Result<String, String> {
+    let result = run_browser_python_tool_result(browser, tool_name, request)?;
+    Ok(match tool_name {
+        "web_execute_js" => format_web_execute_js_content(&result),
+        _ => format_web_scan_content(&result),
+    })
+}
+
+fn run_browser_python_tool_result(
+    browser: &NativeBrowserExecutionContext,
+    tool_name: &str,
+    request: Value,
+) -> std::result::Result<Value, String> {
     let mut child = Command::new(&browser.python)
         .arg("-c")
         .arg(NATIVE_BROWSER_TOOL_SCRIPT)
@@ -1268,12 +1395,17 @@ fn run_browser_python_tool(
             .unwrap_or("Browser Control helper failed");
         return Err(message.to_string());
     }
-    let result = parsed.get("result").cloned().unwrap_or(Value::Null);
-    Ok(format_web_scan_content(&result))
+    Ok(parsed.get("result").cloned().unwrap_or(Value::Null))
 }
 
 fn format_web_scan_content(result: &Value) -> String {
     let mut output = String::from("web_scan:\n");
+    output.push_str(&serde_json::to_string_pretty(result).unwrap_or_else(|_| result.to_string()));
+    output
+}
+
+fn format_web_execute_js_content(result: &Value) -> String {
+    let mut output = String::from("web_execute_js:\n");
     output.push_str(&serde_json::to_string_pretty(result).unwrap_or_else(|_| result.to_string()));
     output
 }
@@ -1372,6 +1504,35 @@ fn web_scan_switch_tab_id_arg(call: &NativeToolCall) -> Option<String> {
     string_arg_any(call, &["switch_tab_id", "switchTabId", "tabId", "tab_id"])
         .map(|tab_id| tab_id.trim().to_string())
         .filter(|tab_id| !tab_id.is_empty())
+}
+
+fn web_execute_js_has_executable_args(call: &NativeToolCall) -> bool {
+    web_execute_js_script_arg(call).is_some() && web_execute_js_save_to_file_arg(call).is_none()
+}
+
+fn web_execute_js_script_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["script", "code"])
+        .map(|script| script.trim().to_string())
+        .filter(|script| !script.is_empty())
+}
+
+fn web_execute_js_switch_tab_id_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["switch_tab_id", "switchTabId", "tabId", "tab_id"])
+        .map(|tab_id| tab_id.trim().to_string())
+        .filter(|tab_id| !tab_id.is_empty())
+}
+
+fn web_execute_js_no_monitor_arg(call: &NativeToolCall) -> bool {
+    call.arguments_json
+        .get("no_monitor")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn web_execute_js_save_to_file_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["save_to_file", "saveToFile"])
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
 }
 
 fn string_arg_any(call: &NativeToolCall, names: &[&str]) -> Option<String> {
@@ -1501,6 +1662,22 @@ fn normalize_web_scan_arguments(value: Value) -> Value {
         "switch_tab_id",
         &["switchTabId", "tabId", "tab_id"],
     );
+    Value::Object(object)
+}
+
+fn normalize_web_execute_js_arguments(value: Value) -> Value {
+    let Some(object) = value.as_object() else {
+        return value;
+    };
+    let mut object = object.clone();
+    copy_string_alias(&mut object, "script", &["code"]);
+    copy_string_alias(
+        &mut object,
+        "switch_tab_id",
+        &["switchTabId", "tabId", "tab_id"],
+    );
+    copy_bool_alias(&mut object, "no_monitor", &["noMonitor"]);
+    copy_string_alias(&mut object, "save_to_file", &["saveToFile"]);
     Value::Object(object)
 }
 
@@ -1995,6 +2172,7 @@ fn side_effect_mode(name: &str) -> &'static str {
         "file_read" | "web_scan" => "read_only",
         "file_patch" | "file_write" => "approval_gated_write",
         "code_run" => "approval_gated_process",
+        "web_execute_js" => "approval_gated_browser_action",
         _ => "slice_4a_stub_no_side_effects",
     }
 }
@@ -2474,6 +2652,208 @@ class TMWebDriver:
         assert!(result.content.contains("\"tabs_count\": 1"));
         assert!(result.content.contains("\"active_tab\": \"101\""));
         assert!(result.content.contains("\"id\": \"101\""));
+    }
+
+    #[test]
+    fn web_execute_js_without_browser_context_fails_without_stub() {
+        let call = normalize_native_tool_call(
+            tool_call(
+                "web_execute_js",
+                serde_json::json!({ "script": "document.title" }),
+            ),
+            &NativeToolExecutionContext::default(),
+        );
+        let context =
+            NativeToolExecutionContext::with_browser_unavailable(None, "Browser Control not ready");
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(approval_for_tool_call(&call, &context), "none");
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("Browser Control is unavailable"));
+        assert!(!result.content.contains("Slice 4A deterministic stub"));
+    }
+
+    #[test]
+    fn web_execute_js_save_to_file_is_rejected_before_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let context = NativeToolExecutionContext::with_browser(
+            None,
+            NativeBrowserExecutionContext {
+                python: PathBuf::from(if cfg!(windows) { "python" } else { "python3" }),
+                code_root: dir.path().join("code"),
+                state_root: dir.path().join("state"),
+                wait_timeout_seconds: 1,
+            },
+        );
+        let call = normalize_native_tool_call(
+            tool_call(
+                "web_execute_js",
+                serde_json::json!({
+                    "script": "document.body.innerText",
+                    "saveToFile": "page.txt"
+                }),
+            ),
+            &context,
+        );
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(call.arguments_json["save_to_file"], "page.txt");
+        assert_eq!(approval_for_tool_call(&call, &context), "none");
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("save_to_file"));
+    }
+
+    #[test]
+    fn web_execute_js_uses_browser_bridge_context() {
+        let dir = tempfile::tempdir().unwrap();
+        let code_root = dir.path().join("code");
+        let state_root = dir.path().join("state");
+        fs::create_dir_all(&code_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+        fs::write(
+            code_root.join("TMWebDriver.py"),
+            r#"
+class TMWebDriver:
+    def __init__(self):
+        self.default_session_id = None
+    def get_all_sessions(self):
+        return [{
+            "id": "101",
+            "url": "https://example.com/",
+            "title": "Example",
+            "connected_at": 1,
+            "type": "ext_ws",
+        }]
+    def get_status(self):
+        return {"extension_connected": True, "tab_count": 1}
+    def execute_js(self, script, timeout=15, session_id=None):
+        return {
+            "echo": script,
+            "session": session_id or self.default_session_id,
+            "timeout": timeout,
+        }
+"#,
+        )
+        .unwrap();
+        fs::write(
+            code_root.join("simphtml.py"),
+            r#"
+def execute_js_rich(script, driver, no_monitor=False):
+    return {
+        "status": "success",
+        "js_return": driver.execute_js(script, timeout=15),
+        "no_monitor": no_monitor,
+        "active_tab": driver.default_session_id,
+    }
+"#,
+        )
+        .unwrap();
+        let python = std::env::var_os("PYTHON")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "python" } else { "python3" }));
+        let context = NativeToolExecutionContext::with_browser(
+            None,
+            NativeBrowserExecutionContext {
+                python,
+                code_root,
+                state_root,
+                wait_timeout_seconds: 1,
+            },
+        );
+        let call = normalize_native_tool_call(
+            tool_call(
+                "web_execute_js",
+                serde_json::json!({
+                    "code": "document.title",
+                    "tabId": "101",
+                    "noMonitor": true
+                }),
+            ),
+            &context,
+        );
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(call.arguments_json["script"], "document.title");
+        assert_eq!(call.arguments_json["switch_tab_id"], "101");
+        assert_eq!(call.arguments_json["no_monitor"], true);
+        assert_eq!(approval_for_tool_call(&call, &context), "risk_based");
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "risk_based");
+        assert!(result.side_effects_performed);
+        assert!(result.content.contains("web_execute_js:"));
+        assert!(result.content.contains("\"active_tab\": \"101\""));
+        assert!(result.content.contains("\"echo\": \"document.title\""));
+        assert!(result.content.contains("\"no_monitor\": true"));
+    }
+
+    #[test]
+    fn web_execute_js_marks_ga_error_result_failed() {
+        let dir = tempfile::tempdir().unwrap();
+        let code_root = dir.path().join("code");
+        let state_root = dir.path().join("state");
+        fs::create_dir_all(&code_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+        fs::write(
+            code_root.join("TMWebDriver.py"),
+            r#"
+class TMWebDriver:
+    def __init__(self):
+        self.default_session_id = None
+    def get_all_sessions(self):
+        return [{
+            "id": "101",
+            "url": "https://example.com/",
+            "title": "Example",
+            "connected_at": 1,
+            "type": "ext_ws",
+        }]
+    def get_status(self):
+        return {"extension_connected": True, "tab_count": 1}
+"#,
+        )
+        .unwrap();
+        fs::write(
+            code_root.join("simphtml.py"),
+            r#"
+def execute_js_rich(script, driver, no_monitor=False):
+    return {"status": "error", "msg": "script failed"}
+"#,
+        )
+        .unwrap();
+        let python = std::env::var_os("PYTHON")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "python" } else { "python3" }));
+        let context = NativeToolExecutionContext::with_browser(
+            None,
+            NativeBrowserExecutionContext {
+                python,
+                code_root,
+                state_root,
+                wait_timeout_seconds: 1,
+            },
+        );
+        let call = normalize_native_tool_call(
+            tool_call(
+                "web_execute_js",
+                serde_json::json!({ "script": "throw new Error('x')" }),
+            ),
+            &context,
+        );
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "risk_based");
+        assert!(result.side_effects_performed);
+        assert!(result.content.contains("\"status\": \"error\""));
+        assert!(result.content.contains("script failed"));
     }
 
     #[test]

@@ -104,9 +104,15 @@ behavior changes until an implementation slice explicitly lands them.
 - Slice 4C1 landed the first native Browser Control executor on 2026-06-17:
   hidden native `web_scan` now uses Galley's prepared `TMWebDriver` bridge to
   read tab metadata and simplified page content, and successful scans feed one
-  continuation request back to the selected native model. `web_execute_js` and
-  richer browser recovery remain deferred.
+  continuation request back to the selected native model. Richer browser
+  recovery remains deferred.
   [devlog](../devlog/2026-06-17-galley-native-slice-4c1-web-scan.md).
+- Slice 4C2 landed approval-gated `web_execute_js` on 2026-06-17: hidden native
+  executes JavaScript through the same `TMWebDriver` / `simphtml` Browser
+  Control bridge, supports GA-compatible script/tab/no-monitor arguments, and
+  feeds approved results into one continuation request. `save_to_file` is
+  explicitly deferred so browser tools cannot bypass file-write previews.
+  [devlog](../devlog/2026-06-17-galley-native-slice-4c2-web-execute-js.md).
 
 ## Document Roles
 
@@ -136,13 +142,15 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4C1, native can read files, answer from tool results, apply targeted
-patches, perform preview-first create/overwrite writes, run approval-gated
-local commands with bounded output, project command stdout/stderr as ordered
-tool-progress events, and read browser tabs/pages through Browser Control
-`web_scan`. The next work is still deliberately narrow:
+After Slice 4C2, native can read files, answer from tool results, apply targeted
+patches, perform preview-first create/overwrite writes, run approval-gated local
+commands with bounded output, project command stdout/stderr as ordered
+tool-progress events, read browser tabs/pages through `web_scan`, and execute
+approval-gated browser JavaScript through `web_execute_js`. The next work is
+still deliberately narrow:
 
-1. add native `web_execute_js` with an explicit browser-action risk policy;
-2. decide whether approval execution should move to a background/live event
+1. decide whether approval execution should move to a background/live event
    publishing lifecycle before long-running browser actions;
+2. add richer Browser Control recovery states for disconnected extension,
+   sleeping service worker, and no-tab cases;
 3. keep memory, Goal Hive, and Morphling in later slices.
