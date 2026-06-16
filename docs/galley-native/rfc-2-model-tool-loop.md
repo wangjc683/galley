@@ -204,6 +204,10 @@ Required behavior:
 - avoid hiding destructive commands behind generic success text;
 - support small helper scripts created by capability packs.
 
+The first hidden-native executor is intentionally non-streaming: it records
+stdout, stderr, exit status, timeout state, and duration at `tool_end`. Streaming
+progress remains a follow-up because it changes the live event surface.
+
 Risk policy should look at command intent, affected paths, network use,
 credential exposure, deletion, installation, commit/push, and external sends.
 

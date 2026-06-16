@@ -113,6 +113,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-16 | [Galley Native Slice 4B3 Approved File Read Continuation](./2026-06-16-galley-native-slice-4b3-approved-file-read-continuation.md) | Hidden native approval 后 `file_read` continuation 落地：operator allow 后 Core 执行只读读取、保留 toolResult、做一次非 streaming model continuation，并更新同一 assistant turn / `turn_end`；失败时不丢工具结果，写入、代码执行、浏览器、memory、Goal Hive、Morphling 仍关闭或 stub。 |
 | 2026-06-16 | [Galley Native Slice 4B4 File Patch Preview](./2026-06-16-galley-native-slice-4b4-file-patch-preview.md) | Hidden native 首个真实写入 executor 落地：`file_patch` 对齐 GA `path` / `old_content` / `new_content`，approval 前复用 GUI split diff preview，allow 后只在 `old_content` 唯一匹配时写入并记录 `sideEffectsPerformed=true`；opaque patch-only 请求直接失败不进审批。 |
 | 2026-06-16 | [Galley Native Slice 4B5 File Write Preview](./2026-06-16-galley-native-slice-4b5-file-write-preview.md) | Hidden native `file_write` preview-first create/overwrite 落地：Core 在 approval args 中生成 `existing_content`，GUI 复用 split diff 展示完整替换预览；allow 后 create 只在路径仍不存在时写入，overwrite 只在内容仍匹配预览时写入，成功记录 `sideEffectsPerformed=true`。 |
+| 2026-06-16 | [Galley Native Slice 4B6 Code Run](./2026-06-16-galley-native-slice-4b6-code-run.md) | Hidden native `code_run` approval-gated executor 落地：Core 解析 command / cwd / timeout 并在 approval args 中写入 `resolved_cwd`，allow 后关闭 stdin、捕获 stdout/stderr、记录 exit code / timeout / duration，timeout 会 kill 进程；Browser/memory/Goal/Morphling 仍关闭。 |
 
 ## 格式约定
 

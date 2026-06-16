@@ -433,8 +433,10 @@ Tasks:
   `old_content` / `new_content` preview and approval-gated unique replacement;
 - implement `file_write`; landed in Slice 4B5 with preview-first create and
   explicit overwrite execution;
-- implement `code_run` with explicit cwd policy;
-- add timeout, cancellation, stdout/stderr, and exit-status capture;
+- implement `code_run`; landed in Slice 4B6 with explicit cwd policy, timeout
+  kill, stdout/stderr capture, and exit-status reporting;
+- add timeout, cancellation, stdout/stderr, and exit-status capture; landed in
+  Slice 4B6 for non-streaming `tool_end` results;
 - add first-pass risk policy for local destructive or credential-adjacent
   actions;
 - keep Project workspace integration minimal until Slice 6.
@@ -497,8 +499,26 @@ Landed in Slice 4B5 follow-up:
   matches the preview;
 - successful writes set `sideEffectsPerformed: true` and are recorded in the
   assistant turn's `tool_results`;
-- `code_run`, Browser Control, memory, Goal Hive, and Morphling remain disabled
-  or stubbed.
+- at the 4B5 checkpoint, `code_run`, Browser Control, memory, Goal Hive, and
+  Morphling remained disabled or stubbed.
+
+Landed in Slice 4B6 follow-up:
+
+- hidden native `code_run` now supports approval-gated shell command execution;
+- Core normalizes `cmd` / `code` into `command`, `timeout_seconds` into
+  `timeoutSeconds`, and defaults timeout to 30 seconds with a 120 second cap;
+- omitted `cwd` resolves to the Project workspace; relative `cwd` must resolve
+  inside that workspace; explicit absolute `cwd` is allowed only through the
+  normal approval path;
+- Core enriches valid pending approval args with `resolved_cwd`, allowing the
+  GUI approval card to show the actual execution directory;
+- missing command, invalid timeout, missing workspace, or unresolvable cwd fail
+  without approval and without spawning a process;
+- approved execution closes stdin, captures stdout/stderr with caps, reports
+  exit code, timeout state, and duration, and kills timed-out commands;
+- once a process is spawned, `sideEffectsPerformed` is `true` even if the command
+  exits non-zero or times out;
+- Browser Control, memory, Goal Hive, and Morphling remain disabled or stubbed.
 
 Rollback:
 

@@ -1432,6 +1432,7 @@ fn approval_pending_event(
 
 fn native_approval_reason(tool_name: &str) -> &'static str {
     match tool_name {
+        "code_run" => "Review the command, cwd, and timeout before Galley Native runs it.",
         "file_patch" => "Review the diff before Galley Native modifies this file.",
         "file_write" => "Review the full file preview before Galley Native writes it.",
         "file_read" => "Approve this read before Galley Native opens a path outside the workspace.",
@@ -1981,7 +1982,7 @@ mod tests {
     #[test]
     fn approval_required_tool_stops_at_pending_approval() {
         let final_answer = r#"```json
-{"tool":"code_run","arguments":{"command":"echo hi"}}
+{"tool":"start_long_term_update","arguments":{"topic":"learn testing"}}
 ```"#;
 
         let trace = native_event_trace(
@@ -2020,6 +2021,68 @@ mod tests {
             complete["exitReason"]["data"]["awaitingApproval"].as_bool(),
             Some(true)
         );
+    }
+
+    #[test]
+    fn code_run_waits_for_approval_with_resolved_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        let final_answer = r#"```json
+{"tool":"code_run","arguments":{"command":"echo hi","timeoutSeconds":2}}
+```"#;
+
+        let trace = native_event_trace_with_context(
+            "s-native-code-run",
+            1,
+            final_answer,
+            "code run summary",
+            "2026-06-16T00:00:00.000Z".to_string(),
+            "Galley Native mock",
+            "mock_model",
+            "mock",
+            None,
+            None,
+            &NativeToolExecutionContext::new(Some(dir.path().to_path_buf())),
+        );
+
+        assert!(trace.pending_approval.is_some());
+        assert_eq!(
+            event_kind_sequence(&trace.events),
+            vec![
+                "runtime_ready",
+                "turn_start",
+                "turn_progress",
+                "tool_pending",
+                "approval_pending",
+                "turn_end",
+                "run_complete"
+            ]
+        );
+        let pending = serde_json::to_value(&trace.events[3]).unwrap();
+        assert_eq!(pending["toolName"], "code_run");
+        assert_eq!(pending["arguments"]["command"], "echo hi");
+        assert_eq!(pending["arguments"]["timeoutSeconds"], 2);
+        assert_eq!(
+            pending["arguments"]["resolved_cwd"].as_str(),
+            Some(
+                dir.path()
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
+        let turn_end = serde_json::to_value(&trace.events[5]).unwrap();
+        assert_eq!(
+            turn_end["toolCalls"][0]["argumentsJson"]["resolved_cwd"].as_str(),
+            Some(
+                dir.path()
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
+        assert_eq!(turn_end["toolResults"], serde_json::json!([]));
     }
 
     #[test]

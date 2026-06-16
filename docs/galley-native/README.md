@@ -85,6 +85,11 @@ behavior changes until an implementation slice explicitly lands them.
   to the approval args and the GUI shows the full replacement preview; stale or
   opaque writes fail without side effects.
   [devlog](../devlog/2026-06-16-galley-native-slice-4b5-file-write-preview.md).
+- Slice 4B6 landed approval-gated `code_run` on 2026-06-16: hidden native
+  resolves cwd, timeout, and command before approval; allow runs a shell command
+  with stdin closed, stdout/stderr captured, exit status recorded, and timeout
+  kill support.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4b6-code-run.md).
 
 ## Document Roles
 
@@ -114,12 +119,12 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4B5, native can read files, answer from read results, apply targeted
-patches, and perform preview-first create/overwrite writes. The next local work
-is still deliberately narrow:
+After Slice 4B6, native can read files, answer from read results, apply targeted
+patches, perform preview-first create/overwrite writes, and run approval-gated
+local commands with bounded output. The next work is still deliberately narrow:
 
 1. decide whether successful write tools should trigger a model continuation;
-2. implement `code_run` with explicit cwd, timeout, stdout/stderr, and
-   cancellation policy;
+2. decide whether `code_run` should stream stdout/stderr progress before
+   `tool_end`;
 3. keep Browser Control as Slice 4C, separate from file/code executors;
 4. keep memory, Goal Hive, and Morphling in later slices.

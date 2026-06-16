@@ -507,9 +507,9 @@ using the existing GUI / runner IPC path.
 
 ```bash
 $ galley session approval-response sess_abc native_sess_abc_0_native_tool_1_code_run allow_once \
-    --supervisor=ga-claude-1 --reason="operator approved stubbed native call"
+    --supervisor=ga-claude-1 --reason="operator approved native command"
 {"session":{...},"approvalId":"native_sess_abc_0_native_tool_1_code_run", \
-"decision":"allow_once","toolResult":{"status":"stubbed_no_side_effects",...}, \
+"decision":"allow_once","toolResult":{"status":"success","sideEffectsPerformed":true,...}, \
 "dispatch":"completed_native_approval"}
 ```
 
@@ -523,7 +523,7 @@ Socket command:
     "approvalId": "native_sess_abc_0_native_tool_1_code_run",
     "decision": "allow_once",
     "supervisor": "ga-claude-1",
-    "reason": "operator approved stubbed native call"
+    "reason": "operator approved native command"
   },
   "schemaVersion": 1
 }
@@ -570,8 +570,17 @@ Semantics:
   otherwise opaque writes without approval. Approval-time execution rechecks the
   target: create fails if the path now exists; overwrite fails if the file
   changed since the preview. Successful writes set
-  `toolResult.sideEffectsPerformed = true`. `code_run`, browser, memory, Goal,
-  and Morphling executors remain deterministic stubs until their own slices land.
+  `toolResult.sideEffectsPerformed = true`.
+- Since Slice 4B6, approved hidden-native `code_run` may execute a shell command
+  in a Core-resolved cwd. Core normalizes command aliases, defaults
+  `timeoutSeconds` to 30, caps it at 120, resolves `cwd` against the Project
+  workspace when relative or omitted, and adds `resolved_cwd` to approval args.
+  Missing command, invalid timeout, or unresolvable cwd fails without approval.
+  Approval-time execution closes stdin, captures stdout/stderr with output caps,
+  records exit code, timeout state, and duration, and sets
+  `toolResult.sideEffectsPerformed = true` once a process is spawned. Browser,
+  memory, Goal, and Morphling executors remain deterministic stubs until their
+  own slices land.
 - A successful response publishes native events ending in
   `native_run_complete`; `session watch` can replay those same-process events.
 

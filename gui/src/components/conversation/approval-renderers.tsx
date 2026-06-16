@@ -115,13 +115,25 @@ function CodeRunRenderer({ tool }: { tool: ConversationToolEvent }) {
     stringArg(tool, "command") ||
     stringArg(tool, "cmd") ||
     "";
+  const cwd = stringArg(tool, "resolved_cwd") || stringArg(tool, "cwd");
+  const timeout = numberArg(tool, "timeoutSeconds");
 
   return (
     <div className="mb-3 overflow-hidden rounded-callout border border-line bg-surface">
-      <div className="flex items-center justify-between border-b border-line px-3 py-1.5 text-[11px]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-1.5 text-[11px]">
         <span className="font-mono uppercase tracking-[0.08em] text-ink-muted">
           {language}
         </span>
+        {cwd && (
+          <span className="min-w-0 select-text truncate font-mono text-ink-soft">
+            {cwd}
+          </span>
+        )}
+        {timeout !== null && (
+          <span className="shrink-0 rounded-full bg-info/[var(--opacity-soft)] px-2 py-0.5 text-[10px] font-medium text-info">
+            {timeout}s
+          </span>
+        )}
       </div>
       <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink">
         {code || copy.conversation.codeNoCommand}
@@ -192,4 +204,9 @@ function optionalStringArg(
 ): string | null {
   const v = tool.args?.[key];
   return typeof v === "string" ? v : null;
+}
+
+function numberArg(tool: ConversationToolEvent, key: string): number | null {
+  const v = tool.args?.[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
 }

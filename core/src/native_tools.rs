@@ -2,7 +2,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
+const CODE_RUN_DEFAULT_TIMEOUT_SECONDS: f64 = 30.0;
+const CODE_RUN_MAX_TIMEOUT_SECONDS: f64 = 120.0;
+const CODE_RUN_OUTPUT_MAX_BYTES: usize = 64 * 1024;
 const FILE_READ_MAX_BYTES: u64 = 256 * 1024;
 const FILE_PATCH_MAX_BYTES: u64 = 256 * 1024;
 const FILE_WRITE_MAX_BYTES: u64 = 256 * 1024;
@@ -253,6 +259,9 @@ pub fn approval_for_tool_call(
     if call.name == "file_write" && !file_write_has_preview_args(call) {
         return "none".to_string();
     }
+    if call.name == "code_run" && !code_run_has_executable_args(call) {
+        return "none".to_string();
+    }
     call.risk_hint
         .as_deref()
         .filter(|hint| is_approval_policy(hint))
@@ -333,6 +342,10 @@ pub fn normalize_native_tool_call(
     context: &NativeToolExecutionContext,
 ) -> NativeToolCall {
     match call.name.as_str() {
+        "code_run" => {
+            call.arguments_json = normalize_code_run_arguments(call.arguments_json, context);
+            call.raw_arguments_text = Some(call.arguments_json.to_string());
+        }
         "file_patch" => {
             call.arguments_json = normalize_file_patch_arguments(call.arguments_json);
             call.raw_arguments_text = Some(call.arguments_json.to_string());
@@ -351,6 +364,7 @@ pub fn execute_native_tool(
     context: &NativeToolExecutionContext,
 ) -> NativeToolStubResult {
     match call.name.as_str() {
+        "code_run" => code_run_result(call, context),
         "file_read" => file_read_result(call, context),
         "file_patch" => file_patch_result(call, context),
         "file_write" => file_write_result(call, context),
@@ -398,6 +412,234 @@ pub fn stub_tool_result(call: &NativeToolCall) -> NativeToolStubResult {
         side_effects_performed: false,
         requires_user_response,
         approval,
+    }
+}
+
+fn code_run_result(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> NativeToolStubResult {
+    let approval = approval_for_tool_call(call, context);
+    let result = code_run_content(call, context);
+    let (status, content, side_effects_performed) = match result {
+        Ok(result) => {
+            let status = if result.timed_out {
+                "timed_out"
+            } else if result.exit_code == Some(0) {
+                "success"
+            } else {
+                "failed"
+            };
+            (status, format_code_run_content(&result), true)
+        }
+        Err(message) => ("failed", message, false),
+    };
+    NativeToolStubResult {
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        status: status.to_string(),
+        content,
+        side_effects_performed,
+        requires_user_response: false,
+        approval,
+    }
+}
+
+#[derive(Debug)]
+struct CodeRunExecutionResult {
+    command: String,
+    cwd: PathBuf,
+    timeout_seconds: f64,
+    duration_ms: u128,
+    exit_code: Option<i32>,
+    timed_out: bool,
+    stdout: String,
+    stderr: String,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+}
+
+fn code_run_content(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<CodeRunExecutionResult, String> {
+    let command = code_run_command_arg(call)
+        .ok_or_else(|| "code_run requires a non-empty string `command` argument.".to_string())?;
+    if let Some(preview_error) = code_run_preview_error_arg(call) {
+        return Err(format!(
+            "code_run cannot run because the approval preview was invalid: {preview_error}"
+        ));
+    }
+    let preview_cwd = code_run_resolved_cwd_arg(call).ok_or_else(|| {
+        "code_run requires a generated `resolved_cwd` before approval.".to_string()
+    })?;
+    let cwd = resolve_code_run_cwd(call, context)?;
+    if cwd.to_string_lossy().as_ref() != preview_cwd {
+        return Err(format!(
+            "code_run refused to run because cwd changed after approval preview: expected {preview_cwd}, got {}.",
+            cwd.display()
+        ));
+    }
+    let timeout_seconds = code_run_timeout_seconds_arg(call)?;
+    let timeout = Duration::from_secs_f64(timeout_seconds);
+    run_shell_command(command, cwd, timeout_seconds, timeout)
+}
+
+fn run_shell_command(
+    command: String,
+    cwd: PathBuf,
+    timeout_seconds: f64,
+    timeout: Duration,
+) -> std::result::Result<CodeRunExecutionResult, String> {
+    let mut child = shell_command(&command)
+        .current_dir(&cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| {
+            format!(
+                "code_run could not spawn command in {}: {err}",
+                cwd.display()
+            )
+        })?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "code_run could not capture stdout.".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "code_run could not capture stderr.".to_string())?;
+    let stdout_handle = thread::spawn(move || read_capped_output(stdout));
+    let stderr_handle = thread::spawn(move || read_capped_output(stderr));
+
+    let start = Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if start.elapsed() >= timeout => {
+                timed_out = true;
+                let _ = child.kill();
+                break child.wait().map_err(|err| {
+                    format!("code_run timed out but could not wait for killed process: {err}")
+                })?;
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(10)),
+            Err(err) => return Err(format!("code_run could not poll command status: {err}")),
+        }
+    };
+    let duration_ms = start.elapsed().as_millis();
+    let stdout = join_capped_output(stdout_handle, "stdout")?;
+    let stderr = join_capped_output(stderr_handle, "stderr")?;
+
+    Ok(CodeRunExecutionResult {
+        command,
+        cwd,
+        timeout_seconds,
+        duration_ms,
+        exit_code: status.code(),
+        timed_out,
+        stdout: String::from_utf8_lossy(&stdout.bytes).to_string(),
+        stderr: String::from_utf8_lossy(&stderr.bytes).to_string(),
+        stdout_truncated: stdout.truncated,
+        stderr_truncated: stderr.truncated,
+    })
+}
+
+fn shell_command(command: &str) -> Command {
+    #[cfg(windows)]
+    {
+        let mut shell = Command::new("cmd");
+        shell.args(["/C", command]);
+        shell
+    }
+    #[cfg(not(windows))]
+    {
+        let mut shell = Command::new("sh");
+        shell.args(["-c", command]);
+        shell
+    }
+}
+
+#[derive(Debug)]
+struct CappedOutput {
+    bytes: Vec<u8>,
+    truncated: bool,
+}
+
+fn read_capped_output<R: Read>(mut reader: R) -> std::io::Result<CappedOutput> {
+    let mut stored = Vec::new();
+    let mut total = 0_usize;
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        total = total.saturating_add(read);
+        if stored.len() < CODE_RUN_OUTPUT_MAX_BYTES {
+            let remaining = CODE_RUN_OUTPUT_MAX_BYTES - stored.len();
+            let keep = remaining.min(read);
+            stored.extend_from_slice(&buffer[..keep]);
+        }
+    }
+    Ok(CappedOutput {
+        bytes: stored,
+        truncated: total > CODE_RUN_OUTPUT_MAX_BYTES,
+    })
+}
+
+fn join_capped_output(
+    handle: thread::JoinHandle<std::io::Result<CappedOutput>>,
+    stream_name: &str,
+) -> std::result::Result<CappedOutput, String> {
+    handle
+        .join()
+        .map_err(|_| format!("code_run {stream_name} reader panicked."))?
+        .map_err(|err| format!("code_run could not read {stream_name}: {err}"))
+}
+
+fn format_code_run_content(result: &CodeRunExecutionResult) -> String {
+    let exit_code = result
+        .exit_code
+        .map(|code| code.to_string())
+        .unwrap_or_else(|| "none".to_string());
+    format!(
+        "code_run: {}\n\
+         cwd: {}\n\
+         timeout_seconds: {}\n\
+         duration_ms: {}\n\
+         exit_code: {}\n\
+         timed_out: {}\n\
+         stdout_truncated: {}\n\
+         stderr_truncated: {}\n\
+         \n\
+         stdout:\n{}\n\
+         stderr:\n{}",
+        result.command,
+        result.cwd.display(),
+        format_seconds(result.timeout_seconds),
+        result.duration_ms,
+        exit_code,
+        result.timed_out,
+        result.stdout_truncated,
+        result.stderr_truncated,
+        result.stdout,
+        result.stderr
+    )
+}
+
+fn format_seconds(value: f64) -> String {
+    if value.fract() == 0.0 {
+        format!("{}", value as u64)
+    } else {
+        format!("{value:.3}")
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
     }
 }
 
@@ -716,6 +958,40 @@ fn path_arg(call: &NativeToolCall) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+fn code_run_has_executable_args(call: &NativeToolCall) -> bool {
+    code_run_command_arg(call).is_some()
+        && code_run_resolved_cwd_arg(call).is_some()
+        && code_run_preview_error_arg(call).is_none()
+        && code_run_timeout_seconds_arg(call).is_ok()
+}
+
+fn code_run_command_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["command", "cmd", "code"])
+        .map(|command| command.trim().to_string())
+        .filter(|command| !command.is_empty())
+}
+
+fn code_run_cwd_arg(call: &NativeToolCall) -> Option<PathBuf> {
+    string_arg_any(call, &["cwd", "working_directory", "workingDirectory"])
+        .map(|cwd| cwd.trim().to_string())
+        .filter(|cwd| !cwd.is_empty())
+        .map(PathBuf::from)
+}
+
+fn code_run_resolved_cwd_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["resolved_cwd", "resolvedCwd"])
+        .map(|cwd| cwd.trim().to_string())
+        .filter(|cwd| !cwd.is_empty())
+}
+
+fn code_run_preview_error_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["preview_error", "previewError"])
+}
+
+fn code_run_timeout_seconds_arg(call: &NativeToolCall) -> std::result::Result<f64, String> {
+    code_run_timeout_seconds_value(&call.arguments_json)
+}
+
 fn file_patch_has_preview_args(call: &NativeToolCall) -> bool {
     path_arg(call).is_some()
         && file_patch_old_content_arg(call)
@@ -777,6 +1053,57 @@ fn normalize_file_patch_arguments(value: Value) -> Value {
     copy_string_alias(&mut object, "old_content", &["oldContent"]);
     copy_string_alias(&mut object, "new_content", &["newContent"]);
     Value::Object(object)
+}
+
+fn normalize_code_run_arguments(value: Value, context: &NativeToolExecutionContext) -> Value {
+    let Some(object) = value.as_object() else {
+        return value;
+    };
+    let mut object = object.clone();
+    copy_string_alias(&mut object, "command", &["cmd", "code"]);
+    copy_string_alias(
+        &mut object,
+        "cwd",
+        &["working_directory", "workingDirectory"],
+    );
+    copy_number_alias(&mut object, "timeoutSeconds", &["timeout_seconds"]);
+    if object.get("timeoutSeconds").is_none() {
+        object.insert(
+            "timeoutSeconds".to_string(),
+            serde_json::Number::from_f64(CODE_RUN_DEFAULT_TIMEOUT_SECONDS)
+                .map(Value::Number)
+                .unwrap_or(Value::Null),
+        );
+    }
+    object.remove("resolved_cwd");
+    object.remove("resolvedCwd");
+    object.remove("preview_error");
+    object.remove("previewError");
+
+    let normalized = Value::Object(object.clone());
+    match preview_code_run(&normalized, context) {
+        Ok(resolved_cwd) => {
+            object.insert("resolved_cwd".to_string(), Value::String(resolved_cwd));
+        }
+        Err(message) => {
+            object.insert("preview_error".to_string(), Value::String(message));
+        }
+    }
+
+    Value::Object(object)
+}
+
+fn preview_code_run(
+    value: &Value,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<String, String> {
+    string_value_any(value, &["command", "cmd", "code"])
+        .map(|command| command.trim().to_string())
+        .filter(|command| !command.is_empty())
+        .ok_or_else(|| "code_run preview requires a non-empty string `command`.".to_string())?;
+    code_run_timeout_seconds_value(value)?;
+    let cwd = resolve_code_run_cwd_from_value(value, context)?;
+    Ok(cwd.to_string_lossy().to_string())
 }
 
 fn normalize_file_write_arguments(value: Value, context: &NativeToolExecutionContext) -> Value {
@@ -899,6 +1226,28 @@ fn normalize_file_write_mode_text(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
+fn code_run_timeout_seconds_value(value: &Value) -> std::result::Result<f64, String> {
+    let Some(raw) = value
+        .get("timeoutSeconds")
+        .or_else(|| value.get("timeout_seconds"))
+    else {
+        return Ok(CODE_RUN_DEFAULT_TIMEOUT_SECONDS);
+    };
+    let Some(seconds) = raw.as_f64() else {
+        return Err("code_run `timeoutSeconds` must be a number.".to_string());
+    };
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return Err("code_run `timeoutSeconds` must be greater than 0.".to_string());
+    }
+    if seconds > CODE_RUN_MAX_TIMEOUT_SECONDS {
+        return Err(format!(
+            "code_run `timeoutSeconds` must be <= {}.",
+            format_seconds(CODE_RUN_MAX_TIMEOUT_SECONDS)
+        ));
+    }
+    Ok(seconds)
+}
+
 fn copy_string_alias(
     object: &mut serde_json::Map<String, Value>,
     canonical: &str,
@@ -912,6 +1261,23 @@ fn copy_string_alias(
         .find_map(|alias| object.get(*alias).and_then(Value::as_str))
     {
         object.insert(canonical.to_string(), Value::String(value.to_string()));
+    }
+}
+
+fn copy_number_alias(
+    object: &mut serde_json::Map<String, Value>,
+    canonical: &str,
+    aliases: &[&str],
+) {
+    if object.get(canonical).and_then(Value::as_f64).is_some() {
+        return;
+    }
+    if let Some(value) = aliases
+        .iter()
+        .find_map(|alias| object.get(*alias).and_then(Value::as_f64))
+        .and_then(serde_json::Number::from_f64)
+    {
+        object.insert(canonical.to_string(), Value::Number(value));
     }
 }
 
@@ -953,6 +1319,83 @@ fn resolve_existing_file_path(
         ));
     }
     Ok(canonical)
+}
+
+fn resolve_code_run_cwd(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<PathBuf, String> {
+    if let Some(cwd) = code_run_cwd_arg(call) {
+        resolve_code_run_cwd_path(Some(&cwd), context)
+    } else {
+        resolve_code_run_cwd_path(None, context)
+    }
+}
+
+fn resolve_code_run_cwd_from_value(
+    value: &Value,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<PathBuf, String> {
+    let cwd = string_value_any(value, &["cwd", "working_directory", "workingDirectory"])
+        .map(|cwd| cwd.trim().to_string())
+        .filter(|cwd| !cwd.is_empty())
+        .map(PathBuf::from);
+    resolve_code_run_cwd_path(cwd.as_deref(), context)
+}
+
+fn resolve_code_run_cwd_path(
+    cwd: Option<&Path>,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<PathBuf, String> {
+    let Some(cwd) = cwd else {
+        let Some(raw_root) = context.workspace_root.as_ref() else {
+            return Err(
+                "code_run requires a Galley Native Project workspace when `cwd` is omitted."
+                    .to_string(),
+            );
+        };
+        let root = raw_root.canonicalize().map_err(|err| {
+            format!(
+                "code_run Project workspace {} is unavailable: {err}",
+                raw_root.display()
+            )
+        })?;
+        return require_directory(&root, "code_run");
+    };
+
+    if cwd.is_absolute() {
+        let canonical = cwd
+            .canonicalize()
+            .map_err(|err| format!("code_run could not resolve cwd {}: {err}", cwd.display()))?;
+        return require_directory(&canonical, "code_run");
+    }
+
+    let Some(raw_root) = context.workspace_root.as_ref() else {
+        return Err(
+            "code_run relative cwd requires a Galley Native Project workspace.".to_string(),
+        );
+    };
+    let root = raw_root.canonicalize().map_err(|err| {
+        format!(
+            "code_run Project workspace {} is unavailable: {err}",
+            raw_root.display()
+        )
+    })?;
+    let canonical = root.join(cwd).canonicalize().map_err(|err| {
+        format!(
+            "code_run could not resolve cwd {} inside workspace {}: {err}",
+            cwd.display(),
+            root.display()
+        )
+    })?;
+    if !canonical.starts_with(&root) {
+        return Err(format!(
+            "code_run refused cwd {} because it resolves outside workspace {}.",
+            cwd.display(),
+            root.display()
+        ));
+    }
+    require_directory(&canonical, "code_run")
 }
 
 fn resolve_writable_file_path(
@@ -1029,6 +1472,18 @@ fn resolve_writable_file_path(
     } else {
         Ok(target)
     }
+}
+
+fn require_directory(path: &Path, tool_name: &str) -> std::result::Result<PathBuf, String> {
+    let metadata = std::fs::metadata(path)
+        .map_err(|err| format!("{tool_name} could not stat {}: {err}", path.display()))?;
+    if !metadata.is_dir() {
+        return Err(format!(
+            "{tool_name} expected a directory, got {}.",
+            path.display()
+        ));
+    }
+    Ok(path.to_path_buf())
 }
 
 fn path_entry_exists(path: &Path, tool_name: &str) -> std::result::Result<bool, String> {
@@ -1172,6 +1627,7 @@ fn side_effect_mode(name: &str) -> &'static str {
     match name {
         "file_read" | "web_scan" => "read_only",
         "file_patch" | "file_write" => "approval_gated_write",
+        "code_run" => "approval_gated_process",
         _ => "slice_4a_stub_no_side_effects",
     }
 }
@@ -1388,6 +1844,16 @@ mod tests {
         }
     }
 
+    #[cfg(not(windows))]
+    fn slow_command() -> &'static str {
+        "sleep 2"
+    }
+
+    #[cfg(windows)]
+    fn slow_command() -> &'static str {
+        "ping -n 3 127.0.0.1 > nul"
+    }
+
     #[test]
     fn registry_contains_exact_ga_parity_tool_names() {
         let names = parity_tool_specs()
@@ -1448,6 +1914,121 @@ mod tests {
         assert_eq!(outcome.calls[0].name, "code_run");
         assert_eq!(outcome.calls[0].arguments_json["command"], "pwd");
         assert_eq!(outcome.calls[0].source, NativeToolCallSource::TextFallback);
+    }
+
+    #[test]
+    fn code_run_normalizes_command_cwd_timeout_for_preview() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("sub")).unwrap();
+        let call = tool_call(
+            "code_run",
+            serde_json::json!({
+                "cmd": "echo hi",
+                "cwd": "sub",
+                "timeout_seconds": 2
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+
+        let call = normalize_native_tool_call(call, &context);
+
+        assert_eq!(call.arguments_json["command"], "echo hi");
+        assert_eq!(call.arguments_json["timeoutSeconds"].as_f64(), Some(2.0));
+        assert_eq!(
+            call.arguments_json["resolved_cwd"].as_str(),
+            Some(
+                dir.path()
+                    .join("sub")
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
+        assert_eq!(approval_for_tool_call(&call, &context), "risk_based");
+    }
+
+    #[test]
+    fn code_run_without_preview_args_fails_without_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let call = tool_call(
+            "code_run",
+            serde_json::json!({
+                "command": "echo hi"
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+
+        assert_eq!(approval_for_tool_call(&call, &context), "none");
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("resolved_cwd"));
+    }
+
+    #[test]
+    fn code_run_executes_workspace_command_and_captures_stdout() {
+        let dir = tempfile::tempdir().unwrap();
+        let call = tool_call(
+            "code_run",
+            serde_json::json!({
+                "command": "echo hi",
+                "timeoutSeconds": 2
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+        let call = normalize_native_tool_call(call, &context);
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "risk_based");
+        assert!(result.side_effects_performed);
+        assert!(result.content.contains("exit_code: 0"));
+        assert!(result.content.contains("stdout:"));
+        assert!(result.content.contains("hi"));
+    }
+
+    #[test]
+    fn code_run_reports_nonzero_exit_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let call = tool_call(
+            "code_run",
+            serde_json::json!({
+                "command": "exit 7",
+                "timeoutSeconds": 2
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+        let call = normalize_native_tool_call(call, &context);
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert!(result.side_effects_performed);
+        assert!(result.content.contains("exit_code: 7"));
+    }
+
+    #[test]
+    fn code_run_times_out_and_kills_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let call = tool_call(
+            "code_run",
+            serde_json::json!({
+                "command": slow_command(),
+                "timeoutSeconds": 0.1
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+        let call = normalize_native_tool_call(call, &context);
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "timed_out");
+        assert!(result.side_effects_performed);
+        assert!(result.content.contains("timed_out: true"));
     }
 
     #[test]
