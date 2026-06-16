@@ -41,6 +41,7 @@ type HistoryReplayState = {
 type HistoryReplaySendResult = "sent" | "skipped" | "failed";
 
 const HISTORY_REPLAY_TIMEOUT_MS = 8_000;
+const NATIVE_TOOL_PROGRESS_PREVIEW_CHARS = 500;
 const _historyReplayPending = new Map<string, HistoryReplayState>();
 const _historyReplayReady = new Set<string>();
 
@@ -489,6 +490,7 @@ type NativeToolDraft = {
 };
 
 const _nativeToolDrafts = new Map<string, NativeToolDraft>();
+const _nativeToolProgressPreviews = new Map<string, string>();
 
 function nativeToolKey(sessionId: string, toolCallId: string): string {
   return `${sessionId}::${toolCallId}`;
@@ -522,6 +524,9 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
 
     case "tool_pending": {
       const args = recordFromUnknown(event.arguments);
+      _nativeToolProgressPreviews.delete(
+        nativeToolKey(event.sessionId, event.toolCallId),
+      );
       _nativeToolDrafts.set(nativeToolKey(event.sessionId, event.toolCallId), {
         sessionId: event.sessionId,
         turnIndex: event.turnIndex,
@@ -571,9 +576,11 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
     }
 
     case "tool_start": {
+      const key = nativeToolKey(event.sessionId, event.toolCallId);
       const draft = _nativeToolDrafts.get(
-        nativeToolKey(event.sessionId, event.toolCallId),
+        key,
       );
+      _nativeToolProgressPreviews.delete(key);
       messages.upsertToolEvent(
         event.sessionId,
         {
@@ -590,13 +597,45 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
     }
 
     case "tool_progress": {
-      console.debug("[native] tool_progress", event);
+      if (typeof event.delta !== "string") {
+        console.debug("[native] tool_progress", event);
+        return;
+      }
+      const key = nativeToolKey(event.sessionId, event.toolCallId);
+      const draft = _nativeToolDrafts.get(key);
+      const preview = appendNativeToolProgressPreview(
+        _nativeToolProgressPreviews.get(key),
+        nativeToolProgressFragment(event),
+      );
+      _nativeToolProgressPreviews.set(key, preview);
+      messages.upsertToolEvent(
+        event.sessionId,
+        {
+          id: event.toolCallId,
+          name: event.toolName,
+          status: "running",
+          args: draft?.args,
+          resultPreview: preview,
+          riskLevel: riskLevelFromNativePolicy(draft?.approval),
+          approvalId: event.toolCallId,
+        },
+        event.turnIndex,
+      );
+      console.debug("[native] tool_progress", {
+        sessionId: event.sessionId,
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        stream: event.stream,
+        deltaLength: event.delta.length,
+        truncated: event.truncated,
+      });
       return;
     }
 
     case "tool_end": {
+      const key = nativeToolKey(event.sessionId, event.toolCallId);
       const draft = _nativeToolDrafts.get(
-        nativeToolKey(event.sessionId, event.toolCallId),
+        key,
       );
       const tool = nativeToolEventFromEnd(event, draft);
       messages.upsertToolEvent(event.sessionId, tool, event.turnIndex);
@@ -608,9 +647,8 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
         );
       }
       messages.removePendingApproval(event.sessionId, event.toolCallId);
-      _nativeToolDrafts.delete(
-        nativeToolKey(event.sessionId, event.toolCallId),
-      );
+      _nativeToolDrafts.delete(key);
+      _nativeToolProgressPreviews.delete(key);
       return;
     }
 
@@ -833,6 +871,26 @@ function previewFromContent(content: unknown): string | undefined {
   } catch {
     return String(content).slice(0, 500);
   }
+}
+
+function nativeToolProgressFragment(
+  event: Extract<NativeRuntimeEvent, { kind: "tool_progress" }>,
+): string {
+  const stream =
+    typeof event.stream === "string" && event.stream.trim()
+      ? event.stream.trim()
+      : "output";
+  const truncated = event.truncated === true ? "\n[truncated]" : "";
+  return `[${stream}]\n${event.delta ?? ""}${truncated}`;
+}
+
+function appendNativeToolProgressPreview(
+  previous: string | undefined,
+  fragment: string,
+): string {
+  const next = previous ? `${previous}\n${fragment}` : fragment;
+  if (next.length <= NATIVE_TOOL_PROGRESS_PREVIEW_CHARS) return next;
+  return `...\n${next.slice(-(NATIVE_TOOL_PROGRESS_PREVIEW_CHARS - 4))}`;
 }
 
 function nativeApprovalRequired(policy: string | undefined): boolean {

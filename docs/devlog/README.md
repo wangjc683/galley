@@ -115,6 +115,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-16 | [Galley Native Slice 4B5 File Write Preview](./2026-06-16-galley-native-slice-4b5-file-write-preview.md) | Hidden native `file_write` preview-first create/overwrite 落地：Core 在 approval args 中生成 `existing_content`，GUI 复用 split diff 展示完整替换预览；allow 后 create 只在路径仍不存在时写入，overwrite 只在内容仍匹配预览时写入，成功记录 `sideEffectsPerformed=true`。 |
 | 2026-06-16 | [Galley Native Slice 4B6 Code Run](./2026-06-16-galley-native-slice-4b6-code-run.md) | Hidden native `code_run` approval-gated executor 落地：Core 解析 command / cwd / timeout 并在 approval args 中写入 `resolved_cwd`，allow 后关闭 stdin、捕获 stdout/stderr、记录 exit code / timeout / duration，timeout 会 kill 进程；Browser/memory/Goal/Morphling 仍关闭。 |
 | 2026-06-16 | [Galley Native Slice 4B7 Approved Tool Continuation](./2026-06-16-galley-native-slice-4b7-approved-tool-continuation.md) | Hidden native approved local-tool continuation 落地：`file_patch` / `file_write` / `code_run` allow 后会把 tool result 回灌给 selected native model，一次性更新同一 assistant turn finalAnswer，同时保留 `toolResult` / `tool_results` 审计；deny 不 continuation。 |
+| 2026-06-16 | [Galley Native Slice 4B8 Code Run Progress](./2026-06-16-galley-native-slice-4b8-code-run-progress.md) | Hidden native `code_run` stdout/stderr progress materialization 落地：Core 在 `tool_end` 前发带 `stream` / `delta` / `truncated` 的 `tool_progress`，GUI 复用 tool card result preview，CLI watch 可 replay；真正 live approval execution 仍留给后续 lifecycle slice。 |
 
 ## 格式约定
 

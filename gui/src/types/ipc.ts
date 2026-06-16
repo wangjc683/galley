@@ -386,6 +386,9 @@ export interface NativeToolProgressEvent {
   toolCallId: string;
   toolName: string;
   message: string;
+  stream?: string;
+  delta?: string;
+  truncated?: boolean;
   timestamp: string;
 }
 

@@ -6,7 +6,8 @@ use crate::error::{GalleyError, Result};
 use crate::native_model::{NativeModelConfig, NativeModelResponse};
 use crate::native_tools::{
     approval_for_tool_call, approval_required, execute_native_tool, normalize_native_tool_call,
-    parse_text_tool_calls, NativeToolCall, NativeToolExecutionContext, NativeToolStubResult,
+    parse_text_tool_calls, NativeToolCall, NativeToolExecutionContext, NativeToolProgressChunk,
+    NativeToolStubResult,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -308,6 +309,12 @@ pub struct NativeToolProgressEvent {
     pub tool_call_id: String,
     pub tool_name: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delta: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<bool>,
     pub timestamp: String,
 }
 
@@ -853,6 +860,7 @@ pub async fn resolve_native_approval(
             side_effects_performed: false,
             requires_user_response: false,
             approval: approval_for_tool_call(&call, &tool_context),
+            progress_chunks: Vec::new(),
         }
     } else {
         events.push(tool_start_event(
@@ -869,6 +877,13 @@ pub async fn resolve_native_approval(
         ));
         execute_native_tool(&call, &tool_context)
     };
+    events.extend(tool_progress_events_from_result(
+        session_id.as_str(),
+        turn_index,
+        &call,
+        &result,
+        timestamp.clone(),
+    ));
     events.push(tool_end_event(
         session_id.as_str(),
         turn_index,
@@ -1348,6 +1363,13 @@ fn native_tool_trace(
             timestamp.clone(),
         ));
         let result = execute_native_tool(&call, tool_context);
+        events.extend(tool_progress_events_from_result(
+            session_id,
+            turn_index,
+            &call,
+            &result,
+            timestamp.clone(),
+        ));
         tool_results.push(tool_result_value(&result));
         events.push(tool_end_event(
             session_id,
@@ -1489,7 +1511,7 @@ fn tool_start_event(
         turn_index,
         tool_call_id: call.id.clone(),
         tool_name: call.name.clone(),
-        executor: "native_stub".to_string(),
+        executor: "galley_native".to_string(),
         timestamp,
     })
 }
@@ -1505,7 +1527,47 @@ fn tool_progress_event(
         turn_index,
         tool_call_id: call.id.clone(),
         tool_name: call.name.clone(),
-        message: "Routed to deterministic stub; no side effect executed.".to_string(),
+        message: "Native executor running.".to_string(),
+        stream: None,
+        delta: None,
+        truncated: None,
+        timestamp,
+    })
+}
+
+fn tool_progress_events_from_result(
+    session_id: &str,
+    turn_index: u32,
+    call: &NativeToolCall,
+    result: &NativeToolStubResult,
+    timestamp: String,
+) -> Vec<NativeRuntimeEvent> {
+    result
+        .progress_chunks
+        .iter()
+        .map(|chunk| {
+            tool_output_progress_event(session_id, turn_index, call, chunk, timestamp.clone())
+        })
+        .collect()
+}
+
+fn tool_output_progress_event(
+    session_id: &str,
+    turn_index: u32,
+    call: &NativeToolCall,
+    chunk: &NativeToolProgressChunk,
+    timestamp: String,
+) -> NativeRuntimeEvent {
+    let truncated_suffix = if chunk.truncated { " (truncated)" } else { "" };
+    NativeRuntimeEvent::ToolProgress(NativeToolProgressEvent {
+        session_id: session_id.to_string(),
+        turn_index,
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        message: format!("code_run {} output{}", chunk.stream, truncated_suffix),
+        stream: Some(chunk.stream.clone()),
+        delta: Some(chunk.delta.clone()),
+        truncated: Some(chunk.truncated),
         timestamp,
     })
 }

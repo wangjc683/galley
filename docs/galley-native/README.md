@@ -95,6 +95,12 @@ behavior changes until an implementation slice explicitly lands them.
   native model once, updating the same assistant turn while keeping tool results
   for audit.
   [devlog](../devlog/2026-06-16-galley-native-slice-4b7-approved-tool-continuation.md).
+- Slice 4B8 landed materialized `code_run` output progress on 2026-06-16:
+  hidden native command stdout/stderr now appear as `tool_progress` events
+  before `tool_end` and project into the existing GUI tool card preview. These
+  events are replayable in the current trace; true live approval execution is
+  still a later lifecycle slice.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4b8-code-run-progress.md).
 
 ## Document Roles
 
@@ -124,11 +130,12 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4B7, native can read files, answer from tool results, apply targeted
-patches, perform preview-first create/overwrite writes, and run approval-gated
-local commands with bounded output. The next work is still deliberately narrow:
+After Slice 4B8, native can read files, answer from tool results, apply targeted
+patches, perform preview-first create/overwrite writes, run approval-gated
+local commands with bounded output, and project command stdout/stderr as
+ordered tool-progress events. The next work is still deliberately narrow:
 
-1. decide whether `code_run` should stream stdout/stderr progress before
-   `tool_end`;
+1. decide whether approval execution should move to a background/live event
+   publishing lifecycle;
 2. keep Browser Control as Slice 4C, separate from file/code executors;
 3. keep memory, Goal Hive, and Morphling in later slices.

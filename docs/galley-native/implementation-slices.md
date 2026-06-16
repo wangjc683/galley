@@ -439,6 +439,9 @@ Tasks:
   kill, stdout/stderr capture, and exit-status reporting;
 - add timeout, cancellation, stdout/stderr, and exit-status capture; landed in
   Slice 4B6 for non-streaming `tool_end` results;
+- project `code_run` stdout/stderr as ordered `tool_progress` events; landed in
+  Slice 4B8 as replayable event materialization before true live approval
+  execution;
 - add first-pass risk policy for local destructive or credential-adjacent
   actions;
 - keep Project workspace integration minimal until Slice 6.
@@ -450,6 +453,8 @@ Exit gate:
 - risky local action reuses the landed approval flow and resumes after
   allow/deny;
 - `code_run` handles timeout, cancellation, exit status, stdout, and stderr;
+- `code_run` output can appear before `tool_end` through additive
+  `tool_progress.stream` / `delta` / `truncated` fields;
 - managed/external file/code behavior is unchanged;
 - Browser Control is not part of this gate.
 
@@ -536,6 +541,22 @@ Landed in Slice 4B7 follow-up:
   tools;
 - `deny` decisions still record a denied result and do not continue;
 - Browser Control, memory, Goal Hive, and Morphling remain disabled or stubbed.
+
+Landed in Slice 4B8 follow-up:
+
+- `NativeToolStubResult` can carry non-serialized progress chunks for executor
+  output without changing persisted `toolResult` JSON;
+- hidden native `code_run` splits captured stdout/stderr into ordered
+  `tool_progress` events before `tool_end`, with additive `stream`, `delta`, and
+  `truncated` fields;
+- GUI native projection consumes only progress events that carry `delta`, keeps
+  them inside the existing tool card result preview while running, and lets the
+  final `tool_end` result remain authoritative;
+- `session.watch` replay now includes the materialized output events for
+  approved `code_run`;
+- this is not yet true live process streaming during
+  `session.approval_response`; making approval execution background-published is
+  a later lifecycle slice.
 
 Rollback:
 

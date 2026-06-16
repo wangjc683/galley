@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 const CODE_RUN_DEFAULT_TIMEOUT_SECONDS: f64 = 30.0;
 const CODE_RUN_MAX_TIMEOUT_SECONDS: f64 = 120.0;
 const CODE_RUN_OUTPUT_MAX_BYTES: usize = 64 * 1024;
+const CODE_RUN_PROGRESS_CHUNK_MAX_BYTES: usize = 8 * 1024;
 const FILE_READ_MAX_BYTES: u64 = 256 * 1024;
 const FILE_PATCH_MAX_BYTES: u64 = 256 * 1024;
 const FILE_WRITE_MAX_BYTES: u64 = 256 * 1024;
@@ -80,6 +81,15 @@ pub struct NativeToolStubResult {
     pub side_effects_performed: bool,
     pub requires_user_response: bool,
     pub approval: String,
+    #[serde(skip)]
+    pub progress_chunks: Vec<NativeToolProgressChunk>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeToolProgressChunk {
+    pub stream: String,
+    pub delta: String,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -412,6 +422,7 @@ pub fn stub_tool_result(call: &NativeToolCall) -> NativeToolStubResult {
         side_effects_performed: false,
         requires_user_response,
         approval,
+        progress_chunks: Vec::new(),
     }
 }
 
@@ -421,7 +432,7 @@ fn code_run_result(
 ) -> NativeToolStubResult {
     let approval = approval_for_tool_call(call, context);
     let result = code_run_content(call, context);
-    let (status, content, side_effects_performed) = match result {
+    let (status, content, side_effects_performed, progress_chunks) = match result {
         Ok(result) => {
             let status = if result.timed_out {
                 "timed_out"
@@ -430,9 +441,14 @@ fn code_run_result(
             } else {
                 "failed"
             };
-            (status, format_code_run_content(&result), true)
+            (
+                status,
+                format_code_run_content(&result),
+                true,
+                code_run_progress_chunks(&result),
+            )
         }
-        Err(message) => ("failed", message, false),
+        Err(message) => ("failed", message, false, Vec::new()),
     };
     NativeToolStubResult {
         tool_call_id: call.id.clone(),
@@ -442,6 +458,7 @@ fn code_run_result(
         side_effects_performed,
         requires_user_response: false,
         approval,
+        progress_chunks,
     }
 }
 
@@ -632,6 +649,56 @@ fn format_code_run_content(result: &CodeRunExecutionResult) -> String {
     )
 }
 
+fn code_run_progress_chunks(result: &CodeRunExecutionResult) -> Vec<NativeToolProgressChunk> {
+    let mut chunks = Vec::new();
+    push_code_run_progress_chunks(
+        &mut chunks,
+        "stdout",
+        &result.stdout,
+        result.stdout_truncated,
+    );
+    push_code_run_progress_chunks(
+        &mut chunks,
+        "stderr",
+        &result.stderr,
+        result.stderr_truncated,
+    );
+    chunks
+}
+
+fn push_code_run_progress_chunks(
+    chunks: &mut Vec<NativeToolProgressChunk>,
+    stream: &str,
+    output: &str,
+    output_truncated: bool,
+) {
+    if output.is_empty() {
+        return;
+    }
+    let mut remaining = output;
+    while !remaining.is_empty() {
+        let (delta, rest) = split_at_byte_cap(remaining, CODE_RUN_PROGRESS_CHUNK_MAX_BYTES);
+        let is_last = rest.is_empty();
+        chunks.push(NativeToolProgressChunk {
+            stream: stream.to_string(),
+            delta: delta.to_string(),
+            truncated: is_last && output_truncated,
+        });
+        remaining = rest;
+    }
+}
+
+fn split_at_byte_cap(value: &str, byte_cap: usize) -> (&str, &str) {
+    if value.len() <= byte_cap {
+        return (value, "");
+    }
+    let mut end = byte_cap;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value.split_at(end)
+}
+
 fn format_seconds(value: f64) -> String {
     if value.fract() == 0.0 {
         format!("{}", value as u64)
@@ -680,6 +747,7 @@ fn file_read_result(
         side_effects_performed: false,
         requires_user_response: false,
         approval,
+        progress_chunks: Vec::new(),
     }
 }
 
@@ -739,6 +807,7 @@ fn file_patch_result(
         side_effects_performed,
         requires_user_response: false,
         approval,
+        progress_chunks: Vec::new(),
     }
 }
 
@@ -833,6 +902,7 @@ fn file_write_result(
         side_effects_performed,
         requires_user_response: false,
         approval,
+        progress_chunks: Vec::new(),
     }
 }
 

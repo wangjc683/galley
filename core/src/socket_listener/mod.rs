@@ -2198,12 +2198,19 @@ mod tests {
             panic!("expected native stream");
         };
         let mut kinds = Vec::new();
+        let mut saw_stdout_progress = false;
         let mut saw_continuation_progress = false;
         while let Some(item) = rx.recv().await {
             match item {
                 crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
                     let value = serde_json::to_value(&*event).unwrap();
                     kinds.push(event.kind());
+                    if value["kind"] == "tool_progress" && value["stream"] == "stdout" {
+                        assert_eq!(value["toolName"], "code_run");
+                        assert_eq!(value["delta"], "hi\n");
+                        assert_eq!(value["truncated"], false);
+                        saw_stdout_progress = true;
+                    }
                     if value["kind"] == "tool_end" {
                         assert_eq!(value["toolName"], "code_run");
                         assert_eq!(value["status"], "success");
@@ -2239,12 +2246,14 @@ mod tests {
                 "approval_resolved",
                 "tool_start",
                 "tool_progress",
+                "tool_progress",
                 "tool_end",
                 "turn_progress",
                 "turn_end",
                 "run_complete"
             ]
         );
+        assert!(saw_stdout_progress);
         assert!(saw_continuation_progress);
     }
 

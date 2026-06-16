@@ -621,6 +621,7 @@ $ galley session watch sess_abc
 {"stream":"event","requestId":null,"data":{"kind":"turn_start","sessionId":"sess_abc",…}}
 {"stream":"event","requestId":null,"data":{"kind":"tool_pending",…}}
 {"stream":"event","requestId":null,"data":{"kind":"tool_start",…}}
+{"stream":"event","requestId":null,"data":{"kind":"tool_progress",…}}
 {"stream":"event","requestId":null,"data":{"kind":"tool_end",…}}
 {"stream":"event","requestId":null,"data":{"kind":"turn_end",…}}
 {"stream":"end","requestId":null,"reason":"native_run_complete"}
@@ -639,9 +640,23 @@ optional Slice 4A tool-control-plane events (`tool_pending`,
 model/selection failures emit `runtime_error` and close with
 `native_runtime_error`.
 
-Slice 4A / 4A2B native tool events are deterministic stubs: they expose parsed
-tool intent, approval shape, approval-response flow, and result payloads, but do
-not execute file, process, browser, memory, or Goal side effects.
+Native tool events started as Slice 4A deterministic stubs. As of Slice 4B,
+hidden native `file_read`, `file_patch`, `file_write`, and `code_run` can
+execute inside the Project workspace and approval policy described in
+[Galley Native](./galley-native/README.md). Browser, memory, Goal, and Morphling
+side effects remain disabled or stubbed until later slices.
+
+For hidden native `code_run`, `tool_progress` can include additive output fields
+before `tool_end`:
+
+- `stream`: `"stdout"` or `"stderr"`;
+- `delta`: captured output chunk;
+- `truncated`: whether the captured stream exceeded the native output cap.
+
+Slice 4B8 materializes these output progress events into the same native event
+trace that `session.watch` and GUI projection consume. They are ordered before
+`tool_end`, but they are not yet a guarantee of true live streaming while
+`session.approval_response` itself is still executing.
 
 When the selected hidden native OpenAI-compatible or Anthropic-compatible
 managed model has `"stream": true` in advanced options, `turn_progress` can
