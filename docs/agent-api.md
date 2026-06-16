@@ -578,9 +578,9 @@ Semantics:
   Missing command, invalid timeout, or unresolvable cwd fails without approval.
   Approval-time execution closes stdin, captures stdout/stderr with output caps,
   records exit code, timeout state, and duration, and sets
-  `toolResult.sideEffectsPerformed = true` once a process is spawned. Browser,
-  memory, Goal, and Morphling executors remain deterministic stubs until their
-  own slices land.
+  `toolResult.sideEffectsPerformed = true` once a process is spawned. Browser
+  executors landed later in Slice 4C; memory, Goal, and Morphling executors
+  remain deterministic stubs until their own slices land.
 - Since Slice 4B7, approved hidden-native `file_patch`, `file_write`, and
   `code_run` also make one non-stream continuation model request after execution.
   The original tool result remains in `toolResult` and assistant
@@ -651,6 +651,12 @@ For hidden native browser tools, failed `tool_end.content` may include a
 `recovery` JSON object with a stable `status` such as `host_unavailable`,
 `connected_no_tabs`, or `not_connected`, plus a human-actionable next step. This
 is currently content-level guidance, not a new event schema field.
+
+As of the Slice 4 completion checkpoint, hidden native's file/code/browser
+tool-control plane is considered closed for the Slice 4 boundary. Durable
+memory/capability updates, Goal Hive, Morphling, provider-native tool-choice
+wiring, durable allow-policy persistence, and background/live approval
+execution remain later-slice work.
 
 For hidden native `code_run`, `tool_progress` can include additive output fields
 before `tool_end`:

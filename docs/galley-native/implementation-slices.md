@@ -647,6 +647,21 @@ Landed in Slice 4C3 follow-up:
 - dedicated runtime recovery events and GUI action buttons remain deferred until
   the UI model is clearer.
 
+Slice 4 completion state:
+
+- hidden native has the GA-compatible 9-tool control plane, structured/text
+  fallback parsing, no-tool recovery, approval pause/resume, ask-user
+  pause/resume, GUI projection, CLI/watch replay, local file/code executors,
+  Browser Control executors, browser recovery hints, and one-pass
+  tool-result continuation;
+- `update_working_checkpoint` and `start_long_term_update` remain recognized
+  but intentionally non-durable until Slice 5;
+- durable allow-policy persistence, provider-native tool-choice request wiring,
+  background/live approval execution, and first-class browser recovery buttons
+  are accepted follow-ups, not blockers for moving to Slice 5;
+- memory, capability packs, Goal Hive, Morphling, and default switching are
+  explicitly Slice 5+ work.
+
 Rollback:
 
 - mark native browser tools unavailable while leaving local native tools

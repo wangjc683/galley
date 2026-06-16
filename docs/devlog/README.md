@@ -120,6 +120,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-17 | [Galley Native Slice 4C2 Web Execute JS](./2026-06-17-galley-native-slice-4c2-web-execute-js.md) | Hidden native approval-gated `web_execute_js` 落地：Core 通过现有 `TMWebDriver` / `simphtml.execute_js_rich` 执行浏览器 JavaScript，支持 GA 风格 script/tab/no-monitor 参数和别名；可执行请求先停 approval，结果进入一次 continuation，`save_to_file` 明确后置以保留 file_write / file_patch 预览审批。 |
 | 2026-06-17 | [Galley Native Tool Prompt Alignment](./2026-06-17-galley-native-tool-prompt-alignment.md) | Hidden native 初始 system prompt 对齐已落地 executor：不再告诉模型“只有 file_read 是真工具”，改为列出 file/code/browser 9-tool parity surface、审批边界和 memory/Goal/Morphling 未实现边界，避免模型因为旧 prompt 不敢用已实现能力。 |
 | 2026-06-17 | [Galley Native Slice 4C3 Browser Recovery Hints](./2026-06-17-galley-native-slice-4c3-browser-recovery-hints.md) | Hidden native Browser Control 失败恢复提示落地：`web_scan` / `web_execute_js` 的 failed tool result 可携带 `recovery` JSON，区分 `host_unavailable`、`connected_no_tabs`、`not_connected`，并在 JS 未送达浏览器时保持 `sideEffectsPerformed=false`。 |
+| 2026-06-17 | [Galley Native Slice 4 Completion](./2026-06-17-galley-native-slice-4-completion.md) | Slice 4 completion checkpoint：确认 hidden native tool-control-plane / file-code-browser executors / approval / ask_user / one-pass continuation 已满足 4 的边界；durable memory、capability packs、Goal Hive、Morphling 和 default switch 明确转入 Slice 5+。 |
 
 ## 格式约定
 

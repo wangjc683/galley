@@ -122,6 +122,11 @@ behavior changes until an implementation slice explicitly lands them.
   connected-with-no-tabs, and extension-not-connected states through a
   `recovery` JSON object.
   [devlog](../devlog/2026-06-17-galley-native-slice-4c3-browser-recovery-hints.md).
+- Slice 4 is closed as of 2026-06-17: hidden native now has the tool control
+  plane, approval/ask-user pauses, local file/code executors, Browser Control
+  executors, and one-pass tool-result continuation needed before starting
+  native memory work.
+  [devlog](../devlog/2026-06-17-galley-native-slice-4-completion.md).
 
 ## Document Roles
 
@@ -151,15 +156,14 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4C2, native can read files, answer from tool results, apply targeted
+After Slice 4, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, run approval-gated local
 commands with bounded output, project command stdout/stderr as ordered
-tool-progress events, read browser tabs/pages through `web_scan`, and execute
-approval-gated browser JavaScript through `web_execute_js`. The next work is
-still deliberately narrow:
+tool-progress events, read browser tabs/pages through `web_scan`, execute
+approval-gated browser JavaScript through `web_execute_js`, and surface browser
+recovery hints. The next implementation phase is Slice 5:
 
-1. decide whether approval execution should move to a background/live event
-   publishing lifecycle before long-running browser actions;
-2. decide whether Browser Control recovery hints should become first-class GUI
-   actions;
-3. keep memory, Goal Hive, and Morphling in later slices.
+1. make `update_working_checkpoint` a real session-local working-state tool;
+2. design the smallest typed native memory/change store for
+   `start_long_term_update`;
+3. keep Goal Hive, Morphling, and default switching in later slices.
