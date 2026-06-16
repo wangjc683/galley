@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 const FILE_READ_MAX_BYTES: u64 = 256 * 1024;
 const FILE_PATCH_MAX_BYTES: u64 = 256 * 1024;
+const FILE_WRITE_MAX_BYTES: u64 = 256 * 1024;
 
 pub const PARITY_TOOL_NAMES: [&str; 9] = [
     "code_run",
@@ -249,6 +250,9 @@ pub fn approval_for_tool_call(
     if call.name == "file_patch" && !file_patch_has_preview_args(call) {
         return "none".to_string();
     }
+    if call.name == "file_write" && !file_write_has_preview_args(call) {
+        return "none".to_string();
+    }
     call.risk_hint
         .as_deref()
         .filter(|hint| is_approval_policy(hint))
@@ -324,10 +328,20 @@ pub fn parse_text_tool_calls(text: &str) -> NativeToolParseOutcome {
     }
 }
 
-pub fn normalize_native_tool_call(mut call: NativeToolCall) -> NativeToolCall {
-    if call.name == "file_patch" {
-        call.arguments_json = normalize_file_patch_arguments(call.arguments_json);
-        call.raw_arguments_text = Some(call.arguments_json.to_string());
+pub fn normalize_native_tool_call(
+    mut call: NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> NativeToolCall {
+    match call.name.as_str() {
+        "file_patch" => {
+            call.arguments_json = normalize_file_patch_arguments(call.arguments_json);
+            call.raw_arguments_text = Some(call.arguments_json.to_string());
+        }
+        "file_write" => {
+            call.arguments_json = normalize_file_write_arguments(call.arguments_json, context);
+            call.raw_arguments_text = Some(call.arguments_json.to_string());
+        }
+        _ => {}
     }
     call
 }
@@ -339,6 +353,7 @@ pub fn execute_native_tool(
     match call.name.as_str() {
         "file_read" => file_read_result(call, context),
         "file_patch" => file_patch_result(call, context),
+        "file_write" => file_write_result(call, context),
         _ => stub_tool_result(call),
     }
 }
@@ -550,6 +565,150 @@ fn file_patch_content(
     ))
 }
 
+fn file_write_result(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> NativeToolStubResult {
+    let approval = approval_for_tool_call(call, context);
+    let result = file_write_content(call, context);
+    let (status, content, side_effects_performed) = match result {
+        Ok((content, side_effects_performed)) => (
+            if side_effects_performed {
+                "success"
+            } else {
+                "success_no_change"
+            },
+            content,
+            side_effects_performed,
+        ),
+        Err(message) => ("failed", message, false),
+    };
+    NativeToolStubResult {
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        status: status.to_string(),
+        content,
+        side_effects_performed,
+        requires_user_response: false,
+        approval,
+    }
+}
+
+fn file_write_content(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<(String, bool), String> {
+    let path = path_arg(call)
+        .ok_or_else(|| "file_write requires a non-empty string `path` argument.".to_string())?;
+    let content = file_write_content_arg(call)
+        .ok_or_else(|| "file_write requires a string `content` argument.".to_string())?;
+    if content.len() as u64 > FILE_WRITE_MAX_BYTES {
+        return Err(format!(
+            "file_write refused {} bytes because the preview/write cap is {} bytes.",
+            content.len(),
+            FILE_WRITE_MAX_BYTES
+        ));
+    }
+    let mode = file_write_mode_arg(call).ok_or_else(|| {
+        "file_write supports only `mode: \"create\"` or `mode: \"overwrite\"` in Galley Native Slice 4B5.".to_string()
+    })?;
+    if let Some(preview_error) = file_write_preview_error_arg(call) {
+        return Err(format!(
+            "file_write cannot run because the approval preview was invalid: {preview_error}"
+        ));
+    }
+    let preview_existing = file_write_existing_content_arg(call).ok_or_else(|| {
+        "file_write requires a generated `existing_content` preview before approval.".to_string()
+    })?;
+    let resolved = resolve_writable_file_path(&path, context, "file_write")?;
+
+    match mode.as_str() {
+        "create" => {
+            if !preview_existing.is_empty() {
+                return Err(
+                    "file_write create mode requires an empty `existing_content` preview."
+                        .to_string(),
+                );
+            }
+            if path_entry_exists(&resolved, "file_write")? {
+                return Err(format!(
+                    "file_write create refused {} because it already exists; use mode overwrite with a fresh preview.",
+                    resolved.display()
+                ));
+            }
+            std::fs::write(&resolved, content.as_bytes()).map_err(|err| {
+                format!("file_write could not create {}: {err}", resolved.display())
+            })?;
+            Ok((
+                format!(
+                    "file_write: {}\nstatus: success\nmode: create\nnew_bytes: {}",
+                    resolved.display(),
+                    content.len()
+                ),
+                true,
+            ))
+        }
+        "overwrite" => {
+            let metadata = std::fs::metadata(&resolved).map_err(|err| {
+                format!(
+                    "file_write overwrite could not stat existing file {}: {err}",
+                    resolved.display()
+                )
+            })?;
+            if !metadata.is_file() {
+                return Err(format!(
+                    "file_write overwrite expected a regular file, got {}.",
+                    resolved.display()
+                ));
+            }
+            if metadata.len() > FILE_WRITE_MAX_BYTES {
+                return Err(format!(
+                    "file_write overwrite refused {} because it is larger than {} bytes.",
+                    resolved.display(),
+                    FILE_WRITE_MAX_BYTES
+                ));
+            }
+            let current = std::fs::read_to_string(&resolved).map_err(|err| {
+                format!(
+                    "file_write overwrite could not read {} as UTF-8 text: {err}",
+                    resolved.display()
+                )
+            })?;
+            if current != preview_existing {
+                return Err(format!(
+                    "file_write refused {} because the file changed after the approval preview; read it again and retry.",
+                    resolved.display()
+                ));
+            }
+            if current == content {
+                return Ok((
+                    format!(
+                        "file_write: {}\nstatus: no_change\nmode: overwrite\nexisting content already matches proposed content.",
+                        resolved.display()
+                    ),
+                    false,
+                ));
+            }
+            std::fs::write(&resolved, content.as_bytes()).map_err(|err| {
+                format!(
+                    "file_write overwrite could not write {}: {err}",
+                    resolved.display()
+                )
+            })?;
+            Ok((
+                format!(
+                    "file_write: {}\nstatus: success\nmode: overwrite\nold_bytes: {}\nnew_bytes: {}",
+                    resolved.display(),
+                    current.len(),
+                    content.len()
+                ),
+                true,
+            ))
+        }
+        _ => Err("file_write reached an unsupported mode after validation.".to_string()),
+    }
+}
+
 fn path_arg(call: &NativeToolCall) -> Option<PathBuf> {
     string_arg_any(call, &["path", "file_path", "filePath"])
         .map(|path| path.trim().to_string())
@@ -573,13 +732,40 @@ fn file_patch_new_content_arg(call: &NativeToolCall) -> Option<String> {
     string_arg_any(call, &["new_content", "newContent"])
 }
 
+fn file_write_has_preview_args(call: &NativeToolCall) -> bool {
+    path_arg(call).is_some()
+        && file_write_content_arg(call)
+            .map(|content| content.len() as u64 <= FILE_WRITE_MAX_BYTES)
+            .unwrap_or(false)
+        && file_write_mode_arg(call).is_some()
+        && file_write_existing_content_arg(call).is_some()
+        && file_write_preview_error_arg(call).is_none()
+}
+
+fn file_write_content_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["content"])
+}
+
+fn file_write_existing_content_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["existing_content", "existingContent"])
+}
+
+fn file_write_preview_error_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["preview_error", "previewError"])
+}
+
+fn file_write_mode_arg(call: &NativeToolCall) -> Option<String> {
+    file_write_mode_value(&call.arguments_json)
+}
+
 fn string_arg_any(call: &NativeToolCall, names: &[&str]) -> Option<String> {
-    names.iter().find_map(|name| {
-        call.arguments_json
-            .get(*name)
-            .and_then(Value::as_str)
-            .map(str::to_string)
-    })
+    string_value_any(&call.arguments_json, names)
+}
+
+fn string_value_any(value: &Value, names: &[&str]) -> Option<String> {
+    names
+        .iter()
+        .find_map(|name| value.get(*name).and_then(Value::as_str).map(str::to_string))
 }
 
 fn normalize_file_patch_arguments(value: Value) -> Value {
@@ -591,6 +777,126 @@ fn normalize_file_patch_arguments(value: Value) -> Value {
     copy_string_alias(&mut object, "old_content", &["oldContent"]);
     copy_string_alias(&mut object, "new_content", &["newContent"]);
     Value::Object(object)
+}
+
+fn normalize_file_write_arguments(value: Value, context: &NativeToolExecutionContext) -> Value {
+    let Some(object) = value.as_object() else {
+        return value;
+    };
+    let mut object = object.clone();
+    copy_string_alias(&mut object, "path", &["file_path", "filePath"]);
+
+    if object.get("mode").and_then(Value::as_str).is_none() {
+        let mode = match object.get("overwrite").and_then(Value::as_bool) {
+            Some(true) => "overwrite",
+            Some(false) | None => "create",
+        };
+        object.insert("mode".to_string(), Value::String(mode.to_string()));
+    } else if let Some(mode) = object
+        .get("mode")
+        .and_then(Value::as_str)
+        .map(normalize_file_write_mode_text)
+    {
+        object.insert("mode".to_string(), Value::String(mode));
+    }
+
+    object.remove("existing_content");
+    object.remove("existingContent");
+    object.remove("preview_error");
+    object.remove("previewError");
+
+    let normalized = Value::Object(object.clone());
+    let preview = preview_file_write_existing_content(&normalized, context);
+    match preview {
+        Ok(existing_content) => {
+            object.insert(
+                "existing_content".to_string(),
+                Value::String(existing_content),
+            );
+        }
+        Err(message) => {
+            object.insert("preview_error".to_string(), Value::String(message));
+        }
+    }
+
+    Value::Object(object)
+}
+
+fn preview_file_write_existing_content(
+    value: &Value,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<String, String> {
+    let path = string_value_any(value, &["path", "file_path", "filePath"])
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .ok_or_else(|| "file_write preview requires a non-empty string `path`.".to_string())?;
+    let content = string_value_any(value, &["content"])
+        .ok_or_else(|| "file_write preview requires a string `content`.".to_string())?;
+    if content.len() as u64 > FILE_WRITE_MAX_BYTES {
+        return Err(format!(
+            "file_write preview refused {} bytes because the cap is {} bytes.",
+            content.len(),
+            FILE_WRITE_MAX_BYTES
+        ));
+    }
+    let mode = file_write_mode_value(value)
+        .ok_or_else(|| "file_write preview supports only mode create or overwrite.".to_string())?;
+    let resolved = resolve_writable_file_path(&path, context, "file_write")?;
+    match mode.as_str() {
+        "create" => {
+            if path_entry_exists(&resolved, "file_write")? {
+                Err(format!(
+                    "file_write create preview refused {} because it already exists.",
+                    resolved.display()
+                ))
+            } else {
+                Ok(String::new())
+            }
+        }
+        "overwrite" => read_file_write_existing_text(&resolved),
+        _ => Err("file_write preview reached an unsupported mode.".to_string()),
+    }
+}
+
+fn read_file_write_existing_text(path: &Path) -> std::result::Result<String, String> {
+    let metadata = std::fs::metadata(path).map_err(|err| {
+        format!(
+            "file_write overwrite preview could not stat {}: {err}",
+            path.display()
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "file_write overwrite preview expected a regular file, got {}.",
+            path.display()
+        ));
+    }
+    if metadata.len() > FILE_WRITE_MAX_BYTES {
+        return Err(format!(
+            "file_write overwrite preview refused {} because it is larger than {} bytes.",
+            path.display(),
+            FILE_WRITE_MAX_BYTES
+        ));
+    }
+    std::fs::read_to_string(path).map_err(|err| {
+        format!(
+            "file_write overwrite preview could not read {} as UTF-8 text: {err}",
+            path.display()
+        )
+    })
+}
+
+fn file_write_mode_value(value: &Value) -> Option<String> {
+    value
+        .get("mode")
+        .and_then(Value::as_str)
+        .map(normalize_file_write_mode_text)
+        .filter(|mode| matches!(mode.as_str(), "create" | "overwrite"))
+}
+
+fn normalize_file_write_mode_text(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
 }
 
 fn copy_string_alias(
@@ -647,6 +953,93 @@ fn resolve_existing_file_path(
         ));
     }
     Ok(canonical)
+}
+
+fn resolve_writable_file_path(
+    path: &Path,
+    context: &NativeToolExecutionContext,
+    tool_name: &str,
+) -> std::result::Result<PathBuf, String> {
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("{tool_name} requires a file path, got {}.", path.display()))?;
+
+    if path.is_absolute() {
+        let parent = path.parent().ok_or_else(|| {
+            format!(
+                "{tool_name} requires a parent directory for {}.",
+                path.display()
+            )
+        })?;
+        let canonical_parent = parent.canonicalize().map_err(|err| {
+            format!(
+                "{tool_name} could not resolve parent directory {}: {err}",
+                parent.display()
+            )
+        })?;
+        let target = canonical_parent.join(file_name);
+        if path_entry_exists(&target, tool_name)? {
+            return target.canonicalize().map_err(|err| {
+                format!("{tool_name} could not resolve {}: {err}", target.display())
+            });
+        }
+        return Ok(target);
+    }
+
+    let Some(raw_root) = context.workspace_root.as_ref() else {
+        return Err(format!(
+            "{tool_name} relative paths require a Galley Native Project workspace; use an absolute path and approve it, or bind a workspace in a later native workspace slice."
+        ));
+    };
+    let root = raw_root.canonicalize().map_err(|err| {
+        format!(
+            "{tool_name} Project workspace {} is unavailable: {err}",
+            raw_root.display()
+        )
+    })?;
+    let parent = path.parent().unwrap_or_else(|| Path::new(""));
+    let candidate_parent = root.join(parent);
+    let canonical_parent = candidate_parent.canonicalize().map_err(|err| {
+        format!(
+            "{tool_name} could not resolve parent directory {} inside workspace {}: {err}",
+            parent.display(),
+            root.display()
+        )
+    })?;
+    if !canonical_parent.starts_with(&root) {
+        return Err(format!(
+            "{tool_name} refused {} because its parent resolves outside workspace {}.",
+            path.display(),
+            root.display()
+        ));
+    }
+    let target = canonical_parent.join(file_name);
+    if path_entry_exists(&target, tool_name)? {
+        let canonical_target = target
+            .canonicalize()
+            .map_err(|err| format!("{tool_name} could not resolve {}: {err}", target.display()))?;
+        if !canonical_target.starts_with(&root) {
+            return Err(format!(
+                "{tool_name} refused {} because it resolves outside workspace {}.",
+                path.display(),
+                root.display()
+            ));
+        }
+        Ok(canonical_target)
+    } else {
+        Ok(target)
+    }
+}
+
+fn path_entry_exists(path: &Path, tool_name: &str) -> std::result::Result<bool, String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(format!(
+            "{tool_name} could not inspect {}: {err}",
+            path.display()
+        )),
+    }
 }
 
 fn canonical_workspace_root(context: &NativeToolExecutionContext) -> Option<PathBuf> {
@@ -778,7 +1171,7 @@ fn spec(
 fn side_effect_mode(name: &str) -> &'static str {
     match name {
         "file_read" | "web_scan" => "read_only",
-        "file_patch" => "approval_gated_write",
+        "file_patch" | "file_write" => "approval_gated_write",
         _ => "slice_4a_stub_no_side_effects",
     }
 }
@@ -1192,7 +1585,7 @@ mod tests {
             }),
         );
 
-        let call = normalize_native_tool_call(call);
+        let call = normalize_native_tool_call(call, &NativeToolExecutionContext::default());
 
         assert_eq!(call.arguments_json["path"], "notes.txt");
         assert_eq!(call.arguments_json["old_content"], "alpha");
@@ -1280,6 +1673,166 @@ mod tests {
         assert_eq!(
             fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
             "alpha\nalpha\n"
+        );
+    }
+
+    #[test]
+    fn file_write_normalizes_overwrite_bool_and_existing_content_for_preview() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "alpha\n").unwrap();
+        let call = tool_call(
+            "file_write",
+            serde_json::json!({
+                "filePath": "notes.txt",
+                "content": "bravo\n",
+                "overwrite": true
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+
+        let call = normalize_native_tool_call(call, &context);
+
+        assert_eq!(call.arguments_json["path"], "notes.txt");
+        assert_eq!(call.arguments_json["mode"], "overwrite");
+        assert_eq!(call.arguments_json["existing_content"], "alpha\n");
+        assert_eq!(approval_for_tool_call(&call, &context), "risk_based");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
+            "alpha\n"
+        );
+    }
+
+    #[test]
+    fn file_write_replaces_model_supplied_existing_content_with_core_preview() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "alpha\n").unwrap();
+        let call = tool_call(
+            "file_write",
+            serde_json::json!({
+                "path": "notes.txt",
+                "content": "bravo\n",
+                "mode": "overwrite",
+                "existing_content": "fake\n",
+                "preview_error": "fake error"
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+
+        let call = normalize_native_tool_call(call, &context);
+
+        assert_eq!(call.arguments_json["existing_content"], "alpha\n");
+        assert!(call.arguments_json.get("preview_error").is_none());
+        assert_eq!(approval_for_tool_call(&call, &context), "risk_based");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
+            "alpha\n"
+        );
+    }
+
+    #[test]
+    fn file_write_creates_new_workspace_file_after_preview() {
+        let dir = tempfile::tempdir().unwrap();
+        let call = tool_call(
+            "file_write",
+            serde_json::json!({
+                "path": "draft.txt",
+                "content": "hello\n",
+                "mode": "create"
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+        let call = normalize_native_tool_call(call, &context);
+
+        assert_eq!(approval_for_tool_call(&call, &context), "risk_based");
+        assert_eq!(call.arguments_json["existing_content"], "");
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "risk_based");
+        assert!(result.side_effects_performed);
+        assert!(result.content.contains("mode: create"));
+        assert_eq!(
+            fs::read_to_string(dir.path().join("draft.txt")).unwrap(),
+            "hello\n"
+        );
+    }
+
+    #[test]
+    fn file_write_without_preview_args_fails_without_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let call = tool_call(
+            "file_write",
+            serde_json::json!({
+                "path": "draft.txt",
+                "content": "hello\n",
+                "mode": "create"
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+
+        assert_eq!(approval_for_tool_call(&call, &context), "none");
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("existing_content"));
+        assert!(!dir.path().join("draft.txt").exists());
+    }
+
+    #[test]
+    fn file_write_overwrite_refuses_stale_preview_without_writing() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "alpha\n").unwrap();
+        let call = tool_call(
+            "file_write",
+            serde_json::json!({
+                "path": "notes.txt",
+                "content": "bravo\n",
+                "mode": "overwrite"
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+        let call = normalize_native_tool_call(call, &context);
+
+        fs::write(dir.path().join("notes.txt"), "changed\n").unwrap();
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert!(!result.side_effects_performed);
+        assert!(result
+            .content
+            .contains("changed after the approval preview"));
+        assert_eq!(
+            fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
+            "changed\n"
+        );
+    }
+
+    #[test]
+    fn file_write_rejects_append_mode_without_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "alpha\n").unwrap();
+        let call = tool_call(
+            "file_write",
+            serde_json::json!({
+                "path": "notes.txt",
+                "content": "bravo\n",
+                "mode": "append"
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+        let call = normalize_native_tool_call(call, &context);
+
+        assert_eq!(approval_for_tool_call(&call, &context), "none");
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("create"));
+        assert_eq!(
+            fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
+            "alpha\n"
         );
     }
 }

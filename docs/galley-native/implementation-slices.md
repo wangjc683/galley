@@ -431,7 +431,8 @@ Tasks:
   read-only paths, updating the same assistant turn and event stream;
 - implement `file_patch`; landed in Slice 4B4 with GA-style
   `old_content` / `new_content` preview and approval-gated unique replacement;
-- implement `file_write`;
+- implement `file_write`; landed in Slice 4B5 with preview-first create and
+  explicit overwrite execution;
 - implement `code_run` with explicit cwd policy;
 - add timeout, cancellation, stdout/stderr, and exit-status capture;
 - add first-pass risk policy for local destructive or credential-adjacent
@@ -478,6 +479,26 @@ Landed in Slice 4B4 follow-up:
   the assistant turn's `tool_results`;
 - `file_write`, `code_run`, Browser Control, memory, Goal Hive, and Morphling
   remain disabled or stubbed.
+
+Landed in Slice 4B5 follow-up:
+
+- hidden native `file_write` now supports only `mode: "create"` and
+  `mode: "overwrite"`;
+- omitted `mode` defaults to create, while `overwrite: true` normalizes to
+  explicit overwrite;
+- Core enriches valid pending approval args with `existing_content`, allowing
+  the GUI approval card to reuse `PatchView` for full-file replacement preview;
+- model-supplied preview fields are ignored and replaced with Core-generated
+  values;
+- missing-preview, stale-preview, `append`, `prepend`, and otherwise opaque
+  writes fail without side effects;
+- approved create writes only when the target still does not exist;
+- approved overwrite rereads the file and writes only when current content still
+  matches the preview;
+- successful writes set `sideEffectsPerformed: true` and are recorded in the
+  assistant turn's `tool_results`;
+- `code_run`, Browser Control, memory, Goal Hive, and Morphling remain disabled
+  or stubbed.
 
 Rollback:
 

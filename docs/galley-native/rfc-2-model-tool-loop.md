@@ -221,6 +221,9 @@ Default behavior:
 
 `file_patch` should be the preferred edit tool for modifications. `file_write`
 should exist for creation and deliberate replacement, not casual patching.
+The first hidden-native executor follows that boundary: only create and
+explicit overwrite are supported, and both require a visible full-file preview
+before approval.
 
 ## Browser Tools
 

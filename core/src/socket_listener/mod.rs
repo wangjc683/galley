@@ -1774,6 +1774,209 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn dispatch_session_approval_response_native_file_write_creates_after_approval() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let workspace = tempfile::tempdir().unwrap();
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let tool_answer = r#"```json
+{"tool":"file_write","arguments":{"path":"draft.txt","content":"hello\n","mode":"create"}}
+```"#;
+        let api_base = start_fake_openai_sequence_server(vec![(
+            "Write workspace note",
+            tool_answer.to_string(),
+        )])
+        .await;
+
+        let galley = SqliteGalley::open().await.unwrap();
+        galley
+            .create_project(
+                CreateProjectInput {
+                    id: "proj_native_file_write".into(),
+                    name: "Native File Write".into(),
+                    root_path: Some(workspace.path().to_string_lossy().to_string()),
+                    icon: None,
+                    color: None,
+                },
+                Origin::gui(),
+            )
+            .await
+            .unwrap();
+        galley
+            .upsert_managed_model_provider_metadata(crate::db::UpsertManagedModelProviderMetadata {
+                id: "mp_native_file_write_openai".into(),
+                display_name: "Native File Write OpenAI".into(),
+                protocol: crate::api::ManagedModelProtocol::Openai,
+                auth_kind: crate::api::ManagedModelAuthKind::ApiKey,
+                api_base,
+                api_key_ref: "managed-provider:mp_native_file_write_openai".into(),
+            })
+            .await
+            .unwrap();
+        crate::credential_store::set_secret(
+            &galley,
+            "managed-provider:mp_native_file_write_openai",
+            "sk-native-test",
+        )
+        .await
+        .unwrap();
+        galley
+            .upsert_managed_model_metadata(crate::db::UpsertManagedModelMetadata {
+                id: "mm_native_file_write_openai".into(),
+                provider_id: "mp_native_file_write_openai".into(),
+                display_name: "Native File Write Model".into(),
+                model: "gpt-test".into(),
+                advanced_options: serde_json::json!({
+                    "temperature": 1,
+                    "max_tokens": 64,
+                    "read_timeout": 5
+                }),
+                make_default: true,
+            })
+            .await
+            .unwrap();
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&db_path)
+                    .create_if_missing(false),
+            )
+            .await
+            .unwrap();
+        let mgr = RunnerManager::new();
+        let new_line = serde_json::json!({
+            "command": "session.new",
+            "args": {
+                "task": "Write workspace note",
+                "projectId": "proj_native_file_write",
+                "runtimeKind": "galley_native",
+                "llmName": "Native File Write Model"
+            },
+            "requestId": "native-file-write-new"
+        })
+        .to_string();
+        let new_resp = expect_unary(dispatch_line(&new_line, None, &mgr).await);
+        assert!(new_resp.ok, "response: {new_resp:?}");
+        let new_result = new_resp.result.expect("result");
+        assert_eq!(new_result["dispatch"], "completed_native");
+        assert_eq!(new_result["session"]["status"], "waiting_approval");
+        assert_eq!(new_result["assistantMessage"]["finalAnswer"], tool_answer);
+        assert!(!workspace.path().join("draft.txt").exists());
+        let session_id = new_result["session"]["id"].as_str().unwrap().to_string();
+        let (approval_id, args_json): (String, String) = sqlx::query_as(
+            "SELECT id, args_json FROM tool_events \
+             WHERE session_id = ? AND status = 'waiting_approval'",
+        )
+        .bind(&session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let args: serde_json::Value = serde_json::from_str(&args_json).unwrap();
+        assert_eq!(args["path"], "draft.txt");
+        assert_eq!(args["mode"], "create");
+        assert_eq!(args["content"], "hello\n");
+        assert_eq!(args["existing_content"], "");
+
+        let allow_line = serde_json::json!({
+            "command": "session.approval_response",
+            "args": {
+                "sessionId": session_id.clone(),
+                "approvalId": approval_id.clone(),
+                "decision": "allow_once"
+            },
+            "requestId": "native-file-write-allow"
+        })
+        .to_string();
+        let allow_resp = expect_unary(dispatch_line(&allow_line, None, &mgr).await);
+        assert!(allow_resp.ok, "response: {allow_resp:?}");
+        let allow_result = allow_resp.result.expect("result");
+        assert_eq!(allow_result["dispatch"], "completed_native_approval");
+        assert_eq!(allow_result["session"]["status"], "idle");
+        assert!(allow_result.get("assistantMessage").is_none());
+        assert_eq!(allow_result["toolResult"]["toolName"], "file_write");
+        assert_eq!(allow_result["toolResult"]["status"], "success");
+        assert_eq!(
+            allow_result["toolResult"]["sideEffectsPerformed"].as_bool(),
+            Some(true)
+        );
+        assert!(allow_result["toolResult"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("mode: create"));
+        assert_eq!(
+            std::fs::read_to_string(workspace.path().join("draft.txt")).unwrap(),
+            "hello\n"
+        );
+
+        let tool_row: (String, String) =
+            sqlx::query_as("SELECT status, approval_decision FROM tool_events WHERE id = ?")
+                .bind(&approval_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(tool_row, ("success".into(), "allow_once".into()));
+        let tool_results_raw: String = sqlx::query_scalar(
+            "SELECT tool_results FROM messages WHERE session_id = ? AND role = 'assistant'",
+        )
+        .bind(&session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let tool_results: serde_json::Value = serde_json::from_str(&tool_results_raw).unwrap();
+        assert_eq!(tool_results[0]["toolName"], "file_write");
+        assert_eq!(tool_results[0]["status"], "success");
+        assert_eq!(tool_results[0]["sideEffectsPerformed"], true);
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": session_id },
+            "requestId": "native-file-write-watch"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { mut rx, .. } = watch else {
+            panic!("expected native stream");
+        };
+        let mut kinds = Vec::new();
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let value = serde_json::to_value(&*event).unwrap();
+                    kinds.push(event.kind());
+                    if value["kind"] == "tool_end" {
+                        assert_eq!(value["toolName"], "file_write");
+                        assert_eq!(value["status"], "success");
+                        assert_eq!(value["sideEffectsPerformed"], true);
+                    }
+                    if value["kind"] == "run_complete" {
+                        assert_eq!(value["exitReason"]["result"], "CURRENT_TASK_DONE");
+                        assert_eq!(value["exitReason"]["data"]["mode"], "approval_response");
+                    }
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    assert_eq!(reason, "native_run_complete");
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            kinds,
+            vec![
+                "approval_resolved",
+                "tool_start",
+                "tool_progress",
+                "tool_end",
+                "run_complete"
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn dispatch_session_approval_response_native_allows_and_denies_pending_tool() {
         let _env_lock = socket_env_lock().lock().await;
         let dir = tempfile::tempdir().unwrap();

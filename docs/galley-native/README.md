@@ -80,6 +80,11 @@ behavior changes until an implementation slice explicitly lands them.
   the existing approval card, and only writes after approval when `old_content`
   still matches exactly once.
   [devlog](../devlog/2026-06-16-galley-native-slice-4b4-file-patch-preview.md).
+- Slice 4B5 landed preview-first `file_write` on 2026-06-16: hidden native can
+  create or explicitly overwrite files only after Core adds `existing_content`
+  to the approval args and the GUI shows the full replacement preview; stale or
+  opaque writes fail without side effects.
+  [devlog](../devlog/2026-06-16-galley-native-slice-4b5-file-write-preview.md).
 
 ## Document Roles
 
@@ -109,11 +114,12 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4B4, native can read files, answer from read results, and apply
-approval-gated targeted file patches with visible diff previews. The next local
-work is still deliberately narrow:
+After Slice 4B5, native can read files, answer from read results, apply targeted
+patches, and perform preview-first create/overwrite writes. The next local work
+is still deliberately narrow:
 
-1. implement `file_write` only with a visible preview/replacement contract;
-2. decide whether successful `file_patch` should trigger a model continuation;
+1. decide whether successful write tools should trigger a model continuation;
+2. implement `code_run` with explicit cwd, timeout, stdout/stderr, and
+   cancellation policy;
 3. keep Browser Control as Slice 4C, separate from file/code executors;
 4. keep memory, Goal Hive, and Morphling in later slices.

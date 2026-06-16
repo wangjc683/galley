@@ -560,7 +560,17 @@ Semantics:
   `new_content`. It writes only when `old_content` matches exactly once at
   approval time; successful writes set `toolResult.sideEffectsPerformed = true`.
   Missing or opaque patch args fail without approval instead of asking the user
-  to approve a black-box edit. `file_write`, `code_run`, browser, memory, Goal,
+  to approve a black-box edit.
+- Since Slice 4B5, approved hidden-native `file_write` may create a new file or
+  deliberately overwrite an existing file after Core has generated a visible
+  preview. Core defaults omitted `mode` / `overwrite` to `mode: "create"`,
+  normalizes `overwrite: true` to `mode: "overwrite"`, adds `existing_content`
+  to the approval args, ignores model-supplied preview fields, and rejects
+  missing-preview, `append`, `prepend`, or
+  otherwise opaque writes without approval. Approval-time execution rechecks the
+  target: create fails if the path now exists; overwrite fails if the file
+  changed since the preview. Successful writes set
+  `toolResult.sideEffectsPerformed = true`. `code_run`, browser, memory, Goal,
   and Morphling executors remain deterministic stubs until their own slices land.
 - A successful response publishes native events ending in
   `native_run_complete`; `session watch` can replay those same-process events.

@@ -1,4 +1,4 @@
-import { Brain, FloppyDiskBack, Info } from "@phosphor-icons/react";
+import { Brain, FloppyDiskBack } from "@phosphor-icons/react";
 
 import { PatchView } from "@/components/conversation/diff/PatchView";
 import { useCopy } from "@/lib/i18n";
@@ -55,27 +55,30 @@ function FilePatchRenderer({ tool }: { tool: ConversationToolEvent }) {
 // ---------------- file_write ----------------
 
 const FILE_WRITE_MODE_LABEL: Record<string, string> = {
+  create: "create",
   overwrite: "overwrite",
-  append: "append",
-  prepend: "prepend",
 };
 
 function FileWriteRenderer({ tool }: { tool: ConversationToolEvent }) {
-  const copy = useCopy();
   const path = stringArg(tool, "path");
-  const mode = stringArg(tool, "mode") || "overwrite";
+  const mode = stringArg(tool, "mode") || "create";
+  const content = optionalStringArg(tool, "content");
+  const existingContent =
+    optionalStringArg(tool, "existing_content") ??
+    optionalStringArg(tool, "existingContent");
+
+  if (!path || content === null || existingContent === null) {
+    return <GenericArgsRenderer tool={tool} />;
+  }
 
   return (
-    <div className="mb-3 rounded-callout border border-line bg-surface px-3.5 py-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="mb-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-muted">
         <FloppyDiskBack
           size={14}
           weight="thin"
           className="shrink-0 text-ink-soft"
         />
-        <span className="select-text font-mono text-[12.5px] text-ink">
-          {path || "—"}
-        </span>
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[10px] font-medium tracking-[0.02em]",
@@ -87,9 +90,12 @@ function FileWriteRenderer({ tool }: { tool: ConversationToolEvent }) {
           {FILE_WRITE_MODE_LABEL[mode] ?? mode}
         </span>
       </div>
-      <div className="mt-2 flex items-start gap-1.5 text-[12px] text-ink-muted">
-        <Info size={12} weight="thin" className="mt-0.5 shrink-0" />
-        <span>{copy.conversation.fileWriteDeferred}</span>
+      <div className="max-h-[480px] overflow-auto">
+        <PatchView
+          path={path}
+          oldContent={existingContent}
+          newContent={content}
+        />
       </div>
     </div>
   );
@@ -177,6 +183,13 @@ function GenericArgsRenderer({ tool }: { tool: ConversationToolEvent }) {
 // ---------------- helpers ----------------
 
 function stringArg(tool: ConversationToolEvent, key: string): string {
+  return optionalStringArg(tool, key) ?? "";
+}
+
+function optionalStringArg(
+  tool: ConversationToolEvent,
+  key: string,
+): string | null {
   const v = tool.args?.[key];
-  return typeof v === "string" ? v : "";
+  return typeof v === "string" ? v : null;
 }
