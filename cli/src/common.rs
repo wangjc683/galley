@@ -55,6 +55,11 @@ pub(crate) async fn runtime_filter(
         RuntimeArg::Current => Some(galley.active_runtime_kind().await?),
         RuntimeArg::Managed => Some(RuntimeKind::Managed),
         RuntimeArg::External => Some(RuntimeKind::External),
+        RuntimeArg::GalleyNative => {
+            let kind = RuntimeKind::GalleyNative;
+            galley_core_lib::runtime::ensure_runtime_filter_available(kind)?;
+            Some(kind)
+        }
         RuntimeArg::All => None,
     })
 }
@@ -66,6 +71,12 @@ pub(crate) fn runtime_arg_for_session_new(
         RuntimeArg::Current => Ok(None),
         RuntimeArg::Managed => Ok(Some(RuntimeKind::Managed)),
         RuntimeArg::External => Ok(Some(RuntimeKind::External)),
+        RuntimeArg::GalleyNative => {
+            galley_core_lib::runtime::ensure_runtime_execution_available(
+                RuntimeKind::GalleyNative,
+            )?;
+            Ok(Some(RuntimeKind::GalleyNative))
+        }
         RuntimeArg::All => Err(GalleyError::InvalidArgs {
             message: "session new: --runtime all is only valid for list commands".into(),
         }),
@@ -80,6 +91,12 @@ pub(crate) async fn runtime_kind_for_goal(
         RuntimeArg::Current => galley.active_runtime_kind().await,
         RuntimeArg::Managed => Ok(RuntimeKind::Managed),
         RuntimeArg::External => Ok(RuntimeKind::External),
+        RuntimeArg::GalleyNative => {
+            galley_core_lib::runtime::ensure_runtime_execution_available(
+                RuntimeKind::GalleyNative,
+            )?;
+            Ok(RuntimeKind::GalleyNative)
+        }
         RuntimeArg::All => Err(GalleyError::InvalidArgs {
             message: "goal: --runtime all is not valid".into(),
         }),
@@ -102,6 +119,7 @@ pub(crate) fn runtime_arg_from_kind(kind: RuntimeKind) -> RuntimeArg {
     match kind {
         RuntimeKind::Managed => RuntimeArg::Managed,
         RuntimeKind::External => RuntimeArg::External,
+        RuntimeKind::GalleyNative => RuntimeArg::GalleyNative,
     }
 }
 

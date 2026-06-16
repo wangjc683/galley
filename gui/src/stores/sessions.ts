@@ -201,6 +201,17 @@ async function invokeHydrate<T>(
 /** "新对话" — seed title set by `createSession`. */
 export const DEFAULT_NEW_SESSION_TITLE = "新对话";
 
+function runtimeLabelFallback(kind: RuntimeKind): string {
+  switch (kind) {
+    case "managed":
+      return "内置 GA";
+    case "external":
+      return "外部 GA";
+    case "galley_native":
+      return "Galley Native";
+  }
+}
+
 function sessionFromBrief(b: SessionBriefWire): Session {
   const gaRuntimeKind = b.gaRuntimeKind ?? "external";
   return {
@@ -225,8 +236,7 @@ function sessionFromBrief(b: SessionBriefWire): Session {
     selectedLlmKey: b.selectedLlmKey,
     selectedLlmDisplayName: b.selectedLlmDisplayName,
     runtimeKind: b.runtimeKind ?? gaRuntimeKind,
-    runtimeLabel:
-      b.runtimeLabel ?? (gaRuntimeKind === "managed" ? "内置 GA" : "外部 GA"),
+    runtimeLabel: b.runtimeLabel ?? runtimeLabelFallback(gaRuntimeKind),
     gaRuntimeKind,
     gaRuntimeId: b.gaRuntimeId,
     promptProfile: b.promptProfile,
@@ -643,7 +653,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       runtimeKind: gaRuntimeKind,
-      runtimeLabel: gaRuntimeKind === "managed" ? "内置 GA" : "外部 GA",
+      runtimeLabel: runtimeLabelFallback(gaRuntimeKind),
       gaRuntimeKind,
       promptProfile,
       selectedLlmIndex: llmSelection?.index,
@@ -696,7 +706,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       runtimeKind: gaRuntimeKind,
-      runtimeLabel: gaRuntimeKind === "managed" ? "内置 GA" : "外部 GA",
+      runtimeLabel: runtimeLabelFallback(gaRuntimeKind),
       gaRuntimeKind,
       promptProfile,
       selectedLlmIndex: llmSelection?.index,

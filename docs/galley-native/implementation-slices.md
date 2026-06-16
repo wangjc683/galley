@@ -59,6 +59,7 @@ Inputs:
 - [RFC 5](./rfc-5-workspace-session-continuity.md)
 - [RFC 6](./rfc-6-goal-hive-morphling.md)
 - [RFC 7](./rfc-7-parity-harness-default-switch.md)
+- [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md)
 
 Tasks:
 
@@ -75,6 +76,9 @@ Exit gate:
 
 ## Slice 1: Runtime Router Skeleton
 
+Status: implemented as hidden identity/router gate on 2026-06-16. See
+[Slice 1 Runtime Router](../devlog/2026-06-16-galley-native-slice-1-runtime-router.md).
+
 Goal: add `galley_native` as a hidden runtime identity without changing default
 behavior.
 
@@ -86,10 +90,23 @@ Primary RFCs:
 Likely code areas:
 
 - `core/src/api/session.rs`
+- `core/src/db/helpers.rs`
+- `core/src/db/rows.rs`
+- `core/migrations/008_runtime_identity.sql` and a future migration if native
+  rows are persisted
+- `core/migrations/015_goal_v1.sql` and Goal runtime follow-up constraints
 - `core/src/runner_commands.rs`
+- `core/src/runner_manager/*`
+- `core/src/ipc.rs`
 - `core/src/socket_listener/session_cmds.rs`
+- `core/src/socket_listener/llm_cmds.rs`
 - `cli/src/args.rs`
 - `cli/src/common.rs`
+- `gui/src/types/session.ts`
+- `gui/src/types/db.ts`
+- `gui/src/stores/prefs.ts`
+- `gui/src/stores/sessions.ts`
+- `gui/src/lib/bridge.ts`
 - `docs/agent-api.md`
 
 Tasks:
@@ -99,6 +116,8 @@ Tasks:
 - adapt existing managed/external Python runner through the router;
 - keep `RunnerManager` as the Python-runtime implementation detail instead of
   rewriting it during this slice;
+- prevent native requests from falling through to external GA path/config
+  errors;
 - keep managed/external behavior equivalent;
 - define neutral internal `RuntimeEvent`;
 - map existing Python `IpcEvent` into neutral events;
@@ -109,6 +128,8 @@ Exit gate:
 - managed/external tests pass;
 - CLI/session listing still returns current data;
 - native cannot become default accidentally;
+- native unavailable errors are explicit when the gate is off or no native
+  worker exists;
 - no GUI user sees native unless the experiment is enabled.
 
 Rollback:

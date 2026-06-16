@@ -158,6 +158,27 @@ fn run_galley_isolated(
         .args(args)
         .env("GALLEY_DB_PATH", db)
         .env("TMPDIR", tmp)
+        .env_remove("GALLEY_NATIVE_EXPERIMENTAL")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn galley");
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    (stdout, out.status.code())
+}
+
+fn run_galley_isolated_native_enabled(
+    db: &std::path::Path,
+    tmp: &std::path::Path,
+    args: &[&str],
+) -> (String, Option<i32>) {
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_galley"));
+    let out = Command::new(&bin)
+        .args(args)
+        .env("GALLEY_DB_PATH", db)
+        .env("TMPDIR", tmp)
+        .env("GALLEY_NATIVE_EXPERIMENTAL", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -230,6 +251,44 @@ async fn session_new_rejects_runtime_all() {
     assert_eq!(code, Some(2), "stdout: {stdout}");
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
     assert_eq!(parsed["error"], "invalid_args");
+}
+
+#[tokio::test]
+async fn session_new_rejects_native_runtime_when_gate_disabled() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    drop(seeded_db_at(&db).await);
+    let (stdout, code) = run_galley_isolated(
+        &db,
+        td.path(),
+        &["session", "new", "investigate", "--runtime", "galley-native"],
+    );
+    assert_eq!(code, Some(2), "stdout: {stdout}");
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(parsed["error"], "invalid_args");
+    assert!(parsed["message"]
+        .as_str()
+        .expect("message")
+        .contains("GALLEY_NATIVE_EXPERIMENTAL"));
+}
+
+#[tokio::test]
+async fn session_new_rejects_native_runtime_when_gate_enabled() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    drop(seeded_db_at(&db).await);
+    let (stdout, code) = run_galley_isolated_native_enabled(
+        &db,
+        td.path(),
+        &["session", "new", "investigate", "--runtime", "galley-native"],
+    );
+    assert_eq!(code, Some(2), "stdout: {stdout}");
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(parsed["error"], "invalid_args");
+    assert!(parsed["message"]
+        .as_str()
+        .expect("message")
+        .contains("not implemented in Slice 1"));
 }
 
 #[tokio::test]

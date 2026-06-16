@@ -23,7 +23,7 @@ export interface SessionRow {
   llm_index: number | null;
   llm_key: string | null;
   llm_display_name: string | null;
-  ga_runtime_kind: "managed" | "external";
+  ga_runtime_kind: "managed" | "external" | "galley_native";
   ga_runtime_id: string | null;
   prompt_profile: string | null;
   /** 0/1 — sessions.has_unread. See Session.hasUnread for semantics. */

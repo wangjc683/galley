@@ -85,6 +85,9 @@ impl SqliteGalley {
         limit: u32,
         runtime_kind: Option<RuntimeKind>,
     ) -> Result<Vec<MessageSearchHit>> {
+        if let Some(kind) = runtime_kind {
+            crate::runtime::ensure_runtime_filter_available(kind)?;
+        }
         let q = query.trim();
         if q.chars().count() < 2 {
             return Ok(vec![]);
@@ -214,6 +217,9 @@ impl SqliteGalley {
         scope: SearchScope,
         runtime_kind: Option<RuntimeKind>,
     ) -> Result<Vec<SearchHit>> {
+        if let Some(kind) = runtime_kind {
+            crate::runtime::ensure_runtime_filter_available(kind)?;
+        }
         let q = query.trim();
         if q.len() < 2 {
             return Ok(vec![]);

@@ -30,6 +30,10 @@ pub(super) async fn resolve_llm_selection(
     match runtime_kind {
         RuntimeKind::Managed => resolve_managed_llm_name(galley, name).await,
         RuntimeKind::External => resolve_external_llm_name(galley, name).await,
+        RuntimeKind::GalleyNative => Err(SocketResponseLite::from_err(
+            crate::runtime::ensure_runtime_execution_available(runtime_kind)
+                .expect_err("native model adapter is unavailable in Slice 1"),
+        )),
     }
 }
 

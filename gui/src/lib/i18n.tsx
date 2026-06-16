@@ -1151,8 +1151,12 @@ const zhCopy = {
     viewProject: "查看项目",
     removedFromProject: (projectName: string) => `已从 ${projectName} 移除`,
     removedFromAnyProject: "已从项目移除",
-    switchedRuntime: (kind: "managed" | "external") =>
-      kind === "managed" ? "已切换到内置 GA" : "已切换到外部 GA",
+    switchedRuntime: (kind: "managed" | "external" | "galley_native") =>
+      kind === "managed"
+        ? "已切换到内置 GA"
+        : kind === "external"
+          ? "已切换到外部 GA"
+          : "已切换到 Galley Native",
     runtimeSwitchKept: "原对话已保留，可切回查看。",
     savedPath: "已保存路径配置",
     restartForExisting: "重启 Galley 才能让现有对话生效",
@@ -2485,7 +2489,11 @@ const enCopy: AppCopy = {
     removedFromProject: (projectName) => `Removed from ${projectName}`,
     removedFromAnyProject: "Removed from project",
     switchedRuntime: (kind) =>
-      kind === "managed" ? "Switched to bundled GA" : "Switched to external GA",
+      kind === "managed"
+        ? "Switched to bundled GA"
+        : kind === "external"
+          ? "Switched to external GA"
+          : "Switched to Galley Native",
     runtimeSwitchKept:
       "Existing conversations are kept; switch back anytime to view them.",
     savedPath: "Path settings saved",

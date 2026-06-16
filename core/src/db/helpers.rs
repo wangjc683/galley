@@ -77,6 +77,7 @@ pub(super) fn parse_runtime_kind(s: &str) -> Result<RuntimeKind> {
     Ok(match s {
         "managed" => RuntimeKind::Managed,
         "external" => RuntimeKind::External,
+        "galley_native" => RuntimeKind::GalleyNative,
         other => {
             return Err(GalleyError::Internal {
                 message: format!("unknown runtime kind: {other}"),
@@ -89,6 +90,7 @@ pub(super) fn runtime_kind_sql(kind: RuntimeKind) -> &'static str {
     match kind {
         RuntimeKind::Managed => "managed",
         RuntimeKind::External => "external",
+        RuntimeKind::GalleyNative => "galley_native",
     }
 }
 
@@ -417,6 +419,7 @@ pub(super) async fn insert_session_row_inner(
         Some(kind) => kind,
         None => active_runtime_kind_inner(conn).await?,
     };
+    crate::runtime::ensure_runtime_execution_available(runtime_kind)?;
     let runtime_kind_value = runtime_kind_sql(runtime_kind);
     let prompt_profile = input.prompt_profile.clone().or_else(|| {
         (runtime_kind == RuntimeKind::Managed).then(|| managed_runtime::PROMPT_PROFILE_ID.into())
@@ -490,9 +493,19 @@ pub(super) async fn active_runtime_kind_inner(conn: &mut SqliteConnection) -> Re
                 message: "pref 'active_runtime_kind' must be a string".into(),
             });
         };
-        return parse_runtime_kind(kind);
+        let parsed = parse_runtime_kind(kind)?;
+        if parsed != RuntimeKind::GalleyNative
+            || crate::runtime::galley_native_experimental_enabled()
+        {
+            return Ok(parsed);
+        }
+        return active_runtime_kind_fallback_inner(conn).await;
     }
 
+    active_runtime_kind_fallback_inner(conn).await
+}
+
+async fn active_runtime_kind_fallback_inner(conn: &mut SqliteConnection) -> Result<RuntimeKind> {
     // Defensive fallback for dev/test DBs that have not run migration 008:
     // an existing GA path means attach/external, otherwise fresh managed.
     let ga_path: Option<String> = sqlx::query_scalar(

@@ -23,7 +23,7 @@ export type SessionStatus =
   | "cancelled"
   | "archived";
 
-export type RuntimeKind = "managed" | "external";
+export type RuntimeKind = "managed" | "external" | "galley_native";
 
 /**
  * Sidebar grouping bucket. Computed from `lastActivityAt` and `pinned`

@@ -1,0 +1,99 @@
+use crate::api::RuntimeKind;
+use crate::error::GalleyError;
+
+pub const GALLEY_NATIVE_EXPERIMENTAL_ENV: &str = "GALLEY_NATIVE_EXPERIMENTAL";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeRoute {
+    PythonGa(RuntimeKind),
+    GalleyNative,
+}
+
+pub fn route_for_runtime(kind: RuntimeKind) -> RuntimeRoute {
+    match kind {
+        RuntimeKind::Managed | RuntimeKind::External => RuntimeRoute::PythonGa(kind),
+        RuntimeKind::GalleyNative => RuntimeRoute::GalleyNative,
+    }
+}
+
+pub fn galley_native_experimental_enabled() -> bool {
+    galley_native_enabled_from_value(std::env::var(GALLEY_NATIVE_EXPERIMENTAL_ENV).ok().as_deref())
+}
+
+pub fn galley_native_enabled_from_value(raw: Option<&str>) -> bool {
+    let Some(raw) = raw else {
+        return false;
+    };
+    matches!(
+        raw.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+pub fn galley_native_gate_disabled_message() -> String {
+    format!(
+        "galley_native runtime is experimental; set {GALLEY_NATIVE_EXPERIMENTAL_ENV}=1 to enable it"
+    )
+}
+
+pub fn galley_native_execution_unavailable_message() -> String {
+    "galley_native runtime is recognized, but native session execution is not implemented in Slice 1"
+        .to_string()
+}
+
+pub fn ensure_runtime_filter_available(kind: RuntimeKind) -> Result<(), GalleyError> {
+    if kind == RuntimeKind::GalleyNative && !galley_native_experimental_enabled() {
+        return Err(GalleyError::InvalidArgs {
+            message: galley_native_gate_disabled_message(),
+        });
+    }
+    Ok(())
+}
+
+pub fn ensure_runtime_execution_available(kind: RuntimeKind) -> Result<(), GalleyError> {
+    if kind != RuntimeKind::GalleyNative {
+        return Ok(());
+    }
+    if !galley_native_experimental_enabled() {
+        return Err(GalleyError::InvalidArgs {
+            message: galley_native_gate_disabled_message(),
+        });
+    }
+    Err(GalleyError::InvalidArgs {
+        message: galley_native_execution_unavailable_message(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gate_accepts_only_truthy_values() {
+        assert!(galley_native_enabled_from_value(Some("1")));
+        assert!(galley_native_enabled_from_value(Some("true")));
+        assert!(galley_native_enabled_from_value(Some("YES")));
+        assert!(galley_native_enabled_from_value(Some(" on ")));
+
+        assert!(!galley_native_enabled_from_value(None));
+        assert!(!galley_native_enabled_from_value(Some("")));
+        assert!(!galley_native_enabled_from_value(Some("0")));
+        assert!(!galley_native_enabled_from_value(Some("false")));
+    }
+
+    #[test]
+    fn route_keeps_python_ga_separate_from_native() {
+        assert_eq!(
+            route_for_runtime(RuntimeKind::Managed),
+            RuntimeRoute::PythonGa(RuntimeKind::Managed)
+        );
+        assert_eq!(
+            route_for_runtime(RuntimeKind::External),
+            RuntimeRoute::PythonGa(RuntimeKind::External)
+        );
+        assert_eq!(
+            route_for_runtime(RuntimeKind::GalleyNative),
+            RuntimeRoute::GalleyNative
+        );
+    }
+}

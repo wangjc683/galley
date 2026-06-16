@@ -500,6 +500,8 @@ pub(crate) enum RuntimeArg {
     Current,
     Managed,
     External,
+    #[value(alias = "galley_native")]
+    GalleyNative,
     All,
 }
 

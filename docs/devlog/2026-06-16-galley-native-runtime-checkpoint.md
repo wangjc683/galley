@@ -79,6 +79,12 @@ task-help updates.
   core code, credentials, provider config, or external GA state.
 - Do not update `AGENTS.md` for this yet. The current result is planning
   documentation, not a global rule every coding agent must read on startup.
+- A read-only Slice 1 audit was added after the RFC set. It confirms that the
+  first implementation slice should be runtime identity plus router boundary,
+  not the first native model/tool slice. It also records the current coupling
+  across Rust API types, SQLite CHECK constraints, socket commands, CLI args,
+  LLM resolution, Python runner ownership, GUI runtime unions, and public API
+  docs.
 
 ## Rejected
 
@@ -156,8 +162,10 @@ task-help updates.
    Seeded by [Implementation Slices](../galley-native/implementation-slices.md).
 3. Settle the pre-freeze decisions in
    [Open Decisions](../galley-native/open-decisions.md) before Slice 1 code.
-4. Keep `managed_ga` stable while designing native; no code, schema, or runtime
+4. Review the Slice 1 pre-implementation audit:
+   [Slice 1 Read-Only Audit](../galley-native/slice-1-readonly-audit.md).
+5. Keep `managed_ga` stable while designing native; no code, schema, or runtime
    behavior changes are implied by this checkpoint.
-5. If implementation starts later, begin with a native runtime skeleton behind
+6. If implementation starts later, begin with a native runtime skeleton behind
    an experimental flag and keep `managed_ga` as the fallback until native meets
    replacement quality.

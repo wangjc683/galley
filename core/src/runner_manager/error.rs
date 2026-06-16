@@ -35,6 +35,8 @@ pub enum RunnerSpawnError {
     ManagedRuntimeInvalid { detail: String },
     /// Managed runtime was selected but no model credential can be used.
     ManagedModelNotConfigured { detail: String },
+    /// Galley Native was selected before the native worker exists.
+    NativeRuntimeUnavailable { detail: String },
     /// `args.bridge_cwd` doesn't exist (used as `cwd` for the subprocess).
     BridgeCwdInvalid { detail: String },
     /// `args.ga_path` or `args.bridge_cwd` had a non-UTF-8 path component
@@ -60,6 +62,9 @@ impl fmt::Display for RunnerSpawnError {
             }
             Self::ManagedModelNotConfigured { detail } => {
                 write!(f, "managed model not configured: {}", detail)
+            }
+            Self::NativeRuntimeUnavailable { detail } => {
+                write!(f, "native runtime unavailable: {}", detail)
             }
             Self::BridgeCwdInvalid { detail } => write!(f, "bridge cwd invalid: {}", detail),
             Self::PathEncoding { detail } => write!(f, "path encoding error: {}", detail),
@@ -180,5 +185,15 @@ mod tests {
         let io_err = io::Error::other("eacces");
         let spawn_err: RunnerSpawnError = io_err.into();
         assert!(matches!(spawn_err, RunnerSpawnError::SpawnIo { .. }));
+    }
+
+    #[test]
+    fn native_runtime_unavailable_serializes_stable_tag() {
+        let e = RunnerSpawnError::NativeRuntimeUnavailable {
+            detail: "not implemented".into(),
+        };
+        let s = serde_json::to_string(&e).unwrap();
+        assert!(s.contains("\"error\":\"native_runtime_unavailable\""));
+        assert!(s.contains("\"detail\":\"not implemented\""));
     }
 }

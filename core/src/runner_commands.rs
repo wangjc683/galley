@@ -427,13 +427,22 @@ pub async fn spawn_runner(
     let runtime_kind = args.runtime_kind.unwrap_or(RuntimeKind::External);
     let mut spawn_args: SpawnArgs = args.into();
     let prepare_started_at = Instant::now();
-    if runtime_kind == RuntimeKind::Managed {
-        spawn_args = prepare_managed_spawn_args(spawn_args, &app)
-            .await
-            .map_err(err_to_json::<RunnerSpawnError>)?;
-    } else {
-        spawn_args = prepare_external_spawn_args(spawn_args, &app)
-            .map_err(err_to_json::<RunnerSpawnError>)?;
+    match crate::runtime::route_for_runtime(runtime_kind) {
+        crate::runtime::RuntimeRoute::PythonGa(RuntimeKind::Managed) => {
+            spawn_args = prepare_managed_spawn_args(spawn_args, &app)
+                .await
+                .map_err(err_to_json::<RunnerSpawnError>)?;
+        }
+        crate::runtime::RuntimeRoute::PythonGa(RuntimeKind::External) => {
+            spawn_args = prepare_external_spawn_args(spawn_args, &app)
+                .map_err(err_to_json::<RunnerSpawnError>)?;
+        }
+        crate::runtime::RuntimeRoute::PythonGa(RuntimeKind::GalleyNative)
+        | crate::runtime::RuntimeRoute::GalleyNative => {
+            return Err(err_to_json(RunnerSpawnError::NativeRuntimeUnavailable {
+                detail: crate::runtime::galley_native_execution_unavailable_message(),
+            }));
+        }
     }
     eprintln!(
         "[perf] core.spawn_runner.prepare session_id={} runtime_kind={:?} elapsed_ms={:.1}",
@@ -885,6 +894,19 @@ mod tests {
         assert_eq!(parsed.bridge_cwd, "/repo/runner");
         assert_eq!(parsed.runtime_kind, Some(RuntimeKind::Managed));
         assert_eq!(parsed.env, vec![("FOO".to_string(), "bar".to_string())]);
+    }
+
+    #[test]
+    fn spawn_args_accept_native_runtime_identity() {
+        let line = r#"{
+            "python": "python3",
+            "gaPath": "",
+            "sessionId": "s1",
+            "bridgeCwd": ".",
+            "runtimeKind": "galley_native"
+        }"#;
+        let parsed: SpawnRunnerArgs = serde_json::from_str(line).expect("parse");
+        assert_eq!(parsed.runtime_kind, Some(RuntimeKind::GalleyNative));
     }
 
     #[test]

@@ -181,6 +181,9 @@ impl SqliteGalley {
         &self,
         filter: SessionFilter,
     ) -> Result<Vec<SessionBrief>> {
+        if let Some(kind) = filter.runtime_kind {
+            crate::runtime::ensure_runtime_filter_available(kind)?;
+        }
         // Hand-build WHERE so we can bind only the filters that are
         // set. sqlx doesn't have a fluent builder; query_builder works
         // but verbose for this scale.

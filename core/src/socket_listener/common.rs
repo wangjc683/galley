@@ -116,6 +116,7 @@ pub(super) fn runner_spawn_error_tag(e: &RunnerSpawnError) -> &'static str {
         RunnerSpawnError::GaPathInvalid { .. } => "ga_path_invalid",
         RunnerSpawnError::ManagedRuntimeInvalid { .. } => "managed_runtime_invalid",
         RunnerSpawnError::ManagedModelNotConfigured { .. } => "managed_model_not_configured",
+        RunnerSpawnError::NativeRuntimeUnavailable { .. } => "native_runtime_unavailable",
         RunnerSpawnError::BridgeCwdInvalid { .. } => "bridge_cwd_invalid",
         RunnerSpawnError::PathEncoding { .. } => "path_encoding",
         RunnerSpawnError::SpawnIo { .. } => "spawn_io",

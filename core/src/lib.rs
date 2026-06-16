@@ -20,6 +20,7 @@ pub mod path_install;
 mod process_command;
 pub mod runner_commands;
 pub mod runner_manager;
+pub mod runtime;
 pub mod socket_listener;
 pub mod sop_install;
 

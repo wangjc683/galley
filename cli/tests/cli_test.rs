@@ -125,6 +125,21 @@ fn run_galley(db_path: &std::path::Path, args: &[&str]) -> (String, Option<i32>)
     let out = Command::new(galley_bin())
         .args(args)
         .env("GALLEY_DB_PATH", db_path)
+        .env_remove("GALLEY_NATIVE_EXPERIMENTAL")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn galley");
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    (stdout, out.status.code())
+}
+
+fn run_galley_native_enabled(db_path: &std::path::Path, args: &[&str]) -> (String, Option<i32>) {
+    let out = Command::new(galley_bin())
+        .args(args)
+        .env("GALLEY_DB_PATH", db_path)
+        .env("GALLEY_NATIVE_EXPERIMENTAL", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -260,6 +275,34 @@ async fn sessions_list_defaults_to_current_runtime() {
     let only: serde_json::Value = serde_json::from_str(lines[0]).expect("ndjson line");
     assert_eq!(only["id"], "external");
     assert_eq!(only["runtimeKind"], "external");
+}
+
+#[tokio::test]
+async fn sessions_list_rejects_native_filter_when_gate_disabled() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+
+    let (stdout, code) = run_galley(&db, &["sessions", "list", "--runtime", "galley-native"]);
+    assert_eq!(code, Some(2), "stdout: {stdout}");
+    let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(payload["error"], "invalid_args");
+    assert!(payload["message"]
+        .as_str()
+        .expect("message")
+        .contains("GALLEY_NATIVE_EXPERIMENTAL"));
+}
+
+#[tokio::test]
+async fn sessions_list_accepts_native_filter_when_gate_enabled() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+
+    let (stdout, code) =
+        run_galley_native_enabled(&db, &["sessions", "list", "--runtime", "galley-native"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    assert!(stdout.trim().is_empty(), "stdout: {stdout}");
 }
 
 #[tokio::test]
@@ -472,6 +515,7 @@ fn run_galley_with_tmpdir(
         .args(args)
         .env("GALLEY_DB_PATH", db)
         .env("TMPDIR", tmp)
+        .env_remove("GALLEY_NATIVE_EXPERIMENTAL")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()

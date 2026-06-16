@@ -596,25 +596,35 @@ async fn spawn_args_for_session_new(
     llm_key: Option<String>,
     runtime_kind: RuntimeKind,
 ) -> Result<SpawnArgs, SocketResponseLite> {
-    if runtime_kind == RuntimeKind::Managed {
-        let app = app.ok_or_else(|| {
-            SocketResponseLite::runner_error(
-                "managed runtime is unavailable without a Galley app handle",
-            )
-        })?;
-        let args = SpawnArgs {
-            python: resolve_python_for_socket(&GaConfigPref::default(), Some(app))?,
-            ga_path: PathBuf::new(),
-            session_id: session_id.to_string(),
-            cwd: None,
-            bridge_cwd: PathBuf::new(),
-            llm_index: llm_index.map(i64::from),
-            llm_key,
-            env: Vec::new(),
-        };
-        return prepare_managed_spawn_args(args, app)
-            .await
-            .map_err(SocketResponseLite::runner_spawn_error);
+    match crate::runtime::route_for_runtime(runtime_kind) {
+        crate::runtime::RuntimeRoute::PythonGa(RuntimeKind::Managed) => {
+            let app = app.ok_or_else(|| {
+                SocketResponseLite::runner_error(
+                    "managed runtime is unavailable without a Galley app handle",
+                )
+            })?;
+            let args = SpawnArgs {
+                python: resolve_python_for_socket(&GaConfigPref::default(), Some(app))?,
+                ga_path: PathBuf::new(),
+                session_id: session_id.to_string(),
+                cwd: None,
+                bridge_cwd: PathBuf::new(),
+                llm_index: llm_index.map(i64::from),
+                llm_key,
+                env: Vec::new(),
+            };
+            return prepare_managed_spawn_args(args, app)
+                .await
+                .map_err(SocketResponseLite::runner_spawn_error);
+        }
+        crate::runtime::RuntimeRoute::PythonGa(RuntimeKind::External) => {}
+        crate::runtime::RuntimeRoute::PythonGa(RuntimeKind::GalleyNative)
+        | crate::runtime::RuntimeRoute::GalleyNative => {
+            return Err(SocketResponseLite::from_err(
+                crate::runtime::ensure_runtime_execution_available(runtime_kind)
+                    .expect_err("native execution is unavailable in Slice 1"),
+            ));
+        }
     }
 
     let raw = galley
@@ -883,6 +893,9 @@ async fn dispatch_session_new_inner(
         Err(e) => return map_galley_err(request_id, e),
     };
     let target_runtime_kind = runtime_kind.unwrap_or(active_runtime_kind);
+    if let Err(e) = crate::runtime::ensure_runtime_execution_available(target_runtime_kind) {
+        return map_galley_err(request_id, e);
+    }
     let runtime_warning = runtime_kind
         .filter(|requested| *requested != active_runtime_kind)
         .map(|requested| {

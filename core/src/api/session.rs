@@ -43,6 +43,8 @@ pub enum RuntimeKind {
     Managed,
     /// User-owned attached GenericAgent checkout.
     External,
+    /// Galley-owned native runtime. Hidden and non-executable in Slice 1.
+    GalleyNative,
 }
 
 impl RuntimeKind {
@@ -50,7 +52,21 @@ impl RuntimeKind {
         match self {
             RuntimeKind::Managed => "Galley",
             RuntimeKind::External => "Attached GenericAgent",
+            RuntimeKind::GalleyNative => "Galley Native",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_kind_serializes_native_as_snake_case() {
+        let encoded = serde_json::to_string(&RuntimeKind::GalleyNative).unwrap();
+        assert_eq!(encoded, r#""galley_native""#);
+        let decoded: RuntimeKind = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, RuntimeKind::GalleyNative);
     }
 }
 

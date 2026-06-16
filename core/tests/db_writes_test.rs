@@ -772,6 +772,34 @@ async fn create_session_can_snapshot_explicit_external_runtime() {
 }
 
 #[tokio::test]
+async fn create_session_rejects_native_runtime_before_db_insert() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    let err = galley
+        .create_session(
+            CreateSessionInput {
+                id: "sess_native_1".into(),
+                title: "Native session".into(),
+                project_id: None,
+                selected_llm_index: None,
+                selected_llm_key: None,
+                selected_llm_display_name: None,
+                ga_runtime_kind: Some(RuntimeKind::GalleyNative),
+                ga_runtime_id: None,
+                prompt_profile: None,
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect_err("native runtime is not executable in Slice 1");
+
+    assert!(matches!(
+        err,
+        GalleyError::InvalidArgs { message } if message.contains("galley_native runtime")
+    ));
+}
+
+#[tokio::test]
 async fn create_session_persists_origin_creation_triple() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool.clone());

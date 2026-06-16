@@ -18,6 +18,7 @@ behavior changes until an implementation slice explicitly lands them.
 8. [RFC 7: Parity Harness And Default Switch](./rfc-7-parity-harness-default-switch.md)
 9. [Open Decisions](./open-decisions.md)
 10. [Implementation Slices](./implementation-slices.md)
+11. [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md)
 
 ## Document Roles
 
@@ -42,6 +43,8 @@ behavior changes until an implementation slice explicitly lands them.
   Slice 1 starts.
 - [Implementation Slices](./implementation-slices.md): sequencing and
   acceptance gates for future implementation.
+- [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md): current codebase
+  coupling map and Goal-mode boundary for the runtime router skeleton.
 
 ## Next After Review
 
@@ -49,5 +52,6 @@ After these RFCs settle, convert the accepted design into implementation slices:
 
 1. review [Open Decisions](./open-decisions.md);
 2. review [Implementation Slices](./implementation-slices.md);
-3. accept or revise the slice gates, including the 4A/4B/4C tool split;
-4. start with Slice 1 only: runtime router skeleton.
+3. review [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md);
+4. accept or revise the slice gates, including the 4A/4B/4C tool split;
+5. start with Slice 1 only: runtime router skeleton.

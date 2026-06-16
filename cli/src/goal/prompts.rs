@@ -197,6 +197,10 @@ fn goal_master_duty_prompt(runtime_kind: RuntimeKind) -> String {
                     .to_string(),
             }
         }
+        RuntimeKind::GalleyNative => {
+            "Galley Native Goal Hive is not executable in Slice 1; use managed or external runtime."
+                .to_string()
+        }
     }
 }
 
@@ -257,6 +261,11 @@ pub(crate) fn goal_memory_policy_prompt(runtime_kind: RuntimeKind) -> &'static s
             r#"Memory/SOP policy:
 - Attached external GA is user-owned; do not modify external GA memory, SOP, skills, config, temp state, or temp/goal_state.json.
 - Do not store Goal protocol state in memory/SOP: Goal ids, task ids, worker session ids, worker indexes, rounds/waves, temporary coordination logs, or transient task-board state."#
+        }
+        RuntimeKind::GalleyNative => {
+            r#"Memory/SOP policy:
+- Galley Native memory is not executable in Slice 1.
+- Do not create native Goal protocol state until the native Goal Hive slice lands."#
         }
     }
 }

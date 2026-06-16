@@ -304,14 +304,14 @@ Response fields:
 | `galleyVersion`  | string | semver of the `galley` binary itself               |
 | `schemaVersion`  | int    | this document's stability key (`1` for v0.2.x) |
 
-### 5.2 · `galley sessions list [--runtime=current|managed|external|all] [--project=X] [--status=Y] [--archived | --all]`
+### 5.2 · `galley sessions list [--runtime=current|managed|external|galley-native|all] [--project=X] [--status=Y] [--archived | --all]`
 
 Lists sessions in `pinned DESC, last_activity_at DESC` order. NDJSON,
 one `SessionBrief` per line.
 
 | Flag         | Type   | Default      | Notes                                                                                             |
 | ------------ | ------ | ------------ | ------------------------------------------------------------------------------------------------- |
-| `--runtime`  | enum   | `current`    | `current` follows the GUI's active runtime; `all` is explicit cross-runtime listing                |
+| `--runtime`  | enum   | `current`    | `current` follows the GUI's active runtime; `all` is explicit cross-runtime listing; `galley-native` is hidden and requires `GALLEY_NATIVE_EXPERIMENTAL=1` |
 | `--project`  | string | (unset)      | restrict to one project id                                                                        |
 | `--status`   | string | (unset)      | one of `idle / connecting / running / waiting_approval / error / completed / cancelled / archived` |
 | `--archived` | bool   | false        | return only archived sessions                                                                     |
@@ -347,13 +347,13 @@ $ galley sessions list --project=proj_demo
 | `selectedLlmIndex` | int?           | legacy per-session LLM index, when set; retained for bridge compatibility          |
 | `selectedLlmKey`  | string?         | stable per-session LLM identity: managed model id or external GA raw LLM name      |
 | `selectedLlmDisplayName` | string?   | cached display name for the persisted LLM selection                                |
-| `runtimeKind`     | string enum     | `managed` / `external`; product-facing alias for CLI callers                       |
+| `runtimeKind`     | string enum     | `managed` / `external` / hidden `galley_native`; product-facing alias for CLI callers |
 | `runtimeLabel`    | string          | `Galley` / `Attached GenericAgent`                                                 |
-| `gaRuntimeKind`   | string enum     | `managed` / `external`; runtime ownership captured at session creation             |
+| `gaRuntimeKind`   | string enum     | `managed` / `external` / hidden `galley_native`; legacy runtime ownership projection captured at session creation |
 | `gaRuntimeId`     | string?         | stable runtime id for future multi-runtime support                                 |
 | `promptProfile`   | string?         | managed prompt profile id, when applied                                            |
 
-### 5.3 · `galley sessions search <query> [--runtime current|managed|external|all] [--all]`
+### 5.3 · `galley sessions search <query> [--runtime current|managed|external|galley-native|all] [--all]`
 
 FTS5 trigram search over message bodies. Two-character queries fall
 back to LIKE substring search. Queries shorter than two characters
@@ -363,7 +363,7 @@ asks for all runtimes.
 
 | Flag        | Default   | Notes                                                         |
 | ----------- | --------- | ------------------------------------------------------------- |
-| `--runtime` | `current` | runtime scope: current GUI context, managed, external, or all |
+| `--runtime` | `current` | runtime scope: current GUI context, managed, external, hidden `galley-native`, or all |
 | `--all`     | false     | include archived sessions in the scan; does not change runtime scope |
 
 Example:
@@ -614,7 +614,7 @@ Pattern: agents should branch on the `status` value (`ok` / `warn` /
 check that dependency — use setup screens, model probes, or live runner
 startup as the stronger signal").
 
-### 5.8 · `galley session new "<task>" [--runtime=current|managed|external] [--project=<id>] [--llm=<name>] [--supervisor=<x>] [--reason=<y>]`
+### 5.8 · `galley session new "<task>" [--runtime=current|managed|external|galley-native] [--project=<id>] [--llm=<name>] [--supervisor=<x>] [--reason=<y>]`
 
 **Write command** — creates a session, persists the first user message
 in **one SQLite transaction**, starts a runner, and dispatches the first
@@ -626,7 +626,7 @@ agents know the delegated task did not actually start.
 | -------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | `--project`    | (none → ungrouped)                   | Project id. Invalid id → `invalid_args`.                                                       |
 | `--llm`        | (none → bridge default at spawn)     | LLM display name (case-insensitive). Resolved against the cached `llm_list` pref.              |
-| `--runtime`    | `current`                            | Follows GUI active runtime by default. `managed` / `external` are explicit cross-runtime writes. |
+| `--runtime`    | `current`                            | Follows GUI active runtime by default. `managed` / `external` are explicit cross-runtime writes. Hidden `galley-native` is recognized only for Slice 1 gating and returns `invalid_args` until native execution exists. |
 | `--supervisor` | (none → `origin.via = cli`)          | Supervisor label. Sets `origin.via = supervisor` on the session row + the first message.       |
 | `--reason`     | (none)                               | Free-text rationale on `origin.reason`.                                                        |
 
@@ -1009,10 +1009,13 @@ Goal commands are additive inside `schemaVersion: 1`. V1 intentionally has no
 full task-board UI; the CLI and the TopBar Goal indicator are the control
 surface.
 
-#### `galley goal propose "<objective>" [--project=<id>] [--budget-minutes=30] [--workers=3] [--runtime=current|managed|external] [--write-mode=autonomous|read-only] [--expires-minutes=10] [--supervisor=<x>] [--reason=<y>]`
+#### `galley goal propose "<objective>" [--project=<id>] [--budget-minutes=30] [--workers=3] [--runtime=current|managed|external|galley-native] [--write-mode=autonomous|read-only] [--expires-minutes=10] [--supervisor=<x>] [--reason=<y>]`
 
 Creates a pending conversational-confirmation proposal. It does **not** start
 work.
+
+Hidden `galley-native` is rejected with `invalid_args` in Slice 1. Native Goal
+Hive semantics land in a later Galley Native slice.
 
 ```bash
 $ galley goal propose "review and fix flaky release checks" \
