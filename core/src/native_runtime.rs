@@ -680,18 +680,14 @@ async fn run_streaming_model_turn(
         })
         .await?;
 
-    let final_answer = model_response.content.trim().to_string();
-    let summary = model_summary(task, &final_answer);
-    let messages = vec![
-        NativeMessage::text(NativeRole::User, task.trim()),
-        NativeMessage::text(NativeRole::Assistant, final_answer.clone()),
-    ];
+    let mut final_answer = model_response.content.trim().to_string();
     let NativeModelResponse {
-        model_name,
-        stop_reason,
-        usage,
+        mut model_name,
+        mut stop_reason,
+        mut usage,
         ..
     } = model_response;
+    let mut mode = "model_stream".to_string();
     let mut tool_trace = native_tool_trace(
         &session_id_str,
         turn_index,
@@ -704,6 +700,38 @@ async fn run_streaming_model_turn(
         event_bus().publish(&session_id_str, event.clone());
     }
     events.extend(tool_trace.events.clone());
+
+    if should_continue_after_read_only_tool(&tool_trace) {
+        let continuation_response = crate::native_model::complete_tool_result_turn_with_delta(
+            &model,
+            &model_task,
+            &final_answer,
+            &tool_trace.tool_results,
+            |delta| {
+                let event = turn_progress_event(
+                    &session_id_str,
+                    turn_index,
+                    delta,
+                    "model_continuation",
+                    native_now_iso(),
+                );
+                event_bus().publish(&session_id_str, event.clone());
+                events.push(event);
+            },
+        )
+        .await?;
+        final_answer = continuation_response.content.trim().to_string();
+        model_name = continuation_response.model_name;
+        mode = "model_continuation".to_string();
+        stop_reason = continuation_response.stop_reason;
+        usage = continuation_usage(usage, continuation_response.usage);
+    }
+
+    let summary = model_summary(task, &final_answer);
+    let messages = vec![
+        NativeMessage::text(NativeRole::User, task.trim()),
+        NativeMessage::text(NativeRole::Assistant, final_answer.clone()),
+    ];
     let end = turn_end_event(
         &session_id_str,
         turn_index,
@@ -718,7 +746,7 @@ async fn run_streaming_model_turn(
     let complete = run_complete_event(
         &session_id_str,
         &final_answer,
-        "model_stream",
+        &mode,
         tool_trace.awaiting_user,
         tool_trace.pending_approval.is_some(),
         stop_reason,
@@ -741,7 +769,7 @@ async fn run_streaming_model_turn(
         tool_trace.awaiting_user,
         tool_trace.pending_approval,
         model_name,
-        "model_stream".to_string(),
+        mode,
         mark_unread,
         true,
     )
@@ -1897,7 +1925,11 @@ fn mock_summary(task: &str) -> String {
 }
 
 fn model_summary(task: &str, final_answer: &str) -> String {
-    let mut preview = final_answer
+    if let Some(summary) = extract_summary_tag(final_answer) {
+        return summary;
+    }
+    let cleaned = strip_summary_preview_tags(final_answer);
+    let mut preview = cleaned
         .lines()
         .find(|line| !line.trim().is_empty())
         .unwrap_or_else(|| task.lines().next().unwrap_or(""))
@@ -1908,7 +1940,47 @@ fn model_summary(task: &str, final_answer: &str) -> String {
     if preview.is_empty() {
         preview = "native model turn".to_string();
     }
-    format!("Galley Native model: {preview}")
+    preview
+}
+
+fn extract_summary_tag(text: &str) -> Option<String> {
+    let start = text.find("<summary>")? + "<summary>".len();
+    let end = text[start..].find("</summary>")? + start;
+    let value = text[start..end].trim();
+    if is_placeholder_summary(value) {
+        None
+    } else {
+        Some(value.chars().take(80).collect())
+    }
+}
+
+fn strip_summary_preview_tags(text: &str) -> String {
+    let mut out = text.to_string();
+    for token in [
+        "<summary>",
+        "</summary>",
+        "<thinking>",
+        "</thinking>",
+        "<tool_use>",
+        "</tool_use>",
+    ] {
+        out = out.replace(token, "");
+    }
+    out
+}
+
+fn is_placeholder_summary(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.is_empty()
+        || matches!(
+            trimmed,
+            "<summary>"
+                | "</summary>"
+                | "<thinking>"
+                | "</thinking>"
+                | "<tool_use>"
+                | "</tool_use>"
+        )
 }
 
 #[derive(Debug, Clone)]
@@ -3204,6 +3276,31 @@ mod tests {
         assert!(answer.contains("Galley Native mock response"));
         assert!(answer.contains("Runtime: galley_native"));
         assert!(answer.contains("mock-model fallback"));
+    }
+
+    #[test]
+    fn model_summary_does_not_expose_runtime_name() {
+        let summary = model_summary("介绍一下你自己", "你好！我是一个 AI 助手。");
+        assert_eq!(summary, "你好！我是一个 AI 助手。");
+        assert!(!summary.contains("Galley Native"));
+    }
+
+    #[test]
+    fn model_summary_extracts_valid_summary_tag() {
+        let summary = model_summary(
+            "打开浏览器搜索",
+            "<summary>准备调用浏览器搜索 GRB</summary>\n<tool_use>{}</tool_use>",
+        );
+        assert_eq!(summary, "准备调用浏览器搜索 GRB");
+    }
+
+    #[test]
+    fn model_summary_ignores_bare_summary_tag_placeholder() {
+        let summary = model_summary(
+            "打开浏览器搜索",
+            "<summary>\n\n好嘞，那我来搜一个我自己挺感兴趣的话题。",
+        );
+        assert_eq!(summary, "好嘞，那我来搜一个我自己挺感兴趣的话题。");
     }
 
     #[test]

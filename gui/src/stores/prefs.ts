@@ -27,7 +27,7 @@ import type { RuntimeKind } from "@/types/session";
  * persistable):
  *
  *   - gaConfig            (python / gaPath / bridgeCwd / useExternalPython)
- *   - activeRuntimeKind   (managed / external)
+ *   - activeRuntimeKind   (galley_native / managed / external)
  *   - approvalConfig      (in-memory only, v0.1 doesn't persist rules)
  *   - yoloMode            (pref: yolo_mode)
  *   - yoloIntroSeen       (pref: yolo_intro_seen)
@@ -77,7 +77,7 @@ interface PrefsState {
   gaConfig: GAConfig;
 
   /**
-   * Current GenericAgent runtime mode. New installs default to managed;
+   * Current runtime mode. New installs default to Galley Native;
    * existing users with a persisted GA path migrate to external.
    */
   activeRuntimeKind: RuntimeKind;
@@ -208,7 +208,7 @@ function normalizeGAConfig(config: GAConfig): GAConfig {
 export const usePrefsStore = create<PrefsStore>((set, get) => ({
   // ---- Initial state (demo fixtures until hydratePrefs) ----
   gaConfig: DEFAULT_GA_CONFIG,
-  activeRuntimeKind: "managed",
+  activeRuntimeKind: "galley_native",
   approvalConfig: DEFAULT_APPROVAL_CONFIG,
   yoloMode: true,
   yoloIntroSeen: true,
@@ -369,9 +369,6 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   // ---- Runtime mode ----
   setActiveRuntimeKind: async (kind) => {
     set({ activeRuntimeKind: kind });
-    if (kind === "galley_native") {
-      return;
-    }
     try {
       await setPref("active_runtime_kind", kind);
     } catch (e) {
@@ -485,17 +482,21 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       const activeRuntimeKind = await getPref<RuntimeKind>(
         "active_runtime_kind",
       );
-      if (activeRuntimeKind === "managed" || activeRuntimeKind === "external") {
+      if (
+        activeRuntimeKind === "galley_native" ||
+        activeRuntimeKind === "managed" ||
+        activeRuntimeKind === "external"
+      ) {
         set({ activeRuntimeKind });
       } else {
-        set({ activeRuntimeKind: hasGAConfig ? "external" : "managed" });
+        set({ activeRuntimeKind: hasGAConfig ? "external" : "galley_native" });
       }
     } catch (e) {
       console.warn(
         "[prefs] hydratePrefs: active_runtime_kind pref load failed.",
         e,
       );
-      set({ activeRuntimeKind: hasGAConfig ? "external" : "managed" });
+      set({ activeRuntimeKind: hasGAConfig ? "external" : "galley_native" });
     }
     return { hasGAConfig };
   },

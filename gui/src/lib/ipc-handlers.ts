@@ -4,6 +4,7 @@ import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
 import { logPerf, perfNow } from "@/lib/perf";
+import { runtimeUsesManagedModelConfig } from "@/lib/runtime-kind";
 import { fromIPCError, makeAppError } from "@/types/app-error";
 import type {
   AgentTurn,
@@ -106,7 +107,7 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         usePrefsStore.getState().activeRuntimeKind;
       const currentIndex = event.availableLLMs.find((l) => l.isCurrent)?.index;
       const managedLLMs =
-        runtimeKind === "managed"
+        runtimeUsesManagedModelConfig(runtimeKind)
           ? managedModelsToLLMs(
               useManagedModelsStore.getState().models,
               currentIndex,
@@ -499,6 +500,14 @@ function nativeToolKey(sessionId: string, toolCallId: string): string {
   return `${sessionId}::${toolCallId}`;
 }
 
+function nativeDisplayTurnIndex(sessionId: string, absoluteTurnIndex: number) {
+  const offset =
+    useMessagesStore.getState().byId[sessionId]?.turnIndexOffset;
+  return typeof offset === "number"
+    ? absoluteTurnIndex - offset
+    : absoluteTurnIndex + 1;
+}
+
 export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
   const messages = useMessagesStore.getState();
 
@@ -514,7 +523,10 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
     case "turn_start": {
       if (eventVisibility(event) === "internal") return;
       messages.setAgentRunning(event.sessionId, true);
-      messages.setCurrentTurnIndex(event.sessionId, event.turnIndex);
+      messages.setCurrentTurnIndex(
+        event.sessionId,
+        nativeDisplayTurnIndex(event.sessionId, event.turnIndex),
+      );
       messages.clearInFlightContent(event.sessionId);
       return;
     }
@@ -532,7 +544,7 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
       );
       _nativeToolDrafts.set(nativeToolKey(event.sessionId, event.toolCallId), {
         sessionId: event.sessionId,
-        turnIndex: event.turnIndex,
+        turnIndex: nativeDisplayTurnIndex(event.sessionId, event.turnIndex),
         toolCallId: event.toolCallId,
         toolName: event.toolName,
         args,
@@ -548,7 +560,7 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
             args,
             riskLevel: riskLevelFromNativePolicy(event.approval),
           },
-          event.turnIndex,
+          nativeDisplayTurnIndex(event.sessionId, event.turnIndex),
         );
       }
       return;
@@ -592,7 +604,7 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
           riskLevel: riskLevelFromNativePolicy(draft?.approval),
           approvalId: event.toolCallId,
         },
-        event.turnIndex,
+        nativeDisplayTurnIndex(event.sessionId, event.turnIndex),
       );
       return;
     }
@@ -620,7 +632,7 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
           riskLevel: riskLevelFromNativePolicy(draft?.approval),
           approvalId: event.toolCallId,
         },
-        event.turnIndex,
+        nativeDisplayTurnIndex(event.sessionId, event.turnIndex),
       );
       console.debug("[native] tool_progress", {
         sessionId: event.sessionId,
@@ -637,7 +649,11 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
       const key = nativeToolKey(event.sessionId, event.toolCallId);
       const draft = _nativeToolDrafts.get(key);
       const tool = nativeToolEventFromEnd(event, draft);
-      messages.upsertToolEvent(event.sessionId, tool, event.turnIndex);
+      messages.upsertToolEvent(
+        event.sessionId,
+        tool,
+        nativeDisplayTurnIndex(event.sessionId, event.turnIndex),
+      );
       if (tool.status === "denied") {
         messages.recordApprovalDecisionLocal(
           event.sessionId,
@@ -783,6 +799,10 @@ function toolEventFromIPC(
 }
 
 function turnFromNativeTurnEnd(event: NativeTurnEndEvent): AgentTurn {
+  const displayTurnIndex = nativeDisplayTurnIndex(
+    event.sessionId,
+    event.turnIndex,
+  );
   const pendingIds = new Set(
     useMessagesStore
       .getState()
@@ -794,7 +814,7 @@ function turnFromNativeTurnEnd(event: NativeTurnEndEvent): AgentTurn {
     return !id || !pendingIds.has(id);
   });
   const turn = turnFromTurnEnd({
-    turnIndex: event.turnIndex,
+    turnIndex: displayTurnIndex,
     absoluteTurnIndex: event.turnIndex,
     summary: event.summary,
     toolCalls,

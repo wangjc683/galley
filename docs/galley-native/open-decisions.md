@@ -1,15 +1,17 @@
 # Galley Native Open Decisions
 
-> Status: pre-freeze decision sheet.
+> Status: historical decision sheet. Slice 1 has shipped, the experimental
+> Settings entry exists, and v0.3.0 now targets `galley_native` as the built-in
+> default after dogfood gates.
 >
 > Scope: decisions that should be settled before Slice 1 implementation. This
 > document does not implement code, schema, or runtime behavior.
 
 ## Purpose
 
-Slice 1 should only prove that Galley can carry a third runtime kind without
-changing `managed` or `external` behavior. These decisions affect that first
-slice's shape, so they should be reviewed before code starts.
+This sheet records the early Slice 1 decisions that shaped `galley_native`.
+Some entries are intentionally historical: they were correct before code
+started, but later slices may have superseded their rollout wording.
 
 Decision statuses:
 
@@ -19,7 +21,7 @@ Decision statuses:
 
 ## D1: Legacy `gaRuntimeKind` Projection
 
-Status: Recommended.
+Status: Accepted and implemented.
 
 Question: how should a native session appear in the existing
 `schemaVersion: 1` fields?
@@ -57,9 +59,9 @@ User impact:
 
 ## D2: Native Feature Gate
 
-Status: Recommended.
+Status: Implemented / superseded by v0.3 default-switch direction.
 
-Question: how is native enabled before opt-in beta?
+Question: how is native enabled before the default-switch release?
 
 Options:
 
@@ -70,27 +72,43 @@ Options:
 | C. Visible Settings toggle | User-facing experimental runtime toggle | Too early; exposes unstable runtime |
 | D. Compile feature | Build-time feature flag | Too rigid for dogfood binaries |
 
-Recommendation: **Option A for Slice 1-3; add a hidden pref only when dogfood
-needs persistence**.
+Original recommendation: **Option A for Slice 1-3; add a hidden pref only when
+dogfood needs persistence**.
+
+Current state:
+
+- Slice 1 shipped the `GALLEY_NATIVE_EXPERIMENTAL=1` gate.
+- The v0.3.0 default-switch implementation retires that gate for runtime
+  filtering, session creation, native Goal proposals, and CLI `--runtime
+  galley-native`.
+- Settings -> Runtime now presents `galley_native` as the recommended built-in
+  runtime and moves Python managed GA to an Advanced legacy fallback.
+- The environment variable may remain as a no-op compatibility/test artifact,
+  but it is no longer a product or API requirement.
 
 Why:
 
-- Slice 1 is about proving the router, not inviting users.
-- Environment flags are easy to disable and do not affect first-run UX.
-- Visible Settings belongs to Slice 9F opt-in beta, after parity evidence.
+- `galley_native` is no longer a peer beta hidden behind a developer switch; it
+  is the built-in runtime path being prepared for v0.3.0.
+- User risk is controlled by release gating, migration tests, and the Advanced
+  managed fallback, not by a developer-only environment flag.
+- External GA remains user-owned and is not migrated.
 
 Implementation notes:
 
-- Gate native session creation, runtime listing, and CLI runtime arguments
-  consistently.
-- Native must never become the default while the gate is off.
-- Error messages should say native is experimental/unavailable, not "unknown
-  runtime".
+- Migration 024 promotes Galley-owned managed runtime metadata to
+  `galley_native` while preserving external rows.
+- Runtime listing and CLI arguments now accept `galley-native` without an
+  environment variable.
+- Release still requires dogfood/parity evidence before a public v0.3.0 build is
+  promoted.
 
 User impact:
 
-- Ordinary users see no new runtime choice.
-- Maintainers can dogfood without forking the product surface.
+- Built-in users land on the native runtime path by default in v0.3 development
+  builds.
+- If native blocks dogfood, the old Python managed GA path remains available as
+  an Advanced fallback.
 
 ## D3: Mock-Model Provider Shape
 

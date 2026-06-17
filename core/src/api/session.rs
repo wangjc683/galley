@@ -43,8 +43,8 @@ pub enum RuntimeKind {
     Managed,
     /// User-owned attached GenericAgent checkout.
     External,
-    /// Galley-owned native runtime. Hidden and experimental until the
-    /// native worker reaches managed-GA parity.
+    /// Galley-owned native runtime. This is the v0.3 built-in default;
+    /// managed Python GA remains available as an explicit fallback.
     GalleyNative,
 }
 

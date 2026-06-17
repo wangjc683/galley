@@ -46,6 +46,10 @@ import {
   currentLLMDisplayName,
   managedModelsToLLMs,
 } from "@/lib/managed-model-options";
+import {
+  isBuiltInRuntimeKind,
+  runtimeUsesManagedModelConfig,
+} from "@/lib/runtime-kind";
 import { bucketSession } from "@/lib/sessions";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useAppUpdateStore } from "@/stores/app-update";
@@ -122,7 +126,6 @@ function App() {
   // frequent non-sidebar updates like turn_progress streaming.
   const sessions = useSessionsStore((s) => s.sessions);
   const activeSessionId = useSessionsStore((s) => s.activeSessionId);
-  const createSession = useSessionsStore((s) => s.createSession);
   const createSessionPersisted = useSessionsStore(
     (s) => s.createSessionPersisted,
   );
@@ -229,13 +232,14 @@ function App() {
   const setActiveRuntimeKind = usePrefsStore((s) => s.setActiveRuntimeKind);
   const gaConfig = usePrefsStore((s) => s.gaConfig);
   const activeRuntimeKind = usePrefsStore((s) => s.activeRuntimeKind);
+  const isBuiltInRuntime = isBuiltInRuntimeKind(activeRuntimeKind);
   const wechatChannelsStatus = useImSupervisorStatus(
     "wechat",
-    activeRuntimeKind === "managed",
+    isBuiltInRuntime,
   );
   const feishuChannelsStatus = useImSupervisorStatus(
     "feishu",
-    activeRuntimeKind === "managed",
+    isBuiltInRuntime,
   );
   const managedModels = useManagedModelsStore((s) => s.models);
   const managedLLMs = useMemo(
@@ -259,28 +263,29 @@ function App() {
     copy.app.unconfiguredModel,
   );
   const usesManagedModelConfig =
-    activeRuntimeKind === "managed" || activeRuntimeKind === "galley_native";
+    runtimeUsesManagedModelConfig(activeRuntimeKind);
   const fallbackLLMs = usesManagedModelConfig ? managedLLMs : cachedLLMs;
-  const fallbackLLMDisplayName =
-    usesManagedModelConfig ? managedLLMDisplayName : cachedLLMDisplayName;
+  const fallbackLLMDisplayName = usesManagedModelConfig
+    ? managedLLMDisplayName
+    : cachedLLMDisplayName;
   const llms = activeRuntimeLLMs ?? fallbackLLMs;
   const llmDisplayName =
     activeRuntimeDisplayName ?? fallbackLLMDisplayName ?? "";
-  const llmConfigHint =
-    usesManagedModelConfig ? undefined : copy.app.externalModelHint;
+  const llmConfigHint = usesManagedModelConfig
+    ? undefined
+    : copy.app.externalModelHint;
   const hasConfiguredManagedModel = managedModels.some(
     (model) => model.credentialStatus !== "missing",
   );
   const requiresManagedModelConfig =
     usesManagedModelConfig && !hasConfiguredManagedModel;
-  const sidebarRuntimeIndicator =
-    usesManagedModelConfig
-      ? hasConfiguredManagedModel
-        ? "hidden"
-        : "configure-models"
-      : gaConfig.gaPath.trim() !== "" && gaConfig.python.trim() !== ""
-        ? "external-ready"
-        : "external-unconfigured";
+  const sidebarRuntimeIndicator = usesManagedModelConfig
+    ? hasConfiguredManagedModel
+      ? "hidden"
+      : "configure-models"
+    : gaConfig.gaPath.trim() !== "" && gaConfig.python.trim() !== ""
+      ? "external-ready"
+      : "external-unconfigured";
   const openSettings = (tab: SettingsTab = "runtime") => {
     setSettingsTab(tab);
     setSettingsOpen(true);
@@ -301,8 +306,9 @@ function App() {
       }),
     );
   };
-  const openModelConfigFromSwitcher =
-    usesManagedModelConfig ? () => openSettings("models") : undefined;
+  const openModelConfigFromSwitcher = usesManagedModelConfig
+    ? () => openSettings("models")
+    : undefined;
   const openLLMSwitcherFallback = () => {
     if (usesManagedModelConfig) {
       openSettings("models");
@@ -427,7 +433,7 @@ function App() {
     }
     let demoSid: string | null = null;
     try {
-      const sid = createSession();
+      const sid = await createSessionPersisted();
       demoSid = sid;
       await activateSession(sid);
       setScreen("main");
@@ -436,6 +442,16 @@ function App() {
         copy.browserControl.demoPrompt,
       );
       const absoluteTurnIndex = persisted.turnIndex;
+      if (activeRuntimeKind === "galley_native") {
+        useMessagesStore.getState().setSendPhase(sid, "waiting_agent");
+        await nativeSessionRunTurn(
+          sid,
+          copy.browserControl.demoPrompt,
+          absoluteTurnIndex,
+        );
+        useMessagesStore.getState().setSendPhase(sid, "sent");
+        return;
+      }
       await sendIPCCommand(sid, {
         kind: "user_message",
         text: copy.browserControl.demoPrompt,
@@ -867,7 +883,7 @@ function App() {
     [projects, deletingProjectId],
   );
   const showBrowserControlAttention =
-    activeRuntimeKind === "managed" &&
+    isBuiltInRuntime &&
     (browserControlStatus === "not_connected" ||
       browserControlStatus === "error");
 
@@ -916,7 +932,7 @@ function App() {
                 : undefined
             }
             canContinueWithCurrentModel={
-              activeRuntimeKind === "managed" && hasConfiguredManagedModel
+              usesManagedModelConfig && hasConfiguredManagedModel
             }
             languagePreference={languagePreference}
             resolvedLanguage={resolvedLanguage}
@@ -945,8 +961,8 @@ function App() {
             }}
             onManagedComplete={() => {
               void (async () => {
-                if (activeRuntimeKind !== "managed") {
-                  await setActiveRuntimeKind("managed");
+                if (!isBuiltInRuntimeKind(activeRuntimeKind)) {
+                  await setActiveRuntimeKind("galley_native");
                 }
                 returnToMainAfterSetup();
               })();
@@ -974,11 +990,11 @@ function App() {
               void setYoloMode(false);
             }}
             browserControlStatus={
-              activeRuntimeKind === "managed" ? browserControlStatus : null
+              isBuiltInRuntime ? browserControlStatus : null
             }
             onOpenBrowserControl={() => openSettings("browser")}
             channelsState={
-              activeRuntimeKind === "managed"
+              isBuiltInRuntime
                 ? aggregateChannelsState([
                     wechatChannelsStatus.status?.state,
                     feishuChannelsStatus.status?.state,
@@ -986,15 +1002,13 @@ function App() {
                 : null
             }
             channelsLoadError={
-              activeRuntimeKind === "managed"
+              isBuiltInRuntime
                 ? (wechatChannelsStatus.loadError ??
                   feishuChannelsStatus.loadError)
                 : null
             }
             onOpenChannelsSettings={
-              activeRuntimeKind === "managed"
-                ? () => openSettings("im")
-                : undefined
+              isBuiltInRuntime ? () => openSettings("im") : undefined
             }
             activeGoals={activeGoals}
             onOpenGoalProject={openGoalProject}
@@ -1206,7 +1220,7 @@ function App() {
                     // visible feedback. The live bridge, when available,
                     // still receives set_llm and will confirm via
                     // llm_changed.
-                    selectLLMForSession(activeSessionId, idx);
+                    selectLLMForSession(activeSessionId, idx, llms);
                     if (
                       bridgeStatus === "connected" ||
                       bridgeStatus === "spawning"
@@ -1469,7 +1483,7 @@ function App() {
             console.info("[palette] switch llm: no active session, idx=", idx);
             return;
           }
-          selectLLMForSession(activeSessionId, idx);
+          selectLLMForSession(activeSessionId, idx, llms);
           // Same relaxed gate as MainView's onSelectLLM — allow during
           // spawning so users don't get silent drops in the cold-start
           // window. set_llm remains best-effort if no live bridge appears.

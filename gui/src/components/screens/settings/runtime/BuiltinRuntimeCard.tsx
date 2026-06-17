@@ -23,7 +23,7 @@ export function BuiltinRuntimeCard({
 }) {
   const appCopy = useCopy();
   const copy = appCopy.settings.runtime;
-  const active = value === "managed";
+  const active = value === "galley_native";
   const canActivate =
     !active &&
     hasManagedRuntimeConfigured &&
@@ -31,10 +31,10 @@ export function BuiltinRuntimeCard({
     !!onActivate;
   const needsModel = !hasManagedRuntimeConfigured;
   const detail = active
-    ? copy.usingBundledGA
+    ? copy.usingGalleyNative
     : needsModel
-      ? copy.needsModel
-      : copy.bundledReady;
+      ? copy.galleyNativeNeedsModel
+      : copy.galleyNativeReady;
 
   return (
     <div>
@@ -55,7 +55,7 @@ export function BuiltinRuntimeCard({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[13px] font-medium text-ink">
-                  {copy.bundledGA}
+                  {copy.galleyNative}
                 </span>
                 <span className="rounded-sm bg-brand-soft px-1.5 py-px text-[10.5px] font-medium text-brand-strong">
                   {copy.recommended}
@@ -87,7 +87,7 @@ export function BuiltinRuntimeCard({
                 disabled={!canActivate}
                 onClick={onActivate}
               >
-                {copy.switchToBundledGA}
+                {copy.switchToGalleyNative}
               </Button>
             )
           )}

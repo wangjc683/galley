@@ -3,8 +3,8 @@
 Design documents for `galley_native`: GenericAgent's Rust semantic port plus
 Galley's product-owned native runtime kernel.
 
-These documents are planning artifacts. They do not imply runtime, schema, or
-behavior changes until an implementation slice explicitly lands them.
+These documents began as planning artifacts. The implementation status below
+records which runtime, schema, and behavior slices have explicitly landed.
 
 ## Read Order
 
@@ -166,8 +166,8 @@ behavior changes until an implementation slice explicitly lands them.
   [devlog](../devlog/2026-06-17-galley-native-slice-8-morphling-mode.md).
 - Slice 9A landed the parity contract checkpoint on 2026-06-17:
   the parity scenario manifest defines scenario IDs, harness layers,
-  beta/default/support gates, pass signals, and accepted variance before
-  native is exposed as opt-in beta.
+  dogfood/default/support gates, pass signals, and accepted variance before
+  native becomes the v0.3.0 built-in default.
   [devlog](../devlog/2026-06-17-galley-native-slice-9a-parity-contract.md).
 - Slice 9B landed the first native deterministic parity anchors on 2026-06-17:
   native runtime tests now expose P01, P03, P04, P05, P06, P07, P09, P11, P12,
@@ -271,7 +271,7 @@ synthesis in the master session. Morphling can now be launched as a hidden
 native Goal proposal template that enforces target locking, same-test evidence,
 component strategy, safety boundaries, and disabled capability-pack candidate
 output. The parity scenario manifest now defines what evidence is required
-before native can become opt-in beta or the new-user default. The first native
+before native can become the v0.3.0 built-in default. The first native
 deterministic parity anchors are executable with `cargo test` filters, and
 Slice 9C locks the schema v1 CLI/Supervisor compatibility path for hidden native
 runtime values and watch events. Slice 9D-B adds a hidden local fixture

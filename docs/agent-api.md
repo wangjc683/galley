@@ -85,8 +85,8 @@ mislead. SOPs branch per command:
 | Command                          | Possible `dispatch` values                         |
 | -------------------------------- | -------------------------------------------------- |
 | `session send`                   | `dispatched` / `persisted_only`                    |
-| `session approval-response`      | hidden native `completed_native_approval`          |
-| `session new`                    | `dispatched` / hidden native `completed_native` (managed/external exit 5 if runner cannot start/send) |
+| `session approval-response`      | native `completed_native_approval`                 |
+| `session new`                    | `dispatched` / native `completed_native` (managed/external exit 5 if runner cannot start/send) |
 | `session btw`                    | `dispatched` (only — exit 5 on no bridge)          |
 | `session stop`                   | `abort_sent` / `already_stopped`                   |
 | `llm set`                        | `dispatched` / `persisted_only`                    |
@@ -106,10 +106,10 @@ For NDJSON stream-end frames on `session watch` (§5.5b),
 | `socket_closed`      | Watch socket closed without a stream-end frame   |
 | `no_live_sessions`   | Project follow found no live stream output       |
 | `all_live_sessions_ended` | Project follow consumed all live subscriptions |
-| `native_run_complete` | Hidden native turn or approval response completed |
-| `native_waiting_user` | Hidden native `ask_user` is waiting for user input |
-| `native_waiting_approval` | Hidden native risky tool call is waiting for approval |
-| `native_runtime_error` | Hidden native model/runtime failed before completion |
+| `native_run_complete` | Native turn or approval response completed |
+| `native_waiting_user` | Native `ask_user` is waiting for user input |
+| `native_waiting_approval` | Native risky tool call is waiting for approval |
+| `native_runtime_error` | Native model/runtime failed before completion |
 
 ### 1.2 Schema pinning
 
@@ -244,7 +244,7 @@ These are stable identifiers — agents pattern-match on them:
 | `schema_mismatch`  | Client's `schemaVersion` != server's accepted version                |
 | `not_implemented`  | Command name reserved but no handler wired (transitional state)     |
 | `idle_timeout`     | Connection sat idle past 90s — server politely closed                |
-| `session_occupied` | Hidden native session is already running; retry later or copy-to-native |
+| `session_occupied` | Native session is already running; retry later or copy-to-native |
 | `internal`         | Unexpected server failure                                            |
 
 The CLI maps each tag onto the §3 exit code table when surfacing the
@@ -317,7 +317,7 @@ one `SessionBrief` per line.
 
 | Flag         | Type   | Default      | Notes                                                                                             |
 | ------------ | ------ | ------------ | ------------------------------------------------------------------------------------------------- |
-| `--runtime`  | enum   | `current`    | `current` follows the GUI's active runtime; `all` is explicit cross-runtime listing; `galley-native` is hidden and requires `GALLEY_NATIVE_EXPERIMENTAL=1` |
+| `--runtime`  | enum   | `current`    | `current` follows the GUI's active runtime; `all` is explicit cross-runtime listing; `galley-native` is a first-class runtime value |
 | `--project`  | string | (unset)      | restrict to one project id                                                                        |
 | `--status`   | string | (unset)      | one of `idle / connecting / running / waiting_approval / error / completed / cancelled / archived` |
 | `--archived` | bool   | false        | return only archived sessions                                                                     |
@@ -353,9 +353,9 @@ $ galley sessions list --project=proj_demo
 | `selectedLlmIndex` | int?           | legacy per-session LLM index, when set; retained for bridge compatibility          |
 | `selectedLlmKey`  | string?         | stable per-session LLM identity: managed model id or external GA raw LLM name      |
 | `selectedLlmDisplayName` | string?   | cached display name for the persisted LLM selection                                |
-| `runtimeKind`     | string enum     | `managed` / `external` / hidden `galley_native`; product-facing alias for CLI callers |
+| `runtimeKind`     | string enum     | `managed` / `external` / `galley_native`; product-facing alias for CLI callers |
 | `runtimeLabel`    | string          | `Galley` / `Attached GenericAgent`                                                 |
-| `gaRuntimeKind`   | string enum     | `managed` / `external` / hidden `galley_native`; legacy runtime ownership projection captured at session creation |
+| `gaRuntimeKind`   | string enum     | `managed` / `external` / `galley_native`; legacy runtime ownership projection captured at session creation |
 | `gaRuntimeId`     | string?         | stable runtime id for future multi-runtime support                                 |
 | `promptProfile`   | string?         | managed prompt profile id, when applied                                            |
 
@@ -369,7 +369,7 @@ asks for all runtimes.
 
 | Flag        | Default   | Notes                                                         |
 | ----------- | --------- | ------------------------------------------------------------- |
-| `--runtime` | `current` | runtime scope: current GUI context, managed, external, hidden `galley-native`, or all |
+| `--runtime` | `current` | runtime scope: current GUI context, managed, external, `galley-native`, or all |
 | `--all`     | false     | include archived sessions in the scan; does not change runtime scope |
 
 Example:
@@ -469,15 +469,15 @@ Response shape:
 | Field      | Type          | Notes                                                                             |
 | ---------- | ------------- | --------------------------------------------------------------------------------- |
 | `message`  | `MessageBrief`| The persisted row, including server-assigned `id` + `createdAt`                   |
-| `session`  | `SessionBrief`? | Present for hidden native sessions after the native turn completes, waits for user input, or waits for approval. |
-| `assistantMessage` | `MessageBrief`? | Present for hidden native sessions after the native assistant message is persisted. |
-| `dispatch` | string enum   | `"dispatched"` if the managed/external runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned); hidden native returns `"completed_native"`. |
+| `session`  | `SessionBrief`? | Present for native sessions after the native turn completes, waits for user input, or waits for approval. |
+| `assistantMessage` | `MessageBrief`? | Present for native sessions after the native assistant message is persisted. |
+| `dispatch` | string enum   | `"dispatched"` if the managed/external runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned); native returns `"completed_native"`. |
 
 **Semantics**: managed/external is fire-and-forget. The CLI returns as soon as
 the message is persisted; it does **not** wait for the runner to complete the
-agent turn. Hidden native currently runs the Rust-native turn inline and returns
+agent turn. Native runs the Rust-native turn inline and returns
 after that native turn completes, enters `ask_user` waiting state, or pauses on
-a risky tool approval. Since Slice 4B2, a hidden native non-stream turn that
+a risky tool approval. Since Slice 4B2, a native non-stream turn that
 auto-executes `file_read` can make one continuation model request and persist
 that continuation as `assistantMessage.finalAnswer`. Pair with
 `galley session watch <id>` if you need to see the resulting events. See [B2
@@ -489,15 +489,14 @@ playbook running note N34] for the managed/external rationale.
 agent identity.
 
 Exit codes: `0` success / `3 not_found` (session missing) /
-`2 invalid_args` (session archived, malformed args, hidden native
+`2 invalid_args` (session archived, malformed args, native
 `session_occupied`) /
 `4 db_unavailable` (Galley Core not running).
 
 ### 5.5a2 · `galley session copy-to-native <id> [--supervisor=<x>] [--reason=<y>]`
 
-**Write command** — creates a new hidden `galley_native` session from an
-existing session's visible conversation context. Requires
-`GALLEY_NATIVE_EXPERIMENTAL=1` and a running Galley Core socket.
+**Write command** — creates a new `galley_native` session from an existing
+session's visible conversation context. Requires a running Galley Core socket.
 
 This is the safe migration / copy-and-continue path. The source session is not
 modified, archived, stopped, or moved.
@@ -549,19 +548,19 @@ Semantics:
 - Does not automatically run the model. Continue by sending the next user turn
   to the new session.
 
-Exit codes: `0` success / `2 invalid_args` (native gate off or malformed args) /
+Exit codes: `0` success / `2 invalid_args` (malformed args) /
 `3 not_found` (source session missing) / `4 db_unavailable` (Galley Core not
 running).
 
 ### 5.5a3 · `galley session approval-response <id> <approval_id> <decision> [--supervisor=<x>] [--reason=<y>]`
 
-**Write command** — responds to a pending hidden native tool approval. This is
+**Write command** — responds to a pending native tool approval. This is
 currently scoped to `galley_native` sessions. Managed/external GA approvals keep
 using the existing GUI / runner IPC path.
 
 | Argument / Flag  | Notes                                                                 |
 | ---------------- | --------------------------------------------------------------------- |
-| `id`             | Session id. The session must be a hidden native session.              |
+| `id`             | Session id. The session must be a native session.                     |
 | `approval_id`    | Pending approval id from the native `approval_pending` event / tool event row. |
 | `decision`       | `allow_once`, `deny`, `always_allow_project`, or `always_allow_global`. |
 | `--supervisor`   | Optional supervisor label for audit origin.                           |
@@ -599,7 +598,7 @@ Response shape:
 | `approvalId` | string         | The resolved approval id.                                |
 | `decision`   | string         | The accepted decision value.                             |
 | `toolResult` | object         | Native tool result payload written onto the assistant turn. |
-| `assistantMessage` | `MessageBrief`? | Present when hidden native continues after an approved tool and updates the assistant turn. |
+| `assistantMessage` | `MessageBrief`? | Present when native continues after an approved tool and updates the assistant turn. |
 | `dispatch`   | string enum    | `"completed_native_approval"`.                           |
 
 Semantics:
@@ -662,19 +661,19 @@ approval not waiting) / `3 not_found` (session or approval missing) /
 
 **Subscription command** — streams runtime events on stdout (one event per
 line, NDJSON). Managed/external sessions stream live IPC events from the Python
-runner subprocess. Hidden `galley-native` sessions stream native
+runner subprocess. `galley-native` sessions stream native
 `NativeRuntimeEvent` frames from the Core-owned native event bus.
 
 The connection stays open until either:
 
 - the subprocess exits (server sends `{"stream":"end","reason":"subprocess_exited"}` then closes), or
-- the hidden native stream closes (native sessions send `{"stream":"end","reason":"native_run_complete"}`), or
-- the hidden native stream waits for human input after `ask_user` (native sends `{"stream":"end","reason":"native_waiting_user"}`), or
-- the hidden native stream waits for a tool approval (native sends `{"stream":"end","reason":"native_waiting_approval"}`), or
+- the native stream closes (native sessions send `{"stream":"end","reason":"native_run_complete"}`), or
+- the native stream waits for human input after `ask_user` (native sends `{"stream":"end","reason":"native_waiting_user"}`), or
+- the native stream waits for a tool approval (native sends `{"stream":"end","reason":"native_waiting_approval"}`), or
 - the client sends SIGINT (Ctrl-C) / the process exits
 
 Requires Galley Core to be running. Managed/external sessions require a live
-runner for the target session. Hidden native sessions require a same-process
+runner for the target session. Native sessions require a same-process
 native event stream for the target session; the Slice 2 bus is not persisted
 across Core restart.
 
@@ -694,7 +693,7 @@ For managed/external sessions, the `data` payload mirrors the runner ↔ Galley
 Core IPC event shape defined in [`docs/ipc-protocol.md`](./ipc-protocol.md)
 §4 — same `kind` discriminator and per-event field set.
 
-For hidden native sessions, the `data` payload is the internal native event
+For native sessions, the `data` payload is the internal native event
 shape and currently emits: `runtime_ready`, `turn_start`, `turn_progress`,
 optional Slice 4A tool-control-plane events (`tool_pending`,
 `approval_pending`, `approval_resolved`, `tool_start`, `tool_progress`,
@@ -705,40 +704,40 @@ model/selection failures emit `runtime_error` and close with
 Schema v1 compatibility rule: native stream frames are additive. Supervisor
 callers may parse only `stream`, `requestId`, `data.kind`, `data.sessionId`,
 and end-frame `reason`, then ignore unknown event fields. `runtimeKind:
-"galley_native"` is a valid hidden runtime value in the same v1 shape that also
+"galley_native"` is a valid runtime value in the same v1 shape that also
 keeps the legacy `gaRuntimeKind` projection for older callers.
 
 Native tool events started as Slice 4A deterministic stubs. As of Slice 4B /
-4C2, hidden native `file_read`, `file_patch`, `file_write`, `code_run`,
+4C2, native `file_read`, `file_patch`, `file_write`, `code_run`,
 `web_scan`, and approval-gated `web_execute_js` can execute inside the Project
 workspace, approval policy, and Browser Control bridge described in
 [Galley Native](./galley-native/README.md). Memory, Goal, and Morphling side
 effects remain disabled or stubbed until later slices.
 
-For hidden native browser tools, failed `tool_end.content` may include a
+For native browser tools, failed `tool_end.content` may include a
 `recovery` JSON object with a stable `status` such as `host_unavailable`,
 `connected_no_tabs`, or `not_connected`, plus a human-actionable next step. This
 is currently content-level guidance, not a new event schema field.
 
-As of the Slice 4 completion checkpoint, hidden native's file/code/browser
+As of the Slice 4 completion checkpoint, native's file/code/browser
 tool-control plane is considered closed for the Slice 4 boundary. Durable
 memory/capability updates, Goal Hive, Morphling, provider-native tool-choice
 wiring, durable allow-policy persistence, and background/live approval
 execution remain later-slice work.
 
-Since Slice 5A, hidden native `update_working_checkpoint` is a real
+Since Slice 5A, native `update_working_checkpoint` is a real
 session-local tool. Successful checkpoint results are persisted in the
 assistant turn's `tool_results`, keep `sideEffectsPerformed = false`, can make
 one continuation model request, and are injected as compact context into later
 native model turns. This is not durable memory.
 
-Since Slice 5C, hidden native `file_read` can also read read-only `memory://`
+Since Slice 5C, native `file_read` can also read read-only `memory://`
 resources pre-rendered by Galley Core for global and active Project memory.
 These reads keep the existing tool-result shape and do not require approval.
 `start_long_term_update`, automatic durable memory writes, capability writes,
 and memory inspect/undo UI remain later Slice 5 work.
 
-For hidden native `code_run`, `tool_progress` can include additive output fields
+For native `code_run`, `tool_progress` can include additive output fields
 before `tool_end`:
 
 - `stream`: `"stdout"` or `"stderr"`;
@@ -750,13 +749,13 @@ trace that `session.watch` and GUI projection consume. They are ordered before
 `tool_end`, but they are not yet a guarantee of true live streaming while
 `session.approval_response` itself is still executing.
 
-When the selected hidden native OpenAI-compatible or Anthropic-compatible
+When the selected native OpenAI-compatible or Anthropic-compatible
 managed model has `"stream": true` in advanced options, `turn_progress` can
 appear as multiple delta events with `source: "model_stream"`. Non-stream
 native model turns still emit one final `turn_progress` with `source: "model"`.
 
 **No durable backlog support yet.** Managed/external subscribers see events
-from subscribe-time forward only. Hidden native subscribers can replay the
+from subscribe-time forward only. Native subscribers can replay the
 same-process native event trace, but this is not a persisted event log and does
 not survive Core restart. Catching up on recent transcript history still
 requires `galley session show <id> --tail=N` first. A `--from=<event-index>`
@@ -872,7 +871,7 @@ startup as the stronger signal").
 **one SQLite transaction**. Managed/external runtimes then start a Python runner
 and dispatch the first task; runner spawn/dispatch failures surface as
 `runner_error` (exit 5) so agents know the delegated task did not actually
-start. Hidden `galley-native` runs a Rust-native no-tool turn instead of
+start. `galley-native` runs a Rust-native turn instead of
 Python: it uses the first usable OpenAI-compatible API-key managed model, or an
 explicit native `--llm` selection, and falls back to the Slice 2 mock worker
 when no supported model is configured.
@@ -880,8 +879,8 @@ when no supported model is configured.
 | Flag           | Default                              | Notes                                                                                          |
 | -------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | `--project`    | (none → ungrouped)                   | Project id. Invalid id → `invalid_args`.                                                       |
-| `--llm`        | (none → runtime default)             | LLM display name (case-insensitive). Resolved against the runtime's model source. Hidden native resolves managed model display names, model names, or ids; Slice 3 supports OpenAI-compatible and Anthropic-compatible API-key models. |
-| `--runtime`    | `current`                            | Follows GUI active runtime by default. `managed` / `external` are explicit cross-runtime writes. Hidden `galley-native` requires `GALLEY_NATIVE_EXPERIMENTAL=1` and currently runs a no-tool native model/mock turn. |
+| `--llm`        | (none → runtime default)             | LLM display name (case-insensitive). Resolved against the runtime's model source. Native resolves managed model display names, model names, or ids; Slice 3 supports OpenAI-compatible and Anthropic-compatible API-key models. |
+| `--runtime`    | `current`                            | Follows GUI active runtime by default. `galley-native` is the v0.3 built-in default; `managed` / `external` are explicit cross-runtime writes. |
 | `--supervisor` | (none → `origin.via = cli`)          | Supervisor label. Sets `origin.via = supervisor` on the session row + the first message.       |
 | `--reason`     | (none)                               | Free-text rationale on `origin.reason`.                                                        |
 
@@ -899,8 +898,8 @@ Response:
 | ---------- | -------------- | ------------------------------------------------------------------------------------------------------ |
 | `session`  | `SessionBrief` | Newly-created row. `title` is the seed `新对话`; the bridge derives a better one after the first turn. |
 | `message`  | `MessageBrief` | The persisted first user message.                                                                      |
-| `assistantMessage` | `MessageBrief`? | Present for hidden native sessions after the native turn completes. Since Slice 4B2/4B7, tool-result continuations can update the final answer here. |
-| `dispatch` | string enum    | `"dispatched"` for managed/external runner success; hidden native returns `"completed_native"`. Runner/model start/send failure returns exit 5 instead of a success envelope. |
+| `assistantMessage` | `MessageBrief`? | Present for native sessions after the native turn completes. Since Slice 4B2/4B7, tool-result continuations can update the final answer here. |
+| `dispatch` | string enum    | `"dispatched"` for managed/external runner success; native returns `"completed_native"`. Runner/model start/send failure returns exit 5 instead of a success envelope. |
 | `warning`  | object?        | Present when the caller explicitly writes to a non-current runtime.                                  |
 
 Exit codes: `0` success / `2 invalid_args` (empty `task`, unknown
@@ -1258,7 +1257,7 @@ cache) / `3 not_found` (session id) / `4 db_unavailable` /
 **Goal V1** is Galley's headless autonomous Hive surface. Galley Core owns the
 Goal state, Project binding, task board, and event stream. Managed/external
 GenericAgent runtimes participate only as ordinary Galley child sessions, and
-hidden `galley_native` participates as native Galley sessions owned by Core.
+`galley_native` participates as native Galley sessions owned by Core.
 This surface does **not** call GA native `/hive`, start GA BBS, or write external
 GA `memory/`, SOP, config, or `temp/goal_state.json`.
 
@@ -1271,18 +1270,18 @@ surface.
 Creates a pending conversational-confirmation proposal. It does **not** start
 work.
 
-Hidden `galley-native` requires `GALLEY_NATIVE_EXPERIMENTAL=1`. In Slice 7 it
-uses the native Goal Hive minimum loop: internal native master planning context,
-controller-owned task/result/deliverable materialization for native workers,
-and native final synthesis back to the master session. Managed and external
-remain the stable/default Goal runtimes.
+`galley-native` uses the native Goal Hive minimum loop: internal native master
+planning context, controller-owned task/result/deliverable materialization for
+native workers, and native final synthesis back to the master session. In
+v0.3, built-in/current Goal launches default to native; managed and external
+remain explicit compatibility choices.
 
 ```bash
 $ galley goal propose "review and fix flaky release checks" \
   --supervisor=ga-wechat-bot \
   --reason="user asked to start a Goal"
 {"id":"gprop_...","objective":"review and fix flaky release checks",
- "budgetSeconds":1800,"workerLimit":3,"runtimeKind":"managed",
+ "budgetSeconds":1800,"workerLimit":3,"runtimeKind":"galley_native",
  "writeMode":"autonomous","status":"awaiting_confirmation",
  "internalConfirmToken":"gtok_...","confirmationPhrase":"确认启动 Goal",
  "expiresAt":"2026-06-04T12:34:56Z",...}
@@ -1300,9 +1299,9 @@ without allowing oversized hives.
 
 #### `galley goal morphling "<target>" [--objective=<text>] [--test=<evidence>]... [--strategy=decide|call|rewrite|discard] [--output=report|capability-pack-candidate|wrapper|rewrite-artifact] [--project=<id>] [--budget-minutes=30] [--workers=3] [--write-mode=autonomous|read-only] [--expires-minutes=10]`
 
-Creates a hidden `galley_native` Morphling Goal proposal. It does **not** start
-work and still requires the normal Goal confirmation/run path. The command
-requires `GALLEY_NATIVE_EXPERIMENTAL=1`.
+Creates a hidden Morphling Goal proposal that uses `galley_native`. It does
+**not** start work and still requires the normal Goal confirmation/run path. The
+command itself remains hidden while the Morphling product surface is dogfooded.
 
 Morphling is a Goal mode, not a low-level model tool. The generated objective
 template asks native Goal workers to lock the target source/scope, extract
@@ -1315,7 +1314,7 @@ protected-asset reproduction as a strategy.
 Example:
 
 ```bash
-$ GALLEY_NATIVE_EXPERIMENTAL=1 galley goal morphling "toy-cli" \
+$ galley goal morphling "toy-cli" \
   --objective "Absorb only the command parsing behavior" \
   --test "toy-cli --help exits 0" \
   --test "toy-cli greet JC prints greeting" \
@@ -1346,7 +1345,7 @@ planning user/assistant/tool turns are persisted as `visibility: "internal"` for
 audit and context, but ordinary session reads, GUI rendering, and search exclude
 them by default.
 
-For hidden `galley_native` Slice 7 Goals, master planning context is also
+For `galley_native` Slice 7 Goals, master planning context is also
 persisted as internal-only, but the controller may seed/fallback task-board
 work itself instead of waiting for the native model to mutate Goal state. Native
 worker answers are then materialized by the controller into task completion,

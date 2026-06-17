@@ -524,7 +524,7 @@ fn p01_no_tool_answer(generated_at: &str, galley_commit: &str) -> ParityReport {
         ),
         runtime(
             "galley_native",
-            "GALLEY_NATIVE_EXPERIMENTAL=1 galley session new --runtime galley-native \"Summarize the release note in one sentence.\"",
+            "galley session new --runtime galley-native \"Summarize the release note in one sentence.\"",
             &[
                 "runtime_ready",
                 "turn_start",
@@ -582,7 +582,7 @@ fn p03_code_run(generated_at: &str, galley_commit: &str) -> ParityReport {
         ),
         runtime(
             "galley_native",
-            "GALLEY_NATIVE_EXPERIMENTAL=1 galley session new --runtime galley-native \"Use code to count rows in fixture.csv.\"",
+            "galley session new --runtime galley-native \"Use code to count rows in fixture.csv.\"",
             &[
                 "runtime_ready",
                 "turn_start",
@@ -642,7 +642,7 @@ fn p04_file_edit(generated_at: &str, galley_commit: &str) -> ParityReport {
         ),
         runtime(
             "galley_native",
-            "GALLEY_NATIVE_EXPERIMENTAL=1 galley session new --runtime galley-native \"Patch notes.txt in the temp workspace.\"",
+            "galley session new --runtime galley-native \"Patch notes.txt in the temp workspace.\"",
             &[
                 "runtime_ready",
                 "turn_start",
@@ -695,7 +695,7 @@ fn p08_browser_control(generated_at: &str, galley_commit: &str) -> ParityReport 
         ),
         runtime(
             "galley_native",
-            "GALLEY_NATIVE_EXPERIMENTAL=1 galley session new --runtime galley-native \"Inspect the safe browser fixture page.\"",
+            "galley session new --runtime galley-native \"Inspect the safe browser fixture page.\"",
             &["runtime_ready", "turn_start", "tool_pending", "tool_end", "run_complete"],
             &[tool("web_scan", "blocked", "none", false)],
             "Fixture report does not launch CDP or a safe browser page.",
@@ -783,7 +783,7 @@ fn p18_failure_recovery(generated_at: &str, galley_commit: &str) -> ParityReport
         ),
         runtime(
             "galley_native",
-            "GALLEY_NATIVE_EXPERIMENTAL=1 galley session new --runtime galley-native \"Use unavailable browser state.\"",
+            "galley session new --runtime galley-native \"Use unavailable browser state.\"",
             &[
                 "runtime_ready",
                 "turn_start",
@@ -835,7 +835,7 @@ fn p19_managed_fallback(generated_at: &str, galley_commit: &str) -> ParityReport
         ),
         runtime(
             "galley_native",
-            "GALLEY_NATIVE_EXPERIMENTAL=1 galley session new --runtime galley-native \"Continue after native gap.\"",
+            "galley session new --runtime galley-native \"Continue after native gap.\"",
             &["runtime_ready", "turn_start", "tool_error", "turn_end", "run_complete"],
             &[],
             "Native data remains readable after the gap; fallback is operator-selected, not automatic.",
@@ -855,9 +855,9 @@ fn p19_managed_fallback(generated_at: &str, galley_commit: &str) -> ParityReport
         vec![
             accepted_gap(
                 "outcome",
-                "Opt-in beta fallback is manual: the operator can keep using managed while native data remains readable.",
-                "Allowed only while native is hidden behind the experimental gate.",
-                "Before default-on, fallback must be clearer in product surfaces and troubleshooting.",
+                "Fallback is manual: the operator can keep using managed while native data remains readable.",
+                "Allowed during v0.3 dogfood because Settings exposes an explicit legacy managed fallback.",
+                "Before public release, fallback must be clear in product surfaces and troubleshooting.",
             ),
             accepted_gap(
                 "recovery",

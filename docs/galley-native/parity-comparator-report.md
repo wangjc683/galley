@@ -30,7 +30,7 @@ or clear safe integration paths:
 | P08 | Browser Control is product-critical and failure-prone | Compare ready/unavailable states, safe scan/JS result, recovery hints |
 | P14 | Copy-to-native is the safest migration path | Compare source immutability and copied visible context |
 | P18 | Failure recovery determines user trust | Compare next-step guidance for missing model/workspace/browser |
-| P19 | Fallback keeps opt-in beta reversible | Compare managed usability and data readability after native gap |
+| P19 | Fallback keeps default switch reversible | Compare managed usability and data readability after native gap |
 
 Do not start with Goal Hive or Morphling in 9D. Those need dogfood evidence in
 9E before semantic comparison can be trusted.
@@ -135,7 +135,7 @@ the public Agent API.
     {
       "dimension": "eventRhythm",
       "reason": "Native emits runtime_ready/run_complete around the same workflow.",
-      "phaseLimit": "Allowed for opt-in beta because stream fields are additive.",
+      "phaseLimit": "Allowed for dogfood because stream fields are additive.",
       "followUp": "No action unless Supervisor dogfood finds parser friction."
     }
   ],

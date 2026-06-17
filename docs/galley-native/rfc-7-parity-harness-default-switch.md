@@ -10,8 +10,8 @@
 
 ## Decision
 
-`galley_native` should become the default built-in runtime only after it passes
-a parity harness and dogfood gates.
+`galley_native` should become the v0.3.0 default built-in runtime only after it
+passes a parity harness and dogfood gates.
 
 Parity does not mean identical model text. It means native can complete the
 same classes of work with the same or better product behavior:
@@ -26,7 +26,8 @@ same classes of work with the same or better product behavior:
 - error recovery;
 - user-visible events.
 
-Managed GA remains the fallback until native proves replacement quality.
+Managed GA remains the Advanced fallback until native proves release-quality
+replacement behavior.
 
 ## Why This Matters For Users
 
@@ -226,15 +227,16 @@ Slice 9 is split into smaller implementation slices:
 | 9C | Prove CLI/Supervisor schema and event compatibility |
 | 9D | Add managed-vs-native semantic comparator |
 | 9E | Record dogfood evidence and troubleshooting |
-| 9F | Expose opt-in beta with tested managed fallback |
+| 9F | Expose dogfood Settings path with tested managed fallback |
 
-The visible Settings opt-in belongs to 9F, not the beginning of Slice 9.
+The visible Settings dogfood/default-switch path belongs to 9F, not the
+beginning of Slice 9.
 The Slice 9D comparator report contract lives in
 [Parity Comparator Report](./parity-comparator-report.md).
 
 ## Default Switch Gates
 
-Do not switch new users to native until:
+Do not switch built-in users to native until:
 
 - all unit/mock/integration gates pass;
 - required scenarios pass or have explicit accepted gaps;

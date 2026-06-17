@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { isBuiltInRuntimeKind } from "@/lib/runtime-kind";
 import { useBrowserControlStore } from "@/stores/browser-control";
 import type { RuntimeKind } from "@/types/session";
 
@@ -12,7 +13,7 @@ export function useBrowserControlStartupEffect(
   const probeBrowserControl = useBrowserControlStore((s) => s.probe);
 
   useEffect(() => {
-    if (activeRuntimeKind !== "managed") return;
+    if (!isBuiltInRuntimeKind(activeRuntimeKind)) return;
     let cancelled = false;
     void (async () => {
       const layout = await ensureBrowserControlLayout();

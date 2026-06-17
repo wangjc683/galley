@@ -13,6 +13,7 @@ import {
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
 import { logPerf, perfNow } from "@/lib/perf";
+import { runtimeUsesManagedModelConfig } from "@/lib/runtime-kind";
 import { useManagedModelsStore } from "@/stores/managed-models";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
@@ -281,7 +282,7 @@ function currentLLMSelectionForNewSession(
   activeSessionId: string | undefined,
 ): LlmSelectionSnapshot | undefined {
   const runtimeState = useRuntimeStore.getState();
-  if (runtimeKind === "managed") {
+  if (runtimeUsesManagedModelConfig(runtimeKind)) {
     return currentSelectionFromLLMs(
       managedModelsToLLMs(
         useManagedModelsStore.getState().models,
@@ -515,17 +516,19 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     const runtimeKind =
       session?.gaRuntimeKind ?? usePrefsStore.getState().activeRuntimeKind;
     const managedSeedLLMs =
-      runtimeKind === "managed"
+      runtimeUsesManagedModelConfig(runtimeKind)
         ? managedModelsToLLMs(useManagedModelsStore.getState().models)
         : undefined;
     runtimeStore.ensureRuntime(id, {
       persistedIndex: session?.selectedLlmIndex,
       persistedKey: session?.selectedLlmKey,
       persistedDisplayName:
-        runtimeKind === "managed" ? undefined : session?.selectedLlmDisplayName,
+        runtimeUsesManagedModelConfig(runtimeKind)
+          ? undefined
+          : session?.selectedLlmDisplayName,
       cachedLLMs: managedSeedLLMs ?? runtimeStore.cachedLLMs,
       cachedDisplayName:
-        runtimeKind === "managed"
+        runtimeUsesManagedModelConfig(runtimeKind)
           ? currentLLMDisplayName(managedSeedLLMs ?? [])
           : runtimeStore.cachedLLMDisplayName,
     });

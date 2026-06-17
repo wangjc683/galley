@@ -3,8 +3,7 @@
 Status: Slice 9A contract checkpoint, 2026-06-17.
 
 This document defines what evidence is required before `galley_native` can move
-from hidden dogfood to opt-in beta, and later from opt-in beta to the default
-built-in runtime.
+from hidden dogfood to the v0.3.0 default built-in runtime.
 
 It does not implement tests, runtime behavior, UI, telemetry, or fallback
 routing.
@@ -77,10 +76,10 @@ Do not compare:
 
 | Gate | Required Before | Meaning |
 |---|---|---|
-| `beta-blocker` | Visible Settings opt-in | Must pass or have a documented accepted gap before advanced users can opt in |
-| `default-blocker` | New-user default switch | Must pass without user-hostile gaps before native becomes default |
+| `beta-blocker` | Maintainer dogfood / Settings experiment | Must pass or have a documented accepted gap before native is shown outside hidden routes |
+| `default-blocker` | Built-in-user default switch | Must pass without user-hostile gaps before native becomes default |
 | `dogfood-evidence` | Default switch review | Needs real-use evidence; automation alone is not enough |
-| `support-readiness` | Opt-in beta and default switch | Error messages, docs, and fallback path must guide the next action |
+| `support-readiness` | Dogfood and default switch | Error messages, docs, and fallback path must guide the next action |
 
 No scenario may be marked passed because "native compiled" or because one
 manual demo succeeded.
@@ -155,7 +154,8 @@ report shape in [Parity Comparator Report](./parity-comparator-report.md).
 - Slice 9C locks CLI/Supervisor event compatibility.
 - Slice 9D adds managed-vs-native scenario comparison.
 - Slice 9E records dogfood metrics and troubleshooting guidance.
-- Slice 9F exposes opt-in beta with tested managed fallback.
+- Slice 9F exposes the Settings dogfood/default-switch path with tested managed
+  fallback.
 
-New-user default switch remains Slice 10 and requires this manifest to pass at
-the required gates.
+Built-in-user default switch remains Slice 10 and requires this manifest to pass
+at the required gates.

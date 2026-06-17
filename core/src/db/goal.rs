@@ -106,7 +106,7 @@ impl SqliteGalley {
             .worker_limit
             .unwrap_or(DEFAULT_GOAL_WORKER_LIMIT)
             .clamp(MIN_GOAL_WORKER_LIMIT, MAX_GOAL_WORKER_LIMIT);
-        let runtime_kind = input.runtime_kind.unwrap_or(RuntimeKind::Managed);
+        let runtime_kind = input.runtime_kind.unwrap_or(RuntimeKind::GalleyNative);
         crate::runtime::ensure_goal_runtime_available(runtime_kind)?;
         let write_mode = input.write_mode.unwrap_or(GoalWriteMode::Autonomous);
         let expires_in_seconds = input.expires_in_seconds.unwrap_or(10 * 60).max(60);

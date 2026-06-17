@@ -38,6 +38,7 @@ const MIG_020: &str = include_str!("../migrations/020_message_attachments.sql");
 const MIG_021: &str = include_str!("../migrations/021_native_session_runtime.sql");
 const MIG_022: &str = include_str!("../migrations/022_native_memory_substrate.sql");
 const MIG_023: &str = include_str!("../migrations/023_native_goal_runtime.sql");
+const MIG_024: &str = include_str!("../migrations/024_native_default_runtime.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -46,7 +47,7 @@ async fn fresh_pool() -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023,
+        MIG_021, MIG_022, MIG_023, MIG_024,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)
@@ -117,6 +118,14 @@ async fn runtime_identity_migration_preserves_existing_attach_users() {
         .execute(&pool)
         .await
         .expect("run message visibility migration");
+    for sql in [
+        MIG_018, MIG_019, MIG_020, MIG_021, MIG_022, MIG_023, MIG_024,
+    ] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .expect("run remaining migrations");
+    }
 
     let active: String =
         sqlx::query_scalar("SELECT value FROM prefs WHERE key = 'active_runtime_kind'")
@@ -124,6 +133,71 @@ async fn runtime_identity_migration_preserves_existing_attach_users() {
             .await
             .expect("read active runtime");
     assert_eq!(active, r#""external""#);
+}
+
+#[tokio::test]
+async fn native_default_migration_promotes_only_galley_owned_state() {
+    let pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    for sql in [
+        MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
+        MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021, MIG_022, MIG_023,
+    ] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .expect("run pre-native-default migration");
+    }
+
+    sqlx::query(
+        "INSERT INTO sessions (id, title, status, turn_count, pending_approval_count, \
+            error_count, pinned, last_activity_at, created_at, updated_at, ga_runtime_kind, \
+            ga_runtime_id, prompt_profile) \
+         VALUES \
+            ('sess_managed_upgrade', 'managed', 'idle', 0, 0, 0, 0, \
+             '2026-06-17T00:00:00Z', '2026-06-17T00:00:00Z', \
+             '2026-06-17T00:00:00Z', 'managed', 'managed-default', 'galley-managed-default'), \
+            ('sess_external_keep', 'external', 'idle', 0, 0, 0, 0, \
+             '2026-06-17T00:00:01Z', '2026-06-17T00:00:01Z', \
+             '2026-06-17T00:00:01Z', 'external', 'external-default', NULL)",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed runtime rows before v0.3 migration");
+
+    sqlx::raw_sql(MIG_024)
+        .execute(&pool)
+        .await
+        .expect("run native default migration");
+
+    let active: String =
+        sqlx::query_scalar("SELECT value FROM prefs WHERE key = 'active_runtime_kind'")
+            .fetch_one(&pool)
+            .await
+            .expect("read active runtime");
+    assert_eq!(active, r#""galley_native""#);
+
+    let managed_row: (String, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT ga_runtime_kind, ga_runtime_id, prompt_profile \
+         FROM sessions WHERE id = 'sess_managed_upgrade'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read promoted managed row");
+    assert_eq!(managed_row.0, "galley_native");
+    assert!(managed_row.1.is_none());
+    assert!(managed_row.2.is_none());
+
+    let external_row: (String, Option<String>) = sqlx::query_as(
+        "SELECT ga_runtime_kind, ga_runtime_id FROM sessions WHERE id = 'sess_external_keep'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read external row");
+    assert_eq!(external_row.0, "external");
+    assert_eq!(external_row.1.as_deref(), Some("external-default"));
 }
 
 async fn seed_session(pool: &SqlitePool, id: &str, title: &str, status: &str, ts: &str) {

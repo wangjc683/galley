@@ -493,13 +493,7 @@ pub(super) async fn active_runtime_kind_inner(conn: &mut SqliteConnection) -> Re
                 message: "pref 'active_runtime_kind' must be a string".into(),
             });
         };
-        let parsed = parse_runtime_kind(kind)?;
-        if parsed != RuntimeKind::GalleyNative
-            || crate::runtime::galley_native_experimental_enabled()
-        {
-            return Ok(parsed);
-        }
-        return active_runtime_kind_fallback_inner(conn).await;
+        return parse_runtime_kind(kind);
     }
 
     active_runtime_kind_fallback_inner(conn).await
@@ -507,7 +501,7 @@ pub(super) async fn active_runtime_kind_inner(conn: &mut SqliteConnection) -> Re
 
 async fn active_runtime_kind_fallback_inner(conn: &mut SqliteConnection) -> Result<RuntimeKind> {
     // Defensive fallback for dev/test DBs that have not run migration 008:
-    // an existing GA path means attach/external, otherwise fresh managed.
+    // an existing GA path means attach/external, otherwise fresh native.
     let ga_path: Option<String> = sqlx::query_scalar(
         "SELECT json_extract(value, '$.gaPath') FROM prefs WHERE key = 'ga_config' LIMIT 1",
     )
@@ -517,7 +511,7 @@ async fn active_runtime_kind_fallback_inner(conn: &mut SqliteConnection) -> Resu
     if ga_path.as_deref().is_some_and(|s| !s.trim().is_empty()) {
         Ok(RuntimeKind::External)
     } else {
-        Ok(RuntimeKind::Managed)
+        Ok(RuntimeKind::GalleyNative)
     }
 }
 

@@ -8,7 +8,7 @@
 
 ## Position
 
-`galley_native` is Galley's future default built-in agent runtime.
+`galley_native` is Galley's v0.3.0 target default built-in agent runtime.
 
 It is not a clean-room agent experiment and not a line-by-line Rust translation
 of GenericAgent. The first version is a Rust semantic port of GenericAgent's
@@ -16,15 +16,17 @@ proven core, then a Galley-owned product kernel can evolve from that base.
 
 Runtime roles:
 
-- `galley_native`: future default runtime for built-in Galley users.
-- `managed_ga`: transition runtime. It keeps the current built-in experience
-  working until native reaches replacement quality.
+- `galley_native`: v0.3.0 target default runtime for built-in Galley users.
+- `managed_ga`: legacy Python fallback under Advanced. It keeps the current
+  built-in experience available for recovery while native dogfood reaches
+  release quality.
 - `external_ga`: advanced compatibility runtime for users who own an existing
   GenericAgent checkout. It remains non-invasive and may expose a smaller
   feature surface than native.
 
-V1 must be good enough to replace `managed_ga` as the default for new built-in
-users, while keeping `managed_ga` as a fallback during the migration window.
+V1 must be good enough to replace `managed_ga` as the default for built-in
+users in v0.3.0, while keeping `managed_ga` as an Advanced fallback during the
+migration window.
 
 ## Reference Source
 
@@ -355,8 +357,8 @@ These need dedicated follow-up design before implementation:
 - Parity harness: how to compare `managed_ga` and `galley_native` on the same
   tasks without treating non-deterministic model behavior as test failure. See
   [RFC 7: Parity Harness And Default Switch](./rfc-7-parity-harness-default-switch.md).
-- Migration path: when new users default to native, what happens to existing
-  managed sessions, and whether "copy to native" is worth a first-party action.
+- Migration path: when built-in users default to native, how existing managed
+  session metadata is migrated while Galley-owned history remains readable.
 - Safety policy: which tool classes require approval in native, which can be
   scoped to project/workspace, and how YOLO interacts with self-evolution.
 

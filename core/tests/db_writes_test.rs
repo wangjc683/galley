@@ -22,7 +22,6 @@ use galley_core_lib::db::{
     UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
 };
 use galley_core_lib::error::GalleyError;
-use galley_core_lib::managed_runtime;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 
@@ -50,6 +49,7 @@ const MIG_020: &str = include_str!("../migrations/020_message_attachments.sql");
 const MIG_021: &str = include_str!("../migrations/021_native_session_runtime.sql");
 const MIG_022: &str = include_str!("../migrations/022_native_memory_substrate.sql");
 const MIG_023: &str = include_str!("../migrations/023_native_goal_runtime.sql");
+const MIG_024: &str = include_str!("../migrations/024_native_default_runtime.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -89,7 +89,7 @@ async fn run_migrations(pool: &SqlitePool) {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023,
+        MIG_021, MIG_022, MIG_023, MIG_024,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -517,11 +517,11 @@ async fn goal_proposal_worker_limit_is_capped_at_official_hive_max() {
 }
 
 #[tokio::test]
-async fn goal_proposal_rejects_native_runtime_before_db_insert() {
+async fn goal_proposal_accepts_native_runtime() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool);
 
-    let err = galley
+    let brief = galley
         .create_goal_proposal(
             CreateGoalProposalInput {
                 objective: "Try native Goal".into(),
@@ -536,12 +536,9 @@ async fn goal_proposal_rejects_native_runtime_before_db_insert() {
             Origin::cli(None, Some("native gate test".into())),
         )
         .await
-        .expect_err("native Goal is not executable in Slice 2");
+        .expect("native Goal runtime is available");
 
-    assert!(matches!(
-        err,
-        GalleyError::InvalidArgs { message } if message.contains("galley_native runtime")
-    ));
+    assert_eq!(brief.runtime_kind, RuntimeKind::GalleyNative);
 }
 
 #[tokio::test]
@@ -994,12 +991,9 @@ async fn create_session_happy_path_persists_all_fields() {
         brief.selected_llm_display_name.as_deref(),
         Some("Claude Sonnet 4.6")
     );
-    assert!(matches!(brief.ga_runtime_kind, RuntimeKind::Managed));
+    assert!(matches!(brief.ga_runtime_kind, RuntimeKind::GalleyNative));
     assert!(brief.ga_runtime_id.is_none());
-    assert_eq!(
-        brief.prompt_profile.as_deref(),
-        Some(managed_runtime::PROMPT_PROFILE_ID)
-    );
+    assert!(brief.prompt_profile.is_none());
 }
 
 #[tokio::test]
@@ -1048,10 +1042,10 @@ async fn create_session_can_snapshot_explicit_external_runtime() {
 }
 
 #[tokio::test]
-async fn create_session_rejects_native_runtime_when_gate_disabled() {
+async fn create_session_accepts_explicit_native_runtime() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool);
-    let err = galley
+    let brief = galley
         .create_session(
             CreateSessionInput {
                 id: "sess_native_1".into(),
@@ -1067,12 +1061,10 @@ async fn create_session_rejects_native_runtime_when_gate_disabled() {
             Origin::gui(),
         )
         .await
-        .expect_err("native runtime is gated");
+        .expect("native runtime is available");
 
-    assert!(matches!(
-        err,
-        GalleyError::InvalidArgs { message } if message.contains("galley_native runtime")
-    ));
+    assert!(matches!(brief.ga_runtime_kind, RuntimeKind::GalleyNative));
+    assert!(brief.prompt_profile.is_none());
 }
 
 #[tokio::test]

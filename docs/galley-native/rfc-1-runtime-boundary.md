@@ -152,9 +152,9 @@ Recommended labels:
 | `managed` | `Galley` during migration | `Managed GenericAgent` |
 | `external` | `Attached GenericAgent` | `External GenericAgent` |
 
-This avoids forcing new users to think about implementation. During migration,
-Settings and diagnostics can expose the difference; the main session surface
-should not make runtime internals the user's first problem.
+This avoids forcing built-in users to think about implementation. During
+migration, Settings and diagnostics can expose the difference; the main session
+surface should not make runtime internals the user's first problem.
 
 ## Core Runtime Boundary
 

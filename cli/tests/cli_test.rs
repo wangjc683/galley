@@ -222,7 +222,7 @@ async fn schema_pin_mismatch_exits_2_invalid_args() {
 }
 
 #[tokio::test]
-async fn runtime_help_hides_native_experimental_value() {
+async fn runtime_help_lists_native_runtime_value() {
     let td = tempdir();
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
@@ -231,10 +231,7 @@ async fn runtime_help_hides_native_experimental_value() {
     assert_eq!(code, Some(0), "stdout: {stdout}");
     assert!(stdout.contains("managed"));
     assert!(stdout.contains("external"));
-    assert!(
-        !stdout.contains("galley-native"),
-        "native runtime should stay hidden from ordinary help: {stdout}"
-    );
+    assert!(stdout.contains("galley-native"));
 }
 
 #[tokio::test]
@@ -515,23 +512,18 @@ async fn sessions_list_defaults_to_current_runtime() {
 }
 
 #[tokio::test]
-async fn sessions_list_rejects_native_filter_when_gate_disabled() {
+async fn sessions_list_accepts_native_filter_without_env_gate() {
     let td = tempdir();
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
 
     let (stdout, code) = run_galley(&db, &["sessions", "list", "--runtime", "galley-native"]);
-    assert_eq!(code, Some(2), "stdout: {stdout}");
-    let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(payload["error"], "invalid_args");
-    assert!(payload["message"]
-        .as_str()
-        .expect("message")
-        .contains("GALLEY_NATIVE_EXPERIMENTAL"));
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    assert!(stdout.trim().is_empty(), "stdout: {stdout}");
 }
 
 #[tokio::test]
-async fn sessions_list_accepts_native_filter_when_gate_enabled() {
+async fn sessions_list_accepts_native_filter_with_legacy_env_flag() {
     let td = tempdir();
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;

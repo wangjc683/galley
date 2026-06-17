@@ -334,6 +334,7 @@ const zhCopy = {
     runtime: {
       subtitle: "Galley 使用的 GenericAgent 运行环境",
       runtimeMode: "Runtime Mode",
+      galleyNative: "Galley Native",
       bundledGA: "内置 GA",
       recommended: "推荐",
       active: "正在使用",
@@ -371,14 +372,19 @@ const zhCopy = {
       configFile: "Config file",
       more: "更多",
       connectExternalGA: "接入外部 GA",
-      galleyNativeExperimental: "Galley Native（实验）",
-      galleyNativeGateDisabled:
-        "需要用 GALLEY_NATIVE_EXPERIMENTAL=1 启动 Dev 才能切换。",
-      galleyNativeNeedsModel: "需要先配置内置模型。",
-      galleyNativeReady: "实验运行时已可切换。",
-      galleyNativeScope: "仅用于 dogfood；不会保存为下次启动默认运行时。",
+      galleyNativeNeedsModel: "需要先配置模型。",
+      galleyNativeReady: "Galley 原生 runtime 已可用",
+      galleyNativeScope:
+        "Rust 原生内核；复用 Galley 模型配置、会话历史和 Channels。",
       usingGalleyNative: "正在使用 Galley Native",
+      legacyManagedGA: "旧版内置 GA",
+      usingLegacyManagedGA: "正在使用旧版内置 GA",
+      legacyManagedNeedsModel: "需要先配置模型。",
+      legacyManagedReady: "旧版 Python managed GA 可作为备用 runtime。",
+      legacyManagedScope:
+        "高级 fallback；用于 native dogfood 遇到阻塞时临时切回。",
       switchToBundledGA: "切换到内置 GA",
+      switchToLegacyManagedGA: "切换到旧版内置 GA",
       switchToExternalGA: "切换到外部 GA",
       switchToGalleyNative: "切换到 Native",
       runningSessionsBlock: "有运行中的对话，结束后可切换运行时。",
@@ -453,8 +459,7 @@ const zhCopy = {
       modelTestCostHint: "模型测试最多 1 个输出 token",
       connectionLatency: (message: string, latencyMs: number) =>
         `${message} · ${latencyMs} ms`,
-      errorUnauthorized:
-        "401 未授权：API Key 不正确，或无权访问此模型。",
+      errorUnauthorized: "401 未授权：API Key 不正确，或无权访问此模型。",
       errorForbidden: "403 权限不足：此 Key 无权访问该服务或模型。",
       errorRateLimited: "429 请求过多：稍后重试，或检查额度和限流设置。",
       errorNotFound: "404 未找到：API 地址或模型名可能不匹配。",
@@ -581,8 +586,7 @@ const zhCopy = {
       notFor: "不适合",
       goodForText: "完全信任 Agent + 在沙盒环境工作（个人 repo / 临时虚拟机）",
       notForText: "生产代码 / 共享系统 / 不熟悉的 Agent / 敏感数据",
-      yoloIndicatorNote:
-        "顶部栏会显示 YOLO 标识，随时可一键关闭。",
+      yoloIndicatorNote: "顶部栏会显示 YOLO 标识，随时可一键关闭。",
       understandRisk: "是的，我知道在做什么",
       filePatch: "file_patch（修改文件）",
       fileWrite: "file_write（写入文件）",
@@ -634,8 +638,7 @@ const zhCopy = {
       discoveryDescription:
         "Galley 启动时把 CLI 的绝对路径写进这个文件。Galley Supervisor SOP 第一步读它来定位 galley。",
       agentSop: "Galley Supervisor SOP",
-      sopDescription:
-        "复制给你的 Agent，让它学会用 Galley 调度 sessions。",
+      sopDescription: "复制给你的 Agent，让它学会用 Galley 调度 sessions。",
       sopCapabilities: [
         "继续现有 session",
         "新开单个 session",
@@ -1169,8 +1172,7 @@ const zhCopy = {
     savedPath: "已保存路径配置",
     restartForExisting: "重启 Galley 才能让现有对话生效",
     modelConfigSaved: "模型配置已保存",
-    modelConfigSavedMessage:
-      "新对话立即生效；已启动的对话重启 Galley 后生效。",
+    modelConfigSavedMessage: "新对话立即生效；已启动的对话重启 Galley 后生效。",
     modelConfigSavedChannelsMessage: "已启用 Channels 重启后使用新模型配置。",
     modelConfigSavedChannelsSuffix: "已启用 Channels 重启后使用新模型配置。",
     restartChannels: "重启 Channels",
@@ -1200,9 +1202,10 @@ const zhCopy = {
     imageOpenFailed: "打开失败",
     imageOpenFailedMessage: "Galley 没能打开这张图片。",
     imageBlocked: "这次不能带图片",
-    imageBlockedGoal: "Goal、/btw 和回复 Agent 提问暂不支持图片。请先发送普通消息。",
+    imageBlockedGoal:
+      "Goal、/btw 和回复 Agent 提问暂不支持图片。请先发送普通消息。",
     imageBlockedExternal:
-      "图片粘贴目前只支持内置 GA。请切到内置 GA，或先移除图片。",
+      "图片粘贴目前只支持旧版内置 GA。请切到旧版内置 GA，或先移除图片。",
     toolsReinjected: "工具已重新注入",
     toolsReinjectedMessage: (count: number) =>
       `已为本对话注入 ${count} 条工具定义。`,
@@ -1261,8 +1264,7 @@ const zhCopy = {
     emptyAllAction: (count: number) => `永久删除 ${count} 个对话`,
     acknowledgeCannotUndo: "我了解此操作无法撤销",
     restoreSelectedAction: (count: number) => `恢复已选的 ${count} 个对话`,
-    deleteSelectedAction: (count: number) =>
-      `永久删除已选的 ${count} 个对话`,
+    deleteSelectedAction: (count: number) => `永久删除已选的 ${count} 个对话`,
     archiveSelected: "归档",
     pinned: "已置顶",
   },
@@ -1573,7 +1575,8 @@ const enCopy: AppCopy = {
     askAnything: "Ask anything...",
     continueConversation: "Continue this conversation...",
     replyToContinue: "Reply to continue, or choose an option above",
-    byTheWay: "Use /btw to ask alongside without interrupting the current task...",
+    byTheWay:
+      "Use /btw to ask alongside without interrupting the current task...",
     send: "Send",
     sendWithEnter: "Send · Enter",
     stop: "Stop",
@@ -1656,6 +1659,7 @@ const enCopy: AppCopy = {
     runtime: {
       subtitle: "GenericAgent runtime used by Galley",
       runtimeMode: "Runtime Mode",
+      galleyNative: "Galley Native",
       bundledGA: "Bundled GA",
       recommended: "Recommended",
       active: "Active",
@@ -1696,15 +1700,19 @@ const enCopy: AppCopy = {
       configFile: "Config file",
       more: "More",
       connectExternalGA: "Connect external GA",
-      galleyNativeExperimental: "Galley Native (experimental)",
-      galleyNativeGateDisabled:
-        "Start Dev with GALLEY_NATIVE_EXPERIMENTAL=1 to switch.",
-      galleyNativeNeedsModel: "Set up a bundled model first.",
-      galleyNativeReady: "Experimental runtime is ready to switch.",
+      galleyNativeNeedsModel: "Set up a model first.",
+      galleyNativeReady: "Galley's native runtime is ready",
       galleyNativeScope:
-        "Dogfood only; it is not saved as the default runtime for next launch.",
+        "Rust-native core; reuses Galley model config, session history, and Channels.",
       usingGalleyNative: "Using Galley Native",
+      legacyManagedGA: "Legacy bundled GA",
+      usingLegacyManagedGA: "Using legacy bundled GA",
+      legacyManagedNeedsModel: "Set up a model first.",
+      legacyManagedReady: "Legacy Python managed GA is available as fallback.",
+      legacyManagedScope:
+        "Advanced fallback for temporarily switching back during native dogfood.",
       switchToBundledGA: "Switch to bundled GA",
+      switchToLegacyManagedGA: "Switch to legacy GA",
       switchToExternalGA: "Switch to external GA",
       switchToGalleyNative: "Switch to Native",
       runningSessionsBlock:
@@ -2109,7 +2117,9 @@ const enCopy: AppCopy = {
               parts: [
                 { text: "After " },
                 { text: "Service running", emphasis: true },
-                { text: " appears, return to Feishu Open Platform to configure long connection and events." },
+                {
+                  text: " appears, return to Feishu Open Platform to configure long connection and events.",
+                },
               ],
             },
           ],
@@ -2129,7 +2139,10 @@ const enCopy: AppCopy = {
                 { text: "Open " },
                 { text: "Callback configuration", emphasis: true },
                 { text: ", set the subscription mode to " },
-                { text: "Use long connection to receive events", emphasis: true },
+                {
+                  text: "Use long connection to receive events",
+                  emphasis: true,
+                },
                 { text: ", then save." },
               ],
             },
@@ -2193,7 +2206,9 @@ const enCopy: AppCopy = {
             },
             {
               parts: [
-                { text: "If there is no reply, check long connection, events, permissions, and publishing." },
+                {
+                  text: "If there is no reply, check long connection, events, permissions, and publishing.",
+                },
               ],
             },
           ],
@@ -2554,7 +2569,7 @@ const enCopy: AppCopy = {
     imageBlockedGoal:
       "Goal, /btw, and replies to Agent questions do not support images yet. Send a normal message first.",
     imageBlockedExternal:
-      "Image paste currently works only with bundled GA. Switch to bundled GA, or remove the image.",
+      "Image paste currently works only with legacy bundled GA. Switch to legacy bundled GA, or remove the image.",
     toolsReinjected: "Tools reinjected",
     toolsReinjectedMessage: (count) =>
       `Injected ${count} tool definitions into this conversation.`,

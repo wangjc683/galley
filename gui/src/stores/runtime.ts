@@ -13,6 +13,7 @@ import { setPref } from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
 import { logPerf, perfNow } from "@/lib/perf";
+import { runtimeUsesManagedModelConfig } from "@/lib/runtime-kind";
 import {
   DEFAULT_LLM_DISPLAY_NAME,
   DEFAULT_LLMS,
@@ -184,7 +185,11 @@ interface RuntimeActions {
    * Bridge `llm_changed` will later confirm the same state when a
    * live bridge is available.
    */
-  selectLLMForSession: (sid: string, index: number) => void;
+  selectLLMForSession: (
+    sid: string,
+    index: number,
+    llmsOverride?: LLMOption[],
+  ) => void;
   /**
    * One-shot bridge spawn at app launch to capture the GA mykey.py
    * LLM list before any user session exists. Caches the list to prefs
@@ -598,7 +603,11 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
 
   selectLLMForNewSession: (index) =>
     set((state) => {
-      if (usePrefsStore.getState().activeRuntimeKind === "managed") {
+      if (
+        runtimeUsesManagedModelConfig(
+          usePrefsStore.getState().activeRuntimeKind,
+        )
+      ) {
         return { pendingLLMIndex: index };
       }
       // EmptyState has no session runtime yet, so its Composer reads
@@ -617,17 +626,21 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
       };
     }),
 
-  selectLLMForSession: (sid, index) => {
+  selectLLMForSession: (sid, index, llmsOverride) => {
     let picked: LLMOption | null = null;
     set((state) => {
       const existing = state.byId[sid];
       const shouldCache = shouldCacheLLMListForSession(sid);
+      const baseLLMs =
+        llmsOverride && llmsOverride.length > 0
+          ? llmsOverride
+          : existing?.llms?.length
+            ? existing.llms
+            : state.cachedLLMs.length > 0
+              ? state.cachedLLMs
+              : DEFAULT_LLMS;
       const selected = selectLLMInList(
-        existing?.llms?.length
-          ? existing.llms
-          : state.cachedLLMs.length > 0
-            ? state.cachedLLMs
-            : DEFAULT_LLMS,
+        baseLLMs,
         index,
       );
       if (!selected) return {};

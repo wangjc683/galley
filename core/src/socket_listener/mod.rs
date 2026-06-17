@@ -751,6 +751,7 @@ mod tests {
         include_str!("../../migrations/021_native_session_runtime.sql"),
         include_str!("../../migrations/022_native_memory_substrate.sql"),
         include_str!("../../migrations/023_native_goal_runtime.sql"),
+        include_str!("../../migrations/024_native_default_runtime.sql"),
     ];
 
     struct EnvGuard {
@@ -1307,7 +1308,7 @@ mod tests {
         let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
         let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
         let tool_answer = r#"```json
-{"tool":"start_long_term_update","arguments":{"topic":"learn approval"}}
+{"tool":"start_long_term_update","arguments":{"topic":"learn approval","risk":"high"}}
 ```"#;
         let api_base =
             start_fake_openai_server_for("Route native tool call", tool_answer.to_string()).await;
@@ -1612,7 +1613,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(progress_sources, vec!["model", "model_continuation"]);
+        assert_eq!(progress_sources, vec!["model_stream", "model_continuation"]);
         assert!(progress_deltas[0].contains("file_read"));
         assert_eq!(progress_deltas[1], final_answer);
         assert!(saw_file_read_tool_end);
@@ -2527,7 +2528,7 @@ mod tests {
         let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
         let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
         let tool_answer = r#"```json
-{"tool":"start_long_term_update","arguments":{"topic":"learn approval"}}
+{"tool":"start_long_term_update","arguments":{"topic":"learn approval","risk":"high"}}
 ```"#;
         let api_base = start_fake_openai_sequence_server(vec![
             ("Allow risky tool", tool_answer.to_string()),
@@ -3486,28 +3487,53 @@ mod tests {
                 assert!(request_lower.contains("authorization: bearer sk-native-test"));
                 assert!(request.contains("\"model\":\"gpt-test\""));
                 assert!(request.contains(expected_task));
-                assert!(request.contains("\"stream\":false"));
+                let is_stream = request.contains("\"stream\":true");
+                assert!(is_stream || request.contains("\"stream\":false"));
 
-                let body = serde_json::json!({
-                    "model": "gpt-test",
-                    "choices": [
-                        {
-                            "message": { "role": "assistant", "content": answer },
-                            "finish_reason": "stop"
+                let response = if is_stream {
+                    let event = serde_json::json!({
+                        "model": "gpt-test",
+                        "choices": [
+                            {
+                                "delta": { "content": answer },
+                                "finish_reason": "stop"
+                            }
+                        ],
+                        "usage": {
+                            "prompt_tokens": 4,
+                            "completion_tokens": 5,
+                            "total_tokens": 9
                         }
-                    ],
-                    "usage": {
-                        "prompt_tokens": 4,
-                        "completion_tokens": 5,
-                        "total_tokens": 9
-                    }
-                })
-                .to_string();
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
+                    })
+                    .to_string();
+                    let body = format!("data: {event}\n\ndata: [DONE]\n\n");
+                    format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                } else {
+                    let body = serde_json::json!({
+                        "model": "gpt-test",
+                        "choices": [
+                            {
+                                "message": { "role": "assistant", "content": answer },
+                                "finish_reason": "stop"
+                            }
+                        ],
+                        "usage": {
+                            "prompt_tokens": 4,
+                            "completion_tokens": 5,
+                            "total_tokens": 9
+                        }
+                    })
+                    .to_string();
+                    format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                };
                 socket.write_all(response.as_bytes()).await.unwrap();
             }
         });

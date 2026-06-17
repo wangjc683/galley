@@ -20,9 +20,9 @@
  *      cosmetics show the user's real GA-configured models instead
  *      of the demo placeholders before any bridge has spawned).
  *   8. Branch on active runtime config:
- *      - managed with no configured model → route to Onboarding
- *      - external with no GA path     → route to Onboarding
- *      - external configured          → warmup bridge against mykey.py
+ *      - built-in runtime with no configured model → route to Onboarding
+ *      - external with no GA path                  → route to Onboarding
+ *      - external configured                       → warmup bridge against mykey.py
  *
  * This is a pure-function module, not a store. It has no own state —
  * it orchestrates side effects across stores. Tests can drive each
@@ -39,6 +39,7 @@ import {
   getPref,
 } from "@/lib/db";
 import { pushCloseHintCopy } from "@/lib/close-hint";
+import { runtimeUsesManagedModelConfig } from "@/lib/runtime-kind";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { useManagedModelsStore } from "@/stores/managed-models";
 import { usePrefsStore } from "@/stores/prefs";
@@ -127,7 +128,9 @@ export async function hydrateApp(): Promise<void> {
   // 8. Branch on active runtime config.
   const activeRuntimeKind = usePrefsStore.getState().activeRuntimeKind;
   const needsOnboarding =
-    activeRuntimeKind === "managed" ? !hasConfiguredManagedModel : !hasGAConfig;
+    runtimeUsesManagedModelConfig(activeRuntimeKind)
+      ? !hasConfiguredManagedModel
+      : !hasGAConfig;
   if (needsOnboarding) {
     useUiStore.getState().setScreen("onboarding");
     return;

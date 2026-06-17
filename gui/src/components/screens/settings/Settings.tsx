@@ -14,6 +14,7 @@ import { SettingsShortcuts } from "@/components/screens/settings/SettingsShortcu
 import { IconButton } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import type { LanguagePreference, ResolvedLanguage } from "@/lib/language";
+import { isBuiltInRuntimeKind } from "@/lib/runtime-kind";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { RuntimeInfo } from "@/types/inspector";
@@ -125,13 +126,13 @@ export function Settings({
     useState<SettingsTab>(defaultTab);
   const tab = controlledTab ?? uncontrolledTab;
   const setTab = onTabChange ?? setUncontrolledTab;
-  const showImTab = activeRuntimeKind === "managed";
+  const showImTab = isBuiltInRuntimeKind(activeRuntimeKind);
 
   useEffect(() => {
     if (!showImTab && tab === "im") setTab("runtime");
   }, [setTab, showImTab, tab]);
 
-  const showBrowserTab = activeRuntimeKind === "managed";
+  const showBrowserTab = isBuiltInRuntimeKind(activeRuntimeKind);
 
   useEffect(() => {
     if (!showBrowserTab && tab === "browser") setTab("runtime");

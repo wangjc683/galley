@@ -8,13 +8,52 @@ use crate::api::{
 use crate::credential_store;
 use crate::db::SqliteGalley;
 use crate::error::{GalleyError, Result};
+use crate::native_tools::parity_tool_specs;
 
 const DEFAULT_READ_TIMEOUT_SECS: u64 = 180;
 const DEFAULT_MAX_TOKENS: u64 = 1024;
 const CONTINUATION_TOOL_RESULT_MAX_CHARS: usize = 64 * 1024;
 const WORKING_CHECKPOINT_PROMPT_MAX_CHARS: usize = 8 * 1024;
-const INITIAL_SYSTEM_PROMPT: &str = "You are Galley Native. Answer directly when no tool is needed. If you need a tool, emit only one JSON tool call, such as {\"tool\":\"file_read\",\"arguments\":{\"path\":\"notes.txt\"}}. Available native tools: file_read, file_patch, file_write, code_run, web_scan, web_execute_js, ask_user, update_working_checkpoint, start_long_term_update. file_read can read workspace files, read-only workspace:// resources, read-only memory:// resources, and read-only capability:// resources when available. Use workspace://snapshot to understand the current Project workspace or scratch root, and workspace://index for file mention paths. file_patch, file_write, code_run, and web_execute_js require approval before side effects. web_scan reads the connected Browser Control tab/page; web_execute_js runs JavaScript through Browser Control. update_working_checkpoint stores short-lived session-local working state, not durable memory. start_long_term_update can store low-risk text memory with evidence; high-risk memory, capability, script, tool, and browser changes require approval or are not implemented yet. code_run cannot execute capability:// scripts in this slice. Goal Hive and Morphling are available only when Galley Core starts the corresponding native Goal controller; follow injected Goal task prompts and keep Goal protocol state in Core. Do not claim standalone Goal Hive, standalone Morphling, unrestricted workspace access, or browser access when Browser Control is unavailable.";
-const TOOL_RESULT_SYSTEM_PROMPT: &str = "You are Galley Native. You have received tool results from Galley Core. Use them to produce the final user-facing answer. Do not emit another tool call in this continuation. If the tool result is insufficient or failed, explain the concrete next step.";
+const INITIAL_SYSTEM_PROMPT: &str = r#"# Role: 物理级全能执行者
+你拥有文件读写、脚本执行、用户浏览器JS注入、系统级干预的物理操作权限。禁止推诿"无法操作"——不空想，用工具探测。
+
+## 行动原则
+调用工具前先推演：当前阶段、上步结果是否符合预期、下步策略，必须在回复文本中用<summary>输出极简总结。
+- 探测优先：失败时先充分获取信息（日志/状态/上下文），关键信息存入工作记忆，再决定重试或换方案。不可逆操作先询问用户。
+- 失败升级：1次→读错误理解原因，2次→探测环境状态，3次→深度分析后换方案或问用户。禁止无新信息的重复操作。
+
+## Galley Context
+
+You are running inside Galley, a local agent workspace for working with AI
+agents on this computer. Galley helps users chat with agents, run local tasks,
+work with files, use the connected browser, manage sessions and projects, and
+connect workflows to local channels such as WeChat or Feishu when configured.
+
+Galley is developed by JC Wang, an AI application builder with a philosophy
+background and interests in Wittgenstein, philosophy of language, and LLMs.
+Mention JC Wang only when the user asks about Galley, its author, or product
+background.
+
+Do not invent exact current metadata such as version, release channel, model
+configuration, runtime mode, project/session state, or available integrations.
+Use available Galley state when exposed; otherwise ask the user to check the
+relevant Settings page."#;
+const TOOL_PROTOCOL_PROMPT: &str = r#"### 交互协议 (必须严格遵守，持续有效)
+请按照以下步骤思考并行动：
+1. **思考**: 在 `<thinking>` 标签中先进行思考，分析现状和策略。
+2. **总结**: 在 `<summary>` 中输出*极为简短*的高度概括的单行（<30字）物理快照，包括上次工具调用结果产生的新信息+本次工具调用意图。此内容将进入长期工作记忆，记录关键信息，严禁输出无实际信息增量的描述。
+3. **行动**: 如需调用工具，请在回复正文之后输出一个（或多个）**<tool_use>块**，然后结束。
+
+Format: <tool_use>{"name":"tool_name","arguments":{...}}</tool_use>
+
+要求：
+- 需要工具时，必须输出有效 JSON 的 `<tool_use>` 块；不要只描述你将要使用工具。
+- 每次最多先调用一个工具；拿到 `<tool_result>` 后再决定下一步。
+- 浏览器任务：打开网页、搜索、导航或页面操作使用 `web_execute_js`；只读取当前页面或标签状态时使用 `web_scan`。
+- 不需要工具时，直接回答，不要输出 tool_use。
+
+### Tools (mounted, always in effect):
+"#;
 
 #[derive(Debug, Clone)]
 pub struct NativeModelSelection {
@@ -39,7 +78,7 @@ impl NativeModelConfig {
         self.advanced_options
             .get("stream")
             .and_then(Value::as_bool)
-            .unwrap_or(false)
+            .unwrap_or(true)
     }
 }
 
@@ -155,9 +194,8 @@ pub async fn complete_no_tool_turn_with_delta<F>(
 where
     F: FnMut(&str),
 {
-    complete_text_turn_with_delta(
+    complete_messages_turn_with_delta(
         config,
-        INITIAL_SYSTEM_PROMPT,
         &[NativeModelTextMessage::user(task)],
         config.streaming_enabled(),
         on_delta,
@@ -189,19 +227,84 @@ pub async fn complete_tool_result_turn(
     assistant_tool_request: &str,
     tool_results: &[Value],
 ) -> Result<NativeModelResponse> {
-    let tool_results_prompt = format_tool_results_prompt(tool_results);
-    complete_text_turn_with_delta(
+    complete_tool_result_turn_inner(
         config,
-        TOOL_RESULT_SYSTEM_PROMPT,
+        task,
+        assistant_tool_request,
+        tool_results,
+        false,
+        |_| {},
+    )
+    .await
+}
+
+pub async fn complete_tool_result_turn_with_delta<F>(
+    config: &NativeModelConfig,
+    task: &str,
+    assistant_tool_request: &str,
+    tool_results: &[Value],
+    on_delta: F,
+) -> Result<NativeModelResponse>
+where
+    F: FnMut(&str),
+{
+    complete_tool_result_turn_inner(
+        config,
+        task,
+        assistant_tool_request,
+        tool_results,
+        config.streaming_enabled(),
+        on_delta,
+    )
+    .await
+}
+
+async fn complete_tool_result_turn_inner<F>(
+    config: &NativeModelConfig,
+    task: &str,
+    assistant_tool_request: &str,
+    tool_results: &[Value],
+    stream: bool,
+    on_delta: F,
+) -> Result<NativeModelResponse>
+where
+    F: FnMut(&str),
+{
+    let tool_results_prompt = format_tool_results_prompt(tool_results);
+    complete_messages_turn_with_delta(
+        config,
         &[
             NativeModelTextMessage::user(task),
             NativeModelTextMessage::assistant(assistant_tool_request),
             NativeModelTextMessage::user(tool_results_prompt),
         ],
-        false,
-        |_| {},
+        stream,
+        on_delta,
     )
     .await
+}
+
+pub async fn complete_messages_turn_with_delta<F>(
+    config: &NativeModelConfig,
+    messages: &[NativeModelTextMessage],
+    stream: bool,
+    on_delta: F,
+) -> Result<NativeModelResponse>
+where
+    F: FnMut(&str),
+{
+    let system_prompt = system_prompt_with_tool_protocol();
+    complete_text_turn_with_delta(config, &system_prompt, messages, stream, on_delta).await
+}
+
+pub(crate) fn tool_results_message(tool_results: &[Value]) -> NativeModelTextMessage {
+    NativeModelTextMessage::user(format_tool_results_prompt(tool_results))
+}
+
+fn system_prompt_with_tool_protocol() -> String {
+    let tools_json =
+        serde_json::to_string(&parity_tool_specs()).unwrap_or_else(|_| "[]".to_string());
+    format!("{INITIAL_SYSTEM_PROMPT}\n\n{TOOL_PROTOCOL_PROMPT}{tools_json}")
 }
 
 async fn complete_text_turn_with_delta<F>(
@@ -535,7 +638,7 @@ fn format_tool_results_prompt(tool_results: &[Value]) -> String {
     } else {
         ""
     };
-    format!("Tool results from Galley Core:\n```json\n{body}\n```{suffix}")
+    format!("<tool_result>\n{body}\n</tool_result>{suffix}")
 }
 
 fn truncate_chars(value: &str, max_chars: usize) -> (String, bool) {
@@ -1065,23 +1168,56 @@ mod tests {
     }
 
     #[test]
+    fn streaming_defaults_on_unless_explicitly_disabled() {
+        let mut config = NativeModelConfig {
+            id: "m1".to_string(),
+            display_name: "Model".to_string(),
+            protocol: ManagedModelProtocol::Openai,
+            api_base: "https://api.example.com".to_string(),
+            model: "gpt-test".to_string(),
+            api_key: "sk-test".to_string(),
+            advanced_options: serde_json::json!({}),
+        };
+        assert!(config.streaming_enabled());
+
+        config.advanced_options = serde_json::json!({ "stream": false });
+        assert!(!config.streaming_enabled());
+    }
+
+    #[test]
     fn initial_prompt_advertises_landed_native_tools() {
-        assert!(INITIAL_SYSTEM_PROMPT.contains("file_read"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("file_patch"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("file_write"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("code_run"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("web_scan"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("web_execute_js"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("memory://"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("capability://"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("workspace://snapshot"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("low-risk text memory"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("cannot execute capability:// scripts"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("session-local working state"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("native Goal controller"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("Morphling"));
-        assert!(INITIAL_SYSTEM_PROMPT.contains("keep Goal protocol state in Core"));
-        assert!(!INITIAL_SYSTEM_PROMPT.contains("file_read is the only real local executor"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("文件读写"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("脚本执行"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("用户浏览器JS注入"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("系统级干预"));
+    }
+
+    #[test]
+    fn initial_prompt_integrates_galley_runtime_and_ga_operating_principles() {
+        assert!(INITIAL_SYSTEM_PROMPT.contains("# Role: 物理级全能执行者"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("不空想，用工具探测"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("探测优先"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("失败升级"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("You are running inside Galley"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("JC Wang"));
+    }
+
+    #[test]
+    fn system_prompts_do_not_present_runtime_as_identity() {
+        assert!(!INITIAL_SYSTEM_PROMPT.contains("You are Galley Native"));
+        assert!(!INITIAL_SYSTEM_PROMPT.contains("internal runtime name"));
+    }
+
+    #[test]
+    fn model_request_adds_ga_style_tool_protocol_without_changing_initial_prompt() {
+        let system_prompt = system_prompt_with_tool_protocol();
+
+        assert!(system_prompt.starts_with(INITIAL_SYSTEM_PROMPT));
+        assert!(system_prompt.contains("### 交互协议"));
+        assert!(system_prompt.contains("<tool_use>"));
+        assert!(system_prompt.contains("web_execute_js"));
+        assert!(system_prompt.contains("web_scan"));
+        assert!(!INITIAL_SYSTEM_PROMPT.contains("web_execute_js"));
     }
 
     #[test]
@@ -1130,7 +1266,7 @@ mod tests {
         let prompt = format_tool_results_prompt(&tool_results);
         let payload = openai_chat_completion_payload(
             "gpt-test",
-            TOOL_RESULT_SYSTEM_PROMPT,
+            &system_prompt_with_tool_protocol(),
             &[
                 NativeModelTextMessage::user("Read notes.txt"),
                 NativeModelTextMessage::assistant(
@@ -1146,11 +1282,19 @@ mod tests {
         assert!(payload["messages"][0]["content"]
             .as_str()
             .unwrap()
-            .contains("tool results"));
+            .contains("# Role: 物理级全能执行者"));
+        assert!(payload["messages"][0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("### 交互协议"));
         assert!(payload["messages"][2]["content"]
             .as_str()
             .unwrap()
             .contains("\"tool\":\"file_read\""));
+        assert!(payload["messages"][3]["content"]
+            .as_str()
+            .unwrap()
+            .contains("<tool_result>"));
         assert!(payload["messages"][3]["content"]
             .as_str()
             .unwrap()

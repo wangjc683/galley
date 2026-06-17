@@ -258,7 +258,7 @@ async fn session_new_rejects_runtime_all() {
 }
 
 #[tokio::test]
-async fn session_new_rejects_native_runtime_when_gate_disabled() {
+async fn session_new_accepts_native_runtime_without_env_gate_and_reaches_socket() {
     let td = tempdir();
     let db = td.path().join("test.db");
     drop(seeded_db_at(&db).await);
@@ -273,17 +273,13 @@ async fn session_new_rejects_native_runtime_when_gate_disabled() {
             "galley-native",
         ],
     );
-    assert_eq!(code, Some(2), "stdout: {stdout}");
+    assert_eq!(code, Some(4), "stdout: {stdout}");
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(parsed["error"], "invalid_args");
-    assert!(parsed["message"]
-        .as_str()
-        .expect("message")
-        .contains("GALLEY_NATIVE_EXPERIMENTAL"));
+    assert_eq!(parsed["error"], "db_unavailable");
 }
 
 #[tokio::test]
-async fn session_new_accepts_native_runtime_when_gate_enabled_and_reaches_socket() {
+async fn session_new_accepts_native_runtime_with_legacy_env_flag_and_reaches_socket() {
     let td = tempdir();
     let db = td.path().join("test.db");
     drop(seeded_db_at(&db).await);
@@ -731,7 +727,7 @@ async fn goal_propose_caps_workers_to_official_hive_max() {
 }
 
 #[tokio::test]
-async fn goal_propose_rejects_native_runtime_when_gate_disabled() {
+async fn goal_propose_accepts_native_runtime_without_env_gate() {
     let td = tempdir();
     let db = td.path().join("test.db");
     drop(seeded_db_at(&db).await);
@@ -747,17 +743,14 @@ async fn goal_propose_rejects_native_runtime_when_gate_disabled() {
             "galley-native",
         ],
     );
-    assert_eq!(code, Some(2), "stdout: {stdout}");
+    assert_eq!(code, Some(0), "stdout: {stdout}");
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(parsed["error"], "invalid_args");
-    assert!(parsed["message"]
-        .as_str()
-        .expect("message")
-        .contains("GALLEY_NATIVE_EXPERIMENTAL"));
+    assert_eq!(parsed["objective"], "Try native goal");
+    assert_eq!(parsed["runtimeKind"], "galley_native");
 }
 
 #[tokio::test]
-async fn goal_propose_accepts_native_runtime_when_gate_enabled() {
+async fn goal_propose_accepts_native_runtime_with_legacy_env_flag() {
     let td = tempdir();
     let db = td.path().join("test.db");
     drop(seeded_db_at(&db).await);

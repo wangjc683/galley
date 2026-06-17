@@ -6,7 +6,6 @@ import {
   Warning,
   X,
 } from "@phosphor-icons/react";
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -74,9 +73,6 @@ export function SettingsRuntime({
   const [externalExpanded, setExternalExpanded] = useState(
     activeRuntimeKind === "external",
   );
-  const [nativeGateEnabled, setNativeGateEnabled] = useState<boolean | null>(
-    null,
-  );
   const [highlightedRuntimeKind, setHighlightedRuntimeKind] =
     useState<RuntimeKind | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
@@ -86,21 +82,6 @@ export function SettingsRuntime({
       if (highlightTimerRef.current !== null) {
         window.clearTimeout(highlightTimerRef.current);
       }
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void invoke<boolean>("galley_native_experimental_enabled")
-      .then((enabled) => {
-        if (!cancelled) setNativeGateEnabled(enabled);
-      })
-      .catch((e) => {
-        console.debug("[settings] native runtime gate probe failed.", e);
-        if (!cancelled) setNativeGateEnabled(false);
-      });
-    return () => {
-      cancelled = true;
     };
   }, []);
 
@@ -157,9 +138,9 @@ export function SettingsRuntime({
         value={activeRuntimeKind}
         hasManagedRuntimeConfigured={hasManagedRuntimeConfigured}
         hasRunningSessions={hasRunningSessions}
-        highlighted={highlightedRuntimeKind === "managed"}
+        highlighted={highlightedRuntimeKind === "galley_native"}
         onOpenModels={onOpenModels}
-        onActivate={() => activateRuntimeKind("managed")}
+        onActivate={() => activateRuntimeKind("galley_native")}
       />
 
       <AdvancedRuntimeSettings
@@ -168,14 +149,13 @@ export function SettingsRuntime({
         hasExternalRuntimeConfigured={hasExternalRuntimeConfigured}
         hasRunningSessions={hasRunningSessions}
         highlighted={highlightedRuntimeKind === "external"}
-        nativeRuntimeSlot={
-          <NativeRuntimeAccess
+        managedFallbackSlot={
+          <ManagedRuntimeFallbackAccess
             value={activeRuntimeKind}
-            gateEnabled={nativeGateEnabled}
             hasManagedRuntimeConfigured={hasManagedRuntimeConfigured}
             hasRunningSessions={hasRunningSessions}
-            highlighted={highlightedRuntimeKind === "galley_native"}
-            onActivate={() => activateRuntimeKind("galley_native")}
+            highlighted={highlightedRuntimeKind === "managed"}
+            onActivate={() => activateRuntimeKind("managed")}
             onOpenModels={onOpenModels}
           />
         }
@@ -205,9 +185,8 @@ export function SettingsRuntime({
   );
 }
 
-function NativeRuntimeAccess({
+function ManagedRuntimeFallbackAccess({
   value,
-  gateEnabled,
   hasManagedRuntimeConfigured,
   hasRunningSessions,
   highlighted,
@@ -215,7 +194,6 @@ function NativeRuntimeAccess({
   onOpenModels,
 }: {
   value: RuntimeKind;
-  gateEnabled: boolean | null;
   hasManagedRuntimeConfigured: boolean;
   hasRunningSessions: boolean;
   highlighted: boolean;
@@ -224,30 +202,25 @@ function NativeRuntimeAccess({
 }) {
   const appCopy = useCopy();
   const copy = appCopy.settings.runtime;
-  const active = value === "galley_native";
+  const active = value === "managed";
   const canActivate =
     !active &&
-    gateEnabled === true &&
     hasManagedRuntimeConfigured &&
     !hasRunningSessions &&
     !!onActivate;
   const detail = active
-    ? copy.usingGalleyNative
-    : gateEnabled === null
-      ? copy.checking
-      : gateEnabled === false
-        ? copy.galleyNativeGateDisabled
-        : !hasManagedRuntimeConfigured
-          ? copy.galleyNativeNeedsModel
-          : hasRunningSessions
-            ? copy.runningSessionsBlock
-            : copy.galleyNativeReady;
+    ? copy.usingLegacyManagedGA
+    : !hasManagedRuntimeConfigured
+      ? copy.legacyManagedNeedsModel
+      : hasRunningSessions
+        ? copy.runningSessionsBlock
+        : copy.legacyManagedReady;
 
   const trailing = active ? (
     <span className="rounded-sm bg-hover px-1.5 py-px text-[10.5px] text-ink-muted">
       {copy.active}
     </span>
-  ) : !hasManagedRuntimeConfigured && gateEnabled === true ? (
+  ) : !hasManagedRuntimeConfigured ? (
     <Button
       variant="secondary"
       size="sm"
@@ -263,7 +236,7 @@ function NativeRuntimeAccess({
       disabled={!canActivate}
       onClick={onActivate}
     >
-      {copy.switchToGalleyNative}
+      {copy.switchToLegacyManagedGA}
     </Button>
   );
 
@@ -273,14 +246,14 @@ function NativeRuntimeAccess({
         title={
           <span className="inline-flex items-center gap-2">
             <Warning size={13} weight="thin" className="text-warning" />
-            <span>{copy.galleyNativeExperimental}</span>
+            <span>{copy.legacyManagedGA}</span>
           </span>
         }
         subtitle={
           <span>
             {detail}
             <span className="mt-1 block text-[11px] text-ink-soft">
-              {copy.galleyNativeScope}
+              {copy.legacyManagedScope}
             </span>
           </span>
         }
@@ -409,6 +382,12 @@ function ManagedRuntimeCard({
       : `${models.length} ${copy.models} · ${copy.keysOnDemand}${
           defaultModel ? ` · ${defaultModel.displayName}` : ""
         }`;
+  const currentMode =
+    activeRuntimeKind === "managed"
+      ? copy.legacyManagedGA
+      : activeRuntimeKind === "galley_native"
+        ? copy.galleyNative
+        : copy.externalGA;
   return (
     <RuntimeAccordionRow
       title={copy.advancedDiagnostics}
@@ -416,13 +395,11 @@ function ManagedRuntimeCard({
       onToggle={() => setExpanded((v) => !v)}
     >
       <div>
+        <RuntimeDiagnosticRow label={copy.currentMode} value={currentMode} />
         <RuntimeDiagnosticRow
-          label={copy.currentMode}
-          value={
-            activeRuntimeKind === "managed" ? copy.bundledGA : copy.externalGA
-          }
+          label={copy.kernelVersion}
+          value={upstreamShort}
         />
-        <RuntimeDiagnosticRow label={copy.kernelVersion} value={upstreamShort} />
         <RuntimeDiagnosticRow
           label="Patch stack"
           value={

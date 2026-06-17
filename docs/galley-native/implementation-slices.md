@@ -8,11 +8,16 @@
 
 ## Direction
 
-Do not start by replacing `managed_ga`.
+The early implementation strategy was to avoid replacing `managed_ga` first:
+add a hidden native runtime path, prove one capability slice at a time, and keep
+`managed_ga` as the default built-in runtime while `external_ga` remains
+non-invasive.
 
-Start by adding a hidden native runtime path that can prove one capability slice
-at a time while `managed_ga` remains the default built-in runtime and
-`external_ga` remains non-invasive.
+That early strategy has done its job. The v0.3.0 product direction is now:
+
+- make `galley_native` the default built-in Galley runtime after dogfood gates;
+- move Python `managed_ga` into an Advanced legacy fallback;
+- keep `external_ga` unchanged for user-owned GenericAgent checkouts.
 
 The implementation shape should follow this dependency chain:
 
@@ -27,8 +32,9 @@ runtime boundary
   -> workspace and continuity
   -> Goal Hive and Morphling
   -> parity harness
-  -> opt-in beta
-  -> new-user default switch
+  -> dogfood/debug entry
+  -> all built-in users default switch
+  -> managed_ga fallback hardening
 ```
 
 ## Non-Negotiable Gates
@@ -37,7 +43,7 @@ Every slice must preserve:
 
 - no behavior change for `managed` and `external` unless explicitly scoped;
 - no writes to external GA state;
-- no default switch before parity gates;
+- no release default switch before dogfood/parity gates;
 - no schemaVersion 1 removals or renames;
 - no first-run runtime complexity for ordinary users;
 - no hidden self-evolution into core runtime code.
@@ -954,10 +960,10 @@ Deferred:
 - actual same-test execution harness and managed-vs-native comparison;
 - capability-pack candidate persistence/inspection/activation workflow.
 
-## Slice 9: Parity Harness And Opt-In Beta
+## Slice 9: Parity Harness And Dogfood Gate
 
-Goal: prove native can replace managed for selected users before becoming the
-new default.
+Goal: prove native can replace managed for built-in users before becoming the
+v0.3.0 default.
 
 Primary docs:
 
@@ -978,13 +984,13 @@ Tasks:
 
 - define comparison rules;
 - define harness layers;
-- define beta/default/support gate classes;
+- define dogfood/default/support gate classes;
 - define scenario IDs and pass signals;
 - update RFC 7 and docs index.
 
 Exit gate:
 
-- scenario manifest can answer what must pass before opt-in beta;
+- scenario manifest can answer what must pass before the v0.3.0 default switch;
 - manifest distinguishes automated tests from dogfood evidence;
 - manifest explains accepted variance and non-acceptable regressions;
 - no runtime, schema, or UI behavior changes.
@@ -1233,24 +1239,25 @@ Deferred:
 - automatic collection or report surfacing;
 - any remote telemetry decision.
 
-### Slice 9F: Opt-In Beta And Managed Fallback
+### Slice 9F: Dogfood Settings Entry And Managed Fallback
 
-Goal: expose native to selected built-in users only after evidence exists.
+Goal: expose native to maintainer dogfood and prepare managed as a tested
+fallback path.
 
 Tasks:
 
-- add visible experimental native opt-in in Settings;
-- keep managed as the default built-in runtime;
+- add or harden the deep experimental native entry in Settings;
+- keep release builds on the current default until default-switch gates pass;
 - test copy-to-native and fallback-to-managed flows;
-- ensure native sessions remain readable if the opt-in is disabled;
+- ensure native sessions remain readable if the experiment is disabled;
 - update release/support docs.
 
 Exit gate:
 
-- required beta-blocker scenarios pass or have accepted gaps;
+- required default-blocker scenarios pass or have accepted gaps;
 - fallback to managed is tested;
-- Settings copy is clear that native is experimental;
-- ordinary users who do nothing remain on managed.
+- Settings copy is clear that native is dogfood/experimental before release;
+- v0.3.0 default-switch migration rules are documented.
 
 Rollback:
 
@@ -1258,9 +1265,9 @@ Rollback:
 - keep native sessions readable;
 - keep managed and external GA behavior unchanged.
 
-## Slice 10: New-User Default Switch
+## Slice 10: Built-In User Default Switch
 
-Goal: make native the default built-in runtime for new users.
+Goal: make native the default built-in runtime for built-in users.
 
 Primary RFC:
 
@@ -1268,10 +1275,10 @@ Primary RFC:
 
 Tasks:
 
-- change default built-in runtime to native for new installs only;
-- keep existing managed users on managed unless they switch;
-- provide copy-to-native affordance;
-- keep managed fallback visible enough for recovery;
+- change default built-in runtime to native;
+- migrate existing managed users' Galley-owned runtime metadata to native while
+  preserving sessions, messages, model config, and Channels config;
+- keep Python managed GA as an Advanced fallback for recovery;
 - update docs/release notes;
 - dogfood release candidate.
 
@@ -1279,13 +1286,14 @@ Exit gate:
 
 - parity gates pass;
 - first-run setup stays model-only;
+- external GA users are not migrated or modified;
 - managed fallback works;
 - no native-only state prevents reading old managed sessions;
 - rollback procedure is documented and tested.
 
 Rollback:
 
-- set new-user default back to managed;
+- set built-in default back to managed;
 - keep native sessions readable;
 - leave native memory/capability data intact but inactive if needed.
 

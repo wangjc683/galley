@@ -374,7 +374,7 @@ async fn start_desktop_goal(
                 master_session_id: Some(master_session_id.clone()),
                 budget_seconds: input.budget_seconds,
                 worker_limit: input.worker_limit,
-                runtime_kind: input.runtime_kind.or(Some(RuntimeKind::Managed)),
+                runtime_kind: input.runtime_kind.or(Some(RuntimeKind::GalleyNative)),
                 write_mode: Some(GoalWriteMode::Autonomous),
                 expires_in_seconds: None,
             },
@@ -619,6 +619,12 @@ pub fn run() {
             version: 23,
             description: "allow Galley Native Goal runtime",
             sql: include_str!("../migrations/023_native_goal_runtime.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 24,
+            description: "make Galley Native the default built-in runtime",
+            sql: include_str!("../migrations/024_native_default_runtime.sql"),
             kind: MigrationKind::Up,
         },
     ];

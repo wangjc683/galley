@@ -67,7 +67,7 @@ Capture enough to answer:
 - Did any side effect require approval?
 - Is state still readable?
 - Can managed still continue the work?
-- Is the gap safe for hidden dogfood, opt-in beta, or neither?
+- Is the gap safe for hidden dogfood, default-switch release, or neither?
 
 Avoid over-capturing:
 

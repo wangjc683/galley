@@ -9,12 +9,15 @@ live in [refactor](./refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.2.8`.
+- Package version: `0.3.0` in development.
 - Git tag / GitHub Release: `v0.2.8` is the current published GitHub Latest.
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.2.8`, with
-  `beta` kept as a legacy alias for older builds.
+- Release tier: `v0.3.0` feature release target; default update channel still
+  points at `v0.2.8` until the release is published and promoted, with `beta`
+  kept as a legacy alias for older builds.
 - Product shape: dual-native local agent team orchestrator
+- v0.3.0 direction: make `galley_native` the default built-in Galley runtime;
+  move Python managed GA to an Advanced fallback; keep external GA unchanged.
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
@@ -23,10 +26,15 @@ Supervisor automation on the same machine.
 ## Current Release State
 
 `v0.2.8` is the current published stable patch, GitHub Latest, and default
-update-channel target. It shipped Goal V1 and master-session Goal delivery, the
-post-`v0.2.7` main-workbench / Settings / Browser Control polish set, Browser
-Control reconnect timing improvements, Core / CLI structure splits, and the
-audited bundled GenericAgent baseline at upstream `0def7441`.
+update-channel target. The main branch now targets `v0.3.0`, whose product
+theme is the built-in runtime migration from Python managed GA to Rust
+`galley_native`. The first default-switch implementation has landed in code;
+release promotion still requires dogfood and parity gates.
+
+`v0.2.8` shipped Goal V1 and master-session Goal delivery, the post-`v0.2.7`
+main-workbench / Settings / Browser Control polish set, Browser Control
+reconnect timing improvements, Core / CLI structure splits, and the audited
+bundled GenericAgent baseline at upstream `0def7441`.
 
 The default update channel was promoted to `v0.2.8` after publish. The live
 channel verifier passed with cache-busting for both `stable` and the legacy
@@ -52,9 +60,10 @@ Post-promote follow-up:
 | Core architecture | Rust Galley Core is authoritative | [architecture demo](./architecture-demo.md) |
 | CLI / Agent API | Feature-complete for v0.2; schema frozen | [agent-api](./agent-api.md) |
 | Agent surface | Settings -> Agent, copy-first SOP, Claude Skill | [Supervisor SOP](./integrations/galley-supervisor-sop.md) |
-| Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; v0.2.8 ships audited upstream `0def7441`; GUI / CLI split, Provider / Model config, and local encrypted SQLite credentials are the current baseline | [managed GA runtime](./managed-ga-runtime.md) |
-| Data migration | Backup mechanism exists; current schema covers runtime identity, managed models/providers, Goal state, internal message visibility, and GUI-created message attachments | [B4 M8](./refactor/B4-M8-sub-plan.md) |
-| Release path | v0.2.8 is published as GitHub Latest and the live update-channel target | [release / update SOP](./release-update-sop.md) |
+| Galley Native runtime | v0.3.0 built-in default implementation landed; release still gated by dogfood/parity | [Galley Native](./galley-native/README.md) |
+| Managed GA runtime | Shipped in v0.2.0; now an Advanced legacy fallback for v0.3.0 dogfood; v0.2.8 ships audited upstream `0def7441` | [managed GA runtime](./managed-ga-runtime.md) |
+| Data migration | Backup mechanism exists; current schema covers runtime identity, managed models/providers, Goal state, internal message visibility, GUI-created message attachments, and native-default metadata migration 024 | [B4 M8](./refactor/B4-M8-sub-plan.md) |
+| Release path | v0.3.0 is the next feature target; v0.2.8 remains GitHub Latest and the live update-channel target | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Locked to audited upstream `0def7441` | [GA baseline](./ga-baseline.md) |
 
@@ -79,7 +88,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.2.8`. For the next release, update:
+- Current package metadata uses `0.3.0`. For a release version bump, update:
   - `package.json`
   - `core/tauri.conf.json`
   - `core/Cargo.toml`

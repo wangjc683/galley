@@ -17,11 +17,7 @@ pub fn route_for_runtime(kind: RuntimeKind) -> RuntimeRoute {
 }
 
 pub fn galley_native_experimental_enabled() -> bool {
-    galley_native_enabled_from_value(
-        std::env::var(GALLEY_NATIVE_EXPERIMENTAL_ENV)
-            .ok()
-            .as_deref(),
-    )
+    true
 }
 
 pub fn galley_native_enabled_from_value(raw: Option<&str>) -> bool {
@@ -34,35 +30,16 @@ pub fn galley_native_enabled_from_value(raw: Option<&str>) -> bool {
     )
 }
 
-pub fn galley_native_gate_disabled_message() -> String {
-    format!(
-        "galley_native runtime is experimental; set {GALLEY_NATIVE_EXPERIMENTAL_ENV}=1 to enable it"
-    )
-}
-
 pub fn galley_native_execution_unavailable_message() -> String {
     "galley_native runtime is recognized, but it does not use the Python GenericAgent runner"
         .to_string()
 }
 
-pub fn ensure_runtime_filter_available(kind: RuntimeKind) -> Result<(), GalleyError> {
-    if kind == RuntimeKind::GalleyNative && !galley_native_experimental_enabled() {
-        return Err(GalleyError::InvalidArgs {
-            message: galley_native_gate_disabled_message(),
-        });
-    }
+pub fn ensure_runtime_filter_available(_kind: RuntimeKind) -> Result<(), GalleyError> {
     Ok(())
 }
 
-pub fn ensure_runtime_execution_available(kind: RuntimeKind) -> Result<(), GalleyError> {
-    if kind != RuntimeKind::GalleyNative {
-        return Ok(());
-    }
-    if !galley_native_experimental_enabled() {
-        return Err(GalleyError::InvalidArgs {
-            message: galley_native_gate_disabled_message(),
-        });
-    }
+pub fn ensure_runtime_execution_available(_kind: RuntimeKind) -> Result<(), GalleyError> {
     Ok(())
 }
 
@@ -75,7 +52,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gate_accepts_only_truthy_values() {
+    fn legacy_gate_parser_accepts_only_truthy_values() {
         assert!(galley_native_enabled_from_value(Some("1")));
         assert!(galley_native_enabled_from_value(Some("true")));
         assert!(galley_native_enabled_from_value(Some("YES")));
@@ -85,6 +62,14 @@ mod tests {
         assert!(!galley_native_enabled_from_value(Some("")));
         assert!(!galley_native_enabled_from_value(Some("0")));
         assert!(!galley_native_enabled_from_value(Some("false")));
+    }
+
+    #[test]
+    fn native_runtime_is_available_without_env_gate() {
+        assert!(galley_native_experimental_enabled());
+        assert!(ensure_runtime_filter_available(RuntimeKind::GalleyNative).is_ok());
+        assert!(ensure_runtime_execution_available(RuntimeKind::GalleyNative).is_ok());
+        assert!(ensure_goal_runtime_available(RuntimeKind::GalleyNative).is_ok());
     }
 
     #[test]
