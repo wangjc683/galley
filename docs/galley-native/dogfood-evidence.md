@@ -33,6 +33,15 @@ readiness before native can become visible:
 | P18 | Failure recovery | Support quality is the user-facing outcome |
 | P19 | Managed fallback | Rollback must preserve readable state and operator control |
 
+## Runbooks
+
+- [Dogfood Kit](./dogfood/README.md): local artifact policy and first-pass
+  routing.
+- [P08/P18/P19 Support Readiness Runbook](./dogfood/support-readiness-runbook.md):
+  first dogfood pass for Browser, recovery, and fallback.
+- [Support Readiness Record Template](./dogfood/support-readiness-record-template.md):
+  local record shape for the first pass.
+
 ## Local Evidence Record
 
 Use one local markdown record per dogfood pass. It may live in a devlog entry

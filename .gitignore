@@ -49,6 +49,10 @@ cli/target/
 core/python-bundle/
 # PBS tarball download cache so we don't refetch on every bundle run.
 .cache/pbs/
+# Local native dogfood evidence may include browser pages, model output,
+# workspace paths, or other private operator context. Commit only sanitized
+# summaries in docs/devlog.
+.cache/galley-native-dogfood/
 
 # Local
 .env

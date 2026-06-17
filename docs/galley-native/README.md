@@ -206,6 +206,11 @@ behavior changes until an implementation slice explicitly lands them.
   checklist, local record template, verdict rules, and troubleshooting matrix
   before Settings opt-in work starts.
   [devlog](../devlog/2026-06-17-galley-native-slice-9e-dogfood-evidence-format.md).
+- Slice 9E-B prep landed the support-readiness dogfood kit on 2026-06-17:
+  P08/P18/P19 now have a concrete runbook, local artifact paths, command
+  evidence examples, and a focused record template for JC's first real native
+  dogfood pass.
+  [devlog](../devlog/2026-06-17-galley-native-slice-9e-support-readiness-kit.md).
 
 ## Document Roles
 
@@ -234,6 +239,8 @@ behavior changes until an implementation slice explicitly lands them.
   and safety rules.
 - [Dogfood Evidence](./dogfood-evidence.md): Slice 9E local evidence template,
   scenario checklists, verdict rules, and troubleshooting matrix.
+- [Dogfood Kit](./dogfood/README.md): first support-readiness runbook and
+  local record template for P08/P18/P19 dogfood.
 - [Open Decisions](./open-decisions.md): pre-freeze decisions needed before
   Slice 1 starts.
 - [Implementation Slices](./implementation-slices.md): sequencing and
@@ -274,7 +281,8 @@ real process evidence into that same report shape. Slice 9D-D extends that
 path to Browser and fallback scenarios without auto-launching a browser or
 rerouting work between runtimes. Slice 9E-A defines the local dogfood evidence
 format and troubleshooting matrix for the evidence-heavy scenarios before
-Settings opt-in.
+Settings opt-in. Slice 9E-B prep makes P08/P18/P19 dogfood executable with a
+support-readiness runbook and local record template.
 
 The next implementation phase should stay conservative:
 
@@ -283,8 +291,8 @@ The next implementation phase should stay conservative:
 2. add automatic managed/native and Browser/fallback presets only after the
    explicit command mode has been used locally without muddying external GA
    state;
-3. use the Slice 9E dogfood template to collect real Browser, memory,
-   continuation, Goal Hive, Morphling, recovery, and fallback evidence;
+3. run the Slice 9E-B support-readiness dogfood pass for P08/P18/P19, then
+   summarize sanitized verdicts/gaps/blockers;
 4. expose Slice 9F Settings opt-in only after beta-blocker scenarios pass or
    have explicit accepted gaps;
 5. keep dynamic capability-pack updates and default switching in later slices.

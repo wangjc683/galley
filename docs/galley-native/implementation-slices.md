@@ -1176,8 +1176,8 @@ Deferred:
 
 ### Slice 9E: Dogfood Evidence And Troubleshooting
 
-Status: local dogfood evidence format landed on 2026-06-17; real dogfood runs
-not yet recorded.
+Status: local dogfood evidence format and support-readiness runbook landed on
+2026-06-17; real dogfood runs not yet recorded.
 
 Goal: collect real-use evidence and make native failures recoverable.
 
@@ -1195,7 +1195,8 @@ Sub-slices:
 
 - 9E-A: define local dogfood evidence record, scenario checklists, verdict
   rules, troubleshooting matrix, and privacy rule;
-- 9E-B: record first real P08/P18/P19 support-readiness dogfood pass;
+- 9E-B: prepare and then record first real P08/P18/P19 support-readiness
+  dogfood pass;
 - 9E-C: record P10/P13 memory and continuation dogfood pass;
 - 9E-D: record P16/P17 Goal Hive and Morphling dogfood pass.
 
@@ -1208,7 +1209,11 @@ Landed:
 - troubleshooting matrix covers model, browser, workspace, approval, memory,
   continuation, Goal Hive, Morphling, and fallback errors;
 - privacy rule keeps dogfood evidence local unless a sanitized summary is
-  intentionally committed.
+  intentionally committed;
+- [Dogfood Kit](./dogfood/README.md) defines local-only artifact paths under
+  `.cache/galley-native-dogfood/`, which is ignored by git;
+- P08/P18/P19 support-readiness runbook and focused record template are ready
+  for the first real dogfood pass.
 
 Exit gate:
 
