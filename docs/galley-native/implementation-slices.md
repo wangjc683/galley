@@ -903,6 +903,8 @@ Deferred:
 
 ## Slice 8: Morphling Native Mode
 
+Status: implemented as the first template/proposal mode on 2026-06-17.
+
 Goal: implement Morphling as a structured Goal mode that produces evidence and
 optionally capability packs.
 
@@ -920,15 +922,37 @@ Tasks:
 - require evidence for absorption;
 - block proprietary-code reproduction as a strategy.
 
+Landed:
+
+- `galley goal morphling <target>` creates a hidden `galley_native` Goal
+  proposal with a structured Morphling objective template;
+- Morphling proposals still require the normal Goal confirmation/run path and
+  native experimental gate;
+- the template captures target, objective, same-test evidence, component
+  strategy bias, requested output shape, safety rules, and final deliverable
+  requirements;
+- built-in `capability://morphling` resources now describe Morphling as a Goal
+  mode with same-test comparison discipline and disabled capability-pack
+  promotion gates;
+- no new `morphling` model-facing tool, schema field, or capability-script
+  execution path was introduced.
+
 Exit gate:
 
-- toy CLI/library Morphling scenario passes same-test comparison;
+- toy CLI/library Morphling proposal carries same-test comparison criteria;
 - output can become a disabled capability-pack candidate;
 - no single low-level `morphling` tool is introduced.
 
 Rollback:
 
 - hide Morphling mode while keeping Goal Hive native available.
+
+Deferred:
+
+- GUI Morphling launcher;
+- typed native Goal tool surface for model-authored task/deliverable writes;
+- actual same-test execution harness and managed-vs-native comparison;
+- capability-pack candidate persistence/inspection/activation workflow.
 
 ## Slice 9: Parity Harness And Opt-In Beta
 

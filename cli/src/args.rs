@@ -173,6 +173,38 @@ pub(crate) enum GoalCmd {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Create a hidden native Morphling Goal proposal. Does not start work.
+    #[command(hide = true)]
+    Morphling {
+        /// Target to absorb or compare against: local path, package, product, URL, repo, or skill name.
+        target: String,
+        /// User-facing objective. Omit to ask Morphling to infer the concrete capability boundary.
+        #[arg(long)]
+        objective: Option<String>,
+        /// Official or objective test/benchmark/demo command. Repeat for multiple evidence gates.
+        #[arg(long = "test")]
+        tests: Vec<String>,
+        /// Initial strategy bias. Morphling may revise it after evidence.
+        #[arg(long, value_enum, default_value = "decide")]
+        strategy: MorphlingStrategyArg,
+        /// Desired final artifact shape.
+        #[arg(long, value_enum, default_value = "report")]
+        output: MorphlingOutputArg,
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long, default_value_t = DEFAULT_GOAL_BUDGET_SECONDS / 60)]
+        budget_minutes: u32,
+        #[arg(long, default_value_t = DEFAULT_GOAL_WORKER_LIMIT)]
+        workers: u32,
+        #[arg(long, value_enum, default_value = "autonomous")]
+        write_mode: GoalWriteModeArg,
+        #[arg(long, default_value_t = 10)]
+        expires_minutes: u32,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Start or resume the blocking Goal controller.
     Run {
         /// Existing goal id when used with --resume.
@@ -545,6 +577,44 @@ impl From<GoalWriteModeArg> for GoalWriteMode {
         match value {
             GoalWriteModeArg::Autonomous => GoalWriteMode::Autonomous,
             GoalWriteModeArg::ReadOnly => GoalWriteMode::ReadOnly,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum MorphlingStrategyArg {
+    Decide,
+    Call,
+    Rewrite,
+    Discard,
+}
+
+impl MorphlingStrategyArg {
+    pub(crate) fn as_label(self) -> &'static str {
+        match self {
+            MorphlingStrategyArg::Decide => "decide after evidence",
+            MorphlingStrategyArg::Call => "prefer calling or wrapping the target when lawful",
+            MorphlingStrategyArg::Rewrite => "prefer a clean-room rewrite when justified",
+            MorphlingStrategyArg::Discard => "prefer discarding non-essential surface area",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum MorphlingOutputArg {
+    Report,
+    CapabilityPackCandidate,
+    Wrapper,
+    RewriteArtifact,
+}
+
+impl MorphlingOutputArg {
+    pub(crate) fn as_label(self) -> &'static str {
+        match self {
+            MorphlingOutputArg::Report => "report",
+            MorphlingOutputArg::CapabilityPackCandidate => "disabled capability-pack candidate",
+            MorphlingOutputArg::Wrapper => "wrapper or integration",
+            MorphlingOutputArg::RewriteArtifact => "rewrite artifact",
         }
     }
 }

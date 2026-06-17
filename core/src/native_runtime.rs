@@ -1255,7 +1255,7 @@ fn builtin_capability_packs() -> Vec<NativeCapabilityPack> {
         NativeCapabilityPack {
             id: "morphling",
             display_name: "Morphling",
-            description: "Long-horizon capability absorption through evidence-backed SOP and script proposals.",
+            description: "Long-horizon capability absorption through same-test evidence and disabled capability-pack proposals.",
             version: "0.1.0",
             origin: "builtin",
             activation: "morphling_mode",
@@ -1271,14 +1271,21 @@ fn builtin_capability_packs() -> Vec<NativeCapabilityPack> {
                     path: "sops/main",
                     kind: "sop",
                     title: "Morphling absorption loop",
-                    body: "Promote a repeated workflow only after evidence shows it saves future work. Capture the trigger, minimal procedure, failure cases, verification command, and rollback path. New scripts or tool schemas require approval before activation.",
+                    body: "Run Morphling as a Goal mode, not a standalone tool. Lock the target source and scope, extract target claims, find or construct same-test evidence, decide per component whether to call, wrap, rewrite, discard, or defer, and produce a report or disabled capability-pack candidate. Do not clone proprietary code or protected assets. Capability activation requires explicit human approval after evidence review.",
                     executable: false,
                 },
                 NativeCapabilityResource {
                     path: "tests/promotion-gate",
                     kind: "test",
                     title: "Promotion gate",
-                    body: "A capability proposal must cite evidence, avoid secrets, include at least one verification path, and explain why memory alone is not enough.",
+                    body: "A capability-pack candidate must stay disabled until reviewed. It must cite same-test evidence, avoid secrets/proprietary code/protected assets, include verification commands, document permissions, list limitations, and provide rollback notes.",
+                    executable: false,
+                },
+                NativeCapabilityResource {
+                    path: "tests/same-test-comparison",
+                    kind: "test",
+                    title: "Same-test comparison discipline",
+                    body: "A Morphling run passes only when the produced artifact, wrapper, report, or capability-pack candidate is judged against the same objective tests as the target capability. When official tests do not exist, construct minimal user-visible tests and label gaps honestly.",
                     executable: false,
                 },
             ],
@@ -1870,7 +1877,7 @@ fn mock_final_answer(task: &str, command_name: &str) -> String {
          Received task:\n{task}\n\n\
          Galley Native used the deterministic mock-model fallback for this turn. \
          Some native tools may be active depending on the current implementation slice. \
-         Native Goal Hive is available only through the Galley Goal controller; full Morphling remains deferred."
+         Native Goal Hive and Morphling are available only through the corresponding Galley Goal controller modes."
     )
 }
 
@@ -3267,7 +3274,15 @@ mod tests {
         assert!(resources
             .get("capability://morphling/sops/main")
             .expect("morphling sop")
-            .contains("Promote a repeated workflow only after evidence"));
+            .contains("Run Morphling as a Goal mode"));
+        assert!(resources
+            .get("capability://morphling/tests/same-test-comparison")
+            .expect("morphling same-test")
+            .contains("same objective tests as the target capability"));
+        assert!(resources
+            .get("capability://morphling/tests/promotion-gate")
+            .expect("morphling promotion gate")
+            .contains("must stay disabled until reviewed"));
 
         let mut memory_resources = HashMap::from([(
             "memory://global/l1".to_string(),

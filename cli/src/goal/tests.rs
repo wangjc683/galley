@@ -4,6 +4,8 @@ use galley_core_lib::api::{
     SessionId, SessionStatus,
 };
 
+use crate::args::{MorphlingOutputArg, MorphlingStrategyArg};
+
 use super::controller::{
     goal_controller_decision, goal_controller_decision_after_wait, goal_drain_cap_seconds,
     goal_has_worker_material_signal, goal_master_checkpoint_event_body,
@@ -21,6 +23,7 @@ use super::types::{
     GoalWorkerWaitOutcome, GoalWrapReason, GOAL_CHECK_REPORT_MARKER,
     GOAL_WORKER_SESSION_ID_PLACEHOLDER,
 };
+use super::{build_morphling_goal_objective, MorphlingGoalSpec};
 
 fn test_goal() -> GoalBrief {
     GoalBrief {
@@ -364,6 +367,62 @@ fn goal_worker_wake_prompt_reuses_native_memory_policy() {
     assert!(prompt.contains(goal_memory_policy_prompt(RuntimeKind::GalleyNative)));
     assert!(prompt.contains("Do not store Goal protocol state in native memory"));
     assert!(!prompt.contains("not executable yet"));
+}
+
+#[test]
+fn morphling_goal_objective_requires_same_test_and_blocks_clone_strategy() {
+    let prompt = build_morphling_goal_objective(&MorphlingGoalSpec {
+        target: "toy-cli".to_string(),
+        objective: Some("Absorb only the greeting command behavior.".to_string()),
+        tests: vec![
+            "toy-cli --help exits 0".to_string(),
+            "toy-cli greet JC prints greeting".to_string(),
+        ],
+        strategy: MorphlingStrategyArg::Decide,
+        output: MorphlingOutputArg::CapabilityPackCandidate,
+    })
+    .unwrap();
+
+    assert!(prompt.contains("[Galley Morphling Native Goal]"));
+    assert!(prompt.contains("Mode: morphling"));
+    assert!(prompt.contains("Target: toy-cli"));
+    assert!(prompt.contains("same-test comparison"));
+    assert!(prompt.contains("toy-cli --help exits 0"));
+    assert!(prompt.contains("disabled capability-pack candidate"));
+    assert!(prompt.contains("Do not reproduce proprietary code"));
+    assert!(prompt.contains("call, wrap, rewrite, discard"));
+    assert!(prompt.contains("Capability pack scripts stay read-only candidates"));
+}
+
+#[test]
+fn morphling_goal_objective_constructs_tests_when_none_are_supplied() {
+    let prompt = build_morphling_goal_objective(&MorphlingGoalSpec {
+        target: "https://example.test/tool".to_string(),
+        objective: None,
+        tests: vec!["  ".to_string()],
+        strategy: MorphlingStrategyArg::Rewrite,
+        output: MorphlingOutputArg::Report,
+    })
+    .unwrap();
+
+    assert!(prompt.contains("Infer the smallest useful capability boundary"));
+    assert!(prompt.contains("No official tests supplied"));
+    assert!(prompt.contains("minimal objective same-test"));
+    assert!(prompt.contains("prefer a clean-room rewrite when justified"));
+}
+
+#[test]
+fn morphling_goal_objective_rejects_empty_target() {
+    let err = build_morphling_goal_objective(&MorphlingGoalSpec {
+        target: "  ".to_string(),
+        objective: None,
+        tests: vec![],
+        strategy: MorphlingStrategyArg::Decide,
+        output: MorphlingOutputArg::Report,
+    })
+    .unwrap_err();
+
+    assert!(err.to_string().contains("target must not be empty"));
 }
 
 #[test]

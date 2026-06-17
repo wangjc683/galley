@@ -1,11 +1,12 @@
 # Galley Native RFC 6: Goal Hive And Morphling
 
-> Status: accepted; Slice 7 minimal Goal Hive loop implemented on 2026-06-17.
+> Status: accepted; Slice 7 minimal Goal Hive loop and Slice 8 Morphling
+> template mode implemented on 2026-06-17.
 >
 > Scope: native Goal Hive semantics, master/worker behavior, Core task-board
 > ownership, deliverables, workspaces, Morphling mode, and memory/capability
 > absorption. Slice 7 implements the first native Goal Hive runtime bridge;
-> Morphling remains a later slice.
+> Slice 8 implements the first Morphling Goal template/proposal mode.
 
 ## Decision
 
@@ -254,6 +255,37 @@ Native Morphling should run as a Goal mode:
 
 The same-test comparison is the discipline that keeps Morphling from becoming
 subjective imitation.
+
+## Slice 8 Implementation Checkpoint
+
+Slice 8 lands Morphling as a structured native Goal proposal mode:
+
+- `galley goal morphling <target>` creates a `galley_native` Goal proposal
+  behind the existing experimental gate;
+- the proposal objective contains a Morphling template: target lock, objective,
+  same-test evidence, component strategy, requested output, safety rules, and
+  final deliverable requirements;
+- the command does not auto-start work; it still uses Goal confirmation, budget,
+  worker limit, and controller semantics;
+- built-in `capability://morphling` resources now expose same-test comparison
+  and promotion-gate guidance;
+- output may be a report, wrapper/integration, rewrite artifact, or disabled
+  capability-pack candidate;
+- no standalone `morphling` tool, schema-level Goal mode, or capability-script
+  execution path was introduced.
+
+This keeps Morphling product-safe: it can guide a long-horizon absorption run,
+but cannot silently activate new persistent capabilities or reproduce protected
+targets.
+
+Known limits after Slice 8:
+
+- actual same-test execution remains the responsibility of native Goal workers
+  using existing file/code/browser tools;
+- candidate capability packs are represented in the deliverable, not yet stored
+  in a dedicated capability-pack table;
+- there is no GUI launcher yet;
+- parity harness evidence is still Slice 9.
 
 ## Component Strategy
 

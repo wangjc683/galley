@@ -197,6 +197,36 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             )
             .await
         }
+        Command::Goal(GoalCmd::Morphling {
+            target,
+            objective,
+            tests,
+            strategy,
+            output,
+            project,
+            budget_minutes,
+            workers,
+            write_mode,
+            expires_minutes,
+            supervisor,
+            reason,
+        }) => {
+            goal::goal_morphling(
+                target,
+                objective,
+                tests,
+                strategy,
+                output,
+                project,
+                budget_minutes,
+                workers,
+                write_mode,
+                expires_minutes,
+                supervisor,
+                reason,
+            )
+            .await
+        }
         Command::Goal(GoalCmd::Run {
             goal_id,
             proposal,

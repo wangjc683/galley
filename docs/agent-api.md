@@ -1292,6 +1292,33 @@ workers and should not exceed `5`. Core keeps the lower-level CLI/API value
 within `1-5` so supervisors can still request a single-agent Goal when needed
 without allowing oversized hives.
 
+#### `galley goal morphling "<target>" [--objective=<text>] [--test=<evidence>]... [--strategy=decide|call|rewrite|discard] [--output=report|capability-pack-candidate|wrapper|rewrite-artifact] [--project=<id>] [--budget-minutes=30] [--workers=3] [--write-mode=autonomous|read-only] [--expires-minutes=10]`
+
+Creates a hidden `galley_native` Morphling Goal proposal. It does **not** start
+work and still requires the normal Goal confirmation/run path. The command
+requires `GALLEY_NATIVE_EXPERIMENTAL=1`.
+
+Morphling is a Goal mode, not a low-level model tool. The generated objective
+template asks native Goal workers to lock the target source/scope, extract
+claims, find or construct same-test evidence, choose a component strategy
+(`call`, `wrap`, `rewrite`, `discard`, or `defer`), run/record comparison
+evidence, and produce a report, wrapper, rewrite artifact, or disabled
+capability-pack candidate. The template explicitly blocks proprietary-code or
+protected-asset reproduction as a strategy.
+
+Example:
+
+```bash
+$ GALLEY_NATIVE_EXPERIMENTAL=1 galley goal morphling "toy-cli" \
+  --objective "Absorb only the command parsing behavior" \
+  --test "toy-cli --help exits 0" \
+  --test "toy-cli greet JC prints greeting" \
+  --output capability-pack-candidate
+```
+
+The response is the normal `GoalProposalBrief` with `runtimeKind:
+"galley_native"` and a structured Morphling objective.
+
 #### `galley goal run --proposal <proposal-id> --confirm-token <internal-token>` / `galley goal run <goal-id> --resume`
 
 Starts or resumes the blocking Goal controller. Starting from a proposal

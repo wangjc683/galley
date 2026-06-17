@@ -157,6 +157,11 @@ behavior changes until an implementation slice explicitly lands them.
   into Core task/result/deliverable state, and final synthesis returns through
   the master session.
   [devlog](../devlog/2026-06-17-galley-native-slice-7-goal-hive.md).
+- Slice 8 landed the first Morphling native Goal mode on 2026-06-17:
+  `galley goal morphling <target>` creates a hidden native Goal proposal with
+  same-test evidence, component strategy, safety, and disabled
+  capability-pack-candidate requirements baked into the objective template.
+  [devlog](../devlog/2026-06-17-galley-native-slice-8-morphling-mode.md).
 
 ## Document Roles
 
@@ -186,7 +191,7 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 7, native can read files, answer from tool results, apply targeted
+After Slice 8, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, run approval-gated local
 commands with bounded output, project command stdout/stderr as ordered
 tool-progress events, read browser tabs/pages through `web_scan`, execute
@@ -201,7 +206,10 @@ resources, deterministic occupied-session refusal, and copy-to-native migration
 for existing visible conversation context. Native Goal Hive has a hidden minimum
 loop: Core-owned task board, internal master planning context, controller-owned
 worker result materialization, deliverable anchor history, and native final
-synthesis in the master session.
+synthesis in the master session. Morphling can now be launched as a hidden
+native Goal proposal template that enforces target locking, same-test evidence,
+component strategy, safety boundaries, and disabled capability-pack candidate
+output.
 
 The next implementation phase should stay conservative:
 
@@ -211,7 +219,7 @@ The next implementation phase should stay conservative:
 3. design real workspace UI and native file mention autocomplete;
 4. design the materialize-by-hash approval path before executing capability
    pack scripts;
-5. add native Goal inspection/pacing and a typed native Goal tool surface before
+5. add native Goal/Morphling inspection, pacing, and a typed native Goal tool surface before
    treating native Goal as default-ready;
-6. keep dynamic capability-pack updates, full Morphling, and default switching
-   in later slices.
+6. add candidate capability-pack persistence/activation workflow;
+7. keep dynamic capability-pack updates and default switching in later slices.

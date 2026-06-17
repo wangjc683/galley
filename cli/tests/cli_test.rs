@@ -40,6 +40,8 @@ const MIG_018: &str = include_str!("../../core/migrations/018_goal_deliverable.s
 const MIG_019: &str = include_str!("../../core/migrations/019_goal_workspace.sql");
 const MIG_020: &str = include_str!("../../core/migrations/020_message_attachments.sql");
 const MIG_021: &str = include_str!("../../core/migrations/021_native_session_runtime.sql");
+const MIG_022: &str = include_str!("../../core/migrations/022_native_memory_substrate.sql");
+const MIG_023: &str = include_str!("../../core/migrations/023_native_goal_runtime.sql");
 
 /// Build a temp .db file with all migrations applied + (optionally)
 /// seed rows. Returns the path; caller stashes it for the spawned
@@ -53,7 +55,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021,
+        MIG_021, MIG_022, MIG_023,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)
@@ -231,6 +233,22 @@ async fn runtime_help_hides_native_experimental_value() {
     assert!(
         !stdout.contains("galley-native"),
         "native runtime should stay hidden from ordinary help: {stdout}"
+    );
+}
+
+#[tokio::test]
+async fn goal_help_hides_morphling_experimental_command() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+
+    let (stdout, code) = run_galley(&db, &["goal", "--help"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    assert!(stdout.contains("propose"));
+    assert!(stdout.contains("run"));
+    assert!(
+        !stdout.contains("morphling"),
+        "Morphling should stay hidden from ordinary help: {stdout}"
     );
 }
 
