@@ -239,7 +239,7 @@ pub(crate) async fn unary_command_value(
 pub(crate) fn map_error_tag(tag: &str, msg: String) -> GalleyError {
     match tag {
         "not_found" => GalleyError::NotFound { message: msg },
-        "invalid_args" => GalleyError::InvalidArgs { message: msg },
+        "invalid_args" | "session_occupied" => GalleyError::InvalidArgs { message: msg },
         "db_unavailable" => GalleyError::DbUnavailable { message: msg },
         "runner_error"
         | "python_not_found"

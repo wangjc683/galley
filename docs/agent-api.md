@@ -244,6 +244,7 @@ These are stable identifiers — agents pattern-match on them:
 | `schema_mismatch`  | Client's `schemaVersion` != server's accepted version                |
 | `not_implemented`  | Command name reserved but no handler wired (transitional state)     |
 | `idle_timeout`     | Connection sat idle past 90s — server politely closed                |
+| `session_occupied` | Hidden native session is already running; retry later or copy-to-native |
 | `internal`         | Unexpected server failure                                            |
 
 The CLI maps each tag onto the §3 exit code table when surfacing the
@@ -488,10 +489,71 @@ playbook running note N34] for the managed/external rationale.
 agent identity.
 
 Exit codes: `0` success / `3 not_found` (session missing) /
-`2 invalid_args` (session archived, malformed args) /
+`2 invalid_args` (session archived, malformed args, hidden native
+`session_occupied`) /
 `4 db_unavailable` (Galley Core not running).
 
-### 5.5a · `galley session approval-response <id> <approval_id> <decision> [--supervisor=<x>] [--reason=<y>]`
+### 5.5a2 · `galley session copy-to-native <id> [--supervisor=<x>] [--reason=<y>]`
+
+**Write command** — creates a new hidden `galley_native` session from an
+existing session's visible conversation context. Requires
+`GALLEY_NATIVE_EXPERIMENTAL=1` and a running Galley Core socket.
+
+This is the safe migration / copy-and-continue path. The source session is not
+modified, archived, stopped, or moved.
+
+| Argument / Flag | Notes |
+| ---------------- | ----- |
+| `id`             | Source session id. Managed, external, or native source sessions are accepted. |
+| `--supervisor`   | Optional supervisor label for audit origin on the new session. |
+| `--reason`       | Optional free-text rationale. |
+
+```bash
+$ galley session copy-to-native sess_managed \
+    --supervisor=ga-claude-1 --reason="continue in native runtime"
+{"sourceSessionId":"sess_managed","session":{...},"copiedMessages":12,"dispatch":"copied_to_native"}
+```
+
+Socket command:
+
+```json
+{
+  "command": "session.copy_to_native",
+  "args": {
+    "sessionId": "sess_managed",
+    "supervisor": "ga-claude-1",
+    "reason": "continue in native runtime"
+  },
+  "schemaVersion": 1
+}
+```
+
+Response shape:
+
+| Field             | Type           | Notes |
+| ----------------- | -------------- | ----- |
+| `sourceSessionId` | string         | The session copied from. |
+| `session`         | `SessionBrief` | New `galley_native` session. |
+| `copiedMessages`  | int            | Count of visible transcript rows copied into the new session. |
+| `dispatch`        | string enum    | `"copied_to_native"`. |
+
+Semantics:
+
+- Copies visible transcript rows only. Internal Goal/controller messages,
+  message attachments, pending approvals, pending ask-user state, worker
+  handles, scratch files, and runtime event streams are not copied.
+- Preserves Project association, summary/turn count, and selected model when
+  the source is managed/native and the model key is meaningful to native.
+- Does not copy external GA model selection because external model names belong
+  to the user-owned GA checkout.
+- Does not automatically run the model. Continue by sending the next user turn
+  to the new session.
+
+Exit codes: `0` success / `2 invalid_args` (native gate off or malformed args) /
+`3 not_found` (source session missing) / `4 db_unavailable` (Galley Core not
+running).
+
+### 5.5a3 · `galley session approval-response <id> <approval_id> <decision> [--supervisor=<x>] [--reason=<y>]`
 
 **Write command** — responds to a pending hidden native tool approval. This is
 currently scoped to `galley_native` sessions. Managed/external GA approvals keep

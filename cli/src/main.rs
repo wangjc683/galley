@@ -88,6 +88,11 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             supervisor,
             reason,
         }) => session::session_send(id, content, supervisor, reason).await,
+        Command::Session(SessionCmd::CopyToNative {
+            id,
+            supervisor,
+            reason,
+        }) => session::session_copy_to_native(id, supervisor, reason).await,
         Command::Session(SessionCmd::ApprovalResponse {
             id,
             approval_id,

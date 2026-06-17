@@ -134,6 +134,25 @@ pub(super) struct PersistedMessageRowRecord {
     pub created_at: String,
 }
 
+#[derive(Debug, FromRow)]
+pub(super) struct CopyMessageRow {
+    pub(super) turn_index: i64,
+    pub(super) sequence: i64,
+    pub(super) role: String,
+    pub(super) content: String,
+    pub(super) tool_calls: Option<String>,
+    pub(super) tool_results: Option<String>,
+    pub(super) thinking: Option<String>,
+    pub(super) final_answer: Option<String>,
+    pub(super) summary: Option<String>,
+    pub(super) preamble: Option<String>,
+    pub(super) created_via: Option<String>,
+    pub(super) supervisor: Option<String>,
+    pub(super) origin_note: Option<String>,
+    pub(super) visibility: String,
+    pub(super) created_at: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct PersistedMessageRow {
     pub id: String,

@@ -379,6 +379,20 @@ pub(crate) enum SessionCmd {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Copy an existing session into a new `galley_native` session.
+    /// The source session is left untouched; only visible transcript rows
+    /// and the Project association are copied. Use when a native session is
+    /// occupied or when migrating managed history into the native runtime.
+    CopyToNative {
+        /// Source session id.
+        id: String,
+        /// Supervisor label. Sets origin via to `supervisor`; omit for via=`cli`.
+        #[arg(long)]
+        supervisor: Option<String>,
+        /// Free-text reason for the action. Surfaces in audit views.
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Respond to a pending native tool approval. Currently supports
     /// hidden `galley_native` sessions; managed/external approvals are
     /// handled by the live GUI/runner IPC path.

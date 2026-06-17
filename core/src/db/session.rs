@@ -508,6 +508,134 @@ impl SqliteGalley {
         insert_session_row_inner(&mut conn, &input, &origin).await
     }
 
+    pub async fn copy_session_to_native(
+        &self,
+        source_id: SessionId,
+        new_id: String,
+        origin: Origin,
+    ) -> Result<(SessionBrief, u32)> {
+        let source = self.session_brief(source_id.clone()).await?;
+        let selected_llm_index = (source.ga_runtime_kind != RuntimeKind::External)
+            .then_some(source.selected_llm_index)
+            .flatten();
+        let selected_llm_key = (source.ga_runtime_kind != RuntimeKind::External)
+            .then(|| source.selected_llm_key.clone())
+            .flatten();
+        let selected_llm_display_name = (source.ga_runtime_kind != RuntimeKind::External)
+            .then(|| source.selected_llm_display_name.clone())
+            .flatten();
+        let input = CreateSessionInput {
+            id: new_id.trim().to_string(),
+            title: format!("Native copy of {}", source.title),
+            project_id: source.project_id.clone(),
+            selected_llm_index,
+            selected_llm_key,
+            selected_llm_display_name,
+            ga_runtime_kind: Some(RuntimeKind::GalleyNative),
+            ga_runtime_id: None,
+            prompt_profile: None,
+        };
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        let session = insert_session_row_inner(&mut tx, &input, &origin).await?;
+        let rows = sqlx::query_as::<_, CopyMessageRow>(
+            "SELECT turn_index, sequence, role, content, tool_calls, tool_results,
+                    thinking, final_answer, summary, preamble, created_via, supervisor,
+                    origin_note, visibility, created_at
+             FROM messages
+             WHERE session_id = ?
+               AND visibility = 'visible'
+             ORDER BY turn_index ASC, sequence ASC",
+        )
+        .bind(source_id.as_str())
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        let now = chrono_now_iso();
+        for row in &rows {
+            let message_id = format!(
+                "msg_{}_copy_{}_{}",
+                session.id.as_str(),
+                row.turn_index,
+                row.sequence
+            );
+            sqlx::query(
+                "INSERT INTO messages (
+                    id, session_id, turn_index, sequence, role, content, tool_calls,
+                    tool_results, thinking, final_answer, summary, preamble, created_at,
+                    created_via, supervisor, origin_note, visibility
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&message_id)
+            .bind(session.id.as_str())
+            .bind(row.turn_index)
+            .bind(row.sequence)
+            .bind(&row.role)
+            .bind(&row.content)
+            .bind(&row.tool_calls)
+            .bind(&row.tool_results)
+            .bind(&row.thinking)
+            .bind(&row.final_answer)
+            .bind(&row.summary)
+            .bind(&row.preamble)
+            .bind(&row.created_at)
+            .bind(row.created_via.as_deref().unwrap_or(origin.via.as_sql()))
+            .bind(row.supervisor.as_deref().or(origin.supervisor.as_deref()))
+            .bind(row.origin_note.as_deref().or(origin.reason.as_deref()))
+            .bind(&row.visibility)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| map_constraint_err("copy_session_to_native.messages", e))?;
+
+            let fts_res = async {
+                let index_body = row
+                    .final_answer
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|body| !body.is_empty())
+                    .unwrap_or(&row.content);
+                sqlx::query(
+                    "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body)
+                     VALUES (?, ?, ?, ?, ?)",
+                )
+                .bind(&message_id)
+                .bind(session.id.as_str())
+                .bind(&row.role)
+                .bind(row.turn_index)
+                .bind(index_body)
+                .execute(&mut *tx)
+                .await?;
+                std::result::Result::<(), sqlx::Error>::Ok(())
+            }
+            .await;
+            if let Err(e) = fts_res {
+                eprintln!("[galley-core] index copied native message fts failed: {e}");
+            }
+        }
+        let turn_count = source.turn_count.map(i64::from).unwrap_or_else(|| {
+            rows.iter()
+                .map(|row| row.turn_index)
+                .max()
+                .unwrap_or(-1)
+                .saturating_add(1)
+                .max(0)
+        });
+        sqlx::query(
+            "UPDATE sessions SET summary = ?, turn_count = ?, last_activity_at = ?, updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(&source.summary)
+        .bind(turn_count)
+        .bind(&now)
+        .bind(&now)
+        .bind(session.id.as_str())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        let session = self.session_brief(session.id).await?;
+        Ok((session, rows.len() as u32))
+    }
+
     pub(super) async fn archive_session_db(
         &self,
         id: SessionId,
@@ -793,6 +921,27 @@ impl SqliteGalley {
             "UPDATE sessions SET \
                 status = 'waiting_approval', \
                 pending_approval_count = 1, \
+                updated_at = ? \
+             WHERE id = ? AND ga_runtime_kind = 'galley_native'",
+        )
+        .bind(&now)
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!("native session {id} not found"),
+            });
+        }
+        self.session_brief(id).await
+    }
+
+    pub async fn set_native_session_running(&self, id: SessionId) -> Result<SessionBrief> {
+        let now = chrono_now_iso();
+        let res = sqlx::query(
+            "UPDATE sessions SET \
+                status = 'running', \
                 updated_at = ? \
              WHERE id = ? AND ga_runtime_kind = 'galley_native'",
         )

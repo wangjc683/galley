@@ -156,6 +156,23 @@ pub(crate) async fn session_send_value(
     }
 }
 
+pub(crate) async fn session_copy_to_native(
+    id: String,
+    supervisor: Option<String>,
+    reason: Option<String>,
+) -> Result<(), GalleyError> {
+    let req = serde_json::json!({
+        "command": "session.copy_to_native",
+        "args": {
+            "sessionId": id,
+            "supervisor": supervisor,
+            "reason": reason,
+        },
+        "schemaVersion": SCHEMA_VERSION,
+    });
+    unary_command(req).await
+}
+
 pub(crate) async fn session_approval_response(
     id: String,
     approval_id: String,

@@ -48,6 +48,18 @@ fn goal_workspace_dir_from_base(base: &Path, goal_id: &str) -> PathBuf {
     base.join("goal-workspaces").join(goal_id)
 }
 
+/// Per-session Galley-owned scratch directory for Galley Native. This is the
+/// default workspace for native sessions without a Project workspace binding.
+pub(crate) fn native_session_scratch_dir(session_id: &str) -> Option<PathBuf> {
+    let db = db_path()?;
+    let base = db.parent()?;
+    Some(native_session_scratch_dir_from_base(base, session_id))
+}
+
+fn native_session_scratch_dir_from_base(base: &Path, session_id: &str) -> PathBuf {
+    base.join("native-session-scratch").join(session_id)
+}
+
 /// Galley-owned runtime scratch dir (not per-goal) for materialized
 /// resources the agents read, e.g. the attach-mode master SOP copy (P3).
 pub(crate) fn goal_runtime_dir() -> Option<PathBuf> {
@@ -117,6 +129,15 @@ mod tests {
         assert_eq!(
             goal_workspace_dir_from_base(base, "goal_abc"),
             base.join("goal-workspaces").join("goal_abc"),
+        );
+    }
+
+    #[test]
+    fn native_session_scratch_dir_is_session_scoped_next_to_db() {
+        let base = Path::new("/tmp/galley-config/app.galley");
+        assert_eq!(
+            native_session_scratch_dir_from_base(base, "sess_abc"),
+            base.join("native-session-scratch").join("sess_abc"),
         );
     }
 

@@ -142,6 +142,15 @@ behavior changes until an implementation slice explicitly lands them.
   Project memory resources without adding a 10th tool or enabling durable
   memory writes.
   [devlog](../devlog/2026-06-17-galley-native-slice-5c-memory-resource-read.md).
+- Slice 5D completed the first memory/capability substrate on 2026-06-17:
+  low-risk `start_long_term_update` can write evidence-backed native memory, and
+  hidden native can read built-in `capability://` resources.
+  [devlog](../devlog/2026-06-17-galley-native-slice-5d-memory-capability.md).
+- Slice 6 landed the first workspace/session-continuity loop on 2026-06-17:
+  native turns use Project workspace or scratch policy, expose
+  `workspace://snapshot` and `workspace://index`, reject occupied native sends
+  before writing, and support copy-to-native from existing sessions.
+  [devlog](../devlog/2026-06-17-galley-native-slice-6-workspace-continuity.md).
 
 ## Document Roles
 
@@ -171,7 +180,7 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 5D, native can read files, answer from tool results, apply targeted
+After Slice 6, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, run approval-gated local
 commands with bounded output, project command stdout/stderr as ordered
 tool-progress events, read browser tabs/pages through `web_scan`, execute
@@ -180,14 +189,18 @@ recovery hints, keep a short-lived working checkpoint across turns, and persist
 typed native memory ledger rows. It can read memory rows as `memory://`
 resources, apply low-risk text memory through `start_long_term_update`, undo
 create changes through Core helpers, and read built-in Goal Hive / Morphling /
-Browser Control capability resources through `capability://`.
+Browser Control capability resources through `capability://`. Native sessions
+also have explicit workspace/scratch context, read-only `workspace://`
+resources, deterministic occupied-session refusal, and copy-to-native migration
+for existing visible conversation context.
 
 The next implementation phase should stay conservative:
 
 1. add GUI/CLI inspect and undo surfaces for native memory changes;
-2. add parity tests for `memory://`, `capability://`, and low-risk
+2. add parity tests for `memory://`, `capability://`, `workspace://`, and low-risk
    `start_long_term_update`;
-3. design the materialize-by-hash approval path before executing capability
+3. design real workspace UI and native file mention autocomplete;
+4. design the materialize-by-hash approval path before executing capability
    pack scripts;
-4. keep dynamic capability-pack updates, full Goal Hive, full Morphling, and
+5. keep dynamic capability-pack updates, full Goal Hive, full Morphling, and
    default switching in later slices.

@@ -517,6 +517,11 @@ pub(crate) async fn native_session_run_turn(
             message: "native_session_run_turn supports only galley_native sessions".into(),
         }));
     }
+    if matches!(session.status, crate::api::SessionStatus::Running) {
+        return Err(stringify_error(crate::error::GalleyError::InvalidArgs {
+            message: "native_session_run_turn refused: this Galley Native session is already running; wait for it to finish or copy-and-continue in a new native session.".into(),
+        }));
+    }
 
     crate::native_runtime::event_bus().start_session(input.session_id.as_str());
     let model = match crate::native_model::load_selected_or_default_model(

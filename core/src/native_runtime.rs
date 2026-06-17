@@ -18,7 +18,8 @@ use crate::native_tools::{
 use ring::digest;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::{broadcast, mpsc};
 
@@ -418,11 +419,14 @@ pub async fn run_turn(
     model: Option<NativeModelConfig>,
     host_context: NativeRuntimeHostContext,
 ) -> Result<NativeTurn> {
-    match model {
+    galley
+        .set_native_session_running(session_id.clone())
+        .await?;
+    let result = match model {
         Some(model) => {
             run_model_turn(
                 galley,
-                session_id,
+                session_id.clone(),
                 turn_index,
                 task,
                 mark_unread,
@@ -434,7 +438,7 @@ pub async fn run_turn(
         None => {
             run_mock_turn(
                 galley,
-                session_id,
+                session_id.clone(),
                 turn_index,
                 task,
                 command_name,
@@ -443,7 +447,11 @@ pub async fn run_turn(
             )
             .await
         }
+    };
+    if result.is_err() {
+        let _ = galley.set_native_session_idle(session_id.clone()).await;
     }
+    result
 }
 
 pub async fn run_mock_turn(
@@ -858,29 +866,287 @@ async fn native_tool_context(
 ) -> Result<NativeToolExecutionContext> {
     let session = galley.session_brief(session_id.clone()).await?;
     let project_id = session.project_id.clone();
-    let workspace_root = if let Some(project_id) = session.project_id.as_deref() {
+    let project_workspace = if let Some(project_id) = session.project_id.as_deref() {
         galley
             .list_projects()
             .await?
             .into_iter()
             .find(|project| project.id.as_str() == project_id)
             .and_then(|project| project.root_path)
-            .map(PathBuf::from)
     } else {
         None
     };
+    let workspace = native_workspace_context(
+        session_id,
+        project_id.as_deref(),
+        project_workspace.as_deref(),
+    )?;
+    let workspace_root = workspace.effective_root.clone();
     let mut context = match host_context.browser.clone() {
         Some(browser) => NativeToolExecutionContext::with_browser(workspace_root, browser),
         None => NativeToolExecutionContext::new(workspace_root),
     };
+    context.scratch_root = workspace.scratch_root.clone();
+    context.workspace_kind = Some(workspace.kind.clone());
+    context.workspace_status = Some(workspace.status.clone());
     context.browser_unavailable_reason = host_context.browser_unavailable_reason.clone();
     let capability_packs = builtin_capability_packs();
     let mut resources = native_memory_resource_files(galley, project_id.as_deref()).await?;
     let capability_resources = native_capability_resource_files(&capability_packs)?;
+    let workspace_resources = native_workspace_resource_files(&workspace)?;
     attach_capability_triggers_to_memory_l1(&mut resources, &capability_packs);
     resources.extend(capability_resources);
+    resources.extend(workspace_resources);
     context.resource_files = resources;
     Ok(context)
+}
+
+#[derive(Debug, Clone)]
+struct NativeWorkspaceContext {
+    session_id: String,
+    project_id: Option<String>,
+    project_workspace: Option<PathBuf>,
+    effective_root: Option<PathBuf>,
+    scratch_root: Option<PathBuf>,
+    kind: String,
+    status: String,
+    recovery: Option<String>,
+}
+
+fn native_workspace_context(
+    session_id: &SessionId,
+    project_id: Option<&str>,
+    project_workspace: Option<&str>,
+) -> Result<NativeWorkspaceContext> {
+    let scratch_root = crate::app_paths::native_session_scratch_dir(session_id.as_str());
+    native_workspace_context_with_scratch(session_id, project_id, project_workspace, scratch_root)
+}
+
+fn native_workspace_context_with_scratch(
+    session_id: &SessionId,
+    project_id: Option<&str>,
+    project_workspace: Option<&str>,
+    scratch_root: Option<PathBuf>,
+) -> Result<NativeWorkspaceContext> {
+    if let Some(scratch_root) = scratch_root.as_deref() {
+        fs::create_dir_all(scratch_root).map_err(|err| GalleyError::Internal {
+            message: format!(
+                "create native session scratch {}: {err}",
+                scratch_root.display()
+            ),
+        })?;
+    }
+
+    let project_workspace = project_workspace
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from);
+    let project_id = project_id.map(str::to_string);
+    let (effective_root, kind, status, recovery) = match project_workspace.as_ref() {
+        Some(root) if root.is_dir() => (
+            Some(root.clone()),
+            "project_workspace".to_string(),
+            "available".to_string(),
+            None,
+        ),
+        Some(root) => (
+            Some(root.clone()),
+            "project_workspace".to_string(),
+            "missing".to_string(),
+            Some(format!(
+                "Project workspace {} is unavailable. Locate the folder, clear the Project workspace binding, or continue in a new scratch-only native session.",
+                root.display()
+            )),
+        ),
+        None => (
+            scratch_root.clone(),
+            "scratch".to_string(),
+            if scratch_root.is_some() {
+                "available".to_string()
+            } else {
+                "unavailable".to_string()
+            },
+            scratch_root.is_none().then(|| {
+                "Native session scratch is unavailable because Galley could not resolve its app data directory.".to_string()
+            }),
+        ),
+    };
+
+    Ok(NativeWorkspaceContext {
+        session_id: session_id.as_str().to_string(),
+        project_id,
+        project_workspace,
+        effective_root,
+        scratch_root,
+        kind,
+        status,
+        recovery,
+    })
+}
+
+fn native_workspace_resource_files(
+    workspace: &NativeWorkspaceContext,
+) -> Result<HashMap<String, String>> {
+    let mut resources = HashMap::new();
+    resources.insert(
+        "workspace://snapshot".to_string(),
+        render_workspace_snapshot(workspace),
+    );
+    resources.insert(
+        "workspace://index".to_string(),
+        render_workspace_index(workspace),
+    );
+    if let Some(scratch_root) = workspace.scratch_root.as_ref() {
+        resources.insert(
+            "workspace://scratch".to_string(),
+            render_workspace_scratch(workspace, scratch_root),
+        );
+    }
+    Ok(resources)
+}
+
+fn render_workspace_snapshot(workspace: &NativeWorkspaceContext) -> String {
+    let mut lines = vec![
+        "workspace_resource: workspace://snapshot".to_string(),
+        format!("session_id: {}", workspace.session_id),
+        format!("kind: {}", workspace.kind),
+        format!("status: {}", workspace.status),
+    ];
+    if let Some(project_id) = workspace.project_id.as_deref() {
+        lines.push(format!("project_id: {project_id}"));
+    }
+    if let Some(project_workspace) = workspace.project_workspace.as_ref() {
+        lines.push(format!(
+            "project_workspace: {}",
+            project_workspace.display()
+        ));
+    }
+    if let Some(root) = workspace.effective_root.as_ref() {
+        lines.push(format!("effective_root: {}", root.display()));
+    }
+    if let Some(scratch_root) = workspace.scratch_root.as_ref() {
+        lines.push(format!("scratch_root: {}", scratch_root.display()));
+    }
+    lines.push("scratch_retention: keep while the session is active or recoverable; clean only Galley-owned native-session-scratch paths".to_string());
+    if let Some(recovery) = workspace.recovery.as_deref() {
+        lines.push(format!("recovery: {recovery}"));
+    }
+    lines.join("\n")
+}
+
+fn render_workspace_scratch(workspace: &NativeWorkspaceContext, scratch_root: &Path) -> String {
+    [
+        "workspace_resource: workspace://scratch".to_string(),
+        format!("session_id: {}", workspace.session_id),
+        format!("scratch_root: {}", scratch_root.display()),
+        "purpose: Galley-owned temporary workspace for this native session".to_string(),
+        "retention: keep while active or recently recoverable; never clean Project workspaces"
+            .to_string(),
+    ]
+    .join("\n")
+}
+
+fn render_workspace_index(workspace: &NativeWorkspaceContext) -> String {
+    const FILE_LIMIT: usize = 500;
+    let mut lines = vec![
+        "workspace_resource: workspace://index".to_string(),
+        format!("kind: {}", workspace.kind),
+        format!("status: {}", workspace.status),
+        String::new(),
+    ];
+    if workspace.status != "available" {
+        lines.push(
+            workspace
+                .recovery
+                .clone()
+                .unwrap_or_else(|| "Workspace is unavailable.".to_string()),
+        );
+        return lines.join("\n");
+    }
+    let Some(root) = workspace.effective_root.as_ref() else {
+        lines.push("No effective workspace root is available.".to_string());
+        return lines.join("\n");
+    };
+    let Ok(root) = root.canonicalize() else {
+        lines.push(format!(
+            "Workspace root {} cannot be resolved.",
+            root.display()
+        ));
+        return lines.join("\n");
+    };
+    let mut files = Vec::new();
+    collect_workspace_files(&root, &root, 0, FILE_LIMIT, &mut files);
+    lines.push(format!("root: {}", root.display()));
+    lines.push(format!("files_indexed: {}", files.len()));
+    lines.push(
+        "file_mentions: use @path for these relative paths; read contents with file_read"
+            .to_string(),
+    );
+    lines.push(String::new());
+    if files.is_empty() {
+        lines.push("No files indexed for this workspace.".to_string());
+    } else {
+        for file in files {
+            lines.push(format!("- @{file}"));
+        }
+    }
+    lines.join("\n")
+}
+
+fn collect_workspace_files(
+    root: &Path,
+    dir: &Path,
+    depth: usize,
+    limit: usize,
+    files: &mut Vec<String>,
+) {
+    if files.len() >= limit || depth > 5 {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries = entries.filter_map(|entry| entry.ok()).collect::<Vec<_>>();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        if files.len() >= limit {
+            break;
+        }
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if should_skip_workspace_entry(&name) {
+            continue;
+        }
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        if metadata.is_dir() {
+            collect_workspace_files(root, &path, depth + 1, limit, files);
+        } else if metadata.is_file() {
+            if let Ok(relative) = path.strip_prefix(root) {
+                files.push(relative.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+}
+
+fn should_skip_workspace_entry(name: &str) -> bool {
+    matches!(
+        name,
+        ".git"
+            | ".hg"
+            | ".svn"
+            | "node_modules"
+            | "target"
+            | "dist"
+            | "build"
+            | ".venv"
+            | ".mypy_cache"
+            | ".pytest_cache"
+            | ".ruff_cache"
+            | ".next"
+    )
 }
 
 async fn native_memory_resource_files(
@@ -3013,6 +3279,87 @@ mod tests {
         assert!(l1.contains("Capability packs:"));
         assert!(l1.contains("target: capability://goal-hive/manifest"));
         assert!(l1.contains("target: capability://browser-control/manifest"));
+    }
+
+    #[test]
+    fn workspace_resources_index_project_files_and_skip_heavy_dirs() {
+        let root = tempfile::tempdir().unwrap();
+        let scratch = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("src")).unwrap();
+        fs::create_dir_all(root.path().join("node_modules/pkg")).unwrap();
+        fs::write(root.path().join("Cargo.toml"), "[package]\n").unwrap();
+        fs::write(root.path().join("src/main.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.path().join("node_modules/pkg/index.js"), "ignored\n").unwrap();
+
+        let workspace = native_workspace_context_with_scratch(
+            &SessionId("s-workspace-index".into()),
+            Some("proj_workspace"),
+            Some(root.path().to_str().unwrap()),
+            Some(scratch.path().join("scratch")),
+        )
+        .expect("workspace context");
+        let resources = native_workspace_resource_files(&workspace).expect("workspace resources");
+        let snapshot = resources.get("workspace://snapshot").unwrap();
+        let index = resources.get("workspace://index").unwrap();
+
+        assert_eq!(workspace.kind, "project_workspace");
+        assert_eq!(workspace.status, "available");
+        assert!(snapshot.contains("project_id: proj_workspace"));
+        assert!(index.contains("@Cargo.toml"));
+        assert!(index.contains("@src/main.rs"));
+        assert!(!index.contains("node_modules"));
+        assert!(resources
+            .get("workspace://scratch")
+            .unwrap()
+            .contains("scratch_root:"));
+    }
+
+    #[test]
+    fn missing_project_workspace_snapshot_is_actionable() {
+        let scratch = tempfile::tempdir().unwrap();
+        let missing = scratch.path().join("missing-project");
+
+        let workspace = native_workspace_context_with_scratch(
+            &SessionId("s-workspace-missing".into()),
+            Some("proj_missing"),
+            Some(missing.to_str().unwrap()),
+            Some(scratch.path().join("scratch")),
+        )
+        .expect("workspace context");
+        let resources = native_workspace_resource_files(&workspace).expect("workspace resources");
+
+        assert_eq!(workspace.kind, "project_workspace");
+        assert_eq!(workspace.status, "missing");
+        assert_eq!(workspace.effective_root.as_deref(), Some(missing.as_path()));
+        assert!(resources
+            .get("workspace://snapshot")
+            .unwrap()
+            .contains("Locate the folder"));
+        assert!(resources
+            .get("workspace://index")
+            .unwrap()
+            .contains("Project workspace"));
+    }
+
+    #[test]
+    fn scratch_workspace_is_default_without_project_workspace() {
+        let scratch = tempfile::tempdir().unwrap();
+        let scratch_root = scratch.path().join("scratch");
+        let workspace = native_workspace_context_with_scratch(
+            &SessionId("s-workspace-scratch".into()),
+            None,
+            None,
+            Some(scratch_root.clone()),
+        )
+        .expect("workspace context");
+
+        assert_eq!(workspace.kind, "scratch");
+        assert_eq!(workspace.status, "available");
+        assert_eq!(
+            workspace.effective_root.as_deref(),
+            Some(scratch_root.as_path())
+        );
+        assert!(scratch_root.is_dir());
     }
 
     #[test]

@@ -1,12 +1,23 @@
 use super::common::{map_galley_err, origin_from_args, SocketResponseLite};
 use super::llm_cmds::resolve_llm_selection;
 use super::*;
+use crate::api::SessionStatus;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SessionSendArgs {
     session_id: String,
     content: String,
+    #[serde(default)]
+    supervisor: Option<String>,
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionCopyToNativeArgs {
+    session_id: String,
     #[serde(default)]
     supervisor: Option<String>,
     #[serde(default)]
@@ -145,20 +156,27 @@ pub(super) async fn dispatch_session_send(
             return SocketResponse::err(request_id, "db_unavailable", format!("open: {e}"));
         }
     };
-    let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
     let session_id = SessionId(parsed.session_id.clone());
+    let session = match galley.session_brief(session_id.clone()).await {
+        Ok(session) => session,
+        Err(e) => return map_galley_err(request_id, e),
+    };
+    if session.ga_runtime_kind == RuntimeKind::GalleyNative
+        && matches!(session.status, SessionStatus::Running)
+    {
+        return SocketResponse::err(
+            request_id,
+            "session_occupied",
+            "session.send refused: this Galley Native session is already running; wait for it to finish or copy-and-continue in a new native session.",
+        );
+    }
+
+    let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
     let brief = match galley
         .send_message(session_id, parsed.content.clone(), origin)
         .await
     {
         Ok(b) => b,
-        Err(e) => return map_galley_err(request_id, e),
-    };
-    let session = match galley
-        .session_brief(SessionId(parsed.session_id.clone()))
-        .await
-    {
-        Ok(session) => session,
         Err(e) => return map_galley_err(request_id, e),
     };
 
@@ -248,6 +266,69 @@ pub(super) async fn dispatch_session_send(
         "dispatch": dispatch_status,
     });
     SocketResponse::ok(request_id, result)
+}
+
+pub(super) async fn dispatch_session_copy_to_native(
+    request_id: Option<String>,
+    args: Value,
+    app: Option<&AppHandle>,
+) -> SocketResponse {
+    let parsed: SessionCopyToNativeArgs = match serde_json::from_value(args) {
+        Ok(a) => a,
+        Err(e) => {
+            return SocketResponse::err(
+                request_id,
+                "invalid_args",
+                format!("session.copy_to_native args: {e}"),
+            );
+        }
+    };
+    let source_session_id = parsed.session_id.trim().to_string();
+    if source_session_id.is_empty() {
+        return SocketResponse::err(
+            request_id,
+            "invalid_args",
+            "session.copy_to_native: sessionId is empty",
+        );
+    }
+    if let Err(e) = crate::runtime::ensure_runtime_execution_available(RuntimeKind::GalleyNative) {
+        return map_galley_err(request_id, e);
+    }
+
+    let galley = match SqliteGalley::open().await {
+        Ok(g) => g,
+        Err(e) => {
+            return SocketResponse::err(request_id, "db_unavailable", format!("open: {e}"));
+        }
+    };
+    let origin = origin_from_args(parsed.supervisor, parsed.reason);
+    let new_id = mint_session_id();
+    match galley
+        .copy_session_to_native(SessionId(source_session_id.clone()), new_id, origin)
+        .await
+    {
+        Ok((session, copied_messages)) => {
+            if let Some(app) = app {
+                let _ = app.emit(
+                    "session-created-external",
+                    SessionExternalPayload {
+                        session: session.clone(),
+                        via: "session.copy_to_native",
+                    },
+                );
+            }
+            SocketResponse::ok(
+                request_id,
+                serde_json::json!({
+                    "sourceSessionId": source_session_id,
+                    "session": session,
+                    "copiedMessages": copied_messages,
+                    "dispatch": "copied_to_native",
+                }),
+            )
+        }
+        Err(e) => map_galley_err(request_id, e),
+    }
 }
 
 pub(super) async fn dispatch_session_approval_response(

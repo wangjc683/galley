@@ -230,6 +230,9 @@ pub struct NativeToolProgressChunk {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NativeToolExecutionContext {
     pub workspace_root: Option<PathBuf>,
+    pub scratch_root: Option<PathBuf>,
+    pub workspace_kind: Option<String>,
+    pub workspace_status: Option<String>,
     pub browser: Option<NativeBrowserExecutionContext>,
     pub browser_unavailable_reason: Option<String>,
     pub resource_files: HashMap<String, String>,
@@ -239,6 +242,9 @@ impl NativeToolExecutionContext {
     pub fn new(workspace_root: Option<PathBuf>) -> Self {
         Self {
             workspace_root,
+            scratch_root: None,
+            workspace_kind: None,
+            workspace_status: None,
             browser: None,
             browser_unavailable_reason: None,
             resource_files: HashMap::new(),
@@ -251,6 +257,9 @@ impl NativeToolExecutionContext {
     ) -> Self {
         Self {
             workspace_root,
+            scratch_root: None,
+            workspace_kind: None,
+            workspace_status: None,
             browser: Some(browser),
             browser_unavailable_reason: None,
             resource_files: HashMap::new(),
@@ -263,6 +272,9 @@ impl NativeToolExecutionContext {
     ) -> Self {
         Self {
             workspace_root,
+            scratch_root: None,
+            workspace_kind: None,
+            workspace_status: None,
             browser: None,
             browser_unavailable_reason: Some(reason.into()),
             resource_files: HashMap::new(),
@@ -305,7 +317,7 @@ pub fn parity_tool_specs() -> Vec<NativeToolSpec> {
         ),
         spec(
             "file_read",
-            "Read a file, memory:// resource, capability:// resource, or a line range from an allowed path.",
+            "Read a file, memory:// resource, capability:// resource, workspace:// resource, or a line range from an allowed path.",
             "core_file_tool",
             "none",
             serde_json::json!({
@@ -1086,6 +1098,8 @@ fn normalize_resource_uri(path: &str) -> String {
     let mut normalized = path.trim().replace('\\', "/");
     let min_len = if normalized.starts_with("capability://") {
         "capability://".len()
+    } else if normalized.starts_with("workspace://") {
+        "workspace://".len()
     } else {
         "memory://".len()
     };
@@ -1096,7 +1110,9 @@ fn normalize_resource_uri(path: &str) -> String {
 }
 
 fn is_native_resource_uri(path: &str) -> bool {
-    path.starts_with("memory://") || path.starts_with("capability://")
+    path.starts_with("memory://")
+        || path.starts_with("capability://")
+        || path.starts_with("workspace://")
 }
 
 fn file_read_resource_content(
@@ -3482,6 +3498,35 @@ def execute_js_rich(script, driver, no_monitor=False):
             .content
             .contains("file_read: capability://morphling/sops/main"));
         assert!(result.content.contains("Morphling SOP"));
+        assert!(!result.content.contains("\nheading\n"));
+    }
+
+    #[test]
+    fn file_read_reads_workspace_resource_without_approval() {
+        let call = tool_call(
+            "file_read",
+            serde_json::json!({
+                "path": "workspace://index",
+                "startLine": 2,
+                "endLine": 3
+            }),
+        );
+        let mut context = NativeToolExecutionContext::default();
+        context.resource_files.insert(
+            "workspace://index".to_string(),
+            "heading\n- @src/main.rs\n- @Cargo.toml\n".to_string(),
+        );
+
+        let approval = approval_for_tool_call(&call, &context);
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(approval, "none");
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("file_read: workspace://index"));
+        assert!(result.content.contains("@src/main.rs"));
+        assert!(result.content.contains("@Cargo.toml"));
         assert!(!result.content.contains("\nheading\n"));
     }
 

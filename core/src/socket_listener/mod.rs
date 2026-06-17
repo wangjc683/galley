@@ -477,6 +477,9 @@ async fn dispatch_line(
         "session.send" => {
             DispatchResult::Unary(dispatch_session_send(request_id, req.args, app, manager).await)
         }
+        "session.copy_to_native" => {
+            DispatchResult::Unary(dispatch_session_copy_to_native(request_id, req.args, app).await)
+        }
         "session.approval_response" => DispatchResult::Unary(
             dispatch_session_approval_response(request_id, req.args, app).await,
         ),
@@ -2588,6 +2591,205 @@ mod tests {
             }
         }
         assert!(saw_second_progress);
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_send_native_running_session_is_occupied_without_write() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+        let galley = SqliteGalley::open().await.unwrap();
+        let session_id = SessionId("s-native-occupied".into());
+        galley
+            .create_session(
+                CreateSessionInput {
+                    id: session_id.as_str().to_string(),
+                    title: "Occupied native".into(),
+                    project_id: None,
+                    selected_llm_index: None,
+                    selected_llm_key: None,
+                    selected_llm_display_name: None,
+                    ga_runtime_kind: Some(RuntimeKind::GalleyNative),
+                    ga_runtime_id: None,
+                    prompt_profile: None,
+                },
+                Origin::cli(None, Some("occupied test".into())),
+            )
+            .await
+            .unwrap();
+        galley
+            .set_native_session_running(session_id.clone())
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let send_line = serde_json::json!({
+            "command": "session.send",
+            "args": {
+                "sessionId": session_id.as_str(),
+                "content": "Should not be persisted"
+            },
+            "requestId": "native-occupied-send"
+        })
+        .to_string();
+        let send_resp = expect_unary(dispatch_line(&send_line, None, &mgr).await);
+
+        assert!(!send_resp.ok);
+        assert_eq!(send_resp.error.as_deref(), Some("session_occupied"));
+        assert!(send_resp
+            .message
+            .as_deref()
+            .unwrap()
+            .contains("copy-and-continue"));
+        assert!(galley
+            .session_messages(session_id, None)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_copy_to_native_copies_visible_context_only() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+
+        let galley = SqliteGalley::open().await.unwrap();
+        let raw_pool = sqlx::SqlitePool::connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&db_path)
+                .create_if_missing(false),
+        )
+        .await
+        .unwrap();
+        galley
+            .create_project(
+                CreateProjectInput {
+                    id: "p1".into(),
+                    name: "Copy Project".into(),
+                    root_path: None,
+                    icon: None,
+                    color: None,
+                },
+                Origin::gui(),
+            )
+            .await
+            .unwrap();
+        let source_session_id = SessionId("s-managed-copy-source".into());
+        galley
+            .create_session(
+                CreateSessionInput {
+                    id: source_session_id.as_str().to_string(),
+                    title: "Managed source".into(),
+                    project_id: Some("p1".into()),
+                    selected_llm_index: Some(2),
+                    selected_llm_key: Some("managed-model-key".into()),
+                    selected_llm_display_name: Some("Managed Model".into()),
+                    ga_runtime_kind: Some(RuntimeKind::Managed),
+                    ga_runtime_id: None,
+                    prompt_profile: None,
+                },
+                Origin::cli(None, Some("copy source".into())),
+            )
+            .await
+            .unwrap();
+        galley
+            .send_message(
+                source_session_id.clone(),
+                "Visible user context".into(),
+                Origin::cli(None, Some("visible user".into())),
+            )
+            .await
+            .unwrap();
+        galley
+            .persist_gui_assistant_message(crate::db::PersistAssistantMessage {
+                session_id: source_session_id.clone(),
+                turn_index: 0,
+                content: "Visible assistant context".into(),
+                tool_calls: None,
+                tool_results: None,
+                thinking: None,
+                final_answer: Some("Visible assistant context".into()),
+                summary: Some("assistant summary".into()),
+                preamble: None,
+                visibility: MessageVisibility::Visible,
+            })
+            .await
+            .unwrap();
+        galley
+            .send_message_with_visibility(
+                source_session_id.clone(),
+                "Internal-only note".into(),
+                Origin::cli(None, Some("internal".into())),
+                MessageVisibility::Internal,
+            )
+            .await
+            .unwrap();
+        sqlx::query("UPDATE sessions SET summary = ?, turn_count = ? WHERE id = ?")
+            .bind("source summary")
+            .bind(3_i64)
+            .bind(source_session_id.as_str())
+            .execute(&raw_pool)
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let copy_line = serde_json::json!({
+            "command": "session.copy_to_native",
+            "args": {
+                "sessionId": source_session_id.as_str(),
+                "supervisor": "slice6-test",
+                "reason": "copy managed to native"
+            },
+            "requestId": "copy-to-native"
+        })
+        .to_string();
+        let copy_resp = expect_unary(dispatch_line(&copy_line, None, &mgr).await);
+        assert!(copy_resp.ok, "response: {copy_resp:?}");
+        let result = copy_resp.result.expect("result");
+        assert_eq!(result["dispatch"], "copied_to_native");
+        assert_eq!(result["sourceSessionId"], source_session_id.as_str());
+        assert_eq!(result["copiedMessages"], 2);
+        assert_eq!(result["session"]["gaRuntimeKind"], "galley_native");
+        assert_eq!(result["session"]["projectId"], "p1");
+        assert_eq!(result["session"]["selectedLlmKey"], "managed-model-key");
+        assert_eq!(result["session"]["turnCount"], 3);
+        assert_eq!(result["session"]["summary"], "source summary");
+        let native_session_id = result["session"]["id"].as_str().unwrap().to_string();
+
+        let source_messages = galley
+            .session_messages_including_internal(source_session_id.clone(), None)
+            .await
+            .unwrap();
+        assert_eq!(source_messages.len(), 3);
+
+        let native_messages = galley
+            .session_messages(SessionId(native_session_id.clone()), None)
+            .await
+            .unwrap();
+        assert_eq!(native_messages.len(), 2);
+        assert_eq!(native_messages[0].content, "Visible user context");
+        assert_eq!(
+            native_messages[1].final_answer.as_deref(),
+            Some("Visible assistant context")
+        );
+        assert!(native_messages
+            .iter()
+            .all(|message| message.content != "Internal-only note"));
+
+        let copied_fts_hits: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM messages_fts WHERE session_id = ?")
+                .bind(&native_session_id)
+                .fetch_one(&raw_pool)
+                .await
+                .unwrap();
+        assert_eq!(copied_fts_hits, 2);
     }
 
     #[tokio::test]

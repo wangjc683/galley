@@ -1,10 +1,11 @@
 # Galley Native RFC 5: Workspace And Session Continuity
 
-> Status: draft decision document.
+> Status: accepted; first minimal implementation landed in Slice 6 on
+> 2026-06-17.
 >
 > Scope: native Project workspace binding, file/code default roots, file
 > mentions, session restore, occupancy, continue/copy policy, and Supervisor
-> follow-ups. This RFC does not implement storage, schema, or runtime behavior.
+> follow-ups.
 
 ## Decision
 
@@ -223,6 +224,54 @@ Do not copy:
 
 The copied session should say it was continued from another session so users
 can navigate back.
+
+## Slice 6 Implementation Checkpoint
+
+Slice 6 landed the minimal Core-owned continuity loop, not the full future UI.
+
+Landed:
+
+- Project `root_path` is interpreted as the native-only primary workspace. It
+  does not change managed/external cwd, GA state, or spawn behavior.
+- Every native session can use a Galley-owned scratch directory at
+  `native-session-scratch/<session_id>`. Slice 6 uses conservative retention:
+  keep scratch and never auto-clean Project workspace paths.
+- Native runtime injects read-only `workspace://snapshot`,
+  `workspace://index`, and, when available, `workspace://scratch` resources into
+  the tool context. `file_read` can read those resources without approval.
+- `workspace://index` provides a capped Project workspace path index for native
+  prompt/tool use. It skips heavy directories such as `.git`, `node_modules`,
+  `target`, `dist`, and cache folders. GUI `@` autocomplete remains later work.
+- Missing Project workspace paths are explicit: the snapshot/index explain that
+  the operator can locate the folder, clear the binding, or continue
+  scratch-only. Native does not silently fall back to scratch when a Project
+  workspace is configured but missing.
+- Native turns mark sessions `running` while executing and return to `idle` or a
+  waiting state when they pause/finish.
+- `session.send` and GUI native run refuse a `galley_native` session already
+  marked `running` with `session_occupied`, before writing a new user message.
+- `session.copy_to_native` and `galley session copy-to-native <id>` create a new
+  native session from an existing session's visible transcript. The source
+  session is untouched.
+- Copy-to-native preserves Project association, summary/turn count, and managed
+  model selection when compatible. External-source model selection is not
+  copied because external GA model names are user-checkout state.
+
+Not landed:
+
+- a new schema column for Project workspace separate from `root_path`;
+- GUI native workspace settings/autocomplete;
+- persisted event-bus replay after Core restart;
+- mid-approval or mid-ask-user restore after app restart;
+- dedicated runtime heartbeat/lease table;
+- scratch cleanup jobs;
+- copying message attachments into native session copies;
+- automatic managed GA memory import.
+
+The practical restore guarantee is: after app/Core restart, an idle native
+session can accept a later turn and rebuild context from Galley-owned persisted
+state: visible transcript, latest working checkpoint, memory/capability
+resources, and workspace resources.
 
 ## Native Restore
 

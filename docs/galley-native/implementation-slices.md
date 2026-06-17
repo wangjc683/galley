@@ -775,6 +775,9 @@ Rollback:
 
 ## Slice 6: Workspace And Session Continuity
 
+Status: implemented as the first minimal continuity slice on 2026-06-17. See
+[Slice 6 Workspace And Continuity](../devlog/2026-06-17-galley-native-slice-6-workspace-continuity.md).
+
 Goal: make native sessions ergonomic for Project work and recoverable across
 process restarts.
 
@@ -784,21 +787,56 @@ Primary RFC:
 
 Tasks:
 
-- store optional Project primary workspace;
-- add native session scratch paths and retention policy;
-- implement file mention indexing for native Project workspace;
-- route file/code tools through explicit workspace policy;
-- add native session snapshot/restore;
-- track runtime occupancy and heartbeat;
-- implement continue original vs copy-and-continue policy;
-- add copy-to-native path for managed sessions.
+- store optional Project primary workspace; landed by treating the existing
+  Project `root_path` as the native-only primary workspace, with no managed or
+  external runtime behavior change;
+- add native session scratch paths and retention policy; landed with
+  Galley-owned `native-session-scratch/<session_id>` paths and conservative
+  no-auto-cleanup retention for Slice 6;
+- implement file mention indexing for native Project workspace; landed as
+  runtime-provided read-only `workspace://index` resource with capped recursive
+  path indexing for native model/tool context. GUI autocomplete remains later UI
+  work;
+- route file/code tools through explicit workspace policy; landed by passing
+  workspace kind/status, scratch root, and effective root into native tool
+  execution context and exposing `workspace://` resources through `file_read`;
+- add native session snapshot/restore; landed as DB-backed idle-session
+  restore: later native turns rebuild context from persisted transcript,
+  working checkpoint, memory/capability resources, and workspace resources
+  after app/Core restart. Persisted event-bus replay and mid-approval restore
+  remain deferred;
+- track runtime occupancy and heartbeat; landed as persisted native
+  `running`/waiting/`idle` status transitions. Dedicated heartbeat rows remain
+  deferred until background native workers exist;
+- implement continue original vs copy-and-continue policy; landed by refusing
+  `session.send` / GUI native run on `galley_native` sessions already marked
+  `running`, with a deterministic `session_occupied` error that points callers
+  to copy-and-continue;
+- add copy-to-native path for managed sessions; landed as
+  `session.copy_to_native` / `galley session copy-to-native <id>`, copying
+  visible transcript, Project association, summary/turn count, and compatible
+  model selection into a new native session without mutating the source.
 
 Exit gate:
 
-- app restart can restore and continue a native session;
-- occupied session behavior is deterministic;
-- missing workspace gives actionable recovery;
-- managed/external sessions are unaffected by Project workspace binding.
+- app restart can restore and continue an idle native session from Galley DB
+  state and runtime resources;
+- occupied native session behavior is deterministic and write-safe;
+- missing workspace produces actionable `workspace://snapshot` /
+  `workspace://index` recovery text instead of silent scratch fallback;
+- managed/external sessions are unaffected by Project workspace binding;
+- copy-to-native preserves useful visible context without copying volatile
+  runtime state.
+
+Deferred:
+
+- GUI Project settings for native workspace binding beyond existing
+  `root_path`;
+- native file mention autocomplete UI;
+- explicit heartbeat/lease table for background native workers;
+- restoring mid-approval / mid-ask-user state after app restart;
+- scratch retention cleanup policy implementation and UI;
+- managed-memory import candidates during copy-to-native.
 
 Rollback:
 
