@@ -60,7 +60,8 @@ matches who you are and what you are trying to do.
   bundled GenericAgent runtime, mode boundaries, prompt composition, model
   config, patch discipline, and state rules.
 - [Galley Native](./galley-native/README.md): folder index for the native
-  runtime charter, RFC set, and implementation-slice plan.
+  runtime charter, RFC set, parity scenario manifest, and
+  implementation-slice plan.
 - [architecture demo](./architecture-demo.md): code-level proof of the four
   architecture principles.
 - [session close SOP](./session-close-sop.md): closeout and knowledge-sync

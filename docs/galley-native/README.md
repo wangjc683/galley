@@ -16,9 +16,10 @@ behavior changes until an implementation slice explicitly lands them.
 6. [RFC 5: Workspace And Session Continuity](./rfc-5-workspace-session-continuity.md)
 7. [RFC 6: Goal Hive And Morphling](./rfc-6-goal-hive-morphling.md)
 8. [RFC 7: Parity Harness And Default Switch](./rfc-7-parity-harness-default-switch.md)
-9. [Open Decisions](./open-decisions.md)
-10. [Implementation Slices](./implementation-slices.md)
-11. [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md)
+9. [Parity Scenario Manifest](./parity-scenario-manifest.md)
+10. [Open Decisions](./open-decisions.md)
+11. [Implementation Slices](./implementation-slices.md)
+12. [Slice 1 Read-Only Audit](./slice-1-readonly-audit.md)
 
 ## Implementation Status
 
@@ -162,6 +163,11 @@ behavior changes until an implementation slice explicitly lands them.
   same-test evidence, component strategy, safety, and disabled
   capability-pack-candidate requirements baked into the objective template.
   [devlog](../devlog/2026-06-17-galley-native-slice-8-morphling-mode.md).
+- Slice 9A landed the parity contract checkpoint on 2026-06-17:
+  the parity scenario manifest defines scenario IDs, harness layers,
+  beta/default/support gates, pass signals, and accepted variance before
+  native is exposed as opt-in beta.
+  [devlog](../devlog/2026-06-17-galley-native-slice-9a-parity-contract.md).
 
 ## Document Roles
 
@@ -182,6 +188,9 @@ behavior changes until an implementation slice explicitly lands them.
   absorption.
 - [RFC 7](./rfc-7-parity-harness-default-switch.md): managed-vs-native parity
   testing, dogfood gates, rollout phases, rollback, and managed retirement.
+- [Parity Scenario Manifest](./parity-scenario-manifest.md): stable Slice 9A
+  scenario IDs, comparison rules, harness layers, gates, pass signals, and
+  evidence record shape.
 - [Open Decisions](./open-decisions.md): pre-freeze decisions needed before
   Slice 1 starts.
 - [Implementation Slices](./implementation-slices.md): sequencing and
@@ -191,7 +200,7 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 8, native can read files, answer from tool results, apply targeted
+After Slice 9A, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, run approval-gated local
 commands with bounded output, project command stdout/stderr as ordered
 tool-progress events, read browser tabs/pages through `web_scan`, execute
@@ -209,17 +218,18 @@ worker result materialization, deliverable anchor history, and native final
 synthesis in the master session. Morphling can now be launched as a hidden
 native Goal proposal template that enforces target locking, same-test evidence,
 component strategy, safety boundaries, and disabled capability-pack candidate
-output.
+output. The parity scenario manifest now defines what evidence is required
+before native can become opt-in beta or the new-user default.
 
 The next implementation phase should stay conservative:
 
-1. add GUI/CLI inspect and undo surfaces for native memory changes;
-2. add parity tests for `memory://`, `capability://`, `workspace://`, and low-risk
-   `start_long_term_update`;
-3. design real workspace UI and native file mention autocomplete;
-4. design the materialize-by-hash approval path before executing capability
-   pack scripts;
-5. add native Goal/Morphling inspection, pacing, and a typed native Goal tool surface before
-   treating native Goal as default-ready;
-6. add candidate capability-pack persistence/activation workflow;
-7. keep dynamic capability-pack updates and default switching in later slices.
+1. implement Slice 9B native mock/integration harness coverage for the
+   manifest's beta-blocker scenarios;
+2. implement Slice 9C CLI/Supervisor schema and event compatibility coverage;
+3. build Slice 9D managed-vs-native semantic comparison only after native
+   harness assertions are stable;
+4. collect Slice 9E dogfood evidence and troubleshooting for Browser, memory,
+   continuation, Goal Hive, Morphling, and fallback;
+5. expose Slice 9F Settings opt-in only after beta-blocker scenarios pass or
+   have explicit accepted gaps;
+6. keep dynamic capability-pack updates and default switching in later slices.

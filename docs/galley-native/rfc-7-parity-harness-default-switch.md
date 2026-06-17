@@ -1,10 +1,12 @@
 # Galley Native RFC 7: Parity Harness And Default Switch
 
-> Status: draft decision document.
+> Status: accepted decision document; Slice 9A parity contract checkpoint landed
+> on 2026-06-17.
 >
 > Scope: managed-vs-native parity testing, event contracts, dogfood metrics,
 > rollout gates, default switch, rollback, and managed retirement. This RFC does
-> not implement tests or runtime behavior.
+> not implement tests or runtime behavior. The scenario source of truth is the
+> [Parity Scenario Manifest](./parity-scenario-manifest.md).
 
 ## Decision
 
@@ -118,27 +120,23 @@ These tests should tolerate model variance and focus on capability parity.
 
 ## Required Scenario Set
 
-V1 default switch should require at least these scenarios:
+V1 default switch requires the scenarios in the
+[Parity Scenario Manifest](./parity-scenario-manifest.md).
 
-| Area | Scenario |
-|---|---|
-| Basic answer | Answer a normal question without tools |
-| `code_run` | Run a small command, use output correctly |
-| File edit | Read and patch a temp project file |
-| Large code no-tool | Recover when model emits code without tool |
-| Approval | Block and resume a risky write |
-| Browser | Scan tabs and execute a safe JS action |
-| Memory read | Discover an SOP through L1 pointer and read it |
-| Memory write | Distill a verified fact with evidence and undo |
-| Capability pack | Use a pack SOP/script through resource paths |
-| Workspace | Resolve an `@` file mention and default tool root |
-| Continue | Restore and continue after restart |
-| Copy continue | Fork an occupied session safely |
-| Goal Hive | Run a small multi-worker Goal to final synthesis |
-| Morphling | Absorb a toy CLI/library using same-test comparison |
-| Failure recovery | Surface missing workspace/browser/model errors clearly |
+The manifest assigns each scenario:
 
-Some can be mock-model tests; some need dogfood with real models.
+- a stable ID;
+- harness layer;
+- beta/default/support gate class;
+- pass signal;
+- allowed variance.
+
+The required areas are basic answer, model adapters, `code_run`, file edit,
+large code no-tool recovery, approval, `ask_user`, browser, memory read/write,
+capability pack resources, workspace, continue, copy continue, CLI/Supervisor,
+Goal Hive, Morphling, failure recovery, and managed fallback.
+
+Some scenarios can be mock-model tests; some need dogfood with real models.
 
 ## Event Contract
 
@@ -216,6 +214,21 @@ managed without data loss.
 Managed stops being the built-in fallback only after native covers parity,
 dogfood, migration, and support requirements. External GA remains advanced
 compatibility.
+
+## Slice 9 Implementation Split
+
+Slice 9 is split into smaller implementation slices:
+
+| Slice | Purpose |
+|---|---|
+| 9A | Freeze parity contract and scenario manifest |
+| 9B | Implement native mock/integration harness coverage |
+| 9C | Prove CLI/Supervisor schema and event compatibility |
+| 9D | Add managed-vs-native semantic comparator |
+| 9E | Record dogfood evidence and troubleshooting |
+| 9F | Expose opt-in beta with tested managed fallback |
+
+The visible Settings opt-in belongs to 9F, not the beginning of Slice 9.
 
 ## Default Switch Gates
 

@@ -959,29 +959,156 @@ Deferred:
 Goal: prove native can replace managed for selected users before becoming the
 new default.
 
-Primary RFC:
+Primary docs:
 
 - [RFC 7](./rfc-7-parity-harness-default-switch.md)
+- [Parity Scenario Manifest](./parity-scenario-manifest.md)
+
+Slice 9 is intentionally split. It is too large to ship as one implementation
+slice because it combines test infrastructure, managed-vs-native comparison,
+dogfood evidence, Settings exposure, fallback routing, and support docs.
+
+### Slice 9A: Parity Contract And Scenario Manifest
+
+Status: documentation checkpoint landed on 2026-06-17.
+
+Goal: freeze what "native parity" means before writing the harness.
 
 Tasks:
 
-- implement native unit/mock/integration harness;
-- implement managed-vs-native scenario comparison;
-- add local dogfood metrics or devlog checklist;
-- expose native as experimental opt-in;
-- add managed fallback routing;
-- write troubleshooting docs for native errors.
+- define comparison rules;
+- define harness layers;
+- define beta/default/support gate classes;
+- define scenario IDs and pass signals;
+- update RFC 7 and docs index.
 
 Exit gate:
 
-- required scenario set passes or has accepted gaps;
-- Browser, memory, Goal, workspace, and continuation all have dogfood evidence;
-- fallback to managed is tested;
-- CLI/Supervisor callers tolerate native runtime values.
+- scenario manifest can answer what must pass before opt-in beta;
+- manifest distinguishes automated tests from dogfood evidence;
+- manifest explains accepted variance and non-acceptable regressions;
+- no runtime, schema, or UI behavior changes.
 
 Rollback:
 
-- remove opt-in from UI and keep native hidden.
+- revert the manifest and keep the previous RFC 7 scenario list.
+
+### Slice 9B: Native Harness Coverage
+
+Goal: make native's own behavior testable before comparing it to managed.
+
+Tasks:
+
+- add mock-model loop tests for P01, P03-P07, P09, P11, P12, P18;
+- add native integration tests for safe file/code/workspace/resource paths;
+- add event-order assertions for native tool/approval/ask-user/continuation;
+- keep real model and managed comparison out of this slice.
+
+Exit gate:
+
+- native mock/integration scenarios have deterministic pass/fail signals;
+- failures produce actionable assertion messages;
+- harness does not require a real LLM or a real external GA checkout.
+
+Rollback:
+
+- remove the new harness tests without changing runtime behavior.
+
+### Slice 9C: CLI And Supervisor Event Compatibility
+
+Goal: prove public schema v1 consumers tolerate native runtime values and event
+streams.
+
+Tasks:
+
+- test `runtimeKind = galley_native` through CLI JSON and socket/watch output;
+- assert optional native event fields remain additive;
+- verify older schema v1 callers can ignore native-specific fields;
+- document any accepted event variance.
+
+Exit gate:
+
+- P15 passes in CLI/socket tests;
+- no breaking schema v1 change is introduced;
+- Supervisor-facing troubleshooting copy names native-specific unavailable
+  states.
+
+Rollback:
+
+- keep native hidden and revert only compatibility tests/docs if they are wrong.
+
+### Slice 9D: Managed-Vs-Native Scenario Comparator
+
+Goal: compare managed and native semantically without pretending LLM wording is
+deterministic.
+
+Tasks:
+
+- build a scenario runner that records managed and native evidence;
+- compare outcome class, tool/action class, approval path, event rhythm, and
+  persisted state;
+- start with P01, P03, P04, P08, P14, P18, P19;
+- produce human-reviewable diffs for model-dependent output.
+
+Exit gate:
+
+- comparator can mark pass/fail/accepted-gap per scenario;
+- at least one managed and native run can be compared without mutating external
+  GA state;
+- accepted gaps are explicit and linked to follow-up slices.
+
+Rollback:
+
+- disable comparator reports while keeping native harness coverage.
+
+### Slice 9E: Dogfood Evidence And Troubleshooting
+
+Goal: collect real-use evidence and make native failures recoverable.
+
+Tasks:
+
+- create local dogfood checklist/report format;
+- record Browser, memory, Goal Hive, Morphling, continuation, and fallback
+  evidence;
+- write troubleshooting docs for model, browser, workspace, approval, memory,
+  and fallback errors;
+- keep metrics local/devlog-based unless a separate privacy decision adds
+  telemetry.
+
+Exit gate:
+
+- P08, P10, P13, P16, P17, P18, and P19 have dogfood evidence or accepted gaps;
+- troubleshooting tells the user what to do next;
+- no remote telemetry is added.
+
+Rollback:
+
+- remove dogfood docs/reporting without changing runtime behavior.
+
+### Slice 9F: Opt-In Beta And Managed Fallback
+
+Goal: expose native to selected built-in users only after evidence exists.
+
+Tasks:
+
+- add visible experimental native opt-in in Settings;
+- keep managed as the default built-in runtime;
+- test copy-to-native and fallback-to-managed flows;
+- ensure native sessions remain readable if the opt-in is disabled;
+- update release/support docs.
+
+Exit gate:
+
+- required beta-blocker scenarios pass or have accepted gaps;
+- fallback to managed is tested;
+- Settings copy is clear that native is experimental;
+- ordinary users who do nothing remain on managed.
+
+Rollback:
+
+- remove opt-in from Settings and keep native hidden;
+- keep native sessions readable;
+- keep managed and external GA behavior unchanged.
 
 ## Slice 10: New-User Default Switch
 

@@ -77,7 +77,7 @@ Why:
 
 - Slice 1 is about proving the router, not inviting users.
 - Environment flags are easy to disable and do not affect first-run UX.
-- Visible Settings belongs to Slice 9 opt-in beta, after parity evidence.
+- Visible Settings belongs to Slice 9F opt-in beta, after parity evidence.
 
 Implementation notes:
 
