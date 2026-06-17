@@ -229,6 +229,8 @@ Slice 9 is split into smaller implementation slices:
 | 9F | Expose opt-in beta with tested managed fallback |
 
 The visible Settings opt-in belongs to 9F, not the beginning of Slice 9.
+The Slice 9D comparator report contract lives in
+[Parity Comparator Report](./parity-comparator-report.md).
 
 ## Default Switch Gates
 

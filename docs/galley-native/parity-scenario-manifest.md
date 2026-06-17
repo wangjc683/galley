@@ -145,8 +145,8 @@ Each scenario result should record:
 - gaps, accepted variance, and rollback notes.
 
 The first implementation of the harness may store this evidence in devlog
-entries and test output. A structured local report file can come later if it
-reduces review effort.
+entries and test output. Slice 9D defines the structured local comparison
+report shape in [Parity Comparator Report](./parity-comparator-report.md).
 
 ## Slice Mapping
 

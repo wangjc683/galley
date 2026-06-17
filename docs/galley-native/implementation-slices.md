@@ -1082,8 +1082,15 @@ Deferred:
 
 ### Slice 9D: Managed-Vs-Native Scenario Comparator
 
+Status: report-contract checkpoint landed on 2026-06-17; runner not yet
+implemented.
+
 Goal: compare managed and native semantically without pretending LLM wording is
 deterministic.
+
+Primary doc:
+
+- [Parity Comparator Report](./parity-comparator-report.md)
 
 Tasks:
 
@@ -1092,6 +1099,26 @@ Tasks:
   persisted state;
 - start with P01, P03, P04, P08, P14, P18, P19;
 - produce human-reviewable diffs for model-dependent output.
+
+Sub-slices:
+
+- 9D-A: define report contract, verdicts, comparison dimensions, first scenario
+  batch, and safety rules;
+- 9D-B: implement first local report writer for fixture scenarios;
+- 9D-C: run managed/native command comparison for P01, P03, P04, P14, and P18;
+- 9D-D: add Browser and fallback scenarios P08 and P19.
+
+Landed:
+
+- 9D-A report contract defines verdicts `pass`, `fail`, `accepted_gap`,
+  `blocked`, and `not_run`;
+- first scenario batch is P01, P03, P04, P08, P14, P18, and P19;
+- report dimensions are outcome, tool/action, event rhythm, approval,
+  side effects, memory policy, workspace policy, recovery, and persisted state;
+- report JSON shape keeps both managed and native runtime objects present even
+  when one side is blocked;
+- safety rules forbid external GA state writes and require temporary
+  workspaces/test pages for side-effect scenarios.
 
 Exit gate:
 
@@ -1103,6 +1130,14 @@ Exit gate:
 Rollback:
 
 - disable comparator reports while keeping native harness coverage.
+
+Deferred:
+
+- runner implementation;
+- report file location/naming convention;
+- real managed GA execution;
+- browser/fallback comparison;
+- Settings or GUI report surfacing.
 
 ### Slice 9E: Dogfood Evidence And Troubleshooting
 
