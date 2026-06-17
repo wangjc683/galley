@@ -126,6 +126,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-17 | [Galley Native Slice 5C Memory Resource Read](./2026-06-17-galley-native-slice-5c-memory-resource-read.md) | Hidden native `file_read` 可读取 runtime 预渲染的 `memory://` 只读资源：global / Project L1 index、L2/L3/L4 layer list 和 item body；不新增工具、不需要审批、不开启 durable memory writes。 |
 | 2026-06-17 | [Galley Native Slice 5D Memory Apply And Capability Resources](./2026-06-17-galley-native-slice-5d-memory-capability.md) | Slice 5D 完成低风险 `start_long_term_update` 落库：evidence -> item -> L1 index -> change，可撤销 create；`file_read` 支持 `capability://` read-only packs，L1 暴露 Goal Hive / Morphling / Browser Control trigger 指针，`code_run` 明确拒绝直接执行 capability scripts。 |
 | 2026-06-17 | [Galley Native Slice 6 Workspace And Continuity](./2026-06-17-galley-native-slice-6-workspace-continuity.md) | Slice 6 首个 continuity loop 落地：native 使用 Project `root_path` 或 session scratch 作为显式 workspace policy，提供 `workspace://snapshot` / `workspace://index` 只读资源，running native session 在写入前返回 `session_occupied`，并新增 `session.copy_to_native` / `galley session copy-to-native` 把现有 visible context 复制成 native session。 |
+| 2026-06-17 | [Galley Native Slice 7 Goal Hive](./2026-06-17-galley-native-slice-7-goal-hive.md) | Slice 7 打开 hidden native Goal 最小闭环：`galley_native` Goal rows 受实验 gate 保护，master planning 保持 internal-only，controller 把 native worker answer 物化成 task/result/deliverable，final synthesis 通过 native runtime 回到 master session；Morphling 和 typed native Goal tool surface 继续后置。 |
 
 ## 格式约定
 

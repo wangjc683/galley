@@ -734,6 +734,7 @@ mod tests {
         include_str!("../../migrations/020_message_attachments.sql"),
         include_str!("../../migrations/021_native_session_runtime.sql"),
         include_str!("../../migrations/022_native_memory_substrate.sql"),
+        include_str!("../../migrations/023_native_goal_runtime.sql"),
     ];
 
     struct EnvGuard {
@@ -921,6 +922,161 @@ mod tests {
             ]
         );
         assert_eq!(end_reason.as_deref(), Some("native_run_complete"));
+    }
+
+    #[tokio::test]
+    async fn create_native_goal_proposal_allowed_when_gate_enabled() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+
+        let galley = SqliteGalley::open().await.unwrap();
+        let proposal = galley
+            .create_goal_proposal(
+                crate::api::CreateGoalProposalInput {
+                    objective: "Run native Goal Hive smoke".into(),
+                    project_id: None,
+                    master_session_id: None,
+                    budget_seconds: Some(60),
+                    worker_limit: Some(1),
+                    runtime_kind: Some(RuntimeKind::GalleyNative),
+                    write_mode: None,
+                    expires_in_seconds: Some(60),
+                },
+                Origin::cli(
+                    Some("slice7-test".into()),
+                    Some("native goal proposal".into()),
+                ),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(proposal.runtime_kind, RuntimeKind::GalleyNative);
+        assert_eq!(proposal.worker_limit, 1);
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_goal_master_plan_native_stays_internal() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+
+        let galley = SqliteGalley::open().await.unwrap();
+        let session_id = SessionId("s-native-goal-master".into());
+        galley
+            .create_session(
+                CreateSessionInput {
+                    id: session_id.as_str().to_string(),
+                    title: "Native goal master".into(),
+                    project_id: None,
+                    selected_llm_index: None,
+                    selected_llm_key: None,
+                    selected_llm_display_name: None,
+                    ga_runtime_kind: Some(RuntimeKind::GalleyNative),
+                    ga_runtime_id: None,
+                    prompt_profile: None,
+                },
+                Origin::cli(None, Some("native master test".into())),
+            )
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let line = serde_json::json!({
+            "command": "session.goal_master_plan",
+            "args": {
+                "sessionId": session_id.as_str(),
+                "dispatchContent": "Hidden native master planning prompt"
+            },
+            "requestId": "native-master-plan"
+        })
+        .to_string();
+        let resp = expect_unary(dispatch_line(&line, None, &mgr).await);
+
+        assert!(resp.ok, "response: {resp:?}");
+        let result = resp.result.expect("result");
+        assert_eq!(result["dispatch"], "completed_native_goal_master_plan");
+
+        let visible = galley
+            .session_messages(session_id.clone(), None)
+            .await
+            .unwrap();
+        assert!(visible.is_empty());
+        let all = galley
+            .session_messages_including_internal(session_id, None)
+            .await
+            .unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].content, "Hidden native master planning prompt");
+        assert_eq!(all[0].visibility, Some(MessageVisibility::Internal));
+    }
+
+    #[tokio::test]
+    async fn dispatch_session_goal_synthesize_native_runs_inline() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+
+        let galley = SqliteGalley::open().await.unwrap();
+        let session_id = SessionId("s-native-goal-synthesis".into());
+        galley
+            .create_session(
+                CreateSessionInput {
+                    id: session_id.as_str().to_string(),
+                    title: "Native goal synthesis".into(),
+                    project_id: None,
+                    selected_llm_index: None,
+                    selected_llm_key: None,
+                    selected_llm_display_name: None,
+                    ga_runtime_kind: Some(RuntimeKind::GalleyNative),
+                    ga_runtime_id: None,
+                    prompt_profile: None,
+                },
+                Origin::cli(None, Some("native synthesis test".into())),
+            )
+            .await
+            .unwrap();
+
+        let mgr = RunnerManager::new();
+        let line = serde_json::json!({
+            "command": "session.goal_synthesize",
+            "args": {
+                "sessionId": session_id.as_str(),
+                "visibleContent": "正在综合 Goal 结果。",
+                "dispatchContent": "Native final synthesis payload"
+            },
+            "requestId": "native-goal-synthesize"
+        })
+        .to_string();
+        let resp = expect_unary(dispatch_line(&line, None, &mgr).await);
+
+        assert!(resp.ok, "response: {resp:?}");
+        let result = resp.result.expect("result");
+        assert_eq!(result["dispatch"], "completed_native");
+        assert_eq!(result["session"]["status"], "idle");
+        assert!(result["assistantMessage"]["finalAnswer"]
+            .as_str()
+            .unwrap()
+            .contains("Native final synthesis payload"));
+
+        let messages = galley.session_messages(session_id, None).await.unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content, "正在综合 Goal 结果。");
+        assert_eq!(messages[0].visibility, Some(MessageVisibility::Visible));
+        assert!(messages[1]
+            .final_answer
+            .as_deref()
+            .unwrap()
+            .contains("Galley Native mock response"));
     }
 
     #[tokio::test]

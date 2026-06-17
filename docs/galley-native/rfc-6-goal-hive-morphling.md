@@ -1,10 +1,11 @@
 # Galley Native RFC 6: Goal Hive And Morphling
 
-> Status: draft decision document.
+> Status: accepted; Slice 7 minimal Goal Hive loop implemented on 2026-06-17.
 >
 > Scope: native Goal Hive semantics, master/worker behavior, Core task-board
 > ownership, deliverables, workspaces, Morphling mode, and memory/capability
-> absorption. This RFC does not implement runtime behavior.
+> absorption. Slice 7 implements the first native Goal Hive runtime bridge;
+> Morphling remains a later slice.
 
 ## Decision
 
@@ -183,6 +184,37 @@ User-visible Goal flow should remain honest:
 
 The UI should show progress and result access without exposing task-board
 protocol unless the user asks for details.
+
+## Slice 7 Implementation Checkpoint
+
+Slice 7 lands the smallest native Goal Hive loop that is useful without
+pretending to be full Morphling:
+
+- native Goal proposals and Goal rows are accepted only when the hidden
+  `GALLEY_NATIVE_EXPERIMENTAL=1` gate is enabled;
+- Core still owns Goal, GoalTask, GoalEvent, GoalDeliverable, workspace, master
+  session, and worker session identity;
+- native master planning context is persisted as `visibility = internal` and
+  does not enter ordinary session rendering/search;
+- the controller seeds/fallbacks task-board work for native V1 instead of
+  requiring the model to mutate Goal state through ad hoc text protocol;
+- each completed native worker answer is materialized by the controller into a
+  task completion, result event, and deliverable-anchor version;
+- final synthesis runs through the native runtime and returns to the master
+  session as a visible answer.
+
+This is intentionally a controller adapter, not a large new Goal tool surface.
+That keeps the first user-facing risk low: managed/external Goal behavior is
+unchanged, native remains hidden, and Core can inspect every task/result/write.
+
+Known limits after Slice 7:
+
+- native master planning does not yet have a typed model-callable Goal tool;
+- very fast native/mock workers can consume waves quickly until existing wave
+  caps or the deadline logic wrap the run;
+- Morphling is still only a documented Goal mode;
+- native Goal internals still need better GUI inspection before default
+  rollout.
 
 ## Morphling Definition
 

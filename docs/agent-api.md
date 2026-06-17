@@ -1250,10 +1250,11 @@ cache) / `3 not_found` (session id) / `4 db_unavailable` /
 ### 5.19 · `galley goal ...`
 
 **Goal V1** is Galley's headless autonomous Hive surface. Galley Core owns the
-Goal state, Project binding, task board, and event stream. Managed and external
-GenericAgent runtimes participate only as ordinary Galley child sessions; this
-surface does **not** call GA native `/hive`, start GA BBS, or write external GA
-`memory/`, SOP, config, or `temp/goal_state.json`.
+Goal state, Project binding, task board, and event stream. Managed/external
+GenericAgent runtimes participate only as ordinary Galley child sessions, and
+hidden `galley_native` participates as native Galley sessions owned by Core.
+This surface does **not** call GA native `/hive`, start GA BBS, or write external
+GA `memory/`, SOP, config, or `temp/goal_state.json`.
 
 Goal commands are additive inside `schemaVersion: 1`. V1 intentionally has no
 full task-board UI; the CLI and the TopBar Goal indicator are the control
@@ -1264,8 +1265,11 @@ surface.
 Creates a pending conversational-confirmation proposal. It does **not** start
 work.
 
-Hidden `galley-native` is rejected with `invalid_args` in Slice 2. Native Goal
-Hive semantics land in a later Galley Native slice.
+Hidden `galley-native` requires `GALLEY_NATIVE_EXPERIMENTAL=1`. In Slice 7 it
+uses the native Goal Hive minimum loop: internal native master planning context,
+controller-owned task/result/deliverable materialization for native workers,
+and native final synthesis back to the master session. Managed and external
+remain the stable/default Goal runtimes.
 
 ```bash
 $ galley goal propose "review and fix flaky release checks" \
@@ -1295,8 +1299,9 @@ validates the proposal status, internal token, and expiry. If the proposal did
 not specify a Project, Core creates one and binds the Goal to it.
 
 For desktop Goals with a master session, the controller first dispatches an
-internal Goal Master planning turn to that master session. The Master acts as a
-scheduler/editor, not a production worker: it must read
+internal Goal Master planning turn to that master session. For managed/external
+runtimes, the Master acts as a scheduler/editor, not a production worker: it
+must read
 `galley goal status <goalId>`, then write executable work only through
 `galley goal task ...` and `galley goal event ...`. It must not call GA native
 `/hive`, start GA BBS, write external GA state, or write the Goal state outside
@@ -1307,6 +1312,14 @@ coordination logs, and transient task-board state stay in Galley Core. Master
 planning user/assistant/tool turns are persisted as `visibility: "internal"` for
 audit and context, but ordinary session reads, GUI rendering, and search exclude
 them by default.
+
+For hidden `galley_native` Slice 7 Goals, master planning context is also
+persisted as internal-only, but the controller may seed/fallback task-board
+work itself instead of waiting for the native model to mutate Goal state. Native
+worker answers are then materialized by the controller into task completion,
+result events, and deliverable-anchor history. This keeps Goal protocol state in
+Core and out of native memory while the typed native Goal tool surface is still
+deferred.
 
 `workerLimit` is a maximum concurrency limit, not "start this many sessions
 immediately." Worker sessions are created lazily only when the Core task board

@@ -15,9 +15,10 @@ use crate::session::{
 use galley_core_lib::api::{
     goal_checkpoint_deadline_reached, goal_checkpoint_first_material,
     goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_synthesizing,
-    CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief, GoalEventBrief, GoalEventType,
-    GoalId, GoalLocale, GoalStatus, GoalStatusSnapshot, GoalTaskBrief, GoalTaskStatus,
-    MessageBrief, MessageRole, RuntimeKind, SessionId, GOAL_CONFIRMATION_PHRASE,
+    ClaimGoalTaskInput, CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief,
+    GoalEventBrief, GoalEventType, GoalId, GoalLocale, GoalStatus, GoalStatusSnapshot,
+    GoalTaskBrief, GoalTaskStatus, MessageBrief, MessageRole, RuntimeKind, SessionId,
+    UpdateGoalTaskInput, GOAL_CONFIRMATION_PHRASE,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
@@ -718,6 +719,10 @@ async fn run_goal_master_planning_turn(
     )
     .await?;
 
+    if snapshot.goal.runtime_kind == RuntimeKind::GalleyNative {
+        return galley.goal_status(snapshot.goal.id.clone()).await;
+    }
+
     wait_goal_master_planning_result(galley, &snapshot.goal.id, snapshot.tasks.len()).await
 }
 
@@ -1026,6 +1031,18 @@ async fn start_goal_worker_slots(
                 message: "session.new_goal_worker response missing session.id".to_string(),
             })?;
         let baseline = goal_worker_wave_baseline(wave_start_snapshot, session_id.clone());
+        if goal.runtime_kind == RuntimeKind::GalleyNative {
+            materialize_native_goal_worker_result(
+                galley,
+                goal,
+                assigned_task,
+                worker_index,
+                wave,
+                &session_id,
+                &result,
+            )
+            .await?;
+        }
         let _ = galley
             .create_goal_event(CreateGoalEventInput {
                 goal_id: goal.id.clone(),
@@ -1093,7 +1110,7 @@ async fn continue_goal_worker_slot(
     };
     let task = task.clone();
     let prompt = goal_worker_wake_prompt(goal, next_wave, slot.worker_index, &session_id, &task);
-    session_send_value(
+    let result = session_send_value(
         session_id.0.clone(),
         prompt,
         supervisor.clone(),
@@ -1107,6 +1124,18 @@ async fn continue_goal_worker_slot(
     .await?;
     slot.wave = next_wave;
     slot.baseline = goal_worker_wave_baseline(snapshot_before_continue, session_id.clone());
+    if goal.runtime_kind == RuntimeKind::GalleyNative {
+        materialize_native_goal_worker_result(
+            galley,
+            goal,
+            &task,
+            slot.worker_index,
+            next_wave,
+            &session_id,
+            &result,
+        )
+        .await?;
+    }
     let _ = galley
         .create_goal_event(CreateGoalEventInput {
             goal_id: goal.id.clone(),
@@ -1131,6 +1160,90 @@ async fn continue_goal_worker_slot(
         )),
     })?;
     Ok(true)
+}
+
+fn native_goal_assistant_text(response: &Value) -> Option<String> {
+    let message = response.get("assistantMessage")?;
+    message
+        .get("finalAnswer")
+        .and_then(Value::as_str)
+        .or_else(|| message.get("content").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+}
+
+async fn materialize_native_goal_worker_result(
+    galley: &SqliteGalley,
+    goal: &GoalBrief,
+    task: &GoalTaskBrief,
+    worker_index: u32,
+    wave: u32,
+    session_id: &SessionId,
+    response: &Value,
+) -> Result<(), GalleyError> {
+    let Some(text) = native_goal_assistant_text(response) else {
+        return Ok(());
+    };
+    let summary = compact_text(&text, 1200);
+
+    if task.status == GoalTaskStatus::Open && task.owner_session_id.is_none() {
+        match galley
+            .claim_goal_task(ClaimGoalTaskInput {
+                task_id: task.id.clone(),
+                owner_session_id: session_id.clone(),
+                scope: task.scope.clone(),
+            })
+            .await
+        {
+            Ok(_) => {}
+            Err(GalleyError::InvalidArgs { message }) => {
+                let _ = galley
+                    .create_goal_event(CreateGoalEventInput {
+                        goal_id: goal.id.clone(),
+                        task_id: Some(task.id.clone()),
+                        author_session_id: Some(session_id.clone()),
+                        event_type: GoalEventType::System,
+                        body: format!(
+                            "Native worker {worker_index} wave {wave} could not claim task before materializing result: {message}"
+                        ),
+                    })
+                    .await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    galley
+        .update_goal_task(UpdateGoalTaskInput {
+            task_id: task.id.clone(),
+            status: Some(GoalTaskStatus::Completed),
+            owner_session_id: Some(Some(session_id.clone())),
+            scope: Some(task.scope.clone()),
+            result_summary: Some(Some(summary.clone())),
+        })
+        .await?;
+    galley
+        .create_goal_event(CreateGoalEventInput {
+            goal_id: goal.id.clone(),
+            task_id: Some(task.id.clone()),
+            author_session_id: Some(session_id.clone()),
+            event_type: GoalEventType::Result,
+            body: summary,
+        })
+        .await?;
+    galley
+        .set_goal_deliverable(
+            goal.id.clone(),
+            text,
+            Some(format!(
+                "native worker {worker_index} wave {wave} result from task {}",
+                task.id
+            )),
+            Some(session_id.clone()),
+        )
+        .await?;
+    Ok(())
 }
 
 pub(crate) fn goal_worker_wave_baseline(
@@ -1695,6 +1808,9 @@ async fn shutdown_goal_worker_runners(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
+    if snapshot.goal.runtime_kind == RuntimeKind::GalleyNative {
+        return Ok(());
+    }
     let worker_ids = goal_worker_session_ids(snapshot, worker_session_ids);
     for session_id in worker_ids {
         session_shutdown_runner_value(

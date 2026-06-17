@@ -512,13 +512,74 @@ pub(super) async fn dispatch_session_goal_synthesize(
     };
     let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
     let session_id = SessionId(parsed.session_id.clone());
+    let session = match galley.session_brief(session_id.clone()).await {
+        Ok(session) => session,
+        Err(e) => return map_galley_err(request_id, e),
+    };
+    if session.ga_runtime_kind == RuntimeKind::GalleyNative
+        && matches!(session.status, SessionStatus::Running)
+    {
+        return SocketResponse::err(
+            request_id,
+            "session_occupied",
+            "session.goal_synthesize refused: this Galley Native session is already running; wait for it to finish before synthesizing.",
+        );
+    }
     let brief = match galley
-        .send_message(session_id, visible_content.clone(), origin)
+        .send_message(session_id.clone(), visible_content.clone(), origin)
         .await
     {
         Ok(b) => b,
         Err(e) => return map_galley_err(request_id, e),
     };
+
+    if session.ga_runtime_kind == RuntimeKind::GalleyNative {
+        let Some(turn_index) = brief.turn_index else {
+            return SocketResponse::err(
+                request_id,
+                "internal",
+                "session.goal_synthesize native turn missing turn_index",
+            );
+        };
+        let native_turn = match run_hidden_native_turn(
+            &galley,
+            &session.id,
+            turn_index,
+            &dispatch_content,
+            "session.goal_synthesize",
+            true,
+            session.selected_llm_key.as_deref(),
+            app,
+        )
+        .await
+        {
+            Ok(turn) => turn,
+            Err(e) => {
+                emit_user_message_persisted(app, &parsed.session_id, &brief, "persisted_only");
+                return map_galley_err(request_id, e);
+            }
+        };
+        emit_user_message_persisted(app, &parsed.session_id, &brief, "persisted_only");
+        emit_native_runtime_events(app, &native_turn.events);
+        if let Some(app) = app {
+            let _ = app.emit(
+                "session-updated-external",
+                SessionExternalPayload {
+                    session: native_turn.session.clone(),
+                    via: "session.goal_synthesize",
+                },
+            );
+        }
+        return SocketResponse::ok(
+            request_id,
+            serde_json::json!({
+                "message": brief,
+                "session": native_turn.session,
+                "assistantMessage": native_turn.assistant_message,
+                "dispatch": "completed_native",
+            }),
+        );
+    }
 
     if let Err(e) = ensure_goal_synthesis_runner(
         &galley,
@@ -599,6 +660,19 @@ pub(super) async fn dispatch_session_goal_master_plan(
     };
     let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
     let session_id = SessionId(parsed.session_id.clone());
+    let session = match galley.session_brief(session_id.clone()).await {
+        Ok(session) => session,
+        Err(e) => return map_galley_err(request_id, e),
+    };
+    if session.ga_runtime_kind == RuntimeKind::GalleyNative
+        && matches!(session.status, SessionStatus::Running)
+    {
+        return SocketResponse::err(
+            request_id,
+            "session_occupied",
+            "session.goal_master_plan refused: this Galley Native session is already running; wait for it to finish before planning.",
+        );
+    }
     let brief = match galley
         .send_message_with_visibility(
             session_id,
@@ -611,6 +685,16 @@ pub(super) async fn dispatch_session_goal_master_plan(
         Ok(b) => b,
         Err(e) => return map_galley_err(request_id, e),
     };
+
+    if session.ga_runtime_kind == RuntimeKind::GalleyNative {
+        return SocketResponse::ok(
+            request_id,
+            serde_json::json!({
+                "message": brief,
+                "dispatch": "completed_native_goal_master_plan",
+            }),
+        );
+    }
 
     if let Err(e) = ensure_goal_synthesis_runner(
         &galley,

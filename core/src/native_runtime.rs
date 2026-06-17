@@ -1869,7 +1869,8 @@ fn mock_final_answer(task: &str, command_name: &str) -> String {
          Runtime: galley_native\n\n\
          Received task:\n{task}\n\n\
          Galley Native used the deterministic mock-model fallback for this turn. \
-         Some native tools may be active depending on the current implementation slice, but memory, Goal Hive, and Morphling remain deferred."
+         Some native tools may be active depending on the current implementation slice. \
+         Native Goal Hive is available only through the Galley Goal controller; full Morphling remains deferred."
     )
 }
 

@@ -198,7 +198,11 @@ fn goal_master_duty_prompt(runtime_kind: RuntimeKind) -> String {
             }
         }
         RuntimeKind::GalleyNative => {
-            "Galley Native Goal Hive is not executable yet; use managed or external runtime."
+            r#"Master discipline — you are the native Hive master for a Core-owned Goal board:
+- Decompose, judge, and aggregate. Do not produce the deliverable directly when workers can create or verify it.
+- Galley Core owns the task board, events, deliverable anchor, worker identity, workspace path, and final delivery. Use those Core surfaces instead of inventing side state.
+- Run rounds as probe -> design -> execute -> check. Spread divergent work across workers; converge by accepting only improvements into the deliverable anchor.
+- Keep a single current-best deliverable. Workers produce candidates and evidence; the master curates the anchor and returns the final synthesis to the master session."#
                 .to_string()
         }
     }
@@ -264,8 +268,9 @@ pub(crate) fn goal_memory_policy_prompt(runtime_kind: RuntimeKind) -> &'static s
         }
         RuntimeKind::GalleyNative => {
             r#"Memory/SOP policy:
-- Galley Native memory is not executable yet.
-- Do not create native Goal protocol state until the native Goal Hive slice lands."#
+- Galley Native may write durable reusable learnings only through evidence-backed start_long_term_update.
+- Do not store Goal protocol state in native memory: Goal ids, task ids, worker session ids, worker indexes, rounds/waves, temporary coordination logs, task-board state, or deliverable-anchor versions.
+- Goal protocol state belongs in Galley Core task board, events, deliverables, workspace, and visible checkpoints."#
         }
     }
 }

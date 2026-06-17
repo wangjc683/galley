@@ -308,6 +308,21 @@ fn goal_master_planner_uses_runtime_aware_memory_policy() {
 }
 
 #[test]
+fn goal_master_planner_uses_native_goal_policy() {
+    let mut snapshot = test_snapshot(vec![], vec![], vec![]);
+    snapshot.goal.runtime_kind = RuntimeKind::GalleyNative;
+    let prompt = goal_master_planning_prompt(&snapshot, 1);
+
+    assert!(prompt.contains("native Hive master"));
+    assert!(prompt.contains("Galley Core owns the task board"));
+    assert!(prompt.contains("deliverable anchor"));
+    assert!(prompt.contains("evidence-backed start_long_term_update"));
+    assert!(prompt.contains("Goal protocol state belongs in Galley Core"));
+    assert!(!prompt.contains("not executable yet"));
+    assert!(!prompt.contains("use managed or external runtime"));
+}
+
+#[test]
 fn goal_worker_wake_prompt_reuses_memory_policy() {
     let task = GoalTaskBrief {
         description: Some("Review the current answer and find gaps.".to_string()),
@@ -328,6 +343,27 @@ fn goal_worker_wake_prompt_reuses_memory_policy() {
 
     assert!(prompt.contains(goal_memory_policy_prompt(RuntimeKind::Managed)));
     assert!(!prompt.contains("write GenericAgent memory/SOP/config"));
+}
+
+#[test]
+fn goal_worker_wake_prompt_reuses_native_memory_policy() {
+    let mut goal = test_goal();
+    goal.runtime_kind = RuntimeKind::GalleyNative;
+    let task = GoalTaskBrief {
+        description: Some("Review the current answer and find gaps.".to_string()),
+        ..test_task_with_scope(
+            "task_native_wake",
+            GoalTaskStatus::Open,
+            None,
+            Some("goal-worker-1:verification"),
+        )
+    };
+    let prompt =
+        goal_worker_wake_prompt(&goal, 2, 1, &SessionId("worker_native".to_string()), &task);
+
+    assert!(prompt.contains(goal_memory_policy_prompt(RuntimeKind::GalleyNative)));
+    assert!(prompt.contains("Do not store Goal protocol state in native memory"));
+    assert!(!prompt.contains("not executable yet"));
 }
 
 #[test]

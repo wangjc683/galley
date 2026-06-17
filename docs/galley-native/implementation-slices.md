@@ -844,6 +844,8 @@ Rollback:
 
 ## Slice 7: Goal Hive Native
 
+Status: implemented on 2026-06-17.
+
 Goal: run Goal Hive with native master/worker sessions on Core-owned task board
 state.
 
@@ -861,6 +863,23 @@ Tasks:
 - return final synthesis to master session;
 - prevent Goal protocol state from entering native memory.
 
+Landed:
+
+- `goal_proposals` / `goals` now allow hidden `runtime_kind = galley_native`
+  behind `GALLEY_NATIVE_EXPERIMENTAL=1`;
+- native `session.goal_master_plan` persists the master planning prompt as
+  internal-only session context, then returns immediately to the Core
+  controller fallback/seed planner;
+- native `session.new_goal_worker` and `session.send` worker replies are
+  materialized by the controller into task claim/completion, result event, and a
+  new deliverable-anchor version;
+- native `session.goal_synthesize` runs inline through the Rust native runtime
+  and returns the final answer to the master session;
+- native worker cleanup skips Python runner shutdown because no Python runner is
+  owned for native sessions;
+- native Goal prompts now allow evidence-backed native memory while explicitly
+  banning Goal protocol state from memory.
+
 Exit gate:
 
 - small mock-model Goal reaches final synthesis;
@@ -872,6 +891,15 @@ Exit gate:
 Rollback:
 
 - keep managed/external Goal path as fallback; disable native Goal workers.
+
+Deferred:
+
+- richer native master planning that writes task-board changes directly through
+  a typed native Goal tool surface;
+- pacing/backoff for very fast mock/native workers under sustained-budget
+  semantics;
+- GUI task-board inspection for native Goal internals;
+- Morphling mode and capability-pack absorption.
 
 ## Slice 8: Morphling Native Mode
 

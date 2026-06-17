@@ -45,11 +45,6 @@ pub fn galley_native_execution_unavailable_message() -> String {
         .to_string()
 }
 
-pub fn galley_native_goal_unavailable_message() -> String {
-    "galley_native runtime is recognized, but native Goal execution is not implemented in Slice 2"
-        .to_string()
-}
-
 pub fn ensure_runtime_filter_available(kind: RuntimeKind) -> Result<(), GalleyError> {
     if kind == RuntimeKind::GalleyNative && !galley_native_experimental_enabled() {
         return Err(GalleyError::InvalidArgs {
@@ -72,13 +67,7 @@ pub fn ensure_runtime_execution_available(kind: RuntimeKind) -> Result<(), Galle
 }
 
 pub fn ensure_goal_runtime_available(kind: RuntimeKind) -> Result<(), GalleyError> {
-    ensure_runtime_filter_available(kind)?;
-    if kind == RuntimeKind::GalleyNative {
-        return Err(GalleyError::InvalidArgs {
-            message: galley_native_goal_unavailable_message(),
-        });
-    }
-    Ok(())
+    ensure_runtime_filter_available(kind)
 }
 
 #[cfg(test)]
