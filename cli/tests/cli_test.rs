@@ -343,6 +343,43 @@ async fn sessions_list_accepts_native_filter_when_gate_enabled() {
 }
 
 #[tokio::test]
+async fn p15_cli_schema_v1_lists_native_runtime_with_legacy_projection() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session_with_runtime(
+        &pool,
+        "native",
+        "native",
+        "idle",
+        "2026-06-17T00:00:00Z",
+        "galley_native",
+    )
+    .await;
+    drop(pool);
+
+    let (stdout, code) = run_galley_native_enabled(
+        &db,
+        &[
+            "--schema",
+            "1",
+            "sessions",
+            "list",
+            "--runtime",
+            "galley-native",
+        ],
+    );
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let lines: Vec<&str> = stdout.trim().lines().collect();
+    assert_eq!(lines.len(), 1, "stdout: {stdout}");
+    let native: serde_json::Value = serde_json::from_str(lines[0]).expect("ndjson line");
+    assert_eq!(native["id"], "native");
+    assert_eq!(native["runtimeKind"], "galley_native");
+    assert_eq!(native["gaRuntimeKind"], "galley_native");
+    assert_eq!(native["runtimeLabel"], "Galley Native");
+}
+
+#[tokio::test]
 async fn sessions_search_defaults_to_current_runtime() {
     let td = tempdir();
     let db = td.path().join("workbench.db");

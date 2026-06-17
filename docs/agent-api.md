@@ -702,6 +702,12 @@ optional Slice 4A tool-control-plane events (`tool_pending`,
 model/selection failures emit `runtime_error` and close with
 `native_runtime_error`.
 
+Schema v1 compatibility rule: native stream frames are additive. Supervisor
+callers may parse only `stream`, `requestId`, `data.kind`, `data.sessionId`,
+and end-frame `reason`, then ignore unknown event fields. `runtimeKind:
+"galley_native"` is a valid hidden runtime value in the same v1 shape that also
+keeps the legacy `gaRuntimeKind` projection for older callers.
+
 Native tool events started as Slice 4A deterministic stubs. As of Slice 4B /
 4C2, hidden native `file_read`, `file_patch`, `file_write`, `code_run`,
 `web_scan`, and approval-gated `web_execute_js` can execute inside the Project

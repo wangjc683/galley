@@ -173,6 +173,12 @@ behavior changes until an implementation slice explicitly lands them.
   and P18 as `pXX_...` test names and keep those anchors tied to the parity
   scenario manifest.
   [devlog](../devlog/2026-06-17-galley-native-slice-9b-native-harness.md).
+- Slice 9C landed CLI/Supervisor compatibility coverage on 2026-06-17:
+  schema v1 callers can receive `runtimeKind = galley_native`, older callers
+  still have `gaRuntimeKind`, and native watch events are additive for
+  Supervisor parsers that only read `stream`, `kind`, `sessionId`, and
+  end-frame `reason`.
+  [devlog](../devlog/2026-06-17-galley-native-slice-9c-cli-supervisor-compat.md).
 
 ## Document Roles
 
@@ -225,18 +231,19 @@ synthesis in the master session. Morphling can now be launched as a hidden
 native Goal proposal template that enforces target locking, same-test evidence,
 component strategy, safety boundaries, and disabled capability-pack candidate
 output. The parity scenario manifest now defines what evidence is required
-before native can become opt-in beta or the new-user default, and the first
-native deterministic parity anchors are executable with `cargo test` filters.
+before native can become opt-in beta or the new-user default. The first native
+deterministic parity anchors are executable with `cargo test` filters, and
+Slice 9C locks the schema v1 CLI/Supervisor compatibility path for hidden native
+runtime values and watch events.
 
 The next implementation phase should stay conservative:
 
 1. broaden Slice 9B native integration coverage beyond the current runtime
    anchors where it materially increases confidence;
-2. implement Slice 9C CLI/Supervisor schema and event compatibility coverage;
-3. build Slice 9D managed-vs-native semantic comparison only after native
+2. build Slice 9D managed-vs-native semantic comparison only after native
    harness assertions are stable;
-4. collect Slice 9E dogfood evidence and troubleshooting for Browser, memory,
+3. collect Slice 9E dogfood evidence and troubleshooting for Browser, memory,
    continuation, Goal Hive, Morphling, and fallback;
-5. expose Slice 9F Settings opt-in only after beta-blocker scenarios pass or
+4. expose Slice 9F Settings opt-in only after beta-blocker scenarios pass or
    have explicit accepted gaps;
-6. keep dynamic capability-pack updates and default switching in later slices.
+5. keep dynamic capability-pack updates and default switching in later slices.

@@ -1039,6 +1039,8 @@ Deferred:
 
 ### Slice 9C: CLI And Supervisor Event Compatibility
 
+Status: implemented for P15 schema/event compatibility on 2026-06-17.
+
 Goal: prove public schema v1 consumers tolerate native runtime values and event
 streams.
 
@@ -1048,6 +1050,18 @@ Tasks:
 - assert optional native event fields remain additive;
 - verify older schema v1 callers can ignore native-specific fields;
 - document any accepted event variance.
+
+Landed:
+
+- CLI test `p15_cli_schema_v1_lists_native_runtime_with_legacy_projection`
+  proves `--schema=1` callers can receive `runtimeKind = galley_native` while
+  older callers can still read `gaRuntimeKind`;
+- socket test `p15_socket_schema_v1_native_watch_events_are_additive` proves a
+  schema v1 `session.new` / `session.watch` native stream can be parsed by a
+  legacy view that only reads `stream`, `requestId`, `data.kind`,
+  `data.sessionId`, and end-frame `reason`;
+- Agent API docs now state native watch frames are additive and unknown native
+  fields should be ignored by Supervisor callers.
 
 Exit gate:
 
@@ -1059,6 +1073,12 @@ Exit gate:
 Rollback:
 
 - keep native hidden and revert only compatibility tests/docs if they are wrong.
+
+Deferred:
+
+- live CLI dogfood with a real supervisor process;
+- `session follow` parity-specific tests;
+- managed-vs-native semantic comparison remains Slice 9D.
 
 ### Slice 9D: Managed-Vs-Native Scenario Comparator
 

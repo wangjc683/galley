@@ -711,6 +711,22 @@ mod tests {
         }
     }
 
+    #[derive(Debug, serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct LegacyNativeEventView {
+        kind: String,
+        session_id: String,
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct LegacyStreamFrameView {
+        stream: String,
+        request_id: Option<String>,
+        data: Option<LegacyNativeEventView>,
+        reason: Option<String>,
+    }
+
     const TEST_MIGRATIONS: &[&str] = &[
         include_str!("../../migrations/001_init.sql"),
         include_str!("../../migrations/002_add_has_unread.sql"),
@@ -922,6 +938,91 @@ mod tests {
             ]
         );
         assert_eq!(end_reason.as_deref(), Some("native_run_complete"));
+    }
+
+    #[tokio::test]
+    async fn p15_socket_schema_v1_native_watch_events_are_additive() {
+        let _env_lock = socket_env_lock().lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("workbench.db");
+        seed_socket_test_db(&db_path).await;
+        let _db_guard = EnvGuard::set("GALLEY_DB_PATH", db_path.as_os_str());
+        let _native_guard = EnvGuard::set(crate::runtime::GALLEY_NATIVE_EXPERIMENTAL_ENV, "1");
+
+        let mgr = RunnerManager::new();
+        let line = r#"{
+            "command":"session.new",
+            "args":{
+                "task":"P15 native compatibility",
+                "runtimeKind":"galley_native"
+            },
+            "schemaVersion":1,
+            "requestId":"p15-native-new"
+        }"#;
+        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
+        assert!(resp.ok, "response: {resp:?}");
+        assert_eq!(resp.request_id.as_deref(), Some("p15-native-new"));
+        let result = resp.result.expect("result");
+        assert_eq!(result["dispatch"], "completed_native");
+        assert_eq!(result["session"]["runtimeKind"], "galley_native");
+        assert_eq!(result["session"]["gaRuntimeKind"], "galley_native");
+        let session_id = result["session"]["id"].as_str().unwrap().to_string();
+
+        let watch_line = serde_json::json!({
+            "command": "session.watch",
+            "args": { "sessionId": session_id },
+            "schemaVersion": 1,
+            "requestId": "p15-native-watch"
+        })
+        .to_string();
+        let watch = dispatch_line(&watch_line, None, &mgr).await;
+        let DispatchResult::NativeStream { request_id, mut rx } = watch else {
+            panic!("expected native stream");
+        };
+        assert_eq!(request_id.as_deref(), Some("p15-native-watch"));
+
+        let mut legacy_kinds = Vec::new();
+        let mut saw_additive_native_field = false;
+        while let Some(item) = rx.recv().await {
+            match item {
+                crate::native_runtime::NativeRuntimeStreamItem::Event(event) => {
+                    let data = serde_json::to_value(&*event).unwrap();
+                    if data["kind"] == "runtime_ready" {
+                        assert_eq!(data["runtimeKind"], "galley_native");
+                        saw_additive_native_field = true;
+                    }
+                    let envelope = StreamEnvelope::event(Some("p15-native-watch".into()), data);
+                    let legacy: LegacyStreamFrameView =
+                        serde_json::from_value(serde_json::to_value(envelope).unwrap()).unwrap();
+                    assert_eq!(legacy.stream, "event");
+                    assert_eq!(legacy.request_id.as_deref(), Some("p15-native-watch"));
+                    let legacy_event = legacy.data.expect("legacy event data");
+                    assert_eq!(legacy_event.session_id, session_id);
+                    legacy_kinds.push(legacy_event.kind);
+                }
+                crate::native_runtime::NativeRuntimeStreamItem::Closed { reason } => {
+                    let envelope = StreamEnvelope::end(Some("p15-native-watch".into()), &reason);
+                    let legacy: LegacyStreamFrameView =
+                        serde_json::from_value(serde_json::to_value(envelope).unwrap()).unwrap();
+                    assert_eq!(legacy.stream, "end");
+                    assert_eq!(legacy.request_id.as_deref(), Some("p15-native-watch"));
+                    assert_eq!(legacy.reason.as_deref(), Some("native_run_complete"));
+                    break;
+                }
+            }
+        }
+
+        assert_eq!(
+            legacy_kinds,
+            vec![
+                "runtime_ready",
+                "turn_start",
+                "turn_progress",
+                "turn_end",
+                "run_complete"
+            ]
+        );
+        assert!(saw_additive_native_field);
     }
 
     #[tokio::test]
