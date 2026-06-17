@@ -15,7 +15,7 @@ const REPORT_VERSION: u8 = 1;
 const FIXTURE_HARNESS: &str = "managed_native_fixture_comparison";
 const COMMAND_HARNESS: &str = "managed_native_command_comparison";
 const FIRST_BATCH_IDS: [&str; 7] = ["P01", "P03", "P04", "P08", "P14", "P18", "P19"];
-const COMMAND_MODE_IDS: [&str; 5] = ["P01", "P03", "P04", "P14", "P18"];
+const COMMAND_MODE_IDS: [&str; 7] = ["P01", "P03", "P04", "P08", "P14", "P18", "P19"];
 const COMMAND_PREVIEW_CHAR_LIMIT: usize = 4096;
 
 pub(crate) async fn native_parity_report(
@@ -239,7 +239,9 @@ async fn command_report(
 
     let mut report = fixture_report(&request.scenario_id, generated_at, galley_commit)?;
     let (comparison, accepted_gaps, blockers, notes) = command_mode_verdict_inputs(
+        &request.scenario_id,
         &report.comparison,
+        &report.accepted_gaps,
         managed_run.success(),
         native_run.success(),
     );
@@ -260,17 +262,14 @@ async fn command_report(
 }
 
 fn command_mode_verdict_inputs(
+    scenario_id: &str,
     base: &Comparison,
+    base_accepted_gaps: &[AcceptedGap],
     managed_success: bool,
     native_success: bool,
 ) -> (Comparison, Vec<AcceptedGap>, Vec<Blocker>, String) {
     if managed_success && native_success {
-        return (
-            base.clone(),
-            command_mode_accepted_gaps(base),
-            vec![],
-            "Both command sides exited successfully.".to_string(),
-        );
+        return command_mode_success_inputs(scenario_id, base, base_accepted_gaps);
     }
 
     if !managed_success {
@@ -311,12 +310,55 @@ fn command_mode_verdict_inputs(
         vec![accepted_gap(
             "eventRhythm",
             "Command mode captures shell command_start/command_exit events rather than live runner NDJSON.",
-            "Allowed only for hidden 9D-C command evidence.",
+            "Allowed only for hidden 9D-C/D command evidence.",
             "Replace with live runner event collection before beta rollout decisions.",
         )],
         vec![],
         "Native command failed while managed command succeeded.".to_string(),
     )
+}
+
+fn command_mode_success_inputs(
+    scenario_id: &str,
+    base: &Comparison,
+    base_accepted_gaps: &[AcceptedGap],
+) -> (Comparison, Vec<AcceptedGap>, Vec<Blocker>, String) {
+    match scenario_id {
+        "P08" => (
+            Comparison {
+                outcome: DimensionResult::Match,
+                tool_action: DimensionResult::Match,
+                event_rhythm: DimensionResult::AcceptedGap,
+                approval: DimensionResult::NotApplicable,
+                side_effects: DimensionResult::Match,
+                memory_policy: DimensionResult::Match,
+                workspace_policy: DimensionResult::Match,
+                recovery: DimensionResult::Match,
+                persisted_state: DimensionResult::Match,
+            },
+            vec![
+                accepted_gap(
+                    "browserControl",
+                    "Command mode proves operator-supplied Browser Control readiness commands can complete on both runtimes, but it does not yet launch or compare an automatic safe-page browser run.",
+                    "Allowed only for hidden 9D-D evidence collection.",
+                    "Replace with automatic CDP readiness and safe-page comparison before Settings opt-in.",
+                ),
+                command_mode_event_gap("9D-D browser/fallback command evidence"),
+            ],
+            vec![],
+            "Both Browser Control readiness commands exited successfully.".to_string(),
+        ),
+        _ => {
+            let mut gaps = base_accepted_gaps.to_vec();
+            gaps.extend(command_mode_accepted_gaps(base));
+            (
+                base.clone(),
+                gaps,
+                vec![],
+                "Both command sides exited successfully.".to_string(),
+            )
+        }
+    }
 }
 
 fn command_mode_accepted_gaps(base: &Comparison) -> Vec<AcceptedGap> {
@@ -326,14 +368,18 @@ fn command_mode_accepted_gaps(base: &Comparison) -> Vec<AcceptedGap> {
         .iter()
         .any(|value| *value == DimensionResult::AcceptedGap)
     {
-        gaps.push(accepted_gap(
-            "eventRhythm",
-            "Command mode captures shell command_start/command_exit events rather than live runner NDJSON.",
-            "Allowed only for hidden 9D-C command evidence.",
-            "Replace with live runner event collection before beta rollout decisions.",
-        ));
+        gaps.push(command_mode_event_gap("hidden command evidence"));
     }
     gaps
+}
+
+fn command_mode_event_gap(phase_limit: &str) -> AcceptedGap {
+    accepted_gap(
+        "eventRhythm",
+        "Command mode captures shell command_start/command_exit events rather than live runner NDJSON.",
+        phase_limit,
+        "Replace with live runner event collection before beta rollout decisions.",
+    )
 }
 
 async fn run_shell_command(
@@ -919,6 +965,12 @@ fn derive_verdict(
     if values.iter().all(|value| *value == DimensionResult::NotRun) {
         return Verdict::NotRun;
     }
+    if values
+        .iter()
+        .any(|value| *value == DimensionResult::Blocked)
+    {
+        return Verdict::Blocked;
+    }
     if values.iter().any(|value| {
         matches!(
             value,
@@ -1218,6 +1270,10 @@ mod tests {
         let mut failing = comparison.clone();
         failing.side_effects = DimensionResult::Regression;
         assert_eq!(derive_verdict(&failing, &[], &[]), Verdict::Fail);
+
+        let mut blocked = comparison;
+        blocked.outcome = DimensionResult::Blocked;
+        assert_eq!(derive_verdict(&blocked, &[], &[]), Verdict::Blocked);
     }
 
     #[test]

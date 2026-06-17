@@ -399,6 +399,60 @@ async fn native_parity_command_mode_marks_native_failure_as_fail() {
 }
 
 #[tokio::test]
+async fn native_parity_command_mode_accepts_browser_and_fallback_scenarios() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+
+    let (stdout, code) = run_galley(
+        &db,
+        &[
+            "native-parity",
+            "report",
+            "--mode",
+            "command",
+            "--scenario",
+            "P08",
+            "--managed-command",
+            "echo browser-ready",
+            "--native-command",
+            "echo browser-ready",
+        ],
+    );
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let reports: serde_json::Value = serde_json::from_str(stdout.trim()).expect("report json");
+    let report = &reports.as_array().expect("report array")[0];
+    assert_eq!(report["scenarioId"], "P08");
+    assert_eq!(report["verdict"], "accepted_gap");
+    assert!(report["blockers"].as_array().expect("blockers").is_empty());
+    assert_eq!(report["comparison"]["outcome"], "match");
+    assert_eq!(report["acceptedGaps"][0]["dimension"], "browserControl");
+
+    let (stdout, code) = run_galley(
+        &db,
+        &[
+            "native-parity",
+            "report",
+            "--mode",
+            "command",
+            "--scenario",
+            "P19",
+            "--managed-command",
+            "echo managed-fallback",
+            "--native-command",
+            "echo native-gap-readable",
+        ],
+    );
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let reports: serde_json::Value = serde_json::from_str(stdout.trim()).expect("report json");
+    let report = &reports.as_array().expect("report array")[0];
+    assert_eq!(report["scenarioId"], "P19");
+    assert_eq!(report["verdict"], "accepted_gap");
+    assert_eq!(report["comparison"]["outcome"], "accepted_gap");
+    assert_eq!(report["acceptedGaps"][0]["dimension"], "outcome");
+}
+
+#[tokio::test]
 async fn sessions_list_emits_ndjson_recent_first() {
     let td = tempdir();
     let db = td.path().join("workbench.db");

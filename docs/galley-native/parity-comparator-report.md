@@ -1,6 +1,6 @@
 # Galley Native Parity Comparator Report
 
-Status: Slice 9D-C explicit command mode landed, 2026-06-17.
+Status: Slice 9D-D Browser/fallback command evidence landed, 2026-06-17.
 
 This document defines the managed-vs-native comparison report shape and the
 hidden local writers. The default writer does not run GenericAgent, start
@@ -236,7 +236,8 @@ Current fixture verdict intent:
 
 ## Explicit Command Mode
 
-Slice 9D-C adds a second hidden mode:
+Slice 9D-C added a second hidden mode, and Slice 9D-D extended it to Browser
+and fallback evidence:
 
 ```bash
 galley native-parity report \
@@ -257,7 +258,8 @@ explicit command does.
 Command-mode behavior:
 
 - requires exactly one `--scenario`;
-- currently supports 9D-C scenarios P01, P03, P04, P14, and P18;
+- currently supports the first 9D batch: P01, P03, P04, P08, P14, P18, and
+  P19;
 - requires both `--managed-command` and `--native-command`;
 - runs each side in an isolated workspace root with `managed/` and `native/`
   subdirectories;
@@ -273,12 +275,21 @@ Command-mode verdict rules:
 | Situation | Verdict |
 |---|---|
 | managed succeeds and native succeeds | inherits the scenario's semantic fixture verdict |
+| P08 managed/native readiness commands both succeed | `accepted_gap`, because this proves operator-supplied Browser readiness evidence, not automatic Browser Control parity |
 | managed fails or times out | `blocked`, because the baseline is unavailable |
 | managed succeeds and native fails or times out | `fail`, because native regressed the explicit comparison |
 
 The command mode is still not a full live GA runner. It is useful for local
 evidence capture and for proving the report writer can ingest real process
 results before model/browser-dependent automation is added.
+
+For P08, command mode replaces the fixture-only blocker with a human-reviewable
+Browser readiness accepted gap when both commands succeed. It still does not
+launch CDP, serve a safe page, or compare browser DOM/JS results on its own.
+
+For P19, command mode records explicit managed fallback/native readability
+commands while preserving the rollout gap: fallback is still manual while native
+is hidden beta.
 
 ## Relationship To Later Slices
 
@@ -287,6 +298,7 @@ results before model/browser-dependent automation is added.
   hidden `native-parity report` command.
 - Slice 9D-C: explicit managed/native command mode for P01, P03, P04, P14,
   and P18.
-- Slice 9D-D: live Browser and fallback scenarios P08 and P19.
+- Slice 9D-D: Browser and fallback command evidence for P08 and P19; automatic
+  CDP/safe-page and fallback-flow presets are still later beta gates.
 - Slice 9E: dogfood evidence and troubleshooting.
 - Slice 9F: Settings opt-in after beta blockers pass or have accepted gaps.

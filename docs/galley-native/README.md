@@ -196,6 +196,11 @@ behavior changes until an implementation slice explicitly lands them.
   then persist exit code, timeout, output preview, duration, and workspace
   evidence in the same report shape.
   [devlog](../devlog/2026-06-17-galley-native-slice-9d-command-mode.md).
+- Slice 9D-D extended command evidence to Browser/fallback scenarios on
+  2026-06-17: P08 and P19 can now be captured through the same hidden command
+  mode, with P08 treated as Browser readiness `accepted_gap` evidence rather
+  than automatic Browser Control parity.
+  [devlog](../devlog/2026-06-17-galley-native-slice-9d-browser-fallback-command-evidence.md).
 
 ## Document Roles
 
@@ -258,14 +263,17 @@ runtime values and watch events. Slice 9D-B adds a hidden local fixture
 comparator that emits the managed-vs-native report contract for the first
 scenario batch before live runtime runner variance is introduced. Slice 9D-C
 adds explicit command mode so operator-supplied managed/native runs can feed
-real process evidence into that same report shape.
+real process evidence into that same report shape. Slice 9D-D extends that
+path to Browser and fallback scenarios without auto-launching a browser or
+rerouting work between runtimes.
 
 The next implementation phase should stay conservative:
 
 1. broaden Slice 9B native integration coverage beyond the current runtime
    anchors where it materially increases confidence;
-2. add automatic managed/native command presets only after the explicit command
-   mode has been used locally without muddying external GA state;
+2. add automatic managed/native and Browser/fallback presets only after the
+   explicit command mode has been used locally without muddying external GA
+   state;
 3. collect Slice 9E dogfood evidence and troubleshooting for Browser, memory,
    continuation, Goal Hive, Morphling, and fallback;
 4. expose Slice 9F Settings opt-in only after beta-blocker scenarios pass or

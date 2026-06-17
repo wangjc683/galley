@@ -1082,8 +1082,8 @@ Deferred:
 
 ### Slice 9D: Managed-Vs-Native Scenario Comparator
 
-Status: hidden fixture comparator plus explicit command mode landed on
-2026-06-17; automatic live GA command presets not yet implemented.
+Status: hidden fixture comparator plus explicit command evidence mode landed on
+2026-06-17; automatic live GA/Browser presets not yet implemented.
 
 Goal: compare managed and native semantically without pretending LLM wording is
 deterministic.
@@ -1128,12 +1128,17 @@ Landed:
   native has additive runtime/recovery/fallback differences, P14 as pass, and
   P08 as blocked because live Browser Control is not run in fixture mode;
 - hidden command mode `galley native-parity report --mode command` runs
-  operator-supplied managed/native commands for one 9D-C scenario at a time;
-- command mode supports P01, P03, P04, P14, and P18, captures exit code,
-  timeout, stdout/stderr previews, duration, and per-side workspace path under
-  `commandStatus`;
+  operator-supplied managed/native commands for one first-batch scenario at a
+  time;
+- command mode supports P01, P03, P04, P08, P14, P18, and P19, captures exit
+  code, timeout, stdout/stderr previews, duration, and per-side workspace path
+  under `commandStatus`;
 - command mode uses isolated `managed/` and `native/` workspaces and never
-  invents managed/native commands on the operator's behalf.
+  invents managed/native commands on the operator's behalf;
+- P08 command evidence turns fixture-blocked Browser Control into an explicit
+  `accepted_gap` readiness report when both operator-supplied commands succeed;
+- P19 command evidence records explicit managed fallback/native readability
+  commands while preserving the manual-fallback accepted gap.
 
 Exit gate:
 
@@ -1143,6 +1148,8 @@ Exit gate:
   mutating external GA state;
 - explicit command mode can ingest at least one managed/native command pair and
   preserve process evidence in the same report shape;
+- Browser/fallback scenarios P08 and P19 have command-mode evidence paths
+  without automatic browser launch or runtime reroute;
 - accepted gaps are explicit and linked to follow-up work.
 
 Live beta gate still required before Settings opt-in:
@@ -1150,9 +1157,10 @@ Live beta gate still required before Settings opt-in:
 - at least one managed and native command run can be compared without mutating
   external GA state through automatic presets, not only operator-supplied
   commands;
-- Browser Control P08 must move from fixture-blocked to a live readiness
-  verdict or documented beta blocker;
-- fallback P19 needs real operator-flow evidence before broad rollout.
+- Browser Control P08 still needs automatic CDP readiness and safe-page
+  comparison before broad rollout;
+- fallback P19 still needs real operator-flow evidence and a designed user
+  action before broad rollout.
 
 Rollback:
 
@@ -1163,7 +1171,7 @@ Deferred:
 - automatic live runtime runner presets;
 - default report file location/naming convention;
 - real managed GA execution;
-- browser/fallback comparison;
+- automatic browser/fallback presets;
 - Settings or GUI report surfacing.
 
 ### Slice 9E: Dogfood Evidence And Troubleshooting
