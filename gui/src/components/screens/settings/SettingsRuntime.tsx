@@ -6,6 +6,7 @@ import {
   Warning,
   X,
 } from "@phosphor-icons/react";
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -17,7 +18,10 @@ import { AdvancedRuntimeSettings } from "@/components/screens/settings/runtime/A
 import { BuiltinRuntimeCard } from "@/components/screens/settings/runtime/BuiltinRuntimeCard";
 import { GAVersionCard } from "@/components/screens/settings/runtime/GAVersionCard";
 import { HealthCheckSection } from "@/components/screens/settings/runtime/HealthCheckSection";
-import { RuntimeAccordionRow } from "@/components/screens/settings/runtime/RuntimeAccordionRow";
+import {
+  RuntimeAccordionRow,
+  RuntimeActionRow,
+} from "@/components/screens/settings/runtime/RuntimeAccordionRow";
 import type { SettingsRuntimeProps } from "@/components/screens/settings/runtime/types";
 import { SettingsUpdateControl } from "@/components/screens/settings/SettingsUpdateControl";
 import { Button } from "@/components/ui/button";
@@ -70,6 +74,9 @@ export function SettingsRuntime({
   const [externalExpanded, setExternalExpanded] = useState(
     activeRuntimeKind === "external",
   );
+  const [nativeGateEnabled, setNativeGateEnabled] = useState<boolean | null>(
+    null,
+  );
   const [highlightedRuntimeKind, setHighlightedRuntimeKind] =
     useState<RuntimeKind | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
@@ -79,6 +86,21 @@ export function SettingsRuntime({
       if (highlightTimerRef.current !== null) {
         window.clearTimeout(highlightTimerRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void invoke<boolean>("galley_native_experimental_enabled")
+      .then((enabled) => {
+        if (!cancelled) setNativeGateEnabled(enabled);
+      })
+      .catch((e) => {
+        console.debug("[settings] native runtime gate probe failed.", e);
+        if (!cancelled) setNativeGateEnabled(false);
+      });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -146,6 +168,17 @@ export function SettingsRuntime({
         hasExternalRuntimeConfigured={hasExternalRuntimeConfigured}
         hasRunningSessions={hasRunningSessions}
         highlighted={highlightedRuntimeKind === "external"}
+        nativeRuntimeSlot={
+          <NativeRuntimeAccess
+            value={activeRuntimeKind}
+            gateEnabled={nativeGateEnabled}
+            hasManagedRuntimeConfigured={hasManagedRuntimeConfigured}
+            hasRunningSessions={hasRunningSessions}
+            highlighted={highlightedRuntimeKind === "galley_native"}
+            onActivate={() => activateRuntimeKind("galley_native")}
+            onOpenModels={onOpenModels}
+          />
+        }
         managedDiagnosticsSlot={
           activeRuntimeKind === "managed" ? (
             <ManagedRuntimeCard diagnostics={info.managedRuntime} />
@@ -168,6 +201,91 @@ export function SettingsRuntime({
           }
         />
       </div>
+    </div>
+  );
+}
+
+function NativeRuntimeAccess({
+  value,
+  gateEnabled,
+  hasManagedRuntimeConfigured,
+  hasRunningSessions,
+  highlighted,
+  onActivate,
+  onOpenModels,
+}: {
+  value: RuntimeKind;
+  gateEnabled: boolean | null;
+  hasManagedRuntimeConfigured: boolean;
+  hasRunningSessions: boolean;
+  highlighted: boolean;
+  onActivate?: () => void;
+  onOpenModels?: () => void;
+}) {
+  const appCopy = useCopy();
+  const copy = appCopy.settings.runtime;
+  const active = value === "galley_native";
+  const canActivate =
+    !active &&
+    gateEnabled === true &&
+    hasManagedRuntimeConfigured &&
+    !hasRunningSessions &&
+    !!onActivate;
+  const detail = active
+    ? copy.usingGalleyNative
+    : gateEnabled === null
+      ? copy.checking
+      : gateEnabled === false
+        ? copy.galleyNativeGateDisabled
+        : !hasManagedRuntimeConfigured
+          ? copy.galleyNativeNeedsModel
+          : hasRunningSessions
+            ? copy.runningSessionsBlock
+            : copy.galleyNativeReady;
+
+  const trailing = active ? (
+    <span className="rounded-sm bg-hover px-1.5 py-px text-[10.5px] text-ink-muted">
+      {copy.active}
+    </span>
+  ) : !hasManagedRuntimeConfigured && gateEnabled === true ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={!onOpenModels}
+      onClick={onOpenModels}
+    >
+      {appCopy.sidebar.configureModels}
+    </Button>
+  ) : (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={!canActivate}
+      onClick={onActivate}
+    >
+      {copy.switchToGalleyNative}
+    </Button>
+  );
+
+  return (
+    <div className={cn(highlighted && "runtime-mode-highlight")}>
+      <RuntimeActionRow
+        title={
+          <span className="inline-flex items-center gap-2">
+            <Warning size={13} weight="thin" className="text-warning" />
+            <span>{copy.galleyNativeExperimental}</span>
+          </span>
+        }
+        subtitle={
+          <span>
+            {detail}
+            <span className="mt-1 block text-[11px] text-ink-soft">
+              {copy.galleyNativeScope}
+            </span>
+          </span>
+        }
+        trailing={trailing}
+      />
     </div>
   );
 }

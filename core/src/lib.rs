@@ -16,6 +16,7 @@ pub mod managed_model_probe;
 mod managed_prompt;
 pub mod managed_runtime;
 pub mod migration_backup;
+pub mod migration_repair;
 pub mod native_model;
 pub mod native_runtime;
 pub mod native_tools;
@@ -654,6 +655,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             path_exists,
             get_supervisor_sop,
+            galley_native_experimental_enabled,
             app_update::check_app_update,
             app_update::install_app_update,
             conversation_image::save_conversation_image,
@@ -784,6 +786,15 @@ pub fn run() {
                     .add_migrations(DB_URL, migrations)
                     .build(),
             )?;
+
+            match migration_repair::repair_history_from_latest_backup() {
+                Ok(outcome) => {
+                    eprintln!("[migration-repair] {outcome:?}");
+                }
+                Err(e) => {
+                    eprintln!("[migration-repair] WARN: {e}");
+                }
+            }
 
             // Seed the background-mode close-hint guard from the
             // persisted seen flag, now that the SQL plugin above has run

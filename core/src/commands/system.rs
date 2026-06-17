@@ -38,6 +38,11 @@ pub(crate) fn get_supervisor_sop() -> String {
     sop_install::sop_body().to_string()
 }
 
+#[tauri::command]
+pub(crate) fn galley_native_experimental_enabled() -> bool {
+    runtime::galley_native_experimental_enabled()
+}
+
 /// B4 M3 T3.3 — query whether `/usr/local/bin/galley` exists and
 /// matches the CLI binary we'd install. No elevation required.
 /// Wrapper over [`path_install::check_status`].

@@ -229,7 +229,10 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // on every new user message is GA's native semantic and what
       // the user expects.
       if (visibility === "visible") {
-        const turn = turnFromTurnEnd(event);
+        const turn = turnFromTurnEnd({
+          ...event,
+          absoluteTurnIndex,
+        });
         messages.appendAgentTurn(event.sessionId, turn);
       }
       // No setAgentRunning(false) here — turn_end is per-step inside
@@ -701,6 +704,7 @@ export function dispatchNativeRuntimeEvent(event: NativeRuntimeEvent): void {
 
 function turnFromTurnEnd(event: {
   turnIndex: number;
+  absoluteTurnIndex?: number;
   summary: string;
   toolCalls: Array<Record<string, unknown>>;
   toolResults: Array<Record<string, unknown>>;
@@ -734,6 +738,7 @@ function turnFromTurnEnd(event: {
     tools,
     finalAnswer: cleanedAnswer.trim() ? cleanedAnswer : null,
     turnIndex: event.turnIndex,
+    absoluteTurnIndex: event.absoluteTurnIndex,
     summary: trimmedSummary ? trimmedSummary : undefined,
   };
 }
@@ -790,6 +795,7 @@ function turnFromNativeTurnEnd(event: NativeTurnEndEvent): AgentTurn {
   });
   const turn = turnFromTurnEnd({
     turnIndex: event.turnIndex,
+    absoluteTurnIndex: event.turnIndex,
     summary: event.summary,
     toolCalls,
     toolResults: event.toolResults,

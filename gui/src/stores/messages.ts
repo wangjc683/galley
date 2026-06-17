@@ -400,9 +400,25 @@ function upsertToolInTurns(
 }
 
 function appendOrReplaceAgentTurn(turns: Turn[], turn: AgentTurn): Turn[] {
+  if (typeof turn.absoluteTurnIndex === "number") {
+    const existing = turns.findIndex(
+      (item) =>
+        item.role === "agent" &&
+        item.absoluteTurnIndex === turn.absoluteTurnIndex,
+    );
+    if (existing >= 0) {
+      const next = turns.slice();
+      next[existing] = turn;
+      return next;
+    }
+    return [...turns, turn];
+  }
   if (typeof turn.turnIndex === "number") {
     const existing = turns.findIndex(
-      (item) => item.role === "agent" && item.turnIndex === turn.turnIndex,
+      (item) =>
+        item.role === "agent" &&
+        item.absoluteTurnIndex === undefined &&
+        item.turnIndex === turn.turnIndex,
     );
     if (existing >= 0) {
       const next = turns.slice();

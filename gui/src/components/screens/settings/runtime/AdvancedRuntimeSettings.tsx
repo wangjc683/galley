@@ -13,6 +13,7 @@ export function AdvancedRuntimeSettings({
   hasExternalRuntimeConfigured,
   hasRunningSessions,
   highlighted,
+  nativeRuntimeSlot,
   managedDiagnosticsSlot,
   onOpenSetupAssistant,
   onToggleExpanded,
@@ -24,6 +25,7 @@ export function AdvancedRuntimeSettings({
   hasExternalRuntimeConfigured: boolean;
   hasRunningSessions: boolean;
   highlighted: boolean;
+  nativeRuntimeSlot?: ReactNode;
   managedDiagnosticsSlot?: ReactNode;
   onOpenSetupAssistant?: () => void;
   onToggleExpanded: () => void;
@@ -51,6 +53,8 @@ export function AdvancedRuntimeSettings({
         >
           {children}
         </ExternalRuntimeAccess>
+
+        {nativeRuntimeSlot}
 
         {managedDiagnosticsSlot}
       </div>

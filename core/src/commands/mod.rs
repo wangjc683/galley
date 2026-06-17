@@ -11,7 +11,7 @@ use crate::db::{
 };
 use crate::{
     browser_control, codex_oauth, credential_store, error, im_supervisor, managed_model_config,
-    managed_model_probe, managed_runtime, path_install, sop_install,
+    managed_model_probe, managed_runtime, path_install, runtime, sop_install,
 };
 use serde::Deserialize;
 

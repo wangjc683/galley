@@ -258,24 +258,23 @@ function App() {
     managedLLMs,
     copy.app.unconfiguredModel,
   );
-  const fallbackLLMs =
-    activeRuntimeKind === "managed" ? managedLLMs : cachedLLMs;
+  const usesManagedModelConfig =
+    activeRuntimeKind === "managed" || activeRuntimeKind === "galley_native";
+  const fallbackLLMs = usesManagedModelConfig ? managedLLMs : cachedLLMs;
   const fallbackLLMDisplayName =
-    activeRuntimeKind === "managed"
-      ? managedLLMDisplayName
-      : cachedLLMDisplayName;
+    usesManagedModelConfig ? managedLLMDisplayName : cachedLLMDisplayName;
   const llms = activeRuntimeLLMs ?? fallbackLLMs;
   const llmDisplayName =
     activeRuntimeDisplayName ?? fallbackLLMDisplayName ?? "";
   const llmConfigHint =
-    activeRuntimeKind === "managed" ? undefined : copy.app.externalModelHint;
+    usesManagedModelConfig ? undefined : copy.app.externalModelHint;
   const hasConfiguredManagedModel = managedModels.some(
     (model) => model.credentialStatus !== "missing",
   );
   const requiresManagedModelConfig =
-    activeRuntimeKind === "managed" && !hasConfiguredManagedModel;
+    usesManagedModelConfig && !hasConfiguredManagedModel;
   const sidebarRuntimeIndicator =
-    activeRuntimeKind === "managed"
+    usesManagedModelConfig
       ? hasConfiguredManagedModel
         ? "hidden"
         : "configure-models"
@@ -303,9 +302,9 @@ function App() {
     );
   };
   const openModelConfigFromSwitcher =
-    activeRuntimeKind === "managed" ? () => openSettings("models") : undefined;
+    usesManagedModelConfig ? () => openSettings("models") : undefined;
   const openLLMSwitcherFallback = () => {
-    if (activeRuntimeKind === "managed") {
+    if (usesManagedModelConfig) {
       openSettings("models");
       return;
     }

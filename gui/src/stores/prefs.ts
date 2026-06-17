@@ -369,6 +369,9 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   // ---- Runtime mode ----
   setActiveRuntimeKind: async (kind) => {
     set({ activeRuntimeKind: kind });
+    if (kind === "galley_native") {
+      return;
+    }
     try {
       await setPref("active_runtime_kind", kind);
     } catch (e) {

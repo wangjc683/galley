@@ -107,6 +107,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         tools,
         finalAnswer,
         turnIndex: displayStep,
+        absoluteTurnIndex: row.turn_index,
         // GA turn summary (added in migration v3). Pre-v3 rows
         // have NULL — TurnMarker collapses to just "第 N 步"
         // when summary is undefined, which is the right behavior

@@ -52,7 +52,7 @@ export function RuntimeActionRow({
   subtitle,
   trailing,
 }: {
-  title: string;
+  title: ReactNode;
   subtitle?: ReactNode;
   trailing: ReactNode;
 }) {
