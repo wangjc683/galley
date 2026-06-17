@@ -1176,6 +1176,9 @@ Deferred:
 
 ### Slice 9E: Dogfood Evidence And Troubleshooting
 
+Status: local dogfood evidence format landed on 2026-06-17; real dogfood runs
+not yet recorded.
+
 Goal: collect real-use evidence and make native failures recoverable.
 
 Tasks:
@@ -1188,6 +1191,25 @@ Tasks:
 - keep metrics local/devlog-based unless a separate privacy decision adds
   telemetry.
 
+Sub-slices:
+
+- 9E-A: define local dogfood evidence record, scenario checklists, verdict
+  rules, troubleshooting matrix, and privacy rule;
+- 9E-B: record first real P08/P18/P19 support-readiness dogfood pass;
+- 9E-C: record P10/P13 memory and continuation dogfood pass;
+- 9E-D: record P16/P17 Goal Hive and Morphling dogfood pass.
+
+Landed:
+
+- [Dogfood Evidence](./dogfood-evidence.md) defines the local markdown record
+  template for dogfood passes;
+- P08, P10, P13, P16, P17, P18, and P19 have scenario-specific dogfood
+  checklists and pass signals;
+- troubleshooting matrix covers model, browser, workspace, approval, memory,
+  continuation, Goal Hive, Morphling, and fallback errors;
+- privacy rule keeps dogfood evidence local unless a sanitized summary is
+  intentionally committed.
+
 Exit gate:
 
 - P08, P10, P13, P16, P17, P18, and P19 have dogfood evidence or accepted gaps;
@@ -1197,6 +1219,12 @@ Exit gate:
 Rollback:
 
 - remove dogfood docs/reporting without changing runtime behavior.
+
+Deferred:
+
+- real dogfood evidence records;
+- automatic collection or report surfacing;
+- any remote telemetry decision.
 
 ### Slice 9F: Opt-In Beta And Managed Fallback
 

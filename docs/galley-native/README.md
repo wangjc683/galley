@@ -201,6 +201,11 @@ behavior changes until an implementation slice explicitly lands them.
   mode, with P08 treated as Browser readiness `accepted_gap` evidence rather
   than automatic Browser Control parity.
   [devlog](../devlog/2026-06-17-galley-native-slice-9d-browser-fallback-command-evidence.md).
+- Slice 9E-A landed the local dogfood evidence and troubleshooting format on
+  2026-06-17: P08, P10, P13, P16, P17, P18, and P19 now have a maintainer
+  checklist, local record template, verdict rules, and troubleshooting matrix
+  before Settings opt-in work starts.
+  [devlog](../devlog/2026-06-17-galley-native-slice-9e-dogfood-evidence-format.md).
 
 ## Document Roles
 
@@ -227,6 +232,8 @@ behavior changes until an implementation slice explicitly lands them.
 - [Parity Comparator Report](./parity-comparator-report.md): Slice 9D
   managed-vs-native report contract, verdicts, dimensions, first scenario batch,
   and safety rules.
+- [Dogfood Evidence](./dogfood-evidence.md): Slice 9E local evidence template,
+  scenario checklists, verdict rules, and troubleshooting matrix.
 - [Open Decisions](./open-decisions.md): pre-freeze decisions needed before
   Slice 1 starts.
 - [Implementation Slices](./implementation-slices.md): sequencing and
@@ -265,7 +272,9 @@ scenario batch before live runtime runner variance is introduced. Slice 9D-C
 adds explicit command mode so operator-supplied managed/native runs can feed
 real process evidence into that same report shape. Slice 9D-D extends that
 path to Browser and fallback scenarios without auto-launching a browser or
-rerouting work between runtimes.
+rerouting work between runtimes. Slice 9E-A defines the local dogfood evidence
+format and troubleshooting matrix for the evidence-heavy scenarios before
+Settings opt-in.
 
 The next implementation phase should stay conservative:
 
@@ -274,8 +283,8 @@ The next implementation phase should stay conservative:
 2. add automatic managed/native and Browser/fallback presets only after the
    explicit command mode has been used locally without muddying external GA
    state;
-3. collect Slice 9E dogfood evidence and troubleshooting for Browser, memory,
-   continuation, Goal Hive, Morphling, and fallback;
+3. use the Slice 9E dogfood template to collect real Browser, memory,
+   continuation, Goal Hive, Morphling, recovery, and fallback evidence;
 4. expose Slice 9F Settings opt-in only after beta-blocker scenarios pass or
    have explicit accepted gaps;
 5. keep dynamic capability-pack updates and default switching in later slices.
