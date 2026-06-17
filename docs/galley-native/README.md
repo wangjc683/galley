@@ -208,7 +208,8 @@ behavior changes until an implementation slice explicitly lands them.
   [devlog](../devlog/2026-06-17-galley-native-slice-9e-dogfood-evidence-format.md).
 - Slice 9E-B prep landed the support-readiness dogfood kit on 2026-06-17:
   P08/P18/P19 now have a concrete runbook, local artifact paths, command
-  evidence examples, and a focused record template for JC's first real native
+  evidence examples, a focused record template, and
+  `scripts/init-native-dogfood.mjs` to initialize JC's first real native
   dogfood pass.
   [devlog](../devlog/2026-06-17-galley-native-slice-9e-support-readiness-kit.md).
 

@@ -24,6 +24,8 @@ These determine whether hidden native can fail clearly and remain reversible.
 - Added `docs/galley-native/dogfood/README.md`.
 - Added `docs/galley-native/dogfood/support-readiness-runbook.md`.
 - Added `docs/galley-native/dogfood/support-readiness-record-template.md`.
+- Added `scripts/init-native-dogfood.mjs` to create the ignored local artifact
+  directories and dated support-readiness record.
 - Linked the kit from `dogfood-evidence.md` and the Galley Native README.
 - Updated Slice 9E status to distinguish prep kit from real dogfood evidence.
 - Added `.cache/galley-native-dogfood/` to `.gitignore` for raw local notes,

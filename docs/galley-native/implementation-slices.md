@@ -1213,7 +1213,9 @@ Landed:
 - [Dogfood Kit](./dogfood/README.md) defines local-only artifact paths under
   `.cache/galley-native-dogfood/`, which is ignored by git;
 - P08/P18/P19 support-readiness runbook and focused record template are ready
-  for the first real dogfood pass.
+  for the first real dogfood pass;
+- `scripts/init-native-dogfood.mjs` initializes the ignored local artifact
+  directories and dated support-readiness record.
 
 Exit gate:
 

@@ -24,9 +24,14 @@ to do next, or touching external GA state?
 Use a local private artifact root:
 
 ```bash
-mkdir -p .cache/galley-native-dogfood/9e-b/parity
-mkdir -p .cache/galley-native-dogfood/9e-b/screenshots
+node scripts/init-native-dogfood.mjs \
+  --operator JC \
+  --model "<model/provider>" \
+  --browser "<browser/profile>"
 ```
+
+This creates a dated local record plus `parity/` and `screenshots/`
+directories under `.cache/galley-native-dogfood/9e-b/`.
 
 Record:
 

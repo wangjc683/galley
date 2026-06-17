@@ -37,6 +37,19 @@ Recommended local-only paths:
 screenshots, parity reports, session ids, browser URLs, and model output there
 unless they have been sanitized.
 
+Initialize the first pass:
+
+```bash
+node scripts/init-native-dogfood.mjs \
+  --operator JC \
+  --model "<model/provider>" \
+  --browser "<browser/profile>"
+```
+
+The script creates the local artifact directories and a dated support-readiness
+record under `.cache/galley-native-dogfood/9e-b/`. It prints a JSON summary with
+the record path.
+
 Commit only sanitized conclusions:
 
 - verdicts;
