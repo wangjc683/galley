@@ -995,6 +995,8 @@ Rollback:
 
 ### Slice 9B: Native Harness Coverage
 
+Status: first deterministic parity-anchor batch landed on 2026-06-17.
+
 Goal: make native's own behavior testable before comparing it to managed.
 
 Tasks:
@@ -1003,6 +1005,19 @@ Tasks:
 - add native integration tests for safe file/code/workspace/resource paths;
 - add event-order assertions for native tool/approval/ask-user/continuation;
 - keep real model and managed comparison out of this slice.
+
+Landed:
+
+- added a Slice 9B anchor ledger in native runtime tests;
+- anchored P01, P03, P04, P05, P06, P07, P09, P11, P12, and P18 with
+  `pXX_...` test names;
+- P09 now directly proves `memory://` reads go through `file_read` without a
+  bespoke memory tool;
+- P11 now directly proves `capability://` resources are read-only file
+  resources and `code_run` refuses capability script URI execution;
+- P05 now proves large code answers without tool calls stay no-tool answers;
+- anchor tests read the parity scenario manifest so Pxx IDs cannot silently
+  drift away from the docs.
 
 Exit gate:
 
@@ -1013,6 +1028,14 @@ Exit gate:
 Rollback:
 
 - remove the new harness tests without changing runtime behavior.
+
+Deferred:
+
+- broaden native integration coverage beyond the existing socket/file/code
+  tests;
+- convert more historical slice tests into Pxx-named anchors where useful;
+- P15 CLI/Supervisor event compatibility remains Slice 9C;
+- managed-vs-native comparison remains Slice 9D.
 
 ### Slice 9C: CLI And Supervisor Event Compatibility
 

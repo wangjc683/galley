@@ -168,6 +168,11 @@ behavior changes until an implementation slice explicitly lands them.
   beta/default/support gates, pass signals, and accepted variance before
   native is exposed as opt-in beta.
   [devlog](../devlog/2026-06-17-galley-native-slice-9a-parity-contract.md).
+- Slice 9B landed the first native deterministic parity anchors on 2026-06-17:
+  native runtime tests now expose P01, P03, P04, P05, P06, P07, P09, P11, P12,
+  and P18 as `pXX_...` test names and keep those anchors tied to the parity
+  scenario manifest.
+  [devlog](../devlog/2026-06-17-galley-native-slice-9b-native-harness.md).
 
 ## Document Roles
 
@@ -200,10 +205,11 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 9A, native can read files, answer from tool results, apply targeted
-patches, perform preview-first create/overwrite writes, run approval-gated local
-commands with bounded output, project command stdout/stderr as ordered
-tool-progress events, read browser tabs/pages through `web_scan`, execute
+After Slice 9B's first anchor batch, native can read files, answer from tool
+results, apply targeted patches, perform preview-first create/overwrite writes,
+run approval-gated local commands with bounded output, project command
+stdout/stderr as ordered tool-progress events, read browser tabs/pages through
+`web_scan`, execute
 approval-gated browser JavaScript through `web_execute_js`, surface browser
 recovery hints, keep a short-lived working checkpoint across turns, and persist
 typed native memory ledger rows. It can read memory rows as `memory://`
@@ -219,12 +225,13 @@ synthesis in the master session. Morphling can now be launched as a hidden
 native Goal proposal template that enforces target locking, same-test evidence,
 component strategy, safety boundaries, and disabled capability-pack candidate
 output. The parity scenario manifest now defines what evidence is required
-before native can become opt-in beta or the new-user default.
+before native can become opt-in beta or the new-user default, and the first
+native deterministic parity anchors are executable with `cargo test` filters.
 
 The next implementation phase should stay conservative:
 
-1. implement Slice 9B native mock/integration harness coverage for the
-   manifest's beta-blocker scenarios;
+1. broaden Slice 9B native integration coverage beyond the current runtime
+   anchors where it materially increases confidence;
 2. implement Slice 9C CLI/Supervisor schema and event compatibility coverage;
 3. build Slice 9D managed-vs-native semantic comparison only after native
    harness assertions are stable;

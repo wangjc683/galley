@@ -129,6 +129,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-17 | [Galley Native Slice 7 Goal Hive](./2026-06-17-galley-native-slice-7-goal-hive.md) | Slice 7 打开 hidden native Goal 最小闭环：`galley_native` Goal rows 受实验 gate 保护，master planning 保持 internal-only，controller 把 native worker answer 物化成 task/result/deliverable，final synthesis 通过 native runtime 回到 master session；Morphling 和 typed native Goal tool surface 继续后置。 |
 | 2026-06-17 | [Galley Native Slice 8 Morphling Mode](./2026-06-17-galley-native-slice-8-morphling-mode.md) | Slice 8 把 Morphling 落成 hidden native Goal proposal mode：`galley goal morphling <target>` 生成带 same-test、component strategy、安全边界和 disabled capability-pack-candidate 要求的结构化目标；不新增 schema mode、不新增 model-facing morphling tool、不激活 capability scripts。 |
 | 2026-06-17 | [Galley Native Slice 9A Parity Contract](./2026-06-17-galley-native-slice-9a-parity-contract.md) | Slice 9 拆成 9A-9F，并新增 parity scenario manifest：冻结 P01-P19 场景、harness layer、beta/default/support gate、pass signal 和 accepted variance；明确 Settings opt-in 属于 9F，不先于 parity 证据。 |
+| 2026-06-17 | [Galley Native Slice 9B Native Harness](./2026-06-17-galley-native-slice-9b-native-harness.md) | Slice 9B 第一批 deterministic native parity anchors 落地：`core/src/native_runtime.rs` 测试新增 manifest anchor ledger，并把 P01/P03/P04/P05/P06/P07/P09/P11/P12/P18 锚成可过滤的 `pXX_...` 测试；P09/P11/P05 补直接语义覆盖。 |
 
 ## 格式约定
 

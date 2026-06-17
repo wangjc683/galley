@@ -3023,7 +3023,7 @@ mod tests {
     use super::*;
     use crate::api::{RuntimeKind, SessionStatus};
     use crate::native_tools::NativeToolCallSource;
-    use std::fs;
+    use std::{collections::HashSet, fs};
 
     async fn native_memory_test_galley(session_id: &str) -> SqliteGalley {
         let pool = sqlx::SqlitePool::connect("sqlite::memory:")
@@ -3085,6 +3085,119 @@ mod tests {
         }
     }
 
+    fn parity_tool_call(name: &str, arguments_json: serde_json::Value) -> NativeToolCall {
+        NativeToolCall {
+            id: format!("call_{name}"),
+            name: name.to_string(),
+            arguments_json,
+            raw_arguments_text: None,
+            source: NativeToolCallSource::Structured,
+            risk_hint: None,
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct NativeParityAnchor {
+        scenario_id: &'static str,
+        harness: &'static str,
+        test_name: &'static str,
+    }
+
+    const SLICE_9B_NATIVE_PARITY_ANCHORS: &[NativeParityAnchor] = &[
+        NativeParityAnchor {
+            scenario_id: "P01",
+            harness: "mock_native",
+            test_name: "p01_basic_answer_no_tool_mock_event_contract",
+        },
+        NativeParityAnchor {
+            scenario_id: "P03",
+            harness: "mock_native",
+            test_name: "p03_code_run_waits_for_approval_with_resolved_cwd",
+        },
+        NativeParityAnchor {
+            scenario_id: "P04",
+            harness: "mock_native",
+            test_name: "p04_file_edit_patch_waits_for_preview_approval",
+        },
+        NativeParityAnchor {
+            scenario_id: "P05",
+            harness: "mock_native",
+            test_name: "p05_large_code_without_tool_stays_no_tool_answer",
+        },
+        NativeParityAnchor {
+            scenario_id: "P06",
+            harness: "mock_native",
+            test_name: "p06_approval_blocks_high_risk_memory_update",
+        },
+        NativeParityAnchor {
+            scenario_id: "P07",
+            harness: "mock_native",
+            test_name: "p07_ask_user_tool_marks_trace_waiting_for_user",
+        },
+        NativeParityAnchor {
+            scenario_id: "P09",
+            harness: "unit",
+            test_name: "p09_memory_resource_read_uses_file_read_without_approval",
+        },
+        NativeParityAnchor {
+            scenario_id: "P11",
+            harness: "unit",
+            test_name: "p11_capability_resources_are_read_only_file_resources",
+        },
+        NativeParityAnchor {
+            scenario_id: "P12",
+            harness: "unit",
+            test_name: "p12_workspace_resources_index_project_files_and_skip_heavy_dirs",
+        },
+        NativeParityAnchor {
+            scenario_id: "P18",
+            harness: "mock_native",
+            test_name: "p18_browser_unavailable_tool_result_is_actionable_without_side_effects",
+        },
+        NativeParityAnchor {
+            scenario_id: "P18",
+            harness: "unit",
+            test_name: "p18_missing_project_workspace_snapshot_is_actionable",
+        },
+    ];
+
+    #[test]
+    fn slice_9b_native_parity_anchors_match_manifest() {
+        let manifest = include_str!("../../docs/galley-native/parity-scenario-manifest.md");
+        let mut anchor_keys = HashSet::new();
+
+        for anchor in SLICE_9B_NATIVE_PARITY_ANCHORS {
+            assert!(
+                manifest.contains(&format!("| {} |", anchor.scenario_id)),
+                "missing {} in parity scenario manifest",
+                anchor.scenario_id
+            );
+            assert!(
+                matches!(
+                    anchor.harness,
+                    "unit" | "mock_native" | "native_integration"
+                ),
+                "unexpected Slice 9B harness layer for {}: {}",
+                anchor.scenario_id,
+                anchor.harness
+            );
+            assert!(
+                anchor
+                    .test_name
+                    .starts_with(&anchor.scenario_id.to_ascii_lowercase()),
+                "{} anchor test should start with its scenario id",
+                anchor.test_name
+            );
+            assert!(
+                anchor_keys.insert((anchor.scenario_id, anchor.harness, anchor.test_name)),
+                "duplicate Slice 9B parity anchor: {} {} {}",
+                anchor.scenario_id,
+                anchor.harness,
+                anchor.test_name
+            );
+        }
+    }
+
     #[test]
     fn mock_response_discloses_slice_boundary() {
         let answer = mock_final_answer("Investigate", "session.new");
@@ -3094,7 +3207,7 @@ mod tests {
     }
 
     #[test]
-    fn mock_event_trace_uses_ga_shaped_turn_order_without_tools() {
+    fn p01_basic_answer_no_tool_mock_event_contract() {
         let events = mock_event_trace(
             "s-native",
             0,
@@ -3126,7 +3239,7 @@ mod tests {
     }
 
     #[test]
-    fn mock_event_trace_routes_no_approval_tools_without_side_effects() {
+    fn p18_browser_unavailable_tool_result_is_actionable_without_side_effects() {
         let tool_calls = ["file_read", "web_scan", "update_working_checkpoint"]
             .iter()
             .map(|name| {
@@ -3221,7 +3334,34 @@ mod tests {
     }
 
     #[test]
-    fn native_memory_l1_renders_file_read_resource_pointers() {
+    fn p09_memory_resource_read_uses_file_read_without_approval() {
+        let call = parity_tool_call(
+            "file_read",
+            serde_json::json!({
+                "path": "memory://global/l2/nmi_test"
+            }),
+        );
+        let mut context = NativeToolExecutionContext::default();
+        context.resource_files.insert(
+            "memory://global/l2/nmi_test".to_string(),
+            "memory_item: memory://global/l2/nmi_test\nbody:\nUse cargo test.".to_string(),
+        );
+
+        let approval = approval_for_tool_call(&call, &context);
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(approval, "none");
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result
+            .content
+            .contains("file_read: memory://global/l2/nmi_test"));
+        assert!(result.content.contains("Use cargo test."));
+    }
+
+    #[test]
+    fn memory_l1_renders_file_read_resource_pointers() {
         let scope = NativeMemoryScope::GlobalUser;
         let item = NativeMemoryItemRecord {
             id: "nmi_test".to_string(),
@@ -3259,7 +3399,44 @@ mod tests {
     }
 
     #[test]
-    fn builtin_capability_packs_render_resources_and_l1_triggers() {
+    fn p11_capability_resources_are_read_only_file_resources() {
+        let mut context = NativeToolExecutionContext::default();
+        context.resource_files.insert(
+            "capability://morphling/sops/main".to_string(),
+            "capability_resource: capability://morphling/sops/main\nbody:\nRun Morphling as a Goal mode."
+                .to_string(),
+        );
+        let read_call = parity_tool_call(
+            "file_read",
+            serde_json::json!({
+                "path": "capability://morphling/sops/main"
+            }),
+        );
+        let read_result = execute_native_tool(&read_call, &context);
+
+        assert_eq!(approval_for_tool_call(&read_call, &context), "none");
+        assert_eq!(read_result.status, "success");
+        assert!(!read_result.side_effects_performed);
+        assert!(read_result.content.contains("Run Morphling as a Goal mode"));
+
+        let blocked_script = parity_tool_call(
+            "code_run",
+            serde_json::json!({
+                "command": "python capability://morphling/scripts/promote.py",
+                "timeoutSeconds": 2
+            }),
+        );
+        let blocked_result = execute_native_tool(&blocked_script, &context);
+
+        assert_eq!(blocked_result.status, "failed");
+        assert!(!blocked_result.side_effects_performed);
+        assert!(blocked_result
+            .content
+            .contains("refused capability pack script execution"));
+    }
+
+    #[test]
+    fn capability_pack_resources_render_l1_triggers() {
         let packs = builtin_capability_packs();
         let resources = native_capability_resource_files(&packs).expect("capability resources");
 
@@ -3298,7 +3475,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_resources_index_project_files_and_skip_heavy_dirs() {
+    fn p12_workspace_resources_index_project_files_and_skip_heavy_dirs() {
         let root = tempfile::tempdir().unwrap();
         let scratch = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join("src")).unwrap();
@@ -3331,7 +3508,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_project_workspace_snapshot_is_actionable() {
+    fn p18_missing_project_workspace_snapshot_is_actionable() {
         let scratch = tempfile::tempdir().unwrap();
         let missing = scratch.path().join("missing-project");
 
@@ -3469,7 +3646,7 @@ mod tests {
     }
 
     #[test]
-    fn file_patch_waits_for_approval_with_preview_args() {
+    fn p04_file_edit_patch_waits_for_preview_approval() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("notes.txt"), "alpha\nbeta\n").unwrap();
         let final_answer = r#"```json
@@ -3518,6 +3695,45 @@ mod tests {
             fs::read_to_string(dir.path().join("notes.txt")).unwrap(),
             "alpha\nbeta\n"
         );
+    }
+
+    #[test]
+    fn p05_large_code_without_tool_stays_no_tool_answer() {
+        let code = "fn main() { println!(\"hello\"); }\n".repeat(300);
+        let final_answer = format!("Here is the generated code:\n\n```rust\n{code}```");
+
+        let events = mock_event_trace(
+            "s-native-large-code",
+            1,
+            &final_answer,
+            "large code summary",
+            "2026-06-17T00:00:00.000Z".to_string(),
+            "Galley Native mock",
+            "mock_model",
+            "mock",
+            None,
+            None,
+        );
+
+        assert_eq!(
+            event_kind_sequence(&events),
+            vec![
+                "runtime_ready",
+                "turn_start",
+                "turn_progress",
+                "turn_end",
+                "run_complete"
+            ]
+        );
+        let turn_end = serde_json::to_value(&events[events.len() - 2]).unwrap();
+        assert_eq!(turn_end["toolCalls"], serde_json::json!([]));
+        assert_eq!(turn_end["toolResults"], serde_json::json!([]));
+        let complete = serde_json::to_value(events.last().unwrap()).unwrap();
+        assert_eq!(complete["exitReason"]["result"], "CURRENT_TASK_DONE");
+        assert!(complete["finalContent"]
+            .as_str()
+            .unwrap()
+            .contains("println!"));
     }
 
     #[test]
@@ -3574,7 +3790,7 @@ mod tests {
     }
 
     #[test]
-    fn high_risk_long_term_update_stops_at_pending_approval() {
+    fn p06_approval_blocks_high_risk_memory_update() {
         let final_answer = r#"```json
 {"tool":"start_long_term_update","arguments":{"topic":"learn testing","kind":"capability","risk":"high"}}
 ```"#;
@@ -3693,7 +3909,7 @@ mod tests {
     }
 
     #[test]
-    fn code_run_waits_for_approval_with_resolved_cwd() {
+    fn p03_code_run_waits_for_approval_with_resolved_cwd() {
         let dir = tempfile::tempdir().unwrap();
         let final_answer = r#"```json
 {"tool":"code_run","arguments":{"command":"echo hi","timeoutSeconds":2}}
@@ -3806,7 +4022,7 @@ mod tests {
     }
 
     #[test]
-    fn ask_user_tool_marks_trace_waiting_for_user() {
+    fn p07_ask_user_tool_marks_trace_waiting_for_user() {
         let final_answer = r#"```json
 {"tool":"ask_user","arguments":{"question":"Which path should I use?","candidates":["A","B"]}}
 ```"#;
