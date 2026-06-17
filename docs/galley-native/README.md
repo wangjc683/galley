@@ -137,6 +137,11 @@ behavior changes until an implementation slice explicitly lands them.
   internal DB helpers. The runtime still does not automatically write durable
   memory.
   [devlog](../devlog/2026-06-17-galley-native-slice-5b-memory-substrate.md).
+- Slice 5C landed memory resource reads on 2026-06-17:
+  hidden native `file_read` can now read pre-rendered `memory://` global and
+  Project memory resources without adding a 10th tool or enabling durable
+  memory writes.
+  [devlog](../devlog/2026-06-17-galley-native-slice-5c-memory-resource-read.md).
 
 ## Document Roles
 
@@ -166,17 +171,18 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 5B, native can read files, answer from tool results, apply targeted
+After Slice 5C, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, run approval-gated local
 commands with bounded output, project command stdout/stderr as ordered
 tool-progress events, read browser tabs/pages through `web_scan`, execute
 approval-gated browser JavaScript through `web_execute_js`, surface browser
 recovery hints, keep a short-lived working checkpoint across turns, and persist
-typed native memory ledger rows for later runtime use. The next implementation
-phase remains Slice 5:
+typed native memory ledger rows. It can also read those memory rows as
+`memory://` resources through `file_read`. The next implementation phase remains
+Slice 5:
 
-1. expose safe read-only `memory://` resources through `file_read`;
-2. wire `start_long_term_update` through the evidence/change ledger with secret
+1. wire `start_long_term_update` through the evidence/change ledger with secret
    checks and undo metadata;
+2. add low-risk memory apply/undo behavior and timeline events;
 3. keep capability packs, Goal Hive, Morphling, and default switching in later
    slices.

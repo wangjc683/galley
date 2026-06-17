@@ -662,8 +662,13 @@ Since Slice 5A, hidden native `update_working_checkpoint` is a real
 session-local tool. Successful checkpoint results are persisted in the
 assistant turn's `tool_results`, keep `sideEffectsPerformed = false`, can make
 one continuation model request, and are injected as compact context into later
-native model turns. This is not durable memory; `start_long_term_update`,
-memory item storage, and capability writes remain later Slice 5 work.
+native model turns. This is not durable memory.
+
+Since Slice 5C, hidden native `file_read` can also read read-only `memory://`
+resources pre-rendered by Galley Core for global and active Project memory.
+These reads keep the existing tool-result shape and do not require approval.
+`start_long_term_update`, automatic durable memory writes, capability writes,
+and memory inspect/undo UI remain later Slice 5 work.
 
 For hidden native `code_run`, `tool_progress` can include additive output fields
 before `tool_end`:

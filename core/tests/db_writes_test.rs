@@ -179,6 +179,26 @@ async fn native_memory_substrate_records_item_evidence_index_and_change() {
     assert_eq!(index.target_item_id, item.id);
     assert_eq!(index.rank, 10);
 
+    let listed_items = galley
+        .list_native_memory_items_for_scope(
+            &NativeMemoryScope::Project("proj_native_memory".into()),
+            10,
+        )
+        .await
+        .expect("list memory items");
+    assert_eq!(listed_items.len(), 1);
+    assert_eq!(listed_items[0].id, item.id);
+
+    let listed_entries = galley
+        .list_native_memory_index_entries_for_scope(
+            &NativeMemoryScope::Project("proj_native_memory".into()),
+            10,
+        )
+        .await
+        .expect("list index entries");
+    assert_eq!(listed_entries.len(), 1);
+    assert_eq!(listed_entries[0].id, index.id);
+
     let evidence = galley
         .create_native_memory_evidence(CreateNativeMemoryEvidenceInput {
             session_id: Some(sid("sess_native_memory")),

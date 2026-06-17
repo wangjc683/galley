@@ -685,7 +685,8 @@ Tasks:
 - implement storage for memory items, evidence, index entries, and changes;
   landed in Slice 5B as Core-owned tables and typed DB helpers, without runtime
   memory writes yet;
-- expose `memory://` resources through `file_read`;
+- expose `memory://` resources through `file_read`; landed in Slice 5C for
+  global and active Project L1/L2/L3/L4 read-only resources;
 - implement low-risk memory change apply + undo;
 - implement `start_long_term_update`;
 - add built-in pack registry;
@@ -725,6 +726,21 @@ Landed in Slice 5B follow-up:
   `capability_pack`;
 - no public Agent API, GUI surface, `memory://` resource, or
   `start_long_term_update` runtime write path is enabled yet.
+
+Landed in Slice 5C follow-up:
+
+- native runtime pre-renders global and active Project memory resources into the
+  tool execution context;
+- `file_read` can read `memory://...` resources without approval and without
+  side effects;
+- `memory://.../l1` renders compact index entries and points to deeper item
+  resources;
+- `memory://.../l2`, `l3`, and `l4` render layer item lists;
+- `memory://.../l2/<item-id>` and equivalent L3/L4 item paths render item
+  bodies with triggers, tags, source refs, and scope metadata;
+- missing memory resources return an actionable list of available memory paths;
+- durable memory writes, inspect/undo UI, and capability resources remain
+  deferred.
 
 Rollback:
 

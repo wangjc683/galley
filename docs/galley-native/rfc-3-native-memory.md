@@ -8,8 +8,9 @@
 
 Implementation note: Slice 5B landed the first storage substrate on
 2026-06-17 through Core-owned `native_memory_*` tables and typed DB helpers.
-Runtime writes, `memory://` reads, secret checks, and inspect/undo UI are still
-separate implementation slices.
+Slice 5C then exposed read-only `memory://` resources through `file_read`.
+Runtime writes, secret checks, and inspect/undo UI are still separate
+implementation slices.
 
 ## Decision
 

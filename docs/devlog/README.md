@@ -123,6 +123,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-17 | [Galley Native Slice 4 Completion](./2026-06-17-galley-native-slice-4-completion.md) | Slice 4 completion checkpoint：确认 hidden native tool-control-plane / file-code-browser executors / approval / ask_user / one-pass continuation 已满足 4 的边界；durable memory、capability packs、Goal Hive、Morphling 和 default switch 明确转入 Slice 5+。 |
 | 2026-06-17 | [Galley Native Slice 5A Working Checkpoint](./2026-06-17-galley-native-slice-5a-working-checkpoint.md) | Slice 5A 开始 native memory 前的安全第一步：`update_working_checkpoint` 从 stub 变成 session-local working-state 工具，成功结果写入 assistant `tool_results`、触发一次 continuation，并在后续 native turn 中作为短上下文注入；durable memory / capability 写入仍 deferred。 |
 | 2026-06-17 | [Galley Native Slice 5B Memory Substrate](./2026-06-17-galley-native-slice-5b-memory-substrate.md) | Native memory substrate 落地：新增 Core-owned memory item / index / evidence / change tables 和 typed DB helper；change 必须带 evidence ids，但 `start_long_term_update`、`memory://` read path、secret checks、inspect/undo UI 仍 deferred。 |
+| 2026-06-17 | [Galley Native Slice 5C Memory Resource Read](./2026-06-17-galley-native-slice-5c-memory-resource-read.md) | Hidden native `file_read` 可读取 runtime 预渲染的 `memory://` 只读资源：global / Project L1 index、L2/L3/L4 layer list 和 item body；不新增工具、不需要审批、不开启 durable memory writes。 |
 
 ## 格式约定
 

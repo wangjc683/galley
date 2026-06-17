@@ -1,7 +1,10 @@
 use crate::api::{
     GalleyApi, MessageBrief, MessageRole, MessageVisibility, SessionBrief, SessionId,
 };
-use crate::db::{PersistAssistantMessage, PersistToolEventPending, SqliteGalley, ToolEventRow};
+use crate::db::{
+    NativeMemoryIndexEntryRecord, NativeMemoryItemRecord, NativeMemoryLayer, NativeMemoryScope,
+    PersistAssistantMessage, PersistToolEventPending, SqliteGalley, ToolEventRow,
+};
 use crate::error::{GalleyError, Result};
 use crate::native_model::{NativeModelConfig, NativeModelResponse};
 use crate::native_tools::{
@@ -848,6 +851,7 @@ async fn native_tool_context(
     host_context: &NativeRuntimeHostContext,
 ) -> Result<NativeToolExecutionContext> {
     let session = galley.session_brief(session_id.clone()).await?;
+    let project_id = session.project_id.clone();
     let workspace_root = if let Some(project_id) = session.project_id.as_deref() {
         galley
             .list_projects()
@@ -864,7 +868,217 @@ async fn native_tool_context(
         None => NativeToolExecutionContext::new(workspace_root),
     };
     context.browser_unavailable_reason = host_context.browser_unavailable_reason.clone();
+    context.resource_files = native_memory_resource_files(galley, project_id.as_deref()).await?;
     Ok(context)
+}
+
+async fn native_memory_resource_files(
+    galley: &SqliteGalley,
+    project_id: Option<&str>,
+) -> Result<HashMap<String, String>> {
+    const RESOURCE_LIMIT: u32 = 200;
+
+    let mut resources = HashMap::new();
+    let mut scopes = vec![NativeMemoryScope::GlobalUser];
+    if let Some(project_id) = project_id.map(str::trim).filter(|id| !id.is_empty()) {
+        scopes.push(NativeMemoryScope::Project(project_id.to_string()));
+    }
+
+    for scope in scopes {
+        let items = galley
+            .list_native_memory_items_for_scope(&scope, RESOURCE_LIMIT)
+            .await?;
+        let entries = galley
+            .list_native_memory_index_entries_for_scope(&scope, RESOURCE_LIMIT)
+            .await?;
+        resources.insert(
+            format!("{}/l1", native_memory_scope_uri(&scope)),
+            render_native_memory_l1(&scope, &items, &entries),
+        );
+        for layer in [
+            NativeMemoryLayer::L2,
+            NativeMemoryLayer::L3,
+            NativeMemoryLayer::L4,
+        ] {
+            resources.insert(
+                format!(
+                    "{}/{}",
+                    native_memory_scope_uri(&scope),
+                    native_memory_layer_segment(layer)
+                ),
+                render_native_memory_layer_list(&scope, layer, &items),
+            );
+        }
+        for item in &items {
+            resources.insert(
+                native_memory_item_uri(&item.scope, item.layer, &item.id),
+                render_native_memory_item(item),
+            );
+        }
+    }
+
+    Ok(resources)
+}
+
+fn native_memory_scope_uri(scope: &NativeMemoryScope) -> String {
+    match scope {
+        NativeMemoryScope::GlobalUser => "memory://global".to_string(),
+        NativeMemoryScope::Project(project_id) => format!("memory://project/{project_id}"),
+        NativeMemoryScope::Workspace(workspace_id) => format!("memory://workspace/{workspace_id}"),
+        NativeMemoryScope::CapabilityPack(pack_id) => {
+            format!("memory://capability-pack/{pack_id}")
+        }
+    }
+}
+
+fn native_memory_scope_label(scope: &NativeMemoryScope) -> String {
+    match scope {
+        NativeMemoryScope::GlobalUser => "global_user".to_string(),
+        NativeMemoryScope::Project(project_id) => format!("project:{project_id}"),
+        NativeMemoryScope::Workspace(workspace_id) => format!("workspace:{workspace_id}"),
+        NativeMemoryScope::CapabilityPack(pack_id) => format!("capability_pack:{pack_id}"),
+    }
+}
+
+fn native_memory_layer_segment(layer: NativeMemoryLayer) -> &'static str {
+    match layer {
+        NativeMemoryLayer::L1 => "l1",
+        NativeMemoryLayer::L2 => "l2",
+        NativeMemoryLayer::L3 => "l3",
+        NativeMemoryLayer::L4 => "l4",
+    }
+}
+
+fn native_memory_item_uri(
+    scope: &NativeMemoryScope,
+    layer: NativeMemoryLayer,
+    item_id: &str,
+) -> String {
+    format!(
+        "{}/{}/{}",
+        native_memory_scope_uri(scope),
+        native_memory_layer_segment(layer),
+        item_id
+    )
+}
+
+fn render_native_memory_l1(
+    scope: &NativeMemoryScope,
+    items: &[NativeMemoryItemRecord],
+    entries: &[NativeMemoryIndexEntryRecord],
+) -> String {
+    let mut lines = vec![
+        format!("memory_resource: {}/l1", native_memory_scope_uri(scope)),
+        format!("scope: {}", native_memory_scope_label(scope)),
+        "layer: l1".to_string(),
+        format!("entries: {}", entries.len()),
+        String::new(),
+    ];
+    if entries.is_empty() {
+        lines.push("No active memory index entries for this scope.".to_string());
+    } else {
+        for entry in entries {
+            let item = items.iter().find(|item| item.id == entry.target_item_id);
+            let target = item
+                .map(|item| native_memory_item_uri(&item.scope, item.layer, &item.id))
+                .unwrap_or_else(|| format!("memory://missing/{}", entry.target_item_id));
+            lines.push(format!("- trigger: {}", entry.trigger));
+            lines.push(format!("  target: {target}"));
+            if let Some(item) = item {
+                lines.push(format!("  target_title: {}", item.title));
+            }
+            lines.push(format!("  rank: {}", entry.rank));
+            if let Some(reason) = entry.reason.as_deref() {
+                lines.push(format!("  reason: {reason}"));
+            }
+        }
+    }
+    lines.push(String::new());
+    lines.push("Layer lists:".to_string());
+    for layer in [
+        NativeMemoryLayer::L2,
+        NativeMemoryLayer::L3,
+        NativeMemoryLayer::L4,
+    ] {
+        lines.push(format!(
+            "- {}/{}",
+            native_memory_scope_uri(scope),
+            native_memory_layer_segment(layer)
+        ));
+    }
+    lines.join("\n")
+}
+
+fn render_native_memory_layer_list(
+    scope: &NativeMemoryScope,
+    layer: NativeMemoryLayer,
+    items: &[NativeMemoryItemRecord],
+) -> String {
+    let layer_items = items
+        .iter()
+        .filter(|item| item.layer == layer)
+        .collect::<Vec<_>>();
+    let mut lines = vec![
+        format!(
+            "memory_resource: {}/{}",
+            native_memory_scope_uri(scope),
+            native_memory_layer_segment(layer)
+        ),
+        format!("scope: {}", native_memory_scope_label(scope)),
+        format!("layer: {}", native_memory_layer_segment(layer)),
+        format!("items: {}", layer_items.len()),
+        String::new(),
+    ];
+    if layer_items.is_empty() {
+        lines.push("No active memory items for this layer.".to_string());
+    } else {
+        for item in layer_items {
+            lines.push(format!("- id: {}", item.id));
+            lines.push(format!("  title: {}", item.title));
+            lines.push(format!(
+                "  uri: {}",
+                native_memory_item_uri(&item.scope, item.layer, &item.id)
+            ));
+            if !item.triggers.is_empty() {
+                lines.push(format!("  triggers: {}", item.triggers.join(", ")));
+            }
+            if !item.tags.is_empty() {
+                lines.push(format!("  tags: {}", item.tags.join(", ")));
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+fn render_native_memory_item(item: &NativeMemoryItemRecord) -> String {
+    let source_refs = serde_json::to_string_pretty(&item.source_refs)
+        .unwrap_or_else(|_| item.source_refs.to_string());
+    let mut lines = vec![
+        format!(
+            "memory_item: {}",
+            native_memory_item_uri(&item.scope, item.layer, &item.id)
+        ),
+        format!("id: {}", item.id),
+        format!("layer: {}", native_memory_layer_segment(item.layer)),
+        format!("scope: {}", native_memory_scope_label(&item.scope)),
+        format!("status: {}", item.status),
+        format!("title: {}", item.title),
+    ];
+    if !item.triggers.is_empty() {
+        lines.push(format!("triggers: {}", item.triggers.join(", ")));
+    }
+    if !item.tags.is_empty() {
+        lines.push(format!("tags: {}", item.tags.join(", ")));
+    }
+    if let Some(supersedes) = item.supersedes_item_id.as_deref() {
+        lines.push(format!("supersedes: {supersedes}"));
+    }
+    lines.push("source_refs:".to_string());
+    lines.push(source_refs);
+    lines.push(String::new());
+    lines.push("body:".to_string());
+    lines.push(item.body.clone());
+    lines.join("\n")
 }
 
 #[derive(Debug, Clone)]
@@ -1968,6 +2182,44 @@ mod tests {
         };
 
         assert!(should_continue_after_read_only_tool(&trace));
+    }
+
+    #[test]
+    fn native_memory_l1_renders_file_read_resource_pointers() {
+        let scope = NativeMemoryScope::GlobalUser;
+        let item = NativeMemoryItemRecord {
+            id: "nmi_test".to_string(),
+            layer: NativeMemoryLayer::L2,
+            scope: scope.clone(),
+            title: "Verified command".to_string(),
+            body: "Run cargo check.".to_string(),
+            triggers: vec!["cargo check".to_string()],
+            tags: vec!["testing".to_string()],
+            source_refs: serde_json::json!([{ "kind": "session", "id": "sess_1" }]),
+            status: "active".to_string(),
+            supersedes_item_id: None,
+            created_at: "2026-06-17T00:00:00+00:00".to_string(),
+            updated_at: "2026-06-17T00:00:00+00:00".to_string(),
+        };
+        let entry = NativeMemoryIndexEntryRecord {
+            id: "nmix_test".to_string(),
+            scope: scope.clone(),
+            trigger: "cargo check".to_string(),
+            target_item_id: item.id.clone(),
+            rank: 10,
+            reason: Some("Route test work.".to_string()),
+            created_at: "2026-06-17T00:00:00+00:00".to_string(),
+            updated_at: "2026-06-17T00:00:00+00:00".to_string(),
+        };
+
+        let l1 = render_native_memory_l1(&scope, std::slice::from_ref(&item), &[entry]);
+        let item_body = render_native_memory_item(&item);
+
+        assert!(l1.contains("memory_resource: memory://global/l1"));
+        assert!(l1.contains("target: memory://global/l2/nmi_test"));
+        assert!(l1.contains("target_title: Verified command"));
+        assert!(item_body.contains("memory_item: memory://global/l2/nmi_test"));
+        assert!(item_body.contains("body:\nRun cargo check."));
     }
 
     #[test]

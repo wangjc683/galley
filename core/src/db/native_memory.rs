@@ -416,6 +416,52 @@ impl SqliteGalley {
         row.into_record()
     }
 
+    pub async fn list_native_memory_items_for_scope(
+        &self,
+        scope: &NativeMemoryScope,
+        limit: u32,
+    ) -> Result<Vec<NativeMemoryItemRecord>> {
+        let scope_key = normalized_scope_key(scope)?;
+        let limit = i64::from(limit.clamp(1, 500));
+        let rows = if let Some(scope_key) = scope_key.as_deref() {
+            sqlx::query_as::<_, NativeMemoryItemRow>(
+                "SELECT id, layer, scope_kind, scope_key, title, body, triggers_json, tags_json,
+                        source_refs_json, status, supersedes_item_id, created_at, updated_at
+                 FROM native_memory_items
+                 WHERE scope_kind = ?
+                   AND scope_key = ?
+                   AND status = 'active'
+                 ORDER BY layer ASC, updated_at DESC, id DESC
+                 LIMIT ?",
+            )
+            .bind(scope.kind_sql())
+            .bind(scope_key)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?
+        } else {
+            sqlx::query_as::<_, NativeMemoryItemRow>(
+                "SELECT id, layer, scope_kind, scope_key, title, body, triggers_json, tags_json,
+                        source_refs_json, status, supersedes_item_id, created_at, updated_at
+                 FROM native_memory_items
+                 WHERE scope_kind = ?
+                   AND scope_key IS NULL
+                   AND status = 'active'
+                 ORDER BY layer ASC, updated_at DESC, id DESC
+                 LIMIT ?",
+            )
+            .bind(scope.kind_sql())
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?
+        };
+        rows.into_iter()
+            .map(NativeMemoryItemRow::into_record)
+            .collect()
+    }
+
     pub async fn create_native_memory_index_entry(
         &self,
         input: CreateNativeMemoryIndexEntryInput,
@@ -475,6 +521,50 @@ impl SqliteGalley {
             message: format!("native memory index entry {id} not found"),
         })?;
         row.into_record()
+    }
+
+    pub async fn list_native_memory_index_entries_for_scope(
+        &self,
+        scope: &NativeMemoryScope,
+        limit: u32,
+    ) -> Result<Vec<NativeMemoryIndexEntryRecord>> {
+        let scope_key = normalized_scope_key(scope)?;
+        let limit = i64::from(limit.clamp(1, 500));
+        let rows = if let Some(scope_key) = scope_key.as_deref() {
+            sqlx::query_as::<_, NativeMemoryIndexEntryRow>(
+                "SELECT id, scope_kind, scope_key, trigger, target_item_id, rank, reason,
+                        created_at, updated_at
+                 FROM native_memory_index_entries
+                 WHERE scope_kind = ?
+                   AND scope_key = ?
+                 ORDER BY rank ASC, updated_at DESC, id DESC
+                 LIMIT ?",
+            )
+            .bind(scope.kind_sql())
+            .bind(scope_key)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?
+        } else {
+            sqlx::query_as::<_, NativeMemoryIndexEntryRow>(
+                "SELECT id, scope_kind, scope_key, trigger, target_item_id, rank, reason,
+                        created_at, updated_at
+                 FROM native_memory_index_entries
+                 WHERE scope_kind = ?
+                   AND scope_key IS NULL
+                 ORDER BY rank ASC, updated_at DESC, id DESC
+                 LIMIT ?",
+            )
+            .bind(scope.kind_sql())
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?
+        };
+        rows.into_iter()
+            .map(NativeMemoryIndexEntryRow::into_record)
+            .collect()
     }
 
     pub async fn create_native_memory_evidence(

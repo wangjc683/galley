@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -231,6 +232,7 @@ pub struct NativeToolExecutionContext {
     pub workspace_root: Option<PathBuf>,
     pub browser: Option<NativeBrowserExecutionContext>,
     pub browser_unavailable_reason: Option<String>,
+    pub resource_files: HashMap<String, String>,
 }
 
 impl NativeToolExecutionContext {
@@ -239,6 +241,7 @@ impl NativeToolExecutionContext {
             workspace_root,
             browser: None,
             browser_unavailable_reason: None,
+            resource_files: HashMap::new(),
         }
     }
 
@@ -250,6 +253,7 @@ impl NativeToolExecutionContext {
             workspace_root,
             browser: Some(browser),
             browser_unavailable_reason: None,
+            resource_files: HashMap::new(),
         }
     }
 
@@ -261,6 +265,7 @@ impl NativeToolExecutionContext {
             workspace_root,
             browser: None,
             browser_unavailable_reason: Some(reason.into()),
+            resource_files: HashMap::new(),
         }
     }
 }
@@ -300,7 +305,7 @@ pub fn parity_tool_specs() -> Vec<NativeToolSpec> {
         ),
         spec(
             "file_read",
-            "Read a file or a line range from an allowed path.",
+            "Read a file, memory:// resource, or a line range from an allowed path.",
             "core_file_tool",
             "none",
             serde_json::json!({
@@ -941,6 +946,9 @@ fn file_read_requires_approval(
     call: &NativeToolCall,
     context: &NativeToolExecutionContext,
 ) -> bool {
+    if file_read_resource_uri_arg(call).is_some() {
+        return false;
+    }
     let Some(path) = file_read_path_arg(call) else {
         return false;
     };
@@ -982,6 +990,9 @@ fn file_read_content(
     call: &NativeToolCall,
     context: &NativeToolExecutionContext,
 ) -> std::result::Result<String, String> {
+    if let Some(uri) = file_read_resource_uri_arg(call) {
+        return file_read_resource_content(&uri, call, context);
+    }
     let path = file_read_path_arg(call)
         .ok_or_else(|| "file_read requires a non-empty string `path` argument.".to_string())?;
     let resolved = resolve_existing_file_path(&path, context, "file_read")?;
@@ -1006,6 +1017,54 @@ fn file_read_content(
 
 fn file_read_path_arg(call: &NativeToolCall) -> Option<PathBuf> {
     path_arg(call)
+}
+
+fn file_read_resource_uri_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["path"])
+        .map(|path| normalize_resource_uri(&path))
+        .filter(|path| path.starts_with("memory://"))
+}
+
+fn normalize_resource_uri(path: &str) -> String {
+    let mut normalized = path.trim().replace('\\', "/");
+    while normalized.ends_with('/') && normalized.len() > "memory://".len() {
+        normalized.pop();
+    }
+    normalized
+}
+
+fn file_read_resource_content(
+    uri: &str,
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> std::result::Result<String, String> {
+    let Some(body) = context.resource_files.get(uri) else {
+        let mut available = context
+            .resource_files
+            .keys()
+            .filter(|key| key.starts_with("memory://"))
+            .take(20)
+            .cloned()
+            .collect::<Vec<_>>();
+        available.sort();
+        let available = if available.is_empty() {
+            "No memory:// resources are available in this session.".to_string()
+        } else {
+            format!("Available memory:// resources:\n{}", available.join("\n"))
+        };
+        return Err(format!(
+            "file_read memory resource not found: {uri}\n\n{available}"
+        ));
+    };
+    let (start_line, end_line) = file_read_line_range(call)?;
+    let (body, truncated) = virtual_text_with_cap(body);
+    let (selected, rendered_range) = select_line_range(&body, start_line, end_line)?;
+    Ok(format_file_read_resource_content(
+        uri,
+        rendered_range.as_deref(),
+        truncated,
+        &selected,
+    ))
 }
 
 fn file_patch_result(
@@ -2247,6 +2306,18 @@ fn read_text_with_cap(path: &Path) -> std::result::Result<(String, bool), String
     Ok((String::from_utf8_lossy(&bytes).to_string(), truncated))
 }
 
+fn virtual_text_with_cap(body: &str) -> (String, bool) {
+    let cap = FILE_READ_MAX_BYTES as usize;
+    if body.len() <= cap {
+        return (body.to_string(), false);
+    }
+    let mut end = cap;
+    while end > 0 && !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    (body[..end].to_string(), true)
+}
+
 fn select_line_range(
     body: &str,
     start_line: Option<usize>,
@@ -2289,6 +2360,25 @@ fn format_file_read_content(
     body: &str,
 ) -> String {
     let mut header = format!("file_read: {}", path.display());
+    if let Some(range) = range {
+        header.push_str(&format!("\nlines: {range}"));
+    }
+    if truncated {
+        header.push_str(&format!(
+            "\ntruncated: true ({} bytes)",
+            FILE_READ_MAX_BYTES
+        ));
+    }
+    format!("{header}\n\n{body}")
+}
+
+fn format_file_read_resource_content(
+    uri: &str,
+    range: Option<&str>,
+    truncated: bool,
+    body: &str,
+) -> String {
+    let mut header = format!("file_read: {uri}");
     if let Some(range) = range {
         header.push_str(&format!("\nlines: {range}"));
     }
@@ -3199,6 +3289,57 @@ def execute_js_rich(script, driver, no_monitor=False):
         assert!(result.content.contains("lines: 2-3"));
         assert!(result.content.contains("beta\ngamma"));
         assert!(!result.content.contains("\nalpha\n"));
+    }
+
+    #[test]
+    fn file_read_reads_memory_resource_without_approval() {
+        let call = tool_call(
+            "file_read",
+            serde_json::json!({
+                "path": "memory://global/l1",
+                "startLine": 2,
+                "endLine": 2
+            }),
+        );
+        let mut context = NativeToolExecutionContext::default();
+        context.resource_files.insert(
+            "memory://global/l1".to_string(),
+            "heading\nindexed trigger\nbody".to_string(),
+        );
+
+        let approval = approval_for_tool_call(&call, &context);
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(approval, "none");
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("file_read: memory://global/l1"));
+        assert!(result.content.contains("lines: 2-2"));
+        assert!(result.content.contains("indexed trigger"));
+        assert!(!result.content.contains("\nheading\n"));
+    }
+
+    #[test]
+    fn file_read_missing_memory_resource_lists_available_resources() {
+        let call = tool_call(
+            "file_read",
+            serde_json::json!({
+                "path": "memory://global/l2/missing"
+            }),
+        );
+        let mut context = NativeToolExecutionContext::default();
+        context.resource_files.insert(
+            "memory://global/l1".to_string(),
+            "existing index".to_string(),
+        );
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(result.content.contains("memory resource not found"));
+        assert!(result.content.contains("memory://global/l1"));
     }
 
     #[test]

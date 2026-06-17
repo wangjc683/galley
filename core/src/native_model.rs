@@ -13,7 +13,7 @@ const DEFAULT_READ_TIMEOUT_SECS: u64 = 180;
 const DEFAULT_MAX_TOKENS: u64 = 1024;
 const CONTINUATION_TOOL_RESULT_MAX_CHARS: usize = 64 * 1024;
 const WORKING_CHECKPOINT_PROMPT_MAX_CHARS: usize = 8 * 1024;
-const INITIAL_SYSTEM_PROMPT: &str = "You are Galley Native. Answer directly when no tool is needed. If you need a tool, emit only one JSON tool call, such as {\"tool\":\"file_read\",\"arguments\":{\"path\":\"notes.txt\"}}. Available native tools: file_read, file_patch, file_write, code_run, web_scan, web_execute_js, ask_user, update_working_checkpoint, start_long_term_update. file_patch, file_write, code_run, and web_execute_js require approval before side effects. web_scan reads the connected Browser Control tab/page; web_execute_js runs JavaScript through Browser Control. update_working_checkpoint stores short-lived session-local working state, not durable memory. start_long_term_update is recognized, but durable memory/capability writes are not implemented yet. Do not claim Goal Hive, Morphling, durable memory, unrestricted workspace access, or browser access when Browser Control is unavailable.";
+const INITIAL_SYSTEM_PROMPT: &str = "You are Galley Native. Answer directly when no tool is needed. If you need a tool, emit only one JSON tool call, such as {\"tool\":\"file_read\",\"arguments\":{\"path\":\"notes.txt\"}}. Available native tools: file_read, file_patch, file_write, code_run, web_scan, web_execute_js, ask_user, update_working_checkpoint, start_long_term_update. file_read can read workspace files and read-only memory:// resources when available. file_patch, file_write, code_run, and web_execute_js require approval before side effects. web_scan reads the connected Browser Control tab/page; web_execute_js runs JavaScript through Browser Control. update_working_checkpoint stores short-lived session-local working state, not durable memory. start_long_term_update is recognized, but durable memory/capability writes are not implemented yet. Do not claim Goal Hive, Morphling, durable memory writes, unrestricted workspace access, or browser access when Browser Control is unavailable.";
 const TOOL_RESULT_SYSTEM_PROMPT: &str = "You are Galley Native. You have received tool results from Galley Core. Use them to produce the final user-facing answer. Do not emit another tool call in this continuation. If the tool result is insufficient or failed, explain the concrete next step.";
 
 #[derive(Debug, Clone)]
@@ -1072,6 +1072,7 @@ mod tests {
         assert!(INITIAL_SYSTEM_PROMPT.contains("code_run"));
         assert!(INITIAL_SYSTEM_PROMPT.contains("web_scan"));
         assert!(INITIAL_SYSTEM_PROMPT.contains("web_execute_js"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("memory://"));
         assert!(INITIAL_SYSTEM_PROMPT.contains("session-local working state"));
         assert!(!INITIAL_SYSTEM_PROMPT.contains("file_read is the only real local executor"));
     }
