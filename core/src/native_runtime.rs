@@ -510,7 +510,10 @@ async fn run_model_turn(
         .await;
     }
 
-    let model_response = crate::native_model::complete_no_tool_turn(&model, task).await?;
+    let working_checkpoint = galley.latest_native_working_checkpoint(&session_id).await?;
+    let model_task =
+        crate::native_model::task_with_working_checkpoint(task, working_checkpoint.as_deref());
+    let model_response = crate::native_model::complete_no_tool_turn(&model, &model_task).await?;
     let first_answer = model_response.content.trim().to_string();
     let NativeModelResponse {
         model_name: first_model_name,
@@ -553,7 +556,7 @@ async fn run_model_turn(
     if should_continue_after_read_only_tool(&tool_trace) {
         let continuation_response = crate::native_model::complete_tool_result_turn(
             &model,
-            task,
+            &model_task,
             &first_answer,
             &tool_trace.tool_results,
         )
@@ -644,8 +647,11 @@ async fn run_streaming_model_turn(
     event_bus().publish(&session_id_str, start.clone());
     events.push(start);
 
+    let working_checkpoint = galley.latest_native_working_checkpoint(&session_id).await?;
+    let model_task =
+        crate::native_model::task_with_working_checkpoint(task, working_checkpoint.as_deref());
     let model_response =
-        crate::native_model::complete_no_tool_turn_with_delta(&model, task, |delta| {
+        crate::native_model::complete_no_tool_turn_with_delta(&model, &model_task, |delta| {
             let event = turn_progress_event(
                 &session_id_str,
                 turn_index,
@@ -1135,9 +1141,12 @@ async fn continue_after_approved_tool_result(
     };
     let (task, assistant_tool_request) =
         native_turn_continuation_context(galley, session_id, turn_index, call).await?;
+    let working_checkpoint = galley.latest_native_working_checkpoint(session_id).await?;
+    let model_task =
+        crate::native_model::task_with_working_checkpoint(&task, working_checkpoint.as_deref());
     let response = crate::native_model::complete_tool_result_turn(
         &model,
-        &task,
+        &model_task,
         &assistant_tool_request,
         tool_results,
     )
@@ -1219,7 +1228,7 @@ fn should_continue_after_read_only_tool(trace: &NativeToolTrace) -> bool {
         && trace.tool_results.iter().any(|result| {
             matches!(
                 result.get("toolName").and_then(serde_json::Value::as_str),
-                Some("file_read" | "web_scan")
+                Some("file_read" | "web_scan" | "update_working_checkpoint")
             ) && result.get("status").and_then(serde_json::Value::as_str) == Some("success")
         })
 }
@@ -1936,6 +1945,22 @@ mod tests {
             tool_calls: Vec::new(),
             tool_results: vec![serde_json::json!({
                 "toolName": "web_scan",
+                "status": "success"
+            })],
+            awaiting_user: false,
+            pending_approval: None,
+        };
+
+        assert!(should_continue_after_read_only_tool(&trace));
+    }
+
+    #[test]
+    fn successful_working_checkpoint_requests_continuation() {
+        let trace = NativeToolTrace {
+            events: Vec::new(),
+            tool_calls: Vec::new(),
+            tool_results: vec![serde_json::json!({
+                "toolName": "update_working_checkpoint",
                 "status": "success"
             })],
             awaiting_user: false,

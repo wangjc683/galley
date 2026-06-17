@@ -127,6 +127,11 @@ behavior changes until an implementation slice explicitly lands them.
   executors, and one-pass tool-result continuation needed before starting
   native memory work.
   [devlog](../devlog/2026-06-17-galley-native-slice-4-completion.md).
+- Slice 5A landed the working checkpoint on 2026-06-17:
+  `update_working_checkpoint` now records short-lived session-local state,
+  triggers a continuation answer, and is injected into later native model turns
+  without becoming durable memory.
+  [devlog](../devlog/2026-06-17-galley-native-slice-5a-working-checkpoint.md).
 
 ## Document Roles
 
@@ -156,14 +161,15 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 4, native can read files, answer from tool results, apply targeted
+After Slice 5A, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, run approval-gated local
 commands with bounded output, project command stdout/stderr as ordered
 tool-progress events, read browser tabs/pages through `web_scan`, execute
-approval-gated browser JavaScript through `web_execute_js`, and surface browser
-recovery hints. The next implementation phase is Slice 5:
+approval-gated browser JavaScript through `web_execute_js`, surface browser
+recovery hints, and keep a short-lived working checkpoint across turns. The
+next implementation phase remains Slice 5:
 
-1. make `update_working_checkpoint` a real session-local working-state tool;
-2. design the smallest typed native memory/change store for
+1. design the smallest typed native memory/change store for
    `start_long_term_update`;
+2. expose safe read-only memory resources through `file_read`;
 3. keep Goal Hive, Morphling, and default switching in later slices.

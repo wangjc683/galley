@@ -862,6 +862,51 @@ impl SqliteGalley {
         Ok(())
     }
 
+    pub async fn latest_native_working_checkpoint(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Option<String>> {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT tool_results \
+             FROM messages \
+             WHERE session_id = ? \
+               AND role = 'assistant' \
+               AND tool_results IS NOT NULL \
+             ORDER BY turn_index DESC, sequence DESC \
+             LIMIT 50",
+        )
+        .bind(session_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        for (raw_tool_results,) in rows {
+            let Ok(serde_json::Value::Array(results)) =
+                serde_json::from_str::<serde_json::Value>(&raw_tool_results)
+            else {
+                continue;
+            };
+            for result in results.into_iter().rev() {
+                if result.get("toolName").and_then(serde_json::Value::as_str)
+                    != Some("update_working_checkpoint")
+                    || result.get("status").and_then(serde_json::Value::as_str) != Some("success")
+                {
+                    continue;
+                }
+                if let Some(content) = result
+                    .get("content")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|content| !content.is_empty())
+                {
+                    return Ok(Some(content.to_string()));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
     pub async fn update_native_assistant_after_approval(
         &self,
         session_id: SessionId,

@@ -12,7 +12,8 @@ use crate::error::{GalleyError, Result};
 const DEFAULT_READ_TIMEOUT_SECS: u64 = 180;
 const DEFAULT_MAX_TOKENS: u64 = 1024;
 const CONTINUATION_TOOL_RESULT_MAX_CHARS: usize = 64 * 1024;
-const INITIAL_SYSTEM_PROMPT: &str = "You are Galley Native. Answer directly when no tool is needed. If you need a tool, emit only one JSON tool call, such as {\"tool\":\"file_read\",\"arguments\":{\"path\":\"notes.txt\"}}. Available native tools: file_read, file_patch, file_write, code_run, web_scan, web_execute_js, ask_user, update_working_checkpoint, start_long_term_update. file_patch, file_write, code_run, and web_execute_js require approval before side effects. web_scan reads the connected Browser Control tab/page; web_execute_js runs JavaScript through Browser Control. update_working_checkpoint and start_long_term_update are recognized but durable memory/capability writes are not implemented yet. Do not claim Goal Hive, Morphling, durable memory, unrestricted workspace access, or browser access when Browser Control is unavailable.";
+const WORKING_CHECKPOINT_PROMPT_MAX_CHARS: usize = 8 * 1024;
+const INITIAL_SYSTEM_PROMPT: &str = "You are Galley Native. Answer directly when no tool is needed. If you need a tool, emit only one JSON tool call, such as {\"tool\":\"file_read\",\"arguments\":{\"path\":\"notes.txt\"}}. Available native tools: file_read, file_patch, file_write, code_run, web_scan, web_execute_js, ask_user, update_working_checkpoint, start_long_term_update. file_patch, file_write, code_run, and web_execute_js require approval before side effects. web_scan reads the connected Browser Control tab/page; web_execute_js runs JavaScript through Browser Control. update_working_checkpoint stores short-lived session-local working state, not durable memory. start_long_term_update is recognized, but durable memory/capability writes are not implemented yet. Do not claim Goal Hive, Morphling, durable memory, unrestricted workspace access, or browser access when Browser Control is unavailable.";
 const TOOL_RESULT_SYSTEM_PROMPT: &str = "You are Galley Native. You have received tool results from Galley Core. Use them to produce the final user-facing answer. Do not emit another tool call in this continuation. If the tool result is insufficient or failed, explain the concrete next step.";
 
 #[derive(Debug, Clone)]
@@ -162,6 +163,24 @@ where
         on_delta,
     )
     .await
+}
+
+pub(crate) fn task_with_working_checkpoint(task: &str, checkpoint: Option<&str>) -> String {
+    let Some(checkpoint) = checkpoint
+        .map(str::trim)
+        .filter(|checkpoint| !checkpoint.is_empty())
+    else {
+        return task.to_string();
+    };
+    let (checkpoint, truncated) = truncate_chars(checkpoint, WORKING_CHECKPOINT_PROMPT_MAX_CHARS);
+    let suffix = if truncated {
+        "\n[Working checkpoint truncated before this turn.]"
+    } else {
+        ""
+    };
+    format!(
+        "Current Galley Native working checkpoint from this session:\n```text\n{checkpoint}\n```{suffix}\n\nUser request:\n{task}"
+    )
 }
 
 pub async fn complete_tool_result_turn(
@@ -1053,7 +1072,29 @@ mod tests {
         assert!(INITIAL_SYSTEM_PROMPT.contains("code_run"));
         assert!(INITIAL_SYSTEM_PROMPT.contains("web_scan"));
         assert!(INITIAL_SYSTEM_PROMPT.contains("web_execute_js"));
+        assert!(INITIAL_SYSTEM_PROMPT.contains("session-local working state"));
         assert!(!INITIAL_SYSTEM_PROMPT.contains("file_read is the only real local executor"));
+    }
+
+    #[test]
+    fn task_with_working_checkpoint_injects_session_state() {
+        let task = task_with_working_checkpoint(
+            "Continue the implementation.",
+            Some("update_working_checkpoint:\nstatus: active\n\nTests are next."),
+        );
+
+        assert!(task.contains("Current Galley Native working checkpoint"));
+        assert!(task.contains("Tests are next."));
+        assert!(task.contains("User request:\nContinue the implementation."));
+    }
+
+    #[test]
+    fn task_without_working_checkpoint_is_unchanged() {
+        assert_eq!(
+            task_with_working_checkpoint("Continue.", Some("   ")),
+            "Continue."
+        );
+        assert_eq!(task_with_working_checkpoint("Continue.", None), "Continue.");
     }
 
     #[test]

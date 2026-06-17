@@ -13,6 +13,7 @@ const CODE_RUN_PROGRESS_CHUNK_MAX_BYTES: usize = 8 * 1024;
 const FILE_READ_MAX_BYTES: u64 = 256 * 1024;
 const FILE_PATCH_MAX_BYTES: u64 = 256 * 1024;
 const FILE_WRITE_MAX_BYTES: u64 = 256 * 1024;
+const WORKING_CHECKPOINT_MAX_CHARS: usize = 16 * 1024;
 const NATIVE_BROWSER_TOOL_SCRIPT: &str = r#"
 import importlib, json, os, sys, time, traceback
 
@@ -569,6 +570,7 @@ pub fn execute_native_tool(
         "file_write" => file_write_result(call, context),
         "web_scan" => web_scan_result(call, context),
         "web_execute_js" => web_execute_js_result(call, context),
+        "update_working_checkpoint" => update_working_checkpoint_result(call, context),
         _ => stub_tool_result(call),
     }
 }
@@ -582,11 +584,6 @@ pub fn stub_tool_result(call: &NativeToolCall) -> NativeToolStubResult {
             "waiting_for_user",
             "ask_user was recognized. Native emits an ask_user event and waits for the next session.send response before continuing.",
             true,
-        ),
-        "update_working_checkpoint" => (
-            "stub_checkpoint_observed",
-            "update_working_checkpoint was recognized. Slice 4A records only the event/result stub and writes no durable checkpoint state.",
-            false,
         ),
         "start_long_term_update" => (
             "stub_long_term_update_deferred",
@@ -615,6 +612,45 @@ pub fn stub_tool_result(call: &NativeToolCall) -> NativeToolStubResult {
         approval,
         progress_chunks: Vec::new(),
     }
+}
+
+fn update_working_checkpoint_result(
+    call: &NativeToolCall,
+    context: &NativeToolExecutionContext,
+) -> NativeToolStubResult {
+    let approval = approval_for_tool_call(call, context);
+    let result = update_working_checkpoint_content(call);
+    let (status, content) = match result {
+        Ok(content) => ("success", content),
+        Err(message) => ("failed", message),
+    };
+    NativeToolStubResult {
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        status: status.to_string(),
+        content,
+        side_effects_performed: false,
+        requires_user_response: false,
+        approval,
+        progress_chunks: Vec::new(),
+    }
+}
+
+fn update_working_checkpoint_content(call: &NativeToolCall) -> std::result::Result<String, String> {
+    let content = update_working_checkpoint_content_arg(call).ok_or_else(|| {
+        "update_working_checkpoint requires a non-empty string `content` argument.".to_string()
+    })?;
+    if content.chars().count() > WORKING_CHECKPOINT_MAX_CHARS {
+        return Err(format!(
+            "update_working_checkpoint refused {} chars because the cap is {} chars.",
+            content.chars().count(),
+            WORKING_CHECKPOINT_MAX_CHARS
+        ));
+    }
+    let status = update_working_checkpoint_status_arg(call);
+    Ok(format!(
+        "update_working_checkpoint:\nstatus: {status}\n\n{content}"
+    ))
 }
 
 fn code_run_result(
@@ -1635,6 +1671,19 @@ fn web_execute_js_save_to_file_arg(call: &NativeToolCall) -> Option<String> {
     string_arg_any(call, &["save_to_file", "saveToFile"])
         .map(|path| path.trim().to_string())
         .filter(|path| !path.is_empty())
+}
+
+fn update_working_checkpoint_content_arg(call: &NativeToolCall) -> Option<String> {
+    string_arg_any(call, &["content", "checkpoint", "summary"])
+        .map(|content| content.trim().to_string())
+        .filter(|content| !content.is_empty())
+}
+
+fn update_working_checkpoint_status_arg(call: &NativeToolCall) -> String {
+    string_arg_any(call, &["status", "state"])
+        .map(|status| status.trim().to_ascii_lowercase())
+        .filter(|status| !status.is_empty())
+        .unwrap_or_else(|| "active".to_string())
 }
 
 fn string_arg_any(call: &NativeToolCall, names: &[&str]) -> Option<String> {
@@ -2676,6 +2725,43 @@ mod tests {
         assert_eq!(result.status, "timed_out");
         assert!(result.side_effects_performed);
         assert!(result.content.contains("timed_out: true"));
+    }
+
+    #[test]
+    fn update_working_checkpoint_records_session_local_state_without_approval() {
+        let call = tool_call(
+            "update_working_checkpoint",
+            serde_json::json!({
+                "content": "Read the API docs; next step is adding tests.",
+                "status": "Active"
+            }),
+        );
+
+        let result = execute_native_tool(&call, &NativeToolExecutionContext::default());
+
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(!result.requires_user_response);
+        assert!(result.content.contains("status: active"));
+        assert!(result.content.contains("Read the API docs"));
+    }
+
+    #[test]
+    fn update_working_checkpoint_rejects_empty_content() {
+        let call = tool_call(
+            "update_working_checkpoint",
+            serde_json::json!({
+                "content": "   "
+            }),
+        );
+
+        let result = execute_native_tool(&call, &NativeToolExecutionContext::default());
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result.content.contains("non-empty"));
     }
 
     #[test]

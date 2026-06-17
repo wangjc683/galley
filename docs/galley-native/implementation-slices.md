@@ -679,6 +679,9 @@ Primary RFCs:
 
 Tasks:
 
+- implement `update_working_checkpoint` as short-lived session-local state;
+  landed in Slice 5A through assistant `tool_results` persistence and compact
+  prompt injection on later native turns;
 - implement storage for memory items, evidence, index entries, and changes;
 - expose `memory://` resources through `file_read`;
 - implement low-risk memory change apply + undo;
@@ -697,6 +700,17 @@ Exit gate:
 - secrets are rejected or redirected to credential references;
 - pack resource reads work without adding a 10th tool;
 - no import from managed/external happens automatically.
+
+Landed in Slice 5A follow-up:
+
+- `update_working_checkpoint` no longer routes to the deterministic stub;
+- successful checkpoints persist as assistant `tool_results`, trigger one
+  continuation model request, and remain `sideEffectsPerformed=false`;
+- future native model turns read the latest successful checkpoint from prior
+  assistant `tool_results` and inject it as compact session-local context;
+- checkpoint content is capped before storage and before prompt injection;
+- durable memory/capability writes remain deferred to `start_long_term_update`
+  and later Slice 5 work.
 
 Rollback:
 
