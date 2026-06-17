@@ -687,14 +687,22 @@ Tasks:
   memory writes yet;
 - expose `memory://` resources through `file_read`; landed in Slice 5C for
   global and active Project L1/L2/L3/L4 read-only resources;
-- implement low-risk memory change apply + undo;
-- implement `start_long_term_update`;
-- add built-in pack registry;
-- expose `capability://` resources through `file_read`;
-- add pack manifest validation;
-- connect pack triggers to L1;
-- add script execution policy through `code_run`;
-- add timeline events for memory/pack updates.
+- implement low-risk memory change apply + undo; landed in Slice 5D for
+  create changes;
+- implement `start_long_term_update`; landed in Slice 5D for low-risk text
+  memory, while high-risk/capability/script/tool/browser updates still require
+  approval or remain unsupported;
+- add built-in pack registry; landed in Slice 5D as read-only built-in packs;
+- expose `capability://` resources through `file_read`; landed in Slice 5D;
+- add pack manifest validation; landed in Slice 5D for built-in pack manifests;
+- connect pack triggers to L1; landed in Slice 5D by appending capability
+  pointers to active memory L1 resources;
+- add script execution policy through `code_run`; landed in Slice 5D by
+  refusing `capability://` script execution until a materialize-by-hash approval
+  path exists;
+- add timeline events for memory/pack updates; landed in Slice 5D for memory
+  writes through existing `tool_progress` / `tool_end` events. Pack updates are
+  still deferred because V1 packs are read-only built-ins.
 
 Exit gate:
 
@@ -741,6 +749,25 @@ Landed in Slice 5C follow-up:
 - missing memory resources return an actionable list of available memory paths;
 - durable memory writes, inspect/undo UI, and capability resources remain
   deferred.
+
+Landed in Slice 5D follow-up:
+
+- low-risk `start_long_term_update` calls create native evidence, memory item,
+  L1 index entries, and an auto-applied create change;
+- high-risk memory, capability, script, tool, browser, and pack updates still
+  stop at approval or return an explicit unsupported policy result;
+- create changes can be reverted by Core: the item becomes `deleted`, its index
+  entries are removed, and the change moves to `reverted`;
+- candidate text is rejected when it appears to contain a raw secret;
+- memory write results update assistant `tool_results`, `tool_progress`, and
+  `tool_end` so GUI/CLI timelines see the side effect;
+- built-in read-only packs exist for Goal Hive, Morphling, and Browser Control;
+- `capability://index`, `capability://<pack>/manifest`, and pack resource paths
+  are exposed through `file_read`;
+- capability pack manifests are validated at runtime context construction;
+- active memory L1 resources include capability trigger pointers;
+- `code_run` refuses `capability://` script execution until pack scripts have a
+  materialize-by-hash approval and rollback path.
 
 Rollback:
 

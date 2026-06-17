@@ -171,18 +171,23 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 5C, native can read files, answer from tool results, apply targeted
+After Slice 5D, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, run approval-gated local
 commands with bounded output, project command stdout/stderr as ordered
 tool-progress events, read browser tabs/pages through `web_scan`, execute
 approval-gated browser JavaScript through `web_execute_js`, surface browser
 recovery hints, keep a short-lived working checkpoint across turns, and persist
-typed native memory ledger rows. It can also read those memory rows as
-`memory://` resources through `file_read`. The next implementation phase remains
-Slice 5:
+typed native memory ledger rows. It can read memory rows as `memory://`
+resources, apply low-risk text memory through `start_long_term_update`, undo
+create changes through Core helpers, and read built-in Goal Hive / Morphling /
+Browser Control capability resources through `capability://`.
 
-1. wire `start_long_term_update` through the evidence/change ledger with secret
-   checks and undo metadata;
-2. add low-risk memory apply/undo behavior and timeline events;
-3. keep capability packs, Goal Hive, Morphling, and default switching in later
-   slices.
+The next implementation phase should stay conservative:
+
+1. add GUI/CLI inspect and undo surfaces for native memory changes;
+2. add parity tests for `memory://`, `capability://`, and low-risk
+   `start_long_term_update`;
+3. design the materialize-by-hash approval path before executing capability
+   pack scripts;
+4. keep dynamic capability-pack updates, full Goal Hive, full Morphling, and
+   default switching in later slices.

@@ -305,7 +305,7 @@ pub fn parity_tool_specs() -> Vec<NativeToolSpec> {
         ),
         spec(
             "file_read",
-            "Read a file, memory:// resource, or a line range from an allowed path.",
+            "Read a file, memory:// resource, capability:// resource, or a line range from an allowed path.",
             "core_file_tool",
             "none",
             serde_json::json!({
@@ -421,7 +421,25 @@ pub fn parity_tool_specs() -> Vec<NativeToolSpec> {
                 "required": ["topic"],
                 "properties": {
                     "topic": { "type": "string" },
-                    "proposal": { "type": "string" }
+                    "proposal": { "type": "string" },
+                    "content": { "type": "string" },
+                    "body": { "type": "string" },
+                    "scope": { "type": "string" },
+                    "layer": { "type": "string" },
+                    "triggers": {
+                        "oneOf": [
+                            { "type": "string" },
+                            { "type": "array", "items": { "type": "string" } }
+                        ]
+                    },
+                    "tags": {
+                        "oneOf": [
+                            { "type": "string" },
+                            { "type": "array", "items": { "type": "string" } }
+                        ]
+                    },
+                    "risk": { "type": "string" },
+                    "kind": { "type": "string" }
                 }
             }),
         ),
@@ -459,6 +477,9 @@ pub fn approval_for_tool_call(
     {
         return "none".to_string();
     }
+    if call.name == "start_long_term_update" && !start_long_term_update_requires_approval(call) {
+        return "none".to_string();
+    }
     call.risk_hint
         .as_deref()
         .filter(|hint| is_approval_policy(hint))
@@ -472,6 +493,39 @@ fn is_approval_policy(value: &str) -> bool {
         value,
         "none" | "risk_based" | "durable_write" | "always_visible" | "unsupported"
     )
+}
+
+fn start_long_term_update_requires_approval(call: &NativeToolCall) -> bool {
+    let risk = string_arg_any(call, &["risk", "risk_level", "riskLevel"])
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    if matches!(
+        risk.as_str(),
+        "medium" | "high" | "risk_based" | "durable_write"
+    ) {
+        return true;
+    }
+    let kind = string_arg_any(call, &["kind", "type", "update_type", "updateType"])
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    if kind.contains("capability")
+        || kind.contains("pack")
+        || kind.contains("script")
+        || kind.contains("tool")
+        || kind.contains("browser")
+        || kind.contains("morphling")
+    {
+        return true;
+    }
+    [
+        "capability",
+        "capability_pack",
+        "script",
+        "tool_schema",
+        "permissions",
+    ]
+    .iter()
+    .any(|name| call.arguments_json.get(*name).is_some())
 }
 
 pub fn parse_structured_tool_calls(value: &Value) -> NativeToolParseOutcome {
@@ -714,6 +768,9 @@ fn code_run_content(
 ) -> std::result::Result<CodeRunExecutionResult, String> {
     let command = code_run_command_arg(call)
         .ok_or_else(|| "code_run requires a non-empty string `command` argument.".to_string())?;
+    if let Some(policy_error) = code_run_script_policy_error(call, &command) {
+        return Err(policy_error);
+    }
     if let Some(preview_error) = code_run_preview_error_arg(call) {
         return Err(format!(
             "code_run cannot run because the approval preview was invalid: {preview_error}"
@@ -1022,15 +1079,24 @@ fn file_read_path_arg(call: &NativeToolCall) -> Option<PathBuf> {
 fn file_read_resource_uri_arg(call: &NativeToolCall) -> Option<String> {
     string_arg_any(call, &["path"])
         .map(|path| normalize_resource_uri(&path))
-        .filter(|path| path.starts_with("memory://"))
+        .filter(|path| is_native_resource_uri(path))
 }
 
 fn normalize_resource_uri(path: &str) -> String {
     let mut normalized = path.trim().replace('\\', "/");
-    while normalized.ends_with('/') && normalized.len() > "memory://".len() {
+    let min_len = if normalized.starts_with("capability://") {
+        "capability://".len()
+    } else {
+        "memory://".len()
+    };
+    while normalized.ends_with('/') && normalized.len() > min_len {
         normalized.pop();
     }
     normalized
+}
+
+fn is_native_resource_uri(path: &str) -> bool {
+    path.starts_with("memory://") || path.starts_with("capability://")
 }
 
 fn file_read_resource_content(
@@ -1039,21 +1105,23 @@ fn file_read_resource_content(
     context: &NativeToolExecutionContext,
 ) -> std::result::Result<String, String> {
     let Some(body) = context.resource_files.get(uri) else {
+        let scheme = uri.split("://").next().unwrap_or("native");
+        let prefix = format!("{scheme}://");
         let mut available = context
             .resource_files
             .keys()
-            .filter(|key| key.starts_with("memory://"))
+            .filter(|key| key.starts_with(&prefix))
             .take(20)
             .cloned()
             .collect::<Vec<_>>();
         available.sort();
         let available = if available.is_empty() {
-            "No memory:// resources are available in this session.".to_string()
+            format!("No {prefix} resources are available in this session.")
         } else {
-            format!("Available memory:// resources:\n{}", available.join("\n"))
+            format!("Available {prefix} resources:\n{}", available.join("\n"))
         };
         return Err(format!(
-            "file_read memory resource not found: {uri}\n\n{available}"
+            "file_read native resource not found: {uri}\n\n{available}"
         ));
     };
     let (start_line, end_line) = file_read_line_range(call)?;
@@ -1625,6 +1693,27 @@ fn code_run_command_arg(call: &NativeToolCall) -> Option<String> {
     string_arg_any(call, &["command", "cmd", "code"])
         .map(|command| command.trim().to_string())
         .filter(|command| !command.is_empty())
+}
+
+fn code_run_script_policy_error(call: &NativeToolCall, command: &str) -> Option<String> {
+    if command.contains("capability://")
+        || string_arg_any(
+            call,
+            &[
+                "script_uri",
+                "scriptUri",
+                "capability_script",
+                "capabilityScript",
+            ],
+        )
+        .is_some()
+    {
+        return Some(
+            "code_run refused capability pack script execution. Slice 5 exposes capability:// resources as read-only; executing pack scripts requires a later materialize-by-hash approval path."
+                .to_string(),
+        );
+    }
+    None
 }
 
 fn code_run_cwd_arg(call: &NativeToolCall) -> Option<PathBuf> {
@@ -2778,6 +2867,30 @@ mod tests {
     }
 
     #[test]
+    fn code_run_refuses_capability_pack_script_uri() {
+        let dir = tempfile::tempdir().unwrap();
+        let call = tool_call(
+            "code_run",
+            serde_json::json!({
+                "command": "python capability://morphling/scripts/promote.py",
+                "timeoutSeconds": 2
+            }),
+        );
+        let context = NativeToolExecutionContext::new(Some(dir.path().to_path_buf()));
+        let call = normalize_native_tool_call(call, &context);
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "risk_based");
+        assert!(!result.side_effects_performed);
+        assert!(result
+            .content
+            .contains("refused capability pack script execution"));
+        assert!(result.content.contains("materialize-by-hash approval path"));
+    }
+
+    #[test]
     fn code_run_reports_nonzero_exit_status() {
         let dir = tempfile::tempdir().unwrap();
         let call = tool_call(
@@ -3338,8 +3451,64 @@ def execute_js_rich(script, driver, no_monitor=False):
 
         assert_eq!(result.status, "failed");
         assert_eq!(result.approval, "none");
-        assert!(result.content.contains("memory resource not found"));
+        assert!(result.content.contains("native resource not found"));
         assert!(result.content.contains("memory://global/l1"));
+    }
+
+    #[test]
+    fn file_read_reads_capability_resource_without_approval() {
+        let call = tool_call(
+            "file_read",
+            serde_json::json!({
+                "path": "capability://morphling/sops/main",
+                "startLine": 2,
+                "endLine": 2
+            }),
+        );
+        let mut context = NativeToolExecutionContext::default();
+        context.resource_files.insert(
+            "capability://morphling/sops/main".to_string(),
+            "heading\nMorphling SOP\nbody".to_string(),
+        );
+
+        let approval = approval_for_tool_call(&call, &context);
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(approval, "none");
+        assert_eq!(result.status, "success");
+        assert_eq!(result.approval, "none");
+        assert!(!result.side_effects_performed);
+        assert!(result
+            .content
+            .contains("file_read: capability://morphling/sops/main"));
+        assert!(result.content.contains("Morphling SOP"));
+        assert!(!result.content.contains("\nheading\n"));
+    }
+
+    #[test]
+    fn file_read_missing_capability_resource_lists_capability_resources() {
+        let call = tool_call(
+            "file_read",
+            serde_json::json!({
+                "path": "capability://morphling/sops/missing"
+            }),
+        );
+        let mut context = NativeToolExecutionContext::default();
+        context
+            .resource_files
+            .insert("memory://global/l1".to_string(), "memory index".to_string());
+        context.resource_files.insert(
+            "capability://morphling/sops/main".to_string(),
+            "Morphling SOP".to_string(),
+        );
+
+        let result = execute_native_tool(&call, &context);
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.approval, "none");
+        assert!(result.content.contains("native resource not found"));
+        assert!(result.content.contains("capability://morphling/sops/main"));
+        assert!(!result.content.contains("memory://global/l1"));
     }
 
     #[test]

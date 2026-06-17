@@ -351,16 +351,24 @@ into pack files.
 
 ## Implementation Order
 
-1. Define pack manifest and validation rules.
-2. Add built-in pack registry for native-only resources.
-3. Expose pack resources through `file_read`.
-4. Connect pack triggers to L1 native memory.
-5. Add script execution through existing `code_run` policy.
-6. Add pack change records and rollback.
-7. Add self-evolved SOP/script proposals.
-8. Add Project packs.
-9. Add import path only after native memory is stable.
-10. Consider tool-schema extensions last.
+Implementation checkpoint, 2026-06-17:
+
+- Slice 5D defines a first built-in manifest shape in Rust and validates it at
+  runtime context construction.
+- Built-in read-only packs exist for Goal Hive, Morphling, and Browser Control.
+- `file_read` can read `capability://index`, pack manifests, SOP resources, and
+  test resources without adding a 10th tool.
+- Active memory L1 resources include capability trigger pointers.
+- `code_run` explicitly refuses `capability://` script execution until pack
+  scripts have a materialize-by-hash approval and rollback path.
+
+Remaining order:
+
+1. Add pack change records and rollback.
+2. Add self-evolved SOP/script proposals.
+3. Add Project packs.
+4. Add import path only after native memory is stable.
+5. Consider tool-schema extensions last.
 
 ## Acceptance Checks Before Code
 

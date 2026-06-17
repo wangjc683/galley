@@ -733,6 +733,72 @@ impl SqliteGalley {
             .map(NativeMemoryChangeRow::into_record)
             .collect()
     }
+
+    pub async fn revert_native_memory_change(&self, id: &str) -> Result<NativeMemoryChangeRecord> {
+        let change_id = trimmed_required("native_memory.change.revert id", id)?.to_string();
+        let change = self.native_memory_change_by_id(&change_id).await?;
+        if change.approval_state == NativeMemoryApprovalState::Reverted {
+            return Ok(change);
+        }
+        if change.kind != NativeMemoryChangeKind::Create {
+            return Err(GalleyError::InvalidArgs {
+                message: "native_memory.change.revert currently supports only create changes"
+                    .into(),
+            });
+        }
+        if !matches!(
+            change.approval_state,
+            NativeMemoryApprovalState::AutoApplied | NativeMemoryApprovalState::Approved
+        ) {
+            return Err(GalleyError::InvalidArgs {
+                message: format!(
+                    "native_memory.change.revert cannot revert change in {:?} state",
+                    change.approval_state
+                ),
+            });
+        }
+        let target_item_id =
+            change
+                .target_item_id
+                .clone()
+                .ok_or_else(|| GalleyError::InvalidArgs {
+                    message: "native_memory.change.revert create change has no target item".into(),
+                })?;
+        let now = chrono_now_iso();
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+
+        sqlx::query(
+            "UPDATE native_memory_items
+             SET status = 'deleted', updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(&now)
+        .bind(&target_item_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        sqlx::query("DELETE FROM native_memory_index_entries WHERE target_item_id = ?")
+            .bind(&target_item_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+
+        sqlx::query(
+            "UPDATE native_memory_changes
+             SET approval_state = 'reverted', reverted_at = ?, updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(&now)
+        .bind(&now)
+        .bind(&change_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        tx.commit().await.map_err(map_sqlx_err)?;
+        self.native_memory_change_by_id(&change_id).await
+    }
 }
 
 fn trimmed_required<'a>(field: &str, value: &'a str) -> Result<&'a str> {

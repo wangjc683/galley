@@ -2,8 +2,11 @@ use crate::api::{
     GalleyApi, MessageBrief, MessageRole, MessageVisibility, SessionBrief, SessionId,
 };
 use crate::db::{
-    NativeMemoryIndexEntryRecord, NativeMemoryItemRecord, NativeMemoryLayer, NativeMemoryScope,
-    PersistAssistantMessage, PersistToolEventPending, SqliteGalley, ToolEventRow,
+    CreateNativeMemoryChangeInput, CreateNativeMemoryEvidenceInput,
+    CreateNativeMemoryIndexEntryInput, CreateNativeMemoryItemInput, NativeMemoryApprovalState,
+    NativeMemoryChangeKind, NativeMemoryIndexEntryRecord, NativeMemoryItemRecord,
+    NativeMemoryLayer, NativeMemoryRisk, NativeMemoryScope, PersistAssistantMessage,
+    PersistToolEventPending, SqliteGalley, ToolEventRow,
 };
 use crate::error::{GalleyError, Result};
 use crate::native_model::{NativeModelConfig, NativeModelResponse};
@@ -12,8 +15,9 @@ use crate::native_tools::{
     parse_text_tool_calls, NativeBrowserExecutionContext, NativeToolCall,
     NativeToolExecutionContext, NativeToolProgressChunk, NativeToolStubResult,
 };
+use ring::digest;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::{broadcast, mpsc};
@@ -527,13 +531,14 @@ async fn run_model_turn(
     let tool_context = native_tool_context(galley, &session_id, &host_context).await?;
     let session_id_str = session_id.as_str().to_string();
     let first_timestamp = native_now_iso();
-    let tool_trace = native_tool_trace(
+    let mut tool_trace = native_tool_trace(
         &session_id_str,
         turn_index,
         &first_answer,
         first_timestamp.clone(),
         &tool_context,
     );
+    apply_native_durable_tool_effects(galley, &session_id, turn_index, &mut tool_trace).await?;
     let mut final_answer = first_answer.clone();
     let mut model_name = first_model_name;
     let mut mode = "model".to_string();
@@ -679,13 +684,14 @@ async fn run_streaming_model_turn(
         usage,
         ..
     } = model_response;
-    let tool_trace = native_tool_trace(
+    let mut tool_trace = native_tool_trace(
         &session_id_str,
         turn_index,
         &final_answer,
         native_now_iso(),
         &tool_context,
     );
+    apply_native_durable_tool_effects(galley, &session_id, turn_index, &mut tool_trace).await?;
     for event in &tool_trace.events {
         event_bus().publish(&session_id_str, event.clone());
     }
@@ -868,7 +874,12 @@ async fn native_tool_context(
         None => NativeToolExecutionContext::new(workspace_root),
     };
     context.browser_unavailable_reason = host_context.browser_unavailable_reason.clone();
-    context.resource_files = native_memory_resource_files(galley, project_id.as_deref()).await?;
+    let capability_packs = builtin_capability_packs();
+    let mut resources = native_memory_resource_files(galley, project_id.as_deref()).await?;
+    let capability_resources = native_capability_resource_files(&capability_packs)?;
+    attach_capability_triggers_to_memory_l1(&mut resources, &capability_packs);
+    resources.extend(capability_resources);
+    context.resource_files = resources;
     Ok(context)
 }
 
@@ -918,6 +929,327 @@ async fn native_memory_resource_files(
     }
 
     Ok(resources)
+}
+
+#[derive(Debug, Clone)]
+struct NativeCapabilityPack {
+    id: &'static str,
+    display_name: &'static str,
+    description: &'static str,
+    version: &'static str,
+    origin: &'static str,
+    activation: &'static str,
+    triggers: &'static [&'static str],
+    permissions: &'static [&'static str],
+    resources: &'static [NativeCapabilityResource],
+}
+
+#[derive(Debug, Clone)]
+struct NativeCapabilityResource {
+    path: &'static str,
+    kind: &'static str,
+    title: &'static str,
+    body: &'static str,
+    executable: bool,
+}
+
+fn builtin_capability_packs() -> Vec<NativeCapabilityPack> {
+    vec![
+        NativeCapabilityPack {
+            id: "goal-hive",
+            display_name: "Goal Hive",
+            description: "Long-running goal decomposition, worker coordination, and checkpoint discipline.",
+            version: "0.1.0",
+            origin: "builtin",
+            activation: "goal_mode",
+            triggers: &[
+                "goal mode",
+                "long running task",
+                "worker coordination",
+                "checkpoint",
+            ],
+            permissions: &["read_memory", "write_memory", "manage_goal_tasks"],
+            resources: &[
+                NativeCapabilityResource {
+                    path: "sops/main",
+                    kind: "sop",
+                    title: "Goal Hive operating loop",
+                    body: "Use Goal Hive when a task is too large for one turn. Keep one visible objective, split concrete tasks, checkpoint after each durable change, and prefer small verified worker outputs over speculative broad rewrites.",
+                    executable: false,
+                },
+                NativeCapabilityResource {
+                    path: "tests/checkpoint-discipline",
+                    kind: "test",
+                    title: "Checkpoint discipline smoke",
+                    body: "A Goal Hive run is healthy when every material code or doc change has a visible checkpoint, a clear next task, and a verification result or an explicit blocker.",
+                    executable: false,
+                },
+            ],
+        },
+        NativeCapabilityPack {
+            id: "morphling",
+            display_name: "Morphling",
+            description: "Long-horizon capability absorption through evidence-backed SOP and script proposals.",
+            version: "0.1.0",
+            origin: "builtin",
+            activation: "morphling_mode",
+            triggers: &[
+                "capability absorption",
+                "self evolution",
+                "reusable workflow",
+                "morphling",
+            ],
+            permissions: &["read_memory", "write_memory", "propose_capability_pack"],
+            resources: &[
+                NativeCapabilityResource {
+                    path: "sops/main",
+                    kind: "sop",
+                    title: "Morphling absorption loop",
+                    body: "Promote a repeated workflow only after evidence shows it saves future work. Capture the trigger, minimal procedure, failure cases, verification command, and rollback path. New scripts or tool schemas require approval before activation.",
+                    executable: false,
+                },
+                NativeCapabilityResource {
+                    path: "tests/promotion-gate",
+                    kind: "test",
+                    title: "Promotion gate",
+                    body: "A capability proposal must cite evidence, avoid secrets, include at least one verification path, and explain why memory alone is not enough.",
+                    executable: false,
+                },
+            ],
+        },
+        NativeCapabilityPack {
+            id: "browser-control",
+            display_name: "Browser Control",
+            description: "Browser inspection and controlled JavaScript execution through the Galley Browser bridge.",
+            version: "0.1.0",
+            origin: "builtin",
+            activation: "session_requested",
+            triggers: &[
+                "browser",
+                "web_scan",
+                "web_execute_js",
+                "inspect page",
+                "cdp bridge",
+            ],
+            permissions: &["use_browser", "read_memory"],
+            resources: &[
+                NativeCapabilityResource {
+                    path: "sops/main",
+                    kind: "sop",
+                    title: "Browser Control usage",
+                    body: "Use web_scan for tab and page inspection. Use web_execute_js only after approval, and prefer read-only JavaScript unless the user explicitly asked for page mutation or automation.",
+                    executable: false,
+                },
+                NativeCapabilityResource {
+                    path: "tests/readiness",
+                    kind: "test",
+                    title: "Browser readiness",
+                    body: "The browser bridge is ready only when a scriptable http or https tab is available. If unavailable, explain the setup action instead of pretending browser access worked.",
+                    executable: false,
+                },
+            ],
+        },
+    ]
+}
+
+fn native_capability_resource_files(
+    packs: &[NativeCapabilityPack],
+) -> Result<HashMap<String, String>> {
+    let mut resources = HashMap::new();
+    let mut all_uris = HashSet::new();
+    for pack in packs {
+        validate_capability_pack(pack, &mut all_uris)?;
+    }
+    resources.insert(
+        "capability://index".to_string(),
+        render_capability_index(packs),
+    );
+    for pack in packs {
+        resources.insert(
+            format!("capability://{}/manifest", pack.id),
+            render_capability_manifest(pack),
+        );
+        for resource in pack.resources {
+            resources.insert(
+                capability_resource_uri(pack, resource),
+                render_capability_resource(pack, resource),
+            );
+        }
+    }
+    Ok(resources)
+}
+
+fn validate_capability_pack(
+    pack: &NativeCapabilityPack,
+    all_uris: &mut HashSet<String>,
+) -> Result<()> {
+    if !valid_capability_id(pack.id) {
+        return Err(GalleyError::InvalidArgs {
+            message: format!("invalid builtin capability pack id `{}`", pack.id),
+        });
+    }
+    if pack.display_name.trim().is_empty()
+        || pack.description.trim().is_empty()
+        || pack.version.trim().is_empty()
+        || pack.triggers.is_empty()
+        || pack.resources.is_empty()
+    {
+        return Err(GalleyError::InvalidArgs {
+            message: format!("capability pack `{}` has an incomplete manifest", pack.id),
+        });
+    }
+    let allowed_permissions = [
+        "read_memory",
+        "write_memory",
+        "manage_goal_tasks",
+        "propose_capability_pack",
+        "use_browser",
+    ];
+    for permission in pack.permissions {
+        if !allowed_permissions.contains(permission) {
+            return Err(GalleyError::InvalidArgs {
+                message: format!(
+                    "capability pack `{}` declares unknown permission `{permission}`",
+                    pack.id
+                ),
+            });
+        }
+    }
+    let mut paths = HashSet::new();
+    for resource in pack.resources {
+        if resource.path.trim().is_empty()
+            || resource.path.starts_with('/')
+            || resource.path.contains("..")
+            || resource.body.trim().is_empty()
+            || native_memory_update_looks_secret(resource.body)
+        {
+            return Err(GalleyError::InvalidArgs {
+                message: format!(
+                    "capability pack `{}` has an invalid resource `{}`",
+                    pack.id, resource.path
+                ),
+            });
+        }
+        if !paths.insert(resource.path) {
+            return Err(GalleyError::InvalidArgs {
+                message: format!(
+                    "capability pack `{}` duplicates resource `{}`",
+                    pack.id, resource.path
+                ),
+            });
+        }
+        let uri = capability_resource_uri(pack, resource);
+        if !all_uris.insert(uri) {
+            return Err(GalleyError::InvalidArgs {
+                message: format!("capability pack `{}` duplicates a resource URI", pack.id),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn valid_capability_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+}
+
+fn capability_resource_uri(
+    pack: &NativeCapabilityPack,
+    resource: &NativeCapabilityResource,
+) -> String {
+    format!("capability://{}/{}", pack.id, resource.path)
+}
+
+fn render_capability_index(packs: &[NativeCapabilityPack]) -> String {
+    let mut lines = vec![
+        "capability_resource: capability://index".to_string(),
+        "purpose: active Galley Native capability pack index".to_string(),
+        format!("packs: {}", packs.len()),
+        String::new(),
+    ];
+    for pack in packs {
+        lines.push(format!("- id: {}", pack.id));
+        lines.push(format!("  display_name: {}", pack.display_name));
+        lines.push(format!("  description: {}", pack.description));
+        lines.push(format!("  activation: {}", pack.activation));
+        lines.push(format!("  manifest: capability://{}/manifest", pack.id));
+        lines.push(format!("  triggers: {}", pack.triggers.join(", ")));
+    }
+    lines.join("\n")
+}
+
+fn render_capability_manifest(pack: &NativeCapabilityPack) -> String {
+    let mut lines = vec![
+        format!("capability_manifest: capability://{}/manifest", pack.id),
+        "schema_version: 1".to_string(),
+        format!("id: {}", pack.id),
+        format!("display_name: {}", pack.display_name),
+        format!("description: {}", pack.description),
+        format!("version: {}", pack.version),
+        format!("origin: {}", pack.origin),
+        format!("activation: {}", pack.activation),
+        format!("triggers: {}", pack.triggers.join(", ")),
+        format!("permissions: {}", pack.permissions.join(", ")),
+        String::new(),
+        "resources:".to_string(),
+    ];
+    for resource in pack.resources {
+        lines.push(format!(
+            "- uri: {}",
+            capability_resource_uri(pack, resource)
+        ));
+        lines.push(format!("  kind: {}", resource.kind));
+        lines.push(format!("  title: {}", resource.title));
+        lines.push(format!("  executable: {}", resource.executable));
+    }
+    lines.join("\n")
+}
+
+fn render_capability_resource(
+    pack: &NativeCapabilityPack,
+    resource: &NativeCapabilityResource,
+) -> String {
+    [
+        format!(
+            "capability_resource: {}",
+            capability_resource_uri(pack, resource)
+        ),
+        format!("pack_id: {}", pack.id),
+        format!("kind: {}", resource.kind),
+        format!("title: {}", resource.title),
+        format!("executable: {}", resource.executable),
+        String::new(),
+        resource.body.to_string(),
+    ]
+    .join("\n")
+}
+
+fn attach_capability_triggers_to_memory_l1(
+    resources: &mut HashMap<String, String>,
+    packs: &[NativeCapabilityPack],
+) {
+    let section = render_capability_l1_section(packs);
+    for (uri, body) in resources.iter_mut() {
+        if uri.starts_with("memory://") && uri.ends_with("/l1") {
+            body.push_str("\n\n");
+            body.push_str(&section);
+        }
+    }
+}
+
+fn render_capability_l1_section(packs: &[NativeCapabilityPack]) -> String {
+    let mut lines = vec![
+        "Capability packs:".to_string(),
+        "- index: capability://index".to_string(),
+    ];
+    for pack in packs {
+        lines.push(format!("- trigger: {}", pack.triggers.join(", ")));
+        lines.push(format!("  target: capability://{}/manifest", pack.id));
+        lines.push(format!("  target_title: {}", pack.display_name));
+    }
+    lines.join("\n")
 }
 
 fn native_memory_scope_uri(scope: &NativeMemoryScope) -> String {
@@ -1310,6 +1642,7 @@ struct NativeToolTrace {
     events: Vec<NativeRuntimeEvent>,
     tool_calls: Vec<serde_json::Value>,
     tool_results: Vec<serde_json::Value>,
+    raw_calls: Vec<NativeToolCall>,
     awaiting_user: bool,
     pending_approval: Option<NativePendingApproval>,
 }
@@ -1593,6 +1926,7 @@ fn native_tool_trace(
     let mut events = Vec::new();
     let mut tool_calls = Vec::new();
     let mut tool_results = Vec::new();
+    let mut raw_calls = Vec::new();
     let mut awaiting_user = false;
     let mut pending_approval = None;
 
@@ -1619,6 +1953,7 @@ fn native_tool_trace(
             pending_approval = Some(NativePendingApproval { call, approval });
             break;
         }
+        raw_calls.push(call.clone());
         events.push(tool_start_event(
             session_id,
             turn_index,
@@ -1662,9 +1997,372 @@ fn native_tool_trace(
         events,
         tool_calls,
         tool_results,
+        raw_calls,
         awaiting_user,
         pending_approval,
     }
+}
+
+async fn apply_native_durable_tool_effects(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+    turn_index: u32,
+    trace: &mut NativeToolTrace,
+) -> Result<()> {
+    if trace.pending_approval.is_some() {
+        return Ok(());
+    }
+    let session = galley.session_brief(session_id.clone()).await?;
+    for call in trace.raw_calls.clone() {
+        if call.name != "start_long_term_update" {
+            continue;
+        }
+        let result =
+            start_long_term_update_tool_result(galley, session_id, turn_index, &call, &session)
+                .await;
+        let message = if result.status == "success" {
+            "Native memory update applied."
+        } else {
+            "Native memory update rejected."
+        };
+        replace_native_tool_result(
+            trace,
+            session_id.as_str(),
+            turn_index,
+            &call,
+            result,
+            message,
+        );
+    }
+    Ok(())
+}
+
+async fn start_long_term_update_tool_result(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+    turn_index: u32,
+    call: &NativeToolCall,
+    session: &SessionBrief,
+) -> NativeToolStubResult {
+    match apply_start_long_term_update(galley, session_id, turn_index, call, session).await {
+        Ok(applied) => NativeToolStubResult {
+            tool_call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            status: "success".to_string(),
+            content: format!(
+                "start_long_term_update applied.\nitem: {}\nchange_id: {}\nevidence_id: {}\nscope: {}\nlayer: {}\ntriggers: {}",
+                applied.item_uri,
+                applied.change_id,
+                applied.evidence_id,
+                applied.scope_label,
+                native_memory_layer_segment(applied.layer),
+                applied.triggers.join(", ")
+            ),
+            side_effects_performed: true,
+            requires_user_response: false,
+            approval: "none".to_string(),
+            progress_chunks: Vec::new(),
+        },
+        Err(err) => NativeToolStubResult {
+            tool_call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            status: "failed".to_string(),
+            content: format!("start_long_term_update rejected: {err}"),
+            side_effects_performed: false,
+            requires_user_response: false,
+            approval: "none".to_string(),
+            progress_chunks: Vec::new(),
+        },
+    }
+}
+
+struct AppliedNativeMemoryUpdate {
+    item_uri: String,
+    change_id: String,
+    evidence_id: String,
+    scope_label: String,
+    layer: NativeMemoryLayer,
+    triggers: Vec<String>,
+}
+
+async fn apply_start_long_term_update(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+    turn_index: u32,
+    call: &NativeToolCall,
+    session: &SessionBrief,
+) -> Result<AppliedNativeMemoryUpdate> {
+    let topic = native_string_arg_any(call, &["topic", "title"]).ok_or_else(|| {
+        GalleyError::InvalidArgs {
+            message: "start_long_term_update requires a non-empty `topic`.".into(),
+        }
+    })?;
+    let body = native_string_arg_any(call, &["proposal", "content", "body", "summary"])
+        .unwrap_or_else(|| topic.clone());
+    let combined = format!("{topic}\n{body}");
+    if native_memory_update_looks_secret(&combined) {
+        return Err(GalleyError::InvalidArgs {
+            message:
+                "candidate appears to contain a raw secret; store credentials in Galley secrets and remember only a reference"
+                    .into(),
+        });
+    }
+
+    let scope = native_memory_scope_for_update(call, session.project_id.as_deref());
+    let layer = native_memory_layer_for_update(call)?;
+    let mut triggers = native_string_list_arg_any(call, &["triggers", "trigger", "keywords"]);
+    if triggers.is_empty() {
+        triggers.push(topic.clone());
+    }
+    let tags = native_string_list_arg_any(call, &["tags", "tag"]);
+    let evidence_summary = format!("start_long_term_update: {topic}");
+    let evidence = galley
+        .create_native_memory_evidence(CreateNativeMemoryEvidenceInput {
+            session_id: Some(session_id.clone()),
+            turn_index: Some(turn_index),
+            message_id: None,
+            tool_call_id: Some(call.id.clone()),
+            tool_event_id: None,
+            content_hash: native_memory_content_hash(&combined),
+            summary: evidence_summary,
+        })
+        .await?;
+    let item = galley
+        .create_native_memory_item(CreateNativeMemoryItemInput {
+            layer,
+            scope: scope.clone(),
+            title: topic.clone(),
+            body: body.clone(),
+            triggers: triggers.clone(),
+            tags: tags.clone(),
+            source_refs: serde_json::json!([{
+                "kind": "native_tool_call",
+                "session_id": session_id.as_str(),
+                "turn_index": turn_index,
+                "tool_call_id": call.id,
+                "evidence_id": evidence.id
+            }]),
+            supersedes_item_id: None,
+        })
+        .await?;
+
+    let mut index_entry_ids = Vec::new();
+    for (rank, trigger) in triggers.iter().enumerate() {
+        let entry = galley
+            .create_native_memory_index_entry(CreateNativeMemoryIndexEntryInput {
+                scope: scope.clone(),
+                trigger: trigger.clone(),
+                target_item_id: item.id.clone(),
+                rank: i64::try_from(rank).unwrap_or(i64::MAX),
+                reason: Some(format!("start_long_term_update routed `{topic}`")),
+            })
+            .await?;
+        index_entry_ids.push(entry.id);
+    }
+
+    let change = galley
+        .create_native_memory_change(CreateNativeMemoryChangeInput {
+            target_item_id: Some(item.id.clone()),
+            kind: NativeMemoryChangeKind::Create,
+            diff: serde_json::json!({
+                "after": {
+                    "item_id": item.id,
+                    "title": topic,
+                    "scope": native_memory_scope_label(&scope),
+                    "layer": native_memory_layer_segment(layer),
+                    "triggers": triggers,
+                    "tags": tags,
+                    "index_entry_ids": index_entry_ids
+                }
+            }),
+            evidence_ids: vec![evidence.id.clone()],
+            risk: NativeMemoryRisk::Low,
+            approval_state: NativeMemoryApprovalState::AutoApplied,
+            created_by_session_id: Some(session_id.clone()),
+            created_by_tool_call_id: Some(call.id.clone()),
+            applied_at: None,
+        })
+        .await?;
+
+    Ok(AppliedNativeMemoryUpdate {
+        item_uri: native_memory_item_uri(&scope, layer, &item.id),
+        change_id: change.id,
+        evidence_id: evidence.id,
+        scope_label: native_memory_scope_label(&scope),
+        layer,
+        triggers,
+    })
+}
+
+fn replace_native_tool_result(
+    trace: &mut NativeToolTrace,
+    session_id: &str,
+    turn_index: u32,
+    call: &NativeToolCall,
+    result: NativeToolStubResult,
+    progress_message: &str,
+) {
+    let result_value = tool_result_value(&result);
+    let progress_delta = result.content.clone();
+    if let Some(existing) = trace.tool_results.iter_mut().find(|value| {
+        value.get("toolCallId").and_then(serde_json::Value::as_str) == Some(call.id.as_str())
+    }) {
+        *existing = result_value.clone();
+    } else {
+        trace.tool_results.push(result_value.clone());
+    }
+
+    let mut tool_end_index = None;
+    for (index, event) in trace.events.iter_mut().enumerate() {
+        let NativeRuntimeEvent::ToolEnd(end) = event else {
+            continue;
+        };
+        if end.tool_call_id != call.id {
+            continue;
+        }
+        end.status = result.status.clone();
+        end.result = result_value.clone();
+        end.side_effects_performed = result.side_effects_performed;
+        tool_end_index = Some(index);
+        break;
+    }
+
+    let progress = NativeRuntimeEvent::ToolProgress(NativeToolProgressEvent {
+        session_id: session_id.to_string(),
+        turn_index,
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        message: progress_message.to_string(),
+        stream: None,
+        delta: Some(progress_delta.clone()),
+        truncated: Some(false),
+        timestamp: native_now_iso(),
+    });
+
+    if let Some(index) = tool_end_index {
+        if let NativeRuntimeEvent::ToolEnd(end) = &trace.events[index] {
+            let progress = NativeRuntimeEvent::ToolProgress(NativeToolProgressEvent {
+                session_id: end.session_id.clone(),
+                turn_index: end.turn_index,
+                tool_call_id: call.id.clone(),
+                tool_name: call.name.clone(),
+                message: progress_message.to_string(),
+                stream: None,
+                delta: Some(progress_delta),
+                truncated: Some(false),
+                timestamp: native_now_iso(),
+            });
+            trace.events.insert(index, progress);
+        }
+    } else {
+        trace.events.push(progress);
+    }
+}
+
+fn native_string_arg_any(call: &NativeToolCall, names: &[&str]) -> Option<String> {
+    names
+        .iter()
+        .find_map(|name| {
+            call.arguments_json
+                .get(*name)
+                .and_then(serde_json::Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn native_string_list_arg_any(call: &NativeToolCall, names: &[&str]) -> Vec<String> {
+    for name in names {
+        let Some(value) = call.arguments_json.get(*name) else {
+            continue;
+        };
+        let list = if let Some(array) = value.as_array() {
+            array
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        } else if let Some(raw) = value.as_str() {
+            raw.split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        if !list.is_empty() {
+            return list;
+        }
+    }
+    Vec::new()
+}
+
+fn native_memory_scope_for_update(
+    call: &NativeToolCall,
+    project_id: Option<&str>,
+) -> NativeMemoryScope {
+    let requested = native_string_arg_any(call, &["scope", "memory_scope", "memoryScope"])
+        .map(|scope| scope.to_ascii_lowercase());
+    match requested.as_deref() {
+        Some("global" | "global_user" | "user") => NativeMemoryScope::GlobalUser,
+        Some("project") | None => project_id
+            .map(|id| NativeMemoryScope::Project(id.to_string()))
+            .unwrap_or(NativeMemoryScope::GlobalUser),
+        _ => project_id
+            .map(|id| NativeMemoryScope::Project(id.to_string()))
+            .unwrap_or(NativeMemoryScope::GlobalUser),
+    }
+}
+
+fn native_memory_layer_for_update(call: &NativeToolCall) -> Result<NativeMemoryLayer> {
+    let Some(raw) = native_string_arg_any(call, &["layer", "memory_layer", "memoryLayer"]) else {
+        return Ok(NativeMemoryLayer::L2);
+    };
+    match raw.to_ascii_lowercase().as_str() {
+        "l2" | "fact" | "facts" | "preference" | "preferences" => Ok(NativeMemoryLayer::L2),
+        "l3" | "procedure" | "procedures" | "sop" | "sops" => Ok(NativeMemoryLayer::L3),
+        "l4" | "identity" | "policy" | "policies" => Ok(NativeMemoryLayer::L4),
+        "l1" | "index" => Err(GalleyError::InvalidArgs {
+            message: "L1 is generated from triggers; write the memory body to L2/L3/L4 instead"
+                .into(),
+        }),
+        other => Err(GalleyError::InvalidArgs {
+            message: format!("unknown native memory layer `{other}`"),
+        }),
+    }
+}
+
+fn native_memory_content_hash(content: &str) -> String {
+    let hash = digest::digest(&digest::SHA256, content.as_bytes());
+    let hex = hash
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("sha256:{hex}")
+}
+
+fn native_memory_update_looks_secret(content: &str) -> bool {
+    let lower = content.to_ascii_lowercase();
+    [
+        "begin private key",
+        "api_key=",
+        "api key:",
+        "password=",
+        "password:",
+        "secret=",
+        "token=",
+        "authorization: bearer",
+        "ghp_",
+        "xoxb-",
+        "sk-",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
 }
 
 fn runtime_ready_event(
@@ -2049,7 +2747,69 @@ fn native_now_iso() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::{RuntimeKind, SessionStatus};
+    use crate::native_tools::NativeToolCallSource;
     use std::fs;
+
+    async fn native_memory_test_galley(session_id: &str) -> SqliteGalley {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+            .execute(&pool)
+            .await
+            .expect("enable foreign keys");
+        sqlx::raw_sql(include_str!("../migrations/001_init.sql"))
+            .execute(&pool)
+            .await
+            .expect("run base migration");
+        sqlx::raw_sql(include_str!(
+            "../migrations/022_native_memory_substrate.sql"
+        ))
+        .execute(&pool)
+        .await
+        .expect("run native memory migration");
+        sqlx::query(
+            "INSERT INTO sessions (
+                id, title, status, turn_count, pending_approval_count, error_count,
+                pinned, last_activity_at, created_at, updated_at
+             ) VALUES (?, ?, 'idle', 0, 0, 0, 0, ?, ?, ?)",
+        )
+        .bind(session_id)
+        .bind(format!("title-{session_id}"))
+        .bind("2026-06-17T00:00:00Z")
+        .bind("2026-06-17T00:00:00Z")
+        .bind("2026-06-17T00:00:00Z")
+        .execute(&pool)
+        .await
+        .expect("seed session");
+        SqliteGalley::from_pool(pool)
+    }
+
+    fn native_test_session(session_id: &str, project_id: Option<&str>) -> SessionBrief {
+        SessionBrief {
+            id: SessionId(session_id.to_string()),
+            project_id: project_id.map(str::to_string),
+            title: format!("title-{session_id}"),
+            status: SessionStatus::Idle,
+            summary: None,
+            turn_count: Some(0),
+            last_activity_at: "2026-06-17T00:00:00Z".into(),
+            created_at: "2026-06-17T00:00:00Z".into(),
+            updated_at: "2026-06-17T00:00:00Z".into(),
+            pinned: Some(false),
+            has_unread: Some(false),
+            origin: None,
+            selected_llm_index: None,
+            selected_llm_key: None,
+            selected_llm_display_name: None,
+            runtime_kind: RuntimeKind::GalleyNative,
+            runtime_label: "Galley Native".into(),
+            ga_runtime_kind: RuntimeKind::GalleyNative,
+            ga_runtime_id: None,
+            prompt_profile: None,
+        }
+    }
 
     #[test]
     fn mock_response_discloses_slice_boundary() {
@@ -2161,6 +2921,7 @@ mod tests {
                 "toolName": "web_scan",
                 "status": "success"
             })],
+            raw_calls: Vec::new(),
             awaiting_user: false,
             pending_approval: None,
         };
@@ -2177,6 +2938,7 @@ mod tests {
                 "toolName": "update_working_checkpoint",
                 "status": "success"
             })],
+            raw_calls: Vec::new(),
             awaiting_user: false,
             pending_approval: None,
         };
@@ -2220,6 +2982,37 @@ mod tests {
         assert!(l1.contains("target_title: Verified command"));
         assert!(item_body.contains("memory_item: memory://global/l2/nmi_test"));
         assert!(item_body.contains("body:\nRun cargo check."));
+    }
+
+    #[test]
+    fn builtin_capability_packs_render_resources_and_l1_triggers() {
+        let packs = builtin_capability_packs();
+        let resources = native_capability_resource_files(&packs).expect("capability resources");
+
+        assert!(resources
+            .get("capability://index")
+            .expect("index")
+            .contains("capability://morphling/manifest"));
+        assert!(resources
+            .get("capability://goal-hive/manifest")
+            .expect("goal hive manifest")
+            .contains("permissions: read_memory, write_memory, manage_goal_tasks"));
+        assert!(resources
+            .get("capability://morphling/sops/main")
+            .expect("morphling sop")
+            .contains("Promote a repeated workflow only after evidence"));
+
+        let mut memory_resources = HashMap::from([(
+            "memory://global/l1".to_string(),
+            "memory_resource: memory://global/l1".to_string(),
+        )]);
+        attach_capability_triggers_to_memory_l1(&mut memory_resources, &packs);
+        let l1 = memory_resources
+            .get("memory://global/l1")
+            .expect("global l1");
+        assert!(l1.contains("Capability packs:"));
+        assert!(l1.contains("target: capability://goal-hive/manifest"));
+        assert!(l1.contains("target: capability://browser-control/manifest"));
     }
 
     #[test]
@@ -2418,9 +3211,9 @@ mod tests {
     }
 
     #[test]
-    fn approval_required_tool_stops_at_pending_approval() {
+    fn high_risk_long_term_update_stops_at_pending_approval() {
         let final_answer = r#"```json
-{"tool":"start_long_term_update","arguments":{"topic":"learn testing"}}
+{"tool":"start_long_term_update","arguments":{"topic":"learn testing","kind":"capability","risk":"high"}}
 ```"#;
 
         let trace = native_event_trace(
@@ -2458,6 +3251,81 @@ mod tests {
         assert_eq!(
             complete["exitReason"]["data"]["awaitingApproval"].as_bool(),
             Some(true)
+        );
+    }
+
+    #[tokio::test]
+    async fn low_risk_long_term_update_applies_native_memory() {
+        let session_id = SessionId("s-native-memory-apply".into());
+        let galley = native_memory_test_galley(session_id.as_str()).await;
+        let session = native_test_session(session_id.as_str(), Some("proj-native-memory-apply"));
+        let final_answer = r#"```json
+{"tool":"start_long_term_update","arguments":{"topic":"Preferred test command","proposal":"Use cargo test --manifest-path core/Cargo.toml when touching Rust core code.","triggers":["rust core tests","cargo test"],"tags":["testing"]}}
+```"#;
+        let mut trace = native_tool_trace(
+            session_id.as_str(),
+            1,
+            final_answer,
+            "2026-06-17T00:00:00.000Z".to_string(),
+            &NativeToolExecutionContext::default(),
+        );
+
+        assert!(trace.pending_approval.is_none());
+        assert_eq!(trace.raw_calls.len(), 1);
+        let call = trace.raw_calls[0].clone();
+        assert_eq!(call.source, NativeToolCallSource::TextFallback);
+        let result =
+            start_long_term_update_tool_result(&galley, &session_id, 1, &call, &session).await;
+        replace_native_tool_result(
+            &mut trace,
+            session_id.as_str(),
+            1,
+            &call,
+            result,
+            "Native memory update applied.",
+        );
+
+        assert_eq!(trace.tool_results[0]["status"], "success");
+        assert_eq!(
+            trace.tool_results[0]["sideEffectsPerformed"].as_bool(),
+            Some(true)
+        );
+        assert!(trace.events.iter().any(|event| matches!(
+            event,
+            NativeRuntimeEvent::ToolProgress(progress)
+                if progress.message == "Native memory update applied."
+        )));
+        assert!(trace.events.iter().any(|event| matches!(
+            event,
+            NativeRuntimeEvent::ToolEnd(end)
+                if end.tool_call_id == call.id
+                    && end.status == "success"
+                    && end.side_effects_performed
+        )));
+        let scope = NativeMemoryScope::Project("proj-native-memory-apply".into());
+        let items = galley
+            .list_native_memory_items_for_scope(&scope, 10)
+            .await
+            .expect("list applied memory");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].layer, NativeMemoryLayer::L2);
+        assert_eq!(
+            items[0].body,
+            "Use cargo test --manifest-path core/Cargo.toml when touching Rust core code."
+        );
+        let entries = galley
+            .list_native_memory_index_entries_for_scope(&scope, 10)
+            .await
+            .expect("list memory index");
+        assert_eq!(entries.len(), 2);
+        let changes = galley
+            .list_native_memory_changes(10)
+            .await
+            .expect("list memory changes");
+        assert_eq!(changes.len(), 1);
+        assert_eq!(
+            changes[0].approval_state,
+            NativeMemoryApprovalState::AutoApplied
         );
     }
 

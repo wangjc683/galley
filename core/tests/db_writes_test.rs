@@ -248,6 +248,88 @@ async fn native_memory_substrate_records_item_evidence_index_and_change() {
 }
 
 #[tokio::test]
+async fn native_memory_create_change_can_be_reverted() {
+    let pool = fresh_pool().await;
+    seed_session_idle(&pool, "sess_native_memory_revert").await;
+    let galley = SqliteGalley::from_pool(pool);
+    let scope = NativeMemoryScope::Project("proj_native_memory_revert".into());
+
+    let evidence = galley
+        .create_native_memory_evidence(CreateNativeMemoryEvidenceInput {
+            session_id: Some(sid("sess_native_memory_revert")),
+            turn_index: Some(4),
+            message_id: None,
+            tool_call_id: Some("tool_call_revert".into()),
+            tool_event_id: None,
+            content_hash: "sha256:revert".into(),
+            summary: "A test memory is being reverted.".into(),
+        })
+        .await
+        .expect("create evidence");
+    let item = galley
+        .create_native_memory_item(CreateNativeMemoryItemInput {
+            layer: NativeMemoryLayer::L2,
+            scope: scope.clone(),
+            title: "Temporary memory".into(),
+            body: "This memory should disappear from active reads after undo.".into(),
+            triggers: vec!["temporary memory".into()],
+            tags: vec!["testing".into()],
+            source_refs: serde_json::json!([{ "kind": "test", "id": "revert" }]),
+            supersedes_item_id: None,
+        })
+        .await
+        .expect("create item");
+    let index = galley
+        .create_native_memory_index_entry(CreateNativeMemoryIndexEntryInput {
+            scope: scope.clone(),
+            trigger: "temporary memory".into(),
+            target_item_id: item.id.clone(),
+            rank: 0,
+            reason: Some("undo test".into()),
+        })
+        .await
+        .expect("create index");
+    let change = galley
+        .create_native_memory_change(CreateNativeMemoryChangeInput {
+            target_item_id: Some(item.id.clone()),
+            kind: NativeMemoryChangeKind::Create,
+            diff: serde_json::json!({ "after": { "item_id": item.id } }),
+            evidence_ids: vec![evidence.id],
+            risk: NativeMemoryRisk::Low,
+            approval_state: NativeMemoryApprovalState::AutoApplied,
+            created_by_session_id: Some(sid("sess_native_memory_revert")),
+            created_by_tool_call_id: Some("tool_call_revert".into()),
+            applied_at: None,
+        })
+        .await
+        .expect("create change");
+
+    let reverted = galley
+        .revert_native_memory_change(&change.id)
+        .await
+        .expect("revert create change");
+
+    assert_eq!(reverted.approval_state, NativeMemoryApprovalState::Reverted);
+    assert!(reverted.reverted_at.is_some());
+    let reverted_item = galley
+        .native_memory_item_by_id(&item.id)
+        .await
+        .expect("load reverted item");
+    assert_eq!(reverted_item.status, "deleted");
+    assert!(galley
+        .list_native_memory_items_for_scope(&scope, 10)
+        .await
+        .expect("active item list")
+        .is_empty());
+    assert!(galley
+        .list_native_memory_index_entries_for_scope(&scope, 10)
+        .await
+        .expect("active index list")
+        .iter()
+        .all(|entry| entry.id != index.id));
+}
+
+#[tokio::test]
 async fn native_memory_change_requires_evidence() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool);

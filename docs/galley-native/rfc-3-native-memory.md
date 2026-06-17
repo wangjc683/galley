@@ -242,6 +242,18 @@ The candidate must answer:
 Native should be useful without asking the user to approve every tiny memory
 update.
 
+Implementation checkpoint, 2026-06-17:
+
+- Slice 5D implements low-risk text memory creates through
+  `start_long_term_update`.
+- Each applied update creates evidence, an item, L1 index entries, and an
+  auto-applied change record.
+- Create changes can be reverted by Core, which marks the item deleted and
+  removes its index entries.
+- High-risk memory, capability, script, tool, browser, and pack updates do not
+  auto-apply.
+- GUI/CLI inspect and undo surfaces are still future work.
+
 Recommended V1 policy:
 
 - Low-risk Galley-owned memory updates can apply automatically with an undoable
