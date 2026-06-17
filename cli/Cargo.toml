@@ -37,6 +37,11 @@ tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Hidden native parity reports need stable UTC timestamps in their local JSON
+# artifact. The workspace already uses chrono from core; this keeps the CLI
+# report format human-reviewable without adding a new time stack.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
 [dev-dependencies]
 # Same sqlx version as galley-core so the integration tests can
 # seed the temp DB with the production migration SQL.

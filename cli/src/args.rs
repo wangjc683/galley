@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand, ValueEnum};
 use galley_core_lib::api::{
     GoalEventType, GoalTaskStatus, GoalWriteMode, DEFAULT_GOAL_BUDGET_SECONDS,
@@ -59,6 +61,27 @@ pub(crate) enum Command {
     /// persists a per-session pick + best-effort tells any live runner.
     #[command(subcommand)]
     Llm(LlmCmd),
+
+    /// Hidden local harness for managed-vs-native parity reports.
+    #[command(hide = true, subcommand)]
+    NativeParity(NativeParityCmd),
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum NativeParityCmd {
+    /// Emit Slice 9D fixture reports in the managed-vs-native comparator shape.
+    Report {
+        /// Scenario id to include. Repeat to select multiple. Defaults to the
+        /// full Slice 9D first batch.
+        #[arg(long = "scenario")]
+        scenarios: Vec<String>,
+        /// Write the JSON report bundle to this path instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Pretty-print the JSON report bundle.
+        #[arg(long)]
+        pretty: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

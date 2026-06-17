@@ -12,6 +12,7 @@
 //! Tests share `tokio` (for the setup helper) but the CLI binary
 //! itself is invoked synchronously via `std::process::Command`.
 
+use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
@@ -250,6 +251,68 @@ async fn goal_help_hides_morphling_experimental_command() {
         !stdout.contains("morphling"),
         "Morphling should stay hidden from ordinary help: {stdout}"
     );
+}
+
+#[tokio::test]
+async fn top_level_help_hides_native_parity_experimental_command() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+
+    let (stdout, code) = run_galley(&db, &["--help"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    assert!(
+        !stdout.contains("native-parity"),
+        "native parity harness should stay hidden from ordinary help: {stdout}"
+    );
+}
+
+#[tokio::test]
+async fn native_parity_report_writes_fixture_bundle() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+    let report_path = td.path().join("reports").join("slice-9d.json");
+    let report_path_arg = report_path.to_string_lossy().to_string();
+
+    let (stdout, code) = run_galley(
+        &db,
+        &[
+            "native-parity",
+            "report",
+            "--scenario",
+            "P01",
+            "--scenario",
+            "p08",
+            "--scenario",
+            "P19",
+            "--output",
+            &report_path_arg,
+            "--pretty",
+        ],
+    );
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+
+    let summary: serde_json::Value = serde_json::from_str(stdout.trim()).expect("summary json");
+    assert_eq!(summary["schemaVersion"], 1);
+    assert_eq!(summary["reportVersion"], 1);
+    assert_eq!(summary["reportCount"], 3);
+    assert_eq!(
+        summary["scenarios"],
+        serde_json::json!(["P01", "P08", "P19"])
+    );
+
+    let body = fs::read_to_string(report_path).expect("report file");
+    let reports: serde_json::Value = serde_json::from_str(&body).expect("report json");
+    let reports = reports.as_array().expect("report array");
+    assert_eq!(reports.len(), 3);
+    assert_eq!(reports[0]["scenarioId"], "P01");
+    assert_eq!(reports[0]["verdict"], "accepted_gap");
+    assert_eq!(reports[1]["scenarioId"], "P08");
+    assert_eq!(reports[1]["verdict"], "blocked");
+    assert_eq!(reports[1]["blockers"][0]["dimension"], "browserControl");
+    assert_eq!(reports[2]["scenarioId"], "P19");
+    assert_eq!(reports[2]["comparison"]["persistedState"], "match");
 }
 
 #[tokio::test]

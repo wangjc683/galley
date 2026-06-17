@@ -185,6 +185,11 @@ behavior changes until an implementation slice explicitly lands them.
   report shape, safety rules, and first runner boundary are now defined before
   runner implementation starts.
   [devlog](../devlog/2026-06-17-galley-native-slice-9d-comparator-contract.md).
+- Slice 9D-B landed the first hidden fixture comparator on 2026-06-17:
+  `galley native-parity report` can emit the managed-vs-native report contract
+  for P01, P03, P04, P08, P14, P18, and P19 without starting GA, native
+  sessions, Browser Control, schema changes, or UI exposure.
+  [devlog](../devlog/2026-06-17-galley-native-slice-9d-fixture-comparator.md).
 
 ## Document Roles
 
@@ -243,14 +248,16 @@ output. The parity scenario manifest now defines what evidence is required
 before native can become opt-in beta or the new-user default. The first native
 deterministic parity anchors are executable with `cargo test` filters, and
 Slice 9C locks the schema v1 CLI/Supervisor compatibility path for hidden native
-runtime values and watch events. Slice 9D-A defines the local
-managed-vs-native report contract before any comparator runner is added.
+runtime values and watch events. Slice 9D-B adds a hidden local fixture
+comparator that emits the managed-vs-native report contract for the first
+scenario batch before live runtime runner variance is introduced.
 
 The next implementation phase should stay conservative:
 
 1. broaden Slice 9B native integration coverage beyond the current runtime
    anchors where it materially increases confidence;
-2. implement Slice 9D-B as a first local report writer for fixture scenarios;
+2. wire the live managed/native runner into the Slice 9D report writer for
+   P01, P03, P04, P14, and P18;
 3. collect Slice 9E dogfood evidence and troubleshooting for Browser, memory,
    continuation, Goal Hive, Morphling, and fallback;
 4. expose Slice 9F Settings opt-in only after beta-blocker scenarios pass or

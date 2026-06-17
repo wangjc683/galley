@@ -20,6 +20,7 @@ mod args;
 mod common;
 mod goal;
 mod llm;
+mod native_parity;
 mod project;
 mod session;
 mod system;
@@ -27,7 +28,7 @@ mod transport;
 
 use std::process::ExitCode;
 
-use args::{Cli, Command, GoalCmd, LlmCmd, ProjectCmd, SessionCmd, SessionsCmd};
+use args::{Cli, Command, GoalCmd, LlmCmd, NativeParityCmd, ProjectCmd, SessionCmd, SessionsCmd};
 use clap::Parser;
 use common::{exit_code_for, SCHEMA_VERSION};
 use galley_core_lib::error::GalleyError;
@@ -261,5 +262,10 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             session_id,
             llm_name,
         }) => llm::llm_set(session_id, llm_name).await,
+        Command::NativeParity(NativeParityCmd::Report {
+            scenarios,
+            output,
+            pretty,
+        }) => native_parity::native_parity_report(scenarios, output, pretty).await,
     }
 }

@@ -1082,8 +1082,8 @@ Deferred:
 
 ### Slice 9D: Managed-Vs-Native Scenario Comparator
 
-Status: report-contract checkpoint landed on 2026-06-17; runner not yet
-implemented.
+Status: hidden fixture comparator landed on 2026-06-17; live runtime command
+runner not yet implemented.
 
 Goal: compare managed and native semantically without pretending LLM wording is
 deterministic.
@@ -1118,14 +1118,31 @@ Landed:
 - report JSON shape keeps both managed and native runtime objects present even
   when one side is blocked;
 - safety rules forbid external GA state writes and require temporary
-  workspaces/test pages for side-effect scenarios.
+  workspaces/test pages for side-effect scenarios;
+- hidden `galley native-parity report` fixture writer emits the report contract
+  as a local JSON array and can write to an explicit `--output` path;
+- fixture writer defaults to the full first batch and supports repeated
+  `--scenario` filters;
+- verdicts are derived from comparison dimensions, accepted gaps, and blockers;
+- fixture reports currently mark P01/P03/P04/P18/P19 as accepted gaps where
+  native has additive runtime/recovery/fallback differences, P14 as pass, and
+  P08 as blocked because live Browser Control is not run in fixture mode.
 
 Exit gate:
 
-- comparator can mark pass/fail/accepted-gap per scenario;
-- at least one managed and native run can be compared without mutating external
-  GA state;
-- accepted gaps are explicit and linked to follow-up slices.
+- fixture comparator can mark pass/fail/accepted-gap/blocked/not-run per
+  scenario;
+- all first-batch scenario IDs have human-reviewable report rows without
+  mutating external GA state;
+- accepted gaps are explicit and linked to follow-up work.
+
+Live beta gate still required before Settings opt-in:
+
+- at least one managed and native command run can be compared without mutating
+  external GA state;
+- Browser Control P08 must move from fixture-blocked to a live readiness
+  verdict or documented beta blocker;
+- fallback P19 needs real operator-flow evidence before broad rollout.
 
 Rollback:
 
@@ -1133,8 +1150,8 @@ Rollback:
 
 Deferred:
 
-- runner implementation;
-- report file location/naming convention;
+- live runtime runner implementation;
+- default report file location/naming convention;
 - real managed GA execution;
 - browser/fallback comparison;
 - Settings or GUI report surfacing.

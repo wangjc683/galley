@@ -1,10 +1,10 @@
 # Galley Native Parity Comparator Report
 
-Status: Slice 9D-A report-contract checkpoint, 2026-06-17.
+Status: Slice 9D-B fixture report writer landed, 2026-06-17.
 
-This document defines the managed-vs-native comparison report shape before a
-runner exists. It does not run GenericAgent, start native sessions, add schema,
-or expose UI.
+This document defines the managed-vs-native comparison report shape and the
+first hidden fixture writer. The writer does not run GenericAgent, start native
+sessions, add schema, or expose UI.
 
 ## Purpose
 
@@ -195,11 +195,50 @@ The first runner should not:
 - mutate external GA checkouts;
 - expose reports in Settings.
 
+## Hidden Fixture Writer
+
+Slice 9D-B adds a hidden CLI harness:
+
+```bash
+galley native-parity report --output /tmp/galley-native-parity.json --pretty
+```
+
+It is intentionally not part of the public Agent API. Ordinary `galley --help`
+hides it.
+
+Behavior:
+
+- default selection is the full first batch: P01, P03, P04, P08, P14, P18,
+  and P19;
+- repeat `--scenario <ID>` to narrow the report;
+- omit `--output` to print the report JSON array to stdout;
+- with `--output`, the command writes the JSON array to that path and prints a
+  small JSON summary;
+- verdicts are derived from comparison dimensions, accepted gaps, and blockers,
+  not hand-filled per scenario.
+
+The first fixture bundle is evidence-shape coverage, not live managed/native
+execution. It lets reviewers inspect the exact report contract and risk labels
+before model, runtime, and Browser Control variance enters the loop.
+
+Current fixture verdict intent:
+
+| ID | Fixture Verdict Intent |
+|---|---|
+| P01 | `accepted_gap` because native has additive runtime envelope events |
+| P03 | `accepted_gap` until real command progress parity is captured |
+| P04 | `accepted_gap` until real temp-workspace patch parity is captured |
+| P08 | `blocked` because fixture mode does not launch CDP or a safe page |
+| P14 | `pass` for copy-to-native source immutability and copied context shape |
+| P18 | `accepted_gap` until real recovery categories are compared |
+| P19 | `accepted_gap` because fallback is manual while native is hidden beta |
+
 ## Relationship To Later Slices
 
 - Slice 9D-A: this report contract.
-- Slice 9D-B: first local report writer with fixture scenarios.
+- Slice 9D-B: first local report writer with fixture scenarios; landed as the
+  hidden `native-parity report` command.
 - Slice 9D-C: managed/native command runner for P01, P03, P04, P14, P18.
-- Slice 9D-D: browser and fallback scenarios P08 and P19.
+- Slice 9D-D: live Browser and fallback scenarios P08 and P19.
 - Slice 9E: dogfood evidence and troubleshooting.
 - Slice 9F: Settings opt-in after beta blockers pass or have accepted gaps.
