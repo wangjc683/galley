@@ -1082,8 +1082,8 @@ Deferred:
 
 ### Slice 9D: Managed-Vs-Native Scenario Comparator
 
-Status: hidden fixture comparator landed on 2026-06-17; live runtime command
-runner not yet implemented.
+Status: hidden fixture comparator plus explicit command mode landed on
+2026-06-17; automatic live GA command presets not yet implemented.
 
 Goal: compare managed and native semantically without pretending LLM wording is
 deterministic.
@@ -1126,7 +1126,14 @@ Landed:
 - verdicts are derived from comparison dimensions, accepted gaps, and blockers;
 - fixture reports currently mark P01/P03/P04/P18/P19 as accepted gaps where
   native has additive runtime/recovery/fallback differences, P14 as pass, and
-  P08 as blocked because live Browser Control is not run in fixture mode.
+  P08 as blocked because live Browser Control is not run in fixture mode;
+- hidden command mode `galley native-parity report --mode command` runs
+  operator-supplied managed/native commands for one 9D-C scenario at a time;
+- command mode supports P01, P03, P04, P14, and P18, captures exit code,
+  timeout, stdout/stderr previews, duration, and per-side workspace path under
+  `commandStatus`;
+- command mode uses isolated `managed/` and `native/` workspaces and never
+  invents managed/native commands on the operator's behalf.
 
 Exit gate:
 
@@ -1134,12 +1141,15 @@ Exit gate:
   scenario;
 - all first-batch scenario IDs have human-reviewable report rows without
   mutating external GA state;
+- explicit command mode can ingest at least one managed/native command pair and
+  preserve process evidence in the same report shape;
 - accepted gaps are explicit and linked to follow-up work.
 
 Live beta gate still required before Settings opt-in:
 
 - at least one managed and native command run can be compared without mutating
-  external GA state;
+  external GA state through automatic presets, not only operator-supplied
+  commands;
 - Browser Control P08 must move from fixture-blocked to a live readiness
   verdict or documented beta blocker;
 - fallback P19 needs real operator-flow evidence before broad rollout.
@@ -1150,7 +1160,7 @@ Rollback:
 
 Deferred:
 
-- live runtime runner implementation;
+- automatic live runtime runner presets;
 - default report file location/naming convention;
 - real managed GA execution;
 - browser/fallback comparison;

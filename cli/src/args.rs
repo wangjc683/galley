@@ -75,6 +75,26 @@ pub(crate) enum NativeParityCmd {
         /// full Slice 9D first batch.
         #[arg(long = "scenario")]
         scenarios: Vec<String>,
+        /// Evidence source. `fixture` emits static 9D shape reports; `command`
+        /// runs explicit managed/native commands for one supported scenario.
+        #[arg(long, value_enum, default_value = "fixture")]
+        mode: NativeParityReportModeArg,
+        /// Managed-side command to run in command mode.
+        #[arg(long)]
+        managed_command: Option<String>,
+        /// Native-side command to run in command mode.
+        #[arg(long)]
+        native_command: Option<String>,
+        /// Command-mode timeout for each side.
+        #[arg(long, default_value_t = 120)]
+        timeout_seconds: u64,
+        /// Command-mode workspace root. Defaults to a temp directory with
+        /// managed/native subdirectories.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Keep the auto-created command-mode temp workspace after the report.
+        #[arg(long)]
+        keep_workspace: bool,
         /// Write the JSON report bundle to this path instead of stdout.
         #[arg(long)]
         output: Option<PathBuf>,
@@ -82,6 +102,12 @@ pub(crate) enum NativeParityCmd {
         #[arg(long)]
         pretty: bool,
     },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum NativeParityReportModeArg {
+    Fixture,
+    Command,
 }
 
 #[derive(Subcommand, Debug)]

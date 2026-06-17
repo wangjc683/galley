@@ -1,27 +1,66 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Stdio;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use crate::args::NativeParityReportModeArg;
 use crate::common::{emit_json, SCHEMA_VERSION};
 use galley_core_lib::error::GalleyError;
 use serde::Serialize;
+use tokio::process::Command as TokioCommand;
+use tokio::time;
 
 const REPORT_VERSION: u8 = 1;
-const HARNESS: &str = "managed_native_fixture_comparison";
+const FIXTURE_HARNESS: &str = "managed_native_fixture_comparison";
+const COMMAND_HARNESS: &str = "managed_native_command_comparison";
 const FIRST_BATCH_IDS: [&str; 7] = ["P01", "P03", "P04", "P08", "P14", "P18", "P19"];
+const COMMAND_MODE_IDS: [&str; 5] = ["P01", "P03", "P04", "P14", "P18"];
+const COMMAND_PREVIEW_CHAR_LIMIT: usize = 4096;
 
 pub(crate) async fn native_parity_report(
     scenarios: Vec<String>,
+    mode: NativeParityReportModeArg,
+    managed_command: Option<String>,
+    native_command: Option<String>,
+    timeout_seconds: u64,
+    workspace: Option<PathBuf>,
+    keep_workspace: bool,
     output: Option<PathBuf>,
     pretty: bool,
 ) -> Result<(), GalleyError> {
-    let scenario_ids = normalize_scenario_ids(scenarios)?;
     let generated_at = now_iso();
     let galley_commit = galley_commit();
-    let reports = scenario_ids
-        .iter()
-        .map(|id| fixture_report(id, &generated_at, &galley_commit))
-        .collect::<Result<Vec<_>, _>>()?;
+    let (reports, scenario_ids, harness) = match mode {
+        NativeParityReportModeArg::Fixture => {
+            reject_command_mode_args(
+                managed_command,
+                native_command,
+                timeout_seconds,
+                workspace,
+                keep_workspace,
+            )?;
+            let scenario_ids = normalize_scenario_ids(scenarios)?;
+            let reports = scenario_ids
+                .iter()
+                .map(|id| fixture_report(id, &generated_at, &galley_commit))
+                .collect::<Result<Vec<_>, _>>()?;
+            (reports, scenario_ids, FIXTURE_HARNESS)
+        }
+        NativeParityReportModeArg::Command => {
+            let scenario_id = normalize_command_scenario_id(scenarios)?;
+            let request = CommandModeRequest {
+                scenario_id: scenario_id.clone(),
+                managed_command: required_command(managed_command, "--managed-command")?,
+                native_command: required_command(native_command, "--native-command")?,
+                timeout_seconds,
+                workspace,
+                keep_workspace,
+            };
+            let report = command_report(request, &generated_at, &galley_commit).await?;
+            (vec![report], vec![scenario_id], COMMAND_HARNESS)
+        }
+    };
 
     let body = if pretty {
         serde_json::to_string_pretty(&reports)
@@ -50,7 +89,7 @@ pub(crate) async fn native_parity_report(
         let summary = NativeParityWriteSummary {
             schema_version: SCHEMA_VERSION,
             report_version: REPORT_VERSION,
-            harness: HARNESS,
+            harness,
             output: path.display().to_string(),
             report_count: reports.len(),
             scenarios: scenario_ids,
@@ -95,6 +134,60 @@ fn normalize_scenario_ids(input: Vec<String>) -> Result<Vec<String>, GalleyError
     Ok(scenario_ids)
 }
 
+fn normalize_command_scenario_id(input: Vec<String>) -> Result<String, GalleyError> {
+    let scenario_ids = normalize_scenario_ids(input)?;
+    if scenario_ids.len() != 1 {
+        return Err(GalleyError::InvalidArgs {
+            message: "native-parity report --mode command requires exactly one --scenario".into(),
+        });
+    }
+    let id = scenario_ids[0].clone();
+    if !COMMAND_MODE_IDS.contains(&id.as_str()) {
+        return Err(GalleyError::InvalidArgs {
+            message: format!(
+                "native-parity report --mode command does not support `{id}` yet. Allowed: {}",
+                COMMAND_MODE_IDS.join(", ")
+            ),
+        });
+    }
+    Ok(id)
+}
+
+fn required_command(command: Option<String>, flag: &str) -> Result<String, GalleyError> {
+    let Some(command) = command else {
+        return Err(GalleyError::InvalidArgs {
+            message: format!("native-parity report --mode command requires {flag}"),
+        });
+    };
+    let command = command.trim();
+    if command.is_empty() {
+        return Err(GalleyError::InvalidArgs {
+            message: format!("native-parity report --mode command requires non-empty {flag}"),
+        });
+    }
+    Ok(command.to_string())
+}
+
+fn reject_command_mode_args(
+    managed_command: Option<String>,
+    native_command: Option<String>,
+    timeout_seconds: u64,
+    workspace: Option<PathBuf>,
+    keep_workspace: bool,
+) -> Result<(), GalleyError> {
+    if managed_command.is_some()
+        || native_command.is_some()
+        || workspace.is_some()
+        || keep_workspace
+        || timeout_seconds != 120
+    {
+        return Err(GalleyError::InvalidArgs {
+            message: "native-parity report command-runner options require --mode command".into(),
+        });
+    }
+    Ok(())
+}
+
 fn fixture_report(
     scenario_id: &str,
     generated_at: &str,
@@ -110,6 +203,260 @@ fn fixture_report(
         "P19" => Ok(p19_managed_fallback(generated_at, galley_commit)),
         other => Err(GalleyError::InvalidArgs {
             message: format!("native-parity report: unknown scenario `{other}`"),
+        }),
+    }
+}
+
+async fn command_report(
+    request: CommandModeRequest,
+    generated_at: &str,
+    galley_commit: &str,
+) -> Result<ParityReport, GalleyError> {
+    if request.timeout_seconds == 0 {
+        return Err(GalleyError::InvalidArgs {
+            message: "native-parity report --mode command requires --timeout-seconds > 0".into(),
+        });
+    }
+
+    let workspace = CommandWorkspace::prepare(request.workspace, request.keep_workspace)?;
+    let managed_workspace = workspace.side_dir("managed");
+    let native_workspace = workspace.side_dir("native");
+
+    let managed_run = run_shell_command(
+        "managed",
+        &request.managed_command,
+        managed_workspace,
+        request.timeout_seconds,
+    )
+    .await?;
+    let native_run = run_shell_command(
+        "galley_native",
+        &request.native_command,
+        native_workspace,
+        request.timeout_seconds,
+    )
+    .await?;
+
+    let mut report = fixture_report(&request.scenario_id, generated_at, galley_commit)?;
+    let (comparison, accepted_gaps, blockers, notes) = command_mode_verdict_inputs(
+        &report.comparison,
+        managed_run.success(),
+        native_run.success(),
+    );
+
+    report.harness = COMMAND_HARNESS.to_string();
+    report.managed = runtime_from_command_run("managed", request.managed_command, managed_run);
+    report.native = runtime_from_command_run("galley_native", request.native_command, native_run);
+    report.comparison = comparison;
+    report.accepted_gaps = accepted_gaps;
+    report.blockers = blockers;
+    report.notes = format!(
+        "{} Command mode runs operator-supplied commands in isolated managed/native workspaces; exact stdout text is captured as preview evidence but not used as the parity judge.",
+        notes
+    );
+    report.verdict = derive_verdict(&report.comparison, &report.accepted_gaps, &report.blockers);
+
+    Ok(report)
+}
+
+fn command_mode_verdict_inputs(
+    base: &Comparison,
+    managed_success: bool,
+    native_success: bool,
+) -> (Comparison, Vec<AcceptedGap>, Vec<Blocker>, String) {
+    if managed_success && native_success {
+        return (
+            base.clone(),
+            command_mode_accepted_gaps(base),
+            vec![],
+            "Both command sides exited successfully.".to_string(),
+        );
+    }
+
+    if !managed_success {
+        return (
+            Comparison {
+                outcome: DimensionResult::Blocked,
+                tool_action: DimensionResult::Blocked,
+                event_rhythm: DimensionResult::Blocked,
+                approval: DimensionResult::NotApplicable,
+                side_effects: DimensionResult::Blocked,
+                memory_policy: DimensionResult::Match,
+                workspace_policy: DimensionResult::Match,
+                recovery: DimensionResult::Blocked,
+                persisted_state: DimensionResult::Match,
+            },
+            vec![],
+            vec![blocker(
+                "managedCommand",
+                "Managed command did not complete successfully, so the baseline cannot be trusted.",
+                "Fix the managed command or environment, then rerun the same scenario.",
+            )],
+            "Managed baseline command failed or timed out.".to_string(),
+        );
+    }
+
+    (
+        Comparison {
+            outcome: DimensionResult::Regression,
+            tool_action: DimensionResult::Regression,
+            event_rhythm: DimensionResult::AcceptedGap,
+            approval: base.approval,
+            side_effects: DimensionResult::Regression,
+            memory_policy: DimensionResult::Match,
+            workspace_policy: DimensionResult::Match,
+            recovery: DimensionResult::Regression,
+            persisted_state: DimensionResult::Match,
+        },
+        vec![accepted_gap(
+            "eventRhythm",
+            "Command mode captures shell command_start/command_exit events rather than live runner NDJSON.",
+            "Allowed only for hidden 9D-C command evidence.",
+            "Replace with live runner event collection before beta rollout decisions.",
+        )],
+        vec![],
+        "Native command failed while managed command succeeded.".to_string(),
+    )
+}
+
+fn command_mode_accepted_gaps(base: &Comparison) -> Vec<AcceptedGap> {
+    let mut gaps = Vec::new();
+    if base
+        .values()
+        .iter()
+        .any(|value| *value == DimensionResult::AcceptedGap)
+    {
+        gaps.push(accepted_gap(
+            "eventRhythm",
+            "Command mode captures shell command_start/command_exit events rather than live runner NDJSON.",
+            "Allowed only for hidden 9D-C command evidence.",
+            "Replace with live runner event collection before beta rollout decisions.",
+        ));
+    }
+    gaps
+}
+
+async fn run_shell_command(
+    runtime_kind: &str,
+    command_line: &str,
+    workspace: PathBuf,
+    timeout_seconds: u64,
+) -> Result<CommandRun, GalleyError> {
+    let started = Instant::now();
+    let mut command = shell_command(command_line);
+    command
+        .current_dir(&workspace)
+        .env("GALLEY_PARITY_RUNTIME", runtime_kind)
+        .env("GALLEY_PARITY_WORKSPACE", &workspace)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let output = time::timeout(Duration::from_secs(timeout_seconds), command.output()).await;
+    match output {
+        Ok(Ok(output)) => {
+            let duration_ms = started.elapsed().as_millis() as u64;
+            let (stdout_preview, stdout_truncated) = preview_bytes(&output.stdout);
+            let (stderr_preview, stderr_truncated) = preview_bytes(&output.stderr);
+            Ok(CommandRun {
+                exit_code: output.status.code(),
+                timed_out: false,
+                stdout_preview,
+                stdout_truncated,
+                stderr_preview,
+                stderr_truncated,
+                duration_ms,
+                workspace: workspace.display().to_string(),
+            })
+        }
+        Ok(Err(e)) => Err(GalleyError::Internal {
+            message: format!("run native parity {runtime_kind} command: {e}"),
+        }),
+        Err(_) => {
+            let duration_ms = started.elapsed().as_millis() as u64;
+            Ok(CommandRun {
+                exit_code: None,
+                timed_out: true,
+                stdout_preview: String::new(),
+                stdout_truncated: false,
+                stderr_preview: format!("command timed out after {timeout_seconds}s"),
+                stderr_truncated: false,
+                duration_ms,
+                workspace: workspace.display().to_string(),
+            })
+        }
+    }
+}
+
+#[cfg(windows)]
+fn shell_command(command_line: &str) -> TokioCommand {
+    let mut command = TokioCommand::new("cmd");
+    command.arg("/C").arg(command_line);
+    command
+}
+
+#[cfg(not(windows))]
+fn shell_command(command_line: &str) -> TokioCommand {
+    let mut command = TokioCommand::new("sh");
+    command.arg("-lc").arg(command_line);
+    command
+}
+
+fn preview_bytes(bytes: &[u8]) -> (String, bool) {
+    let text = String::from_utf8_lossy(bytes);
+    let mut preview = String::new();
+    let mut truncated = false;
+    for (idx, ch) in text.chars().enumerate() {
+        if idx >= COMMAND_PREVIEW_CHAR_LIMIT {
+            truncated = true;
+            break;
+        }
+        preview.push(ch);
+    }
+    (preview, truncated)
+}
+
+fn runtime_from_command_run(
+    runtime_kind: &str,
+    command: String,
+    command_run: CommandRun,
+) -> RuntimeEvidence {
+    let status = if command_run.success() {
+        "success"
+    } else if command_run.timed_out {
+        "timeout"
+    } else {
+        "error"
+    };
+    let exit = command_run
+        .exit_code
+        .map(|code| code.to_string())
+        .unwrap_or_else(|| "none".to_string());
+
+    RuntimeEvidence {
+        runtime_kind: runtime_kind.to_string(),
+        model: "operator_supplied_command".to_string(),
+        command,
+        events: if command_run.timed_out {
+            vec!["command_start".to_string(), "command_timeout".to_string()]
+        } else {
+            vec!["command_start".to_string(), "command_exit".to_string()]
+        },
+        tools: vec![tool("command_runner", status, "explicit_cli", true)],
+        final_outcome: format!(
+            "Command {status}; exitCode={exit}; durationMs={}",
+            command_run.duration_ms
+        ),
+        persisted_state: vec!["local parity report evidence".to_string()],
+        command_status: Some(CommandStatus {
+            exit_code: command_run.exit_code,
+            timed_out: command_run.timed_out,
+            stdout_preview: command_run.stdout_preview,
+            stdout_truncated: command_run.stdout_truncated,
+            stderr_preview: command_run.stderr_preview,
+            stderr_truncated: command_run.stderr_truncated,
+            duration_ms: command_run.duration_ms,
+            workspace: command_run.workspace,
         }),
     }
 }
@@ -500,7 +847,7 @@ fn report(
         scenario_title: scenario_title.to_string(),
         verdict,
         phase_gate: phase_gate.to_string(),
-        harness: HARNESS.to_string(),
+        harness: FIXTURE_HARNESS.to_string(),
         managed,
         native,
         comparison,
@@ -529,6 +876,7 @@ fn runtime(
             .iter()
             .map(|state| (*state).to_string())
             .collect(),
+        command_status: None,
     }
 }
 
@@ -613,6 +961,81 @@ struct NativeParityWriteSummary {
     scenarios: Vec<String>,
 }
 
+struct CommandModeRequest {
+    scenario_id: String,
+    managed_command: String,
+    native_command: String,
+    timeout_seconds: u64,
+    workspace: Option<PathBuf>,
+    keep_workspace: bool,
+}
+
+struct CommandWorkspace {
+    root: PathBuf,
+    cleanup_on_drop: bool,
+}
+
+impl CommandWorkspace {
+    fn prepare(root: Option<PathBuf>, keep_workspace: bool) -> Result<Self, GalleyError> {
+        let (root, auto_created) = match root {
+            Some(root) => (root, false),
+            None => (default_command_workspace_root()?, true),
+        };
+        fs::create_dir_all(root.join("managed")).map_err(|e| GalleyError::Internal {
+            message: format!("create managed parity workspace {}: {e}", root.display()),
+        })?;
+        fs::create_dir_all(root.join("native")).map_err(|e| GalleyError::Internal {
+            message: format!("create native parity workspace {}: {e}", root.display()),
+        })?;
+        Ok(Self {
+            root,
+            cleanup_on_drop: auto_created && !keep_workspace,
+        })
+    }
+
+    fn side_dir(&self, side: &str) -> PathBuf {
+        self.root.join(side)
+    }
+}
+
+impl Drop for CommandWorkspace {
+    fn drop(&mut self) {
+        if self.cleanup_on_drop {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+}
+
+fn default_command_workspace_root() -> Result<PathBuf, GalleyError> {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| GalleyError::Internal {
+            message: format!("system clock before unix epoch: {e}"),
+        })?
+        .as_millis();
+    Ok(std::env::temp_dir().join(format!(
+        "galley-native-parity-{}-{millis}",
+        std::process::id()
+    )))
+}
+
+struct CommandRun {
+    exit_code: Option<i32>,
+    timed_out: bool,
+    stdout_preview: String,
+    stdout_truncated: bool,
+    stderr_preview: String,
+    stderr_truncated: bool,
+    duration_ms: u64,
+    workspace: String,
+}
+
+impl CommandRun {
+    fn success(&self) -> bool {
+        self.exit_code == Some(0) && !self.timed_out
+    }
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ParityReport {
@@ -652,6 +1075,21 @@ struct RuntimeEvidence {
     tools: Vec<ToolEvidence>,
     final_outcome: String,
     persisted_state: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    command_status: Option<CommandStatus>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandStatus {
+    exit_code: Option<i32>,
+    timed_out: bool,
+    stdout_preview: String,
+    stdout_truncated: bool,
+    stderr_preview: String,
+    stderr_truncated: bool,
+    duration_ms: u64,
+    workspace: String,
 }
 
 #[derive(Clone, Serialize)]

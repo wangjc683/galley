@@ -190,6 +190,12 @@ behavior changes until an implementation slice explicitly lands them.
   for P01, P03, P04, P08, P14, P18, and P19 without starting GA, native
   sessions, Browser Control, schema changes, or UI exposure.
   [devlog](../devlog/2026-06-17-galley-native-slice-9d-fixture-comparator.md).
+- Slice 9D-C landed explicit command mode for the hidden comparator on
+  2026-06-17: `galley native-parity report --mode command` can run
+  operator-supplied managed/native commands for P01, P03, P04, P14, and P18,
+  then persist exit code, timeout, output preview, duration, and workspace
+  evidence in the same report shape.
+  [devlog](../devlog/2026-06-17-galley-native-slice-9d-command-mode.md).
 
 ## Document Roles
 
@@ -250,14 +256,16 @@ deterministic parity anchors are executable with `cargo test` filters, and
 Slice 9C locks the schema v1 CLI/Supervisor compatibility path for hidden native
 runtime values and watch events. Slice 9D-B adds a hidden local fixture
 comparator that emits the managed-vs-native report contract for the first
-scenario batch before live runtime runner variance is introduced.
+scenario batch before live runtime runner variance is introduced. Slice 9D-C
+adds explicit command mode so operator-supplied managed/native runs can feed
+real process evidence into that same report shape.
 
 The next implementation phase should stay conservative:
 
 1. broaden Slice 9B native integration coverage beyond the current runtime
    anchors where it materially increases confidence;
-2. wire the live managed/native runner into the Slice 9D report writer for
-   P01, P03, P04, P14, and P18;
+2. add automatic managed/native command presets only after the explicit command
+   mode has been used locally without muddying external GA state;
 3. collect Slice 9E dogfood evidence and troubleshooting for Browser, memory,
    continuation, Goal Hive, Morphling, and fallback;
 4. expose Slice 9F Settings opt-in only after beta-blocker scenarios pass or

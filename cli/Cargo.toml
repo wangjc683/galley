@@ -28,7 +28,7 @@ clap = { version = "4", features = ["derive"] }
 # entrypoint is sync — `#[tokio::main]` bridges. multi-thread isn't
 # needed for the CLI's read path; single-thread keeps the binary
 # smaller.
-tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1", features = ["macros", "process", "rt", "sync", "time"] }
 
 # Output serialization. JSON is the default (one object per line for
 # list-returning commands → NDJSON). `--pretty` will eventually

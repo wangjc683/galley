@@ -316,6 +316,89 @@ async fn native_parity_report_writes_fixture_bundle() {
 }
 
 #[tokio::test]
+async fn native_parity_command_mode_writes_command_evidence() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+    let report_path = td.path().join("command-report.json");
+    let workspace = td.path().join("workspace");
+    let report_path_arg = report_path.to_string_lossy().to_string();
+    let workspace_arg = workspace.to_string_lossy().to_string();
+
+    let (stdout, code) = run_galley(
+        &db,
+        &[
+            "native-parity",
+            "report",
+            "--mode",
+            "command",
+            "--scenario",
+            "P14",
+            "--managed-command",
+            "echo managed",
+            "--native-command",
+            "echo native",
+            "--workspace",
+            &workspace_arg,
+            "--output",
+            &report_path_arg,
+        ],
+    );
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+
+    let summary: serde_json::Value = serde_json::from_str(stdout.trim()).expect("summary json");
+    assert_eq!(summary["harness"], "managed_native_command_comparison");
+    assert_eq!(summary["reportCount"], 1);
+
+    let body = fs::read_to_string(report_path).expect("report file");
+    let reports: serde_json::Value = serde_json::from_str(&body).expect("report json");
+    let report = &reports.as_array().expect("report array")[0];
+    assert_eq!(report["scenarioId"], "P14");
+    assert_eq!(report["verdict"], "pass");
+    assert_eq!(report["harness"], "managed_native_command_comparison");
+    assert_eq!(report["managed"]["commandStatus"]["exitCode"], 0);
+    assert_eq!(report["native"]["commandStatus"]["exitCode"], 0);
+    assert!(report["managed"]["commandStatus"]["stdoutPreview"]
+        .as_str()
+        .expect("managed stdout")
+        .contains("managed"));
+    assert!(
+        workspace.join("managed").is_dir(),
+        "explicit workspace should be preserved"
+    );
+}
+
+#[tokio::test]
+async fn native_parity_command_mode_marks_native_failure_as_fail() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+
+    let (stdout, code) = run_galley(
+        &db,
+        &[
+            "native-parity",
+            "report",
+            "--mode",
+            "command",
+            "--scenario",
+            "P14",
+            "--managed-command",
+            "echo managed",
+            "--native-command",
+            "exit 7",
+        ],
+    );
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+
+    let reports: serde_json::Value = serde_json::from_str(stdout.trim()).expect("report json");
+    let report = &reports.as_array().expect("report array")[0];
+    assert_eq!(report["verdict"], "fail");
+    assert_eq!(report["comparison"]["outcome"], "regression");
+    assert_eq!(report["native"]["commandStatus"]["exitCode"], 7);
+}
+
+#[tokio::test]
 async fn sessions_list_emits_ndjson_recent_first() {
     let td = tempdir();
     let db = td.path().join("workbench.db");

@@ -1,10 +1,11 @@
 # Galley Native Parity Comparator Report
 
-Status: Slice 9D-B fixture report writer landed, 2026-06-17.
+Status: Slice 9D-C explicit command mode landed, 2026-06-17.
 
 This document defines the managed-vs-native comparison report shape and the
-first hidden fixture writer. The writer does not run GenericAgent, start native
-sessions, add schema, or expose UI.
+hidden local writers. The default writer does not run GenericAgent, start
+native sessions, add schema, or expose UI. The command writer runs only
+operator-supplied commands.
 
 ## Purpose
 
@@ -197,7 +198,7 @@ The first runner should not:
 
 ## Hidden Fixture Writer
 
-Slice 9D-B adds a hidden CLI harness:
+Slice 9D-B added a hidden CLI harness:
 
 ```bash
 galley native-parity report --output /tmp/galley-native-parity.json --pretty
@@ -233,12 +234,59 @@ Current fixture verdict intent:
 | P18 | `accepted_gap` until real recovery categories are compared |
 | P19 | `accepted_gap` because fallback is manual while native is hidden beta |
 
+## Explicit Command Mode
+
+Slice 9D-C adds a second hidden mode:
+
+```bash
+galley native-parity report \
+  --mode command \
+  --scenario P14 \
+  --managed-command "galley session show <managed-session>" \
+  --native-command "galley session copy-to-native <managed-session>" \
+  --output /tmp/galley-native-command-parity.json \
+  --pretty
+```
+
+This is a bridge between fixture reports and a future automatic managed/native
+runner. It executes only commands the operator passes explicitly. It does not
+invent default managed GA prompts, start Browser Control, open Core sockets on
+its own, or mutate external GA state except through whatever the operator's
+explicit command does.
+
+Command-mode behavior:
+
+- requires exactly one `--scenario`;
+- currently supports 9D-C scenarios P01, P03, P04, P14, and P18;
+- requires both `--managed-command` and `--native-command`;
+- runs each side in an isolated workspace root with `managed/` and `native/`
+  subdirectories;
+- sets `GALLEY_PARITY_RUNTIME` and `GALLEY_PARITY_WORKSPACE` for each command;
+- creates a temp workspace by default and removes it when the command exits;
+- preserves an explicit `--workspace` path;
+- captures `exitCode`, timeout status, stdout/stderr previews, duration, and
+  workspace path under `managed.commandStatus` and `native.commandStatus`;
+- does not compare exact stdout text as the parity judge.
+
+Command-mode verdict rules:
+
+| Situation | Verdict |
+|---|---|
+| managed succeeds and native succeeds | inherits the scenario's semantic fixture verdict |
+| managed fails or times out | `blocked`, because the baseline is unavailable |
+| managed succeeds and native fails or times out | `fail`, because native regressed the explicit comparison |
+
+The command mode is still not a full live GA runner. It is useful for local
+evidence capture and for proving the report writer can ingest real process
+results before model/browser-dependent automation is added.
+
 ## Relationship To Later Slices
 
 - Slice 9D-A: this report contract.
 - Slice 9D-B: first local report writer with fixture scenarios; landed as the
   hidden `native-parity report` command.
-- Slice 9D-C: managed/native command runner for P01, P03, P04, P14, P18.
+- Slice 9D-C: explicit managed/native command mode for P01, P03, P04, P14,
+  and P18.
 - Slice 9D-D: live Browser and fallback scenarios P08 and P19.
 - Slice 9E: dogfood evidence and troubleshooting.
 - Slice 9F: Settings opt-in after beta blockers pass or have accepted gaps.

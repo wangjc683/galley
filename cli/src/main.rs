@@ -264,8 +264,27 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
         }) => llm::llm_set(session_id, llm_name).await,
         Command::NativeParity(NativeParityCmd::Report {
             scenarios,
+            mode,
+            managed_command,
+            native_command,
+            timeout_seconds,
+            workspace,
+            keep_workspace,
             output,
             pretty,
-        }) => native_parity::native_parity_report(scenarios, output, pretty).await,
+        }) => {
+            native_parity::native_parity_report(
+                scenarios,
+                mode,
+                managed_command,
+                native_command,
+                timeout_seconds,
+                workspace,
+                keep_workspace,
+                output,
+                pretty,
+            )
+            .await
+        }
     }
 }
