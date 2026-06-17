@@ -16,7 +16,10 @@ use galley_core_lib::api::{
 };
 use galley_core_lib::credential_store;
 use galley_core_lib::db::{
-    SqliteGalley, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
+    CreateNativeMemoryChangeInput, CreateNativeMemoryEvidenceInput,
+    CreateNativeMemoryIndexEntryInput, CreateNativeMemoryItemInput, NativeMemoryApprovalState,
+    NativeMemoryChangeKind, NativeMemoryLayer, NativeMemoryRisk, NativeMemoryScope, SqliteGalley,
+    UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
 };
 use galley_core_lib::error::GalleyError;
 use galley_core_lib::managed_runtime;
@@ -45,6 +48,7 @@ const MIG_018: &str = include_str!("../migrations/018_goal_deliverable.sql");
 const MIG_019: &str = include_str!("../migrations/019_goal_workspace.sql");
 const MIG_020: &str = include_str!("../migrations/020_message_attachments.sql");
 const MIG_021: &str = include_str!("../migrations/021_native_session_runtime.sql");
+const MIG_022: &str = include_str!("../migrations/022_native_memory_substrate.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -84,7 +88,7 @@ async fn run_migrations(pool: &SqlitePool) {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021,
+        MIG_021, MIG_022,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -130,6 +134,145 @@ async fn seed_project(pool: &SqlitePool, id: &str, name: &str) {
     .execute(pool)
     .await
     .expect("seed project");
+}
+
+// ---------------- Galley Native memory substrate ----------------
+
+#[tokio::test]
+async fn native_memory_substrate_records_item_evidence_index_and_change() {
+    let pool = fresh_pool().await;
+    seed_session_idle(&pool, "sess_native_memory").await;
+    let galley = SqliteGalley::from_pool(pool);
+
+    let item = galley
+        .create_native_memory_item(CreateNativeMemoryItemInput {
+            layer: NativeMemoryLayer::L2,
+            scope: NativeMemoryScope::Project("proj_native_memory".into()),
+            title: "Verified test command".into(),
+            body: "Use cargo test --manifest-path core/Cargo.toml native_memory --test db_writes_test.".into(),
+            triggers: vec!["native memory tests".into(), "db writes".into()],
+            tags: vec!["testing".into()],
+            source_refs: serde_json::json!([{ "kind": "session", "id": "sess_native_memory" }]),
+            supersedes_item_id: None,
+        })
+        .await
+        .expect("create memory item");
+
+    assert_eq!(item.layer, NativeMemoryLayer::L2);
+    assert_eq!(
+        item.scope,
+        NativeMemoryScope::Project("proj_native_memory".into())
+    );
+    assert_eq!(item.triggers.len(), 2);
+
+    let index = galley
+        .create_native_memory_index_entry(CreateNativeMemoryIndexEntryInput {
+            scope: NativeMemoryScope::Project("proj_native_memory".into()),
+            trigger: "native memory tests".into(),
+            target_item_id: item.id.clone(),
+            rank: 10,
+            reason: Some("Route future native memory test work.".into()),
+        })
+        .await
+        .expect("create index entry");
+
+    assert_eq!(index.target_item_id, item.id);
+    assert_eq!(index.rank, 10);
+
+    let evidence = galley
+        .create_native_memory_evidence(CreateNativeMemoryEvidenceInput {
+            session_id: Some(sid("sess_native_memory")),
+            turn_index: Some(3),
+            message_id: None,
+            tool_call_id: Some("tool_call_1".into()),
+            tool_event_id: None,
+            content_hash: "sha256:abc123".into(),
+            summary: "A test command was verified during native memory work.".into(),
+        })
+        .await
+        .expect("create evidence");
+
+    let change = galley
+        .create_native_memory_change(CreateNativeMemoryChangeInput {
+            target_item_id: Some(index.target_item_id.clone()),
+            kind: NativeMemoryChangeKind::Create,
+            diff: serde_json::json!({
+                "after": {
+                    "title": "Verified test command"
+                }
+            }),
+            evidence_ids: vec![evidence.id.clone()],
+            risk: NativeMemoryRisk::Low,
+            approval_state: NativeMemoryApprovalState::AutoApplied,
+            created_by_session_id: Some(sid("sess_native_memory")),
+            created_by_tool_call_id: Some("tool_call_1".into()),
+            applied_at: None,
+        })
+        .await
+        .expect("create memory change");
+
+    assert_eq!(change.kind, NativeMemoryChangeKind::Create);
+    assert_eq!(change.evidence_ids, vec![evidence.id]);
+    assert_eq!(
+        change.approval_state,
+        NativeMemoryApprovalState::AutoApplied
+    );
+    assert!(change.applied_at.is_some());
+
+    let changes = galley
+        .list_native_memory_changes(10)
+        .await
+        .expect("list changes");
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].id, change.id);
+}
+
+#[tokio::test]
+async fn native_memory_change_requires_evidence() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+
+    let err = galley
+        .create_native_memory_change(CreateNativeMemoryChangeInput {
+            target_item_id: None,
+            kind: NativeMemoryChangeKind::Create,
+            diff: serde_json::json!({ "after": { "title": "No evidence" } }),
+            evidence_ids: Vec::new(),
+            risk: NativeMemoryRisk::Low,
+            approval_state: NativeMemoryApprovalState::AutoApplied,
+            created_by_session_id: None,
+            created_by_tool_call_id: None,
+            applied_at: None,
+        })
+        .await
+        .expect_err("evidence-free memory change must be rejected");
+
+    assert!(matches!(
+        err,
+        GalleyError::InvalidArgs { message } if message.contains("evidence_ids")
+    ));
+}
+
+#[tokio::test]
+async fn native_memory_change_schema_rejects_empty_evidence_ids() {
+    let pool = fresh_pool().await;
+
+    let err = sqlx::query(
+        "INSERT INTO native_memory_changes (
+            id, target_item_id, kind, diff_json, evidence_ids_json, risk,
+            approval_state, created_by_session_id, created_by_tool_call_id,
+            applied_at, reverted_at, created_at, updated_at
+         ) VALUES (
+            'nmc_bad_evidence', NULL, 'create', '{\"after\":{}}', '[]', 'low',
+            'auto_applied', NULL, NULL, '2026-06-17T00:00:00+00:00', NULL,
+            '2026-06-17T00:00:00+00:00', '2026-06-17T00:00:00+00:00'
+         )",
+    )
+    .execute(&pool)
+    .await
+    .expect_err("schema must reject evidence-free memory changes");
+
+    assert!(format!("{err}").contains("CHECK"));
 }
 
 // ---------------- Goal V1 ----------------

@@ -608,6 +608,12 @@ pub fn run() {
             sql: include_str!("../migrations/021_native_session_runtime.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 22,
+            description: "add Galley Native memory substrate",
+            sql: include_str!("../migrations/022_native_memory_substrate.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     // Pre-migration backup hook (B4 M8). Derived — not hard-coded —

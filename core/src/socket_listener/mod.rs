@@ -730,6 +730,7 @@ mod tests {
         include_str!("../../migrations/019_goal_workspace.sql"),
         include_str!("../../migrations/020_message_attachments.sql"),
         include_str!("../../migrations/021_native_session_runtime.sql"),
+        include_str!("../../migrations/022_native_memory_substrate.sql"),
     ];
 
     struct EnvGuard {

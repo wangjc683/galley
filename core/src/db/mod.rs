@@ -100,6 +100,7 @@ mod api_impl;
 mod goal;
 mod helpers;
 mod managed_model;
+mod native_memory;
 mod prefs;
 mod project;
 mod rows;
@@ -110,6 +111,13 @@ mod tool_event;
 use helpers::*;
 use rows::*;
 
+pub use native_memory::{
+    CreateNativeMemoryChangeInput, CreateNativeMemoryEvidenceInput,
+    CreateNativeMemoryIndexEntryInput, CreateNativeMemoryItemInput, NativeMemoryApprovalState,
+    NativeMemoryChangeKind, NativeMemoryChangeRecord, NativeMemoryEvidenceRecord,
+    NativeMemoryIndexEntryRecord, NativeMemoryItemRecord, NativeMemoryLayer, NativeMemoryRisk,
+    NativeMemoryScope,
+};
 pub use rows::{
     ManagedModelSecretRow, MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage,
     PersistToolEventPending, PersistedMessageRow, ToolEventRow, UpsertManagedModelMetadata,

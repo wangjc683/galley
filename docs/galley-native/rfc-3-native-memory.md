@@ -6,6 +6,11 @@
 > update flow, UI expectations, and safety boundaries. This RFC does not
 > implement storage, schema, or runtime behavior.
 
+Implementation note: Slice 5B landed the first storage substrate on
+2026-06-17 through Core-owned `native_memory_*` tables and typed DB helpers.
+Runtime writes, `memory://` reads, secret checks, and inspect/undo UI are still
+separate implementation slices.
+
 ## Decision
 
 `galley_native` should preserve GenericAgent's layered memory semantics, but

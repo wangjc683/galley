@@ -683,6 +683,8 @@ Tasks:
   landed in Slice 5A through assistant `tool_results` persistence and compact
   prompt injection on later native turns;
 - implement storage for memory items, evidence, index entries, and changes;
+  landed in Slice 5B as Core-owned tables and typed DB helpers, without runtime
+  memory writes yet;
 - expose `memory://` resources through `file_read`;
 - implement low-risk memory change apply + undo;
 - implement `start_long_term_update`;
@@ -711,6 +713,18 @@ Landed in Slice 5A follow-up:
 - checkpoint content is capped before storage and before prompt injection;
 - durable memory/capability writes remain deferred to `start_long_term_update`
   and later Slice 5 work.
+
+Landed in Slice 5B follow-up:
+
+- migration 022 adds `native_memory_items`, `native_memory_index_entries`,
+  `native_memory_evidence`, and `native_memory_changes`;
+- Rust Core exposes typed internal helpers for memory item, index, evidence,
+  and change creation/readback;
+- memory changes require at least one evidence id before they can be recorded;
+- scope is explicit as `global_user`, `project`, `workspace`, or
+  `capability_pack`;
+- no public Agent API, GUI surface, `memory://` resource, or
+  `start_long_term_update` runtime write path is enabled yet.
 
 Rollback:
 

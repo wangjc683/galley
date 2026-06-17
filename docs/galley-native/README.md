@@ -132,6 +132,11 @@ behavior changes until an implementation slice explicitly lands them.
   triggers a continuation answer, and is injected into later native model turns
   without becoming durable memory.
   [devlog](../devlog/2026-06-17-galley-native-slice-5a-working-checkpoint.md).
+- Slice 5B landed the native memory substrate on 2026-06-17:
+  Core now owns typed memory item, index, evidence, and change tables plus
+  internal DB helpers. The runtime still does not automatically write durable
+  memory.
+  [devlog](../devlog/2026-06-17-galley-native-slice-5b-memory-substrate.md).
 
 ## Document Roles
 
@@ -161,15 +166,17 @@ behavior changes until an implementation slice explicitly lands them.
 
 ## Next
 
-After Slice 5A, native can read files, answer from tool results, apply targeted
+After Slice 5B, native can read files, answer from tool results, apply targeted
 patches, perform preview-first create/overwrite writes, run approval-gated local
 commands with bounded output, project command stdout/stderr as ordered
 tool-progress events, read browser tabs/pages through `web_scan`, execute
 approval-gated browser JavaScript through `web_execute_js`, surface browser
-recovery hints, and keep a short-lived working checkpoint across turns. The
-next implementation phase remains Slice 5:
+recovery hints, keep a short-lived working checkpoint across turns, and persist
+typed native memory ledger rows for later runtime use. The next implementation
+phase remains Slice 5:
 
-1. design the smallest typed native memory/change store for
-   `start_long_term_update`;
-2. expose safe read-only memory resources through `file_read`;
-3. keep Goal Hive, Morphling, and default switching in later slices.
+1. expose safe read-only `memory://` resources through `file_read`;
+2. wire `start_long_term_update` through the evidence/change ledger with secret
+   checks and undo metadata;
+3. keep capability packs, Goal Hive, Morphling, and default switching in later
+   slices.
