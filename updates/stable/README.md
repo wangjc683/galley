@@ -1,3 +1,3 @@
 Galley stable update channel.
 
-Current tag: v0.2.10
+Current tag: v0.2.11
