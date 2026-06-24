@@ -2,9 +2,30 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::args::RuntimeArg;
 use crate::common::{emit_json, is_live_candidate, runtime_arg_from_kind, SCHEMA_VERSION};
+use crate::goal::decision::goal_failure_summary;
+pub(crate) use crate::goal::decision::{
+    goal_controller_decision, goal_controller_decision_after_wait, goal_wrapping_summary,
+};
 use crate::goal::prompts::{
     goal_master_planning_prompt, goal_worker_prompt_template, goal_worker_protocol_reminder_prompt,
     goal_worker_wake_prompt, goal_workspace_file_listing,
+};
+use crate::goal::signals::{
+    goal_activity_counts, goal_activity_increased, goal_any_worker_slot_has_progress_signal,
+    goal_has_incomplete_tasks, goal_has_result_signal, goal_worker_max_wave,
+    goal_worker_slot_session_ids, goal_worker_slots_all_capped,
+};
+pub(crate) use crate::goal::signals::{
+    goal_drain_cap_seconds, goal_has_worker_material_signal, goal_ready_idle_worker_slot_indices,
+    goal_worker_has_terminal_signal, goal_worker_session_ids, goal_worker_wave_baseline,
+};
+#[cfg(test)]
+pub(crate) use crate::goal::signals::{
+    goal_ready_worker_slot_indices, goal_worker_has_progress_signal, goal_worker_terminal_counts,
+};
+pub(crate) use crate::goal::task_seed::goal_seed_task_specs;
+use crate::goal::task_seed::{
+    goal_has_open_assigned_task, goal_open_assigned_task_for_worker, goal_worker_slot_exists,
 };
 use crate::goal::types::*;
 use crate::project::project_follow;
@@ -15,9 +36,9 @@ use crate::session::{
 use galley_core_lib::api::{
     goal_checkpoint_deadline_reached, goal_checkpoint_first_material,
     goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_synthesizing,
-    CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief, GoalEventBrief, GoalEventType,
-    GoalId, GoalLocale, GoalStatus, GoalStatusSnapshot, GoalTaskBrief, GoalTaskStatus,
-    MessageBrief, MessageRole, RuntimeKind, SessionId, GOAL_CONFIRMATION_PHRASE,
+    CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief, GoalEventType, GoalId,
+    GoalLocale, GoalStatus, GoalStatusSnapshot, MessageBrief, MessageRole, RuntimeKind, SessionId,
+    GOAL_CONFIRMATION_PHRASE,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
@@ -852,127 +873,6 @@ fn goal_seed_task_marker_seen(snapshot: &GoalStatusSnapshot) -> bool {
     })
 }
 
-pub(crate) fn goal_seed_task_specs(goal: &GoalBrief) -> Vec<(u32, GoalTaskSpec)> {
-    let worker_limit = goal.worker_limit.max(1);
-    let mut specs = Vec::new();
-    specs.push((
-        1,
-        goal_task_spec(
-            1,
-            "first-pass",
-            "第一版完整结果",
-            format!(
-                "围绕目标「{}」产出第一版可交付结果，写清主要结论、依据、假设和仍需补齐的缺口。",
-                goal.objective
-            ),
-        ),
-    ));
-    if worker_limit >= 2 {
-        specs.push((
-            2,
-            goal_task_spec(
-                2,
-                "independent-review",
-                "独立核对与补缺",
-                format!(
-                    "独立检查目标「{}」的事实、约束、风险和遗漏，优先找出第一版结果最需要改进的地方。",
-                    goal.objective
-                ),
-            ),
-        ));
-    }
-    if worker_limit >= 3 {
-        specs.push((
-            3,
-            goal_task_spec(
-                3,
-                "synthesis-polish",
-                "结构整理与下一步建议",
-                format!(
-                    "把围绕目标「{}」的已有发现整理成用户容易理解的结构，并补充可执行的下一步建议。",
-                    goal.objective
-                ),
-            ),
-        ));
-    }
-    if worker_limit >= 4 {
-        specs.push((
-            4,
-            goal_task_spec(
-                4,
-                "alternatives-edge-cases",
-                "替代方案、边界和反例检查",
-                format!(
-                    "从替代路径、边界情况和反例角度检查目标「{}」，指出可能被忽略的选择或风险。",
-                    goal.objective
-                ),
-            ),
-        ));
-    }
-    if worker_limit >= 5 {
-        specs.push((
-            5,
-            goal_task_spec(
-                5,
-                "final-quality-review",
-                "最终质量、风险和交付检查",
-                format!(
-                    "对目标「{}」的最终交付做质量检查，确认结论、风险、缺口和下一步都可直接交给用户。",
-                    goal.objective
-                ),
-            ),
-        ));
-    }
-    specs
-}
-
-fn goal_task_spec(
-    worker_index: u32,
-    kind: &str,
-    title: impl Into<String>,
-    description: impl Into<String>,
-) -> GoalTaskSpec {
-    GoalTaskSpec {
-        title: title.into(),
-        description: description.into(),
-        scope: format!("{GOAL_CONTROLLER_TASK_SCOPE_PREFIX}{worker_index}:{kind}"),
-    }
-}
-
-fn goal_open_assigned_task_for_worker<'a>(
-    snapshot: &'a GoalStatusSnapshot,
-    worker_index: u32,
-) -> Option<&'a GoalTaskBrief> {
-    let prefix = format!("{GOAL_CONTROLLER_TASK_SCOPE_PREFIX}{worker_index}:");
-    snapshot.tasks.iter().find(|task| {
-        task.status == GoalTaskStatus::Open
-            && task
-                .scope
-                .as_deref()
-                .is_some_and(|scope| scope.starts_with(&prefix))
-    })
-}
-
-fn goal_has_open_assigned_task(snapshot: &GoalStatusSnapshot) -> bool {
-    snapshot.tasks.iter().any(|task| {
-        task.status == GoalTaskStatus::Open
-            && task
-                .scope
-                .as_deref()
-                .is_some_and(|scope| scope.starts_with(GOAL_CONTROLLER_TASK_SCOPE_PREFIX))
-    })
-}
-
-fn goal_worker_slot_exists(slots: &[GoalWorkerSlot], worker_index: u32) -> bool {
-    slots.iter().any(|slot| slot.worker_index == worker_index)
-}
-
-fn goal_task_is_controller_assigned(task: &GoalTaskBrief) -> bool {
-    task.scope
-        .as_deref()
-        .is_some_and(|scope| scope.starts_with(GOAL_CONTROLLER_TASK_SCOPE_PREFIX))
-}
-
 async fn start_goal_worker_slots(
     galley: &SqliteGalley,
     wave_start_snapshot: &GoalStatusSnapshot,
@@ -1133,55 +1033,6 @@ async fn continue_goal_worker_slot(
     Ok(true)
 }
 
-pub(crate) fn goal_worker_wave_baseline(
-    snapshot: &GoalStatusSnapshot,
-    session_id: SessionId,
-) -> GoalWorkerWaveBaseline {
-    GoalWorkerWaveBaseline {
-        terminal_counts: goal_worker_terminal_counts(snapshot, &session_id),
-        progress_counts: goal_worker_progress_counts(snapshot, &session_id),
-        session_id,
-        reminder_sent: false,
-    }
-}
-
-pub(crate) fn goal_controller_decision(
-    budget_left: bool,
-    has_synthesis_material: bool,
-    all_worker_slots_capped: bool,
-) -> GoalControllerDecision {
-    if budget_left && all_worker_slots_capped {
-        return if has_synthesis_material {
-            GoalControllerDecision::Wrap(GoalWrapReason::WaveCap)
-        } else {
-            GoalControllerDecision::Fail(GoalFailReason::NoResultByWaveCap)
-        };
-    }
-    if budget_left {
-        return GoalControllerDecision::Continue;
-    }
-    if has_synthesis_material {
-        GoalControllerDecision::Wrap(GoalWrapReason::Deadline)
-    } else {
-        GoalControllerDecision::Fail(GoalFailReason::NoResultByDeadline)
-    }
-}
-
-pub(crate) fn goal_controller_decision_after_wait(
-    wait_outcome: GoalWorkerWaitOutcome,
-    budget_left: bool,
-    has_synthesis_material: bool,
-    all_worker_slots_capped: bool,
-) -> GoalControllerDecision {
-    if wait_outcome == GoalWorkerWaitOutcome::DrainCapReached {
-        return GoalControllerDecision::Wrap(GoalWrapReason::DrainCap);
-    }
-    if wait_outcome == GoalWorkerWaitOutcome::IdleWithoutSignal && budget_left {
-        return GoalControllerDecision::WaitForSignal;
-    }
-    goal_controller_decision(budget_left, has_synthesis_material, all_worker_slots_capped)
-}
-
 fn goal_waiting_for_worker_signal_summary(wave: u32, had_protocol_activity: bool) -> String {
     if had_protocol_activity {
         return format!(
@@ -1216,181 +1067,6 @@ fn goal_slot_wake_summary(
     format!(
         "{workers} produced a terminal task signal without a result; budget remains, assigning concrete follow-up tasks."
     )
-}
-
-pub(crate) fn goal_wrapping_summary(reason: GoalWrapReason, incomplete_tasks: bool) -> String {
-    match (reason, incomplete_tasks) {
-        (GoalWrapReason::Deadline, true) => {
-            "Goal budget reached with unfinished tasks; starting master synthesis with the best available results.".to_string()
-        }
-        (GoalWrapReason::Deadline, false) => {
-            "Goal budget reached; starting master synthesis.".to_string()
-        }
-        (GoalWrapReason::DrainCap, true) => {
-            "Goal drain cap reached while some workers may still be active; synthesizing available results with unfinished tasks noted.".to_string()
-        }
-        (GoalWrapReason::DrainCap, false) => {
-            "Goal drain cap reached while some workers may still be active; synthesizing available results.".to_string()
-        }
-        (GoalWrapReason::WaveCap, true) => {
-            "Goal wave cap reached with unfinished tasks; starting master synthesis with accumulated results.".to_string()
-        }
-        (GoalWrapReason::WaveCap, false) => {
-            "Goal wave cap reached; starting master synthesis with accumulated results.".to_string()
-        }
-    }
-}
-
-fn goal_failure_summary(reason: GoalFailReason) -> String {
-    match reason {
-        GoalFailReason::NoResultByDeadline => {
-            "Goal failed: budget ended without worker activity or available output.".to_string()
-        }
-        GoalFailReason::NoResultByWaveCap => {
-            "Goal failed: wave cap reached without worker activity or available output.".to_string()
-        }
-    }
-}
-
-fn goal_has_incomplete_tasks(snapshot: &GoalStatusSnapshot) -> bool {
-    snapshot.tasks.iter().any(|task| {
-        matches!(
-            task.status,
-            GoalTaskStatus::Open
-                | GoalTaskStatus::Claimed
-                | GoalTaskStatus::Running
-                | GoalTaskStatus::Blocked
-        )
-    })
-}
-
-fn goal_has_result_signal(snapshot: &GoalStatusSnapshot) -> bool {
-    snapshot
-        .tasks
-        .iter()
-        .any(|task| task.status == GoalTaskStatus::Completed)
-        || snapshot
-            .events
-            .iter()
-            .any(|event| event.event_type == GoalEventType::Result)
-}
-
-pub(crate) fn goal_has_worker_material_signal(snapshot: &GoalStatusSnapshot) -> bool {
-    snapshot.tasks.iter().any(|task| {
-        task.owner_session_id.is_some()
-            || task.status != GoalTaskStatus::Open
-            || !goal_task_is_controller_assigned(task)
-    }) || snapshot.events.iter().any(|event| {
-        matches!(
-            event.event_type,
-            GoalEventType::Plan
-                | GoalEventType::Claim
-                | GoalEventType::Progress
-                | GoalEventType::Result
-                | GoalEventType::Conflict
-        )
-    })
-}
-
-fn goal_activity_counts(snapshot: &GoalStatusSnapshot) -> GoalActivityCounts {
-    GoalActivityCounts {
-        task_count: snapshot
-            .tasks
-            .iter()
-            .filter(|task| {
-                task.owner_session_id.is_some()
-                    || task.status != GoalTaskStatus::Open
-                    || !goal_task_is_controller_assigned(task)
-            })
-            .count(),
-        completed_task_count: snapshot
-            .tasks
-            .iter()
-            .filter(|task| task.status == GoalTaskStatus::Completed)
-            .count(),
-        worker_event_count: snapshot
-            .events
-            .iter()
-            .filter(|event| {
-                matches!(
-                    event.event_type,
-                    GoalEventType::Plan
-                        | GoalEventType::Claim
-                        | GoalEventType::Progress
-                        | GoalEventType::Result
-                        | GoalEventType::Conflict
-                )
-            })
-            .count(),
-        result_event_count: snapshot
-            .events
-            .iter()
-            .filter(|event| event.event_type == GoalEventType::Result)
-            .count(),
-    }
-}
-
-fn goal_activity_increased(before: GoalActivityCounts, after: GoalActivityCounts) -> bool {
-    after.task_count > before.task_count
-        || after.completed_task_count > before.completed_task_count
-        || after.worker_event_count > before.worker_event_count
-        || after.result_event_count > before.result_event_count
-}
-
-fn goal_worker_slot_session_ids(slots: &[GoalWorkerSlot]) -> Vec<SessionId> {
-    slots.iter().map(|slot| slot.session_id().clone()).collect()
-}
-
-fn goal_worker_slots_all_capped(slots: &[GoalWorkerSlot]) -> bool {
-    !slots.is_empty() && slots.iter().all(|slot| slot.capped)
-}
-
-fn goal_worker_max_wave(slots: &[GoalWorkerSlot]) -> u32 {
-    slots.iter().map(|slot| slot.wave).max().unwrap_or(1)
-}
-
-pub(crate) fn goal_ready_worker_slot_indices(
-    snapshot: &GoalStatusSnapshot,
-    slots: &[GoalWorkerSlot],
-) -> Vec<usize> {
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(index, slot)| {
-            if slot.capped || !goal_worker_has_terminal_signal(snapshot, &slot.baseline) {
-                None
-            } else {
-                Some(index)
-            }
-        })
-        .collect()
-}
-
-pub(crate) fn goal_ready_idle_worker_slot_indices(
-    snapshot: &GoalStatusSnapshot,
-    slots: &[GoalWorkerSlot],
-    live_session_ids: &[SessionId],
-) -> Vec<usize> {
-    goal_ready_worker_slot_indices(snapshot, slots)
-        .into_iter()
-        .filter(|index| {
-            slots.get(*index).is_some_and(|slot| {
-                !live_session_ids
-                    .iter()
-                    .any(|live| live == slot.session_id())
-            })
-        })
-        .collect()
-}
-
-fn goal_any_worker_slot_has_progress_signal(
-    snapshot: &GoalStatusSnapshot,
-    slots: &[GoalWorkerSlot],
-) -> bool {
-    slots
-        .iter()
-        .filter(|slot| !slot.capped)
-        .any(|slot| goal_worker_has_progress_signal(snapshot, &slot.baseline))
 }
 
 async fn goal_worker_sessions_have_output(
@@ -1572,114 +1248,6 @@ async fn send_goal_worker_protocol_reminders(
     Ok(sent)
 }
 
-pub(crate) fn goal_worker_has_terminal_signal(
-    snapshot: &GoalStatusSnapshot,
-    baseline: &GoalWorkerWaveBaseline,
-) -> bool {
-    let current = goal_worker_terminal_counts(snapshot, &baseline.session_id);
-    current.terminal_task_count > baseline.terminal_counts.terminal_task_count
-        || current.result_event_count > baseline.terminal_counts.result_event_count
-}
-
-pub(crate) fn goal_worker_has_progress_signal(
-    snapshot: &GoalStatusSnapshot,
-    baseline: &GoalWorkerWaveBaseline,
-) -> bool {
-    if goal_worker_has_terminal_signal(snapshot, baseline) {
-        return true;
-    }
-    let current = goal_worker_progress_counts(snapshot, &baseline.session_id);
-    current.task_count > baseline.progress_counts.task_count
-        || current.worker_event_count > baseline.progress_counts.worker_event_count
-}
-
-pub(crate) fn goal_worker_terminal_counts(
-    snapshot: &GoalStatusSnapshot,
-    session_id: &SessionId,
-) -> GoalWorkerTerminalCounts {
-    let terminal_task_count = snapshot
-        .tasks
-        .iter()
-        .filter(|task| {
-            task.owner_session_id.as_ref() == Some(session_id)
-                && goal_task_status_is_terminal(task.status)
-        })
-        .count();
-    let result_event_count = snapshot
-        .events
-        .iter()
-        .filter(|event| goal_result_event_belongs_to_worker(snapshot, event, session_id))
-        .count();
-    GoalWorkerTerminalCounts {
-        terminal_task_count,
-        result_event_count,
-    }
-}
-
-fn goal_worker_progress_counts(
-    snapshot: &GoalStatusSnapshot,
-    session_id: &SessionId,
-) -> GoalWorkerProgressCounts {
-    let task_count = snapshot
-        .tasks
-        .iter()
-        .filter(|task| task.owner_session_id.as_ref() == Some(session_id))
-        .count();
-    let worker_event_count = snapshot
-        .events
-        .iter()
-        .filter(|event| {
-            event.author_session_id.as_ref() == Some(session_id)
-                && matches!(
-                    event.event_type,
-                    GoalEventType::Plan
-                        | GoalEventType::Claim
-                        | GoalEventType::Progress
-                        | GoalEventType::Result
-                        | GoalEventType::Conflict
-                )
-        })
-        .count();
-    GoalWorkerProgressCounts {
-        task_count,
-        worker_event_count,
-    }
-}
-
-fn goal_task_status_is_terminal(status: GoalTaskStatus) -> bool {
-    matches!(
-        status,
-        GoalTaskStatus::Completed | GoalTaskStatus::Blocked | GoalTaskStatus::Cancelled
-    )
-}
-
-fn goal_result_event_belongs_to_worker(
-    snapshot: &GoalStatusSnapshot,
-    event: &GoalEventBrief,
-    session_id: &SessionId,
-) -> bool {
-    if event.event_type != GoalEventType::Result {
-        return false;
-    }
-    if event.author_session_id.as_ref() == Some(session_id) {
-        return true;
-    }
-    let Some(task_id) = event.task_id.as_ref() else {
-        return false;
-    };
-    snapshot
-        .tasks
-        .iter()
-        .any(|task| task.id == *task_id && task.owner_session_id.as_ref() == Some(session_id))
-}
-
-pub(crate) fn goal_drain_cap_seconds(budget_seconds: u32) -> u64 {
-    let quarter_budget = u64::from(budget_seconds).saturating_div(4);
-    quarter_budget
-        .max(GOAL_CONTROLLER_MIN_DRAIN_SECONDS)
-        .min(GOAL_CONTROLLER_MAX_DRAIN_SECONDS)
-}
-
 async fn goal_stop_requested(galley: &SqliteGalley, goal: &GoalBrief) -> Result<bool, GalleyError> {
     Ok(galley
         .goal_status(goal.id.clone())
@@ -1707,37 +1275,6 @@ async fn shutdown_goal_worker_runners(
         .await?;
     }
     Ok(())
-}
-
-pub(crate) fn goal_worker_session_ids(
-    snapshot: &GoalStatusSnapshot,
-    worker_session_ids: &[SessionId],
-) -> Vec<SessionId> {
-    let mut out = Vec::new();
-    let event_worker_ids = snapshot
-        .events
-        .iter()
-        .filter_map(|event| event.author_session_id.clone())
-        .filter(|session_id| Some(session_id) != snapshot.goal.master_session_id.as_ref())
-        .collect::<Vec<_>>();
-    let source: Vec<SessionId> = if !worker_session_ids.is_empty() {
-        worker_session_ids.to_vec()
-    } else if !event_worker_ids.is_empty() {
-        event_worker_ids
-    } else {
-        snapshot
-            .sessions
-            .iter()
-            .filter(|session| Some(&session.id) != snapshot.goal.master_session_id.as_ref())
-            .map(|session| session.id.clone())
-            .collect()
-    };
-    for session_id in source {
-        if !out.iter().any(|existing| existing == &session_id) {
-            out.push(session_id);
-        }
-    }
-    out
 }
 
 async fn wait_master_final_answer(

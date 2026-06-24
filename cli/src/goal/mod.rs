@@ -1,5 +1,8 @@
 mod controller;
+mod decision;
 mod prompts;
+mod signals;
+mod task_seed;
 mod types;
 
 #[cfg(test)]
