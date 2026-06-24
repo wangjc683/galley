@@ -30,7 +30,10 @@ import {
   type ConversationFontSize,
 } from "@/lib/conversation-font-size";
 import { useCopy } from "@/lib/i18n";
-import { cleanPartialContent, extractPreamble } from "@/lib/ipc-handlers";
+import {
+  cleanPartialContent,
+  extractPreamble,
+} from "@/lib/ipc/ga-output-cleaning";
 import { cn } from "@/lib/utils";
 import { useMessagesStore } from "@/stores/messages";
 import type {

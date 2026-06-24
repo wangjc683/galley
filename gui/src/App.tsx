@@ -41,7 +41,7 @@ import {
   aggregateChannelsState,
   restartEnabledImSupervisors,
 } from "@/lib/im-supervisor";
-import { ensureHistoryReplayComplete } from "@/lib/ipc-handlers";
+import { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
 import { resolveLanguagePreference } from "@/lib/language";
 import { logPerf, perfNow } from "@/lib/perf";
 import {

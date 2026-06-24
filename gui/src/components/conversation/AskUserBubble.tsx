@@ -2,7 +2,7 @@ import { ChatCircleDots, PauseCircle } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { stripGATags } from "@/lib/ipc-handlers";
+import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { PendingAskUser } from "@/types/conversation";
