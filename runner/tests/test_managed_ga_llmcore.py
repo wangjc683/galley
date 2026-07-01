@@ -121,7 +121,7 @@ def test_codex_stream_final_429_appends_quota_reset_hint(
         headers: dict[str, str] = {}
         text = "quota exhausted"
 
-        def __enter__(self) -> "FakePostResponse":
+        def __enter__(self) -> FakePostResponse:
             return self
 
         def __exit__(self, *_args: object) -> None:
@@ -141,8 +141,18 @@ def test_codex_stream_final_429_appends_quota_reset_hint(
                 }
             }
 
-    monkeypatch.setattr(llmcore.requests, "post", lambda *_args, **_kwargs: FakePostResponse(), raising=False)
-    monkeypatch.setattr(llmcore.requests, "get", lambda *_args, **_kwargs: FakeGetResponse(), raising=False)
+    monkeypatch.setattr(
+        llmcore.requests,
+        "post",
+        lambda *_args, **_kwargs: FakePostResponse(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        llmcore.requests,
+        "get",
+        lambda *_args, **_kwargs: FakeGetResponse(),
+        raising=False,
+    )
     monkeypatch.setattr(llmcore.time, "time", lambda: 1_700_000_000)
     sess = types.SimpleNamespace(
         max_retries=0,
@@ -154,7 +164,15 @@ def test_codex_stream_final_429_appends_quota_reset_hint(
         codex_backend=True,
     )
 
-    chunks = list(llmcore._stream_with_retry(sess, "https://example.test", {}, {}, lambda _r: iter(())))
+    chunks = list(
+        llmcore._stream_with_retry(
+            sess,
+            "https://example.test",
+            {},
+            {},
+            lambda _r: iter(()),
+        )
+    )
 
     assert chunks
     assert "quota exhausted" in chunks[0]
@@ -169,13 +187,18 @@ def test_non_codex_stream_final_429_is_unchanged(
         headers: dict[str, str] = {}
         text = "plain rate limit"
 
-        def __enter__(self) -> "FakePostResponse":
+        def __enter__(self) -> FakePostResponse:
             return self
 
         def __exit__(self, *_args: object) -> None:
             return None
 
-    monkeypatch.setattr(llmcore.requests, "post", lambda *_args, **_kwargs: FakePostResponse(), raising=False)
+    monkeypatch.setattr(
+        llmcore.requests,
+        "post",
+        lambda *_args, **_kwargs: FakePostResponse(),
+        raising=False,
+    )
     monkeypatch.setattr(
         llmcore.requests,
         "get",
@@ -192,7 +215,15 @@ def test_non_codex_stream_final_429_is_unchanged(
         codex_backend=False,
     )
 
-    chunks = list(llmcore._stream_with_retry(sess, "https://example.test", {}, {}, lambda _r: iter(())))
+    chunks = list(
+        llmcore._stream_with_retry(
+            sess,
+            "https://example.test",
+            {},
+            {},
+            lambda _r: iter(()),
+        )
+    )
 
     assert chunks == ["!!!Error: HTTP 429: plain rate limit"]
 
