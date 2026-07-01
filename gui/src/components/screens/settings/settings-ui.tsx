@@ -25,7 +25,7 @@ export function SettingsPanelHeader({
         {title}
       </h2>
       {subtitle && (
-        <p className="mt-1 text-[12.5px] text-ink-muted">{subtitle}</p>
+        <p className="mt-1 text-ui-secondary text-ink-muted">{subtitle}</p>
       )}
     </div>
   );
@@ -33,7 +33,7 @@ export function SettingsPanelHeader({
 
 export function SettingsSectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+    <div className="text-ui-label font-semibold uppercase tracking-[0.08em] text-ink-muted">
       {children}
     </div>
   );

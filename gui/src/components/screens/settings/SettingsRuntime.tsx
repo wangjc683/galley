@@ -162,7 +162,7 @@ export function SettingsRuntime({
         <SettingsUpdateControl
           hasRunningSessions={hasRunningSessions}
           leading={
-            <div className="font-mono text-[11px] text-ink-muted">
+            <div className="font-mono text-ui-label text-ink-muted">
               Galley v{info.workbenchVersion}
             </div>
           }
@@ -347,7 +347,7 @@ function ManagedRuntimeCard({
           }
         />
       </div>
-      <p className="mt-3 text-[11.5px] leading-[1.55] text-ink-muted">
+      <p className="mt-3 text-ui-tertiary leading-[1.55] text-ink-muted">
         {copy.diagnosticsNote}
       </p>
     </RuntimeAccordionRow>
@@ -363,9 +363,9 @@ function RuntimeDiagnosticRow({
 }) {
   return (
     <div className="flex min-w-0 items-baseline gap-3 py-1">
-      <div className="w-24 shrink-0 text-[11.5px] text-ink-muted">{label}</div>
+      <div className="w-24 shrink-0 text-ui-tertiary text-ink-muted">{label}</div>
       <div
-        className="min-w-0 select-text truncate font-mono text-[11.5px] text-ink-soft"
+        className="min-w-0 select-text truncate font-mono text-ui-tertiary text-ink-soft"
         title={value}
       >
         {value}

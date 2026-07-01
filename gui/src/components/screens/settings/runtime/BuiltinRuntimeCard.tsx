@@ -41,32 +41,32 @@ export function BuiltinRuntimeCard({
       <SettingsSectionLabel>{copy.runtimeMode}</SettingsSectionLabel>
       <div
         className={cn(
-          "mt-2 rounded-sm border border-line bg-surface px-3 py-3",
+          "mt-2 rounded-sm border border-line bg-surface px-3 py-2.5",
           highlighted && "runtime-mode-highlight",
         )}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <Package
-              size={18}
+              size={16}
               weight="thin"
               className="shrink-0 text-ink-soft"
             />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[13px] font-medium text-ink">
+                <span className="text-ui-compact font-medium text-ink">
                   {copy.bundledGA}
                 </span>
-                <span className="rounded-sm bg-brand-soft px-1.5 py-px text-[10.5px] font-medium text-brand-strong">
+                <span className="rounded-sm bg-brand-soft px-1.5 py-px text-ui-micro font-medium text-brand-strong">
                   {copy.recommended}
                 </span>
                 {active && (
-                  <span className="rounded-sm bg-hover px-1.5 py-px text-[10.5px] text-ink-muted">
+                  <span className="rounded-sm bg-hover px-1.5 py-px text-ui-micro text-ink-muted">
                     {copy.active}
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 text-[12px] text-ink-muted">{detail}</div>
+              <div className="mt-0.5 text-ui-meta text-ink-muted">{detail}</div>
             </div>
           </div>
           {needsModel ? (
@@ -93,7 +93,7 @@ export function BuiltinRuntimeCard({
           )}
         </div>
         {hasRunningSessions && !active && (
-          <div className="mt-2 text-[11.5px] text-ink-muted">
+          <div className="mt-2 text-ui-tertiary text-ink-muted">
             {copy.runningSessionsBlock}
           </div>
         )}

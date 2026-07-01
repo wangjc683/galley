@@ -35,7 +35,7 @@ export function RuntimeAccordionRow({
           "hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40",
         )}
       >
-        <span className="text-[12.5px] font-medium text-ink">{title}</span>
+        <span className="text-ui-secondary font-medium text-ink">{title}</span>
         {expanded ? (
           <CaretDown size={12} weight="bold" className="shrink-0 text-ink-soft" />
         ) : (
@@ -59,9 +59,9 @@ export function RuntimeActionRow({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
       <div className="min-w-[220px] flex-1">
-        <div className="text-[12.5px] font-medium text-ink">{title}</div>
+        <div className="text-ui-secondary font-medium text-ink">{title}</div>
         {subtitle && (
-          <div className="mt-0.5 text-[11.5px] leading-[1.5] text-ink-muted">
+          <div className="mt-0.5 text-ui-tertiary leading-[1.5] text-ink-muted">
             {subtitle}
           </div>
         )}
