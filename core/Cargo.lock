@@ -1464,7 +1464,7 @@ dependencies = [
 
 [[package]]
 name = "galley-cli"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "clap",
  "galley-core",
@@ -1477,7 +1477,7 @@ dependencies = [
 
 [[package]]
 name = "galley-core"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "anyhow",
  "async-trait",

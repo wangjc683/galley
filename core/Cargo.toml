@@ -10,7 +10,7 @@ members = [".", "../cli"]
 
 [package]
 name = "galley-core"
-version = "0.2.15"
+version = "0.2.16"
 description = "Galley Core — Rust authority layer (Tauri app + business logic)"
 authors = ["JC <wangjc683@github>"]
 edition = "2021"
