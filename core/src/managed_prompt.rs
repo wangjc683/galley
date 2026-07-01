@@ -49,7 +49,45 @@ Do not use `window.open(...)`. Use `window.location.href = ...` only to replace
 the current tab.
 
 Then use the returned tab id or `web_scan`. Do not infer or update connection
-status; Galley's setup check owns it."#;
+status; Galley's setup check owns it.
+
+## Past Galley Conversations
+
+When the user asks to find, recall, or search earlier conversations, history, or
+sessions in Galley, use the Galley CLI — do not browse the filesystem for them.
+
+Galley CLI is not on PATH. Resolve it from the discovery file, then call by
+absolute path. Read-only commands open the local DB directly; no daemon needed.
+
+Use broad history lookup by default so archived sessions and both runtime modes
+are included. Narrow the scope only when the user asks for the current runtime or
+active sessions.
+
+macOS / Linux:
+
+  DISCOVERY="${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path"
+  GALLEY="$(sed -n '1p' "$DISCOVERY")"
+  "$GALLEY" sessions list --runtime all --all
+  "$GALLEY" sessions search "<keywords>" --runtime all --all
+  "$GALLEY" session show <id> --tail=20
+
+Windows PowerShell:
+
+  $Discovery = "$env:APPDATA\galley\cli-path"
+  $GALLEY = Get-Content $Discovery | Select-Object -First 1
+  & $GALLEY sessions list --runtime all --all
+  & $GALLEY sessions search "<keywords>" --runtime all --all
+  & $GALLEY session show <id> --tail=20
+
+Coverage and limits — state these honestly:
+- You CAN retrieve any Galley session's conversation, whether it ran in the
+  desktop GUI or was created by a supervisor via the CLI.
+- You CANNOT retrieve direct IM chats (WeChat / Feishu). Galley is an
+  orchestrator, not a chat platform; IM conversations belong to the IM channel
+  and are not stored in Galley. Do not claim you can fetch them.
+- Do NOT look for past conversations under ../memory/L4_raw_sessions/. That
+  history layer is inactive in Galley's session mode and is always empty — use
+  the CLI above instead."#;
 
 pub(crate) fn im_supervisor_prompt(sop_path: &str, platform: &str) -> String {
     let platform_label = match platform {
