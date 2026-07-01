@@ -379,7 +379,7 @@ export const enCopy: AppCopy = {
     regionLabel: "Epigraph",
   },
   empty: {
-    globalPlaceholder: "What should Galley work on today?",
+    globalPlaceholder: "Want Galley to read and use your local files? Just paste a path.",
     projectPlaceholder: (projectName) =>
       `What should Galley do in ${projectName}?`,
   },

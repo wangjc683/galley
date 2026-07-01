@@ -363,7 +363,7 @@ export const zhCopy = {
     regionLabel: "题词",
   },
   empty: {
-    globalPlaceholder: "今天交代什么？",
+    globalPlaceholder: "想让 Galley 查看和调用本地文件？直接给路径就行",
     projectPlaceholder: (projectName: string) =>
       `在 ${projectName} 里交代什么？`,
   },

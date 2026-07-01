@@ -599,7 +599,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             // height auto-grows via the effect above, so manual resize
             // would just fight it. `overflow-y-auto` handles the rare
             // case where content exceeds the max-height cap.
-            className="block w-full resize-none overflow-y-auto border-0 bg-transparent p-0 [font-size:var(--conversation-composer-size)] leading-[1.55] text-ink outline-none placeholder:text-ink-muted"
+            className="block w-full resize-none overflow-y-auto border-0 bg-transparent p-0 [font-size:var(--conversation-composer-size)] leading-[1.55] text-ink outline-none placeholder:text-ink-muted/50"
           />
 
           {/* Hidden file input backing the 📎 button. Visually absent but
