@@ -98,6 +98,7 @@ export function ErrorCard({
         onOpenMyKey,
         onOpenGADocs,
         onViewProject,
+        onViewGoal,
         onRestartChannels,
         onRestartAppUpdate,
       }),

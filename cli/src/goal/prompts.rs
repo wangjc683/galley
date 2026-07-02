@@ -225,7 +225,16 @@ pub(crate) fn goal_workspace_file_listing(goal: &GoalBrief) -> Option<String> {
     let mut files: Vec<String> = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        let entries = std::fs::read_dir(&dir).ok()?;
+        // Only an unreadable root means "no workspace"; one unreadable
+        // subdirectory (permissions, deleted mid-walk) must not discard
+        // the files already found, or synthesis treats an existing file
+        // deliverable as absent.
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            if dir.as_path() == root {
+                return None;
+            }
+            continue;
+        };
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() {

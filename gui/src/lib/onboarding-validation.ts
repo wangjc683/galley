@@ -354,15 +354,34 @@ async function runBundledRuntimeProbe(
   labels: HealthCheckLabels,
   options: { python?: string; smokeTest: boolean },
 ): Promise<RuntimeProbeOutcome> {
-  const wantBundled = import.meta.env.PROD;
-  const python = await resolvePythonPath(options.python, wantBundled);
-  const result = await probeGARuntime(python, resolvedGaPath, {
-    smokeTest: options.smokeTest,
-  });
-  return {
-    result,
-    pythonDetail: labels.bundledPythonDetail(BUNDLED_PYTHON_VERSION),
-  };
+  // Unlike the external path (which catches per-candidate inside
+  // runSingleProbe), this is a single invoke with no fallback — a
+  // rejection here must become a failed row, or the health check
+  // never settles and Continue stays disabled.
+  try {
+    const wantBundled = import.meta.env.PROD;
+    const python = await resolvePythonPath(options.python, wantBundled);
+    const result = await probeGARuntime(python, resolvedGaPath, {
+      smokeTest: options.smokeTest,
+    });
+    return {
+      result,
+      pythonDetail: labels.bundledPythonDetail(BUNDLED_PYTHON_VERSION),
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      result: {
+        ok: false,
+        llms: [],
+        smokeTested: false,
+        errorStage: "spawn",
+        error: message,
+      },
+      pythonDetail: labels.bundledPythonDetail(BUNDLED_PYTHON_VERSION),
+      runtimeFailureDetail: message,
+    };
+  }
 }
 
 function applyRuntimeProbeResult(

@@ -188,12 +188,26 @@ export function Onboarding({
   useEffect(() => {
     if (step !== "health") return;
     const controller = new AbortController();
+    // Backstop: if the runner itself rejects (path resolution, invoke
+    // errors outside the per-probe catches), settle every unfinished
+    // row as failed — otherwise the list never settles and Continue
+    // stays disabled with no retry affordance.
     void runHealthChecks(path, setHealthChecks, controller.signal, {
       useExternalPython,
       python: configuredPython,
       smokeTest: true,
       onPythonProbed: (alias) => setProbedPython(alias),
       labels: copy.health,
+    }).catch((e) => {
+      if (controller.signal.aborted) return;
+      console.error("[onboarding] health check run failed:", e);
+      setHealthChecks((items) =>
+        items.map((item) =>
+          item.state === "pending" || item.state === "running"
+            ? { ...item, state: "failed" }
+            : item,
+        ),
+      );
     });
     return () => controller.abort();
   }, [
