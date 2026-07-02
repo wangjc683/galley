@@ -34,7 +34,7 @@ use std::time::Instant;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{
     migrate::{Migration as SqlxMigration, MigrationType},
-    ConnectOptions, Executor, Row,
+    ConnectOptions, Connection, Executor, Row,
 };
 
 use crate::app_paths::{self, DB_FILENAME};
@@ -557,12 +557,29 @@ async fn ensure_sqlx_migrations_table(
     Ok(())
 }
 
+/// One transaction per migration: the SQL and its `_sqlx_migrations`
+/// version row commit together. Without this, a crash between the table
+/// rebuild and the version insert leaves the rebuild applied but
+/// unrecorded — every subsequent launch re-runs it into
+/// "table already exists" and exits, permanently. The in-file
+/// `PRAGMA foreign_keys` statements in 021/023 become no-ops inside the
+/// transaction, which is what this preflight wants anyway: the
+/// connection already runs with FK enforcement disabled.
 async fn apply_preflight_migration(
     conn: &mut sqlx::SqliteConnection,
     spec: &MigrationSpec,
 ) -> Result<(), SafeMigrationError> {
     let start = Instant::now();
-    conn.execute(spec.sql)
+    let mut tx = conn
+        .begin()
+        .await
+        .map_err(|e| SafeMigrationError::Apply {
+            version: spec.version,
+            message: format!("begin transaction: {e}"),
+        })?;
+
+    (&mut *tx)
+        .execute(spec.sql)
         .await
         .map_err(|e| SafeMigrationError::Apply {
             version: spec.version,
@@ -581,11 +598,16 @@ async fn apply_preflight_migration(
     .bind(spec.description)
     .bind(checksum.as_slice())
     .bind(elapsed)
-    .execute(conn)
+    .execute(&mut *tx)
     .await
     .map_err(|e| SafeMigrationError::Apply {
         version: spec.version,
         message: format!("record migration: {e}"),
+    })?;
+
+    tx.commit().await.map_err(|e| SafeMigrationError::Apply {
+        version: spec.version,
+        message: format!("commit: {e}"),
     })?;
     Ok(())
 }
@@ -798,42 +820,14 @@ async fn import_message_attachments(conn: &mut sqlx::SqliteConnection) -> Result
     Ok(res.rows_affected())
 }
 
+/// Restores only goal child rows whose parent goal still exists in the
+/// active DB. Parent tables (`goals`, `goal_proposals`) are deliberately
+/// NOT imported: the 021/023 rebuilds copy parent rows into the `*_new`
+/// table before dropping the old one, so parents were never cascade
+/// victims — a goal present in the backup but missing from `main` was
+/// deleted by the user, and importing it would resurrect deleted data.
 async fn import_goal_rows(conn: &mut sqlx::SqliteConnection) -> Result<u64, sqlx::Error> {
     let mut total = 0;
-
-    total += sqlx::query(
-        "INSERT OR IGNORE INTO main.goal_proposals (
-           id, objective, project_id, budget_seconds, worker_limit, runtime_kind,
-           write_mode, status, internal_confirm_token, expires_at, created_at,
-           updated_at, master_session_id
-         )
-         SELECT
-           b.id, b.objective, b.project_id, b.budget_seconds, b.worker_limit, b.runtime_kind,
-           b.write_mode, b.status, b.internal_confirm_token, b.expires_at, b.created_at,
-           b.updated_at, b.master_session_id
-         FROM galley_recovery.goal_proposals b",
-    )
-    .execute(&mut *conn)
-    .await?
-    .rows_affected();
-
-    total += sqlx::query(
-        "INSERT OR IGNORE INTO main.goals (
-           id, proposal_id, project_id, objective, status, budget_seconds,
-           worker_limit, runtime_kind, write_mode, started_at, deadline_at,
-           ended_at, latest_summary, stop_requested, created_at, updated_at,
-           master_session_id, result_seen_at, workspace_path
-         )
-         SELECT
-           b.id, b.proposal_id, b.project_id, b.objective, b.status, b.budget_seconds,
-           b.worker_limit, b.runtime_kind, b.write_mode, b.started_at, b.deadline_at,
-           b.ended_at, b.latest_summary, b.stop_requested, b.created_at, b.updated_at,
-           b.master_session_id, b.result_seen_at, b.workspace_path
-         FROM galley_recovery.goals b",
-    )
-    .execute(&mut *conn)
-    .await?
-    .rows_affected();
 
     total += sqlx::query(
         "INSERT OR IGNORE INTO main.goal_tasks (
@@ -1528,6 +1522,221 @@ mod tests {
         let out = ensure_backup_before_migrate_in(&data, 7).unwrap();
         // version probe returns 0 → 0 < 7 → backup path
         assert!(matches!(out, BackupOutcome::Backed { from: 0, to: 7, .. }));
+    }
+
+    #[test]
+    fn preflight_migration_failure_leaves_no_partial_state() {
+        // A migration whose SQL fails after its first statement must
+        // roll back entirely: the pre-fix behavior committed the first
+        // statement in autocommit mode, so a retry hit "table already
+        // exists" on every subsequent launch.
+        let tmp = TempDir::new().unwrap();
+        let db_path = tmp.path().join(DB_FILENAME);
+        let bad = MigrationSpec {
+            version: 99,
+            description: "fails midway",
+            sql: "CREATE TABLE preflight_tx_probe (x INTEGER);
+                  INSERT INTO no_such_table VALUES (1);",
+        };
+        let good = MigrationSpec {
+            version: 99,
+            description: "succeeds on retry",
+            sql: "CREATE TABLE preflight_tx_probe (x INTEGER);",
+        };
+
+        tauri::async_runtime::block_on(async {
+            let mut conn = SqliteConnectOptions::new()
+                .filename(&db_path)
+                .create_if_missing(true)
+                .foreign_keys(false)
+                .connect()
+                .await
+                .expect("open db");
+            ensure_sqlx_migrations_table(&mut conn)
+                .await
+                .expect("create migration table");
+
+            let err = apply_preflight_migration(&mut conn, &bad)
+                .await
+                .expect_err("bad migration must fail");
+            assert!(matches!(err, SafeMigrationError::Apply { version: 99, .. }));
+
+            // Nothing from the failed migration may survive.
+            let table_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'preflight_tx_probe'",
+            )
+            .fetch_one(&mut conn)
+            .await
+            .expect("probe table existence");
+            assert_eq!(table_count, 0, "partial DDL must be rolled back");
+            let version_rows: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations WHERE version = 99")
+                    .fetch_one(&mut conn)
+                    .await
+                    .expect("probe version row");
+            assert_eq!(version_rows, 0, "no version row for a failed migration");
+
+            // Retry with corrected SQL succeeds — the launch-loop brick
+            // scenario is exactly this retry failing.
+            apply_preflight_migration(&mut conn, &good)
+                .await
+                .expect("retry must succeed");
+            let version_rows: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations WHERE version = 99")
+                    .fetch_one(&mut conn)
+                    .await
+                    .expect("probe version row after retry");
+            assert_eq!(version_rows, 1);
+        });
+    }
+
+    #[test]
+    fn cascaded_row_recovery_does_not_resurrect_deleted_goals() {
+        let tmp = TempDir::new().unwrap();
+        let data = make_parent_with_data_dir(&tmp);
+        let db = data.join(DB_FILENAME);
+        init_db_through_migration(&db, 23);
+
+        let backup_dir = data
+            .parent()
+            .unwrap()
+            .join("app.galley.backup.20260618T070809Z");
+        fs::create_dir(&backup_dir).unwrap();
+        let backup_db = backup_dir.join(DB_FILENAME);
+        init_db_through_migration(&backup_db, 19);
+
+        tauri::async_runtime::block_on(async {
+            // Active DB: session survives, but the user deleted the
+            // goal (and its proposal) after the upgrade.
+            let mut active = SqliteConnectOptions::new()
+                .filename(&db)
+                .create_if_missing(false)
+                .connect()
+                .await
+                .expect("open active db");
+            sqlx::query(
+                "INSERT INTO sessions (
+                   id, title, status, turn_count, pending_approval_count,
+                   error_count, pinned, last_activity_at, created_at, updated_at,
+                   ga_runtime_kind
+                 )
+                 VALUES (
+                   's1', 'Old', 'idle', 1, 0,
+                   0, 0, '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z',
+                   'managed'
+                 )",
+            )
+            .execute(&mut active)
+            .await
+            .expect("seed active session");
+
+            // Backup: same session plus the goal the user later
+            // deleted, with child rows — and one genuinely restorable
+            // message so recovery triggers at all.
+            let mut backup = SqliteConnectOptions::new()
+                .filename(&backup_db)
+                .create_if_missing(false)
+                .connect()
+                .await
+                .expect("open backup db");
+            sqlx::query(
+                "INSERT INTO projects (id, name, last_activity_at, created_at, updated_at)
+                 VALUES ('p1', 'Project', '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z')",
+            )
+            .execute(&mut backup)
+            .await
+            .expect("seed backup project");
+            sqlx::query(
+                "INSERT INTO sessions (
+                   id, title, status, turn_count, pending_approval_count,
+                   error_count, pinned, last_activity_at, created_at, updated_at,
+                   ga_runtime_kind
+                 )
+                 VALUES (
+                   's1', 'Old', 'idle', 1, 0,
+                   0, 0, '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z',
+                   'managed'
+                 )",
+            )
+            .execute(&mut backup)
+            .await
+            .expect("seed backup session");
+            sqlx::query(
+                "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, created_at)
+                 VALUES ('m1', 's1', 1, 0, 'user', 'hello', '2026-06-18T00:00:00Z')",
+            )
+            .execute(&mut backup)
+            .await
+            .expect("seed backup message");
+            sqlx::query(
+                "INSERT INTO goal_proposals (
+                   id, objective, project_id, budget_seconds, worker_limit, runtime_kind,
+                   write_mode, status, internal_confirm_token, expires_at, created_at,
+                   updated_at, master_session_id
+                 )
+                 VALUES (
+                   'gp1', 'Do work', 'p1', 60, 1, 'managed',
+                   'autonomous', 'started', 'tok', '2026-06-18T01:00:00Z',
+                   '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z', 's1'
+                 )",
+            )
+            .execute(&mut backup)
+            .await
+            .expect("seed backup proposal");
+            sqlx::query(
+                "INSERT INTO goals (
+                   id, proposal_id, project_id, objective, status, budget_seconds,
+                   worker_limit, runtime_kind, write_mode, started_at, deadline_at,
+                   created_at, updated_at, master_session_id
+                 )
+                 VALUES (
+                   'g1', 'gp1', 'p1', 'Do work', 'completed', 60,
+                   1, 'managed', 'autonomous', '2026-06-18T00:00:00Z', '2026-06-18T01:00:00Z',
+                   '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z', 's1'
+                 )",
+            )
+            .execute(&mut backup)
+            .await
+            .expect("seed backup goal");
+            sqlx::query(
+                "INSERT INTO goal_tasks (id, goal_id, title, status, created_at, updated_at)
+                 VALUES ('gt1', 'g1', 'Task', 'open', '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z')",
+            )
+            .execute(&mut backup)
+            .await
+            .expect("seed backup goal task");
+        });
+
+        let outcome = recover_cascaded_rows_from_backups_in(&data).unwrap();
+        match outcome {
+            CascadedRowRecoveryOutcome::Recovered {
+                messages,
+                goal_rows,
+                ..
+            } => {
+                assert_eq!(messages, 1, "restorable message should come back");
+                assert_eq!(goal_rows, 0, "no goal child has a surviving parent");
+            }
+            other => panic!("expected recovery, got {other:?}"),
+        }
+
+        tauri::async_runtime::block_on(async {
+            let mut conn = SqliteConnectOptions::new()
+                .filename(&db)
+                .create_if_missing(false)
+                .connect()
+                .await
+                .expect("open active db");
+            for table in ["goals", "goal_proposals", "goal_tasks"] {
+                let sql = format!("SELECT COUNT(*) FROM {table}");
+                let count: i64 = sqlx::query_scalar(&sql)
+                    .fetch_one(&mut conn)
+                    .await
+                    .unwrap_or_else(|e| panic!("count {table}: {e}"));
+                assert_eq!(count, 0, "{table}: user-deleted rows must stay deleted");
+            }
+        });
     }
 
     #[test]

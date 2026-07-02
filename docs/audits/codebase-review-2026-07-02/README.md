@@ -31,7 +31,7 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 ## 修复顺序（建议）
 
 1. **一行级 quick wins**：GUI-1、GUI-2、CLI-11 — ✅ 2026-07-02 已修
-2. **数据安全**：CORE-1（迁移事务）、CORE-2（恢复过滤）
+2. **数据安全**：CORE-1（迁移事务）、CORE-2（恢复过滤）— ✅ 2026-07-02 已修
 3. **Stop/审批整条链**：RUNNER-1 + GUI-3 + GUI-4（一起修才有意义）
 4. **Goal 子系统**：CLI-1（事件窗口是根因）→ CLI-2/3/4
 5. **进程生命周期三件套**：CORE-4、CORE-5、CORE-3
@@ -44,16 +44,23 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 
 ### High
 
-- `[ ]` **CORE-1** · `core/src/migration_backup.rs:560-591` — 预检迁移非原子，
+- `[x]` **CORE-1** · `core/src/migration_backup.rs:560-591` — 预检迁移非原子，
   崩溃后每次启动都失败（brick）。`apply_preflight_migration` 用非事务连接逐批
   执行 SQL，版本行最后才插入；在建表后、版本行前崩溃/断电 → 重启重跑 →
   "table already exists" → `exit(2)`，每次启动都如此，且无自动备份还原。
   修复：连接已是 `foreign_keys(false)`（:374），把「SQL 文件 + 版本行」包进显式
   `BEGIN/COMMIT`（文件内 `PRAGMA foreign_keys` 在事务里是 no-op）。
-- `[ ]` **CORE-2** · `core/src/migration_backup.rs:804-836` — 恢复逻辑无条件
+  **已修 2026-07-02**：每个迁移一个事务（`conn.begin()` → SQL + 版本行 →
+  commit）；副产品是 021 结尾 `PRAGMA foreign_keys = ON` 不再意外重启 FK。
+  新增测试 `preflight_migration_failure_leaves_no_partial_state`。
+- `[x]` **CORE-2** · `core/src/migration_backup.rs:804-836` — 恢复逻辑无条件
   复活已删除的 goals/goal_proposals。文档注释（:401-404）承诺只恢复父行仍存在的
   子行，但这两条 INSERT 无 JOIN 过滤。用户删掉的 Goal 会连同 tasks/events/
   deliverables 全部复活。修复：施加与子行相同的过滤，或不导入这两张表。
+  **已修 2026-07-02**：直接删除两条父表 INSERT——021/023 rebuild 是「先复制进
+  `*_new` 再 DROP」，父行从不是级联受害者（`goals.proposal_id` 是 SET NULL），
+  backup 有而 main 没有的 goal 只可能是用户删的。新增测试
+  `cascaded_row_recovery_does_not_resurrect_deleted_goals`。
 - `[ ]` **CORE-3** · `core/src/im_supervisor.rs:167-270` — start/stop/restart/
   autostart 无互斥。`start_inner` 从状态检查到 `set_slot` 跨多个 await；autostart
   （lib.rs:566）与手动 Connect 并发双 spawn，谁后写 slot 谁占坑——slot 可能挂着
