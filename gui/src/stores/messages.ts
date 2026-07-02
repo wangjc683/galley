@@ -284,6 +284,7 @@ interface MessagesActions {
     approvalId: string,
     decision: ApprovalDecision,
   ) => void;
+  revokeApprovalDecision: (sid: string, approvalId: string) => void;
 }
 
 export type MessagesStore = MessagesState & MessagesActions;
@@ -814,6 +815,20 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     ).catch((e) => {
       console.debug("[messages] persistToolEventApprovalDecision failed.", e);
     });
+  },
+
+  // Rollback for an optimistic recordApprovalDecision whose IPC send
+  // failed — the bridge never saw the decision, so the UI must not
+  // keep showing the decided pill. The DB audit row is left as-is; a
+  // successful re-decision overwrites it.
+  revokeApprovalDecision: (sid, approvalId) => {
+    const state = get();
+    const { byId, next } = patchMessages(state, sid, (m) => {
+      const { [approvalId]: _dropped, ...rest } = m.approvalDecisions;
+      return { ...m, approvalDecisions: rest };
+    });
+    set({ byId });
+    fireSessionMirror(sid, next);
   },
 }));
 

@@ -1260,6 +1260,8 @@ export const enCopy: AppCopy = {
     bridgeTitle: "Galley error",
     businessTitle: "Action could not be completed",
     sendFailed: "Send failed",
+    approvalSendFailed: "Approval didn't reach the agent — please decide again",
+    stopFailed: "Stop didn't reach the agent — please try again",
     bridgeCrashed: "Bridge process crashed",
     bridgeFailed: "Bridge failed to start",
     externalMyKeyImportFailed: (moduleName) =>

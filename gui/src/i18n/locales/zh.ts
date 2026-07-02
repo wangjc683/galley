@@ -1206,6 +1206,8 @@ export const zhCopy = {
     bridgeTitle: "Galley 错误",
     businessTitle: "操作未能完成",
     sendFailed: "发送失败",
+    approvalSendFailed: "审批未送达 Agent，请重新操作",
+    stopFailed: "停止指令未送达 Agent，请重试",
     bridgeCrashed: "Bridge 进程崩溃",
     bridgeFailed: "Bridge 启动失败",
     externalMyKeyImportFailed: (moduleName: string | null) =>

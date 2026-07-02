@@ -32,7 +32,7 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 
 1. **一行级 quick wins**：GUI-1、GUI-2、CLI-11 — ✅ 2026-07-02 已修
 2. **数据安全**：CORE-1（迁移事务）、CORE-2（恢复过滤）— ✅ 2026-07-02 已修
-3. **Stop/审批整条链**：RUNNER-1 + GUI-3 + GUI-4（一起修才有意义）
+3. **Stop/审批整条链**：RUNNER-1 + GUI-3 + GUI-4（一起修才有意义）— ✅ 2026-07-02 已修
 4. **Goal 子系统**：CLI-1（事件窗口是根因）→ CLI-2/3/4
 5. **进程生命周期三件套**：CORE-4、CORE-5、CORE-3
 6. **Windows 三条**：CORE-6、CORE-7、CORE-11（下个 Win 发布的 gate）
@@ -163,15 +163,23 @@ credential_store「密钥与密文同库」是模块头注释明示的 beta 取�
 
 ### Medium
 
-- `[ ]` **GUI-3** · `gui/src/App.tsx:390-410` — 审批响应 fire-and-forget：先改
+- `[x]` **GUI-3** · `gui/src/App.tsx:390-410` — 审批响应 fire-and-forget：先改
   UI 状态再不 await 不 catch 地发 `approval_response`；bridge 非 `connected` 时
   直接跳过发送。UI 显示「已允许」但 GA 未收到，run 永久挂起无反馈。
   修复：`.catch` 回滚 pending approval（或至少 toast），重新考虑 connected-only
   gate。与 GUI-4 共用一个 `sendOrToast` helper。
-- `[ ]` **GUI-4** · `gui/src/App.tsx:1297-1306` — Stop 按钮同款 fire-and-forget：
+  **已修 2026-07-02**：`approval_response`/`abort` 加入
+  `shouldFailWhenBridgeMissing`（bridge 缺失时 reject 而非静默返回）；
+  handleApprove 失败时回滚（`revokeApprovalDecision` + 重挂 pending card）+
+  toast；移除 connected-only gate（顺带减少 handler 身份变化，利好 GUI-7 的
+  memo）。新增 i18n key `errors.approvalSendFailed`。
+- `[x]` **GUI-4** · `gui/src/App.tsx:1297-1306` — Stop 按钮同款 fire-and-forget：
   abort 发送失败则 `isStopping` 永久 true，按钮不再响应而 run 继续跑。同款模式
   还有 `lib/ipc-handlers.ts:433-437`（pet 迁移后 attach）和 `:140`（yolo sync）。
   修复：发送 resolve 后再 setStopping；rejection 时清除并 toast。
+  **已修 2026-07-02**：乐观置 stopping（按钮即时反馈），rejection 时清除 +
+  toast（`errors.stopFailed`）；pet 迁移 attach 失败补发「宠物已关闭」toast
+  （即真实终态）；yolo sync 失败 log-only（失败方向安全：只会多弹审批）。
 - `[ ]` **GUI-5** · `gui/src/stores/messages.ts:603` + `hooks/useStickyScroll.ts:268-288`
   — `appendUserTurnExternal` 对后台 session 也 bump 全局 `userSubmitTick`，
   把当前会话的视口拽到它自己的最后一条用户消息并播放多余的 ack 动画。
@@ -288,10 +296,13 @@ en/zh i18n key 对齐。
 
 ### High
 
-- `[ ]` **RUNNER-1** · `runner/workbench_bridge.py:1345-1363, 1282` — Abort 不
+- `[x]` **RUNNER-1** · `runner/workbench_bridge.py:1345-1363, 1282` — Abort 不
   解决 pending approval：GA 线程阻塞在 `pending.event.wait(timeout=600)` 内，
   `agent.abort()` 无法打断。用户点 Stop → UI 显示空闲 → 新消息静默排队最长
   10 分钟。修复：Abort/Shutdown 时 `resolve_all("deny")` 全部 pending。
+  **已修 2026-07-02**：`SessionState.resolve_all_pending("deny")`，Abort 分支
+  在 `agent.abort()` 之后调用（stop_sig 先置位，deny 唤醒的线程立即走退出检查），
+  Shutdown 分支同样处理。新增 3 个测试（含真实线程阻塞-唤醒场景）。
 
 ### Medium
 

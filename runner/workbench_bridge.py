@@ -514,6 +514,20 @@ class SessionState:
         p.event.set()
         return True
 
+    def resolve_all_pending(self, decision: str) -> int:
+        """Resolve every pending approval at once. Abort/shutdown must
+        call this: the agent thread blocks inside _request_approval's
+        event.wait() *within* the dispatch generator, so agent.abort()
+        alone cannot reach it — without a decision the thread stays
+        wedged for up to APPROVAL_WAIT_SECS."""
+        with self._lock:
+            drained = list(self._pending.values())
+            self._pending.clear()
+        for p in drained:
+            p.decision = decision
+            p.event.set()
+        return len(drained)
+
 
 # ---------------- Bridge runtime ----------------
 
@@ -1346,7 +1360,11 @@ class Bridge:
             # GA's abort() sets stop_sig and breaks out of the run loop
             # without firing turn_end_callback, so we synthesize the
             # run_complete event ourselves with the ABORTED marker.
+            # abort() first so stop_sig is already set when a denied
+            # approval wakes the agent thread — it then exits at the
+            # next stop check instead of continuing the turn.
             self.agent.abort()
+            self.state.resolve_all_pending("deny")
             if self.run_in_progress.is_set():
                 self._emit(
                     RunCompleteEvent(
@@ -1399,6 +1417,9 @@ class Bridge:
         elif isinstance(cmd, DetachPetCommand):
             self._handle_detach_pet()
         elif isinstance(cmd, ShutdownCommand):
+            # A pending approval would keep the agent thread blocked
+            # through process teardown; deny it so the thread can exit.
+            self.state.resolve_all_pending("deny")
             # Make sure pet subprocess + hook don't leak on shutdown.
             self._handle_detach_pet(silent=True)
             self.shutdown_event.set()

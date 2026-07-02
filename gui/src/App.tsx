@@ -385,27 +385,50 @@ function App() {
   // Stable approve handler — passed down to MainView → ToolCallout
   // (React.memo'd). Keeping it referentially stable lets settled
   // ToolCallouts skip re-render during the low-frequency App renders
-  // that still happen (bridgeStatus / pendingAskUser changes). The
-  // deps are the only values the body reads.
+  // that still happen (pendingAskUser changes etc.). The deps are the
+  // only values the body reads.
   const handleApprove = useCallback(
     (approvalId: string, decision: ApprovalDecision) => {
       if (!activeSessionId) return;
-      recordApprovalDecision(activeSessionId, approvalId, decision);
-      removePendingApproval(activeSessionId, approvalId);
-      if (bridgeStatus === "connected") {
-        sendIPCCommand(activeSessionId, {
-          kind: "approval_response",
-          approvalId,
-          decision,
-        });
-      }
+      const sid = activeSessionId;
+      // Snapshot before the optimistic removal so a failed send can
+      // put the card back.
+      const pending = useMessagesStore
+        .getState()
+        .byId[sid]?.pendingApprovals.find((p) => p.approvalId === approvalId);
+      recordApprovalDecision(sid, approvalId, decision);
+      removePendingApproval(sid, approvalId);
+      sendIPCCommand(sid, {
+        kind: "approval_response",
+        approvalId,
+        decision,
+      }).catch((e) => {
+        // The bridge never received the decision: the run is still
+        // blocked on this approval. Roll the optimistic UI back so the
+        // card doesn't show a decided pill for a decision GA never saw.
+        const m = useMessagesStore.getState();
+        m.revokeApprovalDecision(sid, approvalId);
+        if (pending) m.addPendingApproval(sid, pending);
+        useUiStore.getState().pushToast(
+          makeAppError({
+            category: "bridge",
+            severity: "error",
+            title: copy.errors.approvalSendFailed,
+            message: e instanceof Error ? e.message : String(e),
+            hint: null,
+            retryable: true,
+            context: "approval_response",
+            traceback: null,
+          }),
+        );
+      });
     },
     [
       activeSessionId,
       recordApprovalDecision,
       removePendingApproval,
-      bridgeStatus,
       sendIPCCommand,
+      copy,
     ],
   );
 
@@ -1297,12 +1320,26 @@ function App() {
                   onStop={() => {
                     console.info("[main] stop");
                     if (!activeSessionId) return;
-                    if (bridgeStatus === "connected") {
-                      sendIPCCommand(activeSessionId, { kind: "abort" });
-                      useMessagesStore
-                        .getState()
-                        .setStopping(activeSessionId, true);
-                    }
+                    const sid = activeSessionId;
+                    // Optimistic: lock the button immediately; unlock
+                    // if the abort never reached the bridge, otherwise
+                    // the run keeps going with Stop dead.
+                    useMessagesStore.getState().setStopping(sid, true);
+                    sendIPCCommand(sid, { kind: "abort" }).catch((e) => {
+                      useMessagesStore.getState().setStopping(sid, false);
+                      pushToast(
+                        makeAppError({
+                          category: "bridge",
+                          severity: "error",
+                          title: copy.errors.stopFailed,
+                          message: e instanceof Error ? e.message : String(e),
+                          hint: null,
+                          retryable: true,
+                          context: "abort",
+                          traceback: null,
+                        }),
+                      );
+                    });
                   }}
                   isRunning={isRunning}
                   isStopping={isStopping}

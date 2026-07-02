@@ -344,7 +344,16 @@ function actionableBridgeCrashMessage(message: string): string {
 }
 
 function shouldFailWhenBridgeMissing(cmd: IPCCommand): boolean {
-  return cmd.kind === "user_message" || cmd.kind === "ask_user_response";
+  // approval_response and abort are direct user actions on a live run:
+  // silently dropping them leaves the UI showing a state (decided /
+  // stopping) the bridge never heard about. They must reject so the
+  // caller can roll back and tell the user.
+  return (
+    cmd.kind === "user_message" ||
+    cmd.kind === "ask_user_response" ||
+    cmd.kind === "approval_response" ||
+    cmd.kind === "abort"
+  );
 }
 
 async function _enforceLRUCap(): Promise<void> {

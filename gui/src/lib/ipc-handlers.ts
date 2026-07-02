@@ -137,10 +137,17 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // it's queued in the bridge's command pipeline and processed
       // before any subsequent user message can trigger a tool call.
       if (usePrefsStore.getState().yoloMode) {
-        void useRuntimeStore.getState().sendIPCCommand(event.sessionId, {
-          kind: "set_yolo_mode",
-          enabled: true,
-        });
+        // Failure direction is safe (bridge stays yolo=false → more
+        // approval prompts, never fewer), so log-only is enough.
+        useRuntimeStore
+          .getState()
+          .sendIPCCommand(event.sessionId, {
+            kind: "set_yolo_mode",
+            enabled: true,
+          })
+          .catch((e) => {
+            console.warn("[ipc] yolo mode sync failed on ready", e);
+          });
       }
       // Session Restore (Stage 3 Task 3). If this session has prior
       // turn history on disk, replay it into GA `backend.history` via
@@ -430,10 +437,30 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       const pendingTarget = useUiStore.getState().pendingPetMigrationTo;
       if (pendingTarget) {
         useUiStore.getState().setPendingPetMigration(null);
-        void useRuntimeStore.getState().sendIPCCommand(pendingTarget, {
-          kind: "attach_pet",
-          port: 41983,
-        });
+        useRuntimeStore
+          .getState()
+          .sendIPCCommand(pendingTarget, {
+            kind: "attach_pet",
+            port: 41983,
+          })
+          .catch((e) => {
+            // Migration ended half-way: detach succeeded, attach never
+            // reached the target bridge. The truthful end state is
+            // "pet closed" — surface the toast this branch skipped.
+            console.warn("[ipc] pet migration attach failed", e);
+            useUiStore.getState().pushToast(
+              makeAppError({
+                category: "business",
+                severity: "info",
+                title: copy.toasts.petClosed,
+                message: "",
+                hint: null,
+                retryable: false,
+                context: "attach_pet",
+                traceback: null,
+              }),
+            );
+          });
         return;
       }
       useUiStore.getState().pushToast(
