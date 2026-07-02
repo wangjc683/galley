@@ -114,6 +114,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-29 | [GA upstream upgrade 70792af -> b1e173dc](./2026-06-29-ga-upstream-upgrade-70792af-to-b1e173dc.md) | 官方 GA `main` 前进 11 个提交；external bridge contract 未断，`pyproject.toml` 无依赖变更；managed payload 纳入 `--func` / `--history`、UltraPlan、HTTP app asset、summary fallback 修复和 worldline 移除，并刷新 state-root、Codex backend、图片附件 patch contexts。 |
 | 2026-06-29 | [Composer saved prompts](./2026-06-29-composer-saved-prompts.md) | Composer 右侧工具区新增 saved prompts 入口，点击打开提示词库 dialog（dialog-only）：上方可折叠预设模板库 + 下方可排序自定义；LLM picker 回到左侧模型名 + caret，明确不是 Empty State quick prompt 回归，也不改 Agent API / CLI。 |
 | 2026-06-29 | [Pointer-first button focus](./2026-06-29-pointer-first-button-focus.md) | 清理 button-like 控件点击后残留的浏览器蓝色 focus outline；共享 Button/IconButton 鼠标点击不落焦点，hover-only actions 不再用 focus/focus-within 显形，输入框和 inline edit 保留焦点反馈。 |
+| 2026-07-02 | [全 codebase review + 前三档可靠性修复](./2026-07-02-codebase-review-and-reliability-fixes.md) | 4 个并行 agent 深读四大模块产出 56 条带 ID findings（8 high），追踪清单在 `docs/audits/codebase-review-2026-07-02/`；按档修完前三档：quick wins、数据安全（迁移事务化 + 恢复不复活已删 Goal）、Stop/审批链路端到端可靠（runner deny-all pending + GUI 乐观回滚）；约定每修一个 high 补对应失败路径测试；下一档是 Goal 子系统（CLI-1 事件窗口根因）。 |
 
 ## 格式约定
 
