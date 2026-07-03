@@ -144,6 +144,9 @@ austere 不等于 cryptic。以下场景**保留必要的解释句**：
 
 ## 与既有文档的关系
 
+- 气质定位（文库不是作者、四个承重面、拒绝清单）：见
+  [气质总纲](./temperament.md)。本准则是其「语言」承重面的执行规范。
+- 排印（怎么排）：见 [typography-principles](./typography-principles.md)。
 - 术语、Agent/AI、中文版英文词、语言偏好：见
   [copy-language-guidelines](./copy-language-guidelines.md)。
 - 英文逐区域草稿：见 [english-copy-draft](./english-copy-draft.md)。本准则

@@ -115,6 +115,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 | 2026-06-29 | [Composer saved prompts](./2026-06-29-composer-saved-prompts.md) | Composer 右侧工具区新增 saved prompts 入口，点击打开提示词库 dialog（dialog-only）：上方可折叠预设模板库 + 下方可排序自定义；LLM picker 回到左侧模型名 + caret，明确不是 Empty State quick prompt 回归，也不改 Agent API / CLI。 |
 | 2026-06-29 | [Pointer-first button focus](./2026-06-29-pointer-first-button-focus.md) | 清理 button-like 控件点击后残留的浏览器蓝色 focus outline；共享 Button/IconButton 鼠标点击不落焦点，hover-only actions 不再用 focus/focus-within 显形，输入框和 inline edit 保留焦点反馈。 |
 | 2026-07-02 | [全 codebase review + 前三档可靠性修复](./2026-07-02-codebase-review-and-reliability-fixes.md) | 4 个并行 agent 深读四大模块产出 56 条带 ID findings（8 high），追踪清单在 `docs/audits/codebase-review-2026-07-02/`；按档修完前三档：quick wins、数据安全（迁移事务化 + 恢复不复活已删 Goal）、Stop/审批链路端到端可靠（runner deny-all pending + GUI 乐观回滚）；约定每修一个 high 补对应失败路径测试；下一档是 Goal 子系统（CLI-1 事件窗口根因）。 |
+| 2026-07-03 | [气质总纲（文库定位）+ 中文微排印 pass](./2026-07-03-temperament-charter-and-cjk-typography.md) | 承接 2026-06-03 哲学气质第二步：诊断「气质不够」的根因是哲学只住在语言层，感官层还是工具默认方言。认领 galley = 校样盘双关，定位「文库不是作者」；新增 `docs/temperament.md`（定位 + 元规则「清晰不深刻」+ 四承重面 + 气质级拒绝清单）与 `docs/typography-principles.md`（三规范第三条腿，红线 = 排印只作用渲染不改写内容）；代码落 `text-autospace: normal`（对齐 Mac/Win 中西文间距，code 豁免）+ prose `hanging-punctuation: allow-end`。Rejected：继续加题词条件（引文边际收益已为负）、justify、pangu.js。Deferred：版权页 colophon + 题词稀缺性评估。 |
 
 ## 格式约定
 

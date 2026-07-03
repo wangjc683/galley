@@ -144,6 +144,10 @@ const PROSE_BASE = cn(
   // Reset child margins so the parent callout (caller's box) can
   // own outer spacing without collapse fighting.
   "[&>:first-child]:mt-0 [&>:last-child]:mb-0",
+  // Full-width stops (。、，) may hang into the right margin at line
+  // end — classic CJK typesetting. WebKit-only; others ignore it.
+  // Prose only, never UI chrome (docs/typography-principles.md).
+  "[hanging-punctuation:allow-end]",
   // Paragraphs.
   "[&_p]:my-3 [&_p]:[line-height:var(--conversation-body-leading)] [&_p:last-child]:mb-0",
   // Headings (document prose face, slight weight contrast against body).

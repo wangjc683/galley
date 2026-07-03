@@ -35,7 +35,9 @@ matches who you are and what you are trying to do.
 | Touch managed / bundled GA runtime | [managed GA runtime](./managed-ga-runtime.md) |
 | Touch GUI or engineering workflow | [engineering workflow](./engineering-workflow.md) |
 | Touch visual design | [DESIGN.md](./DESIGN.md) |
+| Understand or change Galley's temperament / brand character | [temperament charter](./temperament.md) |
 | Touch UI copy, terminology, or localization | [copy and language guidelines](./copy-language-guidelines.md), [copy austerity principles](./copy-austerity-principles.md) |
+| Touch conversation text rendering / CJK typography | [typography principles](./typography-principles.md) |
 | Review product / UX audit findings | [audits](./audits/README.md) |
 | Understand history or decisions | [devlog](./devlog/README.md) |
 
@@ -59,6 +61,12 @@ matches who you are and what you are trying to do.
 - [copy austerity principles](./copy-austerity-principles.md): the voice rules
   for UI copy — a restrained, Wittgenstein-influenced austerity (how to say it,
   paired with the terminology rules above).
+- [temperament charter](./temperament.md): the "why" above the three execution
+  specs — Galley as imprint-not-author positioning, the four load-bearing
+  surfaces, and the temperament-level refusals list.
+- [typography principles](./typography-principles.md): rendering-layer rules
+  for the reading surface — CJK/Latin auto-spacing, hanging punctuation,
+  measure — and the render-only red line (never rewrite content).
 - [English copy draft](./english-copy-draft.md): review draft for native
   English UI copy before implementation.
 - [audits](./audits/README.md): evidence-backed product, UX, accessibility, and

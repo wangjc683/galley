@@ -348,6 +348,20 @@ body {
   user-select: none;
   overflow: hidden;
   text-rendering: optimizeLegibility;
+  /* CJK↔Latin auto-spacing must be explicit: Chromium 140+ defaults to
+     `normal` but WKWebView (Safari 18.4+) defaults to `no-autospace`,
+     so without this Mac renders tighter than Windows. Older engines
+     ignore it. See docs/typography-principles.md. */
+  text-autospace: normal;
+}
+
+/* Code is verbatim — no inter-script spacing beautification inside
+   comments / strings (docs/typography-principles.md red line). */
+pre,
+code,
+kbd,
+samp {
+  text-autospace: no-autospace;
 }
 
 @keyframes theme-fade {
