@@ -20,7 +20,8 @@
       "0009-managed-feishu-config-env.patch",
       "0010-managed-keychain-state-path.patch",
       "0011-managed-feishu-owner-binding.patch",
-      "0012-managed-feishu-file-marker-echo.patch"
+      "0012-managed-feishu-file-marker-echo.patch",
+      "0013-managed-feishu-report-turn-guard.patch"
     ]
   },
   "stateSchemaVersion": 1

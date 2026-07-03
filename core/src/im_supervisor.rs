@@ -241,11 +241,17 @@ impl ImSupervisorManager {
 
         let mut env = context.env;
         let sop_path_str = sop_path.to_string_lossy().into_owned();
+        // Stable per-channel supervisor identity. The prompt mandates it on
+        // every CLI write, and the completion reporter filters delegated
+        // sessions by this exact string — a model-invented freeform id
+        // would make that filter an empty set.
+        let supervisor_id = managed_prompt::im_supervisor_id(platform);
         env.push((
             "GALLEY_IM_SUPERVISOR_PROMPT_TEXT".into(),
-            managed_prompt::im_supervisor_prompt(&sop_path_str, platform),
+            managed_prompt::im_supervisor_prompt(&sop_path_str, platform, &supervisor_id),
         ));
         env.push(("GALLEY_SUPERVISOR_SOP_PATH".into(), sop_path_str));
+        env.push(("GALLEY_SUPERVISOR_ID".into(), supervisor_id));
         env.push(("GALLEY_IM_PLATFORM".into(), platform.into()));
         env.push((GALLEY_CORE_PID_ENV.into(), std::process::id().to_string()));
         let binding = append_platform_env(platform, &mut env).await?;

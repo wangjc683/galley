@@ -1,0 +1,16 @@
+diff --git a/frontends/fsapp.py b/frontends/fsapp.py
+index 084eeed0..83379020 100644
+--- a/frontends/fsapp.py
++++ b/frontends/fsapp.py
+@@ -917,0 +918,8 @@ class _TaskCard:
++# True while the Galley reporter (runner/im_reporter.py) is draining its own
++# synthetic report turn. The agent loop is serial but tasks can queue: a user
++# task registered during a report turn would see _fs_active_task_id already
++# pointing at itself and stream the report turn's steps into its card. GA
++# doesn't tag turns with a task identity, so the reporter marks its window.
++_GALLEY_REPORT_TURN_ACTIVE = False
++
++
+@@ -921,0 +930,2 @@ def _make_task_hook(card, task_id, on_final):
++            if _GALLEY_REPORT_TURN_ACTIVE:
++                return

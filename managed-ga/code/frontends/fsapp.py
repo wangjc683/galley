@@ -915,10 +915,20 @@ class _TaskCard:
             self._fallback_text(f"❌ {msg}", final=True)
 
 
+# True while the Galley reporter (runner/im_reporter.py) is draining its own
+# synthetic report turn. The agent loop is serial but tasks can queue: a user
+# task registered during a report turn would see _fs_active_task_id already
+# pointing at itself and stream the report turn's steps into its card. GA
+# doesn't tag turns with a task identity, so the reporter marks its window.
+_GALLEY_REPORT_TURN_ACTIVE = False
+
+
 def _make_task_hook(card, task_id, on_final):
     """飞书任务 hook：每轮 patch 卡片状态；结束触发 on_final(raw) 处理附件。"""
     def hook(ctx):
         try:
+            if _GALLEY_REPORT_TURN_ACTIVE:
+                return
             parent = getattr(ctx.get("self"), "parent", None)
             if getattr(parent, "_fs_active_task_id", None) != task_id:
                 return

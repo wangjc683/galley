@@ -1160,6 +1160,9 @@ Current implementation slice:
 - The managed IM channel launcher adds a short `GALLEY_IM_SUPERVISOR_PROMPT_TEXT`
   Galley IM Entry Layer for IM dispatch behavior. It does not inject the full
   Supervisor SOP on every turn.
+- Rust Core also passes `GALLEY_SUPERVISOR_ID` (`galley-im/<platform>`), the
+  stable identity the entry layer mandates on every CLI write and the
+  completion reporter (`runner/im_reporter.py`) filters delegated sessions by.
 - Rust Core materializes the bundled Supervisor SOP as a Galley-owned reference
   file for the IM agent to read when orchestration rules are needed.
 - `prompt_profile` defaults to `galley-runtime-v1` for managed sessions at the

@@ -137,6 +137,58 @@ def test_make_task_hook_adds_final_turn_panel_without_fabricated_thinking(
     assert "Final answer body" in detail
 
 
+def test_make_task_hook_ignores_turns_during_galley_report_window(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """While the reporter drains its synthetic turn, a user task registered
+    in the same window must not stream the report's steps into its card."""
+    cwd = os.getcwd()
+    try:
+        fsapp = _load_managed_fsapp(monkeypatch, tmp_path)
+    finally:
+        os.chdir(cwd)
+
+    class Card:
+        def __init__(self) -> None:
+            self.steps: list[tuple[str, str]] = []
+
+        def step(self, summary: str, detail: str) -> None:
+            self.steps.append((summary, detail))
+
+    class Parent:
+        _fs_active_task_id = "task-1"
+
+    class HookSelf:
+        parent = Parent()
+
+    class Response:
+        content = "report body"
+
+    finals: list[str] = []
+    card = Card()
+    hook = fsapp._make_task_hook(card, "task-1", finals.append)
+
+    ctx = {
+        "self": HookSelf(),
+        "exit_reason": "done",
+        "summary": "report turn",
+        "response": Response(),
+        "tool_calls": [],
+    }
+    fsapp._GALLEY_REPORT_TURN_ACTIVE = True
+    try:
+        hook(ctx)
+    finally:
+        fsapp._GALLEY_REPORT_TURN_ACTIVE = False
+    assert card.steps == []
+    assert finals == []
+
+    hook(ctx)
+    assert len(card.steps) == 1
+    assert finals == ["report body"]
+
+
 # ---------------- Owner binding (patch 0011) ----------------
 
 

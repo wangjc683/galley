@@ -439,6 +439,16 @@ def _run_feishu(args: argparse.Namespace, out: IO[str]) -> int:
         **extra,
     )
 
+    # Proactive completion reporter (Feishu only). Failure to start must
+    # never take the channel down — the reporter is an enhancement, the
+    # inbound message path is the product.
+    try:
+        from runner import im_reporter
+
+        im_reporter.start_feishu_reporter(fsapp, state_dir)
+    except Exception as e:
+        print(f"[galley-im-reporter] disabled: {e}")
+
     _emit(
         out,
         platform="feishu",

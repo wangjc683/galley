@@ -89,7 +89,14 @@ Coverage and limits — state these honestly:
   history layer is inactive in Galley's session mode and is always empty — use
   the CLI above instead."#;
 
-pub(crate) fn im_supervisor_prompt(sop_path: &str, platform: &str) -> String {
+/// Stable supervisor identity for a managed IM channel. Passed as
+/// `--supervisor` on every CLI write (mandated by the entry-layer prompt)
+/// and used by the completion reporter to recognize delegated sessions.
+pub(crate) fn im_supervisor_id(platform: &str) -> String {
+    format!("galley-im/{platform}")
+}
+
+pub(crate) fn im_supervisor_prompt(sop_path: &str, platform: &str, supervisor_id: &str) -> String {
     let platform_label = match platform {
         "wechat" => "WeChat",
         "feishu" => "Feishu",
@@ -106,12 +113,26 @@ simple questions, status checks, and clarifications, reply directly. For
 substantial tasks, use Galley CLI to inspect, continue, create, or monitor
 local Galley sessions instead of doing all work only inside this IM chat.
 
+Your Galley supervisor identity is `{supervisor_id}`. On every CLI write
+command (session new / session send / project create / goal / llm set) pass
+exactly `--supervisor={supervisor_id}` plus a short `--reason=<why>`. Galley
+uses this identity to watch sessions you started and to route their
+completion reports back to this channel — a different or improvised id
+breaks that routing.
+
 Default workflow:
-- Inspect current Galley state before creating or changing sessions.
+- Inspect current Galley state before creating or changing sessions. Re-ground
+  through CLI reads instead of trusting your own memory of what you delegated;
+  Galley holds the durable state.
 - Continue an existing session when it preserves useful context.
 - Start one focused session for one bounded task.
 - For complex goals, create a Galley Project with a small set of child sessions,
   follow them until idle, then synthesize the result back to the user.
+- If `session wait` times out, the task is still running — not failed. Tell the
+  user it is running and that you will message them here when it finishes, then
+  end your turn. Galley triggers an automated report request in this
+  conversation when a session you started finishes; follow its instructions
+  when it arrives.
 - Confirm before stopping, archiving, deleting, publishing, spending money,
   changing credentials, or making broad file changes.
 - Keep IM replies concise, actionable, and readable on mobile.
@@ -156,12 +177,21 @@ mod tests {
 
     #[test]
     fn im_supervisor_prompt_names_current_platform() {
-        let wechat = im_supervisor_prompt("/tmp/sop.md", "wechat");
+        let wechat = im_supervisor_prompt("/tmp/sop.md", "wechat", "galley-im/wechat");
         assert!(wechat.contains("## Galley IM Entry Layer"));
         assert!(wechat.contains("through WeChat"));
 
-        let feishu = im_supervisor_prompt("/tmp/sop.md", "feishu");
+        let feishu = im_supervisor_prompt("/tmp/sop.md", "feishu", "galley-im/feishu");
         assert!(feishu.contains("through Feishu"));
         assert!(feishu.contains("Use this IM chat as a lightweight control surface"));
+    }
+
+    #[test]
+    fn im_supervisor_prompt_pins_supervisor_identity() {
+        let id = im_supervisor_id("feishu");
+        assert_eq!(id, "galley-im/feishu");
+        let prompt = im_supervisor_prompt("/tmp/sop.md", "feishu", &id);
+        assert!(prompt.contains("--supervisor=galley-im/feishu"));
+        assert!(prompt.contains("report request"));
     }
 }

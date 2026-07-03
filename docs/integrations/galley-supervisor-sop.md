@@ -117,7 +117,7 @@ If the command returns `dispatch:"dispatched"`, the session was created and the
 first task was sent. For IM / Supervisor flows that need a bounded answer:
 
 ```bash
-"$GALLEY" session wait <id> --timeout=300 --poll=5 --tail=20 --final-show
+"$GALLEY" session wait <id> --timeout=600 --poll=5 --tail=20 --final-show
 ```
 
 On `status:"completed"`, summarize the final payload. On
