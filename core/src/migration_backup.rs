@@ -184,10 +184,14 @@ pub enum BackupOutcome {
     /// nor backup makes sense. The plugin will no-op.
     NotApplicable { on_disk: i64, code_max: i64 },
     /// Migration pending and backup completed successfully.
+    /// `skipped_symlinks` > 0 means the data dir contained symlinks or
+    /// special files the copy deliberately left behind (logged per
+    /// path) — the backup is otherwise complete.
     Backed {
         from: i64,
         to: i64,
         backup_path: PathBuf,
+        skipped_symlinks: u64,
     },
 }
 
@@ -479,16 +483,18 @@ pub fn ensure_backup_before_migrate_in(
     // 5. on_disk < latest_version → migration pending → backup.
     let parent = data_dir.parent().ok_or(BackupError::DataDirUnavailable)?;
     let backup_path = parent.join(format!("{BACKUP_DIR_PREFIX}{}", timestamp_now()));
-    copy_dir_all(data_dir, &backup_path).map_err(|err| BackupError::CopyFailed {
-        src: data_dir.to_path_buf(),
-        dst: backup_path.clone(),
-        message: err.to_string(),
-    })?;
+    let skipped_symlinks =
+        copy_dir_all(data_dir, &backup_path).map_err(|err| BackupError::CopyFailed {
+            src: data_dir.to_path_buf(),
+            dst: backup_path.clone(),
+            message: err.to_string(),
+        })?;
 
     Ok(BackupOutcome::Backed {
         from: on_disk,
         to: latest_version,
         backup_path,
+        skipped_symlinks,
     })
 }
 
@@ -874,25 +880,48 @@ async fn import_goal_rows(conn: &mut sqlx::SqliteConnection) -> Result<u64, sqlx
 }
 
 /// Recursive directory copy. `std::fs` has no `copy_dir_all`, so we
-/// roll our own — 14 lines, no extra deps (B4 M8 sub-plan §1.8).
-/// Symlinks are skipped silently (Galley's data dir never creates
-/// any; if a user manually drops one in, we'd rather leave it than
-/// follow into untrusted territory).
-fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
+/// roll our own — no extra deps (B4 M8 sub-plan §1.8).
+///
+/// Returns the number of symlinks / special files skipped. Galley's
+/// data dir never creates any; if a user manually drops one in, we'd
+/// rather leave it than follow into untrusted territory — but the skip
+/// is counted and logged so a "backup succeeded" report stays honest.
+///
+/// On Windows both roots are canonicalized to `\\?\` verbatim form
+/// first: MAX_PATH (260) only applies to non-verbatim paths, and the
+/// backup dir name is longer than the data dir's, so deep attachment
+/// paths that fit fine in the data dir would otherwise fail to copy —
+/// and the backup gate then refuses to start Galley (exit 2).
+fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<u64> {
     fs::create_dir_all(dst)?;
+    #[cfg(windows)]
+    {
+        let src = fs::canonicalize(src)?;
+        let dst = fs::canonicalize(dst)?;
+        copy_dir_all_inner(&src, &dst)
+    }
+    #[cfg(not(windows))]
+    copy_dir_all_inner(src, dst)
+}
+
+fn copy_dir_all_inner(src: &Path, dst: &Path) -> io::Result<u64> {
+    fs::create_dir_all(dst)?;
+    let mut skipped_symlinks = 0_u64;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let ty = entry.file_type()?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
         if ty.is_dir() {
-            copy_dir_all(&from, &to)?;
+            skipped_symlinks += copy_dir_all_inner(&from, &to)?;
         } else if ty.is_file() {
             fs::copy(&from, &to)?;
+        } else {
+            eprintln!("[backup] skipping symlink/special file {}", from.display());
+            skipped_symlinks += 1;
         }
-        // symlinks: skip silently
     }
-    Ok(())
+    Ok(skipped_symlinks)
 }
 
 /// Compact ISO-8601 UTC timestamp suitable for filenames (no `:` so
@@ -1007,6 +1036,28 @@ mod tests {
     }
 
     #[test]
+    fn copy_dir_all_counts_skipped_symlinks() {
+        #[cfg(unix)]
+        {
+            let tmp = TempDir::new().unwrap();
+            let src = tmp.path().join("src");
+            fs::create_dir_all(src.join("sub")).unwrap();
+            fs::write(src.join("real.txt"), b"real").unwrap();
+            std::os::unix::fs::symlink(src.join("real.txt"), src.join("sub").join("link.txt"))
+                .unwrap();
+
+            let dst = tmp.path().join("dst");
+            let skipped = copy_dir_all(&src, &dst).unwrap();
+            // The symlink is deliberately not copied, but the skip must
+            // be visible to the caller — a "Backed" report that silently
+            // dropped entries would overstate what the backup contains.
+            assert_eq!(skipped, 1);
+            assert_eq!(fs::read(dst.join("real.txt")).unwrap(), b"real");
+            assert!(!dst.join("sub").join("link.txt").exists());
+        }
+    }
+
+    #[test]
     fn copy_dir_all_src_missing() {
         let tmp = TempDir::new().unwrap();
         let src = tmp.path().join("nope");
@@ -1093,9 +1144,11 @@ mod tests {
                 from,
                 to,
                 backup_path,
+                skipped_symlinks,
             } => {
                 assert_eq!(from, 5);
                 assert_eq!(to, 9);
+                assert_eq!(skipped_symlinks, 0);
                 assert!(backup_path.is_dir(), "backup path must exist");
                 // Sibling: parent is the same as data.parent()
                 assert_eq!(backup_path.parent(), data.parent());

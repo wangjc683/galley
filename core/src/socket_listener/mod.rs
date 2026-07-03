@@ -81,6 +81,15 @@ use tokio::sync::broadcast;
 
 #[cfg(windows)]
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeServer, ServerOptions};
+
+/// `ERROR_PIPE_BUSY` (231): the pipe exists but every server instance is
+/// momentarily connected — proof another process owns it.
+#[cfg(windows)]
+const WIN_ERROR_PIPE_BUSY: i32 = 231;
+/// `ERROR_ACCESS_DENIED` (5): what `first_pipe_instance(true)` returns
+/// when the pipe already exists — i.e. another process owns it.
+#[cfg(windows)]
+const WIN_ERROR_ACCESS_DENIED: i32 = 5;
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 
@@ -203,14 +212,36 @@ pub async fn start(
         let path_str = path
             .to_str()
             .ok_or_else(|| std::io::Error::other("named pipe path not UTF-8"))?;
-        if let Ok(mut stream) = ClientOptions::new().open(path_str) {
-            eprintln!(
-                "[socket] another Galley instance is bound to {} — \
-                 not starting a second listener",
-                path.display()
-            );
-            let _ = request_existing_instance_activation(&mut stream).await;
-            return Ok(SocketGuard::another_instance());
+        // ERROR_PIPE_BUSY means every server instance is momentarily
+        // taken — an owner EXISTS. Treating it as "no instance" (the
+        // old behavior for any open error) let a second full Galley run
+        // against the same DB. Retry briefly to deliver the activation
+        // request; if it stays busy, still yield to the owner.
+        for attempt in 0..5 {
+            match ClientOptions::new().open(path_str) {
+                Ok(mut stream) => {
+                    eprintln!(
+                        "[socket] another Galley instance is bound to {} — \
+                         not starting a second listener",
+                        path.display()
+                    );
+                    let _ = request_existing_instance_activation(&mut stream).await;
+                    return Ok(SocketGuard::another_instance());
+                }
+                Err(e) if e.raw_os_error() == Some(WIN_ERROR_PIPE_BUSY) => {
+                    if attempt == 4 {
+                        eprintln!(
+                            "[socket] {} stayed busy — another Galley instance \
+                             owns it; yielding without activation",
+                            path.display()
+                        );
+                        return Ok(SocketGuard::another_instance());
+                    }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+                // File-not-found & friends → no owner; proceed to bind.
+                Err(_) => break,
+            }
         }
     }
 
@@ -232,6 +263,19 @@ pub async fn start(
             Ok(SocketGuard::active(path))
         }
         Err(e) => {
+            // Windows: first_pipe_instance(true) fails with ACCESS_DENIED
+            // when the pipe already exists — another instance raced past
+            // the probe above. Yield (the duplicate app exits) instead of
+            // running a second full Galley against the same DB.
+            #[cfg(windows)]
+            if e.raw_os_error() == Some(WIN_ERROR_ACCESS_DENIED) {
+                eprintln!(
+                    "[socket] {} is already owned by another Galley instance \
+                     (bind: {e}) — yielding",
+                    path.display()
+                );
+                return Ok(SocketGuard::another_instance());
+            }
             eprintln!(
                 "[socket] bind failed at {}: {} — CLI will report exit 4",
                 path.display(),
@@ -310,36 +354,47 @@ async fn accept_loop(app: AppHandle, listener: UnixListener, manager: Arc<Runner
 }
 
 #[cfg(windows)]
-async fn accept_loop(app: AppHandle, mut listener: NamedPipeServer, manager: Arc<RunnerManager>) {
+async fn accept_loop(app: AppHandle, listener: NamedPipeServer, manager: Arc<RunnerManager>) {
+    let path = socket_path();
+    let Some(path_str) = path.to_str().map(str::to_owned) else {
+        // Static property of the path — no retry can fix it. Never hit in
+        // practice: bind_listener already validated the same path.
+        eprintln!("[socket] named pipe path not UTF-8");
+        return;
+    };
+    let mut listener = Some(listener);
     loop {
+        // (Re)create the server instance for the next client — `connect`
+        // on a named-pipe server only handles one client. Creation can
+        // fail transiently (handle/resource pressure); retry with backoff
+        // instead of returning. A bare return here killed the whole
+        // CLI/Supervisor channel for the rest of the process lifetime.
+        let current = match listener.take() {
+            Some(l) => l,
+            None => loop {
+                match ServerOptions::new().create(&path_str) {
+                    Ok(l) => break l,
+                    Err(e) => {
+                        eprintln!(
+                            "[socket] create next pipe instance failed: {e} — retrying in 500ms"
+                        );
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    }
+                }
+            },
+        };
         // `connect()` blocks until a client connects to this pipe.
-        if let Err(e) = listener.connect().await {
+        if let Err(e) = current.connect().await {
             eprintln!("[socket] connect error: {e}");
             tokio::time::sleep(Duration::from_millis(100)).await;
+            // The unconnected instance stays usable for the next attempt.
+            listener = Some(current);
             continue;
         }
-        // Need a new server instance for the next client; `connect` on
-        // the same server only handles one client.
-        let path = socket_path();
-        let path_str = match path.to_str() {
-            Some(s) => s,
-            None => {
-                eprintln!("[socket] named pipe path not UTF-8");
-                return;
-            }
-        };
-        let new_listener = match ServerOptions::new().create(path_str) {
-            Ok(l) => l,
-            Err(e) => {
-                eprintln!("[socket] create next pipe instance failed: {e}");
-                return;
-            }
-        };
-        let connected = std::mem::replace(&mut listener, new_listener);
         let m = manager.clone();
         let app_c = app.clone();
         tokio::spawn(async move {
-            let (read_half, write_half) = tokio::io::split(connected);
+            let (read_half, write_half) = tokio::io::split(current);
             handle_stream(app_c, read_half, write_half, m).await;
         });
     }

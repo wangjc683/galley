@@ -35,7 +35,9 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 3. **Stop/审批整条链**：RUNNER-1 + GUI-3 + GUI-4（一起修才有意义）— ✅ 2026-07-02 已修
 4. **Goal 子系统**：CLI-1（事件窗口是根因）→ CLI-2/3/4 — ✅ 2026-07-03 已修
 5. **进程生命周期三件套**：CORE-4、CORE-5、CORE-3 — ✅ 2026-07-03 已修
-6. **Windows 三条**：CORE-6、CORE-7、CORE-11（下个 Win 发布的 gate）
+6. **Windows 三条**：CORE-6、CORE-7、CORE-11（下个 Win 发布的 gate）—
+   ✅ 2026-07-03 已修（mac 无法本地跑 Win 分支，靠 check.yml windows-2022
+   job 编译 + named-pipe 集成测试验证，最终 gate 仍是 Win dogfood）
 7. **CORE-13 飞书访问控制**：需产品决策（收紧默认值 vs 明示记录 beta 取舍）
 
 ---
@@ -92,13 +94,20 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
   `shutdown_all` 文档里「kill_on_drop 会兜底」的错误说法。新增集成测试
   `respawn_kills_old_runner_that_ignores_shutdown`（mock 无视 shutdown 命令，
   断言替换后旧 pid 真死，unix 用 `kill -0` 验证）。
-- `[ ]` **CORE-6** · `core/src/socket_listener/mod.rs:313-346`（Windows）—
+- `[x]` **CORE-6** · `core/src/socket_listener/mod.rs:313-346`（Windows）—
   accept loop 在创建下一个 pipe 实例失败时直接 `return`，CLI/Supervisor 通道永久
   死亡直到重启。修复：log + backoff 重试（对齐 Unix 分支 :303-308）。
-- `[ ]` **CORE-7** · `core/src/socket_listener/mod.rs:201-215`（Windows）—
+  **已修 2026-07-03**：loop 重构为「实例可复用 + 创建失败 500ms 退避重试」；
+  连接失败时保留未消耗的实例复用（不再每次失败都需要重建）；path UTF-8 校验
+  移到 loop 外（静态属性，bind 时已验过）。
+- `[x]` **CORE-7** · `core/src/socket_listener/mod.rs:201-215`（Windows）—
   双实例检测把任何 `ClientOptions::open` 失败当「无实例」；`ERROR_PIPE_BUSY` 时
   第二个完整 Galley 实例继续运行，双进程写同一 DB。修复：对 PIPE_BUSY 重试或
   判定为已有实例。
+  **已修 2026-07-03**：双保险——probe 对 `ERROR_PIPE_BUSY`(231) 重试 5 次
+  （100ms 间隔，尽量送达激活请求），仍 busy 则判定已有实例并退出；bind 失败
+  为 `ERROR_ACCESS_DENIED`(5)（`first_pipe_instance(true)` 撞已存在的 pipe，
+  即 probe 与 bind 之间被抢先）也判定已有实例而非降级为 unavailable 继续跑。
 - `[ ]` **CORE-8** · `core/src/codex_oauth.rs:1106-1151` — 每次 managed spawn
   泄漏一个 credential IPC listener（task + fd + socket 文件）；Windows 分支创建
   失败静默 `break`。修复：返回关闭句柄绑定 runner 生命周期，或全进程单 listener。
@@ -110,11 +119,17 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
   备份永不清理（每次 schema bump 全量复制含附件的数据目录），磁盘无界增长；
   recovery 每次启动 ATTACH 所有备份（读写 ATTACH 还 checkpoint 备份的 WAL）。
   修复：保留最近 N 份；recovery 用一次性 sentinel 门控。
-- `[ ]` **CORE-11** · `core/src/migration_backup.rs:481, 887-902`（Windows）—
+- `[x]` **CORE-11** · `core/src/migration_backup.rs:481, 887-902`（Windows）—
   备份目录名比数据目录长 24 字符且不加 `\\?\` 前缀，深层附件复制失败 → 备份
   门禁 `exit(2)` 拒绝启动（正好落在 Win MAX_PATH dogfood unknown 上）。
   修复：manifest 开 `longPathAware` 或 `copy_dir_all` 内转 verbatim 路径。
   另：符号链接被静默跳过（:899）但仍报 `Backed`。
+  **已修 2026-07-03**：选 `copy_dir_all` 内 `fs::canonicalize` 转 verbatim
+  （Windows-only 分支，Unix 路径行为零改动；比 manifest `longPathAware`
+  可靠——后者还依赖系统注册表开关）。符号链接/特殊文件跳过改为逐个 log +
+  计数，`Backed` 增加 `skipped_symlinks` 字段随启动日志如实上报。
+  新增测试 `copy_dir_all_counts_skipped_symlinks`（unix 分支验证计数与不复制）。
+  验证：mac 全绿；Win 分支靠 check.yml windows-2022 编译 + 集成测试。
 - `[ ]` **CORE-12** · `core/src/im_supervisor.rs:180-182` — force-restart 用
   `start_kill()` 后不 wait 就 spawn 新进程，Windows 上新旧进程抢 state-dir 文件锁
   → 模型配置变更后重启间歇性报 "already running"。修复：`start_kill` 后带超时
