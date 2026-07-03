@@ -265,14 +265,27 @@ impl RunnerProcess {
                     }
                 }
                 agent_running.store(false, Ordering::SeqCst);
+                // After stdout EOF, learn the exit status WITHOUT holding
+                // the child lock across an unbounded `wait()`: a child that
+                // closes stdout but keeps running would park this task
+                // inside the lock forever, wedging `shutdown()`/`kill()` —
+                // and with them the app's quit cleanup (tray
+                // `cleanup_and_exit` would never reach `app.exit(0)`).
+                // Poll `try_wait` so the lock is held only for an instant.
                 let closed = {
-                    let status = {
-                        let mut child = child.lock().await;
-                        match child.wait().await {
-                            Ok(status) => Some(status),
+                    let status = loop {
+                        let polled = {
+                            let mut child = child.lock().await;
+                            child.try_wait()
+                        };
+                        match polled {
+                            Ok(Some(status)) => break Some(status),
+                            Ok(None) => {
+                                tokio::time::sleep(Duration::from_millis(200)).await;
+                            }
                             Err(e) => {
                                 eprintln!("[runner wait error {sid_for_log}] {e}");
-                                None
+                                break None;
                             }
                         }
                     };
@@ -398,19 +411,25 @@ impl RunnerProcess {
     }
 
     /// Graceful shutdown: send `{"kind":"shutdown"}` then wait up to
-    /// `timeout` for the child to exit on its own. On timeout, falls back
-    /// to `kill_on_drop(true)` via `Drop` — caller drops `self` after the
-    /// timeout to force SIGKILL.
+    /// `timeout` for the child to exit on its own.
     ///
-    /// Returns whether shutdown was graceful (`true`) or whether the
-    /// caller still needs to drop for the kill path (`false`).
+    /// Returns whether shutdown was graceful (`true`). On `false` the
+    /// caller must follow up with [`kill`](Self::kill) — `kill_on_drop`
+    /// is NOT a reliable fallback here because the stdout reader task
+    /// holds an `Arc` to the child, so dropping `self` does not drop it.
     pub async fn shutdown(&mut self, timeout: Duration) -> bool {
         self.expected_close.store(true, Ordering::SeqCst);
         // Best-effort: write to stdin can fail if the subprocess already
         // crashed. Either way we proceed to wait.
         let _ = self.send_command(&IpcCommand::Shutdown).await;
-        let mut child = self.child.lock().await;
-        match tokio::time::timeout(timeout, child.wait()).await {
+        // The timeout covers lock acquisition too: shutdown must return
+        // in bounded time even if another task is inside the child lock,
+        // or quit cleanup hangs and the app can only be force-killed.
+        let wait = async {
+            let mut child = self.child.lock().await;
+            child.wait().await
+        };
+        match tokio::time::timeout(timeout, wait).await {
             Ok(Ok(_)) => true,
             // Subprocess exit returned an io error → treat as ungraceful.
             Ok(Err(_)) => false,
@@ -418,14 +437,26 @@ impl RunnerProcess {
         }
     }
 
-    /// Force kill the subprocess. Equivalent to letting it drop (which
-    /// triggers `kill_on_drop`) but blocks until the child has reaped.
+    /// Force kill the subprocess and block until it has been reaped.
+    /// Bounded for the same reason as [`shutdown`](Self::shutdown): quit
+    /// cleanup calls this and must never hang. SIGKILL delivery + reap is
+    /// fast; hitting the bound means something else is wedged inside the
+    /// child lock, and `kill_on_drop` stays the final backstop.
     pub async fn kill(&mut self) -> std::io::Result<()> {
         self.expected_close.store(true, Ordering::SeqCst);
-        let mut child = self.child.lock().await;
-        child.start_kill()?;
-        let _ = child.wait().await;
-        Ok(())
+        let kill = async {
+            let mut child = self.child.lock().await;
+            child.start_kill()?;
+            let _ = child.wait().await;
+            Ok(())
+        };
+        match tokio::time::timeout(Duration::from_secs(5), kill).await {
+            Ok(result) => result,
+            Err(_) => {
+                eprintln!("[runner kill timed out {}]", self.session_id);
+                Ok(())
+            }
+        }
     }
 
     /// Wait for the child to exit. Idempotent — `tokio::Child::wait`

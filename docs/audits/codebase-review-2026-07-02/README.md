@@ -34,7 +34,7 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 2. **数据安全**：CORE-1（迁移事务）、CORE-2（恢复过滤）— ✅ 2026-07-02 已修
 3. **Stop/审批整条链**：RUNNER-1 + GUI-3 + GUI-4（一起修才有意义）— ✅ 2026-07-02 已修
 4. **Goal 子系统**：CLI-1（事件窗口是根因）→ CLI-2/3/4 — ✅ 2026-07-03 已修
-5. **进程生命周期三件套**：CORE-4、CORE-5、CORE-3
+5. **进程生命周期三件套**：CORE-4、CORE-5、CORE-3 — ✅ 2026-07-03 已修
 6. **Windows 三条**：CORE-6、CORE-7、CORE-11（下个 Win 发布的 gate）
 7. **CORE-13 飞书访问控制**：需产品决策（收紧默认值 vs 明示记录 beta 取舍）
 
@@ -61,23 +61,37 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
   `*_new` 再 DROP」，父行从不是级联受害者（`goals.proposal_id` 是 SET NULL），
   backup 有而 main 没有的 goal 只可能是用户删的。新增测试
   `cascaded_row_recovery_does_not_resurrect_deleted_goals`。
-- `[ ]` **CORE-3** · `core/src/im_supervisor.rs:167-270` — start/stop/restart/
+- `[x]` **CORE-3** · `core/src/im_supervisor.rs:167-270` — start/stop/restart/
   autostart 无互斥。`start_inner` 从状态检查到 `set_slot` 跨多个 await；autostart
   （lib.rs:566）与手动 Connect 并发双 spawn，谁后写 slot 谁占坑——slot 可能挂着
   死进程而活 bot 无 Child 句柄：Stop 杀不掉、退出 `stop_all` 漏掉。
   修复：每平台一把 `tokio::Mutex` 覆盖整个生命周期操作，或 `set_slot` 加代际校验。
+  **已修 2026-07-03**：每平台一把生命周期 `Mutex<()>`，start_inner/stop/
+  logout/restart 全程持锁（stop 拆出 `stop_locked` 供 logout 复用，避免重入
+  死锁）；`stop_all` 也逐平台取锁，封掉「退出时 spawn 尚未 set_slot 就被漏掉」
+  的窗口。slot 侧原有的 pid 代际校验保留。测试缺口：互斥本身需 tauri
+  AppHandle 测试基建，暂靠结构保证（锁在方法入口、无嵌套取锁）。
 
 ### Medium
 
-- `[ ]` **CORE-4** · `core/src/runner_manager/process.rs:268-278, 407-429` —
+- `[x]` **CORE-4** · `core/src/runner_manager/process.rs:268-278, 407-429` —
   stdout reader 持 child 锁跨无限 `wait()`；shutdown 超时不覆盖锁获取。子进程关
   stdout 但不退出 → 锁永久持有 → `cleanup_and_exit`（tray.rs:164-177）挂死 →
   `app.exit(0)` 永不执行，用户只能强杀。修复：锁获取纳入 timeout，或 reader 不
   共享 Child。
-- `[ ]` **CORE-5** · `core/src/runner_manager/manager.rs:94-103` — spawn 替换旧
+  **已修 2026-07-03**：两头都修——reader 在 stdout EOF 后改为 `try_wait` 轮询
+  （200ms，锁只瞬时持有）；`shutdown`/`kill` 的 timeout 改为覆盖「锁获取 +
+  wait」整体（kill 兜底 5s）。新增集成测试
+  `shutdown_stays_bounded_when_child_closes_stdout_but_lives`（mock 关 fd 1
+  后 sleep，断言 shutdown 有界返回且仍广播 Closed）。
+- `[x]` **CORE-5** · `core/src/runner_manager/manager.rs:94-103` — spawn 替换旧
   runner 依赖 `kill_on_drop`，但 Child 被 reader task 的 Arc 持有，drop 不触发
   kill → 忽略 Shutdown 的 runner 永久存活且脱离追踪。修复：替换路径复用
   `manager.shutdown` 的 `!graceful → kill()` 兜底。
+  **已修 2026-07-03**：按建议补 `!graceful → kill()`；同时修正 `shutdown`/
+  `shutdown_all` 文档里「kill_on_drop 会兜底」的错误说法。新增集成测试
+  `respawn_kills_old_runner_that_ignores_shutdown`（mock 无视 shutdown 命令，
+  断言替换后旧 pid 真死，unix 用 `kill -0` 验证）。
 - `[ ]` **CORE-6** · `core/src/socket_listener/mod.rs:313-346`（Windows）—
   accept loop 在创建下一个 pipe 实例失败时直接 `return`，CLI/Supervisor 通道永久
   死亡直到重启。修复：log + backoff 重试（对齐 Unix 分支 :303-308）。

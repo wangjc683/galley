@@ -196,6 +196,90 @@ sys.exit({code})
     fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
 }
 
+/// Mock that emits `ready`, then closes its stdout while staying alive
+/// (ignoring stdin). Reproduces the CORE-4 wedge: stdout EOF with no
+/// process exit used to park the reader task inside the child lock's
+/// `wait()`, deadlocking `shutdown()` and the app's quit cleanup.
+fn write_stdout_closing_runner(dir: &std::path::Path) {
+    let runner_dir = dir.join("runner");
+    fs::create_dir_all(&runner_dir).expect("mkdir runner");
+    fs::write(runner_dir.join("__init__.py"), "").expect("write __init__");
+    let script = r#"
+import argparse
+import json
+import os
+import sys
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ga-path", required=True)
+parser.add_argument("--session-id", required=True)
+parser.add_argument("--cwd", required=False)
+parser.add_argument("--llm-no", type=int, default=0)
+args = parser.parse_args()
+
+print(json.dumps({
+    "kind": "ready",
+    "sessionId": args.session_id,
+    "protocolVersion": "0.1",
+    "gaCommit": "mock",
+    "gaCommitDate": "2026-05-19T00:00:00+00:00",
+    "gaPath": args.ga_path,
+    "llmName": "mock-llm",
+    "cwd": args.cwd or os.getcwd(),
+    "pid": os.getpid(),
+    "availableLLMs": [],
+    "timestamp": "2026-05-19T10:00:00+00:00"
+}), flush=True)
+sys.stdout.close()
+os.close(1)
+time.sleep(60)
+"#;
+    fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
+}
+
+/// Mock that emits `ready` and then ignores every stdin command,
+/// including `shutdown`. Reproduces the CORE-5 leak: the spawn-replace
+/// path relied on `kill_on_drop`, which never fires because the stdout
+/// reader task's Arc keeps the Child alive.
+fn write_stubborn_runner(dir: &std::path::Path) {
+    let runner_dir = dir.join("runner");
+    fs::create_dir_all(&runner_dir).expect("mkdir runner");
+    fs::write(runner_dir.join("__init__.py"), "").expect("write __init__");
+    let script = r#"
+import argparse
+import json
+import os
+import sys
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ga-path", required=True)
+parser.add_argument("--session-id", required=True)
+parser.add_argument("--cwd", required=False)
+parser.add_argument("--llm-no", type=int, default=0)
+args = parser.parse_args()
+
+print(json.dumps({
+    "kind": "ready",
+    "sessionId": args.session_id,
+    "protocolVersion": "0.1",
+    "gaCommit": "mock",
+    "gaCommitDate": "2026-05-19T00:00:00+00:00",
+    "gaPath": args.ga_path,
+    "llmName": "mock-llm",
+    "cwd": args.cwd or os.getcwd(),
+    "pid": os.getpid(),
+    "availableLLMs": [],
+    "timestamp": "2026-05-19T10:00:00+00:00"
+}), flush=True)
+for line in sys.stdin:
+    pass  # ignore all commands, including shutdown
+time.sleep(60)
+"#;
+    fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
+}
+
 fn make_args(session_id: &str, bridge_cwd: PathBuf) -> SpawnArgs {
     let python = mock_python_path().unwrap_or_else(|| "python3".to_string());
     SpawnArgs {
@@ -509,6 +593,85 @@ async fn shutdown_all_kills_concurrent_runners() {
     assert_eq!(mgr.alive_count().await, 3);
     mgr.shutdown_all(Duration::from_secs(2)).await;
     assert_eq!(mgr.alive_count().await, 0);
+}
+
+#[tokio::test]
+async fn shutdown_stays_bounded_when_child_closes_stdout_but_lives() {
+    if mock_python_path().is_none() {
+        return;
+    }
+    let dir = TempDir::new().expect("tempdir");
+    write_stdout_closing_runner(dir.path());
+
+    let mgr = RunnerManager::new();
+    mgr.spawn(make_args("s_wedge", dir.path().to_path_buf()), None)
+        .await
+        .expect("spawn");
+    let mut rx = mgr.subscribe("s_wedge").await.expect("subscribe");
+    let ev = next_event(&mut rx).await.expect("ready event");
+    assert!(matches!(ev, IpcEvent::Ready(_)));
+    // Give the reader task time to hit stdout EOF and enter its wait.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // Regression guard: the reader used to hold the child lock across an
+    // unbounded wait() here, so this shutdown never returned and quit
+    // cleanup hung. It must complete in bounded time and fall back to
+    // kill.
+    let result = timeout(
+        Duration::from_secs(8),
+        mgr.shutdown("s_wedge", Some(Duration::from_secs(1))),
+    )
+    .await;
+    assert!(result.is_ok(), "shutdown hung on the child lock");
+    assert_eq!(mgr.alive_count().await, 0);
+
+    // The kill fallback reaps the child; the reader's poll observes the
+    // exit and still broadcasts Closed.
+    assert!(next_closed(&mut rx).await.is_some());
+}
+
+#[tokio::test]
+async fn respawn_kills_old_runner_that_ignores_shutdown() {
+    if mock_python_path().is_none() {
+        return;
+    }
+    let dir = TempDir::new().expect("tempdir");
+    write_stubborn_runner(dir.path());
+
+    let mgr = RunnerManager::new();
+    let pid1 = mgr
+        .spawn(make_args("s_stubborn", dir.path().to_path_buf()), None)
+        .await
+        .expect("spawn 1");
+    let mut rx = mgr.subscribe("s_stubborn").await.expect("subscribe");
+    let _ready = next_event(&mut rx).await;
+
+    // Replacement spawn: the old runner ignores Shutdown, so the graceful
+    // wait times out and the replace path must SIGKILL it explicitly —
+    // kill_on_drop can't, because the reader task's Arc keeps the Child
+    // alive after our handle drops.
+    let pid2 = mgr
+        .spawn(make_args("s_stubborn", dir.path().to_path_buf()), None)
+        .await
+        .expect("spawn 2");
+    assert_ne!(pid1, pid2);
+    assert_eq!(mgr.alive_count().await, 1);
+
+    #[cfg(unix)]
+    {
+        let alive = StdCommand::new("kill")
+            .args(["-0", &pid1.to_string()])
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        assert!(
+            !alive,
+            "old runner pid {pid1} still alive after replacement"
+        );
+    }
+
+    mgr.shutdown_all(Duration::from_secs(2)).await;
 }
 
 #[tokio::test]

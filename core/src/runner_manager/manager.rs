@@ -97,9 +97,15 @@ impl RunnerManager {
         };
         if let Some(old) = old {
             let mut p = old.lock().await;
-            let _ = p.shutdown(DEFAULT_SHUTDOWN_TIMEOUT).await;
-            // Old process is dropped here → kill_on_drop forces SIGKILL
-            // if it didn't exit gracefully.
+            let graceful = p.shutdown(DEFAULT_SHUTDOWN_TIMEOUT).await;
+            if !graceful {
+                // kill_on_drop is NOT a real backstop here: the stdout
+                // reader task holds an Arc to the Child, so dropping our
+                // handle doesn't drop the Child. A runner that ignores
+                // Shutdown must be killed explicitly or it lives forever,
+                // untracked. Same fallback as `shutdown`/`shutdown_all`.
+                let _ = p.kill().await;
+            }
         }
 
         let process = RunnerProcess::spawn(args).await?;
@@ -258,9 +264,9 @@ impl RunnerManager {
     }
 
     /// Shut down ALL alive runners concurrently. Called from Tauri app
-    /// cleanup hook on quit / window close. Bounded by `timeout` total —
-    /// any process that hasn't gracefully exited gets force-killed via
-    /// `kill_on_drop`.
+    /// cleanup hook on quit / window close. Bounded by `timeout` per
+    /// process — any process that hasn't gracefully exited gets
+    /// force-killed explicitly.
     pub async fn shutdown_all(&self, timeout: Duration) {
         let processes = {
             let mut map = self.processes.write().await;

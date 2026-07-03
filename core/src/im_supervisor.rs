@@ -115,6 +115,15 @@ struct ProcessSlot {
 #[derive(Default)]
 pub struct ImSupervisorManager {
     slots: Mutex<HashMap<String, ProcessSlot>>,
+    /// One lock per platform serializing whole lifecycle operations
+    /// (start/stop/logout/restart/stop_all). `start_inner` spans many
+    /// awaits between its status check and `set_slot`; without this,
+    /// autostart racing a manual Connect double-spawns and the loser's
+    /// process leaks untracked — the slot holds a dead child while the
+    /// live bot has no handle, so Stop can't kill it and quit's
+    /// `stop_all` misses it.
+    wechat_lifecycle: Mutex<()>,
+    feishu_lifecycle: Mutex<()>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,6 +140,14 @@ struct ImSupervisorLine {
 impl ImSupervisorManager {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    fn lifecycle_lock(&self, platform: &str) -> &Mutex<()> {
+        if platform == FEISHU {
+            &self.feishu_lifecycle
+        } else {
+            &self.wechat_lifecycle
+        }
     }
 
     pub async fn status(
@@ -164,6 +181,7 @@ impl ImSupervisorManager {
         force_restart: bool,
     ) -> Result<ImSupervisorStatus, String> {
         let platform = normalize_platform(&platform)?;
+        let _lifecycle = self.lifecycle_lock(platform).lock().await;
         if let Some(status) = self.current_status(platform).await {
             if matches!(
                 status.state,
@@ -303,6 +321,17 @@ impl ImSupervisorManager {
         platform: String,
     ) -> Result<ImSupervisorStatus, String> {
         let platform = normalize_platform(&platform)?;
+        let _lifecycle = self.lifecycle_lock(platform).lock().await;
+        self.stop_locked(app, platform).await
+    }
+
+    /// Body of [`stop`]. Caller must hold the platform's lifecycle lock
+    /// (split out so `logout` can compose without re-locking).
+    async fn stop_locked(
+        &self,
+        app: AppHandle,
+        platform: &'static str,
+    ) -> Result<ImSupervisorStatus, String> {
         write_pref(
             platform,
             ImSupervisorPref {
@@ -344,7 +373,8 @@ impl ImSupervisorManager {
         platform: String,
     ) -> Result<ImSupervisorStatus, String> {
         let platform = normalize_platform(&platform)?;
-        let _ = self.stop(app.clone(), platform.into()).await;
+        let _lifecycle = self.lifecycle_lock(platform).lock().await;
+        let _ = self.stop_locked(app.clone(), platform).await;
         write_pref(
             platform,
             ImSupervisorPref {
@@ -431,15 +461,18 @@ impl ImSupervisorManager {
     }
 
     pub async fn stop_all(&self) {
-        let children = {
-            let slots = self.slots.lock().await;
-            slots
-                .values()
-                .filter_map(|slot| slot.child.clone())
-                .collect::<Vec<_>>()
-        };
-        for child in children {
-            let _ = child.lock().await.start_kill();
+        // Take each platform's lifecycle lock so a start that hasn't
+        // reached set_slot yet finishes registering before we look — a
+        // spawn mid-flight during quit would otherwise slip past cleanup.
+        for platform in PLATFORMS {
+            let _lifecycle = self.lifecycle_lock(platform).lock().await;
+            let child = {
+                let slots = self.slots.lock().await;
+                slots.get(platform).and_then(|slot| slot.child.clone())
+            };
+            if let Some(child) = child {
+                let _ = child.lock().await.start_kill();
+            }
         }
     }
 
