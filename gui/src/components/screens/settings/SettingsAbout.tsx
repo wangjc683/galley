@@ -5,7 +5,8 @@ import {
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
 import { SettingsUpdateControl } from "@/components/screens/settings/SettingsUpdateControl";
-import { useCopy } from "@/lib/i18n";
+import { EPIGRAPHS } from "@/lib/epigraphs";
+import { useCopy, useLanguage } from "@/lib/i18n";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
 
 interface SettingsAboutProps {
@@ -16,14 +17,22 @@ interface SettingsAboutProps {
 }
 
 /**
- * Settings → About tab. DESIGN.md §9 About tab.
+ * Settings → About tab, composed as a colophon (docs/temperament.md:
+ * the imprint's own page — the one place besides the empty-state
+ * epigraph where a quotation is allowed to live).
  *
- * Structure:
+ * Structure, in book order:
  *   1. Title + tagline
- *   2. Version table (Galley + bundled GenericAgent kernel)
- *   3. Links — Galley source/issues, GenericAgent upstream credit,
+ *   2. Origin story
+ *   3. Version table (Galley + bundled GenericAgent kernel)
+ *   4. Typesetting — what the text is set in, stated as fact
+ *   5. Epigraph — PI §43, the product's thesis line (meaning is use)
+ *   6. Links — Galley source/issues, GenericAgent upstream credit,
  *      plus a quiet maker link group.
- *   4. Footer with author + license.
+ *   7. Footer with author + license.
+ *
+ * The book metaphor stays under the surface: section labels are plain
+ * words (版式 / Typesetting), never trade jargon (印次 / 奥付).
  */
 export function SettingsAbout({
   workbenchVersion,
@@ -32,6 +41,8 @@ export function SettingsAbout({
   hasRunningSessions,
 }: SettingsAboutProps) {
   const copy = useCopy();
+  const language = useLanguage();
+  const colophonEpigraph = EPIGRAPHS.find((e) => e.id === "pi-43");
   const managedKernelCommit =
     managedRuntime?.upstreamCommit || gaBaseline || "unknown";
   const managedKernelShort =
@@ -85,6 +96,38 @@ export function SettingsAbout({
           </dd>
         </dl>
       </div>
+
+      <div>
+        <SettingsSectionLabel>
+          {copy.settings.about.typesetting}
+        </SettingsSectionLabel>
+        <p className="m-0 mt-2 text-[12.5px] leading-secondary text-ink-soft">
+          {copy.settings.about.typesettingDetail}
+        </p>
+      </div>
+
+      {/* Colophon epigraph — the quotation's permanent home (the
+          empty-state epigraph is reserved for the truly silent
+          workspace). Unboxed, unlike the origin callout above: a
+          quote on the page, not a card in the UI. */}
+      {colophonEpigraph && (
+        <figure className="m-0 font-serif">
+          <blockquote className="m-0 border-0 p-0">
+            <p className="m-0 text-[13px] italic leading-[1.6] text-ink-soft">
+              {language === "en-US" ? colophonEpigraph.en : colophonEpigraph.zh}
+            </p>
+            <p
+              lang="de"
+              className="m-0 mt-1 text-[11.5px] italic leading-[1.5] text-ink-muted/70"
+            >
+              {colophonEpigraph.de}
+            </p>
+          </blockquote>
+          <figcaption className="mt-1.5 text-[11.5px] text-ink-muted">
+            {copy.settings.about.epigraphSource}
+          </figcaption>
+        </figure>
+      )}
 
       <div className="border-t border-line pt-6">
         <SettingsSectionLabel>{copy.settings.about.links}</SettingsSectionLabel>

@@ -1442,13 +1442,23 @@ YOLO = "You Only Live Once"。
 - "取消"：ghost button 默认 focus，回车默认是取消（避免误触确认）
 - ESC 关闭 = 取消
 
-#### About
+#### About（版权页 colophon，2026-07-03）
 
-- App icon + `Galley` 标题（Newsreader medium 18px）
-- 版本号 / GA baseline commit / build date
-- Links（Phosphor `ArrowSquareOut`）：GitHub / Documentation / Report issue（外链浏览器）
-- License：MIT
-- 一行 `Made by JCONE · Open source`
+按文库本版权页的逻辑组织（[temperament.md](./temperament.md)：引文只住题词位与版权页），
+隐喻沉在结构里——分区标签用人话（版式），不用行话（印次 / 奥付）：
+
+- `Galley` wordmark + tagline（Newsreader medium 18px）
+- Origin story（serif italic surface callout——GA 致意）
+- 版本：Galley 版本（含更新控件）/ 内置 GA kernel commit + audit date
+- 版式：一行陈述正文与等宽字体（Newsreader / 苹方 / 雅黑 / JetBrains Mono）
+- 题词：PI §43（产品论题「意义即用法」）——译文 + 德文原句 + 出处行；
+  不加框，与 origin 的 callout 卡片区分（页面上的引文，不是 UI 里的卡片）
+- Links（Phosphor `ArrowSquareOut`）：GitHub / Feedback / GenericAgent 上游 / maker links
+- Footer：`由 JC Wang 开发 · MIT License`
+
+连带决策：空状态题词只在 `silent`（工作区真正为空）渲染——每次 New Chat
+都出现会墙纸化，题词的力量来自稀缺；`quiet` / `working` 绑定作为数据保留
+（EmptyState 渲染层一行门控，翻案零成本）。
 
 #### Agent
 
