@@ -340,9 +340,7 @@ export function MainView({
                   >
                     <ToolCallout
                       tool={pendingToToolEvent(p)}
-                      onApprove={(decision) =>
-                        onApprove?.(p.approvalId, decision)
-                      }
+                      onApprove={onApprove}
                       projectName={projectName}
                     />
                   </div>

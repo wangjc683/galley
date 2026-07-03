@@ -57,7 +57,17 @@ export function useGoalEffects({
       try {
         const goals = await listVisibleGoals();
         if (cancelled) return;
-        setActiveGoals(goals);
+        // Keep the previous array identity when nothing changed: the
+        // poll fires every 5s for everyone (usually returning the same
+        // or an empty list), and a fresh reference re-rendered the
+        // header/sidebar tree and re-fired the session-goals effect
+        // each tick for nothing.
+        setActiveGoals((prev) =>
+          prev.length === goals.length &&
+          JSON.stringify(prev) === JSON.stringify(goals)
+            ? prev
+            : goals,
+        );
         void hydrateGoalProjects(goals);
       } catch (e) {
         console.debug("[goals] list_visible_goals failed.", e);
@@ -73,6 +83,10 @@ export function useGoalEffects({
     };
   }, []);
 
+  // In-flight guard: the effect re-runs on every activeGoals change,
+  // and without it the same goal could be mark-seen'd repeatedly while
+  // the first request was still pending.
+  const markSeenInFlight = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!activeSessionId) return;
     const visibleResultGoal = activeGoals.find(
@@ -82,6 +96,8 @@ export function useGoalEffects({
         !goal.resultSeenAt,
     );
     if (!visibleResultGoal) return;
+    if (markSeenInFlight.current.has(visibleResultGoal.id)) return;
+    markSeenInFlight.current.add(visibleResultGoal.id);
     void markGoalResultSeen(visibleResultGoal.id)
       .then((next) => {
         setActiveGoals((goals) =>
@@ -98,6 +114,9 @@ export function useGoalEffects({
       })
       .catch((e) => {
         console.debug("[goals] mark result seen failed.", e);
+      })
+      .finally(() => {
+        markSeenInFlight.current.delete(visibleResultGoal.id);
       });
   }, [activeGoals, activeSessionId]);
 

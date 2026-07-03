@@ -13,7 +13,10 @@ export const PROJECT_REVIEW_EXIT_MS = 150;
 
 export const PROJECT_ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-export const PROJECT_REVIEW_FALLBACK_NOW_MS = Date.now();
+/** Fallback "now" for the 7-day active window. A function, not a
+ * module-load constant: a desktop app left running for days would
+ * otherwise classify against a stale clock. */
+export const projectReviewFallbackNowMs = () => Date.now();
 
 
 export type SidebarRuntimeIndicator =

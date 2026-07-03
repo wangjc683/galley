@@ -88,9 +88,7 @@ export interface BridgeClient {
   pid: number;
   /** Send an IPCCommand to bridge stdin. */
   send(cmd: IPCCommand): Promise<void>;
-  /** SIGKILL the bridge. Use shutdown() for graceful exit when possible. */
-  kill(): Promise<void>;
-  /** Send {kind: "shutdown"} and wait for close. Falls back to kill if hung. */
+  /** Send {kind: "shutdown"} and wait for close. Rust force-kills if hung. */
   shutdown(timeoutMs?: number): Promise<void>;
 }
 
@@ -278,16 +276,6 @@ export async function spawnBridge(
         throw new Error(msg);
       }
     },
-    kill: async () => {
-      try {
-        await invoke("kill_runner", { sessionId });
-      } catch {
-        // already dead → fine
-      }
-      // Synthesize a close event for the same code path the old plugin-
-      // shell version triggered via its on('close', ...) handler.
-      void onClosedSafe(null, null);
-    },
     shutdown: async (timeoutMs = 3000) => {
       try {
         await invoke("shutdown_runner", { sessionId, timeoutMs });
@@ -362,14 +350,6 @@ export async function attachBridge(
         // eslint-disable-next-line preserve-caught-error
         throw new Error(msg);
       }
-    },
-    kill: async () => {
-      try {
-        await invoke("kill_runner", { sessionId });
-      } catch {
-        // already dead → fine
-      }
-      void onClosedSafe(null, null);
     },
     shutdown: async (timeoutMs = 3000) => {
       try {

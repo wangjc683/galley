@@ -689,7 +689,6 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
               displayName: l.displayName,
               isCurrent: l.isCurrent,
             }));
-            const current = llms.find((l) => l.isCurrent);
             // Warmup populates EVERY future-existing session's seed
             // through the `llm_list` pref hydrate path. We don't
             // populate byId here because warmup runs before any
@@ -697,21 +696,6 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
             void setPref("llm_list", llms).catch((e) => {
               console.debug("[warmup] llm_list cache failed.", e);
             });
-            // Also push current displayName onto runtimeInfo so the
-            // Settings → Runtime panel shows it immediately.
-            set((state) => ({
-              runtimeInfo: {
-                ...state.runtimeInfo,
-                pythonVersion: state.runtimeInfo.pythonVersion,
-              },
-            }));
-            if (current) {
-              // Stash so the very next session activation pre-seed
-              // can pick this up via `cachedDisplayName` hint.
-              // (TopBar pill / Composer pill read via the active
-              // session's byId entry; warmup itself doesn't write
-              // byId.)
-            }
             if (client) {
               void client.shutdown(5000);
             } else {

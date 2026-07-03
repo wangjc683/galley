@@ -2,7 +2,6 @@ import * as Dialog from "@radix-ui/react-dialog";
 import {
   ArrowUUpLeft,
   CheckSquare,
-  MagnifyingGlass,
   Square,
   Trash,
   WarningCircle,
@@ -10,8 +9,10 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { SessionSearchBar } from "@/components/screens/SessionSearchBar";
 import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useSessionSelectMode } from "@/hooks/useSessionSelectMode";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/types/session";
@@ -86,65 +87,31 @@ export function ArchivedDialog({
   const [pendingDelete, setPendingDelete] = useState<Session | null>(null);
   const [emptyConfirmOpen, setEmptyConfirmOpen] = useState(false);
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [selectMode, setSelectMode] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deletingOne, setDeletingOne] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [emptying, setEmptying] = useState(false);
 
-  // Reset select mode + selection every time the dialog opens.
-  // Stale selection across opens would be surprising.
+  const {
+    query,
+    setQuery,
+    filtered,
+    isFiltered,
+    selectMode,
+    selected,
+    selectedIds,
+    enterSelectMode,
+    exitSelectMode,
+    toggleSelect,
+    allVisibleSelected,
+    toggleSelectAllVisible,
+  } = useSessionSelectMode(open, archived);
+
+  // Dialog-specific open reset (shared resets live in the hook).
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => {
-      setQuery("");
-      setSelectMode(false);
-      setSelected(new Set());
-      setBulkDeleteConfirmOpen(false);
-    }, 0);
+    const t = setTimeout(() => setBulkDeleteConfirmOpen(false), 0);
     return () => clearTimeout(t);
   }, [open]);
-
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-  const enterSelectMode = () => setSelectMode(true);
-  const exitSelectMode = () => {
-    setSelectMode(false);
-    setSelected(new Set());
-  };
-
-  const trimmedQuery = query.trim().toLowerCase();
-  const filtered = useMemo(() => {
-    if (trimmedQuery === "") return archived;
-    return archived.filter((s) => {
-      const hay = `${s.title}\n${s.summary ?? ""}`.toLowerCase();
-      return hay.includes(trimmedQuery);
-    });
-  }, [archived, trimmedQuery]);
-  const isFiltered = trimmedQuery !== "";
-
-  const allVisibleSelected =
-    filtered.length > 0 && filtered.every((s) => selected.has(s.id));
-  const toggleSelectAllVisible = () => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const s of filtered) next.delete(s.id);
-      } else {
-        for (const s of filtered) next.add(s.id);
-      }
-      return next;
-    });
-  };
-
-  const selectedIds = useMemo(() => Array.from(selected), [selected]);
 
   return (
     <>
@@ -171,7 +138,7 @@ export function ArchivedDialog({
               onEmptyAll={() => setEmptyConfirmOpen(true)}
             />
 
-            <SearchBar query={query} onChange={setQuery} />
+            <SessionSearchBar query={query} onChange={setQuery} />
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-app">
               {filtered.length === 0 ? (
@@ -353,39 +320,6 @@ function Header({
   );
 }
 
-function SearchBar({
-  query,
-  onChange,
-}: {
-  query: string;
-  onChange: (q: string) => void;
-}) {
-  const copy = useCopy();
-  return (
-    <div className="relative shrink-0 border-b border-line bg-app px-4 py-2.5">
-      <MagnifyingGlass
-        size={14}
-        weight="thin"
-        className="pointer-events-none absolute left-7 top-1/2 -translate-y-1/2 text-ink-muted"
-      />
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={copy.projects.filterArchive}
-        autoFocus
-        // Body is the app canvas (matching Settings' workbench treatment),
-        // so the input is a *raised* field: bg-surface + a crisp border-line,
-        // same as the Settings model-filter inputs. Focus swaps in the brand
-        // border + ring.
-        className={cn(
-          "h-7 w-full rounded-sm border border-line bg-surface pl-7 pr-3 text-[12.5px] text-ink",
-          "placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30",
-        )}
-      />
-    </div>
-  );
-}
 
 // ---------------- Row ----------------
 

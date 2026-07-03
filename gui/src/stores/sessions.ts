@@ -868,7 +868,6 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     // but covering the edge so we don't leak a process pointing at
     // a deleted id.
     try {
-      const { useRuntimeStore } = await import("@/stores/runtime");
       await useRuntimeStore.getState().shutdownBridge(sessionId);
     } catch (e) {
       console.warn(
@@ -958,7 +957,6 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     if (sessionIds.length === 0) return;
     // Sequential bridge teardown — racing N parallel shutdowns
     // against the same process tree caused flakiness in M3b dogfood.
-    const { useRuntimeStore } = await import("@/stores/runtime");
     for (const id of sessionIds) {
       try {
         await useRuntimeStore.getState().shutdownBridge(id);

@@ -601,7 +601,18 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       turnIndexOffset: offset,
       lastUserPersistRequestId: 0,
     }));
-    set({ byId, userSubmitTick: state.userSubmitTick + 1 });
+    // Only the ACTIVE session's submit moves the viewport: external
+    // submits into background sessions (supervisor / CLI / goal
+    // workers) used to bump the global tick too, yanking the current
+    // conversation to its own last user message with a spurious ack
+    // animation.
+    const isActiveSession =
+      useSessionsStore.getState().activeSessionId === sid;
+    set(
+      isActiveSession
+        ? { byId, userSubmitTick: state.userSubmitTick + 1 }
+        : { byId },
+    );
     fireSessionMirror(sid, next);
     useSessionsStore.getState().maybeDeriveTitle(sid, text);
   },

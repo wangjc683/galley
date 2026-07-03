@@ -226,7 +226,10 @@ export interface PendingApproval {
 }
 
 /** Decision callback shape used by the Approval form / Dock. */
-export type OnApprove = (decision: ApprovalDecision) => void;
+/** Carries the approvalId so one stable (useCallback) handler serves
+ * every callout — per-tool closures broke ToolCallout's memo and
+ * re-rendered every historical callout at stream frequency. */
+export type OnApprove = (approvalId: string, decision: ApprovalDecision) => void;
 
 /**
  * GA-initiated question awaiting a user reply (V0.2). Set on the

@@ -103,14 +103,14 @@ export function ApprovalForm({
           <DecisionButton
             variant="primary"
             icon={<Check size={13} weight="bold" />}
-            onClick={() => onApprove?.("allow_once")}
+            onClick={() => tool.approvalId && onApprove?.(tool.approvalId, "allow_once")}
           >
             {copy.approval.allow}
           </DecisionButton>
           <DecisionButton
             variant="danger-ghost"
             icon={<X size={13} weight="bold" />}
-            onClick={() => onApprove?.("deny")}
+            onClick={() => tool.approvalId && onApprove?.(tool.approvalId, "deny")}
           >
             {copy.approval.deny}
           </DecisionButton>
@@ -118,7 +118,7 @@ export function ApprovalForm({
             <DecisionButton
               variant="brand-ghost"
               icon={<FolderSimple size={13} weight="thin" />}
-              onClick={() => onApprove?.("always_allow_project")}
+              onClick={() => tool.approvalId && onApprove?.(tool.approvalId, "always_allow_project")}
             >
               {copy.approval.allowProject(projectName)}
             </DecisionButton>
@@ -126,7 +126,7 @@ export function ApprovalForm({
           <DecisionButton
             variant="brand-ghost"
             icon={<Globe size={13} weight="thin" />}
-            onClick={() => onApprove?.("always_allow_global")}
+            onClick={() => tool.approvalId && onApprove?.(tool.approvalId, "always_allow_global")}
             disabled={globalDisabled}
             title={globalDisabled ? copy.approval.highRiskNoGlobal : undefined}
           >

@@ -3,15 +3,16 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   Archive,
   CheckSquare,
-  MagnifyingGlass,
   PushPin,
   PushPinSlash,
   Square,
   X as XIcon,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
+import { SessionSearchBar } from "@/components/screens/SessionSearchBar";
 import { Button, IconButton } from "@/components/ui/button";
+import { useSessionSelectMode } from "@/hooks/useSessionSelectMode";
 import { useCopy } from "@/lib/i18n";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
@@ -83,25 +84,6 @@ export function EarlierDialog({
   onTogglePinSession,
   onArchiveSessionsBulk,
 }: EarlierDialogProps) {
-  const [query, setQuery] = useState("");
-  const [selectMode, setSelectMode] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-
-  // Reset state every time the dialog opens. Stale filter + stale
-  // selection across opens would be surprising — closing then
-  // reopening should feel like a fresh entry into the archive view.
-  // Deferred via setTimeout so we don't setState synchronously in
-  // the effect body (react-hooks/set-state-in-effect).
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => {
-      setQuery("");
-      setSelectMode(false);
-      setSelected(new Set());
-    }, 0);
-    return () => clearTimeout(t);
-  }, [open]);
-
   const sorted = useMemo(
     () =>
       [...sessions].sort((a, b) =>
@@ -110,56 +92,24 @@ export function EarlierDialog({
     [sessions],
   );
 
-  const trimmedQuery = query.trim().toLowerCase();
-  const filtered = useMemo(() => {
-    if (trimmedQuery === "") return sorted;
-    return sorted.filter((s) => {
-      const hay = `${s.title}\n${s.summary ?? ""}`.toLowerCase();
-      return hay.includes(trimmedQuery);
-    });
-  }, [sorted, trimmedQuery]);
+  const {
+    query,
+    setQuery,
+    filtered,
+    isFiltered,
+    selectMode,
+    selected,
+    selectedIds,
+    enterSelectMode,
+    exitSelectMode,
+    toggleSelect,
+    allVisibleSelected,
+    toggleSelectAllVisible,
+  } = useSessionSelectMode(open, sorted);
 
   const groups = useMemo(() => groupByMonth(filtered), [filtered]);
 
-  const showGroups = trimmedQuery === "";
-
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const enterSelectMode = () => {
-    setSelectMode(true);
-  };
-  const exitSelectMode = () => {
-    setSelectMode(false);
-    setSelected(new Set());
-  };
-
-  // "Select all visible" toggles between selecting every currently-
-  // filtered row and clearing them. Other (non-visible) rows the
-  // user may have already picked under a different filter stay
-  // selected — toggling the visible set is the principle of least
-  // surprise when filters and selection are independent.
-  const allVisibleSelected =
-    filtered.length > 0 && filtered.every((s) => selected.has(s.id));
-  const toggleSelectAllVisible = () => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const s of filtered) next.delete(s.id);
-      } else {
-        for (const s of filtered) next.add(s.id);
-      }
-      return next;
-    });
-  };
-
-  const selectedIds = useMemo(() => Array.from(selected), [selected]);
+  const showGroups = !isFiltered;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -184,7 +134,7 @@ export function EarlierDialog({
             onClose={() => onOpenChange(false)}
           />
 
-          <SearchBar query={query} onChange={setQuery} />
+          <SessionSearchBar query={query} onChange={setQuery} />
 
           <div className="min-h-0 flex-1 overflow-y-auto bg-app">
             {filtered.length === 0 ? (
@@ -300,39 +250,6 @@ function Header({
   );
 }
 
-function SearchBar({
-  query,
-  onChange,
-}: {
-  query: string;
-  onChange: (q: string) => void;
-}) {
-  const copy = useCopy();
-  return (
-    <div className="relative shrink-0 border-b border-line bg-app px-4 py-2.5">
-      <MagnifyingGlass
-        size={14}
-        weight="thin"
-        className="pointer-events-none absolute left-7 top-1/2 -translate-y-1/2 text-ink-muted"
-      />
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={copy.projects.filterArchive}
-        autoFocus
-        // Body is the app canvas (matching Settings' workbench treatment),
-        // so the input is a *raised* field: bg-surface + a crisp border-line,
-        // same as the Settings model-filter inputs. Focus swaps in the brand
-        // border + ring.
-        className={cn(
-          "h-7 w-full rounded-sm border border-line bg-surface pl-7 pr-3 text-[12.5px] text-ink",
-          "placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30",
-        )}
-      />
-    </div>
-  );
-}
 
 function GroupedList({
   groups,

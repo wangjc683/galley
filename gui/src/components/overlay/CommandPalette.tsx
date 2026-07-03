@@ -120,9 +120,14 @@ export function CommandPalette(props: CommandPaletteProps) {
     }
     let cancelled = false;
     const handle = setTimeout(() => {
-      void searchMessages(q, 8, props.runtimeKind).then((hits) => {
-        if (!cancelled) setMessageHits(hits);
-      });
+      void searchMessages(q, 8, props.runtimeKind)
+        .then((hits) => {
+          if (!cancelled) setMessageHits(hits);
+        })
+        .catch((e) => {
+          console.debug("[palette] message search failed.", e);
+          if (!cancelled) setMessageHits([]);
+        });
     }, 180);
     return () => {
       cancelled = true;

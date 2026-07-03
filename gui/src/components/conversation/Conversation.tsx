@@ -185,9 +185,7 @@ function AgentTurnView({
           approvalDecision={
             tool.approvalId ? approvalDecisions?.[tool.approvalId] : undefined
           }
-          onApprove={(decision) => {
-            if (tool.approvalId) onApprove?.(tool.approvalId, decision);
-          }}
+          onApprove={onApprove}
           projectName={projectName}
         />
       ))}

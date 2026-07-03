@@ -1,6 +1,6 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   CaretRight,
   DotsThree,
@@ -597,7 +597,9 @@ function SidebarProjectDrawer({
   onConfirmRename: (id: string, newTitle: string) => void;
   onCancelRename: () => void;
 }) {
-  const projectBuckets = groupSessions(sessions);
+  // Memoized like the global list's call (Sidebar.tsx) — this ran in
+  // the render body of every project drawer, collapsed ones included.
+  const projectBuckets = useMemo(() => groupSessions(sessions), [sessions]);
   const projectEmpty = sessions.length === 0;
 
   return (

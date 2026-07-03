@@ -20,7 +20,7 @@ import {
 import {
   GLOBAL_TIMELINE_EXIT_MS,
   PROJECT_REVIEW_EXIT_MS,
-  PROJECT_REVIEW_FALLBACK_NOW_MS,
+  projectReviewFallbackNowMs,
   type ProjectScopePhase,
   type SidebarRuntimeIndicator,
 } from "./sidebar/types";
@@ -137,7 +137,7 @@ export function Sidebar({
   projectViewOpen = false,
   expandedProjectIds = [],
   activeGoalProjectIds = new Set<string>(),
-  projectReviewNowMs = PROJECT_REVIEW_FALLBACK_NOW_MS,
+  projectReviewNowMs = projectReviewFallbackNowMs(),
   runtimeIndicator = "hidden",
   onSelectSession,
   onNewChat,
