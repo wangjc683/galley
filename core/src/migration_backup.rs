@@ -655,13 +655,10 @@ async fn apply_preflight_migration(
     spec: &MigrationSpec,
 ) -> Result<(), SafeMigrationError> {
     let start = Instant::now();
-    let mut tx = conn
-        .begin()
-        .await
-        .map_err(|e| SafeMigrationError::Apply {
-            version: spec.version,
-            message: format!("begin transaction: {e}"),
-        })?;
+    let mut tx = conn.begin().await.map_err(|e| SafeMigrationError::Apply {
+        version: spec.version,
+        message: format!("begin transaction: {e}"),
+    })?;
 
     (&mut *tx)
         .execute(spec.sql)

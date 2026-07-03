@@ -177,7 +177,10 @@ fn cleanup_and_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     });
 }
 
-pub(crate) fn request_true_quit<R: tauri::Runtime>(app: tauri::AppHandle<R>, confirm_if_busy: bool) {
+pub(crate) fn request_true_quit<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    confirm_if_busy: bool,
+) {
     if QUIT_REQUEST_IN_FLIGHT
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
@@ -241,7 +244,11 @@ pub(crate) fn tray_icon_image() -> tauri::Result<tauri::image::Image<'static>> {
 /// handler on first show. This command only mirrors copy inward and
 /// never touches SQLite.
 #[tauri::command]
-pub(crate) fn set_close_hint_copy(title: String, body: String, copy: tauri::State<'_, CloseHintCopy>) {
+pub(crate) fn set_close_hint_copy(
+    title: String,
+    body: String,
+    copy: tauri::State<'_, CloseHintCopy>,
+) {
     if let Ok(mut guard) = copy.title.lock() {
         *guard = title;
     }

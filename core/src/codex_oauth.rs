@@ -678,9 +678,8 @@ fn sync_rotated_tokens_to_codex_cli_at(
         Value::String(refreshed.refresh_token.clone()),
     );
     if file.get("last_refresh").is_some() {
-        file["last_refresh"] = Value::String(
-            Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-        );
+        file["last_refresh"] =
+            Value::String(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true));
     }
     let serialized = match serde_json::to_string_pretty(&file) {
         Ok(s) => s,
@@ -1488,7 +1487,8 @@ mod tests {
     fn cli_sync_leaves_foreign_lineage_untouched() {
         let tmp = TempDir::new().expect("tempdir");
         let auth_path = tmp.path().join("auth.json");
-        let original = r#"{"tokens":{"access_token":"cli-access","refresh_token":"cli-relogged-rt"}}"#;
+        let original =
+            r#"{"tokens":{"access_token":"cli-access","refresh_token":"cli-relogged-rt"}}"#;
         std::fs::write(&auth_path, original).expect("seed auth.json");
         let refreshed =
             CodexOAuthSecret::new("new-access".into(), "new-rt".into()).expect("secret");

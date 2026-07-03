@@ -51,9 +51,7 @@ use crate::ipc::IpcCommand;
 use crate::runner_manager::{
     BroadcastItem, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
 };
-use crate::{
-    codex_oauth, credential_store, managed_model_config, managed_prompt, managed_runtime,
-};
+use crate::{codex_oauth, credential_store, managed_model_config, managed_prompt, managed_runtime};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -66,8 +64,8 @@ mod probe;
 
 pub(crate) use external_spawn::normalize_external_ga_path;
 use external_spawn::prepare_external_spawn_args;
-pub use probe::{ProbeGaRuntimeArgs, ProbeGaRuntimeLlm, ProbeGaRuntimeResult};
 use probe::run_ga_runtime_probe;
+pub use probe::{ProbeGaRuntimeArgs, ProbeGaRuntimeLlm, ProbeGaRuntimeResult};
 
 /// JSON-friendly mirror of [`SpawnArgs`]. The TS side sends camelCase keys
 /// (per the broader serde convention used by all our Tauri commands).
