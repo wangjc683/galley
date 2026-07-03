@@ -62,13 +62,28 @@ pub struct SqliteGalley {
 }
 
 impl SqliteGalley {
-    /// Open a pool against the resolved [`db_path`]. Fails with
-    /// `DbUnavailable` when the file is missing or unopenable —
-    /// indicates the GUI has never run on this machine. CLI callers
-    /// should surface a "Galley hasn't been initialized" message rather
-    /// than auto-creating an empty schema (which would mask a
-    /// configuration mistake).
+    /// Handle to the process-wide shared pool against the resolved
+    /// [`db_path`]. The pool is opened once per process and cloned on
+    /// every later call — callers all over the codebase (socket
+    /// handlers, IM supervisor, Codex OAuth) call this per request, and
+    /// each used to build its own fresh 4-connection pool, multiplying
+    /// WAL writer contention against the design of one shared pool.
+    /// A failed open is not cached; the next call retries.
+    ///
+    /// Fails with `DbUnavailable` when the file is missing or
+    /// unopenable — indicates the GUI has never run on this machine.
+    /// CLI callers should surface a "Galley hasn't been initialized"
+    /// message rather than auto-creating an empty schema (which would
+    /// mask a configuration mistake).
     pub async fn open() -> Result<Self> {
+        static SHARED: tokio::sync::OnceCell<SqliteGalley> = tokio::sync::OnceCell::const_new();
+        SHARED
+            .get_or_try_init(|| async { Self::open_uncached().await })
+            .await
+            .cloned()
+    }
+
+    async fn open_uncached() -> Result<Self> {
         let path = db_path().ok_or_else(|| GalleyError::DbUnavailable {
             message: "platform app config directory unavailable".into(),
         })?;

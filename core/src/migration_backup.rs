@@ -597,7 +597,15 @@ fn probe_on_disk_version(db_path: &Path) -> Result<i64, BackupError> {
             .fetch_optional(&mut conn)
             .await;
         let version = match row {
-            Ok(Some(r)) => r.try_get::<Option<i64>, _>("v").ok().flatten().unwrap_or(0),
+            // A decode failure is NOT "version 0": treating an already-
+            // migrated DB as all-pending re-runs 001 and puts startup in
+            // the same exit(2) loop CORE-1 fixed. Fail the probe loudly.
+            Ok(Some(r)) => r
+                .try_get::<Option<i64>, _>("v")
+                .map_err(|e| BackupError::DbProbe {
+                    message: format!("decoding _sqlx_migrations MAX(version): {e}"),
+                })?
+                .unwrap_or(0),
             Ok(None) => 0,
             Err(e) => {
                 let s = e.to_string();

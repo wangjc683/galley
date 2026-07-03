@@ -452,10 +452,37 @@ fn prepare_extension_layout(
     source_dir: &Path,
     extension_dir: &Path,
 ) -> std::io::Result<(usize, String)> {
-    let files_copied = copy_dir_recursive(source_dir, extension_dir)?;
-    ensure_config_js(extension_dir)?;
-    let manifest_version = read_manifest_version(extension_dir)?;
+    // Sync must also REMOVE files deleted or renamed upstream — copying
+    // over the live dir left stale scripts in the unpacked extension,
+    // mixing versions after upgrades. Stage a fresh copy next to the
+    // target and swap it in.
+    let staging_dir = staging_dir_for(extension_dir)?;
+    if staging_dir.exists() {
+        fs::remove_dir_all(&staging_dir)?;
+    }
+    let files_copied = copy_dir_recursive(source_dir, &staging_dir)?;
+    // The generated per-install TID in config.js survives the swap.
+    let old_config = extension_dir.join("config.js");
+    if old_config.is_file() {
+        fs::copy(&old_config, staging_dir.join("config.js"))?;
+    }
+    ensure_config_js(&staging_dir)?;
+    let manifest_version = read_manifest_version(&staging_dir)?;
+    if extension_dir.exists() {
+        fs::remove_dir_all(extension_dir)?;
+    }
+    fs::rename(&staging_dir, extension_dir)?;
     Ok((files_copied, manifest_version))
+}
+
+fn staging_dir_for(extension_dir: &Path) -> std::io::Result<PathBuf> {
+    let name = extension_dir.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "extension dir has no directory name",
+        )
+    })?;
+    Ok(extension_dir.with_file_name(format!("{}.staging", name.to_string_lossy())))
 }
 
 fn read_manifest_version(extension_dir: &Path) -> std::io::Result<String> {
@@ -638,6 +665,33 @@ mod tests {
         prepare_extension_layout(&source_dir, &extension_dir).expect("preserve config");
         let config = fs::read_to_string(extension_dir.join("config.js")).expect("config");
         assert_eq!(config, stable_config);
+    }
+
+    #[test]
+    fn prepare_extension_layout_removes_files_deleted_upstream() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let source_dir = tmp.path().join("source/tmwd_cdp_bridge");
+        let extension_dir = tmp.path().join("app-data/browser-control/tmwd_cdp_bridge");
+        write_minimal_extension_source(&source_dir);
+        fs::write(source_dir.join("legacy.js"), "old script").expect("write legacy");
+
+        prepare_extension_layout(&source_dir, &extension_dir).expect("first prepare");
+        assert!(extension_dir.join("legacy.js").is_file());
+        let config = fs::read_to_string(extension_dir.join("config.js")).expect("config");
+
+        // Upstream renamed legacy.js → renamed.js. The old additive copy
+        // left legacy.js behind, mixing extension versions after upgrade.
+        fs::remove_file(source_dir.join("legacy.js")).expect("remove from source");
+        fs::write(source_dir.join("renamed.js"), "new script").expect("write renamed");
+        prepare_extension_layout(&source_dir, &extension_dir).expect("resync");
+
+        assert!(!extension_dir.join("legacy.js").exists());
+        assert!(extension_dir.join("renamed.js").is_file());
+        // The generated per-install config survives the swap.
+        assert_eq!(
+            fs::read_to_string(extension_dir.join("config.js")).expect("config"),
+            config
+        );
     }
 
     #[test]

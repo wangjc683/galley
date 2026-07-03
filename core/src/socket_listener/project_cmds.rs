@@ -189,13 +189,19 @@ pub(super) async fn dispatch_project_delete(
 /// `gui/src/stores/sessions.ts:929`). Hex is fine — collision space
 /// for a single-user app is enormous and the id is opaque downstream.
 fn mint_project_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+    // Without the counter this was a pure function of the timestamp:
+    // two creates landing on the same tick minted the SAME id and hit a
+    // PK conflict. Mirrors `mint_session_id`.
+    static PROJECT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let mut x: u128 = ts;
-    // Splitmix-ish stir so two ids minted in the same ns differ.
+    let counter = PROJECT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut x: u128 = ts ^ u128::from(counter.rotate_left(17));
+    // Splitmix-ish stir so ids don't visibly encode the timestamp.
     x ^= x.wrapping_mul(0x9E3779B97F4A7C15_9E3779B97F4A7C15);
     x ^= x >> 64;
     x ^= x.wrapping_mul(0xC4CEB9FE1A85EC53_C4CEB9FE1A85EC53);

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Duration;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -352,11 +352,42 @@ pub struct ResolvedCodexAccessToken {
     pub expires_at: Option<i64>,
 }
 
+/// Process-wide credential IPC handle. One listener serves every
+/// managed runner: the per-spawn variant leaked a task + fd + socket
+/// file on every spawn (they were never closed).
+struct CredentialIpcHandle {
+    config: CodexCredentialIpcConfig,
+    allowlist: Arc<RwLock<CredentialIpcAllowlist>>,
+}
+
+static CREDENTIAL_IPC_SINGLETON: OnceLock<AsyncMutex<Option<CredentialIpcHandle>>> =
+    OnceLock::new();
+
+/// Get-or-create the process-wide credential IPC listener and merge
+/// `allowed_credentials` into its allowlist. Refs are only added, never
+/// removed — a logged-out credential's secret is gone from the store,
+/// so a stale allowlist entry cannot leak anything.
 pub async fn start_credential_ipc(
     allowed_credentials: CredentialIpcAllowlist,
 ) -> Result<CodexCredentialIpcConfig> {
+    let singleton = CREDENTIAL_IPC_SINGLETON.get_or_init(|| AsyncMutex::new(None));
+    let mut slot = singleton.lock().await;
+    if let Some(handle) = slot.as_ref() {
+        handle
+            .allowlist
+            .write()
+            .expect("credential allowlist lock poisoned")
+            .extend(allowed_credentials);
+        return Ok(handle.config.clone());
+    }
     let token = random_hex(24)?;
-    start_platform_credential_ipc(token, Arc::new(allowed_credentials)).await
+    let allowlist = Arc::new(RwLock::new(allowed_credentials));
+    let config = start_platform_credential_ipc(token, allowlist.clone()).await?;
+    *slot = Some(CredentialIpcHandle {
+        config: config.clone(),
+        allowlist,
+    });
+    Ok(config)
 }
 
 async fn persist_probe_and_return(secret: CodexOAuthSecret) -> Result<CodexAuthSetupResult> {
@@ -386,12 +417,25 @@ async fn persist_probe_and_return(secret: CodexOAuthSecret) -> Result<CodexAuthS
             make_default: false,
         })
         .await?;
-    let status = probe_with_access_token(
+    let status = match probe_with_access_token(
         &secret.access_token,
         CODEX_DEFAULT_MODEL,
         CODEX_DEFAULT_REASONING,
     )
-    .await?;
+    .await
+    {
+        Ok(status) => status,
+        // Credentials, provider, and model are persisted above — a
+        // transient probe failure (429 / 5xx / offline) must not surface
+        // as "sign-in failed" when the sign-in in fact succeeded. Report
+        // a non-ok connection status the GUI can show as retryable.
+        Err(e) => ManagedModelConnectionResult {
+            ok: false,
+            endpoint: format!("{CODEX_API_BASE}/responses"),
+            model_found: None,
+            message: e.to_string(),
+        },
+    };
     Ok(CodexAuthSetupResult {
         provider,
         model,
@@ -1164,7 +1208,7 @@ fn credential_token_matches(actual: &str, expected: &str) -> bool {
 #[cfg(unix)]
 async fn start_platform_credential_ipc(
     token: String,
-    allowed_credentials: Arc<CredentialIpcAllowlist>,
+    allowed_credentials: Arc<RwLock<CredentialIpcAllowlist>>,
 ) -> Result<CodexCredentialIpcConfig> {
     use std::os::unix::fs::PermissionsExt;
     use tokio::net::UnixListener;
@@ -1206,7 +1250,7 @@ async fn start_platform_credential_ipc(
 #[cfg(windows)]
 async fn start_platform_credential_ipc(
     token: String,
-    allowed_credentials: Arc<CredentialIpcAllowlist>,
+    allowed_credentials: Arc<RwLock<CredentialIpcAllowlist>>,
 ) -> Result<CodexCredentialIpcConfig> {
     let address = format!(
         r"\\.\pipe\galley-codex-{}-{}",
@@ -1217,8 +1261,18 @@ async fn start_platform_credential_ipc(
     let token_for_task = token.clone();
     tokio::spawn(async move {
         loop {
-            let Ok(server) = create_secure_credential_pipe(&pipe_name) else {
-                break;
+            let server = match create_secure_credential_pipe(&pipe_name) {
+                Ok(server) => server,
+                Err(e) => {
+                    // A silent break here killed credential IPC for the
+                    // rest of the process lifetime; failures are
+                    // transient (handle pressure) — retry with backoff.
+                    eprintln!(
+                        "[codex-oauth] creating credential pipe instance failed: {e} — retrying in 500ms"
+                    );
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    continue;
+                }
             };
             if server.connect().await.is_err() {
                 continue;
@@ -1291,7 +1345,7 @@ fn create_secure_credential_pipe(
 async fn handle_credential_ipc_stream<S>(
     stream: S,
     expected_token: String,
-    allowed_credentials: Arc<CredentialIpcAllowlist>,
+    allowed_credentials: Arc<RwLock<CredentialIpcAllowlist>>,
 ) -> Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -1306,7 +1360,14 @@ where
             message: format!("reading credential IPC request failed: {e}"),
         })?;
     let response = match serde_json::from_str::<CredentialIpcRequest>(&line) {
-        Ok(req) => build_credential_ipc_response(req, &expected_token, &allowed_credentials).await,
+        Ok(req) => {
+            // Snapshot under the read lock; never hold it across await.
+            let allowlist_snapshot = allowed_credentials
+                .read()
+                .expect("credential allowlist lock poisoned")
+                .clone();
+            build_credential_ipc_response(req, &expected_token, &allowlist_snapshot).await
+        }
         Err(e) => Err(GalleyError::InvalidArgs {
             message: format!("credential IPC request is invalid JSON: {e}"),
         }),
@@ -1885,7 +1946,7 @@ mod tests {
         let task = tokio::spawn(handle_credential_ipc_stream(
             server,
             "expected".into(),
-            Arc::new(allowlist),
+            Arc::new(RwLock::new(allowlist)),
         ));
 
         client
@@ -1915,7 +1976,7 @@ mod tests {
         let task = tokio::spawn(handle_credential_ipc_stream(
             server,
             "expected".into(),
-            Arc::new(allowlist),
+            Arc::new(RwLock::new(allowlist)),
         ));
 
         client

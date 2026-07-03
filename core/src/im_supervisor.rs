@@ -212,7 +212,14 @@ impl ImSupervisorManager {
                     return Ok(status.with_pref(pref, current_revision));
                 }
                 if let Some(child) = self.take_child(platform).await {
-                    let _ = child.lock().await.start_kill();
+                    let mut child = child.lock().await;
+                    let _ = child.start_kill();
+                    // Wait (bounded) for the old process to actually die
+                    // before spawning the replacement: on Windows its
+                    // state-dir file lock outlives start_kill, and the
+                    // new supervisor intermittently failed with
+                    // "already running".
+                    let _ = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
                 }
             }
         }
@@ -471,7 +478,28 @@ impl ImSupervisorManager {
         for platform in PLATFORMS {
             let pref = read_pref(platform).await;
             if pref.enabled && pref.auto_start {
-                let _ = self.start(app.clone(), platform.into(), false).await;
+                if let Err(e) = self.start(app.clone(), platform.into(), false).await {
+                    // Swallowing this left the UI reading "enabled but
+                    // nothing happened": pref on, no slot, no last_error.
+                    // Record an Error slot so the failure is visible and
+                    // retryable from the Channels card.
+                    eprintln!("[im-supervisor] autostart {platform} failed: {e}");
+                    let status = ImSupervisorStatus {
+                        platform: platform.into(),
+                        state: ImSupervisorState::Error,
+                        enabled: true,
+                        pid: None,
+                        bot_id: None,
+                        qr_image_path: None,
+                        last_error: Some(e),
+                        model_config_revision: pref.model_config_revision.clone(),
+                        model_config_stale: false,
+                        owner_open_id: feishu_pref_owner(platform).await,
+                        bind_code: None,
+                        updated_at: now_iso(),
+                    };
+                    self.set_slot(platform, None, status, &app).await;
+                }
             }
         }
     }
