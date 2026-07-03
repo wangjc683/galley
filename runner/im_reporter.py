@@ -206,7 +206,7 @@ class ReporterState:
         self.is_new = is_new
 
     @classmethod
-    def load(cls, path: Path) -> "ReporterState":
+    def load(cls, path: Path) -> ReporterState:
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(raw, dict) and isinstance(raw.get("sessions"), dict):

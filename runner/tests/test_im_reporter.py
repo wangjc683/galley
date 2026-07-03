@@ -160,7 +160,7 @@ class _StubAgent:
         self.replies = list(replies)
         self.prompts: list[str] = []
 
-    def put_task(self, prompt: str, source: str = "") -> "queue.Queue[dict[str, Any]]":
+    def put_task(self, prompt: str, source: str = "") -> queue.Queue[dict[str, Any]]:
         assert source == "galley_reporter"
         self.prompts.append(prompt)
         dq: queue.Queue[dict[str, Any]] = queue.Queue()
