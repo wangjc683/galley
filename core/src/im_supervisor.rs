@@ -58,6 +58,12 @@ pub struct ImSupervisorStatus {
     pub last_error: Option<String>,
     pub model_config_revision: Option<String>,
     pub model_config_stale: bool,
+    /// Feishu only: the bound owner's open_id. While set, the bot
+    /// responds exclusively to this user.
+    pub owner_open_id: Option<String>,
+    /// Feishu only: the active pairing code while the bot is running
+    /// unbound. The GUI shows it; DMing it to the bot binds the sender.
+    pub bind_code: Option<String>,
     pub updated_at: String,
 }
 
@@ -90,6 +96,11 @@ struct ImSupervisorPref {
 struct FeishuConfigPref {
     app_id: String,
     updated_at: Option<String>,
+    /// open_id of the paired owner. None = locked, awaiting pairing.
+    /// open_ids are app-scoped, so switching to a different Feishu app
+    /// invalidates this (see `save_feishu_im_config`).
+    owner_open_id: Option<String>,
+    owner_bound_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -98,6 +109,8 @@ pub struct FeishuImConfig {
     pub app_id: String,
     pub has_app_secret: bool,
     pub updated_at: Option<String>,
+    pub owner_open_id: Option<String>,
+    pub owner_bound_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -134,6 +147,9 @@ struct ImSupervisorLine {
     bot_id: Option<String>,
     qr_image_path: Option<String>,
     last_error: Option<String>,
+    /// Present on the Feishu owner-binding event: the open_id that just
+    /// paired with the bot. Core persists it and locks the config to it.
+    owner_open_id: Option<String>,
     updated_at: Option<String>,
 }
 
@@ -225,7 +241,7 @@ impl ImSupervisorManager {
         env.push(("GALLEY_SUPERVISOR_SOP_PATH".into(), sop_path_str));
         env.push(("GALLEY_IM_PLATFORM".into(), platform.into()));
         env.push((GALLEY_CORE_PID_ENV.into(), std::process::id().to_string()));
-        append_platform_env(platform, &mut env).await?;
+        let binding = append_platform_env(platform, &mut env).await?;
 
         let python = managed_python_for_app(&app)?;
         let code_root = context.diagnostics.paths.code_root.clone();
@@ -283,6 +299,8 @@ impl ImSupervisorManager {
             last_error: None,
             model_config_revision,
             model_config_stale: false,
+            owner_open_id: binding.owner_open_id,
+            bind_code: binding.bind_code,
             updated_at: now_iso(),
         };
         self.set_slot(platform, Some(child.clone()), status.clone(), &app)
@@ -361,6 +379,8 @@ impl ImSupervisorManager {
             last_error: None,
             model_config_revision: None,
             model_config_stale: false,
+            owner_open_id: feishu_pref_owner(platform).await,
+            bind_code: None,
             updated_at: now_iso(),
         };
         self.set_slot(platform, None, status.clone(), &app).await;
@@ -402,9 +422,48 @@ impl ImSupervisorManager {
             last_error: None,
             model_config_revision: None,
             model_config_stale: false,
+            owner_open_id: None,
+            bind_code: None,
             updated_at: now_iso(),
         };
         self.set_slot(platform, None, status.clone(), &app).await;
+        Ok(status)
+    }
+
+    /// Unpair the Feishu owner. Clears the persisted owner and, if the
+    /// supervisor is live, force-restarts it so the bot comes back in
+    /// locked mode with a fresh pairing code (the restart is also what
+    /// makes recovery from a hijacked binding race-proof: the new code
+    /// is only visible on this machine's screen).
+    pub async fn unbind_feishu_owner(
+        self: &Arc<Self>,
+        app: AppHandle,
+    ) -> Result<ImSupervisorStatus, String> {
+        clear_feishu_owner_pref().await?;
+        let live = matches!(
+            self.current_status(FEISHU).await.map(|s| s.state),
+            Some(
+                ImSupervisorState::Starting
+                    | ImSupervisorState::WaitingScan
+                    | ImSupervisorState::Reconnecting
+                    | ImSupervisorState::Running
+            )
+        );
+        if live {
+            return self.start_inner(app, FEISHU.into(), false, true).await;
+        }
+        // Not running: just reflect the cleared owner in the slot (if
+        // any) and report the derived state.
+        {
+            let mut slots = self.slots.lock().await;
+            if let Some(slot) = slots.get_mut(FEISHU) {
+                slot.status.owner_open_id = None;
+                slot.status.bind_code = None;
+                slot.status.updated_at = now_iso();
+            }
+        }
+        let status = self.status(&app, FEISHU.into()).await?;
+        let _ = app.emit(EVENT_NAME, status.clone());
         Ok(status)
     }
 
@@ -520,6 +579,14 @@ impl ImSupervisorManager {
             if event_platform != platform {
                 continue;
             }
+            // Owner binding: persist BEFORE touching the slot, so a crash
+            // right after the bot's confirmation reply cannot leave a
+            // bound bot whose owner is lost on the next spawn.
+            if let Some(owner) = event.owner_open_id.as_deref() {
+                if let Err(e) = persist_feishu_owner(owner).await {
+                    eprintln!("[im-supervisor] persisting Feishu owner failed: {e}");
+                }
+            }
             let mut slots = self.slots.lock().await;
             let Some(slot) = slots.get_mut(platform) else {
                 continue;
@@ -530,6 +597,10 @@ impl ImSupervisorManager {
             slot.status.state = event.state;
             slot.status.updated_at = event.updated_at.unwrap_or_else(now_iso);
             slot.status.bot_id = event.bot_id.or_else(|| slot.status.bot_id.clone());
+            if let Some(owner) = event.owner_open_id {
+                slot.status.owner_open_id = Some(owner);
+                slot.status.bind_code = None;
+            }
             if let Some(qr) = event.qr_image_path {
                 slot.status.qr_image_path = Some(qr);
             }
@@ -589,6 +660,8 @@ impl ImSupervisorManager {
         }
         slot.child = None;
         slot.status.pid = None;
+        // A pairing code dies with its process; reconnect issues a new one.
+        slot.status.bind_code = None;
         match slot.status.state {
             ImSupervisorState::Expired | ImSupervisorState::Error | ImSupervisorState::Stopped => {}
             _ => match status {
@@ -668,6 +741,8 @@ impl ImSupervisorManager {
             last_error: None,
             model_config_revision: pref.model_config_revision,
             model_config_stale,
+            owner_open_id: feishu_pref_owner(platform).await,
+            bind_code: None,
             updated_at: now_iso(),
         })
     }
@@ -749,9 +824,24 @@ pub async fn save_feishu_im_config(
         return Err("Feishu App Secret is required".into());
     }
 
+    // open_ids are scoped to the Feishu app: keeping the same app keeps
+    // the pairing; switching to a different app invalidates it (the old
+    // owner's open_id means nothing there and would lock everyone out).
+    let existing = read_feishu_config_pref(&galley).await?;
+    let keep_owner = existing.app_id.trim() == app_id;
     let pref = FeishuConfigPref {
         app_id: app_id.to_string(),
         updated_at: Some(now_iso()),
+        owner_open_id: if keep_owner {
+            existing.owner_open_id
+        } else {
+            None
+        },
+        owner_bound_at: if keep_owner {
+            existing.owner_bound_at
+        } else {
+            None
+        },
     };
     galley
         .set_pref_json(FEISHU_CONFIG_PREF, json!(pref))
@@ -772,12 +862,21 @@ pub async fn delete_feishu_im_config() -> Result<FeishuImConfig, String> {
     read_feishu_im_config_with(&galley).await
 }
 
+/// Feishu access state resolved at spawn time: either a bound owner
+/// (bot responds only to them) or a fresh pairing code (bot is locked
+/// until someone DMs the code). Empty defaults for non-Feishu platforms.
+#[derive(Default)]
+struct FeishuBindingContext {
+    owner_open_id: Option<String>,
+    bind_code: Option<String>,
+}
+
 async fn append_platform_env(
     platform: &str,
     env: &mut Vec<(String, String)>,
-) -> Result<(), String> {
+) -> Result<FeishuBindingContext, String> {
     if platform != FEISHU {
-        return Ok(());
+        return Ok(FeishuBindingContext::default());
     }
     let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
     let config = read_feishu_config_pref(&galley).await?;
@@ -791,14 +890,84 @@ async fn append_platform_env(
     if app_secret.trim().is_empty() {
         return Err("Feishu App ID and App Secret are required before connecting".into());
     }
+    // Owner-locked access: the bot only ever answers the paired owner.
+    // Unbound → issue a pairing code; the empty allow-list plus the code
+    // tells fsapp to run locked (never public) until the code arrives.
+    let owner_open_id = config
+        .owner_open_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
+    let bind_code = if owner_open_id.is_none() {
+        Some(generate_feishu_bind_code())
+    } else {
+        None
+    };
+    let allowed_users: Vec<&String> = owner_open_id.iter().collect();
     let config_json = serde_json::to_string(&json!({
         "fs_app_id": app_id,
         "fs_app_secret": app_secret,
-        "fs_allowed_users": [],
+        "fs_allowed_users": allowed_users,
+        "fs_owner_bind_code": bind_code,
     }))
     .map_err(|e| e.to_string())?;
     env.push(("GALLEY_FEISHU_CONFIG_JSON".into(), config_json));
-    Ok(())
+    Ok(FeishuBindingContext {
+        owner_open_id,
+        bind_code,
+    })
+}
+
+/// 6-digit pairing code. `RandomState` seeds per-instance from OS
+/// entropy — enough for a code that is only shown on the owner's own
+/// screen, rate-limited on the bot side, and regenerated per connect.
+fn generate_feishu_bind_code() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+    );
+    format!("{:06}", hasher.finish() % 1_000_000)
+}
+
+/// Bound owner from the persisted Feishu config, for status snapshots
+/// of non-running states. None for other platforms.
+async fn feishu_pref_owner(platform: &str) -> Option<String> {
+    if platform != FEISHU {
+        return None;
+    }
+    let galley = SqliteGalley::open().await.ok()?;
+    read_feishu_config_pref(&galley)
+        .await
+        .ok()?
+        .owner_open_id
+        .filter(|s| !s.trim().is_empty())
+}
+
+async fn persist_feishu_owner(owner_open_id: &str) -> Result<(), String> {
+    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+    let mut pref = read_feishu_config_pref(&galley).await?;
+    pref.owner_open_id = Some(owner_open_id.to_string());
+    pref.owner_bound_at = Some(now_iso());
+    galley
+        .set_pref_json(FEISHU_CONFIG_PREF, json!(pref))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn clear_feishu_owner_pref() -> Result<(), String> {
+    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+    let mut pref = read_feishu_config_pref(&galley).await?;
+    pref.owner_open_id = None;
+    pref.owner_bound_at = None;
+    galley
+        .set_pref_json(FEISHU_CONFIG_PREF, json!(pref))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn feishu_config_ready() -> bool {
@@ -819,6 +988,8 @@ async fn read_feishu_im_config_with(galley: &SqliteGalley) -> Result<FeishuImCon
         app_id: pref.app_id,
         has_app_secret: feishu_has_secret(galley).await,
         updated_at: pref.updated_at,
+        owner_open_id: pref.owner_open_id.filter(|s| !s.trim().is_empty()),
+        owner_bound_at: pref.owner_bound_at,
     })
 }
 
@@ -940,6 +1111,38 @@ mod tests {
         assert_eq!(normalize_platform("feishu").unwrap(), FEISHU);
         assert_eq!(normalize_platform(" FeiShu ").unwrap(), FEISHU);
         assert!(normalize_platform("telegram").is_err());
+    }
+
+    #[test]
+    fn feishu_bind_code_is_six_digits() {
+        for _ in 0..20 {
+            let code = generate_feishu_bind_code();
+            assert_eq!(code.len(), 6);
+            assert!(code.chars().all(|c| c.is_ascii_digit()), "code: {code}");
+        }
+    }
+
+    #[test]
+    fn supervisor_line_parses_owner_binding_event() {
+        let line = r#"{"platform":"feishu","state":"running","ownerOpenId":"ou_abc123","updatedAt":"2026-07-03T00:00:00Z"}"#;
+        let parsed: ImSupervisorLine = serde_json::from_str(line).expect("parse");
+        assert_eq!(parsed.owner_open_id.as_deref(), Some("ou_abc123"));
+        assert_eq!(parsed.state, ImSupervisorState::Running);
+
+        // Ordinary status lines (no owner field) must keep parsing.
+        let plain = r#"{"platform":"feishu","state":"running","updatedAt":"2026-07-03T00:00:00Z"}"#;
+        let parsed: ImSupervisorLine = serde_json::from_str(plain).expect("parse plain");
+        assert!(parsed.owner_open_id.is_none());
+    }
+
+    #[test]
+    fn feishu_config_pref_deserializes_without_owner_fields() {
+        // Prefs written before owner binding shipped must load cleanly.
+        let old = r#"{"appId":"cli_a1b2","updatedAt":"2026-06-01T00:00:00Z"}"#;
+        let pref: FeishuConfigPref = serde_json::from_str(old).expect("parse old pref");
+        assert_eq!(pref.app_id, "cli_a1b2");
+        assert!(pref.owner_open_id.is_none());
+        assert!(pref.owner_bound_at.is_none());
     }
 
     #[test]

@@ -5,7 +5,10 @@ Patch stack id: `galley-managed-ga-patches-v1`
 Last replay verified: `2026-06-29` against upstream
 `b1e173dcbb3cf1a0c7fdeab4211a12a44461c841`.
 (patches 0001, 0007, and 0008 were refreshed for upstream UltraPlan state
-routing, Responses/Codex payload context, and managed image attachment content.)
+routing, Responses/Codex payload context, and managed image attachment content.
+0011 added 2026-07-03 and verified to apply onto the in-repo post-0010
+payload; full-stack replay against upstream re-runs at the next baseline
+upgrade.)
 
 Current patches:
 
@@ -21,6 +24,7 @@ Current patches:
 | `0008-managed-image-attachments.patch` | `agentmain.py`, `llmcore.py` | Let Galley's managed runtime receive local image attachment paths from the bridge, encode them as real multimodal content blocks, and preserve non-text image blocks through the native tool client. | Medium: touches the managed task loop and native content-block filtering. | Remove when GenericAgent upstream exposes a stable public image-input contract for frontend callers. |
 | `0009-managed-feishu-config-env.patch` | `frontends/fsapp.py` | Let Galley's managed IM launcher inject Feishu app config from process memory, keep Feishu media temp files under Galley managed state, observe reconnect retries, tear down the lark websocket connection / event-loop tasks on each reconnect cycle so dead connections don't linger as zombies that divide by zero, log the lark-oapi hook path, and keep final-turn cards showing the turn summary/detail panel before final output. | Medium: touches config loading, temp path constants, an optional status hook, final-turn card rendering, and lark-oapi websocket lifecycle internals (module-level event loop, `_disconnect`). Re-verify `_teardown_lark_client` and the `GalleyStatusWsClient` private seams (`_connect`/`_reconnect`/`_try_connect`) before upgrading lark-oapi. | Remove when upstream Feishu frontend supports explicit config, temp paths, reconnect status callbacks, final-turn card summary panels, and a clean connection stop API. |
 | `0010-managed-keychain-state-path.patch` | `assets/code_run_header.py` | Keep Galley-managed keychain secrets under `managed-ga-state/ga_keychain.enc` instead of the user's real home `~/ga_keychain.enc`, so secrets written by any keychain-using SOP (e.g. Sophub self-bootstrap) stay inside the managed state root and don't collide with an external GA checkout's keychain. Applied at the `code_run` preamble so the in-memory `keychain` module is rebound (`_PATH` + rebuilt `keys`) before the agent imports it. Attach mode has no `GALLEY_GA_STATE_ROOT`, so the block is a no-op there. | Low: appends a tail block to the code_run preamble after the `sys.path.append` line; only runs when the agent emits a `code_run` that imports `keychain`. | Remove when GenericAgent upstream keychain respects an explicit state root / profile path, or when `code_run_header.py` is restructured so keychain is no longer importable at preamble time. |
+| `0011-managed-feishu-owner-binding.patch` | `frontends/fsapp.py` | Owner-locked access for the Galley-managed Feishu bot: with Galley-injected config (`GALLEY_FEISHU_CONFIG_JSON`), an empty allow-list means "locked awaiting pairing" instead of public access; a p2p text message matching `fs_owner_bind_code` binds the sender as the sole allowed user (wrong codes are ignored silently, the code is invalidated after 10 wrong attempts) and reports `ownerOpenId` through the status hook, which now forwards extra keyword fields. File-based (non-managed) config keeps upstream semantics untouched. | Medium: touches `_load_config` / `_feishu_config` / `_handle_message_impl` / `_emit_galley_status`, which patch 0009 also touches — rebase 0009 first, then this. Binding relies on `message.chat_type == "p2p"` from lark-oapi event models; re-verify on lark-oapi upgrades. | Remove when the upstream Feishu frontend supports explicit per-user access control / owner pairing. |
 
 Rules:
 

@@ -1029,6 +1029,19 @@ export const zhCopy = {
       openModels: "先去配置模型",
       modelRequired:
         "Channels 会使用 Galley 已配置的模型。接入前，需要先在 Models 里配置一个可用模型。",
+      feishuBindWaitingTitle: "等待绑定使用者",
+      feishuBindWaitingLead: "在飞书私聊中向机器人发送配对码：",
+      feishuBindWaitingAfterCode: "发送配对码的人将成为机器人唯一响应的使用者。",
+      feishuOwnerSecurityNote:
+        "Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，其他人（包括群聊中 @ 它的成员）的消息会被忽略，也不会收到回复。",
+      feishuOwnerScopeAdvice:
+        "建议在飞书开放平台把应用可用范围设置为仅自己，进一步收窄暴露面。",
+      feishuBoundLabel: "已绑定使用者",
+      feishuBoundAt: "绑定于",
+      feishuUnbind: "解绑",
+      feishuUnbindDialogTitle: "解绑飞书使用者？",
+      feishuUnbindDialogBody:
+        "解绑后机器人立即停止响应当前使用者。若服务正在运行，会自动重启并生成新的配对码，在飞书私聊中发送新码即可重新绑定。",
     },
   },
   onboarding: {

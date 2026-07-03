@@ -272,6 +272,7 @@ pub fn run() {
             get_feishu_im_config,
             save_feishu_im_config,
             delete_feishu_im_config,
+            unbind_feishu_im_owner,
             start_im_supervisor,
             stop_im_supervisor,
             logout_im_supervisor,

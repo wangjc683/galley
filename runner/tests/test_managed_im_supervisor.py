@@ -207,6 +207,67 @@ def main():
     assert events[2]["lastError"] == "offline"
 
 
+def test_run_feishu_forwards_owner_binding_event(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Extra keyword fields on the status hook (the Feishu owner-binding
+    event) must pass through to the JSON status line — Galley Core reads
+    ownerOpenId from it to persist the paired owner."""
+    ga_path = tmp_path / "ga"
+    state_dir = tmp_path / "state"
+    _write_fake_fsapp(
+        ga_path,
+        """
+class Agent:
+    verbose = True
+
+agent = Agent()
+
+def get_agent():
+    return agent
+
+def check_config(init_agent=False):
+    return {"ready": True}
+
+def main():
+    GALLEY_STATUS_HOOK("running")
+    GALLEY_STATUS_HOOK("running", None, ownerOpenId="ou_test_owner")
+    raise KeyboardInterrupt()
+""",
+    )
+    monkeypatch.setattr(managed_runtime, "install_managed_mykey_loader", lambda: None)
+    monkeypatch.setattr(managed_runtime, "managed_state_root", lambda: None)
+    monkeypatch.setattr(
+        managed_runtime,
+        "install_managed_prompt_profile",
+        lambda agent, extra_env_names: None,
+    )
+    _clear_frontends_modules()
+    out = io.StringIO()
+    stdout, stderr, real_stdout, real_stderr = (
+        sys.stdout,
+        sys.stderr,
+        sys.__stdout__,
+        sys.__stderr__,
+    )
+    cwd = os.getcwd()
+    try:
+        code = managed_im_supervisor._run_feishu(_args(ga_path, state_dir), out)
+    finally:
+        os.chdir(cwd)
+        _restore_stdio(stdout, stderr, real_stdout, real_stderr)
+        _clear_frontends_modules()
+
+    assert code == 0
+    events = [json.loads(line) for line in out.getvalue().splitlines()]
+    bound = [event for event in events if "ownerOpenId" in event]
+    assert len(bound) == 1
+    assert bound[0]["ownerOpenId"] == "ou_test_owner"
+    assert bound[0]["state"] == "running"
+    assert bound[0]["platform"] == "feishu"
+
+
 def test_run_feishu_reports_missing_config(monkeypatch: Any, tmp_path: Path) -> None:
     ga_path = tmp_path / "ga"
     state_dir = tmp_path / "state"

@@ -22,6 +22,10 @@ export interface ImSupervisorStatus {
   lastError?: string | null;
   modelConfigRevision?: string | null;
   modelConfigStale: boolean;
+  /** Feishu only: the bound owner's open_id (the bot answers only them). */
+  ownerOpenId?: string | null;
+  /** Feishu only: pairing code while running unbound — DM it to bind. */
+  bindCode?: string | null;
   updatedAt: string;
 }
 
@@ -29,6 +33,8 @@ export interface FeishuImConfig {
   appId: string;
   hasAppSecret: boolean;
   updatedAt?: string | null;
+  ownerOpenId?: string | null;
+  ownerBoundAt?: string | null;
 }
 
 export interface SaveFeishuImConfigInput {
@@ -72,6 +78,14 @@ export function saveFeishuImConfig(input: SaveFeishuImConfigInput) {
 
 export function deleteFeishuImConfig() {
   return invoke<FeishuImConfig>("delete_feishu_im_config");
+}
+
+/**
+ * Unpair the Feishu owner. If the bot is running it restarts locked with
+ * a fresh pairing code; the returned status carries that code.
+ */
+export function unbindFeishuImOwner() {
+  return invoke<ImSupervisorStatus>("unbind_feishu_im_owner");
 }
 
 /**

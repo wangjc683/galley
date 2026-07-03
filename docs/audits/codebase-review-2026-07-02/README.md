@@ -38,7 +38,8 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 6. **Windows 三条**：CORE-6、CORE-7、CORE-11（下个 Win 发布的 gate）—
    ✅ 2026-07-03 已修（mac 无法本地跑 Win 分支，靠 check.yml windows-2022
    job 编译 + named-pipe 集成测试验证，最终 gate 仍是 Win dogfood）
-7. **CORE-13 飞书访问控制**：需产品决策（收紧默认值 vs 明示记录 beta 取舍）
+7. **CORE-13 飞书访问控制**：需产品决策（收紧默认值 vs 明示记录 beta 取舍）—
+   ✅ 2026-07-03 已修（JC 决策：收紧为配对码单 owner 绑定）
 
 ---
 
@@ -134,10 +135,25 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
   `start_kill()` 后不 wait 就 spawn 新进程，Windows 上新旧进程抢 state-dir 文件锁
   → 模型配置变更后重启间歇性报 "already running"。修复：`start_kill` 后带超时
   `wait().await` 再 spawn。
-- `[~]` **CORE-13** · `core/src/im_supervisor.rs:761-767` — 硬编码
+- `[x]` **CORE-13** · `core/src/im_supervisor.rs:761-767` — 硬编码
   `"fs_allowed_users": []`，下游 fsapp.py:483-487 空列表 = PUBLIC_ACCESS：整个
   飞书组织任何能私聊 bot 的人都能驱动本机 agent。**需产品决策**：收紧默认值，
   或显式记录 beta 取舍 + 代码注释。
+  **已修 2026-07-03**（JC 决策：配对码单 owner 绑定，方案讨论三轮定稿）：
+  - fsapp（patch `0011-managed-feishu-owner-binding`）：managed 注入配置下
+    空 allow-list = 锁定等待绑定（不再 PUBLIC）；仅私聊文本命中
+    `fs_owner_bind_code` 绑定发送者为唯一 owner（错误码静默、10 次后作废码）；
+    绑定经 status hook 上报 `ownerOpenId`。文件配置（非 managed）语义不变。
+  - core：`FeishuConfigPref` 持久化 owner（app_id 变更即失效——open_id 是
+    app-scoped）；未绑定时每次 Connect 生成 6 位配对码随 env 下发并进
+    status；`read_stdout` 先持久化再更新 slot；新命令
+    `unbind_feishu_im_owner`（清 owner + 运行中则强制重启换新码，恢复路径
+    抗抢占）。
+  - GUI：FeishuCard 三层文案——状态行（等待绑定+配对码 / 已绑定+解绑）、
+    常驻安全说明（仅响应绑定者、他人无回复）、可用范围收窄建议；en/zh。
+  - 测试：runner hook 透传、core 行解析/旧 pref 兼容/码格式；fsapp patch
+    逻辑无法在本 repo 单测（依赖 lark），靠 review + dogfood（升级后现有
+    连接需发一次码重新绑定，release notes 提一行）。
 
 ### Medium-Low / Low
 

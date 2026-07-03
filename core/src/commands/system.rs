@@ -137,6 +137,14 @@ pub(crate) async fn delete_feishu_im_config(
 }
 
 #[tauri::command]
+pub(crate) async fn unbind_feishu_im_owner(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, std::sync::Arc<im_supervisor::ImSupervisorManager>>,
+) -> std::result::Result<im_supervisor::ImSupervisorStatus, String> {
+    manager.inner().unbind_feishu_owner(app).await
+}
+
+#[tauri::command]
 pub(crate) async fn start_im_supervisor(
     app: tauri::AppHandle,
     manager: tauri::State<'_, std::sync::Arc<im_supervisor::ImSupervisorManager>>,

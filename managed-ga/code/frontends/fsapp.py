@@ -331,10 +331,19 @@ GALLEY_STARTUP_FAILURE_LIMIT = 3
 _galley_connected_once = False
 
 
-def _emit_galley_status(state, last_error=None):
+def _emit_galley_status(state, last_error=None, **extra):
     hook = globals().get("GALLEY_STATUS_HOOK")
-    if callable(hook):
-        hook(state, last_error)
+    if not callable(hook):
+        return
+    if extra:
+        try:
+            hook(state, last_error, **extra)
+            return
+        except TypeError:
+            # Older launcher hooks take (state, last_error) only; drop the
+            # extra fields rather than losing the status line entirely.
+            pass
+    hook(state, last_error)
 
 
 def _has_galley_reconnect_hooks(cli):
@@ -464,30 +473,79 @@ def _load_config():
         try:
             data = json.loads(raw)
             if isinstance(data, dict):
-                return data, "<galley-managed-feishu-config>"
+                return data, "<galley-managed-feishu-config>", True
         except Exception as e:
             raise RuntimeError(f"load Galley Feishu config failed: {e}") from e
         raise RuntimeError("Galley Feishu config must be a JSON object")
     path = _resolve_mykey_path()
     if not path or not path.exists():
-        return {}, str(path or "")
+        return {}, str(path or ""), False
     try:
         data = _load_dict_config(path)
-        return data if isinstance(data, dict) else {}, str(path)
+        return (data if isinstance(data, dict) else {}), str(path), False
     except Exception as e:
         print(f"[ERROR] load mykey failed {path}: {e}")
-        return {}, str(path)
+        return {}, str(path), False
 
 
 def _feishu_config():
-    cfg, path = _load_config()
+    cfg, path, managed = _load_config()
     app_id = str(cfg.get("fs_app_id", "") or "").strip()
     app_secret = str(cfg.get("fs_app_secret", "") or "").strip()
     allowed = _to_allowed_set(cfg.get("fs_allowed_users", []))
-    return app_id, app_secret, allowed, (not allowed or "*" in allowed), path
+    bind_code = str(cfg.get("fs_owner_bind_code", "") or "").strip() or None
+    if managed:
+        # Galley-managed mode: an empty allow-list means "locked, waiting
+        # for owner pairing", never public access. The agent drives the
+        # owner's machine, so anyone-in-the-org access must be an explicit
+        # choice ("*"), not a default.
+        public = "*" in allowed
+    else:
+        public = not allowed or "*" in allowed
+    return app_id, app_secret, allowed, public, bind_code, path
 
 
-APP_ID, APP_SECRET, ALLOWED_USERS, PUBLIC_ACCESS, CONFIG_PATH = _feishu_config()
+APP_ID, APP_SECRET, ALLOWED_USERS, PUBLIC_ACCESS, OWNER_BIND_CODE, CONFIG_PATH = _feishu_config()
+
+GALLEY_OWNER_BIND_ATTEMPT_LIMIT = 10
+_owner_bind_attempts = 0
+
+
+def _handle_owner_bind_message(message, open_id):
+    """Locked mode (managed config, no owner bound yet): the only input
+    that does anything is the pairing code, sent in a p2p chat. Everything
+    else is ignored silently — wrong guesses get no reply, so a guesser
+    learns nothing; too many wrong guesses invalidate the code entirely
+    (reconnect from Galley issues a new one)."""
+    global ALLOWED_USERS, OWNER_BIND_CODE, _owner_bind_attempts
+    if not OWNER_BIND_CODE:
+        print(f"等待绑定但配对码不可用，忽略消息: {open_id}")
+        return
+    if getattr(message, "chat_type", "") != "p2p":
+        print(f"等待绑定，忽略非私聊消息: {open_id}")
+        return
+    if message.message_type != "text":
+        return
+    try:
+        text = str((json.loads(message.content or "{}") or {}).get("text", "")).strip()
+    except Exception:
+        return
+    if text != OWNER_BIND_CODE:
+        _owner_bind_attempts += 1
+        print(f"配对码不匹配 ({_owner_bind_attempts}/{GALLEY_OWNER_BIND_ATTEMPT_LIMIT}): {open_id}")
+        if _owner_bind_attempts >= GALLEY_OWNER_BIND_ATTEMPT_LIMIT:
+            OWNER_BIND_CODE = None
+            _emit_galley_status(
+                "running",
+                "Feishu owner pairing code invalidated after too many wrong attempts; "
+                "reconnect from Galley to issue a new code",
+            )
+        return
+    ALLOWED_USERS = {open_id}
+    OWNER_BIND_CODE = None
+    _emit_galley_status("running", None, ownerOpenId=open_id)
+    send_message(open_id, "✓ 已绑定为 Galley 的使用者，现在只响应你的消息。")
+    print(f"已绑定 Galley owner: {open_id}")
 
 
 def get_agent():
@@ -519,7 +577,7 @@ def _mask_secret(value):
 
 
 def check_config(init_agent=False):
-    app_id, app_secret, allowed, public_access, path = _feishu_config()
+    app_id, app_secret, allowed, public_access, _bind_code, path = _feishu_config()
     result = {
         "config_path": path,
         "app_id": app_id,
@@ -970,6 +1028,11 @@ def _handle_message_impl(data):
         return
     open_id = sender.sender_id.open_id
     chat_id = message.chat_id
+    if not PUBLIC_ACCESS and not ALLOWED_USERS:
+        # Locked: no owner bound yet. Nothing reaches the agent until the
+        # pairing code arrives in a p2p chat.
+        _handle_owner_bind_message(message, open_id)
+        return
     if not PUBLIC_ACCESS and open_id not in ALLOWED_USERS:
         print(f"未授权用户: {open_id}")
         return
@@ -999,8 +1062,8 @@ def _handle_message_impl(data):
 
 
 def main():
-    global client, APP_ID, APP_SECRET, ALLOWED_USERS, PUBLIC_ACCESS, CONFIG_PATH
-    APP_ID, APP_SECRET, ALLOWED_USERS, PUBLIC_ACCESS, CONFIG_PATH = _feishu_config()
+    global client, APP_ID, APP_SECRET, ALLOWED_USERS, PUBLIC_ACCESS, OWNER_BIND_CODE, CONFIG_PATH
+    APP_ID, APP_SECRET, ALLOWED_USERS, PUBLIC_ACCESS, OWNER_BIND_CODE, CONFIG_PATH = _feishu_config()
     if not APP_ID or not APP_SECRET:
         message = f"请在 mykey 配置中填写 fs_app_id 和 fs_app_secret\n配置文件: {CONFIG_PATH}"
         print(f"错误: {message}", flush=True)

@@ -1080,6 +1080,20 @@ export const enCopy: AppCopy = {
       openModels: "Configure models first",
       modelRequired:
         "Channels use Galley's configured models. Add a usable model in Models before connecting.",
+      feishuBindWaitingTitle: "Waiting for owner pairing",
+      feishuBindWaitingLead: "DM the bot this pairing code in Feishu:",
+      feishuBindWaitingAfterCode:
+        "Whoever sends the code becomes the only user the bot answers.",
+      feishuOwnerSecurityNote:
+        "Galley is a personal assistant: for security, the bot only responds to its paired owner. Messages from anyone else — including group members who @ it — are ignored without a reply.",
+      feishuOwnerScopeAdvice:
+        "Tip: in the Feishu developer console, set the app's availability scope to just yourself to shrink exposure further.",
+      feishuBoundLabel: "Paired owner",
+      feishuBoundAt: "paired",
+      feishuUnbind: "Unpair",
+      feishuUnbindDialogTitle: "Unpair the Feishu owner?",
+      feishuUnbindDialogBody:
+        "The bot immediately stops responding to the current owner. If the service is running, it restarts with a fresh pairing code — DM the new code to pair again.",
     },
   },
   onboarding: {

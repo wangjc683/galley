@@ -16,6 +16,7 @@ import {
   saveFeishuImConfig,
   startImSupervisor,
   stopImSupervisor,
+  unbindFeishuImOwner,
   type FeishuImConfig,
   type ImSupervisorState,
   type ImSupervisorStatus,
@@ -46,13 +47,14 @@ export function FeishuCard({
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [localBusy, setLocalBusy] = useState<
-    "load" | "open" | "save" | "connect" | "stop" | "disconnect" | null
+    "load" | "open" | "save" | "connect" | "stop" | "disconnect" | "unbind" | null
   >("load");
   const [localError, setLocalError] = useState<string | null>(null);
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(
     null,
   );
   const [confirmDisconnectOpen, setConfirmDisconnectOpen] = useState(false);
+  const [confirmUnbindOpen, setConfirmUnbindOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +152,22 @@ export function FeishuCard({
       setAppSecret("");
       onStatusChange(null);
     });
+
+  const unbind = () =>
+    run("unbind", async () => {
+      onStatusChange(await unbindFeishuImOwner());
+      setConfig(await getFeishuImConfig());
+    });
+
+  // Owner binding view state. The live status wins (it carries the
+  // pairing code while running unbound); the persisted config covers
+  // the stopped-but-bound case.
+  const ownerOpenId =
+    status?.ownerOpenId ?? config?.ownerOpenId ?? null;
+  const ownerBoundAt = config?.ownerBoundAt ?? null;
+  const bindCode = ownerOpenId ? null : (status?.bindCode ?? null);
+  const maskOpenId = (id: string) =>
+    id.length <= 8 ? id : `${id.slice(0, 4)}…${id.slice(-4)}`;
 
   const openFeishuConsole = () =>
     run("open", async () => {
@@ -293,6 +311,55 @@ export function FeishuCard({
             />
           )}
 
+          {ownerOpenId ? (
+            <div className="rounded-sm border border-line bg-surface px-3 py-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Check size={13} weight="bold" className="text-success" />
+                <span className="text-[12px] font-semibold text-ink">
+                  {imCopy.feishuBoundLabel}
+                </span>
+                <span className="select-text font-mono text-[11.5px] text-ink-soft">
+                  {maskOpenId(ownerOpenId)}
+                </span>
+                {ownerBoundAt ? (
+                  <span className="text-[11.5px] text-ink-muted">
+                    {imCopy.feishuBoundAt}{" "}
+                    {new Date(ownerBoundAt).toLocaleString()}
+                  </span>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="ml-auto"
+                  disabled={busy}
+                  onClick={() => setConfirmUnbindOpen(true)}
+                >
+                  {localBusy === "unbind" ? imCopy.working : imCopy.feishuUnbind}
+                </Button>
+              </div>
+            </div>
+          ) : bindCode ? (
+            <div className="rounded-sm border border-brand/25 bg-brand/[var(--opacity-subtle)] px-3 py-2.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-brand">
+                {imCopy.feishuBindWaitingTitle}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-baseline gap-2 text-[12.5px] text-ink">
+                <span>{imCopy.feishuBindWaitingLead}</span>
+                <code className="select-text rounded-sm border border-line bg-surface px-2 py-0.5 font-mono text-[15px] font-bold tracking-[0.2em] text-ink">
+                  {bindCode}
+                </code>
+              </div>
+              <div className="mt-1 text-[11.5px] leading-[1.5] text-ink-muted">
+                {imCopy.feishuBindWaitingAfterCode} {imCopy.feishuOwnerScopeAdvice}
+              </div>
+            </div>
+          ) : null}
+
+          <p className="text-[11.5px] leading-[1.5] text-ink-muted">
+            {imCopy.feishuOwnerSecurityNote}
+          </p>
+
           {localError || statusLoadError || status?.lastError ? (
             <div className="rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2">
               <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-error/80">
@@ -305,6 +372,53 @@ export function FeishuCard({
           ) : null}
         </div>
       </ChannelCard>
+
+      <Dialog.Root open={confirmUnbindOpen} onOpenChange={setConfirmUnbindOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
+          <Dialog.Content
+            role="alertdialog"
+            aria-describedby="unbind-feishu-desc"
+            className={cn(
+              "fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
+              "max-w-[calc(100vw-32px)] rounded-lg border border-line bg-elevated p-5 shadow-elevated",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <WarningCircle size={18} weight="bold" className="text-warning" />
+              <Dialog.Title className="text-[15px] font-semibold text-ink">
+                {imCopy.feishuUnbindDialogTitle}
+              </Dialog.Title>
+            </div>
+            <p
+              id="unbind-feishu-desc"
+              className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
+            >
+              {imCopy.feishuUnbindDialogBody}
+            </p>
+            <DialogActionRow>
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmUnbindOpen(false)}
+                disabled={busy}
+                autoFocus
+              >
+                {commonCopy.cancel}
+              </Button>
+              <Button
+                variant="destructive-soft"
+                disabled={busy}
+                onClick={() => {
+                  setConfirmUnbindOpen(false);
+                  void unbind();
+                }}
+              >
+                {imCopy.feishuUnbind}
+              </Button>
+            </DialogActionRow>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <Dialog.Root
         open={confirmDisconnectOpen}

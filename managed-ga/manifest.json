@@ -18,7 +18,8 @@
       "0007-managed-codex-backend.patch",
       "0008-managed-image-attachments.patch",
       "0009-managed-feishu-config-env.patch",
-      "0010-managed-keychain-state-path.patch"
+      "0010-managed-keychain-state-path.patch",
+      "0011-managed-feishu-owner-binding.patch"
     ]
   },
   "stateSchemaVersion": 1

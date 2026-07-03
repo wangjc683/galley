@@ -428,12 +428,15 @@ def _run_feishu(args: argparse.Namespace, out: IO[str]) -> int:
         return agent
 
     fsapp.get_agent = _managed_get_agent
-    fsapp.GALLEY_STATUS_HOOK = lambda state, last_error=None: _emit(
+    # Extra keyword fields (e.g. ownerOpenId on owner binding) pass
+    # through to the JSON status line for Galley Core to persist.
+    fsapp.GALLEY_STATUS_HOOK = lambda state, last_error=None, **extra: _emit(
         out,
         platform="feishu",
         state=state,
         lastError=last_error,
         logPath=str(state_dir / "feishu.log"),
+        **extra,
     )
 
     _emit(
