@@ -176,6 +176,25 @@ About
 | Back | 返回 |
 | Dismiss | 关闭 |
 
+## 内核 / Engine（managed 引擎的用户可见称谓）
+
+2026-07-03 定位决策（Galley = 独立产品，基于 GenericAgent 二次开发）后的
+术语规则：
+
+- **managed（内置运行时）语境**的用户可见文案，指到引擎组件时用
+  **「内核」**（英文版用 **engine**），不再出现 `GA` / `GenericAgent`。
+  例：Health Check 条目「内核入口」「内核资源」；About 的
+  `内核 b1e173dc · 2026-06-29`。中文用户对「XX 基于 Chromium 内核」有
+  现成心智——独立产品 + 诚实交代引擎。
+- **attach 语境**（接入 / 检查用户自己的 GA）保留 `GA` / `GenericAgent`
+  ——那条流程的主题就是用户的 GA，改名反而不诚实。「Galley 不修改你的
+  GA」承诺留在 attach 流程内。
+- **上游 credit**（About origin story、GenericAgent 上游链接）与教程 /
+  技术文档保留 `GenericAgent` 全称。
+- **GA 预算**：品牌表面（About、tagline、首启第一屏）上 GenericAgent
+  的出现次数控制在「一次有感情的（origin）+ 一次有事实的（引擎行）」；
+  产品的一句话自我描述说它**是什么**，不说它**用什么做的**。
+
 ## Agent vs AI
 
 `Agent` 和 `AI` 不等价。

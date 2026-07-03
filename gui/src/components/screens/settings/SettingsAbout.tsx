@@ -24,15 +24,22 @@ interface SettingsAboutProps {
  * Structure, in book order:
  *   1. Title + tagline
  *   2. Origin story
- *   3. Version table (Galley + bundled GenericAgent kernel)
+ *   3. Version — Galley only; the product has one version
  *   4. Typesetting — what the text is set in, stated as fact
- *   5. Epigraph — PI §43, the product's thesis line (meaning is use)
- *   6. Links — Galley source/issues, GenericAgent upstream credit,
- *      plus a quiet maker link group.
- *   7. Footer with author + license.
+ *   5. Links — Galley source/issues, GenericAgent upstream credit
+ *      (carrying the engine commit as its detail), maker links.
+ *   6. Footer with author + license.
+ *   7. Epigraph — PI §43, the page's closing line.
  *
  * The book metaphor stays under the surface: section labels are plain
  * words (版式 / Typesetting), never trade jargon (印次 / 奥付).
+ *
+ * GA budget on this page is exactly two mentions (docs/temperament.md
+ * independent-product positioning): once with feeling (origin story),
+ * once with facts (the upstream link row, engine commit as detail).
+ * The tagline and the version table stay engine-silent — an
+ * independent product's one-line self-description says what it is,
+ * not what it is made of.
  */
 export function SettingsAbout({
   workbenchVersion,
@@ -72,29 +79,14 @@ export function SettingsAbout({
         <SettingsSectionLabel>
           {copy.settings.about.version}
         </SettingsSectionLabel>
-        <dl className="m-0 mt-2 grid grid-cols-[120px_1fr] items-center gap-y-2 text-[12.5px]">
-          <dt className="text-ink-muted">
-            {copy.settings.about.galleyVersion}
-          </dt>
-          <dd className="m-0 min-w-0">
-            <SettingsUpdateControl
-              hasRunningSessions={hasRunningSessions}
-              leading={
-                <span className="font-mono text-ink">v{workbenchVersion}</span>
-              }
-            />
-          </dd>
-
-          <dt className="text-ink-muted">
-            {copy.settings.about.bundledGAVersion}
-          </dt>
-          <dd className="m-0 font-mono text-ink">
-            {managedKernelShort}
-            {managedKernelDate && (
-              <span className="text-ink-muted"> · {managedKernelDate}</span>
-            )}
-          </dd>
-        </dl>
+        <div className="mt-2 text-[12.5px]">
+          <SettingsUpdateControl
+            hasRunningSessions={hasRunningSessions}
+            leading={
+              <span className="font-mono text-ink">v{workbenchVersion}</span>
+            }
+          />
+        </div>
       </div>
 
       <div>
@@ -105,29 +97,6 @@ export function SettingsAbout({
           {copy.settings.about.typesettingDetail}
         </p>
       </div>
-
-      {/* Colophon epigraph — the quotation's permanent home (the
-          empty-state epigraph is reserved for the truly silent
-          workspace). Unboxed, unlike the origin callout above: a
-          quote on the page, not a card in the UI. */}
-      {colophonEpigraph && (
-        <figure className="m-0 font-serif">
-          <blockquote className="m-0 border-0 p-0">
-            <p className="m-0 text-[13px] italic leading-[1.6] text-ink-soft">
-              {language === "en-US" ? colophonEpigraph.en : colophonEpigraph.zh}
-            </p>
-            <p
-              lang="de"
-              className="m-0 mt-1 text-[11.5px] italic leading-[1.5] text-ink-muted/70"
-            >
-              {colophonEpigraph.de}
-            </p>
-          </blockquote>
-          <figcaption className="mt-1.5 text-[11.5px] text-ink-muted">
-            {copy.settings.about.epigraphSource}
-          </figcaption>
-        </figure>
-      )}
 
       <div className="border-t border-line pt-6">
         <SettingsSectionLabel>{copy.settings.about.links}</SettingsSectionLabel>
@@ -142,10 +111,22 @@ export function SettingsAbout({
             label={copy.settings.about.feedback}
             detail="GitHub Issues"
           />
+          {/* Upstream credit row doubles as the engine's fact line —
+              the kernel commit is material information (colophon
+              logic: which paper it is printed on), not a second
+              product version. Falls back to the plain URL when the
+              managed runtime hasn't reported a commit. */}
           <ExternalLink
             href="https://github.com/lsdefine/GenericAgent"
             label="GenericAgent"
-            detail="github.com/lsdefine/GenericAgent"
+            detail={
+              managedKernelShort === "unknown"
+                ? "github.com/lsdefine/GenericAgent"
+                : copy.settings.about.gaKernelDetail(
+                    managedKernelShort,
+                    managedKernelDate,
+                  )
+            }
           />
           <div className="pt-3 text-[11.5px] text-ink-muted">
             {copy.settings.about.alsoBy}
@@ -166,6 +147,30 @@ export function SettingsAbout({
       <div className="border-t border-line pt-4 text-[12px] text-ink-muted">
         {copy.settings.about.madeBy}
       </div>
+
+      {/* Colophon epigraph — the page's closing line, after all the
+          practical matter (a book ends on the quotation, not on the
+          imprint line). Unboxed, unlike the origin callout above: a
+          quote on the page, not a card in the UI. The empty-state
+          epigraph stays reserved for the truly silent workspace. */}
+      {colophonEpigraph && (
+        <figure className="m-0 pt-2 font-serif">
+          <blockquote className="m-0 border-0 p-0">
+            <p className="m-0 text-[13px] italic leading-[1.6] text-ink-soft">
+              {language === "en-US" ? colophonEpigraph.en : colophonEpigraph.zh}
+            </p>
+            <p
+              lang="de"
+              className="m-0 mt-1 text-[11.5px] italic leading-[1.5] text-ink-muted/70"
+            >
+              {colophonEpigraph.de}
+            </p>
+          </blockquote>
+          <figcaption className="mt-1.5 text-[11.5px] text-ink-muted">
+            {copy.settings.about.epigraphSource}
+          </figcaption>
+        </figure>
+      )}
     </div>
   );
 }

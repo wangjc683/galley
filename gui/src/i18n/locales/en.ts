@@ -441,7 +441,7 @@ export const enCopy: AppCopy = {
       openSetupAssistant: "Open Setup Assistant...",
       setupAssistantRunningBlock:
         "Setup Assistant is unavailable while a task is running.",
-      bundledPythonDetail: "Bundled with Galley · GA dependencies included",
+      bundledPythonDetail: "Bundled with Galley · all dependencies included",
       useExternalPython: "Use external Python...",
       externalPythonHint:
         "External Python · Re-run Health Check after changing it",
@@ -711,14 +711,14 @@ export const enCopy: AppCopy = {
       enterSubmenu: "Enter the command palette submenu",
     },
     about: {
-      subtitle: "Open-source local Agent workbench built on GenericAgent",
+      subtitle: "An open-source local Agent workbench",
       version: "Version",
       links: "Links",
       feedback: "Feedback",
       origin:
         "Galley started as a workbench for GenericAgent. The first two letters of our name are a quiet bow to where we came from.",
-      galleyVersion: "Galley version",
-      bundledGAVersion: "Bundled GA version",
+      gaKernelDetail: (commit: string, date?: string) =>
+        date ? `Engine ${commit} · ${date}` : `Engine ${commit}`,
       typesetting: "Typesetting",
       typesettingDetail:
         "Body set in Newsreader with PingFang and Microsoft YaHei; monospace in JetBrains Mono.",
@@ -1156,12 +1156,12 @@ export const enCopy: AppCopy = {
     loadablePython: "Find Python that can load GA",
     llmConnection: "LLM connection test",
     llmConnectionDetail: "Real test, max 1 output token",
-    entryModule: "GA entry module",
+    entryModule: "Engine entry",
     llmConfigFile: "LLM config file",
-    memoryStore: "L1-L4 memory storage",
-    resourcesDir: "GA resources",
+    memoryStore: "Memory storage",
+    resourcesDir: "Engine resources",
     bundledPythonDetail: (version) =>
-      `CPython ${version} · GA dependencies included`,
+      `CPython ${version} · all dependencies included`,
     runtimeReadyDetail: (count) =>
       `${count} model config${count === 1 ? "" : "s"} loaded`,
     llmConnectionPassed: "Test message returned",

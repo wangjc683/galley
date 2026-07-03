@@ -422,7 +422,7 @@ export const zhCopy = {
         "重新走一遍首次设置流程，检查 Runtime、模型和 Health Check。现有对话会保留。",
       openSetupAssistant: "打开设置向导...",
       setupAssistantRunningBlock: "有任务运行时暂时不能打开设置向导。",
-      bundledPythonDetail: "Galley 内置 · 已附带 GA 依赖，零配置可用",
+      bundledPythonDetail: "Galley 内置 · 已附带全部依赖，零配置可用",
       useExternalPython: "使用外部 Python…",
       externalPythonHint: "外部 Python · 改变后用下方 Re-run 重新探测",
       useBundledPython: "改回 Galley 内置 Python",
@@ -675,14 +675,14 @@ export const zhCopy = {
       enterSubmenu: "在命令面板中进入二级菜单",
     },
     about: {
-      subtitle: "基于 GenericAgent 的开源本地 Agent 工作台",
+      subtitle: "开源的本地 Agent 工作台",
       version: "版本",
       links: "Links",
       feedback: "反馈建议",
       origin:
         "Galley 最初是 GenericAgent 的 workbench；名字前两个字母 GA，是对它的致意。",
-      galleyVersion: "Galley 版本",
-      bundledGAVersion: "内置 GA 版本",
+      gaKernelDetail: (commit: string, date?: string) =>
+        date ? `内核 ${commit} · ${date}` : `内核 ${commit}`,
       typesetting: "版式",
       typesettingDetail:
         "正文以 Newsreader 与苹方、雅黑排印；等宽用 JetBrains Mono。",
@@ -1101,12 +1101,12 @@ export const zhCopy = {
     loadablePython: "查找能加载 GA 的 Python",
     llmConnection: "LLM 连接测试",
     llmConnectionDetail: "真实测试，最多 1 个输出 token",
-    entryModule: "GA 入口模块",
+    entryModule: "内核入口",
     llmConfigFile: "LLM 配置文件",
-    memoryStore: "L1-L4 记忆存储",
-    resourcesDir: "GA 资源目录",
+    memoryStore: "记忆存储",
+    resourcesDir: "内核资源",
     bundledPythonDetail: (version: string) =>
-      `CPython ${version} · 已附带 GA 依赖`,
+      `CPython ${version} · 已附带全部依赖`,
     runtimeReadyDetail: (count: number) => `已加载 ${count} 个模型配置`,
     llmConnectionPassed: "测试消息已返回",
     llmConnectionSkipped: "运行环境未通过，未发送测试消息",
