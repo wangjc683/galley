@@ -264,6 +264,15 @@ fn goal_result_event_belongs_to_worker(
         .any(|task| task.id == *task_id && task.owner_session_id.as_ref() == Some(session_id))
 }
 
+/// The controller re-evaluates idle waits every ~1.5s with an unchanged
+/// summary. Reposting the same Synthesis event each cycle floods the
+/// event history that signal logic and the synthesis prompt read (and,
+/// while events were windowed, evicted real worker signals). Post only
+/// when the summary actually changes.
+pub(crate) fn goal_summary_event_is_new(latest_summary: Option<&str>, summary: &str) -> bool {
+    latest_summary != Some(summary)
+}
+
 pub(crate) fn goal_drain_cap_seconds(budget_seconds: u32) -> u64 {
     let quarter_budget = u64::from(budget_seconds).saturating_div(4);
     quarter_budget
@@ -271,30 +280,25 @@ pub(crate) fn goal_drain_cap_seconds(budget_seconds: u32) -> u64 {
         .min(GOAL_CONTROLLER_MAX_DRAIN_SECONDS)
 }
 
+/// Sessions this goal's cleanup and synthesis may treat as workers: the
+/// union of the controller's tracked slots and every event author other
+/// than the master. Worker starts and wakes always post a worker-authored
+/// System event, so with the full event history (goal_status_full) this
+/// also recovers workers from before a `goal run --resume`. There is
+/// deliberately no "all project sessions" fallback: a goal that never
+/// started workers has none to shut down, and that fallback used to kill
+/// unrelated live runners sharing the project.
 pub(crate) fn goal_worker_session_ids(
     snapshot: &GoalStatusSnapshot,
     worker_session_ids: &[SessionId],
 ) -> Vec<SessionId> {
-    let mut out = Vec::new();
     let event_worker_ids = snapshot
         .events
         .iter()
         .filter_map(|event| event.author_session_id.clone())
-        .filter(|session_id| Some(session_id) != snapshot.goal.master_session_id.as_ref())
-        .collect::<Vec<_>>();
-    let source: Vec<SessionId> = if !worker_session_ids.is_empty() {
-        worker_session_ids.to_vec()
-    } else if !event_worker_ids.is_empty() {
-        event_worker_ids
-    } else {
-        snapshot
-            .sessions
-            .iter()
-            .filter(|session| Some(&session.id) != snapshot.goal.master_session_id.as_ref())
-            .map(|session| session.id.clone())
-            .collect()
-    };
-    for session_id in source {
+        .filter(|session_id| Some(session_id) != snapshot.goal.master_session_id.as_ref());
+    let mut out: Vec<SessionId> = Vec::new();
+    for session_id in worker_session_ids.iter().cloned().chain(event_worker_ids) {
         if !out.iter().any(|existing| existing == &session_id) {
             out.push(session_id);
         }

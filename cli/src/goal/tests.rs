@@ -12,6 +12,8 @@ use super::controller::{
     goal_worker_has_terminal_signal, goal_worker_session_ids, goal_worker_terminal_counts,
     goal_worker_wave_baseline, goal_wrapping_summary,
 };
+use super::signals::goal_summary_event_is_new;
+
 use super::prompts::{
     goal_latest_check_report, goal_master_planning_prompt, goal_memory_policy_prompt,
     goal_worker_prompt_template, goal_worker_wake_prompt,
@@ -590,27 +592,23 @@ fn controller_assigned_open_tasks_are_not_worker_material_until_claimed() {
 }
 
 #[test]
-fn goal_worker_session_ids_falls_back_to_project_sessions_without_master() {
+fn goal_worker_session_ids_never_falls_back_to_project_sessions() {
+    // A goal with no tracked workers and no worker-authored events has
+    // no workers — the old "all non-master project sessions" fallback
+    // shut down unrelated live runners sharing the project.
     let snapshot = test_snapshot(
         vec![],
         vec![],
         vec![
             test_session("master"),
-            test_session("worker_1"),
-            test_session("worker_2"),
+            test_session("unrelated_project_session"),
         ],
     );
-    assert_eq!(
-        goal_worker_session_ids(&snapshot, &[]),
-        vec![
-            SessionId("worker_1".to_string()),
-            SessionId("worker_2".to_string())
-        ]
-    );
+    assert!(goal_worker_session_ids(&snapshot, &[]).is_empty());
 }
 
 #[test]
-fn goal_worker_session_ids_prefers_goal_event_authors_over_project_sessions() {
+fn goal_worker_session_ids_recovers_workers_from_event_authors() {
     let snapshot = test_snapshot(
         vec![],
         vec![test_event(1, GoalEventType::System, None, Some("worker_1"))],
@@ -624,6 +622,44 @@ fn goal_worker_session_ids_prefers_goal_event_authors_over_project_sessions() {
         goal_worker_session_ids(&snapshot, &[]),
         vec![SessionId("worker_1".to_string())]
     );
+}
+
+#[test]
+fn goal_worker_session_ids_unions_tracked_slots_with_event_authors() {
+    // Resume case: worker_1 predates the resume (only visible as an
+    // event author), worker_2 is tracked in-memory but has not posted
+    // yet. Cleanup must reach both; master is never a worker.
+    let snapshot = test_snapshot(
+        vec![],
+        vec![
+            test_event(1, GoalEventType::System, None, Some("worker_1")),
+            test_event(2, GoalEventType::System, None, Some("master")),
+        ],
+        vec![],
+    );
+    assert_eq!(
+        goal_worker_session_ids(&snapshot, &[SessionId("worker_2".to_string())]),
+        vec![
+            SessionId("worker_2".to_string()),
+            SessionId("worker_1".to_string())
+        ]
+    );
+}
+
+#[test]
+fn goal_summary_event_posts_only_on_change() {
+    // Idle wait cycles repeat every ~1.5s; an unchanged summary must not
+    // repost the same Synthesis event (it floods the history the signal
+    // logic and synthesis prompt read).
+    assert!(goal_summary_event_is_new(None, "wave 1 waiting"));
+    assert!(goal_summary_event_is_new(
+        Some("wave 1 waiting"),
+        "wave 2 waiting"
+    ));
+    assert!(!goal_summary_event_is_new(
+        Some("wave 1 waiting"),
+        "wave 1 waiting"
+    ));
 }
 
 #[test]

@@ -33,7 +33,7 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 1. **一行级 quick wins**：GUI-1、GUI-2、CLI-11 — ✅ 2026-07-02 已修
 2. **数据安全**：CORE-1（迁移事务）、CORE-2（恢复过滤）— ✅ 2026-07-02 已修
 3. **Stop/审批整条链**：RUNNER-1 + GUI-3 + GUI-4（一起修才有意义）— ✅ 2026-07-02 已修
-4. **Goal 子系统**：CLI-1（事件窗口是根因）→ CLI-2/3/4
+4. **Goal 子系统**：CLI-1（事件窗口是根因）→ CLI-2/3/4 — ✅ 2026-07-03 已修
 5. **进程生命周期三件套**：CORE-4、CORE-5、CORE-3
 6. **Windows 三条**：CORE-6、CORE-7、CORE-11（下个 Win 发布的 gate）
 7. **CORE-13 飞书访问控制**：需产品决策（收紧默认值 vs 明示记录 beta 取舍）
@@ -228,7 +228,7 @@ en/zh i18n key 对齐。
 
 ### High
 
-- `[ ]` **CLI-1** · `core/src/db/goal.rs:291` + `cli/src/goal/signals.rs:166-208`
+- `[x]` **CLI-1** · `core/src/db/goal.rs:291` + `cli/src/goal/signals.rs:166-208`
   等 — 全部 goal 信号逻辑跑在截断的 50 事件窗口上（`ORDER BY id DESC LIMIT 50`），
   controller 当全量历史用：worker 结果信号丢失（空转到 deadline）、checkpoint
   去重失效（controller.rs:640-650）、轮次计数错乱 → fallback scope 冲突静默
@@ -236,21 +236,43 @@ en/zh i18n key 对齐。
   （prompts.rs:8-21）。controller 自己每空转周期还写 Synthesis 事件把真实
   worker 事件挤出窗口（见 CLI-9），问题自我放大。
   修复：信号计数/marker 存在性改用专门 DB 查询或 since-id 游标。
-- `[ ]` **CLI-2** · `cli/src/goal/controller.rs:304` + `cli/src/project.rs:465-479`
+  **已修 2026-07-03**：core 新增 `GalleyApi::goal_status_full`（全量事件史，
+  升序），controller 全部改用；`goal status`/GUI 保持 50 条展示窗口不变。
+  纯函数信号逻辑与既有测试全部保留（输入从截断窗口变成全量）。同时掐掉
+  自我放大源：空转周期 summary 未变时不再重复写 Synthesis 事件
+  （`goal_summary_event_is_new`）。顺带把 wait 循环里 stop 检查与 snapshot
+  合并为单次查询。新增 core 测试
+  `goal_status_full_keeps_events_the_windowed_view_evicts` + cli 测试
+  `goal_summary_event_posts_only_on_change`。
+- `[x]` **CLI-2** · `cli/src/goal/controller.rs:304` + `cli/src/project.rs:465-479`
   — `project_follow --until-idle` 会因用户在同 project 其他 session 聊天而无限
   重置 quiet window，goal controller 空等烧 budget；`?` 还使任何 project-follow
   错误直接中止 goal。修复：只 follow master + worker session ids。
+  **已修 2026-07-03**：`project_follow` 增加 `only_sessions` 范围参数（watch
+  targets、idle 判定、快照统一过滤），controller 传 master + workers；CLI
+  `project follow` 命令传 None 行为不变。controller 侧 follow 失败降级为
+  `follow_interrupted` frame（streaming 是 nicety，进度判定在
+  `wait_goal_worker_sessions`），不再中止 goal。
 
 ### Medium
 
-- `[ ]` **CLI-3** · `cli/src/goal/signals.rs:274-303` — worker 关停 fallback 在
+- `[x]` **CLI-3** · `cli/src/goal/signals.rs:274-303` — worker 关停 fallback 在
   tracked 列表为空（resume 后必然）且窗口驱逐后，回退为「project 内全部非
   master session」→ `shutdown_goal_worker_runners`（controller.rs:1259-1278）
   杀掉用户无关的活 runner。修复：worker session ids 持久化到 goal（DB）。
-- `[ ]` **CLI-4** · `cli/src/goal/controller.rs:1259-1278, 1323` +
+  **已修 2026-07-03**：无需 schema 迁移——worker 启动/唤醒本就写 worker-authored
+  System 事件，CLI-1 修复后事件不再被驱逐，事件流即持久化记录。
+  `goal_worker_session_ids` 改为 tracked ∪ event authors（覆盖 resume 前的旧
+  worker），并删除「project 内全部非 master session」兜底：没 worker 就没有可
+  关的。新增 3 个测试（no-fallback / event-author 恢复 / resume 场景并集）。
+- `[x]` **CLI-4** · `cli/src/goal/controller.rs:1259-1278, 1323` +
   `mod.rs:85-97` — 清理错误用 `?` 中止 master synthesis，一个瞬时 socket 失败把
   成功的 goal 标 Failed。清理应 best-effort（收集错误继续），仅 synthesis 失败
   才 fail。
+  **已修 2026-07-03**：`shutdown_goal_worker_runners` 不再返回 Result——逐个
+  关停收集失败，聚合写一条 System 事件后继续；全部 6 个调用点（stop/fail/
+  synthesis 前后）不再因清理失败中止。synthesis 自身的错误仍经 `mod.rs:85-97`
+  正常标 Failed。
 - `[ ]` **CLI-5** · `cli/src/transport.rs:12-98, 175-209` — socket 传输零超时：
   core 假死时每条 CLI 命令无限挂起零输出，驱动 agent 无法区分「慢」和「死」。
   修复：connect + 首响应包 `tokio::time::timeout`，报「core 无响应」类错误
@@ -270,11 +292,12 @@ en/zh i18n key 对齐。
 - `[ ]` **CLI-8** · `cli/src/session.rs:327-361` — `session wait` 不检查 session
   状态，error/cancelled 的死 session 烧满 300s 才返回。提前结束并带独立终态
   `status`（加法）。
-- `[ ]` **CLI-9** · `cli/src/goal/decision.rs:36-38` + `controller.rs:1102,
+- `[~]` **CLI-9** · `cli/src/goal/decision.rs:36-38` + `controller.rs:1102,
   467-524, 264-265` — wave-cap wrap 不可达（`WaitForSignal` 分支先于
   `all_worker_slots_capped` 检查返回）；空转周期重复写近似相同的 Synthesis
   事件（喂大 CLI-1）；`Continue`/`WaitForSignal` 臂不可达（`budget_left=false`
-  硬编码）。
+  硬编码）。**部分修 2026-07-03**：重复 Synthesis 事件已随 CLI-1 修掉
+  （summary 未变不写）；两处不可达分支仍待清理。
 - `[ ]` **CLI-10** · `cli/src/main.rs:37` — `Cli::parse()` 使 clap 解析错误以
   人类文本走 stderr，违反模块自文档的「错误 JSON 走 stdout」契约，解析 stdout
   的 SOP 看不到任何东西。改 `try_parse()` → `invalid_args` JSON envelope。

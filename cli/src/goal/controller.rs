@@ -12,8 +12,8 @@ use crate::goal::prompts::{
 };
 use crate::goal::signals::{
     goal_activity_counts, goal_activity_increased, goal_any_worker_slot_has_progress_signal,
-    goal_has_incomplete_tasks, goal_has_result_signal, goal_worker_max_wave,
-    goal_worker_slot_session_ids, goal_worker_slots_all_capped,
+    goal_has_incomplete_tasks, goal_has_result_signal, goal_summary_event_is_new,
+    goal_worker_max_wave, goal_worker_slot_session_ids, goal_worker_slots_all_capped,
 };
 pub(crate) use crate::goal::signals::{
     goal_drain_cap_seconds, goal_has_worker_material_signal, goal_ready_idle_worker_slot_indices,
@@ -111,7 +111,7 @@ pub(crate) async fn run_goal_controller(
     let mut worker_slots: Vec<GoalWorkerSlot> = Vec::new();
     loop {
         if goal.status == GoalStatus::Wrapping && !goal.stop_requested {
-            let snapshot = galley.goal_status(goal.id.clone()).await?;
+            let snapshot = galley.goal_status_full(goal.id.clone()).await?;
             finish_goal_with_master(
                 galley,
                 snapshot,
@@ -123,7 +123,7 @@ pub(crate) async fn run_goal_controller(
             return Ok(());
         }
 
-        let wave_start_snapshot = galley.goal_status(goal.id.clone()).await?;
+        let wave_start_snapshot = galley.goal_status_full(goal.id.clone()).await?;
         goal = wave_start_snapshot.goal.clone();
         if goal.stop_requested {
             let summary = "Goal stopped before starting the next worker wave.".to_string();
@@ -136,7 +136,7 @@ pub(crate) async fn run_goal_controller(
                     .clone()
                     .or_else(|| Some(format!("goal {} stopped", goal.id))),
             )
-            .await?;
+            .await;
             galley
                 .create_goal_event(CreateGoalEventInput {
                     goal_id: goal.id.clone(),
@@ -219,7 +219,7 @@ pub(crate) async fn run_goal_controller(
                     })?;
                     finish_goal_with_master(
                         galley,
-                        galley.goal_status(wrapping_goal.id.clone()).await?,
+                        galley.goal_status_full(wrapping_goal.id.clone()).await?,
                         &worker_session_ids,
                         supervisor.clone(),
                         reason.clone().or_else(|| {
@@ -238,7 +238,7 @@ pub(crate) async fn run_goal_controller(
                         supervisor.clone(),
                         Some(format!("goal {} failed before next wave", goal.id)),
                     )
-                    .await?;
+                    .await;
                     galley
                         .create_goal_event(CreateGoalEventInput {
                             goal_id: goal.id.clone(),
@@ -288,7 +288,7 @@ pub(crate) async fn run_goal_controller(
             worker_slots.extend(new_slots);
             worker_session_ids = goal_worker_slot_session_ids(&worker_slots);
             if !worker_slots.is_empty() {
-                let checkpoint_snapshot = galley.goal_status(goal.id.clone()).await?;
+                let checkpoint_snapshot = galley.goal_status_full(goal.id.clone()).await?;
                 post_goal_master_checkpoint(
                     galley,
                     &checkpoint_snapshot,
@@ -301,7 +301,41 @@ pub(crate) async fn run_goal_controller(
             }
         }
 
-        project_follow(goal.project_id.0.clone(), 80, false, true, true).await?;
+        // Stream live output from this goal's own sessions only (master +
+        // workers). Following the whole project let user chatter in
+        // unrelated sessions reset the until-idle quiet window forever,
+        // burning the goal budget. And a follow failure must not abort
+        // the goal — streaming is a nicety; progress detection happens in
+        // wait_goal_worker_sessions below.
+        let mut follow_scope: Vec<String> = goal
+            .master_session_id
+            .iter()
+            .map(|sid| sid.0.clone())
+            .collect();
+        follow_scope.extend(
+            goal_worker_session_ids(&wave_start_snapshot, &worker_session_ids)
+                .into_iter()
+                .map(|sid| sid.0),
+        );
+        if let Err(err) = project_follow(
+            goal.project_id.0.clone(),
+            80,
+            false,
+            true,
+            true,
+            Some(follow_scope),
+        )
+        .await
+        {
+            let _ = emit_json(&GoalRunFrame {
+                schema_version: SCHEMA_VERSION,
+                stream: "goal",
+                phase: "follow_interrupted",
+                goal: &goal,
+                session_id: None,
+                note: Some(format!("project follow interrupted: {err}")),
+            });
+        }
         let wait_outcome = wait_goal_worker_sessions(
             galley,
             &mut worker_slots,
@@ -312,7 +346,7 @@ pub(crate) async fn run_goal_controller(
         )
         .await?;
 
-        let mut snapshot = galley.goal_status(goal.id.clone()).await?;
+        let mut snapshot = galley.goal_status_full(goal.id.clone()).await?;
         let refreshed = snapshot.goal.clone();
         if refreshed.stop_requested {
             let summary = "Worker wave finished after stop request; Goal stopped.".to_string();
@@ -325,7 +359,7 @@ pub(crate) async fn run_goal_controller(
                     .clone()
                     .or_else(|| Some(format!("goal {} stopped", refreshed.id))),
             )
-            .await?;
+            .await;
             galley
                 .create_goal_event(CreateGoalEventInput {
                     goal_id: refreshed.id.clone(),
@@ -469,15 +503,17 @@ pub(crate) async fn run_goal_controller(
                     goal_worker_max_wave(&worker_slots),
                     wave_protocol_activity,
                 );
-                galley
-                    .create_goal_event(CreateGoalEventInput {
-                        goal_id: refreshed.id.clone(),
-                        task_id: None,
-                        author_session_id: None,
-                        event_type: GoalEventType::Synthesis,
-                        body: summary.clone(),
-                    })
-                    .await?;
+                if goal_summary_event_is_new(refreshed.latest_summary.as_deref(), &summary) {
+                    galley
+                        .create_goal_event(CreateGoalEventInput {
+                            goal_id: refreshed.id.clone(),
+                            task_id: None,
+                            author_session_id: None,
+                            event_type: GoalEventType::Synthesis,
+                            body: summary.clone(),
+                        })
+                        .await?;
+                }
                 let waiting_goal = galley
                     .update_goal_state(refreshed.id.clone(), GoalStatus::Running, Some(summary))
                     .await?;
@@ -498,15 +534,17 @@ pub(crate) async fn run_goal_controller(
                     goal_worker_max_wave(&worker_slots),
                     wave_protocol_activity,
                 );
-                galley
-                    .create_goal_event(CreateGoalEventInput {
-                        goal_id: refreshed.id.clone(),
-                        task_id: None,
-                        author_session_id: None,
-                        event_type: GoalEventType::Synthesis,
-                        body: summary.clone(),
-                    })
-                    .await?;
+                if goal_summary_event_is_new(refreshed.latest_summary.as_deref(), &summary) {
+                    galley
+                        .create_goal_event(CreateGoalEventInput {
+                            goal_id: refreshed.id.clone(),
+                            task_id: None,
+                            author_session_id: None,
+                            event_type: GoalEventType::Synthesis,
+                            body: summary.clone(),
+                        })
+                        .await?;
+                }
                 let continuing_goal = galley
                     .update_goal_state(refreshed.id.clone(), GoalStatus::Running, Some(summary))
                     .await?;
@@ -531,7 +569,7 @@ pub(crate) async fn run_goal_controller(
                     supervisor.clone(),
                     Some(format!("goal {} failed after worker wave", refreshed.id)),
                 )
-                .await?;
+                .await;
                 galley
                     .create_goal_event(CreateGoalEventInput {
                         goal_id: refreshed.id.clone(),
@@ -584,7 +622,7 @@ pub(crate) async fn run_goal_controller(
                 })?;
                 finish_goal_with_master(
                     galley,
-                    galley.goal_status(wrapping_goal.id.clone()).await?,
+                    galley.goal_status_full(wrapping_goal.id.clone()).await?,
                     &worker_session_ids,
                     supervisor.clone(),
                     reason
@@ -749,7 +787,7 @@ async fn wait_goal_master_planning_result(
 ) -> Result<GoalStatusSnapshot, GalleyError> {
     let started = Instant::now();
     loop {
-        let snapshot = galley.goal_status(goal_id.clone()).await?;
+        let snapshot = galley.goal_status_full(goal_id.clone()).await?;
         if goal_has_open_assigned_task(&snapshot) || snapshot.tasks.len() > before_task_count {
             return Ok(snapshot);
         }
@@ -823,7 +861,7 @@ async fn ensure_goal_seed_tasks(
             ),
         })
         .await?;
-    galley.goal_status(snapshot.goal.id.clone()).await
+    galley.goal_status_full(snapshot.goal.id.clone()).await
 }
 
 async fn ensure_goal_fallback_followup_tasks(
@@ -864,7 +902,7 @@ async fn ensure_goal_fallback_followup_tasks(
             body: format!("{GOAL_MASTER_PLANNING_MARKER} fallback follow-up tasks created."),
         })
         .await?;
-    galley.goal_status(snapshot.goal.id.clone()).await
+    galley.goal_status_full(snapshot.goal.id.clone()).await
 }
 
 fn goal_seed_task_marker_seen(snapshot: &GoalStatusSnapshot) -> bool {
@@ -1103,10 +1141,10 @@ async fn wait_goal_worker_sessions(
     let drain_cap = Duration::from_secs(goal_drain_cap_seconds(goal.budget_seconds));
     let mut drain_started: Option<Instant> = None;
     loop {
-        if goal_stop_requested(galley, goal).await? {
+        let snapshot = galley.goal_status_full(goal.id.clone()).await?;
+        if snapshot.goal.stop_requested {
             return Ok(GoalWorkerWaitOutcome::IdleWithoutSignal);
         }
-        let snapshot = galley.goal_status(goal.id.clone()).await?;
         if goal_has_result_signal(&snapshot) || goal_has_worker_material_signal(&snapshot) {
             post_goal_master_checkpoint(
                 galley,
@@ -1248,33 +1286,48 @@ async fn send_goal_worker_protocol_reminders(
     Ok(sent)
 }
 
-async fn goal_stop_requested(galley: &SqliteGalley, goal: &GoalBrief) -> Result<bool, GalleyError> {
-    Ok(galley
-        .goal_status(goal.id.clone())
-        .await?
-        .goal
-        .stop_requested)
-}
-
+/// Best-effort worker runner cleanup. Shutting down runners is not the
+/// goal's deliverable: a transient socket failure here must not abort
+/// the caller (it used to fail master synthesis and mark a finished
+/// goal Failed). Failures are recorded as a System event and skipped.
 async fn shutdown_goal_worker_runners(
-    _galley: &SqliteGalley,
+    galley: &SqliteGalley,
     snapshot: &GoalStatusSnapshot,
     worker_session_ids: &[SessionId],
     supervisor: Option<String>,
     reason: Option<String>,
-) -> Result<(), GalleyError> {
+) {
     let worker_ids = goal_worker_session_ids(snapshot, worker_session_ids);
+    let mut failures: Vec<String> = Vec::new();
     for session_id in worker_ids {
-        session_shutdown_runner_value(
-            session_id.0,
+        let session_id = session_id.0;
+        if let Err(err) = session_shutdown_runner_value(
+            session_id.clone(),
             supervisor.clone(),
             reason
                 .clone()
                 .or_else(|| Some(format!("goal {} worker runner cleanup", snapshot.goal.id))),
         )
-        .await?;
+        .await
+        {
+            failures.push(format!("{session_id}: {err}"));
+        }
     }
-    Ok(())
+    if !failures.is_empty() {
+        let _ = galley
+            .create_goal_event(CreateGoalEventInput {
+                goal_id: snapshot.goal.id.clone(),
+                task_id: None,
+                author_session_id: None,
+                event_type: GoalEventType::System,
+                body: format!(
+                    "Worker runner cleanup failed for {} session(s); continuing without them: {}",
+                    failures.len(),
+                    failures.join("; ")
+                ),
+            })
+            .await;
+    }
 }
 
 async fn wait_master_final_answer(
@@ -1329,7 +1382,7 @@ async fn finish_goal_with_master(
             .clone()
             .or_else(|| Some(format!("goal {} entering master synthesis", goal.id))),
     )
-    .await?;
+    .await;
     let Some(master_session_id) = goal.master_session_id.clone() else {
         let summary = goal
             .latest_summary
@@ -1398,7 +1451,7 @@ async fn finish_goal_with_master(
     let final_goal = galley
         .update_goal_state(goal.id.clone(), GoalStatus::Completed, Some(summary))
         .await?;
-    let completed_snapshot = galley.goal_status(final_goal.id.clone()).await?;
+    let completed_snapshot = galley.goal_status_full(final_goal.id.clone()).await?;
     shutdown_goal_worker_runners(
         galley,
         &completed_snapshot,
@@ -1406,7 +1459,7 @@ async fn finish_goal_with_master(
         supervisor.clone(),
         Some(format!("goal {} completed worker cleanup", final_goal.id)),
     )
-    .await?;
+    .await;
     emit_json(&GoalRunFrame {
         schema_version: SCHEMA_VERSION,
         stream: "goal",

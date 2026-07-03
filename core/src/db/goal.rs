@@ -66,22 +66,40 @@ impl SqliteGalley {
         rows.into_iter().map(GoalTaskRow::into_brief).collect()
     }
 
+    /// Events for a goal in ascending id order. `limit` keeps the most
+    /// recent N (display views); `None` returns the complete history —
+    /// signal logic (counts, marker existence, dedup) must see all
+    /// events, or eviction silently flips its answers.
     pub(super) async fn goal_events_for(
         &self,
         goal_id: &str,
-        limit: i64,
+        limit: Option<i64>,
     ) -> Result<Vec<GoalEventBrief>> {
-        let mut rows = sqlx::query_as::<_, GoalEventRow>(
-            "SELECT id, goal_id, task_id, author_session_id, event_type, body, created_at \
-             FROM goal_events WHERE goal_id = ? \
-             ORDER BY id DESC LIMIT ?",
-        )
-        .bind(goal_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
-        rows.reverse();
+        let rows = match limit {
+            Some(limit) => {
+                let mut rows = sqlx::query_as::<_, GoalEventRow>(
+                    "SELECT id, goal_id, task_id, author_session_id, event_type, body, created_at \
+                     FROM goal_events WHERE goal_id = ? \
+                     ORDER BY id DESC LIMIT ?",
+                )
+                .bind(goal_id)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+                rows.reverse();
+                rows
+            }
+            None => sqlx::query_as::<_, GoalEventRow>(
+                "SELECT id, goal_id, task_id, author_session_id, event_type, body, created_at \
+                 FROM goal_events WHERE goal_id = ? \
+                 ORDER BY id ASC",
+            )
+            .bind(goal_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?,
+        };
         rows.into_iter().map(GoalEventRow::into_brief).collect()
     }
 }
@@ -284,11 +302,15 @@ impl SqliteGalley {
         self.fetch_goal(&goal_id).await
     }
 
-    pub(super) async fn goal_status_db(&self, id: GoalId) -> Result<GoalStatusSnapshot> {
+    pub(super) async fn goal_status_db(
+        &self,
+        id: GoalId,
+        event_limit: Option<i64>,
+    ) -> Result<GoalStatusSnapshot> {
         let goal = self.fetch_goal(id.as_str()).await?;
         let project = self.fetch_project(goal.project_id.as_str()).await.ok();
         let tasks = self.goal_tasks_for(id.as_str()).await?;
-        let events = self.goal_events_for(id.as_str(), 50).await?;
+        let events = self.goal_events_for(id.as_str(), event_limit).await?;
         let deliverable = self.latest_goal_deliverable(id.clone()).await?;
         let sessions = self
             .list_sessions(SessionFilter {

@@ -320,7 +320,18 @@ pub trait GalleyApi: Send + Sync {
         origin: Origin,
     ) -> Result<GoalBrief>;
 
+    /// Goal snapshot with the most recent 50 events — the display view
+    /// (GUI, `galley goal status`). Event-derived conclusions from this
+    /// snapshot are approximations once a goal outgrows the window.
     async fn goal_status(&self, id: GoalId) -> Result<GoalStatusSnapshot>;
+
+    /// Goal snapshot with the complete event history. The goal
+    /// controller's signal logic (result/material detection, checkpoint
+    /// and planning-round markers, per-worker baselines) counts and
+    /// dedups over events, so it must never run on a truncated window:
+    /// eviction makes results look absent, checkpoints repost, and
+    /// planning rounds collide.
+    async fn goal_status_full(&self, id: GoalId) -> Result<GoalStatusSnapshot>;
 
     /// Append a new deliverable anchor version for a goal. `version` is
     /// assigned as the current max + 1. Content over the size cap is

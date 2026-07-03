@@ -195,7 +195,11 @@ impl GalleyApi for SqliteGalley {
     }
 
     async fn goal_status(&self, id: GoalId) -> Result<GoalStatusSnapshot> {
-        self.goal_status_db(id).await
+        self.goal_status_db(id, Some(50)).await
+    }
+
+    async fn goal_status_full(&self, id: GoalId) -> Result<GoalStatusSnapshot> {
+        self.goal_status_db(id, None).await
     }
 
     async fn set_goal_deliverable(

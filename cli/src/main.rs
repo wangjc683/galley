@@ -172,7 +172,7 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             all,
             until_idle,
             final_show,
-        }) => project::project_follow(project_id, tail, all, until_idle, final_show).await,
+        }) => project::project_follow(project_id, tail, all, until_idle, final_show, None).await,
         Command::Project(ProjectCmd::Delete {
             project_id,
             supervisor,

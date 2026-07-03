@@ -314,6 +314,93 @@ async fn goal_lifecycle_defaults_task_event_and_stop() {
 }
 
 #[tokio::test]
+async fn goal_status_full_keeps_events_the_windowed_view_evicts() {
+    // The goal controller's signal logic (result detection, checkpoint
+    // dedup, planning-round counting) runs over the event history; the
+    // 50-event display window must not be its data source. Early events
+    // — e.g. a worker's result — have to survive later flooding.
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+
+    let proposal = galley
+        .create_goal_proposal(
+            CreateGoalProposalInput {
+                objective: "Window vs full history".into(),
+                project_id: None,
+                master_session_id: None,
+                budget_seconds: None,
+                worker_limit: None,
+                runtime_kind: Some(RuntimeKind::Managed),
+                write_mode: None,
+                expires_in_seconds: None,
+            },
+            Origin::cli(None, Some("test proposal".into())),
+        )
+        .await
+        .expect("create goal proposal");
+    let goal = galley
+        .start_goal_from_proposal(
+            proposal.id.clone(),
+            proposal.internal_confirm_token.clone(),
+            Origin::cli(None, Some("confirmed".into())),
+        )
+        .await
+        .expect("start goal");
+
+    seed_session_idle(&pool, "sess_worker").await;
+    galley
+        .create_goal_event(CreateGoalEventInput {
+            goal_id: goal.id.clone(),
+            task_id: None,
+            author_session_id: Some(sid("sess_worker")),
+            event_type: GoalEventType::Result,
+            body: "early worker result".into(),
+        })
+        .await
+        .expect("create result event");
+    for i in 0..60 {
+        galley
+            .create_goal_event(CreateGoalEventInput {
+                goal_id: goal.id.clone(),
+                task_id: None,
+                author_session_id: None,
+                event_type: GoalEventType::Synthesis,
+                body: format!("controller idle cycle {i}"),
+            })
+            .await
+            .expect("create filler event");
+    }
+
+    // 1 "Goal started" system event + 1 result + 60 fillers = 62 total.
+    let windowed = galley
+        .goal_status(goal.id.clone())
+        .await
+        .expect("goal status");
+    assert_eq!(windowed.events.len(), 50);
+    assert!(
+        !windowed
+            .events
+            .iter()
+            .any(|e| e.event_type == GoalEventType::Result),
+        "windowed view is expected to have evicted the early result"
+    );
+
+    let full = galley
+        .goal_status_full(goal.id.clone())
+        .await
+        .expect("goal status full");
+    assert_eq!(full.events.len(), 62);
+    assert!(full
+        .events
+        .iter()
+        .any(|e| e.event_type == GoalEventType::Result));
+    assert!(
+        full.events.windows(2).all(|w| w[0].id < w[1].id),
+        "full history stays in ascending id order"
+    );
+}
+
+#[tokio::test]
 async fn goal_proposal_worker_limit_is_capped_at_official_hive_max() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool);
