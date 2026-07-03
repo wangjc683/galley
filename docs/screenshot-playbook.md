@@ -136,6 +136,15 @@ en：`The Odyssey opens soon — find which theaters in Shanghai show the IMAX 7
       goal + objective 与用户消息逐字一致 + system 叙述行）；running 态
       可种且重启存活（Core 启动无状态调和），但 subline 只有「思考中…」
       且不可点开；**ask_user 不可种**（纯内存态），现场真跑制造。
-- [ ] zh / en 两套拍摄 + 暗色 hero
-- [ ] 替换 `docs/screenshots/`，更新两份 README 引用（含 `<picture>` 暗色切换）
+- [x] zh / en 两套拍摄（2026-07-03，hero = 豆瓣中译本对比 / Goodreads 英文
+      版本对比，glm-5.2 裸端点真跑）。实拍与清单的偏差，均已采纳为正式
+      口径：Goal 场景由 owner 换为**项目视图**（含项目感知输入框）；额外
+      拍摄的**空状态**收编为网格第四格（「安静待命的工作区」）；「等你
+      回复」现场真跑未入选最终五张。已知瑕疵：zh 暗色 hero 右上有外观
+      tooltip（「深色 · 当前深色」）入镜，en 套干净——重拍一帧或接受，
+      owner 定。
+- [x] 替换 `docs/screenshots/{zh,en}/`（01-hero / 02-projects / 03-search /
+      04-empty / 05-hero-dark），旧平铺五张删除；两份 README 已切换，
+      hero 用 `<picture prefers-color-scheme>` 明暗自适应，网格四张带
+      `<sub>` 说明行。
 - [ ] 演示 GIF（截图之后的独立资产任务）

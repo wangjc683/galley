@@ -28,7 +28,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/screenshot_05.png" alt="Galley 主对话界面" width="800" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/zh/05-hero-dark.png">
+    <img src="docs/screenshots/zh/01-hero.png" alt="Galley 主对话界面：agent 正在多步调用工具完成任务" width="800" />
+  </picture>
 </p>
 
 ---
@@ -266,8 +269,8 @@ Galley 也是这张桌子：human 在 GUI 推进工作，Supervisor Agent 通过
 
 | | |
 |---|---|
-| ![](docs/screenshots/screenshot_01.png) | ![](docs/screenshots/screenshot_02.png) |
-| ![](docs/screenshots/screenshot_03.png) | ![](docs/screenshots/screenshot_04.png) |
+| ![项目视图](docs/screenshots/zh/02-projects.png)<br/><sub>项目视图 · 多条会话围绕同一项目并行</sub> | ![全文搜索](docs/screenshots/zh/03-search.png)<br/><sub>⌘K · 历史会话全文可搜（中文子串也行）</sub> |
+| ![安静待命](docs/screenshots/zh/04-empty.png)<br/><sub>安静待命的工作区 · 后台任务照常推进</sub> | ![暗色主题](docs/screenshots/zh/05-hero-dark.png)<br/><sub>暗色主题 · 同一张夜间书桌</sub> |
 
 ## 贡献 / 从源码构建
 

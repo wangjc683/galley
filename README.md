@@ -28,7 +28,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/screenshot_05.png" alt="Galley main conversation view" width="800" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en/05-hero-dark.png">
+    <img src="docs/screenshots/en/01-hero.png" alt="Galley main conversation view: an agent working through a multi-step tool run" width="800" />
+  </picture>
 </p>
 
 ---
@@ -266,8 +269,8 @@ Galley is that shared table: humans drive work from the GUI, while Supervisor Ag
 
 | | |
 |---|---|
-| ![](docs/screenshots/screenshot_01.png) | ![](docs/screenshots/screenshot_02.png) |
-| ![](docs/screenshots/screenshot_03.png) | ![](docs/screenshots/screenshot_04.png) |
+| ![Project view](docs/screenshots/en/02-projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Full-text search](docs/screenshots/en/03-search.png)<br/><sub>⌘K — every past conversation is full-text searchable</sub> |
+| ![At rest](docs/screenshots/en/04-empty.png)<br/><sub>The workspace at rest — background work keeps moving</sub> | ![Dark theme](docs/screenshots/en/05-hero-dark.png)<br/><sub>Dark theme — the same desk at night</sub> |
 
 ## Contributing / Building From Source
 
