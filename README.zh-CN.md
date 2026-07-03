@@ -50,30 +50,40 @@
 
 ## Galley 是什么
 
-Galley 让多个 AI agent session 在你自己的电脑上并行运行，随时切换、接管、继续。你在 GUI 里看进度、发指令、做审批；Supervisor Agent 在 CLI 里编排同一支 session 团队——两个角色，一份状态。
+Galley 在你自己的电脑上运行一支 AI agent 团队。每个 agent 都能真正做事——操作浏览器、终端和文件，甚至手机；多条会话并行推进，随时切换、接管、继续。你在 GUI 里看进度、发指令、做审批；Supervisor Agent 在 CLI 里编排同一支团队——两个角色，一份状态。
 
 | 给人用 | 给 agent 用 | 默认开箱即用 |
 |---|---|---|
-| GUI 管理 session、项目、工具时间线与审批 | `galley` CLI 是稳定的公开契约，供 Supervisor Agent 调度 | 内置 GenericAgent runtime、CPython 3.11、运行依赖与浏览器控制插件 |
-
-已有 [GenericAgent](https://github.com/lsdefine/GenericAgent) 的用户，也可以在 **Settings → Runtime** 接入外部 GA。接入后 Galley 严格只读，不改动外部 GA 的代码、memory、SOP 或 `mykey.py`。
+| GUI 管理会话、项目、工具时间线与审批 | `galley` CLI 是稳定的公开契约，供 Supervisor Agent 调度 | 内置内核、CPython 3.11、运行依赖与浏览器控制插件 |
 
 ---
 
 ## Highlights
 
+### 单个 agent，能干活
+
+由内置内核驱动——基于 [GenericAgent](https://github.com/lsdefine/GenericAgent) 二次开发，随安装包附带，下载即用。
+
 | | |
 |---|---|
-| 📦 **开箱即用**<br/>下载即用。内置 GenericAgent runtime、CPython 3.11 与全部运行依赖，不必自己配 Python 环境。 | 🧭 **项目工作区 + 多会话**<br/>把一个文件夹设为项目工作区——代码仓库或资料夹都行；多条会话围绕同一个项目并行推进，再统一汇总。 |
-| 🎯 **Galley Goal**<br/>交给 Galley 一个长期目标，定好时长与 Subagent 预算，它便在后台持续推进，直到达成或预算用尽。 | ⚙️ **GUI + CLI 双原生**<br/>你在 GUI 操作，Supervisor Agent 走稳定的 `galley` CLI；两端共享同一份 session 与历史，不是各开各的。 |
-| 💬 **IM Channels**<br/>接入微信 / 飞书，用日常的聊天软件继续对话，也能远程调度桌面端的 Galley。 | 🔧 **工具时间线 + 审批**<br/>每次工具调用的参数、结果、耗时都内联可见；高风险动作支持逐次审批、加白名单或 YOLO 放行。 |
-| 🌐 **浏览器控制**<br/>连上 Chrome / Edge / Chromium，agent 就能操作你已登录的浏览器，剩下的交给想象力。 | 💾 **持久化 + 搜索 + 后台常驻**<br/>关窗不退出，离开也能远程调度；回来随时接着聊，历史会话全文可搜。 |
+| 🖥️ **系统级执行**<br/>终端、文件系统、键盘鼠标、屏幕视觉，直到通过 ADB 操作手机——从查资料到把事真正办完。 | 🌐 **真实浏览器**<br/>连上 Chrome / Edge，agent 用的就是你已登录的那个浏览器——账号、会员、工作后台都在，不必重新登录。 |
+| 🧬 **自进化技能**<br/>每解决一个新任务，就把做法沉淀成可复用的技能；越用越熟练，技能树长在你本地。 | 💰 **Token 效率**<br/>内核按信息密度主动裁剪上下文——更少噪声、更少幻觉、更低成本；Galley 默认把窗口设在 90K token，为长任务留足余量。 |
+
+### 一支团队，管得住
+
+Galley 的编排层——人在 GUI，Supervisor Agent 在 CLI，都是一等操作者。
+
+| | |
+|---|---|
+| 🧭 **项目工作区 + 多会话**<br/>把一个文件夹设为项目工作区——代码仓库或资料夹都行；多条会话围绕同一个项目并行推进，再统一汇总。 | 🎯 **Galley Goal**<br/>交给 Galley 一个长期目标，定好时长与 Subagent 预算，它便在后台持续推进，直到达成或预算用尽。 |
+| 🔧 **工具时间线 + 审批**<br/>每次工具调用的参数、结果、耗时都内联可见；高风险动作支持逐次审批、加白名单或 YOLO 放行。 | ⚙️ **GUI + CLI 双原生**<br/>你在 GUI 操作，Supervisor Agent 走稳定的 `galley` CLI；两端共享同一份会话与历史，不是各开各的。 |
+| 💬 **IM Channels**<br/>接入微信 / 飞书，用日常的聊天软件继续对话，也能远程调度桌面端的 Galley。 | 💾 **持久化 + 搜索 + 后台常驻**<br/>关窗不退出，离开也能远程调度；回来随时接着聊，历史会话全文可搜。 |
 
 ---
 
 ## Quick Start
 
-先准备一个可用的 LLM 服务：API Key、Base URL 和模型名。
+先准备一个可用的 LLM 服务：API Key、Base URL 和模型名。Claude / ChatGPT / DeepSeek / Kimi / GLM / MiniMax 等主流模型开箱可选，也支持任意 OpenAI 兼容端点。
 
 | 1. 下载 Galley | 2. 配置模型 | 3. 开始使用 |
 |---|---|---|
@@ -96,7 +106,7 @@ xattr -dr com.apple.quarantine /Applications/Galley.app
 
 Windows SmartScreen 提示「发布者未知」时，点「更多信息」→「仍要运行」。
 
-已有 GenericAgent 环境，可在 **Settings → Runtime → 接入外部 GA** 选择 GA 目录。
+已有 [GenericAgent](https://github.com/lsdefine/GenericAgent) 环境，可在 **Settings → Runtime → 接入外部 GA** 选择 GA 目录。接入后 Galley 严格只读，不改动外部 GA 的代码、memory、SOP 或 `mykey.py`。
 
 </details>
 
@@ -177,7 +187,7 @@ galley session archive <id> --supervisor=ga-claude-1 --reason="done"
 
 ## Architecture
 
-GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**。Core 是唯一权威层，掌管 session / Project / Goal 状态、SQLite 写入与 runner 生命周期；默认运行内置的 Galley-managed GA，开箱即用。
+GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**。Core 是唯一权威层，掌管 session / Project / Goal 状态、SQLite 写入与 runner 生命周期；默认运行内置内核，开箱即用。
 
 <details>
 <summary>展开架构图</summary>
@@ -238,7 +248,7 @@ GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自�
 
 - **Agent API 是冻结的公开契约。** CLI 输出带 `schemaVersion`，在 0.2.x 内冻结；每条命令自动携带 origin 三元组（`via` / `supervisor` / `reason`），GUI 时间线据此还原「谁、为什么、什么时候」动了某个 session。Supervisor 可以放心把它当 API 来编程。
 
-- **双 runtime 的边界纪律。** 默认用 bundled GA（含 CPython 3.11 与依赖，开箱即用）；接入外部 GenericAgent 时，Galley 严格只读——不改外部 GA 的代码、memory、SOP 或 `mykey.py`，你的现有环境不会被污染。
+- **双 runtime 的边界纪律。** 默认用内置内核（含 CPython 3.11 与依赖，开箱即用）；接入外部 GenericAgent 时，Galley 严格只读——不改外部 GA 的代码、memory、SOP 或 `mykey.py`，你的现有环境不会被污染。
 
 - **可演进的持久层。** SQLite 作权威存储，有序 migration 保证升级可重放；历史会话用 FTS5 trigram 索引，中文也能子串搜索，关窗后台常驻、回来即搜。
 
@@ -286,7 +296,7 @@ CI release 流程见 [docs/release-update-sop.md](./docs/release-update-sop.md)�
 
 ## 致谢
 
-[**lsdefine/GenericAgent**](https://github.com/lsdefine/GenericAgent) 是 Galley 当前的 agent 内核。Galley 的内置 runtime 基于 GenericAgent，并保留外部 GA attach 兼容路径；在此之上，Galley 提供本地编排、GUI / CLI 对等前端、session 持久化、审批、搜索和打包后的开箱即用体验。
+Galley 的内核基于 [**lsdefine/GenericAgent**](https://github.com/lsdefine/GenericAgent) 二次开发——约 3K 行种子代码、自进化的极简 agent 框架。没有这份干净的地基，就没有 Galley。
 
 相关论文：[GenericAgent: A Token-Efficient Self-Evolving LLM Agent via Contextual Information Density Maximization (arXiv:2604.17091)](https://arxiv.org/abs/2604.17091)
 

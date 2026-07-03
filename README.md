@@ -50,30 +50,40 @@
 
 ## What Is Galley
 
-Galley runs multiple AI agent sessions in parallel on your own computer, ready to switch, take over, and resume at any time. You watch progress, send instructions, and approve actions in the GUI; a Supervisor Agent orchestrates the same session team through the CLI — two roles, one shared state.
+Galley runs a team of AI agents on your own computer. Each agent actually gets things done — driving your browser, terminal, and files, even your phone; multiple sessions advance in parallel, ready to switch, take over, and resume at any time. You watch progress, send instructions, and approve actions in the GUI; a Supervisor Agent orchestrates the same team through the CLI — two roles, one shared state.
 
 | For Humans | For Agents | Ready By Default |
 |---|---|---|
-| Manage sessions, projects, tool timelines, and approvals in the GUI | The `galley` CLI is a stable public contract for Supervisor Agents | Bundled GenericAgent runtime, CPython 3.11, runtime dependencies, and Browser Control assets |
-
-Already have your own [GenericAgent](https://github.com/lsdefine/GenericAgent)? Connect it from **Settings → Runtime**. Once attached, Galley stays strictly read-only and never touches your external GA code, memory, SOP, or `mykey.py`.
+| Manage sessions, projects, tool timelines, and approvals in the GUI | The `galley` CLI is a stable public contract for Supervisor Agents | Bundled engine, CPython 3.11, runtime dependencies, and Browser Control assets |
 
 ---
 
 ## Highlights
 
+### One agent that gets things done
+
+Powered by the bundled engine — a derivative work of [GenericAgent](https://github.com/lsdefine/GenericAgent), shipped inside the installer, ready on first launch.
+
 | | |
 |---|---|
-| 📦 **Out of the box**<br/>Download and run. The bundled GenericAgent runtime, CPython 3.11, and all runtime dependencies mean no Python setup of your own. | 🧭 **Project workspace + multiple sessions**<br/>Point a folder — a code repo or a document directory — at a Project workspace; multiple sessions advance around the same project in parallel, then converge. |
-| 🎯 **Galley Goal**<br/>Hand Galley a long-term goal, set the duration and Subagent budget, and it keeps working in the background until the goal is met or the budget runs out. | ⚙️ **GUI + CLI dual-native**<br/>You operate in the GUI; a Supervisor Agent goes through the stable `galley` CLI. Both share the same sessions and history, not separate worlds. |
-| 💬 **IM Channels**<br/>Connect WeChat / Feishu, keep the conversation going through everyday chat apps, and dispatch Galley Desktop remotely. | 🔧 **Tool timeline + approvals**<br/>Every tool call's args, result, and timing are visible inline; risky actions support per-call approval, allowlists, or YOLO mode. |
-| 🌐 **Browser Control**<br/>Connect Chrome / Edge / Chromium and the agent can operate your signed-in browser. The rest is up to your imagination. | 💾 **Persistence + search + background mode**<br/>Close the window without quitting, dispatch remotely while away, then come back and pick up the thread. Past sessions are fully searchable. |
+| 🖥️ **System-level execution**<br/>Terminal, filesystem, keyboard and mouse, screen vision, all the way to driving a phone over ADB — from looking things up to actually getting them done. | 🌐 **Your real browser**<br/>Connect Chrome / Edge and the agent works in the browser you are already signed into — accounts, memberships, and work consoles are all there. No re-login. |
+| 🧬 **Self-evolving skills**<br/>Every new task it solves is crystallized into a reusable skill; the longer you use it, the more capable it gets — and the skill tree lives on your machine. | 💰 **Token efficiency**<br/>The engine actively trims context by information density — less noise, fewer hallucinations, lower cost. Galley sets the default window at 90K tokens, leaving headroom for long tasks. |
+
+### One team you can actually manage
+
+Galley's orchestration layer — a human in the GUI and a Supervisor Agent on the CLI, both first-class operators.
+
+| | |
+|---|---|
+| 🧭 **Project workspace + multiple sessions**<br/>Point a folder — a code repo or a document directory — at a Project workspace; multiple sessions advance around the same project in parallel, then converge. | 🎯 **Galley Goal**<br/>Hand Galley a long-term goal, set the duration and Subagent budget, and it keeps working in the background until the goal is met or the budget runs out. |
+| 🔧 **Tool timeline + approvals**<br/>Every tool call's args, result, and timing are visible inline; risky actions support per-call approval, allowlists, or YOLO mode. | ⚙️ **GUI + CLI dual-native**<br/>You operate in the GUI; a Supervisor Agent goes through the stable `galley` CLI. Both share the same sessions and history, not separate worlds. |
+| 💬 **IM Channels**<br/>Connect WeChat / Feishu, keep the conversation going through everyday chat apps, and dispatch Galley Desktop remotely. | 💾 **Persistence + search + background mode**<br/>Close the window without quitting, dispatch remotely while away, then come back and pick up the thread. Past sessions are fully searchable. |
 
 ---
 
 ## Quick Start
 
-Prepare a usable LLM service first: API Key, Base URL, and model name.
+Prepare a usable LLM service first: API Key, Base URL, and model name. Claude / ChatGPT / DeepSeek / Kimi / GLM / MiniMax presets are built in, and any OpenAI-compatible endpoint works.
 
 | 1. Download Galley | 2. Configure a model | 3. Start using it |
 |---|---|---|
@@ -96,7 +106,7 @@ xattr -dr com.apple.quarantine /Applications/Galley.app
 
 On Windows, when SmartScreen says the publisher is unknown, choose "More info" → "Run anyway".
 
-If you already have a GenericAgent environment, choose the GA folder from **Settings → Runtime → Connect external GA**.
+If you already have a [GenericAgent](https://github.com/lsdefine/GenericAgent) environment, choose the GA folder from **Settings → Runtime → Connect external GA**. Once attached, Galley stays strictly read-only and never touches your external GA's code, memory, SOP, or `mykey.py`.
 
 </details>
 
@@ -177,7 +187,7 @@ Full command reference, JSON schemas, and exit codes live in [`docs/agent-api.md
 
 ## Architecture
 
-The GUI and the CLI are **peer frontends** — not a GUI wrapping a CLI, but two equals each talking directly to the same **Rust Core**. Core is the single authority, owning session / Project / Goal state, SQLite writes, and runner lifecycle; by default it runs the bundled Galley-managed GA, ready out of the box.
+The GUI and the CLI are **peer frontends** — not a GUI wrapping a CLI, but two equals each talking directly to the same **Rust Core**. Core is the single authority, owning session / Project / Goal state, SQLite writes, and runner lifecycle; by default it runs the bundled engine, ready out of the box.
 
 <details>
 <summary>Show architecture diagram</summary>
@@ -238,7 +248,7 @@ A few design choices that aren't in the feature list but shape Galley's engineer
 
 - **The Agent API is a frozen public contract.** CLI output carries a `schemaVersion`, frozen within 0.2.x; every command carries an origin triple (`via` / `supervisor` / `reason`), and the GUI timeline reconstructs who changed a session, why, and when. A Supervisor can program against it with confidence.
 
-- **Discipline at the dual-runtime boundary.** The default uses bundled GA (CPython 3.11 and dependencies included, ready out of the box); when attaching an external GenericAgent, Galley stays strictly read-only — it never touches the external GA's code, memory, SOP, or `mykey.py`, so your existing environment stays clean.
+- **Discipline at the dual-runtime boundary.** The default is the bundled engine (CPython 3.11 and dependencies included, ready out of the box); when attaching an external GenericAgent, Galley stays strictly read-only — it never touches the external GA's code, memory, SOP, or `mykey.py`, so your existing environment stays clean.
 
 - **A persistence layer built to evolve.** SQLite is the authoritative store, with ordered migrations that make upgrades replayable; past sessions are indexed with FTS5 trigram so even Chinese substrings are searchable, staying resident in the background and instantly searchable when you return.
 
@@ -286,7 +296,7 @@ See [docs/release-update-sop.md](./docs/release-update-sop.md) for the CI releas
 
 ## Acknowledgments
 
-[**lsdefine/GenericAgent**](https://github.com/lsdefine/GenericAgent) is Galley's current agent kernel. Galley's bundled runtime is built on GenericAgent while preserving compatibility with external GA environments; on top of that, Galley adds local orchestration, peer GUI / CLI frontends, session persistence, approvals, search, and an out-of-the-box packaged experience.
+Galley's engine is a derivative work of [**lsdefine/GenericAgent**](https://github.com/lsdefine/GenericAgent) — a minimal, self-evolving agent framework grown from ~3K lines of seed code. Galley would not exist without that clean foundation.
 
 Paper: [GenericAgent: A Token-Efficient Self-Evolving LLM Agent via Contextual Information Density Maximization (arXiv:2604.17091)](https://arxiv.org/abs/2604.17091)
 
