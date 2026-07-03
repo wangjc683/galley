@@ -68,18 +68,27 @@ mv "$HOME/Library/Application Support/app.galley"{.real,}
 | 会话 | 状态 | subline |
 |---|---|---|
 | 帮我搜一下诺兰新电影《奥德赛》的相关资讯 | **hero 真跑**，拍摄时进行中 | 实时步数 |
-| 整理 Downloads 里的安装包和旧截图 | running | 第 3 步 · 按类型归档中 |
-| 帮我查下周去上海的高铁班次 | 等你回复（ask_user） | 等你回复 |
-| 上季度报销单分类整理与汇总 | 已完成 · 未读 | 已完成 · 共 47 笔分 6 类 |
+| 用户访谈纪要整理与共性归纳（Q3 项目内） | running（种子态） | 思考中…（「第 N 步」是内存态种不出） |
+| 帮我查下周去上海的高铁班次 | 等你回复 | **现场真跑制造**（ask_user 是内存态，不可种） |
+| 整理 Downloads 里的安装包和旧截图 | 已完成 | 已按类型归档 38 个文件 |
+| 上季度报销单分类汇总 | 已完成 · 未读 | 共 47 笔分 6 类，2 笔待补发票 |
 | 跟进 #1234 PR 的 review 反馈 | 已完成，**supervisor 徽标** | @ga-claude-1 创建 |
-| 筹备读书会：场地、书单、邀请文案 | 已完成，**含 Goal 章节框** | Goal · 预算 30m · ✓ 已完成 |
+| 筹备读书会：场地、书单、邀请文案 | 已完成，**含 Goal 章节框（纯种子）** | 委派 + 3 条旁白 + 收口 |
 | 面试准备：手写并发限流 + 防抖 | PINNED · 已完成 | 含 4 个常见变体写法 |
-| MCP server 选型笔记 | 本周 · 已完成 | 6 个候选已对比 + 推荐 1 个 |
+| MCP server 选型笔记 | 三天前 · 已完成 | 6 个候选已对比 + 推荐 1 个 |
 
-关键词布点：「整理」出现在 ≥3 条标题（⌘K 场景直接搜「整理」）。
+（种子完整清单以 `scripts/seed-screenshots.py` 为准：2 项目 + 10 会话 +
+23 条消息 + 1 条已完成 goal，双语各一套，脚本内含 zh/en 全部文案。）
+
+关键词布点：「整理」出现在 3 条标题（⌘K 场景直接搜「整理」；en 套搜
+"review"，同样 3 条命中）。
 
 不种：error / cancelled 状态（README 场景无需）、审批态（YOLO 默认）、
-附件与图片消息（seed 复杂度不值）。
+附件与图片消息（seed 复杂度不值）、「等你回复」态（不可种，见上）。
+
+**拍摄纪律**：不要点开 running 种子行（点开会派生回 idle）；不要点开
+未读行（会清零未读点）；种子必须在走完 onboarding 配好模型**之后**注入
+（`managed_models` 空表会被拦回 onboarding）。
 
 **--lang en 对应集**：同结构、原生英文重写（非直译），关键词布点换
 "review"（≥3 条标题含 review）。会话示例：*Weekly movie releases and
@@ -113,14 +122,12 @@ en：`Look up the latest on Nolan's new film The Odyssey and organize a table: r
 
 ## 待办与状态
 
-- [ ] 种子脚本 `scripts/seed-screenshots.py`（含 Goal 章节框可行性验证：
-      goal 表 + 叙述消息能否离线构造出完整收口标记；不行则改为 30 分钟
-      短真跑一个 Goal）
-- [ ] 验证 running / ask_user 种子态能否在重启后存活——Core 启动时的
-      生命周期恢复可能把无 runner 进程的 running 会话收敛为终态（2026-06
-      lifecycle hotfix 方向）。若被收敛：running 态改为拍摄时现场真跑
-      第二个任务（Downloads 整理那条 prompt 现成），ask_user 态用一个
-      会提问的短 prompt 现场制造。
+- [x] 种子脚本 `scripts/seed-screenshots.py`（zh/en 双套，离线自检通过：
+      goal 匹配启发式、JSON 列、turn 布局、关键词命中全绿）
+- [x] 可行性验证（2026-07-03 schema 调查）：Goal 章节框**可纯种**（终态
+      goal + objective 与用户消息逐字一致 + system 叙述行）；running 态
+      可种且重启存活（Core 启动无状态调和），但 subline 只有「思考中…」
+      且不可点开；**ask_user 不可种**（纯内存态），现场真跑制造。
 - [ ] zh / en 两套拍摄 + 暗色 hero
 - [ ] 替换 `docs/screenshots/`，更新两份 README 引用（含 `<picture>` 暗色切换）
 - [ ] 演示 GIF（截图之后的独立资产任务）
