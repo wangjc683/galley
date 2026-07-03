@@ -14,7 +14,7 @@ Install in this order on a clean Windows 10 / 11 machine. Versions reflect what 
 |---|---|---|---|
 | 1 | **Python** | 3.10+ | Bridge subprocess. Use the installer from python.org; tick "Add python.exe to PATH". |
 | 2 | **Node.js** | 20.x LTS | Frontend toolchain. Installer from nodejs.org. |
-| 3 | **pnpm** | 9.x | `npm install -g pnpm` after Node installs. |
+| 3 | **pnpm** | matches root `packageManager` pin (10.x as of 2026-07) | `corepack enable` after Node installs — corepack reads the `packageManager` field in the repo's root `package.json`, so the version always matches CI. Fallback: `npm install -g pnpm@latest-10`. |
 | 4 | **Rust toolchain** | stable 1.78+ | Install via `rustup-init.exe` from rustup.rs. Pick the `x86_64-pc-windows-msvc` host triple (default on Win). |
 | 5 | **MSVC Build Tools** | 2022 | Required by Rust for native compilation. Install "Desktop development with C++" workload via Visual Studio Build Tools standalone installer. |
 | 6 | **WebView2 Runtime** | Evergreen | Already shipped with Win 11. On Win 10 it's usually present via Edge — verify under Settings → Apps → "Microsoft Edge WebView2 Runtime". The Galley installer also includes a bootstrapper that pulls it if absent (`webviewInstallMode: downloadBootstrapper` in `tauri.conf.json`). |
@@ -24,7 +24,7 @@ Verification (PowerShell):
 ```powershell
 python --version           # 3.10+
 node --version             # v20+
-pnpm --version             # 9+
+pnpm --version             # matches the root package.json packageManager pin
 rustup --version           # any
 cargo --version            # any
 ```
@@ -36,9 +36,15 @@ If `cargo` errors with "missing linker", re-run the MSVC Build Tools installer a
 ```powershell
 git clone https://github.com/wangjc683/galley.git
 cd galley
-pnpm install
-pnpm tauri build
+pnpm --dir gui install
+pnpm --dir gui tauri build
 ```
+
+The repo is not a pnpm workspace: a plain `pnpm install` at the repo root
+installs nothing for `gui/`, and the build then fails on missing frontend
+dependencies. Always install and build through `--dir gui` (the root
+`pnpm tauri` script is only a shortcut to the same thing and still needs
+`gui/` dependencies installed first).
 
 Artifacts land in `core\target\release\bundle\`:
 

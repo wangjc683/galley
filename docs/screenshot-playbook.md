@@ -51,7 +51,7 @@ mv "$HOME/Library/Application Support/app.galley"{.real,}
 | 对话字号 | standard |
 | Sidebar 宽度 | 默认 20% |
 | 截图方式 | `⌘⇧4 + 空格` 带窗口阴影，或 `xcrun simctl` 等效；全套一致 |
-| 文件组织 | `docs/screenshots/zh/` + `docs/screenshots/en/`，命名 `01-hero.png` … `05-hero-dark.png`；旧平铺五张删除，两份 README 各自引用对应语言目录 |
+| 文件组织 | `docs/screenshots/zh/` + `docs/screenshots/en/`，命名 `01-hero.png` / `02-projects.png` / `03-search.png` / `04-empty.png` / `05-hero-dark.png`，两份 README 各自引用对应语言目录 |
 | 入镜纪律 | 无 dev 调试 chrome、无系统通知、时间状态合理（种子时间戳相对拍摄日生成） |
 
 ## 种子内容（--lang zh）
@@ -67,9 +67,9 @@ mv "$HOME/Library/Application Support/app.galley"{.real,}
 
 | 会话 | 状态 | subline |
 |---|---|---|
-| 帮我搜一下诺兰新电影《奥德赛》的相关资讯 | **hero 真跑**，拍摄时进行中 | 实时步数 |
+| 《哲学研究》中译本豆瓣对比（见 Hero prompt 节） | **hero 真跑**，拍摄时进行中 | 实时步数 |
 | 用户访谈纪要整理与共性归纳（Q3 项目内） | running（种子态） | 思考中…（「第 N 步」是内存态种不出） |
-| 帮我查下周去上海的高铁班次 | 等你回复 | **现场真跑制造**（ask_user 是内存态，不可种） |
+| 帮我查下周去上海的高铁班次 | 等你回复 | **现场真跑制造**（ask_user 是内存态，不可种）；未入选正式五张，可选 |
 | 整理 Downloads 里的安装包和旧截图 | 已完成 | 已按类型归档 38 个文件 |
 | 上季度报销单分类汇总 | 已完成 · 未读 | 共 47 笔分 6 类，2 笔待补发票 |
 | 跟进 #1234 PR 的 review 反馈 | 已完成，**supervisor 徽标** | @ga-claude-1 创建 |
@@ -91,60 +91,53 @@ mv "$HOME/Library/Application Support/app.galley"{.real,}
 （`managed_models` 空表会被拦回 onboarding）。
 
 **--lang en 对应集**：同结构、原生英文重写（非直译），关键词布点换
-"review"（≥3 条标题含 review）。会话示例：*Weekly movie releases and
-reception, as a table*（hero）/ *Sort the installers piling up in
-Downloads* / *High-speed rail options to Shanghai next week*（waiting
-for you）/ *Q2 expense reports sorted and summarized*（unread）/
-*Follow up on PR #1234 review feedback*（supervisor）/ *Book club prep:
-venue, reading list, invites*（Goal）。
+"review"（≥3 条标题含 review）。会话示例：hero 见 Hero prompt 节 /
+*Sort the installers piling up in Downloads* / *High-speed rail options
+to Shanghai next week*（waiting for you，可选）/ *Q2 expense reports
+sorted and summarized*（unread）/ *Follow up on PR #1234 review
+feedback*（supervisor）/ *Book club prep: venue, reading list, invites*
+（Goal）。
 
 ## 场景清单
 
 | # | 文件 | 画面 | 必须入镜 |
 |---|---|---|---|
-| 1 | `01-hero.png` | MainView 主对话，hero 任务跑到中段 | 用户消息杏沙锚点；thinking 摘要；≥3 种工具调用（code_run / web_execute_js / web_scan）；行动→结论分隔线 + 一段富 markdown 结论（含表格）；TopBar YOLO 徽标；sidebar 满员多状态 |
-| 2 | `02-sessions.png` | Project view 展开的状态板 | 两个项目展开；running 呼吸 rail + 步数、等你回复、未读实心点、已完成同框；supervisor 徽标那条可见 |
-| 3 | `03-goal.png` | 读书会会话打开，Goal run 全章节 | 委派标记（Goal eyebrow + 预算参数）→ 降权旁白 → 收口标记（✓ 已完成 · 用时 + 查看结果） |
-| 4 | `04-search.png` | ⌘K 命令面板，已输入「整理」（en: "review"） | ≥3 条命中会话；浮层 + 半透明遮罩构图 |
-| 5 | `05-hero-dark.png` | 场景 1 同内容，暗色主题 | 同场景 1；README 可用 `<picture prefers-color-scheme>` 给暗色访客自动切换 |
+| 1 | `01-hero.png` | MainView 主对话，hero 任务跑到中段（第 5–8 步，结论未出即可） | 用户消息杏沙锚点；步序号 + 单行 thinking 摘要；≥3 次工具调用且 ≥2 种（web_scan / web_execute_js / update_working_checkpoint）；「工作中 + 秒数」徽标；TopBar YOLO 徽标；composer `/btw` 占位文案；sidebar 满员多状态（置顶、running×2、未读实心点、supervisor 徽标、本周分组） |
+| 2 | `02-projects.png` | 项目视图：活跃项目展开 + 项目感知输入框 | 「退出项目视图」头部；活跃项目展开（running「思考中」+ 已完成同框）；第二个项目收起在列；输入框占位「在 <项目> 里交代什么？」+ 底部「将创建到 <项目>」提示 |
+| 3 | `03-search.png` | ⌘K 命令面板，已输入「整理」（en: "review"） | ≥3 条命中（标题与对话内容两类结果都出现）；浮层 + 半透明遮罩构图 |
+| 4 | `04-empty.png` | 新对话空状态：「安静待命的工作区」 | 空主区 + 居中 composer（题词占位文案入镜）；sidebar 满员多状态与场景 1 同源 |
+| 5 | `05-hero-dark.png` | 场景 1 同内容，暗色主题 | 同场景 1；README 用 `<picture prefers-color-scheme>` 给暗色访客自动切换；注意右上外观 tooltip 不入镜 |
 
 ## Hero prompt（真跑）
 
-zh：`《奥德赛》快上映了，帮我查一下上海哪些影院会放 IMAX 70mm 版本、预售什么时候开，整理成一张表。`
-en：`The Odyssey opens soon — find which theaters in Shanghai show the IMAX 70mm version and when presales open, and organize a table.`
+正式口径（2026-07-03 实拍所用）：
 
-（城市按拍摄者实际所在替换。）
+zh：`《哲学研究》的几个中译本在豆瓣上现在的评分和评论数分别是多少？整理一张对比表，每个译本再摘一条有代表性的短评。`
+en：`Compare the current Goodreads ratings and review counts of the main English editions of Philosophical Investigations (Anscombe vs. Hacker & Schulte), as a table with one representative review each`
 
 **准入标准（2026-07-03 实测教训）**：hero prompt 的答案必须依赖**模型
-不可能预知的状态**——本机文件，或此时此刻的数据（排片、预售、余票、
-实时评分）。第一版「搜一下《奥德赛》的相关资讯」实测零工具单 turn 直
-答：卡司档期早在训练数据里。排片与预售逐日变化，只能真去翻页面，
-多步工具链是物理必然；查到「预售未开」也没关系——截图取的是中段过程，
-结论诚实收尾即可。
+不可能预知的状态**——本机文件，或此时此刻的数据（评分、评论数、排片、
+余票）。反例：「搜一下《奥德赛》的相关资讯」实测零工具单 turn 直答，
+卡司档期早在训练数据里。实时评分与评论数逐日变化，只能真去翻页面，
+多步工具链是物理必然。
 
-其余理由不变：具体优于空泛、与旧截图的诺兰任务一脉相承、非 coding、
-产出 markdown 表格（顺带展示表格排印）。跑到第 6–10 步之间、结论已出
-首段时截图；工具序列不理想就重跑一次。**保底方案**（若模型端点自带
-联网搜索绕过工具层）：换本机任务——「把桌面这份 PDF 的要点整理成一张
-表」，文件系统对模型不可见，工具调用必然发生。
+其余理由：具体优于空泛、与「维特根斯坦哲学与 LLM」项目彩蛋一脉相承、
+非 coding、产出 markdown 表格（顺带展示表格排印）。跑到第 5–8 步、工具
+序列已含 ≥2 种网页工具时截图，不必等结论段；序列不理想就重跑一次。
 
-## 待办与状态
+**备选**（同样过准入，时效型——临近热门影片上映时可用）：
+`《奥德赛》快上映了，帮我查一下上海哪些影院会放 IMAX 70mm 版本、预售什么时候开，整理成一张表。`
+（城市按拍摄者实际所在替换。）**保底方案**（若模型端点自带联网搜索绕过
+工具层）：换本机任务——「把桌面这份 PDF 的要点整理成一张表」，文件系统
+对模型不可见，工具调用必然发生。
 
-- [x] 种子脚本 `scripts/seed-screenshots.py`（zh/en 双套，离线自检通过：
-      goal 匹配启发式、JSON 列、turn 布局、关键词命中全绿）
-- [x] 可行性验证（2026-07-03 schema 调查）：Goal 章节框**可纯种**（终态
-      goal + objective 与用户消息逐字一致 + system 叙述行）；running 态
-      可种且重启存活（Core 启动无状态调和），但 subline 只有「思考中…」
-      且不可点开；**ask_user 不可种**（纯内存态），现场真跑制造。
-- [x] zh / en 两套拍摄（2026-07-03，hero = 豆瓣中译本对比 / Goodreads 英文
-      版本对比，glm-5.2 裸端点真跑）。实拍与清单的偏差，均已采纳为正式
-      口径：Goal 场景由 owner 换为**项目视图**（含项目感知输入框）；额外
-      拍摄的**空状态**收编为网格第四格（「安静待命的工作区」）；「等你
-      回复」现场真跑未入选最终五张。已知瑕疵：zh 暗色 hero 右上有外观
-      tooltip（「深色 · 当前深色」）入镜，en 套干净——重拍一帧或接受，
-      owner 定。
-- [x] 替换 `docs/screenshots/{zh,en}/`（01-hero / 02-projects / 03-search /
-      04-empty / 05-hero-dark），旧平铺五张删除；两份 README 已切换，
-      hero 用 `<picture prefers-color-scheme>` 明暗自适应，网格四张带
-      `<sub>` 说明行。
+## 当前状态与待办
+
+正式五张（zh / en 双套）已于 2026-07-03 实拍并上 README。实拍过程、与
+原清单的偏差决策（Goal 专场撤销、空状态收编、「等你回复」未入选）见
+[重拍 devlog](./devlog/2026-07-03-screenshot-reshoot-bilingual.md)；本文
+各节即偏差采纳后的现行口径。
+
+- [ ] 已知瑕疵：zh 暗色 hero 右上入镜外观 tooltip（「深色 · 当前深色」），
+      en 套干净——重拍一帧或接受，owner 定。
 - [ ] 演示 GIF（截图之后的独立资产任务）

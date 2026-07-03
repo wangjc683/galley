@@ -847,6 +847,29 @@ Rules:
 - Changes touching agent loop, tool protocol, memory semantics, or backend
   history shape are high risk and require a baseline audit.
 
+### How To Add A Patch
+
+Never edit `managed-ga/code/` directly. It is a generated payload: a direct
+edit is silently discarded on the next baseline rebuild, and it bypasses the
+patch ledger that makes the stack auditable and replayable. To change managed
+runtime behavior:
+
+1. Author the change as the next numbered **zero-context** unified diff in
+   `managed-ga/patches/` (for example `0014-<slug>.patch`).
+2. Record it in **both** ledgers: append the filename to
+   `managed-ga/manifest.json` (`patchStack.patches`), and add a row to
+   [`managed-ga/patches/manifest.md`](../managed-ga/patches/manifest.md) with
+   reason, touched upstream files, rebase risk, and removal condition.
+3. Verify the stack replays: `scripts/build-managed-ga.sh` regenerates
+   `code/` from the pinned upstream baseline and applies every patch in
+   manifest order via `git apply --unidiff-zero`.
+4. Mind ordering dependencies between patches touching the same upstream
+   file (for example, the fsapp patches rebase `0009` first); record them in
+   the manifest row's rebase-risk column.
+
+`managed-ga/patches/manifest.md` is the authoritative ledger for the current
+stack, including the last verified replay date.
+
 ## Backup And Device Migration
 
 Managed GA memory, SOP, skills, temp state, and model response state belong to
