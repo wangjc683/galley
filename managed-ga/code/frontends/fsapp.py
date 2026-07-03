@@ -768,9 +768,26 @@ def _send_local_file(receive_id, file_path, receive_id_type="open_id"):
     return False
 
 
+# Known prompt-echo placeholders: FILE_HINT shows the literal example
+# `[FILE:filepath]`, and models repeat it (or a variant) when describing
+# their own abilities. Mirrors the guard the WeChat frontend already has.
+_FILE_MARKER_PLACEHOLDERS = {"filepath", "<filepath>", "path", "<path>", "file_path", "<file_path>", "..."}
+
+
 def _send_generated_files(receive_id, raw_text, receive_id_type="open_id"):
-    for file_path in _extract_files(raw_text):
-        _send_local_file(receive_id, file_path, receive_id_type)
+    for file_path in dict.fromkeys(_extract_files(raw_text)):
+        candidate = file_path.strip()
+        if not candidate or candidate.lower() in _FILE_MARKER_PLACEHOLDERS:
+            continue
+        if not os.path.isfile(candidate) and "/" not in candidate and "\\" not in candidate:
+            # A bare word that is not an existing file is prompt echo,
+            # not a deliverable — log it instead of messaging the user
+            # "文件不存在: filepath" after an otherwise fine reply. Paths
+            # with separators still warn: a promised file that is really
+            # missing is something the user should hear about.
+            print(f"忽略非文件路径的 FILE 标记: {candidate!r}")
+            continue
+        _send_local_file(receive_id, candidate, receive_id_type)
 
 
 def _build_user_message(message):
