@@ -40,6 +40,15 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
    job 编译 + named-pipe 集成测试验证，最终 gate 仍是 Win dogfood）
 7. **CORE-13 飞书访问控制**：需产品决策（收紧默认值 vs 明示记录 beta 取舍）—
    ✅ 2026-07-03 已修（JC 决策：收紧为配对码单 owner 绑定）
+8. **用户可感知 Medium 批**：RUNNER-2/4/5、CORE-9/10、GUI-6 + RUNNER-8 文档
+   补录 — ✅ 2026-07-03 已修
+9. **长尾清零**（JC 决定完整收尾）：RUNNER-3/6/7/9/10/11、CLI-5/6/7/8/9余/10、
+   CORE-8/12/14/15/16/17/18/19、GUI-5/7/8/9/10/11/12/13/14 — ✅ 2026-07-03
+   已修，按模块四个 commit
+
+> **2026-07-03 收尾**：全部 55 条 findings 关闭（53 修复 + RUNNER-10 微信侧
+> 经查为误报保留 + RUNNER-8 以文档补录关闭）。本文档转为历史存档；后续新
+> 发现走新的 review 周期。
 
 ---
 
@@ -109,9 +118,10 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
   （100ms 间隔，尽量送达激活请求），仍 busy 则判定已有实例并退出；bind 失败
   为 `ERROR_ACCESS_DENIED`(5)（`first_pipe_instance(true)` 撞已存在的 pipe，
   即 probe 与 bind 之间被抢先）也判定已有实例而非降级为 unavailable 继续跑。
-- `[ ]` **CORE-8** · `core/src/codex_oauth.rs:1106-1151` — 每次 managed spawn
+- `[x]` **CORE-8** · `core/src/codex_oauth.rs:1106-1151` — 每次 managed spawn
   泄漏一个 credential IPC listener（task + fd + socket 文件）；Windows 分支创建
   失败静默 `break`。修复：返回关闭句柄绑定 runner 生命周期，或全进程单 listener。
+  **已修 2026-07-03**：credential IPC listener 进程级单例 + 共享只增 allowlist（登出后的 secret 已从 store 删除，残留条目无泄漏面）；Windows pipe 实例创建失败改 log+500ms 退避重试。
 - `[x]` **CORE-9** · `core/src/codex_oauth.rs:262-268, 567-580` — 导入 Codex CLI
   登录时用 CLI 的 refresh token 刷新但不回写 `~/.codex/auth.json`；OpenAI 有
   reuse 检测，CLI 下次刷新被登出，严重时 token family 撤销连累 Galley。
@@ -140,10 +150,11 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
   计数，`Backed` 增加 `skipped_symlinks` 字段随启动日志如实上报。
   新增测试 `copy_dir_all_counts_skipped_symlinks`（unix 分支验证计数与不复制）。
   验证：mac 全绿；Win 分支靠 check.yml windows-2022 编译 + 集成测试。
-- `[ ]` **CORE-12** · `core/src/im_supervisor.rs:180-182` — force-restart 用
+- `[x]` **CORE-12** · `core/src/im_supervisor.rs:180-182` — force-restart 用
   `start_kill()` 后不 wait 就 spawn 新进程，Windows 上新旧进程抢 state-dir 文件锁
   → 模型配置变更后重启间歇性报 "already running"。修复：`start_kill` 后带超时
   `wait().await` 再 spawn。
+  **已修 2026-07-03**：按建议 `start_kill` 后带 5s 超时 `wait().await` 再 spawn。
 - `[x]` **CORE-13** · `core/src/im_supervisor.rs:761-767` — 硬编码
   `"fs_allowed_users": []`，下游 fsapp.py:483-487 空列表 = PUBLIC_ACCESS：整个
   飞书组织任何能私聊 bot 的人都能驱动本机 agent。**需产品决策**：收紧默认值，
@@ -169,26 +180,32 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 
 ### Medium-Low / Low
 
-- `[ ]` **CORE-14** · `core/src/socket_listener/session_cmds.rs:105`（及全部
+- `[x]` **CORE-14** · `core/src/socket_listener/session_cmds.rs:105`（及全部
   socket handlers）、`im_supervisor.rs:703+`、`codex_oauth.rs:274+` — 每请求
   `SqliteGalley::open()` 新建 4 连接池，与 lib.rs:429-446 共享池设计矛盾，放大
   WAL 写者竞争。socket handlers 已有 `Option<&AppHandle>` 可取
   `app.state::<SqliteGalley>()`。codebase 最大一处实质性重复。
-- `[ ]` **CORE-15** · `core/src/migration_backup.rs:523` — 版本探测把解码失败
+  **已修 2026-07-03**：修在根上——`SqliteGalley::open()` 本身改为进程级共享池（tokio OnceCell，失败不缓存下次重试），一处改动覆盖全部 ~29 个调用点，无需向 socket handlers / im_supervisor / codex_oauth 逐个穿 AppHandle。
+- `[x]` **CORE-15** · `core/src/migration_backup.rs:523` — 版本探测把解码失败
   静默当 version 0 → 已迁移库被当全部待迁移 → 重跑 001 失败 → 同 CORE-1 的
   exit(2) 循环。应作为 `DbProbe` 错误显式失败。
-- `[ ]` **CORE-16** · `core/src/im_supervisor.rs:381-388` — autostart 吞掉 start
+  **已修 2026-07-03**：解码失败显式返回 `DbProbe` 错误。
+- `[x]` **CORE-16** · `core/src/im_supervisor.rs:381-388` — autostart 吞掉 start
   错误：pref 仍 enabled、无 slot、`last_error: None`，UI 呈现「开关开着但什么都
   没发生」。失败时应 `set_slot` Error 状态。
-- `[ ]` **CORE-17** · `core/src/codex_oauth.rs:361-399` — 先持久化
+  **已修 2026-07-03**：autostart 失败 set_slot Error 状态（Channels 卡片可见可重试）+ log。
+- `[x]` **CORE-17** · `core/src/codex_oauth.rs:361-399` — 先持久化
   secret+provider+model 再 probe，probe 瞬时失败（429/5xx）返回 Err：GUI 报
   「登录失败」但 provider 实际已配置。应返回 `Ok(… { ok: false })`。
-- `[ ]` **CORE-18** · `core/src/browser_control.rs:433-459` — 扩展目录同步只增
+  **已修 2026-07-03**：probe 失败返回 `Ok(status.ok=false)`——凭证/provider/model 已持久化，「登录失败」是误报。
+- `[x]` **CORE-18** · `core/src/browser_control.rs:433-459` — 扩展目录同步只增
   不删，上游删除/改名的脚本残留 unpacked extension，升级后混版本。改为写临时
   目录后原子换名。
-- `[ ]` **CORE-19** · `core/src/socket_listener/project_cmds.rs:191-204` —
+  **已修 2026-07-03**：staging 目录 + 换名同步（上游删除/改名的文件随之消失），生成的 per-install config.js 跨换名保留。新增测试 `prepare_extension_layout_removes_files_deleted_upstream`。
+- `[x]` **CORE-19** · `core/src/socket_listener/project_cmds.rs:191-204` —
   `mint_project_id` 是时间戳纯函数无 counter（对比 `mint_session_id` 有
   AtomicU64），同 tick 并发 create 产生相同 id → PK 冲突。加 counter。
+  **已修 2026-07-03**：加 AtomicU64 counter（对齐 mint_session_id）。
 
 **已核查非问题**（复查可跳过）：FTS/LIKE 搜索全参数化且转义；
 `insert_message_inner` 的 MAX(turn_index)+1 在 `BEGIN IMMEDIATE` 内串行化；
@@ -237,10 +254,11 @@ credential_store「密钥与密文同库」是模块头注释明示的 beta 取�
   **已修 2026-07-02**：乐观置 stopping（按钮即时反馈），rejection 时清除 +
   toast（`errors.stopFailed`）；pet 迁移 attach 失败补发「宠物已关闭」toast
   （即真实终态）；yolo sync 失败 log-only（失败方向安全：只会多弹审批）。
-- `[ ]` **GUI-5** · `gui/src/stores/messages.ts:603` + `hooks/useStickyScroll.ts:268-288`
+- `[x]` **GUI-5** · `gui/src/stores/messages.ts:603` + `hooks/useStickyScroll.ts:268-288`
   — `appendUserTurnExternal` 对后台 session 也 bump 全局 `userSubmitTick`，
   把当前会话的视口拽到它自己的最后一条用户消息并播放多余的 ack 动画。
   修复：仅 `sid === activeSessionId` 时 bump，或 tick 携带 session id。
+  **已修 2026-07-03**：仅 `sid === activeSessionId` 时 bump tick。
 - `[x]` **GUI-6** · `gui/src/lib/hydrate.ts:101-102, 135-140` +
   `stores/managed-models.ts:52-65` — managed models 加载失败被当「零模型」，
   已配置用户被送回 onboarding 首屏。修复：区分「load failed」（保留当前屏 +
@@ -249,34 +267,42 @@ credential_store「密钥与密文同库」是模块头注释明示的 beta 取�
   误读）；hydrate 在 managed + loadError 时保留正常界面并 toast
   （`errors.managedModelsLoadFailed`，指引 Settings → Models 重试），仅真零
   模型才路由 onboarding。
-- `[ ]` **GUI-7** · `gui/src/components/conversation/Conversation.tsx:188-190`
+- `[x]` **GUI-7** · `gui/src/components/conversation/Conversation.tsx:188-190`
   （及 `MainView.tsx:343-347`）— 内联 `onApprove` 闭包击穿 ToolCallout 的
   `React.memo`：流式期间长对话每个历史 ToolCallout 以 ~20Hz 重渲染。App 已特意
   useCallback 稳定 handler（App.tsx:385-390），中间层白包一层箭头函数。
   修复：传 `approvalId` 下去保持 handler 恒等，或 per-turn `useCallback`。
-- `[ ]` **GUI-8** · `gui/src/hooks/useGoalEffects.ts:56-74, 104-121` — goal
+  **已修 2026-07-03**：`OnApprove` 类型改为携带 approvalId，App 的稳定 handler 直通 ToolCallout，memo 恢复生效；ApprovalForm 内部绑定 tool.approvalId。
+- `[x]` **GUI-8** · `gui/src/hooks/useGoalEffects.ts:56-74, 104-121` — goal
   轮询每 5s 无条件 `setActiveGoals(新数组)`，连带 session-goals effect 再发一次
   IPC、header/sidebar 树每 5s 白渲染。`markGoalResultSeen`（:76-102）无 in-flight
   guard 可重复触发。修复：结构比较后再 setState；mark-seen 加 in-flight Set。
+  **已修 2026-07-03**：轮询结果结构比较后保持数组身份（无变化不重渲染、不触发 session-goals 重取）；mark-seen 加 in-flight Set。
 
 ### Low
 
-- `[ ]` **GUI-9** · `gui/src/components/layout/sidebar/SidebarProjectReview.tsx:600`
+- `[x]` **GUI-9** · `gui/src/components/layout/sidebar/SidebarProjectReview.tsx:600`
   — `groupSessions(sessions)` 在 render body 直接算，折叠的 drawer 也算；
   全局列表同款调用有 useMemo（Sidebar.tsx:176）。修复：`useMemo`。
-- `[ ]` **GUI-10** · `gui/src/components/layout/sidebar/types.ts:16` —
+  **已修 2026-07-03**：`useMemo`。
+- `[x]` **GUI-10** · `gui/src/components/layout/sidebar/types.ts:16` —
   `PROJECT_REVIEW_FALLBACK_NOW_MS = Date.now()` 模块加载时固定，桌面应用挂机
   数天后 7 天活跃窗口漂移。修复：改函数在消费点取值。
-- `[ ]` **GUI-11** · `gui/src/components/overlay/CommandPalette.tsx:122-126` —
+  **已修 2026-07-03**：改为 `projectReviewFallbackNowMs()` 函数，消费点取值。
+- `[x]` **GUI-11** · `gui/src/components/overlay/CommandPalette.tsx:122-126` —
   内容搜索无 `.catch`：FTS 错误成 unhandled rejection 且残留上一查询结果。
-- `[ ]` **GUI-12** · `gui/src/stores/runtime.ts:692-711` — warmup ready handler
+  **已修 2026-07-03**：`.catch` log + 清空过期结果。
+- `[x]` **GUI-12** · `gui/src/stores/runtime.ts:692-711` — warmup ready handler
   里的 no-op setState + 空 `if (current)` 块（stale 注释描述的功能从未实现）；
   `lib/bridge.ts:281-290` `BridgeClient.kill()` 零调用者。删除或补完。
-- `[ ]` **GUI-13** · `gui/src/stores/sessions.ts:871, 961` — 顶部已静态 import
+  **已修 2026-07-03**：删除 no-op setState、空 if 块和零调用者的 `BridgeClient.kill()`（Rust 侧持有强杀路径）。
+- `[x]` **GUI-13** · `gui/src/stores/sessions.ts:871, 961` — 顶部已静态 import
   runtime store，删除函数里多余的动态 `await import("@/stores/runtime")`。
-- `[ ]` **GUI-14** · `ArchivedDialog.tsx:98-147, 356-388` ↔
+  **已修 2026-07-03**：删除两处冗余动态 import。
+- `[x]` **GUI-14** · `ArchivedDialog.tsx:98-147, 356-388` ↔
   `EarlierDialog.tsx:95-162, 303-335` — 选择模式状态机 + 搜索过滤 + SearchBar
   逐字节复制，两处手工同步。抽 `useSessionSelectMode` + `SessionSearchBar`。
+  **已修 2026-07-03**：抽出 `useSessionSelectMode` + `SessionSearchBar`，两份手工同步副本删除（净 -18 行）。
 
 **已核查非问题**：listener 生命周期全部有 StrictMode `cancelled` 防护；
 `activateSession` 双击 spawn 竞态被 `spawning` 同步置位串行化；流式热路径
@@ -334,34 +360,43 @@ en/zh i18n key 对齐。
   关停收集失败，聚合写一条 System 事件后继续；全部 6 个调用点（stop/fail/
   synthesis 前后）不再因清理失败中止。synthesis 自身的错误仍经 `mod.rs:85-97`
   正常标 Failed。
-- `[ ]` **CLI-5** · `cli/src/transport.rs:12-98, 175-209` — socket 传输零超时：
+- `[x]` **CLI-5** · `cli/src/transport.rs:12-98, 175-209` — socket 传输零超时：
   core 假死时每条 CLI 命令无限挂起零输出，驱动 agent 无法区分「慢」和「死」。
   修复：connect + 首响应包 `tokio::time::timeout`，报「core 无响应」类错误
   （watch 流首帧后豁免）。
-- `[ ]` **CLI-6** · `cli/src/goal/controller.rs:1280-1313` + `mod.rs:85-97` —
+  **已修 2026-07-03**：connect 10s + 首响应/watch 首帧 120s 超时（watch 首帧后豁免——安静 session 合法），超时报「core 无响应」类 DbUnavailable。
+- `[x]` **CLI-6** · `cli/src/goal/controller.rs:1280-1313` + `mod.rs:85-97` —
   synthesis 300s 硬超时把仍在生成最终答案的 goal 判 Failed（synthesis prompt
   可带 300k 字符 anchor，超 300s 现实存在），且用 stale 的 pre-run status 覆盖。
   修复：自适应超时；超时记「synthesis timed out, check master session X」保持
   Wrapping 而非 Failed。
-- `[ ]` **CLI-7** · `cli/src/session.rs:295-321` — `session wait` 的
+  **已修 2026-07-03**：synthesis 超时随 prompt 规模自适应（300s + 1s/1k 字符，封顶 900s）；超时保持 Wrapping + 事件指向 master session + `--resume` 可重试，不再用 stale status 标 Failed。新增测试。
+- `[x]` **CLI-7** · `cli/src/session.rs:295-321` — `session wait` 的
   `has_agent_output` 接受 tail 中任何已有 agent 消息，多轮 session 上 send→wait
   立即返回上一轮答案。docs/agent-api.md §5.5d 有 codify，属 spec 级陷阱。
   加法修复：`--after-turn` 或 baseline 初始 tail 等增长。
+  **已修 2026-07-03**：加法 `--after-turn=N`（只认 turnIndex >= N 的 agent 消息），agent-api.md §5.5d 同步更新并明示旧陷阱。新增测试。
 
 ### Low
 
-- `[ ]` **CLI-8** · `cli/src/session.rs:327-361` — `session wait` 不检查 session
+- `[x]` **CLI-8** · `cli/src/session.rs:327-361` — `session wait` 不检查 session
   状态，error/cancelled 的死 session 烧满 300s 才返回。提前结束并带独立终态
   `status`（加法）。
-- `[~]` **CLI-9** · `cli/src/goal/decision.rs:36-38` + `controller.rs:1102,
+  **已修 2026-07-03**：error/cancelled 提前结束，加法终态 `session_error`/`session_cancelled`（wait 语义，非业务失败），文档同步。新增测试。
+- `[x]` **CLI-9** · `cli/src/goal/decision.rs:36-38` + `controller.rs:1102,
   467-524, 264-265` — wave-cap wrap 不可达（`WaitForSignal` 分支先于
   `all_worker_slots_capped` 检查返回）；空转周期重复写近似相同的 Synthesis
   事件（喂大 CLI-1）；`Continue`/`WaitForSignal` 臂不可达（`budget_left=false`
   硬编码）。**部分修 2026-07-03**：重复 Synthesis 事件已随 CLI-1 修掉
-  （summary 未变不写）；两处不可达分支仍待清理。
-- `[ ]` **CLI-10** · `cli/src/main.rs:37` — `Cli::parse()` 使 clap 解析错误以
+  （summary 未变不写）。
+  **收尾 2026-07-03**：`decision_after_wait` 的 WaitForSignal 短路让位于
+  全 capped 判定——wave-cap wrap/fail 从不可达变为可达（全 capped 的 goal
+  不再空转到 deadline，这是行为修复不只是清理）；budget 分支的两个空臂
+  标注 unreachable-by-construction。新增 2 测试。
+- `[x]` **CLI-10** · `cli/src/main.rs:37` — `Cli::parse()` 使 clap 解析错误以
   人类文本走 stderr，违反模块自文档的「错误 JSON 走 stdout」契约，解析 stdout
   的 SOP 看不到任何东西。改 `try_parse()` → `invalid_args` JSON envelope。
+  **已修 2026-07-03**：`try_parse()` → `invalid_args` JSON envelope 走 stdout（exit 2）；help/version 保留人类输出。
 - `[x]` **CLI-11** · `cli/src/goal/prompts.rs:228` — workspace 文件列举中
   `std::fs::read_dir(&dir).ok()?` 使任一子目录不可读即丢弃整个 listing，
   synthesis 把文件交付物当不存在。改 `continue` 跳过。
@@ -398,10 +433,11 @@ en/zh i18n key 对齐。
   **已修 2026-07-03**：按建议实现（合成 `SLASH_COMMAND_COMPLETED` 的
   run_complete，形状对齐 Abort 合成路径；GUI 侧确认 run_complete 不解析
   result 字符串）。新增 2 测试（system done 清状态 / workbench done 仍忽略）。
-- `[ ]` **RUNNER-3** · `runner/workbench_bridge.py:1774-1779` — shutdown grace
+- `[x]` **RUNNER-3** · `runner/workbench_bridge.py:1774-1779` — shutdown grace
   逻辑反了（`run_in_progress.wait(2.0)` 在跑时立即返回、空闲时白等 2s），后接
   100% CPU 忙等 drain loop，且「queue empty ≠ 已写入 flush」尾部事件仍可能丢。
   修复：writer 发 sentinel + 带超时 `join`。
+  **已修 2026-07-03**：writer-exit sentinel + 带超时 join——sentinel 前入队的事件保证写完 flush 完；旧逻辑（反向 wait + 忙等 queue.empty）删除。新增确定性尾部 flush 测试。
 - `[x]` **RUNNER-4** · `runner/workbench_bridge.py:1401-1404, 1626-1631,
   1804-1806, 141-147` — 桌宠子进程仅在 ShutdownCommand 清理；stdin-EOF 路径和
   parent watchdog `os._exit(0)` 都不杀 pet → core 崩溃后 pet 孤儿存活占着
@@ -417,13 +453,15 @@ en/zh i18n key 对齐。
   修复：dup 后 `os.dup2(devnull_fd, 1)`。
   **已修 2026-07-03**：按建议实现（capture dup 之后 dup2 devnull 盖掉 fd 1）。
   新增子进程级测试验证 os.write(1)/print 都进 devnull、仅捕获句柄可达真 stdout。
-- `[ ]` **RUNNER-6** · `runner/workbench_bridge.py:1364-1379` — `load_history`
+- `[x]` **RUNNER-6** · `runner/workbench_bridge.py:1364-1379` — `load_history`
   无 run-in-progress guard（对比 `_handle_set_llm` :1414-1421 有），mid-run
   替换 history 会让 agent loop 读写被换掉的列表。修复：镜像 set_llm 的拒绝。
-- `[ ]` **RUNNER-7** · `runner/workbench_bridge.py:1350-1363 vs 1211-1224` —
+  **已修 2026-07-03**：镜像 set_llm 的 run-in-progress 拒绝。新增测试。
+- `[x]` **RUNNER-7** · `runner/workbench_bridge.py:1350-1363 vs 1211-1224` —
   abort（命令线程）与 `_on_turn_end`（agent 线程）的 check-emit-clear 无共享锁，
   自然完成撞上 Stop 会双发 `run_complete`，第二发的 telemetry 基线已被清。
   修复：小锁或 Event-swap 保护。
+  **已修 2026-07-03**：`_run_complete_lock` 串行化三处 check-emit-clear（turn_end/Abort/slash-done），turn_end 补 is_set 检查。新增测试。
 
 ### Low
 
@@ -436,14 +474,17 @@ en/zh i18n key 对齐。
   「Handler 子类可做 approval 拦截 + turn 生命周期 UX 信号（emit-only，不得
   改工具分发/结果）」和「可在 agent 对象上设 Galley 命名空间的内存内属性
   （随子进程生灭，禁止持久化进 GA 文件）」。
-- `[ ]` **RUNNER-9** · `runner/managed_runtime.py:153-158, 164-169` — 重复的
+- `[x]` **RUNNER-9** · `runner/managed_runtime.py:153-158, 164-169` — 重复的
   `chatgpt_codex_oauth` 配置块（advancedOptions merge 前后各一份），已开始漂移。
   合并为单个 post-merge 块。
-- `[ ]` **RUNNER-10** · `runner/managed_im_supervisor.py:380, 474` — 两处
+  **已修 2026-07-03**：合并为单个 post-merge 块（Codex 键必须压过 advancedOptions）。
+- `[x]` **RUNNER-10** · `runner/managed_im_supervisor.py:380, 474` — 两处
   try/except/finally 后不可达的 `return 0`。删除。
-- `[ ]` **RUNNER-11** · `runner/workbench_bridge.py:455-469` — `_FenceFilter`
+  **已修 2026-07-03**：删除 feishu 侧不可达 return；wechat 侧经查实为可达（run_loop 正常返回路径），review 判断修正，保留。
+- `[x]` **RUNNER-11** · `runner/workbench_bridge.py:455-469` — `_FenceFilter`
   的 `carry` 在 drain 线程遇 `done` 退出时不 flush，末尾最多 5 字符反引号内容
   从流式视图截断（canonical turn_end 不受影响，纯视觉）。加 `flush()`。
+  **已修 2026-07-03**：`_FenceFilter.flush()`，drain 在 done 时释放暂存的部分 fence 前缀（fence 内的照旧丢弃）。新增 2 测试。
 
 **已核查非问题**：Windows stdin 编码已处理（core 对每个 Python spawn 设
 `PYTHONUTF8=1`/`PYTHONIOENCODING=utf-8`）；external-GA workspace guard 正确
