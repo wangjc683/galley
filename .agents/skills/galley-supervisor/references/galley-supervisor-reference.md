@@ -6,7 +6,7 @@ command and workflow details.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-reference.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-06-18 (Lite SOP / reference split).
+Last synced: 2026-07-03 (Goal confirmation & reversible-op recalibration; wait 600s).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings.
@@ -189,17 +189,17 @@ Example:
 
 ```bash
 "$GALLEY" project create "Release readiness review" \
-  --supervisor=codex-skill-galley-supervisor/v1 \
+  --supervisor=my-agent/v1 \
   --reason="create Project container for release readiness review"
 
 "$GALLEY" session new "User goal: assess release upgrade readiness. This child session checks app identity, data directory, SQLite migrations, and backup behavior. Do not change files. Output: concise risk list with evidence." \
   --project=<project-id> \
-  --supervisor=codex-skill-galley-supervisor/v1 \
+  --supervisor=my-agent/v1 \
   --reason="split release readiness review into data compatibility work"
 
 "$GALLEY" session new "User goal: assess release upgrade readiness. This child session checks packaging, release workflow, bundled resources, and version bump requirements. Do not change files. Output: release blocker checklist." \
   --project=<project-id> \
-  --supervisor=codex-skill-galley-supervisor/v1 \
+  --supervisor=my-agent/v1 \
   --reason="split release readiness review into packaging work"
 
 "$GALLEY" project follow <project-id> --tail=80 --until-idle --final-show
@@ -211,7 +211,7 @@ If the user explicitly wants the Project bound to a folder:
 "$GALLEY" project create "<short user-goal name>" \
   --root-path="<absolute repo root>" \
   --enable-workspace \
-  --supervisor=codex-skill-galley-supervisor/v1 \
+  --supervisor=my-agent/v1 \
   --reason="create Project workspace for user task"
 ```
 
@@ -228,17 +228,17 @@ For implementation or fix requests, prefer single writer, multiple reviewers:
 
 ```bash
 "$GALLEY" project create "<short user-goal name>" \
-  --supervisor=codex-skill-galley-supervisor/v1 \
+  --supervisor=my-agent/v1 \
   --reason="create project for implementation plus review"
 
 "$GALLEY" session new "User goal: <goal>. This is the only writer session in this Project. Implement the requested change. Own only these files/modules: <ownership>. Output: files changed, tests run, residual risk." \
   --project=<project-id> \
-  --supervisor=codex-skill-galley-supervisor/v1 \
+  --supervisor=my-agent/v1 \
   --reason="delegate implementation as the single writer"
 
 "$GALLEY" session new "User goal: <goal>. This is a read-only review session in the same Project. Do not change files. Review the implementation area for risks, missing tests, and user-facing regressions. Output: findings with evidence." \
   --project=<project-id> \
-  --supervisor=codex-skill-galley-supervisor/v1 \
+  --supervisor=my-agent/v1 \
   --reason="delegate read-only verification"
 ```
 
@@ -254,7 +254,7 @@ Proposal:
 
 ```bash
 "$GALLEY" goal propose "<objective>" \
-  --supervisor=codex-skill-galley-supervisor/v1 \
+  --supervisor=my-agent/v1 \
   --reason="prepare Goal for user confirmation"
 ```
 
@@ -262,13 +262,15 @@ Show the user a short confirmation summary: objective, Project, runtime,
 workers, time budget, write mode, and safety boundary. Do not show
 `internalConfirmToken`.
 
-Run only after exact confirmation:
+Run only after the user's explicit confirmation of this proposal — an
+unambiguous affirmative reply, in their own language, that refers to this
+Goal (offer `confirmationPhrase` as a ready-made reply):
 
 ```bash
 "$GALLEY" goal run --proposal=<proposal-id> \
   --confirm-token=<internalConfirmToken> \
-  --supervisor=codex-skill-galley-supervisor/v1 \
-  --reason="user replied 确认启动 Goal"
+  --supervisor=my-agent/v1 \
+  --reason="user explicitly confirmed this Goal proposal"
 ```
 
 During a Goal:
@@ -317,14 +319,14 @@ user-friendly language for this Supervisor workflow.
 
 Use a stable supervisor id:
 
-- Generic agent: `codex-skill-galley-supervisor/v1`
+- Generic agent: `my-agent/v1`
 - IM bot: `ga-wechat-bot` / `ga-feishu-bot`
 - Claude Skill: `claude-skill-galley-supervisor/v1`
 
 Use a short reason in the user's words or an honest paraphrase:
 
 ```bash
---supervisor=codex-skill-galley-supervisor/v1 \
+--supervisor=my-agent/v1 \
 --reason="user asked me to compare upgrade risks"
 ```
 

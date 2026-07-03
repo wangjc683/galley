@@ -1015,6 +1015,7 @@ export const enCopy: AppCopy = {
       ],
       feishuConnectedSteps: [
         "Message the bot in the Feishu client.",
+        "Tasks you delegate from Feishu report back here automatically when they finish.",
         "If there is no reply, check long connection, events, permissions, and app publishing.",
         "Keep Galley running so the Feishu service keeps receiving messages.",
       ],

@@ -248,13 +248,15 @@ Show the user a short confirmation summary: objective, Project, runtime,
 workers, time budget, write mode, and safety boundary. Do not show
 `internalConfirmToken`.
 
-Run only after exact confirmation:
+Run only after the user's explicit confirmation of this proposal — an
+unambiguous affirmative reply, in their own language, that refers to this
+Goal (offer `confirmationPhrase` as a ready-made reply):
 
 ```bash
 "$GALLEY" goal run --proposal=<proposal-id> \
   --confirm-token=<internalConfirmToken> \
   --supervisor=my-agent/v1 \
-  --reason="user replied 确认启动 Goal"
+  --reason="user explicitly confirmed this Goal proposal"
 ```
 
 During a Goal:

@@ -6,7 +6,7 @@ self-contained when installed at ~/.claude/skills/.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-sop.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-06-18 (Lite SOP / reference split).
+Last synced: 2026-07-03 (Goal confirmation & reversible-op recalibration; wait 600s).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins. Re-sync this copy when you update the canonical.
@@ -49,9 +49,13 @@ Your job is to coordinate work, not to hide work:
    `sessions search` before creating or changing sessions.
 3. **Preserve intent.** Do not expand the user's scope, invent requirements, or
    hide assumptions in child-session prompts.
-4. **Ask before risky actions.** Stop, archive, delete, external sending,
-   credential changes, payment, commit/push, broad file edits, and multiple
-   writer sessions require a short impact summary and user confirmation.
+4. **Ask before irreversible or outward-facing actions.** External sending /
+   publishing, credential changes, payment, commit/push, broad file edits,
+   `project delete`, and multiple writer sessions require a short impact
+   summary and user confirmation first. Reversible session operations
+   (`session stop`, `session archive` — a stopped session can continue,
+   `session restore` un-archives) may proceed when they clearly serve the
+   user's request; report what you did and how to undo it.
 5. **Use origin fields.** For write commands that support them, pass
    `--supervisor=<stable-id>` and `--reason=<why>`.
 6. **Timeout is not failure.** Local tool timeouts and `session wait`
@@ -101,7 +105,7 @@ schema guard, add `--schema=1`.
 | Several independent angles, review, or synthesis | Project-backed session group |
 | "Keep working while I leave", "Goal", sustained autonomous objective | Galley Goal |
 | Implementation/fix across multiple concerns | One writer session plus read-only reviewers |
-| Ambiguous split, destructive action, external action, credentials, payment | Ask first |
+| Ambiguous split, irreversible or external action, credentials, payment | Ask first |
 
 Use `--runtime=managed` or `--runtime=external` only when the user explicitly
 needs a runtime. Otherwise omit it so Galley follows the GUI's current runtime.
@@ -131,12 +135,14 @@ If the command returns `dispatch:"dispatched"`, the session was created and the
 first task was sent. For IM / Supervisor flows that need a bounded answer:
 
 ```bash
-"$GALLEY" session wait <id> --timeout=300 --poll=5 --tail=20 --final-show
+"$GALLEY" session wait <id> --timeout=600 --poll=5 --tail=20 --final-show
 ```
 
 On `status:"completed"`, summarize the final payload. On
-`status:"timed_out"`, say the session has started but no result has been
-retrieved yet; include the session id and offer to check later.
+`status:"timed_out"`, the task is still running — this is not a failure. If
+your host environment delivers Galley completion reports to you (Galley's
+managed IM channels do), tell the user you will notify them when it
+finishes. Otherwise include the session id and offer to check later.
 
 ### Continue A Session
 
@@ -197,14 +203,17 @@ Only use Goal for a long autonomous objective:
 ```
 
 Show the objective, Project, worker count, time budget, write mode, and safety
-boundary. Do not show `internalConfirmToken`. Wait for the exact reply
-`确认启动 Goal`, then:
+boundary. Do not show `internalConfirmToken`. Starting a Goal always requires
+the user's explicit confirmation of this proposal: an unambiguous affirmative
+reply, in their own language, that refers to this Goal (offer the response's
+`confirmationPhrase` as a ready-made reply). Casual acknowledgements ("ok",
+"嗯") or approval buried in an unrelated message do not count. Then:
 
 ```bash
 "$GALLEY" goal run --proposal=<proposal-id> \
   --confirm-token=<internalConfirmToken> \
   --supervisor=my-agent/v1 \
-  --reason="user replied 确认启动 Goal"
+  --reason="user explicitly confirmed this Goal proposal"
 ```
 
 Use `goal status <goal-id>` for progress and `goal stop <goal-id>` only after
@@ -218,8 +227,13 @@ Before `session stop`, `session archive`, or `project delete`, run:
 "$GALLEY" session brief <id>
 ```
 
-or the corresponding Project read command. Explain the effect and wait for
-confirmation. `project delete` detaches sessions; it does not delete them.
+or the corresponding Project read command, so you know what you are touching.
+
+`session stop` and `session archive` are reversible; when one clearly serves
+the user's request, do it and report what you did and how to undo it.
+`project delete` and anything irreversible or outward-facing still need an
+impact summary and the user's confirmation first. `project delete` detaches
+sessions; it does not delete them.
 
 ### Switch Model
 

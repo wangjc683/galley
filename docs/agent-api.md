@@ -1086,8 +1086,9 @@ $ galley goal propose "review and fix flaky release checks" \
 ```
 
 The `internalConfirmToken` is for the trusted local Supervisor only. Do not show
-it to the user. The user-facing confirmation phrase is always
-`确认启动 Goal`.
+it to the user. `confirmationPhrase` is a ready-made reply the Supervisor may
+offer the user; behaviorally, any unambiguous affirmative user reply that
+refers to this proposal counts as confirmation (see the Supervisor SOP).
 
 `--workers` defaults to `3`. Desktop presents `2`, `3`, `4`, and `5` to match
 the official GA Hive guidance that ordinary Hive work usually fits in `2-4`

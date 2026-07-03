@@ -22,8 +22,10 @@ session tasks when that helps parallelize work.
 
 1. **Inventory before action.** Run `sessions list` / `status` first. Blind
    commands create duplicates.
-2. **Destructive ≠ silent.** `archive` / `stop` / `project delete` need user
-   confirmation. Brief, get a yes, then run.
+2. **Destructive ≠ silent.** `archive` / `stop` are reversible — when the
+   user's request clearly calls for one, run it and report how to undo.
+   `project delete` and anything irreversible or outward-facing: brief,
+   get a yes, then run.
 3. **Origin whenever supported.** Every write command that accepts origin
    fields takes `--supervisor=` + `--reason=`. You are
    `claude-skill-galley-supervisor/v1`. `llm set` is the v0.2 exception; it
@@ -280,7 +282,8 @@ after finishing unless the user explicitly confirms.
 
 ### "归档 / 停掉 / 删掉那个 session" / "archive / stop / delete"
 
-**Brief first, then confirm, then execute.** See §Destructive below.
+**Brief first; reversible ops execute-and-report, permanent ops confirm
+first.** See §Destructive below.
 
 ### "切 LLM" / "switch LLM"
 
@@ -308,7 +311,10 @@ done
 
 ## Step 5: Destructive operations
 
-Before running any of these, brief + get an explicit yes:
+Brief first so you know what you are touching. `archive` / `stop` are
+reversible: when the user's request clearly calls for one, run it and report
+what you did and how to undo it. `project delete` is permanent — always get
+an explicit yes. When the request is ambiguous (see below), ask:
 
 | Command | Effect | Reversible? |
 |---|---|---|
@@ -418,7 +424,8 @@ Refuse these — they're not in the surface:
 - [ ] Inventory or mutate? If mutate, did I brief the user?
 - [ ] `--supervisor=claude-skill-galley-supervisor/v1` set?
 - [ ] `--reason=` filled with user intent or honest paraphrase?
-- [ ] Destructive command — did user explicitly confirm?
+- [ ] Irreversible command — did user explicitly confirm? (Reversible
+      `archive`/`stop`: did I report the undo path?)
 - [ ] On non-zero exit, did I classify before deciding to retry?
 
 ---

@@ -42,9 +42,12 @@ answer normally instead of entering Supervisor workflow.
 4. **Preserve user intent.** Do not invent scope, requirements, file writes,
    external actions, credentials, payment, or commits. Put assumptions in the
    delegated prompt when you must assume.
-5. **Confirm risky actions.** Stop, archive, delete, external sending,
-   credential changes, payment, commit/push, broad file edits, and multiple
-   writer sessions require a short impact summary and explicit user approval.
+5. **Confirm irreversible or outward-facing actions.** External sending,
+   credential changes, payment, commit/push, broad file edits,
+   `project delete`, and multiple writer sessions require a short impact
+   summary and explicit user approval first. Reversible `session stop` /
+   `session archive` may proceed when they clearly serve the user's request;
+   report what you did and how to undo it.
 6. **Use origin fields.** Every write command that supports them gets
    `--supervisor=codex-skill-galley-supervisor/v1` and a truthful `--reason=`.
    `llm set` is the v0.2 exception.
@@ -141,14 +144,14 @@ Write commands:
 | `"$GALLEY" session new "<task>" --supervisor=<id> --reason=<why>` | Create a session and send first task |
 | `"$GALLEY" session send <id> "<text>" --supervisor=<id> --reason=<why>` | Continue a session |
 | `"$GALLEY" session btw <id> "<question>" --supervisor=<id> --reason=<why>` | Temporary side question; not persisted |
-| `"$GALLEY" session stop <id> --supervisor=<id> --reason=<why>` | Interrupt current turn; confirm first |
-| `"$GALLEY" session archive <id> --supervisor=<id> --reason=<why>` | Hide a session; confirm first |
+| `"$GALLEY" session stop <id> --supervisor=<id> --reason=<why>` | Interrupt current turn; reversible — report undo path |
+| `"$GALLEY" session archive <id> --supervisor=<id> --reason=<why>` | Hide a session; reversible — report undo path |
 | `"$GALLEY" session restore <id> --supervisor=<id> --reason=<why>` | Restore archived session |
 | `"$GALLEY" session move <id> --to=<project-id> --supervisor=<id> --reason=<why>` | Move to Project; omit `--to` to unassign |
 | `"$GALLEY" project create "<name>" --supervisor=<id> --reason=<why>` | Create a Project |
 | `"$GALLEY" project delete <id> --supervisor=<id> --reason=<why>` | Delete Project; sessions survive but detach; confirm first |
 | `"$GALLEY" goal propose "<objective>" --supervisor=<id> --reason=<why>` | Prepare Goal proposal; does not start work |
-| `"$GALLEY" goal run --proposal=<id> --confirm-token=<token> --supervisor=<id> --reason=<why>` | Start Goal after exact confirmation |
+| `"$GALLEY" goal run --proposal=<id> --confirm-token=<token> --supervisor=<id> --reason=<why>` | Start Goal after explicit user confirmation |
 | `"$GALLEY" llm set <session-id> "<llm-name>"` | Switch a session model |
 
 Full command detail lives in
@@ -254,14 +257,16 @@ Use Goal only for sustained autonomous work, not simple parallelism.
 ```
 
 Show the user objective, Project, runtime, workers, time budget, write mode, and
-safety boundary. Do not show `internalConfirmToken`. Run only after the exact
-reply `确认启动 Goal`:
+safety boundary. Do not show `internalConfirmToken`. Run only after the user's
+explicit confirmation of this proposal — an unambiguous affirmative reply, in
+their own language, that refers to this Goal (offer `confirmationPhrase` as a
+ready-made reply):
 
 ```bash
 "$GALLEY" goal run --proposal=<proposal-id> \
   --confirm-token=<internalConfirmToken> \
   --supervisor=codex-skill-galley-supervisor/v1 \
-  --reason="user replied 确认启动 Goal"
+  --reason="user explicitly confirmed this Goal proposal"
 ```
 
 During a Goal, use `goal status`, `goal deliverable get`, and `goal stop`.
