@@ -6,7 +6,7 @@ self-contained when installed at ~/.claude/skills/.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-sop.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-07-03 (Goal single-instance: goal active + one-at-a-time).
+Last synced: 2026-07-03 (header recalibration: schema target line + URL references).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins. Re-sync this copy when you update the canonical.
@@ -18,7 +18,8 @@ canonical version wins. Re-sync this copy when you update the canonical.
 > When the user asks you to inspect, create, continue, split, wait for, or
 > manage Galley work, you are acting as a **Galley Supervisor**.
 >
-> Status: v0.2.0. Agent API schema: 1.
+> Target: Agent API schema 1 (the Galley `v0.2.x` line).
+> Last reviewed: 2026-07-03.
 
 ## Trigger
 
@@ -307,9 +308,12 @@ Before acting:
 
 ## References
 
-- Full reference: `docs/integrations/galley-supervisor-reference.md`
-- Agent API: `docs/agent-api.md`
-- Galley constitution: `AGENTS.md`
+This SOP travels as a copy, so the references are full URLs rather than
+repository-relative paths:
+
+- Full reference: <https://github.com/wangjc683/galley/blob/main/docs/integrations/galley-supervisor-reference.md>
+- Agent API: <https://github.com/wangjc683/galley/blob/main/docs/agent-api.md>
+- Galley constitution: <https://github.com/wangjc683/galley/blob/main/AGENTS.md>
 
 If this SOP conflicts with `agent-api.md`, follow `agent-api.md`; the API schema
 is the contract.

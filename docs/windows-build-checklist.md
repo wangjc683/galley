@@ -62,6 +62,10 @@ Artifacts land in `core\target\release\bundle\`:
 
 Items to verify on the Win machine. Hand back to Mac for any failures.
 
+> Item wording last calibrated: 2026-05 (v0.1 window-chrome plan). The UI
+> evolves faster than this list; after each Windows release smoke, correct any
+> item that no longer matches the product and update this line.
+
 ### Window chrome (Y plan)
 
 - [ ] Window opens with **no native title bar** (decorations off worked)

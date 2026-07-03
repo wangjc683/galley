@@ -97,6 +97,15 @@ jobs:
           cache: pnpm
           cache-dependency-path: gui/pnpm-lock.yaml
 
+      - name: Version consistency gate
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            node scripts/check-version-consistency.mjs --tag="${GITHUB_REF_NAME}"
+          else
+            node scripts/check-version-consistency.mjs
+          fi
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

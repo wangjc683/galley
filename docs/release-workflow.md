@@ -221,7 +221,7 @@ cd gui && pnpm tauri build --target x86_64-apple-darwin
 # artifact: core/target/x86_64-apple-darwin/release/bundle/dmg/Galley_X.Y.Z_macOS_x64.dmg
 
 # 3. Draft the GitHub Release notes to /tmp/galley-<tag>-notes.md
-# Use the release-notes template in docs/release-update-sop.md.
+# Use the templates in docs/release-notes-guide.md.
 
 # 4. Create a draft release (don't publish directly — leave it for review)
 gh release create vX.Y.Z-rc.N \

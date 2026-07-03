@@ -6,7 +6,7 @@ command and workflow details.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-reference.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-07-03 (Goal single-instance: goal active + one-at-a-time).
+Last synced: 2026-07-03 (header recalibration: schema target line + URL references).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings.
@@ -18,7 +18,8 @@ This is the detailed reference for people maintaining or auditing the
 [Galley Supervisor SOP](./galley-supervisor-sop.md). The SOP is the copy-first
 document shown in Settings and should stay short. This reference can be longer.
 
-Status: v0.2.0. Agent API schema: 1.
+Target: Agent API schema 1 (the Galley `v0.2.x` line). Last reviewed:
+2026-07-03.
 
 ## Operating Model
 

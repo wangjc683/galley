@@ -68,12 +68,10 @@ Replace the example value before every release.
   - `./scripts/check-bundled-python-managed-ga.sh`
 - [ ] `docs/devlog/` has the durable release narrative if this is more than a
       tiny hotfix.
-- [ ] Version is bumped consistently:
-  - `package.json`
-  - `gui/package.json`
-  - `core/tauri.conf.json`
-  - `core/Cargo.toml`
-  - `cli/Cargo.toml`
+- [ ] Version is bumped consistently — run
+      `node scripts/check-version-consistency.mjs --tag="${RELEASE_TAG}"`.
+      The script owns the version-file list; `release.yml` re-runs the same
+      gate at tag time and fails the build on mismatch.
 - [ ] GitHub release/update config exists:
   - Secret: `TAURI_SIGNING_PRIVATE_KEY`
   - Secret: `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key has a password
@@ -167,8 +165,9 @@ Open the draft Release in GitHub and check:
 - Version and title are correct.
 - It is marked prerelease for alpha / beta / rc tags, unless we explicitly plan
   to mark this release as GitHub Latest after smoke.
-- Release notes follow the template below. They are user-facing, not just
-  commit messages.
+- Release notes follow the [release notes guide](./release-notes-guide.md)
+  (writing rules plus the stable and alpha templates). They are user-facing,
+  not just commit messages.
 - **Commit coverage**: run `git log <PREVIOUS_TAG>..HEAD --oneline` and confirm
   every user-facing commit maps to a What's New bullet (or was explicitly
   decided to omit). Do not rely on GitHub's auto-generated commit list as proof
@@ -187,169 +186,6 @@ Do not publish before the release owner has installed and smoked the draft
 artifacts. If an agent is driving the release, this is a hard handoff point:
 the agent waits here and resumes only after explicit approval for this exact
 draft build.
-
-#### Stable Release Notes Template
-
-Use this compact template for stable and beta releases. Future GitHub Release
-notes should follow this structure unless the release owner explicitly approves
-a different format. The point is to answer two user questions directly: what
-changed, and which installer should I download? For alpha releases, use the
-alpha template below.
-
-Writing rules:
-
-- English first, Chinese second. Both sections should be complete; do not use a
-  thin machine translation. Keep the two halves in sync — a bullet in one must
-  appear in the other.
-- Keep the headings stable: `## What's New`, optional `## Under the Hood`,
-  `## Installation Guide`, `---`, `## What's New`, optional
-  `## Under the Hood`, `## 安装指南`.
-- Write `What's New` bullets as outcome-first user changes: start with the
-  user result, then state the concrete product change. Prefer
-  `<User outcome>: <what changed>, so <why it matters>` over
-  `<implementation area>: <internal detail>`.
-- Tone: concise and professional. One bullet per user-visible change, usually
-  one sentence each. Lead with the result, not the symptom or implementation —
-  "Track long-running sessions", not "Conversation telemetry"; "新增字号切换"
-  (adds a font-size switcher), not "修复了用户反馈的字号问题". Drop hedge /
-  filler like "修复了一个 case", "保持不变", or describing the pre-release
-  state for its own sake. If a sentence does not tell the user something they
-  can see or act on, cut it or move it to `Under the Hood`.
-- Use `Under the Hood` only for meaningful engineering maintenance that helps a
-  technical reader trust the release but is not itself a user feature. Omit the
-  section when there is no such work.
-- Scope to what changed this tag, not the whole product. Before drafting, run
-  `git log <PREVIOUS_TAG>..HEAD --oneline` and walk every commit; map each
-  user-facing commit to a bullet. A release that ships a new feature plus a
-  fix is not a "hotfix" even if it started as one — title and bullets must
-  reflect everything shipped.
-- For patch releases, 3-5 focused bullets are enough. For larger releases, keep
-  the list scannable instead of turning it into a changelog dump. Related
-  changes (e.g. several typography commits) collapse into one bullet rather
-  than one per commit.
-- Keep established product terms such as `Galley`, `GA`, `GenericAgent`,
-  `Agent / CLI`, `Browser Control`, `Channels`, and `ChatGPT / Codex`.
-- Use `内置 GA` in Chinese and `Bundled GA` in English. Do not expose
-  `managed GA` in user-facing release notes.
-- Installation links must point directly to GitHub Release assets.
-- Always include the macOS quarantine command and Windows SmartScreen note while
-  Galley is unsigned.
-- Omit general compatibility / non-change statements ("no Agent API / DB / GA
-  baseline changes", "reduce heat and resource usage") unless they change what
-  a user does next. The release notes describe changes, not reassurances.
-
-Replace `<TAG>` with the Git tag (for example `v0.2.5`) and `<VERSION>` with
-the package version (for example `0.2.5`).
-
-````markdown
-## What's New
-
-- <User outcome>: <what changed in the product, and why it matters>.
-- <User outcome>: <what changed in the product, and why it matters>.
-- <Fix / reliability outcome>: <what is now more reliable or easier to recover from>.
-
-## Under the Hood
-
-- <Technical maintenance that matters to engineering readers, if any>.
-
-## Installation Guide
-
-### macOS
-
-- [Download for Apple Silicon](https://github.com/wangjc683/galley/releases/download/<TAG>/Galley_<VERSION>_macOS_aarch64.dmg)
-- [Download for Intel](https://github.com/wangjc683/galley/releases/download/<TAG>/Galley_<VERSION>_macOS_x64.dmg)
-
-If macOS says Galley cannot be opened, run this in Terminal:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Galley.app
-```
-
-### Windows
-
-- [Download for Windows](https://github.com/wangjc683/galley/releases/download/<TAG>/Galley_<VERSION>_Windows_x64-setup.exe)
-
-If Windows SmartScreen shows a warning, click "More info" -> "Run anyway".
-
-**Full Changelog**: https://github.com/wangjc683/galley/compare/<PREVIOUS_TAG>...<TAG>
-
----
-
-## What's New
-
-- <用户结果>：<产品里发生了什么变化，以及为什么重要>。
-- <用户结果>：<产品里发生了什么变化，以及为什么重要>。
-- <修复 / 可靠性结果>：<现在什么更稳定，或更容易恢复>。
-
-## Under the Hood
-
-- <如果有值得工程读者知道的技术维护，写在这里>。
-
-## 安装指南
-
-### macOS
-
-- [下载 Apple Silicon 版](https://github.com/wangjc683/galley/releases/download/<TAG>/Galley_<VERSION>_macOS_aarch64.dmg)
-- [下载 Intel 版](https://github.com/wangjc683/galley/releases/download/<TAG>/Galley_<VERSION>_macOS_x64.dmg)
-
-如果 macOS 提示无法打开 Galley，可以在终端执行：
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Galley.app
-```
-
-### Windows
-
-- [下载 Windows 版](https://github.com/wangjc683/galley/releases/download/<TAG>/Galley_<VERSION>_Windows_x64-setup.exe)
-
-如果 Windows SmartScreen 提示风险，点击「更多信息」->「仍要运行」。
-````
-
-#### Alpha Release Notes Template
-
-Use this compact template for tester / early-adopter alpha builds. Keep updater
-checks out of the default test list unless the alpha is explicitly promoted to
-an update channel.
-
-````markdown
-For testers and early adopters. This alpha build is still evolving quickly and may be unstable, so it is not recommended for general users.
-
-## Please Test
-
-- Complete Onboarding after a fresh install, configure a model, and enter the main screen.
-- Start a new conversation and confirm Galley replies normally.
-- Connect WeChat in Settings -> IM, then send a message to Galley from WeChat.
-- Install the Browser Control extension, test the connection, and run a simple browser task.
-- Quit and relaunch Galley, then confirm model settings, conversation history, and WeChat connection state still look correct.
-
-## macOS Install Note
-
-If macOS says Galley cannot be opened, run this in Terminal:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Galley.app
-```
-
----
-
-适合内测用户和愿意尝鲜的用户体验。alpha 版本仍在快速迭代，可能存在稳定性问题，不建议普通用户安装。
-
-## 请重点测试
-
-- 全新安装后完成 Onboarding，配置模型并进入主界面。
-- 新建对话，确认 Galley 能正常回复。
-- Settings -> IM 接入微信，扫码后从微信给 Galley 发消息。
-- 浏览器控制扩展安装、连接测试和简单浏览器任务。
-- 退出并重启 Galley，确认模型配置、历史对话和微信接入状态符合预期。
-
-## macOS 安装提示
-
-如果 macOS 提示无法打开，可以在终端执行：
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Galley.app
-```
-````
 
 ### 5. Smoke Test Installers
 

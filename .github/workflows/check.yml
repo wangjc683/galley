@@ -87,6 +87,9 @@ jobs:
       - name: Supervisor SOP copy drift gate
         run: node scripts/check-supervisor-sop-drift.mjs
 
+      - name: Version consistency gate
+        run: node scripts/check-version-consistency.mjs
+
       - name: Managed GA payload gate
         run: node scripts/check-managed-ga-payload.mjs
 

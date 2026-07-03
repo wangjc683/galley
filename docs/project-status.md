@@ -88,12 +88,10 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.2.16`. For the next release, update:
-  - `package.json`
-  - `core/tauri.conf.json`
-  - `core/Cargo.toml`
-  - `cli/Cargo.toml`
-  - `gui/package.json`
+- Current package metadata uses `0.2.16`. For the next release, bump every
+  file checked by `scripts/check-version-consistency.mjs` and run it with
+  `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
+  time.
 - Use `vX.Y.Z` for Git tag and GitHub Release title.
 - Keep Agent API at `schemaVersion: 1`.
 - A breaking Agent API change requires `schemaVersion: 2`, with explicit

@@ -99,10 +99,11 @@ Before editing, grep for the same term or concept and update the existing entry
 when possible. Prefer replacing stale text over adding a new paragraph. Keep
 relative time out of durable docs; write concrete dates when the date matters.
 
-After editing docs, run a small anti-bloat check:
+After editing docs, run a small anti-bloat check on `AGENTS.md` plus the
+documents this session touched:
 
 ```bash
-wc -l AGENTS.md docs/session-close-sop.md docs/README.md
+wc -l AGENTS.md <docs changed this session>
 git diff --check
 ```
 

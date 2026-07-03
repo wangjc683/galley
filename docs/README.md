@@ -28,6 +28,7 @@ matches who you are and what you are trying to do.
 | Work on Rust core refactor | [refactor README](./refactor/README.md) |
 | Check architecture invariants | [architecture demo](./architecture-demo.md) |
 | Prepare or update a release | [release / update SOP](./release-update-sop.md), then [release workflow](./release-workflow.md) |
+| Write GitHub Release notes | [release notes guide](./release-notes-guide.md) |
 | Close a long coding session or sync project knowledge | [session close SOP](./session-close-sop.md) |
 | Smoke Windows builds | [Windows checklist](./windows-build-checklist.md) |
 | Touch GenericAgent integration | [GA baseline](./ga-baseline.md) |
@@ -83,6 +84,8 @@ matches who you are and what you are trying to do.
   checklist for long coding sessions.
 - [release / update SOP](./release-update-sop.md): maintainer checklist for
   release day and updater channel promotion.
+- [release notes guide](./release-notes-guide.md): writing rules and bilingual
+  templates for GitHub Release notes.
 - [refactor](./refactor/README.md): B-phase implementation playbooks,
   invariants, and execution cursor.
 - [devlog](./devlog/README.md): chronological decision history and rejected

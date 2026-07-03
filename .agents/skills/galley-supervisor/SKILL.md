@@ -13,6 +13,13 @@ description: >-
   what's running in Galley / spin up a Galley session.
 ---
 
+<!--
+Sync invariant: the .claude and .agents copies of this SKILL.md are kept
+identical except for the supervisor id token (the host prefix in
+`*-skill-galley-supervisor/v1`). CI enforces this via
+scripts/check-supervisor-sop-drift.mjs. Edit both copies together.
+-->
+
 # galley-supervisor
 
 You are acting as a **Galley Supervisor**: a dispatcher for the user's local
@@ -118,6 +125,39 @@ needs a runtime. Otherwise omit it so Galley follows the GUI's current runtime.
 
 ---
 
+## Explain Galley To New Users
+
+When the user asks what this integration does, or arrives through IM / another
+chat frontend without knowing Galley terminology, keep the explanation short
+and action-shaped:
+
+The local Supervisor Agent is the one that received the Galley Supervisor SOP
+and can run the Galley CLI on the same machine as Galley. It may be GA behind an
+IM bot, OpenClaw, Hermes, Claude Code, Codex, or another trusted local Agent.
+WeChat, Feishu/Lark, Telegram, Discord, and similar apps are chat entry points;
+the actual CLI operation still needs a local Agent, runner, or bridge. A purely
+cloud-hosted Agent cannot operate Galley directly.
+
+```text
+你可以把我当成 Galley 的调度员。你告诉我要查、继续、开新任务、拆任务或盯进度，我会通过你本机的 Galley 去操作。停止、归档这类可撤销的操作我会直接执行并告诉你怎么撤销；删除、外发、批量改文件这类不可逆动作，我会先说明影响再等你确认。
+```
+
+Offer examples they can reuse:
+
+```text
+帮我看看 Galley 现在跑着什么。
+```
+
+```text
+把这个复杂任务拆成 3 个 Galley session 并行跑，最后统一汇总。
+```
+
+Do not describe this as a real mode switch or computer takeover. "Galley mode"
+is user-facing shorthand; internally you are just following this skill and the
+Supervisor SOP.
+
+---
+
 ## Hot Commands
 
 Read commands:
@@ -125,15 +165,22 @@ Read commands:
 | Command | Use |
 |---|---|
 | `"$GALLEY" status` | Global counts and health summary |
+| `"$GALLEY" health` | DB / GA path / Python checks |
+| `"$GALLEY" version` | CLI + schema version |
 | `"$GALLEY" sessions list` | Recent active sessions |
 | `"$GALLEY" sessions list --all` | Include archived sessions |
+| `"$GALLEY" sessions list --project=<id>` | Scope to a Project |
+| `"$GALLEY" sessions list --status=running` | Only active agents |
 | `"$GALLEY" sessions search "<kw>"` | Find related sessions |
 | `"$GALLEY" session brief <id>` | One-session summary |
 | `"$GALLEY" session show <id> --tail=20` | Recent visible messages |
 | `"$GALLEY" session wait <id> --timeout=300 --poll=5 --tail=20 --final-show` | Bounded result retrieval |
 | `"$GALLEY" session follow <id> --tail=20` | Snapshot plus live events when available |
 | `"$GALLEY" project list` | Available Projects |
+| `"$GALLEY" project brief <id>` | Project status counts |
+| `"$GALLEY" project show <id> --tail=20` | Project sessions plus recent messages |
 | `"$GALLEY" project follow <id> --tail=80 --until-idle --final-show` | Follow a split group until idle |
+| `"$GALLEY" goal active` | The single active Goal, if any (empty = none) |
 | `"$GALLEY" goal status <id>` | Goal task board and events |
 | `"$GALLEY" llm list` | Available LLM display names |
 
@@ -152,6 +199,7 @@ Write commands:
 | `"$GALLEY" project delete <id> --supervisor=<id> --reason=<why>` | Delete Project; sessions survive but detach; confirm first |
 | `"$GALLEY" goal propose "<objective>" --supervisor=<id> --reason=<why>` | Prepare Goal proposal; does not start work |
 | `"$GALLEY" goal run --proposal=<id> --confirm-token=<token> --supervisor=<id> --reason=<why>` | Start Goal after explicit user confirmation |
+| `"$GALLEY" goal stop <id> --supervisor=<id> --reason=<why>` | Stop the active Goal; only after the user asks |
 | `"$GALLEY" llm set <session-id> "<llm-name>"` | Switch a session model |
 
 Full command detail lives in
@@ -282,12 +330,49 @@ Before stop/archive/delete or any broader risky action:
 
 1. Read the current state with `session brief`, `project brief`, or the relevant
    show command.
-2. Explain the effect in one or two sentences.
-3. Wait for explicit confirmation.
-4. Execute with origin fields and a clear reason.
+2. For irreversible or outward-facing actions, explain the effect in one or two
+   sentences and wait for explicit confirmation. For reversible `stop` /
+   `archive` that clearly serve the request, execute and report the undo path.
+3. Execute with origin fields and a clear reason.
+
+Do not substitute `archive` for the user's "delete" without asking — they might
+genuinely want a clean slate. Do not run `delete` on an ambiguous request
+either — it might be a slip. Confirm pattern:
+
+```text
+User: "把那个写 README 的 session 删了"
+You:  「Session 'sess_xxx'（title: '写 README'，最后活动 3 小时前，已 12 turns）。
+       你是要 archive（可以恢复）还是彻底不要了？session 本身没有永久删除，
+       archive 后随时可以 restore。」
+```
 
 For `project delete`, call out that sessions survive but become unassigned and
 include the `detachedSessions` count when available.
+
+---
+
+## Origin Fields
+
+Every write command that supports them takes `--supervisor=` + `--reason=`.
+Galley persists both to an audit log; the user sees them in the per-session
+timeline.
+
+Your identity is `codex-skill-galley-supervisor/v1`. Always pass it —
+omitting it makes Galley record the action as a human typing in a terminal
+(`via=cli`). If you fork this skill or hack a variant, bump the suffix
+(`/v1.1`, `/jc-custom`) so audit logs can distinguish.
+
+`--reason=` is a short freeform string explaining why the action exists:
+
+| Kind | Example |
+|---|---|
+| Relaying user intent | `"user said tldr"` / `"user wants archive"` |
+| Your own judgment | `"detected duplicate session, archiving older"` |
+| Routine | `"daily cleanup of stale sessions"` |
+
+For stop / archive / delete and any autonomous judgment-based action, always
+fill `--reason`. For routine send / new it is still good practice — it gives
+the user a hook to reconstruct history.
 
 ---
 
@@ -307,6 +392,9 @@ CLI errors are JSON on stdout:
 | `5 runner_error` | Runner could not start or receive command | Inspect the session, explain whether the task was saved, and ask before retrying |
 | `1 internal` | Galley internal error | Report to user; do not loop |
 
+Exit `0` with `dispatch:"persisted_only"` or `dispatch:"already_stopped"` is
+not an error; report the distinction instead of retrying.
+
 Never blindly retry. Distinguish `dispatched`, `persisted_only`,
 `already_stopped`, `completed`, and `timed_out`.
 
@@ -318,13 +406,16 @@ Do not:
 
 - modify external GenericAgent memory, SOP, skills, config, venv, or runtime state
 - store Goal protocol state in memory/SOP
-- auto-approve Galley approval prompts
+- auto-approve Galley approval prompts — if the user disabled YOLO mode, they
+  approve manually
+- reconfigure Galley settings (`galley config get/set` does not exist;
+  Settings is GUI-only)
 - claim to inspect a session unless you ran a read command
 - create many sessions without a clear split
 - create multiple writer sessions for the same files
 - launch GenericAgent native Goal/Hive/BBS or another runtime workflow engine
 - expand the user's request beyond what they asked
-- manage another machine's Galley
+- manage another machine's Galley — Galley is localhost-only
 
 You may:
 
