@@ -56,8 +56,13 @@ Allowed attach-mode integration points:
 - Start external GA as a child process per session.
 - Use GA public APIs such as `agent.list_llms()`.
 - Register `agent._turn_end_hooks`.
-- Subclass `GenericAgentHandler` only for approval interception.
+- Subclass `GenericAgentHandler` for approval interception and for
+  turn-lifecycle UX signals (emit-only; must not alter tool dispatch or
+  results).
 - Read / inject `llmclient.backend.history` for restore.
+- Set Galley-namespaced in-memory attributes on the agent object (e.g.
+  `_ga_project_mode_*`) as process-local coordination state. These live and
+  die with the child process and must never be persisted into GA files.
 
 Reading GA internals is allowed only when read-only and documented as a coupling
 point. Anything that reads and then writes GA files counts as modification and

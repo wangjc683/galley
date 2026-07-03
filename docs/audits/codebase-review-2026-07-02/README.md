@@ -112,14 +112,23 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
 - `[ ]` **CORE-8** · `core/src/codex_oauth.rs:1106-1151` — 每次 managed spawn
   泄漏一个 credential IPC listener（task + fd + socket 文件）；Windows 分支创建
   失败静默 `break`。修复：返回关闭句柄绑定 runner 生命周期，或全进程单 listener。
-- `[ ]` **CORE-9** · `core/src/codex_oauth.rs:262-268, 567-580` — 导入 Codex CLI
+- `[x]` **CORE-9** · `core/src/codex_oauth.rs:262-268, 567-580` — 导入 Codex CLI
   登录时用 CLI 的 refresh token 刷新但不回写 `~/.codex/auth.json`；OpenAI 有
   reuse 检测，CLI 下次刷新被登出，严重时 token family 撤销连累 Galley。
   修复：导入时不刷新，或回写 auth.json。
-- `[ ]` **CORE-10** · `core/src/migration_backup.rs:479-486` + `lib.rs:424` —
+  **已修 2026-07-03**：选回写（不刷新只推迟分叉——Galley 后续任何刷新同样旋转
+  token family）。`refresh_secret_with_cli_sync` 统一包装：刷新成功后若
+  auth.json 里的 refresh token 恰等于刚被消费的那个（血缘匹配）才回写，
+  Value 级合并保留未知字段、临时文件+rename 原子写、unix 0600；CLI 换过登录
+  则不碰。import 与 resolve_access_token（含 CLI fallback 注入路径）全走包装。
+  新增 3 测试（血缘匹配回写/异血缘不动/无文件 no-op）。
+- `[x]` **CORE-10** · `core/src/migration_backup.rs:479-486` + `lib.rs:424` —
   备份永不清理（每次 schema bump 全量复制含附件的数据目录），磁盘无界增长；
   recovery 每次启动 ATTACH 所有备份（读写 ATTACH 还 checkpoint 备份的 WAL）。
   修复：保留最近 N 份；recovery 用一次性 sentinel 门控。
+  **已修 2026-07-03**：新备份成功后修剪至最近 3 份（best-effort，失败只 log）；
+  recovery 加 `backup-recovery.done` sentinel（完成任一结果即写入，错误不写
+  留待重试），启动不再重复扫描/ATTACH。新增 2 测试。
 - `[x]` **CORE-11** · `core/src/migration_backup.rs:481, 887-902`（Windows）—
   备份目录名比数据目录长 24 字符且不加 `\\?\` 前缀，深层附件复制失败 → 备份
   门禁 `exit(2)` 拒绝启动（正好落在 Win MAX_PATH dogfood unknown 上）。
@@ -151,8 +160,11 @@ stdout 关闭但进程不退）。修 high 时应同步补对应失败路径测�
     抗抢占）。
   - GUI：FeishuCard 三层文案——状态行（等待绑定+配对码 / 已绑定+解绑）、
     常驻安全说明（仅响应绑定者、他人无回复）、可用范围收窄建议；en/zh。
-  - 测试：runner hook 透传、core 行解析/旧 pref 兼容/码格式；fsapp patch
-    逻辑无法在本 repo 单测（依赖 lark），靠 review + dogfood（升级后现有
+  - 测试：runner hook 透传、core 行解析/旧 pref 兼容/码格式。fsapp patch
+    逻辑最初标注「无法单测（依赖 lark）」，2026-07-03 发现
+    `test_managed_feishu_fsapp.py` 的 stub-lark harness 后已补齐 4 个绑定
+    测试（锁定语义/仅私聊绑定/暴力尝试作废/已绑定 allow-list）+ 1 个
+    0012 回声防护测试。dogfood 项保留（升级后现有
     连接需发一次码重新绑定，release notes 提一行）。
 
 ### Medium-Low / Low
@@ -229,10 +241,14 @@ credential_store「密钥与密文同库」是模块头注释明示的 beta 取�
   — `appendUserTurnExternal` 对后台 session 也 bump 全局 `userSubmitTick`，
   把当前会话的视口拽到它自己的最后一条用户消息并播放多余的 ack 动画。
   修复：仅 `sid === activeSessionId` 时 bump，或 tick 携带 session id。
-- `[ ]` **GUI-6** · `gui/src/lib/hydrate.ts:101-102, 135-140` +
+- `[x]` **GUI-6** · `gui/src/lib/hydrate.ts:101-102, 135-140` +
   `stores/managed-models.ts:52-65` — managed models 加载失败被当「零模型」，
   已配置用户被送回 onboarding 首屏。修复：区分「load failed」（保留当前屏 +
   toast/重试）与「真的零模型」。
+  **已修 2026-07-03**：`load()` 返回值增加 `loadError`（失败时空列表不再可
+  误读）；hydrate 在 managed + loadError 时保留正常界面并 toast
+  （`errors.managedModelsLoadFailed`，指引 Settings → Models 重试），仅真零
+  模型才路由 onboarding。
 - `[ ]` **GUI-7** · `gui/src/components/conversation/Conversation.tsx:188-190`
   （及 `MainView.tsx:343-347`）— 内联 `onApprove` 闭包击穿 ToolCallout 的
   `React.memo`：流式期间长对话每个历史 ToolCallout 以 ~20Hz 重渲染。App 已特意
@@ -374,24 +390,33 @@ en/zh i18n key 对齐。
 
 ### Medium
 
-- `[ ]` **RUNNER-2** · `runner/workbench_bridge.py:1312-1325, 1076-1091` —
+- `[x]` **RUNNER-2** · `runner/workbench_bridge.py:1312-1325, 1076-1091` —
   `/session.x=v` slash 命令走 `display_queue` system 路径不触发 turn_end，
   `run_in_progress` 永不清除：`set_llm` 被拒、GUI spinner 永转直到手动 Stop。
   修复：drain 消费 `source='system'` 的 `done` 时清 run 状态 + 合成
   `run_complete`。
+  **已修 2026-07-03**：按建议实现（合成 `SLASH_COMMAND_COMPLETED` 的
+  run_complete，形状对齐 Abort 合成路径；GUI 侧确认 run_complete 不解析
+  result 字符串）。新增 2 测试（system done 清状态 / workbench done 仍忽略）。
 - `[ ]` **RUNNER-3** · `runner/workbench_bridge.py:1774-1779` — shutdown grace
   逻辑反了（`run_in_progress.wait(2.0)` 在跑时立即返回、空闲时白等 2s），后接
   100% CPU 忙等 drain loop，且「queue empty ≠ 已写入 flush」尾部事件仍可能丢。
   修复：writer 发 sentinel + 带超时 `join`。
-- `[ ]` **RUNNER-4** · `runner/workbench_bridge.py:1401-1404, 1626-1631,
+- `[x]` **RUNNER-4** · `runner/workbench_bridge.py:1401-1404, 1626-1631,
   1804-1806, 141-147` — 桌宠子进程仅在 ShutdownCommand 清理；stdin-EOF 路径和
   parent watchdog `os._exit(0)` 都不杀 pet → core 崩溃后 pet 孤儿存活占着
   41983 端口，下次 attach 失败。修复：EOF 路径与 `_exit_parentless` 前调
   `_handle_detach_pet(silent=True)`。
-- `[ ]` **RUNNER-5** · `runner/workbench_bridge.py:74-84` — fd 1 只在 Python 层
+  **已修 2026-07-03**：`run()` 循环退出后统一 detach（幂等，覆盖 EOF/stdout
+  失败/Shutdown 全部来源）；`_exit_parentless` 增加 `_PARENT_LOSS_CLEANUP`
+  回调注册表（os._exit 跳过 finally/atexit，必须显式清理），Bridge 构造时
+  注册 pet detach。新增 3 测试。
+- `[x]` **RUNNER-5** · `runner/workbench_bridge.py:74-84` — fd 1 只在 Python 层
   静默，OS 级 fd 1 仍指向 IPC 管道：GA 工具/插件 spawn 继承 stdout 的子进程或
   C 扩展写 fd 1 会注入垃圾破坏整个 session 的事件 framing。
   修复：dup 后 `os.dup2(devnull_fd, 1)`。
+  **已修 2026-07-03**：按建议实现（capture dup 之后 dup2 devnull 盖掉 fd 1）。
+  新增子进程级测试验证 os.write(1)/print 都进 devnull、仅捕获句柄可达真 stdout。
 - `[ ]` **RUNNER-6** · `runner/workbench_bridge.py:1364-1379` — `load_history`
   无 run-in-progress guard（对比 `_handle_set_llm` :1414-1421 有），mid-run
   替换 history 会让 agent loop 读写被换掉的列表。修复：镜像 set_llm 的拒绝。
@@ -402,11 +427,15 @@ en/zh i18n key 对齐。
 
 ### Low
 
-- `[~]` **RUNNER-8** · `runner/handlers.py:140-176` + `workbench_bridge.py:944,
+- `[x]` **RUNNER-8** · `runner/handlers.py:140-176` + `workbench_bridge.py:944,
   899-900` — attach 模式两处超出 AGENTS.md 列举的集成点（Handler 做了 approval
   以外的 turn-start UX 信号；给外部 GA agent 设私有属性 `_ga_project_mode_*`）。
   均为内存内/只读、未写 GA 文件，但按「规范可疑先改文档」应把它们加进允许列表
   或记录为耦合点。**需文档决策**。
+  **已修 2026-07-03**（JC 采纳补进允许列表）：AGENTS.md attach 集成点扩为
+  「Handler 子类可做 approval 拦截 + turn 生命周期 UX 信号（emit-only，不得
+  改工具分发/结果）」和「可在 agent 对象上设 Galley 命名空间的内存内属性
+  （随子进程生灭，禁止持久化进 GA 文件）」。
 - `[ ]` **RUNNER-9** · `runner/managed_runtime.py:153-158, 164-169` — 重复的
   `chatgpt_codex_oauth` 配置块（advancedOptions merge 前后各一份），已开始漂移。
   合并为单个 post-merge 块。

@@ -79,8 +79,19 @@ def _capture_real_stdout() -> IO[str]:
 
 
 def _silence_python_stdout() -> None:
-    """Redirect sys.stdout to /dev/null. fd 1 stays usable via the captured
-    handle from _capture_real_stdout()."""
+    """Silence stdout at BOTH layers; must run after _capture_real_stdout().
+
+    Rebinding sys.stdout catches GA's print() calls, but OS-level fd 1
+    would still point at the IPC pipe: subprocesses spawned by GA tools
+    inherit it, and C extensions write to it directly — either injects
+    garbage lines that corrupt the whole session's event framing. dup2
+    /dev/null over fd 1 so only the captured handle can reach the pipe.
+    """
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull_fd, 1)
+    finally:
+        os.close(devnull_fd)
     sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
 
 
@@ -138,11 +149,22 @@ _EXIT_FOR_PARENT_LOSS = os._exit
 _USAGE_FIELDS = ("requests", "input", "output", "cache_create", "cache_read")
 
 
+# Best-effort cleanup hooks run before the parent-loss hard exit.
+# os._exit skips finally blocks and atexit handlers, so child processes
+# (the desktop pet) must be torn down explicitly here or they leak.
+_PARENT_LOSS_CLEANUP: list[Any] = []
+
+
 def _exit_parentless(reason: str) -> None:
     try:
         print(f"[workbench-bridge] exiting: {reason}", file=sys.__stderr__, flush=True)
     except Exception:
         pass
+    for cleanup in list(_PARENT_LOSS_CLEANUP):
+        try:
+            cleanup()
+        except Exception:
+            pass
     _EXIT_FOR_PARENT_LOSS(0)
     raise SystemExit(0)
 
@@ -592,6 +614,11 @@ class Bridge:
         # one is already running first detaches the old.
         self._pet_process: Any = None
         self._pet_port: int = 0
+        # The parent watchdog exits with os._exit, which skips finally
+        # blocks and atexit — an attached pet would survive as an orphan
+        # holding its fixed port (and Galley Core is already gone, so
+        # nothing else cleans it up). Register best-effort cleanup.
+        _PARENT_LOSS_CLEANUP.append(lambda: self._handle_detach_pet(silent=True))
 
     def _current_absolute_turn_index(self, turn_index: int) -> int | None:
         if self._current_message_turn_base is None:
@@ -1102,6 +1129,30 @@ class Bridge:
                                         variant=variant,
                                     )
                                 )
+                            # Slash-command tasks bypass agent_runner_loop,
+                            # so no turn_end / run_complete ever fires for
+                            # them. Without clearing here, run_in_progress
+                            # stays set forever: the GUI spinner never
+                            # stops and set_llm keeps being rejected until
+                            # a manual Stop. Synthesize the completion
+                            # (same shape as the Abort path).
+                            if self.run_in_progress.is_set():
+                                self._emit(
+                                    RunCompleteEvent(
+                                        sessionId=self.session_id,
+                                        exitReason={
+                                            "result": "SLASH_COMMAND_COMPLETED",
+                                            "data": None,
+                                        },
+                                        finalContent="",
+                                        totalTurns=self.current_turn,
+                                        visibility=self._current_message_visibility,
+                                    )
+                                )
+                                self.run_in_progress.clear()
+                                self._current_message_visibility = "visible"
+                                self._current_message_turn_base = None
+                                self._end_run_tracking()
                         return
                     if "next" in item:
                         delta = item["next"]
@@ -1790,6 +1841,12 @@ class Bridge:
                 self._emit_error(
                     f"command dispatch failed: {e}", traceback.format_exc()
                 )
+
+        # Whatever ended the loop (Shutdown command, stdin EOF, stdout
+        # write failure), the pet subprocess must not outlive the bridge —
+        # an orphan keeps holding its fixed port and blocks the next
+        # attach. Idempotent: the Shutdown command path already detached.
+        self._handle_detach_pet(silent=True)
 
         # Brief grace period for any in-flight emit to drain.
         self.run_in_progress.wait(timeout=2.0)

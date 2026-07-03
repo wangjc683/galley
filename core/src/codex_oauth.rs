@@ -262,7 +262,7 @@ pub async fn complete_device_login(
 pub async fn import_cli_login() -> Result<CodexAuthSetupResult> {
     let mut secret = read_codex_cli_secret()?;
     if secret.is_expiring(REFRESH_SKEW_SECONDS) {
-        secret = refresh_secret(secret).await?;
+        secret = refresh_secret_with_cli_sync(secret).await?;
     }
     persist_probe_and_return(secret).await
 }
@@ -296,7 +296,8 @@ pub async fn resolve_access_token(
     galley: &SqliteGalley,
     api_key_ref: &str,
 ) -> Result<ResolvedCodexAccessToken> {
-    resolve_access_token_with_refresh(galley, api_key_ref, &refresh_secret, true).await
+    resolve_access_token_with_refresh(galley, api_key_ref, &refresh_secret_with_cli_sync, true)
+        .await
 }
 
 async fn resolve_access_token_with_refresh<F, Fut>(
@@ -578,6 +579,86 @@ where
         return None;
     }
     Some(candidate)
+}
+
+/// Refresh a ChatGPT / Codex secret and, if the Codex CLI's auth.json
+/// still holds the exact refresh token we just consumed, sync the
+/// rotated tokens back to it. OpenAI rotates refresh tokens with reuse
+/// detection: leaving the CLI on the consumed token logs the CLI out on
+/// its next refresh, and repeated reuse can revoke the whole token
+/// family — taking Galley's copy down with it.
+async fn refresh_secret_with_cli_sync(secret: CodexOAuthSecret) -> Result<CodexOAuthSecret> {
+    let consumed_refresh_token = secret.refresh_token.clone();
+    let refreshed = refresh_secret(secret).await?;
+    sync_rotated_tokens_to_codex_cli(&consumed_refresh_token, &refreshed);
+    Ok(refreshed)
+}
+
+/// Best-effort write-back of rotated tokens into `~/.codex/auth.json`.
+/// Only touches the file when its refresh token equals the one we just
+/// consumed — if the CLI re-logged-in to a different lineage in the
+/// meantime, the file is not ours to change. Unknown fields are
+/// preserved (Value-level merge, not a struct round-trip); the write is
+/// atomic via temp-file + rename. Failures are logged and swallowed:
+/// keeping the CLI in sync is a courtesy, not a Galley invariant.
+fn sync_rotated_tokens_to_codex_cli(consumed_refresh_token: &str, refreshed: &CodexOAuthSecret) {
+    let Ok(auth_path) = codex_cli_auth_path() else {
+        return;
+    };
+    sync_rotated_tokens_to_codex_cli_at(&auth_path, consumed_refresh_token, refreshed);
+}
+
+fn sync_rotated_tokens_to_codex_cli_at(
+    auth_path: &std::path::Path,
+    consumed_refresh_token: &str,
+    refreshed: &CodexOAuthSecret,
+) {
+    let Ok(body) = std::fs::read_to_string(auth_path) else {
+        return; // no CLI login on this machine
+    };
+    let Ok(mut file) = serde_json::from_str::<Value>(&body) else {
+        return;
+    };
+    let Some(tokens) = file.get_mut("tokens").and_then(Value::as_object_mut) else {
+        return;
+    };
+    if tokens.get("refresh_token").and_then(Value::as_str) != Some(consumed_refresh_token) {
+        return;
+    }
+    tokens.insert(
+        "access_token".into(),
+        Value::String(refreshed.access_token.clone()),
+    );
+    tokens.insert(
+        "refresh_token".into(),
+        Value::String(refreshed.refresh_token.clone()),
+    );
+    if file.get("last_refresh").is_some() {
+        file["last_refresh"] = Value::String(
+            Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        );
+    }
+    let serialized = match serde_json::to_string_pretty(&file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[codex-oauth] serializing auth.json write-back failed: {e}");
+            return;
+        }
+    };
+    let tmp_path = auth_path.with_extension("json.galley-tmp");
+    if let Err(e) = std::fs::write(&tmp_path, &serialized) {
+        eprintln!("[codex-oauth] writing auth.json write-back failed: {e}");
+        return;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600));
+    }
+    if let Err(e) = std::fs::rename(&tmp_path, auth_path) {
+        eprintln!("[codex-oauth] replacing auth.json failed: {e}");
+        let _ = std::fs::remove_file(&tmp_path);
+    }
 }
 
 fn codex_secret_accounts_are_compatible(
@@ -1315,6 +1396,58 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::TempDir;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    #[test]
+    fn cli_sync_writes_rotated_tokens_when_lineage_matches() {
+        let tmp = TempDir::new().expect("tempdir");
+        let auth_path = tmp.path().join("auth.json");
+        std::fs::write(
+            &auth_path,
+            r#"{"OPENAI_API_KEY":null,"tokens":{"id_token":"idt","access_token":"old-access","refresh_token":"consumed-rt","account_id":"acct-1"},"last_refresh":"2026-06-01T00:00:00.000Z"}"#,
+        )
+        .expect("seed auth.json");
+        let refreshed =
+            CodexOAuthSecret::new("new-access".into(), "new-rt".into()).expect("secret");
+
+        sync_rotated_tokens_to_codex_cli_at(&auth_path, "consumed-rt", &refreshed);
+
+        let file: Value =
+            serde_json::from_str(&std::fs::read_to_string(&auth_path).unwrap()).unwrap();
+        assert_eq!(file["tokens"]["access_token"], "new-access");
+        assert_eq!(file["tokens"]["refresh_token"], "new-rt");
+        // Unknown fields survive the Value-level merge.
+        assert_eq!(file["tokens"]["id_token"], "idt");
+        assert_eq!(file["tokens"]["account_id"], "acct-1");
+        assert!(file.get("OPENAI_API_KEY").is_some());
+        // last_refresh was bumped away from the seeded value.
+        assert_ne!(file["last_refresh"], "2026-06-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn cli_sync_leaves_foreign_lineage_untouched() {
+        let tmp = TempDir::new().expect("tempdir");
+        let auth_path = tmp.path().join("auth.json");
+        let original = r#"{"tokens":{"access_token":"cli-access","refresh_token":"cli-relogged-rt"}}"#;
+        std::fs::write(&auth_path, original).expect("seed auth.json");
+        let refreshed =
+            CodexOAuthSecret::new("new-access".into(), "new-rt".into()).expect("secret");
+
+        // The CLI re-logged-in since our import: its refresh token is no
+        // longer the one we consumed, so the file is not ours to change.
+        sync_rotated_tokens_to_codex_cli_at(&auth_path, "consumed-rt", &refreshed);
+
+        assert_eq!(std::fs::read_to_string(&auth_path).unwrap(), original);
+    }
+
+    #[test]
+    fn cli_sync_missing_auth_file_is_a_no_op() {
+        let tmp = TempDir::new().expect("tempdir");
+        let auth_path = tmp.path().join("auth.json");
+        let refreshed =
+            CodexOAuthSecret::new("new-access".into(), "new-rt".into()).expect("secret");
+        sync_rotated_tokens_to_codex_cli_at(&auth_path, "consumed-rt", &refreshed);
+        assert!(!auth_path.exists());
+    }
 
     #[test]
     fn codex_default_advanced_options_includes_context_window() {

@@ -846,3 +846,127 @@ def test_fence_filter_marker_at_very_end_leaves_state_inside() -> None:
     assert out == "preamble\n"
     assert f.inside
     assert f.carry == ""
+
+
+# ---------------- RUNNER-2/4/5: shutdown & lifecycle failure paths ----------------
+
+
+def test_slash_command_system_done_clears_run_state() -> None:
+    """Slash-command tasks (e.g. `/session.x=v`) bypass agent_runner_loop:
+    their `done` arrives with source='system' and no turn_end ever fires.
+    The drain must clear run_in_progress and synthesize run_complete, or
+    the GUI spinner never stops and set_llm is rejected until a manual
+    Stop."""
+    import queue as _queue
+
+    bridge = _new_test_bridge()
+    display_queue: _queue.Queue[dict[str, Any]] = _queue.Queue()
+    bridge.run_in_progress.set()
+    bridge._begin_run_tracking()
+    bridge._start_progress_drain(display_queue)
+
+    display_queue.put({"done": "session.x set to v", "source": "system"})
+
+    for _ in range(200):
+        if not bridge.run_in_progress.is_set():
+            break
+        time.sleep(0.01)
+    assert not bridge.run_in_progress.is_set()
+
+    kinds = []
+    while not bridge.event_queue.empty():
+        kinds.append(json.loads(bridge.event_queue.get_nowait())["kind"])
+    assert kinds == ["system_message", "run_complete"]
+
+
+def test_workbench_done_does_not_clear_run_state() -> None:
+    """The normal task path's `done` (source='workbench') must keep being
+    ignored — turn_end owns the canonical completion there."""
+    import queue as _queue
+
+    bridge = _new_test_bridge()
+    display_queue: _queue.Queue[dict[str, Any]] = _queue.Queue()
+    bridge.run_in_progress.set()
+    bridge._start_progress_drain(display_queue)
+
+    display_queue.put({"done": "full answer", "source": "workbench"})
+
+    time.sleep(0.2)
+    assert bridge.run_in_progress.is_set()
+    assert bridge.event_queue.empty()
+
+
+def test_run_loop_exit_detaches_pet() -> None:
+    """The pet subprocess must not outlive the bridge on ANY loop exit
+    (stdin EOF, stdout failure) — not just the Shutdown command path.
+    An orphan pet keeps holding its fixed port and blocks re-attach."""
+    bridge = _new_test_bridge()
+    detach_calls: list[bool] = []
+    bridge._handle_detach_pet = (  # type: ignore[method-assign]
+        lambda silent=False: detach_calls.append(silent)
+    )
+    bridge.shutdown_event.set()
+    bridge.run_in_progress.set()  # skip the shutdown grace wait
+
+    assert bridge.run() == 0
+    assert detach_calls == [True]
+
+
+def test_exit_parentless_runs_registered_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """os._exit skips finally/atexit, so parent-loss exit must run the
+    registered cleanup (pet detach) explicitly before dying."""
+    import runner.workbench_bridge as wb
+
+    calls: list[str] = []
+    monkeypatch.setattr(wb, "_EXIT_FOR_PARENT_LOSS", lambda _code: None)
+    monkeypatch.setattr(wb, "_PARENT_LOSS_CLEANUP", [lambda: calls.append("pet")])
+
+    with pytest.raises(SystemExit):
+        wb._exit_parentless("test parent loss")
+    assert calls == ["pet"]
+
+
+def test_bridge_registers_parent_loss_pet_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import runner.workbench_bridge as wb
+
+    registry: list[Any] = []
+    monkeypatch.setattr(wb, "_PARENT_LOSS_CLEANUP", registry)
+    bridge = _new_test_bridge()
+    detach_calls: list[bool] = []
+    bridge._handle_detach_pet = (  # type: ignore[method-assign]
+        lambda silent=False: detach_calls.append(silent)
+    )
+    assert len(registry) == 1
+    registry[0]()
+    assert detach_calls == [True]
+
+
+def test_silence_python_stdout_redirects_os_level_fd_one() -> None:
+    """sys.stdout rebinding alone leaves OS fd 1 pointing at the IPC
+    pipe: subprocesses and C extensions writing fd 1 would corrupt the
+    session's event framing. After _silence_python_stdout, only the
+    captured handle reaches the real stdout."""
+    import subprocess
+
+    script = (
+        "import os\n"
+        "import runner.workbench_bridge as wb\n"
+        "real = wb._capture_real_stdout()\n"
+        "wb._silence_python_stdout()\n"
+        "os.write(1, b'RAW-FD-GARBAGE\\n')\n"
+        "print('PYTHON-GARBAGE')\n"
+        "real.write('CLEAN\\n')\n"
+        "real.flush()\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        cwd=str(Path(__file__).resolve().parents[2]),
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stdout == b"CLEAN\n"

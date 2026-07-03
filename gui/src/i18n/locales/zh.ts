@@ -1221,6 +1221,8 @@ export const zhCopy = {
     sendFailed: "发送失败",
     approvalSendFailed: "审批未送达 Agent，请重新操作",
     stopFailed: "停止指令未送达 Agent，请重试",
+    managedModelsLoadFailed:
+      "模型配置读取失败，已保留当前界面。打开 Settings → Models 可重试。",
     bridgeCrashed: "Bridge 进程崩溃",
     bridgeFailed: "Bridge 启动失败",
     externalMyKeyImportFailed: (moduleName: string | null) =>

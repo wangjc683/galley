@@ -1276,6 +1276,8 @@ export const enCopy: AppCopy = {
     sendFailed: "Send failed",
     approvalSendFailed: "Approval didn't reach the agent — please decide again",
     stopFailed: "Stop didn't reach the agent — please try again",
+    managedModelsLoadFailed:
+      "Loading model config failed; keeping the current screen. Open Settings → Models to retry.",
     bridgeCrashed: "Bridge process crashed",
     bridgeFailed: "Bridge failed to start",
     externalMyKeyImportFailed: (moduleName) =>

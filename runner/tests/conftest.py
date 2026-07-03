@@ -21,6 +21,12 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Never write .pyc into whichever GA checkout these tests import from:
+# for the managed-ga fallback that pollutes the shipped payload (core's
+# payload-hygiene test rejects __pycache__), and a user checkout is not
+# ours to write into.
+sys.dont_write_bytecode = True
+
 
 def _is_ga_path(path: Path) -> bool:
     return path.is_dir() and (path / "agent_loop.py").is_file() and (path / "ga.py").is_file()

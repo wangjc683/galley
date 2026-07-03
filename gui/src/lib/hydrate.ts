@@ -40,6 +40,8 @@ import {
   getPref,
 } from "@/lib/db";
 import { pushCloseHintCopy } from "@/lib/close-hint";
+import { copyForLanguage } from "@/lib/i18n";
+import { resolveLanguagePreference } from "@/lib/language";
 import { applyManagedRuntimeDiagnostics } from "@/lib/managed-runtime-diagnostics";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { useManagedModelsStore } from "@/stores/managed-models";
@@ -99,7 +101,6 @@ export async function hydrateApp(): Promise<void> {
   // 5. Managed models. Startup reads only metadata and local credential
   // presence, never the real API key values.
   const managedConfig = await useManagedModelsStore.getState().load();
-  const hasConfiguredManagedModel = managedConfig.models.length > 0;
 
   // 6. Startup-critical state: sessions/projects. Route through Rust
   // Core so a slow direct-SQL housekeeping pass cannot leave the
@@ -133,8 +134,32 @@ export async function hydrateApp(): Promise<void> {
 
   // 9. Branch on active runtime config.
   const activeRuntimeKind = usePrefsStore.getState().activeRuntimeKind;
+  if (activeRuntimeKind === "managed" && managedConfig.loadError) {
+    // A failed load says nothing about whether models are configured —
+    // routing to onboarding here used to throw configured users back to
+    // the first-run screen on a transient DB/IPC hiccup. Keep the normal
+    // screen and surface the failure with a retry path (Settings →
+    // Models reloads on open).
+    const copy = copyForLanguage(
+      resolveLanguagePreference(usePrefsStore.getState().languagePreference),
+    );
+    useUiStore.getState().pushToast({
+      id: "managed-models-load-failed",
+      category: "bridge",
+      severity: "error",
+      message: `${copy.errors.managedModelsLoadFailed}\n${managedConfig.loadError}`,
+      hint: null,
+      retryable: true,
+      context: "hydrate.managed_models",
+      traceback: null,
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
   const needsOnboarding =
-    activeRuntimeKind === "managed" ? !hasConfiguredManagedModel : !hasGAConfig;
+    activeRuntimeKind === "managed"
+      ? managedConfig.models.length === 0
+      : !hasGAConfig;
   if (needsOnboarding) {
     useUiStore.getState().setScreen("onboarding");
     return;

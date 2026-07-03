@@ -42,6 +42,14 @@ use crate::app_paths::{self, DB_FILENAME};
 /// Sibling directory name prefix (e.g. `app.galley.backup.20260520T140530Z/`
 /// next to `app.galley/`).
 const BACKUP_DIR_PREFIX: &str = "app.galley.backup.";
+/// Newest migration backups kept after a successful new backup. Each is
+/// a full data-dir copy (attachments included); unbounded retention
+/// grows by the whole data dir on every schema bump.
+const BACKUP_RETENTION_COUNT: usize = 3;
+/// Marker in the data dir recording that the one-shot v0.2.9 cascade
+/// recovery pass has completed; its presence skips backup scanning at
+/// startup.
+const RECOVERY_SENTINEL_FILENAME: &str = "backup-recovery.done";
 const SAFE_REBUILD_PREFLIGHT_MAX_VERSION: i64 = 23;
 
 #[derive(Debug, Clone, Copy)]
@@ -261,6 +269,10 @@ pub enum CascadedRowRecoveryOutcome {
     FreshInstall,
     NoBackups,
     NoRowsToRecover,
+    /// A previous startup already completed the recovery pass (sentinel
+    /// file present). Backups are not scanned or attached again — the
+    /// v0.2.9 repair is one-shot, not a startup routine.
+    AlreadyCompleted,
     Recovered {
         backup_path: PathBuf,
         messages: u64,
@@ -419,6 +431,31 @@ pub fn recover_cascaded_rows_from_backups_in(
     if !db_path.exists() {
         return Ok(CascadedRowRecoveryOutcome::FreshInstall);
     }
+    // One-shot gate: this repair targets the v0.2.9 incident. Without
+    // the sentinel, every startup re-scanned and read-write ATTACHed
+    // every backup DB (checkpointing their WALs — mutating the backups
+    // it exists to preserve).
+    let sentinel = data_dir.join(RECOVERY_SENTINEL_FILENAME);
+    if sentinel.exists() {
+        return Ok(CascadedRowRecoveryOutcome::AlreadyCompleted);
+    }
+    let outcome = recover_cascaded_rows_pass(data_dir, &db_path)?;
+    // Any completed pass (recovered, nothing to recover, or no backups
+    // at all) settles the incident; only errors leave the gate open for
+    // a retry on the next startup.
+    if let Err(e) = fs::write(&sentinel, format!("{outcome:?}\n{}\n", timestamp_now())) {
+        eprintln!(
+            "[backup-recovery] writing sentinel {} failed: {e}",
+            sentinel.display()
+        );
+    }
+    Ok(outcome)
+}
+
+fn recover_cascaded_rows_pass(
+    data_dir: &Path,
+    db_path: &Path,
+) -> Result<CascadedRowRecoveryOutcome, CascadedRowRecoveryError> {
     let mut backups = backup_db_candidates(data_dir)?;
     if backups.is_empty() {
         return Ok(CascadedRowRecoveryOutcome::NoBackups);
@@ -426,7 +463,7 @@ pub fn recover_cascaded_rows_from_backups_in(
 
     tauri::async_runtime::block_on(async {
         let mut conn = SqliteConnectOptions::new()
-            .filename(&db_path)
+            .filename(db_path)
             .create_if_missing(false)
             .connect()
             .await
@@ -489,6 +526,10 @@ pub fn ensure_backup_before_migrate_in(
             dst: backup_path.clone(),
             message: err.to_string(),
         })?;
+    // Only after the new backup fully succeeded: the newest copies are
+    // the safety net for the migration about to run, older ones are
+    // history we cap.
+    prune_old_backups(parent, BACKUP_RETENTION_COUNT);
 
     Ok(BackupOutcome::Backed {
         from: on_disk,
@@ -496,6 +537,36 @@ pub fn ensure_backup_before_migrate_in(
         backup_path,
         skipped_symlinks,
     })
+}
+
+/// Keep only the newest `keep` migration backups. Timestamped dir names
+/// sort lexicographically = chronologically. Best-effort: a failed
+/// removal is logged and skipped — pruning never blocks startup.
+fn prune_old_backups(parent: &Path, keep: usize) {
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
+    let mut backups: Vec<PathBuf> = entries
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(BACKUP_DIR_PREFIX)
+        })
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    if backups.len() <= keep {
+        return;
+    }
+    backups.sort();
+    for path in backups.iter().take(backups.len() - keep) {
+        match fs::remove_dir_all(path) {
+            Ok(()) => eprintln!("[backup] pruned old backup {}", path.display()),
+            Err(e) => eprintln!("[backup] pruning {} failed: {e}", path.display()),
+        }
+    }
 }
 
 /// Probe `_sqlx_migrations` for the highest successfully-applied
@@ -1074,6 +1145,60 @@ mod tests {
         let data = parent.join("app.galley");
         fs::create_dir(&data).unwrap();
         data
+    }
+
+    #[test]
+    fn backup_pruning_keeps_only_newest_backups() {
+        let tmp = TempDir::new().unwrap();
+        let data = make_parent_with_data_dir(&tmp);
+        init_db_with_version(&data.join(DB_FILENAME), 5);
+        let parent = data.parent().unwrap();
+        // Seed older backups (lexicographic = chronological order).
+        for stamp in [
+            "20260101T000000Z",
+            "20260201T000000Z",
+            "20260301T000000Z",
+            "20260401T000000Z",
+        ] {
+            fs::create_dir(parent.join(format!("{BACKUP_DIR_PREFIX}{stamp}"))).unwrap();
+        }
+
+        let out = ensure_backup_before_migrate_in(&data, 9).unwrap();
+        let new_backup = match out {
+            BackupOutcome::Backed { backup_path, .. } => backup_path,
+            other => panic!("expected Backed, got {other:?}"),
+        };
+
+        let mut remaining: Vec<String> = fs::read_dir(parent)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.starts_with(BACKUP_DIR_PREFIX))
+            .collect();
+        remaining.sort();
+        assert_eq!(remaining.len(), BACKUP_RETENTION_COUNT);
+        // The two oldest were pruned; the just-created backup survives.
+        assert_eq!(remaining[0], format!("{BACKUP_DIR_PREFIX}20260301T000000Z"));
+        assert!(new_backup.is_dir());
+    }
+
+    #[test]
+    fn cascade_recovery_is_one_shot_via_sentinel() {
+        let tmp = TempDir::new().unwrap();
+        let data = make_parent_with_data_dir(&tmp);
+        init_db_with_version(&data.join(DB_FILENAME), 9);
+
+        // First pass completes (nothing to recover) and writes the
+        // sentinel; every later startup must skip without scanning.
+        let first = recover_cascaded_rows_from_backups_in(&data).unwrap();
+        assert!(matches!(first, CascadedRowRecoveryOutcome::NoBackups));
+        assert!(data.join(RECOVERY_SENTINEL_FILENAME).is_file());
+
+        let second = recover_cascaded_rows_from_backups_in(&data).unwrap();
+        assert!(matches!(
+            second,
+            CascadedRowRecoveryOutcome::AlreadyCompleted
+        ));
     }
 
     #[test]

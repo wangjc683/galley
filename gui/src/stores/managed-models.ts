@@ -31,6 +31,10 @@ interface ManagedModelsActions {
   load: () => Promise<{
     providers: ManagedModelProviderRecord[];
     models: ManagedModelRecord[];
+    /** Set when the load itself failed — the (empty) lists then say
+     * NOTHING about what is configured. Callers deciding "does the
+     * user have models?" must branch on this, not on length. */
+    loadError: string | null;
   }>;
   saveProvider: (input: SaveManagedProviderInput) => Promise<ManagedModelProviderRecord>;
   deleteProvider: (id: string) => Promise<void>;
@@ -57,10 +61,11 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
         listManagedModels(),
       ]);
       set({ providers, models, loading: false });
-      return { providers, models };
+      return { providers, models, loadError: null };
     } catch (e) {
-      set({ loading: false, error: errorMessage(e) });
-      return { providers: [], models: [] };
+      const loadError = errorMessage(e);
+      set({ loading: false, error: loadError });
+      return { providers: [], models: [], loadError };
     }
   },
 
