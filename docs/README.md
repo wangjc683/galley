@@ -38,6 +38,7 @@ matches who you are and what you are trying to do.
 | Understand or change Galley's temperament / brand character | [temperament charter](./temperament.md) |
 | Touch UI copy, terminology, or localization | [copy and language guidelines](./copy-language-guidelines.md), [copy austerity principles](./copy-austerity-principles.md) |
 | Touch conversation text rendering / CJK typography | [typography principles](./typography-principles.md) |
+| Reshoot README screenshots / demo assets | [screenshot playbook](./screenshot-playbook.md) |
 | Review product / UX audit findings | [audits](./audits/README.md) |
 | Understand history or decisions | [devlog](./devlog/README.md) |
 
