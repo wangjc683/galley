@@ -54,8 +54,8 @@ export const zhCopy = {
   },
   sidebar: {
     configureModels: "配置模型",
-    bundledNeedsModel: "内置 GA 还没有可用模型",
-    openModelsForBundled: "打开 Models 配置内置 GA 模型",
+    bundledNeedsModel: "内置内核还没有可用模型",
+    openModelsForBundled: "打开 Models 为内置内核配置模型",
     externalGA: "外部 GA",
     usingExternalGA: "使用你接入的 GenericAgent",
     usingExternalGAAria: "正在使用外部 GA",
@@ -403,19 +403,19 @@ export const zhCopy = {
       about: { label: "About", helper: "关于" },
     },
     runtime: {
-      subtitle: "Galley 使用的 GenericAgent 运行环境",
+      subtitle: "Galley 的运行环境",
       runtimeMode: "Runtime Mode",
-      bundledGA: "内置 GA",
+      bundledGA: "内置内核",
       recommended: "推荐",
       active: "正在使用",
-      usingBundledGA: "正在使用内置 GA",
+      usingBundledGA: "正在使用内置内核",
       needsModel: "需要先配置模型",
-      bundledReady: "内置 GA 已可用",
+      bundledReady: "内置内核已可用",
       externalGA: "外部 GA",
       externalPath: "外部 GA 路径",
       pathHint: "选择包含 agentmain.py 的 GenericAgent 目录，或粘贴路径后回车",
       healthDescription:
-        "不知道哪儿出问题了？跑一次完整体检 —— 重新探测 Python 解释器、检查 GA 路径和必要文件。",
+        "重新探测 Python 解释器、检查运行环境与必要文件。",
       runHealthCheck: "跑一次 Health Check",
       setupAssistant: "设置向导",
       setupAssistantDescription:
@@ -442,7 +442,7 @@ export const zhCopy = {
       configFile: "Config file",
       more: "更多",
       connectExternalGA: "接入外部 GA",
-      switchToBundledGA: "切换到内置 GA",
+      switchToBundledGA: "切换到内置内核",
       switchToExternalGA: "切换到外部 GA",
       runningSessionsBlock: "有运行中的对话，结束后可切换运行时。",
       usingExternalGA: "正在使用外部 GA",
@@ -469,7 +469,7 @@ export const zhCopy = {
     models: {
       subtitle: "为 Galley 配置模型提供商和模型",
       externalNotice:
-        "当前使用外部 GA。这里的模型只用于内置 GA，不影响外部 GA。",
+        "当前使用外部 GA。这里的模型只用于内置内核，不影响外部 GA。",
       noProviders: "还没有模型提供商。",
       addProvider: "添加",
       addProviderAria: "添加模型提供商",
@@ -1254,7 +1254,7 @@ export const zhCopy = {
     copiedDetails: "Copied",
     switchLLM: "切换 LLM",
     managedModelUnavailable:
-      "内置 GA 没有可用模型。在 Models 添加模型，或重填 API Key。",
+      "内置内核没有可用模型。在 Models 添加模型，或重填 API Key。",
     managedRuntimeInvalid: "Galley 内置运行时不完整。请重新安装或更新 Galley。",
     gaPathInvalid:
       "接入的 GenericAgent 路径不可用。到 Settings → Runtime 重选 GA 目录。",
@@ -1267,7 +1267,7 @@ export const zhCopy = {
     removedFromProject: (projectName: string) => `已从 ${projectName} 移除`,
     removedFromAnyProject: "已从项目移除",
     switchedRuntime: (kind: "managed" | "external") =>
-      kind === "managed" ? "已切换到内置 GA" : "已切换到外部 GA",
+      kind === "managed" ? "已切换到内置内核" : "已切换到外部 GA",
     runtimeSwitchKept: "原对话已保留，可切回查看。",
     savedPath: "已保存路径配置",
     restartForExisting: "重启 Galley 才能让现有对话生效",
@@ -1305,7 +1305,7 @@ export const zhCopy = {
     imageBlockedGoal:
       "Goal、/btw 和回复 Agent 提问暂不支持图片。请先发送普通消息。",
     imageBlockedExternal:
-      "当前外部 GA 尚不支持图片输入，请移除图片后发送，或改用内置 GA 新建会话。",
+      "当前外部 GA 尚不支持图片输入，请移除图片后发送，或改用内置内核新建会话。",
     imageTooLarge: "图片过大，单张上限 10 MB。",
     imageTooMany: "最多添加 4 张图片，移除一张再继续。",
     imageUnsupported: "不支持的图片格式，请粘贴或选择 PNG / JPEG / WebP。",

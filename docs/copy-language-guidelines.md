@@ -244,7 +244,7 @@ About
 |---|---|
 | 左侧 tab | 中文 UI 使用英文主标签 + 中文辅助标签 |
 | Runtime page title | 保留 `Runtime` |
-| Runtime subtitle | `Galley 使用的 GenericAgent 运行环境` |
+| Runtime subtitle | `Galley 的运行环境`（2026-07-03 内核规则：managed 语境不出现 GA） |
 | Health Check section | 保留 `Health Check` |
 | Health Check button | `跑一次 Health Check` |
 | Models page title | 保留 `Models` |

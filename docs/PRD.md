@@ -7,6 +7,8 @@
 >
 > **v0.3 核心变化**：产品定位从「GA 的本地桌面工作台」reframe 为「**本地 agent team orchestrator，dual-native for human and agent**」。新增 Galley CLI 一等公民地位、Supervisor Agent 概念、localhost-only 架构原则、CLI 公开契约面（agent-api）。详细决策叙事见 [2026-05-15 vision pivot devlog](./devlog/2026-05-15-vision-pivot-to-orchestrator.md)。
 >
+> **2026-07-03 定位更新**：Galley 定性为**独立产品，基于 GenericAgent 二次开发**——不是 GA 的 GUI，身份也不再是「wraps GA 的壳」。patch 过的内置 managed runtime 是产品引擎与开发重心；attach 外部 GA 保留为兼容模式。品牌表面遵循「GA 预算」与「内核 / engine」称谓规则（见 [copy-language-guidelines](./copy-language-guidelines.md)），气质定位见 [temperament](./temperament.md)。决策叙事见 2026-07-03 三篇 devlog。
+>
 > **本文件与 DESIGN.md 的关系**：DESIGN.md 继续负责 GUI 视觉与交互设计规则。CLI 设计契约见独立的 [docs/agent-api.md](./agent-api.md)（v0.2 ship 时 publish）。
 
 ## 1. 一句话定位
@@ -48,9 +50,10 @@ Galley 自身永远是本地应用，远程传输不是 Galley 的责任——�
 - **dual-native**：GUI 和 CLI 是对等消费端
 - **agent-friendly platform**：Supervisor Agent 通过公开 CLI 契约面控制整个 team
 - **Local-first**：所有数据在用户机器，远程传输由 Supervisor 在外部完成
-- **Non-invasive to backend**：v0.2 backend 是 GA，但架构允许将来 plug in 其他 agent runtime
+- **自有引擎（owns its engine）**：内置 managed runtime（上游 GA + Galley patch stack）是产品引擎与开发重心
+- **Non-invasive to attached runtime**：attach 外部 GA 是兼容模式，严格非侵入；架构上（runner/ 目录与宪法）仍允许将来接入其他 runtime——这是架构余量，不是产品身份
 
-> "GA 的 companion app，删除即恢复" 在 v0.1 是定位；v0.2 升级为 "agent-runtime-agnostic orchestrator，当前 wraps GA"。GA 仍是 v0.2 唯一支持的 runtime，但目录结构 (runner/) 和宪法允许将来扩展。
+> 定位演化：v0.1 是 "GA 的 companion app，删除即恢复"；v0.2 升级为 "agent-runtime-agnostic orchestrator，当前 wraps GA"；2026-07-03 起是「**独立产品，基于 GenericAgent 二次开发**」——引擎是自己的（managed patch stack），不是包着别人的。
 
 ## 4. 核心架构原则（项目宪法）
 

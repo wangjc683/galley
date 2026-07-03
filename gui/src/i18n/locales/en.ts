@@ -55,8 +55,8 @@ export const enCopy: AppCopy = {
   },
   sidebar: {
     configureModels: "Set up model",
-    bundledNeedsModel: "Bundled GA needs a model",
-    openModelsForBundled: "Open Models to set up bundled GA",
+    bundledNeedsModel: "Bundled engine needs a model",
+    openModelsForBundled: "Open Models to set up the bundled engine",
     externalGA: "External GA",
     usingExternalGA: "Using your connected GenericAgent",
     usingExternalGAAria: "Using external GA",
@@ -420,20 +420,20 @@ export const enCopy: AppCopy = {
       about: { label: "About", helper: "关于" },
     },
     runtime: {
-      subtitle: "GenericAgent runtime used by Galley",
+      subtitle: "Galley's runtime",
       runtimeMode: "Runtime Mode",
-      bundledGA: "Bundled GA",
+      bundledGA: "Bundled engine",
       recommended: "Recommended",
       active: "Active",
-      usingBundledGA: "Using bundled GA",
+      usingBundledGA: "Using the bundled engine",
       needsModel: "Set up a model first",
-      bundledReady: "Bundled GA is ready",
+      bundledReady: "Bundled engine is ready",
       externalGA: "External GA",
       externalPath: "External GA folder",
       pathHint:
         "Choose the GenericAgent folder that contains agentmain.py, or paste a path and press Enter",
       healthDescription:
-        "Not sure what is wrong? Run a full Health Check to re-detect Python, verify the GA folder, and check required files.",
+        "Run a full Health Check: re-detect Python, verify the runtime, and check required files.",
       runHealthCheck: "Run Health Check",
       setupAssistant: "Setup Assistant",
       setupAssistantDescription:
@@ -448,7 +448,7 @@ export const enCopy: AppCopy = {
       useBundledPython: "Use Galley's bundled Python",
       advancedDiagnostics: "Advanced diagnostics",
       currentMode: "Current mode",
-      kernelVersion: "Runtime version",
+      kernelVersion: "Engine version",
       models: "Models",
       memorySop: "Memory / SOP",
       complete: "Complete",
@@ -462,7 +462,7 @@ export const enCopy: AppCopy = {
       configFile: "Config file",
       more: "More",
       connectExternalGA: "Connect external GA",
-      switchToBundledGA: "Switch to bundled GA",
+      switchToBundledGA: "Switch to bundled engine",
       switchToExternalGA: "Switch to external GA",
       runningSessionsBlock:
         "A conversation is running. You can switch runtime after it finishes.",
@@ -490,7 +490,7 @@ export const enCopy: AppCopy = {
     models: {
       subtitle: "Configure model providers and models for Galley",
       externalNotice:
-        "External GA is active. Models here are only used by bundled GA; external GA is unaffected.",
+        "External GA is active. Models here are only used by the bundled engine; external GA is unaffected.",
       noProviders: "No model providers yet.",
       addProvider: "Add",
       addProviderAria: "Add model provider",
@@ -1312,7 +1312,7 @@ export const enCopy: AppCopy = {
     copiedDetails: "Copied",
     switchLLM: "Switch LLM",
     managedModelUnavailable:
-      "Bundled GA has no usable model. Add a model in Models or re-enter the API Key.",
+      "The bundled engine has no usable model. Add a model in Models or re-enter the API Key.",
     managedRuntimeInvalid:
       "Galley's bundled runtime is incomplete. Reinstall or update Galley.",
     gaPathInvalid:
@@ -1326,7 +1326,9 @@ export const enCopy: AppCopy = {
     removedFromProject: (projectName) => `Removed from ${projectName}`,
     removedFromAnyProject: "Removed from project",
     switchedRuntime: (kind) =>
-      kind === "managed" ? "Switched to bundled GA" : "Switched to external GA",
+      kind === "managed"
+        ? "Switched to the bundled engine"
+        : "Switched to external GA",
     runtimeSwitchKept:
       "Existing conversations are kept; switch back anytime to view them.",
     savedPath: "Path settings saved",
@@ -1370,7 +1372,7 @@ export const enCopy: AppCopy = {
     imageBlockedGoal:
       "Goal, /btw, and replies to Agent questions do not support images yet. Send a normal message first.",
     imageBlockedExternal:
-      "External GA does not support image input yet. Remove the image before sending, or start a new session with bundled GA.",
+      "External GA does not support image input yet. Remove the image before sending, or start a new session with the bundled engine.",
     imageTooLarge: "Image is too large. The limit is 10 MB per image.",
     imageTooMany: "You can attach up to 4 images. Remove one to add another.",
     imageUnsupported:

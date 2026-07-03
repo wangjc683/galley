@@ -472,7 +472,7 @@ function formatInvokeError(e: unknown): string {
 function actionableInvokeError(tag: string): string | null {
   switch (tag) {
     case "managed_model_not_configured":
-      return "内置 GA 模型不可用。请在 Models 添加模型，或重新输入 API Key。";
+      return "内置内核模型不可用。请在 Models 添加模型，或重新输入 API Key。";
     case "managed_runtime_invalid":
       return "Galley 内置运行时不完整。请重新安装或更新 Galley。";
     case "ga_path_invalid":

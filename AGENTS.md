@@ -15,6 +15,14 @@ operators:
 - Galley GUI is for the human operator at the desktop.
 - Galley CLI is for trusted Agent / Supervisor automation on the same machine.
 
+Positioning (2026-07-03): Galley is an **independent product built on
+GenericAgent** — a derivative work, not a GUI for GA. The bundled managed
+runtime (upstream GA + Galley's patch stack) is the product's engine and the
+primary development focus; attaching a user-owned external GA remains supported
+as the compatibility mode. User-facing copy follows the 内核 / engine naming
+rule and the "GA budget" in
+[copy-language-guidelines](./docs/copy-language-guidelines.md).
+
 Current target:
 
 - Agent API: `schemaVersion: 1` (frozen for the `0.2.x` line; see Rule 3)
