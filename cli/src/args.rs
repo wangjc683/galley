@@ -200,6 +200,9 @@ pub(crate) enum GoalCmd {
     },
     /// Return Goal status, task board, recent events, and project sessions.
     Status { goal_id: String },
+    /// List active (running / wrapping) goals. Galley runs at most one Goal
+    /// at a time; empty output means none is active. Read-only.
+    Active,
     /// Request a graceful stop.
     Stop {
         goal_id: String,

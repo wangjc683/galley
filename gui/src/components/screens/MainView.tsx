@@ -106,6 +106,9 @@ export interface MainViewProps {
   onOpenLLMSwitcher?: () => void;
   /** Active Goal for this session's Project context, if any. */
   goal?: GoalBrief;
+  /** True when a Goal is active anywhere — gates the Composer's Goal entry
+   * under the single-active-Goal rule. */
+  hasActiveGoal?: boolean;
   /**
    * All goals whose master session is this one (any status), powering
    * the in-thread Goal commission / terminal markers. Forwarded to
@@ -177,6 +180,7 @@ export function MainView({
   requiresModelConfig = false,
   onOpenLLMSwitcher,
   goal,
+  hasActiveGoal,
   sessionGoals,
   pendingAskUser,
   conversationWidth = "compact",
@@ -537,6 +541,7 @@ export function MainView({
             requiresModelConfig={requiresModelConfig}
             onOpenLLMSwitcher={onOpenLLMSwitcher}
             goal={goal}
+            hasActiveGoal={hasActiveGoal}
             showFooterHint
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}

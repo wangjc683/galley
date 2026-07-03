@@ -225,6 +225,10 @@ export interface ComposerProps {
   onOpenLLMSwitcher?: () => void;
   /** Active Goal in this Composer's Project context, if any. */
   goal?: GoalBrief;
+  /** True when a Goal is active anywhere. Galley runs at most one Goal at a
+   * time, so the Goal entry is disabled here (with an explanatory tooltip)
+   * unless this Composer is the one already showing that Goal via `goal`. */
+  hasActiveGoal?: boolean;
   /** Show the compact keyboard/state hint below the Composer. */
   showFooterHint?: boolean;
   /** When false, all image intake (paste / drop / file picker) is
@@ -271,6 +275,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       requiresModelConfig = false,
       onOpenLLMSwitcher,
       goal,
+      hasActiveGoal = false,
       onGoalSubmit,
       showFooterHint = false,
       imagesEnabled = true,
@@ -438,7 +443,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const hasText = text.trim().length > 0;
     const hasSendableContent = hasText || hasPendingImages;
     const canShowGoalEntry = Boolean(onGoalSubmit) && !goal;
-    const goalModeBlocked = disabled || stopMode;
+    // Single active Goal: another Goal is already running elsewhere (this
+    // Composer isn't the one showing it, since canShowGoalEntry requires !goal).
+    const goalBlockedByActive = canShowGoalEntry && hasActiveGoal;
+    const goalModeBlocked = disabled || stopMode || goalBlockedByActive;
     const goalEntryDisabled = goalModeBlocked || goalSubmitting;
     const goalStartBlocked = goalModeBlocked || !hasText || goalSubmitting;
     const effectiveGoalArmed =
@@ -711,11 +719,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {canShowGoalEntry && (
                 <TooltipLabel
                   text={
-                    requiresModelConfig
-                      ? copy.composer.configureModelBeforeSending
-                      : effectiveGoalArmed
-                        ? copy.composer.cancelGoalMode
-                        : copy.composer.goalTooltip
+                    goalBlockedByActive
+                      ? copy.composer.goalBlockedByActive
+                      : requiresModelConfig
+                        ? copy.composer.configureModelBeforeSending
+                        : effectiveGoalArmed
+                          ? copy.composer.cancelGoalMode
+                          : copy.composer.goalTooltip
                   }
                 >
                   <button

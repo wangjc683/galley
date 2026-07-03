@@ -222,6 +222,12 @@ pub fn run() {
             sql: include_str!("../migrations/029_managed_model_custom_context_win.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 30,
+            description: "enforce single active goal",
+            sql: include_str!("../migrations/030_single_active_goal.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     // Pre-migration backup hook (B4 M8). Derived — not hard-coded —
@@ -566,6 +572,19 @@ pub fn run() {
                 let app_for_im = _app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     im_manager.autostart(app_for_im).await;
+                });
+            }
+
+            // Re-spawn controllers for goals left active after a Core restart.
+            // The controller is a detached process orphaned on restart; without
+            // this an interrupted Goal stays `running` in the DB and, under the
+            // single-active-Goal lock, blocks all new Goals.
+            {
+                use tauri::Manager;
+                let galley_for_goals: SqliteGalley =
+                    _app.state::<SqliteGalley>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    desktop_goal::resume_active_goals(&galley_for_goals).await;
                 });
             }
 

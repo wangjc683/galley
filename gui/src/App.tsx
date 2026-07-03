@@ -1105,6 +1105,7 @@ function App() {
                   }}
                   onOpenLLMSwitcher={openLLMSwitcherFallback}
                   onGoalSubmit={startGoalFromComposer}
+                  hasActiveGoal={activeGoals.length > 0}
                   imagesEnabled={activeRuntimeKind === "managed"}
                   onImageBlocked={handleImageBlocked}
                   onSubmit={(t, images) => {
@@ -1169,6 +1170,7 @@ function App() {
                   }}
                   onOpenLLMSwitcher={openLLMSwitcherFallback}
                   goal={activeSessionGoal}
+                  hasActiveGoal={activeGoals.length > 0}
                   sessionGoals={sessionGoals}
                   onGoalSubmit={startGoalFromComposer}
                   imagesEnabled={activeSession?.gaRuntimeKind === "managed"}

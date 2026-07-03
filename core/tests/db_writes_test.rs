@@ -55,6 +55,7 @@ const MIG_026: &str = include_str!("../migrations/026_project_workspace.sql");
 const MIG_027: &str = include_str!("../migrations/027_managed_model_context_win.sql");
 const MIG_028: &str = include_str!("../migrations/028_message_telemetry.sql");
 const MIG_029: &str = include_str!("../migrations/029_managed_model_custom_context_win.sql");
+const MIG_030: &str = include_str!("../migrations/030_single_active_goal.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -94,7 +95,7 @@ async fn run_migrations(pool: &SqlitePool) {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -545,6 +546,85 @@ async fn goal_start_rejects_token_mismatch_and_expired_proposal() {
         .await
         .expect_err("expired proposal should fail");
     assert!(matches!(expired, GalleyError::InvalidArgs { .. }));
+}
+
+/// Galley runs at most one Goal at a time. Starting a second one while the
+/// first is active must fail with a message naming the active Goal; once the
+/// first is terminal (stopped/completed), a new Goal can start.
+#[tokio::test]
+async fn single_active_goal_blocks_second_start_until_first_ends() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+
+    let start = |objective: &str| {
+        let galley = galley.clone();
+        let objective = objective.to_string();
+        async move {
+            let proposal = galley
+                .create_goal_proposal(
+                    CreateGoalProposalInput {
+                        objective,
+                        project_id: None,
+                        master_session_id: None,
+                        budget_seconds: None,
+                        worker_limit: None,
+                        runtime_kind: Some(RuntimeKind::Managed),
+                        write_mode: None,
+                        expires_in_seconds: None,
+                    },
+                    Origin::cli(None, None),
+                )
+                .await
+                .expect("create proposal");
+            galley
+                .start_goal_from_proposal(
+                    proposal.id.clone(),
+                    proposal.internal_confirm_token.clone(),
+                    Origin::cli(None, None),
+                )
+                .await
+        }
+    };
+
+    let first = start("First goal").await.expect("first goal starts");
+
+    // Second start is rejected while the first is running, and the message
+    // names the active Goal so the Supervisor / GUI can relay it.
+    let blocked = start("Second goal")
+        .await
+        .expect_err("second goal blocked while first active");
+    match blocked {
+        GalleyError::InvalidArgs { message } => {
+            assert!(
+                message.contains("First goal") && message.contains(first.id.as_str()),
+                "message should name the active goal, got: {message}"
+            );
+        }
+        other => panic!("expected InvalidArgs, got {other:?}"),
+    }
+
+    // Wrapping still counts as active.
+    galley
+        .update_goal_state(first.id.clone(), GoalStatus::Wrapping, None)
+        .await
+        .expect("to wrapping");
+    assert!(matches!(
+        start("Third goal").await,
+        Err(GalleyError::InvalidArgs { .. })
+    ));
+
+    // Once terminal, the slot frees and a new Goal can start.
+    galley
+        .update_goal_state(first.id.clone(), GoalStatus::Stopped, None)
+        .await
+        .expect("to stopped");
+    let second = start("Fourth goal")
+        .await
+        .expect("new goal starts after first ends");
+    assert_eq!(second.status, GoalStatus::Running);
+    let active = galley.list_active_goals().await.expect("list active");
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].id, second.id);
 }
 
 #[tokio::test]

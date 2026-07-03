@@ -269,6 +269,7 @@ export const zhCopy = {
     dropUnavailable: "当前运行时不支持图片",
     goalButton: "Goal",
     goalTooltip: "作为 Goal 运行",
+    goalBlockedByActive: "已有 Goal 在跑，先停掉或等它完成再启动新的。",
     cancelGoalMode: "取消 Goal 模式",
     startGoal: "启动 Goal",
     startGoalWithEnter: "确认 Goal · Enter",

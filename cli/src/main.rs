@@ -251,6 +251,7 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             .await
         }
         Command::Goal(GoalCmd::Status { goal_id }) => goal::goal_status(goal_id).await,
+        Command::Goal(GoalCmd::Active) => goal::goal_active().await,
         Command::Goal(GoalCmd::Stop {
             goal_id,
             supervisor,

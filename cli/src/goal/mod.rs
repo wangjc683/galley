@@ -106,6 +106,17 @@ pub(crate) async fn goal_status(goal_id: String) -> Result<(), GalleyError> {
     Ok(())
 }
 
+/// List active (running / wrapping) goals as NDJSON — empty output when none.
+/// Galley runs at most one Goal at a time, so a Supervisor uses this to check
+/// before proposing a new one.
+pub(crate) async fn goal_active() -> Result<(), GalleyError> {
+    let galley = SqliteGalley::open().await?;
+    for goal in galley.list_active_goals().await? {
+        emit_json(&goal)?;
+    }
+    Ok(())
+}
+
 pub(crate) async fn goal_stop(
     goal_id: String,
     supervisor: Option<String>,

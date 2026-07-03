@@ -202,6 +202,26 @@ impl SqliteGalley {
             });
         }
 
+        // Single active Goal: Galley runs at most one Goal at a time. Reject a
+        // second start with a message the Supervisor / GUI can relay verbatim.
+        // The partial unique index goals_single_active (migration 030) is the
+        // race-proof backstop; this check exists for the friendly message.
+        if let Some((active_id, active_objective)) = sqlx::query_as::<_, (String, String)>(
+            "SELECT id, objective FROM goals \
+                 WHERE status IN ('running','wrapping') LIMIT 1",
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?
+        {
+            return Err(GalleyError::InvalidArgs {
+                message: format!(
+                    "A Goal is already running: \"{active_objective}\" ({active_id}). \
+                     Stop it or wait for it to finish before starting another."
+                ),
+            });
+        }
+
         let project_id = match proposal.project_id.as_ref() {
             Some(id) => id.0.clone(),
             None => {

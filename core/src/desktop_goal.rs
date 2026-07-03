@@ -166,7 +166,9 @@ pub(crate) async fn start_desktop_goal(
         .await
         .map_err(stringify_error)?;
 
-    if let Err(message) = spawn_goal_controller(&goal, locale) {
+    if let Err(message) =
+        spawn_goal_controller(&goal, locale, "galley-desktop", "desktop Goal Send")
+    {
         let _ = galley
             .update_goal_state(goal.id.clone(), GoalStatus::Failed, Some(message.clone()))
             .await;
@@ -180,7 +182,16 @@ pub(crate) async fn start_desktop_goal(
     })
 }
 
-fn spawn_goal_controller(goal: &GoalBrief, locale: GoalLocale) -> std::result::Result<(), String> {
+/// Spawn a detached Goal controller (`galley goal run <id> --resume`). The
+/// controller acquires a per-goal file lock on start, so a duplicate spawn
+/// (e.g. startup auto-resume racing a manual resume) exits cleanly instead
+/// of double-dispatching work.
+pub(crate) fn spawn_goal_controller(
+    goal: &GoalBrief,
+    locale: GoalLocale,
+    supervisor: &str,
+    reason: &str,
+) -> std::result::Result<(), String> {
     let cli = discovery::locate_cli_binary().ok_or_else(|| {
         "Galley CLI binary was not found next to the desktop app; cannot start Goal controller."
             .to_string()
@@ -193,9 +204,9 @@ fn spawn_goal_controller(goal: &GoalBrief, locale: GoalLocale) -> std::result::R
         .arg("--locale")
         .arg(locale.as_tag())
         .arg("--supervisor")
-        .arg("galley-desktop")
+        .arg(supervisor)
         .arg("--reason")
-        .arg("desktop Goal Send")
+        .arg(reason)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -203,4 +214,39 @@ fn spawn_goal_controller(goal: &GoalBrief, locale: GoalLocale) -> std::result::R
     cmd.spawn()
         .map(|_| ())
         .map_err(|e| format!("Could not start Galley Goal controller: {e}"))
+}
+
+/// Re-spawn controllers for goals left `running`/`wrapping` in the DB.
+///
+/// The controller is a detached process, so a Galley Core restart (crash,
+/// quit, machine reboot) orphans it — without this, a dead Goal would sit
+/// `running` in the DB forever and, under the single-active-Goal lock, block
+/// every new Goal. Called once from the Core setup hook. The per-goal file
+/// lock makes this safe even if a controller somehow survived: the duplicate
+/// spawn just exits.
+pub(crate) async fn resume_active_goals(galley: &SqliteGalley) {
+    let goals = match galley.list_active_goals().await {
+        Ok(goals) => goals,
+        Err(e) => {
+            eprintln!("[goal] startup resume: list active goals failed: {e:?}");
+            return;
+        }
+    };
+    for goal in goals {
+        // No GUI locale at startup; narration falls back to the default.
+        match spawn_goal_controller(
+            &goal,
+            GoalLocale::ZhCn,
+            "galley-core",
+            "startup auto-resume",
+        ) {
+            Ok(()) => eprintln!(
+                "[goal] startup resume: respawned controller for {}",
+                goal.id
+            ),
+            Err(message) => {
+                eprintln!("[goal] startup resume: {} failed: {message}", goal.id);
+            }
+        }
+    }
 }

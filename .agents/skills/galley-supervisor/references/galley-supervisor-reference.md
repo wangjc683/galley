@@ -6,7 +6,7 @@ command and workflow details.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-reference.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-07-03 (Goal confirmation & reversible-op recalibration; wait 600s).
+Last synced: 2026-07-03 (Goal single-instance: goal active + one-at-a-time).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings.
@@ -133,6 +133,7 @@ Write commands:
 | `"$GALLEY" session move <id> --to=<project-id> --supervisor=<id> --reason=<why>` | Move session to Project; omit `--to` to unassign |
 | `"$GALLEY" project create "<name>" --supervisor=<id> --reason=<why>` | Create a Project |
 | `"$GALLEY" project delete <id> --supervisor=<id> --reason=<why>` | Delete Project; sessions survive but become unassigned |
+| `"$GALLEY" goal active` | List active (running/wrapping) goals; empty = none. Check before proposing (one Goal at a time) |
 | `"$GALLEY" goal propose "<objective>" --supervisor=<id> --reason=<why>` | Prepare pending Goal; does not start work |
 | `"$GALLEY" goal run --proposal=<id> --confirm-token=<token> --supervisor=<id> --reason=<why>` | Start blocking Goal controller after exact user confirmation |
 | `"$GALLEY" goal stop <id> --supervisor=<id> --reason=<why>` | Request graceful Goal stop |
@@ -250,7 +251,14 @@ explicit in every child prompt.
 Galley Goal is for longer autonomous runs. Do not use Goal just because a task
 has two obvious subtasks.
 
-Proposal:
+Galley runs at most one Goal at a time. Check first (empty output = none):
+
+```bash
+"$GALLEY" goal active
+```
+
+If one is active, tell the user to stop it or wait; `goal run` rejects a second
+start with `invalid_args`. Proposal:
 
 ```bash
 "$GALLEY" goal propose "<objective>" \

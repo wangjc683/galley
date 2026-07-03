@@ -5,12 +5,12 @@ use galley_core_lib::api::{
 };
 
 use super::controller::{
-    goal_controller_decision, goal_controller_decision_after_wait, goal_drain_cap_seconds,
-    goal_has_worker_material_signal, goal_master_checkpoint_event_body,
+    acquire_goal_controller_lock, goal_controller_decision, goal_controller_decision_after_wait,
+    goal_drain_cap_seconds, goal_has_worker_material_signal, goal_master_checkpoint_event_body,
     goal_master_checkpoint_seen, goal_ready_idle_worker_slot_indices,
     goal_ready_worker_slot_indices, goal_seed_task_specs, goal_worker_has_progress_signal,
     goal_worker_has_terminal_signal, goal_worker_session_ids, goal_worker_terminal_counts,
-    goal_worker_wave_baseline, goal_wrapping_summary,
+    goal_worker_wave_baseline, goal_wrapping_summary, ControllerLock,
 };
 use super::signals::goal_summary_event_is_new;
 
@@ -709,4 +709,38 @@ fn goal_wrapping_summary_marks_drain_cap() {
     let summary = goal_wrapping_summary(GoalWrapReason::DrainCap, false);
     assert!(summary.contains("drain cap reached"));
     assert!(summary.contains("available results"));
+}
+
+#[test]
+fn controller_lock_is_exclusive_per_goal_workspace() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut goal = test_goal();
+    goal.workspace_path = Some(dir.path().to_string_lossy().into_owned());
+
+    // First controller takes the lock.
+    let first = acquire_goal_controller_lock(&goal);
+    assert!(matches!(first, ControllerLock::Held(_)));
+
+    // A second controller for the same goal is refused while the first holds it.
+    assert!(matches!(
+        acquire_goal_controller_lock(&goal),
+        ControllerLock::Busy
+    ));
+
+    // Releasing the first (drop the File) frees the lock for the next acquirer.
+    drop(first);
+    assert!(matches!(
+        acquire_goal_controller_lock(&goal),
+        ControllerLock::Held(_)
+    ));
+}
+
+#[test]
+fn controller_lock_degrades_to_unlocked_without_workspace_path() {
+    let mut goal = test_goal();
+    goal.workspace_path = None;
+    assert!(matches!(
+        acquire_goal_controller_lock(&goal),
+        ControllerLock::Unlocked
+    ));
 }

@@ -1102,6 +1102,15 @@ Starts or resumes the blocking Goal controller. Starting from a proposal
 validates the proposal status, internal token, and expiry. If the proposal did
 not specify a Project, Core creates one and binds the Goal to it.
 
+**Single active Goal.** Galley runs at most one Goal (status `running` or
+`wrapping`) at a time. Starting a second one fails with exit `2`
+(`invalid_args`) and a message naming the active Goal; the constraint is
+enforced in Core (a DB unique index), independent of any client check. Use
+`galley goal active` to check before proposing. A `--resume` of an
+already-running Goal is idempotent: the controller takes a per-goal file lock,
+so a duplicate resume exits without double-dispatching. Goals left active after
+a Core restart are auto-resumed on the next launch.
+
 For desktop Goals with a master session, the controller first dispatches an
 internal Goal Master planning turn to that master session. The Master acts as a
 scheduler/editor, not a production worker: it must read
@@ -1189,6 +1198,12 @@ task board, recent events, and non-archived Project sessions:
 ```json
 {"goal":{...},"project":{...},"tasks":[...],"events":[...],"sessions":[...]}
 ```
+
+#### `galley goal active`
+
+Lists active (`running` / `wrapping`) goals as NDJSON — empty output when none.
+Read-only. Since Galley runs at most one Goal at a time, a Supervisor uses this
+to check before proposing a new one.
 
 #### `galley goal stop <goal-id> [--supervisor=<x>] [--reason=<y>]`
 

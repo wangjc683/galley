@@ -46,6 +46,49 @@ use serde_json::Value;
 
 static GOAL_NARRATION_LOCALE: std::sync::OnceLock<GoalLocale> = std::sync::OnceLock::new();
 
+/// Outcome of trying to acquire the per-goal controller lock.
+pub(crate) enum ControllerLock {
+    /// Lock acquired; hold the File for the controller's lifetime.
+    Held(std::fs::File),
+    /// No lock in force (missing workspace path on an ancient goal). The DB
+    /// single-active-Goal lock is still the hard guarantee.
+    Unlocked,
+    /// Another controller process already holds the lock.
+    Busy,
+}
+
+/// Try to acquire `<goal-workspace>/controller.lock` exclusively (advisory,
+/// non-blocking). The workspace path comes from the goal row so the CLI does
+/// not depend on Core's path internals.
+pub(crate) fn acquire_goal_controller_lock(goal: &GoalBrief) -> ControllerLock {
+    use fs2::FileExt;
+    let Some(workspace) = goal.workspace_path.as_deref() else {
+        return ControllerLock::Unlocked;
+    };
+    let dir = std::path::Path::new(workspace);
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        eprintln!("[goal] controller lock: create workspace dir failed: {e}");
+        return ControllerLock::Unlocked;
+    }
+    let lock_path = dir.join("controller.lock");
+    let file = match std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)
+    {
+        Ok(file) => file,
+        Err(e) => {
+            eprintln!("[goal] controller lock: open failed: {e}");
+            return ControllerLock::Unlocked;
+        }
+    };
+    match file.try_lock_exclusive() {
+        Ok(()) => ControllerLock::Held(file),
+        Err(_) => ControllerLock::Busy,
+    }
+}
+
 pub(crate) fn set_goal_narration_locale(locale: Option<String>) {
     let _ = GOAL_NARRATION_LOCALE.set(GoalLocale::parse(locale.as_deref()));
 }
@@ -63,6 +106,24 @@ pub(crate) async fn run_goal_controller(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
+    // Per-goal controller re-entrancy lock: if another controller process is
+    // already driving this Goal (e.g. startup auto-resume racing a manual
+    // `goal run --resume`), exit cleanly instead of double-dispatching. Held
+    // for the whole run — dropping the File releases the advisory lock. A
+    // missing workspace path (only truly ancient goals) degrades to no lock;
+    // the DB single-active-Goal lock remains the hard guarantee.
+    let _controller_lock = match acquire_goal_controller_lock(&goal) {
+        ControllerLock::Held(file) => Some(file),
+        ControllerLock::Unlocked => None,
+        ControllerLock::Busy => {
+            eprintln!(
+                "[goal] controller for {} is already running; exiting cleanly",
+                goal.id
+            );
+            return Ok(());
+        }
+    };
+
     if !matches!(goal.status, GoalStatus::Running | GoalStatus::Wrapping) {
         return Err(GalleyError::InvalidArgs {
             message: format!("goal {} is not active (status={:?})", goal.id, goal.status),

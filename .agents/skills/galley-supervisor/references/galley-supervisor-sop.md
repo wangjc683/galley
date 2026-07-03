@@ -6,7 +6,7 @@ skill stays self-contained when installed in an agent skills directory.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-sop.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-07-03 (Goal confirmation & reversible-op recalibration; wait 600s).
+Last synced: 2026-07-03 (Goal single-instance: goal active + one-at-a-time).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings. Re-sync
@@ -195,7 +195,17 @@ verification sessions. Never create multiple writers for the same files.
 
 ### Start A Goal
 
-Only use Goal for a long autonomous objective:
+Only use Goal for a long autonomous objective. **Galley runs at most one Goal
+at a time.** Before proposing, check for an active one:
+
+```bash
+"$GALLEY" goal active
+```
+
+Empty output means none is active. If a Goal is already running or wrapping,
+tell the user — they must stop it or wait for it to finish before a new Goal
+can start. Do not propose blindly; `goal run` rejects the second start with an
+`invalid_args` error naming the active Goal.
 
 ```bash
 "$GALLEY" goal propose "<objective>" \

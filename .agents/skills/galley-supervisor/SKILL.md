@@ -248,9 +248,12 @@ Do not delete the Project after finishing unless the user explicitly confirms.
 
 ### Start A Goal
 
-Use Goal only for sustained autonomous work, not simple parallelism.
+Use Goal only for sustained autonomous work, not simple parallelism. Galley runs
+at most one Goal at a time — check first (`goal active`; empty = none), and if
+one is active, tell the user to stop it or wait rather than proposing blindly.
 
 ```bash
+"$GALLEY" goal active
 "$GALLEY" goal propose "<objective>" \
   --supervisor=codex-skill-galley-supervisor/v1 \
   --reason="prepare Goal for user confirmation"
