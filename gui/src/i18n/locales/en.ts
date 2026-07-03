@@ -719,6 +719,10 @@ export const enCopy: AppCopy = {
         "Galley started as a workbench for GenericAgent. The first two letters of our name are a quiet bow to where we came from.",
       galleyVersion: "Galley version",
       bundledGAVersion: "Bundled GA version",
+      typesetting: "Typesetting",
+      typesettingDetail:
+        "Body set in Newsreader with PingFang and Microsoft YaHei; monospace in JetBrains Mono.",
+      epigraphSource: "— Philosophical Investigations, §43",
       alsoBy: "More by JC Wang",
       subsageDetail: "Your AI Agent's Subscription Memory · subsage.top",
       filmDetail: "IMAX Film Datebase · 15perf70mm.com",

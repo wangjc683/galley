@@ -683,6 +683,10 @@ export const zhCopy = {
         "Galley 最初是 GenericAgent 的 workbench；名字前两个字母 GA，是对它的致意。",
       galleyVersion: "Galley 版本",
       bundledGAVersion: "内置 GA 版本",
+      typesetting: "版式",
+      typesettingDetail:
+        "正文以 Newsreader 与苹方、雅黑排印；等宽用 JetBrains Mono。",
+      epigraphSource: "——《哲学研究》§43",
       alsoBy: "JC Wang 的更多作品",
       subsageDetail: "AI Agent 原生订阅管家 · subsage.top",
       filmDetail: "IMAX 胶片电影资料库 · 15perf70mm.com",
