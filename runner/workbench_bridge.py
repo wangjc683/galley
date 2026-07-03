@@ -491,6 +491,14 @@ class _FenceFilter:
             break
         return "".join(parts)
 
+    def flush(self) -> str:
+        """Stream ended: a held-back partial fence marker was real
+        content after all (nothing can extend it into a marker now).
+        Inside-fence carry stays dropped — it was being hidden anyway."""
+        out = "" if self.inside else self.carry
+        self.carry = ""
+        return out
+
 
 # ---------------- Pending approval ----------------
 
@@ -579,7 +587,9 @@ class Bridge:
         self._stdout = stdout
         self._stdin = stdin
         self.state = SessionState()
-        self.event_queue: queue.Queue[str] = queue.Queue()
+        # None is the writer-exit sentinel: everything enqueued before it
+        # is guaranteed written + flushed before the writer thread ends.
+        self.event_queue: queue.Queue[str | None] = queue.Queue()
         self.command_queue: queue.Queue[Command] = queue.Queue()
         self.shutdown_event = threading.Event()
         self.run_in_progress = threading.Event()
@@ -614,6 +624,11 @@ class Bridge:
         # one is already running first detaches the old.
         self._pet_process: Any = None
         self._pet_port: int = 0
+        # Serializes the run-completion check-emit-clear across threads:
+        # natural turn_end (agent thread), Abort (command thread), and
+        # slash-command done (drain thread) can otherwise interleave and
+        # double-emit run_complete with an already-cleared telemetry base.
+        self._run_complete_lock = threading.Lock()
         # The parent watchdog exits with os._exit, which skips finally
         # blocks and atexit — an attached pet would survive as an orphan
         # holding its fixed port (and Galley Core is already gone, so
@@ -1105,6 +1120,20 @@ class Bridge:
                     if not isinstance(item, dict):
                         continue
                     if "done" in item:
+                        # The filter may be holding back a partial fence
+                        # prefix (≤5 backticks) that turned out to be real
+                        # trailing content — emit it before finishing so
+                        # the streamed view doesn't truncate the reply.
+                        tail = fence_filter.flush()
+                        if tail:
+                            self._emit(
+                                TurnProgressEvent(
+                                    sessionId=self.session_id,
+                                    delta=tail,
+                                    source=str(item.get("source", "")),
+                                    visibility=self._current_message_visibility,
+                                )
+                            )
                         # `source='system'` is GA's signal that this
                         # `done` came from a slash-command handler
                         # (currently /btw, /session.x=v) that
@@ -1136,23 +1165,24 @@ class Bridge:
                             # stops and set_llm keeps being rejected until
                             # a manual Stop. Synthesize the completion
                             # (same shape as the Abort path).
-                            if self.run_in_progress.is_set():
-                                self._emit(
-                                    RunCompleteEvent(
-                                        sessionId=self.session_id,
-                                        exitReason={
-                                            "result": "SLASH_COMMAND_COMPLETED",
-                                            "data": None,
-                                        },
-                                        finalContent="",
-                                        totalTurns=self.current_turn,
-                                        visibility=self._current_message_visibility,
+                            with self._run_complete_lock:
+                                if self.run_in_progress.is_set():
+                                    self._emit(
+                                        RunCompleteEvent(
+                                            sessionId=self.session_id,
+                                            exitReason={
+                                                "result": "SLASH_COMMAND_COMPLETED",
+                                                "data": None,
+                                            },
+                                            finalContent="",
+                                            totalTurns=self.current_turn,
+                                            visibility=self._current_message_visibility,
+                                        )
                                     )
-                                )
-                                self.run_in_progress.clear()
-                                self._current_message_visibility = "visible"
-                                self._current_message_turn_base = None
-                                self._end_run_tracking()
+                                    self.run_in_progress.clear()
+                                    self._current_message_visibility = "visible"
+                                    self._current_message_turn_base = None
+                                    self._end_run_tracking()
                         return
                     if "next" in item:
                         delta = item["next"]
@@ -1274,19 +1304,23 @@ class Bridge:
                 )
 
             if exit_reason:
-                self._emit(
-                    RunCompleteEvent(
-                        sessionId=self.session_id,
-                        exitReason=safe_exit or {},
-                        finalContent=_clean_response_for_display(response_content),
-                        totalTurns=turn,
-                        visibility=self._current_message_visibility,
-                    )
-                )
-                self.run_in_progress.clear()
-                self._current_message_visibility = "visible"
-                self._current_message_turn_base = None
-                self._end_run_tracking()
+                with self._run_complete_lock:
+                    # Abort (command thread) may have already emitted the
+                    # completion and cleared the run — don't double-emit.
+                    if self.run_in_progress.is_set():
+                        self._emit(
+                            RunCompleteEvent(
+                                sessionId=self.session_id,
+                                exitReason=safe_exit or {},
+                                finalContent=_clean_response_for_display(response_content),
+                                totalTurns=turn,
+                                visibility=self._current_message_visibility,
+                            )
+                        )
+                        self.run_in_progress.clear()
+                        self._current_message_visibility = "visible"
+                        self._current_message_turn_base = None
+                        self._end_run_tracking()
             else:
                 # Predict-emit turn_start(turn+1): GA is going to keep
                 # looping, but the real dispatch-wrapper signal for the
@@ -1416,21 +1450,32 @@ class Bridge:
             # next stop check instead of continuing the turn.
             self.agent.abort()
             self.state.resolve_all_pending("deny")
-            if self.run_in_progress.is_set():
-                self._emit(
-                    RunCompleteEvent(
-                        sessionId=self.session_id,
-                        exitReason={"result": "ABORTED", "data": None},
-                        finalContent="",
-                        totalTurns=self.current_turn,
-                        visibility=self._current_message_visibility,
+            with self._run_complete_lock:
+                if self.run_in_progress.is_set():
+                    self._emit(
+                        RunCompleteEvent(
+                            sessionId=self.session_id,
+                            exitReason={"result": "ABORTED", "data": None},
+                            finalContent="",
+                            totalTurns=self.current_turn,
+                            visibility=self._current_message_visibility,
+                        )
                     )
-                )
-                self.run_in_progress.clear()
-                self._current_message_visibility = "visible"
-                self._current_message_turn_base = None
-                self._end_run_tracking()
+                    self.run_in_progress.clear()
+                    self._current_message_visibility = "visible"
+                    self._current_message_turn_base = None
+                    self._end_run_tracking()
         elif isinstance(cmd, LoadHistoryCommand):
+            # Mirror set_llm's guard: replacing history mid-run would let
+            # the agent loop read/write a list swapped out under it.
+            if self.run_in_progress.is_set():
+                self._emit_error(
+                    "Cannot load history while a run is in progress",
+                    None,
+                    category="business",
+                    context="load_history",
+                )
+                return
             try:
                 self._load_history(cmd.messages)
                 self._emit(
@@ -1827,7 +1872,8 @@ class Bridge:
     # ---------------- Main loop ----------------
 
     def run(self) -> int:
-        threading.Thread(target=self._stdout_writer, daemon=True).start()
+        writer = threading.Thread(target=self._stdout_writer, daemon=True)
+        writer.start()
         threading.Thread(target=self._stdin_reader, daemon=True).start()
 
         while not self.shutdown_event.is_set():
@@ -1848,23 +1894,31 @@ class Bridge:
         # attach. Idempotent: the Shutdown command path already detached.
         self._handle_detach_pet(silent=True)
 
-        # Brief grace period for any in-flight emit to drain.
-        self.run_in_progress.wait(timeout=2.0)
-        # Drain remaining events (best effort).
-        deadline = threading.Event()
-        threading.Timer(0.5, deadline.set).start()
-        while not self.event_queue.empty() and not deadline.is_set():
-            pass
+        # Flush tail events deterministically: enqueue the writer-exit
+        # sentinel and join with a bound. Everything queued before the
+        # sentinel is written + flushed when join returns. (The previous
+        # logic waited on run_in_progress — inverted: idle sessions
+        # burned the full grace while running ones skipped it — then
+        # busy-spun on queue.empty(), which says nothing about the last
+        # line having actually been written to the pipe.)
+        self.event_queue.put(None)
+        writer.join(timeout=2.0)
         return 0
 
     # ---------------- IO threads ----------------
 
     def _stdout_writer(self) -> None:
-        while not self.shutdown_event.is_set() or not self.event_queue.empty():
+        while True:
             try:
                 line = self.event_queue.get(timeout=0.1)
             except queue.Empty:
+                if self.shutdown_event.is_set():
+                    # Fallback exit; the primary path is the sentinel
+                    # run() enqueues so pre-shutdown events all flush.
+                    return
                 continue
+            if line is None:  # writer-exit sentinel from run()
+                return
             try:
                 self._stdout.write(line + "\n")
                 self._stdout.flush()

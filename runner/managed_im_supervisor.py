@@ -474,7 +474,6 @@ def _run_feishu(args: argparse.Namespace, out: IO[str]) -> int:
         return 1
     finally:
         _flush_and_release_lock(logf, lock)
-    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

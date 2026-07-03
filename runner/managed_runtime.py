@@ -150,21 +150,21 @@ def managed_model_config_from_env() -> dict[str, Any]:
             "apibase": str(model.get("apiBase") or "").rstrip("/"),
             "model": str(model.get("model") or ""),
         }
-        if auth_kind == "chatgpt_codex_oauth":
-            cfg["codex_backend"] = True
-            cfg["api_mode"] = "responses"
-            cfg["galley_api_key_ref"] = api_key_ref
-            if isinstance(credential_ipc, dict):
-                cfg["galley_credential_ipc"] = credential_ipc
         advanced = model.get("advancedOptions") or {}
         if isinstance(advanced, dict):
             cfg.update(advanced)
             if "connect_timeout" in advanced and "timeout" not in advanced:
                 cfg["timeout"] = advanced["connect_timeout"]
         if auth_kind == "chatgpt_codex_oauth":
+            # Single post-merge block: these keys must win over anything
+            # in advancedOptions. (This used to exist as two copies, one
+            # pre-merge and one post-merge, and they had already drifted.)
             cfg["codex_backend"] = True
             cfg["api_mode"] = "responses"
             cfg["stream"] = True
+            cfg["galley_api_key_ref"] = api_key_ref
+            if isinstance(credential_ipc, dict):
+                cfg["galley_credential_ipc"] = credential_ipc
             if str(cfg.get("reasoning_effort") or "").strip().lower() == "minimal":
                 cfg["reasoning_effort"] = "medium"
         if not cfg["apikey"] or not cfg["apibase"] or not cfg["model"]:

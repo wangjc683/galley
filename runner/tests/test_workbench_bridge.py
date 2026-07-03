@@ -52,7 +52,9 @@ def _new_test_bridge() -> Bridge:
 
 
 def _next_bridge_event(bridge: Bridge) -> dict[str, Any]:
-    return cast("dict[str, Any]", json.loads(bridge.event_queue.get_nowait()))
+    line = bridge.event_queue.get_nowait()
+    assert line is not None, "unexpected writer-exit sentinel"
+    return cast("dict[str, Any]", json.loads(line))
 
 
 @pytest.mark.parametrize(
@@ -685,7 +687,7 @@ def test_project_workspace_external_runtime_skips_without_safe_state_root(
     bridge._activate_project_workspace()
 
     assert not hasattr(bridge.agent, "_ga_project_mode_name")
-    event = json.loads(bridge.event_queue.get_nowait())
+    event = _next_bridge_event(bridge)
     assert event["kind"] == "error"
     assert event["severity"] == "warning"
     assert event["context"] == "project_workspace"
@@ -875,7 +877,9 @@ def test_slash_command_system_done_clears_run_state() -> None:
 
     kinds = []
     while not bridge.event_queue.empty():
-        kinds.append(json.loads(bridge.event_queue.get_nowait())["kind"])
+        line = bridge.event_queue.get_nowait()
+        assert line is not None
+        kinds.append(json.loads(line)["kind"])
     assert kinds == ["system_message", "run_complete"]
 
 
@@ -970,3 +974,80 @@ def test_silence_python_stdout_redirects_os_level_fd_one() -> None:
     )
     assert result.returncode == 0, result.stderr.decode()
     assert result.stdout == b"CLEAN\n"
+
+
+# ---------------- RUNNER-3/6/7/11: shutdown flush, guards, fence tail ----------------
+
+
+def test_run_flushes_queued_events_before_exit() -> None:
+    """Tail events queued before shutdown must reach stdout. The old exit
+    path busy-waited on queue.empty(), which says nothing about the last
+    line having been written; the writer-exit sentinel makes it
+    deterministic."""
+    bridge = _new_test_bridge()
+    bridge._handle_detach_pet = lambda silent=False: None  # type: ignore[method-assign]
+    for i in range(50):
+        bridge.event_queue.put(json.dumps({"kind": "turn_progress", "n": i}))
+    bridge.shutdown_event.set()
+
+    assert bridge.run() == 0
+    lines = cast("StringIO", bridge._stdout).getvalue().strip().splitlines()
+    assert len(lines) == 50
+    assert json.loads(lines[-1])["n"] == 49
+
+
+def test_load_history_rejected_while_run_in_progress() -> None:
+    """Replacing history mid-run would let the agent loop read/write a
+    list swapped out under it — mirror set_llm's guard."""
+    from runner.ipc import LoadHistoryCommand
+
+    bridge = _new_test_bridge()
+    bridge.run_in_progress.set()
+    loaded: list[Any] = []
+    bridge._load_history = loaded.append  # type: ignore[method-assign, assignment]
+
+    bridge.dispatch_command(
+        LoadHistoryCommand(messages=[{"role": "user", "content": "x"}])
+    )
+
+    assert loaded == []
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "error"
+    assert event["context"] == "load_history"
+
+
+def test_abort_after_completion_does_not_double_emit_run_complete() -> None:
+    """The run-completion check-emit-clear is serialized: once a path has
+    emitted run_complete and cleared the run, later paths must no-op."""
+
+    class FakeAgent:
+        def abort(self) -> None:
+            pass
+
+    bridge = _new_test_bridge()
+    bridge.agent = FakeAgent()
+    bridge.run_in_progress.set()
+
+    bridge.dispatch_command(AbortCommand())
+    first = _next_bridge_event(bridge)
+    assert first["kind"] == "run_complete"
+
+    # Second abort (or a racing turn_end that lost the check) sees the
+    # cleared flag and emits nothing.
+    bridge.dispatch_command(AbortCommand())
+    assert bridge.event_queue.empty()
+
+
+def test_fence_filter_flush_releases_trailing_partial_marker() -> None:
+    """A held-back partial fence prefix at stream end was real content —
+    flush must release it instead of truncating the reply."""
+    f = _FenceFilter()
+    assert f.feed("answer ends with ``") == "answer ends with "
+    assert f.flush() == "``"
+    assert f.carry == ""
+
+
+def test_fence_filter_flush_drops_carry_inside_fence() -> None:
+    f = _FenceFilter()
+    f.feed("`````\nhidden tool output ``")
+    assert f.flush() == ""
