@@ -195,6 +195,40 @@ fn goal_controller_deadline_fails_without_results() {
 }
 
 #[test]
+fn goal_controller_all_capped_idle_wraps_instead_of_waiting() {
+    // Every slot at its wave cap: waiting cannot produce another wake.
+    // The WaitForSignal short-circuit used to win here, idling the goal
+    // to its deadline and making the wave-cap wrap unreachable.
+    assert_eq!(
+        goal_controller_decision_after_wait(
+            GoalWorkerWaitOutcome::IdleWithoutSignal,
+            true,
+            true,
+            true,
+        ),
+        GoalControllerDecision::Wrap(GoalWrapReason::WaveCap)
+    );
+    assert_eq!(
+        goal_controller_decision_after_wait(
+            GoalWorkerWaitOutcome::IdleWithoutSignal,
+            true,
+            false,
+            true,
+        ),
+        GoalControllerDecision::Fail(GoalFailReason::NoResultByWaveCap)
+    );
+}
+
+#[test]
+fn goal_synthesis_timeout_scales_with_prompt_size() {
+    use super::controller::goal_synthesis_timeout;
+    assert_eq!(goal_synthesis_timeout(0).as_secs(), 300);
+    assert_eq!(goal_synthesis_timeout(120_000).as_secs(), 420);
+    // 300k-char anchor prompts hit the 900s ceiling.
+    assert_eq!(goal_synthesis_timeout(900_000).as_secs(), 900);
+}
+
+#[test]
 fn goal_controller_drain_cap_wraps_even_without_results() {
     assert_eq!(
         goal_controller_decision_after_wait(

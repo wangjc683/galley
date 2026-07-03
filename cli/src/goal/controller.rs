@@ -261,8 +261,10 @@ pub(crate) async fn run_goal_controller(
                     })?;
                     return Ok(());
                 }
-                GoalControllerDecision::Continue => {}
-                GoalControllerDecision::WaitForSignal => {}
+                // Unreachable by construction: budget_left is hardcoded
+                // false in this call, so goal_controller_decision only
+                // returns Wrap or Fail here.
+                GoalControllerDecision::Continue | GoalControllerDecision::WaitForSignal => {}
             }
         }
         let wave_start_activity = goal_activity_counts(&wave_start_snapshot);
@@ -1330,13 +1332,25 @@ async fn shutdown_goal_worker_runners(
     }
 }
 
+/// Synthesis wait budget scales with the dispatched prompt size: a
+/// deliverable anchor can legitimately be 300k chars, and a flat 300s
+/// cannot cover generating a final answer over it. 300s base + 1s per
+/// 1k chars, capped at 900s (the drain-cap ceiling).
+pub(crate) fn goal_synthesis_timeout(dispatch_chars: usize) -> Duration {
+    let extra_seconds = (dispatch_chars / 1_000) as u64;
+    Duration::from_secs((300 + extra_seconds).min(900))
+}
+
+/// `Ok(None)` = timed out — the master may still be generating; the
+/// caller decides what that means (it is NOT a goal failure).
 async fn wait_master_final_answer(
     galley: &SqliteGalley,
     session_id: &SessionId,
     previous_turn_count: u32,
-) -> Result<MessageBrief, GalleyError> {
+    timeout: Duration,
+) -> Result<Option<MessageBrief>, GalleyError> {
     let started = Instant::now();
-    while started.elapsed() < Duration::from_secs(300) {
+    while started.elapsed() < timeout {
         let session = galley.session_brief(session_id.clone()).await?;
         let messages = galley
             .session_messages(session_id.clone(), Some(12))
@@ -1355,14 +1369,12 @@ async fn wait_master_final_answer(
             .cloned();
         if let Some(message) = final_answer {
             if !is_live_candidate(session.status) {
-                return Ok(message);
+                return Ok(Some(message));
             }
         }
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
-    Err(GalleyError::RunnerError {
-        message: format!("master session {session_id} did not produce a final answer within 300s"),
-    })
+    Ok(None)
 }
 
 async fn finish_goal_with_master(
@@ -1418,6 +1430,7 @@ async fn finish_goal_with_master(
         .unwrap_or(0);
     let dispatch_content =
         build_goal_synthesis_prompt(galley, &snapshot, worker_session_ids).await?;
+    let synthesis_timeout = goal_synthesis_timeout(dispatch_content.chars().count());
     session_goal_synthesize_value(
         master_session_id.0.clone(),
         goal_synthesizing(goal_narration_locale()).to_string(),
@@ -1428,8 +1441,47 @@ async fn finish_goal_with_master(
             .or_else(|| Some(format!("goal {} master synthesis", goal.id))),
     )
     .await?;
-    let final_answer_message =
-        wait_master_final_answer(galley, &master_session_id, before_turn_count).await?;
+    let Some(final_answer_message) = wait_master_final_answer(
+        galley,
+        &master_session_id,
+        before_turn_count,
+        synthesis_timeout,
+    )
+    .await?
+    else {
+        // Timed out — the master may STILL be generating the answer.
+        // Failing the goal here threw away a successful run over a slow
+        // final turn (and stamped it with a stale pre-run status). Keep
+        // it Wrapping and point the user at the master session; `goal
+        // run <id> --resume` retries synthesis.
+        let summary = format!(
+            "Master synthesis exceeded {}s; check master session {} — the final answer may still arrive there. Resume with `galley goal run {} --resume`.",
+            synthesis_timeout.as_secs(),
+            master_session_id,
+            goal.id
+        );
+        let _ = galley
+            .create_goal_event(CreateGoalEventInput {
+                goal_id: goal.id.clone(),
+                task_id: None,
+                author_session_id: Some(master_session_id.clone()),
+                event_type: GoalEventType::Synthesis,
+                body: summary.clone(),
+            })
+            .await;
+        let wrapping_goal = galley
+            .update_goal_state(goal.id.clone(), GoalStatus::Wrapping, Some(summary.clone()))
+            .await?;
+        emit_json(&GoalRunFrame {
+            schema_version: SCHEMA_VERSION,
+            stream: "goal",
+            phase: "synthesis_timeout",
+            goal: &wrapping_goal,
+            session_id: Some(master_session_id.0),
+            note: Some(summary),
+        })?;
+        return Ok(());
+    };
 
     let summary = final_answer_message
         .final_answer

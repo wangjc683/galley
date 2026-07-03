@@ -34,7 +34,34 @@ use galley_core_lib::error::GalleyError;
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    // try_parse instead of parse: clap's default error path prints
+    // human-readable text to STDERR, which violates the "errors are
+    // JSON on stdout" contract above — an SOP parsing stdout saw
+    // nothing at all on a typo'd flag. Help/version keep their human
+    // output (they're requested, not errors).
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => {
+            use clap::error::ErrorKind;
+            if matches!(
+                err.kind(),
+                ErrorKind::DisplayHelp
+                    | ErrorKind::DisplayVersion
+                    | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            ) {
+                let _ = err.print();
+                return ExitCode::SUCCESS;
+            }
+            let invalid = GalleyError::InvalidArgs {
+                message: err.to_string(),
+            };
+            println!(
+                "{}",
+                serde_json::to_string(&invalid).expect("serialize GalleyError")
+            );
+            return ExitCode::from(exit_code_for(&invalid));
+        }
+    };
     // §1.2 schema pin: if the caller pinned --schema=N, verify the binary
     // speaks that schema. v0.2 only knows SCHEMA_VERSION (1); future
     // multi-schema binaries widen this check to a set.
@@ -98,7 +125,8 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             poll,
             tail,
             final_show,
-        }) => session::session_wait(id, timeout, poll, tail, final_show).await,
+            after_turn,
+        }) => session::session_wait(id, timeout, poll, tail, final_show, after_turn).await,
         Command::Session(SessionCmd::New {
             task,
             project,

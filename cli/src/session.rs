@@ -9,6 +9,7 @@ use crate::transport::{
 };
 use galley_core_lib::api::{
     GalleyApi, MessageBrief, MessageRole, SearchScope, SessionBrief, SessionFilter, SessionId,
+    SessionStatus,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
@@ -140,15 +141,31 @@ async fn session_wait_snapshot(
     Ok((session, messages))
 }
 
-fn has_agent_output(messages: &[MessageBrief]) -> bool {
+fn has_agent_output(messages: &[MessageBrief], after_turn: Option<u32>) -> bool {
     messages.iter().any(|message| {
         message.role == MessageRole::Agent
+            && after_turn.is_none_or(|threshold| {
+                message
+                    .turn_index
+                    .is_some_and(|turn_index| turn_index >= threshold)
+            })
             && (!message.content.trim().is_empty()
                 || message
                     .final_answer
                     .as_deref()
                     .is_some_and(|answer| !answer.trim().is_empty()))
     })
+}
+
+/// Terminal session states that can no longer produce new output —
+/// waiting the full deadline on them is pure burn. Returns the wait
+/// status/end reason. Additive (docs/agent-api.md §5.5d).
+fn session_wait_dead_end(status: SessionStatus) -> Option<&'static str> {
+    match status {
+        SessionStatus::Error => Some("session_error"),
+        SessionStatus::Cancelled => Some("session_cancelled"),
+        _ => None,
+    }
 }
 
 fn wait_payload(
@@ -298,24 +315,29 @@ pub(crate) async fn session_wait(
     poll: u64,
     tail: usize,
     final_show: bool,
+    after_turn: Option<u32>,
 ) -> Result<(), GalleyError> {
     let galley = SqliteGalley::open().await?;
     let (session, messages) = session_wait_snapshot(&galley, &id, tail).await?;
-    let completed = has_agent_output(&messages);
+    let completed = has_agent_output(&messages, after_turn);
+    let dead_end = (!completed)
+        .then(|| session_wait_dead_end(session.status))
+        .flatten();
     emit_json(&wait_payload("initial", None, session, Some(messages)))?;
 
-    if completed {
+    if completed || dead_end.is_some() {
+        let status = dead_end.unwrap_or("completed");
         let (session, messages) = session_wait_snapshot(&galley, &id, tail).await?;
         emit_json(&wait_payload(
             "final",
-            Some("completed"),
+            Some(status),
             session,
             final_show.then_some(messages),
         ))?;
         emit_json(&StreamEndPayload {
             schema_version: SCHEMA_VERSION,
             stream: "end",
-            reason: "completed",
+            reason: status,
         })?;
         return Ok(());
     }
@@ -344,7 +366,7 @@ pub(crate) async fn session_wait(
 
         tokio::time::sleep(poll.min(timeout.saturating_sub(elapsed))).await;
         let (session, messages) = session_wait_snapshot(&galley, &id, tail).await?;
-        if has_agent_output(&messages) {
+        if has_agent_output(&messages, after_turn) {
             emit_json(&wait_payload(
                 "final",
                 Some("completed"),
@@ -355,6 +377,23 @@ pub(crate) async fn session_wait(
                 schema_version: SCHEMA_VERSION,
                 stream: "end",
                 reason: "completed",
+            })?;
+            return Ok(());
+        }
+        // A session that died (error / cancelled) will never produce the
+        // awaited output — report the terminal state now instead of
+        // burning the remaining deadline.
+        if let Some(status) = session_wait_dead_end(session.status) {
+            emit_json(&wait_payload(
+                "final",
+                Some(status),
+                session,
+                final_show.then_some(messages),
+            ))?;
+            emit_json(&StreamEndPayload {
+                schema_version: SCHEMA_VERSION,
+                stream: "end",
+                reason: status,
             })?;
             return Ok(());
         }
@@ -572,4 +611,56 @@ pub(crate) async fn session_move(
         "schemaVersion": SCHEMA_VERSION,
     });
     unary_command(req).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn agent_message(turn_index: Option<u32>, content: &str) -> MessageBrief {
+        MessageBrief {
+            id: galley_core_lib::api::MessageId("m1".into()),
+            session_id: SessionId("s1".into()),
+            turn_index,
+            role: MessageRole::Agent,
+            content: content.into(),
+            summary: None,
+            final_answer: None,
+            created_at: "2026-07-03T00:00:00Z".into(),
+            visibility: None,
+            attachments: Vec::new(),
+            origin: None,
+        }
+    }
+
+    #[test]
+    fn wait_completion_respects_after_turn_baseline() {
+        // A previous turn's answer must not satisfy a send→wait pair
+        // that asked for output at or after a later turn.
+        let stale = vec![agent_message(Some(3), "previous answer")];
+        assert!(has_agent_output(&stale, None));
+        assert!(!has_agent_output(&stale, Some(4)));
+        let fresh = vec![
+            agent_message(Some(3), "previous answer"),
+            agent_message(Some(4), "new answer"),
+        ];
+        assert!(has_agent_output(&fresh, Some(4)));
+        // Messages without a turn index can't prove freshness.
+        assert!(!has_agent_output(&[agent_message(None, "x")], Some(1)));
+    }
+
+    #[test]
+    fn wait_dead_end_maps_terminal_states_only() {
+        assert_eq!(
+            session_wait_dead_end(SessionStatus::Error),
+            Some("session_error")
+        );
+        assert_eq!(
+            session_wait_dead_end(SessionStatus::Cancelled),
+            Some("session_cancelled")
+        );
+        assert_eq!(session_wait_dead_end(SessionStatus::Running), None);
+        assert_eq!(session_wait_dead_end(SessionStatus::Idle), None);
+        assert_eq!(session_wait_dead_end(SessionStatus::Completed), None);
+    }
 }

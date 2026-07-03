@@ -427,6 +427,11 @@ pub(crate) enum SessionCmd {
             action = clap::ArgAction::Set
         )]
         final_show: bool,
+        /// Only count agent messages with turnIndex >= N as completion.
+        /// Guards multi-turn sessions: without it, send→wait returns
+        /// immediately on the PREVIOUS turn's answer.
+        #[arg(long)]
+        after_turn: Option<u32>,
     },
     /// Create a new session with a first user message (B4 M1). Atomic:
     /// session row + first message commit together or roll back together.

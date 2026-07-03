@@ -33,7 +33,14 @@ pub(crate) fn goal_controller_decision_after_wait(
     if wait_outcome == GoalWorkerWaitOutcome::DrainCapReached {
         return GoalControllerDecision::Wrap(GoalWrapReason::DrainCap);
     }
-    if wait_outcome == GoalWorkerWaitOutcome::IdleWithoutSignal && budget_left {
+    // With every slot at its wave cap, waiting cannot produce another
+    // wake — fall through to the wave-cap wrap/fail decision instead of
+    // idling until the deadline. (The WaitForSignal short-circuit used
+    // to run first, which made the wave-cap wrap unreachable.)
+    if wait_outcome == GoalWorkerWaitOutcome::IdleWithoutSignal
+        && budget_left
+        && !all_worker_slots_capped
+    {
         return GoalControllerDecision::WaitForSignal;
     }
     goal_controller_decision(budget_left, has_synthesis_material, all_worker_slots_capped)

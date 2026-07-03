@@ -584,12 +584,23 @@ saying the delegated task failed.
 
 Completion is detected from the returned visible message tail: any
 `role:"agent"` row with non-empty `content` or `finalAnswer` counts as
-retrievable output. `--final-show=false` omits `messages` from the final
-payload while keeping the initial snapshot.
+retrievable output. **On multi-turn sessions this means a bare
+send→wait pair returns immediately on the PREVIOUS turn's answer** —
+pass `--after-turn=N` (additive) to only count agent messages with
+`turnIndex >= N`. Read the session's `turnCount` before sending to pick
+`N`. `--final-show=false` omits `messages` from the final payload while
+keeping the initial snapshot.
 
-Exit codes: `0` for `completed` and `timed_out` /
-`3 not_found` (session missing) / `4 db_unavailable` (DB missing or
-unopenable).
+Dead sessions end the wait early (additive): a session persisted in
+`error` or `cancelled` status can no longer produce the awaited output,
+so the waiter emits `status:"session_error"` / `status:"session_cancelled"`
+(same value as the `end` frame's `reason`) instead of burning the full
+deadline. Like `timed_out`, these describe the wait, not the delegated
+task's business outcome.
+
+Exit codes: `0` for `completed`, `timed_out`, `session_error`, and
+`session_cancelled` / `3 not_found` (session missing) /
+`4 db_unavailable` (DB missing or unopenable).
 
 ### 5.6 · `galley status`
 

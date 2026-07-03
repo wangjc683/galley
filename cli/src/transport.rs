@@ -2,8 +2,29 @@ use crate::common::SCHEMA_VERSION;
 use galley_core_lib::error::GalleyError;
 use galley_core_lib::socket_listener::socket_path;
 use serde_json::Value;
+use std::time::Duration;
 
 // ---- socket transport helpers (B2 M4) ----
+
+/// Bound on establishing the socket/pipe connection. A live core
+/// accepts on localhost within milliseconds; anything past this means
+/// the core is wedged, and an agent driving the CLI needs "dead", not
+/// an infinite hang with zero output.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Bound on the first response line (unary) / first frame (watch).
+/// Generous: some commands legitimately spawn a runner and wait for its
+/// ready event. After the first watch frame the stream is exempt —
+/// sessions may be quiet for arbitrarily long.
+const FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(120);
+
+fn core_unresponsive(what: &str) -> GalleyError {
+    GalleyError::DbUnavailable {
+        message: format!(
+            "Galley Core is not responding ({what} exceeded {}s)",
+            FIRST_RESPONSE_TIMEOUT.as_secs()
+        ),
+    }
+}
 
 /// One round-trip request → response over the Unix socket / Windows
 /// named pipe. Maps connect errors to `DbUnavailable` (exit 4) per the
@@ -13,8 +34,15 @@ pub(crate) async fn socket_send_recv(req: serde_json::Value) -> Result<String, G
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
     let path = socket_path();
-    let stream = UnixStream::connect(&path)
+    let stream = tokio::time::timeout(CONNECT_TIMEOUT, UnixStream::connect(&path))
         .await
+        .map_err(|_| GalleyError::DbUnavailable {
+            message: format!(
+                "Galley Core is not responding (connect to {} exceeded {}s)",
+                path.display(),
+                CONNECT_TIMEOUT.as_secs()
+            ),
+        })?
         .map_err(|e| GalleyError::DbUnavailable {
             message: format!("Galley Core not running (socket {}: {})", path.display(), e),
         })?;
@@ -39,9 +67,9 @@ pub(crate) async fn socket_send_recv(req: serde_json::Value) -> Result<String, G
             message: format!("socket flush: {e}"),
         })?;
     let mut lines = BufReader::new(read_half).lines();
-    let resp = lines
-        .next_line()
+    let resp = tokio::time::timeout(FIRST_RESPONSE_TIMEOUT, lines.next_line())
         .await
+        .map_err(|_| core_unresponsive("socket response"))?
         .map_err(|e| GalleyError::DbUnavailable {
             message: format!("socket read: {e}"),
         })?
@@ -85,9 +113,9 @@ pub(crate) async fn socket_send_recv(req: serde_json::Value) -> Result<String, G
             message: format!("pipe flush: {e}"),
         })?;
     let mut lines = BufReader::new(read_half).lines();
-    let resp = lines
-        .next_line()
+    let resp = tokio::time::timeout(FIRST_RESPONSE_TIMEOUT, lines.next_line())
         .await
+        .map_err(|_| core_unresponsive("pipe response"))?
         .map_err(|e| GalleyError::DbUnavailable {
             message: format!("pipe read: {e}"),
         })?
@@ -97,8 +125,41 @@ pub(crate) async fn socket_send_recv(req: serde_json::Value) -> Result<String, G
     Ok(resp)
 }
 
-pub(crate) type WatchLines =
+type RawWatchLines =
     tokio::io::Lines<tokio::io::BufReader<Box<dyn tokio::io::AsyncRead + Unpin + Send>>>;
+
+/// Watch subscription stream. The FIRST frame is read under
+/// [`FIRST_RESPONSE_TIMEOUT`] — a wedged core otherwise hangs the
+/// watcher forever with zero output. Later frames are exempt: a quiet
+/// session legitimately produces nothing for hours.
+pub(crate) struct WatchLines {
+    lines: RawWatchLines,
+    awaiting_first_frame: bool,
+}
+
+impl WatchLines {
+    /// Next raw line. The first line is read under
+    /// [`FIRST_RESPONSE_TIMEOUT`] (timeout surfaces as `TimedOut`);
+    /// later lines wait indefinitely — quiet sessions are legitimate.
+    pub(crate) async fn next_line(&mut self) -> std::io::Result<Option<String>> {
+        let next = if self.awaiting_first_frame {
+            match tokio::time::timeout(FIRST_RESPONSE_TIMEOUT, self.lines.next_line()).await {
+                Ok(result) => result,
+                Err(_) => Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!(
+                        "Galley Core is not responding (first watch frame exceeded {}s)",
+                        FIRST_RESPONSE_TIMEOUT.as_secs()
+                    ),
+                )),
+            }
+        } else {
+            self.lines.next_line().await
+        };
+        self.awaiting_first_frame = false;
+        next
+    }
+}
 
 #[derive(Debug)]
 pub(crate) enum WatchFrame {
@@ -121,8 +182,15 @@ pub(crate) async fn open_watch_lines(id: &str) -> Result<WatchLines, GalleyError
     ) = {
         use tokio::net::UnixStream;
         let path = socket_path();
-        let stream = UnixStream::connect(&path)
+        let stream = tokio::time::timeout(CONNECT_TIMEOUT, UnixStream::connect(&path))
             .await
+            .map_err(|_| GalleyError::DbUnavailable {
+                message: format!(
+                    "Galley Core is not responding (connect to {} exceeded {}s)",
+                    path.display(),
+                    CONNECT_TIMEOUT.as_secs()
+                ),
+            })?
             .map_err(|e| GalleyError::DbUnavailable {
                 message: format!("Galley Core not running (socket {}: {})", path.display(), e),
             })?;
@@ -169,13 +237,16 @@ pub(crate) async fn open_watch_lines(id: &str) -> Result<WatchLines, GalleyError
             message: format!("watch flush: {e}"),
         })?;
 
-    Ok(BufReader::new(read_half).lines())
+    Ok(WatchLines {
+        lines: BufReader::new(read_half).lines(),
+        awaiting_first_frame: true,
+    })
 }
 
 pub(crate) async fn read_watch_frame(
-    lines: &mut WatchLines,
+    watch: &mut WatchLines,
 ) -> Result<Option<WatchFrame>, GalleyError> {
-    let Some(line) = lines
+    let Some(line) = watch
         .next_line()
         .await
         .map_err(|e| GalleyError::DbUnavailable {
