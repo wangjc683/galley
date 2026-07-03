@@ -1456,9 +1456,11 @@ YOLO = "You Only Live Once"。
 - Links（Phosphor `ArrowSquareOut`）：GitHub / Feedback / GenericAgent 上游 / maker links
 - Footer：`由 JC Wang 开发 · MIT License`
 
-连带决策：空状态题词只在 `silent`（工作区真正为空）渲染——每次 New Chat
-都出现会墙纸化，题词的力量来自稀缺；`quiet` / `working` 绑定作为数据保留
-（EmptyState 渲染层一行门控，翻案零成本）。
+连带决策（2026-07-03 当日二审翻案）：曾把空状态题词收敛为仅 `silent`
+渲染（稀缺性论证），owner dogfood 后**完全恢复**为每次空状态按条件渲染
+——状态绑定轮换 + 每次驻留冻结本就是反墙纸机制，章节题词式的反复是正当
+形式；理论担忧让位于一个月的实际体验。§43 与版权页双住所（不同寄存器）
+接受。
 
 #### Agent
 

@@ -113,12 +113,6 @@ export function EmptyState({
   // status light (the sidebar's job) and pull attention to a line meant
   // to be quiet.
   const [frozenEpigraphCondition] = useState(() => epigraphCondition);
-  // Display gate (2026-07-03, docs/temperament.md): the epigraph only
-  // renders when the workspace is truly empty. An epigraph that greets
-  // every New Chat becomes wallpaper — its force comes from scarcity.
-  // The quiet/working bindings stay intact in lib/epigraphs.ts (data,
-  // not display); PI §43 now lives on the About colophon instead.
-  const showEpigraph = frozenEpigraphCondition === "silent";
   const composerPlaceholder = projectName
     ? copy.empty.projectPlaceholder(projectName)
     : copy.empty.globalPlaceholder;
@@ -138,9 +132,7 @@ export function EmptyState({
           conversationWidth === "wide" ? "max-w-[1200px]" : "max-w-[560px]",
         )}
       >
-        {showEpigraph && (
-          <Epigraph condition={frozenEpigraphCondition} className="mb-5" />
-        )}
+        <Epigraph condition={frozenEpigraphCondition} className="mb-5" />
 
         <Composer
           ref={composerRef}

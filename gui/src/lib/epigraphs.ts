@@ -29,12 +29,14 @@ import type { ResolvedLanguage } from "@/lib/language";
  * original on an always-on secondary line. See
  * `docs/devlog/2026-06-03-philosophical-voice-and-austerity-copy.md`.
  *
- * Display policy (2026-07-03, docs/temperament.md): EmptyState only
- * renders the epigraph for `silent` — scarcity is what lets a line
- * land as an epigraph rather than wallpaper. The `quiet` / `working`
- * bindings below remain as data (resolution stays total; reverting is
- * a one-line gate change), and PI §43 additionally serves as the About
- * colophon's quotation (SettingsAbout reads `EPIGRAPHS` directly).
+ * Display policy (2026-07-03, second pass): the epigraph renders on
+ * every empty-state entry, state-bound as designed. A silent-only
+ * scarcity gate was tried the same day and reverted after owner
+ * dogfood — the state-bound rotation plus per-sitting freeze already
+ * prevents wallpaper; chapter epigraphs are a legitimate recurring
+ * form. PI §43 additionally serves as the About colophon's quotation
+ * (SettingsAbout reads `EPIGRAPHS` directly) — two homes, two
+ * registers, accepted.
  */
 export type EpigraphCondition = "silent" | "quiet" | "working" | "fresh";
 
