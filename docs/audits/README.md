@@ -17,3 +17,4 @@ rejected-attempt captures in the repo.
 |---|---|---|
 | 2026-06-16 | [Product Design flow audit](./product-design-flow-audit-2026-06-16/README.md) | Reviewing operator flow, TopBar state visibility, Models, Browser Control privacy copy, Sidebar status scanning, Project Review, or onboarding priorities |
 | 2026-07-02 | [Codebase review](./codebase-review-2026-07-02/README.md) | Fixing correctness/robustness findings across gui/core/cli/runner; tracking fix status per finding ID; planning failure-path test coverage |
+| 2026-07-04 | [Concurrency-blocking audit](./concurrency-audit-2026-07-04/README.md) | Checking lock discipline, pipe draining, channel backpressure, DB write contention, or timeout coverage in core/cli; tracking CONC-* fix status; writing concurrency regression tests |
