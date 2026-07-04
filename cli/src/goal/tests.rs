@@ -229,6 +229,21 @@ fn goal_synthesis_timeout_scales_with_prompt_size() {
 }
 
 #[test]
+fn goal_follow_timeout_is_budget_plus_grace_with_floor() {
+    use super::controller::goal_follow_timeout;
+    use std::time::Duration;
+    // Remaining budget gets a 5-minute grace on top.
+    assert_eq!(
+        goal_follow_timeout(Duration::from_secs(1_800)).as_secs(),
+        2_100
+    );
+    // A goal already past its deadline still gets one bounded pass
+    // (grace keeps it above the 60s floor; the floor is defensive).
+    assert_eq!(goal_follow_timeout(Duration::ZERO).as_secs(), 300);
+    assert!(goal_follow_timeout(Duration::ZERO) >= Duration::from_secs(60));
+}
+
+#[test]
 fn goal_controller_drain_cap_wraps_even_without_results() {
     assert_eq!(
         goal_controller_decision_after_wait(

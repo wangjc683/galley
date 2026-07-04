@@ -380,24 +380,61 @@ pub(crate) async fn run_goal_controller(
                 .into_iter()
                 .map(|sid| sid.0),
         );
-        if let Err(err) = project_follow(
-            goal.project_id.0.clone(),
-            80,
-            false,
-            true,
-            true,
-            Some(follow_scope),
+        // The until-idle follow is the controller's only wait without its
+        // own bound: a worker stuck at status Running with a silent bridge
+        // (hung LLM call, wedged tool, stale status row) resets the quiet
+        // window forever and budget/deadline enforcement below never runs.
+        // Bound it by the remaining goal budget plus a grace margin so a
+        // healthy goal is never cut short; on timeout treat it as an idle
+        // return and let the existing budget logic take over wrap-up.
+        let follow_timeout = goal_follow_timeout(goal_budget_remaining(&goal, controller_started));
+        match tokio::time::timeout(
+            follow_timeout,
+            project_follow(
+                goal.project_id.0.clone(),
+                80,
+                false,
+                true,
+                true,
+                Some(follow_scope),
+            ),
         )
         .await
         {
-            let _ = emit_json(&GoalRunFrame {
-                schema_version: SCHEMA_VERSION,
-                stream: "goal",
-                phase: "follow_interrupted",
-                goal: &goal,
-                session_id: None,
-                note: Some(format!("project follow interrupted: {err}")),
-            });
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                let _ = emit_json(&GoalRunFrame {
+                    schema_version: SCHEMA_VERSION,
+                    stream: "goal",
+                    phase: "follow_interrupted",
+                    goal: &goal,
+                    session_id: None,
+                    note: Some(format!("project follow interrupted: {err}")),
+                });
+            }
+            Err(_) => {
+                let note = format!(
+                    "Follow phase hit its {}s bound without the goal's sessions going idle; returning control to the controller loop so budget/deadline enforcement can run.",
+                    follow_timeout.as_secs()
+                );
+                let _ = galley
+                    .create_goal_event(CreateGoalEventInput {
+                        goal_id: goal.id.clone(),
+                        task_id: None,
+                        author_session_id: None,
+                        event_type: GoalEventType::System,
+                        body: note.clone(),
+                    })
+                    .await;
+                let _ = emit_json(&GoalRunFrame {
+                    schema_version: SCHEMA_VERSION,
+                    stream: "goal",
+                    phase: "follow_timeout",
+                    goal: &goal,
+                    session_id: None,
+                    note: Some(note),
+                });
+            }
         }
         let wait_outcome = wait_goal_worker_sessions(
             galley,
@@ -1724,6 +1761,35 @@ fn push_limited(out: &mut String, text: &str, max_chars: usize) {
         out.extend(text.chars().take(remaining.saturating_sub(1)));
         out.push('…');
     }
+}
+
+/// Grace added on top of the remaining goal budget when bounding the
+/// follow phase: streaming may legitimately outlive the budget by the
+/// drain window, and cutting follow exactly at the deadline would race
+/// the deadline checkpoint.
+const GOAL_FOLLOW_TIMEOUT_GRACE: Duration = Duration::from_secs(300);
+/// Floor for the follow bound so a goal already past its deadline
+/// still gets one streaming pass instead of a zero-length timeout.
+const GOAL_FOLLOW_TIMEOUT_FLOOR: Duration = Duration::from_secs(60);
+
+/// Outer bound for the until-idle follow phase: remaining goal budget
+/// plus a grace margin, floored. This is a stuck-session backstop, not
+/// a scheduler — a healthy follow returns on its own well before this.
+pub(crate) fn goal_follow_timeout(budget_remaining: Duration) -> Duration {
+    budget_remaining
+        .saturating_add(GOAL_FOLLOW_TIMEOUT_GRACE)
+        .max(GOAL_FOLLOW_TIMEOUT_FLOOR)
+}
+
+/// Remaining goal budget as a duration (zero once spent). Mirrors
+/// `goal_budget_left`: an explicit deadline wins over the relative
+/// budget counted from controller start.
+fn goal_budget_remaining(goal: &GoalBrief, controller_started: Instant) -> Duration {
+    if let Some(deadline) = parse_goal_iso_seconds(&goal.deadline_at) {
+        return Duration::from_secs(deadline.saturating_sub(unix_now_seconds()).max(0) as u64);
+    }
+    Duration::from_secs(u64::from(goal.budget_seconds.max(60)))
+        .saturating_sub(controller_started.elapsed())
 }
 
 fn goal_budget_left(goal: &GoalBrief, controller_started: Instant) -> bool {
