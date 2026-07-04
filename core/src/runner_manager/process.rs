@@ -29,6 +29,15 @@ const BROADCAST_CAPACITY: usize = 1024;
 /// `gui/src/stores/useAppStore.ts`.
 const STDERR_TAIL_MAX: usize = 8;
 
+/// Bound on a single stdin write to the runner. The runner drains stdin on a
+/// dedicated reader thread, so a healthy child never comes close; hitting
+/// this means the child is alive but wedged with a full pipe buffer. Bounding
+/// the write keeps the per-session Mutex acquisition in
+/// `RunnerManager::send_command` finite, which in turn keeps the manager's
+/// outer map lock livelock-free (see the audit trail in
+/// docs/audits/concurrency-audit-2026-07-04/, CONC-1).
+const STDIN_WRITE_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// What gets fanned out over the broadcast channel.
 ///
 /// `Event` carries already-parsed [`IpcEvent`]s — saves every subscriber from
@@ -372,29 +381,36 @@ impl RunnerProcess {
 
     /// Send a typed [`IpcCommand`] to the subprocess's stdin. Serializes to
     /// JSON Lines (one command per `\n`-terminated line).
+    ///
+    /// The whole write is bounded by [`STDIN_WRITE_TIMEOUT`]. A healthy
+    /// runner drains stdin on a dedicated reader thread, so even multi-MB
+    /// payloads (`LoadHistory`, goal synthesis prompts) complete in well
+    /// under a second; the only way to hit the timeout is a wedged-but-alive
+    /// child with a full pipe buffer. Without the bound, that wedge would
+    /// hold this session's manager Mutex forever and pile up every later
+    /// command for the session.
     pub async fn send_command(&mut self, cmd: &IpcCommand) -> Result<(), SendCommandError> {
         let line = serde_json::to_string(cmd).map_err(|e| SendCommandError::Serialize {
             detail: e.to_string(),
         })?;
-        self.stdin
-            .write_all(line.as_bytes())
-            .await
-            .map_err(|e| SendCommandError::WriteIo {
+        let write = async {
+            self.stdin.write_all(line.as_bytes()).await?;
+            self.stdin.write_all(b"\n").await?;
+            self.stdin.flush().await?;
+            Ok::<(), std::io::Error>(())
+        };
+        match tokio::time::timeout(STDIN_WRITE_TIMEOUT, write).await {
+            Ok(result) => result.map_err(|e| SendCommandError::WriteIo {
                 detail: e.to_string(),
-            })?;
-        self.stdin
-            .write_all(b"\n")
-            .await
-            .map_err(|e| SendCommandError::WriteIo {
-                detail: e.to_string(),
-            })?;
-        self.stdin
-            .flush()
-            .await
-            .map_err(|e| SendCommandError::WriteIo {
-                detail: e.to_string(),
-            })?;
-        Ok(())
+            }),
+            Err(_) => Err(SendCommandError::WriteIo {
+                detail: format!(
+                    "stdin write timed out after {}s — runner alive but not \
+                     reading stdin (wedged process, full pipe buffer)",
+                    STDIN_WRITE_TIMEOUT.as_secs()
+                ),
+            }),
+        }
     }
 
     /// Whether the subprocess is mid-turn. Used by the LRU eviction policy

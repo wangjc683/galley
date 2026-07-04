@@ -696,3 +696,164 @@ async fn respawn_same_session_replaces_old() {
 
     mgr.shutdown_all(Duration::from_secs(2)).await;
 }
+
+/// Mock that emits `ready`, then sleeps forever WITHOUT reading stdin.
+/// Reproduces the CONC-1 trigger (concurrency audit 2026-07-04): a child
+/// that is alive but not draining stdin, so writes larger than the OS pipe
+/// buffer park forever.
+fn write_stdin_ignoring_runner(dir: &std::path::Path) {
+    let runner_dir = dir.join("runner");
+    fs::create_dir_all(&runner_dir).expect("mkdir runner");
+    fs::write(runner_dir.join("__init__.py"), "").expect("write __init__");
+    let script = r#"
+import argparse
+import json
+import os
+import sys
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ga-path", required=True)
+parser.add_argument("--session-id", required=True)
+parser.add_argument("--cwd", required=False)
+parser.add_argument("--llm-no", type=int, default=0)
+args = parser.parse_args()
+
+print(json.dumps({
+    "kind": "ready",
+    "sessionId": args.session_id,
+    "protocolVersion": "0.1",
+    "gaCommit": "mock",
+    "gaCommitDate": "2026-05-19T00:00:00+00:00",
+    "gaPath": args.ga_path,
+    "llmName": "mock-llm",
+    "cwd": args.cwd or os.getcwd(),
+    "pid": os.getpid(),
+    "availableLLMs": [],
+    "timestamp": "2026-05-19T10:00:00+00:00"
+}), flush=True)
+
+# Never read stdin; stay alive until killed.
+while True:
+    time.sleep(3600)
+"#;
+    fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
+}
+
+fn huge_user_message() -> IpcCommand {
+    // Comfortably larger than any OS pipe buffer (64KB-1MB) so the write
+    // parks on a child that never reads stdin.
+    IpcCommand::UserMessage(galley_core_lib::ipc::UserMessageCommand {
+        text: "x".repeat(4 * 1024 * 1024),
+        images: vec![],
+        visibility: None,
+        absolute_turn_index: None,
+    })
+}
+
+/// CONC-1 defect B regression: a wedged child (alive, not reading stdin)
+/// with a full pipe buffer must NOT park `send_command` forever — the
+/// stdin write is bounded by `STDIN_WRITE_TIMEOUT` (15s) and surfaces as
+/// `WriteIo`.
+#[tokio::test]
+async fn send_command_times_out_when_child_stops_reading() {
+    if mock_python_path().is_none() {
+        return;
+    }
+    let dir = TempDir::new().expect("tempdir");
+    write_stdin_ignoring_runner(dir.path());
+
+    let mgr = RunnerManager::new();
+    mgr.spawn(make_args("s_wedged", dir.path().to_path_buf()), None)
+        .await
+        .expect("spawn");
+    let mut rx = mgr.subscribe("s_wedged").await.expect("subscribe");
+    let ev = next_event(&mut rx).await.expect("ready event");
+    assert!(matches!(ev, IpcEvent::Ready(_)));
+
+    // 15s write timeout + margin. Before the fix this call never returned.
+    let result = timeout(
+        Duration::from_secs(25),
+        mgr.send_command("s_wedged", &huge_user_message()),
+    )
+    .await;
+    let inner = result.expect("send_command must return in bounded time");
+    assert!(
+        inner.is_err(),
+        "write into a non-reading child must surface an error"
+    );
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+/// CONC-1 defect A regression: while session A's per-session Mutex is held
+/// (wedged stdin write) and readers/writers are queued on it, operations on
+/// OTHER sessions must still proceed. Before the fix, `subscribe`/`pid`/
+/// `agent_running` parked on A's Mutex while holding the manager map's read
+/// guard; one queued `spawn` (write lock, write-preferring RwLock) then
+/// stalled every session's commands.
+#[tokio::test]
+async fn wedged_session_does_not_block_other_sessions() {
+    if mock_python_path().is_none() {
+        return;
+    }
+    let dir = TempDir::new().expect("tempdir");
+    write_stdin_ignoring_runner(dir.path());
+    let dir_ok = TempDir::new().expect("tempdir");
+    write_mock_runner(dir_ok.path());
+
+    let mgr = std::sync::Arc::new(RunnerManager::new());
+    mgr.spawn(make_args("s_a", dir.path().to_path_buf()), None)
+        .await
+        .expect("spawn a");
+    let mut rx_a = mgr.subscribe("s_a").await.expect("subscribe a");
+    let _ = next_event(&mut rx_a).await.expect("ready a");
+    mgr.spawn(make_args("s_b", dir_ok.path().to_path_buf()), None)
+        .await
+        .expect("spawn b");
+    let mut rx_b = mgr.subscribe("s_b").await.expect("subscribe b");
+    let _ = next_event(&mut rx_b).await.expect("ready b");
+
+    // Wedge A: this parks inside the stdin write holding A's per-session
+    // Mutex (until the 15s timeout, far longer than this test's asserts).
+    let mgr_wedge = mgr.clone();
+    tokio::spawn(async move {
+        let _ = mgr_wedge.send_command("s_a", &huge_user_message()).await;
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // Queue a reader on A's Mutex (would hold the map read guard before
+    // the fix) and a writer on the map (spawn of a third session).
+    let mgr_sub = mgr.clone();
+    tokio::spawn(async move {
+        let _ = mgr_sub.subscribe("s_a").await;
+    });
+    let mgr_spawn = mgr.clone();
+    let dir_c = dir_ok.path().to_path_buf();
+    tokio::spawn(async move {
+        let _ = mgr_spawn.spawn(make_args("s_c", dir_c), None).await;
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // The victim assertion: session B's command path must stay live.
+    let result = timeout(
+        Duration::from_secs(5),
+        mgr.send_command(
+            "s_b",
+            &IpcCommand::UserMessage(galley_core_lib::ipc::UserMessageCommand {
+                text: "still alive?".into(),
+                images: vec![],
+                visibility: None,
+                absolute_turn_index: None,
+            }),
+        ),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "session B's send_command stalled behind session A's wedge"
+    );
+    assert!(result.unwrap().is_ok(), "send to healthy session failed");
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}

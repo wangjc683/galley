@@ -146,7 +146,12 @@ impl RunnerManager {
     /// PID for a session. None if no process is registered for that id.
     pub async fn pid(&self, session_id: &str) -> Option<u32> {
         let map = self.processes.read().await;
-        let proc = map.get(session_id)?;
+        let proc = map.get(session_id)?.clone();
+        // Release the outer read lock before awaiting the per-process
+        // Mutex — same discipline as `send_command`. tokio's RwLock is
+        // write-preferring: a read guard parked on a busy session Mutex
+        // plus one queued writer would stall every other reader.
+        drop(map);
         let p = proc.lock().await;
         p.pid()
     }
@@ -156,12 +161,13 @@ impl RunnerManager {
     /// no registered process.
     pub async fn agent_running(&self, session_id: &str) -> bool {
         let map = self.processes.read().await;
-        if let Some(proc) = map.get(session_id) {
-            let p = proc.lock().await;
-            p.agent_running()
-        } else {
-            false
-        }
+        let Some(proc) = map.get(session_id).cloned() else {
+            return false;
+        };
+        // Release before the per-process Mutex — see `pid` / `send_command`.
+        drop(map);
+        let p = proc.lock().await;
+        p.agent_running()
     }
 
     /// Whether any alive runner is mid-turn. Used by desktop quit
@@ -197,7 +203,9 @@ impl RunnerManager {
     /// — once `subscribe` returns, all subsequent events go to this rx.
     pub async fn subscribe(&self, session_id: &str) -> Option<broadcast::Receiver<BroadcastItem>> {
         let map = self.processes.read().await;
-        let proc = map.get(session_id)?;
+        let proc = map.get(session_id)?.clone();
+        // Release before the per-process Mutex — see `pid` / `send_command`.
+        drop(map);
         let p = proc.lock().await;
         Some(p.broadcast_sender().subscribe())
     }
