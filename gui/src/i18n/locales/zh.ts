@@ -252,9 +252,9 @@ export const zhCopy = {
   },
   composer: {
     askAnything: "问点什么…",
-    continueConversation: "继续这个对话…",
-    replyToContinue: "回复以继续，或选择上方候选",
-    byTheWay: "用 /btw 顺便问一句，不会打断当前任务…",
+    continueConversation: "继续…",
+    replyToContinue: "回复，或选择上方候选",
+    byTheWay: "/btw 顺便问一句，不打断任务…",
     send: "发送",
     sendWithEnter: "发送 · Enter",
     stop: "停止",
@@ -364,9 +364,10 @@ export const zhCopy = {
     regionLabel: "题词",
   },
   empty: {
-    globalPlaceholder: "想让 Galley 查看和调用本地文件？直接给路径就行",
+    globalPlaceholder: "交代什么？",
     projectPlaceholder: (projectName: string) =>
       `在 ${projectName} 里交代什么？`,
+    localFileHint: "本地文件直接给路径就行",
   },
   command: {
     label: "命令面板",

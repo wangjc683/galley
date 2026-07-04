@@ -360,9 +360,10 @@ Context Window / 价格 / token estimate（V0.1 拿不到 + 信息噪音）
             └─────────────────────────────┘
 ```
 
-- Composer 居中（含 LLM 切换器，跟 in-session 对称），placeholder 是 "今天交代什么？"（commissioning 语气）。
+- Composer 居中（含 LLM 切换器，跟 in-session 对称），placeholder 是 "交代什么？"（commissioning 语气；en "What should Galley do?"）。与项目内变体 "在 {Project} 里交代什么？" 同构。2026-07-04 收口：此前实现漂移成 21 字的本地文件功能问句，按 austerity 回归纯 affordance，功能教学移交下方 hint 行。
+- **本地文件 hint 行**（仅全局空状态）：Composer 下方一行 `text-[12px] text-ink-muted` 居中，"本地文件直接给路径就行" / "Local files: just paste a path."。与项目模式的「将创建到 {Project}」行同槽同样式（互斥出现）。它是**输入能力陈述**（这个框接受什么），与下文被撤掉的 quick prompt 建议（serif 内容引导）和快捷键 chrome（操作说明）是三类东西——前者常驻合法，后两者仍然禁止。净效果：空状态文字总量比 21 字 placeholder 时代更少。
 - **题词（epigraph）浮在 Composer 正上方**：一行状态绑定的维特根斯坦句（译文跟随软件语言）+ 德文原句常驻副行（更轻一档）。`font-serif italic text-[12.5px] text-ink-muted`，视觉明显次于 Composer——读作安静题铭，不是 header / banner；入场即冻结，不随状态实时变、不轮播（live pulse 归 sidebar status spine）。状态绑定：`silent`（无 session）→ Tractatus 7「凡不可说的，应当沉默」；`quiet`（有 session 但无运行）→ PI §19；`working`（≥1 运行）→ PI §43（也是 Composer 运行态声音所依的同一命题 *meaning is use*）。策展集与逐条理由在 `gui/src/lib/epigraphs.ts` 注释 + 2026-06-03 devlog。
 - Conversation width toggle 同样影响 Empty State：compact = 560px，wide = 1200px。用户在空状态点击 toggle 必须看到变化，否则像坏了。
 - **不放 quick prompt 建议**（勿回退）：早期在 Composer 下方放过 4 条 serif italic 引导 prompt，2026-06 与题词打架——两坨安静 serif 夹住 Composer 稀释焦点，且在"沉默"题词下放"快说点什么"自拆其台——整段移除；新人能力发现留给独立的非空状态机制（详见 2026-06-03 devlog）。
 - Sidebar 正常显示 Header / Quick Actions / timeline；Project Review 通过 Quick Action 进入；没有 session 时只出现一句 muted empty hint。
-- **不放快捷键 hint 行**（曾尝试在底部加快捷键提示，但稀释了"今天交代什么？"的聚焦感；完整快捷键列表移到 Settings → Shortcuts tab）。
+- **不放快捷键 hint 行**（曾尝试在底部加快捷键提示，但稀释了 placeholder 的聚焦感；完整快捷键列表移到 Settings → Shortcuts tab）。本地文件 hint 行不属此类，见上。

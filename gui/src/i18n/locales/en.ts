@@ -266,10 +266,9 @@ export const enCopy: AppCopy = {
   },
   composer: {
     askAnything: "Ask anything...",
-    continueConversation: "Continue this conversation...",
-    replyToContinue: "Reply to continue, or choose an option above",
-    byTheWay:
-      "Use /btw to ask alongside without interrupting the current task...",
+    continueConversation: "Continue...",
+    replyToContinue: "Reply, or choose an option above",
+    byTheWay: "/btw to ask alongside without interrupting the task...",
     send: "Send",
     sendWithEnter: "Send · Enter",
     stop: "Stop",
@@ -381,9 +380,10 @@ export const enCopy: AppCopy = {
     regionLabel: "Epigraph",
   },
   empty: {
-    globalPlaceholder: "Want Galley to read and use your local files? Just paste a path.",
+    globalPlaceholder: "What should Galley do?",
     projectPlaceholder: (projectName) =>
       `What should Galley do in ${projectName}?`,
+    localFileHint: "Local files: just paste a path.",
   },
   command: {
     label: "Command palette",
