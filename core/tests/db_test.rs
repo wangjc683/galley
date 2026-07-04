@@ -592,6 +592,114 @@ async fn search_messages_fts_finds_hit() {
 }
 
 #[tokio::test]
+async fn backfill_fts_rebuilds_full_index_in_batches() {
+    let pool = fresh_pool().await;
+    seed_session(&pool, "sess_bf", "bf", "idle", "2026-07-04T00:00:00Z").await;
+
+    // Seed 2003 raw message rows (no FTS mirror) in one tx: 2000
+    // indexable user/assistant turns — enough to force multiple
+    // 500-row backfill batches — plus three rows the backfill must
+    // skip (internal visibility, tool role, blank body).
+    let mut tx = pool.begin().await.expect("begin seed tx");
+    for i in 0..2000 {
+        let id = format!("m{i:05}");
+        let (role, content, final_answer) = if i % 2 == 0 {
+            ("user", format!("user says token{i:05}"), None)
+        } else {
+            (
+                "assistant",
+                "raw <thinking> noise".to_string(),
+                Some(format!("answer token{i:05}")),
+            )
+        };
+        sqlx::query(
+            "INSERT INTO messages \
+               (id, session_id, turn_index, sequence, role, content, final_answer, created_at) \
+             VALUES (?, 'sess_bf', ?, 0, ?, ?, ?, '2026-07-04T00:00:00Z')",
+        )
+        .bind(&id)
+        .bind(i)
+        .bind(role)
+        .bind(&content)
+        .bind(&final_answer)
+        .execute(&mut *tx)
+        .await
+        .expect("seed message");
+    }
+    for (id, role, content, visibility) in [
+        ("mz-internal", "user", "internal text", "internal"),
+        ("mz-tool", "tool", "tool output", "visible"),
+        ("mz-blank", "user", "   ", "visible"),
+    ] {
+        sqlx::query(
+            "INSERT INTO messages \
+               (id, session_id, turn_index, sequence, role, content, visibility, created_at) \
+             VALUES (?, 'sess_bf', 9000, 0, ?, ?, ?, '2026-07-04T00:00:00Z')",
+        )
+        .bind(id)
+        .bind(role)
+        .bind(content)
+        .bind(visibility)
+        .execute(&mut *tx)
+        .await
+        .expect("seed skipped message");
+    }
+    tx.commit().await.expect("commit seed tx");
+
+    let galley = SqliteGalley::from_pool(pool.clone());
+
+    // FTS starts empty → full rebuild.
+    let inserted = galley.backfill_fts_if_empty().await.expect("backfill");
+    assert_eq!(inserted, 2000);
+    let fts_cnt: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages_fts")
+        .fetch_one(&pool)
+        .await
+        .expect("count fts");
+    assert_eq!(fts_cnt, 2000);
+    // Assistant rows index final_answer, never raw content.
+    let body: String =
+        sqlx::query_scalar("SELECT body FROM messages_fts WHERE message_id = 'm00001'")
+            .fetch_one(&pool)
+            .await
+            .expect("assistant body");
+    assert_eq!(body, "answer token00001");
+
+    // Converged: counts match, so a second call is a no-op.
+    assert_eq!(galley.backfill_fts_if_empty().await.expect("noop"), 0);
+
+    // Simulate a crash mid-rebuild / index corruption: wipe the index
+    // and leave one stale row for a message that no longer exists.
+    // The re-run must reconstruct everything and drop the stale row.
+    sqlx::query("DELETE FROM messages_fts")
+        .execute(&pool)
+        .await
+        .expect("truncate fts");
+    sqlx::query(
+        "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+         VALUES ('mz-stale', 'sess_bf', 'user', 0, 'stale ghost row')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed stale fts row");
+
+    assert_eq!(galley.backfill_fts_if_empty().await.expect("rebuild"), 2000);
+    let fts_cnt: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages_fts")
+        .fetch_one(&pool)
+        .await
+        .expect("count rebuilt fts");
+    assert_eq!(fts_cnt, 2000);
+
+    // A hit on the last id proves keyset pagination walked the whole
+    // keyspace, not just the first batch.
+    let hits = galley
+        .search_messages("token01999".into(), SearchScope::default(), None)
+        .await
+        .expect("search last batch");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].message_id.0, "m01999");
+}
+
+#[tokio::test]
 async fn gui_search_message_hits_runtime_filter_limits_fts_and_like() {
     let pool = fresh_pool().await;
     seed_session_with_runtime(

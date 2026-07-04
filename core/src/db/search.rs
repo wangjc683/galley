@@ -28,15 +28,25 @@ impl SqliteGalley {
     }
 
     pub async fn backfill_fts_if_empty(&self) -> Result<u32> {
-        let msg_cnt: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM messages \
-             WHERE role IN ('user','assistant') \
+        // Rows per rebuild batch. Small enough that each batch's write
+        // transaction commits in milliseconds, so concurrent writers
+        // (IM supervisor autostart, socket sessions at GUI-hydrate
+        // time) never sit on the write lock long enough to trip the
+        // 5s busy_timeout (CONC-4).
+        const BATCH_SIZE: i64 = 500;
+        // Which message rows get indexed, and what `body` is. Shared
+        // by the count probe and the batched rebuild; must stay in
+        // sync with `index_message_fts` callers.
+        const FTS_SOURCE_FILTER: &str = "role IN ('user','assistant') \
                AND visibility = 'visible' \
                AND COALESCE(NULLIF(TRIM(CASE \
                  WHEN role = 'user' THEN content \
                  WHEN role = 'assistant' THEN COALESCE(final_answer, content) \
-               END), ''), '') != ''",
-        )
+               END), ''), '') != ''";
+
+        let msg_cnt: i64 = sqlx::query_scalar(&format!(
+            "SELECT COUNT(*) FROM messages WHERE {FTS_SOURCE_FILTER}"
+        ))
         .fetch_one(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -48,35 +58,92 @@ impl SqliteGalley {
             return Ok(0);
         }
 
-        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        // Rebuild in small keyset-paginated batches, each its own
+        // short transaction, yielding the write lock between batches.
+        // The previous implementation did DELETE + INSERT..SELECT of
+        // the entire visible history in ONE transaction, holding the
+        // write lock for seconds to tens of seconds on 100k-message
+        // histories.
+        //
+        // Step 1: clear the whole index in its own short statement.
+        // A full DELETE is fast (no per-row body work to redo) and is
+        // the simplest way to guarantee exact reconstruction — no
+        // stale rows for deleted or now-hidden messages can survive.
+        // Crash safety: a crash after this point leaves
+        // fts_cnt < msg_cnt, so the next call re-triggers the rebuild
+        // and converges.
         sqlx::query("DELETE FROM messages_fts")
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+
+        // Step 2: re-insert batch by batch, walking messages.id (TEXT
+        // primary key) with keyset pagination.
+        let mut last_id = String::new();
+        let mut total: u32 = 0;
+        loop {
+            // Upper bound of the next batch, computed from the
+            // messages PK index outside the write transaction.
+            let batch_max: Option<String> = sqlx::query_scalar(&format!(
+                "SELECT MAX(id) FROM ( \
+                   SELECT id FROM messages \
+                   WHERE {FTS_SOURCE_FILTER} \
+                     AND id > ? \
+                   ORDER BY id \
+                   LIMIT ?)"
+            ))
+            .bind(&last_id)
+            .bind(BATCH_SIZE)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+            let Some(batch_max) = batch_max else { break };
+
+            let mut tx = self
+                .pool
+                .begin_with("BEGIN IMMEDIATE")
+                .await
+                .map_err(map_sqlx_err)?;
+            // Delete-then-insert keyed by the id range (instead of a
+            // bare INSERT) makes each batch idempotent and closes the
+            // race with concurrent `index_message_fts`: a message
+            // written — and live-indexed — after the full DELETE above
+            // but before its batch runs would otherwise be inserted
+            // twice. (INSERT OR REPLACE can't express this: FTS5 has
+            // no UNIQUE constraint on message_id, so OR REPLACE would
+            // degrade to a plain INSERT.)
+            sqlx::query("DELETE FROM messages_fts WHERE message_id > ? AND message_id <= ?")
+                .bind(&last_id)
+                .bind(&batch_max)
+                .execute(&mut *tx)
+                .await
+                .map_err(map_sqlx_err)?;
+            let res = sqlx::query(&format!(
+                "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+                 SELECT \
+                   id, \
+                   session_id, \
+                   role, \
+                   turn_index, \
+                   CASE \
+                     WHEN role = 'user' THEN content \
+                     WHEN role = 'assistant' THEN COALESCE(final_answer, content) \
+                   END AS body \
+                 FROM messages \
+                 WHERE {FTS_SOURCE_FILTER} \
+                   AND id > ? AND id <= ?"
+            ))
+            .bind(&last_id)
+            .bind(&batch_max)
             .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
-        let res = sqlx::query(
-            "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
-             SELECT \
-               id, \
-               session_id, \
-               role, \
-               turn_index, \
-               CASE \
-                 WHEN role = 'user' THEN content \
-                 WHEN role = 'assistant' THEN COALESCE(final_answer, content) \
-               END AS body \
-             FROM messages \
-             WHERE role IN ('user','assistant') \
-               AND visibility = 'visible' \
-               AND COALESCE(NULLIF(TRIM(CASE \
-                 WHEN role = 'user' THEN content \
-                 WHEN role = 'assistant' THEN COALESCE(final_answer, content) \
-               END), ''), '') != ''",
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(map_sqlx_err)?;
-        tx.commit().await.map_err(map_sqlx_err)?;
-        Ok(res.rows_affected() as u32)
+            tx.commit().await.map_err(map_sqlx_err)?;
+
+            total += res.rows_affected() as u32;
+            last_id = batch_max;
+        }
+        Ok(total)
     }
 
     pub async fn search_message_hits(
