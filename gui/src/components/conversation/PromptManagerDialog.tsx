@@ -403,7 +403,10 @@ function PromptCard({
       ref={ref}
       onClick={onUse}
       className={cn(
-        "group/card relative flex min-h-[146px] cursor-pointer flex-col rounded-md border border-line bg-surface p-3 pb-9 text-left",
+        // Height hugs content: preset cards (title + one-line description)
+        // sit compact; custom cards (four-line body preview) stay taller.
+        // pb-10 reserves the hover action row so it never overlaps text.
+        "group/card relative flex cursor-pointer flex-col rounded-md border border-line bg-surface p-3 pb-10 text-left",
         "transition-[background-color,border-color,box-shadow,transform] duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)]",
         "hover:-translate-y-px hover:border-brand/35 hover:bg-elevated hover:shadow-[var(--shadow-neutral-control-hover)]",
         "active:translate-y-[1px] active:scale-[0.995]",
@@ -427,8 +430,13 @@ function PromptCard({
         </p>
       )}
       <div
+        // The cluster swallows clicks in its whole area (not just on the
+        // buttons) so a near-miss in this corner never falls through to the
+        // card's "use prompt" onClick. Combined with the larger hit targets
+        // below, this stops the mis-tap that used to prefill the composer.
+        onClick={(event) => event.stopPropagation()}
         className={cn(
-          "pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 opacity-0",
+          "pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md p-0.5 opacity-0",
           "transition-opacity duration-120 group-hover/card:pointer-events-auto group-hover/card:opacity-100",
         )}
       >
@@ -436,14 +444,14 @@ function PromptCard({
           ariaLabel={promptCopy.previewPrompt}
           onClick={(event) => handleAction(event, onPreview)}
         >
-          <Eye size={12} weight="thin" />
+          <Eye size={15} weight="thin" />
         </PromptCardIconButton>
         {onCopyAsCustom && (
           <PromptCardIconButton
             ariaLabel={promptCopy.copyAsCustom}
             onClick={(event) => handleAction(event, onCopyAsCustom)}
           >
-            <Copy size={12} weight="thin" />
+            <Copy size={15} weight="thin" />
           </PromptCardIconButton>
         )}
         {onEdit && (
@@ -451,7 +459,7 @@ function PromptCard({
             ariaLabel={promptCopy.editPrompt}
             onClick={(event) => handleAction(event, onEdit)}
           >
-            <PencilSimple size={12} weight="thin" />
+            <PencilSimple size={15} weight="thin" />
           </PromptCardIconButton>
         )}
         {onMoveUp && (
@@ -460,7 +468,7 @@ function PromptCard({
             disabled={moveUpDisabled}
             onClick={(event) => handleAction(event, onMoveUp)}
           >
-            <ArrowUp size={12} weight="thin" />
+            <ArrowUp size={15} weight="thin" />
           </PromptCardIconButton>
         )}
         {onMoveDown && (
@@ -469,7 +477,7 @@ function PromptCard({
             disabled={moveDownDisabled}
             onClick={(event) => handleAction(event, onMoveDown)}
           >
-            <ArrowDown size={12} weight="thin" />
+            <ArrowDown size={15} weight="thin" />
           </PromptCardIconButton>
         )}
         {onDelete && (
@@ -478,7 +486,7 @@ function PromptCard({
             variant="danger"
             onClick={(event) => handleAction(event, onDelete)}
           >
-            <Trash size={12} weight="thin" />
+            <Trash size={15} weight="thin" />
           </PromptCardIconButton>
         )}
       </div>
@@ -589,13 +597,13 @@ function PromptCardIconButton({
     <IconButton
       ariaLabel={ariaLabel}
       tooltip={ariaLabel}
-      size="xs"
+      size="sm"
       variant={variant}
       active={active}
       disabled={disabled}
       onClick={onClick}
       tabIndex={-1}
-      className="bg-elevated/95"
+      className="bg-elevated/95 shadow-[var(--shadow-neutral-control-hover)]"
     >
       {children}
     </IconButton>
