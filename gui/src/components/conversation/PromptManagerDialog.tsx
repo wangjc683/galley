@@ -405,15 +405,18 @@ function PromptCard({
       className={cn(
         // Height hugs content: preset cards (title + one-line description)
         // sit compact; custom cards (four-line body preview) stay taller.
-        // pb-10 reserves the hover action row so it never overlaps text.
-        "group/card relative flex cursor-pointer flex-col rounded-md border border-line bg-surface p-3 pb-10 text-left",
+        // Hover actions live top-right (see below), so no bottom band is
+        // reserved — the card ends right after its text.
+        "group/card relative flex cursor-pointer flex-col rounded-md border border-line bg-surface p-3 text-left",
         "transition-[background-color,border-color,box-shadow,transform] duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)]",
         "hover:-translate-y-px hover:border-brand/35 hover:bg-elevated hover:shadow-[var(--shadow-neutral-control-hover)]",
         "active:translate-y-[1px] active:scale-[0.995]",
         highlighted && "border-brand/55 ring-2 ring-brand/40",
       )}
     >
-      <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
+      {/* Reserve room at the title's right end so a long title's ellipsis
+          clears the top-right action cluster when it's revealed on hover. */}
+      <span className="min-w-0 truncate pr-1 text-[13px] font-semibold text-ink group-hover/card:pr-16">
         {prompt.title}
       </span>
       {/* Presets lead with their user-facing description (the "capability
@@ -430,13 +433,14 @@ function PromptCard({
         </p>
       )}
       <div
-        // The cluster swallows clicks in its whole area (not just on the
-        // buttons) so a near-miss in this corner never falls through to the
-        // card's "use prompt" onClick. Combined with the larger hit targets
-        // below, this stops the mis-tap that used to prefill the composer.
+        // Top-right so no bottom band has to be reserved (that band read as
+        // wasted space on the compact preset cards). The cluster swallows
+        // clicks across its whole area — not just on the buttons — so a
+        // near-miss in this corner never falls through to the card's "use
+        // prompt" onClick.
         onClick={(event) => event.stopPropagation()}
         className={cn(
-          "pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md p-0.5 opacity-0",
+          "pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-md p-0.5 opacity-0",
           "transition-opacity duration-120 group-hover/card:pointer-events-auto group-hover/card:opacity-100",
         )}
       >
@@ -444,14 +448,14 @@ function PromptCard({
           ariaLabel={promptCopy.previewPrompt}
           onClick={(event) => handleAction(event, onPreview)}
         >
-          <Eye size={15} weight="thin" />
+          <Eye size={14} weight="thin" />
         </PromptCardIconButton>
         {onCopyAsCustom && (
           <PromptCardIconButton
             ariaLabel={promptCopy.copyAsCustom}
             onClick={(event) => handleAction(event, onCopyAsCustom)}
           >
-            <Copy size={15} weight="thin" />
+            <Copy size={14} weight="thin" />
           </PromptCardIconButton>
         )}
         {onEdit && (
@@ -459,7 +463,7 @@ function PromptCard({
             ariaLabel={promptCopy.editPrompt}
             onClick={(event) => handleAction(event, onEdit)}
           >
-            <PencilSimple size={15} weight="thin" />
+            <PencilSimple size={14} weight="thin" />
           </PromptCardIconButton>
         )}
         {onMoveUp && (
@@ -468,7 +472,7 @@ function PromptCard({
             disabled={moveUpDisabled}
             onClick={(event) => handleAction(event, onMoveUp)}
           >
-            <ArrowUp size={15} weight="thin" />
+            <ArrowUp size={14} weight="thin" />
           </PromptCardIconButton>
         )}
         {onMoveDown && (
@@ -477,7 +481,7 @@ function PromptCard({
             disabled={moveDownDisabled}
             onClick={(event) => handleAction(event, onMoveDown)}
           >
-            <ArrowDown size={15} weight="thin" />
+            <ArrowDown size={14} weight="thin" />
           </PromptCardIconButton>
         )}
         {onDelete && (
@@ -486,7 +490,7 @@ function PromptCard({
             variant="danger"
             onClick={(event) => handleAction(event, onDelete)}
           >
-            <Trash size={15} weight="thin" />
+            <Trash size={14} weight="thin" />
           </PromptCardIconButton>
         )}
       </div>
@@ -603,7 +607,9 @@ function PromptCardIconButton({
       disabled={disabled}
       onClick={onClick}
       tabIndex={-1}
-      className="bg-elevated/95 shadow-[var(--shadow-neutral-control-hover)]"
+      // 24px target: between the too-small 20px (xs, easy to miss) and the
+      // clunky 28px (sm). Overrides the sm sizing with an explicit size-6.
+      className="size-6 bg-elevated/95 shadow-[var(--shadow-neutral-control-hover)]"
     >
       {children}
     </IconButton>
