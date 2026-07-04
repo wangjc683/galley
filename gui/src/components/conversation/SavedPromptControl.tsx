@@ -167,49 +167,31 @@ function ReplaceDraftDialog({
 function usePromptPresets(): PromptPreset[] {
   const copy = useCopy();
   const presets = copy.composer.savedPrompts.presets;
+  // Order is deliberate: the three differentiated-capability presets
+  // (local files, web browser, multi-source research) sit at positions
+  // 3 / 5 / 7 so they're woven through the grid rather than buried at the
+  // end — the library doubles as capability discovery. See design/
+  // conversation.md.
   return useMemo(
-    () => [
-      {
-        id: PROMPT_PRESET_IDS.informationCheck,
-        title: presets.informationCheck.title,
-        body: presets.informationCheck.body,
-      },
-      {
-        id: PROMPT_PRESET_IDS.summarizeMaterial,
-        title: presets.summarizeMaterial.title,
-        body: presets.summarizeMaterial.body,
-      },
-      {
-        id: PROMPT_PRESET_IDS.translatePolish,
-        title: presets.translatePolish.title,
-        body: presets.translatePolish.body,
-      },
-      {
-        id: PROMPT_PRESET_IDS.reviewDraft,
-        title: presets.reviewDraft.title,
-        body: presets.reviewDraft.body,
-      },
-      {
-        id: PROMPT_PRESET_IDS.webExtraction,
-        title: presets.webExtraction.title,
-        body: presets.webExtraction.body,
-      },
-      {
-        id: PROMPT_PRESET_IDS.tableCleanup,
-        title: presets.tableCleanup.title,
-        body: presets.tableCleanup.body,
-      },
-      {
-        id: PROMPT_PRESET_IDS.localFiles,
-        title: presets.localFiles.title,
-        body: presets.localFiles.body,
-      },
-      {
-        id: PROMPT_PRESET_IDS.preflightChecklist,
-        title: presets.preflightChecklist.title,
-        body: presets.preflightChecklist.body,
-      },
-    ],
+    () =>
+      (
+        [
+          "summarizeMaterial",
+          "informationCheck",
+          "localFiles",
+          "translatePolish",
+          "webExtraction",
+          "reviewDraft",
+          "multiSourceResearch",
+          "tableCleanup",
+          "preflightChecklist",
+        ] as const
+      ).map((key) => ({
+        id: PROMPT_PRESET_IDS[key],
+        title: presets[key].title,
+        description: presets[key].description,
+        body: presets[key].body,
+      })),
     [presets],
   );
 }

@@ -7,10 +7,35 @@ import {
   defaultSavedPromptsPrefs,
   moveCustomPrompt,
   normalizeSavedPromptsPrefs,
+  resolveSavedPrompts,
   updateCustomPrompt,
 } from "@/lib/saved-prompts";
 
 describe("saved prompt helpers", () => {
+  it("carries preset descriptions through resolve, leaves custom without one", () => {
+    const resolved = resolveSavedPrompts(
+      [{ id: "preset:p", title: "P", description: "does a thing", body: "B" }],
+      {
+        schemaVersion: 2,
+        customPrompts: [
+          {
+            id: "custom:c",
+            title: "C",
+            body: "CB",
+            createdAt: new Date(0).toISOString(),
+            updatedAt: new Date(0).toISOString(),
+          },
+        ],
+      },
+    );
+    const preset = resolved.find((p) => p.kind === "preset");
+    const custom = resolved.find((p) => p.kind === "custom");
+    expect(preset?.description).toBe("does a thing");
+    // Custom prompts never carry a description — the card falls back to a
+    // body preview for them.
+    expect(custom?.description).toBeUndefined();
+  });
+
   it("resets legacy or corrupt prefs to the v2 default", () => {
     // Legacy v1 prefs (with pinnedIds) and any unknown schema fall back to a
     // clean v2 default — no migration, since the pinned feature was removed

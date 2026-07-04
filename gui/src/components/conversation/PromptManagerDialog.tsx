@@ -413,9 +413,19 @@ function PromptCard({
       <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
         {prompt.title}
       </span>
-      <p className="mt-2 line-clamp-4 text-[12px] leading-[1.45] text-ink-soft">
-        {prompt.body}
-      </p>
+      {/* Presets lead with their user-facing description (the "capability
+          menu" line); the full prompt lives on the preview page. Custom
+          prompts have no description, so they fall back to a body preview
+          the way they always did. */}
+      {prompt.description ? (
+        <p className="mt-2 line-clamp-3 text-[12px] leading-[1.5] text-ink-soft">
+          {prompt.description}
+        </p>
+      ) : (
+        <p className="mt-2 line-clamp-4 text-[12px] leading-[1.45] text-ink-soft">
+          {prompt.body}
+        </p>
+      )}
       <div
         className={cn(
           "pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 opacity-0",
@@ -511,6 +521,11 @@ function PromptPreview({
 
       <div className="mt-4">
         <h3 className="text-[17px] font-semibold text-ink">{prompt.title}</h3>
+        {prompt.description && (
+          <p className="mt-1.5 text-[13px] leading-[1.5] text-ink-soft">
+            {prompt.description}
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <PromptMetaChip>{kindLabel}</PromptMetaChip>
         </div>

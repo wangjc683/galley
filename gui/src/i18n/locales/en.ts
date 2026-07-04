@@ -341,36 +341,49 @@ export const enCopy: AppCopy = {
       savePrompt: "Save",
       createPrompt: "Create",
       presets: {
-        informationCheck: {
-          title: "Check information",
-          body: "Verify the question below. Prefer primary sources and reliable references; cross-check multiple sources when needed. End with: conclusion, evidence, disagreements or uncertainty, and sources:\n\n[Write the question to verify]",
-        },
         summarizeMaterial: {
           title: "Summarize material",
+          description: "Distill long material into a structured summary",
           body: "Turn the material below into a structured summary. Preserve key facts, conclusions, follow-ups, and questions to ask next; do not over-rewrite the original meaning:\n\n[Paste material or a file path]",
+        },
+        informationCheck: {
+          title: "Check facts",
+          description: "Verify a claim, with conclusion and evidence",
+          body: "Verify the question below. Prefer primary sources and reliable references; cross-check multiple sources when needed. End with: conclusion, evidence, disagreements or uncertainty, and sources:\n\n[Write the question to verify]",
+        },
+        localFiles: {
+          title: "Organize local files",
+          description: "Read a folder on your computer, plan before acting",
+          body: "Look through the folder below, read what's in it, and find what's most worth organizing. Give the plan first — how you'd group things, which files would move or change — and wait for my confirmation before actually doing it:\n\n[Paste a folder path]",
         },
         translatePolish: {
           title: "Translate or polish",
+          description: "Translate or polish, keeping meaning and tone",
           body: "Translate or polish the content below while preserving the meaning, tone, and structure. Give the revised version first, then list the key adjustments you made:\n\n[Paste content, and specify target language or style]",
+        },
+        webExtraction: {
+          title: "Pull from a web page",
+          description: "Drive a real browser through pages, incl. logged-in ones",
+          body: "Open the page below in the browser and read out the information I need into a structured result. When you need to paginate, click into detail pages, or read content only visible after login, say how you'll do it first; do not submit, publish, purchase, or delete anything:\n\n[Write the URL, and what to extract]",
         },
         reviewDraft: {
           title: "Review draft",
+          description: "Surface a draft's problems, with fixes",
           body: "Review the draft below. Prioritize factual errors, logic gaps, unclear wording, risks, and direct improvements. Lead with high-priority issues, then suggested changes:\n\n[Paste content or a file path]",
         },
-        webExtraction: {
-          title: "Extract web content",
-          body: "Use browser control to inspect the current page or a page I provide, then extract the information I need into a structured result. If you need to paginate, open detail pages, or read logged-in content, state the plan first; do not submit, publish, purchase, or delete anything:\n\n[Write the page, page area, or information to extract]",
+        multiSourceResearch: {
+          title: "Research and compare",
+          description: "Check several sources, cross-check, compare",
+          body: "Research the topic below. Check several sources, cross-check where they disagree, and lay it out as a comparison table with the conclusion, the disagreements, and what's still uncertain marked. List the sources you used:\n\n[Write the topic to research, or the things to compare]",
         },
         tableCleanup: {
           title: "Organize table",
+          description: "Clean table data, flag anomalies and duplicates",
           body: "Organize the table, CSV, list, or file below. Identify field meanings, anomalies, duplicates, and useful grouping dimensions. End with a cleaned structure and recommended next steps:\n\n[Paste data or a file path]",
-        },
-        localFiles: {
-          title: "Organize files",
-          body: "Inspect the folder or files below and identify what is most worth organizing. Give the plan first, including which files would be affected; wait for confirmation before changing anything:\n\n[Paste a path or note]",
         },
         preflightChecklist: {
           title: "Preflight checklist",
+          description: "List risks and gaps before you act",
           body: "Before I do the task below, run a check. List risks, omissions, prerequisites, irreversible actions, and questions I should confirm. Do not execute it for me; only give the checklist:\n\n[Write what you are about to do]",
         },
       },

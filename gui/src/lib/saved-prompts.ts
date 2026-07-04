@@ -7,19 +7,27 @@ export const SAVED_PROMPTS_SCHEMA_VERSION = 2;
 // for product consistency — a preset users recognize shouldn't silently
 // vanish or swap meaning across versions.
 export const PROMPT_PRESET_IDS = {
-  informationCheck: "preset:information-check",
   summarizeMaterial: "preset:summarize-material",
-  translatePolish: "preset:translate-polish",
-  reviewDraft: "preset:review-draft",
-  webExtraction: "preset:web-extraction",
-  tableCleanup: "preset:table-cleanup",
+  informationCheck: "preset:information-check",
   localFiles: "preset:local-files",
+  translatePolish: "preset:translate-polish",
+  webExtraction: "preset:web-extraction",
+  reviewDraft: "preset:review-draft",
+  multiSourceResearch: "preset:multi-source-research",
+  tableCleanup: "preset:table-cleanup",
   preflightChecklist: "preset:preflight-checklist",
 } as const;
 
 export interface PromptPreset {
   id: string;
   title: string;
+  /**
+   * One-line, user-facing statement of what Galley does with this prompt —
+   * the "capability menu" line on the card. Presets carry it (localized in
+   * i18n); custom prompts don't (users authored the body, so the card falls
+   * back to a body preview). Optional so custom prompts type-check without it.
+   */
+  description?: string;
   body: string;
 }
 
@@ -35,6 +43,8 @@ export interface ResolvedSavedPrompt {
   id: string;
   kind: "preset" | "custom";
   title: string;
+  /** Present for presets only (see [`PromptPreset.description`]). */
+  description?: string;
   body: string;
 }
 
@@ -82,6 +92,8 @@ export function resolveSavedPrompts(
       kind: "custom" as const,
     })),
   ];
+  // Note: custom prompts intentionally carry no `description` — the card
+  // falls back to a body preview for them.
 }
 
 export function createCustomPrompt(
