@@ -416,7 +416,7 @@ function PromptCard({
     >
       {/* Reserve room at the title's right end so a long title's ellipsis
           clears the top-right action cluster when it's revealed on hover. */}
-      <span className="min-w-0 truncate pr-1 text-[13px] font-semibold text-ink group-hover/card:pr-16">
+      <span className="min-w-0 truncate pr-1 text-[14px] font-semibold text-ink group-hover/card:pr-16">
         {prompt.title}
       </span>
       {/* Presets lead with their user-facing description (the "capability
