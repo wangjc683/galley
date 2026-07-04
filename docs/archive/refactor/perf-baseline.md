@@ -192,7 +192,7 @@ done
 | 单 bridge 冷启动 | **430.86 ms** |
 | 3 bridges 并发冷启动 | **340.98 ms** (per ready, 共享 Python page cache) |
 
-Rust subprocess 路径在 B2 跟 prototype 是 **same machinery**（`BridgeProcess` 升级成 `RunnerManager` 的核心 spawn / broadcast 不变 —— [B2 完成 devlog](../devlog/2026-05-19-b2-bridge-ownership-complete.md) §M1 明示）。**因此 B2 baseline = prototype baseline**，不需要新跑除非有理由怀疑 regression。
+Rust subprocess 路径在 B2 跟 prototype 是 **same machinery**（`BridgeProcess` 升级成 `RunnerManager` 的核心 spawn / broadcast 不变 —— [B2 完成 devlog](../../devlog/2026-05-19-b2-bridge-ownership-complete.md) §M1 明示）。**因此 B2 baseline = prototype baseline**，不需要新跑除非有理由怀疑 regression。
 
 **B3 sanity check**：B3 完全不动 Rust subprocess 代码（[B3-I4](./B3-store-slice.md#phase-invariants--b3-特有的硬规则)）。spawn latency 不该变。如 dogfood 撞到「新对话首次响应明显变慢」 = 回查（很可能是 React 渲染 blocking spawn 等待，跟 Rust 无关）。
 

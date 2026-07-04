@@ -2,7 +2,7 @@
 
 > Date: 2026-05-11
 > Status: in progress — Task 2 (Multi-session) 核心架构完成（6 个 commit）；Task 2 polish + Task 2.5 LRU 5 + Task 3 Session Restore 待做
-> Related: [PRD §6.1 七件事](../PRD.md) · 上一篇 [2026-05-09 Stage 3 #1 端到端真跑](./2026-05-09-stage3-end-to-end-and-ux-polish.md) · 论文 [GenericAgent2604.17091v1.pdf](../GenericAgent2604.17091v1.pdf) · 教程 [hello-generic-agent.pdf](../hello-generic-agent.pdf) · 调研对象 [dhdbv-cbs/genericagent-launcher](https://github.com/dhdbv-cbs/genericagent-launcher)
+> Related: [PRD §6.1 七件事](../PRD.md) · 上一篇 [2026-05-09 Stage 3 #1 端到端真跑](./2026-05-09-stage3-end-to-end-and-ux-polish.md) · 论文 `GenericAgent2604.17091v1.pdf` · 教程 `hello-generic-agent.pdf`（两份 PDF 于 2026-05-20 仓库清理时移出 repo，现存 `~/Documents/galley-refs/`） · 调研对象 [dhdbv-cbs/genericagent-launcher](https://github.com/dhdbv-cbs/genericagent-launcher)
 
 ## Context
 

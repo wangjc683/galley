@@ -5,7 +5,7 @@
 
 This document tracks the current working state of Galley. Long historical
 decision trails live in [devlog](./devlog/README.md); implementation playbooks
-live in [refactor](./refactor/README.md).
+live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
@@ -61,7 +61,7 @@ Post-release follow-up:
 | CLI / Agent API | Feature-complete for v0.2; schema frozen | [agent-api](./agent-api.md) |
 | Agent surface | Settings -> Agent, copy-first SOP, Claude Skill | [Supervisor SOP](./integrations/galley-supervisor-sop.md) |
 | Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; audited upstream `b1e173dc` baseline shipped in v0.2.16; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime.md) |
-| Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./refactor/B4-M8-sub-plan.md) |
+| Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Release path | v0.2.16 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
@@ -82,7 +82,7 @@ Post-release follow-up:
 
 Detailed phase narratives are intentionally not duplicated here. Use:
 
-- [refactor README](./refactor/README.md) for B-phase execution state
+- [refactor README](./archive/refactor/README.md) for B-phase execution state
 - [devlog README](./devlog/README.md) for chronological decision history
 - [PRD](./PRD.md) for product intent and roadmap
 

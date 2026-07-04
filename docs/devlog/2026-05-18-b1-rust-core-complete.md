@@ -4,8 +4,8 @@
 - **Status**: ✅ Complete — single session executing all seven milestones M1-M7
 - **Related**:
   - PRD §10 "Galley Core 权威层" (architecture origin)
-  - [B1 playbook](../refactor/B1-rust-core.md) (full cursor history + running notes N1-N29)
-  - [Refactor invariants](../refactor/invariants.md)
+  - [B1 playbook](../archive/refactor/B1-rust-core.md) (full cursor history + running notes N1-N29)
+  - [Refactor invariants](../archive/refactor/invariants.md)
   - [agent-api.md draft](../agent-api.md) (M5 ship)
   - [Prototype GO devlog (2026-05-18)](./2026-05-18-prototype-go-for-b1.md) (immediate predecessor)
   - Commits: `4ee23e3` (M1) · `d79558a` (M2) · `ff878b1` (Check workflow fix) · `9f6b369` (M3) · `e3f11a1` (M4) · `3e29dbc` (M5) · `80feb4c` (M6)
@@ -71,7 +71,7 @@ End state: GUI reads sessions through Rust core (one call site); CLI binary work
 
 1. **Push M5 + M6 + their CI verification.** Currently local-only; will verify CI Check workflow stays green after the M5 doc-only commit + M6 GUI migration.
 2. **Update `/CLAUDE.md` 阶段表** — Stage 6 (B1) goes ✅; cursor advances to Stage 7 (B2).
-3. **Update `docs/refactor/README.md` progress dashboard** — B1 ✅, B2 next.
+3. **Update `docs/archive/refactor/README.md` progress dashboard** — B1 ✅, B2 next.
 
 **B2 startup** (next dedicated session):
 

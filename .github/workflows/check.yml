@@ -5,8 +5,8 @@ name: Check
 # artifacts, so it stays much faster than the release workflow.
 #
 # Gates: actionlint, pnpm typecheck, pnpm lint, pnpm test, IPC protocol
-# drift check, supervisor SOP copy drift check, managed GA payload check,
-# cargo check, and cargo test.
+# drift check, supervisor SOP copy drift check, docs link check, managed GA
+# payload check, cargo check, and cargo test.
 # Target jobs run in parallel;
 # fail-fast: false so every platform reports independently and we get
 # a complete picture.
@@ -86,6 +86,9 @@ jobs:
 
       - name: Supervisor SOP copy drift gate
         run: node scripts/check-supervisor-sop-drift.mjs
+
+      - name: Docs link gate
+        run: node scripts/check-docs-links.mjs
 
       - name: Version consistency gate
         run: node scripts/check-version-consistency.mjs

@@ -4,7 +4,7 @@
 
 - Date: 2026-06-23
 - Status: shipped on `main` (not yet in a release tag)
-- Related: [large component split guardrails](../refactor/large-component-split-2026-06.md), [composer image-intake split](2026-06-22-composer-image-split.md)
+- Related: [large component split guardrails](../archive/refactor/large-component-split-2026-06.md), [composer image-intake split](2026-06-22-composer-image-split.md)
 
 ## Context
 

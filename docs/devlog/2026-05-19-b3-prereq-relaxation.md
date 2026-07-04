@@ -3,10 +3,10 @@
 - **Date**: 2026-05-19
 - **Status**: ✅ Playbook + cursor + devlog amended (this commit)
 - **Related**:
-  - [B3 playbook Prerequisites](../refactor/B3-store-slice.md#prerequisites--必须先完成)（被改）
+  - [B3 playbook Prerequisites](../archive/refactor/B3-store-slice.md#prerequisites--必须先完成)（被改）
   - [B2 完成 devlog](./2026-05-19-b2-bridge-ownership-complete.md) — 自己说过 "the dogfood period is an empirical confidence-building step, not a gating contract"
   - [CLAUDE.md "事件驱动，非日历驱动"](../../CLAUDE.md) — GA Baseline Upgrade Workflow §触发时机 已 codified 的同一原则
-  - [refactor/invariants.md §I7 性能 gate](../refactor/invariants.md#i7-性能-gate)
+  - [refactor/invariants.md §I7 性能 gate](../archive/refactor/invariants.md#i7-性能-gate)
 
 ## Context
 

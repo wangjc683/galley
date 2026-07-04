@@ -4,7 +4,7 @@
 - **Status**: ✅ Code-complete — M1-M7 all milestones shipped in one session; **dogfood 1-week stability period deferred to next session** (per JC decision "暂时跳过 dogfood，下个 session 继续")
 - **Related**:
   - PRD §10 "Galley Core 权威层" / §15 supervisor 行动日志
-  - [B2 playbook](../refactor/B2-bridge-ownership.md) (running notes N1-N46 capture all mid-stream decisions)
+  - [B2 playbook](../archive/refactor/B2-bridge-ownership.md) (running notes N1-N46 capture all mid-stream decisions)
   - [B1 completion devlog](./2026-05-18-b1-rust-core-complete.md) (immediate predecessor — B1 → B2 → B3 → B4 → v0.5)
   - [agent-api.md](../agent-api.md) (public contract — M6 update)
   - [ipc-protocol.md](../ipc-protocol.md) (§2 Transports rewritten in M3)

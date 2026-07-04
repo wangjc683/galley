@@ -5,8 +5,8 @@
 **Related**:
 - [experiments/bridge-owner/README.md](../../desktop/src-tauri/experiments/bridge-owner/README.md) 完整 checklist + cursor + running notes
 - [experiments/bridge-owner/results.md](../../desktop/src-tauri/experiments/bridge-owner/results.md) 完整数据 + 最终 go/no-go
-- [docs/refactor/README.md](../refactor/README.md) phase dashboard 更新
-- [docs/refactor/B1-rust-core.md](../refactor/B1-rust-core.md) next phase playbook
+- [docs/archive/refactor/README.md](../archive/refactor/README.md) phase dashboard 更新
+- [docs/archive/refactor/B1-rust-core.md](../archive/refactor/B1-rust-core.md) next phase playbook
 - [2026-05-15 vision pivot devlog](./2026-05-15-vision-pivot-to-orchestrator.md) §D13 — prototype spec 由来
 - Commits: [8d4769c](../../) scaffold · [c22e6c1](../../) L5+C+S+X · [79e1f0a](../../) P1-P3+verdict · [8fb66ba](../../) 300s plateau
 
@@ -78,7 +78,7 @@ L5 通过的前提是 Rust panic 走 unwind 路径，触发 Drop，Drop 触发 `
 
 但如果哪天有人为减小 binary size 加 `[profile.release] panic = "abort"`，主线程任何 panic 都不走 Drop，所有 alive bridges 全 orphan。L5 会 fail。
 
-**已加进 [docs/refactor/invariants.md](../refactor/invariants.md) 作 I11**。B1 启动后第一个 commit 顺手补的话最稳。
+**已加进 [docs/archive/refactor/invariants.md](../archive/refactor/invariants.md) 作 I11**。B1 启动后第一个 commit 顺手补的话最稳。
 
 ### D6. B2 设计 TODO: 重做 graceful shutdown
 
@@ -108,5 +108,5 @@ L4 已证 `kill_on_drop` 在 app teardown 路径工作干净，所以 SIGKILL �
 ## Next
 
 - **本 session 收尾**：commit + push（4 commits 的 prototype 工作 + 本 devlog + CLAUDE.md Stage 5 ✅ + invariants.md I11）
-- **下次 session 开始 B1 正式 refactor**：cursor 在 T1.1 目录重组。[B1-rust-core.md](../refactor/B1-rust-core.md) playbook 已经写好。
+- **下次 session 开始 B1 正式 refactor**：cursor 在 T1.1 目录重组。[B1-rust-core.md](../archive/refactor/B1-rust-core.md) playbook 已经写好。
 - **B1 第一个 commit 顺手补的事**：把 `BridgeProcess` 从 `experiments/bridge-owner/registry.rs` 搬到生产路径（位置由 T1.1 定）；invariants.md I11 已落，但首个 commit 触及 Cargo profile 时确认没人改 `panic = "abort"`。

@@ -354,7 +354,7 @@ top.
    suggests Rust ≤ TS; B1 dogfood will confirm qualitatively.
 2. **B1 invariant: `panic = "unwind"` Cargo profile** — must stay.
    `panic = "abort"` would orphan all bridges on any main-thread panic
-   (L5 wouldn't pass). Add to `docs/refactor/invariants.md` when B1
+   (L5 wouldn't pass). Add to `docs/archive/refactor/invariants.md` when B1
    starts.
 3. **Graceful shutdown is slow** (~2.5s/bridge per L2 observation).
    B2 should redesign: SIGTERM with short wait then SIGKILL, instead of
@@ -372,7 +372,7 @@ top.
 > Keep `experiments/bridge-owner/` and this README as historical reference
 > Add an entry to vision pivot devlog or new devlog with the findings
 
-That's the start of B1 (T1.1 in [B1-rust-core.md](../../../../docs/refactor/B1-rust-core.md)).
+That's the start of B1 (T1.1 in [B1-rust-core.md](../../../../docs/archive/refactor/B1-rust-core.md)).
 The new devlog should reference this results.md and call out:
 - `BridgeProcess` API shape (subscribe / send_command / wait_exit /
   shutdown) is what B1 productionizes

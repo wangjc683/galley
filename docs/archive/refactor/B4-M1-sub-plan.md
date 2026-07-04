@@ -2,7 +2,7 @@
 
 > 用途：B4 playbook [M1](./B4-cli-bg-artifact.md#m1--cli-写命令补齐-d51-d54) 启动前的详细实施 plan，mirror B3 M3/M4/M5/M6 sub-plan 结构。M1 是 **B4 第一个 milestone** —— 补齐 PRD §11.1 全部 write CLI 命令。
 >
-> **状态**：drafted 2026-05-20 morning · 6 open decisions resolved 2026-05-20 afternoon (JC review)。本 session ship sub-plan markdown，不动代码。M1 实施推 fresh session（per B3 N5 / N10 / N14 教训：sub-plan + 实施分两 session 是稳定模式）。M1 实施不需要等 tray spike（M2 prereq），跟 [M2 spike scaffold + run](../../core/experiments/tray-mode/README.md) 完全独立可并行。
+> **状态**：drafted 2026-05-20 morning · 6 open decisions resolved 2026-05-20 afternoon (JC review)。本 session ship sub-plan markdown，不动代码。M1 实施推 fresh session（per B3 N5 / N10 / N14 教训：sub-plan + 实施分两 session 是稳定模式）。M1 实施不需要等 tray spike（M2 prereq），跟 [M2 spike scaffold + run](../../../core/experiments/tray-mode/README.md) 完全独立可并行。
 >
 > **关键决策**（含 2026-05-20 PM resolved）：**4-commit M1**（按 noun-group 拆 + 单独 agent-api commit）+ **session stop 映射到 Abort 不 Shutdown** + **btw 不持久化 v0.1 保持** + **exit code 引入 5=runner_error**（PRD §11.2 已说，agent-api.md 漏 row，本 milestone 补）+ **session new 走 SQLite transaction wrap** (O1 resolved — eliminates partial state) + **`project archive` 改名 `project delete`** (O2 resolved — honest naming，PRD §11.1 同步更新) + **`project move` 改 `session move <id> --to=<pid>`** (O3 resolved — noun=verb subject grammar，PRD §11.1 同步更新)。详 §2 + §1.4 + §1.5 + §9。
 
@@ -13,14 +13,14 @@
 | Playbook claim | 实际验证 |
 |---|---|
 | T1.1-T1.6 「7 个新 write 命令」 | **实际 11 个 CLI 子命令**：playbook 把 `project create / list / move / archive` 算 1 个，`llm list / llm set` 算 1 个。逐 subcommand 算：`session new` / `session btw` / `session stop` / `session archive` / `session restore` / `project create` / `project list` / `project move` / `project archive` / `llm list` / `llm set` = **11 个**。Sub-plan 内 T1.1-T1.11 per-subcommand 拆 |
-| T1.1 「`create_session_with_first_message` — 复用 M4 create_session + B2 send_message，组合成 atomic 操作」 | 验证 [api.rs:112-116](../../core/src/api.rs) `create_session(input, origin)` + [api.rs:79-84](../../core/src/api.rs) `send_message(session_id, content, origin)` 都已存在。组合发生在 socket handler 内（**不**新加 trait method）—— 两步 SQL 写在同一 socket handler 顺序调用，race condition 概率低于「socket dispatch 内串行」(原 playbook 建议 trait-level atomic 是 over-engineering，详 Reject #2) |
-| T1.2 「`session btw` 加 `via='cli' + kind='btw'` 区分」 | **错** —— btw 不应持久化 messages 行（v0.1 决策 [messages.ts:445-455](../../gui/src/stores/messages.ts) "Transient append — no DB persistence for V0.1")。Runner 端 [workbench_bridge.py:943-948](../../runner/workbench_bridge.py) 检测 `/btw` 前缀走 `handle_frontend_command` 旁路，不进 messages.append。M1 `session btw` 走 socket 把 `/btw <q>` 文本直 emit IpcCommand::UserMessage（runner 自动识别）+ **skip DB persist**。详 §1.5 |
+| T1.1 「`create_session_with_first_message` — 复用 M4 create_session + B2 send_message，组合成 atomic 操作」 | 验证 [api.rs:112-116](../../../core/src/api.rs) `create_session(input, origin)` + [api.rs:79-84](../../../core/src/api.rs) `send_message(session_id, content, origin)` 都已存在。组合发生在 socket handler 内（**不**新加 trait method）—— 两步 SQL 写在同一 socket handler 顺序调用，race condition 概率低于「socket dispatch 内串行」(原 playbook 建议 trait-level atomic 是 over-engineering，详 Reject #2) |
+| T1.2 「`session btw` 加 `via='cli' + kind='btw'` 区分」 | **错** —— btw 不应持久化 messages 行（v0.1 决策 [messages.ts:445-455](../../../gui/src/stores/messages.ts) "Transient append — no DB persistence for V0.1")。Runner 端 [workbench_bridge.py:943-948](../../../runner/workbench_bridge.py) 检测 `/btw` 前缀走 `handle_frontend_command` 旁路，不进 messages.append。M1 `session btw` 走 socket 把 `/btw <q>` 文本直 emit IpcCommand::UserMessage（runner 自动识别）+ **skip DB persist**。详 §1.5 |
 | T1.3 「`stop_session` — runner_manager.shutdown_bridge + emit run_complete event」 | **stop 语义模糊** —— 用户期待 "停止当前 turn" (= IpcCommand::Abort) vs "整个 bridge 杀掉" (= IpcCommand::Shutdown / manager.shutdown)。**M1 决策走 Abort**：bridge 留活下次可继续 send；shutdown 是 LRU/Settings/Cmd-Q 才触发的硬终结，不该挂 CLI surface。详 §1.4 |
-| T1.4 「`session archive / restore` 复用 M4 archive_session / unarchive_session」 | 验证 [api.rs:122 + 128](../../core/src/api.rs) 都已存在 + 都接 Origin 参数。直 thin wrapper |
-| T1.5 「`project` 4 subcommand 复用 M4 trait method」 | 验证 [api.rs:245-273](../../core/src/api.rs) `list_projects` / `create_project` / `update_project` / `delete_project` 全在。**`project move` 语义歧义**：PRD 写「project move」自然语言指「移动 project 自身」（不存在的操作）vs「把 session 移到 project」（= `assign_session_to_project`）。M1 解读为后者，CLI 形态 `galley project move <session-id> [--to=<project-id>]`，no `--to` flag = 拆出 project（[O3 NEW](#open-decisions-new) 复核命名）。**`project archive` 不存在 trait method**：B3 M4 只给 delete，没有 archive；B4 内不该补 schema 加 archived 字段（scope creep）。M1 解读 `project archive` = `delete_project`（CLAUDE.md PRD §11.1 「archive vs delete 语义」playbook 已 flag）+ CLI confirm 守则交给 SOP（[O4 NEW](#open-decisions-new)） |
-| T1.6 「`llm list` 在 bridge 未 alive 时报 exit 4」 | **方案不一致**：`llm list` 不一定需要 bridge alive —— prefs 持有 `getPref<LLMOption[]>("llm_list")` cache（[hydrate.ts:73-80](../../gui/src/lib/hydrate.ts) 启动时 seed runtimeStore）。CLI 读 prefs 表（同一 SQLite）就能拿到 cached LLM 列表，跟 bridge 完全无关。**M1 走 SQLite read** — `llm list` 直走 prefs cache，不依赖 socket / bridge。**`llm set`** 才需要 bridge 应用变更：DB 写 `set_session_llm` + 如 bridge alive 同步 emit `IpcCommand::SetLlm`。详 §1.6 |
-| T1.7 「`agent-api.md` 增量写入 — 每个命令 ship 时同 commit 加 schema 段」 | OK，每个 noun-group commit 内 inline 写 agent-api.md 段。但 **exit code 表 [agent-api.md:166-172](../../docs/agent-api.md) 当前只有 0-4，PRD §11.2 说有 5=runner_error**。M1 决策走 PRD 加 5，**整段独立 commit** ship 在 noun-group commits 之前作为 M1 prerequisite（详 §2.3） |
-| T1.8 「CLI integration tests」 | 验证 [cli/tests/](../../cli/tests/) 当前有 ~13 integration test (B1 6 + B2 7)。M1 加 11 个新 subcommand × 1-2 test/cmd = +15-22 tests |
+| T1.4 「`session archive / restore` 复用 M4 archive_session / unarchive_session」 | 验证 [api.rs:122 + 128](../../../core/src/api.rs) 都已存在 + 都接 Origin 参数。直 thin wrapper |
+| T1.5 「`project` 4 subcommand 复用 M4 trait method」 | 验证 [api.rs:245-273](../../../core/src/api.rs) `list_projects` / `create_project` / `update_project` / `delete_project` 全在。**`project move` 语义歧义**：PRD 写「project move」自然语言指「移动 project 自身」（不存在的操作）vs「把 session 移到 project」（= `assign_session_to_project`）。M1 解读为后者，CLI 形态 `galley project move <session-id> [--to=<project-id>]`，no `--to` flag = 拆出 project（[O3 NEW](#open-decisions-new) 复核命名）。**`project archive` 不存在 trait method**：B3 M4 只给 delete，没有 archive；B4 内不该补 schema 加 archived 字段（scope creep）。M1 解读 `project archive` = `delete_project`（CLAUDE.md PRD §11.1 「archive vs delete 语义」playbook 已 flag）+ CLI confirm 守则交给 SOP（[O4 NEW](#open-decisions-new)） |
+| T1.6 「`llm list` 在 bridge 未 alive 时报 exit 4」 | **方案不一致**：`llm list` 不一定需要 bridge alive —— prefs 持有 `getPref<LLMOption[]>("llm_list")` cache（[hydrate.ts:73-80](../../../gui/src/lib/hydrate.ts) 启动时 seed runtimeStore）。CLI 读 prefs 表（同一 SQLite）就能拿到 cached LLM 列表，跟 bridge 完全无关。**M1 走 SQLite read** — `llm list` 直走 prefs cache，不依赖 socket / bridge。**`llm set`** 才需要 bridge 应用变更：DB 写 `set_session_llm` + 如 bridge alive 同步 emit `IpcCommand::SetLlm`。详 §1.6 |
+| T1.7 「`agent-api.md` 增量写入 — 每个命令 ship 时同 commit 加 schema 段」 | OK，每个 noun-group commit 内 inline 写 agent-api.md 段。但 **exit code 表 [agent-api.md:166-172](../../../docs/agent-api.md) 当前只有 0-4，PRD §11.2 说有 5=runner_error**。M1 决策走 PRD 加 5，**整段独立 commit** ship 在 noun-group commits 之前作为 M1 prerequisite（详 §2.3） |
+| T1.8 「CLI integration tests」 | 验证 [cli/tests/](../../../cli/tests/) 当前有 ~13 integration test (B1 6 + B2 7)。M1 加 11 个新 subcommand × 1-2 test/cmd = +15-22 tests |
 
 ### 1.1 11 个 subcommand 清单
 
@@ -36,11 +36,11 @@
 | 6 | `session move <id> [--to=<project-id>] [--supervisor=Y]` | `assign_session_to_project` | ✓ | `session.move` | **(O3 resolved)** noun=verb subject (session 是 move 的主语，不是 project)；no `--to` = 拆出 project (project_id=None)；PRD §11.1 同步改 |
 | 7 | `project create "<name>" [--description=...] [--supervisor=Y]` | `create_project` | ✓ | `project.create` | thin wrapper |
 | 8 | `project list` | `list_projects` | — | (direct SQLite read, no socket) | thin wrapper；返 NDJSON；mirror sessions list 路径 |
-| 9 | `project delete <project-id> [--supervisor=Y] [--reason=Z]` | `delete_project` | ✓ | `project.delete` | **(O2 resolved)** v0.2 rename from `project archive` → `project delete`；honest naming (实际 SET NULL detach + DELETE)；FK CASCADE 保 sessions intact (per [api.rs:268-270](../../core/src/api.rs))；v0.6+ 再 ship 真 `project archive` reversible 语义；PRD §11.1 同步改 |
+| 9 | `project delete <project-id> [--supervisor=Y] [--reason=Z]` | `delete_project` | ✓ | `project.delete` | **(O2 resolved)** v0.2 rename from `project archive` → `project delete`；honest naming (实际 SET NULL detach + DELETE)；FK CASCADE 保 sessions intact (per [api.rs:268-270](../../../core/src/api.rs))；v0.6+ 再 ship 真 `project archive` reversible 语义；PRD §11.1 同步改 |
 | 10 | `llm list` | (SQLite read prefs) | — | (direct DB read, no socket) | 读 `prefs.llm_list` pref；空 → empty NDJSON；不报错 |
 | 11 | `llm set <session-id> <llm-display-name>` | `set_session_llm` + (optional) bridge emit | — (no audit per existing pattern) | `llm.set` | DB write SessionBrief；如 bridge alive emit `IpcCommand::SetLlm`；by-name lookup against cached list |
 
-### 1.2 Origin 字段填法（[origin.rs:1-113](../../core/src/api/origin.rs)）
+### 1.2 Origin 字段填法（[origin.rs:1-113](../../../core/src/api/origin.rs)）
 
 socket handler 内统一规则（mirror dispatch_session_send pattern）：
 
@@ -51,7 +51,7 @@ reason = args.reason.clone()
 ```
 
 **例外**：
-- `llm.set` no Origin（trait 不接，per existing pattern [api.rs:184-189](../../core/src/api.rs)）
+- `llm.set` no Origin（trait 不接，per existing pattern [api.rs:184-189](../../../core/src/api.rs)）
 - `project.list` / `llm.list` no Origin（read 路径）
 - `session.btw` / `session.stop` socket 接收 supervisor/reason 但**不写 DB**（只用于 runner-side audit log，B4 M7 GUI 行动日志渲染时读这些字段）—— 占位 path，runner 端是否能存进 audit 留 [O5 NEW](#open-decisions-new)
 
@@ -76,13 +76,13 @@ M1 加 row：
 
 ### 1.4 `session stop` 语义 · Abort vs Shutdown
 
-**Abort** ([ipc.rs:313](../../core/src/ipc.rs))：GA's `agent.abort()` 设 stop_sig + 跳出 run loop；synthesize `run_complete` event with `ABORTED` marker (per [workbench_bridge.py:975-980](../../runner/workbench_bridge.py))。Bridge **仍活**。下次 `session send` 直接接上，无需 respawn (5-10s startup cost)。
+**Abort** ([ipc.rs:313](../../../core/src/ipc.rs))：GA's `agent.abort()` 设 stop_sig + 跳出 run loop；synthesize `run_complete` event with `ABORTED` marker (per [workbench_bridge.py:975-980](../../../runner/workbench_bridge.py))。Bridge **仍活**。下次 `session send` 直接接上，无需 respawn (5-10s startup cost)。
 
-**Shutdown** ([ipc.rs:318](../../core/src/ipc.rs))：runner subprocess 真退出。LRU eviction / 用户改 GA path / Cmd+Q 时用。下次 send 必须 respawn。
+**Shutdown** ([ipc.rs:318](../../../core/src/ipc.rs))：runner subprocess 真退出。LRU eviction / 用户改 GA path / Cmd+Q 时用。下次 send 必须 respawn。
 
 **M1 决策**：`session stop` 走 **Abort**。理由：
 1. 用户语义：「停一下这个 turn 我想看看 / 我想改 prompt」≠「彻底关掉这个对话」
-2. 跟 GUI 行为对齐：GUI `MainView.tsx` 顶栏 "停止" 按钮 emit Abort（[grep result indicates current GUI stop = Abort 路径](../../gui/src/components/screens/main/MainView.tsx)）
+2. 跟 GUI 行为对齐：GUI `MainView.tsx` 顶栏 "停止" 按钮 emit Abort（[grep result indicates current GUI stop = Abort 路径](../../../gui/src/components/screens/main/MainView.tsx)）
 3. Shutdown 是 system-driven 操作（LRU + lifecycle），不该挂 user-facing CLI surface
 4. CLI 加 `session kill` 是另一档 destructive ops，留 [O6 NEW](#open-decisions-new) v0.6+ 再加（避免 v0.2 surface 过度复杂）
 
@@ -92,7 +92,7 @@ M1 加 row：
 
 V0.1 决策（messages.ts:445-455）：btw 不进 messages 表，重 session 后 /btw 对话整段丢。这是设计意图（"side question 不进主线"）。
 
-M1 沿用：`session.btw` socket handler **不**调 `send_message` trait method。直接 emit `IpcCommand::UserMessage{ text: "/btw <q>" }` 给 runner —— runner [workbench_bridge.py:943-948](../../runner/workbench_bridge.py) 自动识别 `/btw` 前缀走 `handle_frontend_command` 旁路。
+M1 沿用：`session.btw` socket handler **不**调 `send_message` trait method。直接 emit `IpcCommand::UserMessage{ text: "/btw <q>" }` 给 runner —— runner [workbench_bridge.py:943-948](../../../runner/workbench_bridge.py) 自动识别 `/btw` 前缀走 `handle_frontend_command` 旁路。
 
 **Origin 字段**仍接 `--supervisor=` + `--reason=` flag (CLI surface 对称) 但 socket handler 内只透传给 `IpcCommand::UserMessage` 的 origin metadata（runner-side audit），**不**写 DB。
 
@@ -102,7 +102,7 @@ M1 沿用：`session.btw` socket handler **不**调 `send_message` trait method�
 
 **Option A · 走 socket**：CLI 调 `llm.list` socket command → core 调 `manager.alive_sessions()` 看是否有 ready bridge → 如有，读 ready event 的 `availableLLMs` 缓存；如无 spawn `__warmup__` bridge 拿 → 5-10s 延迟 + 占用 bridge 槽位。
 
-**Option B · 走 SQLite prefs**：CLI 直读 `prefs.llm_list` (pref key 是 [hydrate.ts:75](../../gui/src/lib/hydrate.ts) `getPref<LLMOption[]>("llm_list")` 用的同一 key)。延迟 < 50ms；不占 bridge 槽位；不依赖 Galley Core 运行。
+**Option B · 走 SQLite prefs**：CLI 直读 `prefs.llm_list` (pref key 是 [hydrate.ts:75](../../../gui/src/lib/hydrate.ts) `getPref<LLMOption[]>("llm_list")` 用的同一 key)。延迟 < 50ms；不占 bridge 槽位；不依赖 Galley Core 运行。
 
 **M1 选 B**：
 1. PRD §11 「CLI surface 是 agent-first」—— agent 希望快速 query 不希望 5s wait
@@ -123,7 +123,7 @@ M1 沿用：`session.btw` socket handler **不**调 `send_message` trait method�
 3. not found → exit 2 invalid_args "unknown llm '<name>'; try `galley llm list` to see available"
 4. cache empty → exit 4 db_unavailable "llm cache empty; open Galley GUI once to warmup"
 
-**Decision**：by-name lookup 而非 by-index。理由：(a) PRD 写「`--llm=...`」自然语言用 name (b) index 是 mykey.py 内部细节不该暴露 supervisor SOP (c) name 在 mykey.py 改顺序后稳定（per [bridge.ts _simplify_llm_name](../../runner/workbench_bridge.py) 尊重用户显式 `name`）。
+**Decision**：by-name lookup 而非 by-index。理由：(a) PRD 写「`--llm=...`」自然语言用 name (b) index 是 mykey.py 内部细节不该暴露 supervisor SOP (c) name 在 mykey.py 改顺序后稳定（per [bridge.ts _simplify_llm_name](../../../runner/workbench_bridge.py) 尊重用户显式 `name`）。
 
 ### 1.8 Cross-task 共用 helper
 
@@ -426,7 +426,7 @@ struct SessionMoveArgs {
 
 handler:
 1. parse；validate session exists → not found exit 3
-2. 如 `to.is_some()`: validate project exists → not found exit 2 (FK violation 路径 — `assign_session_to_project` impl 已 return InvalidArgs per [api.rs:165-166](../../core/src/api.rs))
+2. 如 `to.is_some()`: validate project exists → not found exit 2 (FK violation 路径 — `assign_session_to_project` impl 已 return InvalidArgs per [api.rs:165-166](../../../core/src/api.rs))
 3. `galley.assign_session_to_project(SessionId(session_id), to, origin)` → SessionBrief
 4. emit Tauri event `session-moved-external` (payload {sessionId, newProjectId})
 5. 返 `{session: brief}` exit 0
@@ -439,7 +439,7 @@ handler:
 
 **`project list`**：CLI subcommand 直走 SQLite (no socket)，mirror `sessions list` / `llm list` pattern。CLI subcommand 内开 SqliteGalley + 调 `list_projects` trait method。NDJSON output 一行一 ProjectBrief。
 
-**`project create`**：socket handler 调 `create_project(input, origin)` → ProjectBrief。Emit Tauri event `project-created-external`. Args `{name, description, supervisor, reason}`，name trim empty → exit 2 invalid_args (per [api.rs:248-249](../../core/src/api.rs))。
+**`project create`**：socket handler 调 `create_project(input, origin)` → ProjectBrief。Emit Tauri event `project-created-external`. Args `{name, description, supervisor, reason}`，name trim empty → exit 2 invalid_args (per [api.rs:248-249](../../../core/src/api.rs))。
 
 **`project delete`** (O2 resolved · was `project archive`)：socket handler 调 `delete_project(id, origin)`. FK CASCADE SET NULL 自动把 child sessions 拆到 ungrouped (保 sessions 不丢)。Emit Tauri event `project-deleted-external` (payload {projectId, detachedSessions: count})。Response: `{deleted: true, detachedSessions: count}` 让 agent 知道副作用。Exit 3 if not_found。
 
@@ -483,7 +483,7 @@ handler:
 4. if `manager.agent_running(&session_id)` OR bridge alive (manager.has_bridge(&session_id))：emit `IpcCommand::SetLlm{ llm_index: index as i64 }`；on Err → exit 5
 5. 返 `{session: brief, dispatch: "dispatched"|"persisted_only"}` exit 0
 
-**No Origin**：mirror existing `set_session_llm` trait signature (无 origin per [api.rs:184-189](../../core/src/api.rs))。
+**No Origin**：mirror existing `set_session_llm` trait signature (无 origin per [api.rs:184-189](../../../core/src/api.rs))。
 
 ### T1.10 · CLI subcommand 注册 (clap)
 

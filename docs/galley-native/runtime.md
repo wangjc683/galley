@@ -362,8 +362,8 @@ These need dedicated follow-up design before implementation:
 
 ## Read With
 
-- [GA baseline](./ga-baseline.md) for current GenericAgent integration audits.
-- [managed GA runtime](./managed-ga-runtime.md) for the existing built-in runtime
+- [GA baseline](../ga-baseline.md) for current GenericAgent integration audits.
+- [managed GA runtime](../managed-ga-runtime.md) for the existing built-in runtime
   and managed state rules.
 - [Galley Native RFC 1: Runtime Boundary](./rfc-1-runtime-boundary.md)
   for runtime identity, routing, event, API, and migration decisions.
@@ -384,5 +384,5 @@ These need dedicated follow-up design before implementation:
   capability absorption.
 - [Galley Native RFC 7: Parity Harness And Default Switch](./rfc-7-parity-harness-default-switch.md)
   for parity tests, dogfood gates, rollout, rollback, and managed retirement.
-- [Galley Goal V1 devlog](./devlog/2026-06-04-galley-goal-v1.md) for Core-owned
+- [Galley Goal V1 devlog](../devlog/2026-06-04-galley-goal-v1.md) for Core-owned
   Goal/Hive decisions already made.

@@ -1,7 +1,9 @@
 # Galley English Copy Draft
 
-> Status: owner review draft. Do not wire this into the UI until the review
-> pass is done.
+> **ARCHIVED 2026-07-04** — the review pass finished and native English UI
+> copy shipped. The live source of truth is `gui/src/i18n/locales/en.ts`;
+> voice rules live in [copy austerity principles](../copy-austerity-principles.md).
+> This draft is kept for provenance only.
 
 This draft is written as native English product copy for Galley. It is not a
 literal translation of the Chinese UI. Shared product concepts stay consistent,

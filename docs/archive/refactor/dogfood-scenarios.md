@@ -4,7 +4,7 @@
 >
 > **用法**：每项一行 ✓/✗，跑过填日期 + 一句话 note。**先跑 A + B（必 cover），C/D 优先级递减**。发现 regression → 加 inline note + 必要时开 GitHub issue。
 >
-> **来源**：[project status](../project-status.md) compact phase state + [B2 完成 devlog](../devlog/2026-05-19-b2-bridge-ownership-complete.md) Open Questions + B2 dogfood fixes `b087f22` 抓的 3 个 bug + v0.1 七件事 polish 沉淀的高频 user path。
+> **来源**：[project status](../../project-status.md) compact phase state + [B2 完成 devlog](../../devlog/2026-05-19-b2-bridge-ownership-complete.md) Open Questions + B2 dogfood fixes `b087f22` 抓的 3 个 bug + v0.1 七件事 polish 沉淀的高频 user path。
 
 ---
 
@@ -48,7 +48,7 @@
 - [ ] **C9 Manual rename** — 右键 session ✏️ inline edit + Enter commit + Esc revert
 - [ ] **C10 YOLO mode toggle** — TopBar pill 切 YOLO 开/关，verify open 时 ApprovalForm 不出 + 关时出（不影响正在跑的 turn）
 - [ ] **C11 Settings → Health Check revisit** — Settings → Runtime → Re-run Health Check，verify 进 Onboarding StepHealth revisit 模式跳过 Welcome/Attach、Back 返回 Settings
-- [ ] **C12 Settings GA Path 手动输入** — Settings → Runtime → GA Path 框直接键入路径，verify 300ms debounce validate + Enter commit + Esc revert（alpha.2 加的，[devlog](../devlog/2026-05-15-v0.1-alpha.2-windows-attach-fixes.md)）
+- [ ] **C12 Settings GA Path 手动输入** — Settings → Runtime → GA Path 框直接键入路径，verify 300ms debounce validate + Enter commit + Esc revert（alpha.2 加的，[devlog](../../devlog/2026-05-15-v0.1-alpha.2-windows-attach-fixes.md)）
 
 ---
 
@@ -75,4 +75,4 @@
 
 ## Update log
 
-- 2026-05-19 — created (B3 M1 启动门 prereq 落地 · 详 [devlog](../devlog/2026-05-19-b3-prereq-relaxation.md))
+- 2026-05-19 — created (B3 M1 启动门 prereq 落地 · 详 [devlog](../../devlog/2026-05-19-b3-prereq-relaxation.md))

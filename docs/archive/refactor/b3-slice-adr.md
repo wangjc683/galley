@@ -158,11 +158,11 @@
 
 ### T1.5 · Store 库 = Zustand
 
-不换 Redux Toolkit / Jotai。理由：(a) JC 熟悉 + dogfood 稳定 (b) 小 bundle (c) [2026-05-11 useShallow 踩坑 devlog](../devlog/2026-05-11-stage3-multi-session-and-perf.md) 的根因是 React 19 strict mode getSnapshot 死循环，跟 Zustand 无关；换 Jotai/Redux 不解决，反而引入新学习成本。Strict mode 兼容通过 [AD-12 store-side enrichment](#ad-12--selector--2-layers--store-side-enrichment-t17) 解决。
+不换 Redux Toolkit / Jotai。理由：(a) JC 熟悉 + dogfood 稳定 (b) 小 bundle (c) [2026-05-11 useShallow 踩坑 devlog](../../devlog/2026-05-11-stage3-multi-session-and-perf.md) 的根因是 React 19 strict mode getSnapshot 死循环，跟 Zustand 无关；换 Jotai/Redux 不解决，反而引入新学习成本。Strict mode 兼容通过 [AD-12 store-side enrichment](#ad-12--selector--2-layers--store-side-enrichment-t17) 解决。
 
 ### T1.6 · Event batch window = 16ms (单帧)
 
-`turn_progress` streaming events 在 Rust 端 [`spawn_emit_task`](../../core/src/runner_commands.rs) 内累积 16ms 后 batch emit。其它 event（turn_start / turn_end / approval / askUser）不 batch。**16ms 是 Rust 端 emit syscall 减半优化，不是 TS 端 React update 减半**——TS 端在一帧内多 event 触发的多次 setState 由 Zustand + React batching 处理（[G6](./B3-store-slice.md#running-notes--gotchas) 复述）。
+`turn_progress` streaming events 在 Rust 端 [`spawn_emit_task`](../../../core/src/runner_commands.rs) 内累积 16ms 后 batch emit。其它 event（turn_start / turn_end / approval / askUser）不 batch。**16ms 是 Rust 端 emit syscall 减半优化，不是 TS 端 React update 减半**——TS 端在一帧内多 event 触发的多次 setState 由 Zustand + React batching 处理（[G6](./B3-store-slice.md#running-notes--gotchas) 复述）。
 
 实测路径（M5 T5.3）：先实测当前 streaming event/sec rate，再决定是否落地 16ms batch；若 50-100 tokens/sec 实测 batch 收益 < 5% throughput，可改 32ms 或者**完全跳过 batch**（少一层复杂度）。
 
@@ -170,7 +170,7 @@
 
 每个组件 selector 路径长度 ≤ 2 layers：`useStore(s => s.activeSession)` 而非 `useStore(s => s.sessions.list[0].turns[3].x)`。Derived value 物化到 store-side cached field。
 
-根因：[2026-05-11 useShallow 踩坑 devlog](../devlog/2026-05-11-stage3-multi-session-and-perf.md) — React 19 strict mode 要求 getSnapshot 对同输入返回同 reference。任何 `useStore(s => s.x.filter(...).map(...))` 在 strict mode 下死循环 = app 空白，dogfood 不可恢复。
+根因：[2026-05-11 useShallow 踩坑 devlog](../../devlog/2026-05-11-stage3-multi-session-and-perf.md) — React 19 strict mode 要求 getSnapshot 对同输入返回同 reference。任何 `useStore(s => s.x.filter(...).map(...))` 在 strict mode 下死循环 = app 空白，dogfood 不可恢复。
 
 [AD-12 + AD-13 在 mapping doc § A-E 实施时已隐含遵守]
 

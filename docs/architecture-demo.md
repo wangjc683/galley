@@ -17,7 +17,7 @@
 
 ### Code references
 
-- **macOS / Linux**: AF_UNIX socket at `$TMPDIR/galley-$UID.sock` with hand-rolled `getuid` syscall — [`core/src/socket_listener.rs:196-220`](../core/src/socket_listener.rs)
+- **macOS / Linux**: AF_UNIX socket at `$TMPDIR/galley-$UID.sock` with hand-rolled `getuid` syscall — [`core/src/socket_listener/`](../core/src/socket_listener/mod.rs)
   ```rust
   // SAFETY: getuid is always safe — POSIX guarantees it can't fail.
   let uid = unsafe { libc_getuid() };
@@ -53,7 +53,7 @@ grep -rin "jwt\|oauth\|api[_-]key\|bearer" core/src/ | grep -v "//\|test"
 
 ### Code references
 
-- **Schema version constant**: [`cli/src/main.rs`](../cli/src/main.rs) and [`core/src/socket_listener.rs`](../core/src/socket_listener.rs) — frozen at `1` since M6 (2026-05-20)
+- **Schema version constant**: [`cli/src/main.rs`](../cli/src/main.rs) and [`core/src/socket_listener/`](../core/src/socket_listener/mod.rs) — frozen at `1` since M6 (2026-05-20)
 - **`--schema=N` global CLI flag** — clap global flag; mismatch → exit 2 with `schema_mismatch:` prefix
 - **Exit code categorization** — [`cli/src/main.rs`](../cli/src/main.rs) per [agent-api.md §1.1](./agent-api.md):
   - 0 = success
@@ -124,10 +124,10 @@ grep -rn "supervisor_chat\|conversation_log\|supervisor_history\|im_messages" co
 ### Code references — Rust 持有权威
 
 - **SQLite writes via trait** — [`core/src/api.rs`](../core/src/api.rs) `GalleyApi` trait with 17 trait methods spanning sessions / messages / projects / origin
-- **Trait impl** — [`core/src/db.rs`](../core/src/db.rs) `SqliteGalley` is the only writer with `SqlitePool` connection
+- **Trait impl** — [`core/src/db/`](../core/src/db/mod.rs) `SqliteGalley` is the only writer with `SqlitePool` connection
 - **Bridge subprocess ownership** — [`core/src/runner_manager/manager.rs`](../core/src/runner_manager/manager.rs) `RunnerManager` owns `tokio::process::Child` handles; B2 prototype pattern productionized
 - **Session lifecycle** — [`core/src/runner_manager/process.rs`](../core/src/runner_manager/process.rs) `BridgeProcess` Drop sends SIGKILL on unwind panic (B2 invariant I11)
-- **Command dispatch** — [`core/src/socket_listener.rs`](../core/src/socket_listener.rs) routes CLI commands to same trait surface as Tauri commands ([`core/src/lib.rs:400-433`](../core/src/lib.rs))
+- **Command dispatch** — [`core/src/socket_listener/`](../core/src/socket_listener/mod.rs) routes CLI commands to same trait surface as Tauri commands ([`core/src/lib.rs:400-433`](../core/src/lib.rs))
 
 ### Code references — 前端是 presenter
 
@@ -160,9 +160,9 @@ test ! -f gui/src/stores/useAppStore.ts || echo "FAIL: useAppStore.ts still exis
 
 ### Document references
 
-- [`docs/refactor/B1-rust-core.md`](./refactor/B1-rust-core.md) B1 establishes Rust core skeleton
-- [`docs/refactor/B2-bridge-ownership.md`](./refactor/B2-bridge-ownership.md) B2 moves bridge ownership to Rust
-- [`docs/refactor/B3-store-slice.md`](./refactor/B3-store-slice.md) B3 retires TS authoritative state
+- [`docs/archive/refactor/B1-rust-core.md`](./archive/refactor/B1-rust-core.md) B1 establishes Rust core skeleton
+- [`docs/archive/refactor/B2-bridge-ownership.md`](./archive/refactor/B2-bridge-ownership.md) B2 moves bridge ownership to Rust
+- [`docs/archive/refactor/B3-store-slice.md`](./archive/refactor/B3-store-slice.md) B3 retires TS authoritative state
 
 ---
 

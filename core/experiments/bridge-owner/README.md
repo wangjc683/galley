@@ -262,7 +262,7 @@ If no-go:
 
 ## Cursor / running notes (append-only per invariant I10)
 
-**Cursor**: B1 T1.1 (target dir reorg: `src-tauri` → `core`, `desktop` → `gui`, `bridge` → `runner`, new `cli/`). See [docs/refactor/B1-rust-core.md](../../../../docs/refactor/B1-rust-core.md). The prototype's `registry.rs` (`BridgeProcess`) is the source pattern for B1's `runner_manager` module.
+**Cursor**: B1 T1.1 (target dir reorg: `src-tauri` → `core`, `desktop` → `gui`, `bridge` → `runner`, new `cli/`). See [docs/archive/refactor/B1-rust-core.md](../../../../docs/archive/refactor/B1-rust-core.md). The prototype's `registry.rs` (`BridgeProcess`) is the source pattern for B1's `runner_manager` module.
 
 ### 2026-05-18 · Session 1 (Claude + JC)
 
@@ -336,7 +336,7 @@ If no-go:
   qualitatively; if anyone wants strict numbers, half-day task to
   instrument bridge.ts before B2 lands (when TS path goes away).
 - **Cursor moved**: B1 T1.1 — target dir reorg per
-  [B1-rust-core.md](../../../../docs/refactor/B1-rust-core.md). The
+  [B1-rust-core.md](../../../../docs/archive/refactor/B1-rust-core.md). The
   prototype's `registry.rs` (`BridgeProcess` with subscribe /
   send_command / wait_exit / shutdown + pre-subscribed receiver
   pattern) is **the source pattern for B1's `runner_manager` module**.

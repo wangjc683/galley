@@ -468,7 +468,7 @@ v0.2 Windows release 跟 B 重构之间会不会再升 GA baseline？理论上�
 - [PRD v0.3](../PRD.md) 升格为 active（替代 v0.2，v0.2 保留在 git 历史）
 - CLAUDE.md 增加 localhost-only + CLI 公开契约面两条宪法条款（按 D6 + D8 + D15 SOP 安装例外）
 - CLAUDE.md 阶段表加 3.10 vision pivot + 4 v0.2 Windows + 5 prototype + 6-9 B1-B4 + v0.5 节点
-- **[docs/refactor/](../refactor/README.md) 重构执行手册落地** —— 跨多 session 重构的中央调度器：[README 索引 + cursor 总指针](../refactor/README.md) / [invariants 跨 phase 硬规则 10 条](../refactor/invariants.md) / [B1 详细 playbook](../refactor/B1-rust-core.md) (~40 sub-tasks，cursor 指向 T1.1) / B2/B3/B4 stub（接近时 dedicated session 升级成完整）
+- **[docs/archive/refactor/](../archive/refactor/README.md) 重构执行手册落地** —— 跨多 session 重构的中央调度器：[README 索引 + cursor 总指针](../archive/refactor/README.md) / [invariants 跨 phase 硬规则 10 条](../archive/refactor/invariants.md) / [B1 详细 playbook](../archive/refactor/B1-rust-core.md) (~40 sub-tasks，cursor 指向 T1.1) / B2/B3/B4 stub（接近时 dedicated session 升级成完整）
 
 **待做**（后续 session）：
 

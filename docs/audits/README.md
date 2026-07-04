@@ -6,6 +6,11 @@ decision input: active rules belong in focused docs such as `DESIGN.md`,
 `agent-api.md`, or `architecture.md`; rationale and rejected alternatives belong
 in `docs/devlog/`.
 
+Evidence screenshots follow the binary-asset policy in the
+[screenshot playbook](../screenshot-playbook.md): only images the report
+actually cites, downscaled or JPEG-compressed before commit, and no
+rejected-attempt captures in the repo.
+
 ## Available Audits
 
 | Date | Audit | Use When |

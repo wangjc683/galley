@@ -6,7 +6,7 @@
 - **Status**: ✅ **COMPLETE**。M1-M6 全部 ship + dogfood (M5 + M6 combined) JC dev mode 初步验证通过 + tag `b3-complete`
 - **Duration**: 2026-05-19 → 2026-05-20 跨 6 session、2 个日历日（playbook estimate "3-4 周可能拖到 5-6 周"，实际 2 天 / 6 session）
 - **Related**:
-  - [B3 playbook](../refactor/B3-store-slice.md) · 6 sub-plan ([M3](../refactor/B3-M3-sub-plan.md) / [M4](../refactor/B3-M4-sub-plan.md) / [M5](../refactor/B3-M5-sub-plan.md) / [M6](../refactor/B3-M6-sub-plan.md)) · [slice mapping](../refactor/b3-slice-mapping.md) · [ADR](../refactor/b3-slice-adr.md) · [Rust emit catalogue](../refactor/b3-rust-emit-catalogue.md)
+  - [B3 playbook](../archive/refactor/B3-store-slice.md) · 6 sub-plan ([M3](../archive/refactor/B3-M3-sub-plan.md) / [M4](../archive/refactor/B3-M4-sub-plan.md) / [M5](../archive/refactor/B3-M5-sub-plan.md) / [M6](../archive/refactor/B3-M6-sub-plan.md)) · [slice mapping](../archive/refactor/b3-slice-mapping.md) · [ADR](../archive/refactor/b3-slice-adr.md) · [Rust emit catalogue](../archive/refactor/b3-rust-emit-catalogue.md)
   - Milestone devlogs: [M1 design](./2026-05-19-b3-m1-design-complete.md) · [M3](./2026-05-19-b3-m3-complete.md) · [M4](./2026-05-19-b3-m4-complete.md) · [M5](./2026-05-19-b3-m5-complete.md)
   - Prereq relaxation: [2026-05-19](./2026-05-19-b3-prereq-relaxation.md)
   - B2 完成 devlog: [2026-05-19](./2026-05-19-b2-bridge-ownership-complete.md)
@@ -76,7 +76,7 @@ B3 从 M3 起每个 milestone 走「**sub-plan 单独 paperwork commit** → 间
 
 ### Cross-store coordination policy（AD-09 落地）
 
-[ADR AD-09 slice dependency DAG](../refactor/b3-slice-adr.md#ad-09--slice-dependency-dagt18) 钉死 5 slice 不能 cyclic depend，但允许 hot edge 经 Rust event 中介。**实际跑下来**：
+[ADR AD-09 slice dependency DAG](../archive/refactor/b3-slice-adr.md#ad-09--slice-dependency-dagt18) 钉死 5 slice 不能 cyclic depend，但允许 hot edge 经 Rust event 中介。**实际跑下来**：
 
 - **prefsStore → runtimeStore 单向写**：setGAConfig 调用 patchRuntimeInfo / resetWarmup / warmupLLMList，setYoloMode 遍历 byId 调 sendIPCCommand
 - **runtimeStore → prefsStore 单向读**：spawnBridge 前读 gaConfig
@@ -121,7 +121,7 @@ M6 实施初版写了 5 处反 pattern 注释：「Born from B3 M6 retiring useA
 ### 整个 B3 期间的 rejected paths
 
 1. **不拆 slice，强 force useAppStore.ts 越长越好** —— B3 启动前的诱惑（拆 slice 是 risky）。被 dual-native 路径 B 架构需求（multi-frontend / CLI 一等公民）push 下来必须拆。
-2. **拆 slice 但走 Redux Toolkit / Jotai / Valtio 重写** —— [O1 已 resolved 沿用 Zustand](../refactor/B3-store-slice.md#open-decisions)。换库 = 重写所有 store + 重训 React 19 strict-mode 兼容性，net 0 收益。
+2. **拆 slice 但走 Redux Toolkit / Jotai / Valtio 重写** —— [O1 已 resolved 沿用 Zustand](../archive/refactor/B3-store-slice.md#open-decisions)。换库 = 重写所有 store + 重训 React 19 strict-mode 兼容性，net 0 收益。
 3. **拆 slice 但走 React Context** —— sub-plan 拒。Context 跨 slice 协调成本更高 + 不能 store getState() 同步读 = 重写大量 ipc-handlers 路径。
 4. **B3 + 加 Rust messages-appended / prefs-updated event** —— sub-plan 拒（M5 reject #3 + M6 reject #4）。B3-I4 守 + 无 cross-process consumer + 推 B4 配合。
 5. **整个 useAppStore.hydrateFromDB orchestrator 留 store action** —— M6 reject #2/#3。Orchestrator 跨 5 slice，归属应是 `lib/hydrate.ts` pure module，不是 store action。

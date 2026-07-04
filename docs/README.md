@@ -1,95 +1,72 @@
 # Galley Docs
 
-This is the routing index for Galley documentation. Start with the section that
-matches who you are and what you are trying to do.
+This is the routing index for Galley documentation, and the **single source of
+truth** for what to read when. `AGENTS.md` carries only the highest-frequency
+subset of the task table below; when the two disagree, this index wins and
+`AGENTS.md` needs the fix.
 
 ## Read By Role
 
 | Role | Start Here |
 |---|---|
 | User evaluating Galley | [README](../README.md), then [architecture](./architecture.md) |
-| Agent / Supervisor integrator | [Supervisor SOP](./integrations/galley-supervisor-sop.md), then [Supervisor reference](./integrations/galley-supervisor-reference.md) or [agent-api](./agent-api.md) |
+| Agent / Supervisor integrator | [Supervisor SOP](./integrations/galley-supervisor-sop.md), then [Supervisor reference](./integrations/galley-supervisor-reference.md) or [agent-api](./agent-api/README.md) |
 | Contributor | [CONTRIBUTING](../CONTRIBUTING.md), then [engineering workflow](./engineering-workflow.md) |
 | Maintainer | [project status](./project-status.md), [release / update SOP](./release-update-sop.md), [release workflow](./release-workflow.md), [GA baseline](./ga-baseline.md) |
-| Historical reader | [devlog](./devlog/README.md) |
+| Historical reader | [devlog](./devlog/README.md), then [archive](./archive/README.md) |
 | Coding agent | [AGENTS.md](../AGENTS.md), then the focused docs below |
 
 ## Read By Task
 
 | Task | Read First |
 |---|---|
-| Understand current project state | [project status](./project-status.md) |
-| Understand the architecture | [architecture](./architecture.md) |
-| Change product behavior or roadmap | [PRD](./PRD.md) |
-| Change CLI output or Agent API | [agent-api](./agent-api.md) |
-| Change the Core ↔ runner wire protocol | [IPC protocol](./ipc-protocol.md) |
+| Understand current project state | [project status](./project-status.md) — current version, release gates, phase state |
+| Understand the architecture | [architecture](./architecture.md) — external-facing system overview |
+| Change product behavior or roadmap | [PRD](./PRD.md) — product definition and roadmap |
+| Change CLI output or Agent API | [agent-api](./agent-api/README.md) — stable CLI / socket contract; v1 is frozen, additive-only |
+| Change the Core ↔ runner wire protocol | [IPC protocol](./ipc-protocol.md) — change docs first, then code |
 | Change Supervisor / Agent integration | [Supervisor SOP](./integrations/galley-supervisor-sop.md), then [Supervisor reference](./integrations/galley-supervisor-reference.md) |
-| Plan or design Galley Native runtime | [Galley Native](./galley-native/README.md) |
-| Work on Rust core refactor | [refactor README](./refactor/README.md) |
-| Check architecture invariants | [architecture demo](./architecture-demo.md) |
-| Prepare or update a release | [release / update SOP](./release-update-sop.md), then [release workflow](./release-workflow.md) |
-| Write GitHub Release notes | [release notes guide](./release-notes-guide.md) |
+| Plan or design Galley Native runtime | [Galley Native](./galley-native/README.md) — charter, RFC set, implementation slices |
+| Check architecture invariants | [architecture demo](./architecture-demo.md) — code-level proofs and grep gates; hard engineering invariants (I3/I5/I6/I9/I11) are in [engineering workflow](./engineering-workflow.md) |
+| Prepare or update a release | [release / update SOP](./release-update-sop.md) (runbook), then [release workflow](./release-workflow.md) (background) |
+| Write GitHub Release notes | [release notes guide](./release-notes-guide.md) — writing rules and bilingual templates |
 | Close a long coding session or sync project knowledge | [session close SOP](./session-close-sop.md) |
 | Smoke Windows builds | [Windows checklist](./windows-build-checklist.md) |
-| Touch GenericAgent integration | [GA baseline](./ga-baseline.md) |
+| Touch GenericAgent integration | [GA baseline](./ga-baseline.md) — pinned upstream compatibility |
 | Touch app packaging / runtime | [desktop runtime](./desktop-runtime.md) |
-| Touch managed / bundled GA runtime | [managed GA runtime](./managed-ga-runtime.md) |
-| Touch GUI or engineering workflow | [engineering workflow](./engineering-workflow.md) |
-| Touch visual design | [DESIGN.md](./DESIGN.md) |
-| Understand or change Galley's temperament / brand character | [temperament charter](./temperament.md) |
-| Touch UI copy, terminology, or localization | [copy and language guidelines](./copy-language-guidelines.md), [copy austerity principles](./copy-austerity-principles.md) |
-| Touch conversation text rendering / CJK typography | [typography principles](./typography-principles.md) |
-| Reshoot README screenshots / demo assets | [screenshot playbook](./screenshot-playbook.md) |
-| Review product / UX audit findings | [audits](./audits/README.md) |
-| Understand history or decisions | [devlog](./devlog/README.md) |
+| Touch managed / bundled GA runtime | [managed GA runtime](./managed-ga-runtime/README.md) — mode boundaries, patch discipline, state rules |
+| Touch GUI or engineering workflow | [engineering workflow](./engineering-workflow.md) — conventions plus hard invariants |
+| Touch visual design | [DESIGN.md](./design/README.md) |
+| Understand or change Galley's temperament / brand character | [temperament charter](./temperament.md) — the "why" above the execution specs |
+| Touch UI copy, terminology, or localization | [copy and language guidelines](./copy-language-guidelines.md) (what to call things), [copy austerity principles](./copy-austerity-principles.md) (how to say it) |
+| Touch conversation text rendering / CJK typography | [typography principles](./typography-principles.md) — render-only red line |
+| Reshoot README screenshots / demo assets | [screenshot playbook](./screenshot-playbook.md) — includes the binary-asset policy |
+| Review product / UX audit findings | [audits](./audits/README.md) — evidence-backed decision input, not specs |
+| Understand history or decisions | [devlog](./devlog/README.md) — chronological decision provenance |
+| Dig into completed-mission docs (B-phase refactor, old drafts, handoffs) | [archive](./archive/README.md) |
 
-## Document Roles
+## Lifecycle
 
-- [AGENTS.md](../AGENTS.md): short startup constitution for coding agents.
-- [CONTRIBUTING](../CONTRIBUTING.md): contributor entry point.
-- [architecture](./architecture.md): external-facing system overview.
-- [project status](./project-status.md): current milestone, release gates, and
-  compact phase state.
-- [PRD](./PRD.md): product definition and roadmap.
-- [agent-api](./agent-api.md): stable CLI / socket contract for agents.
-- [IPC protocol](./ipc-protocol.md): wire format for the runner ↔ Core and
-  CLI ↔ Core transports; change docs first, then code.
-- [Supervisor SOP](./integrations/galley-supervisor-sop.md): short copy-first
-  SOP for local supervisor agents.
-- [Supervisor reference](./integrations/galley-supervisor-reference.md):
-  detailed command and advanced-workflow reference for Supervisor maintainers.
-- [copy and language guidelines](./copy-language-guidelines.md): UI copy,
-  terminology, and localization rules for Chinese and English.
-- [copy austerity principles](./copy-austerity-principles.md): the voice rules
-  for UI copy — a restrained, Wittgenstein-influenced austerity (how to say it,
-  paired with the terminology rules above).
-- [temperament charter](./temperament.md): the "why" above the three execution
-  specs — Galley as imprint-not-author positioning, the four load-bearing
-  surfaces, and the temperament-level refusals list.
-- [typography principles](./typography-principles.md): rendering-layer rules
-  for the reading surface — CJK/Latin auto-spacing, hanging punctuation,
-  measure — and the render-only red line (never rewrite content).
-- [English copy draft](./english-copy-draft.md): review draft for native
-  English UI copy before implementation.
-- [audits](./audits/README.md): evidence-backed product, UX, accessibility, and
-  workflow audits used as decision input.
-- [managed GA runtime](./managed-ga-runtime.md): design target for Galley's
-  bundled GenericAgent runtime, mode boundaries, prompt composition, model
-  config, patch discipline, and state rules.
-- [Galley Native](./galley-native/README.md): folder index for the native
-  runtime charter, RFC set, and implementation-slice plan.
-- [architecture demo](./architecture-demo.md): code-level proof of the four
-  architecture principles.
-- [session close SOP](./session-close-sop.md): closeout and knowledge-sync
-  checklist for long coding sessions.
-- [release / update SOP](./release-update-sop.md): maintainer checklist for
-  release day and updater channel promotion.
-- [release notes guide](./release-notes-guide.md): writing rules and bilingual
-  templates for GitHub Release notes.
-- [refactor](./refactor/README.md): B-phase implementation playbooks,
-  invariants, and execution cursor.
-- [devlog](./devlog/README.md): chronological decision history and rejected
-  alternatives.
+Status is encoded by location, not per-file headers:
+
+- `docs/archive/**` — **archived**. Mission complete; kept verbatim for
+  provenance. Never a current rule.
+- `docs/devlog/**` — **historical by definition**. Dated decision narrative;
+  entries are never rewritten, only superseded by newer entries.
+- Everything else under `docs/` — **living**. Current rules and references,
+  expected to be accurate today.
+
+To archive a doc: pull any still-binding rules into a living doc, `git mv` the
+file into `docs/archive/`, add a short `> **ARCHIVED <date>**` banner saying
+where the living rules went, and update the table in
+[archive README](./archive/README.md).
+
+When a living doc grows past what one session can afford to read (~1000
+lines), split it into a directory with its own `README.md` routing index,
+grouped by what a session typically needs together. The original path stays
+behind as a redirect stub so external references keep resolving. Current
+stubs: `docs/DESIGN.md`, [docs/agent-api.md](./agent-api.md),
+[docs/managed-ga-runtime.md](./managed-ga-runtime.md).
 
 ## Keep Docs Lean
 
@@ -99,3 +76,8 @@ Do not duplicate long history into task documents. Prefer:
 - link to the devlog for why
 - link to the playbook for how
 - update `AGENTS.md` only for global rules every session must know
+- this index is the only full routing table; do not grow parallel indexes
+
+When adding a major new document: add one row to the task table above, and (only
+if it is truly high-frequency) one row to `AGENTS.md`. Binary assets follow the
+policy in [screenshot playbook](./screenshot-playbook.md).

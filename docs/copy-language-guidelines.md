@@ -7,7 +7,7 @@
 - Owner review：待确认
 - 代码实现：基础语言偏好与 Settings 入口已接入
 - 中文 source copy：第一批全局控件和 Settings 入口已清理，继续整理中
-- 英文 copy：第一稿见 [English copy draft](./english-copy-draft.md)
+- 英文 copy：第一稿见 [English copy draft](./archive/english-copy-draft.md)
 
 ## 核心原则
 

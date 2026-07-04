@@ -22,7 +22,7 @@ Duration:    3 周估计 → 实际单 session ~5h (~21× 加速)
 
 - [x] PRD v0.3 已 ship（产品定位锁定，目录命名锁定）
 - [x] CLAUDE.md Galley 架构原则 4 条已 ship
-- [x] [bridge-owner prototype spec](../../core/experiments/bridge-owner/README.md) 已写
+- [x] [bridge-owner prototype spec](../../../core/experiments/bridge-owner/README.md) 已写
 - [x] **bridge-owner prototype 全 checklist pass + P1/P2 基线数据已记录**（B1 acceptance 复用这个基线）— 2026-05-18 17/17 PASS
 
 **未达 prerequisites 不允许启动 B1**。每一条都要打勾才能开 T1.1。
@@ -301,7 +301,7 @@ GUI 里至少一个 read 是经过 Rust core 来的，行为不变。
 
 - [x] **T7.1** 跑遍 acceptance criteria A1-A12，每条勾掉 — 11/12 pass + 1 deferred (`--pretty` 推 B4)
 - [x] **T7.2** 性能基线：CLI 6 命令各跑 100 次取平均，记录到本文件 running notes — 用 10-run (而非 100) avg；debug binary 全 < 100ms (`version` 89ms · status 73ms · health 62ms · sessions list 61ms · search 61ms · session brief 60ms · session show --tail=5 63ms)。Process startup dominated; release binary 会更快但不必要。
-- [x] **T7.3** 写 B1 完成 devlog: [`docs/devlog/2026-05-18-b1-rust-core-complete.md`](../devlog/2026-05-18-b1-rust-core-complete.md)
+- [x] **T7.3** 写 B1 完成 devlog: [`docs/devlog/2026-05-18-b1-rust-core-complete.md`](../../devlog/2026-05-18-b1-rust-core-complete.md)
   - findings (踩了什么坑)
   - 性能数据
   - 跟 prototype P1/P2 基线对比
@@ -403,7 +403,7 @@ B1 全部 acceptance 跑过，devlog ship，B2 playbook 写好可以启动。
 ## Migration pattern · 给 B2/B3 用的迁移模板
 
 样板已在 M6 落地：**`loadSessions` → `loadSessionsViaCore`**。
-[`gui/src/lib/db.ts loadSessionsViaCore`](../../gui/src/lib/db.ts) 的 JSDoc 是 canonical 描述；以下是 10 步操作清单 + M6 学到的 4 条注意事项。
+[`gui/src/lib/db.ts loadSessionsViaCore`](../../../gui/src/lib/db.ts) 的 JSDoc 是 canonical 描述；以下是 10 步操作清单 + M6 学到的 4 条注意事项。
 
 ```
 1. 在 core/src/api.rs 给目标功能加 trait method（read-only B1 / write B2+）

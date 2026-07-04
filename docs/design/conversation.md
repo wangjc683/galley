@@ -1,0 +1,368 @@
+# Conversation 主区与 Composer
+
+> Galley 设计系统 · 原 DESIGN.md §4.3–§4.4 与 §7（2026-07-04 拆分）：turn 结构、Goal 章节框、Markdown / 代码块渲染、滚动与流式行为、Composer、Empty State。
+
+### 4.3 Conversation 主区
+
+#### Turn 结构
+
+```
+第 1 步                                          ← 直立 12px sans · tabular 数字 · hairline 分隔（结构 metadata）
+[Thinking summary callout]                       ← 序列最前（仅在 GA 真实 emit <thinking> 时出现）
+[Tool callout 1]                                 ← 行动序列
+[Tool callout 2]
+─────────────────                                ← 稍深 1px 全宽 hr（行动 → 结论）
+[Final answer，浮在文档里]                       ← 不放 callout
+第 2 步                                          ← 自带 mt-6 (24px) 的 chapter-mark，承担 turn 间分隔
+[Thinking summary callout]
+...
+```
+
+**没有 turn 之间的 SoftHr** —— TurnMarker 自带视觉重量 + 上方间距，承担 turn-to-turn 的章节分隔。不再有水平横线。
+
+#### User vs Agent 三重区分（不用气泡）
+
+| 维度 | User | Agent |
+|---|---|---|
+| 字体 | Inter 500 | Newsreader 400 |
+| 字重 | medium | regular |
+| 锚点 | 左侧 4px 杏沙竖条 + 杏沙底 `bg-brand-tint` + 右侧硬边（无圆角） | 无 |
+| 对齐 | 左对齐 | 左对齐 |
+
+不要 right-align 不要气泡 —— 这是文档区，不是聊天 IM。**用户消息是 callout 块，不是 bubble**：全宽对齐、左强边线、轻底色——参照 Markdown blockquote / Notion callout 的文档语法，而非 IM 单侧浮起。
+
+长对话里这是用户**回找自己提问**的主视觉锚——杏沙底 + 品牌竖线让每个 user turn 成为滚动停靠点。AI 回复保持纯散文无底色，"提问（高亮锚）→ AI 回复（要读的内容）" 的层次随之建立。
+
+#### Right Question Rail
+
+主区右侧 rail 的首要职责是 **question index**：一颗 dot / 一段 cluster marker 对应一次或一组 user message，用来回跳提问。它不是第二个 Sidebar，也不是 session 状态队列。
+
+- 少于 3 条 user message 时隐藏；3 条以上显示为右侧细 spine + dots / dense cluster。
+- 历史 dots 永远只表达导航位置：active = brand filled，inactive = hollow ring，cluster = vertical capsule。
+- 只有最新 tail marker 可以临时承载 live 状态：running 时 single dot 替换为 Sidebar 同源的 brand `CircleNotch` spinner；waiting（approval / ask_user 合并）时替换为 warning `PauseCircle`。状态结束后恢复普通 dot / cluster。
+- 最新提问落在 dense cluster 里时，保留 cluster capsule 和 hover list，再叠加同源状态图标；不能让状态图标吞掉“这里是一组提问”的导航语义。
+- 右 rail 不展示 subline / badge / row tint。状态文案只进入 tooltip / aria：`进行中` / `等你回应`。跨区记忆来自同一套状态图标语法，而不是把 Sidebar row chrome 搬进文档区。
+
+#### Thinking Summary
+
+- 每 turn 第一个 callout（仅当 GA 真实 emit `<thinking>` 内容时出现）
+- 内容 = LLM 这一轮"打算做什么"的总结
+- Newsreader italic 14px ink-soft，3px 中性 `ink-soft` 左竖条 + `bg-surface` 底 + 右 8px 圆角
+- 无图标——typography + 容器 chrome 已足够标识 callout 块，2026-05-14 收回了原 💭 例外
+
+#### Goal 叙述 callout（SystemMessageBubble `variant="goal"`）
+
+Galley 在 Goal master 线程里讲述 run 进展的旁白（system row）。它是**次要的进行旁白，不是要读的答案**，层级应低于 agent answer。
+
+- 早期设计是"满底 `bg-brand-soft` + 3px brand-strong 实条 + 大写加粗 brand 标签 + bold 图标"，使它成了整个对话区最重的块，反倒压过用户消息和 agent 正文（层级倒挂），多条堆叠还会连成一堵 brand 墙。
+- **2026-06 降权**：去掉满底色与横幅化标签，只留**一条细 brand 左规线**（`border-l-[3px] border-brand-strong/30` + `pl-4`，无底色无右圆角）+ **一个无字的小 `Target` 图标**（thin 11px）作 register 标记，正文经 `MarkdownView variant="agent"` 但 `[&_p]/[&_li]` 降到 `text-ink-soft`。读作页边批注，而非横幅。
+- **「Galley」不再逐条显示**：每条都重复这个词是零信息的 chrome；归属改挂到 Target 图标的 `aria-label`（沿用 `goalNarration` 文案），读屏仍可念出，视觉不啰嗦。保留图标而非裸到只剩左规线，是为了和 agent 正文里的 markdown blockquote（同为 brand 左条 + 斜体 ink-soft 衬线）区分开。
+- **身份由 run 两端的章节框承担**：Goal 委派标记（开场）+ 收口标记（终态）扛起"这是一个 Goal"的 brand 身份，中间的叙述因此可以退回安静旁白。连续叙述簇只在**首条**显示 Target 图标（`SystemMessageBubble` 的 `showGlyph`，由 `annotateGoalThread` 的 `narrationLeading` 驱动），多 beat 的 run 不再每行重复标记。
+
+#### Goal run = 线程内插曲（章节框）
+
+一条 master session 的线程可先后承载**多个 Goal run**（session 复用自身 id 作每个 goal 的 master），中间还会夹普通对话。所以不做"会话级 Header"，而是把每个 run 括成一段**插曲**：开场 = 委派标记，结尾 = 收口标记，中间是该 run 的叙述。单 goal 就是一段干净的头尾，多 goal 自动分段，同一套规则。
+
+- **委派标记（`GoalCommissionMarker`）= objective user message 的加冠版**：它本就是用户在 Goal 模式下发送的第一条消息，保留 user DNA（4px brand 竖条 + `bg-brand-tint` + 硬右边 + Inter medium，就是用户的话），头上加一行 eyebrow：`Target + Goal`（brand 大写字距）+ 右侧直立 tabular 参数（`N 个 Agent · 预算 Xm · 写入模式`）+ 一个粗粒度状态徽标。这同时解决了"objective 被当普通气泡"和"Composer 两种寄存器结果不可辨"——普通发送=普通气泡，Goal 发送=委派标记。
+- **收口标记（`GoalTerminalMarker`）= run 终态留痕**：`✓ 已完成 / ✕ 失败 / ⏸ 已停止` + `用时 Xm` + 一条 hairline + 操作（`查看结果`/`查看详情` 走 `onOpenGoal`；`产出文件夹` 在有 `workspacePath` 时直接 `revealItemInDir`）。让结果沉淀在对话里，而非划过即逝的 toast；goal 即使已 `result_seen` 从 active 列表移除，回看仍在。
+- **live 归外围**：实时倒计时 / worker 明细 / 停止仍只在 TopBar pill；章节框只在粗粒度状态转变时变（开始 → 进行中 → 终态），不做每秒 ticker（与 §2.7、sidebar/epigraph 的"live 归外围 chrome"一致）。
+- **数据与关联**：标记数据来自只读命令 `list_goals_for_session(masterSessionId)`（全状态，含已读终态）。`annotateGoalThread`（`lib/goal-thread.ts`）用 **objective 文本 + `startedAt ≈ createdAt`** 启发式把 goal 关联到对应的 objective user-turn（消息行不持久化 goalId，恢复后靠此重建）；未命中则优雅退化为无标记的（仍降权的）叙述。run 的收口标记落在其叙述簇之后、后续普通对话之前。
+
+#### Markdown 渲染
+
+Final answer 跟 Thinking summary 都通过 `react-markdown` + `remark-gfm` + Shiki 渲染。LLM 输出的 markdown（标题 / 列表 / 表格 / 代码块 / 引用 / 链接 / 删除线）全部解析成对应 DOM，没解析的纯文本走默认段落。
+
+**typography 映射**（每个元素 pull 现有 token，不引入新字号）：
+
+| markdown | 渲染 |
+|---|---|
+| `p` | 15px normal / line-height 1.7（Latin Newsreader, CJK 苹方·雅黑）`agent` / 14px italic muted `thinking` |
+| `h1` | Newsreader medium 22px |
+| `h2` | Newsreader medium 19px |
+| `h3` | Newsreader medium 17px（故意接近正文，避免视觉跳跃） |
+| `h4` | Newsreader medium 15.5px |
+| `ul` / `ol` | 标准缩进，`::marker` text-ink-muted |
+| `li` | 紧 paragraph 形态（list 内 `<p>` margin 0） |
+| 行内 `code` | mono 0.86em + bg-hover 浅底（pill） |
+| 块代码 ` ```python ` | 详见下方 Shiki 段 |
+| `blockquote` | 左 3px brand 竖线 + italic + ink-soft |
+| `a` | text-brand-strong + 1px 下划线 + 安全 _blank |
+| `table` (GFM) | `overflow-x-auto` 容器 + border-collapse + th `bg-surface` + 单元格 padding 12px×8px |
+| `hr` | 1px line + my-5 |
+| `strong` | font-medium（正文 normal 400，strong 500，一档可见加粗） |
+| `em` | italic |
+| `~~del~~` (GFM) | line-through ink-muted |
+| `![alt](url)` | `https://` 与绝对本地 raster 图片（png / jpg / jpeg / webp / gif）内联预览；本地路径支持 macOS/Linux 绝对路径、Windows drive path、`file://`；相对路径、`http://`、`data:`、`svg`、加载失败降级为图片链接 pill |
+
+**视觉哲学**：每个 markdown 元素 reuse 现有 Newsreader / Inter / JetBrains-Mono token，不为 markdown 单独引入字号 ramp。整段对话读起来是一个 document，不是 stylesheet 拼贴。
+
+#### 代码块语法高亮（Shiki）
+
+- 引擎：[Shiki](https://shiki.style) v1+，TextMate grammar，跟 VS Code / Claude.ai web 同款
+- 主题：跟随 Galley 当前主题，light 用 `github-light`，dark 用 `github-dark`
+- 注册语言（hand-picked）：`bash` / `css` / `diff` / `html` / `javascript` / `json` / `markdown` / `python` / `rust` / `shell` / `sql` / `tsx` / `typescript` / `yaml` —— 14 种 coding agent 用户高频
+- 别名：`js → javascript` / `ts → typescript` / `py → python` / `rs → rust` / `sh → bash` / `yml → yaml`
+- 未注册的语言：fallback 到无色 mono code block（同样的 chrome，仅没 token color），不报错
+- async render：第一次 highlighter 加载时显示 plain mono fallback，加载完替换；同 highlighter 实例 cache，跨 code block 共享
+- 视觉容器：**无顶部 header 行**。圆角 6px + `border-line-strong` + 底色 `--color-code-surface`（内凹暖灰，见下方决策）。语言名 + copy/wrap 控件浮在**右上角**：语言名常驻（dim 10px mono uppercase，`text`/`plaintext` 等无信息语言名不显示），copy/wrap 在 hover 时 fade-in，三者都带 `bg-code-surface/85` backdrop 以压住底下的代码。
+- 默认横向 overflow scrollable；hover/focus 可切到 wrap 模式，便于读日志、错误栈、长命令
+
+**Copy 按钮**：hover-revealed（11px Phosphor `Copy` thin + uppercase "Copy"，复制后变 ✓ + "Copied" 1.5s），复制内容是**纯代码**——不带 ` ``` ` fence、不带 markdown chrome。Claude.ai / ChatGPT / Cursor 的肌肉记忆位置。
+
+**2026-06 密度与分离 pass（决策留痕，勿回退）**：
+
+- **去掉顶部 header 行**：它占一整行；当语言名被抑制（`text` 等）时只剩一条死白带。改为右上角浮动控件后，框身就是代码本身。语言名挪到右上角而非左上角，是因为代码顶格起排，左上角标签会压在第一行字上。
+- **紧凑间距**：正文 `py-1.5` + 代码 `leading-[1.45]`，并**显式归零** `pre`/`code` 的 margin/padding（`[&_pre]:m-0 [&_pre]:p-0` 等），堵住 Shiki / UA 行盒漏进来撑高单行块的纵向空白。
+- **首尾空行裁剪**：按行剥掉围栏内容的首尾空白行（兼容 `\r\n`），LLM 常带的前导空行不再渲染成框内浪费空间（`trimCodeBlankEdges`）。
+- **底色方向（关键，别再"优化"回去）**：代码要读作"嵌进纸里的另一种介质"，所以 `--color-code-surface` 必须**比页面 `--color-app` 暗**、与行内代码 `--color-hover` 同族（亮 `#f3f0e9` / 暗 `#221d18`）。曾经用过的比纸更白的 `bg-surface` 会让代码框糊进对话流、几乎不可辨——这是被明确否掉的方向。
+
+V0.1 不做：代码块行号 / Edit 在行内（V0.2 候选）。
+
+#### Message Actions（reply 级行动条）
+
+每段 agent final answer 下方常驻一行 muted 行动条（DESIGN.md §4.3 dogfood 反馈：用户经常想保留 reply 内容）：
+
+| 按钮 | 行为 |
+|---|---|
+| `Copy` | 复制原始 markdown source（带 `**bold**` `## headers`），不是渲染后纯文本——用户粘贴目的地（Notion / Obsidian / Slack / 邮件）多数能 re-render markdown |
+| `Save` | Tauri save dialog → `.md` 文件。默认文件名 `ga-{YYYYMMDD-HHmmss}.md`，用户可改 |
+
+**复制入口统一（`ActionChip`）** —— 按"常驻 vs 触发浮现"两类组织，全部共用一个
+`ActionChip`（Copy thin 14px → Check success，1.5s 回落，quiet 1px press）：
+
+- **常驻**：assistant 回答末尾的 reply 行动条（`Copy` + `Save`），bare chip、贴答案
+  下方左对齐、一直可见。
+- **触发浮现**：用户做动作才出现的复制，统一为 `floating` 变体（实底 `bg-elevated`
+  + `border-line` + token 投影，非 glassmorphism），贴相关内容浮出：
+  - assistant 里**选中**文字 → 浮在选区旁（gutter）
+  - user 消息上 **hover** → 浮在杏沙块**右上角**（覆盖在块上，归属无歧义；块留
+    `pr-10` 横向余量、chip 不压字；不占布局、不碰 turn 间距）
+
+一条规则统摄：**常驻操作在回答末尾的 bar 里；触发式复制是一个浮动 chip，贴触发的
+内容浮出。** bar 里用 bare chip，浮动的用 floating chip。
+
+视觉：
+
+- 位置：reply markdown 渲染**正下方**，gap 8px (`mt-2`)
+- 字号 12px Inter + 13px Phosphor thin icon
+- **常驻可见**（不 hover-only），text-ink-muted；hover 升 ink-soft + bg-hover
+- 点击后 0.5s 内 icon 变 Check + 文字变 "Copied" / "Saved"，1.5s 后回 idle
+- success 反馈用 `text-success`（绿色 token）
+
+工程：
+- Copy 走 `navigator.clipboard.writeText` web API（Tauri webview 支持）
+- Save 走 `@tauri-apps/plugin-dialog` `save()` + `@tauri-apps/plugin-fs` `writeTextFile`
+- Capabilities 加 `dialog:default` / `fs:allow-write-text-file` + `fs:scope` 限制到 `$HOME` / `$DOCUMENT` / `$DESKTOP` / `$DOWNLOAD`（保留用户常去的目录）
+
+V0.1 **不做**：
+
+- **Regenerate 按钮**：需要 GA history 回滚 + 跨 turn 状态管理，工程量大；推后到 V0.2 跟 multi-session / session 恢复一并设计
+- **Continue 按钮**：用户自己输入"继续"即可，不需要专用按钮
+- **Pin / 收藏**：需要数据模型扩展，V0.1 单 session 不值
+- **Branch（从这里分叉新 session）**：跟 multi-session 深度耦合，V0.1 没法做
+- **TTS / 翻译 / Share**：依赖外部服务，跟产品定位不符
+
+ReactNode children（非 markdown string）的 reply 不渲染 actions——demo fixture 没 markdown source 可复制。
+
+#### Scroll behaviour（stick to user message top）
+
+Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不**滚到底部（reply 还没生成，跳到一片空地）；**也不**被动什么都不做（user message 出现在视口外，看不到反馈）。**正确做法**：把刚 submit 的 user message 顶端贴到 viewport 顶部下方 32px 处。
+
+跟 Claude.ai / ChatGPT 收敛的同一模式。理由：
+
+- 用户提交完立刻能看到自己的提问
+- 长 reply 不会推走问题——问题永远在视口顶端附近
+- 短 reply 用户也不必往下找答案——它就在问题正下方
+- 阅读 reply 期间**不被打扰**（不跟随）
+
+实现细节：
+
+- store 加 `userSubmitTick` 计数器，`appendUserTurn` 时 +1
+- MainView `useEffect` 监听 `userSubmitTick` 变化（不监听 `turns.length`——避免 `turn_end` 也触发滚）
+- RAF 推迟到 `<MessageUser data-role="user-msg">` 真实 mount 后
+- 找最后一个 `[data-role="user-msg"]`，算 offset (`top - container.top - 32`)，`container.scrollBy({ top: delta, behavior: "smooth" })`
+- 不用 `scrollIntoView({block: "start"})`：它没法控 padding
+
+边界：
+
+| 场景 | 行为 |
+|---|---|
+| 第一次提交（EmptyState → MainView 切换） | 同样滚一次（保险，user message 已经在顶部时 delta 接近 0，相当于 noop） |
+| `turn_progress` chunk 流入 / `turn_end` 来 | 不触发（store 状态变了但 tick 没变） |
+| 用户主动向上翻历史 | 不打断（仅 submit 触发） |
+| 切换历史 session（multi-session 后） | 默认滚到底（看到最后 turn）；不属于此 spec 范畴 |
+
+#### Streaming generation（流式 partial 渲染）
+
+Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每个 partial chunk 通过 IPC `turn_progress` event 推给 desktop。这里的流式单位是 GA display_queue chunk，不是 token-level 合约；desktop 累积成 `inFlightContent`，跑 `cleanPartialContent` strip 掉 GA 内部 tag 后用 `MarkdownView` 实时渲染，并可用本地 typewriter 平滑 chunk 间隔。
+
+| 时机 | 显示 |
+|---|---|
+| User 提交 → bridge spawn → LLM TTFT | `第 N 步 · 思考中` TurnMarker（thinking 态） |
+| 第一批 chunk 到 | placeholder 消失，partial markdown 开始流出 |
+| 流式过程中 | partial 持续增长，Markdown re-render（行内 / 列表 / 代码块都跟着出现） |
+| `turn_end` 到 | partial 被 finalized AgentTurn **替换**（store `appendAgentTurn` clear inFlightContent） |
+| Tool call 触发 | partial 暂停，Approval Card 出现 |
+| 用户决策后 → bridge 继续 → 下一 turn | 新 turn 的 partial 重新开始流（store `turn_start` clear inFlightContent） |
+
+**关键 robustness**：partial 输入是 GA-raw（`<thinking>` / `<summary>` / `<tool_use>` / `<file_content>` / `[FILE:...]`），且**可能 mid-tag**（比如刚收到 `<thi` 没 close）。`cleanPartialContent` 的 4 步算法：
+
+1. Strip 完整的 `<tag>...</tag>` block
+2. 找 leftmost unclosed open tag → 截断
+3. 找 trailing partial open-tag start（"<thi" / "</sum"）→ 截断
+4. Strip `[FILE:...]` refs + 折叠空行
+
+效果：用户在任何 sampling instant 都看不到 GA 内部 scaffolding 闪过。
+
+#### Sticky-bottom + Scroll-to-bottom 浮动按钮
+
+- 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 监听 `inFlightContent` 变化把 `scrollTop = scrollHeight`
+- **用户向上滚 → 不跟随**：`atBottom = false`，stream 继续但视图不动
+- **浮动按钮**：`atBottom = false` 时 conversation 列右下角（Composer 上方 140px）出现一个 36px 圆形 ghost 按钮，⬇ ArrowDown thin icon
+- 点按钮 → `scrollTo({ top: scrollHeight, behavior: "smooth" })` + `atBottom = true`（重新启用跟随）
+- ESC / 任何手动 wheel 不影响按钮可见性（仅 scroll position 决定）
+
+#### Thinking Placeholder（in-flight 占位）
+
+用户提交消息后到 `turn_end` 到达之间存在显著延迟（LLM TTFT 可达几秒到十几秒）。如果不显示状态指示，用户会觉得 UI 卡住。
+
+- 用户提交瞬间 store 设 `agentRunning = true`（不等 `turn_start` IPC，避免一次往返延迟）
+- conversation 末尾立即渲染 `TurnMarker` 的 thinking 态：单行直立 12px ink-soft，内容 "第 N 步 │ 思考中" + 三点 working 指示（`LiveDots`）；不再用逐字 opacity 波浪
+- 触发条件：`agentRunning && pendingApprovals.length === 0 && !visiblePartial`
+- `turn_end` 到达时占位消失，真正的 AgentTurn（含同一个 step number 的 TurnMarker + tools + final answer）一次性渲染替换。**before/after 视觉一致**——同一个 TurnMarker 组件的两态，用户感受到的是一个步骤的进展，不是两个独立的 UI
+- **等待 ≥ 3 秒时显示 elapsed 计数，≥ 60 秒后追加仍在运行**——立即显示读秒会
+  太机械，但 5 秒空等又明显让人产生等待感；3 秒是当前 dogfood 后的中点。
+  `仍在运行` 是更强的长等待确认，只在 60 秒后出现，避免前一分钟显得啰嗦。
+  Caller 用 `key={currentTurnIndex}` 让每步独立计时（step 1 等 40s，step 2 时钟归零）
+  - `0-2s` → `思考中` + 三点指示
+  - `3-59s` → `思考中` + 三点 · `32 秒`（tabular 等宽）
+  - `60s+` → `思考中` + 三点 · `已 1 分 23 秒` · `仍在运行`
+
+历史设计（已废弃）：原本占位走 ThinkingSummary callout（bg-surface + 左竖条 + 💭 emoji），跟正式 ThinkingSummary 块视觉同款。问题是 callout chrome 是给"GA 真实 emit `<thinking>` 多段内容"设计的容器，套在 10 字占位上视觉权重严重失衡。2026-05-14 改成 TurnMarker thinking 态。
+
+Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模式，LLM dropdown disable。
+
+#### Turn 编号 + 间距
+
+**不是**用户↔agent 对话轮次，**是 GA 内部 agent loop 的 turn 计数**——每次 LLM call + dispatch = 1 turn。一个 user message 可以触发 GA 跑 N 个 turn（agent 不断 reflect + 调 tool 直到出 final answer）。这跟 PRD §7.5 sidebar session row 显示的 "Turn N · summary" 同一个 N。
+
+- 数据来源：每个 IPC `turn_start` / `turn_end` event 都带 `turnIndex` 字段
+- AgentTurn type 持有 `turnIndex`（一个 user message 在 conversation 里可能产生多个 AgentTurn）
+- 渲染：每个 AgentTurn 的 thinking summary 之上一行，`第 N 步`（`copy.conversation.step`）12px 直立 sans `text-ink-soft`，`tabular-nums` 数字作结构锚点；与 summary 之间用一条 `w-px bg-line-strong` 竖向 hairline 分隔（瑞士结构感，取代旧的 ` · ` 中点）；`mt-6`（24px）上方间距承担 turn 间章节分隔。**不用 italic、不用 serif、不用 uppercase tracking**——结构 metadata 冷静直立，与下方 Newsreader 衬线正文形成对比张力
+- in-flight 状态：`currentTurnIndex` 从 `turn_start` 读取；thinking placeholder 顶部也显示 `Turn N` 标记让用户感知 agent 当前跑到第几迭代
+- `run_complete` / `error` 时清空 currentTurnIndex
+- **没有 turn 之间的 SoftHr**——TurnMarker 自带 chapter-break 视觉重量，水平横线已删除
+
+#### 间距演化历史
+
+`turn 间分隔`经过四次调整：
+
+1. v0.1 初版：SoftHr `my-9`（72px）—— dogfood 反馈"每个 turn 浪费 1/3 屏"
+2. SoftHr `my-6`（48px）—— 仍反馈"还是大"
+3. SoftHr `my-5`（40px）—— 仍反馈"还是大"
+4. 删除 SoftHr，TurnMarker `mt-7`（28px）+ tracking 加大承担分隔
+5. **现行（2026-06-09 瑞士化）**：直立 sans + tabular 数字 + 竖向 hairline 分隔，去掉 italic 与 uppercase tracking。间距曾短暂提到 `mt-9`（36px），但实测 turn 间隙 ≈ 42px 又触到当年被拒的 SoftHr `my-5`（40px）量级；dogfood 后一路收到 `mt-6`（24px）。结论：瑞士 marker 自带分隔力，结构清晰度承担分隔，不需要靠大留白
+
+教训：当用户反复反馈"间距大"时，缩 hr 到极小已经不是答案；该思考"分隔信号"是不是必须靠 hr 承担。结果：TurnMarker 的章节标识 + 间距 + 字号已经足够。
+
+### 4.4 Composer
+
+#### 视觉
+
+- **杏沙 focus ring**（`brand` token）
+- 圆角 12px / `surface` 背景 / 默认 1px `border-default`
+- 上方留 1.5em，下方贴 viewport bottom（in-session）或居中（empty state hero）
+- + icon 占位（V0.2 接 attach）/ Submit 按钮
+
+#### Submit 按钮（杏沙 CTA 例外）
+
+- **Submit 是全局唯一用杏沙作为 CTA 填充的元素** —— 用户最高频元素，杏沙带来"亲和体温"
+- Phosphor `ArrowUp` thin / 32px circle / 杏沙填充 / charcoal icon
+- Enter 触发，Shift+Enter 换行
+- agent running 时**位置替换为 Stop 按钮**（深琥珀填充 / Phosphor `Stop` thin），点击触发 abort
+
+#### 常用提示词入口（V0.2.16）
+
+位置：**Composer 内部右下角**，放在图片附件按钮左侧。常用提示词属于
+「往输入框添加内容」的工具，和添加图片同组；LLM picker 属于模型选择，
+不和它绑定。
+
+- 形态：Phosphor `BookmarkSimple` thin icon，icon-only，32px 圆形 hit target；
+  无边框 / 无底色，hover 才出现 `hover` tint，与图片附件按钮同视觉族。
+- 点击图标直接打开提示词库 dialog；hover 只显示统一 Radix tooltip，不再打开
+  quick-fill popover，避免鼠标擦过 Composer 工具区时误弹大浮层。
+- 内置预设共 8 个，按大众用户使用频率从高到低展示：信息查证、整理长文、
+  翻译润色、审阅草稿、网页内容提取、整理表格、本地文件整理、执行前检查清单。
+  预设是固定目录，顺序固定、只读，不可置顶或排序。
+- 常用提示词入口采用 pointer-first，不进入键盘 Tab 顺序，也不显示 focus ring；
+  避免桌面 WebView 把焦点态误读成“选中”。
+- Dialog 顶部不显示可见副标题；尺寸约
+  `920x680`，读作 Settings / Earlier / Archived 同族的工作台，而不是小确认窗。
+  主体为工作台式 `bg-app` 画布 + 卡片平铺，分两个 group：上方「预设」（常驻
+  可折叠的模板库，固定顺序），下方「自定义」（用户可上移 / 下移调整顺序）。
+  整张卡片点击即预填 Composer，不自动发送；hover 卡片时显示查看 / 管理按钮。
+- 卡片只承载摘要：标题 + 4 行正文预览。需要看完整 prompt 时，hover 点“查看”
+  进入同一 dialog 内的完整阅读页；阅读页提供返回、填入输入框，以及预设复制为
+  自定义 / 自定义编辑。
+- 卡片管理动作按 group 分：预设只读，可复制为自定义；自定义可新增、编辑、删除、
+  上移 / 下移调整顺序。复制预设或新增自定义后，新项落在自定义列表最前并短暂
+  高亮、自动滚到该卡片。
+- 数据存在 GUI prefs `saved_prompts_v1`（schemaVersion 2），只保存用户自定义
+  prompt；内置 preset 不写入 prefs，随 UI 语言本地化。没有置顶 / pinnedIds
+  概念——早期版本的置顶机制在首次发布前移除，pinnedIds 字段一并删除，旧 prefs
+  落到 v2 默认值（空自定义）。
+- 若 Composer 已有非空草稿，选择 prompt 先确认再覆盖；图片附件保留，
+  paste-fold registry 重置。
+- 首版明确不做：分类、搜索、变量、使用次数 / 最近使用排序、import/export、
+  cloud sync、Agent API / CLI surface。
+
+设计判断：这是高频便利入口，不是新手能力发现模块；因此它留在 Composer 工具组，
+不回到 Empty State 下方的 quick prompt 建议。
+
+#### LLM 切换器（V0.1）
+
+位置：**Composer 内部左下角**。
+
+- 形态：LLM displayName + `CaretDown` thin。模型名本身已承担语义，不再显示
+  Cube icon。
+- Ghost button / hover `hover-tint` / 13px Inter / 28px 高
+- 点击展开 popover：
+  - `surface-elevated` 背景 + `shadow-elevated`
+  - 圆角 12px / 内边距 8px / 每行 32px
+  - current 项右侧杏沙 ✓
+  - 切换中 `Check` 替换为 `CircleNotch` 旋转
+- agent running / waiting approval 时 disabled，hover 显示 tooltip "Wait for the current run to finish"
+- LLM list > 8 时加 scroll
+- displayName 由 bridge 按 runtime 边界生成：external GA 显示完整 raw name；managed GA 显示 Galley Models 里的显示名或原始 model id（详见 IPC 协议）
+
+#### 不显示
+
+Context Window / 价格 / token estimate（V0.1 拿不到 + 信息噪音）
+
+---
+
+## 7. Empty State（无 session 时主区）
+
+主界面没 session 时**不放大段欢迎文案**，**Composer 浮在视口中部**（不在底部正常位置）。提交第一条后切入 conversation。
+
+参考 Claude.ai / ChatGPT / Cursor 标准模式，跟"对话工作台"心智一致。
+
+### 视觉
+
+```
+             语词的意义，在于它在语言中的用法。       ← 题词：状态绑定的维氏句（serif italic ink-muted）
+             Die Bedeutung eines Wortes …             ← 德文原句常驻副行（更轻一档）
+
+            ┌─────────────────────────────┐
+            │ Composer (居中，560px max)   │
+            │ [Cube] LLM dropdown │ [+]   │
+            │                       [↑]   │
+            └─────────────────────────────┘
+```
+
+- Composer 居中（含 LLM 切换器，跟 in-session 对称），placeholder 是 "今天交代什么？"（commissioning 语气）。
+- **题词（epigraph）浮在 Composer 正上方**：一行状态绑定的维特根斯坦句（译文跟随软件语言）+ 德文原句常驻副行（更轻一档）。`font-serif italic text-[12.5px] text-ink-muted`，视觉明显次于 Composer——读作安静题铭，不是 header / banner；入场即冻结，不随状态实时变、不轮播（live pulse 归 sidebar status spine）。状态绑定：`silent`（无 session）→ Tractatus 7「凡不可说的，应当沉默」；`quiet`（有 session 但无运行）→ PI §19；`working`（≥1 运行）→ PI §43（也是 Composer 运行态声音所依的同一命题 *meaning is use*）。策展集与逐条理由在 `gui/src/lib/epigraphs.ts` 注释 + 2026-06-03 devlog。
+- Conversation width toggle 同样影响 Empty State：compact = 560px，wide = 1200px。用户在空状态点击 toggle 必须看到变化，否则像坏了。
+- **不放 quick prompt 建议**（勿回退）：早期在 Composer 下方放过 4 条 serif italic 引导 prompt，2026-06 与题词打架——两坨安静 serif 夹住 Composer 稀释焦点，且在"沉默"题词下放"快说点什么"自拆其台——整段移除；新人能力发现留给独立的非空状态机制（详见 2026-06-03 devlog）。
+- Sidebar 正常显示 Header / Quick Actions / timeline；Project Review 通过 Quick Action 进入；没有 session 时只出现一句 muted empty hint。
+- **不放快捷键 hint 行**（曾尝试在底部加快捷键提示，但稀释了"今天交代什么？"的聚焦感；完整快捷键列表移到 Settings → Shortcuts tab）。

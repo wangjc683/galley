@@ -1,0 +1,269 @@
+# Command Palette、Settings 与快捷键
+
+> Galley 设计系统 · 原 DESIGN.md §8–§10（2026-07-04 拆分）：⌘K Command Palette、Settings modal 全部 tab、全局快捷键表。
+
+## 8. Command Palette（⌘K Overlay）
+
+### 触发与形态
+
+- `⌘K` 开 / `Esc` 或点遮罩关
+- **居中 overlay**（不贴顶；居中更聚焦，不遮 Top Bar 状态）
+- 宽度 **560px**（不顶天立地）
+- 高度自适应，max 420px（约 8 行结果），超出 scroll
+- 背景 `surface-elevated` + `shadow-elevated` + 圆角 14px
+- 触发后页面其余加 `surface-overlay` 遮罩，**无模糊**（模糊太花）
+
+### 不加 ⌘P 别名
+
+只 `⌘K`，少而精（VS Code/macOS `⌘P` 习惯不引入）。
+
+### 内容范围（V0.1 收敛）
+
+#### Session 类（主轴）
+
+- 最近 8 个 session（按 `lastActiveAt` 倒序）
+- 搜索：按 title 模糊匹配（V0.2 加 message 内容全文搜索）
+- "New chat" 永远固定在第一项
+
+#### Action 类（少而精）
+
+- Switch LLM → 嵌套二级（展开当前 availableLLMs 列表）
+- Re-run health check
+- Open settings
+- Attach GA folder（仅 onboarding 已完成、想换路径时）
+
+#### 故意排除（V0.1 不做）
+
+- 跨 session 全文搜索
+- Theme switcher（V0.1 light-only）
+- Quick prompt insertion（empty state 已经有）
+- 任何 destructive action（删除 session 之类，Palette 不该让破坏太轻松）
+
+### 视觉细节
+
+- **Input row**：48px 高 / 17px Inter / placeholder italic muted "搜索 session 或输入命令…" / 左侧 16px Phosphor `MagnifyingGlass` thin / 右侧 `Esc` shortcut hint（13px muted）
+- **Divider**：1px `border-default`
+- **Result row**：36px 高 / 13px Inter / 左侧 16px Phosphor icon / 中间 label / 右侧 keyboard shortcut（如 `⌘N`）灰色 hint
+- **Section header**（仅多组结果时）：11px Inter uppercase tracked `RECENT` / `ACTIONS` / `LLMS` —— 大多数情况下不显示 header（结果少时 header 是噪音）
+- **Hover / 键盘选中态**：背景 `hover-tint`，左侧 2px charcoal 竖条
+- **Empty state**：输入有内容但无匹配 → 中央一行 muted "没找到。Enter 直接发问？" + Enter shortcut（**做** —— 输入框里写的字 Enter 直接 new chat + 把它当第一句 prompt，是对"文档对话工作台"心智的延伸）
+
+### 关键交互
+
+- ↑↓ 选 / Enter 执行 / Tab 进二级（如 Switch LLM 子菜单）
+- 输入"#"前缀强制只搜 session（V0.2 留）；输入">"前缀只搜 action（V0.2 留）
+- **没有最近搜索历史持久化**（V0.1 简化）
+
+### 排序规则
+
+- Session 类按 lastActiveAt
+- Action 类按内置优先级：New chat > Switch LLM > Re-run health check > Open settings > Attach GA folder
+- Switch LLM 嵌套二级而不是平铺（避免 LLM 多时淹没 session）
+
+---
+
+## 9. Settings（modal overlay）
+
+### 形态决策
+
+当前实现是 **Radix Dialog modal overlay**，720 × 560px，左侧 tab list + 右侧内容区。独立 settings window 是历史方向，已从当前基准移出。
+
+理由：
+
+- Tauri 多窗口需要第二 React entry + WebviewWindow 生命周期，成本不应压过 v0.2 beta 的核心任务。
+- 当前 settings 多数是即时保存的低频配置，modal 的短暂停留成本可接受。
+- 用固定 overlay frame 先统一 Settings 内部信息架构，未来若升级为独立窗口，tab/content API 可以保留。
+
+### 规格
+
+- **720 × 560px / centered modal / `bg-overlay` scrim**
+- 左侧 180px Tab list（垂直），右侧主内容区
+- 右上角 28px close icon，Esc 可关闭
+- 触发：主窗口 ⌘, / Sidebar runtime unconfigured / Command Palette "Open settings" / TopBar Gear
+- 内容区 `px-8 py-7`，可滚动；Tab list 固定
+
+### 语言与 Tabs
+
+- 语言选项不为当前 Settings 单独新增 `General` tab。现阶段放在左侧 tab
+  list 底部，作为轻量全局偏好。
+- 选项为 `Auto / 跟随系统`、`中文`、`English`；默认 `Auto / 跟随系统`。
+- 首次启动没有保存偏好时，根据 OS / WebView language preference 推断：
+  `zh-*` 显示中文，其余显示 English。不要根据 IP、地区或时区判断。
+- 用户显式选择 `中文` 或 `English` 后持久化；之后不再跟随系统语言变化，
+  除非用户切回 `Auto / 跟随系统`。
+- 中文 UI 的左侧 tab 使用英文主标签 + 小号中文辅助标签；英文 UI 只显示
+  英文标签。
+
+```text
+Runtime      / 运行环境
+Models       / 模型
+Approval     / 审批
+Agent        / 智能体接入
+Shortcuts    / 快捷键
+About        / 关于
+```
+
+视觉上不要真的使用斜杠；主标签和辅助标签上下两行显示。辅助标签
+只做注释，不与英文主标签同权重：英文约 14px medium，中文约 10.5px
+normal muted，两行之间保留明确间距。即使 tab 处于 active 状态，中文也
+不要抬到主标签权重。该双层标签只用于 Settings 左侧导航，正文不做大面积
+双语。
+
+### 当前 Tabs
+
+#### Runtime
+
+- **GA path**：当前路径显示（mono）+ 重选按钮（触发文件夹选择器）
+  - 改动后弹 confirm dialog："路径改动需要重启 Galley 才能生效。立即重启？/ 稍后"（不悄悄 kill 所有 session）
+- **Bridge Python**：当前 interpreter 路径显示 + 重选 + muted hint "用于运行 bridge，影响 GA 子进程"
+- **Re-run health check**：button → 弹 Health Check Card 重跑
+- Bundled Python / external Python mode 在这里切换；默认 bundled，external 是高级路径。
+- 底部显示 GenericAgent 版本 / Galley 版本。
+
+#### Models
+
+- Managed / bundled GA 的模型配置入口；attach mode 不读取这里。
+- 支持添加多个模型：`OpenAI-compatible` / `Anthropic-compatible`、API Key、Base URL、模型名、可选显示名。
+- Provider picker 中，`OpenAI` / `Anthropic` 保留品牌主标题；下拉项用低权重副标题说明“官方 API 或 compatible endpoint”，帮助用户理解第三方中转站 / 兼容接口也应该选择这两个入口。
+- 页面分为主视图和维护区：
+  - `当前配置模型` 是主视图，显示 Galley 当前会使用的模型队列、默认模型和排序。
+  - `当前配置模型` 标题区只承载标题、`Info` tooltip 和模型数量；配置生效范围放到 `Info` tooltip，避免 header 被常驻说明文字撑乱或浪费纵向空间。
+  - 模型新增、编辑、排序或设为默认成功后，用短 toast 提醒：新对话立即使用最新配置；如果存在已启用 Channels，toast 带 `重启 Channels` CTA，直接重启已启用 Channel 进程，不要求重新登录。
+  - `当前配置模型` 行 hover / focus 只做轻底色和排序箭头显性化，提示可操作但不做抬升、缩放或阴影；Provider 名称使用低权重 metadata chip，默认模型标签保留可见但不做重 Badge。
+  - `已接入的模型提供商` 是维护区，标题右侧按钮只写 `添加`，accessible label 保留完整的 `添加模型提供商`；Provider 摘要压成单行，长名称截断，不撑高卡片；协议类型放在模型数量之后，用低权重 metadata chip 显示，不使用明显边框或等宽字体，避免和 Provider 名称、模型数量抢层级。
+  - Provider 摘要行的正常状态不显示 Key 图标或 `Key 已保存`；只有缺少密钥 / 状态异常时才显示 warning badge。
+  - 新增 Provider 表单贴着 `已接入的模型提供商` 标题区展开，位于 Provider 列表上方；新增表单不重复显示标题，Provider picker 不显示额外 label，placeholder 用 `选择提供商`，关闭按钮与 picker 同行，避免小区域反复出现“模型提供商”或形成空标题区；编辑已接入 Provider 时，编辑表单必须贴着对应 Provider 原地展开，不跳回页面上方；新增和编辑表单都使用同一套展开态底色、边框和阴影，不因入口不同改变视觉层级。
+  - Provider / Model 的局部编辑表单关闭入口统一用右上角 `X` icon button；不要混用右上角文字「取消」。
+  - Provider 展开后才显示模型测试、自动获取列表、手动添加、编辑和删除等维护操作。
+  - 获取模型列表后的模型选择必须使用 Galley 自定义 popover dropdown，不使用浏览器原生 `select`。
+  - `可添加模型` 列表里的模型行操作使用低权重 `+ 添加`；已加入配置的模型在同一位置显示 `✓ 已添加`，两者高度和占位保持一致，避免形成一列重按钮。
+  - 编辑模型里可以折叠显示 `高级配置`，默认关闭。第一版只开放排障/适配项：`max_retries`、`read_timeout`、`stream`、OpenAI-compatible 的 `api_mode` / `reasoning_effort`，以及 Anthropic-compatible 的 `thinking_type`、`reasoning_effort`、`Claude Code 兼容透传`。`thinking_budget_tokens` 不开放，因此 `thinking_type` 暂不提供 `enabled`，避免用户选了实际会被 GA 忽略的配置。
+- 新增 / 编辑 Provider 表单和 Onboarding 首次模型配置中，`提供商显示名称` 是可选身份字段，不放进折叠的 `更多`；它常驻在连接信息和模型字段之后、保存按钮之前，作为最后一步轻量命名。
+- Provider 检查成功态使用低权重 inline 文本，不长期占用绿色块；失败态保留说明块并贴近对应 Provider。
+- Provider 内的默认模型在右侧操作区显示轻量 `默认模型` 状态；非默认模型才显示 `设为默认` 动作。
+- API Key 字段只用于保存到本地加密凭据存储；列表正常态不展示凭据状态，只有缺少密钥 / 状态异常时显示提示，诊断可显示 `apiKeyRef` 对应状态但不显示密钥。
+- Session 选中模型持久化必须用稳定身份：managed 用 `managed_models.id`，external 用 GA raw LLM name；`llm_index` 只能作为 bridge 命令和旧数据 fallback，不能作为长期身份。
+- 第一版保留为 Settings 高级入口；first-run onboarding 会复用同一套能力，但不暴露高级参数。
+
+#### Channels
+
+- TopBar 中 Channels 位于状态簇最后，常驻但默认安静。`setup` / `not_connected` / `stopped` 显示 neutral icon-only `ChatCircleText`，作为可选扩展入口而不是待办；`running` 同样收敛为 icon-only。只有已经进入连接或需要处理时才升级为文字 badge：`starting` 显示 `Channels · 连接中`；`waiting_scan` 显示 `Channels · 扫码`；`expired` / `error` / load error 显示 `Channels · 需处理`。
+- Channels 使用 managed model config revision 判断配置 freshness。模型配置变更后，已启用 Channel 若仍记录旧 revision，Settings -> Channels 顶部显示状态条：`Channels 正在使用旧模型配置`。
+- `重启 Channels` 语义是重启所有已启用 Channel；手动 Stop / Disconnect 会把 Channel 置为未启用，不会被这个按钮重新拉起。
+- Models toast 里的 `重启 Channels` CTA 直接执行；Channels 页状态条按钮先弹轻确认，说明可能中断当前回复、不会退出登录。
+- 重启不删除微信 token，不主动要求重新扫码；token 过期仍走现有 expired / scan 流程。
+- 飞书卡片与微信并列，但流程不是扫码：展开区提供开放平台步骤、App ID / App Secret 输入和启动按钮。App Secret 保存后不回显，留空表示沿用已保存凭据。目标用户是个人用户和小团队企业，默认允许组织内所有飞书用户访问，不在首版增加 allowlist / 绑定码。
+
+#### Approval
+
+- **YOLO mode toggle**（PRD §11.5）—— Tab 顶部第一项，跟下方常规设置之间留 32px gap + 一条 `border-line` 分隔线，视觉上独立成块（不被埋没在普通 toggle 列表里）
+  - Toggle 行：左 18px Phosphor `Lightning` thin（深琥珀 `--color-warning`）+ "YOLO 模式" Newsreader medium 14px + 右侧 Switch
+  - Toggle 下方一行 muted 12px："跳过所有工具调用的审批，直接执行——适合完全信任 Agent + 沙盒环境"
+  - 当前已开启状态：Switch 杏沙激活 + 行底部一段 13px 文案"YOLO 已启用 · 顶部栏显示状态" + secondary button "立即关闭"
+  - 关闭 → 开启触发 confirm modal（见下）；开启 → 关闭直接生效，无 confirm
+- **需要审批的工具**：复选列表（默认 `code_run` / `file_write` / `file_patch` / `start_long_term_update`），用户可勾选；YOLO 开启时整个 section 显示 `opacity-50` + tooltip "YOLO 已开启，单项工具审批不生效"，但**不禁用**——用户关 YOLO 后仍生效
+- **白名单规则**：分两组显示
+  - **Per-project**（当前 attached GA 目录下的）—— 列出 tool name + 添加日期 + remove 按钮
+  - **Global** —— 同上
+  - YOLO 开启时同样 dimmed
+- 改动后弹 toast "已应用到所有 session"（避免"太隐式"）
+- 底部 muted hint："在审批弹窗里加入白名单后，规则会显示在这里。"
+
+##### YOLO 启用 confirm modal
+
+Radix Dialog，~480 × 360。文案（中文）：
+
+```
+打开 YOLO 模式？
+
+YOLO = "You Only Live Once"。
+所有工具调用将不经审批直接执行——包括：
+
+  · file_patch（修改文件）
+  · file_write（写入文件）
+  · code_run（执行命令）
+  · 其他高风险操作
+
+适合：完全信任 Agent + 在沙盒环境工作（个人 repo / 临时虚拟机）
+不适合：生产代码 / 共享系统 / 不熟悉的 Agent / 敏感数据
+
+打开后顶部栏会显示 YOLO 状态标识，随时可一键关闭。
+
+  [取消]  [是的，我知道在做什么]
+```
+
+视觉细节：
+
+- 标题左侧用 Phosphor `Lightning` + "打开 YOLO 模式？" Newsreader medium 18px
+- 主体 13px Inter，bullet 列表用 mono `·` 锚点
+- "是的，我知道在做什么" 按钮：深琥珀 `bg-warning` 背景 + 白色文字（不是品牌杏沙——视觉上要显眼但不像"OK"那种条件反射按钮）
+- "取消"：ghost button 默认 focus，回车默认是取消（避免误触确认）
+- ESC 关闭 = 取消
+
+#### About（版权页 colophon，2026-07-03）
+
+按文库本版权页的逻辑组织（[temperament.md](../temperament.md)：引文只住题词位与版权页），
+隐喻沉在结构里——分区标签用人话（版式），不用行话（印次 / 奥付）：
+
+- `Galley` wordmark + tagline（Newsreader medium 18px）
+- Origin story（serif italic surface callout——GA 致意）
+- 版本：Galley 版本（含更新控件）/ 内置 GA kernel commit + audit date
+- 版式：一行陈述正文与等宽字体（Newsreader / 苹方 / 雅黑 / JetBrains Mono）
+- 题词：PI §43（产品论题「意义即用法」）——译文 + 德文原句 + 出处行；
+  不加框，与 origin 的 callout 卡片区分（页面上的引文，不是 UI 里的卡片）
+- Links（Phosphor `ArrowSquareOut`）：GitHub / Feedback / GenericAgent 上游 / maker links
+- Footer：`由 JC Wang 开发 · MIT License`
+
+连带决策（2026-07-03 当日二审翻案）：曾把空状态题词收敛为仅 `silent`
+渲染（稀缺性论证），owner dogfood 后**完全恢复**为每次空状态按条件渲染
+——状态绑定轮换 + 每次驻留冻结本就是反墙纸机制，章节题词式的反复是正当
+形式；理论担忧让位于一个月的实际体验。§43 与版权页双住所（不同寄存器）
+接受。
+
+#### Agent
+
+- Copy Supervisor SOP：复制 Galley Agent SOP，不写入 GenericAgent memory。
+- CLI install / path 指引：帮助可信 Agent 找到 `galley` CLI。
+- Agent API reference：链接到 `docs/agent-api.md`，强调 `schemaVersion: 1`。
+
+#### Shortcuts（read-only）
+
+- 三个 group：Navigation / Composer / Overlays。
+- 每行：左侧 kbd chip（`bg-surface` + `border-line` + mono）+ action label + 可选 note。
+- 当前只展示，不提供自定义；重绑入口留到未来版本。
+
+### 视觉
+
+- **Tab list**：每项 32px 高 / 13px Inter / 左侧 16px Phosphor icon
+  - Runtime: `Cpu`
+  - Approval: `ShieldCheck`
+  - Agent: `PlugsConnected`
+  - Shortcuts: `Keyboard`
+  - About: `Info`
+- 选中态：`hover-tint` 背景 + 左侧 2px charcoal 竖条
+- **主内容区**：内边距 32px / 标题 18px Newsreader medium / 描述 13px Inter muted / 控件之间 24px 垂直间距
+- **Form 控件**：路径 input + 文件夹选择器按钮（Phosphor `FolderOpen`）/ 复选框跟 Approval Dock 同款 / Button 体系跟主界面一致
+- **没有 sticky save button**：所有改动**即时生效 + 自动持久化**（违反"不要让用户思考"），破坏性改动单独 confirm dialog
+
+### 推到未来版本的 Tab
+
+- **General / Preferences**（telemetry / launch behavior 等）—— 只有当全局偏好超过左侧轻量入口承载范围时再新增；外观和语言当前不单独触发这个 tab。
+- **LLM**（custom displayName / default index）—— per-app preference 已够，custom name V0.2
+- **Data**（SQLite 位置 / export / clear history）—— V0.1 不做高危数据 UI
+- **Developer**（Logs / IPC trace）—— V0.1 用 stderr 调试
+
+---
+
+## 10. 全局快捷键
+
+| 键位 | 动作 |
+|---|---|
+| `⌘K` | 命令面板 |
+| `⌘N` | 新对话 |
+| `⌘ + ,` | 打开设置 |
+| `Esc` | 关闭浮层 / 退出编辑状态 |
+| `Enter` | 输入框发送 / 命令面板执行 |
+| `Shift + Enter` | 输入框换行 |
+| `↑ / ↓` | 命令面板选项 |
+| `Tab` | 命令面板进二级 |
+| `⌥↑ / ⌥↓` | 跳到对话中上 / 下一条用户提问（焦点在 Composer 时不生效） |

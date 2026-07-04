@@ -35,8 +35,9 @@ Key directories:
 - `managed-ga/`: Galley-managed GenericAgent runtime — vendored code, Galley
   patches, and the runtime manifest.
 - `scripts/`: build, bundle, and release / update-channel automation.
-- `docs/refactor/`: B-phase implementation playbooks and invariants.
 - `docs/devlog/`: decision provenance and historical narrative.
+- `docs/archive/`: completed-mission docs kept for provenance (B-phase
+  refactor playbooks, one-off handoffs, superseded drafts).
 
 ## Common Commands
 
@@ -106,8 +107,40 @@ Component guidance:
 Design references:
 
 - [DESIGN.md](./DESIGN.md)
-- [design handoff](./design-handoff/README.md)
 - [devlog design entries](./devlog/README.md)
+
+## Hard Engineering Invariants
+
+These rules were forged during the B-phase refactor and remain binding after
+v0.2.0. Violating one is grounds for revert. The IDs are stable because
+devlog entries, playbooks, and commit messages reference them; the retired
+refactor-execution rules (I1, I2, I4, I7, I8, I10) live in the
+[archived invariants file](./archive/refactor/invariants.md).
+
+- **I3 — SQLite migration numbering.** Migrations increment by commit order.
+  Never skip, reuse, or edit a shipped migration — dogfood databases have
+  already run that number, and editing it makes the two sides drift. A wrong
+  migration is fixed by adding a new one on top.
+- **I5 — API surface single source of truth.** The Rust `GalleyApi` trait is
+  the only definition of commands. Both transports (Tauri command, socket)
+  thin-wrap it. No command may exist on only one transport, and no business
+  logic may live in a transport layer — protocol adaptation (framing, event
+  emit) only.
+- **I6 — GUI stays a stateless presenter.** `gui/` never reads or writes
+  SQLite directly, never owns runner subprocesses, and never holds
+  authoritative state. The test: if the CLI performed the same action, would
+  the React store's value now be wrong? If yes, that state belongs in Rust.
+- **I9 — Shipped data formats are contracts.** Once a SQLite schema, prefs
+  format, or file location ships, changes are additive only: new columns with
+  compatible defaults, new tables, new prefs keys. Never delete a shipped
+  column, change its semantics, or move data without a real migration.
+- **I11 — Keep `panic = "unwind"`.** Bridge children are reclaimed by
+  `kill_on_drop(true)` during unwind. `panic = "abort"` skips Drop and
+  orphans every live bridge process. No `[profile.*] panic = "abort"` in
+  `core/Cargo.toml`, ever — the ~5% binary-size saving is not worth it.
+
+Code-level proofs and grep gates for the architecture-layer principles are in
+[architecture demo](./architecture-demo.md).
 
 ## IPC Protocol Changes
 

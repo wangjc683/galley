@@ -82,7 +82,7 @@ not install SOP content into GA memory. Read
 
 For managed / bundled GA, Galley may patch and configure only its own managed
 runtime, under the managed-runtime rules in
-[managed GA runtime](./docs/managed-ga-runtime.md):
+[managed GA runtime](./docs/managed-ga-runtime/README.md):
 
 - Keep patches minimal, isolated, documented, and replayable on top of upstream.
 - Prefer explicit extension seams over broad edits.
@@ -108,7 +108,7 @@ change this constitution.
 ### 3. CLI Surface Is Public Contract
 
 Galley CLI JSON is the stable contract for agents. Read
-[agent-api](./docs/agent-api.md) before changing it.
+[agent-api](./docs/agent-api/README.md) before changing it.
 
 - `schemaVersion: 1` is frozen for `v0.2.x`.
 - v1 changes are additive-only.
@@ -160,26 +160,23 @@ docs/        Product, architecture, workflow, and history
 
 ## Read On Demand
 
+The full task-to-doc routing table lives in the
+[docs index](./docs/README.md) — that index is the single source of truth for
+what to read. The highest-frequency routes:
+
 | If you are doing this | Read first |
 |---|---|
 | Need current state / release gates | [project status](./docs/project-status.md) |
 | Understand architecture | [architecture](./docs/architecture.md) |
 | Product or roadmap change | [PRD](./docs/PRD.md) |
-| CLI / Agent API change | [agent-api](./docs/agent-api.md) |
+| CLI / Agent API change | [agent-api](./docs/agent-api/README.md) |
 | Core ↔ runner wire protocol change | [IPC protocol](./docs/ipc-protocol.md) |
-| Supervisor / Agent integration | [Supervisor SOP](./docs/integrations/galley-supervisor-sop.md), then [Supervisor reference](./docs/integrations/galley-supervisor-reference.md) |
-| GenericAgent compatibility | [GA baseline](./docs/ga-baseline.md) |
-| Managed / bundled GA runtime | [managed GA runtime](./docs/managed-ga-runtime.md) |
-| Desktop packaging / runtime | [desktop runtime](./docs/desktop-runtime.md) |
-| Rust core refactor / B-phase work | [refactor README](./docs/refactor/README.md) |
-| Architecture invariant proof | [architecture demo](./docs/architecture-demo.md) |
-| Release work | [release / update SOP](./docs/release-update-sop.md) (runbook), [release workflow](./docs/release-workflow.md) (background) |
-| Closing a long coding session or syncing project knowledge | [session close SOP](./docs/session-close-sop.md) |
-| Windows smoke | [Windows checklist](./docs/windows-build-checklist.md) |
-| GUI / engineering conventions | [engineering workflow](./docs/engineering-workflow.md) |
-| Visual design | [DESIGN.md](./docs/DESIGN.md) |
-| Historical decisions | [devlog](./docs/devlog/README.md) |
-| All docs | [docs index](./docs/README.md) |
+| Supervisor / Agent integration | [Supervisor SOP](./docs/integrations/galley-supervisor-sop.md) |
+| Managed / bundled GA runtime | [managed GA runtime](./docs/managed-ga-runtime/README.md) |
+| Visual design | [DESIGN.md](./docs/design/README.md) |
+| GUI / engineering conventions, hard invariants | [engineering workflow](./docs/engineering-workflow.md) |
+| Release work | [release / update SOP](./docs/release-update-sop.md) |
+| Anything else — GA baseline, desktop runtime, Windows smoke, copy rules, audits, history | [docs index](./docs/README.md) |
 
 ## Working Defaults
 

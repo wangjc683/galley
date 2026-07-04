@@ -14,13 +14,13 @@ Duration:    3 周估计（D16-D30），实际单 session 推到 M7 (~7h cumulat
 
 ## 这个 phase 在干啥（一段话）
 
-把 Python runner 子进程的 spawn / stdin / stdout / lifecycle 管理从 TypeScript（[`gui/src/lib/bridge.ts`](../../gui/src/lib/bridge.ts) 227 行 + [`gui/src/stores/useAppStore.ts`](../../gui/src/stores/useAppStore.ts) 里的 `_bridgeClients` Map / `_lruOrder` / `_stderrTails`）迁到 Rust (`core/src/runner_manager.rs`)。bridge-owner prototype 验证过的 `BridgeProcess` 是 source pattern，本 phase 把它升级到 production：多 session 并发 + LRU eviction + 多 subscriber broadcast。同步在 Rust 端开 Unix socket / named pipe listener，CLI 拿到第一个 write 命令 `session send`（通过 socket）— 这一刻起 GUI 跟 CLI 两个前端走**同一条权威路径**。**GUI 行为对用户 0 regression**：multi-session / streaming / ask_user / approval / `/btw` 全部通过 invoke + event listen 跑通。本 phase 结束时 v0.1 / v0.2 用户开 Galley 看不出区别，但内部权威已经全部在 Rust 端 — 这是路径 B 不可逆迁移（[CLAUDE.md 架构原则 #4](../../CLAUDE.md)）真正落地。
+把 Python runner 子进程的 spawn / stdin / stdout / lifecycle 管理从 TypeScript（[`gui/src/lib/bridge.ts`](../../../gui/src/lib/bridge.ts) 227 行 + [`gui/src/stores/useAppStore.ts`](../../../gui/src/stores/useAppStore.ts) 里的 `_bridgeClients` Map / `_lruOrder` / `_stderrTails`）迁到 Rust (`core/src/runner_manager.rs`)。bridge-owner prototype 验证过的 `BridgeProcess` 是 source pattern，本 phase 把它升级到 production：多 session 并发 + LRU eviction + 多 subscriber broadcast。同步在 Rust 端开 Unix socket / named pipe listener，CLI 拿到第一个 write 命令 `session send`（通过 socket）— 这一刻起 GUI 跟 CLI 两个前端走**同一条权威路径**。**GUI 行为对用户 0 regression**：multi-session / streaming / ask_user / approval / `/btw` 全部通过 invoke + event listen 跑通。本 phase 结束时 v0.1 / v0.2 用户开 Galley 看不出区别，但内部权威已经全部在 Rust 端 — 这是路径 B 不可逆迁移（[CLAUDE.md 架构原则 #4](../../../CLAUDE.md)）真正落地。
 
 ## Prerequisites · 必须先完成
 
 - [x] B1 全部 acceptance criteria 跑过（11/12 pass + 1 deferred）+ devlog ship
 - [x] B1 完成时记录的性能基线（CLI 6 命令 < 100ms debug binary）
-- [x] [bridge-owner prototype](../../core/experiments/bridge-owner/README.md) 17/17 PASS + GO verdict
+- [x] [bridge-owner prototype](../../../core/experiments/bridge-owner/README.md) 17/17 PASS + GO verdict
 - [x] prototype 的 `BridgeProcess` 设计已被 B1 实施验证（`GalleyApi` trait + types 不会大改）
 - [ ] dogfood 在 B1 后稳定一周以上（regression 浮现期） — **2026-05-19 开 B2 时 B1 仅 ship 一天，dogfood window 不足。建议 M1-M2 走 read-side scaffold + invoke wiring（影响面有限），到 M3 真正动 stdin/stdout/lifecycle 时再确认 dogfood 是否撞到 B1 引入的 regression**
 - [ ] Project status B2 row 加入（B1 finish 时只到 Stage 7 stub）— **B2 启动 commit 时一并更**
@@ -35,7 +35,7 @@ Duration:    3 周估计（D16-D30），实际单 session 推到 M7 (~7h cumulat
 
 - **B2-I1**: B2 内 `gui/src/lib/bridge.ts` 的 `spawnBridge()` 函数签名 **不改**。函数 body 在 M2 换成 Tauri invoke + listen wrappers，但 `BridgeClient` / `BridgeSpawnArgs` / `BridgeHandlers` interface 保持 byte-identical — 调用者（useAppStore）零修改。**保护 B3 的迁移空间**：B3 改 useAppStore 时已经能假设 bridge.ts 是 thin shim
 - **B2-I2**: B2 内 `gui/src/lib/db.ts` 的 write functions（`persistTurn` / `persistApproval` / `persistRuntimeStateDelta` 等）**不动**。Write-to-SQLite path 是 B3 的事。B2 只动 runner 子进程相关的 ownership
-- **B2-I3**: socket protocol schema **写入 `docs/agent-api.md`**（M6）。CLI 跟 socket 是 [CLAUDE.md 架构原则 #2 公开契约](../../CLAUDE.md)，schema 漂移 0 — 内部 enum / 字段名变了等于 break SOP，必须走 schema_version bump
+- **B2-I3**: socket protocol schema **写入 `docs/agent-api.md`**（M6）。CLI 跟 socket 是 [CLAUDE.md 架构原则 #2 公开契约](../../../CLAUDE.md)，schema 漂移 0 — 内部 enum / 字段名变了等于 break SOP，必须走 schema_version bump
 - **B2-I4**: 新加的 origin 字段（`messages.created_via` / `messages.supervisor` / `messages.origin_note`）**额外可读，不影响显示**：GUI 在 B2 阶段不引入新 UI 渲染（V0.5 UI 渲染是 B3 的事）。本 phase 数据层落，UI 层后做
 - **B2-I5**: socket 路径 **per-user scoped**（macOS/Linux 用 `$TMPDIR/galley-${UID}.sock`，Windows `\\.\pipe\galley-<user>`）。多个 Galley 实例同时跑 → 第二个 instance 启动时检测 socket 已存在 + listener live → exit with informative log。**不**抢 socket，**不**让两个实例 race
 - **B2-I6**: prototype 验证的 `kill_on_drop(true)` + `panic = "unwind"`（[invariants.md I11](./invariants.md#i11-cargo-panic--unwind-必须保留)）**必须维持**。M1 任何代码 review 强制扫一遍 Cargo.toml profile + Child spawn options
@@ -121,7 +121,7 @@ Duration:    3 周估计（D16-D30），实际单 session 推到 M7 (~7h cumulat
   - 切 session 看 LLM list per-session 保持 ✓
   - 关 Galley 主窗口 + 等 5s + `pgrep -fl workbench_bridge` 0 命中 ✓
   - 触发 approval 拦截 → Card 显示 → approve → tool 跑通 ✓
-- [x] **T2.11** CI 加 `cargo test`：[.github/workflows/check.yml](../../.github/workflows/check.yml) 加两步 `cargo test -p galley-core` + `cargo test -p galley-cli`，per-target matrix (macos-15 / windows-latest)。release.yml 不动 — release 不应该跑测试是约定（CI 已经覆盖；release 是 build artifact，跑测试浪费 5 min CI 时间）
+- [x] **T2.11** CI 加 `cargo test`：[.github/workflows/check.yml](../../../.github/workflows/check.yml) 加两步 `cargo test -p galley-core` + `cargo test -p galley-cli`，per-target matrix (macos-15 / windows-latest)。release.yml 不动 — release 不应该跑测试是约定（CI 已经覆盖；release 是 build artifact，跑测试浪费 5 min CI 时间）
 - [ ] **T2.12** M2 commit pending（本节描述完后做）
 
 ---
@@ -151,7 +151,7 @@ Duration:    3 周估计（D16-D30），实际单 session 推到 M7 (~7h cumulat
   - macOS: `nc -U $TMPDIR/galley-$UID.sock` 手动发 `{"command":"ping"}` 看返回
   - Windows: 推到 v0.2 ship 前 Windows 机 smoke 时一并
 - [x] **T3.14** Socket file permission `0600` 通过 `fs::set_permissions(path, Permissions::from_mode(0o600))` 在 bind 后立即设。**TOCTOU window 残留**：bind 到 set_permissions 之间约 1ms 内 socket 是 default umask（可能 0644）。Mitigation 候选 (`umask(0o077)` 临时降低 + restore) 推到 B4 hardening — 真实 exploit 路径太窄，但完整 hardening 该做
-- [x] **T3.15** [docs/ipc-protocol.md](../ipc-protocol.md) `## 2. Transport` 重写：split 成 Stdin/stdout (runner ↔ Core) + Socket (CLI ↔ Core) 两节，加 socket path / framing / schema version / idle timeout / auth model / 8 个 error discriminants / stream variant (M4 preview) / race detection 说明
+- [x] **T3.15** [docs/ipc-protocol.md](../../ipc-protocol.md) `## 2. Transport` 重写：split 成 Stdin/stdout (runner ↔ Core) + Socket (CLI ↔ Core) 两节，加 socket path / framing / schema version / idle timeout / auth model / 8 个 error discriminants / stream variant (M4 preview) / race detection 说明
 - [x] **T3.16** M3 commit (本节描述完后做)
 
 ---
@@ -203,7 +203,7 @@ CLI 拿到第一个 write 命令，验证从 CLI → socket → runner_manager �
 
 ### Sub-tasks
 
-- [x] **T6.1** §2A "Transports" 新 section: 区分 read-only direct-SQLite vs write socket transport / Unix + Windows path resolution / NDJSON request/response framing / 8 个 stable error discriminants / race detection. Cross-link [docs/ipc-protocol.md](../ipc-protocol.md) 而不复制内容
+- [x] **T6.1** §2A "Transports" 新 section: 区分 read-only direct-SQLite vs write socket transport / Unix + Windows path resolution / NDJSON request/response framing / 8 个 stable error discriminants / race detection. Cross-link [docs/ipc-protocol.md](../../ipc-protocol.md) 而不复制内容
 - [x] **T6.2** §5.5a `galley session send` command 段：args 表 + supervisor / reason 语义 + response shape (message + dispatch 双字段) + fire-and-forget semantics + exit code mapping
 - [x] **T6.3** §5.5b `galley session watch` command 段：streaming NDJSON event shape + stream end sentinel + SIGINT exit + 无 backlog (`--from` deferred to future)
 - [x] **T6.4** §1 stability promise 增写：socket wire format 也是公开契约 + schemaVersion 适用范围 + socket path 稳定性承诺。§7 versioning 段同步说 socket
@@ -221,7 +221,7 @@ CLI 拿到第一个 write 命令，验证从 CLI → socket → runner_manager �
 - [-] **T7.1** 跑遍 acceptance criteria A1-A12 — **deferred 到 dogfood 期**。代码层 A1/A2/A3/A5/A7/A10/A12 自动验证（cargo test 83 pass + typecheck + lint）；A4/A6/A8/A9/A11 需要 dogfood 跑实际 multi-session scenario。JC 决定本 session 跳过 dogfood，留下次 session
 - [-] **T7.2** 性能基线对比 prototype — **deferred 到 dogfood 期**。prototype `p99 RTT 614µs` + `4684 events/sec` 基线已存；B2 需要 dogfood 时实测 first-token RTT + streaming throughput 对比
 - [-] **T7.3** dogfood 1-week period — **deferred 到下次 session**。JC: 暂时跳过 dogfood，下个 session 继续
-- [x] **T7.4** 写 B2 完成 devlog: [`docs/devlog/2026-05-19-b2-bridge-ownership-complete.md`](../devlog/2026-05-19-b2-bridge-ownership-complete.md) — code-complete 视角，13 decisions + rejected alternatives + 5 open questions（含 dogfood 1-week placeholder）
+- [x] **T7.4** 写 B2 完成 devlog: [`docs/devlog/2026-05-19-b2-bridge-ownership-complete.md`](../../devlog/2026-05-19-b2-bridge-ownership-complete.md) — code-complete 视角，13 decisions + rejected alternatives + 5 open questions（含 dogfood 1-week placeholder）
 - [x] **T7.5** 更新 `docs/refactor/README.md`: dashboard B2 row → ✅, cursor 指向 B3 T1.1（M1 静态分析）
 - [x] **T7.6** 更新 `CLAUDE.md` 阶段表：B2 ✅ COMPLETE
 - [x] **T7.7** **写 B3 playbook** — 已 ship 在更早 commit `3002f76` (B3 stub 117 行 → 285 行 detailed playbook)；T7.6 / T7.7 顺序互换（playbook 先写 commit、ceremony 后做）

@@ -331,9 +331,9 @@ set((s) => {
 fireSessionMirror(sessionMirror);
 ```
 
-`fireSessionMirror` 内调 sessionsStore.applyDerivedFromRuntime —— 但因为 status 来自 deriveSessionStatus 需要 sessions[sid] 数据 + runtimeStore bridgeStatus，逻辑要复制 (or import) [lib/sessions.ts:deriveSessionStatus](../../gui/src/lib/sessions.ts)。**复用 deriveSessionStatus**：lib/sessions.ts:40 注释 "useRuntimeStore.getState().byId[sid]?.bridgeStatus and pass in" —— 改 deriveSessionStatus 也接 messagesState 参数。
+`fireSessionMirror` 内调 sessionsStore.applyDerivedFromRuntime —— 但因为 status 来自 deriveSessionStatus 需要 sessions[sid] 数据 + runtimeStore bridgeStatus，逻辑要复制 (or import) [lib/sessions.ts:deriveSessionStatus](../../../gui/src/lib/sessions.ts)。**复用 deriveSessionStatus**：lib/sessions.ts:40 注释 "useRuntimeStore.getState().byId[sid]?.bridgeStatus and pass in" —— 改 deriveSessionStatus 也接 messagesState 参数。
 
-**关键 decision**: `deriveSessionStatus(session, rt, bridgeStatus)` 当前签名读 SessionRuntime → 改读 PerSessionMessages（agentRunning/pendingApprovals/turns 都在 PerSessionMessages）。这是 [lib/sessions.ts](../../gui/src/lib/sessions.ts) 的 signature change，1 处用法 in useAppStore.applyRuntimeUpdate 已搬 + sessionsStore call site。M5 commit 内同步改。
+**关键 decision**: `deriveSessionStatus(session, rt, bridgeStatus)` 当前签名读 SessionRuntime → 改读 PerSessionMessages（agentRunning/pendingApprovals/turns 都在 PerSessionMessages）。这是 [lib/sessions.ts](../../../gui/src/lib/sessions.ts) 的 signature change，1 处用法 in useAppStore.applyRuntimeUpdate 已搬 + sessionsStore call site。M5 commit 内同步改。
 
 ### T5.4 · 迁 conversation actions
 

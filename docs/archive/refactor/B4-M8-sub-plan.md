@@ -106,7 +106,7 @@ dialog 关闭后 process 退出（exit code 非 0，但 GUI 没有 exit channel�
 
 ### 1.5 Tauri setup hook 顺序
 
-当前 [`core/src/lib.rs:382-465`](../../core/src/lib.rs) 的顺序：
+当前 [`core/src/lib.rs:382-465`](../../../core/src/lib.rs) 的顺序：
 
 ```
 Builder::default()
@@ -467,7 +467,7 @@ backup 是 Rust 内部机制，不暴露 CLI / socket API surface。schema_versi
 | ID | Risk | Probability | Severity | Mitigation |
 |---|---|---|---|---|
 | R1 | tauri-plugin-sql 用的 migration 表名不是 `_sqlx_migrations` | low | medium | T8.3 测试用真 plugin 跑一次确认；如果不是改 query |
-| R2 | setup hook 闭包 `&mut tauri::App` 不能 await async | high (known) | low | 用 `block_on` —— socket listener 已经这样做（[lib.rs:455](../../core/src/lib.rs)） |
+| R2 | setup hook 闭包 `&mut tauri::App` 不能 await async | high (known) | low | 用 `block_on` —— socket listener 已经这样做（[lib.rs:455](../../../core/src/lib.rs)） |
 | R3 | `process::exit(2)` 在 Tauri runtime 没起就 exit 是否绕过 Drop | medium | low | 大体可以；Tauri runtime 起前 exit 等于 std exit；dogfood 验证 dialog 真弹出 |
 | R4 | backup 跨 macOS APFS clone 表现 | low | low | `fs::copy` 不用 clonefile，速度 OK；GB 数据几秒 |
 | R5 | Windows backup 文件名 timestamp 含 `:` 非法 | low | low | 用 `T140530Z` 格式无冒号 |
@@ -540,10 +540,10 @@ grep -rn "migration_backup" core/src/ | grep -v 'migration_backup\.rs'
 
 - B4 playbook M8 段：[B4-cli-bg-artifact.md §M8](./B4-cli-bg-artifact.md)
 - B4-I6 invariant：[B4-cli-bg-artifact.md §Phase invariants](./B4-cli-bg-artifact.md#phase-invariants--b4-特有的硬规则)
-- migration files：[core/migrations/](../../core/migrations/) 001-007
-- migration runner 注册：[core/src/lib.rs:337-380](../../core/src/lib.rs)
-- DB path resolution：[core/src/db.rs:53-65](../../core/src/db.rs)
-- Tauri identifier 守护：[desktop runtime](../desktop-runtime.md#tauri-identifier)
+- migration files：[core/migrations/](../../../core/migrations/) 001-007
+- migration runner 注册：[core/src/lib.rs:337-380](../../../core/src/lib.rs)
+- DB path resolution：[core/src/db.rs:53-65](../../../core/src/db.rs)
+- Tauri identifier 守护：[desktop runtime](../../desktop-runtime.md#tauri-identifier)
 
 ---
 

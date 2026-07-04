@@ -66,6 +66,12 @@ documentation diff. Do not commit or close the session unless asked.
      cargo test --workspace
      ```
 
+   - When docs changed, run the docs link gate (CI runs it too):
+
+     ```bash
+     node scripts/check-docs-links.mjs
+     ```
+
 6. Clean the workspace.
    - Inspect `git status --short`.
    - Remove accidental generated files, local DBs, logs, and debug artifacts.

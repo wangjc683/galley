@@ -2,9 +2,9 @@
 
 **Status**: 📋 Spec ready · spike not yet run · prereq gate for B4 M1
 **Purpose**: 1-day throwaway prototype to validate Tauri v2 tray API + hide-window + WebView keep-alive on macOS 14+ AND Windows 11 before committing 2-3 weeks to B4's menubar daemon work.
-**Gate for**: [B4 M2](../../../docs/refactor/B4-cli-bg-artifact.md#m2--tray-spike--background-mode-menubar-daemon-d55-d57) — go/no-go based on this experiment.
+**Gate for**: [B4 M2](../../../docs/archive/refactor/B4-cli-bg-artifact.md#m2--tray-spike--background-mode-menubar-daemon-d55-d57) — go/no-go based on this experiment.
 **Related**:
-- [B4 playbook](../../../docs/refactor/B4-cli-bg-artifact.md) §M2 + risk #1 + G2
+- [B4 playbook](../../../docs/archive/refactor/B4-cli-bg-artifact.md) §M2 + risk #1 + G2
 - [PRD §13 Background mode](../../../docs/PRD.md#13-background-mode)
 - Predecessor pattern: [bridge-owner prototype](../bridge-owner/README.md)
 - Tauri v2 tray docs: `tauri::tray::TrayIconBuilder` API surface
@@ -30,7 +30,7 @@ To keep scope tight:
 - ❌ Do not implement CLI socket → window action — instead, simulate "CLI writes while window hidden" with a Rust `tokio::spawn` timer that emits a Tauri event every 500ms and a JS-side `listen()` that increments a counter (visible when window is re-shown)
 - ❌ Do not pretty-print the WebView UI — a plain HTML page with `<h1>Hidden time: Xs / events received: N</h1>` is enough
 - ❌ Do not test tray icon design / branding — use a placeholder icon (gradient PNG or Tauri default)
-- ❌ Do not run on macOS 26 (Tahoe) — JC's mac is macOS 14, CI is macos-15; Tahoe behavior gets deferred to post-v0.2 ([B4 O9](../../../docs/refactor/B4-cli-bg-artifact.md#open-decisionsb4-启动前要拍))
+- ❌ Do not run on macOS 26 (Tahoe) — JC's mac is macOS 14, CI is macos-15; Tahoe behavior gets deferred to post-v0.2 ([B4 O9](../../../docs/archive/refactor/B4-cli-bg-artifact.md#open-decisionsb4-启动前要拍))
 
 This experiment is **throwaway**. Code lives in `core/experiments/tray-mode/` and is not part of the production build (excluded via `[[bin]]` + feature flag, mirror bridge-owner pattern).
 

@@ -1,5 +1,9 @@
 # CODING AGENTS: READ THIS FIRST
 
+> **ARCHIVED 2026-07-04** — this one-time handoff bundle was consumed while
+> building the v0.1 GUI. Do not follow the instructions below; current design
+> rules live in [DESIGN.md](../../DESIGN.md).
+
 This is a **handoff bundle** from Claude Design (claude.ai/design).
 
 A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.

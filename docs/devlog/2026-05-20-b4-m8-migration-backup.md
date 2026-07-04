@@ -5,7 +5,7 @@
 - **Date**: 2026-05-20（B4 第 5 个工作 session — M8 sub-plan + implementation 同 session）
 - **Status**: ✅ Code + 文档 + 测试 ship。T8.7 dogfood real run 留 v0.6 prereq（v0.5 没新 migration delta 触发不到）。
 - **Commits**: 单 commit（pending — closeout 后 ship）
-- **Related**: [B4 playbook M8](../refactor/B4-cli-bg-artifact.md#m8--v0x--v05-data-migration-真跑-d64) · [B4 M8 sub-plan](../refactor/B4-M8-sub-plan.md) · [B4-I6 invariant](../refactor/B4-cli-bg-artifact.md#phase-invariants--b4-特有的硬规则) · [N18 session-end handoff](../refactor/B4-cli-bg-artifact.md#running-notes--gotchas)
+- **Related**: [B4 playbook M8](../archive/refactor/B4-cli-bg-artifact.md#m8--v0x--v05-data-migration-真跑-d64) · [B4 M8 sub-plan](../archive/refactor/B4-M8-sub-plan.md) · [B4-I6 invariant](../archive/refactor/B4-cli-bg-artifact.md#phase-invariants--b4-特有的硬规则) · [N18 session-end handoff](../archive/refactor/B4-cli-bg-artifact.md#running-notes--gotchas)
 
 ## Context
 
@@ -72,7 +72,7 @@ JC 选 "M8 data migration (sub-plan + 实施)" 接 N18 handoff 的 (b) 路径。
 - `core/Cargo.toml` — `chrono` top-level dep (zero net new crate; transitive via sqlx)
 - `core/src/migration_backup.rs` — **NEW** 415 行（model + impl + 11 test）
 - `core/src/lib.rs` — `mod migration_backup;` + `latest_migration_version` 推导 + setup hook backup 段（≈30 行 net add）
-- `docs/refactor/B4-M8-sub-plan.md` — **NEW** 400+ 行 sub-plan
+- `docs/archive/refactor/B4-M8-sub-plan.md` — **NEW** 400+ 行 sub-plan
 - `docs/devlog/2026-05-20-b4-m8-migration-backup.md` — **NEW** 本文件
 
 ## Verification

@@ -2,7 +2,7 @@
 
 本目录跨多 phase / 多 session 的执行硬规则。任何 PR / sub-task 不能违反这些。**违反 = revert，无需讨论**。
 
-跟 [AGENTS.md 项目宪法](../../AGENTS.md) 的区别：
+跟 [AGENTS.md 项目宪法](../../../AGENTS.md) 的区别：
 - AGENTS.md 宪法是 **产品 / 架构层** 的（"不改 GA / localhost only / CLI 是公开契约"）
 - 本文件是 **重构执行层** 的（"老路径不删 / 每 task 跑测试 / migration 号段"）
 
@@ -56,7 +56,7 @@ v0.1 已用 migration 001-005。**v0.2 起从 006 开始递增，绝不跳号、
 
 **migration 写好后不准改**——dogfood 用户的 DB 已经跑过那个版本号了，改内容会让两侧 DB schema 漂移。要修 = 加新 migration 覆盖。
 
-**为什么**：[Tauri identifier 不可随意改](../../AGENTS.md) 的 corollary——同一 identifier 下数据目录连续，migration 历史也连续。
+**为什么**：[Tauri identifier 不可随意改](../../../AGENTS.md) 的 corollary——同一 identifier 下数据目录连续，migration 历史也连续。
 
 ## I4. 目录重组 commit 只做 rename，不做逻辑改动
 
@@ -85,7 +85,7 @@ Rust 端 `GalleyApi` trait 是所有命令的 single source of truth。两个 tr
 - 同一命令在两个 transport 走不同代码路径
 - 在 transport 层做业务逻辑（必须在 trait 实现里）
 
-**为什么**：[AGENTS.md § CLI Surface Is Public Contract](../../AGENTS.md)——schema 必须漂移 0，唯一保证方式就是一处生成。
+**为什么**：[AGENTS.md § CLI Surface Is Public Contract](../../../AGENTS.md)——schema 必须漂移 0，唯一保证方式就是一处生成。
 
 **例外**：transport 层可以做 transport-specific 转换（如 socket 需要 framing，Tauri event 需要 emit）——这不算业务逻辑，是 protocol adapter。
 
@@ -103,7 +103,7 @@ gui/ 只允许：
 
 **判断 authoritative 还是 display**：如果别的 transport（CLI）做了同样动作，React store 还能保持原值，那就是 display；如果会冲突，那就是 authoritative，必须在 Rust 端。
 
-**为什么**：[AGENTS.md § Rust Core Is Authoritative](../../AGENTS.md)——多 frontend 必须基于同一权威。
+**为什么**：[AGENTS.md § Rust Core Is Authoritative](../../../AGENTS.md)——多 frontend 必须基于同一权威。
 
 ## I7. 性能 gate
 
@@ -174,7 +174,7 @@ prototype L5 通过的前提就是 unwind 路径。如果有人为减小 binary 
 
 **例外**：测试 binary（如 `[[bin]] required-features = ["experiments"]` 的实验代码）可以单独覆盖；但生产 desktop 主入口 + B1+ 的 core/ crate 必须保持 unwind。
 
-**历史**：2026-05-18 bridge-owner prototype session 1 L5 验证后引入。详 [prototype-go-for-b1 devlog](../devlog/2026-05-18-prototype-go-for-b1.md) §D5。
+**历史**：2026-05-18 bridge-owner prototype session 1 L5 验证后引入。详 [prototype-go-for-b1 devlog](../../devlog/2026-05-18-prototype-go-for-b1.md) §D5。
 
 ---
 

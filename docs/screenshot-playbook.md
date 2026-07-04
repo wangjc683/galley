@@ -131,6 +131,23 @@ en：`Compare the current Goodreads ratings and review counts of the main Englis
 工具层）：换本机任务——「把桌面这份 PDF 的要点整理成一张表」，文件系统
 对模型不可见，工具调用必然发生。
 
+## 二进制资产政策（全 docs 通用）
+
+进 git 的二进制**永远留在历史里**——删除和替换都只会让仓库更大，不会
+更小。所以规则设在入口处：
+
+- **只提交被文档引用的资产**。README 截图 = 上方场景清单的 5 张 × 双语，
+  重拍**同名覆盖**，不新增编号、不留旧版（旧版在 git 历史里）。
+- **提交前压尺寸**：README 截图导出后先缩到 2× 展示宽（README 展示宽
+  800px → 图片 1600px 宽即可，无需 3200px 原始 Retina 尺寸），PNG 走一遍
+  无损压缩（如 `pngquant` / ImageOptim）。单张目标 ≤ 600KB。
+- **审计证据图**：全窗口截图用 JPEG（质量 80 足够作证据）或降采样 PNG；
+  只保留报告正文引用的图。落选 / 重试的抓拍不进 repo（放本机
+  `~/Documents/galley-refs/` 之类）。2026-06-16 审计的 `rejected/` 目录
+  早于本政策，按归档现状保留，不追溯。
+- **参考资料（PDF、论文等）不进 repo**：放 `~/Documents/galley-refs/`，
+  文档里用纯文本提名（先例见 2026-05-20 repo hygiene devlog）。
+
 ## 当前状态与待办
 
 正式五张（zh / en 双套）已于 2026-07-03 实拍并上 README。实拍过程、与

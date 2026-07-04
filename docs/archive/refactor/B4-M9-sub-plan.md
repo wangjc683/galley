@@ -47,7 +47,7 @@ DESIGN.md onboarding subtitle 改 dual-native framing（playbook T9.3 mention）
 
 > **G2 (today)**: T9.4 release notes 不写到任何文件，而是 sub-plan 内附 draft。M9 ship session 时再正式写入 GitHub Release body。理由：release notes 通常 ship 时还会补「具体下载文件名 + 当天截止」等动态信息。
 
-> **G3 (today)**: PRD.md 已经是 v0.3 dual-native framing（[CLAUDE.md](../../CLAUDE.md) 写明），T9.7 主要是 status section / 阶段进度同步，不是大改。
+> **G3 (today)**: PRD.md 已经是 v0.3 dual-native framing（[CLAUDE.md](../../../CLAUDE.md) 写明），T9.7 主要是 status section / 阶段进度同步，不是大改。
 
 ---
 
@@ -137,7 +137,7 @@ README 受众包括第一次看到的人（GitHub 浏览者 / 社交分享点进
 | 技术栈 | **改**：去 "v0.2 实现中" 字样 |
 | 平台行 | 保留（macOS + Windows） |
 | 安装 / 前置 / macOS / Windows | 保留 + 微调（drop "v0.x.x" placeholder → "v0.2.x"） |
-| 贡献 / 从源码构建 | **改**：`cd desktop` 已经是 [B1 后改 gui](../../CLAUDE.md)，commands 同步 |
+| 贡献 / 从源码构建 | **改**：`cd desktop` 已经是 [B1 后改 gui](../../../CLAUDE.md)，commands 同步 |
 | 致谢 GA paper | 保留 |
 | License | 保留 |
 
@@ -205,7 +205,7 @@ Release notes 不写到任何 repo 文件，而是 sub-plan 内附 draft。M9 sh
 
 ### 4.1 风格
 
-沿用 [feedback_release_notes_style](../../) 简洁优先 pattern:
+沿用 [feedback_release_notes_style](../../../) 简洁优先 pattern:
 - 不写 lead-in（"今天我们 ship 了..." 类）
 - 不写 Alpha 含义解释
 - 不写 Upstream 段
@@ -326,8 +326,8 @@ Closeout devlog 不写 —— M9 paperwork 不是 milestone ship，M9 真正 mil
 ## 8. References
 
 - B4 playbook M9 段：[B4-cli-bg-artifact.md §M9](./B4-cli-bg-artifact.md#m9--b4-acceptance--v02-ship-准备-d65)
-- PRD：[docs/PRD.md](../PRD.md)
-- README：[README.md](../../README.md)
+- PRD：[docs/PRD.md](../../PRD.md)
+- README：[README.md](../../../README.md)
 - Release notes 风格：feedback_release_notes_style memory
 
 ---
