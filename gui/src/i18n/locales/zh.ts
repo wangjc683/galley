@@ -367,7 +367,6 @@ export const zhCopy = {
     globalPlaceholder: "交代什么？",
     projectPlaceholder: (projectName: string) =>
       `在 ${projectName} 里交代什么？`,
-    localFileHint: "本地文件直接给路径就行",
   },
   command: {
     label: "命令面板",

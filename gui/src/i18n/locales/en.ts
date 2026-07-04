@@ -383,7 +383,6 @@ export const enCopy: AppCopy = {
     globalPlaceholder: "What should Galley do?",
     projectPlaceholder: (projectName) =>
       `What should Galley do in ${projectName}?`,
-    localFileHint: "Local files: just paste a path.",
   },
   command: {
     label: "Command palette",

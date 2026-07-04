@@ -231,12 +231,14 @@ export interface ComposerProps {
   hasActiveGoal?: boolean;
   /** Show the compact keyboard/state hint below the Composer. */
   showFooterHint?: boolean;
-  /** Caller-supplied line for the same footer slot, shown when the
+  /** Caller-supplied content for the same footer slot, shown when the
    * internal keyboard/state hint is off. Keeps every hint under every
    * Composer in one visual grammar (mt-1.5 / 11px / left-aligned) —
-   * EmptyState routes its "will be created in X" / local-file line
-   * here instead of rendering its own row. */
-  staticHint?: string;
+   * EmptyState routes its "will be created in X" consequence line here
+   * instead of rendering its own row. ReactNode so callers can carry a
+   * content-level genre marker (e.g. the project row's folder icon),
+   * parallel to how keyboard hints self-identify via kbd tokens. */
+  staticHint?: ReactNode;
   /** When false, all image intake (paste / drop / file picker) is
    * disabled and the 📎 button is hidden — used for runtimes that
    * cannot deliver images to the agent (external GA). Defaults to
@@ -464,10 +466,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       : (placeholder ?? copy.composer.askAnything);
     const shouldShowByTheWayRequiredHint =
       showByTheWayRequiredHint && stopMode && !isSideQuestion;
-    const footerHint = showFooterHint
+    const keyboardHint = showFooterHint
       ? shouldShowByTheWayRequiredHint
         ? copy.composer.byTheWayPrefixHint
         : copy.composer.enterHint
+      : null;
+    // Keyboard hints get kbd-token styling; a caller-supplied staticHint
+    // is already a ReactNode and renders as-is in the same slot.
+    const footerHint: ReactNode = keyboardHint
+      ? renderComposerHintWithKbd(keyboardHint)
       : (staticHint ?? null);
 
     useEffect(() => {
@@ -885,7 +892,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         </div>
         {footerHint && (
           <div className="mt-1.5 text-[11px] text-ink-muted">
-            {renderComposerHintWithKbd(footerHint)}
+            {footerHint}
           </div>
         )}
         <ImagePreviewDialog

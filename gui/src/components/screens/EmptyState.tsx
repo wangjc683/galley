@@ -1,3 +1,4 @@
+import { FolderOpen } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -150,22 +151,30 @@ export function EmptyState({
           imagesEnabled={imagesEnabled}
           onImageBlocked={onImageBlocked}
           staticHint={
-            projectName
-              ? copy.composer.willCreateIn(projectName)
-              : copy.empty.localFileHint
+            projectName ? (
+              <span className="flex min-w-0 items-center gap-1.5">
+                <FolderOpen size={11} weight="thin" className="shrink-0" />
+                <span className="min-w-0 truncate">
+                  {copy.composer.willCreateIn(projectName)}
+                </span>
+              </span>
+            ) : undefined
           }
         />
 
-        {/* Keyboard-shortcut hints intentionally not shown here. Empty
-            state is the user's first impression; shortcut chrome dilutes
-            focus on the composer (the full list lives in Settings →
-            Shortcuts). The staticHint above is a different kind: it
-            states what the input accepts (local files) or what will
-            happen (created in project X), rendered through the same
-            footer slot as the in-session keyboard hint so every hint
-            under every Composer shares one visual grammar. It replaced
-            the former sentence-length placeholder inside the composer —
-            net less text on the quiet desk. */}
+        {/* Below the composer, the GLOBAL empty state stays empty on
+            purpose — no keyboard-shortcut chrome (first impression;
+            the full list lives in Settings → Shortcuts) and no
+            capability tips: the 2026-06-03 decision keeps capability
+            discovery out of the empty state (a local-file tip was
+            trialed here on 2026-07-04 and removed the same day — the
+            saved-prompts presets already teach paste-a-path four
+            times over). The one legitimate line is the project-mode
+            consequence hint above ("will be created in X"), routed
+            through the Composer's staticHint slot so it shares the
+            in-session hint grammar; its folder icon is the
+            content-level genre marker, parallel to kbd tokens in
+            keyboard hints. */}
       </div>
     </div>
   );
