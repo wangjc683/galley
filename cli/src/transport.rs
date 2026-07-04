@@ -17,6 +17,50 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// sessions may be quiet for arbitrarily long.
 const FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// `ERROR_PIPE_BUSY` (same constant / detection idiom as
+/// `core/src/socket_listener/mod.rs`). Core's accept loop creates the
+/// next pipe instance only after the previous `connect()` returns, so
+/// concurrent CLI invocations can transiently see every instance taken
+/// (`ERROR_PIPE_BUSY`) or no instance at all (`NotFound`) while the
+/// core is alive and healthy.
+#[cfg(windows)]
+const WIN_ERROR_PIPE_BUSY: i32 = 231;
+#[cfg(windows)]
+const PIPE_OPEN_ATTEMPTS: u32 = 10;
+#[cfg(windows)]
+const PIPE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(100);
+
+/// Open the core named pipe, retrying transient instance-gap errors
+/// (`ERROR_PIPE_BUSY`, `NotFound`) with a short backoff before mapping
+/// the failure to `DbUnavailable` (exit 4). Worst case ~1s, well inside
+/// [`CONNECT_TIMEOUT`]. If the core truly isn't running the retries
+/// only delay the same "Core not running" error slightly.
+#[cfg(windows)]
+async fn open_pipe_client(
+    path_str: &str,
+) -> Result<tokio::net::windows::named_pipe::NamedPipeClient, GalleyError> {
+    use tokio::net::windows::named_pipe::ClientOptions;
+    let mut attempt = 0;
+    loop {
+        match ClientOptions::new().open(path_str) {
+            Ok(stream) => return Ok(stream),
+            Err(e)
+                if attempt + 1 < PIPE_OPEN_ATTEMPTS
+                    && (e.raw_os_error() == Some(WIN_ERROR_PIPE_BUSY)
+                        || e.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                attempt += 1;
+                tokio::time::sleep(PIPE_OPEN_RETRY_DELAY).await;
+            }
+            Err(e) => {
+                return Err(GalleyError::DbUnavailable {
+                    message: format!("Galley Core not running (pipe {}: {})", path_str, e),
+                });
+            }
+        }
+    }
+}
+
 fn core_unresponsive(what: &str) -> GalleyError {
     GalleyError::DbUnavailable {
         message: format!(
@@ -82,16 +126,11 @@ pub(crate) async fn socket_send_recv(req: serde_json::Value) -> Result<String, G
 #[cfg(windows)]
 pub(crate) async fn socket_send_recv(req: serde_json::Value) -> Result<String, GalleyError> {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    use tokio::net::windows::named_pipe::ClientOptions;
     let path = socket_path();
     let path_str = path.to_str().ok_or_else(|| GalleyError::Internal {
         message: "named pipe path not UTF-8".into(),
     })?;
-    let stream = ClientOptions::new()
-        .open(path_str)
-        .map_err(|e| GalleyError::DbUnavailable {
-            message: format!("Galley Core not running (pipe {}: {})", path_str, e),
-        })?;
+    let stream = open_pipe_client(path_str).await?;
     let (read_half, mut write_half) = tokio::io::split(stream);
     let line = serde_json::to_string(&req).unwrap();
     write_half
@@ -202,17 +241,11 @@ pub(crate) async fn open_watch_lines(id: &str) -> Result<WatchLines, GalleyError
         Box<dyn AsyncRead + Unpin + Send>,
         Box<dyn AsyncWrite + Unpin + Send>,
     ) = {
-        use tokio::net::windows::named_pipe::ClientOptions;
         let path = socket_path();
         let path_str = path.to_str().ok_or_else(|| GalleyError::Internal {
             message: "named pipe path not UTF-8".into(),
         })?;
-        let stream =
-            ClientOptions::new()
-                .open(path_str)
-                .map_err(|e| GalleyError::DbUnavailable {
-                    message: format!("Galley Core not running (pipe {}: {})", path_str, e),
-                })?;
+        let stream = open_pipe_client(path_str).await?;
         let (read_half, write_half) = tokio::io::split(stream);
         (Box::new(read_half), Box::new(write_half))
     };
