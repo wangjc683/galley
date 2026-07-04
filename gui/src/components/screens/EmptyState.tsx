@@ -1,4 +1,3 @@
-import { FolderOpen } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -150,35 +149,23 @@ export function EmptyState({
           onOpenLLMSwitcher={onOpenLLMSwitcher}
           imagesEnabled={imagesEnabled}
           onImageBlocked={onImageBlocked}
+          staticHint={
+            projectName
+              ? copy.composer.willCreateIn(projectName)
+              : copy.empty.localFileHint
+          }
         />
-
-        {projectName && (
-          <div className="mt-3 flex min-w-0 items-center justify-center gap-1.5 text-[12px] text-ink-muted">
-            <FolderOpen
-              size={12}
-              weight="thin"
-              className="shrink-0 text-ink-muted"
-            />
-            <span className="min-w-0 truncate">
-              {copy.composer.willCreateIn(projectName)}
-            </span>
-          </div>
-        )}
-
-        {!projectName && (
-          <div className="mt-3 text-center text-[12px] text-ink-muted">
-            {copy.empty.localFileHint}
-          </div>
-        )}
 
         {/* Keyboard-shortcut hints intentionally not shown here. Empty
             state is the user's first impression; shortcut chrome dilutes
             focus on the composer (the full list lives in Settings →
-            Shortcuts). The single muted line above is a different kind:
-            like the project row it occupies, it states what the input
-            accepts / what will happen, and it replaced the former
-            sentence-length placeholder inside the composer — net less
-            text on the quiet desk. */}
+            Shortcuts). The staticHint above is a different kind: it
+            states what the input accepts (local files) or what will
+            happen (created in project X), rendered through the same
+            footer slot as the in-session keyboard hint so every hint
+            under every Composer shares one visual grammar. It replaced
+            the former sentence-length placeholder inside the composer —
+            net less text on the quiet desk. */}
       </div>
     </div>
   );

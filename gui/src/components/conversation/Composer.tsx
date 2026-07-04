@@ -231,6 +231,12 @@ export interface ComposerProps {
   hasActiveGoal?: boolean;
   /** Show the compact keyboard/state hint below the Composer. */
   showFooterHint?: boolean;
+  /** Caller-supplied line for the same footer slot, shown when the
+   * internal keyboard/state hint is off. Keeps every hint under every
+   * Composer in one visual grammar (mt-1.5 / 11px / left-aligned) —
+   * EmptyState routes its "will be created in X" / local-file line
+   * here instead of rendering its own row. */
+  staticHint?: string;
   /** When false, all image intake (paste / drop / file picker) is
    * disabled and the 📎 button is hidden — used for runtimes that
    * cannot deliver images to the agent (external GA). Defaults to
@@ -278,6 +284,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       hasActiveGoal = false,
       onGoalSubmit,
       showFooterHint = false,
+      staticHint,
       imagesEnabled = true,
       onImageBlocked,
     },
@@ -461,7 +468,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       ? shouldShowByTheWayRequiredHint
         ? copy.composer.byTheWayPrefixHint
         : copy.composer.enterHint
-      : null;
+      : (staticHint ?? null);
 
     useEffect(() => {
       if (!showByTheWayRequiredHint) return;
