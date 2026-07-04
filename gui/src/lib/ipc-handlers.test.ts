@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
 import { useMessagesStore } from "@/stores/messages";
@@ -315,5 +323,123 @@ describe("dispatchIPCEvent", () => {
     expect(useUiStore.getState().toasts[0]).toMatchObject({
       message: "Bridge failed",
     });
+  });
+});
+
+describe("Core DB persistence retry on SQLite contention (CONC-8)", () => {
+  let consoleError: MockInstance<typeof console.error>;
+
+  function persistCalls(command: string): number {
+    return tauriMocks.invoke.mock.calls.filter(([c]) => c === command).length;
+  }
+
+  function turnEndEvent(): IPCEvent {
+    return {
+      kind: "turn_end",
+      sessionId: "s-test",
+      turnIndex: 1,
+      summary: "Answered",
+      toolCalls: [],
+      toolResults: [],
+      responseContent: "Final answer",
+      exitReason: null,
+      timestamp: "2026-06-18T08:01:02.000Z",
+    };
+  }
+
+  function failInvoke(command: string, message: string, times: number): void {
+    let failures = times;
+    tauriMocks.invoke.mockImplementation(async (c) => {
+      if (c === command && failures > 0) {
+        failures -= 1;
+        throw new Error(message);
+      }
+      return undefined;
+    });
+  }
+
+  beforeEach(() => {
+    resetStores();
+    seedSession();
+    vi.useFakeTimers();
+    consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    consoleError.mockRestore();
+  });
+
+  it("retries persist_assistant_message after a busy error", async () => {
+    failInvoke(
+      "persist_assistant_message",
+      "database is locked (code 5) SQLITE_BUSY",
+      1,
+    );
+
+    dispatchIPCEvent(turnEndEvent());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(persistCalls("persist_assistant_message")).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(persistCalls("persist_assistant_message")).toBe(2);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it("does not retry non-contention errors and logs identifiers", async () => {
+    failInvoke(
+      "persist_assistant_message",
+      "no such table: messages",
+      Infinity,
+    );
+
+    dispatchIPCEvent(turnEndEvent());
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(persistCalls("persist_assistant_message")).toBe(1);
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    const logged = String(consoleError.mock.calls[0][0]);
+    expect(logged).toContain("session=s-test");
+    expect(logged).toContain("turn=1");
+  });
+
+  it("gives up after three contention retries and logs at error level", async () => {
+    failInvoke(
+      "persist_assistant_message",
+      "database is locked (code 5) SQLITE_BUSY",
+      Infinity,
+    );
+
+    dispatchIPCEvent(turnEndEvent());
+    await vi.advanceTimersByTimeAsync(5000);
+
+    // Initial attempt + 200/500/1000ms retries, then escalate.
+    expect(persistCalls("persist_assistant_message")).toBe(4);
+    expect(consoleError).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries persist_tool_event_pending after a busy error", async () => {
+    failInvoke(
+      "persist_tool_event_pending",
+      "database is locked (code 5) SQLITE_BUSY",
+      1,
+    );
+
+    dispatchIPCEvent({
+      kind: "tool_call_pending",
+      sessionId: "s-test",
+      approvalId: "appr-retry",
+      turnIndex: 1,
+      toolName: "file_write",
+      args: { path: "README.md" },
+      argsPreview: "path=README.md",
+      riskLevel: "high",
+      reason: "Writes a file",
+      timestamp: "2026-06-18T08:02:00.000Z",
+    });
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(persistCalls("persist_tool_event_pending")).toBe(2);
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

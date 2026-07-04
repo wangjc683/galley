@@ -598,12 +598,57 @@ function pickTarget(args: Record<string, unknown>): string | undefined {
 
 // ---------------- Core DB persistence (best-effort) ----------------
 
+const DB_CONTENTION_RETRY_DELAYS_MS = [200, 500, 1000];
+
+/**
+ * Rust commands reject with a stringified GalleyError (see Core's
+ * `stringify_error`), so SQLite contention is only recognizable by
+ * text. Match defensively on the SQLITE_BUSY / SQLITE_LOCKED
+ * phrasings sqlx surfaces.
+ */
+function isSqliteContention(e: unknown): boolean {
+  const text = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return text.includes("database is locked") || text.includes("busy");
+}
+
+/**
+ * Runs a fire-and-forget Core DB write, retrying on SQLite contention
+ * (e.g. an FTS rebuild or a slow transaction elsewhere holding the
+ * write lock). Never throws — callers `void` the promise and the IPC
+ * dispatch path must not block on persistence — but non-contention
+ * errors and exhausted retries log at error level with `ids` so a
+ * lost row is diagnosable (CONC-8).
+ */
+async function persistWithContentionRetry(
+  label: string,
+  ids: string,
+  write: () => Promise<void>,
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await write();
+      return;
+    } catch (e) {
+      if (
+        isSqliteContention(e) &&
+        attempt < DB_CONTENTION_RETRY_DELAYS_MS.length
+      ) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, DB_CONTENTION_RETRY_DELAYS_MS[attempt]);
+        });
+        continue;
+      }
+      console.error(`[ipc] ${label} failed — row lost (${ids}).`, e);
+      return;
+    }
+  }
+}
+
 /**
  * Best-effort Core DB write for the approval audit trail. Imported
  * lazily so a non-Tauri runtime (Vite-only dev) doesn't fail hard at
- * IPC dispatch time; if persistence isn't available we just log and
- * move on. See db.ts `persistToolEventPending` for the v0.1 scoping
- * rationale (audit only, no completion rows).
+ * IPC dispatch time. See db.ts `persistToolEventPending` for the v0.1
+ * scoping rationale (audit only, no completion rows).
  */
 async function persistToolEventPendingFromIPC(event: {
   sessionId: string;
@@ -615,27 +660,29 @@ async function persistToolEventPendingFromIPC(event: {
   riskLevel: string;
   timestamp: string;
 }): Promise<void> {
-  try {
-    const { persistToolEventPending } = await import("@/lib/db");
-    // Bridge sends riskLevel as a free string per the wire format; map
-    // unexpected values to 'medium' to keep the column constraint happy.
-    const risk: "low" | "medium" | "high" =
-      event.riskLevel === "low" || event.riskLevel === "high"
-        ? event.riskLevel
-        : "medium";
-    await persistToolEventPending({
-      approvalId: event.approvalId,
-      sessionId: event.sessionId,
-      turnIndex: event.turnIndex,
-      toolName: event.toolName,
-      args: event.args,
-      argsPreview: event.argsPreview,
-      riskLevel: risk,
-      startedAt: event.timestamp,
-    });
-  } catch (e) {
-    console.debug("[ipc] persistToolEventPending: Core DB unavailable.", e);
-  }
+  // Bridge sends riskLevel as a free string per the wire format; map
+  // unexpected values to 'medium' to keep the column constraint happy.
+  const risk: "low" | "medium" | "high" =
+    event.riskLevel === "low" || event.riskLevel === "high"
+      ? event.riskLevel
+      : "medium";
+  await persistWithContentionRetry(
+    "persistToolEventPending",
+    `session=${event.sessionId} approval=${event.approvalId} turn=${event.turnIndex}`,
+    async () => {
+      const { persistToolEventPending } = await import("@/lib/db");
+      await persistToolEventPending({
+        approvalId: event.approvalId,
+        sessionId: event.sessionId,
+        turnIndex: event.turnIndex,
+        toolName: event.toolName,
+        args: event.args,
+        argsPreview: event.argsPreview,
+        riskLevel: risk,
+        startedAt: event.timestamp,
+      });
+    },
+  );
 }
 
 async function persistTurnEndToMessages(event: {
@@ -648,40 +695,42 @@ async function persistTurnEndToMessages(event: {
   telemetry?: TurnTelemetry | null;
   visibility?: MessageVisibility;
 }): Promise<void> {
-  try {
-    const trimmedSummary = event.summary?.trim() ?? "";
-    const finalAnswer = cleanFinalAnswer(event.responseContent);
-    // Mirrors turnFromTurnEnd's gate: only intermediate turns persist
-    // a preamble. Final-answer turn's narrator IS the final answer
-    // and lives in `final_answer`; storing it again as `preamble`
-    // would double-render on restore.
-    const isFinalTurn =
-      event.toolCalls.length === 0 ||
-      event.toolCalls.every((tc) => tc.toolName === "no_tool");
-    const persistedPreamble = isFinalTurn
-      ? null
-      : (extractPreamble(event.responseContent) ?? null);
-    await invoke("persist_assistant_message", {
-      input: {
-        sessionId: event.sessionId,
-        turnIndex: event.turnIndex,
-        content: event.responseContent,
-        toolCalls: JSON.stringify(event.toolCalls),
-        toolResults: JSON.stringify(event.toolResults),
-        thinking: extractThinking(event.responseContent) ?? null,
-        finalAnswer,
-        // GA's third-person turn summary. NULL when empty so the
-        // TurnMarker renders the bare "第 N 步" instead of an
-        // empty separator.
-        summary: trimmedSummary ? trimmedSummary : null,
-        // LLM pre-tool reasoning prose for DetailPanel restore. See
-        // isFinalTurn gate above — final answers don't persist here.
-        preamble: persistedPreamble,
-        telemetry: event.telemetry ?? null,
-        visibility: event.visibility ?? "visible",
-      },
-    });
-  } catch (e) {
-    console.debug("[ipc] persistTurnEndToMessages: Core DB unavailable.", e);
-  }
+  const trimmedSummary = event.summary?.trim() ?? "";
+  const finalAnswer = cleanFinalAnswer(event.responseContent);
+  // Mirrors turnFromTurnEnd's gate: only intermediate turns persist
+  // a preamble. Final-answer turn's narrator IS the final answer
+  // and lives in `final_answer`; storing it again as `preamble`
+  // would double-render on restore.
+  const isFinalTurn =
+    event.toolCalls.length === 0 ||
+    event.toolCalls.every((tc) => tc.toolName === "no_tool");
+  const persistedPreamble = isFinalTurn
+    ? null
+    : (extractPreamble(event.responseContent) ?? null);
+  await persistWithContentionRetry(
+    "persistTurnEndToMessages",
+    `session=${event.sessionId} turn=${event.turnIndex}`,
+    async () => {
+      await invoke("persist_assistant_message", {
+        input: {
+          sessionId: event.sessionId,
+          turnIndex: event.turnIndex,
+          content: event.responseContent,
+          toolCalls: JSON.stringify(event.toolCalls),
+          toolResults: JSON.stringify(event.toolResults),
+          thinking: extractThinking(event.responseContent) ?? null,
+          finalAnswer,
+          // GA's third-person turn summary. NULL when empty so the
+          // TurnMarker renders the bare "第 N 步" instead of an
+          // empty separator.
+          summary: trimmedSummary ? trimmedSummary : null,
+          // LLM pre-tool reasoning prose for DetailPanel restore. See
+          // isFinalTurn gate above — final answers don't persist here.
+          preamble: persistedPreamble,
+          telemetry: event.telemetry ?? null,
+          visibility: event.visibility ?? "visible",
+        },
+      });
+    },
+  );
 }
