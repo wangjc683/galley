@@ -1229,8 +1229,18 @@ async fn start_platform_credential_ipc(
     let token_for_task = token.clone();
     tokio::spawn(async move {
         loop {
-            let Ok((stream, _)) = listener.accept().await else {
-                break;
+            let stream = match listener.accept().await {
+                Ok((stream, _)) => stream,
+                Err(e) => {
+                    // A silent break here killed credential IPC for the
+                    // rest of the process lifetime; failures are
+                    // transient (fd pressure) — retry with backoff.
+                    eprintln!(
+                        "[codex-oauth] accepting credential IPC connection failed: {e} — retrying in 500ms"
+                    );
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    continue;
+                }
             };
             let token = token_for_task.clone();
             let allowed_credentials = allowed_credentials.clone();
