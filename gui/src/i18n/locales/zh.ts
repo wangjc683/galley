@@ -440,9 +440,7 @@ export const zhCopy = {
         "重新探测 Python 解释器、检查运行环境与必要文件。",
       runHealthCheck: "跑一次 Health Check",
       setupAssistant: "设置向导",
-      setupAssistantDescription:
-        "重新走一遍首次设置流程，检查 Runtime、模型和 Health Check。现有对话会保留。",
-      openSetupAssistant: "打开设置向导…",
+      setupAssistantDescription: "重新走一遍首次设置，现有对话会保留",
       setupAssistantRunningBlock: "有任务运行时暂时不能打开设置向导。",
       bundledPythonDetail: "Galley 内置 · 已附带全部依赖，零配置可用",
       useExternalPython: "使用外部 Python…",
@@ -467,7 +465,6 @@ export const zhCopy = {
       switchToBundledGA: "切换到内置内核",
       switchToExternalGA: "切换到外部 GA",
       runningSessionsBlock: "有运行中的对话，结束后可切换运行时。",
-      usingExternalGA: "正在使用外部 GA",
       externalReady: "外部 GA 已可用",
       needsGAPath: "需要先选择 GA 路径",
       choose: "选择",

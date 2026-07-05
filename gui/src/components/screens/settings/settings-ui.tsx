@@ -38,3 +38,16 @@ export function SettingsSectionLabel({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+/**
+ * Field-level label for content nested inside a section (accordion
+ * bodies, expanded rows). Deliberately one tier below
+ * SettingsSectionLabel — no uppercase, no tracking — so expanding an
+ * advanced row never re-introduces page-level eyebrows and flattens
+ * the hierarchy.
+ */
+export function SettingsFieldLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="text-ui-meta font-medium text-ink-soft">{children}</div>
+  );
+}

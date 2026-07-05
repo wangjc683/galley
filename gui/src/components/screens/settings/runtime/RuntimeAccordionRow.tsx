@@ -1,25 +1,28 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import { ArrowRight, CaretDown, CaretRight } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 /**
- * Shared row idiom for the Runtime "更多" group. The three entries
- * (Setup Assistant, external GA, managed diagnostics) used to be three
- * different shapes — two floaty ghost-link carets plus an always-open
- * card. They now share one hairline-divided container with consistent
- * row headers: expandable rows carry a caret, action rows carry a
- * trailing control. Inner content stays borderless so the list reads
- * as one group instead of boxes inside a box.
+ * Shared row idiom for the Runtime "更多" group. All three entries
+ * (Setup Assistant, external GA, managed diagnostics) are whole-row
+ * clickable headers inside one hairline-divided container; the
+ * trailing glyph tells the row's behavior apart — caret expands in
+ * place, arrow navigates away. Inner content stays borderless so the
+ * list reads as one group instead of boxes inside a box.
  */
 
 export function RuntimeAccordionRow({
   title,
+  badge,
   expanded,
   onToggle,
   children,
 }: {
   title: string;
+  /** Status chip next to the title — visible while collapsed, so state
+   * (e.g. "external GA active") never hides inside the accordion. */
+  badge?: ReactNode;
   expanded: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -35,7 +38,12 @@ export function RuntimeAccordionRow({
           "hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40",
         )}
       >
-        <span className="text-ui-secondary font-medium text-ink">{title}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="text-ui-secondary font-medium text-ink">
+            {title}
+          </span>
+          {badge}
+        </span>
         {expanded ? (
           <CaretDown size={12} weight="bold" className="shrink-0 text-ink-soft" />
         ) : (
@@ -47,26 +55,39 @@ export function RuntimeAccordionRow({
   );
 }
 
-export function RuntimeActionRow({
+export function RuntimeNavRow({
   title,
   subtitle,
-  trailing,
+  disabled = false,
+  onOpen,
 }: {
   title: string;
   subtitle?: ReactNode;
-  trailing: ReactNode;
+  disabled?: boolean;
+  onOpen?: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
-      <div className="min-w-[220px] flex-1">
-        <div className="text-ui-secondary font-medium text-ink">{title}</div>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onOpen}
+      className={cn(
+        "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40",
+        disabled ? "cursor-not-allowed opacity-60" : "hover:bg-hover",
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block text-ui-secondary font-medium text-ink">
+          {title}
+        </span>
         {subtitle && (
-          <div className="mt-0.5 text-ui-tertiary leading-[1.5] text-ink-muted">
+          <span className="mt-0.5 block text-ui-tertiary leading-[1.5] text-ink-muted">
             {subtitle}
-          </div>
+          </span>
         )}
-      </div>
-      {trailing}
-    </div>
+      </span>
+      <ArrowRight size={12} weight="bold" className="shrink-0 text-ink-soft" />
+    </button>
   );
 }

@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 
 import { SettingsSectionLabel } from "@/components/screens/settings/settings-ui";
 import { useCopy } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import type { RuntimeKind } from "@/types/session";
 
 import { ExternalRuntimeAccess } from "./ExternalRuntimeAccess";
@@ -34,7 +35,16 @@ export function AdvancedRuntimeSettings({
   return (
     <div>
       <SettingsSectionLabel>{copy.more}</SettingsSectionLabel>
-      <div className="mt-2 divide-y divide-line overflow-hidden rounded-sm border border-line bg-surface">
+      <div
+        className={cn(
+          "mt-2 divide-y divide-line overflow-hidden rounded-sm border border-line bg-surface",
+          // The activation pulse targets this bordered container (the
+          // row headers have no border of their own and overflow-hidden
+          // would clip a row-level shadow), so the acknowledgement
+          // lands on the group where the external runtime lives.
+          highlighted && "runtime-mode-highlight",
+        )}
+      >
         <SetupAssistantAccess
           hasRunningSessions={hasRunningSessions}
           onOpenSetupAssistant={onOpenSetupAssistant}
@@ -45,7 +55,6 @@ export function AdvancedRuntimeSettings({
           value={value}
           hasExternalRuntimeConfigured={hasExternalRuntimeConfigured}
           hasRunningSessions={hasRunningSessions}
-          highlighted={highlighted}
           onToggleExpanded={onToggleExpanded}
           onActivate={onActivate}
         >

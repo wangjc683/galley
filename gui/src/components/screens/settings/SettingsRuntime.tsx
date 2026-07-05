@@ -2,15 +2,14 @@ import {
   Check,
   CircleNotch,
   FolderOpen,
-  Package,
   Warning,
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import {
+  SettingsFieldLabel,
   SettingsPanelHeader,
-  SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
 import type { PathValidation } from "@/components/screens/onboarding/StepAttach";
 import { AdvancedRuntimeSettings } from "@/components/screens/settings/runtime/AdvancedRuntimeSettings";
@@ -97,8 +96,11 @@ export function SettingsRuntime({
     onChangeRuntimeKind?.(kind);
   };
 
+  // Rendered as fragment children of ExternalRuntimeAccess's space-y
+  // stack, so every block inside the accordion shares one rhythm with
+  // the status/switch row — no divider, no extra nesting.
   const externalRuntimeDetails = (
-    <div className="space-y-7 border-t border-line pt-6">
+    <>
       <PathField
         label={runtimeCopy.externalPath}
         value={info.gaPath}
@@ -122,7 +124,7 @@ export function SettingsRuntime({
       />
 
       <HealthCheckSection onReRunHealthCheck={onReRunHealthCheck} />
-    </div>
+    </>
   );
 
   return (
@@ -178,11 +180,11 @@ export function SettingsRuntime({
 /**
  * Python interpreter panel. Two visual modes:
  *
- *   - **Bundled (default, v0.1.1+)**: read-only card showing
- *     "Galley 内置 Python <version>". Galley ships its own CPython
- *     with GA deps pre-staged via scripts/bundle-python.sh, so the
- *     user doesn't pick anything. A small "使用外部 Python…" toggle
- *     under the card reveals the legacy picker for advanced users
+ *   - **Bundled (default, v0.1.1+)**: read-only lines showing
+ *     "CPython <version>" + bundled detail. Galley ships its own
+ *     CPython with GA deps pre-staged via scripts/bundle-python.sh, so
+ *     the user doesn't pick anything. A small "使用外部 Python…" toggle
+ *     underneath reveals the legacy picker for advanced users
  *     (custom GA forks, live venv iteration).
  *
  *   - **External**: a read-only PathField mirrors the
@@ -210,24 +212,19 @@ function PythonPanel({
   if (!useExternal) {
     return (
       <div>
-        <SettingsSectionLabel>Python</SettingsSectionLabel>
-        <div className="mt-2 flex items-center gap-3 rounded-sm border border-line bg-surface px-3 py-2.5">
-          <Package size={18} weight="thin" className="shrink-0 text-ink-soft" />
-          <div className="min-w-0">
-            <div className="font-mono text-[12.5px] text-ink">
-              CPython {BUNDLED_PYTHON_VERSION}
-            </div>
-            <div className="mt-0.5 text-[11.5px] text-ink-muted">
-              {copy.bundledPythonDetail}
-            </div>
-          </div>
+        <SettingsFieldLabel>Python</SettingsFieldLabel>
+        <div className="mt-1.5 font-mono text-ui-secondary text-ink">
+          CPython {BUNDLED_PYTHON_VERSION}
+        </div>
+        <div className="mt-0.5 text-ui-tertiary text-ink-muted">
+          {copy.bundledPythonDetail}
         </div>
         {onToggle && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onToggle(true)}
-            className="mt-2 px-0 text-[11.5px] hover:bg-transparent hover:underline"
+            className="mt-1.5 px-0 text-ui-tertiary hover:bg-transparent hover:underline"
           >
             {copy.useExternalPython}
           </Button>
@@ -253,7 +250,7 @@ function PythonPanel({
           variant="ghost"
           size="sm"
           onClick={() => onToggle(false)}
-          className="mt-2 px-0 text-[11.5px] hover:bg-transparent hover:underline"
+          className="mt-1.5 px-0 text-ui-tertiary hover:bg-transparent hover:underline"
         >
           {copy.useBundledPython}
         </Button>
@@ -496,8 +493,8 @@ function PathField({
 
   return (
     <div>
-      <SettingsSectionLabel>{label}</SettingsSectionLabel>
-      <div className="mt-2 flex gap-2">
+      <SettingsFieldLabel>{label}</SettingsFieldLabel>
+      <div className="mt-1.5 flex gap-2">
         <input
           type="text"
           value={editable ? draft : value}
@@ -508,7 +505,7 @@ function PathField({
           onKeyDown={editable ? handleKeyDown : undefined}
           spellCheck={false}
           className={cn(
-            "min-w-0 flex-1 rounded-sm border border-line bg-surface px-3 py-2 font-mono text-[12.5px] text-ink outline-none placeholder:text-ink-muted/70",
+            "min-w-0 flex-1 rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none placeholder:text-ink-muted/70",
             editable &&
               "focus:border-brand focus:ring-[3px] focus:ring-brand/20",
           )}
@@ -523,7 +520,7 @@ function PathField({
             // result — double toast, confusing audit trail.
             onMouseDown={(e) => e.preventDefault()}
             onClick={onPick}
-            className="shrink-0 px-3 py-2 text-[12.5px]"
+            className="shrink-0 px-3 py-2 text-ui-secondary"
             leadingIcon={<FolderOpen size={13} weight="thin" />}
           >
             {copy.choose}
@@ -531,7 +528,9 @@ function PathField({
         )}
       </div>
       {editable && <ValidationLine validation={validation} />}
-      {hint && <div className="mt-1.5 text-[12px] text-ink-muted">{hint}</div>}
+      {hint && (
+        <div className="mt-1.5 text-ui-meta text-ink-muted">{hint}</div>
+      )}
     </div>
   );
 }
@@ -539,7 +538,7 @@ function PathField({
 function ValidationLine({ validation }: { validation: PathValidation }) {
   const copy = useCopy().settings.runtime;
   if (!validation) return null;
-  const cls = "mt-2 flex items-center gap-1.5 text-[12.5px]";
+  const cls = "mt-2 flex items-center gap-1.5 text-ui-secondary";
   switch (validation.kind) {
     case "ok":
       return (

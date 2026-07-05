@@ -1,77 +1,51 @@
-import { FolderOpen } from "@phosphor-icons/react";
-
 import { Button } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 import type { RuntimeKind } from "@/types/session";
 
+/**
+ * Status + switch action for the external runtime, rendered as the
+ * first line inside the "接入外部 GA" accordion. The accordion header
+ * already names the concept (and carries the "正在使用" badge when
+ * external is active), so this row never repeats the icon/title —
+ * when active it renders nothing at all.
+ */
 export function ExternalRuntimeCard({
   value,
   hasExternalRuntimeConfigured,
   hasRunningSessions,
-  highlighted,
   onActivate,
 }: {
   value: RuntimeKind;
   hasExternalRuntimeConfigured: boolean;
   hasRunningSessions: boolean;
-  highlighted: boolean;
   onActivate?: () => void;
 }) {
   const copy = useCopy().settings.runtime;
   const active = value === "external";
+  if (active) return null;
   const canActivate =
-    !active &&
-    hasExternalRuntimeConfigured &&
-    !hasRunningSessions &&
-    !!onActivate;
-  const detail = active
-    ? copy.usingExternalGA
-    : hasExternalRuntimeConfigured
-      ? copy.externalReady
-      : copy.needsGAPath;
+    hasExternalRuntimeConfigured && !hasRunningSessions && !!onActivate;
+  const detail = hasExternalRuntimeConfigured
+    ? copy.externalReady
+    : copy.needsGAPath;
 
   return (
     <div>
-      <div
-        className={cn(
-          "flex flex-wrap items-center justify-between gap-3 rounded-sm py-1.5",
-          highlighted && "runtime-mode-highlight",
-        )}
-      >
-        <div className="flex min-w-[240px] flex-1 items-center gap-3">
-          <FolderOpen
-            size={16}
-            weight="thin"
-            className="shrink-0 text-ink-soft"
-          />
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[12.5px] font-medium text-ink">
-                {copy.externalGA}
-              </span>
-              {active && (
-                <span className="rounded-sm bg-hover px-1.5 py-px text-[10.5px] text-ink-muted">
-                  {copy.active}
-                </span>
-              )}
-            </div>
-            <div className="mt-0.5 text-[11.5px] text-ink-muted">{detail}</div>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex-1 text-ui-secondary text-ink-soft">
+          {detail}
         </div>
-        {!active && (
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!canActivate}
-            onClick={onActivate}
-          >
-            {copy.switchToExternalGA}
-          </Button>
-        )}
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!canActivate}
+          onClick={onActivate}
+        >
+          {copy.switchToExternalGA}
+        </Button>
       </div>
-      {hasRunningSessions && !active && (
-        <div className="mt-2 text-[11.5px] text-ink-muted">
+      {hasRunningSessions && (
+        <div className="mt-2 text-ui-tertiary text-ink-muted">
           {copy.runningSessionsBlock}
         </div>
       )}

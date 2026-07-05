@@ -458,8 +458,7 @@ export const enCopy: AppCopy = {
       runHealthCheck: "Run Health Check",
       setupAssistant: "Setup Assistant",
       setupAssistantDescription:
-        "Run through first-time setup again to review Runtime, models, and Health Check. Your conversations stay in place.",
-      openSetupAssistant: "Open Setup Assistant…",
+        "Run first-time setup again · conversations stay in place",
       setupAssistantRunningBlock:
         "Setup Assistant is unavailable while a task is running.",
       bundledPythonDetail: "Bundled with Galley · all dependencies included",
@@ -487,7 +486,6 @@ export const enCopy: AppCopy = {
       switchToExternalGA: "Switch to external GA",
       runningSessionsBlock:
         "A conversation is running. You can switch runtime after it finishes.",
-      usingExternalGA: "Using external GA",
       externalReady: "External GA is ready",
       needsGAPath: "Choose a GA folder first",
       choose: "Choose",

@@ -1,7 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 
-import { RuntimeActionRow } from "./RuntimeAccordionRow";
+import { RuntimeNavRow } from "./RuntimeAccordionRow";
 
 export function SetupAssistantAccess({
   hasRunningSessions,
@@ -13,23 +12,15 @@ export function SetupAssistantAccess({
   const copy = useCopy().settings.runtime;
   const disabled = hasRunningSessions || !onOpenSetupAssistant;
   return (
-    <RuntimeActionRow
+    <RuntimeNavRow
       title={copy.setupAssistant}
       subtitle={
         hasRunningSessions
           ? copy.setupAssistantRunningBlock
           : copy.setupAssistantDescription
       }
-      trailing={
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={disabled}
-          onClick={onOpenSetupAssistant}
-        >
-          {copy.openSetupAssistant}
-        </Button>
-      }
+      disabled={disabled}
+      onOpen={onOpenSetupAssistant}
     />
   );
 }

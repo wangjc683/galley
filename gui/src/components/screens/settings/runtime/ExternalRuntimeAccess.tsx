@@ -11,7 +11,6 @@ export function ExternalRuntimeAccess({
   value,
   hasExternalRuntimeConfigured,
   hasRunningSessions,
-  highlighted,
   onToggleExpanded,
   onActivate,
   children,
@@ -20,24 +19,30 @@ export function ExternalRuntimeAccess({
   value: RuntimeKind;
   hasExternalRuntimeConfigured: boolean;
   hasRunningSessions: boolean;
-  highlighted: boolean;
   onToggleExpanded: () => void;
   onActivate?: () => void;
   children: ReactNode;
 }) {
   const copy = useCopy().settings.runtime;
+  const active = value === "external";
   return (
     <RuntimeAccordionRow
       title={copy.connectExternalGA}
+      badge={
+        active ? (
+          <span className="rounded-sm bg-hover px-1.5 py-px text-ui-micro text-ink-muted">
+            {copy.active}
+          </span>
+        ) : undefined
+      }
       expanded={expanded}
       onToggle={onToggleExpanded}
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
         <ExternalRuntimeCard
           value={value}
           hasExternalRuntimeConfigured={hasExternalRuntimeConfigured}
           hasRunningSessions={hasRunningSessions}
-          highlighted={highlighted}
           onActivate={onActivate}
         />
         {children}
