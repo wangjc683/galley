@@ -10,7 +10,7 @@ export type ImSupervisorState =
   | "error"
   | "stopped";
 
-export type ImSupervisorPlatform = "wechat" | "feishu";
+export type ImSupervisorPlatform = "wechat" | "feishu" | "telegram";
 
 export interface ImSupervisorStatus {
   platform: ImSupervisorPlatform;
@@ -22,9 +22,11 @@ export interface ImSupervisorStatus {
   lastError?: string | null;
   modelConfigRevision?: string | null;
   modelConfigStale: boolean;
-  /** Feishu only: the bound owner's open_id (the bot answers only them). */
+  /** Owner-paired channels (Feishu / Telegram): the bound owner's id
+   * (Feishu open_id / Telegram user id — the bot answers only them). */
   ownerOpenId?: string | null;
-  /** Feishu only: pairing code while running unbound — DM it to bind. */
+  /** Owner-paired channels: pairing code while running unbound — DM it
+   * to bind. */
   bindCode?: string | null;
   updatedAt: string;
 }
@@ -86,6 +88,38 @@ export function deleteFeishuImConfig() {
  */
 export function unbindFeishuImOwner() {
   return invoke<ImSupervisorStatus>("unbind_feishu_im_owner");
+}
+
+export interface TelegramImConfig {
+  hasBotToken: boolean;
+  updatedAt?: string | null;
+  ownerUserId?: string | null;
+  ownerBoundAt?: string | null;
+}
+
+export interface SaveTelegramImConfigInput {
+  /** Blank / undefined keeps the already-saved token (never echoed back). */
+  botToken?: string | null;
+}
+
+export function getTelegramImConfig() {
+  return invoke<TelegramImConfig>("get_telegram_im_config");
+}
+
+export function saveTelegramImConfig(input: SaveTelegramImConfigInput) {
+  return invoke<TelegramImConfig>("save_telegram_im_config", { input });
+}
+
+export function deleteTelegramImConfig() {
+  return invoke<TelegramImConfig>("delete_telegram_im_config");
+}
+
+/**
+ * Unpair the Telegram owner. Same semantics as the Feishu unbind: a live
+ * bot restarts locked with a fresh pairing code in the returned status.
+ */
+export function unbindTelegramImOwner() {
+  return invoke<ImSupervisorStatus>("unbind_telegram_im_owner");
 }
 
 /**

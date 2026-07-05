@@ -186,6 +186,13 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
 - 卡片下方的常驻 `重启 Channels` 按钮保持 ghost 权重，且只在存在已启用 Channel 且非 stale 时渲染——没有可重启对象时不占位，stale 时让位给状态条。
 - 重启不删除微信 token，不主动要求重新扫码；token 过期仍走现有 expired / scan 流程。
 - 飞书卡片与微信并列，但流程不是扫码：展开区提供开放平台步骤、App ID / App Secret 输入和启动按钮。App Secret 保存后不回显，留空表示沿用已保存凭据。使用者通过配对码绑定：服务启动后未绑定时展示配对码，首个在飞书私聊发送配对码的用户成为机器人唯一响应的使用者，可在卡片内解绑（早期「不做绑定码」的定位已被 owner-binding 实现取代）。
+- Telegram 是第三张卡，凭据只有一个 Bot Token（来自 @BotFather），保存后
+  不回显、留空沿用；设置指引用微信同款编号步骤列表（不需要飞书那种多段开
+  放平台指引）。配对码绑定与飞书同一套交互和视觉（`OwnerBoundRow` /
+  `BindCodeCallout` 共享组件）；与飞书的有意差异是换 Bot Token 不清除绑定
+  （Telegram user id 全局，飞书 open_id 是应用作用域）。「保存凭证 / 启动
+  服务」沿用 primary = 当前可执行下一步的互斥规则。不做代理配置 UI：默认
+  Telegram 用户具备网络解决能力，错误 hint 提示网络可达性即可。
 - 卡内层级规则（与 Runtime tab 同源）：
   - 每张卡同时至多一颗 primary 按钮，primary = 当前可执行的下一步。
     飞书的「保存凭证」和「启动服务」按此互斥：凭证未就绪时保存是

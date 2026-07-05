@@ -26,12 +26,16 @@ use tokio::time::{sleep, Duration};
 const EVENT_NAME: &str = "im-supervisor-updated";
 const WECHAT: &str = "wechat";
 const FEISHU: &str = "feishu";
+const TELEGRAM: &str = "telegram";
 const WECHAT_PREF: &str = "im_supervisor_wechat";
 const FEISHU_PREF: &str = "im_supervisor_feishu";
+const TELEGRAM_PREF: &str = "im_supervisor_telegram";
 const FEISHU_CONFIG_PREF: &str = "im_supervisor_feishu_config";
+const TELEGRAM_CONFIG_PREF: &str = "im_supervisor_telegram_config";
 const FEISHU_SECRET_REF: &str = "im-supervisor:feishu:app-secret";
+const TELEGRAM_TOKEN_REF: &str = "im-supervisor:telegram:bot-token";
 const GALLEY_CORE_PID_ENV: &str = "GALLEY_CORE_PID";
-const PLATFORMS: [&str; 2] = [WECHAT, FEISHU];
+const PLATFORMS: [&str; 3] = [WECHAT, FEISHU, TELEGRAM];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -58,11 +62,13 @@ pub struct ImSupervisorStatus {
     pub last_error: Option<String>,
     pub model_config_revision: Option<String>,
     pub model_config_stale: bool,
-    /// Feishu only: the bound owner's open_id. While set, the bot
-    /// responds exclusively to this user.
+    /// Owner-paired channels (Feishu / Telegram): the bound owner's id
+    /// (Feishu open_id / Telegram user id). While set, the bot responds
+    /// exclusively to this user.
     pub owner_open_id: Option<String>,
-    /// Feishu only: the active pairing code while the bot is running
-    /// unbound. The GUI shows it; DMing it to the bot binds the sender.
+    /// Owner-paired channels: the active pairing code while the bot is
+    /// running unbound. The GUI shows it; DMing it to the bot binds the
+    /// sender.
     pub bind_code: Option<String>,
     pub updated_at: String,
 }
@@ -120,6 +126,35 @@ pub struct SaveFeishuImConfigInput {
     pub app_secret: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct TelegramConfigPref {
+    updated_at: Option<String>,
+    /// Telegram user id of the paired owner. None = locked, awaiting
+    /// pairing. Telegram user ids are global (not bot-scoped), so the
+    /// binding survives a bot-token change — the same human owns the
+    /// channel regardless of which bot fronts it.
+    owner_user_id: Option<String>,
+    owner_bound_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelegramImConfig {
+    pub has_bot_token: bool,
+    pub updated_at: Option<String>,
+    pub owner_user_id: Option<String>,
+    pub owner_bound_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveTelegramImConfigInput {
+    /// None / blank keeps the already-saved token (it is never echoed
+    /// back to the GUI), mirroring the Feishu app-secret semantics.
+    pub bot_token: Option<String>,
+}
+
 struct ProcessSlot {
     child: Option<Arc<Mutex<Child>>>,
     status: ImSupervisorStatus,
@@ -137,6 +172,7 @@ pub struct ImSupervisorManager {
     /// `stop_all` misses it.
     wechat_lifecycle: Mutex<()>,
     feishu_lifecycle: Mutex<()>,
+    telegram_lifecycle: Mutex<()>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -159,10 +195,10 @@ impl ImSupervisorManager {
     }
 
     fn lifecycle_lock(&self, platform: &str) -> &Mutex<()> {
-        if platform == FEISHU {
-            &self.feishu_lifecycle
-        } else {
-            &self.wechat_lifecycle
+        match platform {
+            FEISHU => &self.feishu_lifecycle,
+            TELEGRAM => &self.telegram_lifecycle,
+            _ => &self.wechat_lifecycle,
         }
     }
 
@@ -392,7 +428,7 @@ impl ImSupervisorManager {
             last_error: None,
             model_config_revision: None,
             model_config_stale: false,
-            owner_open_id: feishu_pref_owner(platform).await,
+            owner_open_id: pref_owner(platform).await,
             bind_code: None,
             updated_at: now_iso(),
         };
@@ -424,6 +460,8 @@ impl ImSupervisorManager {
             }
         } else if platform == FEISHU {
             let _ = delete_feishu_im_config().await;
+        } else if platform == TELEGRAM {
+            let _ = delete_telegram_im_config().await;
         }
         let status = ImSupervisorStatus {
             platform: platform.into(),
@@ -443,18 +481,21 @@ impl ImSupervisorManager {
         Ok(status)
     }
 
-    /// Unpair the Feishu owner. Clears the persisted owner and, if the
-    /// supervisor is live, force-restarts it so the bot comes back in
-    /// locked mode with a fresh pairing code (the restart is also what
-    /// makes recovery from a hijacked binding race-proof: the new code
-    /// is only visible on this machine's screen).
-    pub async fn unbind_feishu_owner(
+    /// Unpair an owner-paired channel (Feishu / Telegram). Clears the
+    /// persisted owner and, if the supervisor is live, force-restarts it
+    /// so the bot comes back in locked mode with a fresh pairing code
+    /// (the restart is also what makes recovery from a hijacked binding
+    /// race-proof: the new code is only visible on this machine's
+    /// screen).
+    pub async fn unbind_owner(
         self: &Arc<Self>,
         app: AppHandle,
+        platform: String,
     ) -> Result<ImSupervisorStatus, String> {
-        clear_feishu_owner_pref().await?;
+        let platform = normalize_platform(&platform)?;
+        clear_owner_pref(platform).await?;
         let live = matches!(
-            self.current_status(FEISHU).await.map(|s| s.state),
+            self.current_status(platform).await.map(|s| s.state),
             Some(
                 ImSupervisorState::Starting
                     | ImSupervisorState::WaitingScan
@@ -463,19 +504,19 @@ impl ImSupervisorManager {
             )
         );
         if live {
-            return self.start_inner(app, FEISHU.into(), false, true).await;
+            return self.start_inner(app, platform.into(), false, true).await;
         }
         // Not running: just reflect the cleared owner in the slot (if
         // any) and report the derived state.
         {
             let mut slots = self.slots.lock().await;
-            if let Some(slot) = slots.get_mut(FEISHU) {
+            if let Some(slot) = slots.get_mut(platform) {
                 slot.status.owner_open_id = None;
                 slot.status.bind_code = None;
                 slot.status.updated_at = now_iso();
             }
         }
-        let status = self.status(&app, FEISHU.into()).await?;
+        let status = self.status(&app, platform.into()).await?;
         let _ = app.emit(EVENT_NAME, status.clone());
         Ok(status)
     }
@@ -500,7 +541,7 @@ impl ImSupervisorManager {
                         last_error: Some(e),
                         model_config_revision: pref.model_config_revision.clone(),
                         model_config_stale: false,
-                        owner_open_id: feishu_pref_owner(platform).await,
+                        owner_open_id: pref_owner(platform).await,
                         bind_code: None,
                         updated_at: now_iso(),
                     };
@@ -617,8 +658,8 @@ impl ImSupervisorManager {
             // right after the bot's confirmation reply cannot leave a
             // bound bot whose owner is lost on the next spawn.
             if let Some(owner) = event.owner_open_id.as_deref() {
-                if let Err(e) = persist_feishu_owner(owner).await {
-                    eprintln!("[im-supervisor] persisting Feishu owner failed: {e}");
+                if let Err(e) = persist_owner(platform, owner).await {
+                    eprintln!("[im-supervisor] persisting {platform} owner failed: {e}");
                 }
             }
             let mut slots = self.slots.lock().await;
@@ -755,10 +796,20 @@ impl ImSupervisorManager {
                 },
                 latest_wechat_qr_path(&state_dir),
             )
-        } else if feishu_config_ready().await {
-            (ImSupervisorState::Stopped, None)
         } else {
-            (ImSupervisorState::NotConnected, None)
+            let ready = match platform {
+                FEISHU => feishu_config_ready().await,
+                TELEGRAM => telegram_config_ready().await,
+                _ => false,
+            };
+            (
+                if ready {
+                    ImSupervisorState::Stopped
+                } else {
+                    ImSupervisorState::NotConnected
+                },
+                None,
+            )
         };
         let model_config_stale = model_config_stale(
             pref.model_config_revision.as_ref(),
@@ -775,7 +826,7 @@ impl ImSupervisorManager {
             last_error: None,
             model_config_revision: pref.model_config_revision,
             model_config_stale,
-            owner_open_id: feishu_pref_owner(platform).await,
+            owner_open_id: pref_owner(platform).await,
             bind_code: None,
             updated_at: now_iso(),
         })
@@ -826,6 +877,7 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
     match platform.trim().to_ascii_lowercase().as_str() {
         WECHAT => Ok(WECHAT),
         FEISHU => Ok(FEISHU),
+        TELEGRAM => Ok(TELEGRAM),
         other => Err(format!("unsupported IM platform: {other}")),
     }
 }
@@ -896,11 +948,58 @@ pub async fn delete_feishu_im_config() -> Result<FeishuImConfig, String> {
     read_feishu_im_config_with(&galley).await
 }
 
-/// Feishu access state resolved at spawn time: either a bound owner
-/// (bot responds only to them) or a fresh pairing code (bot is locked
-/// until someone DMs the code). Empty defaults for non-Feishu platforms.
+pub async fn get_telegram_im_config() -> Result<TelegramImConfig, String> {
+    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+    read_telegram_im_config_with(&galley).await
+}
+
+pub async fn save_telegram_im_config(
+    input: SaveTelegramImConfigInput,
+) -> Result<TelegramImConfig, String> {
+    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+    let token = input
+        .bot_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(token) = token {
+        credential_store::set_secret(&galley, TELEGRAM_TOKEN_REF, token)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    if !telegram_has_token(&galley).await {
+        return Err("Telegram Bot Token is required".into());
+    }
+    // The owner binding intentionally survives a token change: Telegram
+    // user ids are global, so the paired human stays the same even when
+    // a different bot fronts the channel.
+    let mut pref = read_telegram_config_pref(&galley).await?;
+    pref.updated_at = Some(now_iso());
+    galley
+        .set_pref_json(TELEGRAM_CONFIG_PREF, json!(pref))
+        .await
+        .map_err(|e| e.to_string())?;
+    read_telegram_im_config_with(&galley).await
+}
+
+pub async fn delete_telegram_im_config() -> Result<TelegramImConfig, String> {
+    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+    credential_store::delete_secret(&galley, TELEGRAM_TOKEN_REF)
+        .await
+        .map_err(|e| e.to_string())?;
+    galley
+        .set_pref_json(TELEGRAM_CONFIG_PREF, json!(TelegramConfigPref::default()))
+        .await
+        .map_err(|e| e.to_string())?;
+    read_telegram_im_config_with(&galley).await
+}
+
+/// Owner-paired access state resolved at spawn time: either a bound
+/// owner (bot responds only to them) or a fresh pairing code (bot is
+/// locked until someone DMs the code). Empty defaults for platforms
+/// without owner pairing (WeChat).
 #[derive(Default)]
-struct FeishuBindingContext {
+struct OwnerBindingContext {
     owner_open_id: Option<String>,
     bind_code: Option<String>,
 }
@@ -908,55 +1007,95 @@ struct FeishuBindingContext {
 async fn append_platform_env(
     platform: &str,
     env: &mut Vec<(String, String)>,
-) -> Result<FeishuBindingContext, String> {
-    if platform != FEISHU {
-        return Ok(FeishuBindingContext::default());
+) -> Result<OwnerBindingContext, String> {
+    match platform {
+        FEISHU => {
+            let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+            let config = read_feishu_config_pref(&galley).await?;
+            let app_id = config.app_id.trim();
+            if app_id.is_empty() {
+                return Err("Feishu App ID and App Secret are required before connecting".into());
+            }
+            let app_secret = credential_store::get_secret(&galley, FEISHU_SECRET_REF)
+                .await
+                .map_err(|_| {
+                    "Feishu App ID and App Secret are required before connecting".to_string()
+                })?;
+            if app_secret.trim().is_empty() {
+                return Err("Feishu App ID and App Secret are required before connecting".into());
+            }
+            // Owner-locked access: the bot only ever answers the paired
+            // owner. Unbound → issue a pairing code; the empty allow-list
+            // plus the code tells fsapp to run locked (never public)
+            // until the code arrives.
+            let owner_open_id = config
+                .owner_open_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned);
+            let bind_code = if owner_open_id.is_none() {
+                Some(generate_bind_code())
+            } else {
+                None
+            };
+            let allowed_users: Vec<&String> = owner_open_id.iter().collect();
+            let config_json = serde_json::to_string(&json!({
+                "fs_app_id": app_id,
+                "fs_app_secret": app_secret,
+                "fs_allowed_users": allowed_users,
+                "fs_owner_bind_code": bind_code,
+            }))
+            .map_err(|e| e.to_string())?;
+            env.push(("GALLEY_FEISHU_CONFIG_JSON".into(), config_json));
+            Ok(OwnerBindingContext {
+                owner_open_id,
+                bind_code,
+            })
+        }
+        TELEGRAM => {
+            let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+            let bot_token = credential_store::get_secret(&galley, TELEGRAM_TOKEN_REF)
+                .await
+                .map_err(|_| "Telegram Bot Token is required before connecting".to_string())?;
+            if bot_token.trim().is_empty() {
+                return Err("Telegram Bot Token is required before connecting".into());
+            }
+            let config = read_telegram_config_pref(&galley).await?;
+            // Same owner-locked semantics as Feishu, with tgapp reading
+            // GALLEY_TELEGRAM_CONFIG_JSON (managed-ga patch 0014).
+            let owner_user_id = config
+                .owner_user_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned);
+            let bind_code = if owner_user_id.is_none() {
+                Some(generate_bind_code())
+            } else {
+                None
+            };
+            let allowed_users: Vec<&String> = owner_user_id.iter().collect();
+            let config_json = serde_json::to_string(&json!({
+                "tg_bot_token": bot_token.trim(),
+                "tg_allowed_users": allowed_users,
+                "tg_owner_bind_code": bind_code,
+            }))
+            .map_err(|e| e.to_string())?;
+            env.push(("GALLEY_TELEGRAM_CONFIG_JSON".into(), config_json));
+            Ok(OwnerBindingContext {
+                owner_open_id: owner_user_id,
+                bind_code,
+            })
+        }
+        _ => Ok(OwnerBindingContext::default()),
     }
-    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
-    let config = read_feishu_config_pref(&galley).await?;
-    let app_id = config.app_id.trim();
-    if app_id.is_empty() {
-        return Err("Feishu App ID and App Secret are required before connecting".into());
-    }
-    let app_secret = credential_store::get_secret(&galley, FEISHU_SECRET_REF)
-        .await
-        .map_err(|_| "Feishu App ID and App Secret are required before connecting".to_string())?;
-    if app_secret.trim().is_empty() {
-        return Err("Feishu App ID and App Secret are required before connecting".into());
-    }
-    // Owner-locked access: the bot only ever answers the paired owner.
-    // Unbound → issue a pairing code; the empty allow-list plus the code
-    // tells fsapp to run locked (never public) until the code arrives.
-    let owner_open_id = config
-        .owner_open_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned);
-    let bind_code = if owner_open_id.is_none() {
-        Some(generate_feishu_bind_code())
-    } else {
-        None
-    };
-    let allowed_users: Vec<&String> = owner_open_id.iter().collect();
-    let config_json = serde_json::to_string(&json!({
-        "fs_app_id": app_id,
-        "fs_app_secret": app_secret,
-        "fs_allowed_users": allowed_users,
-        "fs_owner_bind_code": bind_code,
-    }))
-    .map_err(|e| e.to_string())?;
-    env.push(("GALLEY_FEISHU_CONFIG_JSON".into(), config_json));
-    Ok(FeishuBindingContext {
-        owner_open_id,
-        bind_code,
-    })
 }
 
 /// 6-digit pairing code. `RandomState` seeds per-instance from OS
 /// entropy — enough for a code that is only shown on the owner's own
 /// screen, rate-limited on the bot side, and regenerated per connect.
-fn generate_feishu_bind_code() -> String {
+fn generate_bind_code() -> String {
     use std::hash::{BuildHasher, Hasher};
     let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
     hasher.write_u128(
@@ -968,40 +1107,73 @@ fn generate_feishu_bind_code() -> String {
     format!("{:06}", hasher.finish() % 1_000_000)
 }
 
-/// Bound owner from the persisted Feishu config, for status snapshots
-/// of non-running states. None for other platforms.
-async fn feishu_pref_owner(platform: &str) -> Option<String> {
-    if platform != FEISHU {
-        return None;
-    }
+/// Bound owner from the persisted platform config, for status snapshots
+/// of non-running states. None for platforms without owner pairing.
+async fn pref_owner(platform: &str) -> Option<String> {
     let galley = SqliteGalley::open().await.ok()?;
-    read_feishu_config_pref(&galley)
-        .await
-        .ok()?
-        .owner_open_id
-        .filter(|s| !s.trim().is_empty())
+    match platform {
+        FEISHU => read_feishu_config_pref(&galley)
+            .await
+            .ok()?
+            .owner_open_id
+            .filter(|s| !s.trim().is_empty()),
+        TELEGRAM => read_telegram_config_pref(&galley)
+            .await
+            .ok()?
+            .owner_user_id
+            .filter(|s| !s.trim().is_empty()),
+        _ => None,
+    }
 }
 
-async fn persist_feishu_owner(owner_open_id: &str) -> Result<(), String> {
+async fn persist_owner(platform: &str, owner_id: &str) -> Result<(), String> {
     let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
-    let mut pref = read_feishu_config_pref(&galley).await?;
-    pref.owner_open_id = Some(owner_open_id.to_string());
-    pref.owner_bound_at = Some(now_iso());
-    galley
-        .set_pref_json(FEISHU_CONFIG_PREF, json!(pref))
-        .await
-        .map_err(|e| e.to_string())
+    match platform {
+        FEISHU => {
+            let mut pref = read_feishu_config_pref(&galley).await?;
+            pref.owner_open_id = Some(owner_id.to_string());
+            pref.owner_bound_at = Some(now_iso());
+            galley
+                .set_pref_json(FEISHU_CONFIG_PREF, json!(pref))
+                .await
+                .map_err(|e| e.to_string())
+        }
+        TELEGRAM => {
+            let mut pref = read_telegram_config_pref(&galley).await?;
+            pref.owner_user_id = Some(owner_id.to_string());
+            pref.owner_bound_at = Some(now_iso());
+            galley
+                .set_pref_json(TELEGRAM_CONFIG_PREF, json!(pref))
+                .await
+                .map_err(|e| e.to_string())
+        }
+        other => Err(format!("platform {other} has no owner pairing")),
+    }
 }
 
-async fn clear_feishu_owner_pref() -> Result<(), String> {
+async fn clear_owner_pref(platform: &str) -> Result<(), String> {
     let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
-    let mut pref = read_feishu_config_pref(&galley).await?;
-    pref.owner_open_id = None;
-    pref.owner_bound_at = None;
-    galley
-        .set_pref_json(FEISHU_CONFIG_PREF, json!(pref))
-        .await
-        .map_err(|e| e.to_string())
+    match platform {
+        FEISHU => {
+            let mut pref = read_feishu_config_pref(&galley).await?;
+            pref.owner_open_id = None;
+            pref.owner_bound_at = None;
+            galley
+                .set_pref_json(FEISHU_CONFIG_PREF, json!(pref))
+                .await
+                .map_err(|e| e.to_string())
+        }
+        TELEGRAM => {
+            let mut pref = read_telegram_config_pref(&galley).await?;
+            pref.owner_user_id = None;
+            pref.owner_bound_at = None;
+            galley
+                .set_pref_json(TELEGRAM_CONFIG_PREF, json!(pref))
+                .await
+                .map_err(|e| e.to_string())
+        }
+        other => Err(format!("platform {other} has no owner pairing")),
+    }
 }
 
 async fn feishu_config_ready() -> bool {
@@ -1041,6 +1213,40 @@ async fn feishu_has_secret(galley: &SqliteGalley) -> bool {
     credential_store::get_secret(galley, FEISHU_SECRET_REF)
         .await
         .map(|secret| !secret.trim().is_empty())
+        .unwrap_or(false)
+}
+
+async fn telegram_config_ready() -> bool {
+    let Ok(galley) = SqliteGalley::open().await else {
+        return false;
+    };
+    telegram_has_token(&galley).await
+}
+
+async fn read_telegram_im_config_with(galley: &SqliteGalley) -> Result<TelegramImConfig, String> {
+    let pref = read_telegram_config_pref(galley).await?;
+    Ok(TelegramImConfig {
+        has_bot_token: telegram_has_token(galley).await,
+        updated_at: pref.updated_at,
+        owner_user_id: pref.owner_user_id.filter(|s| !s.trim().is_empty()),
+        owner_bound_at: pref.owner_bound_at,
+    })
+}
+
+async fn read_telegram_config_pref(galley: &SqliteGalley) -> Result<TelegramConfigPref, String> {
+    let value = galley
+        .get_pref_json(TELEGRAM_CONFIG_PREF)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(value
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default())
+}
+
+async fn telegram_has_token(galley: &SqliteGalley) -> bool {
+    credential_store::get_secret(galley, TELEGRAM_TOKEN_REF)
+        .await
+        .map(|token| !token.trim().is_empty())
         .unwrap_or(false)
 }
 
@@ -1091,6 +1297,7 @@ fn pref_key(platform: &str) -> Option<&'static str> {
     match platform {
         WECHAT => Some(WECHAT_PREF),
         FEISHU => Some(FEISHU_PREF),
+        TELEGRAM => Some(TELEGRAM_PREF),
         _ => None,
     }
 }
@@ -1144,16 +1351,34 @@ mod tests {
         assert_eq!(normalize_platform(" WeChat ").unwrap(), WECHAT);
         assert_eq!(normalize_platform("feishu").unwrap(), FEISHU);
         assert_eq!(normalize_platform(" FeiShu ").unwrap(), FEISHU);
-        assert!(normalize_platform("telegram").is_err());
+        assert_eq!(normalize_platform("telegram").unwrap(), TELEGRAM);
+        assert_eq!(normalize_platform(" Telegram ").unwrap(), TELEGRAM);
+        assert!(normalize_platform("discord").is_err());
     }
 
     #[test]
-    fn feishu_bind_code_is_six_digits() {
+    fn bind_code_is_six_digits() {
         for _ in 0..20 {
-            let code = generate_feishu_bind_code();
+            let code = generate_bind_code();
             assert_eq!(code.len(), 6);
             assert!(code.chars().all(|c| c.is_ascii_digit()), "code: {code}");
         }
+    }
+
+    #[test]
+    fn telegram_supervisor_line_parses_owner_binding_event() {
+        let line = r#"{"platform":"telegram","state":"running","ownerOpenId":"123456789","botId":"my_bot","updatedAt":"2026-07-05T00:00:00Z"}"#;
+        let parsed: ImSupervisorLine = serde_json::from_str(line).expect("parse");
+        assert_eq!(parsed.owner_open_id.as_deref(), Some("123456789"));
+        assert_eq!(parsed.bot_id.as_deref(), Some("my_bot"));
+        assert_eq!(parsed.state, ImSupervisorState::Running);
+    }
+
+    #[test]
+    fn telegram_config_pref_deserializes_defaults() {
+        let empty: TelegramConfigPref = serde_json::from_str("{}").expect("parse empty pref");
+        assert!(empty.owner_user_id.is_none());
+        assert!(empty.owner_bound_at.is_none());
     }
 
     #[test]

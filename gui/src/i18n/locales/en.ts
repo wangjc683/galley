@@ -1123,6 +1123,58 @@ export const enCopy: AppCopy = {
       feishuUnbindDialogTitle: "Unpair the Feishu owner?",
       feishuUnbindDialogBody:
         "The bot immediately stops responding to the current owner. If the service is running, it restarts with a fresh pairing code — DM the new code to pair again.",
+      telegramTitle: "Telegram",
+      telegramSetupSteps: [
+        "Search @BotFather in Telegram, send /newbot to create a bot and get its Bot Token.",
+        "Paste the Bot Token below and save it.",
+        "Start the service, then DM the pairing code to the bot to pair.",
+      ],
+      telegramConnectedSteps: [
+        "Message the bot in Telegram.",
+        "Galley handles requests on this machine and replies in Telegram.",
+        "Keep Galley running to keep the Telegram entry available.",
+      ],
+      telegramNotConnectedHint:
+        "Get a Bot Token from @BotFather first, save it, then start the service.",
+      telegramStartingHint: "Starting the Telegram service.",
+      telegramReconnectingHint: "Telegram connection is retrying.",
+      telegramRunningHint:
+        "Telegram service is running. Message the bot in Telegram to use it.",
+      telegramErrorHint:
+        "Connection problem. Check the Bot Token and your network (Telegram must be reachable), then retry.",
+      telegramStoppedHint:
+        "Bot Token saved. Click Start to bring the service up.",
+      telegramServiceStarted: "Service running",
+      telegramNotStarted: "Not started",
+      telegramBotTokenLabel: "Bot Token",
+      telegramBotTokenPlaceholder: "123456789:ABC…",
+      telegramTokenSavedPlaceholder: "Saved — leave blank to keep it",
+      telegramSaveCredentials: "Save credentials",
+      telegramStartService: "Start Telegram service",
+      telegramConfigLoading: "Loading Telegram config…",
+      telegramTextCommandsTitle: "Telegram text commands",
+      telegramTextCommandsHint: "Send these text commands directly in the Telegram chat.",
+      telegramTextCommands: [
+        { command: "/llm", description: "List and switch models" },
+        { command: "/stop", description: "Stop the current task" },
+        { command: "/new", description: "Start a new conversation" },
+        { command: "/status", description: "Show runtime status" },
+      ],
+      telegramBindWaitingTitle: "Waiting for owner pairing",
+      telegramBindWaitingLead: "DM the pairing code to the bot in Telegram:",
+      telegramBindWaitingAfterCode:
+        "Whoever sends the pairing code becomes the only user the bot responds to.",
+      telegramOwnerSecurityNote:
+        "Galley is a personal assistant: for safety the bot only responds to its paired owner. Messages from anyone else are ignored without a reply.",
+      telegramBoundLabel: "Paired owner",
+      telegramBoundAt: "Paired at",
+      telegramUnbind: "Unpair",
+      telegramUnbindDialogTitle: "Unpair the Telegram owner?",
+      telegramUnbindDialogBody:
+        "The bot immediately stops responding to the current owner. If the service is running, it restarts with a fresh pairing code — DM the new code to pair again.",
+      telegramDisconnectDialogTitle: "Disconnect Telegram?",
+      telegramDisconnectDialogBody:
+        "This stops the Telegram channel and deletes the saved Bot Token; reconnecting later needs the token again.",
     },
   },
   onboarding: {

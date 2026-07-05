@@ -1,8 +1,8 @@
-"""Tests for the Feishu proactive completion reporter (runner/im_reporter.py).
+"""Tests for the proactive completion reporter (runner/im_reporter.py).
 
-Pure decision logic is tested directly; the tick/deliver flow runs against a
-stub fsapp module and a stubbed CLI, mirroring the stub-lark approach used in
-test_managed_feishu_fsapp.py.
+Pure decision logic is tested directly; the tick/deliver flow runs against
+stub fsapp / tgapp modules and a stubbed CLI, mirroring the stub-lark
+approach used in test_managed_feishu_fsapp.py.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from runner.im_reporter import (
     FeishuReporter,
     Report,
     ReporterState,
+    TelegramReporter,
     build_report_prompt,
     delegated_sessions,
     is_skip_reply,
@@ -159,6 +160,7 @@ class _StubAgent:
     def __init__(self, replies: list[str]) -> None:
         self.replies = list(replies)
         self.prompts: list[str] = []
+        self.is_running = False
 
     def put_task(self, prompt: str, source: str = "") -> queue.Queue[dict[str, Any]]:
         assert source == "galley_reporter"
@@ -310,6 +312,101 @@ def test_start_feishu_reporter_disabled_without_supervisor_id(
 ) -> None:
     monkeypatch.delenv("GALLEY_SUPERVISOR_ID", raising=False)
     assert im_reporter.start_feishu_reporter(_stub_fsapp([]), tmp_path) is None
+
+
+# ── Telegram channel adapter ─────────────────────────────────────────
+
+
+def _stub_tgapp(replies: list[str]) -> Any:
+    agent = _StubAgent(replies)
+    tgapp = types.SimpleNamespace(
+        PUBLIC_ACCESS=False,
+        ALLOWED={123456789},
+        BOT_TOKEN="42:stub-token",
+        _galley_connected_once=True,
+        agent=agent,
+        clean_reply=lambda t: t,
+        _render_file_markers=lambda t: (t or "").strip(),
+        split_text=lambda t, limit: [t],
+    )
+    tgapp._agent = agent
+    return tgapp
+
+
+def _make_telegram_reporter(
+    monkeypatch: Any,
+    tmp_path: Path,
+    tgapp: Any,
+    cli_payloads: dict[str, list[dict[str, Any]]],
+    sent: list[tuple[str, str, str]],
+) -> TelegramReporter:
+    reporter = TelegramReporter(
+        tgapp, "galley-im/telegram", tmp_path / "reporter_state.json"
+    )
+    reporter.cli = "/stub/galley"
+
+    def fake_run(cli: str, args: list[str]) -> list[dict[str, Any]]:
+        key = " ".join(args[:2])
+        if key == "sessions list":
+            return cli_payloads["sessions"]
+        if key == "session show":
+            return cli_payloads.get(f"show {args[2]}", [])
+        raise AssertionError(f"unexpected CLI call: {args}")
+
+    monkeypatch.setattr(im_reporter, "run_cli_json_lines", fake_run)
+    monkeypatch.setattr(
+        im_reporter,
+        "_telegram_send_text",
+        lambda token, chat_id, text: sent.append((token, chat_id, text)),
+    )
+    return reporter
+
+
+def test_telegram_reporter_delivers_over_http_send(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    tgapp = _stub_tgapp(["任务完成：结果是 X。"])
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    payloads = {
+        "sessions": [_session("s1", supervisor="galley-im/telegram")],
+        "show s1": [_agent_msg("a1", "done!")],
+    }
+    sent: list[tuple[str, str, str]] = []
+    reporter = _make_telegram_reporter(monkeypatch, tmp_path, tgapp, payloads, sent)
+    assert len(reporter.tick()) == 1
+    assert sent == [("42:stub-token", "123456789", "任务完成：结果是 X。")]
+    # No new activity → nothing re-reported.
+    assert reporter.tick() == []
+    assert len(sent) == 1
+
+
+def test_telegram_reporter_owner_and_busy_gates(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    tgapp = _stub_tgapp(["report"])
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    payloads = {
+        "sessions": [_session("s1", supervisor="galley-im/telegram")],
+        "show s1": [_agent_msg("a1", "done!")],
+    }
+    sent: list[tuple[str, str, str]] = []
+    reporter = _make_telegram_reporter(monkeypatch, tmp_path, tgapp, payloads, sent)
+    # Public access → no unambiguous recipient → no push.
+    tgapp.PUBLIC_ACCESS = True
+    assert reporter.owner_open_id() is None
+    assert reporter.tick() == []
+    tgapp.PUBLIC_ACCESS = False
+    tgapp.ALLOWED = set()
+    assert reporter.owner_open_id() is None
+    tgapp.ALLOWED = {123456789}
+    assert reporter.owner_open_id() == "123456789"
+    # Busy agent defers without consuming the report.
+    tgapp.agent.is_running = True
+    assert reporter.tick() == []
+    assert sent == []
+    tgapp.agent.is_running = False
+    assert len(reporter.tick()) == 1
+    assert sent[0][1] == "123456789"
 
 
 def test_run_cli_json_lines_parses_ndjson(monkeypatch: Any) -> None:

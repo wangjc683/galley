@@ -486,9 +486,104 @@ def _run_feishu(args: argparse.Namespace, out: IO[str]) -> int:
         _flush_and_release_lock(logf, lock)
 
 
+def _run_telegram(args: argparse.Namespace, out: IO[str]) -> int:
+    state_dir = Path(args.state_dir).expanduser().resolve()
+    temp_dir = state_dir / "temp"
+    user_data_dir = state_dir / "ga_config"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    lock = _acquire_supervisor_lock(
+        platform=args.platform,
+        state_dir=state_dir,
+        log_path=state_dir / "telegram.log",
+        out=out,
+    )
+    if lock is None:
+        return 1
+    logf = _redirect_logs(state_dir / "telegram.log")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["GA_WORKSPACE_ROOT"] = str(state_dir)
+    os.environ["GA_USER_DATA_DIR"] = str(user_data_dir)
+
+    _install_paths(args.ga_path)
+    managed_runtime.install_managed_mykey_loader()
+    managed_state_root = managed_runtime.managed_state_root()
+    if managed_state_root:
+        os.chdir(managed_state_root)
+
+    # tgapp reads GALLEY_TELEGRAM_CONFIG_JSON (set by Galley Core before
+    # spawn) at import time. Import failure exits with SystemExit when the
+    # telegram dependency is missing — catch it so the status line still
+    # reaches Core instead of a silent nonzero exit.
+    try:
+        import frontends.tgapp as tgapp  # type: ignore[import-not-found]
+    except (Exception, SystemExit) as e:
+        _emit(out, platform="telegram", state="error", lastError=f"import failed: {e}")
+        _flush_and_release_lock(logf, lock)
+        return 1
+
+    os.chdir(state_dir)
+    tgapp._TEMP_DIR = str(temp_dir)
+    tgapp.agent.verbose = False
+    managed_runtime.install_managed_prompt_profile(
+        tgapp.agent,
+        extra_env_names=(IM_SUPERVISOR_PROMPT_ENV,),
+    )
+    # Extra keyword fields (botId on connect, ownerOpenId on owner binding)
+    # pass through to the JSON status line for Galley Core to persist.
+    tgapp.GALLEY_STATUS_HOOK = lambda state, last_error=None, **extra: _emit(
+        out,
+        platform="telegram",
+        state=state,
+        lastError=last_error,
+        logPath=str(state_dir / "telegram.log"),
+        **extra,
+    )
+
+    # Proactive completion reporter. Failure to start must never take the
+    # channel down — the reporter is an enhancement, the inbound message
+    # path is the product.
+    try:
+        from runner import im_reporter
+
+        im_reporter.start_telegram_reporter(tgapp, state_dir)
+    except Exception as e:
+        print(f"[galley-im-reporter] disabled: {e}")
+
+    _emit(
+        out,
+        platform="telegram",
+        state="starting",
+        logPath=str(state_dir / "telegram.log"),
+    )
+
+    if not tgapp.check_config().get("ready"):
+        _emit(
+            out,
+            platform="telegram",
+            state="error",
+            lastError="Telegram Bot Token is required",
+            logPath=str(state_dir / "telegram.log"),
+        )
+        _flush_and_release_lock(logf, lock)
+        return 1
+
+    try:
+        code = tgapp.main()
+        return int(code or 0)
+    except KeyboardInterrupt:
+        _emit(out, platform="telegram", state="stopped")
+        return 0
+    except Exception as e:
+        _emit(out, platform="telegram", state="error", lastError=str(e))
+        return 1
+    finally:
+        _flush_and_release_lock(logf, lock)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a Galley-managed IM Supervisor.")
-    parser.add_argument("--platform", choices=["wechat", "feishu"], required=True)
+    parser.add_argument("--platform", choices=["wechat", "feishu", "telegram"], required=True)
     parser.add_argument("--ga-path", required=True)
     parser.add_argument("--state-dir", required=True)
     parser.add_argument("--sop-path", required=True)
@@ -504,6 +599,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_wechat(args, out)
     if args.platform == "feishu":
         return _run_feishu(args, out)
+    if args.platform == "telegram":
+        return _run_telegram(args, out)
     _emit(out, platform=args.platform, state="error", lastError="unsupported platform")
     return 1
 

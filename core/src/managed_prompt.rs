@@ -100,6 +100,7 @@ pub(crate) fn im_supervisor_prompt(sop_path: &str, platform: &str, supervisor_id
     let platform_label = match platform {
         "wechat" => "WeChat",
         "feishu" => "Feishu",
+        "telegram" => "Telegram",
         _ => "the current IM channel",
     };
     format!(

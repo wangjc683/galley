@@ -1,9 +1,12 @@
-"""Proactive completion reporter for the Galley IM Supervisor (Feishu).
+"""Proactive completion reporter for the Galley IM Supervisor.
 
 Watches Galley for sessions this channel delegated (``origin.supervisor``
 equals this process's ``GALLEY_SUPERVISOR_ID``) and, when one settles,
 injects a synthetic report turn into the running GA frontend so the model
-composes a short IM report to the bound owner. Design:
+composes a short IM report to the bound owner. The reporter core is
+channel-agnostic; per-platform seams (connection state, owner lookup,
+busy check, text rendering, outbound send) live in a ``ChannelAdapter``.
+Feishu and Telegram are wired today. Design:
 docs/devlog/2026-07-03-supervisor-proactive-reporting-design.md
 
 Mechanism notes (why polling, not `session watch`): the reporter's truth is
@@ -30,6 +33,7 @@ import subprocess
 import threading
 import time
 import traceback
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -241,18 +245,154 @@ def mark_seen(entry: dict[str, Any], session: dict[str, Any]) -> None:
     entry["lastSeenStatus"] = session.get("status")
 
 
-# ── Feishu integration ───────────────────────────────────────────────
+# ── channel adapters ─────────────────────────────────────────────────
 
 
-class FeishuReporter:
+def _single_owner(public_access: Any, allowed: Any) -> str | None:
+    """The bound owner. Reporting requires an unambiguous recipient:
+    public access or an unbound channel means no proactive push."""
+    if public_access:
+        return None
+    users = allowed or set()
+    if len(users) != 1:
+        return None
+    return str(next(iter(users)))
+
+
+class ChannelAdapter:
+    """Channel-specific seams the reporter core needs."""
+
+    def connected(self) -> bool:
+        raise NotImplementedError
+
+    def owner_id(self) -> str | None:
+        raise NotImplementedError
+
+    def busy(self) -> bool:
+        raise NotImplementedError
+
+    def agent(self) -> Any:
+        raise NotImplementedError
+
+    def begin_report_turn(self) -> None:
+        return None
+
+    def end_report_turn(self) -> None:
+        return None
+
+    def render(self, raw: str) -> str:
+        return raw
+
+    def send(self, owner: str, text: str, raw: str) -> None:
+        raise NotImplementedError
+
+
+class FeishuChannel(ChannelAdapter):
+    def __init__(self, fsapp: Any) -> None:
+        self.fsapp = fsapp
+
+    def connected(self) -> bool:
+        return getattr(self.fsapp, "client", None) is not None
+
+    def owner_id(self) -> str | None:
+        return _single_owner(
+            getattr(self.fsapp, "PUBLIC_ACCESS", True),
+            getattr(self.fsapp, "ALLOWED_USERS", None),
+        )
+
+    def busy(self) -> bool:
+        return bool(self.fsapp.get_app().user_tasks)
+
+    def agent(self) -> Any:
+        return self.fsapp.get_app().agent
+
+    def begin_report_turn(self) -> None:
+        # Card isolation flag consumed by managed-ga patch 0013.
+        self.fsapp._GALLEY_REPORT_TURN_ACTIVE = True
+
+    def end_report_turn(self) -> None:
+        self.fsapp._GALLEY_REPORT_TURN_ACTIVE = False
+
+    def render(self, raw: str) -> str:
+        display = getattr(self.fsapp, "_display_text", lambda t: t)(raw)
+        return str(display or "")
+
+    def send(self, owner: str, text: str, raw: str) -> None:
+        self.fsapp.send_message(owner, text)
+        send_files = getattr(self.fsapp, "_send_generated_files", None)
+        if callable(send_files):
+            send_files(owner, raw)
+
+
+TELEGRAM_TEXT_LIMIT = 4000
+
+
+def _telegram_send_text(token: str, chat_id: str, text: str) -> None:
+    payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        response.read()
+
+
+class TelegramChannel(ChannelAdapter):
+    """python-telegram-bot runs its own event loop inside ``tgapp.main()``;
+    the reporter thread sends through the plain Bot HTTP API instead of
+    scheduling onto that loop — same token, no loop coordination. Reports
+    are text-only: generated files stay in the Galley session."""
+
+    def __init__(self, tgapp: Any) -> None:
+        self.tgapp = tgapp
+
+    def connected(self) -> bool:
+        return bool(getattr(self.tgapp, "_galley_connected_once", False))
+
+    def owner_id(self) -> str | None:
+        return _single_owner(
+            getattr(self.tgapp, "PUBLIC_ACCESS", True),
+            getattr(self.tgapp, "ALLOWED", None),
+        )
+
+    def busy(self) -> bool:
+        return bool(getattr(self.tgapp.agent, "is_running", False))
+
+    def agent(self) -> Any:
+        return self.tgapp.agent
+
+    def render(self, raw: str) -> str:
+        if not (raw or "").strip():
+            return ""
+        cleaned = self.tgapp.clean_reply(raw)
+        render_markers = getattr(self.tgapp, "_render_file_markers", None)
+        if callable(render_markers):
+            return str(render_markers(cleaned) or "")
+        return str(cleaned or "")
+
+    def send(self, owner: str, text: str, raw: str) -> None:
+        token = str(getattr(self.tgapp, "BOT_TOKEN", "") or "")
+        if not token:
+            raise ReporterCliError("Telegram bot token unavailable for reporter send")
+        split = getattr(self.tgapp, "split_text", None)
+        segments = split(text, TELEGRAM_TEXT_LIMIT) if callable(split) else [text]
+        for segment in segments:
+            _telegram_send_text(token, owner, segment)
+
+
+# ── reporter core ────────────────────────────────────────────────────
+
+
+class ImReporter:
     def __init__(
         self,
-        fsapp: Any,
+        channel: ChannelAdapter,
         supervisor_id: str,
         state_path: Path,
         poll_interval: float = POLL_INTERVAL_SEC,
     ) -> None:
-        self.fsapp = fsapp
+        self.channel = channel
         self.supervisor_id = supervisor_id
         self.state = ReporterState.load(state_path)
         self.poll_interval = poll_interval
@@ -261,18 +401,11 @@ class FeishuReporter:
     # -- channel readiness --
 
     def owner_open_id(self) -> str | None:
-        """The bound owner. Reporting requires an unambiguous recipient:
-        public access or an unbound channel means no proactive push."""
-        if getattr(self.fsapp, "PUBLIC_ACCESS", True):
-            return None
-        allowed = getattr(self.fsapp, "ALLOWED_USERS", None) or set()
-        if len(allowed) != 1:
-            return None
-        return str(next(iter(allowed)))
+        return self.channel.owner_id()
 
     def _ready(self) -> tuple[str, str] | None:
-        """(cli_path, owner_open_id) once the channel can report, else None."""
-        if getattr(self.fsapp, "client", None) is None:
+        """(cli_path, owner_id) once the channel can report, else None."""
+        if not self.channel.connected():
             return None
         if self.cli is None:
             self.cli = resolve_cli_path()
@@ -355,8 +488,7 @@ class FeishuReporter:
 
     def _deliver(self, report: Report, owner: str) -> str:
         """Returns "delivered" | "busy" | "retry" | "gave_up"."""
-        app = self.fsapp.get_app()
-        if app.user_tasks:
+        if self.channel.busy():
             return "busy"
         entry = self.state.entry(str(report.session.get("id")))
         if int(entry.get("reportAttempts") or 0) >= REPORT_ATTEMPT_LIMIT:
@@ -365,10 +497,10 @@ class FeishuReporter:
                 f"{report.session.get('id')} after {REPORT_ATTEMPT_LIMIT} attempts"
             )
             return "gave_up"
-        agent = app.agent
+        agent = self.channel.agent()
         prompt = build_report_prompt(report)
         raw: str | None = None
-        self.fsapp._GALLEY_REPORT_TURN_ACTIVE = True
+        self.channel.begin_report_turn()
         try:
             dq = agent.put_task(prompt, source="galley_reporter")
             deadline = time.time() + REPORT_TURN_TIMEOUT_SEC
@@ -381,21 +513,17 @@ class FeishuReporter:
                     raw = str(item.get("done") or "")
                     break
         finally:
-            self.fsapp._GALLEY_REPORT_TURN_ACTIVE = False
+            self.channel.end_report_turn()
         if raw is None:
             print(
                 f"[galley-im-reporter] report turn timed out for session "
                 f"{report.session.get('id')}"
             )
             return "retry"
-        display = getattr(self.fsapp, "_display_text", lambda t: t)(raw)
-        text = str(display or "").strip()
+        text = self.channel.render(raw).strip()
         if not text or is_skip_reply(text):
             return "delivered"
-        self.fsapp.send_message(owner, text)
-        send_files = getattr(self.fsapp, "_send_generated_files", None)
-        if callable(send_files):
-            send_files(owner, raw)
+        self.channel.send(owner, text, raw)
         return "delivered"
 
     def run_forever(self) -> None:
@@ -407,15 +535,54 @@ class FeishuReporter:
             time.sleep(self.poll_interval)
 
 
+class FeishuReporter(ImReporter):
+    def __init__(
+        self,
+        fsapp: Any,
+        supervisor_id: str,
+        state_path: Path,
+        poll_interval: float = POLL_INTERVAL_SEC,
+    ) -> None:
+        super().__init__(FeishuChannel(fsapp), supervisor_id, state_path, poll_interval)
+        self.fsapp = fsapp
+
+
+class TelegramReporter(ImReporter):
+    def __init__(
+        self,
+        tgapp: Any,
+        supervisor_id: str,
+        state_path: Path,
+        poll_interval: float = POLL_INTERVAL_SEC,
+    ) -> None:
+        super().__init__(
+            TelegramChannel(tgapp), supervisor_id, state_path, poll_interval
+        )
+        self.tgapp = tgapp
+
+
+def _start_reporter(reporter: ImReporter) -> ImReporter:
+    threading.Thread(
+        target=reporter.run_forever, name="galley-im-reporter", daemon=True
+    ).start()
+    return reporter
+
+
 def start_feishu_reporter(fsapp: Any, state_dir: Path) -> FeishuReporter | None:
     supervisor_id = (os.environ.get("GALLEY_SUPERVISOR_ID") or "").strip()
     if not supervisor_id:
         print("[galley-im-reporter] disabled: GALLEY_SUPERVISOR_ID not set")
         return None
-    reporter = FeishuReporter(
-        fsapp, supervisor_id, Path(state_dir) / STATE_FILE_NAME
-    )
-    threading.Thread(
-        target=reporter.run_forever, name="galley-im-reporter", daemon=True
-    ).start()
+    reporter = FeishuReporter(fsapp, supervisor_id, Path(state_dir) / STATE_FILE_NAME)
+    _start_reporter(reporter)
+    return reporter
+
+
+def start_telegram_reporter(tgapp: Any, state_dir: Path) -> TelegramReporter | None:
+    supervisor_id = (os.environ.get("GALLEY_SUPERVISOR_ID") or "").strip()
+    if not supervisor_id:
+        print("[galley-im-reporter] disabled: GALLEY_SUPERVISOR_ID not set")
+        return None
+    reporter = TelegramReporter(tgapp, supervisor_id, Path(state_dir) / STATE_FILE_NAME)
+    _start_reporter(reporter)
     return reporter

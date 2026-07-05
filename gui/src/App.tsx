@@ -217,6 +217,10 @@ function App() {
     "feishu",
     activeRuntimeKind === "managed",
   );
+  const telegramChannelsStatus = useImSupervisorStatus(
+    "telegram",
+    activeRuntimeKind === "managed",
+  );
   const managedModels = useManagedModelsStore((s) => s.models);
   const managedLLMs = useMemo(
     () => managedModelsToLLMs(managedModels, pendingLLMIndex),
@@ -316,6 +320,12 @@ function App() {
       const feishu = statuses.find((status) => status.platform === "feishu");
       if (feishu) {
         feishuChannelsStatus.setStatus(feishu);
+      }
+      const telegram = statuses.find(
+        (status) => status.platform === "telegram",
+      );
+      if (telegram) {
+        telegramChannelsStatus.setStatus(telegram);
       }
       pushToast(
         makeAppError({
@@ -989,13 +999,15 @@ function App() {
                   ? aggregateChannelsState([
                       wechatChannelsStatus.status?.state,
                       feishuChannelsStatus.status?.state,
+                      telegramChannelsStatus.status?.state,
                     ])
                   : null
               }
               channelsLoadError={
                 activeRuntimeKind === "managed"
                   ? (wechatChannelsStatus.loadError ??
-                    feishuChannelsStatus.loadError)
+                    feishuChannelsStatus.loadError ??
+                    telegramChannelsStatus.loadError)
                   : null
               }
               onOpenChannelsSettings={

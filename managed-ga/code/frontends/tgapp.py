@@ -1,11 +1,11 @@
-import os, sys, re, threading, asyncio, queue as Q, time, random, uuid
+import os, sys, re, json, threading, asyncio, queue as Q, time, random, uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp')
 from agentmain import GeneraticAgent
 try:
     from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
     from telegram.constants import ChatType, MessageLimit, ParseMode
-    from telegram.error import RetryAfter
+    from telegram.error import InvalidToken, RetryAfter
     from telegram.ext import ApplicationBuilder, CallbackQueryHandler, MessageHandler, filters, ContextTypes
     from telegram.helpers import escape_markdown
     from telegram.request import HTTPXRequest
@@ -32,7 +32,110 @@ from llmcore import mykeys
 agent = GeneraticAgent()
 agent.verbose = False
 agent.inc_out = True
-ALLOWED = set(mykeys.get('tg_allowed_users', []))
+
+
+def _load_galley_config():
+    raw = os.environ.get("GALLEY_TELEGRAM_CONFIG_JSON")
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw)
+    except Exception as e:
+        raise RuntimeError(f"load Galley Telegram config failed: {e}") from e
+    if not isinstance(data, dict):
+        raise RuntimeError("Galley Telegram config must be a JSON object")
+    return data
+
+
+_GALLEY_CFG = _load_galley_config()
+_GALLEY_MANAGED = _GALLEY_CFG is not None
+
+
+def _telegram_config():
+    if not _GALLEY_MANAGED:
+        # File-based (non-managed) config keeps upstream semantics untouched.
+        token = mykeys.get("tg_bot_token")
+        return token, set(mykeys.get("tg_allowed_users", []) or []), False, None
+    cfg = _GALLEY_CFG or {}
+    token = str(cfg.get("tg_bot_token", "") or "").strip()
+    bind_code = str(cfg.get("tg_owner_bind_code", "") or "").strip() or None
+    allowed, public = set(), False
+    for item in cfg.get("tg_allowed_users") or []:
+        text = str(item).strip()
+        if text == "*":
+            public = True
+        elif text.lstrip("-").isdigit():
+            # Telegram user ids are numeric; effective_user.id is an int.
+            allowed.add(int(text))
+    return token, allowed, public, bind_code
+
+
+BOT_TOKEN, ALLOWED, PUBLIC_ACCESS, OWNER_BIND_CODE = _telegram_config()
+
+GALLEY_STARTUP_FAILURE_LIMIT = 3
+GALLEY_OWNER_BIND_ATTEMPT_LIMIT = 10
+_galley_connected_once = False
+_owner_bind_attempts = 0
+
+
+def _emit_galley_status(state, last_error=None, **extra):
+    hook = globals().get("GALLEY_STATUS_HOOK")
+    if not callable(hook):
+        return
+    if extra:
+        try:
+            hook(state, last_error, **extra)
+            return
+        except TypeError:
+            # Older launcher hooks take (state, last_error) only; drop the
+            # extra fields rather than losing the status line entirely.
+            pass
+    hook(state, last_error)
+
+
+def _galley_locked():
+    # Galley-managed mode: an empty allow-list means "locked, waiting for
+    # owner pairing", never public access. The agent drives the owner's
+    # machine, so anyone-can-chat access must be an explicit choice ("*").
+    return _GALLEY_MANAGED and not PUBLIC_ACCESS and not ALLOWED
+
+
+async def _handle_owner_bind_message(update):
+    """Locked mode (managed config, no owner bound yet): the only input
+    that does anything is the pairing code, sent in a private chat.
+    Everything else is ignored silently — wrong guesses get no reply, so
+    a guesser learns nothing; too many wrong guesses invalidate the code
+    entirely (reconnect from Galley issues a new one)."""
+    global ALLOWED, OWNER_BIND_CODE, _owner_bind_attempts
+    message = update.message
+    uid = update.effective_user.id if update.effective_user else None
+    if message is None or uid is None:
+        return
+    if not OWNER_BIND_CODE:
+        print(f"等待绑定但配对码不可用，忽略消息: {uid}", flush=True)
+        return
+    if getattr(getattr(message, "chat", None), "type", "") != ChatType.PRIVATE:
+        print(f"等待绑定，忽略非私聊消息: {uid}", flush=True)
+        return
+    text = (message.text or "").strip()
+    if not text:
+        return
+    if text != OWNER_BIND_CODE:
+        _owner_bind_attempts += 1
+        print(f"配对码不匹配 ({_owner_bind_attempts}/{GALLEY_OWNER_BIND_ATTEMPT_LIMIT}): {uid}", flush=True)
+        if _owner_bind_attempts >= GALLEY_OWNER_BIND_ATTEMPT_LIMIT:
+            OWNER_BIND_CODE = None
+            _emit_galley_status(
+                "running",
+                "Telegram owner pairing code invalidated after too many wrong attempts; "
+                "reconnect from Galley to issue a new code",
+            )
+        return
+    ALLOWED = {uid}
+    OWNER_BIND_CODE = None
+    _emit_galley_status("running", None, ownerOpenId=str(uid))
+    await message.reply_text("✓ 已绑定为 Galley 的使用者，现在只响应你的消息。")
+    print(f"已绑定 Galley owner: {uid}", flush=True)
 
 _DRAFT_HINT = "thinking..."
 _STREAM_SUFFIX = " ⏳"
@@ -893,6 +996,8 @@ async def _handle_review_command(update, ctx, cmd):
 
 async def handle_msg(update, ctx):
     uid = update.effective_user.id
+    if _galley_locked():
+        return await _handle_owner_bind_message(update)
     if ALLOWED and uid not in ALLOWED:
         return await update.message.reply_text("no")
     prompt = _build_text_prompt(update.message.text)
@@ -905,6 +1010,8 @@ async def handle_ask_callback(update, ctx):
     if query is None:
         return
     uid = update.effective_user.id if update.effective_user else None
+    if _galley_locked():
+        return await query.answer()
     if ALLOWED and uid not in ALLOWED:
         return await query.answer("no", show_alert=True)
     menu_id, action = _parse_ask_callback_data(query.data)
@@ -996,6 +1103,8 @@ async def handle_llm_callback(update, ctx):
     if query is None:
         return
     uid = update.effective_user.id if update.effective_user else None
+    if _galley_locked():
+        return await query.answer()
     if ALLOWED and uid not in ALLOWED:
         return await query.answer("no", show_alert=True)
     menu_id, action = _parse_menu_callback_data(query.data, _LLM_CALLBACK_PREFIX)
@@ -1039,6 +1148,8 @@ async def cmd_llm(update, ctx):
 
 async def handle_photo(update, ctx):
     uid = update.effective_user.id
+    if _galley_locked():
+        return await _handle_owner_bind_message(update)
     if ALLOWED and uid not in ALLOWED: return await update.message.reply_text("no")
     if update.message.photo:
         photo = update.message.photo[-1]
@@ -1061,6 +1172,8 @@ async def handle_photo(update, ctx):
 
 async def handle_command(update, ctx):
     uid = update.effective_user.id
+    if _galley_locked():
+        return await _handle_owner_bind_message(update)
     if ALLOWED and uid not in ALLOWED:
         return await update.message.reply_text("no")
     cmd = _normalized_command(update.message.text)
@@ -1096,13 +1209,15 @@ async def handle_command(update, ctx):
         return await update.message.reply_text(handle_frontend_command(agent, cmd))
     return await update.message.reply_text(HELP_TEXT)
 
-if __name__ == '__main__':
-    _LOCK_SOCK = ensure_single_instance(19527, "Telegram")
-    if not ALLOWED: 
+def check_config(init_agent=False):
+    return {"ready": bool(BOT_TOKEN)}
+
+
+def main():
+    if not _GALLEY_MANAGED and not ALLOWED:
         print('[Telegram] ERROR: tg_allowed_users in mykey.py is empty or missing. Set it to avoid unauthorized access.')
-        sys.exit(1)
-    require_runtime(agent, "Telegram", tg_bot_token=mykeys.get("tg_bot_token"))
-    redirect_log(__file__, "tgapp.log", "Telegram", ALLOWED)
+        return 1
+    require_runtime(agent, "Telegram", tg_bot_token=BOT_TOKEN)
     _register_ask_user_hook()
     threading.Thread(target=agent.run, daemon=True).start()
     proxy = mykeys.get('proxy')
@@ -1114,6 +1229,21 @@ if __name__ == '__main__':
     async def _error_handler(update, context: ContextTypes.DEFAULT_TYPE):
         print(f"[{time.strftime('%m-%d %H:%M')}] TG error: {context.error}", flush=True)
 
+    async def _galley_post_init(application):
+        # post_init runs after Application.initialize(), i.e. after the bot
+        # token has been accepted by getMe — the earliest reliable "we are
+        # actually connected" point for a polling bot.
+        global _galley_connected_once
+        await _sync_commands(application)
+        first_connect = not _galley_connected_once
+        _galley_connected_once = True
+        if first_connect:
+            username = getattr(application.bot, "username", "") or ""
+            _emit_galley_status("running", None, botId=str(username))
+        else:
+            _emit_galley_status("running")
+
+    startup_failures = 0
     while True:
         try:
             print(f"TG bot starting... {time.strftime('%m-%d %H:%M')}")
@@ -1122,8 +1252,8 @@ if __name__ == '__main__':
             if proxy:
                 request_kwargs['proxy'] = proxy
             request = HTTPXRequest(**request_kwargs)
-            app = (ApplicationBuilder().token(mykeys['tg_bot_token'])
-                   .request(request).get_updates_request(request).post_init(_sync_commands).build())
+            app = (ApplicationBuilder().token(BOT_TOKEN)
+                   .request(request).get_updates_request(request).post_init(_galley_post_init).build())
             app.add_handler(CallbackQueryHandler(handle_ask_callback, pattern=r"^ask:"))
             app.add_handler(CallbackQueryHandler(handle_llm_callback, pattern=r"^llm:"))
             app.add_handler(MessageHandler(filters.COMMAND, handle_command))
@@ -1134,5 +1264,20 @@ if __name__ == '__main__':
             app.run_polling(drop_pending_updates=True, poll_interval=1.0, timeout=30)
         except Exception as e:
             print(f"[{time.strftime('%m-%d %H:%M')}] polling crashed: {e}", flush=True)
+            if isinstance(e, InvalidToken):
+                _emit_galley_status("error", f"Telegram bot token rejected: {e}")
+                return 1
+            if not _galley_connected_once:
+                startup_failures += 1
+                if startup_failures >= GALLEY_STARTUP_FAILURE_LIMIT:
+                    _emit_galley_status("error", str(e))
+                    return 1
+            _emit_galley_status("reconnecting", str(e))
             time.sleep(10)
             asyncio.set_event_loop(asyncio.new_event_loop())
+
+
+if __name__ == '__main__':
+    _LOCK_SOCK = ensure_single_instance(19527, "Telegram")
+    redirect_log(__file__, "tgapp.log", "Telegram", ALLOWED)
+    raise SystemExit(main())

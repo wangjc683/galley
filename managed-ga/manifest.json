@@ -21,7 +21,8 @@
       "0010-managed-keychain-state-path.patch",
       "0011-managed-feishu-owner-binding.patch",
       "0012-managed-feishu-file-marker-echo.patch",
-      "0013-managed-feishu-report-turn-guard.patch"
+      "0013-managed-feishu-report-turn-guard.patch",
+      "0014-managed-telegram-galley-integration.patch"
     ]
   },
   "stateSchemaVersion": 1

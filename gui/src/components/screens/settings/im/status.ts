@@ -35,3 +35,19 @@ export function feishuStatusHintForState(
     stopped: imCopy.feishuStoppedHint,
   }[state];
 }
+
+export function telegramStatusHintForState(
+  state: ImSupervisorState,
+  imCopy: ImCopy,
+) {
+  return {
+    not_connected: imCopy.telegramNotConnectedHint,
+    starting: imCopy.telegramStartingHint,
+    waiting_scan: imCopy.telegramStartingHint,
+    reconnecting: imCopy.telegramReconnectingHint,
+    running: imCopy.telegramRunningHint,
+    expired: imCopy.telegramErrorHint,
+    error: imCopy.telegramErrorHint,
+    stopped: imCopy.telegramStoppedHint,
+  }[state];
+}

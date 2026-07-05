@@ -1069,6 +1069,57 @@ export const zhCopy = {
       feishuUnbindDialogTitle: "解绑飞书使用者？",
       feishuUnbindDialogBody:
         "解绑后机器人立即停止响应当前使用者。若服务正在运行，会自动重启并生成新的配对码，在飞书私聊中发送新码即可重新绑定。",
+      telegramTitle: "Telegram",
+      telegramSetupSteps: [
+        "在 Telegram 搜索 @BotFather，发送 /newbot 创建机器人并获取 Bot Token。",
+        "把 Bot Token 粘贴到下面并保存凭证。",
+        "启动服务，然后私聊机器人发送配对码完成绑定。",
+      ],
+      telegramConnectedSteps: [
+        "在 Telegram 里给机器人发消息。",
+        "Galley 会在本机处理请求，并把结果回复到 Telegram。",
+        "保持 Galley 运行，Telegram 入口会持续可用。",
+      ],
+      telegramNotConnectedHint:
+        "先从 @BotFather 获取 Bot Token，保存后启动服务。",
+      telegramStartingHint: "正在启动 Telegram 服务。",
+      telegramReconnectingHint: "Telegram 连接正在重试。",
+      telegramRunningHint:
+        "Telegram 服务运行中。在 Telegram 里给机器人发消息即可使用。",
+      telegramErrorHint:
+        "接入异常。检查 Bot Token 与网络环境（需要能访问 Telegram）后重试。",
+      telegramStoppedHint: "Bot Token 已保存。点击启动服务即可接入。",
+      telegramServiceStarted: "服务已启动",
+      telegramNotStarted: "未启动",
+      telegramBotTokenLabel: "Bot Token",
+      telegramBotTokenPlaceholder: "123456789:ABC…",
+      telegramTokenSavedPlaceholder: "已保存，留空保持不变",
+      telegramSaveCredentials: "保存凭证",
+      telegramStartService: "启动 Telegram 服务",
+      telegramConfigLoading: "正在读取 Telegram 配置…",
+      telegramTextCommandsTitle: "Telegram 文本命令",
+      telegramTextCommandsHint: "在 Telegram 聊天里直接发送这些文本命令。",
+      telegramTextCommands: [
+        { command: "/llm", description: "查看并切换模型" },
+        { command: "/stop", description: "停止当前任务" },
+        { command: "/new", description: "开始新对话" },
+        { command: "/status", description: "查看运行状态" },
+      ],
+      telegramBindWaitingTitle: "等待绑定使用者",
+      telegramBindWaitingLead: "在 Telegram 私聊中向机器人发送配对码：",
+      telegramBindWaitingAfterCode:
+        "发送配对码的人将成为机器人唯一响应的使用者。",
+      telegramOwnerSecurityNote:
+        "Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，其他人的消息会被忽略，也不会收到回复。",
+      telegramBoundLabel: "已绑定使用者",
+      telegramBoundAt: "绑定于",
+      telegramUnbind: "解绑",
+      telegramUnbindDialogTitle: "解绑 Telegram 使用者？",
+      telegramUnbindDialogBody:
+        "解绑后机器人立即停止响应当前使用者。若服务正在运行，会自动重启并生成新的配对码，在 Telegram 私聊中发送新码即可重新绑定。",
+      telegramDisconnectDialogTitle: "解除 Telegram 接入？",
+      telegramDisconnectDialogBody:
+        "这会停止 Telegram 接入并删除已保存的 Bot Token；下次重新接入需要再粘贴 Token。",
     },
   },
   onboarding: {

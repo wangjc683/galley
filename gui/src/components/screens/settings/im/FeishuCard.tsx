@@ -23,6 +23,7 @@ import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { FeishuCommandReference } from "./CommandReference";
 import { FeishuSetupGuide } from "./FeishuSetupGuide";
 import { FeishuGlyph } from "./Glyphs";
+import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
 import { feishuStatusHintForState } from "./status";
 
@@ -160,8 +161,6 @@ export function FeishuCard({
     status?.ownerOpenId ?? config?.ownerOpenId ?? null;
   const ownerBoundAt = config?.ownerBoundAt ?? null;
   const bindCode = ownerOpenId ? null : (status?.bindCode ?? null);
-  const maskOpenId = (id: string) =>
-    id.length <= 8 ? id : `${id.slice(0, 4)}…${id.slice(-4)}`;
 
   const openFeishuConsole = () =>
     run("open", async () => {
@@ -310,48 +309,24 @@ export function FeishuCard({
           )}
 
           {ownerOpenId ? (
-            <div className="rounded-sm border border-line bg-surface px-3 py-2.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Check size={13} weight="bold" className="text-success" />
-                <span className="text-ui-meta font-semibold text-ink">
-                  {imCopy.feishuBoundLabel}
-                </span>
-                <span className="select-text font-mono text-ui-tertiary text-ink-soft">
-                  {maskOpenId(ownerOpenId)}
-                </span>
-                {ownerBoundAt ? (
-                  <span className="text-ui-tertiary text-ink-muted">
-                    {imCopy.feishuBoundAt}{" "}
-                    {new Date(ownerBoundAt).toLocaleString()}
-                  </span>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="ml-auto"
-                  disabled={busy}
-                  onClick={() => setConfirmUnbindOpen(true)}
-                >
-                  {localBusy === "unbind" ? imCopy.working : imCopy.feishuUnbind}
-                </Button>
-              </div>
-            </div>
+            <OwnerBoundRow
+              ownerId={ownerOpenId}
+              boundAt={ownerBoundAt}
+              boundLabel={imCopy.feishuBoundLabel}
+              boundAtLabel={imCopy.feishuBoundAt}
+              unbindLabel={imCopy.feishuUnbind}
+              workingLabel={imCopy.working}
+              busy={busy}
+              working={localBusy === "unbind"}
+              onUnbind={() => setConfirmUnbindOpen(true)}
+            />
           ) : bindCode ? (
-            <div className="rounded-sm border border-brand/25 bg-brand/[var(--opacity-subtle)] px-3 py-2.5">
-              <div className="text-ui-tertiary font-medium text-brand">
-                {imCopy.feishuBindWaitingTitle}
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-baseline gap-2 text-ui-secondary text-ink">
-                <span>{imCopy.feishuBindWaitingLead}</span>
-                <code className="select-text rounded-sm border border-line bg-surface px-2 py-0.5 font-mono text-[15px] font-bold tracking-[0.2em] text-ink">
-                  {bindCode}
-                </code>
-              </div>
-              <div className="mt-1 text-ui-tertiary leading-notice text-ink-muted">
-                {imCopy.feishuBindWaitingAfterCode} {imCopy.feishuOwnerScopeAdvice}
-              </div>
-            </div>
+            <BindCodeCallout
+              title={imCopy.feishuBindWaitingTitle}
+              lead={imCopy.feishuBindWaitingLead}
+              code={bindCode}
+              afterCode={`${imCopy.feishuBindWaitingAfterCode} ${imCopy.feishuOwnerScopeAdvice}`}
+            />
           ) : null}
 
           <p className="text-ui-tertiary leading-notice text-ink-muted">

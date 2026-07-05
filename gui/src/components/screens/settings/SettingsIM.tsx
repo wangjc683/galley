@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { ConfirmActionDialog } from "@/components/screens/settings/im/ConfirmActionDialog";
 import { FeishuCard } from "@/components/screens/settings/im/FeishuCard";
+import { TelegramCard } from "@/components/screens/settings/im/TelegramCard";
 import { WeChatCard } from "@/components/screens/settings/im/WeChatCard";
 import type { BusyAction } from "@/components/screens/settings/im/types";
 import { SettingsPanelHeader } from "@/components/screens/settings/settings-ui";
@@ -42,15 +43,22 @@ export function SettingsIM({
     setStatus: setFeishuStatus,
     loadError: feishuStatusLoadError,
   } = useImSupervisorStatus("feishu", hasManagedRuntimeConfigured);
+  const {
+    status: telegramStatus,
+    setStatus: setTelegramStatus,
+    loadError: telegramStatusLoadError,
+  } = useImSupervisorStatus("telegram", hasManagedRuntimeConfigured);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [invokeError, setInvokeError] = useState<string | null>(null);
   const [confirmRestartOpen, setConfirmRestartOpen] = useState(false);
-  const hasEnabledChannel = [wechatStatus, feishuStatus].some(
+  const hasEnabledChannel = [wechatStatus, feishuStatus, telegramStatus].some(
     (status) => status?.enabled,
   );
-  const hasStaleEnabledChannel = [wechatStatus, feishuStatus].some(
-    (status) => status?.enabled && status.modelConfigStale,
-  );
+  const hasStaleEnabledChannel = [
+    wechatStatus,
+    feishuStatus,
+    telegramStatus,
+  ].some((status) => status?.enabled && status.modelConfigStale);
 
   const runAction = async (
     action: Exclude<BusyAction, null | "restart">,
@@ -78,6 +86,10 @@ export function SettingsIM({
       const feishu = statuses.find((item) => item.platform === "feishu");
       if (feishu) {
         setFeishuStatus(feishu);
+      }
+      const telegram = statuses.find((item) => item.platform === "telegram");
+      if (telegram) {
+        setTelegramStatus(telegram);
       }
       useUiStore.getState().pushToast(
         makeAppError({
@@ -197,6 +209,11 @@ export function SettingsIM({
             status={feishuStatus}
             statusLoadError={feishuStatusLoadError}
             onStatusChange={setFeishuStatus}
+          />
+          <TelegramCard
+            status={telegramStatus}
+            statusLoadError={telegramStatusLoadError}
+            onStatusChange={setTelegramStatus}
           />
 
           {hasEnabledChannel && !hasStaleEnabledChannel && (

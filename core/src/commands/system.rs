@@ -141,7 +141,37 @@ pub(crate) async fn unbind_feishu_im_owner(
     app: tauri::AppHandle,
     manager: tauri::State<'_, std::sync::Arc<im_supervisor::ImSupervisorManager>>,
 ) -> std::result::Result<im_supervisor::ImSupervisorStatus, String> {
-    manager.inner().unbind_feishu_owner(app).await
+    manager.inner().unbind_owner(app, "feishu".into()).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_telegram_im_config(
+) -> std::result::Result<im_supervisor::TelegramImConfig, String> {
+    im_supervisor::get_telegram_im_config().await
+}
+
+#[tauri::command]
+pub(crate) async fn save_telegram_im_config(
+    input: im_supervisor::SaveTelegramImConfigInput,
+) -> std::result::Result<im_supervisor::TelegramImConfig, String> {
+    im_supervisor::save_telegram_im_config(input).await
+}
+
+#[tauri::command]
+pub(crate) async fn delete_telegram_im_config(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, std::sync::Arc<im_supervisor::ImSupervisorManager>>,
+) -> std::result::Result<im_supervisor::TelegramImConfig, String> {
+    let _ = manager.logout(app, "telegram".into()).await;
+    im_supervisor::get_telegram_im_config().await
+}
+
+#[tauri::command]
+pub(crate) async fn unbind_telegram_im_owner(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, std::sync::Arc<im_supervisor::ImSupervisorManager>>,
+) -> std::result::Result<im_supervisor::ImSupervisorStatus, String> {
+    manager.inner().unbind_owner(app, "telegram".into()).await
 }
 
 #[tauri::command]

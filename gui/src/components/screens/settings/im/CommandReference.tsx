@@ -10,6 +10,16 @@ export function FeishuCommandReference({ imCopy }: { imCopy: ImCopy }) {
   );
 }
 
+export function TelegramCommandReference({ imCopy }: { imCopy: ImCopy }) {
+  return (
+    <TextCommandReference
+      title={imCopy.telegramTextCommandsTitle}
+      hint={imCopy.telegramTextCommandsHint}
+      commands={imCopy.telegramTextCommands}
+    />
+  );
+}
+
 export function WeChatCommandReference({ imCopy }: { imCopy: ImCopy }) {
   return (
     <TextCommandReference
