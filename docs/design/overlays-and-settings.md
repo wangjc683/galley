@@ -113,12 +113,42 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
 
 #### Runtime
 
-- **GA path**：当前路径显示（mono）+ 重选按钮（触发文件夹选择器）
-  - 改动后弹 confirm dialog："路径改动需要重启 Galley 才能生效。立即重启？/ 稍后"（不悄悄 kill 所有 session）
-- **Bridge Python**：当前 interpreter 路径显示 + 重选 + muted hint "用于运行 bridge，影响 GA 子进程"
-- **Re-run health check**：button → 弹 Health Check Card 重跑
-- Bundled Python / external Python mode 在这里切换；默认 bundled，external 是高级路径。
-- 底部显示 GenericAgent 版本 / Galley 版本。
+页面骨架是「Runtime Mode 主区 + 更多 低频组 + 底部版本行」三段，
+内置内核是主推路径（产品站位见根 CLAUDE.md），外部 GA 是兼容模式，
+入口整体降级进「更多」。
+
+- **Runtime Mode**：内置内核卡（`推荐` badge；激活时 `正在使用`
+  badge）。未配置模型时右侧 primary 按钮是「配置模型」，已配置未激活
+  时是「切换到内置内核」。有运行中对话时切换禁用并显示原因。
+- **更多**：一个 hairline 分行的带边框容器，三行共用一套行语法——
+  整行可点，尾部字形区分行为：caret = 原地展开（手风琴），arrow =
+  跳走（导航）。
+  - **设置向导**：导航行，一行短说明（「重新走一遍首次设置，现有对话
+    会保留」）；有任务运行时禁用，subtitle 换成禁用原因。
+  - **接入外部 GA**：手风琴。外部 GA 激活时头部常驻 `正在使用`
+    badge——状态可见性不依赖展开状态。展开内容依次是：状态 + 「切换
+    到外部 GA」行（激活时整行不渲染，badge 已承担状态）、外部 GA 路
+    径（mono 输入 + 文件夹选择器，输入可手打、Enter/blur 提交、
+    debounce 校验，`not-found` 拒绝保存；改动后 toast 提示重启
+    Galley 生效，不弹 confirm dialog）、Python（默认内置 CPython
+    只读展示，「使用外部 Python…」ghost link 切到外部模式，路径由
+    python-probe 决定、只读回显）、GenericAgent 版本（当前 / 已验证
+    commit + 对齐 badge）、Health Check（说明 + accent-secondary sm
+    按钮重跑）。
+  - **高级诊断**：手风琴，仅内置内核激活时出现；key-value 只读行。
+- **底部**：`border-line` 分隔后一行 mono `Galley v{x}` + 更新控制。
+
+层级规则（这轮打磨的决策，后续改动不要破坏）：
+
+- 展开区内部一律用 `SettingsFieldLabel`（12px、非 uppercase、无
+  tracking），不复用页面级 `SettingsSectionLabel` 眉标——展开一个二级
+  入口不允许再引入「一级章节」，否则层级塌平。
+- 手风琴内部内容 borderless 平铺（key-value 行 / 纯文本行），不做
+  卡片套卡片；输入框因交互需要保留边框，只读展示一律不带框。
+- 嵌套内容的按钮不超过 `sm`；页面最重的按钮必须属于主区动作。
+- 切换运行时的确认脉冲（`runtime-mode-highlight`）落在有边框的容器
+  上：内置侧是 Runtime Mode 卡，外部侧是「更多」组容器（行头无边框、
+  容器 `overflow-hidden` 会裁掉行级 shadow）。
 
 #### Models
 
