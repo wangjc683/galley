@@ -51,14 +51,14 @@ export function ManagedModelProviderPicker({
           <span className="min-w-0">
             <span
               className={cn(
-                "block truncate text-[12.5px] font-medium",
+                "block truncate text-ui-secondary font-medium",
                 selectedPreset ? "text-ink" : "text-ink-muted",
               )}
             >
               {selectedPreset?.label ?? copy.chooseProvider}
             </span>
             {badgeLabel && (
-              <span className="mt-1 inline-flex rounded-sm bg-ink-muted/10 px-1.5 py-px text-[10.5px] text-ink-muted">
+              <span className="mt-1 inline-flex rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-micro text-ink-muted">
                 {badgeLabel}
               </span>
             )}
@@ -109,11 +109,11 @@ export function ManagedModelProviderPicker({
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12.5px] font-medium">
+                    <span className="block truncate text-ui-secondary font-medium">
                       {preset.label}
                     </span>
                     {description && (
-                      <span className="mt-0.5 block truncate text-[11.5px] leading-4 text-ink-muted">
+                      <span className="mt-0.5 block truncate text-ui-tertiary leading-4 text-ink-muted">
                         {description}
                       </span>
                     )}

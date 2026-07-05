@@ -42,7 +42,7 @@ export function ModelSelectionList({
   return (
     <div className="space-y-2 border-t border-line pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[12.5px] font-medium text-ink">{title}</div>
+        <div className="text-ui-secondary font-medium text-ink">{title}</div>
         <div className="relative w-full max-w-[260px]">
           <MagnifyingGlass
             size={12}
@@ -54,7 +54,7 @@ export function ModelSelectionList({
             onChange={(e) => onFilterChange(e.target.value)}
             placeholder={copy.filterModels}
             spellCheck={false}
-            className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-[12px] text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
+            className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-ui-meta text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
           />
         </div>
       </div>
@@ -87,7 +87,7 @@ export function ModelSelectionList({
                     />
                   )}
                 </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
+                <span className="min-w-0 flex-1 truncate font-mono text-ui-meta">
                   {option}
                 </span>
               </button>
@@ -96,7 +96,7 @@ export function ModelSelectionList({
         </div>
       </ScrollFade>
       {filteredOptions.length > visibleOptions.length && (
-        <div className="text-[11.5px] text-ink-muted">
+        <div className="text-ui-tertiary text-ink-muted">
           {copy.visibleOptionsHint(visibleOptions.length)}
         </div>
       )}
@@ -123,7 +123,10 @@ export function SettingsInput({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+      {/* Field-tier label (same tier as SettingsFieldLabel): these
+          inputs always render inside nested editors, where page-level
+          uppercase eyebrows are off-limits. */}
+      <label className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
         {label}
       </label>
       <div className="relative">
@@ -134,7 +137,7 @@ export function SettingsInput({
           placeholder={placeholder}
           spellCheck={false}
           className={cn(
-            "w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-[12.5px] text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20",
+            "w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20",
             (trailing || reserveTrailing) && "pr-10",
           )}
         />
@@ -158,7 +161,7 @@ export function InlineProbeStatus({
   if (state.kind !== "success" || state.action !== action) return null;
   return (
     <span
-      className="inline-flex min-h-7 max-w-[220px] shrink items-center gap-1 px-1 text-[11.5px] leading-none text-success"
+      className="inline-flex min-h-7 max-w-[220px] shrink items-center gap-1 px-1 text-ui-tertiary leading-none text-success"
       title={state.message}
     >
       <CheckCircle size={11} weight="fill" className="shrink-0" />
@@ -189,7 +192,7 @@ function StatusLine({ state }: { state: ProbeState }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 rounded-sm border px-3 py-2 text-[12.5px]",
+        "flex items-center gap-1.5 rounded-sm border px-3 py-2 text-ui-secondary",
         "select-text",
         state.kind === "success"
           ? "border-success/20 bg-success/[var(--opacity-subtle)] text-success"
@@ -208,7 +211,7 @@ function StatusLine({ state }: { state: ProbeState }) {
 
 export function ErrorLine({ message }: { message: string }) {
   return (
-    <div className="select-text rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2 text-[12.5px] text-error">
+    <div className="select-text rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2 text-ui-secondary text-error">
       {message}
     </div>
   );
@@ -216,7 +219,7 @@ export function ErrorLine({ message }: { message: string }) {
 
 export function InfoLine({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-1.5 rounded-sm border border-line bg-elevated/55 px-3 py-2 text-[12.5px] leading-[1.45] text-ink-soft">
+    <div className="flex items-start gap-1.5 rounded-sm border border-line bg-elevated/55 px-3 py-2 text-ui-secondary leading-dense text-ink-soft">
       <Info
         size={12}
         weight="bold"
@@ -230,7 +233,7 @@ export function InfoLine({ message }: { message: string }) {
 export function LoadingRow() {
   const copy = useCopy().settings.models;
   return (
-    <div className="flex items-center gap-2 px-3 py-3 text-[12.5px] text-ink-muted">
+    <div className="flex items-center gap-2 px-3 py-3 text-ui-secondary text-ink-muted">
       <span className="spin">
         <CircleNotch size={13} weight="thin" />
       </span>
@@ -240,7 +243,7 @@ export function LoadingRow() {
 }
 
 export function EmptyRow({ text }: { text: string }) {
-  return <div className="px-3 py-3 text-[12.5px] text-ink-muted">{text}</div>;
+  return <div className="px-3 py-3 text-ui-secondary text-ink-muted">{text}</div>;
 }
 
 export function CredentialBadge({
@@ -252,14 +255,14 @@ export function CredentialBadge({
   if (status === "present") return null;
   if (status === "unknown") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-warning/[var(--opacity-soft)] px-1.5 py-px text-[10.5px] text-warning">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-warning/[var(--opacity-soft)] px-1.5 py-px text-ui-micro text-warning">
         <WarningCircle size={10} weight="fill" />
         {copy.keyStatusUnknownShort}
       </span>
     );
   }
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-warning/[var(--opacity-soft)] px-1.5 py-px text-[10.5px] text-warning">
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-warning/[var(--opacity-soft)] px-1.5 py-px text-ui-micro text-warning">
       <WarningCircle size={10} weight="fill" />
       {copy.keyNeedsResaveShort}
     </span>
@@ -276,7 +279,7 @@ export function ProtocolBadge({
   const label = protocolLabel(protocol);
   return (
     <span
-      className="shrink-0 text-[10.5px] leading-4 text-ink-muted/55"
+      className="shrink-0 text-ui-micro leading-4 text-ink-muted/55"
       title={`${label} · ${apiBase}`}
     >
       {label}

@@ -127,11 +127,13 @@ export function ProviderCard({
   return (
     <div
       className={cn(
-        "group/provider overflow-hidden rounded-sm border border-line bg-surface",
-        "transition-[background-color,border-color,box-shadow,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-        "hover:-translate-y-[0.5px] hover:border-line-strong hover:shadow-card",
-        "active:translate-y-[0.5px] active:shadow-[var(--shadow-button-raised-active)]",
-        open && "border-line-strong shadow-card",
+        // Quiet header grammar, matching the ChannelCard / model-row
+        // idiom: light hover tint + caret emphasis only. The primary
+        // "我的模型" list above must stay the loudest surface on this
+        // tab — the maintenance area doesn't lift, shadow, or turn
+        // brand-colored on hover.
+        "group/provider overflow-hidden rounded-sm border border-line bg-surface transition-colors",
+        open && "border-line-strong",
       )}
     >
       <div className="flex min-w-0 items-center gap-3 px-2 py-1.5 transition-colors">
@@ -142,16 +144,14 @@ export function ProviderCard({
           aria-expanded={open}
           className={cn(
             "group/toggle flex min-w-0 flex-1 items-center gap-3 rounded-sm px-1.5 py-0.5 text-left",
-            "outline-none",
+            "outline-none transition-colors hover:bg-hover",
           )}
           onClick={onToggle}
         >
           <span
             className={cn(
               "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-colors",
-              open
-                ? "bg-elevated text-brand-strong"
-                : "text-ink-muted group-hover/provider:bg-brand-soft group-hover/provider:text-brand-strong",
+              open ? "text-ink" : "text-ink-soft",
             )}
           >
             {open ? (
@@ -162,23 +162,13 @@ export function ProviderCard({
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span
-              className={cn(
-                "min-w-0 truncate text-[13px] font-medium transition-colors",
-                "group-hover/provider:text-brand-strong",
-                open ? "text-brand-strong" : "text-ink",
-              )}
+              className="min-w-0 truncate text-ui-compact font-medium text-ink"
               title={provider.displayName}
             >
               {provider.displayName}
             </span>
             <CredentialBadge status={provider.credentialStatus} />
-            <span
-              className={cn(
-                "inline-flex shrink-0 rounded-sm border border-line bg-surface/80 px-1.5 py-px text-[10.5px] text-ink-muted transition-colors",
-                "group-hover/provider:border-line-strong group-hover/provider:bg-elevated/80",
-                open && "border-line-strong bg-elevated/75",
-              )}
-            >
+            <span className="inline-flex shrink-0 rounded-sm border border-line bg-surface/80 px-1.5 py-px text-ui-micro text-ink-muted">
               {copy.enabledModelsCount(models.length)}
             </span>
             <ProtocolBadge
@@ -260,13 +250,13 @@ export function ProviderCard({
 
                 {models.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-                    <span className="text-[11.5px] text-ink-muted">
+                    <span className="text-ui-tertiary text-ink-muted">
                       {copy.enabledFromProvider}
                     </span>
                     {models.map((model) => (
                       <span
                         key={model.id}
-                        className="inline-flex max-w-[200px] shrink-0 truncate rounded-sm bg-ink-muted/10 px-1.5 py-px font-mono text-[11px] leading-4 text-ink-muted/85"
+                        className="inline-flex max-w-[200px] shrink-0 truncate rounded-sm bg-ink-muted/10 px-1.5 py-px font-mono text-ui-label leading-4 text-ink-muted/85"
                         title={model.model}
                       >
                         {modelDisplayParts(model).title}
@@ -333,7 +323,7 @@ export function ProviderCard({
                 {modelOptions.length > 0 && (
                   <div className="space-y-1.5 pt-0.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-[12.5px] font-medium text-ink">
+                      <div className="text-ui-secondary font-medium text-ink">
                         {copy.availableModels}
                       </div>
                       <div className="relative w-full max-w-[260px]">
@@ -347,7 +337,7 @@ export function ProviderCard({
                           onChange={(e) => onSetModelFilter(e.target.value)}
                           placeholder={copy.filterModels}
                           spellCheck={false}
-                          className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-[12px] text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
+                          className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-ui-meta text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
                         />
                       </div>
                     </div>
@@ -368,7 +358,7 @@ export function ProviderCard({
                       </div>
                     </ScrollFade>
                     {filteredOptions.length > visibleOptions.length && (
-                      <div className="text-[11.5px] text-ink-muted">
+                      <div className="text-ui-tertiary text-ink-muted">
                         {copy.visibleOptionsHint(visibleOptions.length)}
                       </div>
                     )}
@@ -410,7 +400,7 @@ function ProviderActionsMenu({
           sideOffset={6}
           className={cn(
             "z-[70] min-w-[112px] rounded-md border border-line bg-elevated p-1",
-            "text-[13px] text-ink shadow-elevated",
+            "text-ui-compact text-ink shadow-elevated",
           )}
         >
           <DropdownMenu.Item onSelect={onEdit} className={itemClass}>
@@ -448,11 +438,11 @@ function DetectedModelRow({
   const copy = useCopy().settings.models;
   return (
     <div className="flex min-w-0 items-center gap-3 px-2.5 py-1.5">
-      <div className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink">
+      <div className="min-w-0 flex-1 truncate font-mono text-ui-meta text-ink">
         {modelName}
       </div>
       {enabled ? (
-        <span className="inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent bg-success/[var(--opacity-subtle)] px-2.5 text-[12px] leading-none text-success">
+        <span className="inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent bg-success/[var(--opacity-subtle)] px-2.5 text-ui-meta leading-none text-success">
           <CheckCircle size={12} weight="fill" />
           {copy.enabled}
         </span>
@@ -463,7 +453,7 @@ function DetectedModelRow({
           disabled={saving}
           onClick={onEnable}
           className={cn(
-            "inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent px-2.5 text-[12px] leading-none text-ink-muted",
+            "inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent px-2.5 text-ui-meta leading-none text-ink-muted",
             "transition-[background-color,border-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
             "hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20 active:translate-y-[0.5px]",
             "disabled:cursor-not-allowed disabled:opacity-40 disabled:translate-y-0",

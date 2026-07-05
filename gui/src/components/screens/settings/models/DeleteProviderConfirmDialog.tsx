@@ -50,7 +50,7 @@ export function ConfirmDeleteProviderDialog({
           </div>
           <p
             id="confirm-delete-provider-desc"
-            className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
+            className="mt-2 text-ui-secondary leading-secondary text-ink-soft"
           >
             {candidate
               ? copy.deleteProviderDialogBody(

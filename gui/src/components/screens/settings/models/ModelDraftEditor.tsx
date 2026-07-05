@@ -62,16 +62,16 @@ export function ModelDraftEditor({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[12.5px] font-medium text-ink">
+          <div className="text-ui-secondary font-medium text-ink">
             {draft.id ? copy.editModel : copy.manualAddModel}
           </div>
           {title && (
-            <div className="mt-0.5 truncate text-[12px] text-ink-muted">
+            <div className="mt-0.5 truncate text-ui-meta text-ink-muted">
               {title}
             </div>
           )}
           {!draft.id && allModelCount === 0 && (
-            <div className="mt-0.5 text-[12px] text-ink-muted">
+            <div className="mt-0.5 text-ui-meta text-ink-muted">
               {copy.autoDefaultHint}
             </div>
           )}

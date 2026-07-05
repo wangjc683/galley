@@ -112,11 +112,11 @@ export function AdvancedModelOptions({
           ) : (
             <CaretRight size={12} weight="bold" className="text-ink-muted" />
           )}
-          <span className="text-[12.5px] font-medium text-ink">
+          <span className="text-ui-secondary font-medium text-ink">
             {copy.advancedConfig}
           </span>
         </span>
-        <span className="shrink-0 text-[11.5px] text-ink-muted">
+        <span className="shrink-0 text-ui-tertiary text-ink-muted">
           {customCount > 0
             ? copy.advancedConfigSetCount(customCount)
             : copy.advancedConfigUsingRecommended}
@@ -255,7 +255,7 @@ function AdvancedNumberField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+      <span className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
         {label}
       </span>
       <span className="relative block">
@@ -268,13 +268,13 @@ function AdvancedNumberField({
             if (Number.isFinite(next)) onChange(Math.max(min, next));
           }}
           className={cn(
-            "w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-[12.5px] text-ink outline-none transition-colors",
+            "w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors",
             "placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20",
             suffix && "pr-12",
           )}
         />
         {suffix && (
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11.5px] text-ink-muted">
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ui-tertiary text-ink-muted">
             {suffix}
           </span>
         )}
@@ -296,7 +296,7 @@ function AdvancedChoiceField<TValue extends string>({
 }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+      <div className="mb-1.5 text-ui-meta font-medium text-ink-soft">
         {label}
       </div>
       <div className="flex flex-wrap gap-1">
@@ -309,7 +309,7 @@ function AdvancedChoiceField<TValue extends string>({
               aria-pressed={active}
               onClick={() => onChange(option.value)}
               className={cn(
-                "inline-flex min-h-7 items-center rounded-sm border px-2 text-[12px] transition-colors",
+                "inline-flex min-h-7 items-center rounded-sm border px-2 text-ui-meta transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
                 active
                   ? "border-line bg-elevated text-ink shadow-card"
@@ -338,7 +338,7 @@ function AdvancedSwitchRow({
 }) {
   return (
     <div className="flex min-h-8 items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ink">
+      <div className="flex min-w-0 items-center gap-1.5 text-ui-secondary text-ink">
         <span>{label}</span>
         {info && <InfoTooltip label={label} text={info} />}
       </div>

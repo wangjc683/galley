@@ -256,7 +256,10 @@ export function SettingsModels({
             </SettingsSectionLabel>
           </div>
           <Button
-            variant="primary"
+            // primary = the current actionable next step: with zero
+            // providers, adding one IS the next step; once configured,
+            // adding another is routine maintenance.
+            variant={providers.length === 0 ? "primary" : "secondary"}
             size="sm"
             aria-label={modelCopy.addProviderAria}
             onClick={startNewProvider}
@@ -430,7 +433,7 @@ export function SettingsModels({
 function ExternalRuntimeNotice() {
   const copy = useCopy().settings.models;
   return (
-    <div className="flex gap-2 rounded-sm border border-brand/25 bg-brand-soft px-3 py-2.5 text-[12.5px] leading-[1.5] text-ink">
+    <div className="flex gap-2 rounded-sm border border-brand/25 bg-brand-soft px-3 py-2.5 text-ui-secondary leading-notice text-ink">
       <Info
         size={14}
         weight="bold"

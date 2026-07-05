@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 
 import { Button, IconButton } from "@/components/ui/button";
+import { SettingsSectionLabel } from "@/components/screens/settings/settings-ui";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
@@ -89,28 +90,29 @@ export function ConfiguredModelsPanel({
   const appCopy = useCopy();
   const copy = appCopy.settings.models;
   return (
-    <div className="rounded-sm border border-line bg-surface">
-      <div className="px-3 py-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <div className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-            {copy.myModels}
-          </div>
-          <ModelScopeHint copy={copy} />
-          <span aria-hidden="true" className="text-[11.5px] text-ink-muted/45">
-            ·
-          </span>
-          <span className="text-[12px] text-ink-muted">
-            {models.length > 0
-              ? copy.enabledModelsCount(models.length)
-              : copy.noEnabledModels}
-          </span>
-        </div>
-        <div className="mt-0.5 text-[11px] leading-snug text-ink-muted/60">
-          {copy.myModelsSubtitle}
-        </div>
+    // Section label lives outside the card, same grammar as the
+    // 服务商 section below — cards contain lists, labels belong to the
+    // page skeleton. The one-line subtitle is a documented exception
+    // to "no persistent copy in headers": order = switch-menu order and
+    // first = default are core semantics nothing else conveys.
+    <div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <SettingsSectionLabel>{copy.myModels}</SettingsSectionLabel>
+        <ModelScopeHint copy={copy} />
+        <span aria-hidden="true" className="text-ui-tertiary text-ink-muted/45">
+          ·
+        </span>
+        <span className="text-ui-meta text-ink-muted">
+          {models.length > 0
+            ? copy.enabledModelsCount(models.length)
+            : copy.noEnabledModels}
+        </span>
+      </div>
+      <div className="mt-1 text-ui-label leading-snug text-ink-muted/60">
+        {copy.myModelsSubtitle}
       </div>
       {models.length > 0 ? (
-        <div className="divide-y divide-line border-t border-line">
+        <div className="mt-2 divide-y divide-line rounded-sm border border-line bg-surface">
           {models.map((model, index) => {
             const provider = providers.find((p) => p.id === model.providerId);
             return (
@@ -152,7 +154,7 @@ export function ConfiguredModelsPanel({
           })}
         </div>
       ) : (
-        <div className="border-t border-line px-3 py-3 text-[12.5px] text-ink-muted">
+        <div className="mt-2 rounded-sm border border-line bg-surface px-3 py-3 text-ui-secondary text-ink-muted">
           {copy.myModelsEmpty}
         </div>
       )}
@@ -171,10 +173,10 @@ function ModelScopeHint({
       contentClassName="max-w-[300px] p-2.5 text-left leading-normal"
       text={
         <>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink">
+          <div className="text-ui-label font-semibold uppercase tracking-[0.06em] text-ink">
             {copy.sessionModelScopeTitle}
           </div>
-          <div className="mt-1 text-[11.5px] leading-4 text-ink-soft">
+          <div className="mt-1 text-ui-tertiary leading-4 text-ink-soft">
             {copy.sessionModelScopeHint}
           </div>
         </>
@@ -287,27 +289,27 @@ function ConfiguredModelRow({
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div
               className={cn(
-                "truncate text-[13px] font-medium transition-colors",
+                "truncate text-ui-compact font-medium transition-colors",
                 isEditing ? "text-brand-strong" : "text-ink",
               )}
             >
               {display.title}
             </div>
             {isDefault && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-brand/15 bg-brand-soft px-1.5 py-px text-[10.5px] leading-4 text-brand-strong">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-brand/15 bg-brand-soft px-1.5 py-px text-ui-micro leading-4 text-brand-strong">
                 <CheckCircle size={10} weight="fill" />
                 {copy.defaultModel}
               </span>
             )}
             <span
-              className="inline-flex max-w-[180px] shrink-0 truncate rounded-sm bg-ink-muted/10 px-1.5 py-px text-[10.5px] leading-4 text-ink-muted/80"
+              className="inline-flex max-w-[180px] shrink-0 truncate rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-micro leading-4 text-ink-muted/80"
               title={model.providerDisplayName}
             >
               {model.providerDisplayName}
             </span>
           </div>
           {display.subtitle && (
-            <div className="mt-0.5 truncate font-mono text-[11px] text-ink-muted/85">
+            <div className="mt-0.5 truncate font-mono text-ui-label text-ink-muted/85">
               {display.subtitle}
             </div>
           )}
@@ -394,7 +396,7 @@ function ConfiguredModelRow({
         <div
           className={cn(
             "mt-2 flex items-center justify-end gap-2 rounded-sm border border-line/70",
-            "bg-surface/60 px-2 py-1.5 text-[12px] text-ink-soft",
+            "bg-surface/60 px-2 py-1.5 text-ui-meta text-ink-soft",
           )}
         >
           <span className="min-w-0 flex-1">{copy.removeModelInlineConfirm}</span>

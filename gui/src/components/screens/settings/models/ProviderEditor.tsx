@@ -121,18 +121,21 @@ export function ProviderEditor({
   return (
     <div
       className={cn(
-        "rounded-sm border border-line-strong bg-selected/35 px-3 py-3 shadow-card",
+        // Same editing-surface grammar as ModelDraftEditor: brand left
+        // rail + elevated bg, no shadow. One visual language for "you
+        // are editing something inline" across the tab.
+        "rounded-sm border border-line-strong/70 border-l-[3px] border-l-brand bg-elevated px-3 py-3",
         className,
       )}
     >
       {!isCreatingProvider && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="text-[13px] font-medium text-ink">
+            <div className="text-ui-compact font-medium text-ink">
               {copy.editProvider}
             </div>
             {form.id && providerHasSavedKey && (
-              <div className="mt-0.5 text-[12px] text-ink-muted">
+              <div className="mt-0.5 text-ui-meta text-ink-muted">
                 {copy.leaveKeyBlank}
               </div>
             )}
@@ -181,10 +184,10 @@ export function ProviderEditor({
           <div className="space-y-4 pb-1">
             <div className="space-y-3">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                <div className="text-ui-meta font-medium text-ink-soft">
                   {copy.chatgptCodexWebLogin}
                 </div>
-                <p className="m-0 mt-1 max-w-[620px] text-[12.5px] leading-5 text-ink-muted">
+                <p className="m-0 mt-1 max-w-[620px] text-ui-secondary leading-5 text-ink-muted">
                   {copy.chatgptCodexReadyBody}
                 </p>
               </div>
@@ -262,7 +265,7 @@ export function ProviderEditor({
             </div>
 
             <div className="border-t border-line pt-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+              <div className="text-ui-meta font-medium text-ink-soft">
                 {copy.codexCliLoginTitle}
               </div>
               <Button
@@ -429,7 +432,7 @@ export function ProviderEditor({
                 {form.id ? copy.saveService : copy.saveAndEnableModel}
               </Button>
               {showSecondaryProbe && secondaryProbeAction === "model-test" && (
-                <span className="text-[11px] leading-none text-ink-muted/60">
+                <span className="text-ui-label leading-none text-ink-muted/60">
                   {copy.modelTestCostHint}
                 </span>
               )}

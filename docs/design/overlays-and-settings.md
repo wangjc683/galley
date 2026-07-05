@@ -156,13 +156,15 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
 - 支持添加多个模型：`OpenAI-compatible` / `Anthropic-compatible`、API Key、Base URL、模型名、可选显示名。
 - Provider picker 中，`OpenAI` / `Anthropic` 保留品牌主标题；下拉项用低权重副标题说明“官方 API 或 compatible endpoint”，帮助用户理解第三方中转站 / 兼容接口也应该选择这两个入口。
 - 页面分为主视图和维护区：
-  - `当前配置模型` 是主视图，显示 Galley 当前会使用的模型队列、默认模型和排序。
-  - `当前配置模型` 标题区只承载标题、`Info` tooltip 和模型数量；配置生效范围放到 `Info` tooltip，避免 header 被常驻说明文字撑乱或浪费纵向空间。
+  - `我的模型` 是主视图，显示 Galley 当前会使用的模型队列、默认模型和排序。（早期文档名「当前配置模型」已演进为「我的模型」；维护区同期演进为「服务商」。）
+  - `我的模型` 的标签行（标题 + `Info` tooltip + 模型数量）放在卡片外，和 `服务商` 的 section 标签同构——卡片只装列表，标签属于页面骨架；配置生效范围放在 `Info` tooltip。标签行下保留一行小字副标题（「按顺序排列，第一个为默认」）：这是「header 不放常驻说明文字」的**有意例外**——顺序 = 切换菜单顺序、第一个 = 默认是不可推断的核心语义，tooltip 藏不起。
   - 模型新增、编辑、排序或设为默认成功后，用短 toast 提醒：新对话立即使用最新配置；如果存在已启用 Channels，toast 带 `重启 Channels` CTA，直接重启已启用 Channel 进程，不要求重新登录。
-  - `当前配置模型` 行 hover / focus 只做轻底色和排序箭头显性化，提示可操作但不做抬升、缩放或阴影；Provider 名称使用低权重 metadata chip，默认模型标签保留可见但不做重 Badge。
-  - `已接入的模型提供商` 是维护区，标题右侧按钮只写 `添加`，accessible label 保留完整的 `添加模型提供商`；Provider 摘要压成单行，长名称截断，不撑高卡片；协议类型放在模型数量之后，用低权重 metadata chip 显示，不使用明显边框或等宽字体，避免和 Provider 名称、模型数量抢层级。
+  - `我的模型` 行 hover / focus 只做轻底色和排序箭头显性化，提示可操作但不做抬升、缩放或阴影；Provider 名称使用低权重 metadata chip，默认模型标签保留可见但不做重 Badge。
+  - `服务商` 是维护区，标题右侧按钮只写 `添加`，accessible label 保留完整的 `添加模型提供商`；`添加` 按钮只在没有任何服务商时用 primary（此时它是当前唯一的下一步），已有配置后降为 secondary。Provider 摘要压成单行，长名称截断，不撑高卡片；协议类型放在模型数量之后，用低权重 metadata chip 显示，不使用明显边框或等宽字体，避免和 Provider 名称、模型数量抢层级。
+  - Provider 卡的 hover 语法必须比主视图安静或同级：轻底色 + caret 显性化，不做抬升、阴影或品牌色 hover——主视图是这个 Tab 视觉上最重的表面，维护区不抢。
   - Provider 摘要行的正常状态不显示 Key 图标或 `Key 已保存`；只有缺少密钥 / 状态异常时才显示 warning badge。
-  - 新增 Provider 表单贴着 `已接入的模型提供商` 标题区展开，位于 Provider 列表上方；新增表单不重复显示标题，Provider picker 不显示额外 label，placeholder 用 `选择提供商`，关闭按钮与 picker 同行，避免小区域反复出现“模型提供商”或形成空标题区；编辑已接入 Provider 时，编辑表单必须贴着对应 Provider 原地展开，不跳回页面上方；新增和编辑表单都使用同一套展开态底色、边框和阴影，不因入口不同改变视觉层级。
+  - 新增 Provider 表单贴着 `服务商` 标题区展开，位于 Provider 列表上方；新增表单不重复显示标题，Provider picker 不显示额外 label，placeholder 用 `选择提供商`，关闭按钮与 picker 同行，避免小区域反复出现“模型提供商”或形成空标题区；编辑已接入 Provider 时，编辑表单必须贴着对应 Provider 原地展开，不跳回页面上方。
+  - 全 Tab 只有一种「正在内联编辑」的表面语法：brand 左边条（3px）+ `bg-elevated`，无阴影。Provider 编辑器和 Model 编辑器共用，不因入口不同改变视觉层级；嵌套表单的字段标签用 field 级标签（非 uppercase），页面级眉标不进入编辑器内部。
   - Provider / Model 的局部编辑表单关闭入口统一用右上角 `X` icon button；不要混用右上角文字「取消」。
   - Provider 展开后才显示模型测试、自动获取列表、手动添加、编辑和删除等维护操作。
   - 获取模型列表后的模型选择必须使用 Galley 自定义 popover dropdown，不使用浏览器原生 `select`。
