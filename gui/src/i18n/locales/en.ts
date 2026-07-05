@@ -194,19 +194,6 @@ export const enCopy: AppCopy = {
     action: "Connect Browser Control",
   },
   browserControl: {
-    title: "Connect Browser Control",
-    connectedTitle: "Browser Control is ready",
-    connectedNoTabsTitle: "Browser Control is connected",
-    offlineTitle: "Browser is not open",
-    connectedDescription:
-      "Galley can already read and operate this browser, using your existing login state.",
-    connectedNoTabsDescription:
-      "The extension is connected and waiting for a webpage.",
-    offlineDescription:
-      "Test passed. Open Chrome / Edge to use Browser Control.",
-    description:
-      "One-time setup, about a minute. Once installed, Galley can read and operate webpages, using your existing login state.",
-    close: "Close Browser Control setup",
     folderName: "tmwd_cdp_bridge",
     developerMode: "Developer mode",
     loadUnpacked: "Load unpacked",
@@ -229,7 +216,7 @@ export const enCopy: AppCopy = {
       "Galley could not prepare the extension folder. Try again, or reinstall Galley.",
     stepTest: "Test the connection",
     stepTestHint:
-      "Open any webpage in that browser (or use the test page below), then click Test connection.",
+      "Open any webpage in that browser (or click Open test page), then click Test connection.",
     openTestPage: "Open test page",
     troubleShow: "Having trouble?",
     troubleHide: "Hide",

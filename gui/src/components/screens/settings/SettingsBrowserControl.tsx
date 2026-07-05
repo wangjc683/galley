@@ -37,23 +37,12 @@ const BROWSER_LABELS: Record<BrowserControlBrowser, string> = {
 };
 
 /**
- * Settings → Browser Control tab. Managed-runtime only (mirrors the
- * Channels tab gating). The full setup / status / repair experience
- * lives inline here — the same content the TopBar indicator and the
- * attention banner now deep-link to, the way Channels works. There is
- * no separate dialog: configuration has a single home.
- *
- * Elevation note: this renders on the Settings `bg-app` canvas, so its
- * cards are `bg-surface` raised insets (not `bg-elevated`, which was
- * right only when this was a floating dialog body).
+ * Shared view-state for this tab. Both the page shell and the setup
+ * guide derive everything from the store + copy, so nothing threads a
+ * wall of props anymore.
  */
-export function SettingsBrowserControl({
-  onRunDemo,
-}: {
-  onRunDemo?: () => void;
-}) {
-  const fullCopy = useCopy();
-  const copy = fullCopy.browserControl;
+function useBrowserControlView() {
+  const copy = useCopy().browserControl;
   const layout = useBrowserControlStore((s) => s.layout);
   const layoutError = useBrowserControlStore((s) => s.layoutError);
   const status = useBrowserControlStore((s) => s.status);
@@ -62,10 +51,6 @@ export function SettingsBrowserControl({
   const error = useBrowserControlStore((s) => s.error);
   const ensureLayout = useBrowserControlStore((s) => s.ensureLayout);
   const probe = useBrowserControlStore((s) => s.probe);
-  const [copied, setCopied] = useState(false);
-  const [openError, setOpenError] = useState<string | null>(null);
-  const [showRepair, setShowRepair] = useState(false);
-  const [browser, setBrowser] = useState<BrowserControlBrowser>("chrome");
 
   const extensionDir = layout?.extensionDir ?? lastProbe?.extensionDir ?? "";
   const connected = status === "connected";
@@ -89,10 +74,31 @@ export function SettingsBrowserControl({
         ? copy.offlineStatusDetail
         : "";
 
-  useEffect(() => {
-    if (layoutReady || busy || layoutError) return;
-    void ensureLayout();
-  }, [busy, ensureLayout, layoutError, layoutReady]);
+  return {
+    copy,
+    layoutError,
+    status,
+    busy,
+    ensureLayout,
+    probe,
+    connected,
+    needsWebpage,
+    bridgeReady,
+    layoutReady,
+    statusMessage,
+    statusDetail,
+  };
+}
+
+/**
+ * Open-external helpers with a local error line. Instantiated where the
+ * buttons live (page shell and setup guide each own their error slot).
+ */
+function useOpenActions(copy: BrowserControlCopy) {
+  const layout = useBrowserControlStore((s) => s.layout);
+  const ensureLayout = useBrowserControlStore((s) => s.ensureLayout);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const openExtensionsPage = async (target: BrowserControlBrowser) => {
     setOpenError(null);
@@ -142,6 +148,51 @@ export function SettingsBrowserControl({
     window.setTimeout(() => setCopied(false), 1200);
   };
 
+  return {
+    openError,
+    copied,
+    openExtensionsPage,
+    openGuide,
+    openTestPage,
+    showFolder,
+    copyPath,
+  };
+}
+
+/**
+ * Settings → Browser Control tab. Managed-runtime only (mirrors the
+ * Channels tab gating). The full setup / status / repair experience
+ * lives inline here — the same content the TopBar indicator and the
+ * attention banner deep-link to, the way Channels works. There is no
+ * separate dialog: configuration has a single home.
+ *
+ * Action anchoring: state-advancing actions (open test page / recheck /
+ * test) live inside the status card or the setup step they belong to —
+ * the floating bottom action row was a leftover of the old dialog's
+ * action bar. The quiet row below the card carries maintenance only
+ * (retest, repair toggle, demo).
+ *
+ * Elevation note: this renders on the Settings `bg-app` canvas, so its
+ * cards are `bg-surface` raised insets (not `bg-elevated`, which was
+ * right only when this was a floating dialog body).
+ */
+export function SettingsBrowserControl({
+  onRunDemo,
+}: {
+  onRunDemo?: () => void;
+}) {
+  const fullCopy = useCopy();
+  const view = useBrowserControlView();
+  const { copy } = view;
+  const open = useOpenActions(copy);
+  const [showRepair, setShowRepair] = useState(false);
+
+  const { layoutReady, busy, layoutError, ensureLayout } = view;
+  useEffect(() => {
+    if (layoutReady || busy || layoutError) return;
+    void ensureLayout();
+  }, [busy, ensureLayout, layoutError, layoutReady]);
+
   return (
     <div className="space-y-7">
       <SettingsPanelHeader
@@ -150,130 +201,83 @@ export function SettingsBrowserControl({
       />
 
       <div className="space-y-3">
-        {connected || needsWebpage ? (
+        {view.connected || view.needsWebpage ? (
           <>
             <ConnectionStatusCard
-              busy={busy}
-              connected={bridgeReady}
-              status={status}
-              statusDetail={statusDetail}
-              statusMessage={statusMessage}
+              busy={view.busy}
+              connected={view.bridgeReady}
+              status={view.status}
+              statusDetail={view.statusDetail}
+              statusMessage={view.statusMessage}
               actions={
-                needsWebpage ? (
+                view.needsWebpage ? (
                   <TestPageActions
                     copy={copy}
-                    openError={showRepair ? null : openError}
-                    openTestPage={openTestPage}
+                    busy={view.busy}
+                    layoutReady={view.layoutReady}
+                    openError={showRepair ? null : open.openError}
+                    openTestPage={open.openTestPage}
+                    onRecheck={() => void view.probe("recheck")}
                   />
                 ) : undefined
               }
             />
 
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+              <div className="flex flex-wrap gap-2">
+                {view.connected && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={view.busy || !view.layoutReady}
+                    onClick={() => void view.probe("manual")}
+                    leadingIcon={
+                      view.busy ? (
+                        <CircleNotch size={13} weight="thin" className="spin" />
+                      ) : (
+                        <ArrowsClockwise size={13} weight="thin" />
+                      )
+                    }
+                  >
+                    {view.busy ? copy.testing : copy.retest}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRepair((show) => !show)}
+                  leadingIcon={<PuzzlePiece size={13} weight="thin" />}
+                >
+                  {showRepair
+                    ? copy.hideRepair
+                    : view.needsWebpage
+                      ? copy.reinstallOrRepair
+                      : copy.repairTitle}
+                </Button>
+              </div>
+              {view.connected && (
+                <Button
+                  variant="accent-secondary"
+                  size="sm"
+                  title={copy.runDemoTitle}
+                  onClick={() => onRunDemo?.()}
+                >
+                  {copy.runDemo}
+                </Button>
+              )}
+            </div>
+
             {showRepair && (
               <div className="rounded-callout border border-line bg-surface p-3.5">
-                <SetupGuide
-                  browser={browser}
-                  busy={busy}
-                  bridgeReady={bridgeReady}
-                  copied={copied}
-                  copy={copy}
-                  copyPath={copyPath}
-                  includeTest
-                  layoutError={layoutError}
-                  layoutReady={layoutReady}
-                  openError={openError}
-                  openExtensionsPage={openExtensionsPage}
-                  openGuide={openGuide}
-                  openTestPage={openTestPage}
-                  retryPrepare={ensureLayout}
-                  setBrowser={setBrowser}
-                  showFolder={showFolder}
-                  showTestStatus={false}
-                  status={status}
-                  statusDetail={statusDetail}
-                  statusMessage={statusMessage}
-                />
+                <SetupGuide includeTest showTestStatus={false} />
               </div>
             )}
           </>
         ) : (
           <div className="rounded-callout border border-line bg-surface p-3.5">
-            <SetupGuide
-              browser={browser}
-              busy={busy}
-              bridgeReady={bridgeReady}
-              copied={copied}
-              copy={copy}
-              copyPath={copyPath}
-              includeTest
-              layoutError={layoutError}
-              layoutReady={layoutReady}
-              openError={openError}
-              openExtensionsPage={openExtensionsPage}
-              openGuide={openGuide}
-              openTestPage={openTestPage}
-              retryPrepare={ensureLayout}
-              setBrowser={setBrowser}
-              showFolder={showFolder}
-              showTestStatus
-              status={status}
-              statusDetail={statusDetail}
-              statusMessage={statusMessage}
-            />
+            <SetupGuide includeTest showTestStatus />
           </div>
         )}
-
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={connected ? "ghost" : "secondary"}
-              size="md"
-              disabled={busy || !layoutReady}
-              onClick={() => void probe(needsWebpage ? "recheck" : "manual")}
-              leadingIcon={
-                busy ? (
-                  <CircleNotch size={13} weight="thin" className="spin" />
-                ) : connected ? (
-                  <ArrowsClockwise size={13} weight="thin" />
-                ) : (
-                  <CursorClick size={13} weight="thin" />
-                )
-              }
-            >
-              {busy
-                ? copy.testing
-                : connected
-                  ? copy.retest
-                  : needsWebpage
-                    ? copy.recheck
-                    : copy.test}
-            </Button>
-            {(connected || needsWebpage) && (
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={() => setShowRepair((show) => !show)}
-                leadingIcon={<PuzzlePiece size={13} weight="thin" />}
-              >
-                {showRepair
-                  ? copy.hideRepair
-                  : needsWebpage
-                    ? copy.reinstallOrRepair
-                    : copy.repairTitle}
-              </Button>
-            )}
-          </div>
-          {connected && (
-            <Button
-              variant="accent-secondary"
-              size="md"
-              title={copy.runDemoTitle}
-              onClick={() => onRunDemo?.()}
-            >
-              {copy.runDemo}
-            </Button>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -281,12 +285,18 @@ export function SettingsBrowserControl({
 
 function TestPageActions({
   copy,
+  busy,
+  layoutReady,
   openError,
   openTestPage,
+  onRecheck,
 }: {
   copy: BrowserControlCopy;
+  busy: boolean;
+  layoutReady: boolean;
   openError: string | null;
   openTestPage: (browser: BrowserControlBrowser) => Promise<void>;
+  onRecheck: () => void;
 }) {
   return (
     <div className="mt-2">
@@ -307,9 +317,24 @@ function TestPageActions({
         >
           {copy.openEdgeTestPage}
         </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={busy || !layoutReady}
+          onClick={onRecheck}
+          leadingIcon={
+            busy ? (
+              <CircleNotch size={13} weight="thin" className="spin" />
+            ) : (
+              <ArrowsClockwise size={13} weight="thin" />
+            )
+          }
+        >
+          {busy ? copy.testing : copy.recheck}
+        </Button>
       </div>
       {openError && (
-        <div className="mt-2 rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2 text-[12px] leading-[1.5] text-error">
+        <div className="mt-2 rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2 text-ui-meta leading-notice text-error">
           {openError}
         </div>
       )}
@@ -318,54 +343,22 @@ function TestPageActions({
 }
 
 function SetupGuide({
-  browser,
-  busy,
-  bridgeReady,
-  copied,
-  copy,
-  copyPath,
   includeTest,
-  layoutError,
-  layoutReady,
-  openError,
-  openExtensionsPage,
-  openGuide,
-  openTestPage,
-  retryPrepare,
-  setBrowser,
-  showFolder,
   showTestStatus,
-  status,
-  statusDetail,
-  statusMessage,
 }: {
-  browser: BrowserControlBrowser;
-  busy: boolean;
-  bridgeReady: boolean;
-  copied: boolean;
-  copy: BrowserControlCopy;
-  copyPath: () => Promise<void>;
   includeTest: boolean;
-  layoutError: string | null;
-  layoutReady: boolean;
-  openError: string | null;
-  openExtensionsPage: (browser: BrowserControlBrowser) => Promise<void>;
-  openGuide: () => Promise<void>;
-  openTestPage: (browser: BrowserControlBrowser) => Promise<void>;
-  retryPrepare: () => Promise<unknown>;
-  setBrowser: (browser: BrowserControlBrowser) => void;
-  showFolder: () => Promise<void>;
   showTestStatus: boolean;
-  status: string;
-  statusDetail: string;
-  statusMessage: string;
 }) {
+  const view = useBrowserControlView();
+  const { copy } = view;
+  const open = useOpenActions(copy);
+  const [browser, setBrowser] = useState<BrowserControlBrowser>("chrome");
   const [showTrouble, setShowTrouble] = useState(false);
 
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[12px] text-ink-muted">{copy.browserLabel}</span>
+        <span className="text-ui-meta text-ink-muted">{copy.browserLabel}</span>
         <SegmentedControl<BrowserControlBrowser>
           ariaLabel={copy.browserLabel}
           size="sm"
@@ -388,7 +381,7 @@ function SetupGuide({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => void openExtensionsPage(browser)}
+            onClick={() => void open.openExtensionsPage(browser)}
             leadingIcon={<ArrowSquareOut size={13} weight="thin" />}
           >
             {copy.openExtensions}
@@ -397,13 +390,13 @@ function SetupGuide({
       </SetupStep>
 
       <SetupStep index={2} title={copy.stepDrag}>
-        {layoutReady ? (
+        {view.layoutReady ? (
           <>
             <StepHint>
               {copy.stepDragHintPrefix}
               <strong className="font-medium text-ink">
                 {copy.stepDragWholePrefix}
-                <code className="rounded-[3px] bg-app px-1 py-0.5 font-mono text-[11px] text-ink">
+                <code className="rounded-[3px] bg-app px-1 py-0.5 font-mono text-ui-label text-ink">
                   {copy.folderName}
                 </code>
                 {copy.stepDragWholeSuffix}
@@ -414,7 +407,7 @@ function SetupGuide({
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => void showFolder()}
+                onClick={() => void open.showFolder()}
                 leadingIcon={<FolderOpen size={13} weight="thin" />}
               >
                 {copy.showFolder}
@@ -422,24 +415,24 @@ function SetupGuide({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => void copyPath()}
+                onClick={() => void open.copyPath()}
                 leadingIcon={<ClipboardText size={13} weight="thin" />}
               >
-                {copied ? copy.copied : copy.copyPath}
+                {open.copied ? copy.copied : copy.copyPath}
               </Button>
             </div>
           </>
         ) : (
           <div className="mt-2">
-            {layoutError ? (
-              <div className="rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2 text-[12px] leading-[1.5] text-error">
+            {view.layoutError ? (
+              <div className="rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2 text-ui-meta leading-notice text-error">
                 <div>{copy.stepPrepareFailed}</div>
-                <div className="mt-1 select-text break-all font-mono text-[11px] leading-[1.5] opacity-80">
-                  {layoutError}
+                <div className="mt-1 select-text break-all font-mono text-ui-label leading-notice opacity-80">
+                  {view.layoutError}
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-[12px] leading-[1.5] text-ink-muted">
+              <div className="flex items-center gap-2 text-ui-meta leading-notice text-ink-muted">
                 <CircleNotch size={13} weight="thin" className="spin" />
                 <span>{copy.preparingPath}</span>
               </div>
@@ -448,10 +441,10 @@ function SetupGuide({
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={busy}
-                onClick={() => void retryPrepare()}
+                disabled={view.busy}
+                onClick={() => void view.ensureLayout()}
                 leadingIcon={
-                  busy ? (
+                  view.busy ? (
                     <CircleNotch size={13} weight="thin" className="spin" />
                   ) : (
                     <ArrowsClockwise size={13} weight="thin" />
@@ -465,27 +458,44 @@ function SetupGuide({
         )}
       </SetupStep>
 
-      {includeTest && layoutReady && (
+      {includeTest && view.layoutReady && (
         <SetupStep index={3} title={copy.stepTest}>
           <StepHint>{copy.stepTestHint}</StepHint>
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => void openTestPage(browser)}
+              onClick={() => void open.openTestPage(browser)}
               leadingIcon={<ArrowSquareOut size={13} weight="thin" />}
             >
               {copy.openTestPage}
+            </Button>
+            <Button
+              // The current actionable next step of the whole setup —
+              // the only primary on this tab while not yet connected.
+              variant="primary"
+              size="sm"
+              disabled={view.busy}
+              onClick={() => void view.probe("manual")}
+              leadingIcon={
+                view.busy ? (
+                  <CircleNotch size={13} weight="thin" className="spin" />
+                ) : (
+                  <CursorClick size={13} weight="thin" />
+                )
+              }
+            >
+              {view.busy ? copy.testing : copy.test}
             </Button>
           </div>
           {showTestStatus && (
             <div className="mt-2.5">
               <ConnectionStatusCard
-                busy={busy}
-                connected={bridgeReady}
-                status={status}
-                statusDetail={statusDetail}
-                statusMessage={statusMessage}
+                busy={view.busy}
+                connected={view.bridgeReady}
+                status={view.status}
+                statusDetail={view.statusDetail}
+                statusMessage={view.statusMessage}
                 embedded
               />
             </div>
@@ -493,18 +503,18 @@ function SetupGuide({
         </SetupStep>
       )}
 
-      {openError && (
-        <div className="rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2 text-[12px] leading-[1.5] text-error">
-          {openError}
+      {open.openError && (
+        <div className="rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2 text-ui-meta leading-notice text-error">
+          {open.openError}
         </div>
       )}
 
-      {layoutReady && (
+      {view.layoutReady && (
         <div className="border-t border-line-subtle pt-2.5">
           <button
             type="button"
             onClick={() => setShowTrouble((show) => !show)}
-            className="flex items-center gap-1 text-[12px] text-ink-muted transition-colors hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            className="flex items-center gap-1 text-ui-meta text-ink-muted transition-colors hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
           >
             <CaretRight
               size={11}
@@ -517,7 +527,7 @@ function SetupGuide({
             {showTrouble ? copy.troubleHide : copy.troubleShow}
           </button>
           {showTrouble && (
-            <div className="mt-2 grid gap-2 text-[12px] leading-[1.5] text-ink-muted">
+            <div className="mt-2 grid gap-2 text-ui-meta leading-notice text-ink-muted">
               <div>
                 {copy.troubleDragFailsPrefix}
                 <StrongTerm>{copy.loadUnpacked}</StrongTerm>
@@ -527,9 +537,9 @@ function SetupGuide({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="-ml-2 h-6 px-2 text-[12px]"
+                  className="-ml-2 h-6 px-2 text-ui-meta"
                   title={copy.openGuideTitle}
-                  onClick={() => void openGuide()}
+                  onClick={() => void open.openGuide()}
                   trailingIcon={<ArrowSquareOut size={12} weight="thin" />}
                 >
                   {copy.openGuide}
@@ -545,7 +555,7 @@ function SetupGuide({
 
 function StepHint({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-1 text-[12px] leading-[1.5] text-ink-muted">
+    <div className="mt-1 text-ui-meta leading-notice text-ink-muted">
       {children}
     </div>
   );
@@ -576,7 +586,7 @@ function ConnectionStatusCard({
   return (
     <div
       className={cn(
-        "text-[12px] leading-[1.5]",
+        "text-ui-meta leading-notice",
         embedded
           ? connected
             ? "text-ink-muted"
@@ -610,7 +620,7 @@ function ConnectionStatusCard({
         <span className="min-w-0">
           <span className="block">{statusMessage}</span>
           {statusDetail && (
-            <span className="mt-0.5 block text-[11.5px] leading-[1.45] text-ink-soft">
+            <span className="mt-0.5 block text-ui-tertiary leading-dense text-ink-soft">
               {statusDetail}
             </span>
           )}
@@ -632,11 +642,11 @@ function SetupStep({
 }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-line bg-app font-mono text-[11px] font-medium tabular-nums text-ink-soft">
+      <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-line bg-app font-mono text-ui-label font-medium tabular-nums text-ink-soft">
         {index}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] font-medium text-ink">{title}</div>
+        <div className="text-ui-secondary font-medium text-ink">{title}</div>
         {children}
       </div>
     </div>

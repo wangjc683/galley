@@ -95,12 +95,14 @@
   英文标签。
 
 ```text
-Runtime      / 运行环境
-Models       / 模型
-Approval     / 审批
-Agent        / 智能体接入
-Shortcuts    / 快捷键
-About        / 关于
+Runtime          / 运行环境
+Models           / 模型
+Approval         / 审批
+Agent            / 智能体接入
+Channels         / 聊天软件
+Browser Control  / 浏览器控制   （仅 managed 运行时显示）
+Shortcuts        / 快捷键
+About            / 关于
 ```
 
 视觉上不要真的使用斜杠；主标签和辅助标签上下两行显示。辅助标签
@@ -205,6 +207,36 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
   - 四个确认弹窗（微信断开、飞书断开、飞书解绑、重启）共用一个
     shell（`ConfirmActionDialog`），取消键默认聚焦，回车不会误触
     执行。
+
+#### Browser Control
+
+从独立 setup dialog 迁移而来的 Tab（仅 managed 运行时显示，与 Channels 同
+一 gating）。TopBar indicator 和 attention banner 都深链到这里；配置只有
+这一个家（见 [layout-and-chrome](./layout-and-chrome.md) §4.1 Browser
+Control Indicator）。
+
+- **结构按验证状态二分**：未验证（`unknown` / `error`）显示设置指引卡；
+  验证过（`connected` / `connected_no_tabs` / `offline`）显示状态卡 +
+  卡下维护行，指引卡降级为「重新安装或修复插件」toggle 展开的修复卡。
+- **设置指引卡**：浏览器选择（Chrome / Edge SegmentedControl）+ 三步编号
+  步骤（打开扩展页并开开发者模式 → 定位 / 拖入 `tmwd_cdp_bridge` 文件夹
+  → 测试连接）。步骤 3 内并排「打开测试页」（secondary）和「测试连接」
+  （primary）+ 内嵌状态行。准备失败停留在步骤 2 并给重试；「遇到问题？」
+  折叠区放加载已解压扩展的兜底说明和官方图文指南 ghost link。
+- **动作锚定规则（本 Tab 的核心决策）**：推进状态的动作住在它作用的对象
+  里——「测试连接」在步骤 3 内，「打开测试页 ×2 + 重新检测」在等待网页的
+  状态卡内。卡下的裸按钮行只放维护动作（重新测试 ghost / 修复 toggle
+  ghost / 右侧 demo accent-secondary）。dialog 时代的底部 action bar 语
+  义不进 Settings 页：动作漂在卡外无锚定即是回归。
+- **primary = 当前下一步**：未连接时全 Tab 唯一 primary 是「测试连接 /
+  重新检测」；已连接后无 primary，一切收敛为安静维护。
+- **浏览器选择有意存在两种语法**：状态卡里直给「打开 Chrome / Edge 测试
+  页」两个按钮（快速路径，用户可能没进过指引、无浏览器选择上下文）；指
+  引卡里用 SegmentedControl 驱动各步骤（引导路径）。不要强行统一。
+- 已连接的状态卡降权为 `line-subtle` 安静信息行（✓ + `已连接浏览器` +
+  `检测到 N 个可操作标签页`）；demo 按钮（`试用浏览器控制`）保留：连接
+  测试本身不走模型，demo 由 managed GA 通过现有 `web_execute_js` /
+  `tabs.create` 协议主动打开搜索页，不写回连接状态。
 
 #### Approval
 

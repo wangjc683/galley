@@ -189,16 +189,6 @@ export const zhCopy = {
     action: "连接浏览器控制",
   },
   browserControl: {
-    title: "连接浏览器控制",
-    connectedTitle: "浏览器控制已可用",
-    connectedNoTabsTitle: "浏览器控制已连接",
-    offlineTitle: "浏览器未打开",
-    connectedDescription: "Galley 已能读取和操作浏览器，并沿用你的登录态。",
-    connectedNoTabsDescription: "插件已连接，等待网页可用。",
-    offlineDescription: "已测试通过。打开 Chrome / Edge 浏览器后即可使用。",
-    description:
-      "一次性设置，约一分钟。装好后 Galley 能读取和操作网页，并沿用你的登录态。",
-    close: "关闭浏览器控制设置",
     folderName: "tmwd_cdp_bridge",
     developerMode: "开发者模式",
     loadUnpacked: "加载已解压的扩展程序",
@@ -220,7 +210,7 @@ export const zhCopy = {
     stepPrepareFailed: "Galley 未能准备插件文件夹。请重试，或重新安装 Galley。",
     stepTest: "测试连接",
     stepTestHint:
-      "在该浏览器打开任意网页（或用下面的测试页），再点下方「测试连接」。",
+      "在该浏览器打开任意网页（或点「打开测试页」），再点「测试连接」。",
     openTestPage: "打开测试页",
     troubleShow: "遇到问题？",
     troubleHide: "收起",

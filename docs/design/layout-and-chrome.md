@@ -95,10 +95,15 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 - 视觉：使用统一 TopBar 状态 badge；`not_connected` 用 `warning`，`unknown` 用 `neutral`，`error` 用 `error`。
 - `connected` / `connected_no_tabs` / `offline` 收敛为安静的 icon-only button：`PuzzlePiece` thin icon，tooltip 展示具体状态，无状态点、无文字、无 warning 底色。
 - 未连接时不允许隐藏、不允许 dismiss。禁止闪烁、抖动、红色警报或反复弹窗抢焦点。
-- 每次启动如果未连接，可以自动打开一次 Browser Control setup dialog；用户关闭后本次启动不再自动弹，但 TopBar 继续强提醒。
-- 点击 indicator 打开 Browser Control setup dialog，不跳 Settings。
-- setup dialog 使用 Radix Dialog，信息量保持短：未连接时先展示准备 `tmwd_cdp_bridge` 文件夹和配置；只有准备成功后，才展示打开 Chrome / Edge 扩展页、把 `tmwd_cdp_bridge` 文件夹拖到扩展页（拖拽无效时再点"加载已解压的扩展程序"选择该文件夹）、测试连接。若准备失败，停留在第一步并提供重试；第 3 步可放一个轻量 `图文指南` ghost link 指向官方教程的 Chrome 安装步骤锚点，作为带图救急入口，不进入底部 action row，避免先看到原生 GA 的前置条件和 `GenericAgent\assets` 路径；已连接时，连接证据降权为安静信息行（`已连接浏览器` + `检测到 N 个可操作标签页`），维护动作收敛到底部左侧（`重新测试`、`重新加载插件`），右侧保留 demo。
-- 成功后提供轻量 demo 按钮 `试用浏览器控制`，作为新手理解真实浏览器控制的入口；连接测试本身不走模型，demo 由 managed GA 通过现有 `web_execute_js` / `tabs.create` 协议主动打开搜索页，不依赖 `window.open`，也不写回 Browser Control 连接状态。
+- **配置只有一个家：Settings → Browser Control。** 点击 indicator 深链打开
+  该 Tab。早期的独立 setup dialog（含「每次启动自动弹一次」的规则）已在
+  Tab 迁移中退役——不再有任何自动弹窗。
+- 未连接（`not_connected` / `error`）且处于 managed 运行时，主内容区顶部
+  显示 attention banner（warning 底色 + `PuzzlePiece` + `接入浏览器控制`
+  warning 按钮），点击同样深链 Settings Tab。banner 不可 dismiss，连接成
+  功后消失——它接替了旧自动弹窗的「强提醒」职责，但不抢焦点。
+- Tab 内容（设置指引 / 状态卡 / 维护动作 / demo）的规范在
+  [overlays-and-settings](./overlays-and-settings.md) §9 Browser Control。
 
 ### 4.2 Sidebar
 
