@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import { CaretRight, Check, Monitor, Moon, Sun } from "@phosphor-icons/react";
 
+import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -98,27 +99,17 @@ export function ThemePreferenceMenu({
   // user can flip themes and compare live. The "system" sub-state
   // ("当前浅色") moves to a caption line under the segments; the
   // sidebar variant below keeps the menu form, where list rows
-  // naturally open side menus and sublabels have room.
+  // naturally open side menus and sublabels have room. No persistent
+  // tint for non-system preferences — a settled preference is standing
+  // noise, not information; state lives in the tooltip and popover.
   if (variant === "topbar") {
     return (
       <Popover.Root>
         <TooltipLabel text={triggerLabel} side="bottom">
           <Popover.Trigger asChild>
-            <button
-              type="button"
-              aria-label={triggerLabel}
-              className={cn(
-                "relative flex size-7 items-center justify-center rounded-md border border-transparent text-ink-muted",
-                "transition-[background-color,border-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-                "hover:border-line hover:bg-hover hover:text-ink active:translate-y-[0.5px] active:duration-[45ms]",
-                "data-[state=open]:translate-y-px data-[state=open]:border-line data-[state=open]:bg-hover data-[state=open]:text-ink data-[state=open]:shadow-[var(--shadow-control-press)]",
-                "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-                preference !== "system" &&
-                  "border-brand/30 bg-brand/[var(--opacity-subtle)] text-brand-strong hover:bg-brand/[var(--opacity-soft)] hover:text-brand-strong data-[state=open]:border-brand/40 data-[state=open]:bg-brand/[var(--opacity-soft)] data-[state=open]:text-brand-strong",
-              )}
-            >
+            <TopBarIconButton aria-label={triggerLabel}>
               <ActualIcon size={16} weight="thin" />
-            </button>
+            </TopBarIconButton>
           </Popover.Trigger>
         </TooltipLabel>
         <Popover.Portal>

@@ -45,13 +45,15 @@
 - **Session title menu**：有 active session 时 title + `CaretDown` 是一个按钮，打开 session-scoped 菜单（Rename / Reinject Tools / Desktop Pet）。空状态渲染 italic muted "新对话"，不可点。Rename 进入 inline edit（Enter 提交 / Esc 取消）。
 - 右：两个清晰 group，最后才是 Windows window controls（不属于工具簇）：
   - **状态簇**（aria label：`运行状态`）：YOLO（条件渲染）→ Goal（条件渲染）→ Browser Control → Channels。
-  - **工具簇**（aria label：`视图与设置`）：conversation width toggle（compact / wide）→ Appearance icon-only menu → Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。
+  - **工具簇**（aria label：`视图与设置`）：conversation width toggle（compact / wide）→ 对话字号（`TextAa`，popover + 分段）→ 外观主题（popover + 分段）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。四个按钮共用 `TopBarIconButton`；宽度箭头图标为 14px（其余 16px）是刻意的视觉补偿——横向箭头光学上偏大，缩一档四个按钮才等重。
   - 两组之间用 1px 竖向分隔线；没有任何状态项时不显示状态簇和分隔线。
 - Windows window controls（min / max-restore / close）贴 MainHeader 最右端 = 窗口右上；macOS 不渲染（由左上 overlay traffic light 接管窗口控制）。
 
 **两 header 共通视觉规约**
 - 状态控件统一视觉语法：文字 badge 统一 28px 高度、6px 圆角、12px 字号、border / hover / press 节奏；icon-only 状态统一 28px 方形按钮、Radix tooltip，且不显示浏览器默认 focus outline。`warning` / `error` / `success` / `neutral` 只表达状态，不给某个功能单独造身份视觉。
 - Topbar 内会打开 menu / popover 的 trigger，打开态需要保留轻微下沉 + press shadow，帮助用户把浮层和来源按钮对应起来；YOLO 因为是风险态，可额外升为实心 warning，其它常规工具只做温和 opened 态。
+- **外观类偏好控件的标准形态**（2026-07-05，字号 / 主题已落地）：28px 图标按钮（`TopBarIconButton`）→ 小 popover → 共享 `SegmentedControl` 三选一。用 Popover 而非 DropdownMenu 是刻意的：选后**不自动关闭**，用户可来回切档对比即时效果。按钮面**不用 brand tint 表达「偏离默认」**——已定型的偏好不是可行动信息，常驻高亮是安静工作台的噪音；当前状态放 tooltip 和 popover 内（如「跟随系统」的解析结果做分段下方 caption）。新增外观控件时沿用此形态，不再发明新样式。
+- `SegmentedControl` 选中态（全局，`ui/segmented-control.tsx`）：`bg-hover` 轨道上的白色浮起块 + `text-brand-strong` medium 文字。轨道不用 `bg-surface`——它和 `bg-elevated` 在浅色下几乎同白，放进 elevated 父容器（popover）时选中态会不可读。
 - icon-only controls 必须使用项目统一的 Radix tooltip（`TooltipLabel` / `IconButton` tooltip），不使用原生 `title` 作为 hover 提示（延迟 / 样式 / 出现时机不可控，会让相邻按钮反馈节奏不一致）；可访问名称用 `aria-label` 保留。
 - **不放 Command Palette 按钮**：Sidebar 已有 Search quick action，`⌘K` 全局可用；重复 click affordance 只增加 chrome 噪音。
 - **不放 Sidebar toggle**：Sidebar 当前不可折叠，只可拖拽调整宽度。

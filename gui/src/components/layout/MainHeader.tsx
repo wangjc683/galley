@@ -23,7 +23,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ThemePreferenceMenu } from "@/components/theme/ThemePreferenceMenu";
 import { TooltipLabel } from "@/components/ui/tooltip";
@@ -42,6 +42,7 @@ import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import type { ImSupervisorState } from "@/lib/im-supervisor";
 import type { GoalBrief } from "@/types/goal";
 
+import { TopBarIconButton } from "./TopBarIconButton";
 import { WindowControls } from "./WindowControls";
 
 export interface MainHeaderProps {
@@ -128,19 +129,8 @@ const TOPBAR_CONTROL_MOTION = cn(
 const TOPBAR_POPOVER_OPEN_STATE =
   "data-[state=open]:translate-y-px data-[state=open]:shadow-[var(--shadow-control-press)]";
 
-const TOPBAR_ICON_POPOVER_OPEN_STATE = cn(
-  TOPBAR_POPOVER_OPEN_STATE,
-  "data-[state=open]:border-line data-[state=open]:bg-hover data-[state=open]:text-ink",
-);
-
 const TOPBAR_STATUS_BADGE_BASE = cn(
   "inline-flex h-7 items-center whitespace-nowrap rounded-md border px-2.5 text-[12px] font-medium",
-  "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-  TOPBAR_CONTROL_MOTION,
-);
-
-const TOPBAR_STATUS_ICON_BASE = cn(
-  "relative flex size-7 items-center justify-center rounded-md border",
   "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
   TOPBAR_CONTROL_MOTION,
 );
@@ -158,26 +148,12 @@ const TOPBAR_STATUS_BADGE_TONE: Record<TopBarStatusTone, string> = {
     "border-warning/30 bg-warning/[var(--opacity-soft)] text-warning hover:bg-warning/[var(--opacity-medium)]",
 };
 
-const TOPBAR_STATUS_ICON_TONE: Record<"neutral" | "success", string> = {
-  neutral:
-    "border-transparent text-ink-muted hover:border-line hover:bg-hover hover:text-ink",
-  success:
-    "border-transparent text-ink-muted hover:border-line hover:bg-hover hover:text-ink",
-};
-
 function topBarStatusBadgeClass(tone: TopBarStatusTone, className?: string) {
   return cn(
     TOPBAR_STATUS_BADGE_BASE,
     TOPBAR_STATUS_BADGE_TONE[tone],
     className,
   );
-}
-
-function topBarStatusIconClass(
-  tone: keyof typeof TOPBAR_STATUS_ICON_TONE = "neutral",
-  className?: string,
-) {
-  return cn(TOPBAR_STATUS_ICON_BASE, TOPBAR_STATUS_ICON_TONE[tone], className);
 }
 
 /**
@@ -485,13 +461,11 @@ function TopBarUtilityCluster({
           variant="topbar"
         />
       )}
-      <IconButton
-        title={copy.settingsShortcut(formatShortcutReadable("Mod+,"))}
-        onClick={onOpenSettings}
-        ariaLabel={copy.openSettings}
-      >
-        <Gear size={16} weight="thin" />
-      </IconButton>
+      <TooltipLabel text={copy.settingsShortcut(formatShortcutReadable("Mod+,"))}>
+        <TopBarIconButton onClick={onOpenSettings} aria-label={copy.openSettings}>
+          <Gear size={16} weight="thin" />
+        </TopBarIconButton>
+      </TooltipLabel>
     </div>
   );
 }
@@ -779,14 +753,9 @@ function ChannelsIndicator({
   if (status === "setup" || status === "connected") {
     return (
       <TooltipLabel text={title}>
-        <button
-          type="button"
-          onClick={onOpen}
-          aria-label={title}
-          className={topBarStatusIconClass()}
-        >
+        <TopBarIconButton onClick={onOpen} aria-label={title}>
           <ChatCircleText size={16} weight="thin" />
-        </button>
+        </TopBarIconButton>
       </TooltipLabel>
     );
   }
@@ -861,14 +830,9 @@ function BrowserControlIndicator({
   if (bridgeReady || offline) {
     return (
       <TooltipLabel text={title}>
-        <button
-          type="button"
-          onClick={onOpen}
-          className={topBarStatusIconClass()}
-          aria-label={title}
-        >
+        <TopBarIconButton onClick={onOpen} aria-label={title}>
           <PuzzlePiece size={16} weight="thin" />
-        </button>
+        </TopBarIconButton>
       </TooltipLabel>
     );
   }
@@ -1261,11 +1225,12 @@ function SessionTitleEditor({
 /**
  * Conversation font-size control.
  *
- * Trigger: fixed-size TextAa icon button. Current tier is conveyed by
- * the tooltip and, for non-default tiers, a brand tint — the same
- * "non-default state" language as the width toggle and theme button.
- * (Earlier design scaled a custom "A" glyph with the tier; a ~2px
- * difference is unreadable as state and made the icon jump on change.)
+ * Trigger: fixed-size TextAa icon button; current tier lives in the
+ * tooltip and the popover, never on the button face. (Earlier designs
+ * scaled a custom "A" glyph with the tier — a ~2px difference is
+ * unreadable as state and made the icon jump on change — then tried a
+ * persistent brand tint for non-default tiers, which turned a settled
+ * preference into standing chrome noise.)
  *
  * Panel: a Popover (not DropdownMenu) on purpose — it stays open after
  * a pick so the user can flip through tiers and watch the conversation
@@ -1286,21 +1251,9 @@ function ConversationFontSizeMenu({
     <Popover.Root>
       <TooltipLabel text={selectedLabel}>
         <Popover.Trigger asChild>
-          <button
-            type="button"
-            aria-label={selectedLabel}
-            className={cn(
-              "inline-flex size-7 items-center justify-center rounded-md border",
-              "transition-[background-color,border-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-[0.5px] active:duration-[45ms]",
-              "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-              "border-transparent text-ink-soft hover:bg-hover hover:text-ink",
-              TOPBAR_ICON_POPOVER_OPEN_STATE,
-              value !== "standard" &&
-                "border-brand/30 bg-brand/[var(--opacity-subtle)] text-brand-strong hover:bg-brand/[var(--opacity-soft)] hover:text-brand-strong data-[state=open]:border-brand/40 data-[state=open]:bg-brand/[var(--opacity-soft)] data-[state=open]:text-brand-strong",
-            )}
-          >
+          <TopBarIconButton aria-label={selectedLabel}>
             <TextAa size={16} weight="thin" />
-          </button>
+          </TopBarIconButton>
         </Popover.Trigger>
       </TooltipLabel>
       <Popover.Portal>
@@ -1343,8 +1296,9 @@ function fontSizeLabel(
  * Conversation width toggle.
  *
  * Icon direction expresses the action (expand while compact, collapse
- * while wide). Tooltip and aria-label carry the text so this stays a
- * light topbar tool instead of a status pill.
+ * while wide) — that flip is the only state on the button face; the
+ * wide mode gets no persistent tint. Tooltip and aria-label carry the
+ * text so this stays a light topbar tool instead of a status pill.
  */
 function WidthToggleButton({
   mode,
@@ -1360,25 +1314,20 @@ function WidthToggleButton({
     : copy.topbar.wideWidthTitle;
   return (
     <TooltipLabel text={tooltip}>
-      <button
-        type="button"
+      <TopBarIconButton
         onClick={onToggle}
         aria-label={isWide ? copy.topbar.compactWidth : copy.topbar.wideWidth}
-        className={cn(
-          "inline-flex size-7 items-center justify-center rounded-md",
-          "transition-[background-color,border-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-[0.5px] active:duration-[45ms]",
-          "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-          isWide
-            ? "border border-brand/30 bg-brand/[var(--opacity-subtle)] text-brand-strong hover:bg-brand/[var(--opacity-soft)]"
-            : "border border-transparent text-ink-soft hover:bg-hover hover:text-ink",
-        )}
       >
+        {/* 14px, not the cluster's usual 16px: the wide horizontal
+            arrows read optically larger than the compact TextAa /
+            sun / gear glyphs; the smaller box makes the four utility
+            buttons weigh the same to the eye. */}
         {isWide ? (
           <ArrowsInLineHorizontal size={14} weight="thin" />
         ) : (
           <ArrowsOutLineHorizontal size={14} weight="thin" />
         )}
-      </button>
+      </TopBarIconButton>
     </TooltipLabel>
   );
 }
