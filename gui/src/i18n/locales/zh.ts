@@ -643,6 +643,7 @@ export const zhCopy = {
       projectAllowlist: (count: number) => `项目白名单 (${count})`,
       globalAllowlist: (count: number) => `全局白名单 (${count})`,
       noProjectRules: "没有项目级白名单",
+      removeRule: "移除规则",
       noGlobalRules: "没有全局白名单",
       allowlistHint: "在审批弹窗里加入白名单后，规则会显示在这里。",
       turnOnYoloTitle: "打开 YOLO 模式？",

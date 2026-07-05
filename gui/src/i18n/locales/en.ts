@@ -670,6 +670,7 @@ export const enCopy: AppCopy = {
       projectAllowlist: (count) => `Project allowlist (${count})`,
       globalAllowlist: (count) => `Global allowlist (${count})`,
       noProjectRules: "No project allowlist rules",
+      removeRule: "Remove rule",
       noGlobalRules: "No global allowlist rules",
       allowlistHint:
         "Rules appear here after you add them from an approval prompt.",

@@ -79,7 +79,7 @@ export function SettingsAbout({
         <SettingsSectionLabel>
           {copy.settings.about.version}
         </SettingsSectionLabel>
-        <div className="mt-2 text-[12.5px]">
+        <div className="mt-2 text-ui-secondary">
           <SettingsUpdateControl
             hasRunningSessions={hasRunningSessions}
             leading={
@@ -93,7 +93,7 @@ export function SettingsAbout({
         <SettingsSectionLabel>
           {copy.settings.about.typesetting}
         </SettingsSectionLabel>
-        <p className="m-0 mt-2 text-[12.5px] leading-secondary text-ink-soft">
+        <p className="m-0 mt-2 text-ui-secondary leading-secondary text-ink-soft">
           {copy.settings.about.typesettingDetail}
         </p>
       </div>
@@ -128,7 +128,7 @@ export function SettingsAbout({
                   )
             }
           />
-          <div className="pt-3 text-[11.5px] text-ink-muted">
+          <div className="pt-3 text-ui-tertiary text-ink-muted">
             {copy.settings.about.alsoBy}
           </div>
           <ExternalLink
@@ -144,7 +144,7 @@ export function SettingsAbout({
         </div>
       </div>
 
-      <div className="border-t border-line pt-4 text-[12px] text-ink-muted">
+      <div className="border-t border-line pt-4 text-ui-meta text-ink-muted">
         {copy.settings.about.madeBy}
       </div>
 
@@ -166,7 +166,7 @@ export function SettingsAbout({
               {colophonEpigraph.de}
             </p>
           </blockquote>
-          <figcaption className="mt-1.5 text-[11.5px] text-ink-muted">
+          <figcaption className="mt-1.5 text-ui-tertiary text-ink-muted">
             {copy.settings.about.epigraphSource}
           </figcaption>
         </figure>
@@ -189,7 +189,7 @@ function ExternalLink({
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="group grid min-w-0 grid-cols-[120px_1fr_18px] items-baseline gap-3 rounded-sm px-1 py-1 text-[13px] transition-colors hover:bg-hover"
+      className="group grid min-w-0 grid-cols-[120px_1fr_18px] items-baseline gap-3 rounded-sm px-1 py-1 text-ui-compact transition-colors hover:bg-hover"
     >
       <span className="font-medium text-ink">{label}</span>
       <span className="min-w-0 text-ink-muted group-hover:text-ink-soft">

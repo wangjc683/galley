@@ -99,7 +99,7 @@ export function SettingsApproval({
           container with a -mb-2 negative margin and ended up
           overlapping the required-tools header. */}
       {yoloMode && (
-        <div className="text-[12px] italic text-ink-muted">
+        <div className="text-ui-meta italic text-ink-muted">
           {approvalCopy.yoloRulesPaused}
         </div>
       )}
@@ -126,10 +126,10 @@ export function SettingsApproval({
                   onCheckedChange={(c) => toggleRequired(tool, c)}
                   className="flex items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-hover"
                 >
-                  <span className="font-mono text-[12.5px] text-ink">
+                  <span className="font-mono text-ui-secondary text-ink">
                     {tool}
                   </span>
-                  <span className="text-[11px] text-ink-muted">
+                  <span className="text-ui-label text-ink-muted">
                     {
                       (approvalCopy.toolDescriptions as Record<string, string>)[
                         tool
@@ -166,7 +166,7 @@ export function SettingsApproval({
           />
         </div>
 
-        <div className="text-[12px] text-ink-muted">
+        <div className="text-ui-meta text-ink-muted">
           {approvalCopy.allowlistHint}
         </div>
       </div>
@@ -222,7 +222,7 @@ function YoloSection({
                 </span>
               </IconTooltip>
             </div>
-            <div className="mt-1 text-[12px] text-ink-muted">
+            <div className="mt-1 text-ui-meta text-ink-muted">
               {copy.yoloDescription}
             </div>
           </div>
@@ -235,7 +235,7 @@ function YoloSection({
         />
       </div>
       {enabled && (
-        <div className="mt-3 flex items-center justify-between border-t border-warning/20 pt-3 text-[12px]">
+        <div className="mt-3 flex items-center justify-between border-t border-warning/20 pt-3 text-ui-meta">
           <span className="text-warning">{copy.yoloEnabledTopbar}</span>
           <Button variant="ghost" size="sm" onClick={() => onToggle(false)}>
             {copy.turnOffNow}
@@ -280,9 +280,9 @@ function YoloActivationModal({
             </Dialog.Title>
           </div>
 
-          <div className="mt-4 space-y-3 text-[13px] text-ink-soft">
+          <div className="mt-4 space-y-3 text-ui-compact text-ink-soft">
             <p>{approvalCopy.yoloModalIntro}</p>
-            <ul className="space-y-1 pl-1 font-mono text-[12.5px] text-ink">
+            <ul className="space-y-1 pl-1 font-mono text-ui-secondary text-ink">
               <li>· {approvalCopy.filePatch}</li>
               <li>· {approvalCopy.fileWrite}</li>
               <li>· {approvalCopy.codeRun}</li>
@@ -298,7 +298,7 @@ function YoloActivationModal({
               {": "}
               {approvalCopy.notForText}
             </p>
-            <p className="text-[12px] text-ink-muted">
+            <p className="text-ui-meta text-ink-muted">
               {approvalCopy.yoloIndicatorNote}
             </p>
           </div>
@@ -340,9 +340,10 @@ function RuleList({
   empty: string;
   onRemove: (tool: string) => void;
 }) {
+  const copy = useCopy().settings.approval;
   if (rules.length === 0) {
     return (
-      <div className="mt-2 rounded-callout border border-dashed border-line px-3 py-3 text-[12.5px] italic text-ink-muted">
+      <div className="mt-2 rounded-callout border border-dashed border-line px-3 py-3 text-ui-secondary italic text-ink-muted">
         {empty}
       </div>
     );
@@ -352,13 +353,13 @@ function RuleList({
       {rules.map((tool) => (
         <div
           key={tool}
-          className="flex items-center justify-between px-3 py-2.5 text-[12.5px]"
+          className="flex items-center justify-between px-3 py-2.5 text-ui-secondary"
         >
           <span className="font-mono text-ink">{tool}</span>
           <IconButton
             onClick={() => onRemove(tool)}
-            ariaLabel={`Remove ${tool}`}
-            title="Remove rule"
+            ariaLabel={`${copy.removeRule}: ${tool}`}
+            title={copy.removeRule}
             variant="danger"
             size="xs"
           >

@@ -148,7 +148,7 @@ function SettingsTabButton({
       className={cn(
         "group relative flex w-full items-center gap-3 px-4 text-left transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40",
-        subLabel ? "h-[50px]" : "h-8 text-[13px]",
+        subLabel ? "h-[50px]" : "h-8 text-ui-compact",
         active ? "bg-hover" : "hover:bg-hover",
       )}
     >

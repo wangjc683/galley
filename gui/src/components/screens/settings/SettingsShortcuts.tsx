@@ -104,9 +104,9 @@ export function SettingsShortcuts() {
               >
                 <KbdCombo combo={r.combo} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] text-ink">{r.action}</div>
+                  <div className="text-ui-compact text-ink">{r.action}</div>
                   {r.note && (
-                    <div className="mt-0.5 text-[11px] italic text-ink-muted">
+                    <div className="mt-0.5 text-ui-label italic text-ink-muted">
                       {r.note}
                     </div>
                   )}
@@ -132,14 +132,14 @@ function KbdCombo({ combo }: { combo: string }) {
       {chords.map((chord, chordIndex) => (
         <span key={chordIndex} className="inline-flex items-center gap-1">
           {chordIndex > 0 && (
-            <span className="px-0.5 text-[11px] text-ink-muted">/</span>
+            <span className="px-0.5 text-ui-label text-ink-muted">/</span>
           )}
           {shortcutParts(chord).map((part, partIndex) => (
             <span key={partIndex} className="inline-flex items-center gap-1">
               {partIndex > 0 && (
-                <span className="text-[10.5px] text-ink-muted">+</span>
+                <span className="text-ui-micro text-ink-muted">+</span>
               )}
-              <kbd className="inline-flex min-w-[28px] items-center justify-center rounded-sm border border-line bg-app px-1.5 py-0.5 font-mono text-[11px] text-ink">
+              <kbd className="inline-flex min-w-[28px] items-center justify-center rounded-sm border border-line bg-app px-1.5 py-0.5 font-mono text-ui-label text-ink">
                 {part}
               </kbd>
             </span>

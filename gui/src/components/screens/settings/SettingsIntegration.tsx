@@ -12,10 +12,12 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 
 import {
+  SettingsFieldLabel,
   SettingsPanelHeader,
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
 import { Button } from "@/components/ui/button";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useCopy } from "@/lib/i18n";
 import { isMac, isWindows } from "@/lib/platform";
 
@@ -255,14 +257,14 @@ export function SettingsIntegration() {
           external agent they want to empower as Supervisor. */}
       <section>
         <SettingsSectionLabel>{agentCopy.agentSop}</SettingsSectionLabel>
-        <p className="mt-2 max-w-[58ch] text-[12.5px] leading-[1.55] text-ink-soft">
+        <p className="mt-2 max-w-[58ch] text-ui-secondary leading-secondary text-ink-soft">
           {agentCopy.sopDescription}
         </p>
         <ul className="mt-3 space-y-1.5">
           {agentCopy.sopCapabilities.map((capability) => (
             <li
               key={capability}
-              className="flex items-start gap-2 text-[12.5px] leading-[1.45] text-ink"
+              className="flex items-start gap-2 text-ui-secondary leading-dense text-ink"
             >
               <Check
                 size={13}
@@ -277,7 +279,7 @@ export function SettingsIntegration() {
           <Button
             type="button"
             variant="primary"
-            size="md"
+            size="sm"
             disabled={sopState.kind === "pending" || !sopBody}
             onClick={() => void copySop()}
           >
@@ -311,7 +313,7 @@ export function SettingsIntegration() {
               className="group h-auto w-full items-start justify-start gap-1.5 rounded-none border-l border-line px-3 py-1 text-left hover:border-brand/40 hover:bg-hover/50 focus-visible:border-brand/40 focus-visible:bg-hover/50"
               onClick={() => void copyExample(example, index)}
             >
-              <span className="min-w-0 flex-1 whitespace-normal text-[12.5px] leading-[1.55] text-ink">
+              <span className="min-w-0 flex-1 whitespace-normal text-ui-secondary leading-secondary text-ink">
                 {example}
               </span>
               <span
@@ -339,7 +341,7 @@ export function SettingsIntegration() {
           aria-expanded={advancedOpen}
           onClick={() => setAdvancedOpen((current) => !current)}
         >
-          <span className="text-[12.5px] font-medium text-ink">
+          <span className="text-ui-secondary font-medium text-ink">
             {agentCopy.advanced}
           </span>
           {advancedOpen ? (
@@ -357,11 +359,11 @@ export function SettingsIntegration() {
                 input. Kept under Advanced because it is implementation
                 detail, not part of the ordinary user handoff path. */}
             <div>
-              <SettingsSectionLabel>{agentCopy.discoveryFile}</SettingsSectionLabel>
-              <p className="mt-2 text-[12.5px] leading-[1.6] text-ink-soft">
+              <SettingsFieldLabel>{agentCopy.discoveryFile}</SettingsFieldLabel>
+              <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
                 {agentCopy.discoveryDescription}
               </p>
-              <dl className="mt-3 grid grid-cols-[88px_1fr] gap-x-3 text-[12.5px]">
+              <dl className="mt-3 grid grid-cols-[88px_1fr] gap-x-3 text-ui-secondary">
                 <dt className="text-ink-muted">{discoveryPlatformLabel}</dt>
                 <dd className="m-0 select-text break-all font-mono text-ink">
                   {discoveryFilePath}
@@ -375,12 +377,12 @@ export function SettingsIntegration() {
                 auth prompt; Windows is intentionally presented as
                 unsupported until the user-level PATH writer exists. */}
             <div>
-              <SettingsSectionLabel>{agentCopy.cliShortcut}</SettingsSectionLabel>
-              <p className="mt-2 text-[12.5px] leading-[1.6] text-ink-soft">
+              <SettingsFieldLabel>{agentCopy.cliShortcut}</SettingsFieldLabel>
+              <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
                 {agentCopy.cliDescription}
               </p>
               {pathInstallHint && (
-                <p className="mt-2 text-[11.5px] text-ink-muted">
+                <p className="mt-2 text-ui-tertiary text-ink-muted">
                   {pathInstallHint}
                 </p>
               )}
@@ -398,8 +400,8 @@ export function SettingsIntegration() {
                 for users wiring their own scripts / Skills / agents,
                 while the SOP covers the normal copy-paste path. */}
             <div>
-              <SettingsSectionLabel>{agentCopy.apiDocs}</SettingsSectionLabel>
-              <p className="mt-2 text-[12.5px] leading-[1.6] text-ink-soft">
+              <SettingsFieldLabel>{agentCopy.apiDocs}</SettingsFieldLabel>
+              <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
                 {agentCopy.apiDescription}
               </p>
               <div className="mt-3">
@@ -461,7 +463,7 @@ function PathInstallRow({
   const copy = useCopy().settings.agent;
   if (unsupportedCopy || status?.status === "unsupported") {
     return (
-      <p className="mt-3 text-[12px] text-ink-muted">
+      <p className="mt-3 text-ui-meta text-ink-muted">
         {unsupportedCopy ?? copy.pathUnsupportedGeneric}
       </p>
     );
@@ -472,7 +474,7 @@ function PathInstallRow({
     return (
       <div className="mt-3 space-y-2">
         <p
-          className="select-text break-all text-[12px] text-ink-soft"
+          className="select-text break-all text-ui-meta text-ink-soft"
           title={status.target}
         >
           {copy.pathInstalled}
@@ -497,7 +499,7 @@ function PathInstallRow({
     return (
       <div className="mt-3 space-y-2">
         <p
-          className="select-text break-all text-[12px] text-ink-soft"
+          className="select-text break-all text-ui-meta text-ink-soft"
           title={status.actual}
         >
           <code className="font-mono text-ink">{status.symlink}</code>{" "}
@@ -559,16 +561,16 @@ function SopStatus({ state }: { state: SopCopyState }) {
       return null;
     case "pending":
       return (
-        <span className="text-[11px] text-ink-muted">{copy.sopPending}</span>
+        <span className="text-ui-label text-ink-muted">{copy.sopPending}</span>
       );
     case "copied":
       return (
-        <span className="text-[11px] text-ink-soft">{copy.readyForAgent}</span>
+        <span className="text-ui-label text-ink-soft">{copy.readyForAgent}</span>
       );
     case "error":
       return (
         <span
-          className="select-text break-all text-[11px] text-error"
+          className="select-text break-all text-ui-label text-error"
           title={state.reason}
         >
           {copy.sopFailed(state.reason.slice(0, 80))}
@@ -590,14 +592,14 @@ function InlineErrorWithCopy({
   const visible =
     message.length > 140 ? `${message.slice(0, 140)}…` : message;
   return (
-    <div className="mt-2 flex items-start gap-2 text-[11px] text-error">
+    <div className="mt-2 flex items-start gap-2 text-ui-label text-error">
       <p className="m-0 min-w-0 flex-1 select-text break-all" title={message}>
         {visible}
       </p>
       <Button
         variant="ghost"
         size="sm"
-        className="h-5 shrink-0 px-1.5 text-[10.5px] text-error/75 hover:text-error"
+        className="h-5 shrink-0 px-1.5 text-ui-micro text-error/75 hover:text-error"
         onClick={() => {
           void copyTextToClipboard(details ?? message).then(() => {
             setCopied(true);
@@ -609,29 +611,4 @@ function InlineErrorWithCopy({
       </Button>
     </div>
   );
-}
-
-async function copyTextToClipboard(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return;
-    } catch {
-      // Fall through to the legacy selection-based copy path below.
-    }
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  document.body.removeChild(textarea);
-  if (!copied) {
-    throw new Error("clipboard unavailable");
-  }
 }

@@ -85,7 +85,7 @@ function UpdateActionControl({
       <span
         role="status"
         className={cn(
-          "inline-flex h-6 cursor-default select-none items-center justify-center gap-1 rounded-sm border px-2 text-[11.5px] leading-none",
+          "inline-flex h-6 cursor-default select-none items-center justify-center gap-1 rounded-sm border px-2 text-ui-tertiary leading-none",
           view.className,
         )}
       >
@@ -101,7 +101,7 @@ function UpdateActionControl({
       size="sm"
       onClick={onClick}
       disabled={view.disabled}
-      className="h-6 px-2 text-[11.5px]"
+      className="h-6 px-2 text-ui-tertiary"
       leadingIcon={
         <Icon size={12} weight="thin" className={cn(view.spin && "spin")} />
       }
@@ -127,7 +127,7 @@ function UpdateInlineStatus({
     <span
       role="status"
       className={cn(
-        "inline-flex min-w-0 flex-wrap items-center gap-1.5 text-[11.5px] leading-[1.45]",
+        "inline-flex min-w-0 flex-wrap items-center gap-1.5 text-ui-tertiary leading-dense",
         view.className,
       )}
     >
@@ -149,7 +149,7 @@ function UpdateInlineStatus({
             <ArrowSquareOut size={10} weight="thin" />
           </a>
           <code
-            className="min-w-0 max-w-[min(34rem,100%)] truncate rounded-sm border border-line bg-surface px-1.5 py-0.5 font-mono text-[10.5px] leading-tight text-ink-muted select-text"
+            className="min-w-0 max-w-[min(34rem,100%)] truncate rounded-sm border border-line bg-surface px-1.5 py-0.5 font-mono text-ui-micro leading-tight text-ink-muted select-text"
             title={status.detail}
           >
             {copy.updates.diagnosticPrefix}: {status.detail}
