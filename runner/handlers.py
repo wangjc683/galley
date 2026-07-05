@@ -235,6 +235,11 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
             decision = self._request_approval(tool_name, dict(args))
             if decision == "deny":
                 yield f"[Approval] User denied: {tool_name}\n"
+                # Coupling point: this payload round-trips verbatim into
+                # turn_end.toolResults[].content, and the desktop parses
+                # `status == "denied"` to render the tool as denied in the
+                # transcript (gui/src/lib/tool-outcome.ts). Change the
+                # shape there and here together.
                 return StepOutcome(
                     {"status": "denied", "msg": "User denied this tool call"},
                     next_prompt="\n",

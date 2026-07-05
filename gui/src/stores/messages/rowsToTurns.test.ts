@@ -91,6 +91,36 @@ describe("rowsToTurns", () => {
     });
   });
 
+  it("restores a denied tool as denied, not success", () => {
+    const turns = rowsToTurns([
+      makeMessageRow({
+        role: "assistant",
+        turn_index: 4,
+        content: "OK, skipping that.",
+        tool_calls: JSON.stringify([
+          { toolName: "run_command", args: { command: "rm -rf build" } },
+        ]),
+        tool_results: JSON.stringify([
+          {
+            toolUseId: "call-9",
+            // Verbatim shape from runner/handlers.py's deny path, as
+            // GA serializes it into the tool result content.
+            content: '{"status": "denied", "msg": "User denied this tool call"}',
+          },
+        ]),
+        final_answer: "OK, skipping that.",
+      }),
+    ]);
+
+    expect(turns).toHaveLength(1);
+    const agent = turns[0];
+    if (agent.role !== "agent") throw new Error("expected agent turn");
+    expect(agent.tools[0]).toMatchObject({
+      name: "run_command",
+      status: "denied",
+    });
+  });
+
   it("tolerates malformed tool JSON", () => {
     const turns = rowsToTurns([
       makeMessageRow({

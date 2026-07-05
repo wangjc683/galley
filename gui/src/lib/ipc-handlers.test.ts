@@ -167,6 +167,42 @@ describe("dispatchIPCEvent", () => {
     );
   });
 
+  it("marks a denied tool as denied in the live turn_end path", () => {
+    dispatchIPCEvent({
+      kind: "turn_end",
+      sessionId: "s-test",
+      turnIndex: 1,
+      summary: "Denied by user",
+      toolCalls: [
+        { toolName: "run_command", args: { command: "rm -rf build" } },
+        { toolName: "file_read", args: { path: "README.md" } },
+      ],
+      toolResults: [
+        {
+          toolUseId: "call-1",
+          // Verbatim shape from runner/handlers.py's deny path.
+          content: '{"status": "denied", "msg": "User denied this tool call"}',
+        },
+        { toolUseId: "call-2", content: "[FILE] 268 lines..." },
+      ],
+      responseContent: "",
+      exitReason: null,
+      timestamp: "2026-06-18T08:02:00.000Z",
+    });
+
+    const turns = useMessagesStore.getState().byId["s-test"].turns;
+    const agent = turns[turns.length - 1];
+    if (agent.role !== "agent") throw new Error("expected agent turn");
+    expect(agent.tools[0]).toMatchObject({
+      name: "run_command",
+      status: "denied",
+    });
+    expect(agent.tools[1]).toMatchObject({
+      name: "file_read",
+      status: "success-historical",
+    });
+  });
+
   it("keeps same-turn streaming content when turn_start arrives late", () => {
     dispatchIPCEvent({
       kind: "turn_progress",

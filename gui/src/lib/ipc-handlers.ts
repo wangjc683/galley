@@ -14,6 +14,7 @@ import {
 } from "@/lib/ipc/history-replay";
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
+import { settledToolStatus } from "@/lib/tool-outcome";
 import { fromIPCError, makeAppError } from "@/types/app-error";
 import type {
   AgentTurn,
@@ -581,9 +582,10 @@ function toolEventFromIPC(
     id,
     name: tc.toolName,
     // turn_end is the post-completion state — by definition every
-    // tool here finished. The conversation view fades older success
-    // tools via "success-historical".
-    status: "success-historical",
+    // tool here finished. Denials are detected from the result payload
+    // Galley's own handler wrote (see lib/tool-outcome.ts); everything
+    // else fades into the document as "success-historical".
+    status: settledToolStatus(content),
     args: tc.args,
     resultPreview,
   };

@@ -4,6 +4,7 @@
 // the parent store hit the B3-I5 600-line budget. Pure functions —
 // no store dependency.
 
+import { settledToolStatus } from "@/lib/tool-outcome";
 import type {
   AgentTurn,
   ConversationToolEvent,
@@ -71,7 +72,10 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         return {
           id,
           name: typeof tc.toolName === "string" ? tc.toolName : "(unknown)",
-          status: "success-historical",
+          // Same denial detection as the live turn_end path
+          // (lib/tool-outcome.ts) so a restored session shows the
+          // user's rejections identically to the live one.
+          status: settledToolStatus(result?.content),
           args: (tc.args as Record<string, unknown>) ?? {},
           resultPreview,
         };
