@@ -1,4 +1,4 @@
 Galley legacy beta update channel alias.
 
-Current tag: v0.2.16
+Current tag: v0.3.0
 Primary channel: stable
