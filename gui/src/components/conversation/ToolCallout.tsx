@@ -19,6 +19,7 @@ import { useEffect, memo, useState, type ReactNode } from "react";
 
 import { ApprovalForm } from "@/components/conversation/ApprovalForm";
 import { LiveDots } from "@/components/conversation/LiveIndicators";
+import { PatchView } from "@/components/conversation/diff/PatchView";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type {
@@ -211,14 +212,7 @@ function BlockToolCallout({
               projectName={projectName}
             />
           ) : (
-            <>
-              {tool.args && Object.keys(tool.args).length > 0 && (
-                <ArgsBlock args={tool.args} />
-              )}
-              {tool.resultPreview && (
-                <ResultBlock content={tool.resultPreview} />
-              )}
-            </>
+            <SettledToolBody tool={tool} />
           )}
         </div>
       )}
@@ -373,9 +367,54 @@ const STATUS_PILL_CLASS: Record<ToolEventStatus, string> = {
 
 // ---------- arg / result blocks (fallbacks) ----------
 
+/**
+ * Expanded body for a settled (non-approval) tool. file_patch gets the
+ * same PatchView diff the approval card used — expanding a settled
+ * patch previously dumped old_content/new_content as JSON-escaped
+ * single-line soup via ArgsBlock, which made post-hoc audit unreadable.
+ * Everything else keeps the generic args + result blocks.
+ */
+function SettledToolBody({ tool }: { tool: ConversationToolEvent }) {
+  const path =
+    typeof tool.args?.path === "string" ? (tool.args.path as string) : "";
+  if (tool.name === "file_patch" && path) {
+    return (
+      // Same 480px audit window as the approval-time renderer.
+      <div className="max-h-[480px] overflow-auto">
+        <PatchView
+          path={path}
+          oldContent={
+            typeof tool.args?.old_content === "string"
+              ? (tool.args.old_content as string)
+              : ""
+          }
+          newContent={
+            typeof tool.args?.new_content === "string"
+              ? (tool.args.new_content as string)
+              : ""
+          }
+        />
+      </div>
+    );
+  }
+  return (
+    <>
+      {tool.args && Object.keys(tool.args).length > 0 && (
+        <ArgsBlock args={tool.args} />
+      )}
+      {/* A denied tool's "result" is just the internal denial payload
+          ({"status": "denied", ...}) — the status chrome already says
+          已拒绝, so echoing the raw JSON adds nothing. */}
+      {tool.resultPreview && tool.status !== "denied" && (
+        <ResultBlock content={tool.resultPreview} />
+      )}
+    </>
+  );
+}
+
 function ArgsBlock({ args }: { args: Record<string, unknown> }) {
   return (
-    <pre className="overflow-x-auto whitespace-pre-wrap rounded-callout border border-line bg-app px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink-soft">
+    <pre className="max-h-[200px] overflow-y-auto whitespace-pre-wrap rounded-callout border border-line bg-app px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink-soft">
       {Object.entries(args).map(([k, v]) => (
         <Line key={k} k={k} v={v} />
       ))}
@@ -404,7 +443,9 @@ function ResultBlock({ content }: { content: string }) {
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
         {copy.conversation.result}
       </div>
-      <pre className="overflow-x-auto whitespace-pre-wrap rounded-callout border border-line bg-app px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink-soft">
+      {/* 200px scroll window per tools-and-approvals.md — one tool's
+          stdout must not swallow the document column. */}
+      <pre className="max-h-[200px] overflow-y-auto whitespace-pre-wrap rounded-callout border border-line bg-app px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink-soft">
         {content}
       </pre>
     </div>
@@ -530,10 +571,7 @@ function InlineToolPill({ tool }: { tool: ConversationToolEvent }) {
 
       {open && (
         <div className="ml-3 mt-1 animate-fade-in border-l border-line/60 pl-3">
-          {tool.args && Object.keys(tool.args).length > 0 && (
-            <ArgsBlock args={tool.args} />
-          )}
-          {tool.resultPreview && <ResultBlock content={tool.resultPreview} />}
+          <SettledToolBody tool={tool} />
         </div>
       )}
     </div>
@@ -564,11 +602,16 @@ function previewArgs(
   };
   const truncate = (s: string | null): string | null =>
     s && s.length > PREVIEW_MAX_LEN ? s.slice(0, PREVIEW_MAX_LEN) + "…" : s;
+  // Paths truncate from the HEAD: the tail (filename) is the
+  // informative part; keeping the prefix left pills reading as
+  // "/Users/…/Documents/…" with the actual file cut off.
+  const truncateKeepTail = (s: string | null): string | null =>
+    s && s.length > PREVIEW_MAX_LEN ? "…" + s.slice(-PREVIEW_MAX_LEN) : s;
   switch (toolName) {
     case "file_read":
     case "file_write":
     case "file_patch":
-      return truncate(get("path"));
+      return truncateKeepTail(get("path"));
     case "web_scan": {
       // Quote-wrap query so it reads as user-typed text vs raw URL.
       const q = get("query");

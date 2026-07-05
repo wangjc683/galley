@@ -403,7 +403,19 @@ function CodeBlock({ code, language }: CodeBlockProps) {
     key: string;
     html: string;
   } | null>(null);
-  const html = highlighted?.key === highlightKey ? highlighted.html : null;
+  // Keep the previous highlighted HTML while the new one is in flight:
+  // during streaming every chunk changes the key, and dropping to the
+  // plain fallback each time made the block strobe plain→colored (same
+  // flash on theme switch). The stale frame lags the newest chunk by
+  // one highlight pass (a few ms once Shiki is warm) — far calmer than
+  // flickering. Only when this block has never highlighted (or has no
+  // language) does the plain <pre> of the CURRENT code render.
+  const html =
+    highlighted?.key === highlightKey
+      ? highlighted.html
+      : lang && highlighted
+        ? highlighted.html
+        : null;
   const [wrapped, setWrapped] = useState(false);
   const wrapLabel = wrapped
     ? copy.conversation.scrollCode
@@ -489,7 +501,7 @@ function CodeBlock({ code, language }: CodeBlockProps) {
       </div>
       <div
         className={cn(
-          "px-3.5 py-1.5 font-mono text-[13px] leading-[1.45] text-ink",
+          "px-3.5 py-1.5 font-mono [font-size:var(--conversation-code-size)] leading-[1.45] text-ink",
           wrapped
             ? "overflow-x-hidden break-words [&_code]:whitespace-pre-wrap [&_pre]:whitespace-pre-wrap"
             : "overflow-x-auto [&_code]:whitespace-pre [&_pre]:whitespace-pre",
@@ -498,7 +510,7 @@ function CodeBlock({ code, language }: CodeBlockProps) {
           // vertical space is this wrapper's py-1.5 — no UA / Shiki
           // line-box padding leaking in and inflating the block.
           "[&_pre]:m-0 [&_pre]:p-0 [&_pre]:bg-transparent [&_pre]:leading-[1.45]",
-          "[&_code]:m-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[13px]",
+          "[&_code]:m-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:[font-size:var(--conversation-code-size)]",
         )}
       >
         {html ? (

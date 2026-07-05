@@ -10,6 +10,7 @@ import {
 
 import { ApprovalRenderer } from "@/components/conversation/approval-renderers";
 import { Button, type ButtonVariant } from "@/components/ui/button";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type {
@@ -218,18 +219,28 @@ function DecisionButton({
   title,
 }: DecisionButtonProps) {
   const buttonVariant = VARIANT_CLASS[variant];
-  return (
+  // aria-disabled + click no-op instead of `disabled`, and Radix
+  // TooltipLabel instead of native title: a disabled element swallows
+  // pointer events, so the explanation for WHY it's disabled (e.g.
+  // "高风险操作不能全局放行") could never open — and native title is
+  // off-system chrome (engineering-workflow tooltip rule).
+  const button = (
     <Button
       variant={buttonVariant}
-      title={title}
-      onClick={onClick}
-      disabled={disabled}
-      className="text-[13px]"
+      onClick={disabled ? undefined : onClick}
+      aria-disabled={disabled || undefined}
+      className={cn(
+        "text-[13px]",
+        disabled &&
+          "cursor-not-allowed opacity-50 hover:translate-y-0 hover:shadow-none active:translate-y-0",
+      )}
       leadingIcon={icon}
     >
       {children}
     </Button>
   );
+  if (!title) return button;
+  return <TooltipLabel text={title}>{button}</TooltipLabel>;
 }
 
 const VARIANT_CLASS: Record<DecisionButtonProps["variant"], ButtonVariant> = {

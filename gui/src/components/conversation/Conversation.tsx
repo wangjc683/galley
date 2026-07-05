@@ -178,6 +178,16 @@ function AgentTurnView({
         />
       )}
 
+      {/* Intermediate-turn narration renders BEFORE the turn's tools:
+          the LLM wrote that prose ("好的，我先看一下 X") before
+          dispatching them, so rendering it after read as "tools ran →
+          then it announced the plan" — time-inverted on re-read. The
+          final answer stays after the sequence (a final turn carries
+          no real tools). */}
+      {answerText && !isFinalTurn && (
+        <MessageAgentNarration>{answerText}</MessageAgentNarration>
+      )}
+
       {visibleTools.map((tool) => (
         <ToolCallout
           key={tool.id}
@@ -194,15 +204,12 @@ function AgentTurnView({
         <AnsweredAskUser question={askUserQuestion} />
       )}
 
-      {answerText &&
-        (isFinalTurn ? (
-          <>
-            <StrongHr />
-            <MessageAgent telemetry={turn.telemetry}>{answerText}</MessageAgent>
-          </>
-        ) : (
-          <MessageAgentNarration>{answerText}</MessageAgentNarration>
-        ))}
+      {answerText && isFinalTurn && (
+        <>
+          <StrongHr />
+          <MessageAgent telemetry={turn.telemetry}>{answerText}</MessageAgent>
+        </>
+      )}
     </div>
   );
 }

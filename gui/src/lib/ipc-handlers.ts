@@ -566,16 +566,23 @@ function toolEventFromIPC(
     (typeof tc.toolUseId === "string" && tc.toolUseId) ||
     `t-${index}`;
 
+  // ≤500 char preview with a visible ellipsis when content was cut —
+  // silent truncation read as "the output just ends here". Keep in
+  // sync with rowsToTurns' previewFromContent.
   let resultPreview: string | undefined;
   const content = result?.content;
+  let full: string | undefined;
   if (typeof content === "string") {
-    resultPreview = content.slice(0, 500);
+    full = content;
   } else if (content !== undefined) {
     try {
-      resultPreview = JSON.stringify(content).slice(0, 500);
+      full = JSON.stringify(content);
     } catch {
-      resultPreview = String(content).slice(0, 500);
+      full = String(content);
     }
+  }
+  if (full !== undefined) {
+    resultPreview = full.length > 500 ? `${full.slice(0, 500)}…` : full;
   }
 
   return {

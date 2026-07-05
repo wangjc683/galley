@@ -263,6 +263,7 @@ export const zhCopy = {
     stop: "停止",
     stopping: "停止中…",
     enterHint: "Enter 发送 · Shift+Enter 换行",
+    runningHint: "运行中 · 以 /btw 开头可继续追问",
     byTheWayPrefixHint: "请先以 /btw 开头",
     imageOnlyFallback: "请看这张图片。",
     pastedImage: "已粘贴图片",

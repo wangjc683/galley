@@ -157,13 +157,20 @@ function safeParseJsonArray(raw: string | null): Record<string, unknown>[] {
   }
 }
 
-/** Mirror of ipc-handlers' resultPreview logic — keep ≤500 char preview. */
+/** Mirror of ipc-handlers' resultPreview logic — keep ≤500 char preview,
+ * with a visible ellipsis when content was actually cut (silent
+ * truncation read as "the output just ends here"). */
 function previewFromContent(content: unknown): string | undefined {
   if (content === undefined || content === null) return undefined;
-  if (typeof content === "string") return content.slice(0, 500);
-  try {
-    return JSON.stringify(content).slice(0, 500);
-  } catch {
-    return String(content).slice(0, 500);
+  let full: string;
+  if (typeof content === "string") {
+    full = content;
+  } else {
+    try {
+      full = JSON.stringify(content);
+    } catch {
+      full = String(content);
+    }
   }
+  return full.length > 500 ? `${full.slice(0, 500)}…` : full;
 }

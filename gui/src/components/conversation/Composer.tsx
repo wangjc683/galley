@@ -509,10 +509,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       : (placeholder ?? copy.composer.askAnything);
     const shouldShowByTheWayRequiredHint =
       showByTheWayRequiredHint && stopMode && !isSideQuestion;
+    // While the agent runs, plain Enter does NOT send — the persistent
+    // hint must teach /btw up front ("Enter 发送" would be a lie here);
+    // the transient byTheWayPrefixHint stays as the correction after a
+    // blocked Enter attempt.
     const keyboardHint = showFooterHint
       ? shouldShowByTheWayRequiredHint
         ? copy.composer.byTheWayPrefixHint
-        : copy.composer.enterHint
+        : stopMode
+          ? copy.composer.runningHint
+          : copy.composer.enterHint
       : null;
     // Keyboard hints get kbd-token styling; a caller-supplied staticHint
     // is already a ReactNode and renders as-is in the same slot.
@@ -758,14 +764,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 />
                 {imagesEnabled && (
                   <TooltipLabel text={copy.composer.attachImage}>
+                    {/* aria-disabled + click no-op instead of `disabled`:
+                        a disabled element swallows pointer events, so its
+                        explanatory tooltip could never open (same pattern
+                        as the Stop button below). */}
                     <button
                       type="button"
                       tabIndex={-1}
                       onMouseDown={preventMouseFocus}
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={disabled || stopMode}
+                      onClick={() => {
+                        if (disabled || stopMode) return;
+                        fileInputRef.current?.click();
+                      }}
+                      aria-disabled={disabled || stopMode || undefined}
                       aria-label={copy.composer.attachImage}
-                      className={COMPOSER_TERTIARY_ICON_BUTTON}
+                      className={cn(
+                        COMPOSER_TERTIARY_ICON_BUTTON,
+                        (disabled || stopMode) &&
+                          "cursor-not-allowed opacity-50 hover:translate-y-0 hover:bg-transparent hover:text-ink-muted active:translate-y-0 active:scale-100",
+                      )}
                     >
                       <Paperclip size={17} weight="thin" />
                     </button>
@@ -793,8 +810,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     type="button"
                     tabIndex={-1}
                     onMouseDown={preventMouseFocus}
+                    // handleGoalArmToggle already no-ops when blocked;
+                    // aria-disabled (not `disabled`) keeps pointer events
+                    // alive so the explanatory tooltip ("已有 Goal 在跑")
+                    // can actually open.
                     onClick={handleGoalArmToggle}
-                    disabled={goalEntryDisabled && !requiresModelConfig}
+                    aria-disabled={
+                      (goalEntryDisabled && !requiresModelConfig) || undefined
+                    }
                     aria-label={
                       effectiveGoalArmed
                         ? copy.composer.cancelGoalMode
@@ -806,7 +829,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                         : COMPOSER_GOAL_BUTTON,
                       goalEntryDisabled &&
                         !requiresModelConfig &&
-                        "cursor-not-allowed opacity-50 hover:translate-y-0 hover:shadow-none",
+                        "cursor-not-allowed opacity-50 hover:translate-y-0 hover:shadow-none active:translate-y-0 active:scale-100",
                     )}
                   >
                     <Target
@@ -871,12 +894,26 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                       type="button"
                       tabIndex={-1}
                       onMouseDown={preventMouseFocus}
-                      onClick={handleSubmit}
-                      disabled={
+                      // aria-disabled + click guard (not `disabled`) so the
+                      // "发送 · Enter" / "先配置模型" tooltips still open on
+                      // the unlit button — see the attach button above.
+                      onClick={() => {
+                        if (
+                          disabled ||
+                          !hasSendableContent ||
+                          goalSubmitting ||
+                          (requiresModelConfig && !onConfigureModels)
+                        ) {
+                          return;
+                        }
+                        handleSubmit();
+                      }}
+                      aria-disabled={
                         disabled ||
                         !hasSendableContent ||
                         goalSubmitting ||
-                        (requiresModelConfig && !onConfigureModels)
+                        (requiresModelConfig && !onConfigureModels) ||
+                        undefined
                       }
                       aria-label={
                         requiresModelConfig
@@ -900,7 +937,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                           // soft button). The brand fill then *blooms* in via the
                           // base button's color/shadow transition the moment the
                           // first character lands.
-                          "cursor-not-allowed border-line bg-chrome text-ink-muted shadow-none hover:translate-y-0 hover:border-line hover:bg-chrome hover:text-ink-muted hover:shadow-none",
+                          "cursor-not-allowed border-line bg-chrome text-ink-muted shadow-none hover:translate-y-0 hover:border-line hover:bg-chrome hover:text-ink-muted hover:shadow-none active:translate-y-0 active:scale-100",
                       )}
                     >
                       {requiresModelConfig ? (
@@ -1237,25 +1274,34 @@ function LLMPill({
     "hover:bg-hover hover:text-ink",
     "outline-none",
     "rounded-sm px-2.5",
-    disabled && "cursor-not-allowed opacity-60",
+    disabled &&
+      "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-ink-soft active:translate-y-0",
   );
 
   // Fallback path — no llms list available, defer to the parent's
   // legacy handler. Same visual treatment as the popover trigger.
+  // Radix tooltip (not native title): design-system rule, and the
+  // aria-disabled pattern keeps it reachable while the run blocks
+  // switching — the tooltip carries exactly that explanation.
   if (!llms || llms.length === 0) {
     return (
-      <button
-        type="button"
-        tabIndex={-1}
-        onMouseDown={preventMouseFocus}
-        onClick={onOpenLLMSwitcher}
-        disabled={disabled}
-        className={pillClasses}
-        title={title}
-      >
-        <span className="min-w-0 truncate">{llmDisplayName}</span>
-        <CaretUp size={10} weight="thin" className="text-ink-muted" />
-      </button>
+      <TooltipLabel text={title}>
+        <button
+          type="button"
+          tabIndex={-1}
+          onMouseDown={preventMouseFocus}
+          onClick={() => {
+            if (disabled) return;
+            onOpenLLMSwitcher?.();
+          }}
+          aria-disabled={disabled || undefined}
+          aria-label={title}
+          className={pillClasses}
+        >
+          <span className="min-w-0 truncate">{llmDisplayName}</span>
+          <CaretUp size={10} weight="thin" className="text-ink-muted" />
+        </button>
+      </TooltipLabel>
     );
   }
 
@@ -1270,26 +1316,38 @@ function LLMPill({
 
   return (
     <Popover.Root>
-      <Popover.Trigger asChild>
-        <button
-          type="button"
-          tabIndex={-1}
-          onMouseDown={preventMouseFocus}
-          disabled={disabled}
-          className={pillClasses}
-          title={title}
-        >
-          <span className="min-w-0 truncate">{llmDisplayName}</span>
-          <CaretUp size={10} weight="thin" className="text-ink-muted" />
-        </button>
-      </Popover.Trigger>
+      <TooltipLabel text={title}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            tabIndex={-1}
+            onMouseDown={preventMouseFocus}
+            // preventDefault stops Radix from opening the popover while
+            // switching is blocked (its composed handlers respect
+            // defaultPrevented); aria-disabled keeps the explanatory
+            // tooltip reachable, unlike a real `disabled`.
+            onClick={(e) => {
+              if (disabled) e.preventDefault();
+            }}
+            aria-disabled={disabled || undefined}
+            aria-label={title}
+            className={pillClasses}
+          >
+            <span className="min-w-0 truncate">{llmDisplayName}</span>
+            <CaretUp size={10} weight="thin" className="text-ink-muted" />
+          </button>
+        </Popover.Trigger>
+      </TooltipLabel>
       <Popover.Portal>
         <Popover.Content
           align="start"
           side="top"
           sideOffset={6}
           className={cn(
+            // Long model lists scroll instead of outgrowing the
+            // viewport (conversation.md §4.4).
             "galley-pop-in z-50 min-w-[200px] max-w-[320px] rounded-md border border-line bg-elevated p-1 shadow-elevated",
+            "max-h-[min(60vh,360px)] overflow-y-auto",
           )}
         >
           {llms.map((llm) => {
@@ -1329,7 +1387,6 @@ function LLMPill({
                           ? "max-w-[96px] opacity-100"
                           : "max-w-0 opacity-0 group-hover/llm-option:max-w-[96px] group-hover/llm-option:opacity-100",
                       )}
-                      title={providerLabel}
                     >
                       {providerLabel}
                     </span>

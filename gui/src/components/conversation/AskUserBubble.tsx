@@ -166,7 +166,10 @@ export function AnsweredAskUser({ question }: { question: string }) {
         <ChatCircleDots size={10} weight="regular" />
         {copy.conversation.askedYou}
       </div>
-      <div className="whitespace-pre-wrap text-[13px] leading-[1.55] text-ink-soft">
+      {/* Echo register: quieter than body but still part of the reading
+          flow, so it tracks the conversation font-size tiers via its own
+          var (13px at standard — the historical value). */}
+      <div className="whitespace-pre-wrap [font-size:var(--conversation-echo-size)] leading-[1.55] text-ink-soft">
         {cleaned}
       </div>
     </div>
