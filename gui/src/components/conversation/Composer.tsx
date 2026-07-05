@@ -627,7 +627,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         <div
           ref={composerRootRef}
           className={cn(
-            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow] duration-150",
+            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow] duration-[120ms]",
             "focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/20",
             disabled && "opacity-60",
           )}
@@ -1151,7 +1151,7 @@ function GoalConfirmDialog({
                     disabled={submitting}
                     aria-label={copy.composer.goalDurationCustomInput}
                     className={cn(
-                      "h-8 w-20 rounded-sm border bg-app px-2 text-[12.5px] font-medium text-ink outline-none transition-colors focus:border-brand",
+                      "h-8 w-20 rounded-sm border bg-app px-2 text-[12.5px] font-medium text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20",
                       customBudgetValid ? "border-line" : "border-error/40",
                     )}
                   />

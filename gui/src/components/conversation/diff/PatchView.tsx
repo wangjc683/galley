@@ -1,6 +1,7 @@
 import { diffLines } from "diff";
 import { useMemo } from "react";
 
+import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export interface PatchViewProps {
@@ -30,6 +31,7 @@ export interface PatchViewProps {
  * scoped down to the languages we actually use.
  */
 export function PatchView({ path, oldContent, newContent }: PatchViewProps) {
+  const copy = useCopy();
   const { rows, added, removed } = useMemo(
     () => buildRows(oldContent, newContent),
     [oldContent, newContent],
@@ -41,10 +43,24 @@ export function PatchView({ path, oldContent, newContent }: PatchViewProps) {
       <div className="flex items-center justify-between gap-3 border-b border-line bg-app px-3 py-2">
         <span className="select-text font-mono text-[12px] text-ink">{path}</span>
         <span className="flex items-center gap-2 text-ink-muted">
-          {added > 0 && <span className="text-success">+{added} lines</span>}
-          {removed > 0 && <span className="text-error">−{removed} lines</span>}
-          {isNewFile && <span className="text-ink-muted">· new file</span>}
-          {added === 0 && removed === 0 && <span>no change</span>}
+          {added > 0 && (
+            <span className="text-success">
+              {copy.conversation.diffLinesAdded(added)}
+            </span>
+          )}
+          {removed > 0 && (
+            <span className="text-error">
+              {copy.conversation.diffLinesRemoved(removed)}
+            </span>
+          )}
+          {isNewFile && (
+            <span className="text-ink-muted">
+              · {copy.conversation.diffNewFile}
+            </span>
+          )}
+          {added === 0 && removed === 0 && (
+            <span>{copy.conversation.diffNoChange}</span>
+          )}
         </span>
       </div>
 

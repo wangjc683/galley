@@ -487,7 +487,7 @@ export function MainView({
               className={cn(
                 "group pointer-events-auto inline-flex size-8 items-center justify-center rounded-full",
                 "border border-line bg-elevated/92 text-ink-soft shadow-[var(--shadow-float)] backdrop-blur-md",
-                "transition-all duration-150 ease-out",
+                "transition-all duration-[120ms] ease-out",
                 "hover:-translate-y-0.5 hover:border-line-strong hover:bg-elevated hover:text-ink hover:shadow-[var(--shadow-float-hover)]",
                 "active:translate-y-0 active:scale-95",
                 "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20",

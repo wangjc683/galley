@@ -44,13 +44,13 @@ export function ApprovalDock({ pending, onAdvance }: ApprovalDockProps) {
 
       <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-soft">
         {copy.approval.nextApproval}{" "}
-        <span className="rounded-[4px] bg-hover px-1.5 py-px font-mono text-[12px] text-ink-soft">
+        <span className="rounded-sm bg-hover px-1.5 py-px font-mono text-[12px] text-ink-soft">
           {next.toolName}
         </span>
         {next.target && (
           <>
             {" · "}
-            <span className="rounded-[4px] bg-hover px-1.5 py-px font-mono text-[12px] text-ink-soft">
+            <span className="rounded-sm bg-hover px-1.5 py-px font-mono text-[12px] text-ink-soft">
               {next.target}
             </span>
           </>

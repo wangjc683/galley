@@ -33,7 +33,7 @@ import type { MessageTelemetry } from "@/types/conversation";
  *              syntax. Pasting the visually-rendered text would
  *              throw away structure.
  *   - Save   → opens a Tauri save-as dialog and writes the markdown
- *              to disk. Default filename `ga-{timestamp}.md` so
+ *              to disk. Default filename `galley-{timestamp}.md` so
  *              successive saves don't fight each other.
  *
  * Always-visible (not hover-only): per dogfood feedback, hover-only
@@ -84,9 +84,11 @@ export function MessageActions({ source, telemetry }: MessageActionsProps) {
   };
 
   const onSave = async () => {
-    // Default filename `ga-{timestamp}.md`. Timestamp keeps successive
-    // saves from clobbering each other; user can edit in the dialog
-    // before confirming.
+    // Default filename `galley-{timestamp}.md` — the product name, not
+    // "ga" (GA is reserved for the engine per the naming rules; image
+    // saves already used galley-). Timestamp keeps successive saves
+    // from clobbering each other; user can edit in the dialog before
+    // confirming.
     const stamp = new Date()
       .toISOString()
       .slice(0, 19)
@@ -94,7 +96,7 @@ export function MessageActions({ source, telemetry }: MessageActionsProps) {
       // YYYYMMDDhhmmss is hard to scan; insert one dash between date
       // and time so the default name reads cleanly.
       .replace(/^(\d{8})(\d{6})$/, "$1-$2");
-    const defaultName = `ga-${stamp}.md`;
+    const defaultName = `galley-${stamp}.md`;
 
     try {
       const path = await save({

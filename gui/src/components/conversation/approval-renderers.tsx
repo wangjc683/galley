@@ -54,16 +54,15 @@ function FilePatchRenderer({ tool }: { tool: ConversationToolEvent }) {
 
 // ---------------- file_write ----------------
 
-const FILE_WRITE_MODE_LABEL: Record<string, string> = {
-  overwrite: "overwrite",
-  append: "append",
-  prepend: "prepend",
-};
-
 function FileWriteRenderer({ tool }: { tool: ConversationToolEvent }) {
   const copy = useCopy();
   const path = stringArg(tool, "path");
   const mode = stringArg(tool, "mode") || "overwrite";
+  // Localized mode label; unknown modes fall through raw (defensive —
+  // GA only sends the three known ones today).
+  const modeLabel =
+    copy.approval.writeMode[mode as keyof typeof copy.approval.writeMode] ??
+    mode;
 
   return (
     <div className="mb-3 rounded-callout border border-line bg-surface px-3.5 py-3">
@@ -84,7 +83,7 @@ function FileWriteRenderer({ tool }: { tool: ConversationToolEvent }) {
               : "bg-info/[var(--opacity-soft)] text-info",
           )}
         >
-          {FILE_WRITE_MODE_LABEL[mode] ?? mode}
+          {modeLabel}
         </span>
       </div>
       <div className="mt-2 flex items-start gap-1.5 text-[12px] text-ink-muted">
@@ -147,7 +146,7 @@ function StartLongTermUpdateRenderer({
     <div className="mb-3 rounded-callout border border-line bg-surface">
       <div className="flex items-center gap-2 border-b border-line px-3 py-2 text-[12px]">
         <Brain size={14} weight="thin" className="text-ink-soft" />
-        <span className="text-ink-soft">memory key</span>
+        <span className="text-ink-soft">{copy.approval.memoryKey}</span>
         <span className="ml-1 select-text font-mono text-ink">{key}</span>
       </div>
       <pre className="max-h-[280px] overflow-auto whitespace-pre-wrap px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink-soft">

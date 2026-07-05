@@ -102,7 +102,9 @@ export function ActionChip({
   );
 
   return (
-    <IconTooltip text={idleLabel} side={tooltipSide}>
+    // Tooltip tracks the current state: hovering right after a copy
+    // must read "已复制", not contradict the green check with "复制".
+    <IconTooltip text={label} side={tooltipSide}>
       {button}
     </IconTooltip>
   );

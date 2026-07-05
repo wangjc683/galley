@@ -180,7 +180,7 @@ function BlockToolCallout({
               size={12}
               weight="thin"
               className={cn(
-                "transition-transform duration-150",
+                "transition-transform duration-[120ms]",
                 open && "rotate-180",
               )}
             />
@@ -562,7 +562,7 @@ function InlineToolPill({ tool }: { tool: ConversationToolEvent }) {
             size={10}
             weight="thin"
             className={cn(
-              "text-ink-muted transition-transform duration-150",
+              "text-ink-muted transition-transform duration-[120ms]",
               open && "rotate-180",
             )}
           />

@@ -330,7 +330,7 @@ function SectionHeader({
           size={12}
           weight="bold"
           className={cn(
-            "shrink-0 text-ink-muted transition-transform duration-150",
+            "shrink-0 text-ink-muted transition-transform duration-[120ms]",
             collapsed && "-rotate-90",
           )}
         />
@@ -414,9 +414,11 @@ function PromptCard({
         highlighted && "border-brand/55 ring-2 ring-brand/40",
       )}
     >
-      {/* Reserve room at the title's right end so a long title's ellipsis
-          clears the top-right action cluster when it's revealed on hover. */}
-      <span className="min-w-0 truncate pr-1 text-[14px] font-semibold text-ink group-hover/card:pr-16">
+      {/* Constant right reserve for the top-right action cluster: it used
+          to appear only on hover (pr-1 → pr-16), which visibly shifted a
+          long title's truncation point the instant the pointer entered
+          the card — right before the user reads it. */}
+      <span className="min-w-0 truncate pr-16 text-[14px] font-semibold text-ink">
         {prompt.title}
       </span>
       {/* Presets lead with their user-facing description (the "capability
@@ -681,7 +683,9 @@ function CustomPromptEditor({
             placeholder={promptCopy.titlePlaceholder}
             className={cn(
               "h-9 w-full rounded-sm border border-line bg-surface px-3 text-[13px] text-ink",
-              "placeholder:text-ink-muted focus:border-line-strong focus:outline-none",
+              // Focused = apricot, like every other text input in the app
+              // (the composer's focus-within ring, the rename editors).
+              "placeholder:text-ink-muted focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none",
             )}
           />
         </Field>
@@ -692,7 +696,9 @@ function CustomPromptEditor({
             placeholder={promptCopy.bodyPlaceholder}
             className={cn(
               "h-72 w-full resize-none rounded-sm border border-line bg-surface px-3 py-2 text-[13px] leading-[1.55] text-ink",
-              "placeholder:text-ink-muted focus:border-line-strong focus:outline-none",
+              // Focused = apricot, like every other text input in the app
+              // (the composer's focus-within ring, the rename editors).
+              "placeholder:text-ink-muted focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none",
             )}
           />
         </Field>
