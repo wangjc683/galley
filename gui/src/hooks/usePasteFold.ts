@@ -85,8 +85,12 @@ export function usePasteFold({
     applyValue(next);
   };
 
-  const expandPastePlaceholders = (s: string): string =>
-    expandPlaceholders(s, pastesRef.current);
+  // Stable identity (only reads the registry ref) so effect callers can
+  // list it in deps without re-running every render.
+  const expandPastePlaceholders = useCallback(
+    (s: string): string => expandPlaceholders(s, pastesRef.current),
+    [],
+  );
 
   /** Drop every folded entry and reset the counter. Called after submit
    * (the placeholders are gone from the draft) and on programmatic

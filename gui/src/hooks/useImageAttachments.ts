@@ -26,6 +26,8 @@ export function useImageAttachments({
   imagesEnabled,
   onImageBlocked,
   pastedImageAlt,
+  initialImages,
+  retainImagesOnUnmount = false,
 }: {
   /** When false, all intake (paste / drop / picker) is refused and routed
    * to `onImageBlocked("external")` — the runtime can't deliver images. */
@@ -33,9 +35,17 @@ export function useImageAttachments({
   onImageBlocked?: (reason: ImageBlockReason) => void;
   /** Alt text for the preview tiles / dialog (localized by the caller). */
   pastedImageAlt: string;
+  /** Seed attachments restored from a parked draft (mount-time only —
+   * later identity changes are ignored, like any useState initializer). */
+  initialImages?: PendingImageAttachment[];
+  /** When true, skip the unmount object-URL sweep: a draft registry has
+   * taken ownership of the attachments and their previews must survive
+   * the unmount (see lib/composer-draft.ts ownership notes). Remove /
+   * clear still revoke as usual. */
+  retainImagesOnUnmount?: boolean;
 }) {
   const [pendingImages, setPendingImages] = useState<PendingImageAttachment[]>(
-    [],
+    () => initialImages ?? [],
   );
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,8 +69,13 @@ export function useImageAttachments({
   useEffect(() => {
     pendingImagesRef.current = pendingImages;
   }, [pendingImages]);
+  const retainOnUnmountRef = useRef(retainImagesOnUnmount);
+  useEffect(() => {
+    retainOnUnmountRef.current = retainImagesOnUnmount;
+  }, [retainImagesOnUnmount]);
   useEffect(() => {
     return () => {
+      if (retainOnUnmountRef.current) return;
       for (const image of pendingImagesRef.current) {
         URL.revokeObjectURL(image.previewUrl);
       }

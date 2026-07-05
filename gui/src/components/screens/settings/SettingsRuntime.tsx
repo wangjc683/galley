@@ -21,6 +21,7 @@ import { RuntimeAccordionRow } from "@/components/screens/settings/runtime/Runti
 import type { SettingsRuntimeProps } from "@/components/screens/settings/runtime/types";
 import { SettingsUpdateControl } from "@/components/screens/settings/SettingsUpdateControl";
 import { Button } from "@/components/ui/button";
+import { isImeCompositionKeydown } from "@/lib/ime";
 import { useCopy } from "@/lib/i18n";
 import {
   BUNDLED_PYTHON_VERSION,
@@ -481,6 +482,7 @@ function PathField({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isImeCompositionKeydown(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
       e.currentTarget.blur();

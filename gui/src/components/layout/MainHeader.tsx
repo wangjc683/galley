@@ -33,6 +33,7 @@ import {
   goalWorkspaceHasFiles,
 } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
+import { isImeCompositionKeydown } from "@/lib/ime";
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { formatShortcutReadable } from "@/lib/shortcuts";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
@@ -1205,6 +1206,7 @@ function SessionTitleEditor({
       data-tauri-drag-region="false"
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
+        if (isImeCompositionKeydown(e)) return;
         if (e.key === "Enter") {
           e.preventDefault();
           commit();

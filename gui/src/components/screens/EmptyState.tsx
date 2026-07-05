@@ -141,6 +141,10 @@ export function EmptyState({
           onSubmit={onSubmit}
           onGoalSubmit={onGoalSubmit}
           hasActiveGoal={hasActiveGoal}
+          // One shared new-conversation draft: typing here, glancing at a
+          // session, and coming back must not lose the text. Submit hands
+          // the text to the new session and drops the parked copy.
+          draftKey="empty-state"
           autoFocus
           llms={llms}
           onSelectLLM={onSelectLLM}

@@ -516,6 +516,12 @@ export function MainView({
 
           <Composer
             key={activeSessionId ?? "main-composer"}
+            // Draft parks per session (survives the keyed remount above);
+            // autoFocus lands the caret in the textarea on every session
+            // entry — the user came here to read or to type, and typing
+            // must not require a click first.
+            draftKey={activeSessionId ?? "main-composer"}
+            autoFocus
             llmDisplayName={llmDisplayName}
             placeholder={
               copy.composer[

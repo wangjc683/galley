@@ -26,6 +26,7 @@ import { IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
+import { isImeCompositionKeydown } from "@/lib/ime";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
@@ -683,6 +684,7 @@ function SessionTitleEditor({
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
+        if (isImeCompositionKeydown(e)) return;
         if (e.key === "Enter") {
           e.preventDefault();
           commit();

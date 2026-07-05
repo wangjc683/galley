@@ -32,8 +32,14 @@ import {
   IMAGE_ACCEPT,
   type ImageBlockReason,
 } from "@/lib/composer-images";
+import {
+  dropComposerDraft,
+  readComposerDraft,
+  saveComposerDraft,
+} from "@/lib/composer-draft";
 import { useCopy } from "@/lib/i18n";
 import { goalPillLabel } from "@/lib/goals";
+import { isImeCompositionKeydown } from "@/lib/ime";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
 import type { PendingImageAttachment } from "@/types/conversation";
@@ -202,6 +208,16 @@ export interface ComposerProps {
   autoFocus?: boolean;
 
   /**
+   * Key for the in-memory draft parking lot (lib/composer-draft.ts).
+   * When set (and the Composer is uncontrolled), the draft — text,
+   * expanded paste-folds, image attachments — survives unmount and is
+   * restored on the next mount with the same key. MainView passes the
+   * session id; EmptyState passes "empty-state". Without it, a session
+   * switch silently destroys a half-written message.
+   */
+  draftKey?: string;
+
+  /**
    * LLM list for the inline dropdown. When provided + non-empty, the
    * Composer renders its own Radix Popover under the LLM pill (the
    * ChatGPT / Claude UX). When empty / undefined, the pill becomes a
@@ -276,6 +292,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       disabled = false,
       placeholder,
       autoFocus = false,
+      draftKey,
       llms,
       onSelectLLM,
       llmConfigHint,
@@ -297,7 +314,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // we render it directly; otherwise we maintain an internal copy.
     // Avoid syncing prop -> internal in an effect (React 19 / Compiler
     // flags that as cascading-render-prone) — derive on render instead.
-    const [internal, setInternal] = useState("");
+    // Uncontrolled state seeds from the parked draft (if any) — the
+    // Composer is keyed per session, so a switch-back remounts here.
+    // Snapshot once on mount; the parking lot is not reactive.
+    const [initialDraft] = useState(() =>
+      draftKey && value === undefined ? readComposerDraft(draftKey) : undefined,
+    );
+    const [internal, setInternal] = useState(initialDraft?.text ?? "");
     const [goalArmed, setGoalArmed] = useState(false);
     const [goalConfirmOpen, setGoalConfirmOpen] = useState(false);
     const [goalConfirmationObjective, setGoalConfirmationObjective] =
@@ -333,6 +356,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       imagesEnabled,
       onImageBlocked,
       pastedImageAlt: copy.composer.pastedImage,
+      initialImages: initialDraft?.images,
+      // With a draft key, the parking lot owns preview object URLs
+      // across unmount; without one, the hook's unmount sweep applies.
+      retainImagesOnUnmount: Boolean(draftKey) && !isControlled,
     });
 
     // Long-paste folding ([Pasted text #N +M lines]) + its registry and
@@ -354,6 +381,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         textareaRef.current.focus();
       }
     }, [autoFocus]);
+
+    // Draft parking (write-through): every text / attachment change
+    // updates the parked draft so unmount needs no save step (an
+    // unmount-time save could race the image hook's URL bookkeeping).
+    // Text is stored expanded — see lib/composer-draft.ts.
+    useEffect(() => {
+      if (!draftKey || isControlled) return;
+      saveComposerDraft(draftKey, {
+        text: expandPastePlaceholders(text),
+        images: pendingImages,
+      });
+    }, [draftKey, isControlled, text, pendingImages, expandPastePlaceholders]);
 
     // Blur-on-outside-pointer WebView focus workaround (see the hook).
     useBlurOnOutsidePointer(textareaRef, composerRootRef);
@@ -430,6 +469,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       }
       resetPasteRegistry();
       clearImages();
+      // Synchronous drop: the write-through effect would clear the entry
+      // on the next render, but submit can unmount this Composer first
+      // (EmptyState → MainView switch) and resurrect the sent text.
+      if (draftKey) dropComposerDraft(draftKey);
     };
 
     const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -558,6 +601,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // IME guard: Enter confirming a pinyin candidate (or Escape
+      // dismissing the candidate window) belongs to the IME — it must
+      // not submit the draft or disarm Goal mode.
+      if (isImeCompositionKeydown(e)) return;
       if (e.key === "Escape" && effectiveGoalArmed && !goalConfirmOpen) {
         e.preventDefault();
         setGoalArmed(false);
