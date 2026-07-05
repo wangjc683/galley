@@ -1,6 +1,6 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   CaretRight,
   DotsThree,
@@ -610,8 +610,29 @@ function SidebarProjectDrawer({
   );
   const projectEmpty = sessions.length === 0;
 
+  // Expanding a project near the bottom of the scroll container used
+  // to animate the drawer open below the fold — the click appeared to
+  // do nothing. After the 240ms height animation settles, nudge the
+  // revealed sessions into view (nearest: no jump when already
+  // visible).
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const prevExpandedRef = useRef(expanded);
+  useEffect(() => {
+    const wasExpanded = prevExpandedRef.current;
+    prevExpandedRef.current = expanded;
+    if (!expanded || wasExpanded) return;
+    const id = window.setTimeout(() => {
+      drawerRef.current?.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }, 260);
+    return () => window.clearTimeout(id);
+  }, [expanded]);
+
   return (
     <div
+      ref={drawerRef}
       className={cn(
         "grid overflow-hidden transition-[grid-template-rows] duration-[240ms] ease-[cubic-bezier(0.34,1.2,0.64,1)] motion-reduce:transition-none",
         expanded

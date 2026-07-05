@@ -79,15 +79,25 @@ export function SidebarHeader({
     >
       {/* Product mark: sentence-case Galley keeps the name legible as
           a product rather than an acronym. */}
+      {/* data-tauri-drag-region is non-bubbling (must be on the exact
+          mousedown target), so the wordmark and the badge carry it
+          explicitly — grabbing "Galley" next to the traffic lights is
+          the most natural window-drag spot in this column. */}
       <div data-tauri-drag-region className="flex min-w-0 items-center gap-2">
-        <div className="shrink-0 font-serif text-[17px] font-medium italic tracking-[0.005em] text-ink">
+        <div
+          data-tauri-drag-region
+          className="shrink-0 font-serif text-[17px] font-medium italic tracking-[0.005em] text-ink"
+        >
           Galley
         </div>
         {externalRuntimeBadge ? (
           <IconTooltip text={externalRuntimeBadge.title} side="bottom">
-            <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-soft">
+            <div
+              data-tauri-drag-region
+              className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-soft"
+            >
               <RuntimeDot tone={externalRuntimeBadge.tone} />
-              <span className="min-w-0 truncate">
+              <span data-tauri-drag-region className="min-w-0 truncate">
                 {externalRuntimeBadge.label}
               </span>
             </div>
@@ -132,9 +142,14 @@ export function SidebarHeader({
         </IconTooltip>
       ) : indicator ? (
         <IconTooltip text={indicator.title} side="bottom">
-          <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-soft">
+          <div
+            data-tauri-drag-region
+            className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-soft"
+          >
             <RuntimeDot tone={indicator.tone} />
-            <span className="min-w-0 truncate">{indicator.label}</span>
+            <span data-tauri-drag-region className="min-w-0 truncate">
+              {indicator.label}
+            </span>
           </div>
         </IconTooltip>
       ) : (
@@ -182,5 +197,8 @@ function RuntimeDot({ tone }: { tone: RuntimeIndicatorView["tone"] }) {
     success: "bg-success ring-2 ring-success/20",
     muted: "bg-ink-muted",
   };
-  return <span className={cn("size-2 rounded-full", map[tone])} />;
+  // shrink-0: inside min-w-0 truncating rows the dot is otherwise the
+  // only shrinkable item left once the label hits zero — at 14%
+  // sidebar width the status dot itself deformed.
+  return <span className={cn("size-2 shrink-0 rounded-full", map[tone])} />;
 }

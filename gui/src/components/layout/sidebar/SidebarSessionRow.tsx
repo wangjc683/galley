@@ -252,6 +252,20 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             : "idle";
   const shouldPopIcon =
     hasBlockingError || hasPendingAsk || hasPendingApproval || showUnread;
+  // Suppress the pop for the state the row MOUNTED in: app launch and
+  // returning from Project Review must not fire a simultaneous burst
+  // of "look here" for states that aren't news. Once the key changes,
+  // popEnabled latches true and the keyed icon span remounts with the
+  // class already present, so the animation plays exactly on entry.
+  // Render-time state adjustment (React's "information from previous
+  // renders" pattern) — a post-mount effect can't do this, because
+  // adding the class one frame after mount still starts the animation.
+  const [prevAttentionKey, setPrevAttentionKey] = useState(attentionKey);
+  const [popEnabled, setPopEnabled] = useState(false);
+  if (attentionKey !== prevAttentionKey) {
+    setPrevAttentionKey(attentionKey);
+    setPopEnabled(true);
+  }
   const inactiveRowClass = hasBlockingError
     ? "bg-error/[var(--opacity-subtle)] hover:bg-error/[var(--opacity-soft)]"
     : hasPendingAsk || hasPendingApproval
@@ -309,8 +323,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       className={cn(
         "group relative mx-1.5 grid min-h-[48px] grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
         "transition-[background-color,box-shadow,color]",
+        // No row-level ring while editing — the input inside carries
+        // its own brand ring; two nested rings for one focus state
+        // was noisier than the app's quiet register.
         isEditing
-          ? "bg-elevated ring-1 ring-brand/30"
+          ? "bg-elevated"
           : cn(
               "cursor-pointer",
               active
@@ -348,7 +365,13 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
         key={`icon:${attentionKey}`}
         className={cn(
           "flex h-5 w-4 items-center justify-center pt-0.5",
-          shouldPopIcon && "sidebar-state-pop",
+          // No-subline rows center their single line in the 48px row
+          // instead of hugging the top (dead space below read as
+          // misalignment against two-line neighbours).
+          !sublineText && !isEditing && "self-center pt-0",
+          // Pop only on state TRANSITIONS, not on mount (see
+          // popEnabled above).
+          shouldPopIcon && popEnabled && "sidebar-state-pop",
         )}
       >
         {/* Same priority order as the rail and subline (error first):
@@ -367,8 +390,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       <div
         className={cn(
           "min-w-0 flex-1 transition-[padding] duration-75",
-          showActionTrigger && "group-hover:pr-6",
-          actionsOpen && "pr-6",
+          !sublineText && !isEditing && "self-center",
+          showActionTrigger && "group-hover:pr-7",
+          actionsOpen && "pr-7",
         )}
       >
         <div className="flex min-h-5 min-w-0 items-center gap-1.5">
@@ -425,6 +449,10 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
         {sublineText && (
           <div
             key={`${session.id}:${showRunningActivity ? `running:${session.lastStepIndex ?? "thinking"}:${cleanSummary ?? ""}` : `settled:${sublineText}`}`}
+            // Same truncated-text native-title exception as the row
+            // title above — at 14% width the status line clips to
+            // almost nothing and was otherwise unrecoverable.
+            title={sublineText}
             className={cn(
               "mt-0.5 truncate text-[11px] leading-[1.4]",
               sublineTone === "warning"
@@ -443,7 +471,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       {showActionTrigger && (
         <div
           className={cn(
-            "pointer-events-none absolute right-2 top-1.5 z-10 flex h-6 w-6 items-center justify-center opacity-0 transition-opacity duration-75",
+            // Vertically centered (not pinned top) so the sole actions
+            // entry sits on the row's optical middle for one- and
+            // two-line rows alike; sm (28px) button over the old 20px
+            // xs — this is a precision target used constantly.
+            "pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center opacity-0 transition-opacity duration-75",
             "group-hover:pointer-events-auto group-hover:opacity-100",
             actionsOpen && "pointer-events-auto opacity-100",
           )}
@@ -454,7 +486,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 <IconButton
                   ariaLabel={copy.common.more}
                   tooltip={false}
-                  size="xs"
+                  size="sm"
                   active={actionsOpen}
                   onPointerDown={(e) => {
                     e.stopPropagation();
@@ -472,7 +504,10 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 kind="dropdown"
                 align="end"
                 sideOffset={6}
-                className="z-50 min-w-[180px] rounded-md border border-line bg-elevated p-1 shadow-elevated"
+                // Same register as the MainHeader session-title menu —
+                // rename appears in both; they must not differ in
+                // width, motion, or type size.
+                className="galley-pop-in z-50 min-w-[200px] rounded-md border border-line bg-elevated p-1 shadow-elevated"
               >
                 <SidebarSessionMenuItems
                   kind="dropdown"
@@ -521,7 +556,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       <ContextMenu.Root>
         <ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger>
         <ContextMenu.Portal>
-          <ContextMenu.Content className="z-50 min-w-[180px] rounded-md border border-line bg-elevated p-1 shadow-elevated">
+          <ContextMenu.Content className="galley-pop-in z-50 min-w-[200px] rounded-md border border-line bg-elevated p-1 shadow-elevated">
             <SidebarSessionMenuItems
               kind="context"
               session={session}
@@ -558,7 +593,7 @@ function SidebarSessionMenuItems({
 }) {
   const copy = useCopy();
   const itemClass = cn(
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none transition-colors",
+    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[13px] text-ink-soft outline-none transition-colors",
     "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
   );
 

@@ -77,37 +77,40 @@ function ProjectQuickAction({
     <div
       className={cn(
         "mx-1.5 flex w-[calc(100%-12px)] items-center rounded-sm transition-[background-color,box-shadow,color] motion-reduce:transition-none",
-        // 激活态用 shadow-inner + 底色压暗,读出"被按住/陷进去"的物理
-        // 按压感,而不是平涂高亮的"被选中/标题"语义。配合文字改成
-        // "退出项目视图" + 小 ×,四重信号确保用户知道再按一次 = 退出。
+        // 激活态用 shadow-inner + 底色压暗 + FolderOpen 翻面,读出
+        // "被按住/陷进去"的物理按压感;标签保持「项目」不换字
+        // (换字会让行宽跳动),"再按一次 = 退出"由 tooltip / aria
+        // 承担 —— 与 layout-and-chrome.md §4.2 的约定一致。
         active
           ? "bg-selected/85 text-ink shadow-inner"
           : "text-ink hover:bg-hover",
       )}
     >
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={active}
-        aria-label={projectActionLabel}
-        className={cn(
-          "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2 text-left outline-none",
-          "transition-transform duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-px active:duration-[45ms]",
-          "focus-visible:ring-2 focus-visible:ring-brand/30",
-        )}
-      >
-        <ProjectIcon
-          size={14}
-          weight="thin"
+      <IconTooltip text={projectActionLabel} side="bottom">
+        <button
+          type="button"
+          onClick={onClick}
+          aria-pressed={active}
+          aria-label={projectActionLabel}
           className={cn(
-            "shrink-0 transition-colors",
-            active ? "text-brand-strong" : "text-ink-soft",
+            "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2 text-left outline-none",
+            "transition-transform duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-px active:duration-[45ms]",
+            "focus-visible:ring-2 focus-visible:ring-brand/30",
           )}
-        />
-        <span className="min-w-0 flex-1 truncate text-[13px]">
-          {active ? copy.sidebar.exitProjects : copy.sidebar.projects}
-        </span>
-      </button>
+        >
+          <ProjectIcon
+            size={14}
+            weight="thin"
+            className={cn(
+              "shrink-0 transition-colors",
+              active ? "text-brand-strong" : "text-ink-soft",
+            )}
+          />
+          <span className="min-w-0 flex-1 truncate text-[13px]">
+            {copy.sidebar.projects}
+          </span>
+        </button>
+      </IconTooltip>
       <IconTooltip text={copy.sidebar.newProject}>
         <button
           type="button"
