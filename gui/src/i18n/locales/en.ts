@@ -91,6 +91,11 @@ export const enCopy: AppCopy = {
     bucketEarlier: "Earlier",
     stepSummary: (index, summary) => `Step ${index} · ${summary}`,
     completedSummary: (summary) => `Done · ${summary}`,
+    cancelledSummary: (summary: string) => `Stopped · ${summary}`,
+    archiveRunningTitle: "Archive a running conversation?",
+    archiveRunningBody: (title: string) =>
+      `"${title}" is still running. Archiving won't stop it, but it will disappear from the sidebar and you won't see its progress.`,
+    archiveRunningConfirm: "Archive anyway",
     pendingAskPrefix: "Waiting for you",
     gaWaitingForReply: "GA is waiting for your reply",
     pendingApprovalBadge: (count) =>

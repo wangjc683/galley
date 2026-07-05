@@ -15,6 +15,7 @@ import {
 
 import { IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
+import { useDayStamp } from "@/hooks/useDayStamp";
 import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { effectiveProjectActivityAt } from "@/lib/projects";
@@ -599,7 +600,14 @@ function SidebarProjectDrawer({
 }) {
   // Memoized like the global list's call (Sidebar.tsx) — this ran in
   // the render body of every project drawer, collapsed ones included.
-  const projectBuckets = useMemo(() => groupSessions(sessions), [sessions]);
+  // dayStamp keeps the 今天/本周 buckets honest past midnight (see
+  // useDayStamp).
+  const dayStamp = useDayStamp();
+  const projectBuckets = useMemo(
+    () => groupSessions(sessions),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessions, dayStamp],
+  );
   const projectEmpty = sessions.length === 0;
 
   return (

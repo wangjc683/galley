@@ -1,4 +1,5 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
+import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   useEffect,
@@ -19,10 +20,11 @@ import {
   PlugsConnected,
   PushPin,
   PushPinSlash,
+  WarningCircle,
   X as XIcon,
 } from "@phosphor-icons/react";
 
-import { IconButton } from "@/components/ui/button";
+import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
@@ -103,6 +105,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   );
   const showActionTrigger = hasRowActions && !isEditing;
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
   const ignoreNextRowClickRef = useRef(false);
   // Four-state sidebar display (Stage 3 round 7+10, V0.2 ask_user):
   //   1. running                  — bold brand spinner + italic "正在工作 · 第 N 步" subline
@@ -220,7 +223,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           : goalRunning
             ? goalSubline
             : cleanSummary
-              ? copy.sidebar.completedSummary(cleanSummary)
+              ? // A user-aborted session must not claim completion —
+                // its icon is already Prohibit; the words must match.
+                session.status === "cancelled"
+                ? copy.sidebar.cancelledSummary(cleanSummary)
+                : copy.sidebar.completedSummary(cleanSummary)
               : null;
   const sublineTone: "running" | "warning" | "error" | "muted" =
     hasBlockingError
@@ -265,10 +272,13 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     if (event.ctrlKey) return;
 
     activateRow();
+    // Suppress the click this press will produce (activation already
+    // happened on pointerdown for snappy switching). A plain ref, not
+    // a timer: every click is preceded by a pointerdown that re-arms
+    // the flag, and a press that never clicks (dragged off) re-arms on
+    // its next press — so there's no timing window to mis-size. The
+    // old 500ms timeout double-fired on long presses.
     ignoreNextRowClickRef.current = true;
-    window.setTimeout(() => {
-      ignoreNextRowClickRef.current = false;
-    }, 500);
   };
   const handleRowClick = () => {
     if (ignoreNextRowClickRef.current) {
@@ -276,6 +286,20 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       return;
     }
     activateRow();
+  };
+  // Archiving a running session (own run or goal-master) hides live
+  // work from the status board, so it asks for an explicit confirm
+  // (2026-07-05 decision). Archive does NOT stop the run — the dialog
+  // copy says exactly that. Settled sessions keep the one-click,
+  // reversible archive.
+  const archiveNeedsConfirm = isRunning || goalRunning;
+  const handleArchiveSelect = () => {
+    if (!onArchive) return;
+    if (archiveNeedsConfirm) {
+      setConfirmArchiveOpen(true);
+      return;
+    }
+    onArchive();
   };
   const row = (
     <div
@@ -327,7 +351,10 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           shouldPopIcon && "sidebar-state-pop",
         )}
       >
-        {hasPendingAsk ? (
+        {/* Same priority order as the rail and subline (error first):
+            the three signals must agree on what the row's state is —
+            an amber pause icon next to a red rail read as two states. */}
+        {hasPendingAsk && !hasBlockingError ? (
           <PauseCircle size={14} weight="fill" className="text-warning" />
         ) : (
           <StatusIcon
@@ -451,7 +478,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                   kind="dropdown"
                   session={session}
                   projects={projects}
-                  onArchive={onArchive}
+                  onArchive={handleArchiveSelect}
                   onTogglePin={onTogglePin}
                   onAssignToProject={onAssignToProject}
                   onRequestRename={onRequestRename}
@@ -464,25 +491,51 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     </div>
   );
 
-  if (!hasRowActions) return row;
+  const archiveConfirmDialog = onArchive ? (
+    <ArchiveRunningConfirmDialog
+      title={session.title}
+      open={confirmArchiveOpen}
+      onCancel={() => setConfirmArchiveOpen(false)}
+      onConfirm={() => {
+        setConfirmArchiveOpen(false);
+        onArchive();
+      }}
+    />
+  ) : null;
+
+  // While a rename edit is live, the row must not offer a context menu:
+  // right-clicking the row padding blurs the input (committing the
+  // rename by design) and would then open a menu over the just-
+  // committed row — the user thinks they're still editing.
+  if (!hasRowActions || isEditing) {
+    return (
+      <>
+        {row}
+        {archiveConfirmDialog}
+      </>
+    );
+  }
 
   return (
-    <ContextMenu.Root>
-      <ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger>
-      <ContextMenu.Portal>
-        <ContextMenu.Content className="z-50 min-w-[180px] rounded-md border border-line bg-elevated p-1 shadow-elevated">
-          <SidebarSessionMenuItems
-            kind="context"
-            session={session}
-            projects={projects}
-            onArchive={onArchive}
-            onTogglePin={onTogglePin}
-            onAssignToProject={onAssignToProject}
-            onRequestRename={onRequestRename}
-          />
-        </ContextMenu.Content>
-      </ContextMenu.Portal>
-    </ContextMenu.Root>
+    <>
+      <ContextMenu.Root>
+        <ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger>
+        <ContextMenu.Portal>
+          <ContextMenu.Content className="z-50 min-w-[180px] rounded-md border border-line bg-elevated p-1 shadow-elevated">
+            <SidebarSessionMenuItems
+              kind="context"
+              session={session}
+              projects={projects}
+              onArchive={handleArchiveSelect}
+              onTogglePin={onTogglePin}
+              onAssignToProject={onAssignToProject}
+              onRequestRename={onRequestRename}
+            />
+          </ContextMenu.Content>
+        </ContextMenu.Portal>
+      </ContextMenu.Root>
+      {archiveConfirmDialog}
+    </>
   );
 });
 
@@ -628,6 +681,68 @@ function SidebarSessionMenuItems({
   );
 }
 
+
+/**
+ * Confirm dialog for archiving a session that is still running (its
+ * own run, or a goal it masters). Mirrors ConfirmDeleteProjectDialog's
+ * alertdialog shape; warning tone (not error) because archiving is
+ * reversible — the risk is losing SIGHT of live work, not losing data.
+ */
+function ArchiveRunningConfirmDialog({
+  title,
+  open,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  open: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const copy = useCopy();
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) onCancel();
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
+        <Dialog.Content
+          role="alertdialog"
+          aria-describedby="archive-running-desc"
+          className={cn(
+            "fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
+            "rounded-lg border border-line bg-elevated p-5 shadow-elevated",
+            "max-w-[calc(100vw-32px)]",
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <WarningCircle size={18} weight="bold" className="text-warning" />
+            <Dialog.Title className="text-[15px] font-semibold text-ink">
+              {copy.sidebar.archiveRunningTitle}
+            </Dialog.Title>
+          </div>
+          <p
+            id="archive-running-desc"
+            className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
+          >
+            {copy.sidebar.archiveRunningBody(title)}
+          </p>
+          <DialogActionRow>
+            <Button variant="secondary" onClick={onCancel} autoFocus>
+              {copy.common.cancel}
+            </Button>
+            <Button variant="warning" onClick={onConfirm}>
+              {copy.sidebar.archiveRunningConfirm}
+            </Button>
+          </DialogActionRow>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
 
 /**
  * Inline-edit input for session title (replaces the title span when

@@ -89,6 +89,11 @@ export const zhCopy = {
     stepSummary: (index: number, summary: string) =>
       `第 ${index} 步 · ${summary}`,
     completedSummary: (summary: string) => `已完成 · ${summary}`,
+    cancelledSummary: (summary: string) => `已中止 · ${summary}`,
+    archiveRunningTitle: "归档正在运行的对话？",
+    archiveRunningBody: (title: string) =>
+      `「${title}」仍在运行。归档不会停止它，但它会从侧栏消失，你将看不到后续进展。`,
+    archiveRunningConfirm: "仍要归档",
     pendingAskPrefix: "⏸ 等你回复",
     gaWaitingForReply: "GA 在等你回复",
     pendingApprovalBadge: (count: number) => `${count} 待审批`,

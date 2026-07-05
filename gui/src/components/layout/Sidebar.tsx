@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useDayStamp } from "@/hooks/useDayStamp";
 import { useCopy } from "@/lib/i18n";
 import { sortProjectsForNavigation } from "@/lib/projects";
 import { groupSessions } from "@/lib/sessions";
@@ -172,8 +173,16 @@ export function Sidebar({
   // Memoised: `groupSessions` walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
-  // pendingAskUser / bridgeStatus). `[sessions]` is the only input.
-  const globalBuckets = useMemo(() => groupSessions(sessions), [sessions]);
+  // pendingAskUser / bridgeStatus). `dayStamp` is in the deps because
+  // bucketing captures "today" at call time — without it, an app left
+  // open past midnight kept yesterday's sessions under 今天 until an
+  // unrelated session mutation happened to retrigger the memo.
+  const dayStamp = useDayStamp();
+  const globalBuckets = useMemo(
+    () => groupSessions(sessions),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessions, dayStamp],
+  );
   const globalEmpty = sessions.length === 0;
   const navigationProjects = useMemo(
     () => sortProjectsForNavigation(projects, sessions),
