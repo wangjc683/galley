@@ -20,7 +20,7 @@ export function SidebarFooter({
     <button
       type="button"
       onClick={onOpenArchived}
-      className="flex w-full items-center gap-2 border-t border-line/70 px-3.5 py-1.5 text-left text-[11px] text-ink-muted transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-hover hover:text-ink-soft active:translate-y-px active:duration-[45ms] outline-none focus-visible:bg-hover focus-visible:text-ink-soft"
+      className="flex w-full items-center gap-2 border-t border-line/70 px-3.5 py-1.5 text-left text-[11px] text-ink-muted transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-hover hover:text-ink-soft active:translate-y-px active:duration-[45ms] outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
     >
       <Archive size={12} weight="thin" className="text-ink-muted" />
       <span>{copy.sidebar.archived}</span>

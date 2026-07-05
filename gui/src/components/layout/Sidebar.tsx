@@ -125,7 +125,9 @@ export interface SidebarProps {
  *   full  — sessions[] non-empty: header + quick actions + bucketed
  *           sections (pinned/today/week/earlier) + archive footer
  *   empty — sessions[] empty: header + quick actions + muted hint
- *           "这里会出现你的 sessions"; no sections / archive footer
+ *           ("你的对话会出现在这里。"); no sections, and the archive
+ *           footer only if archived sessions exist (it's the sole
+ *           path back to them)
  *
  * The active session row gets `bg-selected` (apricot tint) — this is a
  * brand moment, not just hover state.
@@ -358,7 +360,14 @@ export function Sidebar({
         )}
       </div>
 
-      <SidebarFooter count={archivedCount} onOpenArchived={onOpenArchived} />
+      {/* Fresh installs (no sessions, nothing archived) keep the quiet
+          empty state — a lone "已归档" button under the hint was chrome
+          for nothing. But if archived sessions exist while the live
+          list is empty, the footer MUST stay: it's the only path back
+          to that data. */}
+      {(!globalEmpty || archivedCount > 0) && (
+        <SidebarFooter count={archivedCount} onOpenArchived={onOpenArchived} />
+      )}
     </div>
   );
 }

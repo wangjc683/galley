@@ -110,7 +110,7 @@ export function SidebarHeader({
             type="button"
             onClick={onOpenModelsSettings}
             aria-label={indicator.ariaLabel}
-            className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft transition-colors hover:bg-hover hover:text-ink"
+            className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft transition-colors duration-[120ms] hover:bg-hover hover:text-ink"
           >
             <RuntimeDot tone={indicator.tone} />
             <span className="min-w-0 truncate">{indicator.label}</span>
@@ -122,7 +122,7 @@ export function SidebarHeader({
             type="button"
             onClick={onOpenRuntimeSettings}
             aria-label={indicator.ariaLabel}
-            className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft transition-colors hover:bg-hover hover:text-ink"
+            className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft transition-colors duration-[120ms] hover:bg-hover hover:text-ink"
           >
             <RuntimeDot tone={indicator.tone} />
             <span className="min-w-0 truncate">{indicator.label}</span>
@@ -134,7 +134,7 @@ export function SidebarHeader({
             type="button"
             onClick={onOpenAgentSettings}
             aria-label={copy.sidebar.openSupervisorSop}
-            className="inline-flex min-w-0 max-w-[132px] items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[11.5px] text-ink-soft transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            className="inline-flex min-w-0 max-w-[132px] items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[11.5px] text-ink-soft transition-colors duration-[120ms] hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
           >
             <PlugsConnected size={13} weight="thin" className="shrink-0" />
             <span className="min-w-0 truncate">{supervisorSopLabel}</span>

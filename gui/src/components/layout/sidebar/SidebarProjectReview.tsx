@@ -6,6 +6,7 @@ import {
   DotsThree,
   Folder,
   FolderOpen,
+  Pencil,
   Plus,
   PushPin,
   PushPinSlash,
@@ -260,7 +261,10 @@ function SidebarProjectReviewEmpty({
           "outline-none",
         )}
       >
-        <Plus size={13} weight="thin" className="shrink-0 text-brand-strong" />
+        {/* regular (not thin): this is the empty state's PRIMARY CTA —
+            its plus must not read weaker than the routine new-chat
+            entry above. */}
+        <Plus size={14} weight="regular" className="shrink-0 text-brand-strong" />
         <span className="min-w-0 flex-1 truncate">
           {copy.sidebar.createFirstProject}
         </span>
@@ -300,10 +304,17 @@ function SidebarProjectGroupToggle({
       <CaretRight
         size={10}
         weight="thin"
-        className={cn("transition-transform", open && "rotate-90")}
+        className={cn(
+          "transition-transform duration-[120ms]",
+          open && "rotate-90",
+        )}
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="text-[10px] font-medium tracking-normal">{count}</span>
+      {/* tabular-nums: same count family as the timeline bucket
+          headers (今天 5 / 本周 8). */}
+      <span className="text-[10px] font-medium tabular-nums tracking-normal">
+        {count}
+      </span>
     </button>
   );
 }
@@ -362,7 +373,7 @@ function SidebarProjectRow({
         size={14}
         weight="thin"
         className={cn(
-          "shrink-0 transition-colors",
+          "shrink-0 transition-colors duration-[120ms]",
           expanded ? "text-brand-strong" : "text-ink-muted",
         )}
       />
@@ -388,7 +399,7 @@ function SidebarProjectRow({
       {(onStartConversation || hasRowActions) && (
         <div
           className={cn(
-            "pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity duration-75",
+            "pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity duration-[120ms]",
             "group-hover:pointer-events-auto group-hover:opacity-100",
             actionsOpen && "pointer-events-auto opacity-100",
           )}
@@ -405,14 +416,17 @@ function SidebarProjectRow({
                 }}
                 aria-label={newConversationTitle}
                 className={cn(
-                  "inline-flex size-[28px] shrink-0 items-center justify-center rounded-sm",
+                  // 32px hit area + 14/regular plus per the shared
+                  // light-button rules with the quick-action 新建项目
+                  // (layout-and-chrome.md §4.2 Project 行).
+                  "inline-flex size-[32px] shrink-0 items-center justify-center rounded-sm",
                   "text-ink-muted transition-[background-color,color,opacity,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
                   "group-hover:text-ink-soft",
                   "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60 active:duration-[45ms]",
                   "outline-none",
                 )}
               >
-                <Plus size={13} weight="thin" />
+                <Plus size={14} weight="regular" />
               </button>
             </IconTooltip>
           )}
@@ -501,11 +515,11 @@ function SidebarProjectMenuItems({
 }) {
   const copy = useCopy();
   const itemClass = cn(
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none transition-colors",
+    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none transition-colors duration-[120ms]",
     "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
   );
   const destructiveItemClass = cn(
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-error outline-none transition-colors",
+    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-error outline-none transition-colors duration-[120ms]",
     "data-[highlighted]:bg-error/[var(--opacity-soft)] data-[highlighted]:text-error",
   );
 
@@ -536,7 +550,10 @@ function SidebarProjectMenuItems({
           onSelect={onEdit}
           className={itemClass}
         >
-          <FolderOpen size={13} weight="thin" />
+          {/* Pencil, not FolderOpen: on project rows FolderOpen already
+              means "expanded" — the menu glyph must say "edit" (same
+              icon as session rename). */}
+          <Pencil size={13} weight="thin" />
           {copy.sidebar.editProject}
         </SidebarRowMenuItem>
       )}
@@ -693,10 +710,12 @@ function SidebarProjectEmptyHint({
     project.name,
   );
   if (!onStartProjectConversation) {
+    // Defensive branch (host didn't wire the action): render plain
+    // muted text, NOT the bordered plus-pill — a dead control styled
+    // like the live one is a lie of an affordance.
     return (
-      <div className="mx-1.5 mt-3 flex w-[calc(100%-12px)] items-center gap-2 rounded-sm border border-line/70 bg-elevated/55 px-3 py-2 text-[12px] font-medium text-ink-muted">
-        <Plus size={12} weight="thin" className="shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+      <div className="mx-1.5 mt-3 px-3 py-2 text-[12px] italic text-ink-muted">
+        {label}
       </div>
     );
   }
@@ -714,7 +733,7 @@ function SidebarProjectEmptyHint({
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         )}
       >
-        <Plus size={12} weight="thin" className="shrink-0" />
+        <Plus size={13} weight="regular" className="shrink-0" />
         <span className="min-w-0 flex-1 truncate">{label}</span>
       </button>
     </IconTooltip>

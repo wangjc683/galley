@@ -102,7 +102,7 @@ function ProjectQuickAction({
             size={14}
             weight="thin"
             className={cn(
-              "shrink-0 transition-colors",
+              "shrink-0 transition-colors duration-[120ms]",
               active ? "text-brand-strong" : "text-ink-soft",
             )}
           />

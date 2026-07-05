@@ -107,25 +107,16 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   const [actionsOpen, setActionsOpen] = useState(false);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
   const ignoreNextRowClickRef = useRef(false);
-  // Four-state sidebar display (Stage 3 round 7+10, V0.2 ask_user):
-  //   1. running                  — bold brand spinner + italic "正在工作 · 第 N 步" subline
-  //   2. pending ask_user         — warning PauseCircle + "⏸ 等你回复" subline (V0.2)
-  //   3. settled + hasUnread=true — static icon + brand dot + bold title
-  //   4. settled + hasUnread=false — static icon, no dot
+  // Row state model (current spec: layout-and-chrome.md §4.2 Session
+  // Row) — three independent signals, same priority order in each:
+  // status rail (left 3px channel) → status icon → subline text.
+  // Priority: error > ask_user > approval > running/goal-running >
+  // unread > idle. Unread folds into the left icon (filled brand
+  // circle); there is no right-side dot.
+  //
   // Active row is always treated as read (the user is looking at
   // it); even if the final turn_end fires there, bumpSessionAfterTurn
   // skips the unread mark for sessionId === activeSessionId.
-  //
-  // Pending ask_user takes precedence over hasUnread when both are
-  // true (rare — would mean ask_user fired on a session the user
-  // wasn't watching). The yellow indicator carries higher actionable
-  // weight than "there's something new"; we override.
-  //
-  // Running gets a second signal beyond the spinning icon: the
-  // subline switches from the persisted turn-summary to a live
-  // italic "正在工作 · 第 N 步". Color + typography + language all
-  // shift so the running state is identifiable at a glance, not
-  // just by the icon's rotation.
   const hasPendingAsk = !!session.hasPendingAskUser;
   const isRunning = session.status === "running";
   const hasPendingApproval =
@@ -143,8 +134,8 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     !hasBlockingError;
   const showRunningActivity =
     isRunning && !hasPendingAsk && !hasPendingApproval && !hasBlockingError;
-  // Right-side dot is unread-only now; the ongoing states
-  // (running / waiting / error) are carried by the left status rail.
+  // Unread renders as the left icon's filled-brand form, and only for
+  // fully settled rows — every live/blocking state outranks it.
   const showUnread =
     !!session.hasUnread &&
     !active &&
@@ -182,11 +173,12 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   //     language as MainView's in-progress placeholder for a
   //     unified register.
   //
-  //   settled → "已完成 · {summary}"
+  //   settled → "已完成 · {summary}"（cancelled → "已中止 · {summary}"）
   //     Same {summary} as the running row's final tick — the
   //     transition from running→settled keeps the recap text
-  //     stable and only swaps the prefix (and the icon flips
-  //     from spinner to check). Visual continuity for the user.
+  //     stable and only swaps the prefix. (Note: locally-settled
+  //     sessions have status "idle"; the "completed" enum value is
+  //     only ever written by the CLI/supervisor surface.)
   //
   // Legacy data: pre-this-change rows wrote
   // "第 N 步 · {summary}" into session.summary directly. Strip
@@ -389,7 +381,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       </span>
       <div
         className={cn(
-          "min-w-0 flex-1 transition-[padding] duration-75",
+          "min-w-0 flex-1 transition-[padding] duration-[120ms]",
           !sublineText && !isEditing && "self-center",
           showActionTrigger && "group-hover:pr-7",
           actionsOpen && "pr-7",
@@ -475,7 +467,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             // entry sits on the row's optical middle for one- and
             // two-line rows alike; sm (28px) button over the old 20px
             // xs — this is a precision target used constantly.
-            "pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center opacity-0 transition-opacity duration-75",
+            "pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center opacity-0 transition-opacity duration-[120ms]",
             "group-hover:pointer-events-auto group-hover:opacity-100",
             actionsOpen && "pointer-events-auto opacity-100",
           )}
