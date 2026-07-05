@@ -131,6 +131,11 @@
    * `leading-*` utilities from them. New chrome code should reference
    * these names; the ~436 legacy `text-[Npx]` literals migrate when
    * their host component is next touched.
+   *
+   * Adding/renaming a token here? Mirror it in lib/utils.ts's
+   * extendTailwindMerge config — otherwise tailwind-merge classifies the
+   * unknown `text-*` class as a COLOR and a later text color in the same
+   * cn() call silently deletes the font-size.
    */
   --text-ui-compact: 13px; /* 紧凑正文 / CTA / session row title / tool name */
   --text-ui-secondary: 12.5px; /* 次要正文 / dialog 描述 / menu item */

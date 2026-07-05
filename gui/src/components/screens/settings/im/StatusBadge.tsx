@@ -49,10 +49,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        // Chip metrics sit a tier below the 13px card title: CJK labels
-        // (未接入 / 运行中) at ui-tertiary read almost title-sized, so
-        // the badge uses ui-micro with proportionally tighter box.
-        "inline-flex h-5 items-center gap-1 rounded-sm border px-1.5 text-ui-micro",
+        "inline-flex h-6 items-center gap-1.5 rounded-sm border px-2 text-ui-tertiary",
         state === "running"
           ? "border-success/30 bg-success/[var(--opacity-soft)] text-success"
           : state === "error" || state === "expired"
@@ -61,7 +58,7 @@ export function StatusBadge({
       )}
     >
       <Icon
-        size={11}
+        size={12}
         weight={iconState === "running" ? "fill" : "regular"}
         className={
           iconState === "starting" || iconState === "reconnecting"
