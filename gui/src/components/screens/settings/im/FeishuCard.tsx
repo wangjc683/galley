@@ -1,14 +1,8 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import * as Dialog from "@radix-ui/react-dialog";
-import {
-  Check,
-  CircleNotch,
-  Power,
-  WarningCircle,
-} from "@phosphor-icons/react";
+import { Check, CircleNotch, Power } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
-import { Button, DialogActionRow } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import {
   deleteFeishuImConfig,
@@ -21,10 +15,11 @@ import {
   type ImSupervisorState,
   type ImSupervisorStatus,
 } from "@/lib/im-supervisor";
-import { cn } from "@/lib/utils";
 
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelCard } from "./ChannelCard";
+import { ChannelErrorBlock } from "./ChannelErrorBlock";
+import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { FeishuCommandReference } from "./CommandReference";
 import { FeishuSetupGuide } from "./FeishuSetupGuide";
 import { FeishuGlyph } from "./Glyphs";
@@ -42,7 +37,6 @@ export function FeishuCard({
 }) {
   const appCopy = useCopy();
   const imCopy = appCopy.settings.im;
-  const commonCopy = appCopy.common;
   const [config, setConfig] = useState<FeishuImConfig | null>(null);
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
@@ -229,7 +223,7 @@ export function FeishuCard({
               credentialsForm={
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                    <span className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
                       {imCopy.feishuAppIdLabel}
                     </span>
                     <input
@@ -237,11 +231,11 @@ export function FeishuCard({
                       onChange={(e) => setAppId(e.target.value)}
                       placeholder={imCopy.feishuAppIdPlaceholder}
                       spellCheck={false}
-                      className="w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-[12.5px] text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
+                      className="w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                    <span className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
                       {imCopy.feishuAppSecretLabel}
                     </span>
                     <input
@@ -254,7 +248,7 @@ export function FeishuCard({
                           : imCopy.feishuAppSecretPlaceholder
                       }
                       spellCheck={false}
-                      className="w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-[12.5px] text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
+                      className="w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
                     />
                   </label>
                 </div>
@@ -263,7 +257,11 @@ export function FeishuCard({
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
-                    variant="primary"
+                    // Primary tracks the current actionable step: while
+                    // credentials aren't saved yet, saving IS the next
+                    // step; once the service can start, save demotes to
+                    // a secondary re-save and start takes primary.
+                    variant={canStartService ? "secondary" : "primary"}
                     size="sm"
                     disabled={busy || !canSaveCredentials}
                     leadingIcon={
@@ -280,7 +278,7 @@ export function FeishuCard({
                       : imCopy.feishuSaveCredentials}
                   </Button>
                   {localBusy === "load" ? (
-                    <span className="text-[12px] text-ink-muted">
+                    <span className="text-ui-meta text-ink-muted">
                       {imCopy.feishuConfigLoading}
                     </span>
                   ) : null}
@@ -290,7 +288,7 @@ export function FeishuCard({
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
-                    variant="primary"
+                    variant={canStartService ? "primary" : "secondary"}
                     size="sm"
                     disabled={busy || !canStartService}
                     leadingIcon={
@@ -315,14 +313,14 @@ export function FeishuCard({
             <div className="rounded-sm border border-line bg-surface px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-2">
                 <Check size={13} weight="bold" className="text-success" />
-                <span className="text-[12px] font-semibold text-ink">
+                <span className="text-ui-meta font-semibold text-ink">
                   {imCopy.feishuBoundLabel}
                 </span>
-                <span className="select-text font-mono text-[11.5px] text-ink-soft">
+                <span className="select-text font-mono text-ui-tertiary text-ink-soft">
                   {maskOpenId(ownerOpenId)}
                 </span>
                 {ownerBoundAt ? (
-                  <span className="text-[11.5px] text-ink-muted">
+                  <span className="text-ui-tertiary text-ink-muted">
                     {imCopy.feishuBoundAt}{" "}
                     {new Date(ownerBoundAt).toLocaleString()}
                   </span>
@@ -341,134 +339,56 @@ export function FeishuCard({
             </div>
           ) : bindCode ? (
             <div className="rounded-sm border border-brand/25 bg-brand/[var(--opacity-subtle)] px-3 py-2.5">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-brand">
+              <div className="text-ui-tertiary font-medium text-brand">
                 {imCopy.feishuBindWaitingTitle}
               </div>
-              <div className="mt-1.5 flex flex-wrap items-baseline gap-2 text-[12.5px] text-ink">
+              <div className="mt-1.5 flex flex-wrap items-baseline gap-2 text-ui-secondary text-ink">
                 <span>{imCopy.feishuBindWaitingLead}</span>
                 <code className="select-text rounded-sm border border-line bg-surface px-2 py-0.5 font-mono text-[15px] font-bold tracking-[0.2em] text-ink">
                   {bindCode}
                 </code>
               </div>
-              <div className="mt-1 text-[11.5px] leading-[1.5] text-ink-muted">
+              <div className="mt-1 text-ui-tertiary leading-notice text-ink-muted">
                 {imCopy.feishuBindWaitingAfterCode} {imCopy.feishuOwnerScopeAdvice}
               </div>
             </div>
           ) : null}
 
-          <p className="text-[11.5px] leading-[1.5] text-ink-muted">
+          <p className="text-ui-tertiary leading-notice text-ink-muted">
             {imCopy.feishuOwnerSecurityNote}
           </p>
 
-          {localError || statusLoadError || status?.lastError ? (
-            <div className="rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-error/80">
-                {imCopy.lastError}
-              </div>
-              <div className="select-text break-words font-mono text-[11.5px] leading-[1.45] text-error">
-                {localError ?? statusLoadError ?? status?.lastError}
-              </div>
-            </div>
-          ) : null}
+          <ChannelErrorBlock
+            error={localError ?? statusLoadError ?? status?.lastError ?? null}
+          />
         </div>
       </ChannelCard>
 
-      <Dialog.Root open={confirmUnbindOpen} onOpenChange={setConfirmUnbindOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
-          <Dialog.Content
-            role="alertdialog"
-            aria-describedby="unbind-feishu-desc"
-            className={cn(
-              "fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
-              "max-w-[calc(100vw-32px)] rounded-lg border border-line bg-elevated p-5 shadow-elevated",
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <WarningCircle size={18} weight="bold" className="text-warning" />
-              <Dialog.Title className="text-[15px] font-semibold text-ink">
-                {imCopy.feishuUnbindDialogTitle}
-              </Dialog.Title>
-            </div>
-            <p
-              id="unbind-feishu-desc"
-              className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
-            >
-              {imCopy.feishuUnbindDialogBody}
-            </p>
-            <DialogActionRow>
-              <Button
-                variant="secondary"
-                onClick={() => setConfirmUnbindOpen(false)}
-                disabled={busy}
-                autoFocus
-              >
-                {commonCopy.cancel}
-              </Button>
-              <Button
-                variant="destructive-soft"
-                disabled={busy}
-                onClick={() => {
-                  setConfirmUnbindOpen(false);
-                  void unbind();
-                }}
-              >
-                {imCopy.feishuUnbind}
-              </Button>
-            </DialogActionRow>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <ConfirmActionDialog
+        open={confirmUnbindOpen}
+        onOpenChange={setConfirmUnbindOpen}
+        busy={busy}
+        title={imCopy.feishuUnbindDialogTitle}
+        body={imCopy.feishuUnbindDialogBody}
+        confirmLabel={imCopy.feishuUnbind}
+        onConfirm={() => {
+          setConfirmUnbindOpen(false);
+          void unbind();
+        }}
+      />
 
-      <Dialog.Root
+      <ConfirmActionDialog
         open={confirmDisconnectOpen}
         onOpenChange={setConfirmDisconnectOpen}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
-          <Dialog.Content
-            role="alertdialog"
-            aria-describedby="disconnect-feishu-desc"
-            className={cn(
-              "fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
-              "max-w-[calc(100vw-32px)] rounded-lg border border-line bg-elevated p-5 shadow-elevated",
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <WarningCircle size={18} weight="bold" className="text-warning" />
-              <Dialog.Title className="text-[15px] font-semibold text-ink">
-                {imCopy.feishuDisconnectDialogTitle}
-              </Dialog.Title>
-            </div>
-            <p
-              id="disconnect-feishu-desc"
-              className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
-            >
-              {imCopy.feishuDisconnectDialogBody}
-            </p>
-            <DialogActionRow>
-              <Button
-                variant="secondary"
-                onClick={() => setConfirmDisconnectOpen(false)}
-                disabled={busy}
-                autoFocus
-              >
-                {commonCopy.cancel}
-              </Button>
-              <Button
-                variant="destructive-soft"
-                disabled={busy}
-                onClick={() => {
-                  setConfirmDisconnectOpen(false);
-                  void disconnect();
-                }}
-              >
-                {imCopy.disconnect}
-              </Button>
-            </DialogActionRow>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        busy={busy}
+        title={imCopy.feishuDisconnectDialogTitle}
+        body={imCopy.feishuDisconnectDialogBody}
+        confirmLabel={imCopy.disconnect}
+        onConfirm={() => {
+          setConfirmDisconnectOpen(false);
+          void disconnect();
+        }}
+      />
     </>
   );
 }

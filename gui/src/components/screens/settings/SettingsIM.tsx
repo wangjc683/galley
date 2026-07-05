@@ -5,8 +5,8 @@ import {
 } from "@phosphor-icons/react";
 import { useState } from "react";
 
+import { ConfirmActionDialog } from "@/components/screens/settings/im/ConfirmActionDialog";
 import { FeishuCard } from "@/components/screens/settings/im/FeishuCard";
-import { RestartChannelsDialog } from "@/components/screens/settings/im/RestartChannelsDialog";
 import { WeChatCard } from "@/components/screens/settings/im/WeChatCard";
 import type { BusyAction } from "@/components/screens/settings/im/types";
 import { SettingsPanelHeader } from "@/components/screens/settings/settings-ui";
@@ -69,7 +69,6 @@ export function SettingsIM({
 
   const restartChannels = async () => {
     setBusyAction("restart");
-    setInvokeError(null);
     try {
       const statuses = await restartEnabledImSupervisors();
       const wechat = statuses.find((item) => item.platform === "wechat");
@@ -99,8 +98,10 @@ export function SettingsIM({
         }),
       );
     } catch (e) {
+      // Restart failures report through the toast only. Writing them
+      // into `invokeError` would surface a cross-channel failure
+      // inside the WeChat card's error block — wrong attribution.
       const message = e instanceof Error ? e.message : String(e);
-      setInvokeError(message);
       useUiStore.getState().pushToast(
         makeAppError({
           id: "channels-restart-failed",
@@ -128,7 +129,7 @@ export function SettingsIM({
 
       {!hasManagedRuntimeConfigured ? (
         <div className="rounded-sm border border-line bg-surface px-4 py-4">
-          <div className="text-[13px] leading-[1.55] text-ink-soft">
+          <div className="text-ui-compact leading-secondary text-ink-soft">
             {imCopy.modelRequired}
           </div>
           <Button
@@ -143,6 +144,40 @@ export function SettingsIM({
         </div>
       ) : (
         <div className="space-y-3">
+          {hasStaleEnabledChannel && (
+            <div className="flex flex-wrap items-center gap-3 rounded-sm border border-warning/25 bg-warning/[var(--opacity-subtle)] px-3 py-2.5">
+              <WarningCircle
+                size={16}
+                weight="bold"
+                className="shrink-0 text-warning"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-ui-secondary font-medium text-ink">
+                  {imCopy.staleConfigTitle}
+                </div>
+                <div className="mt-0.5 text-ui-tertiary leading-notice text-ink-muted">
+                  {imCopy.staleConfigBody}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={busyAction === "restart"}
+                leadingIcon={
+                  busyAction === "restart" ? (
+                    <CircleNotch size={13} className="animate-spin" />
+                  ) : (
+                    <ArrowsClockwise size={13} />
+                  )
+                }
+                onClick={() => setConfirmRestartOpen(true)}
+              >
+                {copy.toasts.restartChannels}
+              </Button>
+            </div>
+          )}
+
           <WeChatCard
             status={wechatStatus}
             busyAction={busyAction}
@@ -163,30 +198,44 @@ export function SettingsIM({
             statusLoadError={feishuStatusLoadError}
             onStatusChange={setFeishuStatus}
           />
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              variant={hasStaleEnabledChannel ? "secondary" : "ghost"}
-              size="sm"
-              disabled={busyAction === "restart" || !hasEnabledChannel}
-              leadingIcon={
-                busyAction === "restart" ? (
-                  <CircleNotch size={13} className="animate-spin" />
-                ) : hasStaleEnabledChannel ? (
-                  <WarningCircle size={13} weight="bold" />
-                ) : (
-                  <ArrowsClockwise size={13} />
-                )
-              }
-              onClick={() => setConfirmRestartOpen(true)}
-            >
-              {copy.toasts.restartChannels}
-            </Button>
-          </div>
-          <RestartChannelsDialog
+
+          {hasEnabledChannel && !hasStaleEnabledChannel && (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busyAction === "restart"}
+                leadingIcon={
+                  busyAction === "restart" ? (
+                    <CircleNotch size={13} className="animate-spin" />
+                  ) : (
+                    <ArrowsClockwise size={13} />
+                  )
+                }
+                onClick={() => setConfirmRestartOpen(true)}
+              >
+                {copy.toasts.restartChannels}
+              </Button>
+            </div>
+          )}
+
+          <ConfirmActionDialog
             open={confirmRestartOpen}
             busy={busyAction === "restart"}
             onOpenChange={setConfirmRestartOpen}
+            icon={
+              <ArrowsClockwise
+                size={18}
+                weight="bold"
+                className="text-warning"
+              />
+            }
+            title={imCopy.restartChannelsDialogTitle}
+            body={imCopy.restartChannelsDialogBody}
+            confirmLabel={copy.toasts.restartChannels}
+            confirmVariant="warning"
+            confirmIcon={<ArrowsClockwise size={13} />}
             onConfirm={() => {
               setConfirmRestartOpen(false);
               void restartChannels();

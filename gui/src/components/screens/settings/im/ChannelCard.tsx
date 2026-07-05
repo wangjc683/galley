@@ -69,7 +69,7 @@ export function ChannelCard({
           <span className="flex min-w-0 flex-1 items-center gap-2">
             {glyph}
             <span
-              className="min-w-0 truncate text-[13px] font-medium text-ink"
+              className="min-w-0 truncate text-ui-compact font-medium text-ink"
               title={title}
             >
               {title}

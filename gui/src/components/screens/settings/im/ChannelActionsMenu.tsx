@@ -36,7 +36,7 @@ export function ChannelActionsMenu({
           sideOffset={6}
           className={cn(
             "z-[70] min-w-[132px] rounded-md border border-line bg-elevated p-1",
-            "text-[13px] text-ink shadow-elevated",
+            "text-ui-compact text-ink shadow-elevated",
           )}
         >
           {canStop ? (

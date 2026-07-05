@@ -121,7 +121,7 @@ export function FeishuSetupGuide({
   return (
     <div className="max-w-[76ch] space-y-3">
       {statusPlacement === "top" ? (
-        <p className="pl-7 text-[12px] leading-[1.45] text-ink-muted">
+        <p className="pl-7 text-ui-meta leading-dense text-ink-muted">
           {status}
         </p>
       ) : null}
@@ -132,7 +132,7 @@ export function FeishuSetupGuide({
             type="button"
             onClick={() => setStepsExpanded((v) => !v)}
             aria-expanded={stepsExpanded}
-            className="group/disclosure flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[12px] font-medium text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/35"
+            className="group/disclosure flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-ui-meta font-medium text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/35"
           >
             {stepsExpanded ? (
               <CaretDown size={11} weight="bold" />
@@ -149,7 +149,7 @@ export function FeishuSetupGuide({
         <div className="divide-y divide-line/70">{sectionsInner}</div>
       )}
       {statusPlacement === "bottom" ? (
-        <p className="pl-7 text-[12px] leading-[1.45] text-ink-muted">
+        <p className="pl-7 text-ui-meta leading-dense text-ink-muted">
           {status}
         </p>
       ) : null}
@@ -173,14 +173,14 @@ function FeishuSetupSection({
   return (
     <section className="py-3 first:pt-0 last:pb-0">
       <div className="flex gap-2.5">
-        <span className="mt-[1px] inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-line bg-app font-mono text-[11px] font-medium tabular-nums text-ink-soft">
+        <span className="mt-[1px] inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-line bg-app font-mono text-ui-label font-medium tabular-nums text-ink-soft">
           {index}
         </span>
         <div className="min-w-0 flex-1 space-y-2">
-          <h4 className="text-[12px] font-semibold leading-[1.45] text-ink">
+          <h4 className="text-ui-meta font-semibold leading-dense text-ink">
             {title}
           </h4>
-          <ul className="space-y-1 text-[12.5px] leading-[1.5] text-ink-soft">
+          <ul className="space-y-1 text-ui-secondary leading-notice text-ink-soft">
             {steps.map((step, stepIndex) => (
               <li key={stepIndex} className="flex min-w-0 gap-2">
                 <span className="mt-[0.65em] size-1 shrink-0 rounded-full bg-ink-muted/60" />
@@ -213,7 +213,7 @@ function FeishuSetupStepText({ step }: { step: FeishuSetupStep }) {
 function FeishuSetupStepPart({ part }: { part: FeishuSetupStepPart }) {
   if ("code" in part && part.code) {
     return (
-      <code className="rounded-sm border border-line/80 bg-app px-1 py-[1px] font-mono text-[11.5px] text-ink">
+      <code className="rounded-sm border border-line/80 bg-app px-1 py-[1px] font-mono text-ui-tertiary text-ink">
         {part.text}
       </code>
     );
@@ -245,7 +245,7 @@ function FeishuPermissionsList({
         type="button"
         onClick={onCopy}
         className={cn(
-          "absolute right-2 top-2 inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-sm border px-1.5 text-[11px] font-medium",
+          "absolute right-2 top-2 inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-sm border px-1.5 text-ui-label font-medium",
           "transition-[background-color,border-color,color,transform] duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-px active:duration-[70ms]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           copied
@@ -266,10 +266,10 @@ function FeishuPermissionsList({
             key={item.name}
             className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,240px)_1fr] sm:items-baseline sm:gap-3"
           >
-            <code className="min-w-0 break-all rounded-sm border border-line/70 bg-surface px-1.5 py-[1px] font-mono text-[11.5px] leading-[1.5] text-ink sm:break-normal">
+            <code className="min-w-0 break-all rounded-sm border border-line/70 bg-surface px-1.5 py-[1px] font-mono text-ui-tertiary leading-notice text-ink sm:break-normal">
               {item.name}
             </code>
-            <span className="min-w-0 text-[12px] leading-[1.5] text-ink-muted">
+            <span className="min-w-0 text-ui-meta leading-notice text-ink-muted">
               {item.description}
             </span>
           </li>

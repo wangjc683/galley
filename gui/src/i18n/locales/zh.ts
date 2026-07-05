@@ -1051,6 +1051,8 @@ export const zhCopy = {
       restartChannelsDialogTitle: "重启 Channels？",
       restartChannelsDialogBody:
         "这会重启所有已启用的 Channels，可能中断当前回复；不会退出登录。",
+      staleConfigTitle: "Channels 正在使用旧模型配置",
+      staleConfigBody: "模型配置已更新，重启后新回复会使用最新配置。",
       openModels: "先去配置模型",
       modelRequired:
         "Channels 会使用 Galley 已配置的模型。接入前，需要先在 Models 里配置一个可用模型。",

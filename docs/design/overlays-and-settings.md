@@ -178,11 +178,24 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
 #### Channels
 
 - TopBar 中 Channels 位于状态簇最后，常驻但默认安静。`setup` / `not_connected` / `stopped` 显示 neutral icon-only `ChatCircleText`，作为可选扩展入口而不是待办；`running` 同样收敛为 icon-only。只有已经进入连接或需要处理时才升级为文字 badge：`starting` 显示 `Channels · 连接中`；`waiting_scan` 显示 `Channels · 扫码`；`expired` / `error` / load error 显示 `Channels · 需处理`。
-- Channels 使用 managed model config revision 判断配置 freshness。模型配置变更后，已启用 Channel 若仍记录旧 revision，Settings -> Channels 顶部显示状态条：`Channels 正在使用旧模型配置`。
+- Channels 使用 managed model config revision 判断配置 freshness。模型配置变更后，已启用 Channel 若仍记录旧 revision，Settings -> Channels 卡片列表顶部显示 warning 状态条：标题 `Channels 正在使用旧模型配置` + 一行说明 + `重启 Channels` CTA。stale 信号只靠状态条传达，不再改按钮变体——反馈要引导行动，不是暗示。
 - `重启 Channels` 语义是重启所有已启用 Channel；手动 Stop / Disconnect 会把 Channel 置为未启用，不会被这个按钮重新拉起。
-- Models toast 里的 `重启 Channels` CTA 直接执行；Channels 页状态条按钮先弹轻确认，说明可能中断当前回复、不会退出登录。
+- Models toast 里的 `重启 Channels` CTA 直接执行；Channels 页（状态条或底部按钮）先弹轻确认，说明可能中断当前回复、不会退出登录。
+- 卡片下方的常驻 `重启 Channels` 按钮保持 ghost 权重，且只在存在已启用 Channel 且非 stale 时渲染——没有可重启对象时不占位，stale 时让位给状态条。
 - 重启不删除微信 token，不主动要求重新扫码；token 过期仍走现有 expired / scan 流程。
-- 飞书卡片与微信并列，但流程不是扫码：展开区提供开放平台步骤、App ID / App Secret 输入和启动按钮。App Secret 保存后不回显，留空表示沿用已保存凭据。目标用户是个人用户和小团队企业，默认允许组织内所有飞书用户访问，不在首版增加 allowlist / 绑定码。
+- 飞书卡片与微信并列，但流程不是扫码：展开区提供开放平台步骤、App ID / App Secret 输入和启动按钮。App Secret 保存后不回显，留空表示沿用已保存凭据。使用者通过配对码绑定：服务启动后未绑定时展示配对码，首个在飞书私聊发送配对码的用户成为机器人唯一响应的使用者，可在卡片内解绑（早期「不做绑定码」的定位已被 owner-binding 实现取代）。
+- 卡内层级规则（与 Runtime tab 同源）：
+  - 每张卡同时至多一颗 primary 按钮，primary = 当前可执行的下一步。
+    飞书的「保存凭证」和「启动服务」按此互斥：凭证未就绪时保存是
+    primary、启动是 secondary，就绪后互换。
+  - 卡内表单标签、错误块 / 配对码块的标题用 field 级标签（非
+    uppercase、无 tracking），页面级眉标语法不进入卡内。
+  - StatusBadge（带边框 + 语义色 + 图标的 chip）是有意比 Runtime tab
+    的 badge 语法重一档的分叉：连接状态是 Channels 卡的核心信息，
+    值得这个权重。不要把两处强行统一。
+  - 四个确认弹窗（微信断开、飞书断开、飞书解绑、重启）共用一个
+    shell（`ConfirmActionDialog`），取消键默认聚焦，回车不会误触
+    执行。
 
 #### Approval
 

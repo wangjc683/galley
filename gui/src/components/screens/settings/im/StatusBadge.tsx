@@ -49,7 +49,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-sm border px-2 text-[11.5px]",
+        "inline-flex h-6 items-center gap-1.5 rounded-sm border px-2 text-ui-tertiary",
         state === "running"
           ? "border-success/30 bg-success/[var(--opacity-soft)] text-success"
           : state === "error" || state === "expired"

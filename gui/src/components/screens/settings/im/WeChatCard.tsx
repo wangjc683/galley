@@ -1,23 +1,18 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import * as Dialog from "@radix-ui/react-dialog";
-import {
-  CircleNotch,
-  Power,
-  QrCode,
-  WarningCircle,
-} from "@phosphor-icons/react";
+import { CircleNotch, Power, QrCode } from "@phosphor-icons/react";
 import { useState } from "react";
 
-import { Button, DialogActionRow } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import type {
   ImSupervisorState,
   ImSupervisorStatus,
 } from "@/lib/im-supervisor";
-import { cn } from "@/lib/utils";
 
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelCard } from "./ChannelCard";
+import { ChannelErrorBlock } from "./ChannelErrorBlock";
+import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { WeChatCommandReference } from "./CommandReference";
 import { ConnectionSteps } from "./ConnectionSteps";
 import { WeChatGlyph } from "./Glyphs";
@@ -44,7 +39,6 @@ export function WeChatCard({
 }) {
   const appCopy = useCopy();
   const imCopy = appCopy.settings.im;
-  const commonCopy = appCopy.common;
   const state = status?.state ?? "not_connected";
   const qrSrc = status?.qrImagePath
     ? `${convertFileSrc(status.qrImagePath)}?v=${encodeURIComponent(status.updatedAt)}`
@@ -113,12 +107,12 @@ export function WeChatCard({
                     className="h-[148px] w-[148px] object-contain"
                   />
                 ) : (
-                  <span className="text-[12px] text-ink-muted">
+                  <span className="text-ui-meta text-ink-muted">
                     {imCopy.noQrYet}
                   </span>
                 )}
               </div>
-              <div className="min-w-0 space-y-3 text-[13px] leading-[1.55] text-ink-soft">
+              <div className="min-w-0 space-y-3 text-ui-compact leading-secondary text-ink-soft">
                 <p>{imCopy.scanHint}</p>
                 <Button
                   type="button"
@@ -142,68 +136,22 @@ export function WeChatCard({
             </div>
           ) : null}
 
-          {invokeError || status?.lastError ? (
-            <div className="rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-error/80">
-                {imCopy.lastError}
-              </div>
-              <div className="select-text break-words font-mono text-[11.5px] leading-[1.45] text-error">
-                {invokeError ?? status?.lastError}
-              </div>
-            </div>
-          ) : null}
+          <ChannelErrorBlock error={invokeError ?? status?.lastError ?? null} />
         </div>
       </ChannelCard>
 
-      <Dialog.Root
+      <ConfirmActionDialog
         open={confirmDisconnectOpen}
         onOpenChange={setConfirmDisconnectOpen}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
-          <Dialog.Content
-            role="alertdialog"
-            aria-describedby="disconnect-wechat-desc"
-            className={cn(
-              "fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
-              "max-w-[calc(100vw-32px)] rounded-lg border border-line bg-elevated p-5 shadow-elevated",
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <WarningCircle size={18} weight="bold" className="text-warning" />
-              <Dialog.Title className="text-[15px] font-semibold text-ink">
-                {imCopy.disconnectDialogTitle}
-              </Dialog.Title>
-            </div>
-            <p
-              id="disconnect-wechat-desc"
-              className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
-            >
-              {imCopy.disconnectDialogBody}
-            </p>
-            <DialogActionRow>
-              <Button
-                variant="secondary"
-                onClick={() => setConfirmDisconnectOpen(false)}
-                disabled={busyAction !== null}
-                autoFocus
-              >
-                {commonCopy.cancel}
-              </Button>
-              <Button
-                variant="destructive-soft"
-                disabled={busyAction !== null}
-                onClick={() => {
-                  setConfirmDisconnectOpen(false);
-                  onDisconnect();
-                }}
-              >
-                {imCopy.disconnect}
-              </Button>
-            </DialogActionRow>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        busy={busyAction !== null}
+        title={imCopy.disconnectDialogTitle}
+        body={imCopy.disconnectDialogBody}
+        confirmLabel={imCopy.disconnect}
+        onConfirm={() => {
+          setConfirmDisconnectOpen(false);
+          onDisconnect();
+        }}
+      />
     </>
   );
 }

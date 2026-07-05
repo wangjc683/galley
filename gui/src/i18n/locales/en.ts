@@ -1103,6 +1103,9 @@ export const enCopy: AppCopy = {
       restartChannelsDialogTitle: "Restart Channels?",
       restartChannelsDialogBody:
         "This restarts all enabled Channels. It may interrupt the current reply, but will not log you out.",
+      staleConfigTitle: "Channels are using an outdated model config",
+      staleConfigBody:
+        "The model config changed. Restart so new replies use the latest config.",
       openModels: "Configure models first",
       modelRequired:
         "Channels use Galley's configured models. Add a usable model in Models before connecting.",
