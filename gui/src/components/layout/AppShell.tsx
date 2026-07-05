@@ -43,11 +43,13 @@ import {
  * than an IDE clone. Memory Inspector (V0.2 PRD) — if it lands —
  * gets a fresh design, not a reuse of this slot.
  *
- * macOS traffic light is positioned at {16, 16} via tauri.conf.json
+ * macOS traffic light is positioned at {16, 22} via tauri.conf.json
  * `titleBarStyle: "Overlay"`; it floats above the window's top-left,
  * which is now the Sidebar column's header (SidebarHeader). That header
- * reserves ~78px left padding to clear the lights. The Windows custom
- * window controls live at the right of MainHeader (= window top-right).
+ * reserves ~88px left padding to clear the lights; the y=22 inset drops
+ * the lights onto the header's ~22px content center so they line up with
+ * the wordmark instead of sitting high. The Windows custom window
+ * controls live at the right of MainHeader (= window top-right).
  *
  * `overflow-hidden` on `<aside>` and `<main>` Panel children locks
  * scrolling to each section's own internal container (Sidebar bucket

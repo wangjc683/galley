@@ -30,14 +30,24 @@ export function SidebarHeader({
   // This is now the TOP-MOST chrome of the Sidebar column (the old
   // full-width TopBar is gone — each column grows its own header; see
   // MainHeader.tsx). On macOS the traffic lights float at {16,16} over
-  // this row, so the left padding reserves ~78px to clear them (cluster
-  // right edge ~68px + ~10px gap). The header is h-11 (44px) to match
-  // MainHeader so both column headers' bottom borders align into one
-  // continuous top strip. Carries `data-tauri-drag-region` + the
+  // this row (cluster right edge ~68px), so the left padding reserves
+  // ~88px: ~20px of clearance so the "Galley" wordmark reads as a
+  // deliberate brand placement rather than crowding the OS lights. A
+  // flush ~10px gap made the italic serif look jammed against the
+  // colored dots — do NOT drop back toward 78px. The header is h-11
+  // (44px) to match MainHeader so both column headers' bottom borders
+  // align into one continuous top strip; the header content is
+  // items-center at ~22px. The lights are nudged to `trafficLightPosition
+  // y=22` (tauri.conf.json) so their center lands on that same ~22px row
+  // — the default y=16 rendered the lights visibly higher than the
+  // wordmark / Supervisor-SOP text. We move the lights, not the text:
+  // the text's center is shared with the right column's MainHeader (which
+  // has no lights), so nudging text up would break the two-column top
+  // strip. Carries `data-tauri-drag-region` + the
   // Windows double-click-maximize handler so this header is a window
   // drag handle just like MainHeader.
   //
-  // Narrow widths (min window 960px × 14% sidebar ≈ 134px): the 78px
+  // Narrow widths (min window 960px × 14% sidebar ≈ 134px): the 88px
   // reserve eats most of the row; the wordmark stays visible and the
   // runtime indicator truncates via its existing max-w / truncate.
   const runtimeIndicatorView = renderRuntimeIndicator(
@@ -70,11 +80,11 @@ export function SidebarHeader({
       }}
       className={cn(
         "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line/60 pr-4",
-        // macOS: clear the traffic-light cluster (right edge ~68px).
-        // ~78px = ~70px reserve + ~10px gap so the wordmark never merges
-        // into the lights — do NOT drop toward a flush 70px. Non-mac has
+        // macOS: clear the traffic-light cluster (right edge ~68px) with
+        // ~20px of breathing room so the wordmark reads as a deliberate
+        // brand mark, not something crowding the OS lights. Non-mac has
         // no native left chrome, so a normal 16px gutter.
-        isMac ? "pl-[78px]" : "pl-4",
+        isMac ? "pl-[88px]" : "pl-4",
       )}
     >
       {/* Product mark: sentence-case Galley keeps the name legible as
