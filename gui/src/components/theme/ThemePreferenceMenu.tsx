@@ -1,6 +1,8 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Popover from "@radix-ui/react-popover";
 import { CaretRight, Check, Monitor, Moon, Sun } from "@phosphor-icons/react";
 
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
@@ -54,9 +56,9 @@ export function ThemePreferenceMenu({
 
   const menu = (
     <DropdownMenu.Content
-      align={variant === "topbar" ? "end" : "start"}
-      side={variant === "topbar" ? "bottom" : "right"}
-      sideOffset={variant === "topbar" ? 6 : 8}
+      align="start"
+      side="right"
+      sideOffset={8}
       className={cn(
         "galley-pop-in z-[70] min-w-[176px] rounded-md border border-line bg-elevated p-1",
         "text-[13px] text-ink shadow-elevated",
@@ -90,11 +92,18 @@ export function ThemePreferenceMenu({
     </DropdownMenu.Content>
   );
 
+  // Topbar variant mirrors the conversation font-size control next to
+  // it: icon trigger → small Popover → shared SegmentedControl. Popover
+  // (not DropdownMenu) on purpose — it stays open after a pick so the
+  // user can flip themes and compare live. The "system" sub-state
+  // ("当前浅色") moves to a caption line under the segments; the
+  // sidebar variant below keeps the menu form, where list rows
+  // naturally open side menus and sublabels have room.
   if (variant === "topbar") {
     return (
-      <DropdownMenu.Root>
+      <Popover.Root>
         <TooltipLabel text={triggerLabel} side="bottom">
-          <DropdownMenu.Trigger asChild>
+          <Popover.Trigger asChild>
             <button
               type="button"
               aria-label={triggerLabel}
@@ -110,10 +119,45 @@ export function ThemePreferenceMenu({
             >
               <ActualIcon size={16} weight="thin" />
             </button>
-          </DropdownMenu.Trigger>
+          </Popover.Trigger>
         </TooltipLabel>
-        <DropdownMenu.Portal>{menu}</DropdownMenu.Portal>
-      </DropdownMenu.Root>
+        <Popover.Portal>
+          <Popover.Content
+            align="end"
+            side="bottom"
+            sideOffset={6}
+            className="galley-pop-in z-[70] rounded-md border border-line bg-elevated p-1.5 shadow-elevated"
+          >
+            <SegmentedControl<ThemePreference>
+              value={preference}
+              ariaLabel={copy.theme.aria}
+              onValueChange={onChange}
+              options={[
+                {
+                  value: "system",
+                  label: copy.theme.system,
+                  icon: <Monitor size={13} weight="thin" />,
+                },
+                {
+                  value: "light",
+                  label: copy.theme.light,
+                  icon: <Sun size={13} weight="thin" />,
+                },
+                {
+                  value: "dark",
+                  label: copy.theme.dark,
+                  icon: <Moon size={13} weight="thin" />,
+                },
+              ]}
+            />
+            {preference === "system" && (
+              <div className="px-1 pb-0.5 pt-1.5 text-[11px] text-ink-muted">
+                {actualTooltipLabel}
+              </div>
+            )}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
     );
   }
 

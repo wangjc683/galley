@@ -23,7 +23,7 @@ export const zhCopy = {
     current: (name: string) => `当前${name}`,
   },
   theme: {
-    button: "Appearance",
+    button: "外观",
     aria: "选择外观主题",
     system: "跟随系统",
     light: "浅色",
