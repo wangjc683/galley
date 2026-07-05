@@ -5,7 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { useState } from "react";
 
-import { ConfirmActionDialog } from "@/components/screens/settings/im/ConfirmActionDialog";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { FeishuCard } from "@/components/screens/settings/im/FeishuCard";
 import { TelegramCard } from "@/components/screens/settings/im/TelegramCard";
 import { WeChatCard } from "@/components/screens/settings/im/WeChatCard";

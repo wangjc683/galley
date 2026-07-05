@@ -7,10 +7,10 @@ import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
- * Shared light-confirm dialog for channel actions. The four confirms
- * (WeChat disconnect, Feishu disconnect / unbind, restart Channels)
- * differ only in copy, header icon, and confirm variant, so they share
- * one shell. Cancel is the autoFocus default — Enter never fires the
+ * Shared light-confirm dialog (started life in Settings → Channels;
+ * promoted to ui/ once the archived-sessions browser needed the same
+ * shell). Confirms differ only in copy, header icon, and confirm
+ * variant. Cancel is the autoFocus default — Enter never fires the
  * consequential action by reflex.
  */
 export function ConfirmActionDialog({
@@ -28,18 +28,25 @@ export function ConfirmActionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   busy?: boolean;
-  /** Header icon; defaults to a warning circle. */
-  icon?: ReactNode;
+  /** Header icon. Defaults to a warning circle; pass `null` to omit
+   * (plain title-only confirms, e.g. row deletes). */
+  icon?: ReactNode | null;
   title: string;
-  body: string;
+  body: ReactNode;
   confirmLabel: string;
-  confirmVariant?: "destructive-soft" | "warning";
+  confirmVariant?: "destructive-soft" | "destructive" | "warning";
   /** Leading icon on the confirm button; swapped for a spinner while busy. */
   confirmIcon?: ReactNode;
   onConfirm: () => void;
 }) {
   const copy = useCopy();
   const descId = useId();
+  const headerIcon =
+    icon === null ? null : (
+      icon ?? (
+        <WarningCircle size={18} weight="bold" className="text-warning" />
+      )
+    );
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -53,9 +60,7 @@ export function ConfirmActionDialog({
           )}
         >
           <div className="flex items-center gap-2">
-            {icon ?? (
-              <WarningCircle size={18} weight="bold" className="text-warning" />
-            )}
+            {headerIcon}
             <Dialog.Title className="text-[15px] font-semibold text-ink">
               {title}
             </Dialog.Title>

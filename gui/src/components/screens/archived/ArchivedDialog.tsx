@@ -1,17 +1,21 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import {
-  ArrowUUpLeft,
-  CheckSquare,
-  Square,
-  Trash,
-  WarningCircle,
-  X as XIcon,
-} from "@phosphor-icons/react";
+import { ArrowUUpLeft, Trash, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { SessionSearchBar } from "@/components/screens/SessionSearchBar";
+import {
+  SESSION_BROWSER_CONTENT_CLASS,
+  formatSessionDate,
+} from "@/components/screens/session-browser";
+import {
+  SelectGlyph,
+  SessionBrowserEmpty,
+  SessionBrowserHeader,
+  SessionBrowserSelectBar,
+} from "@/components/screens/session-browser-ui";
 import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { useSessionSelectMode } from "@/hooks/useSessionSelectMode";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -45,7 +49,8 @@ export interface ArchivedDialogProps {
  * Archived sessions browser. Three destructive operations live here:
  *
  *   - Single Delete (per row, right-side icon button): single-layer
- *     AlertDialog confirm. Lower stakes (one row), no checkbox.
+ *     confirm (shared ConfirmActionDialog). Lower stakes (one row),
+ *     no checkbox.
  *
  *   - Bulk Delete (select mode → action bar): single-layer confirm
  *     showing the count. The user picked the rows explicitly, so
@@ -55,16 +60,15 @@ export interface ArchivedDialogProps {
  *     stays visible but low-priority; clicking it opens an AlertDialog
  *     that REQUIRES checking an acknowledgement checkbox to enable the
  *     final destructive button. Mirrors the GitHub "delete repository"
- *     pattern for undifferentiated batch destruction.
+ *     pattern for undifferentiated batch destruction — this one stays
+ *     a bespoke dialog because the checkbox gate IS its design.
  *
  * Restore is non-destructive — no confirm in any mode, just executes
  * and the row drops out of the archived list immediately.
  *
- * Select mode (Gmail-style): header `Select` button toggles in. In
- * select mode, rows show leading checkboxes, click toggles
- * selection (single-row inline Restore/Delete buttons hide), and a
- * sticky action bar with Restore / Delete actions appears at the
- * bottom. Same UX as EarlierDialog.
+ * Select mode (Gmail-style): shared chrome with EarlierDialog via
+ * session-browser-ui; this dialog contributes Restore / Delete bulk
+ * actions.
  */
 export function ArchivedDialog({
   open,
@@ -76,6 +80,7 @@ export function ArchivedDialog({
   onRestoreBulk,
   onDeletePermanentlyBulk,
 }: ArchivedDialogProps) {
+  const copy = useCopy();
   const archived = useMemo(
     () =>
       [...sessions]
@@ -120,29 +125,46 @@ export function ArchivedDialog({
           <Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
           <Dialog.Content
             aria-describedby={undefined}
-            className={cn(
-              "fixed left-1/2 top-1/2 z-50 flex h-[520px] w-[640px] -translate-x-1/2 -translate-y-1/2 flex-col",
-              "overflow-hidden rounded-lg border border-line bg-app shadow-elevated",
-              "max-h-[calc(100vh-32px)] max-w-[calc(100vw-32px)]",
-            )}
+            className={SESSION_BROWSER_CONTENT_CLASS}
           >
-            <Header
+            <SessionBrowserHeader
+              title={copy.projects.archivedTitle}
               total={archived.length}
               shown={filtered.length}
               filtered={isFiltered}
               selectMode={selectMode}
               selectedCount={selected.size}
+              totalSummary={
+                archived.length > 0
+                  ? copy.projects.archivedCountLabel(archived.length)
+                  : copy.projects.noArchived
+              }
+              actions={
+                archived.length > 0 ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEmptyConfirmOpen(true)}
+                    title={copy.projects.deleteAllArchived}
+                    className="px-1.5 font-normal text-ink-muted hover:bg-error/[var(--opacity-soft)] hover:text-error active:bg-error/[var(--opacity-medium)]"
+                  >
+                    {copy.projects.emptyArchive(archived.length)}
+                  </Button>
+                ) : undefined
+              }
               onEnterSelectMode={enterSelectMode}
               onCancelSelectMode={exitSelectMode}
               onClose={() => onOpenChange(false)}
-              onEmptyAll={() => setEmptyConfirmOpen(true)}
             />
 
             <SessionSearchBar query={query} onChange={setQuery} />
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-app">
               {filtered.length === 0 ? (
-                <EmptyState filtered={isFiltered} />
+                <SessionBrowserEmpty
+                  filtered={isFiltered}
+                  emptyLabel={copy.projects.noArchivedConversations}
+                />
               ) : (
                 <ul className="divide-y divide-line">
                   {filtered.map((s) => (
@@ -161,63 +183,115 @@ export function ArchivedDialog({
             </div>
 
             {selectMode && (
-              <SelectActionBar
+              <SessionBrowserSelectBar
                 selectedCount={selected.size}
                 allVisibleSelected={allVisibleSelected}
                 onToggleSelectAllVisible={toggleSelectAllVisible}
-                onRestore={() => {
-                  if (selectedIds.length === 0) return;
-                  onRestoreBulk(selectedIds);
-                  exitSelectMode();
-                }}
-                onDelete={() => {
-                  if (selectedIds.length === 0) return;
-                  setBulkDeleteConfirmOpen(true);
-                }}
-              />
+              >
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedIds.length === 0) return;
+                    onRestoreBulk(selectedIds);
+                    exitSelectMode();
+                  }}
+                  disabled={selected.size === 0}
+                  aria-label={copy.projects.restoreSelectedAction(selected.size)}
+                  title={copy.projects.restoreSelectedAction(selected.size)}
+                  leadingIcon={<ArrowUUpLeft size={12} weight="thin" />}
+                >
+                  {copy.common.restore}
+                </Button>
+                <Button
+                  variant="destructive-soft"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedIds.length === 0) return;
+                    setBulkDeleteConfirmOpen(true);
+                  }}
+                  disabled={selected.size === 0}
+                  aria-label={copy.projects.deleteSelectedAction(selected.size)}
+                  title={copy.projects.deleteSelectedAction(selected.size)}
+                  leadingIcon={<Trash size={12} weight="thin" />}
+                >
+                  {copy.common.deletePermanently}
+                </Button>
+              </SessionBrowserSelectBar>
             )}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
       {/* Per-row single-confirm dialog. Stacks above ArchivedDialog
-          while open so the user has full context of the row's title. */}
-      <ConfirmDeleteOneDialog
-        session={pendingDelete}
-        onCancel={() => setPendingDelete(null)}
-        onConfirm={async () => {
-          if (!pendingDelete) return;
-          setDeletingOne(true);
-          try {
-            await onDeletePermanently(pendingDelete.id);
-            setPendingDelete(null);
-          } catch {
-            // Store surfaces the failure toast and keeps the row in place.
-          } finally {
-            setDeletingOne(false);
-          }
+          while open so the user has full context of the row's title.
+          Confirm awaits the delete before closing — failures keep the
+          dialog up (store surfaces the toast). */}
+      <ConfirmActionDialog
+        open={!!pendingDelete}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null);
         }}
         busy={deletingOne}
+        icon={null}
+        title={copy.projects.permanentlyDeleteConversation}
+        body={
+          <>
+            {copy.projects.permanentlyDeleteConversationBody(
+              pendingDelete?.title ?? "",
+            )}{" "}
+            <span className="text-ink">{copy.projects.cannotUndo}</span>
+          </>
+        }
+        confirmLabel={copy.common.deletePermanently}
+        confirmVariant="destructive"
+        onConfirm={() => {
+          void (async () => {
+            if (!pendingDelete) return;
+            setDeletingOne(true);
+            try {
+              await onDeletePermanently(pendingDelete.id);
+              setPendingDelete(null);
+            } catch {
+              // Store surfaces the failure toast and keeps the row in place.
+            } finally {
+              setDeletingOne(false);
+            }
+          })();
+        }}
       />
 
       {/* Bulk delete confirm — single-layer (count, no checkbox). */}
-      <ConfirmDeleteManyDialog
+      <ConfirmActionDialog
         open={bulkDeleteConfirmOpen}
-        count={selectedIds.length}
-        onCancel={() => setBulkDeleteConfirmOpen(false)}
-        onConfirm={async () => {
-          setBulkDeleting(true);
-          try {
-            await onDeletePermanentlyBulk(selectedIds);
-            setBulkDeleteConfirmOpen(false);
-            exitSelectMode();
-          } catch {
-            // Store surfaces the failure toast and keeps the selection.
-          } finally {
-            setBulkDeleting(false);
-          }
+        onOpenChange={(o) => {
+          if (!o) setBulkDeleteConfirmOpen(false);
         }}
         busy={bulkDeleting}
+        icon={null}
+        title={copy.projects.permanentlyDeleteSelectedTitle(selectedIds.length)}
+        body={
+          <>
+            {copy.projects.permanentlyDeleteSelectedBody}{" "}
+            <span className="text-ink">{copy.projects.cannotUndo}</span>
+          </>
+        }
+        confirmLabel={copy.projects.permanentlyDeleteCount(selectedIds.length)}
+        confirmVariant="destructive"
+        onConfirm={() => {
+          void (async () => {
+            setBulkDeleting(true);
+            try {
+              await onDeletePermanentlyBulk(selectedIds);
+              setBulkDeleteConfirmOpen(false);
+              exitSelectMode();
+            } catch {
+              // Store surfaces the failure toast and keeps the selection.
+            } finally {
+              setBulkDeleting(false);
+            }
+          })();
+        }}
       />
 
       {/* Empty-all double-confirm dialog. */}
@@ -241,85 +315,6 @@ export function ArchivedDialog({
     </>
   );
 }
-
-// ---------------- Header ----------------
-
-function Header({
-  total,
-  shown,
-  filtered,
-  selectMode,
-  selectedCount,
-  onEnterSelectMode,
-  onCancelSelectMode,
-  onClose,
-  onEmptyAll,
-}: {
-  total: number;
-  shown: number;
-  filtered: boolean;
-  selectMode: boolean;
-  selectedCount: number;
-  onEnterSelectMode: () => void;
-  onCancelSelectMode: () => void;
-  onClose: () => void;
-  onEmptyAll: () => void;
-}) {
-  const copy = useCopy();
-  const summary = selectMode
-    ? copy.projects.selected(selectedCount)
-    : filtered
-      ? shown === 0
-        ? copy.projects.noMatches
-        : copy.projects.hits(shown, total)
-      : total > 0
-        ? copy.projects.archivedCountLabel(total)
-        : copy.projects.noArchived;
-
-  return (
-    <div className="flex items-center gap-3 border-b border-line bg-app px-5 py-3.5">
-      <Dialog.Title className="text-[16px] font-semibold text-ink">
-        {copy.projects.archivedTitle}
-      </Dialog.Title>
-      <span className="text-[12.5px] tabular-nums tracking-[0.01em] text-ink-muted">
-        {summary}
-      </span>
-
-      <div className="ml-auto flex items-center gap-2">
-        {selectMode ? (
-          <Button variant="secondary" size="sm" onClick={onCancelSelectMode}>
-            {copy.common.cancel}
-          </Button>
-        ) : (
-          <>
-            {total > 0 && (
-              <Button variant="secondary" size="sm" onClick={onEnterSelectMode}>
-                {copy.projects.select}
-              </Button>
-            )}
-            {total > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onEmptyAll}
-                title={copy.projects.deleteAllArchived}
-                className="px-1.5 font-normal text-ink-muted hover:bg-error/[var(--opacity-soft)] hover:text-error active:bg-error/[var(--opacity-medium)]"
-              >
-                {copy.projects.emptyArchive(total)}
-              </Button>
-            )}
-          </>
-        )}
-        <Dialog.Close asChild onClick={onClose}>
-          <IconButton ariaLabel={copy.common.close} tooltip={false}>
-            <XIcon size={14} weight="thin" />
-          </IconButton>
-        </Dialog.Close>
-      </div>
-    </div>
-  );
-}
-
 
 // ---------------- Row ----------------
 
@@ -348,29 +343,19 @@ function ArchivedRow({
           isSelected ? "bg-selected hover:bg-selected" : "hover:bg-hover",
         )}
       >
-        <span className="pt-0.5 text-ink-soft">
-          {isSelected ? (
-            <CheckSquare
-              size={14}
-              weight="fill"
-              className="text-brand-strong"
-            />
-          ) : (
-            <Square size={14} weight="thin" />
-          )}
-        </span>
+        <SelectGlyph isSelected={isSelected} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-medium text-ink">
+          <div className="truncate text-ui-compact font-medium text-ink">
             {session.title}
           </div>
           {session.summary && (
-            <div className="mt-0.5 truncate text-[11.5px] text-ink-muted">
+            <div className="mt-0.5 truncate text-ui-tertiary text-ink-muted">
               {session.summary}
             </div>
           )}
         </div>
-        <span className="shrink-0 pt-0.5 text-[10.5px] tabular-nums tracking-[0.02em] text-ink-muted">
-          {formatDate(session.updatedAt)}
+        <span className="shrink-0 pt-0.5 text-ui-micro tabular-nums tracking-[0.02em] text-ink-muted">
+          {formatSessionDate(session.updatedAt)}
         </span>
       </li>
     );
@@ -379,11 +364,11 @@ function ArchivedRow({
   return (
     <li className="group relative flex items-start gap-3 px-5 py-3 transition-colors hover:bg-hover">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium text-ink">
+        <div className="truncate text-ui-compact font-medium text-ink">
           {session.title}
         </div>
         {session.summary && (
-          <div className="mt-0.5 truncate text-[11.5px] text-ink-muted">
+          <div className="mt-0.5 truncate text-ui-tertiary text-ink-muted">
             {session.summary}
           </div>
         )}
@@ -393,8 +378,8 @@ function ArchivedRow({
           clean ledger rail down the list (Swiss: alignment is structure).
           Yields to the row actions on hover, the same
           swap the sidebar rows use. */}
-      <span className="shrink-0 pt-0.5 text-[10.5px] tabular-nums tracking-[0.02em] text-ink-muted transition-opacity duration-100 group-hover:opacity-0">
-        {formatDate(session.updatedAt)}
+      <span className="shrink-0 pt-0.5 text-ui-micro tabular-nums tracking-[0.02em] text-ink-muted transition-opacity duration-100 group-hover:opacity-0">
+        {formatSessionDate(session.updatedAt)}
       </span>
 
       <div className="pointer-events-none absolute right-5 top-3 flex items-center gap-1 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100">
@@ -419,238 +404,14 @@ function ArchivedRow({
   );
 }
 
-// ---------------- Select action bar ----------------
-
-function SelectActionBar({
-  selectedCount,
-  allVisibleSelected,
-  onToggleSelectAllVisible,
-  onRestore,
-  onDelete,
-}: {
-  selectedCount: number;
-  allVisibleSelected: boolean;
-  onToggleSelectAllVisible: () => void;
-  onRestore: () => void;
-  onDelete: () => void;
-}) {
-  const copy = useCopy();
-  const disabled = selectedCount === 0;
-  return (
-    <div className="flex shrink-0 items-center gap-2 border-t border-line bg-app px-4 py-2.5">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onToggleSelectAllVisible}
-        leadingIcon={
-          allVisibleSelected ? (
-            <CheckSquare
-              size={13}
-              weight="fill"
-              className="text-brand-strong"
-            />
-          ) : (
-            <Square size={13} weight="thin" />
-          )
-        }
-      >
-        {allVisibleSelected
-          ? copy.projects.clearSelection
-          : copy.projects.selectAll}
-      </Button>
-      <span className="text-[12px] tabular-nums tracking-[0.01em] text-ink-muted">
-        {copy.projects.selected(selectedCount)}
-      </span>
-
-      <div className="ml-auto flex items-center gap-1.5">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onRestore}
-          disabled={disabled}
-          aria-label={copy.projects.restoreSelectedAction(selectedCount)}
-          title={copy.projects.restoreSelectedAction(selectedCount)}
-          leadingIcon={<ArrowUUpLeft size={12} weight="thin" />}
-        >
-          {copy.common.restore}
-        </Button>
-        <Button
-          variant="destructive-soft"
-          size="sm"
-          onClick={onDelete}
-          disabled={disabled}
-          aria-label={copy.projects.deleteSelectedAction(selectedCount)}
-          title={copy.projects.deleteSelectedAction(selectedCount)}
-          leadingIcon={<Trash size={12} weight="thin" />}
-        >
-          {copy.common.deletePermanently}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------- Empty ----------------
-
-function EmptyState({ filtered }: { filtered: boolean }) {
-  const copy = useCopy();
-  return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-[13.5px] italic text-ink-muted">
-        {filtered
-          ? copy.projects.noMatchingConversations
-          : copy.projects.noArchivedConversations}
-      </p>
-    </div>
-  );
-}
-
-// ---------------- Confirm dialogs ----------------
-
-/**
- * Single-layer confirm for per-row delete. Standard
- * destructive-action pattern: cancel button on the left (escape
- * also dismisses via Radix), destructive button on the right.
- */
-function ConfirmDeleteOneDialog({
-  session,
-  onCancel,
-  onConfirm,
-  busy,
-}: {
-  session: Session | null;
-  onCancel: () => void;
-  onConfirm: () => Promise<void>;
-  busy: boolean;
-}) {
-  const copy = useCopy();
-  return (
-    <Dialog.Root
-      open={!!session}
-      onOpenChange={(open) => {
-        if (!open) onCancel();
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
-        <Dialog.Content
-          // role="alertdialog" instructs assistive tech to interrupt
-          // and require explicit dismissal — appropriate for a
-          // destructive confirmation.
-          role="alertdialog"
-          aria-describedby="confirm-delete-one-desc"
-          className={cn(
-            "fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
-            "rounded-lg border border-line bg-elevated p-5 shadow-elevated",
-            "max-w-[calc(100vw-32px)]",
-          )}
-        >
-          <Dialog.Title className="text-[15px] font-semibold text-ink">
-            {copy.projects.permanentlyDeleteConversation}
-          </Dialog.Title>
-          <p
-            id="confirm-delete-one-desc"
-            className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
-          >
-            {copy.projects.permanentlyDeleteConversationBody(
-              session?.title ?? "",
-            )}{" "}
-            <span className="text-ink">{copy.projects.cannotUndo}</span>
-          </p>
-
-          <DialogActionRow>
-            <Button variant="secondary" onClick={onCancel} disabled={busy} autoFocus>
-              {copy.common.cancel}
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={() => {
-                void onConfirm();
-              }}
-            >
-              {copy.common.deletePermanently}
-            </Button>
-          </DialogActionRow>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-/**
- * Single-layer confirm for "Delete N selected". Mirrors the per-row
- * confirm — the user already deliberated by checking the rows, so
- * the empty-all checkbox-acknowledge friction would be redundant.
- */
-function ConfirmDeleteManyDialog({
-  open,
-  count,
-  onCancel,
-  onConfirm,
-  busy,
-}: {
-  open: boolean;
-  count: number;
-  onCancel: () => void;
-  onConfirm: () => Promise<void>;
-  busy: boolean;
-}) {
-  const copy = useCopy();
-  return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) onCancel();
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
-        <Dialog.Content
-          role="alertdialog"
-          aria-describedby="confirm-delete-many-desc"
-          className={cn(
-            "fixed left-1/2 top-1/2 z-[60] w-[440px] -translate-x-1/2 -translate-y-1/2",
-            "rounded-lg border border-line bg-elevated p-5 shadow-elevated",
-            "max-w-[calc(100vw-32px)]",
-          )}
-        >
-          <Dialog.Title className="text-[15px] font-semibold text-ink">
-            {copy.projects.permanentlyDeleteSelectedTitle(count)}
-          </Dialog.Title>
-          <p
-            id="confirm-delete-many-desc"
-            className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
-          >
-            {copy.projects.permanentlyDeleteSelectedBody}{" "}
-            <span className="text-ink">{copy.projects.cannotUndo}</span>
-          </p>
-
-          <DialogActionRow>
-            <Button variant="secondary" onClick={onCancel} disabled={busy} autoFocus>
-              {copy.common.cancel}
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={() => {
-                void onConfirm();
-              }}
-            >
-              {copy.projects.permanentlyDeleteCount(count)}
-            </Button>
-          </DialogActionRow>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
+// ---------------- Empty-all confirm ----------------
 
 /**
  * Two-layer confirm for "Delete all". The user must check the
  * "我了解此操作无法撤销" checkbox before the destructive button
  * becomes enabled. Mirrors GitHub's "delete repository" friction
- * for batch destructive operations.
+ * for batch destructive operations — deliberately NOT the shared
+ * ConfirmActionDialog: the checkbox gate is this dialog's design.
  *
  * Resets the checkbox whenever the dialog opens so a previous
  * acknowledged state doesn't carry over.
@@ -700,7 +461,7 @@ function ConfirmEmptyAllDialog({
           </div>
           <p
             id="confirm-empty-all-desc"
-            className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
+            className="mt-2 text-ui-secondary leading-secondary text-ink-soft"
           >
             {copy.projects.emptyAllBody(count)}{" "}
             <span className="text-ink">{copy.projects.cannotUndo}</span>
@@ -709,7 +470,7 @@ function ConfirmEmptyAllDialog({
           <Checkbox
             checked={acknowledged}
             onCheckedChange={setAcknowledged}
-            className="mt-4 flex cursor-pointer select-none items-start gap-2 rounded-sm border border-line bg-app px-3 py-2.5 text-[12.5px] text-ink transition-colors hover:border-line-strong"
+            className="mt-4 flex cursor-pointer select-none items-start gap-2 rounded-sm border border-line bg-app px-3 py-2.5 text-ui-secondary text-ink transition-colors hover:border-line-strong"
           >
             <span>{copy.projects.acknowledgeCannotUndo}</span>
           </Checkbox>
@@ -740,17 +501,4 @@ function ConfirmEmptyAllDialog({
       </Dialog.Portal>
     </Dialog.Root>
   );
-}
-
-// ---------------- helpers ----------------
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${d.getFullYear()}-${m}-${day}`;
-  } catch {
-    return iso;
-  }
 }

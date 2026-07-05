@@ -12,7 +12,7 @@ import type {
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelCard } from "./ChannelCard";
 import { ChannelErrorBlock } from "./ChannelErrorBlock";
-import { ConfirmActionDialog } from "./ConfirmActionDialog";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { WeChatCommandReference } from "./CommandReference";
 import { ConnectionSteps } from "./ConnectionSteps";
 import { WeChatGlyph } from "./Glyphs";
