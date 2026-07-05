@@ -41,7 +41,12 @@ export function SegmentedControl<TValue extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex items-center rounded-sm border border-line bg-surface p-0.5",
+        // Track uses bg-hover, not bg-surface: the active thumb is
+        // bg-elevated, and surface/elevated are near-identical whites in
+        // light mode — on an elevated parent (e.g. a popover) the
+        // selection became unreadable. The darker track restores the
+        // thumb-on-track contrast on every parent background.
+        "inline-flex items-center rounded-sm border border-line bg-hover p-0.5",
         className,
       )}
       {...rest}
@@ -64,8 +69,8 @@ export function SegmentedControl<TValue extends string>({
               "disabled:cursor-not-allowed disabled:opacity-40",
               ITEM_SIZE_CLASSES[size],
               active
-                ? "bg-elevated text-ink shadow-card"
-                : "text-ink-soft hover:bg-hover hover:text-ink",
+                ? "bg-elevated font-medium text-brand-strong shadow-card"
+                : "text-ink-soft hover:text-ink",
             )}
           >
             {option.icon}
