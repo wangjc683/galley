@@ -100,6 +100,7 @@ trust_env），错误 hint 提一句「需要能访问 Telegram 的网络环境�
 ## 待办 / 已知限制
 
 - Telegram reporter 报告只发文本，不带生成文件。
-- Telegram glyph 是手绘简化 SVG，视觉验收时可换正式品牌资产。
 - 全 patch 栈对上游的 replay 验证照惯例推迟到下次 baseline 升级
   （0014 已验证可从当前树反向应用）。
+- glyph 初版是手绘 SVG，当天已换成官方 logo 处理的 250px alpha mask
+  （圆盘 currentColor、纸飞机镂空，与飞书同一套 mask 语法）。
