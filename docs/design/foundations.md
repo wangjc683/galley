@@ -160,6 +160,8 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 | `--conversation-step-size` | 11.5 | **12** | 12.5 | TurnMarker「第 N 步」 |
 | `--conversation-tool-label-size` | 11.5 | **12** | 12.5 | tool callout head 标签 |
 | `--conversation-tool-mono-size` | 10.5 | **11** | 11.5 | tool callout 次级 mono |
+| `--conversation-code-size` | 12 | **13** | 14.5 | markdown 块代码（leading 固定 1.45，2026-07-05 新增） |
+| `--conversation-echo-size` | 12.5 | **13** | 14.5 | 已答复 ask_user 的问题回显（降权阅读态，2026-07-05 新增） |
 | `--conversation-heading-1-size` | 20 | **22** | 24 | markdown h1（Newsreader medium） |
 | `--conversation-heading-2-size` | 17.5 | **19** | 21 | markdown h2 |
 | `--conversation-heading-3-size` | 15.5 | **17** | 18.5 | markdown h3（故意接近正文） |

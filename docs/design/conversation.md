@@ -45,10 +45,13 @@
 
 #### Thinking Summary
 
-- 每 turn 第一个 callout（仅当 GA 真实 emit `<thinking>` 内容时出现）
-- 内容 = LLM 这一轮"打算做什么"的总结
-- Newsreader italic 14px ink-soft，3px 中性 `ink-soft` 左竖条 + `bg-surface` 底 + 右 8px 圆角
-- 无图标——typography + 容器 chrome 已足够标识 callout 块，2026-05-14 收回了原 💭 例外
+- 不再是独立 callout（2026-06 改版，2026-07-05 回写）：thinking 内容
+  折叠进 TurnMarker 行的 DetailPanel——点 marker 行尾的 caret 展开,
+  无独立容器 chrome。理由：独立 callout 让每步多一块常驻框,而
+  thinking 是"想看才看"的过程材料,渐进式展示。
+- 内容 = GA 真实 emit 的 `<thinking>`（无则 caret 不出现）+ 中间轮
+  preamble（当其未作为旁白单独渲染时）
+- 展开后 Newsreader italic、`--conversation-thinking-size` 走三档字号
 
 #### Goal 叙述 callout（SystemMessageBubble `variant="goal"`）
 
@@ -72,7 +75,11 @@ Galley 在 Goal master 线程里讲述 run 进展的旁白（system row）。它
 
 Final answer 跟 Thinking summary 都通过 `react-markdown` + `remark-gfm` + Shiki 渲染。LLM 输出的 markdown（标题 / 列表 / 表格 / 代码块 / 引用 / 链接 / 删除线）全部解析成对应 DOM，没解析的纯文本走默认段落。
 
-**typography 映射**（每个元素 pull 现有 token，不引入新字号）：
+**typography 映射**（每个元素 pull 现有 token，不引入新字号）。下表
+px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
+`--conversation-*` 变量驱动（见 foundations.md「字号 scale」），**不要
+在组件里硬编码 px**（2026-07-05 教训：块代码曾硬编码 13px，用户调大
+字号时代码不跟随）：
 
 | markdown | 渲染 |
 |---|---|
@@ -105,7 +112,8 @@ Final answer 跟 Thinking summary 都通过 `react-markdown` + `remark-gfm` + Sh
 - 未注册的语言：fallback 到无色 mono code block（同样的 chrome，仅没 token color），不报错
 - async render：第一次 highlighter 加载时显示 plain mono fallback，加载完替换；同 highlighter 实例 cache，跨 code block 共享
 - 视觉容器：**无顶部 header 行**。圆角 6px + `border-line-strong` + 底色 `--color-code-surface`（内凹暖灰，见下方决策）。语言名 + copy/wrap 控件浮在**右上角**：语言名常驻（dim 10px mono uppercase，`text`/`plaintext` 等无信息语言名不显示），copy/wrap 在 hover 时 fade-in，三者都带 `bg-code-surface/85` backdrop 以压住底下的代码。
-- 默认横向 overflow scrollable；hover/focus 可切到 wrap 模式，便于读日志、错误栈、长命令
+- 默认横向 overflow scrollable；hover 显出 wrap 切换，便于读日志、错误栈、长命令（对话区操作当前为 pointer-first，无键盘焦点路径——键盘故事整体待议）
+- 流式期间保留上一帧高亮 HTML 直到新高亮完成（2026-07-05）：否则每个 chunk 都闪一次"无色→上色"；换主题同理。代价是内容滞后一次高亮周期（Shiki 热启动后仅数毫秒）
 
 **Copy 按钮**：hover-revealed（11px Phosphor `Copy` thin + uppercase "Copy"，复制后变 ✓ + "Copied" 1.5s），复制内容是**纯代码**——不带 ` ``` ` fence、不带 markdown chrome。Claude.ai / ChatGPT / Cursor 的肌肉记忆位置。
 
@@ -125,7 +133,7 @@ V0.1 不做：代码块行号 / Edit 在行内（V0.2 候选）。
 | 按钮 | 行为 |
 |---|---|
 | `Copy` | 复制原始 markdown source（带 `**bold**` `## headers`），不是渲染后纯文本——用户粘贴目的地（Notion / Obsidian / Slack / 邮件）多数能 re-render markdown |
-| `Save` | Tauri save dialog → `.md` 文件。默认文件名 `ga-{YYYYMMDD-HHmmss}.md`，用户可改 |
+| `Save` | Tauri save dialog → `.md` 文件。默认文件名 `galley-{YYYYMMDD-HHmmss}.md`（产品名前缀；`ga` 保留给内核，与图片保存的 `galley-image-` 同族），用户可改 |
 
 **复制入口统一（`ActionChip`）** —— 按"常驻 vs 触发浮现"两类组织，全部共用一个
 `ActionChip`（Copy thin 14px → Check success，1.5s 回落，quiet 1px press）：
@@ -141,13 +149,14 @@ V0.1 不做：代码块行号 / Edit 在行内（V0.2 候选）。
 一条规则统摄：**常驻操作在回答末尾的 bar 里；触发式复制是一个浮动 chip，贴触发的
 内容浮出。** bar 里用 bare chip，浮动的用 floating chip。
 
-视觉：
+视觉（2026-07-05 回写为 icon-only 现状）：
 
-- 位置：reply markdown 渲染**正下方**，gap 8px (`mt-2`)
-- 字号 12px Inter + 13px Phosphor thin icon
+- 位置：reply markdown 渲染**正下方**，gap 6px (`mt-1.5`)
+- icon-only chip（14px Phosphor thin），无文字标签；标签在 Radix
+  tooltip / aria-label 里
 - **常驻可见**（不 hover-only），text-ink-muted；hover 升 ink-soft + bg-hover
-- 点击后 0.5s 内 icon 变 Check + 文字变 "Copied" / "Saved"，1.5s 后回 idle
-- success 反馈用 `text-success`（绿色 token）
+- 点击后 icon 变 Check（`text-success`）1.5s 后回 idle；tooltip 随状态
+  切换（悬停绿勾时读到「已复制」而非「复制」）
 
 工程：
 - Copy 走 `navigator.clipboard.writeText` web API（Tauri webview 支持）
@@ -218,7 +227,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 
 - 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 监听 `inFlightContent` 变化把 `scrollTop = scrollHeight`
 - **用户向上滚 → 不跟随**：`atBottom = false`，stream 继续但视图不动
-- **浮动按钮**：`atBottom = false` 时 conversation 列右下角（Composer 上方 140px）出现一个 36px 圆形 ghost 按钮，⬇ ArrowDown thin icon
+- **浮动按钮**：`atBottom = false` 时出现 32px 圆形 ghost 按钮（⬇ ArrowDown thin），**水平居中、贴对话列底部 16px**——实现时从"右下角"改为居中（代码注释记录了理由：右下角与 Composer 动作簇视觉打架），2026-07-05 回写
 - 点按钮 → `scrollTo({ top: scrollHeight, behavior: "smooth" })` + `atBottom = true`（重新启用跟随）
 - ESC / 任何手动 wheel 不影响按钮可见性（仅 scroll position 决定）
 
@@ -270,16 +279,17 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 #### 视觉
 
 - **杏沙 focus ring**（`brand` token）
-- 圆角 12px / `surface` 背景 / 默认 1px `border-default`
+- 圆角 12px / `elevated` 背景（浮起的输入卡；曾写 `surface`，2026-07-05 回写）/ 默认 1px `border-default`
 - 上方留 1.5em，下方贴 viewport bottom（in-session）或居中（empty state hero）
-- + icon 占位（V0.2 接 attach）/ Submit 按钮
+- 附件已落地：`Paperclip` 按钮 + 拖放 / 粘贴图片三路收口（旧文案「+ icon 占位（V0.2 接 attach）」作废）
+- 草稿按 session 驻留内存（切会话不丢半截消息）；进入会话自动聚焦
 
 #### Submit 按钮（杏沙 CTA 例外）
 
 - **Submit 是全局唯一用杏沙作为 CTA 填充的元素** —— 用户最高频元素，杏沙带来"亲和体温"
-- Phosphor `ArrowUp` thin / 32px circle / 杏沙填充 / charcoal icon
-- Enter 触发，Shift+Enter 换行
-- agent running 时**位置替换为 Stop 按钮**（深琥珀填充 / Phosphor `Stop` thin），点击触发 abort
+- Phosphor `ArrowUp` **bold** / 32px circle / 杏沙填充 / charcoal icon（thin 在 16px 实心圆上过细，落地时升 bold——刻意，勿"修"回 thin）
+- Enter 触发，Shift+Enter 换行；**输入法组字中的 Enter 交给 IME**（`isImeCompositionKeydown` 守卫，中文优先产品的硬约束）
+- agent running 时**位置替换为 Stop 按钮**（深琥珀填充 / Phosphor `Stop` **fill**，同上刻意加重），点击触发 abort；此时 footer hint 教 `/btw`（「Enter 发送」在运行态是谎言）
 
 #### 常用提示词入口（V0.2.16）
 
@@ -345,16 +355,19 @@ quick prompt 建议**——能力发现靠"用户主动打开库时看到能力�
 
 位置：**Composer 内部左下角**。
 
-- 形态：LLM displayName + `CaretDown` thin。模型名本身已承担语义，不再显示
+- 形态：LLM displayName + `CaretUp` thin（popover 向上开，箭头指向开启方向；旧文档写 CaretDown 已回写）。模型名本身已承担语义，不再显示
   Cube icon。
 - Ghost button / hover `hover-tint` / 13px Inter / 28px 高
 - 点击展开 popover：
   - `surface-elevated` 背景 + `shadow-elevated`
   - 圆角 12px / 内边距 8px / 每行 32px
-  - current 项右侧杏沙 ✓
-  - 切换中 `Check` 替换为 `CircleNotch` 旋转
-- agent running / waiting approval 时 disabled，hover 显示 tooltip "Wait for the current run to finish"
-- LLM list > 8 时加 scroll
+  - current 项左侧杏沙 ✓
+  - 切换中 spinner（`CircleNotch`）未实现——切换足够快，V0.2 再议
+- agent running / waiting approval 时不可切换：`aria-disabled` + 点击
+  no-op（不用真 `disabled`——禁用元素吞掉指针事件，解释性 tooltip
+  「运行中无法切换」永远弹不出来；这条规则适用于所有带解释 tooltip
+  的禁用控件，Radix `TooltipLabel`，禁原生 `title`）
+- 长列表在 popover 内滚动（`max-h min(60vh,360px)`）
 - displayName 由 bridge 按 runtime 边界生成：external GA 显示完整 raw name；managed GA 显示 Galley Models 里的显示名或原始 model id（详见 IPC 协议）
 
 #### 不显示
