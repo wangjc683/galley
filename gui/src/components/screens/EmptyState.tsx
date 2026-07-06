@@ -1,4 +1,4 @@
-import { FolderOpen } from "@phosphor-icons/react";
+import { FolderOpen, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -8,6 +8,7 @@ import {
   type ImageBlockReason,
 } from "@/components/conversation/Composer";
 import { Epigraph } from "@/components/screens/Epigraph";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   conversationTypographyStyle,
   type ConversationFontSize,
@@ -55,6 +56,15 @@ export interface EmptyStateProps {
   conversationFontSize?: ConversationFontSize;
   /** Active project context for the next lazily-created session. */
   projectName?: string;
+  /**
+   * Clears the project context so the next new chat is a plain,
+   * project-less conversation. When provided, the "将创建到 X" hint
+   * gains an × to dismiss the binding — the escape hatch for a user
+   * who landed in a project's context by selecting one of its sessions
+   * (not by deliberately entering the project) and just wants a scratch
+   * conversation. No-op / hint stays passive when omitted.
+   */
+  onClearProjectContext?: () => void;
   /** Bumped by the host when a navigation action should return focus here. */
   focusTick?: number;
   /**
@@ -97,6 +107,7 @@ export function EmptyState({
   conversationWidth = "compact",
   conversationFontSize = "standard",
   projectName,
+  onClearProjectContext,
   focusTick = 0,
   epigraphCondition = "quiet",
   imagesEnabled = true,
@@ -161,6 +172,22 @@ export function EmptyState({
                 <span className="min-w-0 truncate">
                   {copy.composer.willCreateIn(projectName)}
                 </span>
+                {onClearProjectContext && (
+                  <TooltipLabel text={copy.composer.clearProjectContext}>
+                    <button
+                      type="button"
+                      onClick={onClearProjectContext}
+                      aria-label={copy.composer.clearProjectContext}
+                      className={cn(
+                        "flex size-4 shrink-0 items-center justify-center rounded-full text-ink-muted",
+                        "transition-colors hover:bg-hover hover:text-ink",
+                        "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+                      )}
+                    >
+                      <X size={10} weight="bold" />
+                    </button>
+                  </TooltipLabel>
+                )}
               </span>
             ) : undefined
           }

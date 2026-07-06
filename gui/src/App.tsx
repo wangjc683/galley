@@ -793,6 +793,9 @@ function App() {
                   conversationWidth={conversationWidth}
                   conversationFontSize={conversationFontSize}
                   projectName={activeProject?.name}
+                  onClearProjectContext={() =>
+                    setActiveProjectFilter(undefined)
+                  }
                   focusTick={emptyComposerFocusTick}
                   epigraphCondition={epigraphCondition}
                   llms={llms}

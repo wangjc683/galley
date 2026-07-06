@@ -293,6 +293,7 @@ export const zhCopy = {
     configureModels: "配置模型",
     configureModelBeforeSending: "先配置模型",
     willCreateIn: (projectName: string) => `将创建到 ${projectName}`,
+    clearProjectContext: "改为普通新对话（不放入项目）",
     savedPrompts: {
       trigger: "常用提示词",
       replaceDraftTitle: "替换当前草稿？",
@@ -320,7 +321,8 @@ export const zhCopy = {
       moveUp: "上移",
       moveDown: "下移",
       deleteCustom: "删除",
-      emptyCustom: "还没有自定义提示词。点「新增」创建一个，或从上方预设复制一个。",
+      emptyCustom:
+        "还没有自定义提示词。点「新增」创建一个，或从上方预设复制一个。",
       savePrompt: "保存",
       createPrompt: "创建",
       presets: {
@@ -426,8 +428,7 @@ export const zhCopy = {
       externalGA: "外部 GA",
       externalPath: "外部 GA 路径",
       pathHint: "选择包含 agentmain.py 的 GenericAgent 目录，或粘贴路径后回车",
-      healthDescription:
-        "重新探测 Python 解释器、检查运行环境与必要文件。",
+      healthDescription: "重新探测 Python 解释器、检查运行环境与必要文件。",
       runHealthCheck: "跑一次 Health Check",
       setupAssistant: "设置向导",
       setupAssistantDescription: "重新走一遍首次设置，现有对话会保留",
@@ -1049,7 +1050,8 @@ export const zhCopy = {
         "Channels 会使用 Galley 已配置的模型。接入前，需要先在 Models 里配置一个可用模型。",
       feishuBindWaitingTitle: "等待绑定使用者",
       feishuBindWaitingLead: "在飞书私聊中向机器人发送配对码：",
-      feishuBindWaitingAfterCode: "发送配对码的人将成为机器人唯一响应的使用者。",
+      feishuBindWaitingAfterCode:
+        "发送配对码的人将成为机器人唯一响应的使用者。",
       feishuOwnerSecurityNote:
         "Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，其他人（包括群聊中 @ 它的成员）的消息会被忽略，也不会收到回复。",
       feishuOwnerScopeAdvice:

@@ -306,6 +306,7 @@ export const enCopy: AppCopy = {
     configureModels: "Configure models",
     configureModelBeforeSending: "Set up a model first",
     willCreateIn: (projectName) => `Will be created in ${projectName}`,
+    clearProjectContext: "Switch to a plain new chat (not in the project)",
     savedPrompts: {
       trigger: "Saved prompts",
       replaceDraftTitle: "Replace the current draft?",
@@ -359,7 +360,8 @@ export const enCopy: AppCopy = {
         },
         webExtraction: {
           title: "Pull from a web page",
-          description: "Drive a real browser through pages, incl. logged-in ones",
+          description:
+            "Drive a real browser through pages, incl. logged-in ones",
           body: "Open the page below in the browser and read out the information I need into a structured result. When you need to paginate, click into detail pages, or read content only visible after login, say how you'll do it first; do not submit, publish, purchase, or delete anything:\n\n[Write the URL, and what to extract]",
         },
         reviewDraft: {
@@ -1141,7 +1143,8 @@ export const enCopy: AppCopy = {
       telegramStartService: "Start Telegram service",
       telegramConfigLoading: "Loading Telegram config…",
       telegramTextCommandsTitle: "Telegram text commands",
-      telegramTextCommandsHint: "Send these text commands directly in the Telegram chat.",
+      telegramTextCommandsHint:
+        "Send these text commands directly in the Telegram chat.",
       telegramTextCommands: [
         { command: "/llm", description: "List and switch models" },
         { command: "/stop", description: "Stop the current task" },
