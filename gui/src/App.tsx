@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
@@ -10,7 +10,7 @@ import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
 import { EmptyState } from "@/components/screens/EmptyState";
 import { MainView } from "@/components/screens/MainView";
-import { Onboarding } from "@/components/screens/onboarding/Onboarding";
+import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
 import { Settings } from "@/components/screens/settings/Settings";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { YoloIntroDialog } from "@/components/screens/YoloIntroDialog";
@@ -26,24 +26,18 @@ import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useBrowserControlStartupEffect } from "@/hooks/useBrowserControlStartupEffect";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
+import { useGoalActions } from "@/hooks/useGoalActions";
 import { useGoalEffects } from "@/hooks/useGoalEffects";
 import { useImSupervisorStatus } from "@/hooks/useImSupervisorStatus";
+import { useMessageSend } from "@/hooks/useMessageSend";
+import { useOnboardingFlow } from "@/hooks/useOnboardingFlow";
 import { useProjectNavigation } from "@/hooks/useProjectNavigation";
 import { useThemeAndCloseHintEffects } from "@/hooks/useThemeAndCloseHintEffects";
-import {
-  getGoalStatus,
-  goalMasterSessionTitle,
-  markGoalResultSeen,
-  startDesktopGoal,
-  stopGoal,
-} from "@/lib/goals";
 import {
   aggregateChannelsState,
   restartEnabledImSupervisors,
 } from "@/lib/im-supervisor";
-import { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
 import { resolveLanguagePreference } from "@/lib/language";
-import { logPerf, perfNow } from "@/lib/perf";
 import {
   currentLLMDisplayName,
   managedModelsToLLMs,
@@ -64,9 +58,7 @@ import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
-import type { PendingImageAttachment } from "@/types/conversation";
-import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
-import type { ApprovalDecision } from "@/types/ipc";
+import type { GoalBrief } from "@/types/goal";
 
 /**
  * V0.1 Stage 2 #8 — App entry.
@@ -392,121 +384,6 @@ function App() {
     (s) => s.removePendingApproval,
   );
 
-  // Stable approve handler — passed down to MainView → ToolCallout
-  // (React.memo'd). Keeping it referentially stable lets settled
-  // ToolCallouts skip re-render during the low-frequency App renders
-  // that still happen (pendingAskUser changes etc.). The deps are the
-  // only values the body reads.
-  const handleApprove = useCallback(
-    (approvalId: string, decision: ApprovalDecision) => {
-      if (!activeSessionId) return;
-      const sid = activeSessionId;
-      // Snapshot before the optimistic removal so a failed send can
-      // put the card back.
-      const pending = useMessagesStore
-        .getState()
-        .byId[sid]?.pendingApprovals.find((p) => p.approvalId === approvalId);
-      recordApprovalDecision(sid, approvalId, decision);
-      removePendingApproval(sid, approvalId);
-      sendIPCCommand(sid, {
-        kind: "approval_response",
-        approvalId,
-        decision,
-      }).catch((e) => {
-        // The bridge never received the decision: the run is still
-        // blocked on this approval. Roll the optimistic UI back so the
-        // card doesn't show a decided pill for a decision GA never saw.
-        const m = useMessagesStore.getState();
-        m.revokeApprovalDecision(sid, approvalId);
-        if (pending) m.addPendingApproval(sid, pending);
-        useUiStore.getState().pushToast(
-          makeAppError({
-            category: "bridge",
-            severity: "error",
-            title: copy.errors.approvalSendFailed,
-            message: e instanceof Error ? e.message : String(e),
-            hint: null,
-            retryable: true,
-            context: "approval_response",
-            traceback: null,
-          }),
-        );
-      });
-    },
-    [
-      activeSessionId,
-      recordApprovalDecision,
-      removePendingApproval,
-      sendIPCCommand,
-      copy,
-    ],
-  );
-
-  const reportUserSendFailure = (sid: string, context: string, e: unknown) => {
-    const message = e instanceof Error ? e.message : String(e);
-    console.warn("[main] send failed", { sid, message });
-    const m = useMessagesStore.getState();
-    m.setAgentRunning(sid, false);
-    m.setCurrentTurnIndex(sid, null);
-    m.setSendPhase(sid, null);
-    m.clearInFlightContent(sid);
-    useUiStore.getState().pushToast(
-      makeAppError({
-        category: "bridge",
-        severity: "error",
-        title: copy.errors.sendFailed,
-        message,
-        hint: null,
-        retryable: true,
-        context,
-        traceback: null,
-      }),
-    );
-  };
-
-  const runBrowserControlDemo = async () => {
-    if (requiresManagedModelConfig) {
-      openModelsForMissingConfig();
-      return;
-    }
-    let demoSid: string | null = null;
-    try {
-      const sid = createSession();
-      demoSid = sid;
-      await activateSession(sid);
-      setScreen("main");
-      const persisted = await appendUserTurn(
-        sid,
-        copy.browserControl.demoPrompt,
-      );
-      const absoluteTurnIndex = persisted.turnIndex;
-      await sendIPCCommand(sid, {
-        kind: "user_message",
-        text: copy.browserControl.demoPrompt,
-        images: [],
-        absoluteTurnIndex,
-      });
-    } catch (e) {
-      if (demoSid) {
-        reportUserSendFailure(demoSid, "browser_control_demo", e);
-      } else {
-        const message = e instanceof Error ? e.message : String(e);
-        useUiStore.getState().pushToast(
-          makeAppError({
-            category: "bridge",
-            severity: "error",
-            title: copy.errors.sendFailed,
-            message,
-            hint: null,
-            retryable: true,
-            context: "browser_control_demo",
-            traceback: null,
-          }),
-        );
-      }
-    }
-  };
-
   useAppHydrationEffects();
   const { activeGoals, sessionGoals, setActiveGoals } = useGoalEffects({
     activeSessionId,
@@ -589,6 +466,35 @@ function App() {
     screen === "main" &&
     (isRunning || pendingApprovals.length > 0 || pendingAskUser !== null);
   const {
+    handleApprove,
+    sendUserMessage,
+    submitFromEmpty,
+    stopRun,
+    runBrowserControlDemo,
+  } = useMessageSend({
+    activeSessionId,
+    activeSession,
+    pendingAskUser,
+    requiresManagedModelConfig,
+    activeRuntimeKind,
+    activeProjectFilter,
+    copy,
+    recordApprovalDecision,
+    removePendingApproval,
+    sendIPCCommand,
+    shutdownBridge,
+    activateSession,
+    appendUserTurn,
+    appendSideQuestionUserTurn,
+    createSession,
+    createSessionPersisted,
+    setScreen,
+    setActiveProjectFilter,
+    pushToast,
+    showImageBlockedToast,
+    openModelsForMissingConfig,
+  });
+  const {
     activeGoalProjectIds,
     activeProject,
     assignSessionToProjectWithToast,
@@ -620,121 +526,28 @@ function App() {
     visibleSessions,
   });
   const openGoalProject = openProjectInSidebar;
-  const startGoalFromComposer = async (
-    objective: string,
-    config: GoalLaunchConfig,
-  ) => {
-    if (requiresManagedModelConfig) {
-      openModelsForMissingConfig();
-      return;
-    }
-    try {
-      let masterSessionId = activeSession?.id;
-      const createdMasterSession = masterSessionId === undefined;
-      if (!masterSessionId) {
-        masterSessionId = await createSessionPersisted(
-          activeProjectFilter,
-          goalMasterSessionTitle(objective),
-        );
-        setScreen("main");
-      }
-      const projectId = activeSession?.projectId ?? activeProjectFilter;
-      const shouldMirrorMasterProject =
-        masterSessionId && (!activeSession || !activeSession.projectId);
-      const result = await startDesktopGoal({
-        objective,
-        projectId: projectId ?? undefined,
-        masterSessionId,
-        runtimeKind: activeRuntimeKind,
-        workerLimit: config.workerLimit,
-        budgetSeconds: config.budgetSeconds,
-        llmName: llmDisplayName,
-        locale: resolvedLanguage,
-      });
-      const { goal, objectiveMessage, masterMessage } = result;
-      appendUserTurnExternal(
-        masterSessionId,
-        objectiveMessage.content,
-        objectiveMessage.origin,
-        objectiveMessage.createdAt,
-        false,
-        objectiveMessage.turnIndex,
-      );
-      appendSystemTurn(masterSessionId, {
-        role: "system",
-        content: masterMessage.content,
-        variant: "goal",
-      });
-      setActiveGoals((goals) => {
-        const withoutCurrent = goals.filter(
-          (candidate) => candidate.id !== goal.id,
-        );
-        return [...withoutCurrent, goal].sort(
-          (a, b) => Date.parse(a.deadlineAt) - Date.parse(b.deadlineAt),
-        );
-      });
-      if (shouldMirrorMasterProject) {
-        void assignSessionToProject(masterSessionId, goal.projectId);
-      }
-      void getGoalStatus(goal.id)
-        .then((snapshot) => {
-          if (snapshot.project) {
-            useSessionsStore
-              .getState()
-              .applyExternalProjectCreated(snapshot.project);
-          }
-          const master = snapshot.sessions.find(
-            (session) => session.id === masterSessionId,
-          );
-          if (master) {
-            useSessionsStore.getState().applyExternalSessionUpdated(master);
-          }
-        })
-        .catch((e) => {
-          console.debug("[goals] hydrate started goal project failed.", e);
-        });
-      setActiveProjectFilter(undefined);
-      if (createdMasterSession) {
-        setScreen("main");
-      }
-      pushToast(
-        makeAppError({
-          category: "business",
-          severity: "info",
-          title: copy.toasts.goalStarted,
-          message: copy.toasts.goalStartedMessage(
-            goal.workerLimit,
-            Math.round(goal.budgetSeconds / 60),
-          ),
-          hint: null,
-          retryable: false,
-          context: "start_desktop_goal",
-          traceback: null,
-          action: {
-            kind: "view_project",
-            label: copy.toasts.viewProject,
-            projectId: goal.projectId,
-          },
-          autoDismissMs: 4200,
-        }),
-      );
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      pushToast(
-        makeAppError({
-          category: "business",
-          severity: "error",
-          title: copy.toasts.goalStartFailed,
-          message,
-          hint: null,
-          retryable: true,
-          context: "start_desktop_goal",
-          traceback: null,
-        }),
-      );
-      throw e;
-    }
-  };
+  const { startGoalFromComposer, openGoal, stopGoalFromTopbar } =
+    useGoalActions({
+      activeGoals,
+      activeSession,
+      activeProjectFilter,
+      activeRuntimeKind,
+      llmDisplayName,
+      resolvedLanguage,
+      requiresManagedModelConfig,
+      copy,
+      createSessionPersisted,
+      setScreen,
+      setActiveProjectFilter,
+      activateSession,
+      appendUserTurnExternal,
+      appendSystemTurn,
+      assignSessionToProject,
+      setActiveGoals,
+      openGoalProject,
+      pushToast,
+      openModelsForMissingConfig,
+    });
 
   // Archived dialog open state — local UI state, no need to live in
   // the global store. Persisting across reloads would be confusing
@@ -748,70 +561,19 @@ function App() {
     () => visibleSessions.filter((s) => bucketSession(s) === "earlier"),
     [visibleSessions],
   );
-  const openGoal = async (goalId: string) => {
-    try {
-      const snapshot = await getGoalStatus(goalId);
-      const masterSessionId = snapshot.goal.masterSessionId;
-      if (masterSessionId) {
-        setActiveProjectFilter(undefined);
-        void activateSession(masterSessionId);
-        setScreen("main");
-        if (
-          snapshot.goal.status === "completed" ||
-          snapshot.goal.status === "failed"
-        ) {
-          void markGoalResultSeen(snapshot.goal.id)
-            .then((next) => {
-              setActiveGoals((goals) =>
-                goals
-                  .map((goal) => (goal.id === next.id ? next : goal))
-                  .filter((goal) => goal.id !== next.id),
-              );
-            })
-            .catch((e) => {
-              console.debug("[goals] mark result seen failed.", e);
-            });
-        }
-        return;
-      }
-      openGoalProject(snapshot.goal.projectId);
-    } catch (e) {
-      console.warn("[goals] open goal failed.", e);
-      const goal = activeGoals.find((candidate) => candidate.id === goalId);
-      if (goal) openGoalProject(goal.projectId);
-    }
-  };
-  const stopGoalFromTopbar = async (goalId: string) => {
-    try {
-      const next = await stopGoal(goalId);
-      setActiveGoals((goals) =>
-        goals.map((goal) => (goal.id === goalId ? next : goal)),
-      );
-    } catch (e) {
-      console.warn("[goals] stop failed.", e);
-    }
-  };
-  // Settings-driven Onboarding flows:
-  // - Health Check revisit jumps directly to StepHealth and returns to
-  //   Settings on completion.
-  // - Setup Assistant starts from the same first screen as initial
-  //   install, but keeps a Back to Settings escape hatch. Opening it
-  //   has no side effect; settings only change when the user edits a
-  //   step and completes it.
-  //
-  // Health Check revisit flow (Settings → Re-run Health Check):
-  //   - true → Onboarding renders in "revisit" mode (skips Welcome /
-  //     Attach, jumps to Health step, swaps button labels)
-  //   - previousScreen remembers where the user was before triggering
-  //     the revisit, so onComplete / onCancel can return them there +
-  //     re-open Settings (the action itself was triggered from inside
-  //     the Settings dialog, so "where I was" implicitly includes
-  //     "with Settings open").
-  const [healthCheckRevisit, setHealthCheckRevisit] = useState(false);
-  const [setupAssistantFromSettings, setSetupAssistantFromSettings] =
-    useState(false);
-  const [revisitReturnScreen, setRevisitReturnScreen] =
-    useState<import("@/stores/ui").Screen>("empty");
+  // Settings-driven Onboarding re-entry (Re-run Health Check / Setup
+  // Assistant) + the return flows out of the takeover. State + logic
+  // live in the hook; both Settings and OnboardingScreen consume it.
+  const onboarding = useOnboardingFlow({
+    screen,
+    setScreen,
+    setSettingsOpen,
+    setEmptyComposerFocusTick,
+    gaConfig,
+    setGAConfig,
+    activeRuntimeKind,
+    setActiveRuntimeKind,
+  });
 
   const showBrowserControlAttention =
     activeRuntimeKind === "managed" &&
@@ -821,92 +583,23 @@ function App() {
   // Onboarding takeover: no AppShell, no overlays besides the dev
   // toggle.
   if (screen === "onboarding") {
-    const onboardingMode = healthCheckRevisit
-      ? "revisit"
-      : setupAssistantFromSettings
-        ? "setup"
-        : "fresh";
-    const returnToSettings = () => {
-      setHealthCheckRevisit(false);
-      setSetupAssistantFromSettings(false);
-      setScreen(revisitReturnScreen);
-      setSettingsOpen(true);
-    };
-    const returnToMainAfterSetup = () => {
-      setHealthCheckRevisit(false);
-      setSetupAssistantFromSettings(false);
-      setScreen("empty");
-      setEmptyComposerFocusTick((tick) => tick + 1);
-    };
-    const saveExternalGAConfigIfChanged = async (
-      gaPath: string,
-      pythonAlias: string | null,
-    ) => {
-      const partial: { gaPath?: string; python?: string } = {};
-      if (gaPath !== gaConfig.gaPath) partial.gaPath = gaPath;
-      if (pythonAlias && pythonAlias !== gaConfig.python) {
-        partial.python = pythonAlias;
-      }
-      if (Object.keys(partial).length > 0) {
-        await setGAConfig(partial);
-      }
-    };
-
     return (
-      <CopyProvider language={resolvedLanguage}>
-        <ThemeProvider theme={resolvedTheme}>
-          <Onboarding
-            mode={onboardingMode}
-            initialPath={
-              healthCheckRevisit || setupAssistantFromSettings
-                ? gaConfig.gaPath
-                : undefined
-            }
-            canContinueWithCurrentModel={
-              activeRuntimeKind === "managed" && hasConfiguredManagedModel
-            }
-            languagePreference={languagePreference}
-            resolvedLanguage={resolvedLanguage}
-            onChangeLanguagePreference={(preference) => {
-              void setLanguagePreference(preference);
-            }}
-            onComplete={(gaPath, pythonAlias) => {
-              // Persist the validated path + the probed Python alias so
-              // subsequent bridge spawns use the right interpreter, not
-              // the demo fallback (system python3 in a packaged build
-              // has no GA deps — silent crash).
-              void (async () => {
-                await saveExternalGAConfigIfChanged(gaPath, pythonAlias);
-                if (!healthCheckRevisit && activeRuntimeKind !== "external") {
-                  await setActiveRuntimeKind("external");
-                }
-                if (healthCheckRevisit) {
-                  // Settings → "跑一次 Health Check" round-trip: return
-                  // the user to the screen they came from + re-open the
-                  // Settings dialog where they clicked.
-                  returnToSettings();
-                } else {
-                  returnToMainAfterSetup();
-                }
-              })();
-            }}
-            onManagedComplete={() => {
-              void (async () => {
-                if (activeRuntimeKind !== "managed") {
-                  await setActiveRuntimeKind("managed");
-                }
-                returnToMainAfterSetup();
-              })();
-            }}
-            onCancel={() => {
-              // Revisit-only escape hatch. setGAConfig is intentionally
-              // skipped — the user bailed without committing to a new
-              // probe result, so we keep whatever was saved before.
-              returnToSettings();
-            }}
-          />
-        </ThemeProvider>
-      </CopyProvider>
+      <OnboardingScreen
+        resolvedLanguage={resolvedLanguage}
+        resolvedTheme={resolvedTheme}
+        mode={onboarding.mode}
+        gaPath={gaConfig.gaPath}
+        canContinueWithCurrentModel={
+          activeRuntimeKind === "managed" && hasConfiguredManagedModel
+        }
+        languagePreference={languagePreference}
+        onChangeLanguagePreference={(preference) => {
+          void setLanguagePreference(preference);
+        }}
+        onComplete={onboarding.handleComplete}
+        onManagedComplete={onboarding.handleManagedComplete}
+        onCancel={onboarding.returnToSettings}
+      />
     );
   }
 
@@ -1120,33 +813,7 @@ function App() {
                   hasActiveGoal={activeGoals.length > 0}
                   imagesEnabled={activeRuntimeKind === "managed"}
                   onImageBlocked={handleImageBlocked}
-                  onSubmit={(t, images) => {
-                    if (requiresManagedModelConfig) {
-                      openModelsForMissingConfig();
-                      return;
-                    }
-                    if (images.length > 0 && activeRuntimeKind !== "managed") {
-                      showImageBlockedToast(copy.toasts.imageBlockedExternal);
-                      return false;
-                    }
-                    void submitOnEmpty(
-                      t,
-                      images,
-                      activeSessionId,
-                      createSessionPersisted,
-                      activateSession,
-                      appendUserTurn,
-                      sendIPCCommand,
-                      setScreen,
-                      reportUserSendFailure,
-                      copy.errors.sendFailed,
-                      copy.app.restoreTimeout,
-                      activeProjectFilter,
-                    ).then(() => {
-                      if (activeProjectFilter)
-                        setActiveProjectFilter(undefined);
-                    });
-                  }}
+                  onSubmit={submitFromEmpty}
                 />
               ) : (
                 <MainView
@@ -1189,172 +856,9 @@ function App() {
                   onImageBlocked={handleImageBlocked}
                   pendingApprovals={pendingApprovals}
                   approvalDecisions={approvalDecisions}
-                  onSubmit={(t, images) => {
-                    if (requiresManagedModelConfig) {
-                      openModelsForMissingConfig();
-                      return;
-                    }
-                    // Main screen always has an active session — Sidebar
-                    // / EmptyState set it before transitioning here.
-                    if (!activeSessionId) return;
-                    const sid = activeSessionId;
-                    const ensureBridgeThenSend = async (
-                      cmd:
-                        | {
-                            kind: "user_message";
-                            text: string;
-                            images: string[];
-                            absoluteTurnIndex?: number | null;
-                          }
-                        | {
-                            kind: "ask_user_response";
-                            text: string;
-                            absoluteTurnIndex?: number | null;
-                          },
-                      options: { showPhase?: boolean } = {},
-                    ) => {
-                      const sendStartedAt = perfNow();
-                      const showPhase = options.showPhase ?? true;
-                      const setSendPhase = (
-                        phase:
-                          | "starting"
-                          | "restoring"
-                          | "waiting_agent"
-                          | "sent",
-                      ) => {
-                        if (showPhase) {
-                          useMessagesStore.getState().setSendPhase(sid, phase);
-                        }
-                      };
-                      const runtime = useRuntimeStore.getState();
-                      const latestStatus =
-                        runtime.byId[sid]?.bridgeStatus ?? "idle";
-                      if (
-                        latestStatus !== "spawning" &&
-                        (latestStatus !== "connected" ||
-                          !runtime.hasBridgeClient(sid))
-                      ) {
-                        setSendPhase("starting");
-                        await activateSession(sid);
-                      }
-                      if (cmd.kind === "user_message") {
-                        setSendPhase("restoring");
-                        let historyReady =
-                          await ensureHistoryReplayComplete(sid);
-                        if (!historyReady) {
-                          console.warn(
-                            "[main] history replay did not confirm; restarting bridge.",
-                            { sid },
-                          );
-                          await shutdownBridge(sid);
-                          setSendPhase("starting");
-                          await activateSession(sid);
-                          setSendPhase("restoring");
-                          historyReady = await ensureHistoryReplayComplete(sid);
-                          if (!historyReady) {
-                            throw new Error(copy.app.restoreTimeout);
-                          }
-                        }
-                      }
-                      setSendPhase("waiting_agent");
-                      await sendIPCCommand(sid, cmd);
-                      setSendPhase("sent");
-                      logPerf("app.ensureBridgeThenSend", sendStartedAt, {
-                        sessionId: sid,
-                        command: cmd.kind,
-                        phaseVisible: showPhase,
-                      });
-                    };
-                    const reportSendFailure = (e: unknown) =>
-                      reportUserSendFailure(sid, "send_user_message", e);
-                    // `/btw` is a side question (interruption-free,
-                    // not a main-agent turn). Route to the transient
-                    // user-turn path so it doesn't disturb the main
-                    // agent's running state — bridge intercepts the
-                    // user_message command and runs the btw worker
-                    // independently of the task queue.
-                    const trimmed = t.trimStart();
-                    if (images.length > 0) {
-                      if (activeSession?.gaRuntimeKind !== "managed") {
-                        showImageBlockedToast(copy.toasts.imageBlockedExternal);
-                        return false;
-                      }
-                      if (
-                        trimmed === "/btw" ||
-                        trimmed.startsWith("/btw ") ||
-                        pendingAskUser !== null
-                      ) {
-                        showImageBlockedToast(copy.toasts.imageBlockedGoal);
-                        return false;
-                      }
-                    }
-                    if (trimmed === "/btw" || trimmed.startsWith("/btw ")) {
-                      appendSideQuestionUserTurn(sid, t);
-                      void ensureBridgeThenSend(
-                        {
-                          kind: "user_message",
-                          text: t,
-                          images: [],
-                        },
-                        { showPhase: false },
-                      ).catch(reportSendFailure);
-                      return;
-                    }
-                    // Snapshot pendingAskUser **before** appendUserTurn
-                    // clears it — we need to know which IPC command to
-                    // send. ask_user_response and user_message both
-                    // ultimately call agent.put_task on the bridge side
-                    // (same agent_runner_loop kickoff), but keeping
-                    // them distinct preserves audit-trail clarity:
-                    // "this user message was a reply to a specific
-                    // question" vs "this was a fresh prompt".
-                    const wasAskUser = pendingAskUser !== null;
-                    void (async () => {
-                      const persisted = await appendUserTurn(sid, t, images);
-                      const absoluteTurnIndex = persisted.turnIndex;
-                      if (wasAskUser) {
-                        await ensureBridgeThenSend({
-                          kind: "ask_user_response",
-                          text: t,
-                          absoluteTurnIndex,
-                        });
-                      } else {
-                        await ensureBridgeThenSend({
-                          kind: "user_message",
-                          text: t,
-                          images: persisted.attachments.map(
-                            (attachment) => attachment.path,
-                          ),
-                          absoluteTurnIndex,
-                        });
-                      }
-                    })().catch(reportSendFailure);
-                  }}
+                  onSubmit={sendUserMessage}
                   onApprove={handleApprove}
-                  onStop={() => {
-                    console.info("[main] stop");
-                    if (!activeSessionId) return;
-                    const sid = activeSessionId;
-                    // Optimistic: lock the button immediately; unlock
-                    // if the abort never reached the bridge, otherwise
-                    // the run keeps going with Stop dead.
-                    useMessagesStore.getState().setStopping(sid, true);
-                    sendIPCCommand(sid, { kind: "abort" }).catch((e) => {
-                      useMessagesStore.getState().setStopping(sid, false);
-                      pushToast(
-                        makeAppError({
-                          category: "bridge",
-                          severity: "error",
-                          title: copy.errors.stopFailed,
-                          message: e instanceof Error ? e.message : String(e),
-                          hint: null,
-                          retryable: true,
-                          context: "abort",
-                          traceback: null,
-                        }),
-                      );
-                    });
-                  }}
+                  onStop={stopRun}
                   isRunning={isRunning}
                   isStopping={isStopping}
                   pendingAskUser={pendingAskUser}
@@ -1497,20 +1001,8 @@ function App() {
         // canonical health-check UX instead of a divergent inline
         // copy in Settings — see Settings-Health-Check devlog
         // 2026-05-15.
-        onReRunHealthCheck={() => {
-          setRevisitReturnScreen(screen);
-          setSettingsOpen(false);
-          setHealthCheckRevisit(true);
-          setSetupAssistantFromSettings(false);
-          setScreen("onboarding");
-        }}
-        onOpenSetupAssistant={() => {
-          setRevisitReturnScreen(screen);
-          setSettingsOpen(false);
-          setHealthCheckRevisit(false);
-          setSetupAssistantFromSettings(true);
-          setScreen("onboarding");
-        }}
+        onReRunHealthCheck={onboarding.enterHealthCheckRevisit}
+        onOpenSetupAssistant={onboarding.enterSetupAssistant}
         onRunBrowserControlDemo={() => {
           setSettingsOpen(false);
           void runBrowserControlDemo();
@@ -1615,119 +1107,6 @@ function App() {
 }
 
 export default App;
-
-// ---------------- Lazy session creation ----------------
-
-/**
- * Empty-screen submit handler. The session is created lazily — the
- * first user-initiated action (typing a message or clicking a quick
- * prompt) is what bumps us from "no chat yet" to "real chat".
- *
- * Flow:
- *   1. If there's already an active session id, reuse it.
- *   2. Otherwise create a persisted session row first so the user
- *      message write cannot race the async session create.
- *   3. Transition to main view + append the user turn before bridge
- *      startup, so cold runner spawn doesn't look like a frozen UI.
- *   4. Activate the session, replay history, then send the IPC message.
- *
- * sendIPCCommand waits for the bridge `ready` event before writing
- * user-visible commands. This keeps first-run Windows startup stalls from
- * turning into a silent, indefinite "thinking" state.
- */
-async function submitOnEmpty(
-  text: string,
-  attachments: PendingImageAttachment[],
-  existingId: string | undefined,
-  createSessionPersisted: (projectId?: string) => Promise<string>,
-  activateSession: (id: string) => Promise<void>,
-  appendUserTurn: (
-    sessionId: string,
-    text: string,
-    attachments?: PendingImageAttachment[],
-  ) => Promise<{
-    turnIndex: number;
-    attachments: { path: string }[];
-  }>,
-  sendIPCCommand: (
-    sessionId: string,
-    cmd: {
-      kind: "user_message";
-      text: string;
-      images?: string[];
-      absoluteTurnIndex?: number | null;
-    },
-  ) => Promise<void>,
-  setScreen: (s: import("@/stores/ui").Screen) => void,
-  reportSendFailure: (
-    sessionId: string,
-    context: string,
-    error: unknown,
-  ) => void,
-  sendFailedTitle: string,
-  restoreTimeoutMessage: string,
-  inheritProjectId?: string,
-): Promise<void> {
-  const submitStartedAt = perfNow();
-  let id = existingId;
-  try {
-    if (!id) {
-      // Inherit project assignment when the EmptyState composer was
-      // opened from a project's inline +. The context is one-shot:
-      // after the first message creates the session, App clears the
-      // pending project id.
-      id = await createSessionPersisted(inheritProjectId);
-    }
-    setScreen("main");
-    const persisted = await appendUserTurn(id, text, attachments);
-    const absoluteTurnIndex = persisted.turnIndex;
-    const messages = useMessagesStore.getState();
-    const runtime = useRuntimeStore.getState();
-    const status = runtime.byId[id]?.bridgeStatus ?? "idle";
-    if (
-      status !== "spawning" &&
-      (status !== "connected" || !runtime.hasBridgeClient(id))
-    ) {
-      messages.setSendPhase(id, "starting");
-      await activateSession(id);
-    }
-    messages.setSendPhase(id, "restoring");
-    const historyReady = await ensureHistoryReplayComplete(id);
-    if (!historyReady) {
-      throw new Error(restoreTimeoutMessage);
-    }
-    messages.setSendPhase(id, "waiting_agent");
-    await sendIPCCommand(id, {
-      kind: "user_message",
-      text,
-      images: persisted.attachments.map((attachment) => attachment.path),
-      absoluteTurnIndex,
-    });
-    messages.setSendPhase(id, "sent");
-    logPerf("app.submitOnEmpty", submitStartedAt, {
-      sessionId: id,
-      createdSession: existingId === undefined,
-    });
-  } catch (e) {
-    if (id) {
-      reportSendFailure(id, "send_user_message", e);
-    } else {
-      console.warn("[main] empty submit failed before session creation", e);
-      useUiStore.getState().pushToast(
-        makeAppError({
-          category: "business",
-          severity: "error",
-          title: sendFailedTitle,
-          message: e instanceof Error ? e.message : String(e),
-          hint: null,
-          retryable: true,
-          context: "create_session_for_send",
-          traceback: null,
-        }),
-      );
-    }
-  }
-}
 
 // ---------------- Settings path pickers ----------------
 //

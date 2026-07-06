@@ -1,50 +1,31 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
-  useEffect,
   memo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  Archive,
-  CaretRight,
   Cat,
-  Check,
   DotsThree,
-  Folder,
   PauseCircle,
-  Pencil,
   PlugsConnected,
-  PushPin,
-  PushPinSlash,
-  WarningCircle,
-  X as XIcon,
 } from "@phosphor-icons/react";
 
-import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
-import { isImeCompositionKeydown } from "@/lib/ime";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 
-import {
-  SidebarRowMenuContent,
-  SidebarRowMenuItem,
-  type SidebarRowMenuKind,
-  SidebarRowMenuPortal,
-  SidebarRowMenuSeparator,
-  SidebarRowMenuSub,
-  SidebarRowMenuSubContent,
-  SidebarRowMenuSubTrigger,
-} from "./SidebarRowMenu";
-
+import { SessionTitleEditor } from "../SessionTitleEditor";
+import { ArchiveRunningConfirmDialog } from "./ArchiveRunningConfirmDialog";
+import { SidebarRowMenuContent, SidebarRowMenuPortal } from "./SidebarRowMenu";
+import { SidebarSessionMenuItems } from "./SidebarSessionMenuItems";
 
 export const SidebarSessionRow = memo(function SidebarSessionRow({
   session,
@@ -269,9 +250,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     if (isEditing) return;
     onClick?.();
   };
-  const handleRowPointerDown = (
-    event: ReactPointerEvent<HTMLDivElement>,
-  ) => {
+  const handleRowPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (isEditing || event.defaultPrevented || event.button !== 0) return;
     // macOS Ctrl-click is a context-menu gesture; don't turn it into a
     // session switch while the user is asking for row actions.
@@ -330,8 +309,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             ),
       )}
     >
-      {railKind && !isEditing && (
-        railKind === "running" ? (
+      {railKind &&
+        !isEditing &&
+        (railKind === "running" ? (
           <>
             <span
               aria-hidden
@@ -351,8 +331,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               railKind === "error" ? "bg-error" : "bg-warning",
             )}
           />
-        )
-      )}
+        ))}
       <span
         key={`icon:${attentionKey}`}
         className={cn(
@@ -393,6 +372,8 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               initial={session.title}
               onCommit={(t) => onConfirmRename?.(t)}
               onCancel={() => onCancelRename?.()}
+              stopRowActivation
+              className="flex-1 truncate rounded-sm px-1 py-0"
             />
           ) : (
             <div
@@ -565,289 +546,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     </>
   );
 });
-
-function SidebarSessionMenuItems({
-  kind,
-  session,
-  projects,
-  onArchive,
-  onTogglePin,
-  onAssignToProject,
-  onRequestRename,
-}: {
-  kind: SidebarRowMenuKind;
-  session: Session;
-  projects: Project[];
-  onArchive?: () => void;
-  onTogglePin?: () => void;
-  onAssignToProject?: (projectId: string | null) => void;
-  onRequestRename?: () => void;
-}) {
-  const copy = useCopy();
-  const itemClass = cn(
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[13px] text-ink-soft outline-none transition-colors",
-    "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
-  );
-
-  return (
-    <>
-      {onRequestRename && (
-        <SidebarRowMenuItem
-          kind={kind}
-          onSelect={onRequestRename}
-          className={itemClass}
-        >
-          <Pencil size={13} weight="thin" />
-          {copy.sidebar.rename}
-        </SidebarRowMenuItem>
-      )}
-      {onTogglePin && (
-        <SidebarRowMenuItem
-          kind={kind}
-          onSelect={onTogglePin}
-          className={itemClass}
-        >
-          {session.pinned ? (
-            <>
-              <PushPinSlash size={13} weight="thin" />
-              {copy.sidebar.unpin}
-            </>
-          ) : (
-            <>
-              <PushPin size={13} weight="thin" />
-              {copy.sidebar.pin}
-            </>
-          )}
-        </SidebarRowMenuItem>
-      )}
-      {onAssignToProject && (
-        <SidebarRowMenuSub kind={kind}>
-          <SidebarRowMenuSubTrigger
-            kind={kind}
-            className={cn(
-              itemClass,
-              "data-[state=open]:bg-hover data-[state=open]:text-ink",
-            )}
-          >
-            <Folder size={13} weight="thin" />
-            {copy.sidebar.addToProject}
-            <CaretRight
-              size={10}
-              weight="thin"
-              className="ml-auto text-ink-muted"
-            />
-          </SidebarRowMenuSubTrigger>
-          <SidebarRowMenuPortal kind={kind}>
-            <SidebarRowMenuSubContent
-              kind={kind}
-              className="z-50 min-w-[200px] rounded-md border border-line bg-elevated p-1 shadow-elevated"
-              sideOffset={4}
-            >
-              {projects.length === 0 ? (
-                <div className="px-2.5 py-1.5 text-[12px] italic text-ink-muted">
-                  {copy.sidebar.noProjects}
-                </div>
-              ) : (
-                projects.map((p) => {
-                  const isCurrent = session.projectId === p.id;
-                  return (
-                    <SidebarRowMenuItem
-                      key={p.id}
-                      kind={kind}
-                      onSelect={() => onAssignToProject(p.id)}
-                      disabled={isCurrent}
-                      className={cn(
-                        itemClass,
-                        "data-[disabled]:cursor-default data-[disabled]:opacity-50",
-                      )}
-                    >
-                      <Folder size={13} weight="thin" />
-                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                      {isCurrent && (
-                        <Check
-                          size={11}
-                          weight="bold"
-                          className="text-brand-strong"
-                        />
-                      )}
-                    </SidebarRowMenuItem>
-                  );
-                })
-              )}
-              {session.projectId && (
-                <>
-                  <SidebarRowMenuSeparator
-                    kind={kind}
-                    className="my-1 h-px bg-line"
-                  />
-                  <SidebarRowMenuItem
-                    kind={kind}
-                    onSelect={() => onAssignToProject(null)}
-                    className={itemClass}
-                  >
-                    <XIcon size={13} weight="thin" />
-                    {copy.sidebar.removeFromProject}
-                  </SidebarRowMenuItem>
-                </>
-              )}
-            </SidebarRowMenuSubContent>
-          </SidebarRowMenuPortal>
-        </SidebarRowMenuSub>
-      )}
-      {onArchive && (
-        <SidebarRowMenuItem
-          kind={kind}
-          onSelect={onArchive}
-          className={itemClass}
-        >
-          <Archive size={13} weight="thin" />
-          {copy.sidebar.archive}
-        </SidebarRowMenuItem>
-      )}
-    </>
-  );
-}
-
-
-/**
- * Confirm dialog for archiving a session that is still running (its
- * own run, or a goal it masters). Mirrors ConfirmDeleteProjectDialog's
- * alertdialog shape; warning tone (not error) because archiving is
- * reversible — the risk is losing SIGHT of live work, not losing data.
- */
-function ArchiveRunningConfirmDialog({
-  title,
-  open,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  open: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const copy = useCopy();
-  return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) onCancel();
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
-        <Dialog.Content
-          role="alertdialog"
-          aria-describedby="archive-running-desc"
-          className={cn(
-            "fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
-            "rounded-lg border border-line bg-elevated p-5 shadow-elevated",
-            "max-w-[calc(100vw-32px)]",
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <WarningCircle size={18} weight="bold" className="text-warning" />
-            <Dialog.Title className="text-[15px] font-semibold text-ink">
-              {copy.sidebar.archiveRunningTitle}
-            </Dialog.Title>
-          </div>
-          <p
-            id="archive-running-desc"
-            className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
-          >
-            {copy.sidebar.archiveRunningBody(title)}
-          </p>
-          <DialogActionRow>
-            <Button variant="secondary" onClick={onCancel} autoFocus>
-              {copy.common.cancel}
-            </Button>
-            <Button variant="warning" onClick={onConfirm}>
-              {copy.sidebar.archiveRunningConfirm}
-            </Button>
-          </DialogActionRow>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-/**
- * Inline-edit input for session title (replaces the title span when
- * `SidebarSessionRow.isEditing` is true).
- *
- * Behavior:
- *   - Auto-focuses + selects all text on mount (Notion / Linear style)
- *   - Enter → commit; Esc → cancel; blur → commit (matching the
- *     "click outside doesn't lose work" pattern)
- *   - stopPropagation on click + mousedown so the parent row's
- *     onClick (session activation) doesn't fire while editing
- *   - Local uncontrolled value — store action handles trim + fallback
- *     to default placeholder on empty
- */
-function SessionTitleEditor({
-  initial,
-  onCommit,
-  onCancel,
-}: {
-  initial: string;
-  onCommit: (newTitle: string) => void;
-  onCancel: () => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState(initial);
-  // Track whether we've already committed/cancelled — protects against
-  // a stray blur after Enter (Enter triggers commit synchronously,
-  // then focus moves elsewhere → onBlur fires → second commit). Two
-  // commits would call renameSession twice with the same value (no
-  // harm) but if the second call beats the parent setEditingSessionId
-  // race it produces a flash. Guard idempotently.
-  const settledRef = useRef(false);
-
-  useEffect(() => {
-    ref.current?.focus();
-    ref.current?.select();
-  }, []);
-
-  const commit = () => {
-    if (settledRef.current) return;
-    settledRef.current = true;
-    onCommit(value);
-  };
-  const cancel = () => {
-    if (settledRef.current) return;
-    settledRef.current = true;
-    onCancel();
-  };
-
-  return (
-    <input
-      ref={ref}
-      type="text"
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onKeyDown={(e) => {
-        if (isImeCompositionKeydown(e)) return;
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commit();
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          cancel();
-        }
-      }}
-      onBlur={commit}
-      onClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-      onContextMenu={(e) => e.stopPropagation()}
-      className={cn(
-        "min-w-0 flex-1 truncate rounded-sm bg-app px-1 py-0 text-[13px] font-medium text-ink",
-        "border border-line outline-none ring-2 ring-brand/30",
-        "focus:border-brand",
-      )}
-    />
-  );
-}
-
 
 /**
  * Strip the legacy "第 N 步 · " prefix that earlier versions of

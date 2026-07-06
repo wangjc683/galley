@@ -1,9 +1,5 @@
-import * as Dialog from "@radix-ui/react-dialog";
-import * as Popover from "@radix-ui/react-popover";
 import {
   ArrowUp,
-  CaretUp,
-  Check,
   Gear,
   Paperclip,
   Stop,
@@ -20,18 +16,28 @@ import {
   type ReactNode,
 } from "react";
 
+import { GoalConfirmDialog } from "@/components/conversation/GoalConfirmDialog";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
+import {
+  LLMPill,
+  type ComposerLLMOption,
+} from "@/components/conversation/LLMPill";
 import { SavedPromptControl } from "@/components/conversation/SavedPromptControl";
-import { Button, DialogActionRow } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  COMPOSER_CONFIG_BUTTON,
+  COMPOSER_GOAL_BUTTON,
+  COMPOSER_GOAL_BUTTON_ARMED,
+  COMPOSER_GOAL_SEND_BUTTON,
+  COMPOSER_MAX_HEIGHT_PX,
+  COMPOSER_SEND_BUTTON,
+  COMPOSER_STOP_BUTTON,
+  COMPOSER_TERTIARY_ICON_BUTTON,
+} from "@/components/conversation/composer-styles";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useBlurOnOutsidePointer } from "@/hooks/useBlurOnOutsidePointer";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { usePasteFold } from "@/hooks/usePasteFold";
-import {
-  IMAGE_ACCEPT,
-  type ImageBlockReason,
-} from "@/lib/composer-images";
+import { IMAGE_ACCEPT, type ImageBlockReason } from "@/lib/composer-images";
 import {
   dropComposerDraft,
   readComposerDraft,
@@ -45,14 +51,7 @@ import { cn } from "@/lib/utils";
 import type { PendingImageAttachment } from "@/types/conversation";
 import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
 
-export interface ComposerLLMOption {
-  index: number;
-  key?: string;
-  name?: string;
-  displayName: string;
-  providerDisplayName?: string;
-  isCurrent: boolean;
-}
+export type { ComposerLLMOption };
 
 /**
  * Imperative handle exposed via `ref` on Composer. Lets callers
@@ -71,98 +70,12 @@ export interface ComposerHandle {
   focus(): void;
 }
 
-/**
- * Maximum textarea height in pixels (auto-grow cap). The pixel cap stays
- * fixed across conversation font-size preferences: smaller text gets more
- * visible lines, larger text scrolls earlier, matching the density goal.
- * Past this the textarea scrolls internally so the layout doesn't crowd the
- * conversation document above.
- */
-const COMPOSER_MAX_HEIGHT_PX = 280;
-const DEFAULT_GOAL_BUDGET_MINUTES = 30;
-const MIN_CUSTOM_GOAL_BUDGET_MINUTES = 5;
-const MAX_CUSTOM_GOAL_BUDGET_MINUTES = 120;
-const DEFAULT_GOAL_AGENT_COUNT = 3;
-type GoalBudgetPreset = "15" | "30" | "60" | "custom";
-type GoalAgentCountPreset = "2" | "3" | "4" | "5";
-
 const COMPOSER_HINT_KBD = new Set(["Shift+Enter", "Enter", "/btw"]);
 
 // Re-exported so callers wiring `onImageBlocked` keep importing the
 // block-reason contract from the Composer; the type itself now lives with
 // the image helpers in `@/lib/composer-images`.
 export type { ImageBlockReason };
-
-const COMPOSER_ACTION_BUTTON = cn(
-  "flex size-8 items-center justify-center rounded-full border transition-[background-color,border-color,color,box-shadow,transform]",
-  "duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
-  // Full key travel: rises a crisp 1px on hover (key meets finger),
-  // sinks 2px on press (~3px of perceptible travel) with a slight
-  // compression scale. Integer-pixel movement, never sub-pixel.
-  "hover:-translate-y-px",
-  "active:translate-y-[2px] active:scale-[0.97]",
-  "outline-none",
-  "disabled:translate-y-0 disabled:scale-100 disabled:shadow-none",
-);
-
-const COMPOSER_TERTIARY_ICON_BUTTON = cn(
-  "flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted",
-  "transition-[background-color,color,transform] duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
-  "hover:-translate-y-px active:translate-y-[2px] active:scale-[0.97]",
-  "hover:bg-hover hover:text-ink outline-none",
-  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:active:translate-y-0 disabled:active:scale-100 disabled:hover:bg-transparent disabled:hover:text-ink-muted",
-);
-
-const COMPOSER_SEND_BUTTON = cn(
-  COMPOSER_ACTION_BUTTON,
-  "border-brand-strong/40 bg-brand text-ink",
-  "shadow-[var(--shadow-brand-control)]",
-  "hover:bg-brand-strong hover:text-elevated hover:shadow-[var(--shadow-brand-control-hover)]",
-  "active:bg-brand-strong active:text-elevated active:shadow-[var(--shadow-control-press)]",
-);
-
-const COMPOSER_STOP_BUTTON = cn(
-  COMPOSER_ACTION_BUTTON,
-  "border-warning/70 bg-warning text-elevated",
-  "shadow-[var(--shadow-composer-stop)]",
-  "hover:bg-warning-hover hover:shadow-[var(--shadow-composer-stop-pulse)]",
-  "active:shadow-[var(--shadow-control-press)]",
-);
-
-const COMPOSER_CONFIG_BUTTON = cn(
-  COMPOSER_ACTION_BUTTON,
-  "border-line bg-surface text-ink-soft",
-  "shadow-[var(--shadow-neutral-control)]",
-  "hover:border-brand/35 hover:bg-brand-soft hover:text-ink hover:shadow-[var(--shadow-neutral-control-hover)]",
-  "active:shadow-[var(--shadow-control-press)]",
-);
-
-const COMPOSER_GOAL_BUTTON = cn(
-  COMPOSER_ACTION_BUTTON,
-  "border-line bg-surface text-ink-soft",
-  "shadow-[var(--shadow-neutral-control)]",
-  "hover:border-brand/45 hover:bg-brand-soft hover:text-brand-strong hover:shadow-[var(--shadow-neutral-control-hover)]",
-  "active:shadow-[var(--shadow-control-press)]",
-);
-
-const COMPOSER_GOAL_BUTTON_ARMED = cn(
-  COMPOSER_ACTION_BUTTON,
-  "border-brand/45 bg-brand-soft text-brand-strong",
-  "shadow-[var(--shadow-neutral-control)]",
-  "hover:bg-brand/[var(--opacity-medium)] hover:shadow-[var(--shadow-neutral-control-hover)]",
-  "active:shadow-[var(--shadow-control-press)]",
-);
-
-const COMPOSER_GOAL_SEND_BUTTON = cn(
-  "inline-flex h-8 min-w-[112px] items-center justify-center gap-1.5 rounded-full border px-3",
-  "text-[12.5px] font-semibold transition-[background-color,border-color,color,box-shadow,transform]",
-  "duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
-  "border-brand-strong/40 bg-brand text-ink",
-  "outline-none",
-  "shadow-[var(--shadow-brand-control)] hover:-translate-y-px hover:bg-brand-strong hover:text-elevated hover:shadow-[var(--shadow-brand-control-hover)]",
-  "active:translate-y-[2px] active:scale-[0.97] active:bg-brand-strong active:text-elevated active:shadow-[var(--shadow-control-press)]",
-  "disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
-);
 
 export interface ComposerProps {
   /** Display name of the currently active LLM (e.g., "Claude Sonnet 4.5"). */
@@ -852,7 +765,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               >
                 {stopMode && !isSideQuestion ? (
                   <TooltipLabel
-                    text={isStopping ? copy.composer.stopping : copy.composer.stop}
+                    text={
+                      isStopping ? copy.composer.stopping : copy.composer.stop
+                    }
                   >
                     <button
                       type="button"
@@ -975,9 +890,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           />
         </div>
         {footerHint && (
-          <div className="mt-1.5 text-[11px] text-ink-muted">
-            {footerHint}
-          </div>
+          <div className="mt-1.5 text-[11px] text-ink-muted">{footerHint}</div>
         )}
         <ImagePreviewDialog
           images={previewImages}
@@ -1005,211 +918,6 @@ function renderComposerHintWithKbd(text: string): ReactNode {
   );
 }
 
-function GoalConfirmDialog({
-  open,
-  objective,
-  submitting,
-  onOpenChange,
-  onConfirm,
-}: {
-  open: boolean;
-  objective: string;
-  submitting: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: (config: GoalLaunchConfig) => void;
-}) {
-  const copy = useCopy();
-  const [budgetPreset, setBudgetPreset] = useState<GoalBudgetPreset>(
-    String(DEFAULT_GOAL_BUDGET_MINUTES) as GoalBudgetPreset,
-  );
-  const [agentCountPreset, setAgentCountPreset] =
-    useState<GoalAgentCountPreset>(
-      String(DEFAULT_GOAL_AGENT_COUNT) as GoalAgentCountPreset,
-    );
-  const [customBudgetMinutes, setCustomBudgetMinutes] = useState(
-    String(DEFAULT_GOAL_BUDGET_MINUTES),
-  );
-
-  const customBudgetNumber = Number.parseInt(customBudgetMinutes, 10);
-  const customBudgetValid =
-    budgetPreset !== "custom" ||
-    (Number.isInteger(customBudgetNumber) &&
-      customBudgetNumber >= MIN_CUSTOM_GOAL_BUDGET_MINUTES &&
-      customBudgetNumber <= MAX_CUSTOM_GOAL_BUDGET_MINUTES);
-  const budgetMinutes =
-    budgetPreset === "custom"
-      ? customBudgetValid
-        ? customBudgetNumber
-        : DEFAULT_GOAL_BUDGET_MINUTES
-      : Number.parseInt(budgetPreset, 10);
-  const workerLimit = Number.parseInt(agentCountPreset, 10);
-  const disabledDurationOptions: {
-    value: GoalBudgetPreset;
-    label: string;
-    disabled: boolean;
-  }[] = [
-    {
-      value: "15",
-      label: copy.composer.goalDurationFast,
-      disabled: submitting,
-    },
-    {
-      value: "30",
-      label: copy.composer.goalDurationRecommended,
-      disabled: submitting,
-    },
-    {
-      value: "60",
-      label: copy.composer.goalDurationDeep,
-      disabled: submitting,
-    },
-    {
-      value: "custom",
-      label: copy.composer.goalDurationCustom,
-      disabled: submitting,
-    },
-  ];
-  const disabledAgentCountOptions: {
-    value: GoalAgentCountPreset;
-    label: string;
-    disabled: boolean;
-  }[] = [
-    {
-      value: "2",
-      label: "2",
-      disabled: submitting,
-    },
-    {
-      value: "3",
-      label: "3",
-      disabled: submitting,
-    },
-    {
-      value: "4",
-      label: "4",
-      disabled: submitting,
-    },
-    {
-      value: "5",
-      label: "5",
-      disabled: submitting,
-    },
-  ];
-
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
-        <Dialog.Content
-          className={cn(
-            "fixed left-1/2 top-1/2 z-50 w-[440px] -translate-x-1/2 -translate-y-1/2",
-            "max-w-[calc(100vw-32px)] rounded-lg border border-line bg-elevated p-5 shadow-elevated",
-          )}
-        >
-          <Dialog.Title className="text-[16px] font-semibold text-ink">
-            {copy.composer.goalConfirmTitle}
-          </Dialog.Title>
-          <Dialog.Description className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
-            {copy.composer.goalConfirmBody}
-          </Dialog.Description>
-
-          <div className="mt-4 space-y-4">
-            <section className="rounded-md border border-line bg-app px-3 py-2.5">
-              <div className="text-[11px] font-medium text-ink-muted">
-                {copy.composer.goalConfirmObjective}
-              </div>
-              <div className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[13px] font-medium leading-relaxed text-ink">
-                {objective}
-              </div>
-            </section>
-
-            <section className="space-y-2">
-              <div className="text-[12px] font-medium text-ink-soft">
-                {copy.composer.goalConfirmDuration}
-              </div>
-              <SegmentedControl<GoalBudgetPreset>
-                value={budgetPreset}
-                onValueChange={setBudgetPreset}
-                options={disabledDurationOptions}
-                ariaLabel={copy.composer.goalConfirmDuration}
-                size="md"
-                className="max-w-full"
-              />
-              {budgetPreset === "custom" && (
-                <label className="flex items-center gap-2 text-[12.5px] text-ink-soft">
-                  <input
-                    type="number"
-                    min={MIN_CUSTOM_GOAL_BUDGET_MINUTES}
-                    max={MAX_CUSTOM_GOAL_BUDGET_MINUTES}
-                    step={1}
-                    value={customBudgetMinutes}
-                    onChange={(e) =>
-                      setCustomBudgetMinutes(
-                        e.target.value.replace(/[^\d]/g, "").slice(0, 3),
-                      )
-                    }
-                    disabled={submitting}
-                    aria-label={copy.composer.goalDurationCustomInput}
-                    className={cn(
-                      "h-8 w-20 rounded-sm border bg-app px-2 text-[12.5px] font-medium text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20",
-                      customBudgetValid ? "border-line" : "border-error/40",
-                    )}
-                  />
-                  <span>{copy.composer.goalDurationMinutes}</span>
-                  {!customBudgetValid && (
-                    <span className="text-[11px] text-error">
-                      {copy.composer.goalDurationRange}
-                    </span>
-                  )}
-                </label>
-              )}
-            </section>
-
-            <section className="space-y-2">
-              <div className="text-[12px] font-medium text-ink-soft">
-                {copy.composer.goalAgentCount}
-              </div>
-              <SegmentedControl<GoalAgentCountPreset>
-                value={agentCountPreset}
-                onValueChange={setAgentCountPreset}
-                options={disabledAgentCountOptions}
-                ariaLabel={copy.composer.goalAgentCount}
-                size="md"
-                className="max-w-full"
-              />
-            </section>
-          </div>
-
-          <DialogActionRow>
-            <Button
-              variant="secondary"
-              onClick={() => onOpenChange(false)}
-              disabled={submitting}
-            >
-              {copy.common.cancel}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() =>
-                onConfirm({
-                  workerLimit,
-                  budgetSeconds: budgetMinutes * 60,
-                })
-              }
-              disabled={submitting || !objective || !customBudgetValid}
-              leadingIcon={<Target size={13} weight="fill" />}
-            >
-              {submitting
-                ? copy.composer.goalStarting
-                : copy.composer.startGoal}
-            </Button>
-          </DialogActionRow>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
 function GoalContextBadge({ goal }: { goal: GoalBrief }) {
   const copy = useCopy();
   const label = goalPillLabel(goal.status, copy.topbar);
@@ -1225,204 +933,5 @@ function GoalContextBadge({ goal }: { goal: GoalBrief }) {
         {label}
       </span>
     </TooltipLabel>
-  );
-}
-
-/**
- * LLM pill — clickable label showing the current model, opens a
- * dropdown of available models for one-click switching (DESIGN.md §4.4).
- *
- * Two modes:
- *   - `llms` provided (production): renders a Radix Popover with the
- *     model list, mirroring ChatGPT / Claude's inline picker UX.
- *   - `llms` empty / undefined: falls back to `onOpenLLMSwitcher`
- *     callback (e.g. opens Command Palette) so pre-bridge states
- *     and dev tooling still have a click target.
- *
- * `stopMode` (agent mid-run) disables both — switching LLMs while a
- * turn is in flight would race the in-progress request and produce
- * inconsistent state. PRD §13.2.
- */
-function LLMPill({
-  llmDisplayName,
-  llms,
-  onSelectLLM,
-  llmConfigHint,
-  onConfigureModels,
-  onOpenLLMSwitcher,
-  disabled,
-  stopMode,
-}: {
-  llmDisplayName: string;
-  llms?: ComposerLLMOption[];
-  onSelectLLM?: (index: number) => void;
-  llmConfigHint?: string;
-  onConfigureModels?: () => void;
-  onOpenLLMSwitcher?: () => void;
-  disabled: boolean;
-  stopMode: boolean;
-}) {
-  const copy = useCopy();
-  const footerHint = llmConfigHint ?? copy.app.externalModelHint;
-  const title = stopMode
-    ? copy.composer.cannotSwitchRunning
-    : copy.composer.switchCurrent(llmDisplayName);
-
-  const pillClasses = cn(
-    "flex h-7 min-w-0 items-center gap-1 text-[12.5px] text-ink-soft",
-    "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-[0.5px] active:duration-[45ms]",
-    "hover:bg-hover hover:text-ink",
-    "outline-none",
-    "rounded-sm px-2.5",
-    disabled &&
-      "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-ink-soft active:translate-y-0",
-  );
-
-  // Fallback path — no llms list available, defer to the parent's
-  // legacy handler. Same visual treatment as the popover trigger.
-  // Radix tooltip (not native title): design-system rule, and the
-  // aria-disabled pattern keeps it reachable while the run blocks
-  // switching — the tooltip carries exactly that explanation.
-  if (!llms || llms.length === 0) {
-    return (
-      <TooltipLabel text={title}>
-        <button
-          type="button"
-          tabIndex={-1}
-          onMouseDown={preventMouseFocus}
-          onClick={() => {
-            if (disabled) return;
-            onOpenLLMSwitcher?.();
-          }}
-          aria-disabled={disabled || undefined}
-          aria-label={title}
-          className={pillClasses}
-        >
-          <span className="min-w-0 truncate">{llmDisplayName}</span>
-          <CaretUp size={10} weight="thin" className="text-ink-muted" />
-        </button>
-      </TooltipLabel>
-    );
-  }
-
-  const displayNameCounts = new Map<string, number>();
-  for (const llm of llms) {
-    const displayNameKey = llm.displayName.trim();
-    displayNameCounts.set(
-      displayNameKey,
-      (displayNameCounts.get(displayNameKey) ?? 0) + 1,
-    );
-  }
-
-  return (
-    <Popover.Root>
-      <TooltipLabel text={title}>
-        <Popover.Trigger asChild>
-          <button
-            type="button"
-            tabIndex={-1}
-            onMouseDown={preventMouseFocus}
-            // preventDefault stops Radix from opening the popover while
-            // switching is blocked (its composed handlers respect
-            // defaultPrevented); aria-disabled keeps the explanatory
-            // tooltip reachable, unlike a real `disabled`.
-            onClick={(e) => {
-              if (disabled) e.preventDefault();
-            }}
-            aria-disabled={disabled || undefined}
-            aria-label={title}
-            className={pillClasses}
-          >
-            <span className="min-w-0 truncate">{llmDisplayName}</span>
-            <CaretUp size={10} weight="thin" className="text-ink-muted" />
-          </button>
-        </Popover.Trigger>
-      </TooltipLabel>
-      <Popover.Portal>
-        <Popover.Content
-          align="start"
-          side="top"
-          sideOffset={6}
-          className={cn(
-            // Long model lists scroll instead of outgrowing the
-            // viewport (conversation.md §4.4).
-            "galley-pop-in z-50 min-w-[200px] max-w-[320px] rounded-md border border-line bg-elevated p-1 shadow-elevated",
-            "max-h-[min(60vh,360px)] overflow-y-auto",
-          )}
-        >
-          {llms.map((llm) => {
-            const providerLabel = llm.providerDisplayName?.trim();
-            const isDuplicateDisplayName =
-              (displayNameCounts.get(llm.displayName.trim()) ?? 0) > 1;
-            return (
-              <Popover.Close asChild key={llm.index}>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onMouseDown={preventMouseFocus}
-                  onClick={() => onSelectLLM?.(llm.index)}
-                  className={cn(
-                    "group/llm-option flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-hover",
-                    llm.isCurrent ? "text-ink" : "text-ink-soft",
-                  )}
-                >
-                  <span className="flex w-3.5 shrink-0 items-center justify-center">
-                    {llm.isCurrent && (
-                      <Check
-                        size={12}
-                        weight="bold"
-                        className="text-brand-strong"
-                      />
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">
-                    {llm.displayName}
-                  </span>
-                  {providerLabel && (
-                    <span
-                      className={cn(
-                        "shrink-0 overflow-hidden truncate whitespace-nowrap text-[10px] leading-4 text-ink-muted/50",
-                        "transition-[max-width,opacity] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-                        isDuplicateDisplayName
-                          ? "max-w-[96px] opacity-100"
-                          : "max-w-0 opacity-0 group-hover/llm-option:max-w-[96px] group-hover/llm-option:opacity-100",
-                      )}
-                    >
-                      {providerLabel}
-                    </span>
-                  )}
-                </button>
-              </Popover.Close>
-            );
-          })}
-          {/* Footer hint: addresses the "为什么这里没有 X 模型"
-              question right where it surfaces. Visually quiet on
-              purpose — supplementary metadata, not a CTA. */}
-          {onConfigureModels ? (
-            <div className="mt-1 border-t border-line/60 px-1.5 pb-1 pt-1">
-              <Popover.Close asChild>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onMouseDown={preventMouseFocus}
-                  onClick={onConfigureModels}
-                  className={cn(
-                    "flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
-                    "transition-colors hover:bg-hover hover:text-ink-soft",
-                  )}
-                >
-                  <Gear size={11} weight="thin" className="shrink-0" />
-                  <span>{copy.composer.configureModels}</span>
-                </button>
-              </Popover.Close>
-            </div>
-          ) : (
-            <div className="mt-1 border-t border-line/60 px-2.5 pb-1 pt-1.5 text-[10.5px] leading-[1.45] text-ink-muted/70">
-              {footerHint}
-            </div>
-          )}
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
   );
 }
