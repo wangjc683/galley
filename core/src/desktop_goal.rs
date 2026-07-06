@@ -145,11 +145,15 @@ pub(crate) async fn start_desktop_goal(
         }
     }
     // The objective is the user's own words → a normal user turn.
+    // Both launch rows carry the goal id so the GUI brackets the Goal
+    // episode by exact id (objective-text matching stays only as the
+    // fallback for pre-031 rows).
     let objective_message = galley
-        .send_message(
+        .send_message_for_goal(
             master_session_id.clone(),
             input.objective.trim().to_string(),
             Origin::gui(),
+            goal.id.clone(),
         )
         .await
         .map_err(stringify_error)?;
@@ -158,10 +162,11 @@ pub(crate) async fn start_desktop_goal(
     // before the first controller checkpoint lands and anchors the
     // "results return here" promise inside the session.
     let master_message = galley
-        .send_system_message(
+        .send_system_message_for_goal(
             master_session_id,
             api::goal_launch_ack(locale).to_string(),
             Origin::gui(),
+            goal.id.clone(),
         )
         .await
         .map_err(stringify_error)?;

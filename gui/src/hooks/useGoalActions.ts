@@ -69,6 +69,7 @@ export function useGoalActions({
     createdAt?: string,
     dispatched?: boolean,
     turnIndex?: number | null,
+    goalId?: string,
   ) => void;
   appendSystemTurn: (sid: string, turn: SystemTurn) => void;
   assignSessionToProject: (
@@ -119,6 +120,7 @@ export function useGoalActions({
         objectiveMessage.createdAt,
         false,
         objectiveMessage.turnIndex,
+        goal.id,
       );
       appendSystemTurn(masterSessionId, {
         role: "system",
@@ -206,7 +208,8 @@ export function useGoalActions({
         setScreen("main");
         if (
           snapshot.goal.status === "completed" ||
-          snapshot.goal.status === "failed"
+          snapshot.goal.status === "failed" ||
+          snapshot.goal.status === "stopped"
         ) {
           void markGoalResultSeen(snapshot.goal.id)
             .then((next) => {

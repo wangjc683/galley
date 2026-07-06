@@ -235,6 +235,7 @@ interface MessagesActions {
     createdAt?: string,
     dispatched?: boolean,
     turnIndex?: number | null,
+    goalId?: string,
   ) => void;
   /**
    * Append a transient user message for `/btw` side questions.
@@ -569,6 +570,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     createdAt,
     dispatched = true,
     turnIndex,
+    goalId,
   ) => {
     // Mirror of appendUserTurn — see that action's comments for
     // rationale on each field. Difference: skips `persistUserMessage`
@@ -585,6 +587,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const userTurn: UserTurn = { role: "user", content: text };
     if (origin) userTurn.origin = origin;
     if (createdAt) userTurn.createdAt = createdAt;
+    if (goalId) userTurn.goalId = goalId;
     const runStartedAtMs = dispatched
       ? (createdAtToMs(createdAt) ?? Date.now())
       : null;

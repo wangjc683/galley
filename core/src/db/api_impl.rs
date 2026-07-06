@@ -66,6 +66,28 @@ impl GalleyApi for SqliteGalley {
             .await
     }
 
+    async fn send_message_for_goal(
+        &self,
+        session_id: SessionId,
+        content: String,
+        origin: crate::api::Origin,
+        goal_id: GoalId,
+    ) -> Result<MessageBrief> {
+        self.send_message_for_goal_db(session_id, content, origin, goal_id)
+            .await
+    }
+
+    async fn send_system_message_for_goal(
+        &self,
+        session_id: SessionId,
+        content: String,
+        origin: crate::api::Origin,
+        goal_id: GoalId,
+    ) -> Result<MessageBrief> {
+        self.send_system_message_for_goal_db(session_id, content, origin, goal_id)
+            .await
+    }
+
     async fn create_session(
         &self,
         input: CreateSessionInput,

@@ -58,6 +58,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
       };
       const origin = originFromRow(row);
       if (origin) userTurn.origin = origin;
+      if (row.goal_id) userTurn.goalId = row.goal_id;
       turns.push(userTurn);
     } else if (row.role === "assistant") {
       const toolCalls = safeParseJsonArray(row.tool_calls);

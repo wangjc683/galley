@@ -7,6 +7,7 @@ import {
   GoalCommissionMarker,
   GoalTerminalMarker,
 } from "@/components/conversation/GoalRunMarkers";
+import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import {
   MessageAgent,
@@ -43,6 +44,9 @@ export interface ConversationProps {
    * terminal marker — bracketing each run as an in-thread episode.
    */
   goals?: GoalBrief[];
+  /** Drill-down from a frozen task board row into the owning worker
+   * session's raw log. */
+  onOpenWorkerSession?: (sessionId: string) => void;
 }
 
 /**
@@ -65,6 +69,7 @@ export function Conversation({
   onApprove,
   projectName,
   goals,
+  onOpenWorkerSession,
 }: ConversationProps) {
   const items = annotateGoalThread(turns, goals ?? []);
   return (
@@ -73,6 +78,11 @@ export function Conversation({
         <Fragment key={i}>
           {item.kind === "commission" ? (
             <GoalCommissionMarker goal={item.goal} content={item.content} />
+          ) : item.kind === "task-board" ? (
+            <GoalTaskBoard
+              goal={item.goal}
+              onOpenWorkerSession={onOpenWorkerSession}
+            />
           ) : item.kind === "terminal" ? (
             <GoalTerminalMarker goal={item.goal} />
           ) : item.turn.role === "user" ? (

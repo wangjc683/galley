@@ -1,5 +1,6 @@
 use crate::api::{
     self, CreateProjectInput, CreateSessionInput, GalleyApi, GoalBrief, GoalId, GoalStatusSnapshot,
+    GoalWorkerContext,
     ManagedModelAuthKind, ManagedModelProbeInput, MessageTelemetry, MessageVisibility, Origin,
     ProjectBrief, ProjectId, ProjectPatch, ReorderManagedModelsInput, RuntimeKind,
     SaveManagedModelInput, SaveManagedProviderInput, SessionBrief, SessionFilter, SessionId,

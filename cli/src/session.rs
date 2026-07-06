@@ -491,6 +491,7 @@ pub(crate) async fn session_goal_master_plan_value(
 pub(crate) async fn session_checkpoint_value(
     id: String,
     content: String,
+    goal_id: Option<String>,
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<serde_json::Value, GalleyError> {
@@ -499,6 +500,7 @@ pub(crate) async fn session_checkpoint_value(
         "args": {
             "sessionId": id,
             "content": content,
+            "goalId": goal_id,
             "supervisor": supervisor,
             "reason": reason,
         },

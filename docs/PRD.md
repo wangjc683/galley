@@ -165,6 +165,38 @@ V1.0 优先服务：
 - Artifacts 一等公民
 - 完整 tracing / 多人审批 / 复杂 policy / RBAC
 
+### 6.4 Goal 模式定位（2026-07-06 定案）
+
+Goal 是 Galley 的长视界自治模式：给一个目标，Galley 起一个 Master
+session + N 个 Worker session，在时间预算内持续推进、验证、改进，把
+结果送回发起对话。设计与协议细节见
+[RFC-6 Goal / Hive / Morphling](./galley-native/rfc-6-goal-hive-morphling.md)、
+契约见 [agent-api §5.19](./agent-api/goal-commands.md)。
+
+**受众与投入水位**：
+
+- **第一受众是 Supervisor agent**（经 CLI / socket 契约驱动 Goal）。
+  契约完备性、可恢复性、行为语义的稳定优先于桌面呈现。
+- **桌面人类用户是第二受众**。欢迎使用，但桌面侧的目标水位是
+  「基础体验到位」：启动可发现、进行中可感知、结果可读、worker
+  会话有方向感——不做专门 Goal 屏幕、不做 deliverable 面板、
+  不追求日常工具级的打磨密度。超出该水位的桌面增强需重新立项。
+
+**Goal ↔ Project 关系**：
+
+- 主路径是**复用现有项目上下文**：从项目内会话（或带项目筛选的
+  空白屏）启动的 Goal 在该项目中运行，worker 也生成在其中。
+- **自建项目仅是无上下文启动的 fallback**（空白屏、无项目筛选）。
+  机械原因：worker 会话的归属靠 `project_id` 锚定，Goal 没有项目
+  就没有 worker 容器。
+- 未来方向（未排期）：把 worker 锚定从 project 迁到 goal
+  （sessions 挂 goal 关联），project 变为可选；届时 fallback
+  自建可移除。
+
+**何时用 Goal**（判断规则，同 Supervisor SOP）：需要长时间自治推进、
+多方案比较、持续验证改进的目标才用 Goal；任务只是"有两个明显子步骤"
+不构成使用理由，普通 session 即可。
+
 ## 7. 术语表
 
 | 概念 | 术语 | 备注 |

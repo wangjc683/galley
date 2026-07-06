@@ -519,6 +519,7 @@ pub(super) async fn insert_user_message_inner(
     content: String,
     origin: Origin,
     visibility: MessageVisibility,
+    goal_id: Option<&str>,
 ) -> Result<MessageBrief> {
     insert_message_inner(
         conn,
@@ -527,6 +528,7 @@ pub(super) async fn insert_user_message_inner(
         content,
         origin,
         visibility,
+        goal_id,
     )
     .await
 }
@@ -544,6 +546,7 @@ pub(super) async fn insert_message_inner(
     content: String,
     origin: Origin,
     visibility: MessageVisibility,
+    goal_id: Option<&str>,
 ) -> Result<MessageBrief> {
     let role_sql = match role {
         MessageRole::User => "user",
@@ -580,8 +583,8 @@ pub(super) async fn insert_message_inner(
     sqlx::query(
         "INSERT INTO messages \
          (id, session_id, turn_index, sequence, role, content, created_at, \
-          created_via, supervisor, origin_note, visibility) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          created_via, supervisor, origin_note, visibility, goal_id) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&msg_id)
     .bind(&session_id.0)
@@ -594,6 +597,7 @@ pub(super) async fn insert_message_inner(
     .bind(&origin.supervisor)
     .bind(&origin.reason)
     .bind(message_visibility_sql(visibility))
+    .bind(goal_id)
     .execute(&mut *conn)
     .await
     .map_err(map_sqlx_err)?;

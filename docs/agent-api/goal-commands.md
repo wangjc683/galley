@@ -118,8 +118,12 @@ For desktop Goals, the master session is the user-visible control and delivery
 location. The controller may persist short Galley-owned checkpoints there
 (`agents started`, `initial progress`, `run time reached`) through an internal
 socket write path that does not dispatch those checkpoint messages to the
-master runner. Worker prompts, Goal ids, task ids, and protocol logs remain in
-worker sessions and the Goal audit stream.
+master runner. Since v0.3.x the internal `session.checkpoint` socket command
+accepts an optional additive `goalId` arg; when present the persisted message
+row is stamped with it (`messages.goal_id`, migration 031) so frontends can
+bracket Goal episodes by exact id instead of matching objective text. Worker
+prompts, Goal ids, task ids, and protocol logs remain in worker sessions and
+the Goal audit stream.
 
 `goal run` emits NDJSON frames:
 
@@ -144,6 +148,13 @@ task board, recent events, and non-archived Project sessions:
 {"goal":{...},"project":{...},"tasks":[...],"events":[...],"sessions":[...]}
 ```
 
+Additive since v0.3.x: `GoalBrief` MAY carry three optional counters —
+`taskCount` (task-board rows), `completedTaskCount` (rows with
+`status=completed`), and `deliverableVersion` (highest deliverable anchor
+version). They are computed by the queries feeding live surfaces (`goal
+status`, `goal active`, desktop lists) and omitted elsewhere. Consumers must
+treat an absent counter as unknown, not zero.
+
 #### `galley goal active`
 
 Lists active (`running` / `wrapping`) goals as NDJSON — empty output when none.
@@ -153,8 +164,18 @@ to check before proposing a new one.
 #### `galley goal stop <goal-id> [--supervisor=<x>] [--reason=<y>]`
 
 Requests a graceful stop. Core sets `stopRequested=true` and moves a running
-Goal into `wrapping`; the controller observes that flag after the current
-Project wave and finalizes as `stopped`.
+Goal into `wrapping`; the controller observes that flag and finalizes as
+`stopped`.
+
+Behavior since v0.3.x: when the run holds any material worth accounting for
+(claimed/completed tasks, worker results), the controller dispatches a brief
+master wrap-up before parking — a short "what finished / what remains /
+where partial results live" summary in the master session, capped at ~2
+minutes on top of the normal stop path. A stop before workers produced
+anything keeps the historical instant termination. Supervisors polling for
+`stopped` must tolerate this wrap-up window; the terminal status, exit codes,
+`goal run` phase values, and the `request stop` response shape are unchanged
+(the wrap-up emits the existing `wrapping` → `finished` frames).
 
 #### `galley goal task create|claim|update|complete ...`
 

@@ -15,11 +15,12 @@ import type { GoalBrief } from "@/types/goal";
  *   - `terminal` — the run's outcome (done / failed / stopped), placed
  *     right after the run's narration block. Closes the episode.
  *
- * Association is heuristic and GUI-side (no goalId on message rows): a
- * goal is matched to the user turn whose normalized content equals the
- * objective and whose `createdAt` is closest to the goal's `startedAt`.
- * This survives restore (where the linkage is otherwise lost) and
- * degrades gracefully — an unmatched goal simply renders no markers and
+ * Association is exact-first: objective user turns written since
+ * migration 031 carry `goalId`, so those match by id. Rows written
+ * before 031 have no goalId and fall back to the original heuristic —
+ * the user turn whose normalized content equals the objective and whose
+ * `createdAt` is closest to the goal's `startedAt`. Either way an
+ * unmatched goal degrades gracefully: it simply renders no markers and
  * its narration stays as plain (still lightened) callouts.
  *
  * `narrationLeading` lets the renderer show the Galley register glyph
@@ -35,6 +36,7 @@ export type GoalThreadItem =
       origin?: Origin;
       createdAt?: string;
     }
+  | { kind: "task-board"; goal: GoalBrief }
   | { kind: "terminal"; goal: GoalBrief };
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped"]);
@@ -49,9 +51,13 @@ function isGoalNarrationTurn(t: Turn): boolean {
 
 /**
  * Match each goal to the array index of the user turn that commissioned
- * it. Each turn matches at most one goal and vice-versa; when several
- * goals share identical objective text, the closest `startedAt` ↔
- * `createdAt` pairing wins so distinct runs map to distinct turns.
+ * it. Pass 1 is exact: turns carrying `goalId` (rows written since
+ * migration 031) match their goal by id. Pass 2 runs the legacy
+ * heuristic ONLY over goalId-less turns × still-unmatched goals — a
+ * turn stamped with some other goal's id must never be claimed by text
+ * equality. Each turn matches at most one goal and vice-versa; when
+ * several goals share identical objective text, the closest `startedAt`
+ * ↔ `createdAt` pairing wins so distinct runs map to distinct turns.
  */
 function matchCommissions(
   turns: Turn[],
@@ -59,9 +65,20 @@ function matchCommissions(
 ): Map<number, GoalBrief> {
   const byTurnIndex = new Map<number, GoalBrief>();
   const usedTurns = new Set<number>();
-  const ordered = [...goals].sort((a, b) =>
-    a.startedAt.localeCompare(b.startedAt),
-  );
+  const matchedGoals = new Set<string>();
+
+  turns.forEach((t, idx) => {
+    if (t.role !== "user" || !t.goalId) return;
+    const goal = goals.find((g) => g.id === t.goalId);
+    if (!goal || matchedGoals.has(goal.id)) return;
+    byTurnIndex.set(idx, goal);
+    usedTurns.add(idx);
+    matchedGoals.add(goal.id);
+  });
+
+  const ordered = [...goals]
+    .filter((goal) => !matchedGoals.has(goal.id))
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   for (const goal of ordered) {
     const objective = norm(goal.objective);
     const startedTs = Date.parse(goal.startedAt);
@@ -69,6 +86,9 @@ function matchCommissions(
     let bestDelta = Number.POSITIVE_INFINITY;
     turns.forEach((t, idx) => {
       if (t.role !== "user" || usedTurns.has(idx)) return;
+      // A goalId-stamped turn belongs to its own goal (matched above or
+      // not at all) — never lend it to another goal via text equality.
+      if (t.goalId) return;
       if (norm(t.content) !== objective) return;
       const ts = t.createdAt ? Date.parse(t.createdAt) : Number.NaN;
       const delta =
@@ -102,6 +122,11 @@ export function annotateGoalThread(
 
   const closeRun = () => {
     if (currentRunGoal && TERMINAL_STATUSES.has(currentRunGoal.status)) {
+      // Frozen task board above the terminal marker: what ran, what
+      // completed, result summaries. For failed goals this is the
+      // legacy accounting. (The LIVE board for a still-running goal is
+      // pinned at the thread tail by MainView, not emitted here.)
+      items.push({ kind: "task-board", goal: currentRunGoal });
       items.push({ kind: "terminal", goal: currentRunGoal });
     }
     currentRunGoal = null;

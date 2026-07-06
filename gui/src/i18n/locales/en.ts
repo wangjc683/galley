@@ -173,6 +173,10 @@ export const enCopy: AppCopy = {
     goalRemaining: (minutes: number) => `${minutes}m left`,
     goalWorkerCount: (workers: number) =>
       `${workers} ${workers === 1 ? "Agent" : "Agents"}`,
+    goalElapsedOfBudget: (elapsed: number, total: number) =>
+      `${elapsed}m elapsed of ${total}m`,
+    goalTaskProgress: (done: number, total: number) =>
+      `Tasks ${done}/${total}`,
     goalPillMultiple: (count: number) => `Goals · ${count}`,
     openGoal: "View progress",
     openGoalResult: "Open result",
@@ -181,7 +185,7 @@ export const enCopy: AppCopy = {
     openGoalWorkspace: "Output folder",
     stopGoal: "Stop",
     confirmStopGoal: "Confirm stop",
-    stopGoalConsequence: "Stopping skips the final summary",
+    stopGoalConsequence: "Stopping wraps up with a brief summary first (~1–2 min)",
     moreConversationActions: (title) => `${title} · More conversation actions`,
     rename: "Rename",
     reinjectTools: "Reinject tools",
@@ -307,6 +311,9 @@ export const enCopy: AppCopy = {
     configureModelBeforeSending: "Set up a model first",
     willCreateIn: (projectName) => `Will be created in ${projectName}`,
     clearProjectContext: "Switch to a plain new chat (not in the project)",
+    goalRunInProject: (projectName: string) =>
+      `Runs in project "${projectName}"`,
+    goalRunNewProject: "A new project will be created to hold this Goal",
     savedPrompts: {
       trigger: "Saved prompts",
       replaceDraftTitle: "Replace the current draft?",
@@ -1243,6 +1250,23 @@ export const enCopy: AppCopy = {
     goalWriteAutonomous: "Autonomous",
     goalWriteReadonly: "Read-only",
     goalRunElapsed: (minutes) => `${minutes}m elapsed`,
+    goalTasksCompleted: (done: number, total: number) =>
+      `${done}/${total} tasks done`,
+    goalImprovedVersions: (versions: number) => `${versions} revisions`,
+    goalTaskBoardHeading: (done: number, total: number) =>
+      `Tasks ${done}/${total}`,
+    goalTaskBoardPlanning: "Planning tasks…",
+    goalTaskStatus: {
+      open: "Open",
+      claimed: "Claimed",
+      running: "Running",
+      completed: "Done",
+      blocked: "Blocked",
+      cancelled: "Cancelled",
+    },
+    workerContextEyebrow: "Goal worker",
+    workerContextTask: "Task: ",
+    workerContextOpenMaster: "Back to the Goal session ›",
     goalWorking: "Galley is working…",
     result: "Result",
     diffLinesAdded: (n: number) => `+${n} lines`,
@@ -1427,6 +1451,7 @@ export const enCopy: AppCopy = {
     goalStartFailed: "Could not start Goal",
     goalCompleted: "Goal done",
     goalFailed: "Goal failed",
+    goalStopped: "Goal stopped",
     viewGoalResult: "View result",
     viewGoalDetails: "View details",
     modelSelectionChanged: "Switched to the default model",

@@ -228,6 +228,12 @@ pub fn run() {
             sql: include_str!("../migrations/030_single_active_goal.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 31,
+            description: "stamp goal-scoped message rows with goal_id",
+            sql: include_str!("../migrations/031_message_goal_id.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     // Pre-migration backup hook (B4 M8). Derived — not hard-coded —
@@ -336,6 +342,7 @@ pub fn run() {
             list_active_goals,
             list_visible_goals,
             list_goals_for_session,
+            goal_context_for_session,
             goal_status,
             goal_workspace_has_files,
             mark_goal_result_seen,

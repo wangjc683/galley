@@ -736,3 +736,25 @@ code {
     animation: none;
   }
 }
+
+/* Goal pill time-budget fill, wrapping phase: bar is full (budget
+   consumed) but the master is still synthesizing — breathe so a full
+   bar reads "finishing up", not "stuck at 100%". Continuous-state
+   liveness per DESIGN.md §2.7, same register as the sidebar rail. */
+@keyframes goal-pill-fill-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.goal-pill-fill-breathe {
+  animation: goal-pill-fill-breathe 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .goal-pill-fill-breathe {
+    animation: none;
+  }
+}

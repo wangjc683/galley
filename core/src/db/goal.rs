@@ -23,6 +23,11 @@ impl SqliteGalley {
             "SELECT id, proposal_id, project_id, master_session_id, objective, status, budget_seconds, \
                     worker_limit, runtime_kind, write_mode, started_at, deadline_at, \
                     ended_at, latest_summary, result_seen_at, stop_requested, workspace_path, \
+                    (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id) AS task_count, \
+                    (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id \
+                        AND t.status = 'completed') AS completed_task_count, \
+                    (SELECT MAX(version) FROM goal_deliverables d WHERE d.goal_id = goals.id) \
+                        AS deliverable_version, \
                     created_at, updated_at \
              FROM goals WHERE id = ? LIMIT 1",
         )
@@ -437,21 +442,59 @@ impl SqliteGalley {
         rows.into_iter().map(GoalRow::into_brief).collect()
     }
 
+    /// Reverse lookup for worker sessions: "which Goal does this session
+    /// work for, on what task". Worker sessions carry no schema marker —
+    /// the ownership chain lives in `goal_tasks.owner_session_id` (fed by
+    /// the atomic claim), so the most recently updated owned task is the
+    /// session's current assignment. Returns `None` for non-worker
+    /// sessions (including masters, which never claim tasks).
+    pub async fn goal_worker_context(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Option<GoalWorkerContext>> {
+        let row = sqlx::query_as::<_, GoalTaskRow>(
+            "SELECT id, goal_id, title, description, status, owner_session_id, \
+                    scope, result_summary, created_at, updated_at \
+             FROM goal_tasks WHERE owner_session_id = ? \
+             ORDER BY updated_at DESC, id DESC LIMIT 1",
+        )
+        .bind(session_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let task = row.into_brief()?;
+        let goal = self.fetch_goal(task.goal_id.as_str()).await?;
+        Ok(Some(GoalWorkerContext { goal, task }))
+    }
+
     pub(super) async fn list_visible_goals_db(&self) -> Result<Vec<GoalBrief>> {
+        // `stopped` stays visible until seen, like completed/failed:
+        // stop now ends in a brief wrap-up summary, and the GUI's
+        // poll-diff toast/mark-seen flow only ever observes goals that
+        // appear in this list.
         let rows = sqlx::query_as::<_, GoalRow>(
             "SELECT id, proposal_id, project_id, master_session_id, objective, status, budget_seconds, \
                     worker_limit, runtime_kind, write_mode, started_at, deadline_at, \
                     ended_at, latest_summary, result_seen_at, stop_requested, workspace_path, \
+                    (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id) AS task_count, \
+                    (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id \
+                        AND t.status = 'completed') AS completed_task_count, \
+                    (SELECT MAX(version) FROM goal_deliverables d WHERE d.goal_id = goals.id) \
+                        AS deliverable_version, \
                     created_at, updated_at \
              FROM goals \
              WHERE status IN ('running','wrapping') \
-                OR (status IN ('completed','failed') AND result_seen_at IS NULL) \
+                OR (status IN ('completed','failed','stopped') AND result_seen_at IS NULL) \
              ORDER BY CASE status \
                     WHEN 'running' THEN 0 \
                     WHEN 'wrapping' THEN 1 \
                     WHEN 'failed' THEN 2 \
                     WHEN 'completed' THEN 3 \
-                    ELSE 4 END, \
+                    WHEN 'stopped' THEN 4 \
+                    ELSE 5 END, \
                 deadline_at ASC, updated_at DESC",
         )
         .fetch_all(&self.pool)
@@ -468,6 +511,11 @@ impl SqliteGalley {
             "SELECT id, proposal_id, project_id, master_session_id, objective, status, budget_seconds, \
                     worker_limit, runtime_kind, write_mode, started_at, deadline_at, \
                     ended_at, latest_summary, result_seen_at, stop_requested, workspace_path, \
+                    (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id) AS task_count, \
+                    (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id \
+                        AND t.status = 'completed') AS completed_task_count, \
+                    (SELECT MAX(version) FROM goal_deliverables d WHERE d.goal_id = goals.id) \
+                        AS deliverable_version, \
                     created_at, updated_at \
              FROM goals WHERE master_session_id = ? \
              ORDER BY started_at ASC",

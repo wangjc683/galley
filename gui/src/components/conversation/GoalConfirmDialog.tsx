@@ -26,12 +26,17 @@ type GoalAgentCountPreset = "2" | "3" | "4" | "5";
 export function GoalConfirmDialog({
   open,
   objective,
+  projectName,
   submitting,
   onOpenChange,
   onConfirm,
 }: {
   open: boolean;
   objective: string;
+  /** Project the Goal will run in; undefined = the backend creates a
+   * fresh project for the run. Rendered as a one-line consequence so
+   * where the run lands is never a silent decision. */
+  projectName?: string;
   submitting: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (config: GoalLaunchConfig) => void;
@@ -138,6 +143,11 @@ export function GoalConfirmDialog({
               </div>
               <div className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[13px] font-medium leading-relaxed text-ink">
                 {objective}
+              </div>
+              <div className="mt-1.5 text-[11.5px] text-ink-muted">
+                {projectName
+                  ? copy.composer.goalRunInProject(projectName)
+                  : copy.composer.goalRunNewProject}
               </div>
             </section>
 

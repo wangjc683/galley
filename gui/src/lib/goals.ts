@@ -5,6 +5,7 @@ import type {
   GoalBrief,
   GoalStatus,
   GoalStatusSnapshot,
+  GoalWorkerContext,
   StartDesktopGoalInput,
   StartDesktopGoalResult,
 } from "@/types/goal";
@@ -83,6 +84,17 @@ export function listGoalsForSession(sessionId: string) {
 
 export function getGoalStatus(id: string) {
   return invoke<GoalStatusSnapshot>("goal_status", { id });
+}
+
+/**
+ * Worker-session orientation — resolves "which Goal does this session
+ * work for, on what task" via the backend's `goal_tasks.owner_session_id`
+ * reverse lookup. Null for non-worker sessions (including masters).
+ */
+export function getGoalContextForSession(sessionId: string) {
+  return invoke<GoalWorkerContext | null>("goal_context_for_session", {
+    sessionId,
+  });
 }
 
 export function markGoalResultSeen(id: string) {

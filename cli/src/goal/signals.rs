@@ -47,6 +47,17 @@ pub(crate) fn goal_has_worker_material_signal(snapshot: &GoalStatusSnapshot) -> 
     })
 }
 
+/// Stop wrap-up material gate: does the run hold anything worth a brief
+/// master accounting? Non-empty task board counts — even claimed-but-
+/// unfinished tasks give the wrap-up something honest to report ("X was
+/// in progress"). With nothing here, stop keeps its historical instant
+/// termination instead of dispatching a synthesis turn over nothing.
+pub(crate) fn goal_has_stop_wrap_up_material(snapshot: &GoalStatusSnapshot) -> bool {
+    goal_has_result_signal(snapshot)
+        || goal_has_worker_material_signal(snapshot)
+        || !snapshot.tasks.is_empty()
+}
+
 pub(crate) fn goal_activity_counts(snapshot: &GoalStatusSnapshot) -> GoalActivityCounts {
     GoalActivityCounts {
         task_count: snapshot

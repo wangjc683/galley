@@ -2,10 +2,11 @@ import * as Popover from "@radix-ui/react-popover";
 import {
   CheckCircle,
   FolderOpen,
+  Prohibit,
   Target,
   Warning,
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
@@ -54,7 +55,20 @@ export function GoalIndicator({
       ? CheckCircle
       : visualGoal.status === "failed"
         ? Warning
-        : Target;
+        : visualGoal.status === "stopped"
+          ? Prohibit
+          : Target;
+  // The pill doubles as an ambient progress bar: a quiet brand fill
+  // grows left→right as the time budget is consumed. It restores the
+  // at-a-glance progress the countdown removal took away, without
+  // reintroducing an anxious ticking number. deadline is frozen at
+  // launch, so this runs on a local clock — no dependency on the 5s
+  // poll. Wrapping = full bar + breathe (deadline passed, still
+  // working — not stuck).
+  const fillGoal = goals.find(
+    (goal) => goal.status === "running" || goal.status === "wrapping",
+  );
+  const fillFraction = useGoalBudgetFraction(fillGoal);
   return (
     <Popover.Root
       onOpenChange={(open) => {
@@ -86,11 +100,24 @@ export function GoalIndicator({
             aria-label={copy.goalTooltip}
             className={topBarStatusBadgeClass(
               style.tone,
-              cn("gap-1.5", TOPBAR_POPOVER_OPEN_STATE),
+              cn(
+                "relative gap-1.5 overflow-hidden",
+                TOPBAR_POPOVER_OPEN_STATE,
+              ),
             )}
           >
-            <Icon size={14} weight="thin" />
-            <span>{label}</span>
+            {fillFraction !== null && (
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute inset-y-0 left-0 bg-brand/15",
+                  fillGoal?.status === "wrapping" && "goal-pill-fill-breathe",
+                )}
+                style={{ width: `${(fillFraction * 100).toFixed(1)}%` }}
+              />
+            )}
+            <Icon size={14} weight="thin" className="relative z-[1]" />
+            <span className="relative z-[1]">{label}</span>
           </button>
         </Popover.Trigger>
       </TooltipLabel>
@@ -140,8 +167,38 @@ export function GoalIndicator({
                   <div className="mt-2 line-clamp-2 break-words text-[13px] font-medium leading-snug text-ink">
                     {goal.objective}
                   </div>
-                  <div className="mt-1 text-[11px] text-ink-muted">
-                    {copy.goalWorkerCount(goal.workerLimit)}
+                  {/* "What is it doing right now" — the controller's
+                      latest progress beat. The single highest-signal
+                      line the backend already had and the popover never
+                      showed. */}
+                  {goal.latestSummary && (
+                    <div className="mt-1 line-clamp-2 break-words text-[11.5px] leading-snug text-ink-muted">
+                      {goal.latestSummary}
+                    </div>
+                  )}
+                  <div className="mt-1 text-[11px] tabular-nums text-ink-muted">
+                    <span>{copy.goalWorkerCount(goal.workerLimit)}</span>
+                    {goal.taskCount != null &&
+                      goal.completedTaskCount != null &&
+                      goal.taskCount > 0 && (
+                        <span>
+                          {" · "}
+                          {copy.goalTaskProgress(
+                            goal.completedTaskCount,
+                            goal.taskCount,
+                          )}
+                        </span>
+                      )}
+                    {(goal.status === "running" ||
+                      goal.status === "wrapping") && (
+                      <span>
+                        {" · "}
+                        {copy.goalElapsedOfBudget(
+                          elapsedRunMinutes(goal),
+                          Math.max(1, Math.round(goal.budgetSeconds / 60)),
+                        )}
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-3 flex flex-col gap-2">
@@ -231,7 +288,54 @@ function goalPrimaryActionLabel(
 ) {
   if (goal.status === "completed") return copy.openGoalResult;
   if (goal.status === "failed") return copy.viewGoalDetails;
+  // stopped now ends in a brief wrap-up summary — "open result" is the
+  // honest label for what's waiting in the master session.
+  if (goal.status === "stopped") return copy.openGoalResult;
   return copy.openGoal;
+}
+
+/**
+ * Time-budget fill fraction for the pill background. Running scales
+ * elapsed/budget on a coarse local clock (20s ticks — the budget is
+ * minutes-grained, per-second motion would just be noise); wrapping
+ * pins to 1. Returns null when no goal is running/wrapping (no fill).
+ * The interval only bumps a re-render tick (state changes strictly in
+ * the timer callback); the fraction itself derives at render, like
+ * `remainingMinutes` in the popover.
+ */
+function useGoalBudgetFraction(goal?: GoalBrief): number | null {
+  const [, setTick] = useState(0);
+  const running = goal?.status === "running";
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 20_000);
+    return () => window.clearInterval(id);
+  }, [running]);
+  if (!goal) return null;
+  if (goal.status === "wrapping") return 1;
+  if (goal.status !== "running") return null;
+  return budgetFractionNow(goal.startedAt, goal.deadlineAt);
+}
+
+function budgetFractionNow(
+  startedAt: string,
+  deadlineAt: string,
+): number | null {
+  const start = Date.parse(startedAt);
+  const end = Date.parse(deadlineAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return null;
+  }
+  return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
+}
+
+/** Minutes since launch, floored at 0 — the popover's "elapsed" half of
+ * "elapsed / budget". Computed at render; the popover only opens on
+ * demand so no ticker is needed. */
+function elapsedRunMinutes(goal: GoalBrief): number {
+  const start = Date.parse(goal.startedAt);
+  if (!Number.isFinite(start)) return 0;
+  return Math.max(0, Math.round((Date.now() - start) / 60_000));
 }
 
 function goalAttentionGoal(goals: GoalBrief[]): GoalBrief {
@@ -260,6 +364,13 @@ function goalIndicatorStyle(goal: GoalBrief): { tone: TopBarStatusTone } {
   if (goal.status === "completed") {
     return {
       tone: "success",
+    };
+  }
+  // stopped-unseen lingers in the pill until the user reads the wrap-up
+  // — user-initiated, so quiet neutral, not brand "still working".
+  if (goal.status === "stopped") {
+    return {
+      tone: "neutral",
     };
   }
   return {

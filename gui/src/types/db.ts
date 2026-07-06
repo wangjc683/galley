@@ -81,6 +81,11 @@ export interface MessageRow {
   visibility: "visible" | "internal";
   /** Optional per-final-answer telemetry. Added in migration 028. */
   telemetry: MessageTelemetry | null;
+  /** Goal this row belongs to (objective turn, launch ack, master
+   * checkpoints). Added in migration 031; NULL on non-goal rows and on
+   * rows written before 031 — goal-thread.ts falls back to the
+   * objective-text heuristic for those. */
+  goal_id: string | null;
   attachments: MessageAttachmentRow[];
   created_at: string;
 }

@@ -43,6 +43,9 @@ fn test_goal() -> GoalBrief {
         result_seen_at: None,
         stop_requested: false,
         workspace_path: None,
+        task_count: None,
+        completed_task_count: None,
+        deliverable_version: None,
         created_at: "2026-06-05T00:00:00Z".to_string(),
         updated_at: "2026-06-05T00:00:00Z".to_string(),
     }
@@ -226,6 +229,49 @@ fn goal_synthesis_timeout_scales_with_prompt_size() {
     assert_eq!(goal_synthesis_timeout(120_000).as_secs(), 420);
     // 300k-char anchor prompts hit the 900s ceiling.
     assert_eq!(goal_synthesis_timeout(900_000).as_secs(), 900);
+}
+
+#[test]
+fn goal_stop_synthesis_timeout_is_capped() {
+    use super::controller::goal_finish_synthesis_timeout;
+    use super::types::GoalFinishMode;
+    // Normal mode inherits the size-scaled timeout untouched.
+    assert_eq!(
+        goal_finish_synthesis_timeout(GoalFinishMode::Normal, 120_000).as_secs(),
+        420
+    );
+    // Stop wrap-up is capped at 120s regardless of prompt size…
+    assert_eq!(
+        goal_finish_synthesis_timeout(GoalFinishMode::StopWrapUp, 900_000).as_secs(),
+        120
+    );
+    assert_eq!(
+        goal_finish_synthesis_timeout(GoalFinishMode::StopWrapUp, 0).as_secs(),
+        120
+    );
+}
+
+#[test]
+fn goal_stop_wrap_up_material_gate() {
+    use super::signals::goal_has_stop_wrap_up_material;
+    // Nothing to account for → instant stop path.
+    assert!(!goal_has_stop_wrap_up_material(&test_snapshot(
+        vec![],
+        vec![],
+        vec![]
+    )));
+    // Any task on the board is worth a brief accounting, even unfinished.
+    assert!(goal_has_stop_wrap_up_material(&test_snapshot(
+        vec![test_task("t1", GoalTaskStatus::Claimed, Some("w1"))],
+        vec![],
+        vec![]
+    )));
+    // A worker result event alone also qualifies.
+    assert!(goal_has_stop_wrap_up_material(&test_snapshot(
+        vec![],
+        vec![test_event(1, GoalEventType::Result, None, Some("w1"))],
+        vec![]
+    )));
 }
 
 #[test]

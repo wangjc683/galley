@@ -92,7 +92,9 @@ export function useGoalEffects({
     const visibleResultGoal = activeGoals.find(
       (goal) =>
         goal.masterSessionId === activeSessionId &&
-        (goal.status === "completed" || goal.status === "failed") &&
+        (goal.status === "completed" ||
+          goal.status === "failed" ||
+          goal.status === "stopped") &&
         !goal.resultSeenAt,
     );
     if (!visibleResultGoal) return;
@@ -107,7 +109,9 @@ export function useGoalEffects({
               (goal) =>
                 !(
                   goal.id === next.id &&
-                  (goal.status === "completed" || goal.status === "failed")
+                  (goal.status === "completed" ||
+                    goal.status === "failed" ||
+                    goal.status === "stopped")
                 ),
             ),
         );
@@ -143,12 +147,20 @@ export function useGoalEffects({
   const notifyGoalTerminalRef = useRef<(goal: GoalBrief) => void>(() => {});
   useEffect(() => {
     notifyGoalTerminalRef.current = (goal: GoalBrief) => {
-      const done = goal.status === "completed";
+      // stopped is user-initiated — an info notification pointing at the
+      // wrap-up summary, never an error tone.
+      const failed = goal.status === "failed";
+      const title =
+        goal.status === "completed"
+          ? copy.toasts.goalCompleted
+          : goal.status === "stopped"
+            ? copy.toasts.goalStopped
+            : copy.toasts.goalFailed;
       pushToast(
         makeAppError({
           category: "business",
-          severity: done ? "info" : "error",
-          title: done ? copy.toasts.goalCompleted : copy.toasts.goalFailed,
+          severity: failed ? "error" : "info",
+          title,
           message: goal.objective,
           hint: null,
           retryable: false,
@@ -156,9 +168,9 @@ export function useGoalEffects({
           traceback: null,
           action: {
             kind: "view_goal",
-            label: done
-              ? copy.toasts.viewGoalResult
-              : copy.toasts.viewGoalDetails,
+            label: failed
+              ? copy.toasts.viewGoalDetails
+              : copy.toasts.viewGoalResult,
             goalId: goal.id,
           },
           autoDismissMs: 6000,
@@ -172,7 +184,10 @@ export function useGoalEffects({
     for (const goal of activeGoals) {
       next.set(goal.id, goal.status);
       const before = prev.get(goal.id);
-      const terminal = goal.status === "completed" || goal.status === "failed";
+      const terminal =
+        goal.status === "completed" ||
+        goal.status === "failed" ||
+        goal.status === "stopped";
       const wasActive = before === "running" || before === "wrapping";
       if (terminal && wasActive) notifyGoalTerminalRef.current(goal);
     }

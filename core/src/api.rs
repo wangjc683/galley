@@ -27,7 +27,8 @@ pub use goal::{
     goal_synthesizing, ClaimGoalTaskInput, CreateGoalEventInput, CreateGoalProposalInput,
     CreateGoalTaskInput, GoalBrief, GoalDeliverable, GoalEventBrief, GoalEventType, GoalId,
     GoalLocale, GoalProposalBrief, GoalProposalId, GoalProposalStatus, GoalStatus,
-    GoalStatusSnapshot, GoalTaskBrief, GoalTaskId, GoalTaskStatus, GoalWriteMode,
+    GoalStatusSnapshot, GoalTaskBrief, GoalTaskId, GoalTaskStatus, GoalWorkerContext,
+    GoalWriteMode,
     UpdateGoalTaskInput, DEFAULT_GOAL_BUDGET_SECONDS, DEFAULT_GOAL_WORKER_LIMIT,
     GOAL_CONFIRMATION_PHRASE, MAX_GOAL_WORKER_LIMIT, MIN_GOAL_WORKER_LIMIT,
 };
@@ -123,6 +124,28 @@ pub trait GalleyApi: Send + Sync {
         session_id: SessionId,
         content: String,
         origin: Origin,
+    ) -> Result<MessageBrief>;
+
+    /// [`Self::send_message`] variant that stamps the row with the Goal
+    /// it belongs to (`messages.goal_id`), used for the objective turn
+    /// of a Goal launch. Frontends bracket Goal episodes by this id
+    /// instead of matching objective text.
+    async fn send_message_for_goal(
+        &self,
+        session_id: SessionId,
+        content: String,
+        origin: Origin,
+        goal_id: GoalId,
+    ) -> Result<MessageBrief>;
+
+    /// [`Self::send_system_message`] variant that stamps the row with
+    /// the Goal it narrates (launch ack, controller checkpoints).
+    async fn send_system_message_for_goal(
+        &self,
+        session_id: SessionId,
+        content: String,
+        origin: Origin,
+        goal_id: GoalId,
     ) -> Result<MessageBrief>;
 
     // ---------------- session writes (B3 M4a) ----------------

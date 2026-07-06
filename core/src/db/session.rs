@@ -12,7 +12,7 @@ impl SqliteGalley {
                 "SELECT id, session_id, turn_index, sequence, role, content, \
                     tool_calls, tool_results, thinking, final_answer, summary, \
                     preamble, created_via, supervisor, origin_note, visibility, \
-                    telemetry_json, created_at \
+                    telemetry_json, goal_id, created_at \
              FROM messages \
              WHERE session_id = ? AND visibility = 'visible' \
              ORDER BY turn_index ASC, sequence ASC",
@@ -402,6 +402,36 @@ impl SqliteGalley {
             content,
             origin,
             MessageVisibility::Visible,
+            None,
+        )
+        .await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(msg)
+    }
+
+    /// Same as [`Self::send_message_db`] but stamps the row with the
+    /// Goal it belongs to (the objective turn of a Goal launch), so the
+    /// GUI can bracket Goal episodes by exact id instead of the
+    /// objective-text heuristic.
+    pub(super) async fn send_message_for_goal_db(
+        &self,
+        session_id: SessionId,
+        content: String,
+        origin: crate::api::Origin,
+        goal_id: GoalId,
+    ) -> Result<MessageBrief> {
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(map_sqlx_err)?;
+        let msg = insert_user_message_inner(
+            &mut tx,
+            session_id,
+            content,
+            origin,
+            MessageVisibility::Visible,
+            Some(goal_id.as_str()),
         )
         .await?;
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -430,6 +460,7 @@ impl SqliteGalley {
             content,
             origin,
             MessageVisibility::Visible,
+            None,
         )
         .await?;
 
@@ -470,7 +501,8 @@ impl SqliteGalley {
             .await
             .map_err(map_sqlx_err)?;
         let msg =
-            insert_user_message_inner(&mut tx, session_id, content, origin, visibility).await?;
+            insert_user_message_inner(&mut tx, session_id, content, origin, visibility, None)
+                .await?;
         tx.commit().await.map_err(map_sqlx_err)?;
         Ok(msg)
     }
@@ -493,6 +525,35 @@ impl SqliteGalley {
             content,
             origin,
             MessageVisibility::Visible,
+            None,
+        )
+        .await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(msg)
+    }
+
+    /// Same as [`Self::send_system_message_db`] but stamps the row with
+    /// the Goal it narrates (launch ack, controller checkpoints).
+    pub(super) async fn send_system_message_for_goal_db(
+        &self,
+        session_id: SessionId,
+        content: String,
+        origin: crate::api::Origin,
+        goal_id: GoalId,
+    ) -> Result<MessageBrief> {
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(map_sqlx_err)?;
+        let msg = insert_message_inner(
+            &mut tx,
+            session_id,
+            MessageRole::System,
+            content,
+            origin,
+            MessageVisibility::Visible,
+            Some(goal_id.as_str()),
         )
         .await?;
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -873,7 +934,15 @@ impl SqliteGalley {
         content: String,
         origin: Origin,
     ) -> Result<MessageBrief> {
-        insert_user_message_inner(tx, session_id, content, origin, MessageVisibility::Visible).await
+        insert_user_message_inner(
+            tx,
+            session_id,
+            content,
+            origin,
+            MessageVisibility::Visible,
+            None,
+        )
+        .await
     }
 
     pub(super) async fn begin_tx_db(&self) -> Result<Transaction<'_, Sqlite>> {

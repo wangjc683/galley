@@ -25,6 +25,20 @@ pub(crate) async fn list_goals_for_session(
         .map_err(stringify_error)
 }
 
+/// Worker-session orientation: which Goal this session works for and
+/// its latest owned task. `None` for sessions that never claimed a goal
+/// task (normal sessions and masters). Drives the worker context bar.
+#[tauri::command]
+pub(crate) async fn goal_context_for_session(
+    galley: State<'_, SqliteGalley>,
+    session_id: SessionId,
+) -> std::result::Result<Option<GoalWorkerContext>, String> {
+    galley
+        .goal_worker_context(&session_id)
+        .await
+        .map_err(stringify_error)
+}
+
 #[tauri::command]
 pub(crate) async fn goal_status(
     galley: State<'_, SqliteGalley>,

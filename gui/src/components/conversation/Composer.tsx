@@ -158,6 +158,12 @@ export interface ComposerProps {
    * time, so the Goal entry is disabled here (with an explanatory tooltip)
    * unless this Composer is the one already showing that Goal via `goal`. */
   hasActiveGoal?: boolean;
+  /** Name of the project a Goal launched here would run in — the
+   * session's project (MainView) or the active project filter
+   * (EmptyState). Undefined = no project context: the backend will
+   * create a fresh project to hold the run. Either way the confirm
+   * dialog says so, instead of deciding it silently. */
+  goalProjectName?: string;
   /** Show the compact keyboard/state hint below the Composer. */
   showFooterHint?: boolean;
   /** Caller-supplied content for the same footer slot, shown when the
@@ -214,6 +220,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onOpenLLMSwitcher,
       goal,
       hasActiveGoal = false,
+      goalProjectName,
       onGoalSubmit,
       showFooterHint = false,
       staticHint,
@@ -875,6 +882,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             key={goalConfirmationObjective || "goal-confirm-closed"}
             open={effectiveGoalConfirmOpen}
             objective={goalConfirmationObjective}
+            projectName={goalProjectName}
             submitting={goalSubmitting}
             onOpenChange={(open) => {
               if (goalSubmitting) return;

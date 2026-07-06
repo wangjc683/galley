@@ -132,6 +132,7 @@ pub(super) struct PersistedMessageRowRecord {
     pub origin_note: Option<String>,
     pub visibility: String,
     pub telemetry_json: Option<String>,
+    pub goal_id: Option<String>,
     pub created_at: String,
 }
 
@@ -154,6 +155,7 @@ pub struct PersistedMessageRow {
     pub origin_note: Option<String>,
     pub visibility: String,
     pub telemetry: Option<MessageTelemetry>,
+    pub goal_id: Option<String>,
     pub created_at: String,
     pub attachments: Vec<MessageAttachmentBrief>,
 }
@@ -180,6 +182,7 @@ impl PersistedMessageRowRecord {
             telemetry: self
                 .telemetry_json
                 .and_then(|raw| serde_json::from_str::<MessageTelemetry>(&raw).ok()),
+            goal_id: self.goal_id,
             created_at: self.created_at,
             attachments: Vec::new(),
         }
@@ -502,6 +505,14 @@ pub(super) struct GoalRow {
     pub(super) result_seen_at: Option<String>,
     pub(super) stop_requested: i64,
     pub(super) workspace_path: Option<String>,
+    /// Scalar-subquery counters. Only the queries feeding live surfaces
+    /// select them; everywhere else `#[sqlx(default)]` decodes None.
+    #[sqlx(default)]
+    pub(super) task_count: Option<i64>,
+    #[sqlx(default)]
+    pub(super) completed_task_count: Option<i64>,
+    #[sqlx(default)]
+    pub(super) deliverable_version: Option<i64>,
     pub(super) created_at: String,
     pub(super) updated_at: String,
 }
@@ -526,6 +537,9 @@ impl GoalRow {
             result_seen_at: self.result_seen_at,
             stop_requested: self.stop_requested != 0,
             workspace_path: self.workspace_path,
+            task_count: self.task_count.map(|n| n.max(0) as u32),
+            completed_task_count: self.completed_task_count.map(|n| n.max(0) as u32),
+            deliverable_version: self.deliverable_version.map(|n| n.max(0) as u32),
             created_at: self.created_at,
             updated_at: self.updated_at,
         })

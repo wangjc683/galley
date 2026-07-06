@@ -18,6 +18,11 @@ struct SessionSendArgs {
 struct SessionCheckpointArgs {
     session_id: String,
     content: String,
+    /// Goal this checkpoint narrates. Optional and additive
+    /// (schemaVersion 1): older callers omit it and the row persists
+    /// un-stamped, exactly as before 031.
+    #[serde(default)]
+    goal_id: Option<String>,
     #[serde(default)]
     supervisor: Option<String>,
     #[serde(default)]
@@ -197,10 +202,20 @@ pub(super) async fn dispatch_session_checkpoint(
     // operator's input — persist them as a `system` row so the GUI
     // renders neutral narration instead of a user bubble. Still
     // `persisted_only`: never dispatched to the runner.
-    let brief = match galley
-        .send_system_message(session_id, content, origin)
-        .await
-    {
+    let send = match parsed.goal_id.as_deref().map(str::trim) {
+        Some(goal_id) if !goal_id.is_empty() => {
+            galley
+                .send_system_message_for_goal(
+                    session_id,
+                    content,
+                    origin,
+                    GoalId(goal_id.to_string()),
+                )
+                .await
+        }
+        _ => galley.send_system_message(session_id, content, origin).await,
+    };
+    let brief = match send {
         Ok(b) => b,
         Err(e) => return map_galley_err(request_id, e),
     };

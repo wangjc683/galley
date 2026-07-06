@@ -156,6 +156,17 @@ pub struct GoalBrief {
     /// is created lazily by the agents on first write.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace_path: Option<String>,
+    /// Task-board counters and the deliverable anchor version, computed
+    /// by the queries that feed live surfaces (visible list, status,
+    /// per-session list). `None` on queries that don't compute them —
+    /// additive within schemaVersion 1, so consumers must treat absent
+    /// as "unknown", not zero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_task_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deliverable_version: Option<u32>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -205,6 +216,18 @@ pub struct GoalDeliverable {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_session_id: Option<SessionId>,
     pub created_at: String,
+}
+
+/// "Which Goal is this worker session part of, and what is it working
+/// on" — resolved by reverse lookup through `goal_tasks.owner_session_id`
+/// (worker sessions carry no schema marker of their own). `task` is the
+/// most recently updated task the session owns; a worker that claimed
+/// tasks across several waves reports its latest one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalWorkerContext {
+    pub goal: GoalBrief,
+    pub task: GoalTaskBrief,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

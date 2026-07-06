@@ -136,6 +136,10 @@ export interface UserTurn {
    * supervisor provenance tooltip timestamp (M7). Optional so existing
    * UserTurn constructions in tests / demo data don't need to change. */
   createdAt?: string;
+  /** Goal this turn commissioned (`messages.goal_id`, migration 031).
+   * When present, goal-thread.ts matches the commission marker by exact
+   * id instead of the objective-text + timestamp heuristic. */
+  goalId?: string;
 }
 
 /**

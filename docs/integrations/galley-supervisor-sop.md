@@ -214,7 +214,10 @@ reply, in their own language, that refers to this Goal (offer the response's
 ```
 
 Use `goal status <goal-id>` for progress and `goal stop <goal-id>` only after
-the user asks to stop.
+the user asks to stop. A stop is not instant: when the run already holds
+results, Galley writes a brief wrap-up summary into the master session first
+(up to ~2 minutes) and only then parks the Goal as `stopped` — keep polling
+`goal status` instead of treating the delay as a failure.
 
 ### Risky Actions
 

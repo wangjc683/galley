@@ -27,6 +27,12 @@ export interface GoalBrief {
   resultSeenAt?: string;
   stopRequested: boolean;
   workspacePath?: string;
+  /** Task-board counters + deliverable anchor version. Present on the
+   * live-surface queries (visible list / status / per-session list);
+   * absent = unknown, not zero — hide the affordance, don't show 0/0. */
+  taskCount?: number;
+  completedTaskCount?: number;
+  deliverableVersion?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -152,4 +158,13 @@ export interface GoalStatusSnapshot {
   events: GoalEventBrief[];
   sessions: GoalSessionBrief[];
   deliverable?: GoalDeliverable;
+}
+
+/** Worker-session orientation from `goal_context_for_session`: which
+ * Goal the session works for and its latest owned task. Null for
+ * sessions that never claimed a goal task (normal sessions, masters).
+ * Drives the worker context bar at the top of the conversation. */
+export interface GoalWorkerContext {
+  goal: GoalBrief;
+  task: GoalTaskBrief;
 }

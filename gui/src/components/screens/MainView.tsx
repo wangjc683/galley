@@ -13,6 +13,8 @@ import {
   TurnMarker,
 } from "@/components/conversation/Conversation";
 import { GoalRunningTail } from "@/components/conversation/GoalRunMarkers";
+import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
+import { GoalWorkerContextBar } from "@/components/conversation/GoalWorkerContextBar";
 import { StreamingCursor } from "@/components/conversation/LiveIndicators";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
@@ -116,6 +118,12 @@ export interface MainViewProps {
    */
   sessionGoals?: GoalBrief[];
   /**
+   * Session navigation for the Goal orientation surfaces: task-board
+   * rows drill into their worker session, and the worker context bar
+   * jumps back to the Goal's master session.
+   */
+  onOpenSession?: (sessionId: string) => void;
+  /**
    * GA-initiated question waiting for a user reply. When non-null,
    * the AskUserBubble renders at the conversation tail (with chip
    * candidates) and the Composer's placeholder switches to a reply
@@ -182,6 +190,7 @@ export function MainView({
   goal,
   hasActiveGoal,
   sessionGoals,
+  onOpenSession,
   pendingAskUser,
   conversationWidth = "compact",
   conversationFontSize = "standard",
@@ -288,6 +297,14 @@ export function MainView({
       className="relative flex min-h-0 flex-1 flex-col bg-app"
       style={conversationTypographyStyle(conversationFontSize)}
     >
+      {/* Worker-session orientation: renders only when this session is
+          a Goal worker (backend reverse lookup returns null otherwise).
+          Sits above the scroll area — orientation must be readable
+          before, and regardless of, scroll position. */}
+      <GoalWorkerContextBar
+        sessionId={activeSessionId}
+        onOpenMaster={onOpenSession}
+      />
       {/* Scrollable conversation column. Width follows the TopBar
           toggle: 760px (typography sweet spot) by default, 1200px
           in wide mode. Bottom stack matches — see MainViewProps doc
@@ -316,6 +333,7 @@ export function MainView({
               onApprove={onApprove}
               projectName={projectName}
               goals={sessionGoals}
+              onOpenWorkerSession={onOpenSession}
             />
             {/* In-flight pending approvals — rendered after the
               completed turns. The agent has emitted tool_call_pending
@@ -434,6 +452,16 @@ export function MainView({
                 onPickCandidate={(text) => onSubmit?.(text, [])}
               />
             )}
+            {/* Live task board for a running Goal, pinned at the thread
+                tail: what the workers are doing right now, refreshed on
+                the board's own 5s poll. The frozen (terminal) board is
+                emitted in-thread by annotateGoalThread instead. */}
+            {runningGoal && (
+              <GoalTaskBoard
+                goal={runningGoal}
+                onOpenWorkerSession={onOpenSession}
+              />
+            )}
             {/* Ambient liveness for a running Goal master thread: the
                 master itself isn't mid-turn, but its goal is still
                 progressing in worker sessions. Shown only when nothing
@@ -548,6 +576,7 @@ export function MainView({
             onOpenLLMSwitcher={onOpenLLMSwitcher}
             goal={goal}
             hasActiveGoal={hasActiveGoal}
+            goalProjectName={projectName}
             showFooterHint
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}

@@ -12,8 +12,9 @@ use crate::goal::prompts::{
 };
 use crate::goal::signals::{
     goal_activity_counts, goal_activity_increased, goal_any_worker_slot_has_progress_signal,
-    goal_has_incomplete_tasks, goal_has_result_signal, goal_summary_event_is_new,
-    goal_worker_max_wave, goal_worker_slot_session_ids, goal_worker_slots_all_capped,
+    goal_has_incomplete_tasks, goal_has_result_signal, goal_has_stop_wrap_up_material,
+    goal_summary_event_is_new, goal_worker_max_wave, goal_worker_slot_session_ids,
+    goal_worker_slots_all_capped,
 };
 pub(crate) use crate::goal::signals::{
     goal_drain_cap_seconds, goal_has_worker_material_signal, goal_ready_idle_worker_slot_indices,
@@ -171,7 +172,15 @@ pub(crate) async fn run_goal_controller(
     let mut worker_session_ids: Vec<SessionId> = Vec::new();
     let mut worker_slots: Vec<GoalWorkerSlot> = Vec::new();
     loop {
-        if goal.status == GoalStatus::Wrapping && !goal.stop_requested {
+        // Wrapping enters synthesis in both flavors: budget/wave-cap wraps
+        // run the full synthesis, a requested stop runs the brief wrap-up.
+        // This also covers "stop requested, controller crashed, resumed".
+        if goal.status == GoalStatus::Wrapping {
+            let mode = if goal.stop_requested {
+                GoalFinishMode::StopWrapUp
+            } else {
+                GoalFinishMode::Normal
+            };
             let snapshot = galley.goal_status_full(goal.id.clone()).await?;
             finish_goal_with_master(
                 galley,
@@ -179,6 +188,7 @@ pub(crate) async fn run_goal_controller(
                 &worker_session_ids,
                 supervisor.clone(),
                 reason.clone(),
+                mode,
             )
             .await?;
             return Ok(());
@@ -187,17 +197,11 @@ pub(crate) async fn run_goal_controller(
         let wave_start_snapshot = galley.goal_status_full(goal.id.clone()).await?;
         goal = wave_start_snapshot.goal.clone();
         if goal.stop_requested {
-            let summary = "Goal stopped before starting the next worker wave.".to_string();
-            shutdown_goal_worker_runners(
-                galley,
-                &wave_start_snapshot,
-                &worker_session_ids,
-                supervisor.clone(),
-                reason
-                    .clone()
-                    .or_else(|| Some(format!("goal {} stopped", goal.id))),
-            )
-            .await;
+            // Race-window catch (stop landing between the loop-top fetch
+            // and this one): same brief wrap-up as the loop-top path.
+            // `finish_goal_with_master` stops instantly when there is no
+            // material worth accounting for.
+            let summary = "Stop requested before the next worker wave; wrapping up.".to_string();
             galley
                 .create_goal_event(CreateGoalEventInput {
                     goal_id: goal.id.clone(),
@@ -207,17 +211,25 @@ pub(crate) async fn run_goal_controller(
                     body: summary.clone(),
                 })
                 .await?;
-            let final_goal = galley
-                .update_goal_state(goal.id.clone(), GoalStatus::Stopped, Some(summary))
-                .await?;
             emit_json(&GoalRunFrame {
                 schema_version: SCHEMA_VERSION,
                 stream: "goal",
-                phase: "finished",
-                goal: &final_goal,
+                phase: "wrapping",
+                goal: &goal,
                 session_id: None,
-                note: None,
+                note: Some(summary),
             })?;
+            finish_goal_with_master(
+                galley,
+                wave_start_snapshot,
+                &worker_session_ids,
+                supervisor.clone(),
+                reason
+                    .clone()
+                    .or_else(|| Some(format!("goal {} stopped", goal.id))),
+                GoalFinishMode::StopWrapUp,
+            )
+            .await?;
             return Ok(());
         }
         if !goal_budget_left(&goal, controller_started) {
@@ -286,6 +298,7 @@ pub(crate) async fn run_goal_controller(
                         reason.clone().or_else(|| {
                             Some(format!("goal master synthesis after {wrap_reason:?}"))
                         }),
+                        GoalFinishMode::Normal,
                     )
                     .await?;
                     return Ok(());
@@ -449,17 +462,9 @@ pub(crate) async fn run_goal_controller(
         let mut snapshot = galley.goal_status_full(goal.id.clone()).await?;
         let refreshed = snapshot.goal.clone();
         if refreshed.stop_requested {
-            let summary = "Worker wave finished after stop request; Goal stopped.".to_string();
-            shutdown_goal_worker_runners(
-                galley,
-                &snapshot,
-                &worker_session_ids,
-                supervisor.clone(),
-                reason
-                    .clone()
-                    .or_else(|| Some(format!("goal {} stopped", refreshed.id))),
-            )
-            .await;
+            // Stop landed while a wave was running: the finished wave's
+            // output is exactly what the brief wrap-up should account for.
+            let summary = "Worker wave finished after stop request; wrapping up.".to_string();
             galley
                 .create_goal_event(CreateGoalEventInput {
                     goal_id: refreshed.id.clone(),
@@ -469,17 +474,25 @@ pub(crate) async fn run_goal_controller(
                     body: summary.clone(),
                 })
                 .await?;
-            let final_goal = galley
-                .update_goal_state(refreshed.id.clone(), GoalStatus::Stopped, Some(summary))
-                .await?;
             emit_json(&GoalRunFrame {
                 schema_version: SCHEMA_VERSION,
                 stream: "goal",
-                phase: "finished",
-                goal: &final_goal,
+                phase: "wrapping",
+                goal: &refreshed,
                 session_id: None,
-                note: None,
+                note: Some(summary),
             })?;
+            finish_goal_with_master(
+                galley,
+                snapshot,
+                &worker_session_ids,
+                supervisor.clone(),
+                reason
+                    .clone()
+                    .or_else(|| Some(format!("goal {} stopped", refreshed.id))),
+                GoalFinishMode::StopWrapUp,
+            )
+            .await?;
             return Ok(());
         }
 
@@ -728,6 +741,7 @@ pub(crate) async fn run_goal_controller(
                     reason
                         .clone()
                         .or_else(|| Some(format!("goal master synthesis after {wrap_reason:?}"))),
+                    GoalFinishMode::Normal,
                 )
                 .await?;
                 return Ok(());
@@ -753,6 +767,7 @@ async fn post_goal_master_checkpoint(
     session_checkpoint_value(
         master_session_id.0.clone(),
         content.clone(),
+        Some(snapshot.goal.id.to_string()),
         supervisor.clone(),
         reason.clone().or_else(|| {
             Some(format!(
@@ -1439,6 +1454,19 @@ pub(crate) fn goal_synthesis_timeout(dispatch_chars: usize) -> Duration {
     Duration::from_secs((300 + extra_seconds).min(900))
 }
 
+/// Mode-aware synthesis wait: the normal wrap scales with prompt size;
+/// the stop wrap-up is additionally capped at
+/// [`GOAL_STOP_SYNTHESIS_TIMEOUT_SECONDS`] — the user asked to stop.
+pub(crate) fn goal_finish_synthesis_timeout(mode: GoalFinishMode, dispatch_chars: usize) -> Duration {
+    let base = goal_synthesis_timeout(dispatch_chars);
+    match mode {
+        GoalFinishMode::Normal => base,
+        GoalFinishMode::StopWrapUp => {
+            base.min(Duration::from_secs(GOAL_STOP_SYNTHESIS_TIMEOUT_SECONDS))
+        }
+    }
+}
+
 /// `Ok(None)` = timed out — the master may still be generating; the
 /// caller decides what that means (it is NOT a goal failure).
 async fn wait_master_final_answer(
@@ -1481,8 +1509,16 @@ async fn finish_goal_with_master(
     worker_session_ids: &[SessionId],
     supervisor: Option<String>,
     reason: Option<String>,
+    mode: GoalFinishMode,
 ) -> Result<(), GalleyError> {
     let goal = snapshot.goal.clone();
+    // Terminal state is decided by why we're finishing, not by whether
+    // synthesis succeeds: a stop wrap-up that produced a fine summary is
+    // still a *stopped* goal, never a completed one.
+    let terminal_status = match mode {
+        GoalFinishMode::Normal => GoalStatus::Completed,
+        GoalFinishMode::StopWrapUp => GoalStatus::Stopped,
+    };
     shutdown_goal_worker_runners(
         galley,
         &snapshot,
@@ -1493,11 +1529,11 @@ async fn finish_goal_with_master(
             .or_else(|| Some(format!("goal {} entering master synthesis", goal.id))),
     )
     .await;
-    let Some(master_session_id) = goal.master_session_id.clone() else {
-        let summary = goal
-            .latest_summary
-            .clone()
-            .unwrap_or_else(|| "Goal completed without a desktop master session.".to_string());
+    // A stop with nothing to account for (no worker material, no result,
+    // an empty task board) keeps the historical instant-stop behavior —
+    // dispatching a wrap-up turn over nothing would only delay the stop.
+    if mode == GoalFinishMode::StopWrapUp && !goal_has_stop_wrap_up_material(&snapshot) {
+        let summary = "Goal stopped before workers produced results.".to_string();
         galley
             .create_goal_event(CreateGoalEventInput {
                 goal_id: goal.id.clone(),
@@ -1508,7 +1544,34 @@ async fn finish_goal_with_master(
             })
             .await?;
         let final_goal = galley
-            .update_goal_state(goal.id.clone(), GoalStatus::Completed, Some(summary))
+            .update_goal_state(goal.id.clone(), GoalStatus::Stopped, Some(summary))
+            .await?;
+        emit_json(&GoalRunFrame {
+            schema_version: SCHEMA_VERSION,
+            stream: "goal",
+            phase: "finished",
+            goal: &final_goal,
+            session_id: None,
+            note: None,
+        })?;
+        return Ok(());
+    }
+    let Some(master_session_id) = goal.master_session_id.clone() else {
+        let summary = goal.latest_summary.clone().unwrap_or_else(|| match mode {
+            GoalFinishMode::Normal => "Goal completed without a desktop master session.".to_string(),
+            GoalFinishMode::StopWrapUp => "Goal stopped without a desktop master session.".to_string(),
+        });
+        galley
+            .create_goal_event(CreateGoalEventInput {
+                goal_id: goal.id.clone(),
+                task_id: None,
+                author_session_id: None,
+                event_type: GoalEventType::Synthesis,
+                body: summary.clone(),
+            })
+            .await?;
+        let final_goal = galley
+            .update_goal_state(goal.id.clone(), terminal_status, Some(summary))
             .await?;
         emit_json(&GoalRunFrame {
             schema_version: SCHEMA_VERSION,
@@ -1527,8 +1590,8 @@ async fn finish_goal_with_master(
         .turn_count
         .unwrap_or(0);
     let dispatch_content =
-        build_goal_synthesis_prompt(galley, &snapshot, worker_session_ids).await?;
-    let synthesis_timeout = goal_synthesis_timeout(dispatch_content.chars().count());
+        build_goal_synthesis_prompt(galley, &snapshot, worker_session_ids, mode).await?;
+    let synthesis_timeout = goal_finish_synthesis_timeout(mode, dispatch_content.chars().count());
     session_goal_synthesize_value(
         master_session_id.0.clone(),
         goal_synthesizing(goal_narration_locale()).to_string(),
@@ -1547,7 +1610,40 @@ async fn finish_goal_with_master(
     )
     .await?
     else {
-        // Timed out — the master may STILL be generating the answer.
+        // Timed out — mode decides what that means.
+        if mode == GoalFinishMode::StopWrapUp {
+            // The user asked to stop; keeping the goal Wrapping until a
+            // resume would mean "stop" never terminates. Stop now,
+            // pointing at the master session where a late wrap-up may
+            // still land.
+            let summary = format!(
+                "Goal stopped; the wrap-up summary exceeded {}s — a late summary may still appear in master session {}.",
+                synthesis_timeout.as_secs(),
+                master_session_id
+            );
+            let _ = galley
+                .create_goal_event(CreateGoalEventInput {
+                    goal_id: goal.id.clone(),
+                    task_id: None,
+                    author_session_id: Some(master_session_id.clone()),
+                    event_type: GoalEventType::Synthesis,
+                    body: summary.clone(),
+                })
+                .await;
+            let final_goal = galley
+                .update_goal_state(goal.id.clone(), GoalStatus::Stopped, Some(summary.clone()))
+                .await?;
+            emit_json(&GoalRunFrame {
+                schema_version: SCHEMA_VERSION,
+                stream: "goal",
+                phase: "finished",
+                goal: &final_goal,
+                session_id: Some(master_session_id.0),
+                note: Some(summary),
+            })?;
+            return Ok(());
+        }
+        // Normal wrap: the master may STILL be generating the answer.
         // Failing the goal here threw away a successful run over a slow
         // final turn (and stamped it with a stale pre-run status). Keep
         // it Wrapping and point the user at the master session; `goal
@@ -1587,7 +1683,14 @@ async fn finish_goal_with_master(
         .and_then(first_non_empty_line)
         .or_else(|| first_non_empty_line(&final_answer_message.content))
         .or_else(|| final_answer_message.summary.clone())
-        .unwrap_or_else(|| "Goal completed and master synthesis was delivered.".to_string());
+        .unwrap_or_else(|| match mode {
+            GoalFinishMode::Normal => {
+                "Goal completed and master synthesis was delivered.".to_string()
+            }
+            GoalFinishMode::StopWrapUp => {
+                "Goal stopped and a wrap-up summary was delivered.".to_string()
+            }
+        });
 
     galley
         .create_goal_event(CreateGoalEventInput {
@@ -1599,7 +1702,7 @@ async fn finish_goal_with_master(
         })
         .await?;
     let final_goal = galley
-        .update_goal_state(goal.id.clone(), GoalStatus::Completed, Some(summary))
+        .update_goal_state(goal.id.clone(), terminal_status, Some(summary))
         .await?;
     let completed_snapshot = galley.goal_status_full(final_goal.id.clone()).await?;
     shutdown_goal_worker_runners(
@@ -1625,21 +1728,49 @@ async fn build_goal_synthesis_prompt(
     galley: &SqliteGalley,
     snapshot: &GoalStatusSnapshot,
     worker_session_ids: &[SessionId],
+    mode: GoalFinishMode,
 ) -> Result<String, GalleyError> {
     let goal = &snapshot.goal;
     let fallback_worker_ids = goal_worker_session_ids(snapshot, worker_session_ids);
     let worker_ids = fallback_worker_ids.as_slice();
+    // Stop wrap-up trims the prompt everywhere: fewer worker messages
+    // and no full-anchor allowance — the user asked to stop, so the
+    // master owes a brief accounting, not an anchor-polishing pass.
+    let worker_message_tail = match mode {
+        GoalFinishMode::Normal => Some(6),
+        GoalFinishMode::StopWrapUp => Some(3),
+    };
+    let anchor_char_limit = match mode {
+        // Allow the anchor itself to be large; it is the payload.
+        GoalFinishMode::Normal => 300_000,
+        // push_limited caps are cumulative: a lower anchor cap here keeps
+        // room under the later 28k caps for the task board, which is the
+        // part a stop accounting actually needs.
+        GoalFinishMode::StopWrapUp => 12_000,
+    };
     let mut out = String::new();
-    push_limited(
-        &mut out,
-        &format!(
-            "[Galley Goal Master Synthesis]\n\nYou are the master session for this Galley Goal. Answer the user directly in their language. Do not expose worker protocol, Goal ids, command logs, or internal coordination unless it materially helps the user.\n\nObjective:\n{}\n\nProduce a concise final answer with: conclusion, key evidence, important gaps or caveats, and next actions. Internal temp paths are scratch; only report a file path as the deliverable when the user explicitly asked Galley to save there.\n\nGoal status: {:?}\nProject id: {}\n\n",
-            goal.objective,
-            goal.status,
-            goal.project_id
+    match mode {
+        GoalFinishMode::Normal => push_limited(
+            &mut out,
+            &format!(
+                "[Galley Goal Master Synthesis]\n\nYou are the master session for this Galley Goal. Answer the user directly in their language. Do not expose worker protocol, Goal ids, command logs, or internal coordination unless it materially helps the user.\n\nObjective:\n{}\n\nProduce a concise final answer with: conclusion, key evidence, important gaps or caveats, and next actions. Internal temp paths are scratch; only report a file path as the deliverable when the user explicitly asked Galley to save there.\n\nGoal status: {:?}\nProject id: {}\n\n",
+                goal.objective,
+                goal.status,
+                goal.project_id
+            ),
+            28_000,
         ),
-        28_000,
-    );
+        GoalFinishMode::StopWrapUp => push_limited(
+            &mut out,
+            &format!(
+                "[Galley Goal Stop Wrap-Up]\n\nYou are the master session for this Galley Goal. The user asked to STOP the goal early. Answer the user directly in their language, in a few sentences: what was completed, what remains unfinished, and where any partial results live. Do not start new work, do not expose worker protocol, Goal ids, command logs, or internal coordination.\n\nObjective:\n{}\n\nGoal status: {:?}\nProject id: {}\n\n",
+                goal.objective,
+                goal.status,
+                goal.project_id
+            ),
+            28_000,
+        ),
+    }
 
     if let Some(deliverable) = snapshot.deliverable.as_ref() {
         // The anchor is the curated current-best result. Deliver it as the
@@ -1652,8 +1783,7 @@ async fn build_goal_synthesis_prompt(
                 "Current deliverable anchor (version {}) — this is the curated best result. Deliver it as the final answer, polishing wording and structure only; do not discard or rebuild it. The sections below are context for last-mile polish.\n\n--- DELIVERABLE ANCHOR START ---\n{}\n--- DELIVERABLE ANCHOR END ---\n\n",
                 deliverable.version, deliverable.content
             ),
-            // Allow the anchor itself to be large; it is the payload.
-            300_000,
+            anchor_char_limit,
         );
     }
 
@@ -1708,7 +1838,9 @@ async fn build_goal_synthesis_prompt(
 
     push_limited(&mut out, "Worker session latest output:\n", 28_000);
     for session_id in worker_ids {
-        let messages = galley.session_messages(session_id.clone(), Some(6)).await?;
+        let messages = galley
+            .session_messages(session_id.clone(), worker_message_tail)
+            .await?;
         push_limited(
             &mut out,
             &format!("\n## Worker session {session_id}\n"),

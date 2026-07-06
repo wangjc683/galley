@@ -142,15 +142,40 @@ export function GoalTerminalMarker({ goal }: { goal: GoalBrief }) {
     "hover:bg-hover hover:text-ink active:translate-y-px active:duration-[45ms]",
   );
 
+  // Provenance line — the only visible evidence of the "keeps improving
+  // until the budget ends" promise: N/T tasks done, elapsed, and (when
+  // the anchor was actually revised) how many deliverable versions it
+  // went through. Fields absent on pre-counter goals just drop their
+  // segment; a version of 1 is "wrote it once", not an improvement, so
+  // the revisions chip starts at 2.
+  const showTasks =
+    goal.taskCount != null &&
+    goal.completedTaskCount != null &&
+    goal.taskCount > 0;
+  const showRevisions =
+    goal.deliverableVersion != null && goal.deliverableVersion >= 2;
   return (
     <div className="my-5 flex items-center gap-2 text-[12px]">
       <Icon size={13} weight="bold" className={cn("shrink-0", tone)} />
       <span className={cn("shrink-0 font-medium", tone)}>
         {goalStageLabel(goal.status, tb)}
       </span>
+      {showTasks && (
+        <span className="shrink-0 tabular-nums text-ink-muted">
+          {`· ${conv.goalTasksCompleted(
+            goal.completedTaskCount ?? 0,
+            goal.taskCount ?? 0,
+          )}`}
+        </span>
+      )}
       {minutes != null && (
         <span className="shrink-0 tabular-nums text-ink-muted">
           {`· ${conv.goalRunElapsed(minutes)}`}
+        </span>
+      )}
+      {showRevisions && (
+        <span className="shrink-0 tabular-nums text-ink-muted">
+          {`· ${conv.goalImprovedVersions(goal.deliverableVersion ?? 0)}`}
         </span>
       )}
       <span className="h-px min-w-4 flex-1 bg-line" aria-hidden />
