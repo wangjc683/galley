@@ -13,6 +13,7 @@ import {
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
 import { logPerf, perfNow } from "@/lib/perf";
+import { toDurableStatus } from "@/lib/sessions";
 import { useManagedModelsStore } from "@/stores/managed-models";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
@@ -22,6 +23,7 @@ import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
 import type { Origin } from "@/types/conversation";
 import type {
+  DurableSessionStatus,
   Project,
   RuntimeKind,
   Session,
@@ -48,10 +50,11 @@ import type {
  *     which routes through the Rust `set_session_llm` trait method.
  *
  * Cross-store reach after M5:
- *   - `applyDerivedFromRuntime` is called by messagesStore's
- *     `fireSessionMirror` to keep `status` / `pendingApprovalCount` /
- *     `hasPendingAskUser` on the session row in sync with the live
- *     conversation state.
+ *   - Live session status is NOT stored here; each sidebar row derives
+ *     it at read time from the messages + runtime slices via
+ *     `useSessionStatusView` (replaced the old fireSessionMirror push).
+ *     `sessionFromBrief` collapses any stale runtime status from Core to
+ *     the durable subset via `toDurableStatus`.
  *   - `clearSessionMessages` (local helper) drops a session's
  *     conversation entry from messagesStore on delete + bulk delete.
  *   - `activateSession` orchestrates messagesStore.ensureMessages +
@@ -209,10 +212,12 @@ function sessionFromBrief(b: SessionBriefWire): Session {
     id: b.id,
     projectId: b.projectId,
     title: b.title,
-    status: b.status,
+    // Collapse any stale runtime status from Core's persisted column to
+    // the durable subset — the row never holds a live status; that's
+    // derived at read time (see useSessionStatusView).
+    status: toDurableStatus(b.status),
     summary: b.summary,
     turnCount: b.turnCount ?? 0,
-    pendingApprovalCount: 0,
     errorCount: 0,
     currentTool: undefined,
     pid: undefined,
@@ -395,21 +400,6 @@ interface SessionsActions {
   ) => Promise<void>;
   setActiveProjectFilter: (projectId: string | undefined) => void;
 
-  // ---- runtime-driven mirroring (cross-store entry point) ----
-  /**
-   * Sync sidebar-visible fields (status / pendingApprovalCount /
-   * hasPendingAskUser) onto the session row from the live
-   * conversation state. Called from messagesStore.fireSessionMirror
-   * after every conversation-side write.
-   *
-   * No-op when the patch matches the current row.
-   */
-  applyDerivedFromRuntime: (
-    sessionId: string,
-    patch: Partial<
-      Pick<Session, "status" | "pendingApprovalCount" | "hasPendingAskUser">
-    >,
-  ) => void;
   /**
    * Used by messagesStore.appendUserTurn / appendUserTurnExternal on
    * the first user message in a fresh session: if the title is still
@@ -651,7 +641,6 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       title: DEFAULT_NEW_SESSION_TITLE,
       status: "idle",
       projectId,
-      pendingApprovalCount: 0,
       errorCount: 0,
       lastActivityAt: now,
       createdAt: now,
@@ -704,7 +693,6 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       title: sessionTitle,
       status: "idle",
       projectId,
-      pendingApprovalCount: 0,
       errorCount: 0,
       lastActivityAt: now,
       createdAt: now,
@@ -902,7 +890,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       const sessions = state.sessions.map((s) => {
         if (!idSet.has(s.id) || s.status === "archived") return s;
         archivedCount++;
-        return { ...s, status: "archived" as SessionStatus, updatedAt: now };
+        return { ...s, status: "archived" as DurableSessionStatus, updatedAt: now };
       });
       const out: Partial<SessionsState> = { sessions };
       if (state.activeSessionId && idSet.has(state.activeSessionId)) {
@@ -941,7 +929,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       sessions: state.sessions.map((s) => {
         if (!idSet.has(s.id) || s.status !== "archived") return s;
         unarchivedCount++;
-        return { ...s, status: "idle" as SessionStatus, updatedAt: now };
+        return { ...s, status: "idle" as DurableSessionStatus, updatedAt: now };
       }),
     }));
     if (unarchivedCount === 0) return;
@@ -1221,33 +1209,6 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
   setActiveProjectFilter: (projectId) =>
     set({ activeProjectFilter: projectId }),
 
-  // ---- runtime-driven mirroring ----
-
-  applyDerivedFromRuntime: (sessionId, patch) => {
-    set((state) => {
-      const idx = state.sessions.findIndex((s) => s.id === sessionId);
-      if (idx === -1) return {};
-      const s = state.sessions[idx];
-      const newStatus = patch.status ?? s.status;
-      const newCount = patch.pendingApprovalCount ?? s.pendingApprovalCount;
-      const newAsk = patch.hasPendingAskUser ?? s.hasPendingAskUser ?? false;
-      if (
-        s.status === newStatus &&
-        s.pendingApprovalCount === newCount &&
-        (s.hasPendingAskUser ?? false) === newAsk
-      ) {
-        return {};
-      }
-      const sessions = state.sessions.slice();
-      sessions[idx] = {
-        ...s,
-        status: newStatus,
-        pendingApprovalCount: newCount,
-        hasPendingAskUser: newAsk,
-      };
-      return { sessions };
-    });
-  },
 
   maybeDeriveTitle: (sessionId, text) => {
     let derived: string | null = null;
@@ -1340,7 +1301,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
         (s) => ({
           ...s,
           title: brief.title,
-          status: brief.status,
+          status: toDurableStatus(brief.status),
           projectId: brief.projectId,
           summary: brief.summary ?? s.summary,
           turnCount: brief.turnCount ?? s.turnCount,

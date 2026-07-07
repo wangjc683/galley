@@ -81,12 +81,9 @@ function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("runtime");
   const browserControlStatus = useBrowserControlStore((s) => s.status);
 
-  // Sidebar live-status comes from `sessions` directly: messagesStore's
-  // `fireSessionMirror` writes sidebar-visible fields (status,
-  // pendingApprovalCount, hasPendingAskUser) onto each session row
-  // whenever the conversation changes, but only generates a new
-  // `sessions` array when those fields actually change. So a plain
-  // selector with default strict-equality stays stable through
+  // `sessions` carries only durable row state now; each sidebar row
+  // derives its live status at read time via `useSessionStatusView`.
+  // A plain selector with default strict-equality stays stable through
   // frequent non-sidebar updates like turn_progress streaming.
   const sessions = useSessionsStore((s) => s.sessions);
   const activeSessionId = useSessionsStore((s) => s.activeSessionId);

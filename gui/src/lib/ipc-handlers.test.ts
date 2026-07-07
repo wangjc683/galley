@@ -9,6 +9,7 @@ import {
 } from "vitest";
 
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
+import { deriveSessionStatus } from "@/lib/sessions";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -253,10 +254,14 @@ describe("dispatchIPCEvent", () => {
         args: { path: "README.md" },
       },
     ]);
-    expect(useSessionsStore.getState().sessions[0]).toMatchObject({
-      status: "waiting_approval",
-      pendingApprovalCount: 1,
-    });
+    // Approval state lives on the messages slice (asserted above); the
+    // session row keeps its durable status and derives waiting_approval
+    // at read time rather than via the removed fireSessionMirror push.
+    const row = useSessionsStore.getState().sessions[0];
+    expect(row.status).toBe("idle");
+    expect(
+      deriveSessionStatus(row, { agentRunning: true, pendingApprovalCount: 1 }),
+    ).toBe("waiting_approval");
 
     await flushPromises();
     expect(tauriMocks.invoke).toHaveBeenCalledWith(

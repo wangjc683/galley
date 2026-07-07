@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { deriveSessionStatus } from "@/lib/sessions";
 import { DEFAULT_NEW_SESSION_TITLE, useSessionsStore } from "@/stores/sessions";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -42,7 +43,7 @@ describe("messages store", () => {
     });
   });
 
-  it("appendUserTurnExternal appends, derives title, and mirrors running state", () => {
+  it("appendUserTurnExternal appends, derives title, leaves row status durable", () => {
     useMessagesStore
       .getState()
       .appendUserTurnExternal(
@@ -70,14 +71,19 @@ describe("messages store", () => {
       createdAt: "2026-06-18T08:02:00.000Z",
       origin: { via: "supervisor", supervisor: "ga-claude" },
     });
+    // Title is still derived onto the row. Running is NOT mirrored — the
+    // row keeps its durable status; running is derived at read time from
+    // the slice's agentRunning (see useSessionStatusView).
     expect(session).toMatchObject({
       title: "Summarize the release notes",
-      status: "running",
-      pendingApprovalCount: 0,
+      status: "idle",
     });
+    expect(
+      deriveSessionStatus(session, { agentRunning: true, pendingApprovalCount: 0 }),
+    ).toBe("running");
   });
 
-  it("addPendingApproval de-dupes and mirrors approval state onto the session", () => {
+  it("addPendingApproval de-dupes pending approvals", () => {
     const store = useMessagesStore.getState();
 
     store.addPendingApproval("s-test", {
@@ -101,10 +107,13 @@ describe("messages store", () => {
         args: { path: "AGENTS.md" },
       },
     ]);
-    expect(useSessionsStore.getState().sessions[0]).toMatchObject({
-      status: "waiting_approval",
-      pendingApprovalCount: 1,
-    });
+    // The row is no longer mutated with derived approval state; the
+    // pendingApprovals slice above is the source deriveSessionStatus reads.
+    const session = useSessionsStore.getState().sessions[0];
+    expect(session.status).toBe("idle");
+    expect(
+      deriveSessionStatus(session, { agentRunning: false, pendingApprovalCount: 1 }),
+    ).toBe("waiting_approval");
   });
 
   it("covers streaming and run terminal cleanup", () => {

@@ -23,6 +23,22 @@ export type SessionStatus =
   | "cancelled"
   | "archived";
 
+/**
+ * The subset of `SessionStatus` that is durable, persisted lifecycle
+ * state — the only values a `Session` row may hold. The live/runtime
+ * values (`connecting` / `running` / `waiting_approval` / `error`) are
+ * NOT stored on the row; they are derived at read time from conversation
+ * + bridge state by `deriveSessionStatus` (see `useSessionStatusView`).
+ * Narrowing the row to this type makes "the row never holds a runtime
+ * status" a compile-time guarantee rather than a convention upheld by
+ * the old `fireSessionMirror` push.
+ */
+export type DurableSessionStatus =
+  | "idle"
+  | "completed"
+  | "cancelled"
+  | "archived";
+
 export type RuntimeKind = "managed" | "external";
 
 /**
@@ -35,15 +51,19 @@ export interface Session {
   id: string;
   projectId?: string;
   title: string;
-  status: SessionStatus;
+  /**
+   * Durable lifecycle status only. Live runtime status (running /
+   * waiting_approval / connecting / error) is derived at read time via
+   * `useSessionStatusView` — never written here.
+   */
+  status: DurableSessionStatus;
 
   /** "Turn N · {one-line summary}" — used on the sidebar row. */
   summary?: string;
   turnCount?: number;
-  /** Tool name currently running, if status === "running". */
+  /** Tool name currently running, if the derived status is "running". */
   currentTool?: string;
 
-  pendingApprovalCount: number;
   errorCount: number;
   /**
    * "There is a completed reply the user hasn't seen yet." Set when
@@ -54,16 +74,6 @@ export interface Session {
    * status — the Sidebar suppresses the dot while a run is still active.
    */
   hasUnread?: boolean;
-  /**
-   * Transient: GA called `ask_user` and is waiting for the user to reply.
-   * Surfaces as the sidebar's fourth state (yellow "⏸ 等你回复"). Mirror
-   * of messagesStore's `pendingAskUser` — synced via
-   * `applyDerivedFromRuntime` so the sidebar can flip without reading
-   * conversation state directly. NOT persisted (pending questions are
-   * cleared on app restart; the conversation history still shows the
-   * question text).
-   */
-  hasPendingAskUser?: boolean;
   /**
    * GA-side per-message step the agent **most recently finished**
    * (the turnIndex passed in the last `turn_end` event for the

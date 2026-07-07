@@ -6,8 +6,6 @@ import {
   persistUserMessage,
 } from "@/lib/db";
 import { logPerf, perfNow } from "@/lib/perf";
-import { deriveSessionStatus } from "@/lib/sessions";
-import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { rowsToTurns } from "@/stores/messages/rowsToTurns";
 import type {
@@ -270,9 +268,9 @@ interface MessagesActions {
   clearInFlightContent: (sid: string) => void;
   /**
    * Set / clear the GA-side pending question for a session. `null`
-   * clears (typically after the user submits a reply). Also lights
-   * up the Sidebar yellow "⏸ 等你回复" indicator via the session row
-   * mirror written in `fireSessionMirror`.
+   * clears (typically after the user submits a reply). Drives the
+   * Sidebar yellow "⏸ 等你回复" indicator, which each row reads at
+   * render time via `useSessionStatusView`.
    */
   setPendingAskUser: (sid: string, value: PendingAskUser | null) => void;
   clearConversation: (sid: string) => void;
@@ -301,10 +299,9 @@ export interface PersistedUserTurn {
 
 /**
  * Apply an updater to a single session's messages entry. Returns the
- * fields to merge into Zustand state. The caller fires the session
- * row mirror separately (see `fireSessionMirror`) — keeping mirror
- * dispatch outside `set` preserves Zustand's single-update semantics
- * and avoids re-entrant store writes.
+ * fields to merge into Zustand state. Sidebar status is derived from
+ * this slice at read time (`useSessionStatusView`) — the store no
+ * longer pushes a mirror onto the session row.
  */
 function patchMessages(
   state: MessagesState,
@@ -317,29 +314,6 @@ function patchMessages(
     byId: { ...state.byId, [sid]: next },
     next,
   };
-}
-
-/**
- * Sync sidebar-visible fields (status, pendingApprovalCount,
- * hasPendingAskUser) onto the session row in sessionsStore. Called by
- * messagesStore actions after a `set` that touched any of the fields
- * `deriveSessionStatus` reads.
- *
- * Pulls bridgeStatus from runtimeStore because `deriveSessionStatus`
- * needs it for the `spawning` / `error` short-circuit; the session
- * row itself doesn't carry bridge status (it's not persisted state).
- */
-function fireSessionMirror(sid: string, next: PerSessionMessages): void {
-  const sessionsState = useSessionsStore.getState();
-  const session = sessionsState.sessions.find((s) => s.id === sid);
-  if (!session) return;
-  const bridgeStatus = useRuntimeStore.getState().byId[sid]?.bridgeStatus;
-  const status = deriveSessionStatus(session, next, bridgeStatus);
-  sessionsState.applyDerivedFromRuntime(sid, {
-    status,
-    pendingApprovalCount: next.pendingApprovals.length,
-    hasPendingAskUser: next.pendingAskUser !== null,
-  });
 }
 
 function replaceLastPendingUserAttachments(
@@ -394,7 +368,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
   clearStreamingOnBridgeClose: (sid) => {
     const state = get();
     if (!state.byId[sid]) return;
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       agentRunning: false,
       currentRunStartedAtMs: null,
@@ -403,9 +377,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       sendPhase: null,
       isStopping: false,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   // ---- read path ----
 
@@ -427,10 +399,8 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     if (rows.length === 0) return;
     const turns = rowsToTurns(rows);
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({ ...m, turns }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    const { byId } = patchMessages(state, sid, (m) => ({ ...m, turns }));
+    set({ byId });  },
 
   // ---- conversation writes ----
 
@@ -473,7 +443,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       height: image.height,
       createdAt: new Date().toISOString(),
     }));
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [
         ...m.turns,
@@ -504,9 +474,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       turnIndexOffset: currentTurnCount,
       lastUserPersistRequestId: persistRequestId,
     }));
-    set({ byId, userSubmitTick: state.userSubmitTick + 1 });
-    fireSessionMirror(sid, next);
-    // Derive a Sidebar title from the first user message — but only
+    set({ byId, userSubmitTick: state.userSubmitTick + 1 });    // Derive a Sidebar title from the first user message — but only
     // once, and only when the row is still wearing the seed "新对话"
     // placeholder. sessionsStore handles the trim / fallback / Rust
     // persist; this call is a no-op when the title has been edited.
@@ -592,7 +560,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       ? (createdAtToMs(createdAt) ?? Date.now())
       : null;
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [...m.turns, userTurn],
       agentRunning: dispatched,
@@ -615,28 +583,24 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       isActiveSession
         ? { byId, userSubmitTick: state.userSubmitTick + 1 }
         : { byId },
-    );
-    fireSessionMirror(sid, next);
-    useSessionsStore.getState().maybeDeriveTitle(sid, text);
+    );    useSessionsStore.getState().maybeDeriveTitle(sid, text);
   },
 
   appendSideQuestionUserTurn: (sid, text) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [...m.turns, { role: "user", content: text } as UserTurn],
       // Deliberately NOT touching agentRunning / inFlightContent /
       // currentTurnIndex / pendingAskUser — /btw is a side worker
       // path that doesn't interfere with the main agent loop.
     }));
-    set({ byId, userSubmitTick: state.userSubmitTick + 1 });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId, userSubmitTick: state.userSubmitTick + 1 });  },
 
   appendAgentTurn: (sid, turn) => {
     invalidateMessageRowsCache(sid);
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [...m.turns, turn],
       // turn_end is per-step inside GA's agent_runner_loop, NOT the
@@ -654,9 +618,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       inFlightContent: "",
       sendPhase: null,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   appendSystemTurn: (sid, turn) => {
     // Transient append — no DB persistence for V0.1. The /btw side
@@ -670,17 +632,15 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     // — /btw runs in its own worker, doesn't drive the main agent's
     // running state.
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [...m.turns, turn],
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   setAgentRunning: (sid, running) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       agentRunning: running,
       currentRunStartedAtMs: running
@@ -692,40 +652,32 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       // (or aborted-then-finished) run never leaves the button stuck.
       isStopping: running ? m.isStopping : false,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   setCurrentTurnIndex: (sid, idx) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       currentTurnIndex: idx,
       sendPhase: idx !== null ? null : m.sendPhase,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   setSendPhase: (sid, phase) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       sendPhase: phase,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   setStopping: (sid, stopping) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       isStopping: stopping,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   appendInFlightDelta: (sid, delta) => {
     // HOT PATH — streaming `turn_progress`. N7 perf baseline measured
@@ -734,39 +686,33 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     // [B3-M5-sub-plan §3 T5.3] for why we don't introduce a Rust-side
     // batch here (B3-I4 守 Rust 端不动).
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       inFlightContent: m.inFlightContent + delta,
       sendPhase: null,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   clearInFlightContent: (sid) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       inFlightContent: "",
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   setPendingAskUser: (sid, value) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       pendingAskUser: value,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   clearConversation: (sid) => {
     invalidateMessageRowsCache(sid);
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [],
       pendingApprovals: [],
@@ -777,15 +723,13 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       inFlightContent: "",
       sendPhase: null,
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   // ---- approval writes ----
 
   addPendingApproval: (sid, p) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       // de-dupe on approvalId so a re-emitted pending event doesn't
       // create twin entries
@@ -794,31 +738,25 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
         p,
       ],
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   removePendingApproval: (sid, approvalId) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       pendingApprovals: m.pendingApprovals.filter(
         (x) => x.approvalId !== approvalId,
       ),
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 
   recordApprovalDecision: (sid, approvalId, decision) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => ({
+    const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       approvalDecisions: { ...m.approvalDecisions, [approvalId]: decision },
     }));
-    set({ byId });
-    fireSessionMirror(sid, next);
-    // Best-effort Core DB write for the approval audit trail.
+    set({ byId });    // Best-effort Core DB write for the approval audit trail.
     // The matching `pending` row was written when tool_call_pending
     // arrived (see ipc-handlers.persistToolEventPendingFromIPC); this
     // update fills in approval_decision + terminal status.
@@ -837,13 +775,11 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
   // successful re-decision overwrites it.
   revokeApprovalDecision: (sid, approvalId) => {
     const state = get();
-    const { byId, next } = patchMessages(state, sid, (m) => {
+    const { byId } = patchMessages(state, sid, (m) => {
       const { [approvalId]: _dropped, ...rest } = m.approvalDecisions;
       return { ...m, approvalDecisions: rest };
     });
-    set({ byId });
-    fireSessionMirror(sid, next);
-  },
+    set({ byId });  },
 }));
 
 // Expose the store on `window.__messagesStore` in dev so the user can

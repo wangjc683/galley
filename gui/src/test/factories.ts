@@ -7,7 +7,6 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
     id: "s-test",
     title: "新对话",
     status: "idle",
-    pendingApprovalCount: 0,
     errorCount: 0,
     lastActivityAt: now,
     createdAt: now,

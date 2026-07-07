@@ -1,40 +1,64 @@
 import type { BridgeStatus } from "@/stores/runtime";
-import type { Session, SessionBucket, SessionStatus } from "@/types/session";
+import type {
+  DurableSessionStatus,
+  Session,
+  SessionBucket,
+  SessionStatus,
+} from "@/types/session";
 
 /**
- * Minimal subset of per-session conversation state needed to derive
- * session row status. Mirror of `PerSessionMessages` from
- * `@/stores/messages` — kept structural here so `lib/sessions.ts`
- * doesn't depend on the store module (avoids an import cycle with
- * messages.ts importing this file).
+ * Collapse any `SessionStatus` to the durable subset a `Session` row may
+ * hold. Core's persisted status column can carry a stale runtime value
+ * (e.g. a session that was `running` when the app died) — on load nothing
+ * is actually running, so those collapse to `idle`. Applied at the wire
+ * boundary (`sessionFromBrief`) so the row never enters a runtime status.
  */
-export interface MessagesView {
-  pendingApprovals: { approvalId: string }[];
-  agentRunning: boolean;
+export function toDurableStatus(status: SessionStatus): DurableSessionStatus {
+  switch (status) {
+    case "completed":
+    case "cancelled":
+    case "archived":
+      return status;
+    default:
+      // idle + any stale runtime value (connecting/running/
+      // waiting_approval/error) → idle.
+      return "idle";
+  }
 }
 
 /**
- * Derive the live session status by overlaying conversation state
- * (from messagesStore.byId[id]) onto the persisted Session row.
- * Long-term states the user / persistence sets (`archived` /
- * `completed` / `cancelled`) always win — they're "this is what this
- * session IS", not "what's happening right now". The remaining
- * states reflect what the bridge + agent are doing this second:
+ * Minimal live conversation state `deriveSessionStatus` overlays onto the
+ * durable row. Deliberately the narrow set the derivation actually reads
+ * — callers (see `useSessionStatusView`) project exactly these off
+ * `messagesStore.byId[id]` with a shallow subscription, so streaming
+ * `inFlightContent` deltas don't churn the derivation.
+ */
+export interface SessionLiveState {
+  agentRunning: boolean;
+  pendingApprovalCount: number;
+}
+
+/**
+ * Derive the effective session status by overlaying live conversation +
+ * bridge state onto the durable Session row. Long-term states the user /
+ * persistence sets (`archived` / `completed` / `cancelled`) always win —
+ * they're "this is what this session IS", not "what's happening right
+ * now". The remaining states reflect what the bridge + agent are doing
+ * this second:
  *
- *   pendingApprovals.length > 0 → waiting_approval (highest priority —
+ *   pendingApprovalCount > 0    → waiting_approval (highest priority —
  *                                  drives the amber pause icon)
- *   agentRunning                 → running         (apricot spinner)
- *   bridgeStatus === "spawning"  → connecting      (subtle loader)
- *   bridgeStatus === "error"     → error           (red dot)
- *   otherwise                    → idle
+ *   agentRunning                → running          (apricot spinner)
+ *   bridgeStatus === "spawning" → connecting       (subtle loader)
+ *   bridgeStatus === "error"    → error            (red dot)
+ *   otherwise                   → idle
  *
- * Used by Sidebar enrichment (in App.tsx) + messagesStore.fireSessionMirror
- * so per-row status icons + badges reflect background-session
- * activity without each component poking at `byId` directly.
+ * Pass `live === undefined` for a session with no loaded conversation
+ * slice — the derivation falls back to the durable row status.
  */
 export function deriveSessionStatus(
-  session: Session,
-  messages: MessagesView | undefined,
+  session: Pick<Session, "status">,
+  live: SessionLiveState | undefined,
   bridgeStatus?: BridgeStatus | undefined,
 ): SessionStatus {
   if (
@@ -44,9 +68,9 @@ export function deriveSessionStatus(
   ) {
     return session.status;
   }
-  if (!messages) return session.status;
-  if (messages.pendingApprovals.length > 0) return "waiting_approval";
-  if (messages.agentRunning) return "running";
+  if (!live) return session.status;
+  if (live.pendingApprovalCount > 0) return "waiting_approval";
+  if (live.agentRunning) return "running";
   // bridgeStatus moved to runtimeStore in M3b — callers fetch it from
   // useRuntimeStore.getState().byId[sid]?.bridgeStatus and pass in.
   if (bridgeStatus === "spawning") return "connecting";

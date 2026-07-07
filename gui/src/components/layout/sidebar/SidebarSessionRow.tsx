@@ -15,6 +15,7 @@ import {
 
 import { IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
+import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
 import { StatusIcon } from "@/lib/status-icon";
@@ -98,11 +99,15 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // Active row is always treated as read (the user is looking at
   // it); even if the final turn_end fires there, bumpSessionAfterTurn
   // skips the unread mark for sessionId === activeSessionId.
-  const hasPendingAsk = !!session.hasPendingAskUser;
-  const isRunning = session.status === "running";
+  // Effective status is derived at read time from live conversation +
+  // bridge state (replaces the old fireSessionMirror push onto the row).
+  const { status, pendingApprovalCount, hasPendingAskUser } =
+    useSessionStatusView(session);
+  const hasPendingAsk = hasPendingAskUser;
+  const isRunning = status === "running";
   const hasPendingApproval =
-    session.status === "waiting_approval" || session.pendingApprovalCount > 0;
-  const hasBlockingError = session.status === "error";
+    status === "waiting_approval" || pendingApprovalCount > 0;
+  const hasBlockingError = status === "error";
   // Master session of a running/wrapping goal: the work happens in
   // worker sessions, so this session's own status is idle. Surface the
   // goal-running state on its row so the board doesn't read it as idle.
@@ -168,7 +173,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   const cleanSummary = session.summary
     ? stripLegacyStepPrefix(session.summary)
     : null;
-  const approvalCount = session.pendingApprovalCount || 0;
+  const approvalCount = pendingApprovalCount;
   const errorCount = session.errorCount || 0;
   // Goal-master running subline, e.g. "运行中 · 2 个 Agent" — reuses the
   // TopBar stage + worker-count copy so the row reads the same language
@@ -198,7 +203,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             : cleanSummary
               ? // A user-aborted session must not claim completion —
                 // its icon is already Prohibit; the words must match.
-                session.status === "cancelled"
+                status === "cancelled"
                 ? copy.sidebar.cancelledSummary(cleanSummary)
                 : copy.sidebar.completedSummary(cleanSummary)
               : null;
@@ -352,7 +357,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           <PauseCircle size={14} weight="fill" className="text-warning" />
         ) : (
           <StatusIcon
-            status={goalRunning ? "running" : session.status}
+            status={goalRunning ? "running" : status}
             size={14}
             unread={showUnread}
           />
