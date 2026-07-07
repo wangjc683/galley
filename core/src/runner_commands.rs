@@ -302,7 +302,7 @@ pub(crate) async fn prepare_managed_runtime_context(
         ),
         (
             "GALLEY_RUNTIME_PROMPT_TEXT".into(),
-            managed_prompt::RUNTIME_PROMPT.into(),
+            managed_prompt::compose_runtime_prompt(&app.package_info().version.to_string()),
         ),
         ("GALLEY_MANAGED_MODEL_CONFIG_JSON".into(), runtime_config),
     ];

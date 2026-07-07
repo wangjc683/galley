@@ -9,7 +9,12 @@ use std::fmt::Write;
 
 pub const PROMPT_PROFILE_ID: &str = "galley-runtime-v1";
 
-pub(crate) const RUNTIME_PROMPT: &str = r#"## Galley Runtime Layer
+/// Static runtime rules. The full prompt sent to managed GA is composed by
+/// [`compose_runtime_prompt`], which appends a session-start state block.
+/// Author facts are deliberately closed-world: the prompt states that nothing
+/// beyond the given name forms is known, so the model declines instead of
+/// extrapolating (e.g. inventing a Chinese full name from the GitHub handle).
+pub(crate) const RUNTIME_PROMPT_STATIC: &str = r#"## Galley Runtime Layer
 
 You are running inside Galley.
 
@@ -20,17 +25,18 @@ agents, run local tasks, work with files, use a connected browser, manage
 sessions and projects, and connect local channels such as WeChat or Feishu when
 configured.
 
-Galley is developed by JC Wang, an AI application builder with a philosophy
-background and interests in Wittgenstein, philosophy of language, and LLMs. The
-project page is:
+Galley is developed by JC Wang (GitHub: wangjc683) — a somewhat mysterious
+figure. Beyond this name and the project page, nothing about the author is
+known: not a full name in any language, not a biography, not a location. If
+asked for more, say so plainly — the mystery is part of the answer. Do not
+guess, translate, or expand the author's name into other forms, and do not
+invent biographical details. The project page is:
 https://github.com/wangjc683/galley
 
+Write the product name as "Galley" — never as an all-caps wordmark.
+
 Mention Galley, JC Wang, or the project page only when the user asks about
-Galley, its author, source code, or product background. Do not invent exact
-current metadata such as version, release channel, model configuration, runtime
-mode, session state, project state, or available integrations. Use exposed
-Galley state when available; otherwise ask the user to check the relevant
-Settings page.
+Galley, its author, source code, or product background.
 
 ## Browser Control
 
@@ -88,6 +94,41 @@ Coverage and limits — state these honestly:
 - Do NOT look for past conversations under ../memory/L4_raw_sessions/. That
   history layer is inactive in Galley's session mode and is always empty — use
   the CLI above instead."#;
+
+/// Full managed runtime prompt: static rules plus a session-start state block.
+///
+/// State-block admission rules (all four must hold): users actually ask for
+/// it, Core knows it reliably at spawn time, it cannot change within a
+/// session (stale injected state answered confidently is worse than "I don't
+/// know"), and it is safe to send to the LLM provider on every request.
+pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
+    format!(
+        r#"{RUNTIME_PROMPT_STATIC}
+
+## Galley State
+
+Facts about this Galley installation, captured at session start:
+
+- Galley version: {app_version}
+- Platform: {platform}
+- Engine: Galley managed runtime (Galley's bundled engine, built on
+  GenericAgent)
+
+For state not listed here — model configuration, connected channels, update
+channel, session or project state — do not guess. Check it through Galley CLI
+where available; otherwise ask the user to check the relevant Settings page."#,
+        platform = platform_label(),
+    )
+}
+
+fn platform_label() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "macOS",
+        "windows" => "Windows",
+        "linux" => "Linux",
+        other => other,
+    }
+}
 
 /// Stable supervisor identity for a managed IM channel. Passed as
 /// `--supervisor` on every CLI write (mandated by the entry-layer prompt)
@@ -147,9 +188,12 @@ unclear."#
     )
 }
 
+/// Prompt-generation fingerprint for diagnostics. Hashes only the static
+/// rules: the state block is data, not behavior, so app-version bumps must
+/// not read as new prompt generations.
 pub(crate) fn prompt_hash() -> String {
     let mut context = Context::new(&SHA256);
-    context.update(RUNTIME_PROMPT.trim().as_bytes());
+    context.update(RUNTIME_PROMPT_STATIC.trim().as_bytes());
     short_hex(context.finish().as_ref(), 8)
 }
 
@@ -174,6 +218,23 @@ mod tests {
         let hash = prompt_hash();
         assert_eq!(hash.len(), 8);
         assert!(hash.chars().all(|ch| ch.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn composed_prompt_appends_state_block_after_static_rules() {
+        let prompt = compose_runtime_prompt("0.2.9-test");
+        assert!(prompt.starts_with(RUNTIME_PROMPT_STATIC));
+        assert!(prompt.contains("## Galley State"));
+        assert!(prompt.contains("Galley version: 0.2.9-test"));
+        assert!(prompt.contains(&format!("Platform: {}", platform_label())));
+    }
+
+    #[test]
+    fn state_block_stays_out_of_static_rules_and_hash() {
+        assert!(!RUNTIME_PROMPT_STATIC.contains("## Galley State"));
+        let hash_before = prompt_hash();
+        let _ = compose_runtime_prompt("9.9.9");
+        assert_eq!(prompt_hash(), hash_before);
     }
 
     #[test]
