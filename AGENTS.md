@@ -226,6 +226,25 @@ surfaces, prefer `pnpm --dir gui typecheck`, `pnpm --dir gui lint`, and
 `git diff --check`; JC will do final visual acceptance in the real app unless
 explicitly asking the agent to run desktop/browser dogfood.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live as local markdown under `.scratch/<feature-slug>/`; triage
+state is a `Status:` line in each file. See
+[issue-tracker](./docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Five canonical roles with default strings (`needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`). See
+[triage-labels](./docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md` + `docs/adr/`. See
+[domain](./docs/agents/domain.md).
+
 ## Documentation Discipline
 
 - `AGENTS.md` should stay short and global.
