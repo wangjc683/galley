@@ -33,7 +33,6 @@ from runner.workbench_bridge import (
     _llm_display_name,
     _managed_model_config_from_env,
     _message_to_content_blocks,
-    _parent_loss_reason,
 )
 
 # ---------------- _classify_error ----------------
@@ -125,28 +124,9 @@ def test_classify_case_insensitive() -> None:
     assert hint == "check_llm_config"
 
 
-# ---------------- parent watchdog ----------------
-
-
-def test_parent_watchdog_detects_missing_core_pid(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("runner.workbench_bridge._parent_process_alive", lambda _pid: False)
-
-    reason = _parent_loss_reason(parent_pid=12345, original_ppid=100)
-
-    assert reason == "Galley Core process 12345 disappeared"
-
-
-def test_parent_watchdog_detects_ppid_change(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("runner.workbench_bridge._parent_process_alive", lambda _pid: True)
-    monkeypatch.setattr(os, "getppid", lambda: 321)
-
-    reason = _parent_loss_reason(parent_pid=123, original_ppid=100)
-
-    assert reason == "parent process changed from 100 to 321"
+# Parent-watchdog liveness logic moved to runner/_watchdog.py — covered by
+# test_watchdog.py. Only the workbench-specific pet-cleanup wiring is tested
+# here (see test_bridge_registers_parent_loss_pet_cleanup below).
 
 
 # ---------------- _llm_display_name ----------------
@@ -914,22 +894,6 @@ def test_run_loop_exit_detaches_pet() -> None:
 
     assert bridge.run() == 0
     assert detach_calls == [True]
-
-
-def test_exit_parentless_runs_registered_cleanup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """os._exit skips finally/atexit, so parent-loss exit must run the
-    registered cleanup (pet detach) explicitly before dying."""
-    import runner.workbench_bridge as wb
-
-    calls: list[str] = []
-    monkeypatch.setattr(wb, "_EXIT_FOR_PARENT_LOSS", lambda _code: None)
-    monkeypatch.setattr(wb, "_PARENT_LOSS_CLEANUP", [lambda: calls.append("pet")])
-
-    with pytest.raises(SystemExit):
-        wb._exit_parentless("test parent loss")
-    assert calls == ["pet"]
 
 
 def test_bridge_registers_parent_loss_pet_cleanup(

@@ -16,13 +16,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Any
 
-from runner import managed_runtime
+from runner import _watchdog, managed_runtime
 
 IM_SUPERVISOR_PROMPT_ENV = "GALLEY_IM_SUPERVISOR_PROMPT_TEXT"
-GALLEY_CORE_PID_ENV = "GALLEY_CORE_PID"
 IM_SUPERVISOR_LOCK_NAME = "supervisor.lock"
-PARENT_WATCH_INTERVAL_SEC = 2.0
-_EXIT_FOR_PARENT_LOSS = os._exit
 
 
 def _capture_real_stdout() -> IO[str]:
@@ -40,93 +37,15 @@ def _emit(out: IO[str], **payload: Any) -> None:
     try:
         print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), file=out)
     except BrokenPipeError:
-        _exit_parentless("Galley Core status pipe closed")
+        _watchdog.exit_parentless(
+            "Galley Core status pipe closed", label="managed-im-supervisor"
+        )
     except OSError as e:
         if e.errno == errno.EPIPE:
-            _exit_parentless("Galley Core status pipe closed")
-        raise
-
-
-def _exit_parentless(reason: str) -> None:
-    try:
-        print(f"[managed-im-supervisor] exiting: {reason}", file=sys.__stderr__, flush=True)
-    except Exception:
-        pass
-    _EXIT_FOR_PARENT_LOSS(0)
-    raise SystemExit(0)
-
-
-def _parse_core_pid() -> int | None:
-    raw = os.environ.get(GALLEY_CORE_PID_ENV)
-    if not raw:
-        return None
-    try:
-        pid = int(raw)
-    except ValueError:
-        return None
-    if pid <= 0 or pid == os.getpid():
-        return None
-    return pid
-
-
-def _parent_process_alive(pid: int) -> bool:
-    if os.name == "nt":  # pragma: no cover - exercised on Windows smoke only
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
-            process_query_limited_information = 0x1000
-            synchronize = 0x00100000
-            wait_timeout = 0x00000102
-            handle = kernel32.OpenProcess(
-                process_query_limited_information | synchronize,
-                False,
-                wintypes.DWORD(pid),
+            _watchdog.exit_parentless(
+                "Galley Core status pipe closed", label="managed-im-supervisor"
             )
-            if not handle:
-                return False
-            try:
-                result = int(kernel32.WaitForSingleObject(handle, 0))
-                return result == wait_timeout
-            finally:
-                kernel32.CloseHandle(handle)
-        except Exception:
-            return True
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-
-
-def _parent_loss_reason(parent_pid: int | None, original_ppid: int | None) -> str | None:
-    if parent_pid is None:
-        return None
-    if not _parent_process_alive(parent_pid):
-        return f"Galley Core process {parent_pid} disappeared"
-    if original_ppid is not None and hasattr(os, "getppid"):
-        current_ppid = os.getppid()
-        if current_ppid not in {original_ppid, parent_pid}:
-            return f"parent process changed from {original_ppid} to {current_ppid}"
-    return None
-
-
-def _start_parent_watchdog(parent_pid: int | None) -> None:
-    if parent_pid is None:
-        return
-    original_ppid = os.getppid() if hasattr(os, "getppid") else None
-
-    def _watch() -> None:
-        while True:
-            time.sleep(PARENT_WATCH_INTERVAL_SEC)
-            reason = _parent_loss_reason(parent_pid, original_ppid)
-            if reason:
-                _exit_parentless(reason)
-
-    threading.Thread(target=_watch, name="galley-im-parent-watchdog", daemon=True).start()
+        raise
 
 
 class _SupervisorLock:
@@ -171,7 +90,7 @@ class _SupervisorLock:
                     "pid": os.getpid(),
                     "platform": platform,
                     "stateDir": str(state_dir),
-                    "corePid": os.environ.get(GALLEY_CORE_PID_ENV),
+                    "corePid": os.environ.get(_watchdog.GALLEY_CORE_PID_ENV),
                     "updatedAt": datetime.now(timezone.utc)
                     .isoformat(timespec="milliseconds")
                     .replace("+00:00", "Z"),
@@ -591,7 +510,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     out = _capture_real_stdout()
-    _start_parent_watchdog(_parse_core_pid())
+    _watchdog.start_parent_watchdog(
+        _watchdog.parse_core_pid(),
+        label="managed-im-supervisor",
+        thread_name="galley-im-parent-watchdog",
+    )
     if not managed_runtime.is_managed_runtime():
         _emit(out, platform=args.platform, state="error", lastError="not a managed runtime")
         return 1

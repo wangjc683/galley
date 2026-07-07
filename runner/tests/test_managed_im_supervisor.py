@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from runner import managed_im_supervisor, managed_runtime
+from runner import _watchdog, managed_im_supervisor, managed_runtime
 
 
 def _write_fake_fsapp(ga_path: Path, body: str) -> None:
@@ -57,7 +57,8 @@ def test_emit_broken_pipe_exits_parentless(monkeypatch: Any) -> None:
         codes.append(code)
         raise ExitCalledError()
 
-    monkeypatch.setattr(managed_im_supervisor, "_EXIT_FOR_PARENT_LOSS", fake_exit)
+    # _emit routes its broken-pipe exit through the shared watchdog now.
+    monkeypatch.setattr(_watchdog, "_EXIT_FOR_PARENT_LOSS", fake_exit)
 
     with pytest.raises(ExitCalledError):
         managed_im_supervisor._emit(_BrokenPipeOut(), platform="feishu", state="running")
@@ -65,21 +66,8 @@ def test_emit_broken_pipe_exits_parentless(monkeypatch: Any) -> None:
     assert codes == [0]
 
 
-def test_parent_watchdog_detects_missing_parent(monkeypatch: Any) -> None:
-    monkeypatch.setattr(managed_im_supervisor, "_parent_process_alive", lambda _pid: False)
-
-    reason = managed_im_supervisor._parent_loss_reason(parent_pid=12345, original_ppid=100)
-
-    assert reason == "Galley Core process 12345 disappeared"
-
-
-def test_parent_watchdog_detects_ppid_change(monkeypatch: Any) -> None:
-    monkeypatch.setattr(managed_im_supervisor, "_parent_process_alive", lambda _pid: True)
-    monkeypatch.setattr(os, "getppid", lambda: 321)
-
-    reason = managed_im_supervisor._parent_loss_reason(parent_pid=123, original_ppid=100)
-
-    assert reason == "parent process changed from 100 to 321"
+# Parent-watchdog liveness logic moved to runner/_watchdog.py — covered by
+# test_watchdog.py.
 
 
 def test_run_feishu_reports_existing_supervisor_lock(tmp_path: Path) -> None:
