@@ -5,6 +5,7 @@
 // no store dependency.
 
 import { settledToolStatus } from "@/lib/tool-outcome";
+import { makeMessageStepper } from "@/lib/turn-index";
 import type {
   AgentTurn,
   ConversationToolEvent,
@@ -35,21 +36,15 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
   const turns: Turn[] = [];
   // Per-message step recovery: AgentTurn.turnIndex is the GA-side
   // per-message step (1 for the first turn of each user message,
-  // 2 for the second, etc) — that's what the user expects to see
-  // in the "第 N 步" UI. SQLite however stores the **absolute**
-  // session-wide turn_index to avoid primary-key collisions
-  // between different user messages' assistant rows (see
-  // turnIndexOffset rationale in messages.ts appendUserTurn).
-  //
-  // To map back from absolute to per-message at restore, we walk
-  // rows in (turn_index, sequence) order and track the latest
-  // user row's turn_index as the base of the current user_message
-  // "block". Each assistant row's display step is then
-  // `absolute - base + 1`.
-  let currentMessageBase: number | null = null;
+  // 2 for the second, etc) — what the user sees as "第 N 步".
+  // SQLite stores the **absolute** session-wide turn_index instead,
+  // to avoid primary-key collisions between user messages' assistant
+  // rows. The stepper owns that absolute→step mapping and its
+  // block-base reset rule; see lib/turn-index.ts for the invariant.
+  const stepper = makeMessageStepper();
   for (const row of rows) {
     if (row.role === "user") {
-      currentMessageBase = row.turn_index;
+      stepper.onUserRow(row.turn_index);
       const userTurn: UserTurn = {
         role: "user",
         content: row.content,
@@ -81,10 +76,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
           resultPreview,
         };
       });
-      const displayStep =
-        currentMessageBase !== null
-          ? row.turn_index - currentMessageBase + 1
-          : row.turn_index; // defensive: no preceding user row found
+      const displayStep = stepper.stepFor(row.turn_index);
       // Normalize empty-string final_answer back to null (same as
       // ipc-handlers turnFromTurnEnd does for live events). Old rows
       // written before commit 1d0c404's fix may have stored "" for

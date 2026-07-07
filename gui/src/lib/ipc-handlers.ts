@@ -15,6 +15,7 @@ import {
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
 import { settledToolStatus } from "@/lib/tool-outcome";
+import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
 import type {
   AgentTurn,
@@ -208,17 +209,13 @@ export function dispatchIPCEvent(event: IPCEvent): void {
 
     case "turn_end": {
       const visibility = eventVisibility(event);
-      // GA's agent_runner_loop resets turn=1 on every put_task
-      // (per-message), so event.turnIndex is the per-message
-      // step (the value users want to see in "第 N 步"). For
-      // SQLite, we add the runtime's offset to get an absolute
-      // session-wide turn index — the primary key
-      // `msg_${sessionId}_${turnIndex}_assistant` would collide
-      // across user messages otherwise. See messages.ts
-      // appendUserTurn for the `turnIndexOffset` rationale.
+      // SQLite keys on the absolute, session-wide turn index (the
+      // per-message `msg_${sessionId}_${turnIndex}_assistant` primary key
+      // would collide across user messages otherwise). Core normally
+      // supplies it on the event; the offset is the fallback. See
+      // lib/turn-index.ts for the invariant.
       const offset = messages.byId[event.sessionId]?.turnIndexOffset ?? 0;
-      const absoluteTurnIndex =
-        event.absoluteTurnIndex ?? event.turnIndex + offset;
+      const absoluteTurnIndex = resolveAbsoluteTurnIndex(event, offset);
       console.info("[ipc] turn_end", {
         gaTurnIndex: event.turnIndex,
         absoluteTurnIndex,
@@ -274,8 +271,7 @@ export function dispatchIPCEvent(event: IPCEvent): void {
 
     case "tool_call_pending": {
       const offset = messages.byId[event.sessionId]?.turnIndexOffset ?? 0;
-      const absoluteTurnIndex =
-        event.absoluteTurnIndex ?? event.turnIndex + offset;
+      const absoluteTurnIndex = resolveAbsoluteTurnIndex(event, offset);
       const target = pickTarget(event.args);
       const pending: PendingApproval = {
         approvalId: event.approvalId,
