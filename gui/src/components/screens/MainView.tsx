@@ -21,6 +21,7 @@ import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
+import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
@@ -211,19 +212,12 @@ export function MainView({
   // Streaming state, subscribed locally so token churn stays inside
   // this subtree instead of re-rendering the whole app. These were
   // previously passed as props from App; see MainViewProps docs above.
-  const inFlightContent = useMessagesStore((s) =>
-    activeSessionId ? (s.byId[activeSessionId]?.inFlightContent ?? "") : "",
-  );
-  const sendPhase = useMessagesStore((s) =>
-    activeSessionId ? (s.byId[activeSessionId]?.sendPhase ?? null) : null,
-  );
-  const currentTurnIndex = useMessagesStore((s) =>
-    activeSessionId ? (s.byId[activeSessionId]?.currentTurnIndex ?? null) : null,
-  );
-  const currentRunStartedAtMs = useMessagesStore((s) =>
-    activeSessionId
-      ? (s.byId[activeSessionId]?.currentRunStartedAtMs ?? null)
-      : null,
+  const inFlightContent = useActiveMessages((m) => m.inFlightContent, "");
+  const sendPhase = useActiveMessages((m) => m.sendPhase, null);
+  const currentTurnIndex = useActiveMessages((m) => m.currentTurnIndex, null);
+  const currentRunStartedAtMs = useActiveMessages(
+    (m) => m.currentRunStartedAtMs,
+    null,
   );
   const userSubmitTick = useMessagesStore((s) => s.userSubmitTick);
 

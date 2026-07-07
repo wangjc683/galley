@@ -37,6 +37,10 @@ import {
   aggregateChannelsState,
   restartEnabledImSupervisors,
 } from "@/lib/im-supervisor";
+import {
+  useActiveMessages,
+  useActiveRuntime,
+} from "@/hooks/useActiveSession";
 import { resolveDisplayedLLM } from "@/lib/current-llm";
 import { resolveLanguagePreference } from "@/lib/language";
 import {
@@ -129,16 +133,17 @@ function App() {
   // LLM / runtimeInfo / pet state now live in runtimeStore (M3a).
   // Subscribe to the active session's per-runtime entry so the
   // Composer pill + dropdown + Inspector tab re-render on changes.
-  const activeRuntimeLLMs = useRuntimeStore((s) =>
-    screen === "main" && activeSessionId
-      ? s.byId[activeSessionId]?.llms
-      : undefined,
+  const activeSessionLLMs = useActiveRuntime((r) => r.llms, undefined);
+  const activeSessionLLMDisplayName = useActiveRuntime(
+    (r) => r.llmDisplayName,
+    undefined,
   );
-  const activeRuntimeDisplayName = useRuntimeStore((s) =>
-    screen === "main" && activeSessionId
-      ? s.byId[activeSessionId]?.llmDisplayName
-      : undefined,
-  );
+  // Only surface the per-session LLM on the main screen (empty / settings
+  // screens fall back to cached / managed in resolveDisplayedLLM).
+  const activeRuntimeLLMs =
+    screen === "main" ? activeSessionLLMs : undefined;
+  const activeRuntimeDisplayName =
+    screen === "main" ? activeSessionLLMDisplayName : undefined;
   const cachedLLMs = useRuntimeStore((s) => s.cachedLLMs);
   const cachedLLMDisplayName = useRuntimeStore((s) => s.cachedLLMDisplayName);
   const pendingLLMIndex = useRuntimeStore((s) => s.pendingLLMIndex);
@@ -152,10 +157,9 @@ function App() {
   // sessionsStore (declared above), used by every selector below to
   // index into messagesStore.byId. EMPTY_* singletons keep React 19
   // strict-mode getSnapshot stable across renders.
-  const approvalDecisions = useMessagesStore((s) =>
-    activeSessionId
-      ? (s.byId[activeSessionId]?.approvalDecisions ?? EMPTY_DECISIONS)
-      : EMPTY_DECISIONS,
+  const approvalDecisions = useActiveMessages(
+    (m) => m.approvalDecisions,
+    EMPTY_DECISIONS,
   );
   const recordApprovalDecision = useMessagesStore(
     (s) => s.recordApprovalDecision,
@@ -188,11 +192,7 @@ function App() {
   const restartAppUpdate = useAppUpdateStore((s) => s.restart);
   const [emptyComposerFocusTick, setEmptyComposerFocusTick] = useState(0);
 
-  const bridgeStatus = useRuntimeStore((s) =>
-    activeSessionId
-      ? (s.byId[activeSessionId]?.bridgeStatus ?? "idle")
-      : "idle",
-  );
+  const bridgeStatus = useActiveRuntime((r) => r.bridgeStatus, "idle");
   const sendIPCCommand = useRuntimeStore((s) => s.sendIPCCommand);
   const shutdownBridge = useRuntimeStore((s) => s.shutdownBridge);
   const setGAConfig = usePrefsStore((s) => s.setGAConfig);
@@ -355,28 +355,17 @@ function App() {
     }
   };
 
-  const storeTurns = useMessagesStore((s) =>
-    activeSessionId
-      ? (s.byId[activeSessionId]?.turns ?? EMPTY_TURNS)
-      : EMPTY_TURNS,
+  const storeTurns = useActiveMessages((m) => m.turns, EMPTY_TURNS);
+  const storePending = useActiveMessages(
+    (m) => m.pendingApprovals,
+    EMPTY_APPROVALS,
   );
-  const storePending = useMessagesStore((s) =>
-    activeSessionId
-      ? (s.byId[activeSessionId]?.pendingApprovals ?? EMPTY_APPROVALS)
-      : EMPTY_APPROVALS,
-  );
-  const agentRunning = useMessagesStore((s) =>
-    activeSessionId ? (s.byId[activeSessionId]?.agentRunning ?? false) : false,
-  );
-  const isStopping = useMessagesStore((s) =>
-    activeSessionId ? (s.byId[activeSessionId]?.isStopping ?? false) : false,
-  );
+  const agentRunning = useActiveMessages((m) => m.agentRunning, false);
+  const isStopping = useActiveMessages((m) => m.isStopping, false);
   const hasRunningSessions = useMessagesStore((s) =>
     Object.values(s.byId).some((messages) => messages.agentRunning),
   );
-  const pendingAskUser = useMessagesStore((s) =>
-    activeSessionId ? (s.byId[activeSessionId]?.pendingAskUser ?? null) : null,
-  );
+  const pendingAskUser = useActiveMessages((m) => m.pendingAskUser, null);
   const appendUserTurn = useMessagesStore((s) => s.appendUserTurn);
   const appendSideQuestionUserTurn = useMessagesStore(
     (s) => s.appendSideQuestionUserTurn,
