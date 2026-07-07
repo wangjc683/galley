@@ -37,6 +37,7 @@ import {
   aggregateChannelsState,
   restartEnabledImSupervisors,
 } from "@/lib/im-supervisor";
+import { resolveDisplayedLLM } from "@/lib/current-llm";
 import { resolveLanguagePreference } from "@/lib/language";
 import {
   currentLLMDisplayName,
@@ -231,15 +232,18 @@ function App() {
     managedLLMs,
     copy.app.unconfiguredModel,
   );
-  const fallbackLLMs =
-    activeRuntimeKind === "managed" ? managedLLMs : cachedLLMs;
-  const fallbackLLMDisplayName =
-    activeRuntimeKind === "managed"
-      ? managedLLMDisplayName
-      : cachedLLMDisplayName;
-  const llms = activeRuntimeLLMs ?? fallbackLLMs;
-  const llmDisplayName =
-    activeRuntimeDisplayName ?? fallbackLLMDisplayName ?? "";
+  // Display precedence (active slot > managed/external fallback) lives in
+  // resolveDisplayedLLM now; i18n stays here (managedLLMDisplayName above,
+  // llmConfigHint below).
+  const { llms, displayName: llmDisplayName } = resolveDisplayedLLM({
+    runtimeKind: activeRuntimeKind,
+    activeRuntimeLLMs,
+    activeRuntimeDisplayName,
+    managedLLMs,
+    managedDisplayName: managedLLMDisplayName,
+    cachedLLMs,
+    cachedDisplayName: cachedLLMDisplayName,
+  });
   const llmConfigHint =
     activeRuntimeKind === "managed" ? undefined : copy.app.externalModelHint;
   const hasConfiguredManagedModel = managedModels.some(
