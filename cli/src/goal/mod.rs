@@ -8,7 +8,9 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-use crate::args::{GoalDeliverableCmd, GoalEventCmd, GoalTaskCmd, GoalWriteModeArg, RuntimeArg};
+use crate::args::{
+    GoalDeliverableCmd, GoalEventCmd, GoalModeArg, GoalTaskCmd, GoalWriteModeArg, RuntimeArg,
+};
 use crate::common::{cli_origin, emit_json, runtime_kind_for_goal};
 use galley_core_lib::api::{
     ClaimGoalTaskInput, CreateGoalEventInput, CreateGoalProposalInput, CreateGoalTaskInput,
@@ -25,6 +27,7 @@ pub(crate) async fn goal_propose(
     workers: u32,
     runtime: RuntimeArg,
     write_mode: GoalWriteModeArg,
+    mode: GoalModeArg,
     expires_minutes: u32,
     supervisor: Option<String>,
     reason: Option<String>,
@@ -41,6 +44,7 @@ pub(crate) async fn goal_propose(
                 worker_limit: Some(workers),
                 runtime_kind: Some(runtime_kind),
                 write_mode: Some(write_mode.into()),
+                mode: Some(mode.into()),
                 expires_in_seconds: Some(expires_minutes.saturating_mul(60)),
             },
             cli_origin(supervisor, reason),

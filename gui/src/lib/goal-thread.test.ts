@@ -15,6 +15,7 @@ function goal(overrides: Partial<GoalBrief>): GoalBrief {
     workerLimit: 3,
     runtimeKind: "managed",
     writeMode: "autonomous",
+    mode: "hive",
     startedAt: "2026-07-01T10:00:00Z",
     deadlineAt: "2026-07-01T10:30:00Z",
     endedAt: "2026-07-01T10:28:00Z",

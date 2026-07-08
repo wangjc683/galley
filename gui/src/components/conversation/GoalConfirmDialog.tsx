@@ -6,12 +6,16 @@ import { Button, DialogActionRow } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { GoalLaunchConfig } from "@/types/goal";
+import type { GoalLaunchConfig, GoalMode } from "@/types/goal";
 
 const DEFAULT_GOAL_BUDGET_MINUTES = 30;
 const MIN_CUSTOM_GOAL_BUDGET_MINUTES = 5;
 const MAX_CUSTOM_GOAL_BUDGET_MINUTES = 120;
 const DEFAULT_GOAL_AGENT_COUNT = 3;
+// Below this budget, the hive engine spends most of its time on spin-up and
+// coordination rather than the work — so the multi-viewpoint option is gated
+// off and the run falls back to solo. See .scratch/goal-solo-hive/PRD.md D2.
+const HIVE_MIN_BUDGET_MINUTES = 10;
 type GoalBudgetPreset = "15" | "30" | "60" | "custom";
 type GoalAgentCountPreset = "2" | "3" | "4" | "5";
 
@@ -52,6 +56,9 @@ export function GoalConfirmDialog({
   const [customBudgetMinutes, setCustomBudgetMinutes] = useState(
     String(DEFAULT_GOAL_BUDGET_MINUTES),
   );
+  // Solo is the product default; hive is a deliberate opt-in (a secondary,
+  // outcome-labeled control), not a peer choice presented up front.
+  const [mode, setMode] = useState<GoalMode>("solo");
 
   const customBudgetNumber = Number.parseInt(customBudgetMinutes, 10);
   const customBudgetValid =
@@ -66,6 +73,11 @@ export function GoalConfirmDialog({
         : DEFAULT_GOAL_BUDGET_MINUTES
       : Number.parseInt(budgetPreset, 10);
   const workerLimit = Number.parseInt(agentCountPreset, 10);
+  const hiveAllowed = budgetMinutes >= HIVE_MIN_BUDGET_MINUTES;
+  // A budget too small for hive silently falls back to solo so the run never
+  // burns its whole budget on coordination — see HIVE_MIN_BUDGET_MINUTES.
+  const effectiveMode: GoalMode =
+    mode === "hive" && hiveAllowed ? "hive" : "solo";
   const disabledDurationOptions: {
     value: GoalBudgetPreset;
     label: string;
@@ -193,19 +205,56 @@ export function GoalConfirmDialog({
               )}
             </section>
 
-            <section className="space-y-2">
-              <div className="text-[12px] font-medium text-ink-soft">
-                {copy.composer.goalAgentCount}
+            {effectiveMode === "solo" ? (
+              <div className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMode("hive")}
+                  disabled={submitting || !hiveAllowed}
+                  className={cn(
+                    "self-start text-[12px] font-medium underline-offset-2 transition-colors",
+                    hiveAllowed
+                      ? "text-ink-muted hover:text-brand hover:underline"
+                      : "cursor-not-allowed text-ink-muted/50",
+                  )}
+                >
+                  {copy.composer.goalHiveToggle}
+                </button>
+                {!hiveAllowed && (
+                  <span className="text-[11px] text-ink-muted">
+                    {copy.composer.goalHiveBudgetHint(HIVE_MIN_BUDGET_MINUTES)}
+                  </span>
+                )}
               </div>
-              <SegmentedControl<GoalAgentCountPreset>
-                value={agentCountPreset}
-                onValueChange={setAgentCountPreset}
-                options={disabledAgentCountOptions}
-                ariaLabel={copy.composer.goalAgentCount}
-                size="md"
-                className="max-w-full"
-              />
-            </section>
+            ) : (
+              <section className="flex flex-col gap-2 rounded-md border border-line bg-app px-3 py-2.5">
+                <div className="text-[12px] font-medium text-ink">
+                  {copy.composer.goalHiveTitle}
+                </div>
+                <div className="text-[11.5px] leading-relaxed text-ink-muted">
+                  {copy.composer.goalHiveDescription}
+                </div>
+                <div className="pt-1 text-[12px] font-medium text-ink-soft">
+                  {copy.composer.goalHiveAgentCount}
+                </div>
+                <SegmentedControl<GoalAgentCountPreset>
+                  value={agentCountPreset}
+                  onValueChange={setAgentCountPreset}
+                  options={disabledAgentCountOptions}
+                  ariaLabel={copy.composer.goalHiveAgentCount}
+                  size="md"
+                  className="max-w-full"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMode("solo")}
+                  disabled={submitting}
+                  className="self-start text-[11.5px] text-ink-muted underline-offset-2 transition-colors hover:text-ink-soft hover:underline"
+                >
+                  {copy.composer.goalHiveBackToSolo}
+                </button>
+              </section>
+            )}
           </div>
 
           <DialogActionRow>
@@ -222,6 +271,7 @@ export function GoalConfirmDialog({
                 onConfirm({
                   workerLimit,
                   budgetSeconds: budgetMinutes * 60,
+                  mode: effectiveMode,
                 })
               }
               disabled={submitting || !objective || !customBudgetValid}

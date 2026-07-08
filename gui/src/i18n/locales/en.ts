@@ -305,6 +305,14 @@ export const enCopy: AppCopy = {
     goalDurationMinutes: "minutes",
     goalDurationRange: "5-120 minutes",
     goalAgentCount: "Max Agents",
+    goalHiveToggle: "Need multiple independent viewpoints cross-checking?",
+    goalHiveTitle: "Multiple independent viewpoints, cross-checked",
+    goalHiveDescription:
+      "Slower and costlier, in exchange for several agents cross-checking each other. Best when the answer is contestable and needs independent verification.",
+    goalHiveAgentCount: "Independent viewpoints",
+    goalHiveBackToSolo: "Back to a single agent",
+    goalHiveBudgetHint: (minutes: number) =>
+      `Cross-checking needs at least ${minutes} minutes; the current run time is too short, so a single agent will run.`,
     cannotSwitchRunning: "Can't switch LLMs while running",
     switchCurrent: (name) => `Switch LLM · Current: ${name}`,
     configureModels: "Configure models",

@@ -177,9 +177,12 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   const errorCount = session.errorCount || 0;
   // Goal-master running subline, e.g. "运行中 · 2 个 Agent" — reuses the
   // TopBar stage + worker-count copy so the row reads the same language
-  // as the goal pill. Null unless this session masters a goal.
+  // as the goal pill. Null unless this session masters a goal. Solo is a
+  // single agent, so the hive-only "N agents" count is dropped for it.
   const goalSubline = goalMaster
-    ? `${goalStageLabel(goalMaster.status, copy.topbar)} · ${copy.topbar.goalWorkerCount(goalMaster.workerLimit)}`
+    ? goalMaster.mode === "solo"
+      ? goalStageLabel(goalMaster.status, copy.topbar)
+      : `${goalStageLabel(goalMaster.status, copy.topbar)} · ${copy.topbar.goalWorkerCount(goalMaster.workerLimit)}`
     : null;
   // Subline doubles as the status line — always state-colored, upright
   // (no italic), text-explicit for the blocking states so a glance

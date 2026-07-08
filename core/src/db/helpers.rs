@@ -207,6 +207,25 @@ pub(super) fn goal_write_mode_sql(mode: GoalWriteMode) -> &'static str {
     }
 }
 
+pub(super) fn parse_goal_mode(s: &str) -> Result<GoalMode> {
+    Ok(match s {
+        "hive" => GoalMode::Hive,
+        "solo" => GoalMode::Solo,
+        other => {
+            return Err(GalleyError::Internal {
+                message: format!("unknown goal mode: {other}"),
+            });
+        }
+    })
+}
+
+pub(super) fn goal_mode_sql(mode: GoalMode) -> &'static str {
+    match mode {
+        GoalMode::Hive => "hive",
+        GoalMode::Solo => "solo",
+    }
+}
+
 pub(super) fn parse_goal_task_status(s: &str) -> Result<GoalTaskStatus> {
     Ok(match s {
         "open" => GoalTaskStatus::Open,

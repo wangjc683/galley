@@ -20,6 +20,9 @@ export interface GoalBrief {
   workerLimit: number;
   runtimeKind: RuntimeKind;
   writeMode: GoalWriteMode;
+  /** Engine: `solo` (single agent) or `hive` (master + workers). Drives
+   * mode-specific UI (e.g. solo hides the hive-only "N agents" chip). */
+  mode: GoalMode;
   startedAt: string;
   deadlineAt: string;
   endedAt?: string;
@@ -44,6 +47,9 @@ export interface StartDesktopGoalInput {
   runtimeKind?: RuntimeKind;
   budgetSeconds?: number;
   workerLimit?: number;
+  /** Goal engine. Omitted → `hive` (backward-compat default resolved in
+   * Core). The GUI sends `solo` as the product default. */
+  mode?: GoalMode;
   /** Display name of the model the operator picked in the Composer at
    * launch. Best-effort applied to the master session (and inherited by
    * worker sessions) by the backend; a miss falls back to the GA
@@ -78,9 +84,14 @@ export interface StartDesktopGoalResult {
   masterMessage: GoalMasterMessage;
 }
 
+/** Which Goal engine to run. `solo` = one agent to budget (product
+ * default); `hive` = master + parallel workers, cross-verified. */
+export type GoalMode = "solo" | "hive";
+
 export interface GoalLaunchConfig {
   workerLimit: number;
   budgetSeconds: number;
+  mode: GoalMode;
 }
 
 export interface GoalTaskBrief {

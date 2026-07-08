@@ -73,8 +73,13 @@ export function GoalCommissionMarker({
           {conv.goalEyebrow}
         </span>
         <span className="ml-auto flex items-center gap-1.5 text-[11px] tabular-nums text-ink-muted">
-          <span>{tb.goalWorkerCount(goal.workerLimit)}</span>
-          <span aria-hidden>·</span>
+          {/* Solo is a single agent — drop the hive-only "N agents". */}
+          {goal.mode !== "solo" && (
+            <>
+              <span>{tb.goalWorkerCount(goal.workerLimit)}</span>
+              <span aria-hidden>·</span>
+            </>
+          )}
           <span>{conv.goalBudget(budgetMinutes)}</span>
           <span aria-hidden>·</span>
           <span>{writeLabel}</span>

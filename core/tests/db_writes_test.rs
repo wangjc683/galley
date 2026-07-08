@@ -9,11 +9,11 @@
 
 use galley_core_lib::api::{
     ClaimGoalTaskInput, CreateGoalEventInput, CreateGoalProposalInput, CreateGoalTaskInput,
-    CreateProjectInput, CreateSessionInput, GalleyApi, GoalEventType, GoalStatus, GoalTaskStatus,
-    GoalWriteMode, ManagedModelAuthKind, ManagedModelCredentialStatus, ManagedModelProtocol,
-    MessageTelemetry, MessageVisibility, Origin, ProjectId, ProjectPatch, RuntimeKind,
-    SessionFilter, SessionId, SessionStatus, UpdateGoalTaskInput, DEFAULT_GOAL_BUDGET_SECONDS,
-    DEFAULT_GOAL_WORKER_LIMIT, MAX_GOAL_WORKER_LIMIT,
+    CreateProjectInput, CreateSessionInput, GalleyApi, GoalEventType, GoalMode, GoalStatus,
+    GoalTaskStatus, GoalWriteMode, ManagedModelAuthKind, ManagedModelCredentialStatus,
+    ManagedModelProtocol, MessageTelemetry, MessageVisibility, Origin, ProjectId, ProjectPatch,
+    RuntimeKind, SessionFilter, SessionId, SessionStatus, UpdateGoalTaskInput,
+    DEFAULT_GOAL_BUDGET_SECONDS, DEFAULT_GOAL_WORKER_LIMIT, MAX_GOAL_WORKER_LIMIT,
 };
 use galley_core_lib::credential_store;
 use galley_core_lib::db::{
@@ -57,6 +57,7 @@ const MIG_028: &str = include_str!("../migrations/028_message_telemetry.sql");
 const MIG_029: &str = include_str!("../migrations/029_managed_model_custom_context_win.sql");
 const MIG_030: &str = include_str!("../migrations/030_single_active_goal.sql");
 const MIG_031: &str = include_str!("../migrations/031_message_goal_id.sql");
+const MIG_032: &str = include_str!("../migrations/032_goal_mode.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -97,7 +98,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
-        MIG_031,
+        MIG_031, MIG_032,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -220,6 +221,7 @@ async fn goal_lifecycle_defaults_task_event_and_stop() {
                 worker_limit: None,
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, Some("test proposal".into())),
@@ -316,6 +318,221 @@ async fn goal_lifecycle_defaults_task_event_and_stop() {
     assert!(galley.list_active_goals().await.expect("active").is_empty());
 }
 
+/// Engine mode defaults to Hive (backward-compat for existing API/CLI
+/// callers) and, when set, flows proposal → goal so the controller can
+/// dispatch solo vs hive. See `.scratch/goal-solo-hive/issues/02-solo-engine.md`.
+#[tokio::test]
+async fn goal_mode_defaults_hive_and_flows_solo_through_proposal() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+
+    // Unspecified mode → Hive (existing behavior unchanged).
+    let hive_prop = galley
+        .create_goal_proposal(
+            CreateGoalProposalInput {
+                objective: "Default mode".into(),
+                project_id: None,
+                master_session_id: None,
+                budget_seconds: None,
+                worker_limit: None,
+                runtime_kind: Some(RuntimeKind::Managed),
+                write_mode: None,
+                mode: None,
+                expires_in_seconds: None,
+            },
+            Origin::cli(None, Some("test".into())),
+        )
+        .await
+        .expect("create hive proposal");
+    assert_eq!(hive_prop.mode, GoalMode::Hive);
+    let hive_goal = galley
+        .start_goal_from_proposal(
+            hive_prop.id.clone(),
+            hive_prop.internal_confirm_token.clone(),
+            Origin::cli(None, Some("confirmed".into())),
+        )
+        .await
+        .expect("start hive goal");
+    assert_eq!(hive_goal.mode, GoalMode::Hive);
+    // End it so the single-active-goal index frees up for the next start.
+    galley
+        .update_goal_state(hive_goal.id.clone(), GoalStatus::Completed, None)
+        .await
+        .expect("complete hive goal");
+
+    // Explicit Solo flows through to the goal row.
+    let solo_prop = galley
+        .create_goal_proposal(
+            CreateGoalProposalInput {
+                objective: "Solo mode".into(),
+                project_id: None,
+                master_session_id: None,
+                budget_seconds: None,
+                worker_limit: None,
+                runtime_kind: Some(RuntimeKind::Managed),
+                write_mode: None,
+                mode: Some(GoalMode::Solo),
+                expires_in_seconds: None,
+            },
+            Origin::cli(None, Some("test".into())),
+        )
+        .await
+        .expect("create solo proposal");
+    assert_eq!(solo_prop.mode, GoalMode::Solo);
+    let solo_goal = galley
+        .start_goal_from_proposal(
+            solo_prop.id.clone(),
+            solo_prop.internal_confirm_token.clone(),
+            Origin::cli(None, Some("confirmed".into())),
+        )
+        .await
+        .expect("start solo goal");
+    assert_eq!(solo_goal.mode, GoalMode::Solo);
+    // The goal_status snapshot the controller reads must carry the mode too.
+    let snapshot = galley
+        .goal_status(solo_goal.id.clone())
+        .await
+        .expect("goal status");
+    assert_eq!(snapshot.goal.mode, GoalMode::Solo);
+}
+
+/// A Goal task must never be owned by the Goal's master session: the master
+/// decomposes/curates and produces the synthesized anchor, but never owns a
+/// scoped worker task. The guard covers create/claim/update, and the worker
+/// context reverse-lookup excludes the master even against dirty data so the
+/// master never renders the worker banner. See
+/// `.scratch/goal-solo-hive/issues/01-master-self-claim-guardrail.md`.
+#[tokio::test]
+async fn goal_task_owner_cannot_be_master_and_master_shows_no_worker_banner() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+
+    seed_session_idle(&pool, "sess_master").await;
+    seed_session_idle(&pool, "sess_worker").await;
+
+    let proposal = galley
+        .create_goal_proposal(
+            CreateGoalProposalInput {
+                objective: "Guard master ownership".into(),
+                project_id: None,
+                master_session_id: Some(sid("sess_master")),
+                budget_seconds: None,
+                worker_limit: None,
+                runtime_kind: Some(RuntimeKind::Managed),
+                write_mode: None,
+                mode: None,
+                expires_in_seconds: None,
+            },
+            Origin::cli(None, Some("test".into())),
+        )
+        .await
+        .expect("create proposal");
+    let goal = galley
+        .start_goal_from_proposal(
+            proposal.id.clone(),
+            proposal.internal_confirm_token.clone(),
+            Origin::cli(None, Some("confirmed".into())),
+        )
+        .await
+        .expect("start goal");
+
+    // create with owner = master is rejected.
+    let create_master = galley
+        .create_goal_task(CreateGoalTaskInput {
+            goal_id: goal.id.clone(),
+            title: "Master self-claim".into(),
+            description: None,
+            scope: Some("goal-worker-1:master-round-1:x".into()),
+            owner_session_id: Some(sid("sess_master")),
+        })
+        .await;
+    assert!(
+        matches!(create_master, Err(GalleyError::InvalidArgs { .. })),
+        "create with owner=master must be rejected, got {create_master:?}"
+    );
+
+    // create open (no owner) works.
+    let task = galley
+        .create_goal_task(CreateGoalTaskInput {
+            goal_id: goal.id.clone(),
+            title: "Open task".into(),
+            description: None,
+            scope: Some("goal-worker-1:master-round-1:x".into()),
+            owner_session_id: None,
+        })
+        .await
+        .expect("create open task");
+    assert_eq!(task.status, GoalTaskStatus::Open);
+
+    // claim by master rejected; claim by worker works.
+    let claim_master = galley
+        .claim_goal_task(ClaimGoalTaskInput {
+            task_id: task.id.clone(),
+            owner_session_id: sid("sess_master"),
+            scope: None,
+        })
+        .await;
+    assert!(
+        matches!(claim_master, Err(GalleyError::InvalidArgs { .. })),
+        "claim by master must be rejected, got {claim_master:?}"
+    );
+    let claimed = galley
+        .claim_goal_task(ClaimGoalTaskInput {
+            task_id: task.id.clone(),
+            owner_session_id: sid("sess_worker"),
+            scope: None,
+        })
+        .await
+        .expect("worker claim ok");
+    assert_eq!(claimed.owner_session_id, Some(sid("sess_worker")));
+
+    // update to owner=master is rejected.
+    let update_master = galley
+        .update_goal_task(UpdateGoalTaskInput {
+            task_id: task.id.clone(),
+            status: None,
+            owner_session_id: Some(Some(sid("sess_master"))),
+            scope: None,
+            result_summary: None,
+        })
+        .await;
+    assert!(
+        matches!(update_master, Err(GalleyError::InvalidArgs { .. })),
+        "update owner=master must be rejected, got {update_master:?}"
+    );
+
+    // Banner fallback: even with pre-guard dirty data (a task raw-inserted with
+    // the master stamped as owner), the reverse-lookup returns None for the
+    // master so it never renders the worker banner. The real worker still does.
+    sqlx::query(
+        "INSERT INTO goal_tasks \
+            (id, goal_id, title, status, owner_session_id, created_at, updated_at) \
+         VALUES ('gtask_dirty', ?, 'dirty', 'claimed', 'sess_master', \
+            '2026-07-08T00:00:00Z', '2026-07-08T00:00:00Z')",
+    )
+    .bind(goal.id.as_str())
+    .execute(&pool)
+    .await
+    .expect("raw insert dirty master-owned task");
+
+    let ctx_master = galley
+        .goal_worker_context(&sid("sess_master"))
+        .await
+        .expect("worker context master");
+    assert!(
+        ctx_master.is_none(),
+        "master must not render a worker banner even with dirty data"
+    );
+    let ctx_worker = galley
+        .goal_worker_context(&sid("sess_worker"))
+        .await
+        .expect("worker context worker");
+    assert!(
+        ctx_worker.is_some(),
+        "a real worker with an owned task still shows the banner"
+    );
+}
+
 #[tokio::test]
 async fn goal_scoped_message_rows_carry_goal_id() {
     let pool = fresh_pool().await;
@@ -332,6 +549,7 @@ async fn goal_scoped_message_rows_carry_goal_id() {
                 worker_limit: None,
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, Some("test proposal".into())),
@@ -395,6 +613,7 @@ async fn goal_worker_context_resolves_latest_owned_task() {
                 worker_limit: None,
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, Some("test proposal".into())),
@@ -482,6 +701,7 @@ async fn visible_goals_keep_stopped_until_seen() {
                 worker_limit: None,
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, Some("test proposal".into())),
@@ -533,6 +753,7 @@ async fn goal_status_full_keeps_events_the_windowed_view_evicts() {
                 worker_limit: None,
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, Some("test proposal".into())),
@@ -616,6 +837,7 @@ async fn goal_proposal_worker_limit_is_capped_at_official_hive_max() {
                 worker_limit: Some(9),
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, Some("test worker cap".into())),
@@ -642,6 +864,7 @@ async fn goal_master_session_visible_until_result_seen() {
                 worker_limit: Some(3),
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::gui(),
@@ -713,6 +936,7 @@ async fn goal_start_rejects_token_mismatch_and_expired_proposal() {
                 worker_limit: None,
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, None),
@@ -770,6 +994,7 @@ async fn single_active_goal_blocks_second_start_until_first_ends() {
                         worker_limit: None,
                         runtime_kind: Some(RuntimeKind::Managed),
                         write_mode: None,
+                        mode: None,
                         expires_in_seconds: None,
                     },
                     Origin::cli(None, None),
@@ -842,6 +1067,7 @@ async fn goal_deliverable_versions_increment_and_surface_in_status() {
                 worker_limit: None,
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, Some("test".into())),
@@ -922,6 +1148,7 @@ async fn goal_deliverable_oversized_content_is_truncated_with_note() {
                 worker_limit: None,
                 runtime_kind: Some(RuntimeKind::Managed),
                 write_mode: None,
+                mode: None,
                 expires_in_seconds: None,
             },
             Origin::cli(None, None),

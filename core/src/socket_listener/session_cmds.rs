@@ -54,6 +54,17 @@ struct SessionGoalMasterPlanArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SessionGoalSoloTurnArgs {
+    session_id: String,
+    dispatch_content: String,
+    #[serde(default)]
+    supervisor: Option<String>,
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SessionWatchArgs {
     session_id: String,
 }
@@ -213,7 +224,11 @@ pub(super) async fn dispatch_session_checkpoint(
                 )
                 .await
         }
-        _ => galley.send_system_message(session_id, content, origin).await,
+        _ => {
+            galley
+                .send_system_message(session_id, content, origin)
+                .await
+        }
     };
     let brief = match send {
         Ok(b) => b,
@@ -414,6 +429,113 @@ pub(super) async fn dispatch_session_goal_master_plan(
             request_id,
             "runner_error",
             format!("session.goal_master_plan runner dispatch: {e}"),
+        ),
+    }
+}
+
+/// Solo-Goal working turn. Deep-research shape: the "keep going" nudge and the
+/// agent's intermediate grind are **internal** (hidden) — a fast-turn solo
+/// Goal can run dozens of short turns, and surfacing every one plus its nudge
+/// buries the thread. The user sees only their objective and the final answer
+/// (the visible synthesis wrap). Kept as a distinct command from
+/// `session.goal_master_plan` for naming clarity and isolation, though both
+/// are internal spawn-and-dispatch.
+///
+/// Unlike `session.send` (best-effort to an already-live runner), this
+/// **ensures the runner is spawned** first: a solo session has no runner until
+/// the controller drives it, so a bare `session.send` would only pile
+/// persisted messages onto a dead session (the original tight-loop bug).
+/// Persist internal → spawn runner → dispatch internal.
+pub(super) async fn dispatch_session_goal_solo_turn(
+    request_id: Option<String>,
+    args: Value,
+    app: Option<&AppHandle>,
+    manager: &RunnerManager,
+) -> SocketResponse {
+    let parsed: SessionGoalSoloTurnArgs = match serde_json::from_value(args) {
+        Ok(a) => a,
+        Err(e) => {
+            return SocketResponse::err(
+                request_id,
+                "invalid_args",
+                format!("session.goal_solo_turn args: {e}"),
+            );
+        }
+    };
+    let dispatch_content = parsed.dispatch_content.trim().to_string();
+    if dispatch_content.is_empty() {
+        return SocketResponse::err(
+            request_id,
+            "invalid_args",
+            "session.goal_solo_turn: dispatchContent is empty",
+        );
+    }
+
+    let galley = match SqliteGalley::open().await {
+        Ok(g) => g,
+        Err(e) => {
+            return SocketResponse::err(request_id, "db_unavailable", format!("open: {e}"));
+        }
+    };
+    let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
+    let session_id = SessionId(parsed.session_id.clone());
+    // Internal — the nudge and the turn it drives stay out of the user thread.
+    let brief = match galley
+        .send_message_with_visibility(
+            session_id,
+            dispatch_content.clone(),
+            origin,
+            MessageVisibility::Internal,
+        )
+        .await
+    {
+        Ok(b) => b,
+        Err(e) => return map_galley_err(request_id, e),
+    };
+
+    if let Err(e) = ensure_goal_synthesis_runner(
+        &galley,
+        app,
+        manager,
+        &parsed.session_id,
+        "session.goal_solo_turn",
+    )
+    .await
+    {
+        return e.with_request_id(request_id);
+    }
+
+    let absolute_turn_index = match brief.turn_index.map(i64::from) {
+        Some(v) => v,
+        None => {
+            return SocketResponseLite::runner_error("session.goal_solo_turn missing turn_index")
+                .with_request_id(request_id);
+        }
+    };
+
+    match manager
+        .send_command(
+            &parsed.session_id,
+            &IpcCommand::UserMessage(UserMessageCommand {
+                text: dispatch_content,
+                images: vec![],
+                visibility: Some("internal".to_string()),
+                absolute_turn_index: Some(absolute_turn_index),
+            }),
+        )
+        .await
+    {
+        Ok(()) => SocketResponse::ok(
+            request_id,
+            serde_json::json!({
+                "message": brief,
+                "dispatch": "dispatched",
+            }),
+        ),
+        Err(e) => SocketResponse::err(
+            request_id,
+            "runner_error",
+            format!("session.goal_solo_turn runner dispatch: {e}"),
         ),
     }
 }

@@ -59,8 +59,8 @@ use crate::api::message::{MessageBrief, MessageVisibility};
 use crate::api::project::{CreateProjectInput, ProjectBrief, ProjectId};
 use crate::api::session::{CreateSessionInput, SessionBrief};
 use crate::api::{
-    GalleyApi, GoalId, ManagedModelCredentialStatus, Origin, OriginVia, RuntimeKind,
-    SessionFilter, SessionId,
+    GalleyApi, GoalId, ManagedModelCredentialStatus, Origin, OriginVia, RuntimeKind, SessionFilter,
+    SessionId,
 };
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};
@@ -573,6 +573,9 @@ async fn dispatch_line(
         ),
         "session.goal_master_plan" => DispatchResult::Unary(
             dispatch_session_goal_master_plan(request_id, req.args, app, manager).await,
+        ),
+        "session.goal_solo_turn" => DispatchResult::Unary(
+            dispatch_session_goal_solo_turn(request_id, req.args, app, manager).await,
         ),
         "session.watch" => dispatch_session_watch(request_id, req.args, manager).await,
         // ---- B4 M1 session write commands ----

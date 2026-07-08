@@ -7,8 +7,8 @@
 //! `desktop_goal::start_desktop_goal` in the command handler.
 
 use crate::api::{
-    self, CreateGoalProposalInput, GalleyApi, GoalBrief, GoalLocale, GoalStatus, GoalWriteMode,
-    MessageBrief, Origin, ProjectId, RuntimeKind, SessionId,
+    self, CreateGoalProposalInput, GalleyApi, GoalBrief, GoalLocale, GoalMode, GoalStatus,
+    GoalWriteMode, MessageBrief, Origin, ProjectId, RuntimeKind, SessionId,
 };
 use crate::commands::stringify_error;
 use crate::db::SqliteGalley;
@@ -56,6 +56,12 @@ pub(crate) struct StartDesktopGoalInput {
     budget_seconds: Option<u32>,
     #[serde(default)]
     worker_limit: Option<u32>,
+    /// Which Goal engine to run. The GUI sends `solo` as the product
+    /// default and `hive` when the operator explicitly opts into
+    /// multi-worker cross-verification. Omitted → `hive` (backward-compat
+    /// default resolved in Core), so an older GUI keeps current behavior.
+    #[serde(default)]
+    mode: Option<GoalMode>,
     /// Display name of the model the operator picked in the Composer at
     /// launch (case-insensitive). Best-effort applied to the master
     /// session's LLM so its bridge — and, via inheritance, the goal's
@@ -102,6 +108,7 @@ pub(crate) async fn start_desktop_goal(
                 worker_limit: input.worker_limit,
                 runtime_kind: input.runtime_kind.or(Some(RuntimeKind::Managed)),
                 write_mode: Some(GoalWriteMode::Autonomous),
+                mode: input.mode,
                 expires_in_seconds: None,
             },
             Origin::gui(),

@@ -488,6 +488,27 @@ pub(crate) async fn session_goal_master_plan_value(
     unary_command_value(req).await
 }
 
+/// Dispatch a visible solo-Goal working turn, spawning the session's runner
+/// if it isn't alive. See `dispatch_session_goal_solo_turn` in Core.
+pub(crate) async fn session_goal_solo_turn_value(
+    id: String,
+    dispatch_content: String,
+    supervisor: Option<String>,
+    reason: Option<String>,
+) -> Result<serde_json::Value, GalleyError> {
+    let req = serde_json::json!({
+        "command": "session.goal_solo_turn",
+        "args": {
+            "sessionId": id,
+            "dispatchContent": dispatch_content,
+            "supervisor": supervisor,
+            "reason": reason,
+        },
+        "schemaVersion": SCHEMA_VERSION,
+    });
+    unary_command_value(req).await
+}
+
 pub(crate) async fn session_checkpoint_value(
     id: String,
     content: String,

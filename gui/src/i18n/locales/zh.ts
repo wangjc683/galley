@@ -291,6 +291,14 @@ export const zhCopy = {
     goalDurationMinutes: "分钟",
     goalDurationRange: "5-120 分钟",
     goalAgentCount: "Agent 数量上限",
+    goalHiveToggle: "需要多个独立视角交叉验证？",
+    goalHiveTitle: "多个独立视角交叉验证",
+    goalHiveDescription:
+      "更慢、更贵，换取多个 agent 相互挑错的独立验证。适合答案有争议、需要交叉核对的目标。",
+    goalHiveAgentCount: "独立视角数量",
+    goalHiveBackToSolo: "改回单个 agent",
+    goalHiveBudgetHint: (minutes: number) =>
+      `多视角交叉验证需要至少 ${minutes} 分钟；当前运行时间太短，将用单个 agent。`,
     cannotSwitchRunning: "运行中无法切换 LLM",
     switchCurrent: (name: string) => `切换 LLM · 当前 ${name}`,
     configureModels: "配置模型",

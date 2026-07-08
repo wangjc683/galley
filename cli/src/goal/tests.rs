@@ -1,7 +1,7 @@
 use galley_core_lib::api::{
-    GoalBrief, GoalEventBrief, GoalEventType, GoalId, GoalStatus, GoalStatusSnapshot,
-    GoalTaskBrief, GoalTaskId, GoalTaskStatus, GoalWriteMode, ProjectId, RuntimeKind, SessionBrief,
-    SessionId, SessionStatus,
+    GoalBrief, GoalEventBrief, GoalEventType, GoalId, GoalMode, GoalStatus, GoalStatusSnapshot,
+    GoalTaskBrief, GoalTaskId, GoalTaskStatus, GoalWriteMode, MessageBrief, MessageId, MessageRole,
+    ProjectId, RuntimeKind, SessionBrief, SessionId, SessionStatus,
 };
 
 use super::controller::{
@@ -10,7 +10,7 @@ use super::controller::{
     goal_master_checkpoint_seen, goal_ready_idle_worker_slot_indices,
     goal_ready_worker_slot_indices, goal_seed_task_specs, goal_worker_has_progress_signal,
     goal_worker_has_terminal_signal, goal_worker_session_ids, goal_worker_terminal_counts,
-    goal_worker_wave_baseline, goal_wrapping_summary, ControllerLock,
+    goal_worker_wave_baseline, goal_wrapping_summary, solo_turn_produced_output, ControllerLock,
 };
 use super::signals::goal_summary_event_is_new;
 
@@ -36,6 +36,7 @@ fn test_goal() -> GoalBrief {
         worker_limit: 2,
         runtime_kind: RuntimeKind::Managed,
         write_mode: GoalWriteMode::Autonomous,
+        mode: GoalMode::Hive,
         started_at: "2026-06-05T00:00:00Z".to_string(),
         deadline_at: "2026-06-05T00:15:00Z".to_string(),
         ended_at: None,
@@ -804,4 +805,61 @@ fn controller_lock_degrades_to_unlocked_without_workspace_path() {
         acquire_goal_controller_lock(&goal),
         ControllerLock::Unlocked
     ));
+}
+
+fn test_message(
+    role: MessageRole,
+    turn_index: u32,
+    content: &str,
+    final_answer: Option<&str>,
+) -> MessageBrief {
+    MessageBrief {
+        id: MessageId("m_test".to_string()),
+        session_id: SessionId("solo".to_string()),
+        role,
+        content: content.to_string(),
+        final_answer: final_answer.map(str::to_string),
+        created_at: "2026-07-08T00:00:00Z".to_string(),
+        summary: None,
+        turn_index: Some(turn_index),
+        visibility: None,
+        attachments: vec![],
+        origin: None,
+    }
+}
+
+#[test]
+fn solo_turn_produced_output_needs_a_strictly_newer_agent_reply() {
+    // Newest agent reply that existed when we dispatched was turn 2.
+    let after = Some(2);
+
+    // The freshly-dispatched user nudge alone must NOT count as completion —
+    // that was the tight-loop bug (send -> immediately "done" -> send again).
+    let only_user = vec![test_message(MessageRole::User, 3, "[keep going]", None)];
+    assert!(!solo_turn_produced_output(&only_user, after));
+
+    // The PREVIOUS turn's agent reply (turn_index == after) must NOT re-count
+    // — the `>` (not `>=`) is exactly what stopped the burst of nudges.
+    let same_turn_agent = vec![test_message(MessageRole::Agent, 2, "prev answer", Some("prev"))];
+    assert!(!solo_turn_produced_output(&same_turn_agent, after));
+
+    // A strictly newer agent reply with content counts.
+    let fresh_content = vec![
+        test_message(MessageRole::Agent, 2, "prev answer", Some("prev")),
+        test_message(MessageRole::User, 3, "[keep going]", None),
+        test_message(MessageRole::Agent, 3, "here is progress", None),
+    ];
+    assert!(solo_turn_produced_output(&fresh_content, after));
+
+    // A newer agent reply carrying only a final answer counts too.
+    let fresh_final = vec![test_message(MessageRole::Agent, 5, "", Some("final answer"))];
+    assert!(solo_turn_produced_output(&fresh_final, after));
+
+    // An empty newer agent reply (no content, no final answer) must NOT count.
+    let empty_agent = vec![test_message(MessageRole::Agent, 5, "   ", None)];
+    assert!(!solo_turn_produced_output(&empty_agent, after));
+
+    // No prior agent reply (None) → the first agent reply of any index counts.
+    let first_reply = vec![test_message(MessageRole::Agent, 0, "first", None)];
+    assert!(solo_turn_produced_output(&first_reply, None));
 }

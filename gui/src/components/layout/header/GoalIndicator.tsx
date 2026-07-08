@@ -177,28 +177,28 @@ export function GoalIndicator({
                     </div>
                   )}
                   <div className="mt-1 text-[11px] tabular-nums text-ink-muted">
-                    <span>{copy.goalWorkerCount(goal.workerLimit)}</span>
-                    {goal.taskCount != null &&
+                    {[
+                      // Solo is a single agent — drop the hive-only "N agents".
+                      goal.mode !== "solo"
+                        ? copy.goalWorkerCount(goal.workerLimit)
+                        : null,
+                      goal.taskCount != null &&
                       goal.completedTaskCount != null &&
-                      goal.taskCount > 0 && (
-                        <span>
-                          {" · "}
-                          {copy.goalTaskProgress(
+                      goal.taskCount > 0
+                        ? copy.goalTaskProgress(
                             goal.completedTaskCount,
                             goal.taskCount,
-                          )}
-                        </span>
-                      )}
-                    {(goal.status === "running" ||
-                      goal.status === "wrapping") && (
-                      <span>
-                        {" · "}
-                        {copy.goalElapsedOfBudget(
-                          elapsedRunMinutes(goal),
-                          Math.max(1, Math.round(goal.budgetSeconds / 60)),
-                        )}
-                      </span>
-                    )}
+                          )
+                        : null,
+                      goal.status === "running" || goal.status === "wrapping"
+                        ? copy.goalElapsedOfBudget(
+                            elapsedRunMinutes(goal),
+                            Math.max(1, Math.round(goal.budgetSeconds / 60)),
+                          )
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
 
                   <div className="mt-3 flex flex-col gap-2">

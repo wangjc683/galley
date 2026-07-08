@@ -234,6 +234,12 @@ pub fn run() {
             sql: include_str!("../migrations/031_message_goal_id.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 32,
+            description: "add goal solo/hive engine mode",
+            sql: include_str!("../migrations/032_goal_mode.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     // Pre-migration backup hook (B4 M8). Derived — not hard-coded —

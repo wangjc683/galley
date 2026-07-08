@@ -31,15 +31,17 @@ use crate::goal::task_seed::{
 use crate::goal::types::*;
 use crate::project::project_follow;
 use crate::session::{
-    session_checkpoint_value, session_goal_master_plan_value, session_goal_synthesize_value,
-    session_new_goal_worker_value, session_send_value, session_shutdown_runner_value,
+    session_checkpoint_value, session_goal_master_plan_value, session_goal_solo_turn_value,
+    session_goal_synthesize_value, session_new_goal_worker_value, session_send_value,
+    session_shutdown_runner_value,
 };
 use galley_core_lib::api::{
     goal_checkpoint_deadline_reached, goal_checkpoint_first_material,
-    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_synthesizing,
-    CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief, GoalEventType, GoalId,
-    GoalLocale, GoalStatus, GoalStatusSnapshot, MessageBrief, MessageRole, RuntimeKind, SessionId,
-    GOAL_CONFIRMATION_PHRASE,
+    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_solo_progress,
+    goal_synthesizing, CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief,
+    GoalEventType, GoalId,
+    GoalLocale, GoalMode, GoalStatus, GoalStatusSnapshot, MessageBrief, MessageRole, RuntimeKind,
+    SessionId, GOAL_CONFIRMATION_PHRASE,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
@@ -158,6 +160,15 @@ pub(crate) async fn run_goal_controller(
             note: None,
         })?;
         return Ok(());
+    }
+
+    // Solo engine: one agent runs the objective to budget, no worker/task
+    // machinery. Dispatch here so it inherits the controller lock, status
+    // guard, started frame, and stop handling above, but skips the whole
+    // hive loop below. The lock lives in this frame and is held across the
+    // solo run's await.
+    if goal.mode == GoalMode::Solo {
+        return run_solo_goal_loop(galley, goal, supervisor, reason).await;
     }
 
     let runtime = runtime_arg_from_kind(goal.runtime_kind);
@@ -1503,6 +1514,284 @@ async fn wait_master_final_answer(
     Ok(None)
 }
 
+/// Solo Goal engine loop: drive one agent (the goal's session) to the time
+/// budget, nudging it to keep working, then produce a final answer. No
+/// workers, task board, waves, or master-duty SOP — the entire hive
+/// coordination surface is skipped. Budget / follow / finish primitives are
+/// shared with the hive path (`finish_goal_with_master` handles the
+/// zero-worker case); only the loop shape and the continuation nudge are
+/// solo-specific.
+async fn run_solo_goal_loop(
+    galley: &SqliteGalley,
+    mut goal: GoalBrief,
+    supervisor: Option<String>,
+    reason: Option<String>,
+) -> Result<(), GalleyError> {
+    let Some(session_id) = goal.master_session_id.clone() else {
+        // Solo needs a session to run in; without one there is nothing to
+        // drive. Fail loudly rather than spin to the deadline.
+        let final_goal = galley
+            .update_goal_state(
+                goal.id.clone(),
+                GoalStatus::Failed,
+                Some("Solo Goal has no session to run in.".into()),
+            )
+            .await?;
+        emit_json(&GoalRunFrame {
+            schema_version: SCHEMA_VERSION,
+            stream: "goal",
+            phase: "failed",
+            goal: &final_goal,
+            session_id: None,
+            note: Some("Solo Goal requires an attached session; none was found.".to_string()),
+        })?;
+        return Ok(());
+    };
+
+    let controller_started = Instant::now();
+    // Throttle for the progress heartbeat: post one after the first turn (break
+    // the silence early), then at most one per this interval.
+    const SOLO_PROGRESS_THROTTLE: Duration = Duration::from_secs(90);
+    let mut last_progress: Option<Instant> = None;
+    // The objective was already sent into the session at launch; the agent
+    // is (or will shortly be) working its first turn. Announce it so live
+    // surfaces show the solo agent as running.
+    emit_json(&GoalRunFrame {
+        schema_version: SCHEMA_VERSION,
+        stream: "goal",
+        phase: "worker_started",
+        goal: &goal,
+        session_id: Some(session_id.0.clone()),
+        note: Some("Solo agent running the objective.".to_string()),
+    })?;
+
+    loop {
+        let snapshot = galley.goal_status_full(goal.id.clone()).await?;
+        goal = snapshot.goal.clone();
+
+        // A requested stop, or a resume that lands in Wrapping, goes
+        // straight to the final answer.
+        if goal.stop_requested || goal.status == GoalStatus::Wrapping {
+            let finish_mode = if goal.stop_requested {
+                GoalFinishMode::StopWrapUp
+            } else {
+                GoalFinishMode::Normal
+            };
+            return finish_goal_with_master(galley, snapshot, &[], supervisor, reason, finish_mode)
+                .await;
+        }
+
+        if !goal_budget_left(&goal, controller_started) {
+            break;
+        }
+
+        let remaining = goal_budget_remaining(&goal, controller_started);
+        // The newest agent turn index BEFORE this dispatch, so `wait_solo_turn`
+        // recognizes only the *new* reply this dispatch produces — not the
+        // previous turn's reply (which shares the session and would otherwise
+        // read as "already done", firing a burst of nudges).
+        let before_agent_turn = latest_agent_turn_index(galley, &session_id).await?;
+
+        emit_json(&GoalRunFrame {
+            schema_version: SCHEMA_VERSION,
+            stream: "goal",
+            phase: "continuing",
+            goal: &goal,
+            session_id: Some(session_id.0.clone()),
+            note: None,
+        })?;
+
+        // Dispatch an INTERNAL (hidden) working turn and SPAWN the runner if it
+        // isn't alive (a solo session has no runner until we drive it). A bare
+        // `session.send` only reaches an already-live runner, so it would pile
+        // persisted messages onto a dead session — the tight-loop bug.
+        session_goal_solo_turn_value(
+            session_id.0.clone(),
+            solo_continuation_prompt(&goal, remaining),
+            supervisor.clone(),
+            reason.clone(),
+        )
+        .await?;
+
+        // Wait for THIS turn to actually complete before nudging again. Bound
+        // by remaining budget so a wedged Running turn can't hang the loop.
+        // (Spawn failure already errored at dispatch above, so reaching here
+        // means the runner is up and the turn is coming — even a slow cold
+        // start.)
+        let turn_timeout = goal_follow_timeout(goal_budget_remaining(&goal, controller_started));
+        wait_solo_turn(galley, &session_id, before_agent_turn, turn_timeout).await?;
+
+        // Break the silence: the working turns are internal, so post a
+        // throttled, Galley-authored progress line (elapsed + the agent's
+        // latest one-liner) into the visible thread. First turn always posts;
+        // then at most one per SOLO_PROGRESS_THROTTLE.
+        let progress_due = last_progress.map_or(true, |at| at.elapsed() >= SOLO_PROGRESS_THROTTLE);
+        if progress_due {
+            if let Some(latest) = latest_agent_progress(galley, &session_id).await? {
+                let elapsed_minutes = controller_started.elapsed().as_secs() / 60;
+                let body = goal_solo_progress(goal_narration_locale(), elapsed_minutes, &latest);
+                let _ = session_checkpoint_value(
+                    session_id.0.clone(),
+                    body,
+                    Some(goal.id.to_string()),
+                    supervisor.clone(),
+                    reason.clone(),
+                )
+                .await;
+                last_progress = Some(Instant::now());
+            }
+        }
+    }
+
+    // Budget exhausted → wrap into a final answer via the shared finish path.
+    let goal = galley
+        .update_goal_state(
+            goal.id.clone(),
+            GoalStatus::Wrapping,
+            goal.latest_summary.clone(),
+        )
+        .await?;
+    emit_json(&GoalRunFrame {
+        schema_version: SCHEMA_VERSION,
+        stream: "goal",
+        phase: "wrapping",
+        goal: &goal,
+        session_id: Some(session_id.0.clone()),
+        note: None,
+    })?;
+    let snapshot = galley.goal_status_full(goal.id.clone()).await?;
+    finish_goal_with_master(galley, snapshot, &[], supervisor, reason, GoalFinishMode::Normal).await
+}
+
+/// Continuation nudge for the solo engine: the single agent may not declare
+/// the task done while budget remains; keep improving a single current-best
+/// result. Borrows the "budget-driven continuation" idea from GA's reflect
+/// goal mode, but is fully Core-owned (no `goal_state.json` / `--reflect`).
+fn solo_continuation_prompt(goal: &GoalBrief, remaining: Duration) -> String {
+    let remaining_min = remaining.as_secs().div_ceil(60).max(1);
+    format!(
+        "[Galley Goal — keep going]\n\nYou are running this Goal on your own and the time budget has NOT run out (~{remaining_min} min left). You cannot declare the task finished yet — keep raising the quality of the result until the budget is reached.\n\nWork one loop now: (1) probe what is still missing, weak, or unverified; (2) produce or expand the result to address it; (3) self-check the result critically and fix the biggest problems you find. Keep a single current-best answer and only change it when the change genuinely makes it better.\n\nObjective:\n{}",
+        goal.objective
+    )
+}
+
+/// Did a *new* agent turn land — an Agent message with non-empty output and a
+/// turn_index STRICTLY GREATER than `after_agent_turn` (the newest agent
+/// turn_index that already existed when we dispatched)? This is the completion
+/// signal for `wait_solo_turn`, pulled out as a pure fn so the anti-tight-loop
+/// logic is unit-testable without a live bridge.
+///
+/// The `>` (not `>=`) against the *previous agent reply's* index is the crux:
+/// a `>=` against `session.turn_count` re-matched the previous turn's reply
+/// (it shares the session), so every wait returned instantly and the loop
+/// fired a burst of nudges before the agent could answer once. A user nudge
+/// never matches (only Agent role does); `None` means no prior agent reply, so
+/// any agent reply counts.
+pub(super) fn solo_turn_produced_output(
+    messages: &[MessageBrief],
+    after_agent_turn: Option<u32>,
+) -> bool {
+    messages.iter().any(|message| {
+        message.role == MessageRole::Agent
+            && after_agent_turn.map_or(true, |after| message.turn_index.unwrap_or(0) > after)
+            && (message
+                .final_answer
+                .as_deref()
+                .is_some_and(|answer| !answer.trim().is_empty())
+                || !message.content.trim().is_empty())
+    })
+}
+
+/// The newest turn_index among the session's Agent messages (`None` if the
+/// agent hasn't replied yet). Captured before dispatching a solo turn so
+/// `wait_solo_turn` recognizes only the reply that dispatch produces.
+async fn latest_agent_turn_index(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+) -> Result<Option<u32>, GalleyError> {
+    // Solo working turns are internal (deep-research shape), so this must read
+    // the internal-inclusive view — the default read hides them and the agent
+    // reply would be invisible to the completion check.
+    let messages = galley
+        .session_messages_including_internal(session_id.clone(), Some(30))
+        .await?;
+    Ok(messages
+        .iter()
+        .filter(|message| message.role == MessageRole::Agent)
+        .filter_map(|message| message.turn_index)
+        .max())
+}
+
+/// The newest solo agent turn's one-line progress: its `summary`, else the
+/// first line of its final answer / content. Reads the internal-inclusive view
+/// because solo turns are internal. Feeds the throttled progress heartbeat.
+async fn latest_agent_progress(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+) -> Result<Option<String>, GalleyError> {
+    let messages = galley
+        .session_messages_including_internal(session_id.clone(), Some(12))
+        .await?;
+    Ok(messages
+        .iter()
+        .rev()
+        .find(|message| message.role == MessageRole::Agent)
+        .and_then(|message| {
+            message
+                .summary
+                .as_deref()
+                .and_then(first_non_empty_line)
+                .or_else(|| message.final_answer.as_deref().and_then(first_non_empty_line))
+                .or_else(|| first_non_empty_line(&message.content))
+        }))
+}
+
+/// Wait for the solo agent's dispatched turn to finish: the session has been
+/// live and returned to idle (or a fresh Agent reply landed and the session
+/// is idle). Bounded by `timeout` (remaining budget + grace) so a hung/silent
+/// turn can't block past the budget.
+///
+/// Deliberately NO fixed "did it start?" grace. `session.goal_solo_turn`
+/// already spawns the runner and errors at dispatch if that fails, so reaching
+/// here means the runner is up and the turn is coming. A slow managed-GA cold
+/// start keeps the session `Idle` for tens of seconds — treating that as a
+/// dead session (the old 60s grace) wrapped a healthy solo goal after ~1 min,
+/// right as the bridge finished warming.
+async fn wait_solo_turn(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+    after_agent_turn: Option<u32>,
+    timeout: Duration,
+) -> Result<(), GalleyError> {
+    let started = Instant::now();
+    let mut observed_live = false;
+    loop {
+        let session = galley.session_brief(session_id.clone()).await?;
+        let live = is_live_candidate(session.status);
+        if live {
+            observed_live = true;
+        }
+        // Internal-inclusive: solo working turns are internal, so the default
+        // read would never surface the agent's reply.
+        let messages = galley
+            .session_messages_including_internal(session_id.clone(), Some(12))
+            .await?;
+        let has_new_agent_turn = solo_turn_produced_output(&messages, after_agent_turn);
+        // The turn cycle finished: it ran (or a reply landed) and is idle
+        // again. `observed_live` guards against the pre-start Idle window so
+        // we don't return before the (possibly cold-starting) turn even runs.
+        if !live && (observed_live || has_new_agent_turn) {
+            return Ok(());
+        }
+        // Budget bound: a silent/hung turn hands control back so the caller
+        // re-checks budget and wraps.
+        if started.elapsed() >= timeout {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
 async fn finish_goal_with_master(
     galley: &SqliteGalley,
     snapshot: GoalStatusSnapshot,
@@ -1749,7 +2038,21 @@ async fn build_goal_synthesis_prompt(
         GoalFinishMode::StopWrapUp => 12_000,
     };
     let mut out = String::new();
+    // Solo goals have no workers/master framing — the one agent that ran the
+    // objective is being asked for its own final answer. Give it a clean
+    // prompt that doesn't reference a hive it never had.
+    if goal.mode == GoalMode::Solo && mode == GoalFinishMode::Normal {
+        push_limited(
+            &mut out,
+            &format!(
+                "[Galley Goal — final answer]\n\nThe time budget for this Goal has been reached. Stop exploring and deliver your final answer to the user now, directly and in their language. Do not expose Goal ids, command logs, or internal process notes.\n\nObjective:\n{}\n\nProduce a concise final answer with: conclusion, key evidence, important gaps or caveats, and next actions. Internal temp paths are scratch; only report a file path as the deliverable when the user explicitly asked Galley to save there.\n\nGoal status: {:?}\nProject id: {}\n\n",
+                goal.objective, goal.status, goal.project_id
+            ),
+            28_000,
+        );
+    }
     match mode {
+        GoalFinishMode::Normal if goal.mode == GoalMode::Solo => {}
         GoalFinishMode::Normal => push_limited(
             &mut out,
             &format!(
@@ -1836,8 +2139,11 @@ async fn build_goal_synthesis_prompt(
         push_limited(&mut out, "\n", 28_000);
     }
 
-    push_limited(&mut out, "Worker session latest output:\n", 28_000);
-    for session_id in worker_ids {
+    // Solo has no worker sessions to summarize; the agent's own conversation
+    // is the source, so skip this block entirely for it.
+    if goal.mode != GoalMode::Solo {
+        push_limited(&mut out, "Worker session latest output:\n", 28_000);
+        for session_id in worker_ids {
         let messages = galley
             .session_messages(session_id.clone(), worker_message_tail)
             .await?;
@@ -1860,6 +2166,7 @@ async fn build_goal_synthesis_prompt(
                 &format!("{:?}: {}\n", message.role, compact_text(body, 2400)),
                 28_000,
             );
+        }
         }
     }
     Ok(out)

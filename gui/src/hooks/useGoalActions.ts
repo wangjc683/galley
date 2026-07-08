@@ -109,6 +109,7 @@ export function useGoalActions({
         runtimeKind: activeRuntimeKind,
         workerLimit: config.workerLimit,
         budgetSeconds: config.budgetSeconds,
+        mode: config.mode,
         llmName: llmDisplayName,
         locale: resolvedLanguage,
       });

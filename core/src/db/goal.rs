@@ -4,7 +4,7 @@ impl SqliteGalley {
     pub(super) async fn fetch_goal_proposal(&self, id: &str) -> Result<GoalProposalBrief> {
         let row = sqlx::query_as::<_, GoalProposalRow>(
             "SELECT id, objective, project_id, master_session_id, budget_seconds, worker_limit, \
-                    runtime_kind, write_mode, status, internal_confirm_token, \
+                    runtime_kind, write_mode, mode, status, internal_confirm_token, \
                     expires_at, created_at, updated_at \
              FROM goal_proposals WHERE id = ? LIMIT 1",
         )
@@ -21,7 +21,7 @@ impl SqliteGalley {
     pub(super) async fn fetch_goal(&self, id: &str) -> Result<GoalBrief> {
         let row = sqlx::query_as::<_, GoalRow>(
             "SELECT id, proposal_id, project_id, master_session_id, objective, status, budget_seconds, \
-                    worker_limit, runtime_kind, write_mode, started_at, deadline_at, \
+                    worker_limit, runtime_kind, write_mode, mode, started_at, deadline_at, \
                     ended_at, latest_summary, result_seen_at, stop_requested, workspace_path, \
                     (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id) AS task_count, \
                     (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id \
@@ -131,6 +131,16 @@ impl SqliteGalley {
             .clamp(MIN_GOAL_WORKER_LIMIT, MAX_GOAL_WORKER_LIMIT);
         let runtime_kind = input.runtime_kind.unwrap_or(RuntimeKind::Managed);
         let write_mode = input.write_mode.unwrap_or(GoalWriteMode::Autonomous);
+        // API/CLI default is Hive for backward compat; the GUI sends Solo
+        // explicitly as the product default (see issue 02 assumption A).
+        let mode = input.mode.unwrap_or(GoalMode::Hive);
+        // Solo is a single agent — `worker_limit` is a hive concept and any
+        // requested value would misrender as "N agents". Pin it to 1.
+        let worker_limit = if mode == GoalMode::Solo {
+            1
+        } else {
+            worker_limit
+        };
         let expires_in_seconds = input.expires_in_seconds.unwrap_or(10 * 60).max(60);
         let id = mint_goal_id("gprop");
         let token = mint_goal_id("gtok");
@@ -140,9 +150,9 @@ impl SqliteGalley {
         sqlx::query(
             "INSERT INTO goal_proposals (
                 id, objective, project_id, master_session_id, budget_seconds, worker_limit,
-                runtime_kind, write_mode, status, internal_confirm_token,
+                runtime_kind, write_mode, mode, status, internal_confirm_token,
                 expires_at, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(objective)
@@ -152,6 +162,7 @@ impl SqliteGalley {
         .bind(i64::from(worker_limit))
         .bind(runtime_kind_sql(runtime_kind))
         .bind(goal_write_mode_sql(write_mode))
+        .bind(goal_mode_sql(mode))
         .bind(goal_proposal_status_sql(
             GoalProposalStatus::AwaitingConfirmation,
         ))
@@ -175,7 +186,7 @@ impl SqliteGalley {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         let proposal_row = sqlx::query_as::<_, GoalProposalRow>(
             "SELECT id, objective, project_id, master_session_id, budget_seconds, worker_limit, \
-                    runtime_kind, write_mode, status, internal_confirm_token, \
+                    runtime_kind, write_mode, mode, status, internal_confirm_token, \
                     expires_at, created_at, updated_at \
              FROM goal_proposals WHERE id = ? LIMIT 1",
         )
@@ -276,10 +287,10 @@ impl SqliteGalley {
         sqlx::query(
             "INSERT INTO goals (
                 id, proposal_id, project_id, master_session_id, objective, status, budget_seconds,
-                worker_limit, runtime_kind, write_mode, started_at, deadline_at,
+                worker_limit, runtime_kind, write_mode, mode, started_at, deadline_at,
                 ended_at, latest_summary, result_seen_at, stop_requested, workspace_path,
                 created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, ?, ?, ?)",
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, ?, ?, ?)",
         )
         .bind(&goal_id)
         .bind(proposal.id.as_str())
@@ -291,6 +302,7 @@ impl SqliteGalley {
         .bind(i64::from(proposal.worker_limit))
         .bind(runtime_kind_sql(proposal.runtime_kind))
         .bind(goal_write_mode_sql(proposal.write_mode))
+        .bind(goal_mode_sql(proposal.mode))
         .bind(&now)
         .bind(&deadline_at)
         .bind(&workspace_path)
@@ -430,7 +442,7 @@ impl SqliteGalley {
     pub(super) async fn list_active_goals_db(&self) -> Result<Vec<GoalBrief>> {
         let rows = sqlx::query_as::<_, GoalRow>(
             "SELECT id, proposal_id, project_id, master_session_id, objective, status, budget_seconds, \
-                    worker_limit, runtime_kind, write_mode, started_at, deadline_at, \
+                    worker_limit, runtime_kind, write_mode, mode, started_at, deadline_at, \
                     ended_at, latest_summary, result_seen_at, stop_requested, workspace_path, \
                     created_at, updated_at \
              FROM goals WHERE status IN ('running','wrapping') \
@@ -447,7 +459,13 @@ impl SqliteGalley {
     /// the ownership chain lives in `goal_tasks.owner_session_id` (fed by
     /// the atomic claim), so the most recently updated owned task is the
     /// session's current assignment. Returns `None` for non-worker
-    /// sessions (including masters, which never claim tasks).
+    /// sessions.
+    ///
+    /// A master must never own a task (enforced by
+    /// `ensure_task_owner_not_master`), but pre-guard dirty data can still
+    /// have a master stamped as an owner. Guard against it here too so the
+    /// master session never renders the worker context banner — the master
+    /// has its own task-board / synthesis surface, not a worker banner.
     pub async fn goal_worker_context(
         &self,
         session_id: &SessionId,
@@ -467,6 +485,9 @@ impl SqliteGalley {
         };
         let task = row.into_brief()?;
         let goal = self.fetch_goal(task.goal_id.as_str()).await?;
+        if goal.master_session_id.as_ref() == Some(session_id) {
+            return Ok(None);
+        }
         Ok(Some(GoalWorkerContext { goal, task }))
     }
 
@@ -477,7 +498,7 @@ impl SqliteGalley {
         // appear in this list.
         let rows = sqlx::query_as::<_, GoalRow>(
             "SELECT id, proposal_id, project_id, master_session_id, objective, status, budget_seconds, \
-                    worker_limit, runtime_kind, write_mode, started_at, deadline_at, \
+                    worker_limit, runtime_kind, write_mode, mode, started_at, deadline_at, \
                     ended_at, latest_summary, result_seen_at, stop_requested, workspace_path, \
                     (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id) AS task_count, \
                     (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id \
@@ -509,7 +530,7 @@ impl SqliteGalley {
     ) -> Result<Vec<GoalBrief>> {
         let rows = sqlx::query_as::<_, GoalRow>(
             "SELECT id, proposal_id, project_id, master_session_id, objective, status, budget_seconds, \
-                    worker_limit, runtime_kind, write_mode, started_at, deadline_at, \
+                    worker_limit, runtime_kind, write_mode, mode, started_at, deadline_at, \
                     ended_at, latest_summary, result_seen_at, stop_requested, workspace_path, \
                     (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id) AS task_count, \
                     (SELECT COUNT(*) FROM goal_tasks t WHERE t.goal_id = goals.id \
@@ -612,6 +633,38 @@ impl SqliteGalley {
         self.fetch_goal(id.as_str()).await
     }
 
+    /// Reject assigning a Goal task to the Goal's own master session.
+    ///
+    /// The master is a scheduler/editor, not a production worker (agent-api
+    /// `goal-commands.md` §5.19; master duty SOP). A master that owns a scoped
+    /// task breaks the worker-slot invariant (its born-`claimed` task leaves the
+    /// slot with no open work, forcing the controller into fallback) and
+    /// misrenders as a worker in the UI, since `goal_worker_context` resolves
+    /// worker identity purely by `owner_session_id`. Workers acquire tasks via
+    /// `claim`; the master never owns one. Guarding here covers every write path
+    /// (create / claim / update) regardless of CLI or socket caller.
+    async fn ensure_task_owner_not_master(
+        &self,
+        goal_id: &str,
+        owner: Option<&SessionId>,
+    ) -> Result<()> {
+        let Some(owner) = owner else {
+            return Ok(());
+        };
+        let goal = self.fetch_goal(goal_id).await?;
+        if goal.master_session_id.as_ref().map(SessionId::as_str) == Some(owner.as_str()) {
+            return Err(GalleyError::InvalidArgs {
+                message: format!(
+                    "goal task cannot be owned by the master session {}: the master \
+                     decomposes and curates, workers own tasks. Create the task open \
+                     (no --owner-session) so a worker can claim it.",
+                    owner.as_str()
+                ),
+            });
+        }
+        Ok(())
+    }
+
     pub(super) async fn create_goal_task_db(
         &self,
         input: CreateGoalTaskInput,
@@ -622,6 +675,8 @@ impl SqliteGalley {
                 message: "goal.task.create: title must not be empty".into(),
             });
         }
+        self.ensure_task_owner_not_master(input.goal_id.as_str(), input.owner_session_id.as_ref())
+            .await?;
         let id = mint_goal_id("gtask");
         let now = chrono_now_iso();
         let status = if input.owner_session_id.is_some() {
@@ -666,6 +721,9 @@ impl SqliteGalley {
         &self,
         input: ClaimGoalTaskInput,
     ) -> Result<GoalTaskBrief> {
+        let task = self.fetch_goal_task(input.task_id.as_str()).await?;
+        self.ensure_task_owner_not_master(task.goal_id.as_str(), Some(&input.owner_session_id))
+            .await?;
         let now = chrono_now_iso();
         let res = sqlx::query(
             "UPDATE goal_tasks SET status = 'claimed', owner_session_id = ?, \
@@ -702,6 +760,10 @@ impl SqliteGalley {
         input: UpdateGoalTaskInput,
     ) -> Result<GoalTaskBrief> {
         let existing = self.fetch_goal_task(input.task_id.as_str()).await?;
+        if let Some(Some(new_owner)) = input.owner_session_id.as_ref() {
+            self.ensure_task_owner_not_master(existing.goal_id.as_str(), Some(new_owner))
+                .await?;
+        }
         let status = input.status.unwrap_or(existing.status);
         let owner = input
             .owner_session_id

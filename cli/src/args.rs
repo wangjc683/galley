@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use galley_core_lib::api::{
-    GoalEventType, GoalTaskStatus, GoalWriteMode, DEFAULT_GOAL_BUDGET_SECONDS,
+    GoalEventType, GoalMode, GoalTaskStatus, GoalWriteMode, DEFAULT_GOAL_BUDGET_SECONDS,
     DEFAULT_GOAL_WORKER_LIMIT,
 };
 
@@ -170,6 +170,11 @@ pub(crate) enum GoalCmd {
         runtime: RuntimeArg,
         #[arg(long, value_enum, default_value = "autonomous")]
         write_mode: GoalWriteModeArg,
+        /// Engine: `hive` (master + parallel workers, cross-verified) or
+        /// `solo` (single agent to budget). Defaults to `hive` for
+        /// backward compatibility; the desktop GUI defaults to `solo`.
+        #[arg(long, value_enum, default_value = "hive")]
+        mode: GoalModeArg,
         #[arg(long, default_value_t = 10)]
         expires_minutes: u32,
         #[arg(long)]
@@ -553,6 +558,21 @@ impl From<GoalWriteModeArg> for GoalWriteMode {
         match value {
             GoalWriteModeArg::Autonomous => GoalWriteMode::Autonomous,
             GoalWriteModeArg::ReadOnly => GoalWriteMode::ReadOnly,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum GoalModeArg {
+    Hive,
+    Solo,
+}
+
+impl From<GoalModeArg> for GoalMode {
+    fn from(value: GoalModeArg) -> Self {
+        match value {
+            GoalModeArg::Hive => GoalMode::Hive,
+            GoalModeArg::Solo => GoalMode::Solo,
         }
     }
 }

@@ -81,6 +81,21 @@ pub enum GoalWriteMode {
     ReadOnly,
 }
 
+/// Which orchestration engine runs the Goal.
+///
+/// - `Hive`: master + parallel workers + task board (multi-angle,
+///   independently cross-verified; slower/costlier). The historical default.
+/// - `Solo`: a single agent runs the objective to budget exhaustion,
+///   Core-owned, no worker coordination. The product default for a human
+///   operator (the GUI sends `Solo`); the API/CLI keep `Hive` as the
+///   backward-compatible default so existing supervisor callers are unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoalMode {
+    Hive,
+    Solo,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GoalTaskStatus {
@@ -117,6 +132,7 @@ pub struct GoalProposalBrief {
     pub worker_limit: u32,
     pub runtime_kind: RuntimeKind,
     pub write_mode: GoalWriteMode,
+    pub mode: GoalMode,
     pub status: GoalProposalStatus,
     /// Internal token for trusted local supervisors. Do not show it in
     /// user-facing confirmation copy.
@@ -142,6 +158,7 @@ pub struct GoalBrief {
     pub worker_limit: u32,
     pub runtime_kind: RuntimeKind,
     pub write_mode: GoalWriteMode,
+    pub mode: GoalMode,
     pub started_at: String,
     pub deadline_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -261,6 +278,8 @@ pub struct CreateGoalProposalInput {
     pub runtime_kind: Option<RuntimeKind>,
     #[serde(default)]
     pub write_mode: Option<GoalWriteMode>,
+    #[serde(default)]
+    pub mode: Option<GoalMode>,
     #[serde(default)]
     pub expires_in_seconds: Option<u32>,
 }
@@ -403,6 +422,31 @@ pub fn goal_synthesizing(locale: GoalLocale) -> &'static str {
     match locale {
         GoalLocale::ZhCn => "正在生成最终汇总。",
         GoalLocale::EnUs => "Generating the final summary.",
+    }
+}
+
+/// Solo-Goal progress heartbeat. A solo run's working turns are internal
+/// (hidden), so without this a long run is silent and reads as stuck. The
+/// controller posts this throttled, Galley-authored line — elapsed time plus
+/// the agent's latest one-line summary — so the user can see it's alive and
+/// roughly where it is.
+pub fn goal_solo_progress(locale: GoalLocale, elapsed_minutes: u64, latest: &str) -> String {
+    let latest = latest.trim();
+    match locale {
+        GoalLocale::ZhCn => {
+            if elapsed_minutes == 0 {
+                format!("进行中 · 最近：{latest}")
+            } else {
+                format!("进行中（{elapsed_minutes} 分钟）· 最近：{latest}")
+            }
+        }
+        GoalLocale::EnUs => {
+            if elapsed_minutes == 0 {
+                format!("Working · latest: {latest}")
+            } else {
+                format!("Working ({elapsed_minutes} min) · latest: {latest}")
+            }
+        }
     }
 }
 
