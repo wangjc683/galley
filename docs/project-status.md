@@ -9,10 +9,10 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.3.0`.
-- Git tag / GitHub Release: `v0.3.0` is the current published stable release.
+- Package version: `0.3.1`.
+- Git tag / GitHub Release: `v0.3.1` is the current published stable release.
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable minor; default update channel points at `v0.3.0`.
+- Release tier: stable patch; default update channel points at `v0.3.1`.
   `beta` is kept as a legacy alias for older builds.
 - Product shape: dual-native local agent team orchestrator
 
@@ -20,23 +20,22 @@ Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.3.0` is a Telegram-channel, interface-polish, and reliability release.
-Telegram joins WeChat and Feishu as a managed Channel, and the Feishu
-supervisor now pushes proactive completion reports and binds to a single owner
-via a pairing code. The sidebar status board, conversation area, and every
-Settings tab (Runtime, Channels, Models, Browser Control) share one visual
-hierarchy; denied tool calls now surface in the transcript; the top bar's theme
-and font-size controls are unified; and on macOS the sidebar wordmark lines up
-with the traffic lights. A concurrency audit (CONC-1..8) and a 55-finding
-codebase review are fully resolved, giving race-free runner / IM / process
-lifecycles, a shared per-process DB pool, and dependable Stop / approval
-delivery. Product shape, Agent API schema, and update-channel policy stay
-unchanged. `v0.3.0` ships the audited Bundled GA baseline `b1e173dc`.
+`v0.3.1` is a Goal-mode feature and reliability release. Lightweight goals now
+run as a single-agent "solo" engine and can run without minting a project; the
+top-bar Goal surface reports the single-active-goal invariant truthfully (the
+running goal vs. finished-but-unreviewed results, split in the popover) and
+explains inline why a second goal is blocked while one runs. Solo-goal wrap-up
+races and a runaway synthesis loop are fixed, and an architecture-review
+refactor consolidates the parent-process watchdog and modularizes the goal
+controller plus several oversized GUI components. The top bar's font-size and
+theme popovers are unified. Product shape, Agent API schema (`schemaVersion:
+1`), and update-channel policy stay unchanged. `v0.3.1` ships the same audited
+Bundled GA baseline `b1e173dc` as `v0.3.0`.
 
 ## Current Release State
 
-`v0.3.0` is published and promoted as the live stable release. The default
-`updates/stable/latest.json` channel points at `v0.3.0`, with the legacy
+`v0.3.1` is published and promoted as the live stable release. The default
+`updates/stable/latest.json` channel points at `v0.3.1`, with the legacy
 `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. The live manifest was verified with `--cache-bust` across all
 three platforms (darwin-aarch64, darwin-x86_64, windows-x86_64).
@@ -44,17 +43,8 @@ three platforms (darwin-aarch64, darwin-x86_64, windows-x86_64).
 Post-release follow-up:
 
 1. Dogfood the app-update path from an installed older Galley build to
-   `v0.3.0`.
-2. Connect Telegram in Settings -> Channels and confirm a session can be
-   supervised end to end; re-verify the Feishu owner pairing code and the
-   proactive completion report.
-3. On macOS, visually confirm the sidebar wordmark / traffic-light alignment
-   across window sizes and the unified top-bar theme / font-size controls.
-4. Visually verify that denied tool calls render in the transcript.
-5. On Windows, continue smoke coverage for duplicate startup / named-pipe
-   behavior and manual overwrite install over a backgrounded Galley process,
-   including the new named-pipe / long-path backup fixes.
-6. Keep Windows ARM out of the stable supported matrix. Add it later only after
+   `v0.3.1`.
+2. Keep Windows ARM out of the stable supported matrix. Add it later only after
    the release workflow, bundled Python, updater manifest, and smoke path all
    support `aarch64-pc-windows-msvc`.
 
@@ -68,7 +58,7 @@ Post-release follow-up:
 | Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; audited upstream `b1e173dc` baseline shipped in v0.2.16; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime.md) |
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
-| Release path | v0.3.0 stable minor is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.3.1 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Locked to audited upstream `b1e173dc` | [GA baseline](./ga-baseline.md) |
 
@@ -93,7 +83,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.3.0`. For the next release, bump every
+- Current package metadata uses `0.3.1`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
