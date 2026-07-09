@@ -6,7 +6,7 @@ skill stays self-contained when installed in an agent skills directory.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-sop.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-07-03 (header recalibration: schema target line + URL references).
+Last synced: 2026-07-09 (re-synced verbatim with canonical after Goal-surface updates).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings. Re-sync
@@ -229,7 +229,10 @@ reply, in their own language, that refers to this Goal (offer the response's
 ```
 
 Use `goal status <goal-id>` for progress and `goal stop <goal-id>` only after
-the user asks to stop.
+the user asks to stop. A stop is not instant: when the run already holds
+results, Galley writes a brief wrap-up summary into the master session first
+(up to ~2 minutes) and only then parks the Goal as `stopped` — keep polling
+`goal status` instead of treating the delay as a failure.
 
 ### Risky Actions
 
