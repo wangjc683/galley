@@ -93,11 +93,17 @@ export function useGoalActions({
       let masterSessionId = activeSession?.id;
       const createdMasterSession = masterSessionId === undefined;
       if (!masterSessionId) {
+        // No setScreen here: flipping to "main" now would unmount the
+        // empty-state Composer mid-submit — the confirm dialog (and its
+        // "启动中…" spinner) vanishes while startDesktopGoal is still
+        // running, leaving the user staring at a blank new session that
+        // looks hung. The screen flips at the end, once the launch rows
+        // exist; on failure the user stays in the empty state with the
+        // dialog and draft intact.
         masterSessionId = await createSessionPersisted(
           activeProjectFilter,
           goalMasterSessionTitle(objective),
         );
-        setScreen("main");
       }
       const projectId = activeSession?.projectId ?? activeProjectFilter;
       const shouldMirrorMasterProject =

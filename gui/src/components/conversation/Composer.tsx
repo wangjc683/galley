@@ -27,7 +27,6 @@ import {
   COMPOSER_CONFIG_BUTTON,
   COMPOSER_GOAL_BUTTON,
   COMPOSER_GOAL_BUTTON_ARMED,
-  COMPOSER_GOAL_SEND_BUTTON,
   COMPOSER_MAX_HEIGHT_PX,
   COMPOSER_SEND_BUTTON,
   COMPOSER_STOP_BUTTON,
@@ -438,7 +437,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         ? copy.composer.byTheWayPrefixHint
         : stopMode
           ? copy.composer.runningHint
-          : copy.composer.enterHint
+          : effectiveGoalArmed
+            ? // Armed changes what Enter does (opens the Goal preview, not
+              // send) — with the wide "启动 Goal" pill gone, this hint and
+              // the button tooltip carry that semantic.
+              copy.composer.startGoalWithEnter
+            : copy.composer.enterHint
       : null;
     // Keyboard hints get kbd-token styling; a caller-supplied staticHint
     // is already a ReactNode and renders as-is in the same slot.
@@ -709,8 +713,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   </TooltipLabel>
                 )}
               </div>
-              {effectiveGoalArmed && (
-                <span className="hidden min-w-0 truncate text-[11px] font-medium text-ink-soft sm:inline">
+              {/* Always mounted, width-animated: conditional mounting made
+                  the hint (and the submit control's circle→pill morph)
+                  reflow the row in one frame, so the Goal button jumped
+                  sideways under the pointer the instant it was pressed. */}
+              {canShowGoalEntry && (
+                <span
+                  className={cn(
+                    "hidden min-w-0 truncate text-[11px] font-medium text-ink-soft sm:inline",
+                    "transition-[max-width,opacity,margin] duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]",
+                    effectiveGoalArmed
+                      ? "ml-0 max-w-[160px] opacity-100"
+                      : "-ml-1.5 max-w-0 opacity-0",
+                  )}
+                  aria-hidden={!effectiveGoalArmed || undefined}
+                >
                   {copy.composer.goalArmedHint}
                 </span>
               )}
@@ -721,9 +738,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                       ? copy.composer.goalBlockedByActive
                       : requiresModelConfig
                         ? copy.composer.configureModelBeforeSending
-                        : effectiveGoalArmed
-                          ? copy.composer.cancelGoalMode
-                          : copy.composer.goalTooltip
+                        : stopMode
+                          ? copy.composer.goalBlockedByRunning
+                          : effectiveGoalArmed
+                            ? copy.composer.cancelGoalMode
+                            : copy.composer.goalTooltip
                   }
                 >
                   <button
@@ -752,21 +771,30 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                         "cursor-not-allowed opacity-50 hover:translate-y-0 hover:shadow-none active:translate-y-0 active:scale-100",
                     )}
                   >
-                    <Target
-                      size={15}
-                      weight={effectiveGoalArmed ? "fill" : "thin"}
-                    />
+                    {/* Armed = ×, not a second Target: the launch button
+                        beside it is the (filled) Target, and two identical
+                        icons left the pair unreadable. × after the
+                        "Goal 模式" hint reads as "dismiss this mode". */}
+                    {effectiveGoalArmed ? (
+                      <X size={15} weight="bold" />
+                    ) : (
+                      <Target size={15} weight="thin" />
+                    )}
                   </button>
                 </TooltipLabel>
               )}
 
+              {/* Fixed 32px circle in EVERY state. The armed state used to
+                  morph this into a 116px "启动 Goal" pill, which shoved the
+                  Goal toggle ~84px left in this right-aligned row — the
+                  pointer then hovered the (often unlit) pill, so a second
+                  press to cancel hit a dead control. Geometry stability
+                  beats the wide-label emphasis: armed is conveyed by the
+                  Target icon morph + hint + tooltip instead. */}
               <span
                 key={`composer-action-${submitAckTick}`}
                 className={cn(
-                  "relative inline-flex shrink-0 items-center justify-center",
-                  effectiveGoalArmed
-                    ? "h-8 min-w-[112px]"
-                    : "size-8 rounded-full",
+                  "relative inline-flex size-8 shrink-0 items-center justify-center rounded-full",
                   submitAckTick > 0 && "composer-submit-ack",
                 )}
               >
@@ -847,9 +875,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                       className={cn(
                         requiresModelConfig
                           ? COMPOSER_CONFIG_BUTTON
-                          : effectiveGoalArmed
-                            ? COMPOSER_GOAL_SEND_BUTTON
-                            : COMPOSER_SEND_BUTTON,
+                          : COMPOSER_SEND_BUTTON,
                         (disabled ||
                           !hasSendableContent ||
                           goalSubmitting ||
@@ -865,10 +891,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                       {requiresModelConfig ? (
                         <Gear size={15} weight="thin" />
                       ) : effectiveGoalArmed ? (
-                        <>
-                          <Target size={14} weight="fill" />
-                          <span>{copy.composer.startGoal}</span>
-                        </>
+                        <Target size={16} weight="fill" />
                       ) : (
                         <ArrowUp size={16} weight="bold" />
                       )}

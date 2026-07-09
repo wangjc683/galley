@@ -76,14 +76,3 @@ export const COMPOSER_GOAL_BUTTON_ARMED = cn(
   "hover:bg-brand/[var(--opacity-medium)] hover:shadow-[var(--shadow-neutral-control-hover)]",
   "active:shadow-[var(--shadow-control-press)]",
 );
-
-export const COMPOSER_GOAL_SEND_BUTTON = cn(
-  "inline-flex h-8 min-w-[112px] items-center justify-center gap-1.5 rounded-full border px-3",
-  "text-[12.5px] font-semibold transition-[background-color,border-color,color,box-shadow,transform]",
-  "duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
-  "border-brand-strong/40 bg-brand text-ink",
-  "outline-none",
-  "shadow-[var(--shadow-brand-control)] hover:-translate-y-px hover:bg-brand-strong hover:text-elevated hover:shadow-[var(--shadow-brand-control-hover)]",
-  "active:translate-y-[2px] active:scale-[0.97] active:bg-brand-strong active:text-elevated active:shadow-[var(--shadow-control-press)]",
-  "disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
-);

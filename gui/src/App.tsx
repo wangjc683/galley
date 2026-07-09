@@ -452,6 +452,14 @@ function App() {
         ? activeGoals.find((goal) => goal.projectId === activeSession.projectId)
         : undefined))
     : undefined;
+  // Gate for launching a NEW Goal. `activeGoals` also carries terminal
+  // goals whose result hasn't been seen (they keep the pill's "view
+  // result" entry alive), but only running/wrapping actually occupies the
+  // single-active-Goal slot (the DB's goals_single_active index) — a
+  // finished-but-unseen goal must not dead-button the Composer.
+  const goalSlotOccupied = activeGoals.some(
+    (goal) => goal.status === "running" || goal.status === "wrapping",
+  );
   const activeSessionBusy =
     screen === "main" &&
     (isRunning || pendingApprovals.length > 0 || pendingAskUser !== null);
@@ -803,7 +811,7 @@ function App() {
                   }}
                   onOpenLLMSwitcher={openLLMSwitcherFallback}
                   onGoalSubmit={startGoalFromComposer}
-                  hasActiveGoal={activeGoals.length > 0}
+                  hasActiveGoal={goalSlotOccupied}
                   imagesEnabled={activeRuntimeKind === "managed"}
                   onImageBlocked={handleImageBlocked}
                   onSubmit={submitFromEmpty}
@@ -842,7 +850,7 @@ function App() {
                   }}
                   onOpenLLMSwitcher={openLLMSwitcherFallback}
                   goal={activeSessionGoal}
-                  hasActiveGoal={activeGoals.length > 0}
+                  hasActiveGoal={goalSlotOccupied}
                   sessionGoals={sessionGoals}
                   onOpenSession={(sid) => void activateSession(sid)}
                   onStopGoal={(goalId) => void stopGoalFromTopbar(goalId)}

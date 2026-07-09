@@ -281,6 +281,8 @@ export const enCopy: AppCopy = {
     dropUnavailable: "Images aren't supported on this runtime",
     goalButton: "Goal",
     goalTooltip: "Run as a Goal",
+    goalBlockedByRunning:
+      "Wait for the current reply to finish, then start the Goal.",
     goalBlockedByActive:
       "A Goal is already running. Stop it or wait for it to finish before starting another.",
     cancelGoalMode: "Cancel Goal mode",
