@@ -65,7 +65,10 @@ export function SegmentedControl<TValue extends string>({
             }}
             className={cn(
               "inline-flex select-none items-center justify-center rounded-sm transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
+              // ring-inset, not an outer ring: the track is only p-0.5, so
+              // an outer ring on an edge segment collided with the track
+              // border / spilled into the neighbor and read as clipped.
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40",
               "disabled:cursor-not-allowed disabled:opacity-40",
               ITEM_SIZE_CLASSES[size],
               active

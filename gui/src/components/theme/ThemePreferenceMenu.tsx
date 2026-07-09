@@ -117,28 +117,28 @@ export function ThemePreferenceMenu({
             align="end"
             side="bottom"
             sideOffset={6}
+            onOpenAutoFocus={(event) => {
+              // Same as the font-size control: suppress Radix's open
+              // autofocus so no stray focus ring lands on the first
+              // segment. The active thumb already shows the current
+              // preference; keyboard users can still Tab / arrow in.
+              event.preventDefault();
+            }}
             className="galley-pop-in z-[70] rounded-md border border-line bg-elevated p-1.5 shadow-elevated"
           >
+            {/* No per-segment icons here, matching the font-size
+                popover next to it: once the panel is open each option
+                carries a text label, so the sun/moon glyphs are
+                redundant. Their real recognition value lives in the
+                topbar trigger (ActualIcon above), which stays. */}
             <SegmentedControl<ThemePreference>
               value={preference}
               ariaLabel={copy.theme.aria}
               onValueChange={onChange}
               options={[
-                {
-                  value: "system",
-                  label: copy.theme.system,
-                  icon: <Monitor size={13} weight="thin" />,
-                },
-                {
-                  value: "light",
-                  label: copy.theme.light,
-                  icon: <Sun size={13} weight="thin" />,
-                },
-                {
-                  value: "dark",
-                  label: copy.theme.dark,
-                  icon: <Moon size={13} weight="thin" />,
-                },
+                { value: "system", label: copy.theme.system },
+                { value: "light", label: copy.theme.light },
+                { value: "dark", label: copy.theme.dark },
               ]}
             />
             {preference === "system" && (

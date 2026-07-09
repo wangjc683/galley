@@ -47,6 +47,15 @@ export function ConversationFontSizeMenu({
           align="end"
           side="bottom"
           sideOffset={6}
+          onOpenAutoFocus={(event) => {
+            // Radix autofocuses the first segment on open, painting a
+            // focus ring on 小 even when a later tier is selected — a
+            // false highlight that fought the real selection (the orange
+            // thumb) and clipped against the tight track. Pointer-open
+            // needs no ring; the thumb already shows the current tier.
+            // Keyboard users can still Tab / arrow into the segments.
+            event.preventDefault();
+          }}
           className="galley-pop-in z-[70] rounded-md border border-line bg-elevated p-1.5 shadow-elevated"
         >
           <SegmentedControl
@@ -54,10 +63,7 @@ export function ConversationFontSizeMenu({
             ariaLabel={copy.aria}
             onValueChange={(size) => onChange?.(size)}
             options={[
-              // No per-segment tooltips: the labels are self-evident, and
-              // Popover's open autofocus lands on the first segment, which
-              // would pop its tooltip ("小字号") regardless of the actual
-              // selection.
+              // No per-segment tooltips: the labels are self-evident.
               { value: "small", label: copy.smallShort },
               { value: "standard", label: copy.standardShort },
               { value: "large", label: copy.largeShort },
