@@ -38,9 +38,9 @@ use crate::session::{
 use galley_core_lib::api::{
     goal_checkpoint_deadline_reached, goal_checkpoint_first_material,
     goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_finished_no_master,
-    goal_stopped_before_results, goal_synthesizing, CreateGoalEventInput, CreateGoalTaskInput,
-    GalleyApi, GoalBrief, GoalEventType, GoalId, GoalLocale, GoalMode, GoalStatus,
-    GoalStatusSnapshot, MessageBrief, MessageRole, RuntimeKind, SessionId,
+    goal_solo_wrap_timeout, goal_stopped_before_results, goal_synthesizing, CreateGoalEventInput,
+    CreateGoalTaskInput, GalleyApi, GoalBrief, GoalEventType, GoalId, GoalLocale, GoalMode,
+    GoalStatus, GoalStatusSnapshot, MessageBrief, MessageRole, RuntimeKind, SessionId,
     GOAL_CONFIRMATION_PHRASE,
 };
 use galley_core_lib::db::SqliteGalley;
@@ -1478,13 +1478,26 @@ pub(crate) fn goal_synthesis_timeout(dispatch_chars: usize) -> Duration {
 /// Mode-aware synthesis wait: the normal wrap scales with prompt size;
 /// the stop wrap-up is additionally capped at
 /// [`GOAL_STOP_SYNTHESIS_TIMEOUT_SECONDS`] — the user asked to stop.
+///
+/// A solo normal wrap is further capped at half the goal's budget
+/// (floored at 120s): the 300–900s base can exceed a short budget
+/// outright, and solo's promise is "the budget ends, you get the current
+/// best" — total wall clock stays predictable (~budget × 1.5 worst case).
 pub(crate) fn goal_finish_synthesis_timeout(
     mode: GoalFinishMode,
     dispatch_chars: usize,
+    engine: GoalMode,
+    budget_seconds: u32,
 ) -> Duration {
     let base = goal_synthesis_timeout(dispatch_chars);
     match mode {
-        GoalFinishMode::Normal => base,
+        GoalFinishMode::Normal => match engine {
+            GoalMode::Solo => {
+                let budget_cap = u64::from(budget_seconds / 2).max(120);
+                base.min(Duration::from_secs(budget_cap))
+            }
+            GoalMode::Hive => base,
+        },
         GoalFinishMode::StopWrapUp => {
             base.min(Duration::from_secs(GOAL_STOP_SYNTHESIS_TIMEOUT_SECONDS))
         }
@@ -1493,10 +1506,14 @@ pub(crate) fn goal_finish_synthesis_timeout(
 
 /// `Ok(None)` = timed out — the master may still be generating; the
 /// caller decides what that means (it is NOT a goal failure).
+///
+/// `after_agent_turn` is the newest agent turn_index that existed BEFORE
+/// the synthesis dispatch; only a strictly newer reply counts (same
+/// anti-race shape as `wait_solo_turn`).
 async fn wait_master_final_answer(
     galley: &SqliteGalley,
     session_id: &SessionId,
-    previous_turn_count: u32,
+    after_agent_turn: Option<u32>,
     timeout: Duration,
 ) -> Result<Option<MessageBrief>, GalleyError> {
     let started = Instant::now();
@@ -1505,19 +1522,7 @@ async fn wait_master_final_answer(
         let messages = galley
             .session_messages(session_id.clone(), Some(12))
             .await?;
-        let final_answer = messages
-            .iter()
-            .rev()
-            .find(|message| {
-                message.role == MessageRole::Agent
-                    && message.turn_index.unwrap_or(0) >= previous_turn_count
-                    && message
-                        .final_answer
-                        .as_deref()
-                        .is_some_and(|answer| !answer.trim().is_empty())
-            })
-            .cloned();
-        if let Some(message) = final_answer {
+        if let Some(message) = master_final_answer_after(&messages, after_agent_turn) {
             if !is_live_candidate(session.status) {
                 return Ok(Some(message));
             }
@@ -1525,6 +1530,31 @@ async fn wait_master_final_answer(
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
     Ok(None)
+}
+
+/// The newest agent reply that (a) landed STRICTLY after `after_agent_turn`
+/// and (b) carries a non-empty final answer — i.e. the synthesis wrap-up,
+/// never a pre-dispatch working turn. The old check compared turn_index
+/// against `session.turn_count` (a different counter) with `>=`, so a
+/// working turn that landed a second before dispatch passed for the
+/// wrap-up (2026-07-09 solo dogfood). Pure so the anti-race logic is
+/// unit-testable without a live bridge.
+pub(super) fn master_final_answer_after(
+    messages: &[MessageBrief],
+    after_agent_turn: Option<u32>,
+) -> Option<MessageBrief> {
+    messages
+        .iter()
+        .rev()
+        .find(|message| {
+            message.role == MessageRole::Agent
+                && after_agent_turn.is_none_or(|after| message.turn_index.unwrap_or(0) > after)
+                && message
+                    .final_answer
+                    .as_deref()
+                    .is_some_and(|answer| !answer.trim().is_empty())
+        })
+        .cloned()
 }
 
 /// Solo Goal engine loop: drive one agent (the goal's session) to the time
@@ -1667,7 +1697,7 @@ async fn run_solo_goal_loop(
 fn solo_continuation_prompt(goal: &GoalBrief, remaining: Duration) -> String {
     let remaining_min = remaining.as_secs().div_ceil(60).max(1);
     format!(
-        "[Galley Goal — keep going]\n\nYou are running this Goal on your own and the time budget has NOT run out (~{remaining_min} min left). You cannot declare the task finished yet — keep raising the quality of the result until the budget is reached.\n\nWork one loop now: (1) probe what is still missing, weak, or unverified; (2) produce or expand the result to address it; (3) self-check the result critically and fix the biggest problems you find. Keep a single current-best answer and only change it when the change genuinely makes it better.\n\nYour work here is shown live to the user. End each turn with a short progress note — a few lines on what you checked and what changed — not the full work-in-progress result; you will present the complete answer at wrap-up.\n\nObjective:\n{}",
+        "[Galley Goal — keep going]\n\nYou are running this Goal on your own and the time budget has NOT run out (~{remaining_min} min left). You cannot declare the task finished yet — keep raising the quality of the result until the budget is reached.\n\nWork one loop now: (1) probe what is still missing, weak, or unverified; (2) produce or expand the result to address it; (3) self-check the result critically and fix the biggest problems you find. Keep a single current-best answer and only change it when the change genuinely makes it better.\n\nIf roughly 2 minutes or less remain, do not open new exploration — tighten and finalize the current best answer so it can be delivered as-is when the budget ends.\n\nYour work here is shown live to the user. End each turn with a short progress note — a few lines on what you checked and what changed — not the full work-in-progress result; you will present the complete answer at wrap-up.\n\nObjective:\n{}",
         goal.objective
     )
 }
@@ -1846,14 +1876,18 @@ async fn finish_goal_with_master(
         return Ok(());
     };
 
-    let before_turn_count = galley
-        .session_brief(master_session_id.clone())
-        .await?
-        .turn_count
-        .unwrap_or(0);
+    // Baseline BEFORE dispatching synthesis: only an agent reply strictly
+    // newer than this counts as the wrap-up answer (see
+    // `master_final_answer_after` for the dogfood incident this fixes).
+    let before_agent_turn = latest_agent_turn_index(galley, &master_session_id).await?;
     let dispatch_content =
         build_goal_synthesis_prompt(galley, &snapshot, worker_session_ids, mode).await?;
-    let synthesis_timeout = goal_finish_synthesis_timeout(mode, dispatch_content.chars().count());
+    let synthesis_timeout = goal_finish_synthesis_timeout(
+        mode,
+        dispatch_content.chars().count(),
+        goal.mode,
+        goal.budget_seconds,
+    );
     session_goal_synthesize_value(
         master_session_id.0.clone(),
         goal_synthesizing(goal_narration_locale()).to_string(),
@@ -1867,12 +1901,77 @@ async fn finish_goal_with_master(
     let Some(final_answer_message) = wait_master_final_answer(
         galley,
         &master_session_id,
-        before_turn_count,
+        before_agent_turn,
         synthesis_timeout,
     )
     .await?
     else {
-        // Timed out — mode decides what that means.
+        // Timed out — engine + mode decide what that means.
+        if goal.mode == GoalMode::Solo {
+            // Solo's promise is "the budget ends, you get the current
+            // best". Deliver the newest agent output as the best-effort
+            // result, land the terminal state, and shut the runner down —
+            // otherwise the wrap-up turn grinds on unbounded (the
+            // 2026-07-09 dogfood ran 8 extra minutes past a 5-minute
+            // budget). No Wrapping+resume dead end: desktop users have no
+            // CLI resume entry point.
+            let messages = galley
+                .session_messages_including_internal(master_session_id.clone(), Some(12))
+                .await?;
+            let best_effort = messages
+                .iter()
+                .rev()
+                .find(|message| message.role == MessageRole::Agent)
+                .and_then(|message| {
+                    message
+                        .final_answer
+                        .as_deref()
+                        .and_then(first_non_empty_line)
+                        .or_else(|| first_non_empty_line(&message.content))
+                        .or_else(|| message.summary.as_deref().and_then(first_non_empty_line))
+                });
+            let note =
+                goal_solo_wrap_timeout(goal_narration_locale(), mode == GoalFinishMode::StopWrapUp);
+            let summary = best_effort.unwrap_or_else(|| note.to_string());
+            let _ = galley
+                .create_goal_event(CreateGoalEventInput {
+                    goal_id: goal.id.clone(),
+                    task_id: None,
+                    author_session_id: Some(master_session_id.clone()),
+                    event_type: GoalEventType::Synthesis,
+                    body: note.to_string(),
+                })
+                .await;
+            let final_goal = galley
+                .update_goal_state(goal.id.clone(), terminal_status, Some(summary))
+                .await?;
+            if let Err(err) = session_shutdown_runner_value(
+                master_session_id.0.clone(),
+                supervisor.clone(),
+                Some(format!("goal {} wrap-up timeout runner cleanup", goal.id)),
+            )
+            .await
+            {
+                let _ = galley
+                    .create_goal_event(CreateGoalEventInput {
+                        goal_id: goal.id.clone(),
+                        task_id: None,
+                        author_session_id: None,
+                        event_type: GoalEventType::System,
+                        body: format!("Solo runner shutdown after wrap-up timeout failed: {err}"),
+                    })
+                    .await;
+            }
+            emit_json(&GoalRunFrame {
+                schema_version: SCHEMA_VERSION,
+                stream: "goal",
+                phase: "finished",
+                goal: &final_goal,
+                session_id: Some(master_session_id.0),
+                note: Some(note.to_string()),
+            })?;
+            return Ok(());
+        }
         if mode == GoalFinishMode::StopWrapUp {
             // The user asked to stop; keeping the goal Wrapping until a
             // resume would mean "stop" never terminates. Stop now,
@@ -2024,7 +2123,7 @@ async fn build_goal_synthesis_prompt(
         push_limited(
             &mut out,
             &format!(
-                "[Galley Goal — final answer]\n\nThe time budget for this Goal has been reached. Stop exploring and deliver your final answer to the user now, directly and in their language. Do not expose Goal ids, command logs, or internal process notes.\n\nObjective:\n{}\n\nProduce a concise final answer with: conclusion, key evidence, important gaps or caveats, and next actions. Internal temp paths are scratch; only report a file path as the deliverable when the user explicitly asked Galley to save there.\n\nGoal status: {:?}\nProject id: {}\n\n",
+                "[Galley Goal — final answer]\n\nThe time budget for this Goal is over. This is a TERMINATION instruction, not another improvement loop: every earlier \"keep going\" instruction is now void. Do NOT probe for gaps, do NOT expand or self-check, do NOT start new work; use a tool only if you must re-read your current best result. In this single turn, write out the complete final answer to the user, directly and in their language. Do not expose Goal ids, command logs, or internal process notes.\n\nObjective:\n{}\n\nProduce a concise final answer with: conclusion, key evidence, important gaps or caveats, and next actions. Internal temp paths are scratch; only report a file path as the deliverable when the user explicitly asked Galley to save there.\n\nGoal status: {:?}\nProject id: {}\n\n",
                 goal.objective, goal.status, project_id_note
             ),
             28_000,

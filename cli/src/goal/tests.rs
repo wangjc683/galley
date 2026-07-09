@@ -236,20 +236,80 @@ fn goal_synthesis_timeout_scales_with_prompt_size() {
 fn goal_stop_synthesis_timeout_is_capped() {
     use super::controller::goal_finish_synthesis_timeout;
     use super::types::GoalFinishMode;
-    // Normal mode inherits the size-scaled timeout untouched.
+    // Hive normal mode inherits the size-scaled timeout untouched.
     assert_eq!(
-        goal_finish_synthesis_timeout(GoalFinishMode::Normal, 120_000).as_secs(),
+        goal_finish_synthesis_timeout(GoalFinishMode::Normal, 120_000, GoalMode::Hive, 300)
+            .as_secs(),
         420
     );
     // Stop wrap-up is capped at 120s regardless of prompt size…
     assert_eq!(
-        goal_finish_synthesis_timeout(GoalFinishMode::StopWrapUp, 900_000).as_secs(),
+        goal_finish_synthesis_timeout(GoalFinishMode::StopWrapUp, 900_000, GoalMode::Hive, 300)
+            .as_secs(),
         120
     );
     assert_eq!(
-        goal_finish_synthesis_timeout(GoalFinishMode::StopWrapUp, 0).as_secs(),
+        goal_finish_synthesis_timeout(GoalFinishMode::StopWrapUp, 0, GoalMode::Solo, 300).as_secs(),
         120
     );
+}
+
+/// Solo's promise is a predictable wall clock: the normal wrap-up may not
+/// exceed half the budget (floored at 120s), so the 300–900s base can't
+/// dwarf a short run. Hive keeps the size-scaled base (covered above).
+#[test]
+fn goal_solo_synthesis_timeout_is_budget_capped() {
+    use super::controller::goal_finish_synthesis_timeout;
+    use super::types::GoalFinishMode;
+    // 5-minute budget → 150s, not the 300s base.
+    assert_eq!(
+        goal_finish_synthesis_timeout(GoalFinishMode::Normal, 0, GoalMode::Solo, 300).as_secs(),
+        150
+    );
+    // Tiny budget floors at 120s.
+    assert_eq!(
+        goal_finish_synthesis_timeout(GoalFinishMode::Normal, 0, GoalMode::Solo, 60).as_secs(),
+        120
+    );
+    // Large budget: the size-scaled base is already the smaller bound.
+    assert_eq!(
+        goal_finish_synthesis_timeout(GoalFinishMode::Normal, 0, GoalMode::Solo, 3600).as_secs(),
+        300
+    );
+}
+
+/// The synthesis wait must never accept a PRE-dispatch working turn as the
+/// wrap-up answer: `>=` against `session.turn_count` (a different counter)
+/// let a reply that landed one second before dispatch complete the goal
+/// instantly while the real wrap-up kept running (2026-07-09 dogfood).
+#[test]
+fn master_final_answer_requires_strictly_newer_turn() {
+    use super::controller::master_final_answer_after;
+
+    // The working turn that existed before dispatch (index 67) must not count.
+    let pre_dispatch = vec![test_message(
+        MessageRole::Agent,
+        67,
+        "",
+        Some("working turn answer"),
+    )];
+    assert!(master_final_answer_after(&pre_dispatch, Some(67)).is_none());
+
+    // A strictly newer reply with a final answer is the wrap-up.
+    let wrapped = vec![
+        test_message(MessageRole::Agent, 67, "", Some("working turn answer")),
+        test_message(MessageRole::Agent, 68, "", Some("final wrap-up")),
+    ];
+    let found = master_final_answer_after(&wrapped, Some(67)).expect("wrap-up reply");
+    assert_eq!(found.final_answer.as_deref(), Some("final wrap-up"));
+
+    // A newer reply WITHOUT a final answer (mid-run step) doesn't count.
+    let mid_step = vec![test_message(MessageRole::Agent, 68, "step note", None)];
+    assert!(master_final_answer_after(&mid_step, Some(67)).is_none());
+
+    // No baseline (fresh session) → any final answer counts.
+    let fresh = vec![test_message(MessageRole::Agent, 1, "", Some("answer"))];
+    assert!(master_final_answer_after(&fresh, None).is_some());
 }
 
 #[test]

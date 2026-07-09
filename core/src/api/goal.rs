@@ -446,6 +446,21 @@ pub fn goal_finished_no_master(locale: GoalLocale, stopped: bool) -> &'static st
     }
 }
 
+/// Goal-event note when a solo wrap-up turn exceeded its timeout and the
+/// controller delivered the newest agent output as the best-effort result
+/// (and shut the runner down). Also the `latest_summary` fallback when the
+/// session had no agent output at all.
+pub fn goal_solo_wrap_timeout(locale: GoalLocale, stopped: bool) -> &'static str {
+    match (locale, stopped) {
+        (GoalLocale::ZhCn, false) => "收口生成超时，已交付当前最好结果。",
+        (GoalLocale::ZhCn, true) => "已停止；收尾超时，已保留当前最好结果。",
+        (GoalLocale::EnUs, false) => "The wrap-up ran long; the latest result was delivered as-is.",
+        (GoalLocale::EnUs, true) => {
+            "Stopped; the wrap-up ran long, so the latest result was kept as-is."
+        }
+    }
+}
+
 /// Terminal summary for a stop that landed before any worker produced
 /// material worth wrapping up.
 pub fn goal_stopped_before_results(locale: GoalLocale) -> &'static str {

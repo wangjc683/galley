@@ -225,3 +225,38 @@ TurnMarker / 工具 pill / 流式渲染的现成策展)。
 折叠组件 + 第三种可见性档位 + 改两层过滤(live 门控 + SQL 恢复),成本高一个量级。
 
 **需 JC dogfood**:live 渲染密度是否合适(尤其快 turn 任务)。
+
+### 2026-07-09(二) — dogfood #5:秒级假 completed + 收口 turn 磨了 8 分钟,已修
+
+**现象**(5 分钟 solo,goal_a847e3872a3ba5a4,DB 实据):deadline 10:16:11,
+10:16:33 派发收口的**同一秒**标 completed;pill 随即消失(用户正在 master
+session 里,auto-mark-seen 设计);但真正的收口 turn 从 10:17:08 磨到 10:24:52
+(11 个可见 step,全在继续补强),wall clock 13.5 分钟。续跑循环本身健康
+(nudge internal + turn 可见,节奏 ~10-50s/轮,渲染密度符合预期)。
+
+**根因三层**:
+1. `wait_master_final_answer` 基线竞态:`turn_index >= session.turn_count`
+   ——`>=` 非严格(与 dogfood #3 同类,当时只修了 wait_solo_turn),且
+   **turn_index 和 turn_count 是两个不同计数器**(该 session count=36 vs
+   index=78,恒真)。1 秒前落地的工作 turn(index 67)+ 瞬时 idle → 秒回,
+   latest_summary 捕到的是工作 turn 的输出(内容碰巧像样,是运气)。
+2. 收口 turn 无终止性:对话浸泡在「不能宣告完成」语境里,一条收口指令压不住;
+   且 Normal 收口超时(300–900s,可能比预算还长)后是 Wrapping + 英文诊断 +
+   CLI resume——桌面死路;master runner 无人 shutdown(hive 只关 worker)。
+3. pill 消失 = 1 的下游(completed+seen 即退场,设计如此),非独立 bug。
+
+**修复**(JC 拍板:超时 best-effort 完成 + 关 runner;超时与预算挂钩):
+- 基线:`latest_agent_turn_index` + 严格 `>`,抽纯函数
+  `master_final_answer_after` + 单测(hive 同收益)。
+- solo Normal 收口超时 = min(基数, max(120s, 预算/2)),5 分钟预算 → 150s;
+  hive 不变。单测覆盖。
+- solo 收口超时兜底(Normal+StopWrapUp):取最新 agent 输出为 best-effort
+  结果标 terminal 状态 + `session_shutdown_runner_value` 关 master runner +
+  本地化事件注记(`goal_solo_wrap_timeout`)。不再留 Wrapping/resume 死路。
+- Prompt:收口改硬终止指令(「此前所有 keep going 作废,禁止再探测/补强/
+  自检,本 turn 直接输出完整答案」);续跑加「剩 ~2 分钟内不再开新探索,
+  收束当前最好答案」。
+
+**验证**:cargo test 全绿(新增严格基线 + 预算封顶单测),clippy 基线持平;
+**需 JC dogfood #6**:确认到点后一个 turn 内收口、completed 时线程真的安静、
+pill 生命周期与线程观感一致。
