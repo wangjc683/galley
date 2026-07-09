@@ -165,10 +165,17 @@ export function useGoalActions({
           category: "business",
           severity: "info",
           title: copy.toasts.goalStarted,
-          message: copy.toasts.goalStartedMessage(
-            goal.workerLimit,
-            Math.round(goal.budgetSeconds / 60),
-          ),
+          // Solo runs one agent regardless of workerLimit — naming a count
+          // would contradict the dialog's single-agent framing.
+          message:
+            goal.mode === "solo"
+              ? copy.toasts.goalStartedMessageSolo(
+                  Math.round(goal.budgetSeconds / 60),
+                )
+              : copy.toasts.goalStartedMessage(
+                  goal.workerLimit,
+                  Math.round(goal.budgetSeconds / 60),
+                ),
           hint: null,
           retryable: false,
           context: "start_desktop_goal",

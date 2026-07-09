@@ -23,13 +23,14 @@ pub mod status;
 
 pub use goal::{
     goal_checkpoint_deadline_reached, goal_checkpoint_first_material,
-    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_launch_ack,
-    goal_synthesizing, ClaimGoalTaskInput, CreateGoalEventInput, CreateGoalProposalInput,
-    CreateGoalTaskInput, GoalBrief, GoalDeliverable, GoalEventBrief, GoalEventType, GoalId,
-    GoalLocale, GoalMode, GoalProposalBrief, GoalProposalId, GoalProposalStatus, GoalStatus,
-    GoalStatusSnapshot, GoalTaskBrief, GoalTaskId, GoalTaskStatus, GoalWorkerContext,
-    GoalWriteMode, UpdateGoalTaskInput, DEFAULT_GOAL_BUDGET_SECONDS, DEFAULT_GOAL_WORKER_LIMIT,
-    GOAL_CONFIRMATION_PHRASE, MAX_GOAL_WORKER_LIMIT, MIN_GOAL_WORKER_LIMIT,
+    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_finished_no_master,
+    goal_launch_ack, goal_stopped_before_results, goal_synthesizing, ClaimGoalTaskInput,
+    CreateGoalEventInput, CreateGoalProposalInput, CreateGoalTaskInput, GoalBrief, GoalDeliverable,
+    GoalEventBrief, GoalEventType, GoalId, GoalLocale, GoalMode, GoalProposalBrief, GoalProposalId,
+    GoalProposalStatus, GoalStatus, GoalStatusSnapshot, GoalTaskBrief, GoalTaskId, GoalTaskStatus,
+    GoalWorkerContext, GoalWriteMode, UpdateGoalTaskInput, DEFAULT_GOAL_BUDGET_SECONDS,
+    DEFAULT_GOAL_WORKER_LIMIT, GOAL_CONFIRMATION_PHRASE, MAX_GOAL_WORKER_LIMIT,
+    MIN_GOAL_WORKER_LIMIT,
 };
 pub use health::{HealthCheck, HealthReport, HealthStatus};
 pub use message::{

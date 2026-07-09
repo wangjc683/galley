@@ -204,3 +204,24 @@ JC:纯隐藏后 10 分钟零反馈,像卡死。讨论后加**节流的进展心�
 进展心跳在首 turn 完成后才发。若嫌初始 gap 长,可加一条开场 heartbeat(易)。
 
 **验证**:cargo test 全绿;**需 JC dogfood(叠加全部 4 处运行时改动)**。
+
+### 2026-07-09 — 形态反转:深研模式 → 完整过程可见(方案 A,JC 拍板)
+
+Dogfood 后 JC 反馈心跳仍"反馈感差",要求像普通 session 一样展示工具调度与进展。
+勘探发现关键事实:当初判"刷屏"的元凶是**续跑 nudge**(叠加已修掉的瞬发 burst
+bug),**"工作 turn 可见 + nudge 隐藏"组合从未被真正试过**;且落库可见性与
+`UserMessageCommand.visibility` 是两个独立开关,拆开即可,GUI 零改动(直接复用
+TurnMarker / 工具 pill / 流式渲染的现成策展)。
+
+实现(commit `bf35060`):
+- `dispatch_session_goal_solo_turn`:nudge 仍 Internal 落库(不 mirror),
+  派发 visibility 改 None(可见)。
+- 删 90s 心跳全链(`goal_solo_progress` + locale 串、`latest_agent_progress`、
+  `SOLO_PROGRESS_THROTTLE`)。阶段 checkpoint(launch/deadline/synthesizing)保留。
+- 续跑 prompt 加"每 turn 只留简短进展说明,完整答案收口时给"约束,防长跑刷屏。
+- `goal_launch_ack` 分 mode:solo 承诺"过程和结果都在本对话"。
+
+备选方案 B(默认折叠的"工作过程"组)记为 A 试跑后嫌吵的 v2 退路——需净新
+折叠组件 + 第三种可见性档位 + 改两层过滤(live 门控 + SQL 恢复),成本高一个量级。
+
+**需 JC dogfood**:live 渲染密度是否合适(尤其快 turn 任务)。

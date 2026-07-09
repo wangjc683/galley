@@ -845,6 +845,7 @@ function App() {
                   hasActiveGoal={activeGoals.length > 0}
                   sessionGoals={sessionGoals}
                   onOpenSession={(sid) => void activateSession(sid)}
+                  onStopGoal={(goalId) => void stopGoalFromTopbar(goalId)}
                   onGoalSubmit={startGoalFromComposer}
                   imagesEnabled={activeSession?.gaRuntimeKind === "managed"}
                   onImageBlocked={handleImageBlocked}

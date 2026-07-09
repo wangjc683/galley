@@ -125,6 +125,11 @@ export interface MainViewProps {
    */
   onOpenSession?: (sessionId: string) => void;
   /**
+   * Stop the running Goal from inside the thread (the GoalRunningTail's
+   * inline control) — same command the TopBar pill popover issues.
+   */
+  onStopGoal?: (goalId: string) => void;
+  /**
    * GA-initiated question waiting for a user reply. When non-null,
    * the AskUserBubble renders at the conversation tail (with chip
    * candidates) and the Composer's placeholder switches to a reply
@@ -192,6 +197,7 @@ export function MainView({
   hasActiveGoal,
   sessionGoals,
   onOpenSession,
+  onStopGoal,
   pendingAskUser,
   conversationWidth = "compact",
   conversationFontSize = "standard",
@@ -460,7 +466,15 @@ export function MainView({
                 master itself isn't mid-turn, but its goal is still
                 progressing in worker sessions. Shown only when nothing
                 else already signals activity. */}
-            {goalRunningTailVisible && <GoalRunningTail />}
+            {goalRunningTailVisible && (
+              <GoalRunningTail
+                onStop={
+                  runningGoal && onStopGoal
+                    ? () => onStopGoal(runningGoal.id)
+                    : undefined
+                }
+              />
+            )}
           </div>
         </div>
 

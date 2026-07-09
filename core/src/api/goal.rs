@@ -434,6 +434,27 @@ pub fn goal_synthesizing(locale: GoalLocale) -> &'static str {
     }
 }
 
+/// Terminal fallback when a goal ends with no desktop master session
+/// (headless / CLI-launched): no synthesis turn runs, so this line is the
+/// whole wrap-up the user sees in `latest_summary`.
+pub fn goal_finished_no_master(locale: GoalLocale, stopped: bool) -> &'static str {
+    match (locale, stopped) {
+        (GoalLocale::ZhCn, false) => "Goal 已完成（没有桌面主会话，未生成最终汇总）。",
+        (GoalLocale::ZhCn, true) => "Goal 已停止（没有桌面主会话，未生成收尾摘要）。",
+        (GoalLocale::EnUs, false) => "Goal completed without a desktop master session.",
+        (GoalLocale::EnUs, true) => "Goal stopped without a desktop master session.",
+    }
+}
+
+/// Terminal summary for a stop that landed before any worker produced
+/// material worth wrapping up.
+pub fn goal_stopped_before_results(locale: GoalLocale) -> &'static str {
+    match locale {
+        GoalLocale::ZhCn => "Goal 已停止，停止时还没有可整理的结果。",
+        GoalLocale::EnUs => "Goal stopped before workers produced results.",
+    }
+}
+
 #[cfg(test)]
 mod goal_locale_tests {
     use super::*;

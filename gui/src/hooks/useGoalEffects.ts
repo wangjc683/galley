@@ -165,7 +165,9 @@ export function useGoalEffects({
           category: "business",
           severity: failed ? "error" : "info",
           title,
-          message: goal.objective,
+          // On failure the controller records the cause in latestSummary;
+          // the objective alone explains nothing ("反馈引导行动").
+          message: failed && goal.latestSummary ? goal.latestSummary : goal.objective,
           hint: null,
           retryable: false,
           context: "goal_terminal",

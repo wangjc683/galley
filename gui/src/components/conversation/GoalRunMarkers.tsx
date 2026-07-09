@@ -57,10 +57,6 @@ export function GoalCommissionMarker({
   const conv = copy.conversation;
   const tb = copy.topbar;
   const budgetMinutes = Math.max(1, Math.round(goal.budgetSeconds / 60));
-  const writeLabel =
-    goal.writeMode === "read_only"
-      ? conv.goalWriteReadonly
-      : conv.goalWriteAutonomous;
 
   return (
     <div className="my-5">
@@ -81,8 +77,15 @@ export function GoalCommissionMarker({
             </>
           )}
           <span>{conv.goalBudget(budgetMinutes)}</span>
-          <span aria-hidden>·</span>
-          <span>{writeLabel}</span>
+          {/* Write mode surfaces only when it deviates from the default:
+              the confirm dialog offers no write-mode knob, so labeling
+              every run "autonomous" is a parameter the user never set. */}
+          {goal.writeMode === "read_only" && (
+            <>
+              <span aria-hidden>·</span>
+              <span>{conv.goalWriteReadonly}</span>
+            </>
+          )}
         </span>
         <GoalStatusBadge status={goal.status} />
       </div>
@@ -160,41 +163,51 @@ export function GoalTerminalMarker({ goal }: { goal: GoalBrief }) {
   const showRevisions =
     goal.deliverableVersion != null && goal.deliverableVersion >= 2;
   return (
-    <div className="my-5 flex items-center gap-2 text-[12px]">
-      <Icon size={13} weight="bold" className={cn("shrink-0", tone)} />
-      <span className={cn("shrink-0 font-medium", tone)}>
-        {goalStageLabel(goal.status, tb)}
-      </span>
-      {showTasks && (
-        <span className="shrink-0 tabular-nums text-ink-muted">
-          {`· ${conv.goalTasksCompleted(
-            goal.completedTaskCount ?? 0,
-            goal.taskCount ?? 0,
-          )}`}
+    <div className="my-5">
+      <div className="flex items-center gap-2 text-[12px]">
+        <Icon size={13} weight="bold" className={cn("shrink-0", tone)} />
+        <span className={cn("shrink-0 font-medium", tone)}>
+          {goalStageLabel(goal.status, tb)}
         </span>
-      )}
-      {minutes != null && (
-        <span className="shrink-0 tabular-nums text-ink-muted">
-          {`· ${conv.goalRunElapsed(minutes)}`}
-        </span>
-      )}
-      {showRevisions && (
-        <span className="shrink-0 tabular-nums text-ink-muted">
-          {`· ${conv.goalImprovedVersions(goal.deliverableVersion ?? 0)}`}
-        </span>
-      )}
-      <span className="h-px min-w-4 flex-1 bg-line" aria-hidden />
-      {workspaceHasFiles && goal.workspacePath && (
-        <button
-          type="button"
-          className={actionClass}
-          onClick={() => {
-            const path = goal.workspacePath;
-            if (path) void revealItemInDir(path).catch(() => undefined);
-          }}
-        >
-          {tb.openGoalWorkspace}
-        </button>
+        {showTasks && (
+          <span className="shrink-0 tabular-nums text-ink-muted">
+            {`· ${conv.goalTasksCompleted(
+              goal.completedTaskCount ?? 0,
+              goal.taskCount ?? 0,
+            )}`}
+          </span>
+        )}
+        {minutes != null && (
+          <span className="shrink-0 tabular-nums text-ink-muted">
+            {`· ${conv.goalRunElapsed(minutes)}`}
+          </span>
+        )}
+        {showRevisions && (
+          <span className="shrink-0 tabular-nums text-ink-muted">
+            {`· ${conv.goalImprovedVersions(goal.deliverableVersion ?? 0)}`}
+          </span>
+        )}
+        <span className="h-px min-w-4 flex-1 bg-line" aria-hidden />
+        {workspaceHasFiles && goal.workspacePath && (
+          <button
+            type="button"
+            className={actionClass}
+            onClick={() => {
+              const path = goal.workspacePath;
+              if (path) void revealItemInDir(path).catch(() => undefined);
+            }}
+          >
+            {tb.openGoalWorkspace}
+          </button>
+        )}
+      </div>
+      {/* A failure without a reason is a dead-end ("反馈引导行动") — the
+          controller records the cause in latestSummary on failure, so
+          surface it right where the run ended. */}
+      {goal.status === "failed" && goal.latestSummary && (
+        <div className="mt-1 break-words pl-[21px] text-[11.5px] leading-snug text-ink-muted">
+          {goal.latestSummary}
+        </div>
       )}
     </div>
   );
@@ -209,14 +222,50 @@ export function GoalTerminalMarker({ goal }: { goal: GoalBrief }) {
  * per-step ticker (live detail stays in the TopBar pill). Rendered only
  * while a goal is running/wrapping and the master is not itself
  * mid-turn. Consistent with DESIGN.md §2.7: running = allowed liveness.
+ *
+ * `onStop` adds an inline stop control so the reader of the thread can
+ * cancel without hunting for the TopBar pill — same two-step confirm
+ * (and consequence copy) as the pill popover.
  */
-export function GoalRunningTail() {
+export function GoalRunningTail({ onStop }: { onStop?: () => void }) {
   const copy = useCopy();
+  const tb = copy.topbar;
+  const [confirmingStop, setConfirmingStop] = useState(false);
   return (
-    <div className="my-5 flex items-center gap-2 text-[12px] text-brand-strong/70">
-      <Target size={12} weight="thin" className="shrink-0" />
-      <span>{copy.conversation.goalWorking}</span>
-      <LiveDots className="pb-px text-brand-strong/50" />
+    <div className="my-5 text-[12px]">
+      <div className="flex items-center gap-2 text-brand-strong/70">
+        <Target size={12} weight="thin" className="shrink-0" />
+        <span>{copy.conversation.goalWorking}</span>
+        <LiveDots className="pb-px text-brand-strong/50" />
+        {onStop && (
+          <button
+            type="button"
+            className={cn(
+              "ml-auto inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 text-[11.5px]",
+              "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
+              "active:translate-y-px active:duration-[45ms]",
+              confirmingStop
+                ? "border border-error bg-error/[var(--opacity-soft)] font-medium text-error hover:bg-error/[var(--opacity-medium)]"
+                : "text-ink-muted hover:bg-hover hover:text-ink",
+            )}
+            onClick={() => {
+              if (!confirmingStop) {
+                setConfirmingStop(true);
+                return;
+              }
+              setConfirmingStop(false);
+              onStop();
+            }}
+          >
+            {confirmingStop ? tb.confirmStopGoal : tb.stopGoal}
+          </button>
+        )}
+      </div>
+      {confirmingStop && (
+        <div className="mt-1 pl-5 text-[11px] leading-snug text-error">
+          {tb.stopGoalConsequence}
+        </div>
+      )}
     </div>
   );
 }

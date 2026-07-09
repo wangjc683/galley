@@ -37,10 +37,11 @@ use crate::session::{
 };
 use galley_core_lib::api::{
     goal_checkpoint_deadline_reached, goal_checkpoint_first_material,
-    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_synthesizing,
-    CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief, GoalEventType, GoalId,
-    GoalLocale, GoalMode, GoalStatus, GoalStatusSnapshot, MessageBrief, MessageRole, RuntimeKind,
-    SessionId, GOAL_CONFIRMATION_PHRASE,
+    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_finished_no_master,
+    goal_stopped_before_results, goal_synthesizing, CreateGoalEventInput, CreateGoalTaskInput,
+    GalleyApi, GoalBrief, GoalEventType, GoalId, GoalLocale, GoalMode, GoalStatus,
+    GoalStatusSnapshot, MessageBrief, MessageRole, RuntimeKind, SessionId,
+    GOAL_CONFIRMATION_PHRASE,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
@@ -1794,7 +1795,7 @@ async fn finish_goal_with_master(
     // an empty task board) keeps the historical instant-stop behavior —
     // dispatching a wrap-up turn over nothing would only delay the stop.
     if mode == GoalFinishMode::StopWrapUp && !goal_has_stop_wrap_up_material(&snapshot) {
-        let summary = "Goal stopped before workers produced results.".to_string();
+        let summary = goal_stopped_before_results(goal_narration_locale()).to_string();
         galley
             .create_goal_event(CreateGoalEventInput {
                 goal_id: goal.id.clone(),
@@ -1818,13 +1819,9 @@ async fn finish_goal_with_master(
         return Ok(());
     }
     let Some(master_session_id) = goal.master_session_id.clone() else {
-        let summary = goal.latest_summary.clone().unwrap_or_else(|| match mode {
-            GoalFinishMode::Normal => {
-                "Goal completed without a desktop master session.".to_string()
-            }
-            GoalFinishMode::StopWrapUp => {
-                "Goal stopped without a desktop master session.".to_string()
-            }
+        let summary = goal.latest_summary.clone().unwrap_or_else(|| {
+            goal_finished_no_master(goal_narration_locale(), mode == GoalFinishMode::StopWrapUp)
+                .to_string()
         });
         galley
             .create_goal_event(CreateGoalEventInput {

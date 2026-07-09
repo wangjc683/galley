@@ -129,8 +129,11 @@ export function GoalIndicator({
         >
           <div className="space-y-3">
             {goals.map((goal) => {
+              // Wrapping shows no countdown: the budget has ticked to zero
+              // but the wrap-up is still working — "剩余 0 分钟" reads as
+              // stuck. The stage word already says what's happening.
               const remaining =
-                goal.status === "running" || goal.status === "wrapping"
+                goal.status === "running"
                   ? remainingMinutes(goal.deadlineAt)
                   : null;
               return (
@@ -190,12 +193,9 @@ export function GoalIndicator({
                             goal.taskCount,
                           )
                         : null,
-                      goal.status === "running" || goal.status === "wrapping"
-                        ? copy.goalElapsedOfBudget(
-                            elapsedRunMinutes(goal),
-                            Math.max(1, Math.round(goal.budgetSeconds / 60)),
-                          )
-                        : null,
+                      // No elapsed-of-budget line: the countdown above and
+                      // the pill's ambient fill already carry time, and two
+                      // framings of the same clock read as noise.
                     ]
                       .filter(Boolean)
                       .join(" · ")}
@@ -332,15 +332,6 @@ function budgetFractionNow(
     return null;
   }
   return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
-}
-
-/** Minutes since launch, floored at 0 — the popover's "elapsed" half of
- * "elapsed / budget". Computed at render; the popover only opens on
- * demand so no ticker is needed. */
-function elapsedRunMinutes(goal: GoalBrief): number {
-  const start = Date.parse(goal.startedAt);
-  if (!Number.isFinite(start)) return 0;
-  return Math.max(0, Math.round((Date.now() - start) / 60_000));
 }
 
 function goalAttentionGoal(goals: GoalBrief[]): GoalBrief {

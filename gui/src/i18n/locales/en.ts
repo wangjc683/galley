@@ -173,8 +173,6 @@ export const enCopy: AppCopy = {
     goalRemaining: (minutes: number) => `${minutes}m left`,
     goalWorkerCount: (workers: number) =>
       `${workers} ${workers === 1 ? "Agent" : "Agents"}`,
-    goalElapsedOfBudget: (elapsed: number, total: number) =>
-      `${elapsed}m elapsed of ${total}m`,
     goalTaskProgress: (done: number, total: number) =>
       `Tasks ${done}/${total}`,
     goalPillMultiple: (count: number) => `Goals · ${count}`,
@@ -298,21 +296,22 @@ export const enCopy: AppCopy = {
     goalConfirmObjective: "Objective",
     goalConfirmDuration: "Run time",
     goalDurationFast: "15 minutes",
-    goalDurationRecommended: "30 minutes",
+    goalDurationRecommended: "30 min · Recommended",
     goalDurationDeep: "60 minutes",
     goalDurationCustom: "Custom",
     goalDurationCustomInput: "Custom run time",
     goalDurationMinutes: "minutes",
     goalDurationRange: "5-120 minutes",
-    goalAgentCount: "Max Agents",
     goalHiveToggle: "Need multiple independent viewpoints cross-checking?",
     goalHiveTitle: "Multiple independent viewpoints, cross-checked",
     goalHiveDescription:
-      "Slower and costlier, in exchange for several agents cross-checking each other. Best when the answer is contestable and needs independent verification.",
+      "Slower and costlier, in exchange for several Agents cross-checking each other. Best when the answer is contestable and needs independent verification.",
     goalHiveAgentCount: "Independent viewpoints",
-    goalHiveBackToSolo: "Back to a single agent",
+    goalHiveBackToSolo: "Back to a single Agent",
     goalHiveBudgetHint: (minutes: number) =>
-      `Cross-checking needs at least ${minutes} minutes; the current run time is too short, so a single agent will run.`,
+      `Cross-checking needs at least ${minutes} minutes; the current run time is too short, so a single Agent will run.`,
+    goalHiveFallbackNotice: (minutes: number) =>
+      `Run time dropped below ${minutes} minutes, so this switched back to a single Agent; raise the run time to restore cross-checking.`,
     cannotSwitchRunning: "Can't switch LLMs while running",
     switchCurrent: (name) => `Switch LLM · Current: ${name}`,
     configureModels: "Configure models",
@@ -1256,7 +1255,6 @@ export const enCopy: AppCopy = {
     goalNarration: "Galley",
     goalEyebrow: "Goal",
     goalBudget: (minutes) => `${minutes}m budget`,
-    goalWriteAutonomous: "Autonomous",
     goalWriteReadonly: "Read-only",
     goalRunElapsed: (minutes) => `${minutes}m elapsed`,
     goalTasksCompleted: (done: number, total: number) =>
@@ -1273,7 +1271,7 @@ export const enCopy: AppCopy = {
       blocked: "Blocked",
       cancelled: "Cancelled",
     },
-    workerContextEyebrow: "Goal worker",
+    workerContextEyebrow: "Goal task",
     workerContextTask: "Task: ",
     workerContextOpenMaster: "Back to the Goal session ›",
     goalWorking: "Galley is working…",
@@ -1457,6 +1455,8 @@ export const enCopy: AppCopy = {
     goalStarted: "Goal started",
     goalStartedMessage: (workers: number, minutes: number) =>
       `For the next ${minutes} minutes, Galley will keep working with ${workers} Agents.`,
+    goalStartedMessageSolo: (minutes: number) =>
+      `For the next ${minutes} minutes, Galley will keep pushing this goal forward.`,
     goalStartFailed: "Could not start Goal",
     goalCompleted: "Goal done",
     goalFailed: "Goal failed",

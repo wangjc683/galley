@@ -224,7 +224,16 @@ export function GoalConfirmDialog({
                 </button>
                 {!hiveAllowed && (
                   <span className="text-[11px] text-ink-muted">
-                    {copy.composer.goalHiveBudgetHint(HIVE_MIN_BUDGET_MINUTES)}
+                    {/* The user had opted into hive and the budget change
+                        overrode that choice — say so explicitly instead of
+                        the generic "toggle disabled" hint. */}
+                    {mode === "hive"
+                      ? copy.composer.goalHiveFallbackNotice(
+                          HIVE_MIN_BUDGET_MINUTES,
+                        )
+                      : copy.composer.goalHiveBudgetHint(
+                          HIVE_MIN_BUDGET_MINUTES,
+                        )}
                   </span>
                 )}
               </div>
