@@ -247,6 +247,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const [goalSubmitting, setGoalSubmitting] = useState(false);
     const [showByTheWayRequiredHint, setShowByTheWayRequiredHint] =
       useState(false);
+    const [showGoalBlockedHint, setShowGoalBlockedHint] = useState(false);
     const isControlled = value !== undefined;
     const text = isControlled ? value : internal;
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -446,9 +447,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       : null;
     // Keyboard hints get kbd-token styling; a caller-supplied staticHint
     // is already a ReactNode and renders as-is in the same slot.
-    const footerHint: ReactNode = keyboardHint
-      ? renderComposerHintWithKbd(keyboardHint)
-      : (staticHint ?? null);
+    const footerHint: ReactNode =
+      showGoalBlockedHint && goalBlockedByActive ? (
+        <span className="text-warning">
+          {copy.composer.goalBlockedByActive}
+        </span>
+      ) : keyboardHint ? (
+        renderComposerHintWithKbd(keyboardHint)
+      ) : (
+        (staticHint ?? null)
+      );
 
     useEffect(() => {
       if (!showByTheWayRequiredHint) return;
@@ -458,10 +466,28 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       return () => window.clearTimeout(timer);
     }, [showByTheWayRequiredHint]);
 
+    useEffect(() => {
+      if (!showGoalBlockedHint) return;
+      // Auto-fade after long enough to read. If the blocking Goal finishes
+      // first the hint stops rendering anyway (its render gate ANDs in
+      // goalBlockedByActive), so no separate early-clear is needed.
+      const timer = window.setTimeout(() => {
+        setShowGoalBlockedHint(false);
+      }, 2600);
+      return () => window.clearTimeout(timer);
+    }, [showGoalBlockedHint]);
+
     const handleGoalArmToggle = () => {
       if (!canShowGoalEntry) return;
       if (requiresModelConfig) {
         onConfigureModels?.();
+        return;
+      }
+      // A second Goal is blocked while one is running. Don't fail silently
+      // on a disabled-looking button — surface the reason inline. The hover
+      // tooltip alone left "why is this greyed out?" unanswered on click.
+      if (goalBlockedByActive) {
+        setShowGoalBlockedHint(true);
         return;
       }
       if (goalEntryDisabled) return;

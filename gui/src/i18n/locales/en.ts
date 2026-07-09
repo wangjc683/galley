@@ -173,9 +173,11 @@ export const enCopy: AppCopy = {
     goalRemaining: (minutes: number) => `${minutes}m left`,
     goalWorkerCount: (workers: number) =>
       `${workers} ${workers === 1 ? "Agent" : "Agents"}`,
-    goalTaskProgress: (done: number, total: number) =>
-      `Tasks ${done}/${total}`,
-    goalPillMultiple: (count: number) => `Goals · ${count}`,
+    goalTaskProgress: (done: number, total: number) => `Tasks ${done}/${total}`,
+    goalReviewCount: (count: number) =>
+      `${count} ${count === 1 ? "result" : "results"} to review`,
+    goalSectionInProgress: "In progress",
+    goalSectionToReview: "To review",
     openGoal: "View progress",
     openGoalResult: "Open result",
     viewGoalDetails: "View details",
@@ -183,7 +185,8 @@ export const enCopy: AppCopy = {
     openGoalWorkspace: "Output folder",
     stopGoal: "Stop",
     confirmStopGoal: "Confirm stop",
-    stopGoalConsequence: "Stopping wraps up with a brief summary first (~1–2 min)",
+    stopGoalConsequence:
+      "Stopping wraps up with a brief summary first (~1–2 min)",
     moreConversationActions: (title) => `${title} · More conversation actions`,
     rename: "Rename",
     reinjectTools: "Reinject tools",
