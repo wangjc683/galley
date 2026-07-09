@@ -50,7 +50,7 @@ const BACKUP_RETENTION_COUNT: usize = 3;
 /// recovery pass has completed; its presence skips backup scanning at
 /// startup.
 const RECOVERY_SENTINEL_FILENAME: &str = "backup-recovery.done";
-const SAFE_REBUILD_PREFLIGHT_MAX_VERSION: i64 = 23;
+const SAFE_REBUILD_PREFLIGHT_MAX_VERSION: i64 = 33;
 
 #[derive(Debug, Clone, Copy)]
 struct MigrationSpec {
@@ -175,6 +175,60 @@ const SAFE_PREFLIGHT_MIGRATIONS: &[MigrationSpec] = &[
         version: 23,
         description: "allow Galley Native Goal runtime",
         sql: include_str!("../migrations/023_native_goal_runtime.sql"),
+    },
+    // 024–032 are additive (no table rebuild) and would be safe under SQLx,
+    // but the preflight boundary must be contiguous: 033 rebuilds `goals`,
+    // and its INSERT…SELECT needs the schema these produce (e.g. 032's
+    // `mode` column), so everything up to the newest rebuild runs here.
+    MigrationSpec {
+        version: 24,
+        description: "make Galley Native the default built-in runtime",
+        sql: include_str!("../migrations/024_native_default_runtime.sql"),
+    },
+    MigrationSpec {
+        version: 25,
+        description: "restore managed runtime default after native experiment",
+        sql: include_str!("../migrations/025_restore_managed_runtime_default.sql"),
+    },
+    MigrationSpec {
+        version: 26,
+        description: "project workspace binding",
+        sql: include_str!("../migrations/026_project_workspace.sql"),
+    },
+    MigrationSpec {
+        version: 27,
+        description: "backfill managed model context_win default",
+        sql: include_str!("../migrations/027_managed_model_context_win.sql"),
+    },
+    MigrationSpec {
+        version: 28,
+        description: "add message telemetry",
+        sql: include_str!("../migrations/028_message_telemetry.sql"),
+    },
+    MigrationSpec {
+        version: 29,
+        description: "backfill managed custom model context_win default",
+        sql: include_str!("../migrations/029_managed_model_custom_context_win.sql"),
+    },
+    MigrationSpec {
+        version: 30,
+        description: "enforce single active goal",
+        sql: include_str!("../migrations/030_single_active_goal.sql"),
+    },
+    MigrationSpec {
+        version: 31,
+        description: "stamp goal-scoped message rows with goal_id",
+        sql: include_str!("../migrations/031_message_goal_id.sql"),
+    },
+    MigrationSpec {
+        version: 32,
+        description: "add goal solo/hive engine mode",
+        sql: include_str!("../migrations/032_goal_mode.sql"),
+    },
+    MigrationSpec {
+        version: 33,
+        description: "make goals.project_id optional (solo without a project)",
+        sql: include_str!("../migrations/033_goal_optional_project.sql"),
     },
 ];
 
@@ -353,10 +407,10 @@ pub fn ensure_backup_before_migrate(latest_version: i64) -> Result<BackupOutcome
 /// `DROP TABLE sessions` can cascade-delete `messages`.
 ///
 /// This guard runs before the SQL plugin. If the user's DB has not crossed the
-/// known parent-table rebuild boundary (021 / 023), we apply pending migrations
-/// through 023 on a connection with FK enforcement disabled and record the same
-/// checksums SQLx expects. The plugin then validates/skips those rows and
-/// continues with later migrations normally.
+/// newest parent-table rebuild boundary (021 / 023 / 033), we apply pending
+/// migrations through that boundary on a connection with FK enforcement
+/// disabled and record the same checksums SQLx expects. The plugin then
+/// validates/skips those rows and continues with later migrations normally.
 pub fn ensure_safe_rebuild_migrations_before_plugin(
     latest_version: i64,
 ) -> Result<SafeMigrationOutcome, SafeMigrationError> {
@@ -647,8 +701,8 @@ async fn ensure_sqlx_migrations_table(
 /// rebuild and the version insert leaves the rebuild applied but
 /// unrecorded — every subsequent launch re-runs it into
 /// "table already exists" and exits, permanently. The in-file
-/// `PRAGMA foreign_keys` statements in 021/023 become no-ops inside the
-/// transaction, which is what this preflight wants anyway: the
+/// `PRAGMA foreign_keys` statements in 021/023/033 become no-ops inside
+/// the transaction, which is what this preflight wants anyway: the
 /// connection already runs with FK enforcement disabled.
 async fn apply_preflight_migration(
     conn: &mut sqlx::SqliteConnection,
@@ -1416,10 +1470,10 @@ mod tests {
             .expect("seed deliverable");
         });
 
-        let outcome = ensure_safe_rebuild_migrations_in(&data, 26).unwrap();
+        let outcome = ensure_safe_rebuild_migrations_in(&data, 33).unwrap();
         assert!(matches!(
             outcome,
-            SafeMigrationOutcome::Applied { from: 19, to: 23 }
+            SafeMigrationOutcome::Applied { from: 19, to: 33 }
         ));
 
         tauri::async_runtime::block_on(async {
@@ -1433,7 +1487,7 @@ mod tests {
                 .fetch_one(&mut conn)
                 .await
                 .expect("read version");
-            assert_eq!(version, 23);
+            assert_eq!(version, 33);
             for (label, table) in [
                 ("messages", "messages"),
                 ("tool_events", "tool_events"),
@@ -1446,8 +1500,131 @@ mod tests {
                     .fetch_one(&mut conn)
                     .await
                     .unwrap_or_else(|e| panic!("count {label}: {e}"));
-                assert_eq!(count, 1, "{label} should survive table rebuild");
+                assert_eq!(
+                    count, 1,
+                    "{label} should survive table rebuilds (021/023/033)"
+                );
             }
+            // 033 preserved the goal row's data through the rebuild and
+            // relaxed project_id to nullable.
+            let (project_id, mode): (Option<String>, String) =
+                sqlx::query_as("SELECT project_id, mode FROM goals WHERE id = 'g1'")
+                    .fetch_one(&mut conn)
+                    .await
+                    .expect("read migrated goal");
+            assert_eq!(project_id.as_deref(), Some("p1"));
+            assert_eq!(mode, "hive");
+            sqlx::query(
+                "INSERT INTO goals (
+                   id, proposal_id, project_id, objective, status, budget_seconds,
+                   worker_limit, runtime_kind, write_mode, started_at, deadline_at,
+                   created_at, updated_at, mode
+                 )
+                 VALUES (
+                   'g2', NULL, NULL, 'Projectless solo', 'completed', 60,
+                   1, 'managed', 'autonomous', '2026-06-18T00:00:00Z', '2026-06-18T01:00:00Z',
+                   '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z', 'solo'
+                 )",
+            )
+            .execute(&mut conn)
+            .await
+            .expect("NULL project_id must be accepted after 033");
+        });
+    }
+
+    /// A user already past the old preflight boundary (on_disk = 32, e.g.
+    /// upgraded before 033 shipped) must run ONLY the 033 rebuild here —
+    /// with goal child rows surviving it.
+    #[test]
+    fn safe_rebuild_preflight_from_32_runs_only_033_and_keeps_goal_children() {
+        let tmp = TempDir::new().unwrap();
+        let data = make_parent_with_data_dir(&tmp);
+        let db = data.join(DB_FILENAME);
+        init_db_through_migration(&db, 32);
+
+        tauri::async_runtime::block_on(async {
+            let mut conn = SqliteConnectOptions::new()
+                .filename(&db)
+                .create_if_missing(false)
+                .connect()
+                .await
+                .expect("open seeded db");
+            sqlx::query(
+                "INSERT INTO projects (id, name, last_activity_at, created_at, updated_at)
+                 VALUES ('p1', 'Project', '2026-07-09T00:00:00Z', '2026-07-09T00:00:00Z', '2026-07-09T00:00:00Z')",
+            )
+            .execute(&mut conn)
+            .await
+            .expect("seed project");
+            sqlx::query(
+                "INSERT INTO goals (
+                   id, proposal_id, project_id, objective, status, budget_seconds,
+                   worker_limit, runtime_kind, write_mode, started_at, deadline_at,
+                   created_at, updated_at, mode
+                 )
+                 VALUES (
+                   'g1', NULL, 'p1', 'Do work', 'completed', 60,
+                   1, 'managed', 'autonomous', '2026-07-09T00:00:00Z', '2026-07-09T01:00:00Z',
+                   '2026-07-09T00:00:00Z', '2026-07-09T00:00:00Z', 'solo'
+                 )",
+            )
+            .execute(&mut conn)
+            .await
+            .expect("seed goal");
+            sqlx::query(
+                "INSERT INTO goal_tasks (id, goal_id, title, status, created_at, updated_at)
+                 VALUES ('gt1', 'g1', 'Task', 'open', '2026-07-09T00:00:00Z', '2026-07-09T00:00:00Z')",
+            )
+            .execute(&mut conn)
+            .await
+            .expect("seed goal task");
+            sqlx::query(
+                "INSERT INTO goal_events (goal_id, task_id, author_session_id, event_type, body, created_at)
+                 VALUES ('g1', 'gt1', NULL, 'progress', 'started', '2026-07-09T00:00:00Z')",
+            )
+            .execute(&mut conn)
+            .await
+            .expect("seed goal event");
+            sqlx::query(
+                "INSERT INTO goal_deliverables (id, goal_id, version, content, created_at)
+                 VALUES ('gd1', 'g1', 1, 'draft', '2026-07-09T00:00:00Z')",
+            )
+            .execute(&mut conn)
+            .await
+            .expect("seed deliverable");
+        });
+
+        let outcome = ensure_safe_rebuild_migrations_in(&data, 33).unwrap();
+        assert!(matches!(
+            outcome,
+            SafeMigrationOutcome::Applied { from: 32, to: 33 }
+        ));
+
+        tauri::async_runtime::block_on(async {
+            let mut conn = SqliteConnectOptions::new()
+                .filename(&db)
+                .create_if_missing(false)
+                .connect()
+                .await
+                .expect("open migrated db");
+            let version: i64 = sqlx::query_scalar("SELECT MAX(version) FROM _sqlx_migrations")
+                .fetch_one(&mut conn)
+                .await
+                .expect("read version");
+            assert_eq!(version, 33);
+            for table in ["goal_tasks", "goal_events", "goal_deliverables"] {
+                let sql = format!("SELECT COUNT(*) FROM {table}");
+                let count: i64 = sqlx::query_scalar(&sql)
+                    .fetch_one(&mut conn)
+                    .await
+                    .unwrap_or_else(|e| panic!("count {table}: {e}"));
+                assert_eq!(count, 1, "{table} should survive the 033 rebuild");
+            }
+            let mode: String = sqlx::query_scalar("SELECT mode FROM goals WHERE id = 'g1'")
+                .fetch_one(&mut conn)
+                .await
+                .expect("read migrated goal mode");
+            assert_eq!(mode, "solo");
         });
     }
 

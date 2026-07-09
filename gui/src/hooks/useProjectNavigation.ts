@@ -57,7 +57,12 @@ export function useProjectNavigation({
     ? projects.find((p) => p.id === activeProjectFilter)
     : undefined;
   const activeGoalProjectIds = useMemo(
-    () => new Set(activeGoals.map((goal) => goal.projectId)),
+    () =>
+      new Set(
+        activeGoals
+          .map((goal) => goal.projectId)
+          .filter((projectId): projectId is string => projectId != null),
+      ),
     [activeGoals],
   );
   const editingProject = useMemo(

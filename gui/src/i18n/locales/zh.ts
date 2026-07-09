@@ -307,6 +307,7 @@ export const zhCopy = {
     clearProjectContext: "改为普通新对话（不放入项目）",
     goalRunInProject: (projectName: string) => `在项目「${projectName}」中运行`,
     goalRunNewProject: "将创建一个新项目来承载这次 Goal",
+    goalRunHere: "就在这个对话中运行，不新建项目",
     savedPrompts: {
       trigger: "常用提示词",
       replaceDraftTitle: "替换当前草稿？",

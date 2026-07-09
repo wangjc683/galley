@@ -1,6 +1,6 @@
 # 03 — Solo Goal 不应自动创建项目(需谨慎的数据迁移)
 
-Status: ready-for-human
+Status: done
 Created: 2026-07-08
 Parent: ../PRD.md
 
@@ -70,3 +70,32 @@ solo 是单 session 任务,不需要项目来圈一个 worker 舰队。所以:
 在数据上仍归属那个隐藏项目(非真·无项目)。JC 2026-07-08 倾向先记 issue 走正经方案 A。
 
 ## Comments
+
+### 2026-07-09 — 已按方案 A 落地(迁移 033 + preflight 扩展)
+
+- **迁移 033**(`core/migrations/033_goal_optional_project.sql`):goals 重建,
+  `project_id` → 可空 + `ON DELETE SET NULL`,列 = post-032 全列(含 mode),
+  重建全部 5 个索引(含 030 的 `goals_single_active` partial UNIQUE)。
+- **preflight**:`SAFE_PREFLIGHT_MIGRATIONS` 补 024–033(全部 `include_str!`,
+  checksum 需按字节一致,不能只放文件名),`SAFE_REBUILD_PREFLIGHT_MAX_VERSION`
+  23 → 33。勘探修正:**024–032 全是 additive**(无重建),比本 issue 预估的
+  风险低;但 preflight 边界必须连续(033 的 INSERT…SELECT 依赖 032 的 mode 列)。
+- **测试**:`safe_rebuild_preflight_preserves_session_and_goal_child_rows`
+  更新为 `Applied { to: 33 }` + 033 后 goal 子表存活 + NULL project_id 可插;
+  新增 `safe_rebuild_preflight_from_32_runs_only_033_and_keeps_goal_children`
+  (on_disk=32 增量用例)。db_writes_test 的迁移常量表补 MIG_033。
+- **Rust**:GoalBrief/GoalRow Option 化;`start_goal_from_proposal_db`
+  solo+无项目 → None(跳过建项目与 session mirror),hive 维持建项目;
+  `goal_status_db` None → 不 fetch project、sessions 只取 master;CLI 侧
+  project_follow/new_goal_worker/synthesis prompt/日志全部 None-safe。
+  勘探修正:worker/synthesis 管线(session_cmds.rs、session.rs:427)本就
+  Option-aware,无需"Some 兜底"。
+- **GUI**:`GoalBrief.projectId?: string`;solo 无项目不 mirror、toast 无
+  「查看项目」action、popover 隐藏「项目」按钮、hydrate/导航过滤 undefined;
+  确认对话框 solo 无项目时显示「就在这个对话中运行,不新建项目」
+  (新 key `goalRunHere`),hive 保留「将创建一个新项目」。
+- 被回退的旧实现在 git 无痕迹(reflog/stash/fsck 均查过),本次从头实现。
+
+验证:cargo test --workspace 全绿(含两条 preflight 守护用例)、clippy/fmt 干净、
+gui typecheck/lint/test(115)全绿。**真实旧库升级路径待 JC 用带历史 goal 的
+库副本 dogfood 一次最稳。**

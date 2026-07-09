@@ -12,7 +12,9 @@ export type GoalWriteMode = "autonomous" | "read_only";
 export interface GoalBrief {
   id: string;
   proposalId?: string;
-  projectId: string;
+  /** Absent for a solo Goal launched outside any project — it stays
+   * project-less, like a plain session. Hive goals always have one. */
+  projectId?: string;
   masterSessionId?: string;
   objective: string;
   status: GoalStatus;

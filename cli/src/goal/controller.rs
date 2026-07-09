@@ -411,21 +411,29 @@ pub(crate) async fn run_goal_controller(
         // healthy goal is never cut short; on timeout treat it as an idle
         // return and let the existing budget logic take over wrap-up.
         let follow_timeout = goal_follow_timeout(goal_budget_remaining(&goal, controller_started));
-        match tokio::time::timeout(
-            follow_timeout,
-            project_follow(
-                goal.project_id.0.clone(),
-                80,
-                false,
-                true,
-                true,
-                Some(follow_scope),
+        // Hive always mints a project at start; a missing one is a data
+        // anomaly. `None` skips the follow and falls through to the
+        // budget/deadline enforcement below rather than crashing.
+        let follow_result = match goal.project_id.as_ref() {
+            Some(project_id) => Some(
+                tokio::time::timeout(
+                    follow_timeout,
+                    project_follow(
+                        project_id.0.clone(),
+                        80,
+                        false,
+                        true,
+                        true,
+                        Some(follow_scope),
+                    ),
+                )
+                .await,
             ),
-        )
-        .await
-        {
-            Ok(Ok(())) => {}
-            Ok(Err(err)) => {
+            None => None,
+        };
+        match follow_result {
+            None | Some(Ok(Ok(()))) => {}
+            Some(Ok(Err(err))) => {
                 let _ = emit_json(&GoalRunFrame {
                     schema_version: SCHEMA_VERSION,
                     stream: "goal",
@@ -435,7 +443,7 @@ pub(crate) async fn run_goal_controller(
                     note: Some(format!("project follow interrupted: {err}")),
                 });
             }
-            Err(_) => {
+            Some(Err(_)) => {
                 let note = format!(
                     "Follow phase hit its {}s bound without the goal's sessions going idle; returning control to the controller loop so budget/deadline enforcement can run.",
                     follow_timeout.as_secs()
@@ -1071,7 +1079,9 @@ async fn start_goal_worker_slots(
         let result =
             session_new_goal_worker_value(
                 prompt,
-                Some(goal.project_id.0.clone()),
+                goal.project_id
+                    .as_ref()
+                    .map(|project_id| project_id.0.clone()),
                 worker_llm.clone(),
                 runtime,
                 supervisor.clone(),
@@ -2004,6 +2014,12 @@ async fn build_goal_synthesis_prompt(
         GoalFinishMode::StopWrapUp => 12_000,
     };
     let mut out = String::new();
+    // Agent-facing context line; a project-less solo goal renders "(none)".
+    let project_id_note = goal
+        .project_id
+        .as_ref()
+        .map(|project_id| project_id.0.as_str())
+        .unwrap_or("(none)");
     // Solo goals have no workers/master framing — the one agent that ran the
     // objective is being asked for its own final answer. Give it a clean
     // prompt that doesn't reference a hive it never had.
@@ -2012,7 +2028,7 @@ async fn build_goal_synthesis_prompt(
             &mut out,
             &format!(
                 "[Galley Goal — final answer]\n\nThe time budget for this Goal has been reached. Stop exploring and deliver your final answer to the user now, directly and in their language. Do not expose Goal ids, command logs, or internal process notes.\n\nObjective:\n{}\n\nProduce a concise final answer with: conclusion, key evidence, important gaps or caveats, and next actions. Internal temp paths are scratch; only report a file path as the deliverable when the user explicitly asked Galley to save there.\n\nGoal status: {:?}\nProject id: {}\n\n",
-                goal.objective, goal.status, goal.project_id
+                goal.objective, goal.status, project_id_note
             ),
             28_000,
         );
@@ -2025,7 +2041,7 @@ async fn build_goal_synthesis_prompt(
                 "[Galley Goal Master Synthesis]\n\nYou are the master session for this Galley Goal. Answer the user directly in their language. Do not expose worker protocol, Goal ids, command logs, or internal coordination unless it materially helps the user.\n\nObjective:\n{}\n\nProduce a concise final answer with: conclusion, key evidence, important gaps or caveats, and next actions. Internal temp paths are scratch; only report a file path as the deliverable when the user explicitly asked Galley to save there.\n\nGoal status: {:?}\nProject id: {}\n\n",
                 goal.objective,
                 goal.status,
-                goal.project_id
+                project_id_note
             ),
             28_000,
         ),
@@ -2035,7 +2051,7 @@ async fn build_goal_synthesis_prompt(
                 "[Galley Goal Stop Wrap-Up]\n\nYou are the master session for this Galley Goal. The user asked to STOP the goal early. Answer the user directly in their language, in a few sentences: what was completed, what remains unfinished, and where any partial results live. Do not start new work, do not expose worker protocol, Goal ids, command logs, or internal coordination.\n\nObjective:\n{}\n\nGoal status: {:?}\nProject id: {}\n\n",
                 goal.objective,
                 goal.status,
-                goal.project_id
+                project_id_note
             ),
             28_000,
         ),

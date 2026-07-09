@@ -58,6 +58,7 @@ const MIG_029: &str = include_str!("../migrations/029_managed_model_custom_conte
 const MIG_030: &str = include_str!("../migrations/030_single_active_goal.sql");
 const MIG_031: &str = include_str!("../migrations/031_message_goal_id.sql");
 const MIG_032: &str = include_str!("../migrations/032_goal_mode.sql");
+const MIG_033: &str = include_str!("../migrations/033_goal_optional_project.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -98,7 +99,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
-        MIG_031, MIG_032,
+        MIG_031, MIG_032, MIG_033,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -296,7 +297,7 @@ async fn goal_lifecycle_defaults_task_event_and_stop() {
         .expect("goal status");
     assert_eq!(snapshot.tasks.len(), 1);
     assert_eq!(snapshot.events.len(), 2);
-    assert_eq!(snapshot.project.expect("project").id, goal.project_id);
+    assert_eq!(Some(snapshot.project.expect("project").id), goal.project_id);
 
     let stopping = galley
         .request_goal_stop(goal.id.clone(), Origin::cli(None, Some("stop".into())))
@@ -354,6 +355,11 @@ async fn goal_mode_defaults_hive_and_flows_solo_through_proposal() {
         .await
         .expect("start hive goal");
     assert_eq!(hive_goal.mode, GoalMode::Hive);
+    // Hive without a project mints one: it needs a project to hold the fleet.
+    assert!(
+        hive_goal.project_id.is_some(),
+        "hive auto-creates a project"
+    );
     // End it so the single-active-goal index frees up for the next start.
     galley
         .update_goal_state(hive_goal.id.clone(), GoalStatus::Completed, None)
@@ -388,12 +394,17 @@ async fn goal_mode_defaults_hive_and_flows_solo_through_proposal() {
         .await
         .expect("start solo goal");
     assert_eq!(solo_goal.mode, GoalMode::Solo);
-    // The goal_status snapshot the controller reads must carry the mode too.
+    // A solo goal launched without a project STAYS project-less — no
+    // auto-minted "Goal · X" project polluting the sidebar (issues/03).
+    assert_eq!(solo_goal.project_id, None, "solo keeps no project");
+    // The goal_status snapshot the controller reads must carry the mode too,
+    // and must not fall over on the missing project.
     let snapshot = galley
         .goal_status(solo_goal.id.clone())
         .await
         .expect("goal status");
     assert_eq!(snapshot.goal.mode, GoalMode::Solo);
+    assert!(snapshot.project.is_none());
 }
 
 /// A Goal task must never be owned by the Goal's master session: the master
@@ -886,7 +897,10 @@ async fn goal_master_session_visible_until_result_seen() {
         .session_brief(sid("sess_master"))
         .await
         .expect("master session");
-    assert_eq!(master.project_id.as_deref(), Some(goal.project_id.as_str()));
+    assert_eq!(
+        master.project_id.as_deref(),
+        goal.project_id.as_ref().map(|p| p.as_str())
+    );
 
     let visible = galley.list_visible_goals().await.expect("visible goals");
     assert_eq!(visible.len(), 1);

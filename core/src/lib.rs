@@ -240,6 +240,12 @@ pub fn run() {
             sql: include_str!("../migrations/032_goal_mode.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 33,
+            description: "make goals.project_id optional (solo without a project)",
+            sql: include_str!("../migrations/033_goal_optional_project.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     // Pre-migration backup hook (B4 M8). Derived — not hard-coded —

@@ -219,14 +219,19 @@ export function GoalIndicator({
                       )}
                     <div className="flex items-center justify-between gap-2 pt-0.5">
                       <div className="flex min-w-0 items-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-[12px]"
-                          onClick={() => onOpenProject?.(goal.projectId)}
-                        >
-                          {copy.openGoalProject}
-                        </Button>
+                        {goal.projectId != null && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[12px]"
+                            onClick={() => {
+                              const projectId = goal.projectId;
+                              if (projectId) onOpenProject?.(projectId);
+                            }}
+                          >
+                            {copy.openGoalProject}
+                          </Button>
+                        )}
                         {workspaceReady[goal.id] && goal.workspacePath && (
                           <Button
                             size="sm"

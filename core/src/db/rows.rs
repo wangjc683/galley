@@ -492,7 +492,7 @@ impl GoalProposalRow {
 pub(super) struct GoalRow {
     pub(super) id: String,
     pub(super) proposal_id: Option<String>,
-    pub(super) project_id: String,
+    pub(super) project_id: Option<String>,
     pub(super) master_session_id: Option<String>,
     pub(super) objective: String,
     pub(super) status: String,
@@ -525,7 +525,7 @@ impl GoalRow {
         Ok(GoalBrief {
             id: GoalId(self.id),
             proposal_id: self.proposal_id.map(GoalProposalId),
-            project_id: ProjectId(self.project_id),
+            project_id: self.project_id.map(ProjectId),
             master_session_id: self.master_session_id.map(SessionId),
             objective: self.objective,
             status: parse_goal_status(&self.status)?,

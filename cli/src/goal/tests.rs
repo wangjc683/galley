@@ -28,7 +28,7 @@ fn test_goal() -> GoalBrief {
     GoalBrief {
         id: GoalId("goal_test".to_string()),
         proposal_id: None,
-        project_id: ProjectId("proj_test".to_string()),
+        project_id: Some(ProjectId("proj_test".to_string())),
         master_session_id: Some(SessionId("master".to_string())),
         objective: "Test goal".to_string(),
         status: GoalStatus::Running,

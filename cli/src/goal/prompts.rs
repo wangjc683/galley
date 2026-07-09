@@ -335,7 +335,12 @@ Autonomy:
 "#,
         wave = wave,
         goal_id = goal.id,
-        project_id = goal.project_id,
+        // Hive always has a project; "(none)" only on a data anomaly.
+        project_id = goal
+            .project_id
+            .as_ref()
+            .map(|project_id| project_id.0.as_str())
+            .unwrap_or("(none)"),
         session_id_placeholder = GOAL_WORKER_SESSION_ID_PLACEHOLDER,
         objective = goal.objective,
         budget_minutes = goal.budget_seconds / 60,

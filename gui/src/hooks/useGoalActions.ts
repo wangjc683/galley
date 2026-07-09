@@ -136,7 +136,7 @@ export function useGoalActions({
           (a, b) => Date.parse(a.deadlineAt) - Date.parse(b.deadlineAt),
         );
       });
-      if (shouldMirrorMasterProject) {
+      if (shouldMirrorMasterProject && goal.projectId) {
         void assignSessionToProject(masterSessionId, goal.projectId);
       }
       void getGoalStatus(goal.id)
@@ -173,11 +173,15 @@ export function useGoalActions({
           retryable: false,
           context: "start_desktop_goal",
           traceback: null,
-          action: {
-            kind: "view_project",
-            label: copy.toasts.viewProject,
-            projectId: goal.projectId,
-          },
+          // A project-less solo goal has nowhere to "view" — the run is
+          // already the active session.
+          action: goal.projectId
+            ? {
+                kind: "view_project",
+                label: copy.toasts.viewProject,
+                projectId: goal.projectId,
+              }
+            : undefined,
           autoDismissMs: 4200,
         }),
       );
@@ -226,11 +230,11 @@ export function useGoalActions({
         }
         return;
       }
-      openGoalProject(snapshot.goal.projectId);
+      if (snapshot.goal.projectId) openGoalProject(snapshot.goal.projectId);
     } catch (e) {
       console.warn("[goals] open goal failed.", e);
       const goal = activeGoals.find((candidate) => candidate.id === goalId);
-      if (goal) openGoalProject(goal.projectId);
+      if (goal?.projectId) openGoalProject(goal.projectId);
     }
   };
 

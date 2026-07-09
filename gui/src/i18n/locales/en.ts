@@ -322,6 +322,7 @@ export const enCopy: AppCopy = {
     goalRunInProject: (projectName: string) =>
       `Runs in project "${projectName}"`,
     goalRunNewProject: "A new project will be created to hold this Goal",
+    goalRunHere: "Runs right here in this conversation — no new project",
     savedPrompts: {
       trigger: "Saved prompts",
       replaceDraftTitle: "Replace the current draft?",

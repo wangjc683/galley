@@ -149,7 +149,10 @@ pub struct GoalBrief {
     pub id: GoalId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proposal_id: Option<GoalProposalId>,
-    pub project_id: ProjectId,
+    /// `None` for a solo Goal launched outside any project (it stays
+    /// project-less, like a plain session). Hive goals always have one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<ProjectId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub master_session_id: Option<SessionId>,
     pub objective: String,

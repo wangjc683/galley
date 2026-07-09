@@ -239,7 +239,11 @@ impl SqliteGalley {
         }
 
         let project_id = match proposal.project_id.as_ref() {
-            Some(id) => id.0.clone(),
+            Some(id) => Some(id.0.clone()),
+            // A solo Goal launched outside a project stays project-less,
+            // like a plain session. Only hive mints a project: it needs one
+            // to hold the master + worker session fleet.
+            None if proposal.mode == GoalMode::Solo => None,
             None => {
                 let project_id = mint_goal_id("proj");
                 let project_name = goal_project_name(&proposal.objective);
@@ -256,10 +260,12 @@ impl SqliteGalley {
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| map_constraint_err("goal.run create project", e))?;
-                project_id
+                Some(project_id)
             }
         };
-        if let Some(master_session_id) = proposal.master_session_id.as_ref() {
+        if let (Some(master_session_id), Some(project_id)) =
+            (proposal.master_session_id.as_ref(), project_id.as_ref())
+        {
             let master_project_id: Option<String> =
                 sqlx::query_scalar("SELECT project_id FROM sessions WHERE id = ? LIMIT 1")
                     .bind(master_session_id.as_str())
@@ -271,7 +277,7 @@ impl SqliteGalley {
                     })?;
             if master_project_id.is_none() {
                 sqlx::query("UPDATE sessions SET project_id = ?, updated_at = ? WHERE id = ?")
-                    .bind(&project_id)
+                    .bind(project_id)
                     .bind(&now)
                     .bind(master_session_id.as_str())
                     .execute(&mut *tx)
@@ -345,18 +351,33 @@ impl SqliteGalley {
         event_limit: Option<i64>,
     ) -> Result<GoalStatusSnapshot> {
         let goal = self.fetch_goal(id.as_str()).await?;
-        let project = self.fetch_project(goal.project_id.as_str()).await.ok();
+        let project = match goal.project_id.as_ref() {
+            Some(project_id) => self.fetch_project(project_id.as_str()).await.ok(),
+            None => None,
+        };
         let tasks = self.goal_tasks_for(id.as_str()).await?;
         let events = self.goal_events_for(id.as_str(), event_limit).await?;
         let deliverable = self.latest_goal_deliverable(id.clone()).await?;
-        let sessions = self
-            .list_sessions(SessionFilter {
-                project_id: Some(goal.project_id.0.clone()),
-                status: None,
-                archived: Some(false),
-                runtime_kind: None,
-            })
-            .await?;
+        let sessions = match goal.project_id.as_ref() {
+            Some(project_id) => {
+                self.list_sessions(SessionFilter {
+                    project_id: Some(project_id.0.clone()),
+                    status: None,
+                    archived: Some(false),
+                    runtime_kind: None,
+                })
+                .await?
+            }
+            // Project-less solo: the master session is the whole fleet.
+            None => match goal.master_session_id.clone() {
+                Some(session_id) => self
+                    .session_brief(session_id)
+                    .await
+                    .map(|brief| vec![brief])
+                    .unwrap_or_default(),
+                None => Vec::new(),
+            },
+        };
         Ok(GoalStatusSnapshot {
             goal,
             project,

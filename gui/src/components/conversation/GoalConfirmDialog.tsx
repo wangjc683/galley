@@ -159,7 +159,9 @@ export function GoalConfirmDialog({
               <div className="mt-1.5 text-[11.5px] text-ink-muted">
                 {projectName
                   ? copy.composer.goalRunInProject(projectName)
-                  : copy.composer.goalRunNewProject}
+                  : effectiveMode === "hive"
+                    ? copy.composer.goalRunNewProject
+                    : copy.composer.goalRunHere}
               </div>
             </section>
 

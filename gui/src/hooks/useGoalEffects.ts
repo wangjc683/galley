@@ -38,7 +38,11 @@ export function useGoalEffects({
       );
       await Promise.all(
         goals
-          .filter((goal) => !knownProjectIds.has(goal.projectId))
+          // Project-less solo goals have nothing to hydrate.
+          .filter(
+            (goal) =>
+              goal.projectId != null && !knownProjectIds.has(goal.projectId),
+          )
           .map(async (goal) => {
             try {
               const snapshot = await getGoalStatus(goal.id);
