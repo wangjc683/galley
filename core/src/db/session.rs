@@ -500,9 +500,8 @@ impl SqliteGalley {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(map_sqlx_err)?;
-        let msg =
-            insert_user_message_inner(&mut tx, session_id, content, origin, visibility, None)
-                .await?;
+        let msg = insert_user_message_inner(&mut tx, session_id, content, origin, visibility, None)
+            .await?;
         tx.commit().await.map_err(map_sqlx_err)?;
         Ok(msg)
     }

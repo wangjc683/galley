@@ -37,9 +37,8 @@ use crate::session::{
 };
 use galley_core_lib::api::{
     goal_checkpoint_deadline_reached, goal_checkpoint_first_material,
-    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_solo_progress,
-    goal_synthesizing, CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief,
-    GoalEventType, GoalId,
+    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_synthesizing,
+    CreateGoalEventInput, CreateGoalTaskInput, GalleyApi, GoalBrief, GoalEventType, GoalId,
     GoalLocale, GoalMode, GoalStatus, GoalStatusSnapshot, MessageBrief, MessageRole, RuntimeKind,
     SessionId, GOAL_CONFIRMATION_PHRASE,
 };
@@ -1468,7 +1467,10 @@ pub(crate) fn goal_synthesis_timeout(dispatch_chars: usize) -> Duration {
 /// Mode-aware synthesis wait: the normal wrap scales with prompt size;
 /// the stop wrap-up is additionally capped at
 /// [`GOAL_STOP_SYNTHESIS_TIMEOUT_SECONDS`] — the user asked to stop.
-pub(crate) fn goal_finish_synthesis_timeout(mode: GoalFinishMode, dispatch_chars: usize) -> Duration {
+pub(crate) fn goal_finish_synthesis_timeout(
+    mode: GoalFinishMode,
+    dispatch_chars: usize,
+) -> Duration {
     let base = goal_synthesis_timeout(dispatch_chars);
     match mode {
         GoalFinishMode::Normal => base,
@@ -1549,10 +1551,6 @@ async fn run_solo_goal_loop(
     };
 
     let controller_started = Instant::now();
-    // Throttle for the progress heartbeat: post one after the first turn (break
-    // the silence early), then at most one per this interval.
-    const SOLO_PROGRESS_THROTTLE: Duration = Duration::from_secs(90);
-    let mut last_progress: Option<Instant> = None;
     // The objective was already sent into the session at launch; the agent
     // is (or will shortly be) working its first turn. Announce it so live
     // surfaces show the solo agent as running.
@@ -1601,10 +1599,11 @@ async fn run_solo_goal_loop(
             note: None,
         })?;
 
-        // Dispatch an INTERNAL (hidden) working turn and SPAWN the runner if it
-        // isn't alive (a solo session has no runner until we drive it). A bare
-        // `session.send` only reaches an already-live runner, so it would pile
-        // persisted messages onto a dead session — the tight-loop bug.
+        // Dispatch a working turn (visible in the user thread; only the nudge
+        // row is internal) and SPAWN the runner if it isn't alive (a solo
+        // session has no runner until we drive it). A bare `session.send` only
+        // reaches an already-live runner, so it would pile persisted messages
+        // onto a dead session — the tight-loop bug.
         session_goal_solo_turn_value(
             session_id.0.clone(),
             solo_continuation_prompt(&goal, remaining),
@@ -1620,27 +1619,6 @@ async fn run_solo_goal_loop(
         // start.)
         let turn_timeout = goal_follow_timeout(goal_budget_remaining(&goal, controller_started));
         wait_solo_turn(galley, &session_id, before_agent_turn, turn_timeout).await?;
-
-        // Break the silence: the working turns are internal, so post a
-        // throttled, Galley-authored progress line (elapsed + the agent's
-        // latest one-liner) into the visible thread. First turn always posts;
-        // then at most one per SOLO_PROGRESS_THROTTLE.
-        let progress_due = last_progress.map_or(true, |at| at.elapsed() >= SOLO_PROGRESS_THROTTLE);
-        if progress_due {
-            if let Some(latest) = latest_agent_progress(galley, &session_id).await? {
-                let elapsed_minutes = controller_started.elapsed().as_secs() / 60;
-                let body = goal_solo_progress(goal_narration_locale(), elapsed_minutes, &latest);
-                let _ = session_checkpoint_value(
-                    session_id.0.clone(),
-                    body,
-                    Some(goal.id.to_string()),
-                    supervisor.clone(),
-                    reason.clone(),
-                )
-                .await;
-                last_progress = Some(Instant::now());
-            }
-        }
     }
 
     // Budget exhausted → wrap into a final answer via the shared finish path.
@@ -1660,7 +1638,15 @@ async fn run_solo_goal_loop(
         note: None,
     })?;
     let snapshot = galley.goal_status_full(goal.id.clone()).await?;
-    finish_goal_with_master(galley, snapshot, &[], supervisor, reason, GoalFinishMode::Normal).await
+    finish_goal_with_master(
+        galley,
+        snapshot,
+        &[],
+        supervisor,
+        reason,
+        GoalFinishMode::Normal,
+    )
+    .await
 }
 
 /// Continuation nudge for the solo engine: the single agent may not declare
@@ -1670,7 +1656,7 @@ async fn run_solo_goal_loop(
 fn solo_continuation_prompt(goal: &GoalBrief, remaining: Duration) -> String {
     let remaining_min = remaining.as_secs().div_ceil(60).max(1);
     format!(
-        "[Galley Goal — keep going]\n\nYou are running this Goal on your own and the time budget has NOT run out (~{remaining_min} min left). You cannot declare the task finished yet — keep raising the quality of the result until the budget is reached.\n\nWork one loop now: (1) probe what is still missing, weak, or unverified; (2) produce or expand the result to address it; (3) self-check the result critically and fix the biggest problems you find. Keep a single current-best answer and only change it when the change genuinely makes it better.\n\nObjective:\n{}",
+        "[Galley Goal — keep going]\n\nYou are running this Goal on your own and the time budget has NOT run out (~{remaining_min} min left). You cannot declare the task finished yet — keep raising the quality of the result until the budget is reached.\n\nWork one loop now: (1) probe what is still missing, weak, or unverified; (2) produce or expand the result to address it; (3) self-check the result critically and fix the biggest problems you find. Keep a single current-best answer and only change it when the change genuinely makes it better.\n\nYour work here is shown live to the user. End each turn with a short progress note — a few lines on what you checked and what changed — not the full work-in-progress result; you will present the complete answer at wrap-up.\n\nObjective:\n{}",
         goal.objective
     )
 }
@@ -1709,9 +1695,9 @@ async fn latest_agent_turn_index(
     galley: &SqliteGalley,
     session_id: &SessionId,
 ) -> Result<Option<u32>, GalleyError> {
-    // Solo working turns are internal (deep-research shape), so this must read
-    // the internal-inclusive view — the default read hides them and the agent
-    // reply would be invisible to the completion check.
+    // Read the internal-inclusive view so the completion check never depends
+    // on turn visibility policy (working turns are visible today, but the
+    // nudge rows sharing the session are internal).
     let messages = galley
         .session_messages_including_internal(session_id.clone(), Some(30))
         .await?;
@@ -1720,30 +1706,6 @@ async fn latest_agent_turn_index(
         .filter(|message| message.role == MessageRole::Agent)
         .filter_map(|message| message.turn_index)
         .max())
-}
-
-/// The newest solo agent turn's one-line progress: its `summary`, else the
-/// first line of its final answer / content. Reads the internal-inclusive view
-/// because solo turns are internal. Feeds the throttled progress heartbeat.
-async fn latest_agent_progress(
-    galley: &SqliteGalley,
-    session_id: &SessionId,
-) -> Result<Option<String>, GalleyError> {
-    let messages = galley
-        .session_messages_including_internal(session_id.clone(), Some(12))
-        .await?;
-    Ok(messages
-        .iter()
-        .rev()
-        .find(|message| message.role == MessageRole::Agent)
-        .and_then(|message| {
-            message
-                .summary
-                .as_deref()
-                .and_then(first_non_empty_line)
-                .or_else(|| message.final_answer.as_deref().and_then(first_non_empty_line))
-                .or_else(|| first_non_empty_line(&message.content))
-        }))
 }
 
 /// Wait for the solo agent's dispatched turn to finish: the session has been
@@ -1847,8 +1809,12 @@ async fn finish_goal_with_master(
     }
     let Some(master_session_id) = goal.master_session_id.clone() else {
         let summary = goal.latest_summary.clone().unwrap_or_else(|| match mode {
-            GoalFinishMode::Normal => "Goal completed without a desktop master session.".to_string(),
-            GoalFinishMode::StopWrapUp => "Goal stopped without a desktop master session.".to_string(),
+            GoalFinishMode::Normal => {
+                "Goal completed without a desktop master session.".to_string()
+            }
+            GoalFinishMode::StopWrapUp => {
+                "Goal stopped without a desktop master session.".to_string()
+            }
         });
         galley
             .create_goal_event(CreateGoalEventInput {
@@ -2144,29 +2110,29 @@ async fn build_goal_synthesis_prompt(
     if goal.mode != GoalMode::Solo {
         push_limited(&mut out, "Worker session latest output:\n", 28_000);
         for session_id in worker_ids {
-        let messages = galley
-            .session_messages(session_id.clone(), worker_message_tail)
-            .await?;
-        push_limited(
-            &mut out,
-            &format!("\n## Worker session {session_id}\n"),
-            28_000,
-        );
-        for message in messages {
-            let body = message
-                .final_answer
-                .as_deref()
-                .filter(|answer| !answer.trim().is_empty())
-                .unwrap_or(&message.content);
-            if body.trim().is_empty() {
-                continue;
-            }
+            let messages = galley
+                .session_messages(session_id.clone(), worker_message_tail)
+                .await?;
             push_limited(
                 &mut out,
-                &format!("{:?}: {}\n", message.role, compact_text(body, 2400)),
+                &format!("\n## Worker session {session_id}\n"),
                 28_000,
             );
-        }
+            for message in messages {
+                let body = message
+                    .final_answer
+                    .as_deref()
+                    .filter(|answer| !answer.trim().is_empty())
+                    .unwrap_or(&message.content);
+                if body.trim().is_empty() {
+                    continue;
+                }
+                push_limited(
+                    &mut out,
+                    &format!("{:?}: {}\n", message.role, compact_text(body, 2400)),
+                    28_000,
+                );
+            }
         }
     }
     Ok(out)

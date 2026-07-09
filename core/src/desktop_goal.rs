@@ -171,7 +171,7 @@ pub(crate) async fn start_desktop_goal(
     let master_message = galley
         .send_system_message_for_goal(
             master_session_id,
-            api::goal_launch_ack(locale).to_string(),
+            api::goal_launch_ack(locale, goal.mode).to_string(),
             Origin::gui(),
             goal.id.clone(),
         )

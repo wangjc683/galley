@@ -370,11 +370,17 @@ impl GoalLocale {
     }
 }
 
-/// Master-session launch acknowledgement (Core `start_desktop_goal`).
-pub fn goal_launch_ack(locale: GoalLocale) -> &'static str {
-    match locale {
-        GoalLocale::ZhCn => "Goal 已启动 · 完成后会在这个对话汇总结果",
-        GoalLocale::EnUs => {
+/// Master-session launch acknowledgement (Core `start_desktop_goal`). Solo
+/// works right here in the thread, so it promises live progress; hive works
+/// in worker sessions and only the summarized result returns.
+pub fn goal_launch_ack(locale: GoalLocale, mode: GoalMode) -> &'static str {
+    match (locale, mode) {
+        (GoalLocale::ZhCn, GoalMode::Solo) => "Goal 已启动 · 运行过程和结果都会显示在这个对话",
+        (GoalLocale::ZhCn, GoalMode::Hive) => "Goal 已启动 · 完成后会在这个对话汇总结果",
+        (GoalLocale::EnUs, GoalMode::Solo) => {
+            "Goal started · progress and the result will show in this conversation"
+        }
+        (GoalLocale::EnUs, GoalMode::Hive) => {
             "Goal started · the result will be summarized in this conversation when it's done"
         }
     }
@@ -422,31 +428,6 @@ pub fn goal_synthesizing(locale: GoalLocale) -> &'static str {
     match locale {
         GoalLocale::ZhCn => "正在生成最终汇总。",
         GoalLocale::EnUs => "Generating the final summary.",
-    }
-}
-
-/// Solo-Goal progress heartbeat. A solo run's working turns are internal
-/// (hidden), so without this a long run is silent and reads as stuck. The
-/// controller posts this throttled, Galley-authored line — elapsed time plus
-/// the agent's latest one-line summary — so the user can see it's alive and
-/// roughly where it is.
-pub fn goal_solo_progress(locale: GoalLocale, elapsed_minutes: u64, latest: &str) -> String {
-    let latest = latest.trim();
-    match locale {
-        GoalLocale::ZhCn => {
-            if elapsed_minutes == 0 {
-                format!("进行中 · 最近：{latest}")
-            } else {
-                format!("进行中（{elapsed_minutes} 分钟）· 最近：{latest}")
-            }
-        }
-        GoalLocale::EnUs => {
-            if elapsed_minutes == 0 {
-                format!("Working · latest: {latest}")
-            } else {
-                format!("Working ({elapsed_minutes} min) · latest: {latest}")
-            }
-        }
     }
 }
 

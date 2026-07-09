@@ -840,7 +840,12 @@ fn solo_turn_produced_output_needs_a_strictly_newer_agent_reply() {
 
     // The PREVIOUS turn's agent reply (turn_index == after) must NOT re-count
     // — the `>` (not `>=`) is exactly what stopped the burst of nudges.
-    let same_turn_agent = vec![test_message(MessageRole::Agent, 2, "prev answer", Some("prev"))];
+    let same_turn_agent = vec![test_message(
+        MessageRole::Agent,
+        2,
+        "prev answer",
+        Some("prev"),
+    )];
     assert!(!solo_turn_produced_output(&same_turn_agent, after));
 
     // A strictly newer agent reply with content counts.
@@ -852,7 +857,12 @@ fn solo_turn_produced_output_needs_a_strictly_newer_agent_reply() {
     assert!(solo_turn_produced_output(&fresh_content, after));
 
     // A newer agent reply carrying only a final answer counts too.
-    let fresh_final = vec![test_message(MessageRole::Agent, 5, "", Some("final answer"))];
+    let fresh_final = vec![test_message(
+        MessageRole::Agent,
+        5,
+        "",
+        Some("final answer"),
+    )];
     assert!(solo_turn_produced_output(&fresh_final, after));
 
     // An empty newer agent reply (no content, no final answer) must NOT count.

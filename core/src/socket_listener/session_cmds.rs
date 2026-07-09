@@ -433,19 +433,18 @@ pub(super) async fn dispatch_session_goal_master_plan(
     }
 }
 
-/// Solo-Goal working turn. Deep-research shape: the "keep going" nudge and the
-/// agent's intermediate grind are **internal** (hidden) — a fast-turn solo
-/// Goal can run dozens of short turns, and surfacing every one plus its nudge
-/// buries the thread. The user sees only their objective and the final answer
-/// (the visible synthesis wrap). Kept as a distinct command from
-/// `session.goal_master_plan` for naming clarity and isolation, though both
-/// are internal spawn-and-dispatch.
+/// Solo-Goal working turn. The "keep going" nudge is **internal** (persisted
+/// hidden, no GUI mirror) — it is scaffolding, not conversation — but the
+/// agent turn it drives is **visible**: solo progress renders in the user
+/// thread with the same step markers / tool callouts / streaming as a normal
+/// session. Kept as a distinct command from `session.goal_master_plan`
+/// (which hides the whole turn) for naming clarity and isolation.
 ///
 /// Unlike `session.send` (best-effort to an already-live runner), this
 /// **ensures the runner is spawned** first: a solo session has no runner until
 /// the controller drives it, so a bare `session.send` would only pile
 /// persisted messages onto a dead session (the original tight-loop bug).
-/// Persist internal → spawn runner → dispatch internal.
+/// Persist internal → spawn runner → dispatch visible.
 pub(super) async fn dispatch_session_goal_solo_turn(
     request_id: Option<String>,
     args: Value,
@@ -519,7 +518,9 @@ pub(super) async fn dispatch_session_goal_solo_turn(
             &IpcCommand::UserMessage(UserMessageCommand {
                 text: dispatch_content,
                 images: vec![],
-                visibility: Some("internal".to_string()),
+                // Visible: the working turn renders in the user thread; only
+                // the nudge row above stays internal.
+                visibility: None,
                 absolute_turn_index: Some(absolute_turn_index),
             }),
         )
