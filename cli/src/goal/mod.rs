@@ -1,7 +1,10 @@
 mod controller;
 mod decision;
+mod finish;
+mod hive;
 mod prompts;
 mod signals;
+mod solo;
 mod task_seed;
 mod types;
 
