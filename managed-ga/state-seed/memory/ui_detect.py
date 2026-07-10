@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw
 import numpy as np
 import json, urllib.request, subprocess, sys, time
 
-print('[UI DETECT] 截图分析后必须使用物理坐标，ljqCtrl也使用物理坐标！')
+#print('[UI DETECT] 截图分析后必须使用物理坐标，ljqCtrl也使用物理坐标！')
 
 DEFAULT_MODEL = str(Path(__file__).resolve().parent.parent / 'temp' / 'weights' / 'icon_detect' / 'model.pt')
 
@@ -158,6 +158,7 @@ def detect(image_path, mode='match', conf=0.25, iou_thresh=0.5):
             if i not in matched_ocr:
                 elements.append({'bbox': [ox1,oy1,ox2,oy2], 'type': 'text', 'label': text, 'confidence': oc})
     #if [x for x in elements if x['label'] is None]: print('[TIPS] crop grid + VLM to identify target no text icon if needed')
+    print('[TIPS] UI DETECT contains OCR, no need to run OCR again!')
     return elements
 
 def visualize_for_debug(image_path, elements, output_path=None):

@@ -24,17 +24,17 @@ print(get_todo())       # 查看待办
 ## 执行
 - 选定任务后 update_working_checkpoint，将选中的TODO条目和执行注意事项 append 到 checkpoint 中
 - 调用code_run准备结尾回调, script为handler._done_hooks.append("重读自主任务sop，检查你刚刚的收尾工作是否正确，不正确则改正")，inline_eval=True （秘密参数）
-- ≤30回合，小步快跑，边探测边实验
+- 小步快跑，边探测边实验
 - 用临时脚本验证假设；禁只读即下结论，完整验证再写报告
 - 即使失败也记录实验过程和结果，失败报告同样有价值
 - 用户不在线，遇到需要决策的问题写入报告待审，不要卡住
 
 **收尾（4件事缺一不可）**：
-0. 重读本sop
-1. 在cwd写报告（文件名任意），若有记忆更新建议，附在报告末尾
-2. `from/import helper; complete_task(tasktitle, historyline, report_path)` → 自动编号+移报告到 autonomous_reports/+prepend history（historyline 格式：`类型 | 主题 | 结论`，严格单行）
-3. `set_todo()` 获取TODO路径 → 将已完成条目标记为 `[x]`（注意前缀）
-4. 结束，剩余TODO留到下次再做
+1. 重读本sop
+2. 在cwd写报告（文件名任意），若有记忆更新建议，附在报告末尾
+3. `from/import helper; complete_task(tasktitle, historyline, report_path)` → 自动编号+移报告到 autonomous_reports/+prepend history（historyline 格式：`类型 | 主题 | 结论`，严格单行）
+4. `set_todo()` 获取TODO路径 → 将已完成条目标记为 `[x]`（注意前缀）
+5. 结束，剩余TODO留到下次再做
 
 ## 权限边界
 - 无需批准：只读探测、cwd内写操作/脚本实验

@@ -34,14 +34,37 @@ k32.VirtualQueryEx.restype = SIZE_T
 k32.ReadProcessMemory.argtypes = [PHANDLE, LPCVOID, LPVOID, SIZE_T, ctypes.POINTER(SIZE_T)]
 k32.ReadProcessMemory.restype = ctypes.wintypes.BOOL
 
-def is_hex_pattern(pattern):
-    clean = pattern.replace(" ", "").replace("??", "")
-    return all(c in "0123456789abcdefABCDEF" for c in clean) and (len(clean) % 2 == 0 or "??" in pattern)
+import re
 
-def build_rules(pattern, mode='auto'):
+# Regex to expand YARA (n) jumps to explicit ?? chains (YARA 4.5.4 bug)
+_RE_JUMP = re.compile(r'\(\s*(\d+)\s*\)')
+
+def expand_yara_jumps(hex_pattern):
+    """Expand (n) → ?? repeated n times, e.g. '90 ( 32 ) 00' → '90 ?? ??...?? 00'"""
+    def _repl(m):
+        return ' '.join(['??'] * int(m.group(1)))
+    return _RE_JUMP.sub(_repl, hex_pattern)
+
+def is_hex_pattern(pattern):
+    """Detect hex patterns like '90 ( 32 ) 00' or '90 ?? 00'"""
+    clean = pattern.replace(" ", "").replace("??", "")
+    # Also remove parenthesized jump counts like (32)
+    clean = _RE_JUMP.sub('', clean)
+    return all(c in "0123456789abcdefABCDEF" for c in clean) and len(clean) % 2 == 0
+
+def build_rules(pattern, mode=None):
+    if hasattr(pattern, 'match'): return pattern
+    mode = mode or ('auto' if isinstance(pattern, str) else 'yara')
+    if mode in ('yara',):
+        try:
+            return yara.compile(source=str(pattern))
+        except yara.SyntaxError:
+            raise  # user-provided full YARA rule, don't mess with it
+    # hex mode or auto
     use_hex = (mode == 'hex') or (mode == 'auto' and is_hex_pattern(pattern))
     if use_hex:
-        rule_text = f'rule CustomSearch {{ strings: $h = {{ {pattern.strip()} }} condition: $h }}'
+        hex_body = expand_yara_jumps(pattern.strip())
+        rule_text = f'rule CustomSearch {{ strings: $h = {{ {hex_body} }} condition: $h }}'
     else:
         escaped = pattern.replace('\\', '\\\\').replace('"', '\\"')
         rule_text = f'rule CustomSearch {{ strings: $s = "{escaped}" ascii wide condition: $s }}'
@@ -60,7 +83,7 @@ def format_llm_context(data, offset, base_addr, length=64):
         "hit_pos": offset - start
     }
 
-def scan_memory(pid, pattern, context_size=256, mode='auto', llm_mode=False):
+def scan_memory(pid, pattern, context_size=256, mode=None, llm_mode=False):
     rules = build_rules(pattern, mode)
     h_proc = k32.OpenProcess(0x0400 | 0x0010, False, pid)
     if not h_proc:
@@ -87,16 +110,17 @@ def scan_memory(pid, pattern, context_size=256, mode='auto', llm_mode=False):
                 data = buf.raw[:read.value]
                 for match in rules.match(data=data):
                     for inst in match.strings:
-                        offset = inst.instances[0].offset
-                        matched_data = inst.instances[0].matched_data
                         base = mbi.BaseAddress if mbi.BaseAddress else 0
-                        if llm_mode:
-                            results.append(format_llm_context(data, offset, base, length=context_size))
-                        else:
-                            # Expand context based on context_size to capture full KEY+SALT
-                            start = max(0, offset - context_size)
-                            end = min(len(data), offset + len(matched_data) + context_size)
-                            results.append(f"Addr: {hex(base+offset)}\nHex: {data[start:end].hex()}")
+                        for instance in inst.instances:  # ITERATE ALL instances, not just [0]
+                            offset = instance.offset
+                            matched_data = instance.matched_data
+                            if llm_mode:
+                                results.append(format_llm_context(data, offset, base, length=context_size))
+                            else:
+                                # Expand context based on context_size to capture full KEY+SALT
+                                start = max(0, offset - context_size)
+                                end = min(len(data), offset + len(matched_data) + context_size)
+                                results.append(f"Addr: {hex(base+offset)}\nHex: {data[start:end].hex()}")
 
         # Update address using the region size
         next_addr = (mbi.BaseAddress if mbi.BaseAddress else 0) + mbi.RegionSize

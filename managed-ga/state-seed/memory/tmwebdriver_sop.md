@@ -17,6 +17,7 @@
 
 ## 导航
 - `web_scan` 仅读当前页不导航，切换网站用 `web_execute_js` + `location.href='url'`
+- ⚠导航与后续操作**必须拆成两次调用**：同一段JS内 `location.href` 后继续操作→报错`Inspected target navigated or closed`（页面已换执行上下文销毁）。先导航→等加载→再单独执行操作
 
 ## Google图搜
 - class名混淆禁硬编码，点击结果用 `[role=button]` div

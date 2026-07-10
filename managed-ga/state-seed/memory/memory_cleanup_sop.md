@@ -39,3 +39,17 @@ ROI = (不放这几个词的犯错概率 × 代价) / 每轮词数成本
 
 **红线**：记忆修改是持久性伤害，错误每轮复利。L1只能patch词级别修改，禁overwrite
 产生误导应及时修正L1或记忆更名
+
+
+## L2 瘦身流程（冗余长段→L3，事实无损）
+适用：L2 某段冗长（服务器/工具详情），需压缩但禁丢事实。
+1. **先迁再压**：把该段完整事实迁到/合并进 L3 专属 SOP（已有同主题 SOP 就并入，勿重复建，先 `ls ../memory/` 查），L2 只留 6-9 行"连接方式+服务端点+高频坑+指针(见 xxx_sop.md)"。
+2. 迁移后同步 L1 加新 SOP 名（自解释即可，勿加冗余括号）。
+3. 每节独立闭环：迁移→压 L2→同步 L1，再进下一节，限制失败半径。
+4. 验证：核对 6 项(每个新 SOP 文件存在 & 已入 L1)、L2 无遗留脏字符、总行数下降。
+
+## 坑：L2 历史脏字符导致 file_patch 匹配失败
+- 现象：`file_patch` 连续报"未找到匹配旧文本块"，但肉眼看 old_content 与文件一致。
+- 根因：老记录行首可能混入真实的多余 `|`（或全角/箭头字节差异），复制时看不出。
+- 排查：`for i,l in enumerate(lines): print(i+1, repr(l[:20]))` 用 repr 看真实字节。
+- 解法：**改用 Python 按行号切片替换**：`lines=open(p,encoding='utf-8').read().split('\n'); assert lines[a].startswith(...); newlines=lines[:a]+repl+lines[b:]; open(p,'w',encoding='utf-8').write('\n'.join(newlines))`。前后加 `assert startswith` 双锚点防错位，改完 repr 复核。此法顺带清脏字符。

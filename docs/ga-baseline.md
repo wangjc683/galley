@@ -15,53 +15,58 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `b1e173dcbb3cf1a0c7fdeab4211a12a44461c841`
+Locked commit: `502be0a76d04e6d7063c28b3bbb77adb1047ba6b`
 
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-06-29
-- Previous baseline: `70792af967a7826fad8e19d800d44977183f046b`
-- Delta: 11 commits
+- Date audited: 2026-07-10
+- Previous baseline: `b1e173dcbb3cf1a0c7fdeab4211a12a44461c841`
+- Delta: 10 commits
 - Result: no external bridge protocol or dependency break; `pyproject.toml`
-  did not change. Managed runtime picked up upstream `--func` / `--history`
-  task helpers, in-memory intervention fields, `export_history`, UltraPlan,
-  HTTP app assets, summary-fallback fixes, and the upstream TUI worldline
-  removal while preserving Galley's managed state-root routing, Codex backend
-  payload shape, and managed image attachment path.
-- Devlog: [GA upstream upgrade 70792af -> b1e173dc](./devlog/2026-06-29-ga-upstream-upgrade-70792af-to-b1e173dc.md)
+  did not change. Managed runtime picked up upstream Claude-refusal handling,
+  `ChunkedEncodingError` retry, suppressed intermittent retry-error yields, the
+  additive `--no-user-tools` flag, opt-in `extra_sys_prompt` / `omit_thinking`
+  session config, an UltraPlan orchestration refactor, and TUI worldline /
+  session-control work. Two managed patches were rebased: `0001` adopts
+  upstream's new `GA_ULTRAPLAN_RUNDIR` env seam (falling back to
+  `GALLEY_GA_STATE_ROOT`), and `0007`'s Codex helper block was regenerated for
+  the shifted `llmcore.py` line numbers (also fixing a latent off-by-one in the
+  insertion hunk's line count). Galley's managed state-root routing, Codex
+  backend payload shape, and managed image attachment path are preserved.
+- Devlog: [GA upstream upgrade b1e173dc -> 502be0a](./devlog/2026-07-10-ga-upstream-upgrade-b1e173dc-to-502be0a.md)
 
 Relevant compatibility notes:
 
-- `agent_loop.py`: unchanged; `BaseHandler.dispatch`, `turn_end_callback`,
-  hook calls, and `initial_user_content` support remain compatible with
-  `WorkbenchHandler`.
-- `agentmain.py`: upstream added `--func`, `--history`, `--nolog`, background
-  task stdout handling, and in-memory `intervene` / `extrakeyinfo` fields.
-  Galley kept managed image attachment injection before `agent_runner_loop`
-  and routes all task / reflect temp paths through the managed state root.
-- `ga.py`: upstream added `export_history`, changed summary fallback to prefer
-  cleaned response text, and consumes in-memory intervention fields before
-  `_intervene` / `_keyinfo` files. Dispatch signature, tool callback protocol,
-  and turn-end hook execution remain compatible.
-- `llmcore.py`: upstream now compresses thinking blocks, accepts
-  `log_path=False`, and keeps Responses `include:
-  reasoning.encrypted_content`. Galley's Codex patch was refreshed so
-  credential IPC, `ChatGPT-Account-ID`, `store=false`, WHAM quota hints, and
-  the upstream `include` field coexist.
-- `frontends/continue_cmd.py`: upstream removed the old worldline
-  `rewind_root` / `allow_empty` paths. Galley's runner does not call those
-  GA-owned TUI parameters; managed `/continue` logs, locks, and cache still
-  route through `GALLEY_GA_STATE_ROOT`.
-- `frontends/tuiapp_v2.py` and `frontends/worldline.py`: upstream removed the
-  large worldline implementation from the bundled TUI. Galley does not use
-  upstream TUI as its authoritative GUI/Core path.
-- `assets/ga_ultraplan.py` and `memory/ultraplan_sop.md`: upstream added
-  UltraPlan orchestration. Managed mode keeps the code asset bundled, seeds the
-  SOP, and patches UltraPlan run artifacts into `GALLEY_GA_STATE_ROOT/temp`.
-- `assets/ga_httpapp.py`: upstream added an optional FastAPI HTTP app asset.
-  Galley Core still does not expose TCP / HTTP and does not invoke this asset
-  as a product surface.
-- `frontends/stapp.py`, `hub.pyw`, `.gitignore`, and image/SOP refreshes:
-  bundled as upstream code or state seed with no Galley contract change.
+- `agent_loop.py`: whitespace-only tweaks to the yielded turn / tool-call
+  markers. `BaseHandler.dispatch`, hook calls (`turn_before` / `llm_before`),
+  and the structured `{'turn': turn}` yield are unchanged; the runner reads the
+  turn number from the `turn_before` hook context, not the text markers, so
+  `WorkbenchHandler` is unaffected.
+- `agentmain.py`: upstream added an additive `--no-user-tools` flag that filters
+  `ask_user` / `start_long_term_update` from the tool schema. Galley does not
+  pass it, so behavior is unchanged; managed image attachment injection and
+  state-root temp routing remain intact.
+- `llmcore.py`: upstream added Claude `stop_reason == "refusal"` handling (no
+  retry), `ChunkedEncodingError` in the retry set, suppression of the
+  intermittent retry-error yield, and two opt-in config keys —
+  `extra_sys_prompt` / `extra_sys_prompt_file` and `omit_thinking`. Default
+  `omit_thinking=False` keeps `llmclient.backend.history` shape identical; the
+  raw-repr / prompt-log formatting changes are logging-only. Galley's Codex
+  patch (`0007`) was regenerated so credential IPC, `ChatGPT-Account-ID`,
+  `store=false`, WHAM quota hints, and forced streaming coexist with the new
+  code.
+- `assets/ga_ultraplan.py` and `memory/ultraplan_sop.md`: upstream refactored
+  UltraPlan orchestration and introduced a `GA_ULTRAPLAN_RUNDIR` env override
+  for the run directory. Galley's `0001` patch now honors that env var first and
+  falls back to `GALLEY_GA_STATE_ROOT/temp` (never the read-only code payload),
+  replacing the previous multi-line `_CODE_ROOT` / `_STATE_ROOT` scaffolding.
+- `mykey_template.py` / `mykey_template_en.py`: upstream simplified the vendor
+  tables and dropped non-native / antigravity configs. Managed mode generates
+  its own model config, and external / attach GA owns its own `mykey.py`, so
+  neither path is affected.
+- `assets/*` and TUI worldline / session-control changes (`frontends/`,
+  `hub.pyw`, background `ljqCtrl` tool, GUI SOP guardrails): bundled as upstream
+  code or state seed with no Galley contract change. Galley does not use the
+  upstream TUI as its authoritative GUI / Core path.
 - `pyproject.toml`: no dependency diff in this range; bundled Python
   dependencies did not need changes.
 

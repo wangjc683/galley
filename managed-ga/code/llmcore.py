@@ -117,6 +117,10 @@ def auto_make_url(base, path):
     return f"{b}/{p}" if re.search(r'/v\d+(/|$)', b) else f"{b}/v1/{p}"
 
 def _parse_claude_json(data):
+    if data.get("stop_reason") == "refusal":
+        err = "[Error: Claude refusal]"
+        yield err
+        return [{"type": "text", "text": err}]
     content_blocks = data.get("content", [])
     _record_usage(data.get("usage", {}), "messages")
     for b in content_blocks:
@@ -182,6 +186,7 @@ def _parse_claude_sse(resp_lines):
     if not warn:
         if not got_message_stop and not stop_reason: warn = "\n\n[!!! 流异常中断，未收到完整响应 !!!]"
         elif stop_reason == "max_tokens": warn = "\n\n[!!! Response truncated: max_tokens !!!]"
+        elif stop_reason == "refusal": warn = "\n\n[Error: Claude refusal]"
     if current_block:
         if current_block["type"] == "tool_use":
             try: current_block["input"] = json.loads(tool_json_buf) if tool_json_buf else {}
@@ -389,17 +394,18 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                 except StopIteration as e:
                     if not e.value and not streamed: raise requests.ConnectionError("empty response")
                     return e.value or []
-        except (requests.Timeout, requests.ConnectionError) as e:
+        except (requests.Timeout, requests.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
             #pathlib.Path(__file__).parent.joinpath('temp','bad_requests.json').write_text(json.dumps({"url":url,"headers":headers,"payload":payload,"err":str(e),"t":time.time()},ensure_ascii=False),encoding='utf-8')
             err = f"!!!Error: {type(e).__name__}: {e}" if str(e) else f"!!!Error: {type(e).__name__}"
             if attempt < sess.max_retries:
                 d = _delay(None, attempt)
                 print(f"[LLM Retry] {type(e).__name__}, retry in {d:.1f}s ({attempt+1}/{sess.max_retries+1})")
-                yield err; time.sleep(d); continue
+                time.sleep(d); continue
             yield err; return [{"type": "text", "text": err}]
         except Exception as e:
             err = f"\n\n[!!! 流异常中断 {type(e).__name__}: {e} !!!]" if streamed else f"!!!Error: {type(e).__name__}: {e}"
             yield err; return [{"type": "text", "text": err}]
+
 def _codex_account_id_from_jwt(access_token):
     try:
         parts = str(access_token or '').split('.')
@@ -552,7 +558,6 @@ def _galley_codex_access_token(sess):
     except Exception as e:
         raise RuntimeError(f"Galley Codex credential refresh failed: {e}") from e
 
-
 def _openai_stream(sess, messages):
     model, api_mode = sess.model, sess.api_mode
     ml = model.lower()
@@ -702,6 +707,9 @@ class BaseSession:
         self.context_win = cfg.get('context_win', default_context_win)
         self.history = []; self.lock = threading.Lock(); self.system = ""
         self.name = cfg.get('name', self.model)
+        self.extra_sys_prompt = cfg.get('extra_sys_prompt', '')
+        if cfg.get('extra_sys_prompt_file'):
+            self.extra_sys_prompt = (self.extra_sys_prompt or '') + open(cfg['extra_sys_prompt_file'] if os.path.isabs(cfg['extra_sys_prompt_file']) else os.path.join(_ROOT, cfg['extra_sys_prompt_file']), encoding='utf-8').read()
         proxy = cfg.get('proxy');
         self.proxies = {"http": proxy, "https": proxy} if proxy else None
         self.max_retries = max(0, int(cfg.get('max_retries', 4)))
@@ -719,6 +727,7 @@ class BaseSession:
             self.reasoning_effort = 'medium'
         self.thinking_type = _enum('thinking_type', {'adaptive', 'enabled', 'disabled'})
         self.thinking_budget_tokens = cfg.get('thinking_budget_tokens')
+        self.omit_thinking = cfg.get('omit_thinking', False)  # Exclude thinking from session history
         mode = str(cfg.get('api_mode', 'chat_completions')).strip().lower().replace('-', '_')
         self.api_mode = 'responses' if mode in ('responses', 'response') else 'chat_completions'
         self.temperature = cfg.get('temperature', 1)
@@ -897,7 +906,9 @@ class NativeClaudeSession(BaseSession):
         except StopIteration as e: content_blocks = e.value or []
         if content_blocks and (_injected := _ensure_text_block(content_blocks)): yield _injected
         if content_blocks and not (len(content_blocks) == 1 and content_blocks[0].get("text", "").startswith("!!!Error:")):
-            self.history.append({"role": "assistant", "content": content_blocks})
+            history_blocks = content_blocks
+            if self.omit_thinking: history_blocks = [b for b in content_blocks if b.get("type") != "thinking"]
+            self.history.append({"role": "assistant", "content": history_blocks})
         text_parts = [b["text"] for b in content_blocks if b.get("type") == "text"]
         content = "\n".join(text_parts).strip()
         tool_calls = [MockToolCall(b["name"], b.get("input", {}), id=b.get("id", "")) for b in content_blocks if b.get("type") == "tool_use"]
@@ -910,7 +921,8 @@ class NativeClaudeSession(BaseSession):
             if think_match:
                 thinking = think_match.group(1).strip()
                 content = re.sub(think_pattern, "", content, flags=re.DOTALL)
-        return MockResponse(thinking, content, tool_calls, str(content_blocks))
+        raw = "[" + ",\n".join(repr(b) for b in content_blocks) + "]"
+        return MockResponse(thinking, content, tool_calls, raw)
 
 class NativeOAISession(NativeClaudeSession):
     native_ua = "codex_exec/0.139.0 (Windows 10.0.26200; x86_64) unknown (codex_exec; 0.139.0)"
@@ -1086,18 +1098,6 @@ def _ensure_text_block(blocks):
     line = th.strip().split('\n', 1)[0]
     txt = "<summary>" + (line[:60] + '...' if len(line) > 60 else line) + "</summary>"
     blocks.insert(1, {"type": "text", "text": txt})
-    return txt
-
-def _write_llm_log(label, content, log_path=None, model=''):
-    if log_path is False: return
-    if not log_path:
-        state_root = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or os.path.dirname(os.path.abspath(__file__)))
-        log_path = os.path.join(state_root, f'temp/model_responses/model_responses_{os.getpid()}.txt')
-    os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
-    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    if model: model = f' model={model}'
-    with open(log_path, 'a', encoding='utf-8', errors='replace') as f:
-        f.write(f"=== {label} === {ts}{model}\n{content}\n\n")
 _WINDOWS_PATH_KEYS = {'path', 'file_path', 'filepath'}
 _WINDOWS_PATH_FIELD_RE = re.compile(
     r'("(?P<key>path|file_path|filepath)"\s*:\s*)"{1,2}'
@@ -1145,6 +1145,18 @@ def _normalize_windows_path_values(value):
         return [_normalize_windows_path_values(v) for v in value]
     return value
 
+    return txt
+
+def _write_llm_log(label, content, log_path=None, model=''):
+    if log_path is False: return
+    if not log_path:
+        state_root = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or os.path.dirname(os.path.abspath(__file__)))
+        log_path = os.path.join(state_root, f'temp/model_responses/model_responses_{os.getpid()}.txt')
+    os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if model: model = f' model={model}'
+    with open(log_path, 'a', encoding='utf-8', errors='replace') as f:
+        f.write(f"=== {label} === {ts}{model}\n{content}\n\n")
 
 def tryparse(json_str):
     try: return _normalize_windows_path_values(json.loads(json_str))
@@ -1276,7 +1288,8 @@ class NativeToolClient:
         final_content = tool_result_blocks + filtered_content
         if not final_content: final_content = [{"type": "text", "text": "."}]
         merged = {"role": "user", "content": final_content}
-        _write_llm_log('Prompt', json.dumps(merged, ensure_ascii=False, indent=2), self.log_path)
+        prompt_raw = '{"role": "user", "content": [\n' + ",\n".join(json.dumps(b, ensure_ascii=False) for b in final_content) + "]}"
+        _write_llm_log('Prompt', prompt_raw, self.log_path)
         gen = self.backend.ask(merged)
         try:
             while True:

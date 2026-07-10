@@ -1,6 +1,12 @@
 # computer_use
 
-相关L3 memory: **ui_detect.py** ljqCtrl.py ljqCtrl_sop.md
+相关L3 memory: **ui_detect.py** ljqCtrl.py/ljqCtrlBg.py ljqCtrl_sop.md
+
+## 0. GUI操作节奏建议
+进入新界面时，建议先只探测不操作：枚举窗口 + UIA + ljqCtrl截图 + ui_detect，读完实际输出再决定下一步
+明确一个操作后，可以在同一轮执行该动作，短暂等待，再立刻枚举窗口 + 截图/ui_detect 验证新状态；不要在未知状态下把多步决策写进大脚本
+尽量不要预测关键词筛候选，应看 detect 输出、坐标、层级和上下文判断
+若确定UIA可用则少用ui_detect/ljqCtrl；若UIA不可用，则后续不用UIA
 
 ## 1. 基础规则
 ### 探测/定位四工具（按优先级降级，前者无效才用后者）
@@ -11,25 +17,25 @@
 | 2 ui_detect.py（配合ljqCtrl截图） | 1无效时才用 | 截图视觉检测控件，返回 bbox+OCR 文本 | bbox 是截图内坐标需转屏幕物理坐标 |
 | 3 vision(VLM) | 2仍不足时才用 | 仅语义理解、确认界面状态、辅助判断目标 | 不可信其坐标 |
 
-Windows 下窗口截图和操作使用 ljqCtrl：严禁 pyautogui；记得先 Activate 到前台；
+Windows 下窗口截图和操作使用 ljqCtrl：严禁 pyautogui；记得先 Activate 到前台（除非用户明确要求后台操作或后台操作失效）
 ui_detect附送OCR，不要单独使用OCR
-坑1-DPI：必须先import ljqCtrl，之后一律使用物理坐标；坑2-遮盖/失焦：混乱先枚举窗口确认前台；
+用PIL传输图像，或者用统一1.png存储截图，不要创建大量截图文件
+
 ui_detect 的 bbox 是截图内坐标，点击前必须用 `ClientToScreen(hwnd,(0,0))/dpi_scale + bbox中心` 转屏幕物理坐标
 坐标转换禁用 `GetWindowRect` 或 DWM 窗口矩形直接加截图坐标（含标题栏/边框/阴影会错位）
 ljqCtrl.Click 后会返回像素/前台变化，0% 或近 0% 变化立即停下诊断，禁止盲目重试。
 ljqCtrl 失效或目标为网络游戏时，必须使用硬件键鼠 Xbananakb / Arduino Leonardo（如有）
 网络游戏除非用户明确允许，严禁普通键鼠事件，必须硬件执行。
 
-## 2. GUI操作节奏建议
-进入新界面时，建议先只探测不操作：枚举窗口 + UIA + ljqCtrl截图 + ui_detect，读完实际输出再决定下一步
-明确一个操作后，可以在同一轮执行该动作，短暂等待，再立刻枚举窗口 + 截图/ui_detect 验证新状态；不要在未知状态下把多步决策写进大脚本
-尽量不要预测关键词筛候选，应看 detect 输出、坐标、层级和上下文判断
-若确定UIA可用则少用ui_detect/ljqCtrl；若UIA不可用，则后续不用UIA
-
 临时截图/可视化文件用后清理，或固定文件名覆盖，避免堆积。
 ui_detect 可跨端复用；手机端沿用本原则时，UIA 换成 ui dump/adb_ui，ljqCtrl 控制换成 adb
 
-## 3. macOS 平台
+### 重要必坑
+坑1-遮盖/失焦：混乱时枚举窗口确认前台；
+坑2-DPI：必须先import ljqCtrl，之后一律使用物理坐标；
+
+
+## macOS 平台
 macOS 定位链与 §1 一致，工具映射如下：
 - 控制层：`import macljqCtrl as ljqCtrl`（替代 Windows ljqCtrl）
 - 窗口枚举：`ListWindows()` → 返回 id/app/title/bbox/pid（替代 win32gui）

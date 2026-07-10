@@ -6,7 +6,7 @@ SuperGrok Local Proxy - CLI
   python assets/supergrok_proxy.py login
   python assets/supergrok_proxy.py serve --port 15433
   python assets/supergrok_proxy.py models
-  python assets/supergrok_proxy.py test --model grok-4.3
+  python assets/supergrok_proxy.py test --model grok-4.5
 
 GenericAgent/mykey 配置示例：
   native_oai_config_supergrok_proxy = {

@@ -2,14 +2,14 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-06-29` against upstream
-`b1e173dcbb3cf1a0c7fdeab4211a12a44461c841`.
-(patches 0001, 0007, and 0008 were refreshed for upstream UltraPlan state
-routing, Responses/Codex payload context, and managed image attachment content.
-0011 added 2026-07-03 and verified to apply onto the in-repo post-0010
-payload; 0013 added 2026-07-03 and verified to apply onto the in-repo
-post-0012 payload; full-stack replay against upstream re-runs at the next
-baseline upgrade.)
+Last replay verified: `2026-07-10` against upstream
+`502be0a76d04e6d7063c28b3bbb77adb1047ba6b`.
+(Full 14-patch stack replayed clean at this baseline. Patches 0001 and 0007
+were rebased for the `502be0a` upgrade: 0001's `ga_ultraplan.py` hunk shrank to
+a single line that adopts upstream's new `GA_ULTRAPLAN_RUNDIR` env seam and
+falls back to `GALLEY_GA_STATE_ROOT`; 0007's Codex helper block was regenerated
+against the shifted `llmcore.py` line numbers, which also fixed a pre-existing
+off-by-one in the insertion hunk's line count.)
 
 Current patches:
 

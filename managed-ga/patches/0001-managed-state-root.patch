@@ -47,17 +47,11 @@ index a8dc394..5931ce3 100644
 -_ROUNDS_CACHE_PATH = os.path.join(os.path.expanduser('~'), '.genericagent', 'continue_rounds_cache.json')
 +_ROUNDS_CACHE_PATH = os.path.join(_STATE_ROOT, 'temp', 'continue_rounds_cache.json')
 diff --git a/assets/ga_ultraplan.py b/assets/ga_ultraplan.py
-index 9145d1e..7ea68da 100644
 --- a/assets/ga_ultraplan.py
 +++ b/assets/ga_ultraplan.py
-@@ -9 +9,3 @@ __all__ = ["phase", "parallel", "mapchain"]
--_RUN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "temp", f"ultraplan_{int(_T0)}_{os.getpid()}")
-+_CODE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-+_STATE_ROOT = os.path.abspath(os.environ.get("GALLEY_GA_STATE_ROOT") or _CODE_ROOT)
-+_RUN_DIR = os.path.join(_STATE_ROOT, "temp", f"ultraplan_{int(_T0)}_{os.getpid()}")
-@@ -99 +101 @@ def _subagent(desc, prompt=None, *, llm_no=0, timeout=3600):
--    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-+    root = _CODE_ROOT
+@@ -13 +13 @@
+-_RUN_DIR = os.path.abspath(os.environ.get("GA_ULTRAPLAN_RUNDIR", os.path.join(_ROOT, "temp", "ultraplan_default")))
++_RUN_DIR = os.path.abspath(os.environ.get("GA_ULTRAPLAN_RUNDIR") or os.path.join(os.environ.get("GALLEY_GA_STATE_ROOT") or _ROOT, "temp", "ultraplan_default"))
 diff --git a/frontends/workspace_cmd.py b/frontends/workspace_cmd.py
 index c9c4d98..88a7742 100644
 --- a/frontends/workspace_cmd.py

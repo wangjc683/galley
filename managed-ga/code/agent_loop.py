@@ -52,7 +52,7 @@ def agent_runner_loop(client, system_prompt, user_input, handler, tools_schema,
         if handler.parent.task_dir: turnstr = f'Turn {turn} ...'
         if verbose: turnstr = f'**{turnstr}**'
         if yield_info: yield {'turn': turn}
-        yield f"\n\n{turnstr}\n\n"
+        yield f"\n{turnstr}\n\n"
         if turn%10 == 0: client.last_tools = ''  # 每10轮重置一次工具描述
         _hook('turn_before', locals())
         _hook('llm_before', locals())
@@ -76,7 +76,7 @@ def agent_runner_loop(client, system_prompt, user_input, handler, tools_schema,
             if tool_name == 'no_tool': pass
             else: 
                 if verbose: yield f"🛠️ Tool: `{tool_name}`  📥 args:\n````text\n{get_pretty_json(args)}\n````\n"
-                else: yield f"🛠️ {tool_name}({_compact_tool_args(tool_name, args)})\n\n\n"
+                else: yield f"🛠️ {tool_name}({_compact_tool_args(tool_name, args)})\n"
             handler.current_turn = turn
             gen = handler.dispatch(tool_name, args, response, index=ii, tool_num=len(tool_calls))
             try:

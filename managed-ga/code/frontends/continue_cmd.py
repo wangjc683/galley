@@ -114,9 +114,68 @@ def _parse_native_history(pairs):
         except Exception: return None
         if not (isinstance(user_msg, dict) and user_msg.get('role') == 'user'): return None
         if not isinstance(blocks, list): return None
-        history.append(user_msg)
+        history.append(user_msg)  # runtime history 尊重日志真实 prompt(含 project-mode 当轮注入)
         history.append({'role': 'assistant', 'content': blocks})
     return history
+
+
+def parse_native_log(path, allow_empty=False):
+    """Parse a native `model_responses_*.txt` log into backend.history.
+
+    Public wrapper around the mature `/continue` parser. It intentionally only
+    restores complete Prompt→Response pairs; dangling Prompt / partial turns keep
+    the current continue semantics and are ignored. Returns:
+    - list (possibly [] when allow_empty=True) on native success;
+    - None when the file is unreadable / non-native / empty without allow_empty.
+    """
+    try:
+        with open(path, encoding='utf-8', errors='replace') as fh:
+            content = fh.read()
+    except Exception:
+        return [] if allow_empty else None
+    pairs = _pairs(content)
+    if not pairs:
+        # Native-looking but incomplete logs (e.g. dangling Prompt without Response)
+        # have block headers but no complete pairs. For worldline's allow_empty mode
+        # this means "0 completed rounds", not "parse failed → trust live history".
+        if allow_empty and (_is_empty_log(path) or _BLOCK_RE.findall(content or '')):
+            return []
+        return None
+    return _parse_native_history(pairs)
+
+
+def _derive_hist_info(history):
+    """从 native history 重建 history_info(轮级纪要):真实用户提问 → `[USER]: …`;每条
+    assistant(=一轮) → `[Agent] <summary>`(无 summary 取首行)。与 ga.turn_end_callback /
+    worldline 树同口径。纯函数、不依赖 worldline,供续接 opt-in 恢复工作记忆(见 restore_wm)。"""
+    def _all_text(m):
+        c = m.get('content') if isinstance(m, dict) else None
+        if isinstance(c, str): return c
+        if isinstance(c, list):
+            return '\n'.join(b.get('text', '') for b in c
+                             if isinstance(b, dict) and b.get('type') == 'text')
+        return ''
+    def _is_tool_result(m):
+        c = m.get('content') if isinstance(m, dict) else None
+        return isinstance(c, list) and any(
+            isinstance(b, dict) and b.get('type') == 'tool_result' for b in c)
+    out = []
+    for m in history or []:
+        if not isinstance(m, dict): continue
+        role = m.get('role')
+        if role == 'user':
+            if _is_tool_result(m): continue            # tool_result 轮不是提问
+            t = strip_project_mode(_all_text(m)).strip()
+            if t and not t.startswith(_INJECT_MARKERS):
+                out.append(f'[USER]: {t}')
+        elif role == 'assistant':
+            txt = re.sub(r'```.*?```|<thinking>.*?</thinking>', '', _all_text(m), flags=re.DOTALL)
+            mt = re.search(r'<summary>(.*?)</summary>', txt, re.DOTALL)
+            s = mt.group(1).strip()[:80] if (mt and mt.group(1).strip()) else ''
+            if not s:
+                s = next((ln.strip()[:80] for ln in txt.splitlines() if ln.strip()), '（无摘要）')
+            out.append(f'[Agent] {s}')
+    return out
 
 
 _PREVIEW_WIN = 32 * 1024
@@ -295,7 +354,7 @@ def _rounds_for_file(path, st):
     return n, key
 
 
-def list_sessions(exclude_pid=None, exclude_log=None):
+def list_sessions(exclude_pid=None, exclude_log=None, rewind_root=None):
     """Newest-first list of (path, mtime, preview_text, n_rounds). Preview uses head/tail window only.
 
     `exclude_log` (basename, e.g. 'model_responses_123456.txt') drops the caller's
@@ -325,6 +384,43 @@ def list_sessions(exclude_pid=None, exclude_log=None):
         valid_keys.append(key)
         out.append((f, mtime, preview, rounds))
     _save_rounds_cache(valid_keys)
+    # 【门控·worldline】树感知发现:日志空/缺失但有非空世界线树的会话(回退到起点后日志被
+    # 清空 → 上面 sz<32 跳过了)。仅当调用方显式传 rewind_root 时启用 → 其他 UI 不传,
+    # 行为逐字节不变。只读 tree.json 的 nodes/head(不依赖 worldline 模块)。
+    if rewind_root and os.path.isdir(rewind_root):
+        have = {os.path.basename(p) for p, *_ in out}
+        try:
+            keys = os.listdir(rewind_root)
+        except OSError:
+            keys = []
+        for key in keys:
+            if not key.startswith('model_responses_'):
+                continue
+            log_name = key + '.txt'
+            if log_name in have or log_name == exclude_log:
+                continue
+            log_path = os.path.join(_LOG_DIR, log_name)
+            try:                                    # 仅收"日志确实空/缺失"的(非空日志已被主循环收录)
+                if os.path.getsize(log_path) >= 32:
+                    continue
+            except OSError:
+                pass                                # 缺失也算
+            try:
+                with open(os.path.join(rewind_root, key, 'tree.json'), encoding='utf-8') as fh:
+                    d = json.load(fh)
+            except Exception:
+                continue
+            nodes = d.get('nodes') or {}
+            real = [v for v in nodes.values() if v.get('kind') != 'origin']
+            if not real:                            # 只有 origin 的空树 → 无内容,跳过
+                continue
+            try:
+                mtime = os.path.getmtime(os.path.join(rewind_root, key, 'tree.json'))
+            except OSError:
+                mtime = 0
+            head = d.get('head')
+            title = (nodes.get(head, {}).get('title') if head else '') or '（已回退至会话起点）'
+            out.append((log_path, mtime, f'[世界线] {title}', len(real)))
     out.sort(key=lambda x: x[1], reverse=True)
     return out
 _MD_ESCAPE_RE = re.compile(r'([\\`*_\[\]])')
@@ -446,17 +542,19 @@ def handle(agent, query, display_queue):
 
 
 _INJECT_MARKERS = ('### [WORKING MEMORY]', '[SYSTEM TIPS]', '[SYSTEM]', '[System]',
-                   '[DANGER]', '### [总结提炼经验]')
+                   '[DANGER]', '### [总结提炼经验]',
+                   'Continue from where you left off')
 
-# project_mode 插件把 `\n\n---\n[PROJECT MODE: <name>]\n…\n---` 追加在用户消息末尾
-# (见 plugins/project_mode._build_injection)。它会进日志,所以 /continue 重建 UI 时
-# 必须从显示文本里剔除,只留用户原话。不能加进 _INJECT_MARKERS——那会把整块(连用户
-# 原话)一起丢弃;这里只剜掉注入这一段后缀。
-_PM_BLOCK_RE = re.compile(r"\n*-{3,}\n\[PROJECT MODE:.*?\n-{3,}\s*$", re.DOTALL)
+# project_mode 插件把 `\n\n---\n[PROJECT MODE: <name>]\n…\n---` 追加到当轮 user
+# message(见 plugins/project_mode._build_injection)。runtime history 尊重日志真实 prompt,
+# 但 UI 预览/显示与派生 history_info 需要只取用户原话。老日志的 WORKING MEMORY 里还
+# 可能嵌着已污染的 `[USER]: ... [PROJECT MODE] ... [Agent] ...`,所以剥离支持 text
+# 内任意位置与被截断的单行 title 形态。不能加进 _INJECT_MARKERS——那会把整条用户原话一起丢弃。
+_PM_BLOCK_RE = re.compile(r"\s*-{3,}\s*\[PROJECT MODE:.*?(?:\n-{3,}\s*|$)", re.DOTALL)
 
 
 def strip_project_mode(text: str) -> str:
-    """剔除用户文本尾部的 project-mode 注入块。"""
+    """剔除文本中由 project_mode 插件追加的 L1 注入块。"""
     return _PM_BLOCK_RE.sub("", text or "")
 
 
@@ -989,9 +1087,13 @@ def begin_fresh_session(agent, agent_id=None):
     _clear_conversation_state(agent)
 
 
-def _load_history_into(agent, path):
+def _load_history_into(agent, path, restore_wm=False):
     """把 `path` 解析进 backend.history(native;否则降级摘要)。镜像 restore() 的解析,
-    但不 abort/不快照(日志重指由调用方先做好)。返回 (msg, is_full)。"""
+    但不 abort/不快照(日志重指由调用方先做好)。返回 (msg, is_full)。
+
+    `restore_wm`(默认 False,仅显式传入的调用方启用,如 worldline TUI):从同一份日志
+    派生 history_info 写回 `agent.history`,使续接后工作记忆不丢。默认关闭 → 其它前端
+    行为完全不变。"""
     try:
         with open(path, encoding='utf-8', errors='replace') as fh:
             content = fh.read()
@@ -1004,6 +1106,8 @@ def _load_history_into(agent, path):
     name = os.path.basename(path)
     if history is not None:
         _replace_backend_history(agent, history)
+        if restore_wm and hasattr(agent, 'history'):
+            agent.history = _derive_hist_info(history)   # 续接恢复工作记忆(opt-in)
         return f'✅ 已恢复 {len(pairs)} 轮完整对话（{name}）', True
     from chatapp_common import _restore_native_history, _restore_text_pairs
     summary = _restore_text_pairs(content) or _restore_native_history(content)
@@ -1015,10 +1119,20 @@ def _load_history_into(agent, path):
     return f'⚠️ 非 native 格式，降级恢复 {n} 轮摘要（{name}）', False
 
 
-def continue_inplace(agent, path, agent_id=None):
+def _is_empty_log(path):
+    """日志空(<32 字节)或缺失。用于 allow_empty:回退到会话起点后日志被清空的会话。"""
+    try:
+        return os.path.getsize(path) < 32
+    except OSError:
+        return True
+
+
+def continue_inplace(agent, path, agent_id=None, allow_empty=False, restore_wm=False):
     """原地续:把 agent 的日志指回 `path` 本身,之后轮次追加到 X,延续同一会话。
     调用方应已确认空闲(session_occupant 为 None);抢锁失败(被占)返回错误。
-    返回 (msg, ok)。"""
+    `allow_empty`(仅 worldline UI 传):日志为空时不报错,按【空会话】恢复(清空对话,
+    由调用方按 `.ga_rewind` 树重连),用于"回退至会话起点"的会话。
+    `restore_wm`(opt-in):续接后从日志派生 history_info 恢复工作记忆。返回 (msg, ok)。"""
     try: agent.abort()
     except Exception: pass
     if not acquire_lock(path, agent_id):       # 先抢到目标锁;失败则保持现状,不丢自己的锁
@@ -1027,12 +1141,17 @@ def continue_inplace(agent, path, agent_id=None):
     if cur and os.path.basename(cur) != os.path.basename(path):
         release_lock(cur)                       # 目标到手,旧会话释放为空闲(同一文件则不放)
     _retarget_log(agent, path)
-    return _load_history_into(agent, path)
+    msg, ok = _load_history_into(agent, path, restore_wm=restore_wm)
+    if not ok and allow_empty and _is_empty_log(path):
+        _replace_backend_history(agent, [])     # 空会话:清空对话(载入失败时它没被清)
+        return '✅ 已恢复空会话（回退至会话起点；世界线树已重连）', True
+    return msg, ok
 
 
-def continue_copy(agent, path, agent_id=None):
+def continue_copy(agent, path, agent_id=None, allow_empty=False, restore_wm=False):
     """拷贝续:铸新 logid、把 `path` 内容拷进去,在副本上续;`path` 原件不动。
-    用于"被占用→用户选拷贝"以及快照源。返回 (msg, ok)。"""
+    用于"被占用→用户选拷贝"以及快照源。`restore_wm`(opt-in)同 continue_inplace。
+    返回 (msg, ok)。"""
     try: agent.abort()
     except Exception: pass
     release_current(agent)
@@ -1043,7 +1162,11 @@ def continue_copy(agent, path, agent_id=None):
         pass
     acquire_lock(newp, agent_id)
     _retarget_log(agent, newp)
-    return _load_history_into(agent, newp)
+    msg, ok = _load_history_into(agent, newp, restore_wm=restore_wm)
+    if not ok and allow_empty and _is_empty_log(newp):
+        _replace_backend_history(agent, [])
+        return '✅ 已恢复空会话（回退至会话起点；世界线树已重连）', True
+    return msg, ok
 
 
 def install(cls):
