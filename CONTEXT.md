@@ -30,3 +30,49 @@ Invariant: `absolute = step + offset` and `base = offset + 1`, hence
 `displayStep = absolute − base + 1 = step` (the restore round-trip is
 identity). Forgetting this is what makes two consecutive messages' step-1
 replies overwrite each other and a restored conversation "lose replies".
+
+## Agent turn construction
+
+The live `turn_end` path and the SQLite restore path build the same
+`AgentTurn` shape. Single code home:
+[`gui/src/lib/agent-turn.ts`](./gui/src/lib/agent-turn.ts) — tool-event
+construction, the **final-answer-turn gate** (`no_tool` / zero tools →
+the narrator IS the final answer, no preamble kept), and
+empty-final-answer → null normalization all live there once. Persist
+consumes the built turn (what rendered live is what lands in SQLite);
+live-only derivation of thinking/preamble from raw `responseContent`
+stays in `ipc-handlers`. The round-trip invariant — *live turn ===
+restored turn for the same data* — is pinned by `agent-turn.test.ts`
+(2026-07-11 decision; see devlog).
+
+## Socket protocol
+
+The CLI↔Core socket contract (Agent API, `schemaVersion: 1`). Single code
+home: [`core/src/protocol/`](./core/src/protocol/mod.rs) — envelopes,
+per-command args structs, error tags. Neither end hand-writes a command
+name or camelCase field literal; drift is a compile/test failure, not a
+silently dropped argument (2026-07-11 decision; see devlog).
+
+- **Protocol module** — `core/src/protocol/`: the shared schemaVersion 1
+  type home. Rule: every `socket_listener` dispatch arm parses an args
+  type from here; every CLI request serializes the same type.
+- **`SocketCommand`** — trait binding a command's wire name (`NAME`) to
+  its args struct, so a name can't be paired with the wrong arguments.
+- **`SocketClient`** — the CLI's deep client (`cli/src/client.rs`):
+  envelope encode/decode, `ErrorTag` → exit-class mapping. Sits on the
+  **Transport seam** (`round_trip` / `open_stream`, string lines in/out)
+  so tests replay canned lines — including malformed ones — with no live
+  Core.
+- **`WatchFrame`** — the one stream-frame parser, with an explicit
+  `Unparseable(raw)` variant. Policy is per-caller by design:
+  `session watch` passes raw lines through (agents parse the NDJSON);
+  programmatic consumers treat `Unparseable` as an error. Results of
+  unary calls stay `Value` — typed results would drop additively-added
+  server fields on reprint.
+- **`HandlerCtx`** — what a Core socket write handler may touch
+  (`core/src/socket_listener/ctx.rs`): `DbSource` (global on-disk DB or
+  injected test pool), **`RunnerPort`** (the 6-method trait that IS the
+  socket→runner coupling), **`Notifier`** (`core/src/notify.rs`, GUI
+  event seam replacing `AppHandle` reach-ins). Production composes at
+  `dispatch_line`; tests enter via `dispatch_line_with` with fakes —
+  see `core/tests/socket_write_handlers_test.rs`.

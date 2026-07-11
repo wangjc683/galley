@@ -14,14 +14,14 @@ import {
 } from "@/lib/ipc/history-replay";
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
-import { settledToolStatus } from "@/lib/tool-outcome";
+import {
+  buildAgentTurn,
+  isFinalAnswerTurn,
+  toolEventsFromRaw,
+} from "@/lib/agent-turn";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
-import type {
-  AgentTurn,
-  ConversationToolEvent,
-  PendingApproval,
-} from "@/types/conversation";
+import type { AgentTurn, PendingApproval } from "@/types/conversation";
 import type {
   IPCEvent,
   MessageVisibility,
@@ -227,9 +227,11 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // UI: AgentTurn.turnIndex = per-message step (raw GA value).
       // TurnMarker renders "第 N 步" against this — resetting to 1
       // on every new user message is GA's native semantic and what
-      // the user expects.
+      // the user expects. Built unconditionally: the persist below
+      // reuses the same turn's derived fields even when the turn is
+      // `visibility: internal` (goal master-plan traffic).
+      const turn = turnFromTurnEnd(event);
       if (visibility === "visible") {
-        const turn = turnFromTurnEnd(event);
         messages.appendAgentTurn(event.sessionId, turn);
       }
       // No setAgentRunning(false) here — turn_end is per-step inside
@@ -265,6 +267,7 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         ...event,
         turnIndex: absoluteTurnIndex,
         visibility,
+        turn,
       });
       return;
     }
@@ -509,6 +512,12 @@ export function dispatchIPCEvent(event: IPCEvent): void {
 }
 
 // ---------------- Turn-end → AgentTurn ----------------
+//
+// Construction rules (tool events, final-answer gate, normalization)
+// live in lib/agent-turn.ts — the single home shared with the restore
+// path. This function only contributes what's live-exclusive: deriving
+// thinking/preamble out of the raw responseContent (restore reads the
+// persisted columns instead).
 
 function turnFromTurnEnd(event: {
   turnIndex: number;
@@ -518,80 +527,20 @@ function turnFromTurnEnd(event: {
   responseContent: string;
   telemetry?: TurnTelemetry | null;
 }): AgentTurn {
-  const tools = event.toolCalls.map((tc, i) =>
-    toolEventFromIPC(tc, event.toolResults[i], i),
-  );
-  // GA's summary occasionally arrives as the literal placeholder
-  // text when the LLM didn't produce a meaningful one. Trim + treat
-  // empty as undefined so the UI doesn't render a hollow line.
-  const trimmedSummary = event.summary?.trim();
-  // Intermediate turns (tool-only, no user-facing answer) produce a
-  // responseContent that's entirely <thinking>...</thinking> +
-  // <tool_use>...</tool_use> tags; after cleanFinalAnswer strips
-  // everything what's left is "". Normalize to null so Conversation's
-  // `showFinalAnswer = finalAnswer !== null` check correctly hides
-  // the MessageAgent + its Copy/Save actions for these turns.
-  const cleanedAnswer = cleanFinalAnswer(event.responseContent);
-  // Detect "final-answer turn" (GA's synthetic `no_tool` placeholder
-  // or zero real tools). For those, the surviving narrator IS the
-  // final answer and renders through MessageAgent — capturing it
-  // also as preamble would double-render the same prose under
-  // TurnMarker. Intermediate turns keep the preamble extraction.
-  const isFinalTurn =
-    tools.length === 0 || tools.every((t) => t.name === "no_tool");
-  const turn: AgentTurn = {
-    role: "agent",
+  const tools = toolEventsFromRaw(event.toolCalls, event.toolResults, "t-");
+  return buildAgentTurn({
     thinking: extractThinking(event.responseContent),
-    preamble: isFinalTurn ? undefined : extractPreamble(event.responseContent),
+    // Final-answer turn's narrator IS the final answer — keeping it as
+    // preamble too would double-render the same prose under TurnMarker.
+    preamble: isFinalAnswerTurn(tools)
+      ? undefined
+      : extractPreamble(event.responseContent),
     tools,
-    finalAnswer: cleanedAnswer.trim() ? cleanedAnswer : null,
+    finalAnswer: cleanFinalAnswer(event.responseContent),
     turnIndex: event.turnIndex,
-    summary: trimmedSummary ? trimmedSummary : undefined,
-  };
-  if (event.telemetry) turn.telemetry = event.telemetry;
-  return turn;
-}
-
-function toolEventFromIPC(
-  tc: IPCToolCall,
-  result: IPCToolResult | undefined,
-  index: number,
-): ConversationToolEvent {
-  const id =
-    (typeof result?.toolUseId === "string" && result.toolUseId) ||
-    (typeof tc.toolUseId === "string" && tc.toolUseId) ||
-    `t-${index}`;
-
-  // ≤500 char preview with a visible ellipsis when content was cut —
-  // silent truncation read as "the output just ends here". Keep in
-  // sync with rowsToTurns' previewFromContent.
-  let resultPreview: string | undefined;
-  const content = result?.content;
-  let full: string | undefined;
-  if (typeof content === "string") {
-    full = content;
-  } else if (content !== undefined) {
-    try {
-      full = JSON.stringify(content);
-    } catch {
-      full = String(content);
-    }
-  }
-  if (full !== undefined) {
-    resultPreview = full.length > 500 ? `${full.slice(0, 500)}…` : full;
-  }
-
-  return {
-    id,
-    name: tc.toolName,
-    // turn_end is the post-completion state — by definition every
-    // tool here finished. Denials are detected from the result payload
-    // Galley's own handler wrote (see lib/tool-outcome.ts); everything
-    // else fades into the document as "success-historical".
-    status: settledToolStatus(content),
-    args: tc.args,
-    resultPreview,
-  };
+    summary: event.summary,
+    telemetry: event.telemetry,
+  });
 }
 
 function pickTarget(args: Record<string, unknown>): string | undefined {
@@ -690,28 +639,22 @@ async function persistToolEventPendingFromIPC(event: {
   );
 }
 
+/**
+ * Persist a turn_end under the ABSOLUTE turn index. The derived columns
+ * (thinking / finalAnswer / summary / preamble / telemetry) come from
+ * the already-built [`AgentTurn`] — what the user saw rendered live IS
+ * what lands in SQLite; there is no second derivation that could drift.
+ */
 async function persistTurnEndToMessages(event: {
   sessionId: string;
   turnIndex: number;
   toolCalls: IPCToolCall[];
   toolResults: IPCToolResult[];
   responseContent: string;
-  summary: string;
-  telemetry?: TurnTelemetry | null;
   visibility?: MessageVisibility;
+  turn: AgentTurn;
 }): Promise<void> {
-  const trimmedSummary = event.summary?.trim() ?? "";
-  const finalAnswer = cleanFinalAnswer(event.responseContent);
-  // Mirrors turnFromTurnEnd's gate: only intermediate turns persist
-  // a preamble. Final-answer turn's narrator IS the final answer
-  // and lives in `final_answer`; storing it again as `preamble`
-  // would double-render on restore.
-  const isFinalTurn =
-    event.toolCalls.length === 0 ||
-    event.toolCalls.every((tc) => tc.toolName === "no_tool");
-  const persistedPreamble = isFinalTurn
-    ? null
-    : (extractPreamble(event.responseContent) ?? null);
+  const { turn } = event;
   await persistWithContentionRetry(
     "persistTurnEndToMessages",
     `session=${event.sessionId} turn=${event.turnIndex}`,
@@ -723,16 +666,17 @@ async function persistTurnEndToMessages(event: {
           content: event.responseContent,
           toolCalls: JSON.stringify(event.toolCalls),
           toolResults: JSON.stringify(event.toolResults),
-          thinking: extractThinking(event.responseContent) ?? null,
-          finalAnswer,
-          // GA's third-person turn summary. NULL when empty so the
-          // TurnMarker renders the bare "第 N 步" instead of an
-          // empty separator.
-          summary: trimmedSummary ? trimmedSummary : null,
-          // LLM pre-tool reasoning prose for DetailPanel restore. See
-          // isFinalTurn gate above — final answers don't persist here.
-          preamble: persistedPreamble,
-          telemetry: event.telemetry ?? null,
+          thinking: turn.thinking ?? null,
+          // NULL (not "") for tool-only intermediate turns, matching
+          // the rendered `finalAnswer: null`. Restore normalizes both
+          // this and legacy ""-storing rows.
+          finalAnswer: turn.finalAnswer,
+          // NULL when empty so the TurnMarker renders the bare
+          // "第 N 步" instead of an empty separator.
+          summary: turn.summary ?? null,
+          // Already gated: final-answer turns carry no preamble.
+          preamble: turn.preamble ?? null,
+          telemetry: turn.telemetry ?? null,
           visibility: event.visibility ?? "visible",
         },
       });

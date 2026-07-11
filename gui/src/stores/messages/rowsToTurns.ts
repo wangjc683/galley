@@ -4,16 +4,9 @@
 // the parent store hit the B3-I5 600-line budget. Pure functions —
 // no store dependency.
 
-import { settledToolStatus } from "@/lib/tool-outcome";
+import { buildAgentTurn, toolEventsFromRaw } from "@/lib/agent-turn";
 import { makeMessageStepper } from "@/lib/turn-index";
-import type {
-  AgentTurn,
-  ConversationToolEvent,
-  Origin,
-  SystemTurn,
-  Turn,
-  UserTurn,
-} from "@/types/conversation";
+import type { Origin, SystemTurn, Turn, UserTurn } from "@/types/conversation";
 import type { MessageRow } from "@/types/db";
 
 /**
@@ -56,52 +49,35 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
       if (row.goal_id) userTurn.goalId = row.goal_id;
       turns.push(userTurn);
     } else if (row.role === "assistant") {
+      // Construction rules shared with the live turn_end path live in
+      // lib/agent-turn.ts — one home, so a restored session renders
+      // identically to the live one (pinned by agent-turn.test.ts's
+      // round-trip test). This branch only contributes the row-specific
+      // parts: JSON re-hydration, the turn_index-namespaced id prefix
+      // (React keys span messages here), and the stepper's
+      // absolute→displayStep recovery.
+      //
+      // Column notes: preamble added in migration v5, summary in v3 —
+      // pre-migration rows have NULL and buildAgentTurn omits the field,
+      // which is right since the data never existed on disk. Legacy
+      // rows may also hold final_answer "" (persist stored the cleaned
+      // string verbatim before 2026-07-11); normalizeFinalAnswer inside
+      // buildAgentTurn maps both "" and NULL to null.
       const toolCalls = safeParseJsonArray(row.tool_calls);
       const toolResults = safeParseJsonArray(row.tool_results);
-      const tools: ConversationToolEvent[] = toolCalls.map((tc, i) => {
-        const result = toolResults[i];
-        const resultPreview = previewFromContent(result?.content);
-        const id =
-          (typeof result?.toolUseId === "string" && result.toolUseId) ||
-          (typeof tc.toolUseId === "string" && tc.toolUseId) ||
-          `t-${row.turn_index}-${i}`;
-        return {
-          id,
-          name: typeof tc.toolName === "string" ? tc.toolName : "(unknown)",
-          // Same denial detection as the live turn_end path
-          // (lib/tool-outcome.ts) so a restored session shows the
-          // user's rejections identically to the live one.
-          status: settledToolStatus(result?.content),
-          args: (tc.args as Record<string, unknown>) ?? {},
-          resultPreview,
-        };
+      const turn = buildAgentTurn({
+        thinking: row.thinking,
+        preamble: row.preamble,
+        tools: toolEventsFromRaw(
+          toolCalls,
+          toolResults,
+          `t-${row.turn_index}-`,
+        ),
+        finalAnswer: row.final_answer,
+        turnIndex: stepper.stepFor(row.turn_index),
+        summary: row.summary,
+        telemetry: row.telemetry,
       });
-      const displayStep = stepper.stepFor(row.turn_index);
-      // Normalize empty-string final_answer back to null (same as
-      // ipc-handlers turnFromTurnEnd does for live events). Old rows
-      // written before commit 1d0c404's fix may have stored "" for
-      // tool-only intermediate turns; surfacing them as null here
-      // keeps the Copy/Save actions from appearing under those turns.
-      const finalAnswerRaw = row.final_answer ?? "";
-      const finalAnswer = finalAnswerRaw.trim() ? finalAnswerRaw : null;
-      const turn: AgentTurn = {
-        role: "agent",
-        thinking: row.thinking ?? undefined,
-        // LLM "当前阶段：..." preamble (added in migration v5). Pre-
-        // v5 rows have NULL — TurnMarker DetailPanel chevron stays
-        // hidden when preamble is undefined and there's no
-        // thinking either.
-        preamble: row.preamble ?? undefined,
-        tools,
-        finalAnswer,
-        turnIndex: displayStep,
-        // GA turn summary (added in migration v3). Pre-v3 rows
-        // have NULL — TurnMarker collapses to just "第 N 步"
-        // when summary is undefined, which is the right behavior
-        // for those rows since the data never existed on disk.
-        summary: row.summary ?? undefined,
-      };
-      if (row.telemetry) turn.telemetry = row.telemetry;
       turns.push(turn);
     } else if (row.role === "system") {
       // The only `system` rows persisted to `messages` are Galley Goal
@@ -148,22 +124,4 @@ function safeParseJsonArray(raw: string | null): Record<string, unknown>[] {
   } catch {
     return [];
   }
-}
-
-/** Mirror of ipc-handlers' resultPreview logic — keep ≤500 char preview,
- * with a visible ellipsis when content was actually cut (silent
- * truncation read as "the output just ends here"). */
-function previewFromContent(content: unknown): string | undefined {
-  if (content === undefined || content === null) return undefined;
-  let full: string;
-  if (typeof content === "string") {
-    full = content;
-  } else {
-    try {
-      full = JSON.stringify(content);
-    } catch {
-      full = String(content);
-    }
-  }
-  return full.length > 500 ? `${full.slice(0, 500)}…` : full;
 }
