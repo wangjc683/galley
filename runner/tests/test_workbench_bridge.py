@@ -18,6 +18,7 @@ from typing import Any, cast
 import pytest
 
 import runner.managed_runtime as managed_runtime
+from runner.ga_session import message_to_content_blocks as _message_to_content_blocks
 from runner.ipc import (
     AbortCommand,
     AskUserResponseCommand,
@@ -32,7 +33,6 @@ from runner.workbench_bridge import (
     _FenceFilter,
     _llm_display_name,
     _managed_model_config_from_env,
-    _message_to_content_blocks,
 )
 
 # ---------------- _classify_error ----------------

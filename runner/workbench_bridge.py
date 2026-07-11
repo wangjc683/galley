@@ -19,9 +19,7 @@ writes to the captured fd.
 from __future__ import annotations
 
 import argparse
-import base64
 import json
-import mimetypes
 import os
 import queue
 import re
@@ -34,6 +32,7 @@ from pathlib import Path
 from typing import IO, Any
 
 from runner import _watchdog, managed_runtime
+from runner.ga_session import GaSession
 from runner.ipc import (
     PROTOCOL_VERSION,
     AbortCommand,
@@ -142,7 +141,6 @@ def _compact_args(args: dict[str, Any], max_len: int = 200) -> str:
 
 _managed_model_config_from_env = managed_runtime.managed_model_config_from_env
 
-_SUPPORTED_IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp"}
 _USAGE_FIELDS = ("requests", "input", "output", "cache_create", "cache_read")
 
 
@@ -152,57 +150,6 @@ _USAGE_FIELDS = ("requests", "input", "output", "cache_create", "cache_read")
 # leak. Passed to the watchdog as its `cleanup` iterable; read at exit time
 # so pet-attach appends after the watchdog starts are still honored.
 _PARENT_LOSS_CLEANUP: list[Any] = []
-
-
-def _mime_for_image_path(path: Path) -> str | None:
-    mime, _ = mimetypes.guess_type(path.name)
-    if mime in _SUPPORTED_IMAGE_MIMES:
-        return mime
-    suffix = path.suffix.lower()
-    if suffix == ".jpg":
-        return "image/jpeg"
-    if suffix == ".jpeg":
-        return "image/jpeg"
-    if suffix == ".png":
-        return "image/png"
-    if suffix == ".webp":
-        return "image/webp"
-    return None
-
-
-def _image_path_to_content_block(path_value: Any) -> dict[str, Any] | None:
-    if not isinstance(path_value, str) or not path_value:
-        return None
-    path = Path(path_value)
-    if not path.is_file():
-        return None
-    mime = _mime_for_image_path(path)
-    if mime is None:
-        return None
-    try:
-        data = base64.b64encode(path.read_bytes()).decode("ascii")
-    except OSError:
-        return None
-    return {
-        "type": "image",
-        "source": {"type": "base64", "media_type": mime, "data": data},
-    }
-
-
-def _message_to_content_blocks(content: Any, images: Any = None) -> list[Any]:
-    if isinstance(content, str):
-        blocks: list[Any] = [{"type": "text", "text": content}]
-    elif isinstance(content, list):
-        blocks = list(content)  # assume already native shape
-    else:
-        blocks = [{"type": "text", "text": str(content)}]
-
-    if isinstance(images, list):
-        for image_path in images:
-            block = _image_path_to_content_block(image_path)
-            if block is not None:
-                blocks.append(block)
-    return blocks
 
 
 def _llm_display_name(raw: str) -> str:
@@ -479,6 +426,13 @@ class Bridge:
 
     APPROVAL_WAIT_SECS = 600  # 10 min default; agent's deny on timeout
 
+    @property
+    def ga(self) -> GaSession:
+        """The GA-internals seam (see ga_session.py). A property over
+        `self.agent` so tests that swap in a fake agent get a matching
+        adapter for free — no stale binding to keep in sync."""
+        return GaSession(self.agent)
+
     def __init__(
         self,
         ga_path: str,
@@ -740,23 +694,7 @@ class Bridge:
 
     def _context_snapshot(self) -> dict[str, int]:
         """Read GA backend context usage without mutating runtime state."""
-        try:
-            backend = getattr(getattr(self.agent, "llmclient", None), "backend", None)
-            if backend is None:
-                return {}
-            history = getattr(backend, "history", None) or []
-            used = sum(
-                len(json.dumps(message, ensure_ascii=False)) for message in history
-            )
-            limit = int(getattr(backend, "context_win", 0) or 0) * 3
-        except Exception:
-            return {}
-        out: dict[str, int] = {}
-        if used >= 0:
-            out["contextUsedChars"] = used
-        if limit > 0:
-            out["contextLimitChars"] = limit
-        return out
+        return self.ga.context_usage()
 
     def _final_turn_telemetry(self) -> dict[str, int | None] | None:
         telemetry: dict[str, int | None] = {}
@@ -864,8 +802,10 @@ class Bridge:
             )
             return
         try:
-            self.agent._ga_project_mode_name = result.get("name") or None
-            self.agent._ga_project_mode_workspace_path = result.get("target") or root
+            self.ga.set_project_mode(
+                result.get("name") or None,
+                result.get("target") or root,
+            )
         except Exception as e:
             self._emit_error(
                 f"Project workspace activation failed while updating the GA session: {e}",
@@ -906,15 +846,10 @@ class Bridge:
                     turn_started_callback=bridge_self._emit_turn_start,
                 )
 
-        # agentmain bound the name at import time (`from ga import
-        # GenericAgentHandler`), so we patch the agentmain module's binding,
-        # not ga's. agentmain.run() looks up the name in agentmain's globals.
-        self.agentmain.GenericAgentHandler = _ConfiguredWorkbenchHandler
+        self.ga.install_handler(self.agentmain, _ConfiguredWorkbenchHandler)
 
     def _register_turn_end_hook(self) -> None:
-        if not hasattr(self.agent, "_turn_end_hooks"):
-            self.agent._turn_end_hooks = {}
-        self.agent._turn_end_hooks[f"workbench_{self.session_id}"] = self._on_turn_end
+        self.ga.register_turn_hook(f"workbench_{self.session_id}", self._on_turn_end)
 
     # ---------------- Event emission ----------------
 
@@ -1512,7 +1447,7 @@ class Bridge:
         import json as _json
 
         try:
-            history = self.agent.llmclient.backend.history
+            self.ga.history()
         except Exception as e:
             self._emit_error(
                 f"Cannot access backend.history: {e}",
@@ -1551,13 +1486,9 @@ class Bridge:
             return
         # Reset GA's per-LLM "last seen tools" so the next prompt rebuilds
         # the tool block from scratch — mirrors stapp.py exactly.
+        self.ga.clear_last_tools()
         try:
-            self.agent.llmclient.last_tools = ""
-        except Exception:
-            # Older GA versions might not have this attribute; non-fatal.
-            pass
-        try:
-            history.extend(tool_hist)
+            self.ga.extend_history(tool_hist)
         except Exception as e:
             self._emit_error(
                 f"Failed to extend backend.history: {e}",
@@ -1703,11 +1634,7 @@ class Bridge:
                 ).start()
 
         try:
-            if not hasattr(self.agent, "_turn_end_hooks"):
-                self.agent._turn_end_hooks = {}
-            self.agent._turn_end_hooks[
-                f"galley_pet_{self.session_id}"
-            ] = _pet_hook
+            self.ga.register_turn_hook(f"galley_pet_{self.session_id}", _pet_hook)
         except Exception as e:
             # Hook registration failed — kill the orphan pet subprocess.
             self._handle_detach_pet(silent=True)
@@ -1732,12 +1659,7 @@ class Bridge:
         """
         # Remove hook first so any in-flight turn_end doesn't try to
         # POST to a pet we're about to kill.
-        try:
-            hooks = getattr(self.agent, "_turn_end_hooks", None)
-            if isinstance(hooks, dict):
-                hooks.pop(f"galley_pet_{self.session_id}", None)
-        except Exception:
-            pass
+        self.ga.unregister_turn_hook(f"galley_pet_{self.session_id}")
         # Terminate subprocess.
         proc = self._pet_process
         self._pet_process = None
@@ -1759,27 +1681,24 @@ class Bridge:
     def _load_history(self, messages: list[dict[str, Any]]) -> None:
         """Inject conversation history into the backend.
 
-        Desktop-facing schema (docs/ipc-protocol.md §8.4) uses simple string
-        content per message. GA's NativeClaudeSession backend stores history
-        as a list of {role, content: [{type, text}, ...]} dicts (Anthropic
-        native format). Adapt here so the desktop never has to know GA's
-        internal shape.
+        Desktop-facing schema (docs/ipc-protocol.md §8.4) uses simple
+        string content per message.
 
-        E2E-validated for NativeClaudeSession (GLM 5.1 via native_claude
-        config). Other session classes (NativeOAISession, ClaudeSession,
-        LLMSession, MixinSession) are NOT yet validated; if a session uses
-        a different shape we'll need a per-class adapter. Tracked as PRD
-        §10 open item.
+        The desktop-shape → GA-native-blocks adaptation lives in
+        `GaSession.set_history` so the desktop never has to know GA's
+        internal shape. Unvalidated backend session classes get the
+        write plus a loud warning (PRD §10); the validated set lives in
+        ga_session.py.
         """
-        adapted = []
-        for m in messages:
-            role = m.get("role")
-            blocks = _message_to_content_blocks(
-                m.get("content", ""),
-                m.get("images", []),
+        warning = self.ga.set_history(messages)
+        if warning:
+            self._emit_error(
+                f"History restore: {warning}",
+                None,
+                category="bridge",
+                severity="warning",
+                context="load_history",
             )
-            adapted.append({"role": role, "content": blocks})
-        self.agent.llmclient.backend.history = adapted
 
     # ---------------- Main loop ----------------
 
