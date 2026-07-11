@@ -249,7 +249,7 @@ GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自�
 
 - **本地优先的安全模型。** 进程间走 Unix socket / named pipe，`0600` 权限、仅 localhost、no token、no TLS——因为信任边界就是「同一台机器的同一个用户」。不把本地工具硬塞进一套网络鉴权，是有意识的减法。
 
-- **Agent API 是冻结的公开契约。** CLI 输出带 `schemaVersion`，在 0.2.x 内冻结；每条命令自动携带 origin 三元组（`via` / `supervisor` / `reason`），GUI 时间线据此还原「谁、为什么、什么时候」动了某个 session。Supervisor 可以放心把它当 API 来编程。
+- **Agent API 是冻结的公开契约。** CLI 输出带 `schemaVersion`，自 0.2 起冻结未变；每条命令自动携带 origin 三元组（`via` / `supervisor` / `reason`），GUI 时间线据此还原「谁、为什么、什么时候」动了某个 session。Supervisor 可以放心把它当 API 来编程。
 
 - **双 runtime 的边界纪律。** 默认用内置内核（含 CPython 3.11 与依赖，开箱即用）；接入外部 GenericAgent 时，Galley 严格只读——不改外部 GA 的代码、memory、SOP 或 `mykey.py`，你的现有环境不会被污染。
 

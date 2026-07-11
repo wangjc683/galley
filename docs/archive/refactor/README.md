@@ -5,6 +5,9 @@
 > （I3 / I5 / I6 / I9 / I11）已迁至
 > [engineering workflow](../../engineering-workflow.md)。
 
+> 以下为 v0.2.0 重构期(2026-05)的原文快照，含当时的活文指令与 cursor
+> 面板；这些指令**不再生效**，仅供追溯当时的工作方式。
+
 跨多 session 重构的中央调度器。**新开 session 第一件事：读本文件 → 找到当前 cursor → 进入对应 phase playbook → 读 cursor 指向的 sub-task**。
 
 ## 跟其它文档的分工

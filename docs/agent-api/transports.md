@@ -111,7 +111,7 @@ These are stable identifiers — agents pattern-match on them:
 | `db_unavailable`   | DB file missing / unopenable / Galley Core not running               |
 | `unknown_command`  | Server doesn't know that command name                                |
 | `schema_mismatch`  | Client's `schemaVersion` != server's accepted version                |
-| `not_implemented`  | Command name reserved but no handler wired (transitional state)     |
+| `not_implemented`  | Reserved — currently NO emitter on either end; do not expect it      |
 | `idle_timeout`     | Connection sat idle past 90s — server politely closed                |
 | `internal`         | Unexpected server failure                                            |
 

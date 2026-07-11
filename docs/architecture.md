@@ -53,8 +53,11 @@ The CLI lives in `cli/` and exposes the `galley` command. Agents use it to list
 sessions, inspect context, create sessions, send messages, move sessions,
 switch LLMs, and archive or restore work.
 
-The CLI contract is documented in [agent-api](./agent-api.md). For the `v0.2.x`
-line, `schemaVersion: 1` is frozen.
+The CLI contract is documented in [agent-api](./agent-api.md).
+`schemaVersion: 1` is frozen (since v0.2; breaking changes require
+`schemaVersion: 2`). Since 2026-07-11 the schema's single code home is
+`core/src/protocol/` — command args, envelopes, and error tags shared
+by Core's socket listener and the CLI's `SocketClient`.
 
 ### Galley Core
 

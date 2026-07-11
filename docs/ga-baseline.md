@@ -21,6 +21,9 @@ Locked commit: `502be0a76d04e6d7063c28b3bbb77adb1047ba6b`
 - Date audited: 2026-07-10
 - Previous baseline: `b1e173dcbb3cf1a0c7fdeab4211a12a44461c841`
 - Delta: 10 commits
+- Note: "current baseline" = latest **audited** commit. What a released
+  build actually **ships** can lag one release behind — see
+  [project status](./project-status.md) for the shipped baseline.
 - Result: no external bridge protocol or dependency break; `pyproject.toml`
   did not change. Managed runtime picked up upstream Claude-refusal handling,
   `ChunkedEncodingError` retry, suppressed intermittent retry-error yields, the

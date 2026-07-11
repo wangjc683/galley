@@ -57,7 +57,7 @@ get a clean error path; the JSON envelope carries the original tag.
 | ------------------ | ----------- | ---------------------------------------------------- |
 | `unknown_command`  | exit 1      | Server doesn't know that command name (version skew) |
 | `schema_mismatch`  | exit 1      | Client's `schemaVersion` != server's accepted set    |
-| `not_implemented`  | exit 1      | Command name reserved but no handler wired           |
+| `not_implemented`  | exit 1      | Reserved — no emitter exists today; do not expect it |
 | `idle_timeout`     | exit 1      | Long-lived stream sat idle past 90s                  |
 
 #### Status enums
@@ -127,8 +127,8 @@ they read keep their names + semantics inside `schemaVersion: 1`.
 
 ## 7 · Versioning
 
-`schemaVersion: 1` is **frozen for the v0.2.x line**. The rules in §1
-apply.
+`schemaVersion: 1` is **frozen** — introduced in v0.2, unchanged
+through every release since (v0.3.x included). The rules in §1 apply.
 
 Inside `schemaVersion: 1`:
 
@@ -136,8 +136,9 @@ Inside `schemaVersion: 1`:
 - Adding a new value to a string enum (status, error, health status,
   …) is **non-breaking** — agents must handle unknown values
   gracefully (default branch).
-- Adding a new error discriminant on the socket transport (e.g. a new
-  not-yet-known cause for `not_implemented`) is **non-breaking**.
+- Adding a new error discriminant on the socket transport is
+  **non-breaking**. (`not_implemented` remains reserved-but-unemitted;
+  a first emitter would be such an additive change.)
 - Adding the v1-additive `detail` object to error envelopes is
   **non-breaking** — parsers that read `error` + `message` keep
   working.

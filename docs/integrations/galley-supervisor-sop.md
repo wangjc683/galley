@@ -275,13 +275,10 @@ Never blindly retry. Distinguish `dispatched`, `persisted_only`,
 
 ## Boundaries
 
-Do not modify external GenericAgent memory, SOP, skills, config, venv, or
-runtime state. Do not store Galley Goal protocol state in GA memory/SOP. Do not
-auto-approve Galley approval prompts. Do not claim to inspect a session unless
-you ran a read command.
-
-You may write clear task prompts, create small Project-backed groups, run Goal
-after explicit confirmation, and summarize results for the user.
+The canonical Do-not / You-may boundary list lives in
+[galley-supervisor-reference §Boundaries](./galley-supervisor-reference.md) —
+read it there; this SOP does not restate it (a shorter copy here drifted
+behind the reference once already).
 
 ## Self-Check
 

@@ -249,7 +249,7 @@ A few design choices that aren't in the feature list but shape Galley's engineer
 
 - **A local-first security model.** Inter-process traffic runs over a Unix socket / named pipe with `0600` permissions, localhost only, no token, no TLS — because the trust boundary is "the same user on the same machine." Not forcing network-style auth onto a local tool is a deliberate subtraction.
 
-- **The Agent API is a frozen public contract.** CLI output carries a `schemaVersion`, frozen within 0.2.x; every command carries an origin triple (`via` / `supervisor` / `reason`), and the GUI timeline reconstructs who changed a session, why, and when. A Supervisor can program against it with confidence.
+- **The Agent API is a frozen public contract.** CLI output carries a `schemaVersion`, frozen since 0.2; every command carries an origin triple (`via` / `supervisor` / `reason`), and the GUI timeline reconstructs who changed a session, why, and when. A Supervisor can program against it with confidence.
 
 - **Discipline at the dual-runtime boundary.** The default is the bundled engine (CPython 3.11 and dependencies included, ready out of the box); when attaching an external GenericAgent, Galley stays strictly read-only — it never touches the external GA's code, memory, SOP, or `mykey.py`, so your existing environment stays clean.
 

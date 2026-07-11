@@ -10,6 +10,18 @@ Issues and PRDs for this repo live as markdown files in `.scratch/`.
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
+## Lifecycle after shipping
+
+When an issue's work ships, set `Status: done`. When the whole feature has
+shipped and its dogfood round closed:
+
+1. Check the feature's devlog entries cover whatever in the PRD / issues
+   still has long-term value (open questions, rejected options); move any
+   uncovered point into the relevant devlog entry first.
+2. Delete the whole `.scratch/<feature-slug>/` directory. `.scratch/` holds
+   in-flight work only — shipped tickets are provenance, and provenance
+   lives in git history + devlog, not in the tracker.
+
 ## When a skill says "publish to the issue tracker"
 
 Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).

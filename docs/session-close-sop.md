@@ -97,7 +97,7 @@ Use these rules when step 3 finds project knowledge drift.
 |---|---|
 | Startup rule every coding agent must obey | `AGENTS.md` |
 | Current architecture, API, runtime, release, or workflow fact | Focused document under `docs/` |
-| Why a decision was made, rejected alternatives, or retrospectives | `docs/devlog/` |
+| Why a decision was made, rejected alternatives, or retrospectives | `docs/devlog/` — and add the entry's row to `docs/devlog/README.md` in the same change (the index is hand-maintained; skipping this is how it drifts) |
 | Major new document or changed routing entry | `docs/README.md` |
 | Completed task detail with no future use | Nowhere; leave it to git history |
 

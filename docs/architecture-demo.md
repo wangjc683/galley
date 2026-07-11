@@ -4,7 +4,7 @@
 > with [architecture](./architecture.md).
 
 > **Purpose**: M9 T9.1 / A13 acceptance deliverable.
-> **Status**: v0.2.0 shipped, 2026-05-31.
+> **Status**: v0.2.0 shipped, 2026-05-31; invariants re-verified against the 0.3.x tree 2026-07-11 (code references use file + symbol, not line numbers — lines rot).
 > **Scope**: 把 v0.2 / B-phase 的 4 个架构不变量逐条 demo 到具体代码位置 + grep / 测试可验证项。
 > [AGENTS.md](../AGENTS.md) 是完整项目宪法；本文件只覆盖这 4 个 verification-facing invariants。
 
@@ -41,7 +41,7 @@ grep -rin "jwt\|oauth\|api[_-]key\|bearer" core/src/ | grep -v "//\|test"
 
 ### Tests demonstrating principle
 
-- [`core/tests/socket_listener_test.rs:7-13`](../core/tests/socket_listener_test.rs) — only AF_UNIX/named pipe accepted; no TCP fallback
+- [`core/tests/socket_listener_test.rs`](../core/tests/socket_listener_test.rs) — transport tests drive the AF_UNIX/named-pipe path only; no TCP fallback exists to test
 - B2 M3 sub-plan §1.3 explicitly rejects TCP variant; AGENTS.md § Localhost Only codifies invariant
 
 ---
@@ -53,16 +53,16 @@ grep -rin "jwt\|oauth\|api[_-]key\|bearer" core/src/ | grep -v "//\|test"
 
 ### Code references
 
-- **Schema version constant**: [`cli/src/main.rs`](../cli/src/main.rs) and [`core/src/socket_listener/`](../core/src/socket_listener/mod.rs) — frozen at `1` since M6 (2026-05-20)
+- **Schema version constant**: `SCHEMA_VERSION` in [`core/src/protocol/`](../core/src/protocol/envelope.rs) — the single home since 2026-07-11; `cli/src/common.rs` and `core/src/socket_listener/` both re-export it. Frozen at `1` since M6 (2026-05-20)
 - **`--schema=N` global CLI flag** — clap global flag; mismatch → exit 2 with `schema_mismatch:` prefix
-- **Exit code categorization** — [`cli/src/main.rs`](../cli/src/main.rs) per [agent-api.md §1.1](./agent-api.md):
+- **Exit code categorization** — `exit_code_for` in [`cli/src/common.rs`](../cli/src/common.rs); wire-tag → error-class mapping is `galley_error_for_tag` in [`cli/src/client.rs`](../cli/src/client.rs) (exhaustive match over the shared `ErrorTag` enum). Per [agent-api.md §1.1](./agent-api.md):
   - 0 = success
   - 1 = internal
   - 2 = invalid_args (includes schema mismatch)
   - 3 = not_found
   - 4 = db_unavailable (Galley Core not running)
   - 5 = runner_error (B4 M1 — bridge unreachable / IPC dispatch failure)
-- **Error enum stable identifiers** — [`core/src/error.rs:12-28`](../core/src/error.rs) `GalleyError` 5 variants with stable snake_case tag via serde `#[serde(tag = "error", rename_all = "snake_case")]`
+- **Error enum stable identifiers** — [`core/src/error.rs`](../core/src/error.rs) `GalleyError` 5 variants with stable snake_case tag via serde `#[serde(tag = "error", rename_all = "snake_case")]`; the full wire-tag set is `ErrorTag` in [`core/src/protocol/error_tag.rs`](../core/src/protocol/error_tag.rs)
 - **Origin enum stable** — [`core/src/api/origin.rs`](../core/src/api/origin.rs) `OriginVia { Gui, Cli, Supervisor, System }` SQL CHECK constraint pinned
 
 ### Document references
@@ -127,14 +127,14 @@ grep -rn "supervisor_chat\|conversation_log\|supervisor_history\|im_messages" co
 - **Trait impl** — [`core/src/db/`](../core/src/db/mod.rs) `SqliteGalley` is the only writer with `SqlitePool` connection
 - **Bridge subprocess ownership** — [`core/src/runner_manager/manager.rs`](../core/src/runner_manager/manager.rs) `RunnerManager` owns `tokio::process::Child` handles; B2 prototype pattern productionized
 - **Session lifecycle** — [`core/src/runner_manager/process.rs`](../core/src/runner_manager/process.rs) `BridgeProcess` Drop sends SIGKILL on unwind panic (B2 invariant I11)
-- **Command dispatch** — [`core/src/socket_listener/`](../core/src/socket_listener/mod.rs) routes CLI commands to same trait surface as Tauri commands ([`core/src/lib.rs:400-433`](../core/src/lib.rs))
+- **Command dispatch** — `dispatch_line_with` in [`core/src/socket_listener/mod.rs`](../core/src/socket_listener/mod.rs) routes CLI commands to the same `GalleyApi` trait surface as Tauri commands; handlers receive dependencies via `HandlerCtx` (2026-07-11 seam, see `socket_listener/ctx.rs`)
 
 ### Code references — 前端是 presenter
 
 - **GUI store slices** — [`gui/src/stores/`](../gui/src/stores) — ui / runtime / sessions / messages / prefs slices; **no direct SQL** writes since B3 M4 / M5
 - **`useAppStore.ts` deleted entirely** — B3 M6 (2026-05-20). The TS-side authoritative state pre-B3 era no longer exists
 - **bridge.ts thin shim** — [`gui/src/lib/bridge.ts`](../gui/src/lib/bridge.ts) all functions `invoke()` Tauri commands; **0 direct Python subprocess spawn**
-- **CLI uses same trait** — [`cli/src/main.rs`](../cli/src/main.rs) opens `SqliteGalley` directly for reads + routes writes through socket (which calls trait); never opens Python subprocess
+- **CLI uses same trait** — read commands (`cli/src/session.rs`, `cli/src/project.rs`, …) open `SqliteGalley` directly; write commands route through the socket via `SocketClient` ([`cli/src/client.rs`](../cli/src/client.rs)) with typed args from `core/src/protocol/`; never opens a Python subprocess
 - **Event subscription pattern** — GUI listens to Tauri `runner-event` / `user-message-persisted` / `runner-closed` events; receives state updates without managing state
 
 ### Grep gates (all should return 0)

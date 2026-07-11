@@ -33,9 +33,11 @@ and the fallback entirely.
 Traced every path that could make `event.absoluteTurnIndex` null:
 
 - **`/btw` side questions** send a command with `absolute_turn_index: None`, but
-  the dispatcher `return`s on the `/btw` branch (`workbench_bridge.py:1409`)
-  **before** the base assignment (`:1417`), and `/btw` emits only a
-  `SystemMessageEvent` — never a `turn_end`. Eliminated.
+  `dispatch_command`'s `/btw` branch (`workbench_bridge.py`, routed to
+  `_handle_btw_command`) returns **before** the
+  `_current_message_turn_base` assignment, and `/btw` emits only a
+  `SystemMessageEvent` — never a `turn_end`. Eliminated. (Symbol refs —
+  original line numbers rotted within days of writing.)
 - **GUI / socket / CLI sends** all persist the user row through
   `RawMessageRow::into_brief`, which always sets `turn_index: Some(...)`
   (`core/src/db/rows.rs:99`). Core reliably returns the index; the runner

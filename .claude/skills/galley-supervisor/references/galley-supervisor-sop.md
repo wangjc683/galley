@@ -6,7 +6,7 @@ self-contained when installed at ~/.claude/skills/.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-sop.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-07-09 (re-synced verbatim with canonical after Goal-surface updates).
+Last synced: 2026-07-11 (Boundaries section now defers to the reference doc's canonical list).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins. Re-sync this copy when you update the canonical.
@@ -289,13 +289,10 @@ Never blindly retry. Distinguish `dispatched`, `persisted_only`,
 
 ## Boundaries
 
-Do not modify external GenericAgent memory, SOP, skills, config, venv, or
-runtime state. Do not store Galley Goal protocol state in GA memory/SOP. Do not
-auto-approve Galley approval prompts. Do not claim to inspect a session unless
-you ran a read command.
-
-You may write clear task prompts, create small Project-backed groups, run Goal
-after explicit confirmation, and summarize results for the user.
+The canonical Do-not / You-may boundary list lives in
+[galley-supervisor-reference §Boundaries](./galley-supervisor-reference.md) —
+read it there; this SOP does not restate it (a shorter copy here drifted
+behind the reference once already).
 
 ## Self-Check
 

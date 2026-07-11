@@ -18,7 +18,7 @@ Response fields:
 | Field            | Type   | Notes                                              |
 | ---------------- | ------ | -------------------------------------------------- |
 | `galleyVersion`  | string | semver of the `galley` binary itself               |
-| `schemaVersion`  | int    | this document's stability key (`1` for v0.2.x) |
+| `schemaVersion`  | int    | this document's stability key (`1`, frozen since v0.2) |
 
 ### 5.2 · `galley sessions list [--runtime=current|managed|external|all] [--project=X] [--status=Y] [--archived | --all]`
 

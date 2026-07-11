@@ -37,6 +37,10 @@ subset of the task table below; when the two disagree, this index wins and
 | Touch managed / bundled GA runtime | [managed GA runtime](./managed-ga-runtime/README.md) — mode boundaries, patch discipline, state rules |
 | Touch GUI or engineering workflow | [engineering workflow](./engineering-workflow.md) — conventions plus hard invariants |
 | Touch visual design | [DESIGN.md](./design/README.md) |
+| Look up domain vocabulary (turn numbering, seams, protocol terms) | [CONTEXT.md](../CONTEXT.md) — the ubiquitous-language glossary; engineering skills read it before exploring |
+| Check whether a refactor direction was already decided against | [ADRs](./adr/) — accepted architecture decisions; reviews must not re-litigate them |
+| Track issues / PRDs for an in-flight feature | [issue tracker](./agents/issue-tracker.md) — local markdown under `.scratch/`, triage states in [triage labels](./agents/triage-labels.md) |
+| Grow the domain model (glossary + ADRs) | [domain](./agents/domain.md) — how CONTEXT.md and `docs/adr/` are maintained |
 | Understand or change Galley's temperament / brand character | [temperament charter](./temperament.md) — the "why" above the execution specs |
 | Touch UI copy, terminology, or localization | [copy and language guidelines](./copy-language-guidelines.md) (what to call things), [copy austerity principles](./copy-austerity-principles.md) (how to say it) |
 | Touch conversation text rendering / CJK typography | [typography principles](./typography-principles.md) — render-only red line |
@@ -67,6 +71,23 @@ grouped by what a session typically needs together. The original path stays
 behind as a redirect stub so external references keep resolving. Current
 stubs: `docs/DESIGN.md`, [docs/agent-api.md](./agent-api.md),
 [docs/managed-ga-runtime.md](./managed-ga-runtime.md).
+
+## Update Triggers
+
+Living docs drift when nothing says who updates them and when. One table,
+one trigger event per doc — if you just did the event in the left column,
+the doc on the right is part of your change, not a follow-up:
+
+| When you… | You must update |
+|---|---|
+| Ship a release | [project status](./project-status.md) (already in the [release SOP](./release-update-sop.md)) |
+| Upgrade the GA baseline | [GA baseline](./ga-baseline.md) + managed patch notes; audit starts at `runner/ga_session.py` |
+| Change the Agent API or IPC protocol | [agent-api](./agent-api/README.md) / [IPC protocol](./ipc-protocol.md) **first**, then code (Rule 3) |
+| Land a new seam, module, or pinned term | [CONTEXT.md](../CONTEXT.md); record rejected directions as [ADRs](./adr/) |
+| Add a top-level module or cross-tier seam | [architecture](./architecture.md) + [architecture demo](./architecture-demo.md) (file + symbol refs, never line numbers) |
+| Write a devlog entry | add its row to [devlog README](./devlog/README.md) in the same change |
+| Change UI copy rules or visual specs | [copy guidelines](./copy-language-guidelines.md) / [design](./design/README.md) |
+| Update the Supervisor SOP | re-sync the verbatim copy in `.claude/skills/galley-supervisor/references/` |
 
 ## Keep Docs Lean
 

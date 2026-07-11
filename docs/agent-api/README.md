@@ -3,7 +3,8 @@
 The contract between **Galley** and any agent that drives it via the
 `galley` CLI binary or the Unix-socket / named-pipe local transport.
 
-> **Status: `schemaVersion: 1` is frozen for the `v0.2.x` line.**
+> **Status: `schemaVersion: 1` is frozen — unchanged since `v0.2`,
+> still the only schema current binaries speak.**
 > The commands documented in §5 are wired, tested, and locked. Inside
 > `schemaVersion: 1` the rules in §1 hold: additive commands, flags,
 > and optional fields are non-breaking; renames / removals require a

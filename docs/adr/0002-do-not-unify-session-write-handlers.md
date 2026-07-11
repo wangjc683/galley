@@ -61,3 +61,14 @@ result is harder to read than the explicit inline handlers.
   code. The Explore-agent review over-stated uniformity here (as it did for the
   "12+ sites" P2 claim and the "byte-identical" P3 claim). Treat such reviews as
   leads to verify, not conclusions.
+
+## Addendum (2026-07-11)
+
+The side-remark above that `SqliteGalley::open` boilerplate is "not worth a
+seam" has been superseded in one narrow sense: the same day's candidate-2
+refactor introduced `DbSource` (`core/src/socket_listener/ctx.rs`), a seam over
+db-open — but for **test injection** (in-memory pool vs global on-disk DB), a
+motivation this ADR never weighed. The core decision is untouched: handlers
+remain explicit per-command functions with their own contract-bound failure
+behavior; `HandlerCtx` changes where dependencies come from, not what handlers
+do.

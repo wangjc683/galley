@@ -61,7 +61,7 @@ Galley (Galley) bridge 与 desktop 之间的通信契约。本文件是**唯一�
 }
 ```
 
-Stable error discriminants: `invalid_args` / `not_found` / `db_unavailable` / `unknown_command` / `schema_mismatch` / `not_implemented` / `idle_timeout` / `internal`. Additions are allowed without bumping `schemaVersion`; renames or removals require a bump.
+The full stable discriminant table (including `runner_error` and the runner-spawn tags) lives in [agent-api/stability-and-versioning §2/§2A](./agent-api/stability-and-versioning.md) — that document is the single source; do not restate the list here. Since 2026-07-11 the code home is the `ErrorTag` enum in `core/src/protocol/error_tag.rs`, shared by Core's emitters and the CLI's exit-code mapping. Additions are allowed without bumping `schemaVersion`; renames or removals require a bump. (`not_implemented` is reserved — no emitter exists today.)
 
 ### Stream responses (B2 M4+, for `session.watch`)
 
@@ -749,7 +749,7 @@ bridge:   { kind: "turn_start", ... }
 
 ## 10. Open Items（实现阶段确认）
 
-- [x] **`load_history` messages 数据结构** — 已 e2e 验证：`NativeClaudeSession` 的 `backend.history` 是 `[{role, content: [{type:"text", text:str}, ...]}]`（Anthropic native messages 格式）。`runner/workbench_bridge.py:_load_history` 把 GUI 传来的简单 string content 适配为 native blocks。**未验证**：`NativeOAISession` / `ClaudeSession` / `LLMSession` / `MixinSession` 的 history 形态可能不同，需要对应 adapter。当前 V0.1 只在 `NativeClaudeSession` 下保证恢复语义。
+- [x] **`load_history` messages 数据结构** — 已 e2e 验证：`NativeClaudeSession` 的 `backend.history` 是 `[{role, content: [{type:"text", text:str}, ...]}]`（Anthropic native messages 格式）。string content → native blocks 的适配自 2026-07-11 起住在 `runner/ga_session.py`（`set_history` / `message_to_content_blocks`，GA 集成缝的一部分）。**未验证**：`NativeOAISession` / `ClaudeSession` / `LLMSession` / `MixinSession` 的 history 形态可能不同，需要对应 adapter——对这些后端 `set_history` 会照写并发出响亮 warning（而非静默），见 PRD §10。当前只在 `NativeClaudeSession` 下保证恢复语义。
 - [ ] `tool_call_progress` 字符串解析规则（GA 当前 yield 的 emoji 前缀格式）需在 runner 实现时记录到 `runner/handlers.py` 注释，避免 GA 升级时格式变化无人知晓 — V0.1 暂不实现 progress 事件，turn_end 已含完整 toolCalls/toolResults
 - [ ] images 字段的传递路径（user_message → GA put_task）需在 bridge 验证可行 — bridge 已通过 `images=cmd.images` 透传到 `agent.put_task`，但实际多模态调用未 e2e 验证
 - [x] **`abort` 路径** — GA 的 `abort()` 设 `stop_sig` 让 worker 跳出循环，但**不**触发 `turn_end_callback`。bridge 在 `dispatch_command` 收到 `AbortCommand` 时主动合成 `RunCompleteEvent` with `exitReason.result = "ABORTED"`。e2e 已验证。

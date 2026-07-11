@@ -25,7 +25,7 @@ rule and the "GA budget" in
 
 Current target:
 
-- Agent API: `schemaVersion: 1` (frozen for the `0.2.x` line; see Rule 3)
+- Agent API: `schemaVersion: 1` (frozen since `v0.2`; see Rule 3)
 
 Read [project status](./docs/project-status.md) for the current version, release
 tag, release gates, update-channel state, and compact phase state. Those values
@@ -110,7 +110,7 @@ change this constitution.
 Galley CLI JSON is the stable contract for agents. Read
 [agent-api](./docs/agent-api/README.md) before changing it.
 
-- `schemaVersion: 1` is frozen for `v0.2.x`.
+- `schemaVersion: 1` is frozen (since `v0.2`; still current).
 - v1 changes are additive-only.
 - Breaking change requires `schemaVersion: 2`.
 - CLI callers pin with `--schema=1`.

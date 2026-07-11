@@ -11,6 +11,7 @@ Since issues are local markdown files, each label is written as a `Status:` valu
 | `ready-for-agent` | `ready-for-agent`     | Fully specified, ready for an AFK agent  |
 | `ready-for-human` | `ready-for-human`     | Requires human implementation            |
 | `wontfix`         | `wontfix`             | Will not be actioned                     |
+| *(terminal)*      | `done`                | Shipped / resolved — see the disposal rule in [issue-tracker](./issue-tracker.md) |
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding string from this table.
 
