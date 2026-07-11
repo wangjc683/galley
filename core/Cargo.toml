@@ -44,6 +44,7 @@ tauri-build = { version = "2", features = [] }
 # written to a tempdir) and is the same dep `cli/tests/cli_test.rs` uses.
 [dev-dependencies]
 tempfile = "3"
+async-trait = "0.1"
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-png"] }

@@ -1,11 +1,8 @@
 use crate::args::RuntimeArg;
+use crate::client::{call_print, call_value, client, next_watch_frame_strict};
 use crate::common::{
     emit_json, parse_status_arg, runtime_arg_for_session_new, runtime_filter, StreamEndPayload,
     SCHEMA_VERSION,
-};
-use crate::transport::{
-    map_error_tag, open_watch_lines, read_watch_frame, socket_send_recv, unary_command,
-    unary_command_value, WatchFrame,
 };
 use galley_core_lib::api::{
     GalleyApi, MessageBrief, MessageRole, SearchScope, SessionBrief, SessionFilter, SessionId,
@@ -13,6 +10,12 @@ use galley_core_lib::api::{
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
+use galley_core_lib::protocol::{
+    SessionArchiveArgs, SessionBtwArgs, SessionCheckpointArgs, SessionGoalMasterPlanArgs,
+    SessionGoalSoloTurnArgs, SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs,
+    SessionNewGoalWorkerArgs, SessionRestoreArgs, SessionSendArgs, SessionShutdownRunnerArgs,
+    SessionStopArgs, WatchFrame,
+};
 use serde::Serialize;
 use serde_json::Value;
 use std::time::{Duration, Instant};
@@ -201,32 +204,17 @@ pub(crate) async fn session_send_value(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<serde_json::Value, GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.send",
-        "args": {
-            "sessionId": id,
-            "content": content,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    let resp_line = socket_send_recv(req).await?;
-    let parsed: serde_json::Value =
-        serde_json::from_str(&resp_line).map_err(|e| GalleyError::Internal {
-            message: format!("malformed socket response: {e}"),
-        })?;
-    if parsed["ok"] == serde_json::Value::Bool(true) {
-        Ok(parsed["result"].clone())
-    } else {
-        let tag = parsed["error"].as_str().unwrap_or("internal");
-        let msg = parsed["message"].as_str().unwrap_or("").to_string();
-        Err(map_error_tag(tag, msg))
-    }
+    call_value(SessionSendArgs {
+        session_id: id,
+        content,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_watch(id: String) -> Result<(), GalleyError> {
-    let mut lines = open_watch_lines(&id).await?;
+    let mut lines = client().open_watch(&id).await?;
     while let Some(line) = lines
         .next_line()
         .await
@@ -234,18 +222,19 @@ pub(crate) async fn session_watch(id: String) -> Result<(), GalleyError> {
             message: format!("watch read: {e}"),
         })?
     {
-        let parsed: serde_json::Value =
-            serde_json::from_str(&line).unwrap_or(serde_json::Value::Null);
-        if parsed["ok"] == serde_json::Value::Bool(false) {
-            let tag = parsed["error"].as_str().unwrap_or("internal");
-            let msg = parsed["message"].as_str().unwrap_or("").to_string();
-            return Err(map_error_tag(tag, msg));
-        }
-        // Print stream frames as-is; agents stream-parse the NDJSON. Initial
-        // error envelopes are mapped above so CLI errors keep one shape.
-        println!("{line}");
-        if parsed["stream"] == "end" {
-            break;
+        // LENIENT policy: print stream frames as-is and keep going —
+        // agents stream-parse the NDJSON themselves, so even an
+        // Unparseable line is theirs to see (frozen behavior). Only an
+        // error envelope terminates with a mapped CLI error.
+        match WatchFrame::parse(&line) {
+            WatchFrame::Error { tag, message } => {
+                return Err(crate::client::galley_error_for_tag(tag, message));
+            }
+            WatchFrame::End(_) => {
+                println!("{line}");
+                break;
+            }
+            WatchFrame::Event(_) | WatchFrame::Unparseable(_) => println!("{line}"),
         }
     }
     Ok(())
@@ -255,7 +244,7 @@ pub(crate) async fn session_follow(id: String, tail: usize) -> Result<(), Galley
     let galley = SqliteGalley::open().await?;
     emit_json(&session_snapshot_payload(&galley, &id, "initial", tail).await?)?;
 
-    let mut lines = match open_watch_lines(&id).await {
+    let mut lines = match client().open_watch(&id).await {
         Ok(lines) => lines,
         Err(GalleyError::DbUnavailable { .. }) => {
             emit_json(&StreamEndPayload {
@@ -269,7 +258,7 @@ pub(crate) async fn session_follow(id: String, tail: usize) -> Result<(), Galley
     };
 
     loop {
-        match read_watch_frame(&mut lines).await {
+        match next_watch_frame_strict(&mut lines).await {
             Ok(Some(WatchFrame::Event(data))) => emit_json(&SessionEventPayload {
                 schema_version: SCHEMA_VERSION,
                 stream: "event",
@@ -285,6 +274,9 @@ pub(crate) async fn session_follow(id: String, tail: usize) -> Result<(), Galley
                     reason: &reason,
                 })?;
                 return Ok(());
+            }
+            Ok(Some(WatchFrame::Error { .. } | WatchFrame::Unparseable(_))) => {
+                unreachable!("next_watch_frame_strict surfaces these as Err")
             }
             Ok(None) => {
                 let galley = SqliteGalley::open().await?;
@@ -409,19 +401,15 @@ pub(crate) async fn session_new(
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
     let runtime_kind = runtime_arg_for_session_new(runtime)?;
-    let req = serde_json::json!({
-        "command": "session.new",
-        "args": {
-            "task": task,
-            "projectId": project,
-            "llmName": llm,
-            "runtimeKind": runtime_kind,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(SessionNewArgs {
+        task,
+        project_id: project,
+        llm_name: llm,
+        runtime_kind,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_new_goal_worker_value(
@@ -433,19 +421,15 @@ pub(crate) async fn session_new_goal_worker_value(
     reason: Option<String>,
 ) -> Result<serde_json::Value, GalleyError> {
     let runtime_kind = runtime_arg_for_session_new(runtime)?;
-    let req = serde_json::json!({
-        "command": "session.new_goal_worker",
-        "args": {
-            "taskTemplate": task_template,
-            "projectId": project,
-            "llmName": llm,
-            "runtimeKind": runtime_kind,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command_value(req).await
+    call_value(SessionNewGoalWorkerArgs {
+        task_template,
+        project_id: project,
+        llm_name: llm,
+        runtime_kind,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_goal_synthesize_value(
@@ -455,18 +439,14 @@ pub(crate) async fn session_goal_synthesize_value(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<serde_json::Value, GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.goal_synthesize",
-        "args": {
-            "sessionId": id,
-            "visibleContent": visible_content,
-            "dispatchContent": dispatch_content,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command_value(req).await
+    call_value(SessionGoalSynthesizeArgs {
+        session_id: id,
+        visible_content,
+        dispatch_content,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_goal_master_plan_value(
@@ -475,17 +455,13 @@ pub(crate) async fn session_goal_master_plan_value(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<serde_json::Value, GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.goal_master_plan",
-        "args": {
-            "sessionId": id,
-            "dispatchContent": dispatch_content,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command_value(req).await
+    call_value(SessionGoalMasterPlanArgs {
+        session_id: id,
+        dispatch_content,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 /// Dispatch a visible solo-Goal working turn, spawning the session's runner
@@ -496,17 +472,13 @@ pub(crate) async fn session_goal_solo_turn_value(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<serde_json::Value, GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.goal_solo_turn",
-        "args": {
-            "sessionId": id,
-            "dispatchContent": dispatch_content,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command_value(req).await
+    call_value(SessionGoalSoloTurnArgs {
+        session_id: id,
+        dispatch_content,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_checkpoint_value(
@@ -516,18 +488,14 @@ pub(crate) async fn session_checkpoint_value(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<serde_json::Value, GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.checkpoint",
-        "args": {
-            "sessionId": id,
-            "content": content,
-            "goalId": goal_id,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command_value(req).await
+    call_value(SessionCheckpointArgs {
+        session_id: id,
+        content,
+        goal_id,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_btw(
@@ -536,17 +504,13 @@ pub(crate) async fn session_btw(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.btw",
-        "args": {
-            "sessionId": id,
-            "question": question,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(SessionBtwArgs {
+        session_id: id,
+        question,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_stop(
@@ -554,16 +518,12 @@ pub(crate) async fn session_stop(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.stop",
-        "args": {
-            "sessionId": id,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(SessionStopArgs {
+        session_id: id,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_shutdown_runner_value(
@@ -571,16 +531,12 @@ pub(crate) async fn session_shutdown_runner_value(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<serde_json::Value, GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.shutdown_runner",
-        "args": {
-            "sessionId": id,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command_value(req).await
+    call_value(SessionShutdownRunnerArgs {
+        session_id: id,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_archive(
@@ -588,16 +544,12 @@ pub(crate) async fn session_archive(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.archive",
-        "args": {
-            "sessionId": id,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(SessionArchiveArgs {
+        session_id: id,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_restore(
@@ -605,16 +557,12 @@ pub(crate) async fn session_restore(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.restore",
-        "args": {
-            "sessionId": id,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(SessionRestoreArgs {
+        session_id: id,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 pub(crate) async fn session_move(
@@ -623,17 +571,13 @@ pub(crate) async fn session_move(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
-    let req = serde_json::json!({
-        "command": "session.move",
-        "args": {
-            "sessionId": id,
-            "to": to,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(SessionMoveArgs {
+        session_id: id,
+        to,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 #[cfg(test)]

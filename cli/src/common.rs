@@ -4,7 +4,9 @@ use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
 use serde::Serialize;
 
-pub(crate) const SCHEMA_VERSION: u32 = 1;
+// Single source of truth for the wire schema version — the CLI speaks
+// exactly what `galley_core_lib::protocol` defines.
+pub(crate) use galley_core_lib::protocol::SCHEMA_VERSION;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

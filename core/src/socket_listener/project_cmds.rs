@@ -24,47 +24,33 @@ struct ProjectDeletedPayload {
     detached_session_ids: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProjectCreateArgs {
-    name: String,
-    #[serde(default)]
-    root_path: Option<String>,
-    #[serde(default)]
-    workspace_enabled: bool,
-    #[serde(default)]
-    icon: Option<String>,
-    #[serde(default)]
-    color: Option<String>,
-    #[serde(default)]
-    supervisor: Option<String>,
-    #[serde(default)]
-    reason: Option<String>,
-}
-
 pub(super) async fn dispatch_project_create(
     request_id: Option<String>,
     args: Value,
-    app: Option<&AppHandle>,
+    ctx: &HandlerCtx<'_>,
 ) -> SocketResponse {
     let parsed: ProjectCreateArgs = match serde_json::from_value(args) {
         Ok(a) => a,
         Err(e) => {
             return SocketResponse::err(
                 request_id,
-                "invalid_args",
+                ErrorTag::InvalidArgs,
                 format!("project.create args: {e}"),
             );
         }
     };
     let name = parsed.name.trim().to_string();
     if name.is_empty() {
-        return SocketResponse::err(request_id, "invalid_args", "project.create: name is empty");
+        return SocketResponse::err(
+            request_id,
+            ErrorTag::InvalidArgs,
+            "project.create: name is empty",
+        );
     }
-    let galley = match SqliteGalley::open().await {
+    let galley = match ctx.db.get().await {
         Ok(g) => g,
         Err(e) => {
-            return SocketResponse::err(request_id, "db_unavailable", format!("open: {e}"));
+            return SocketResponse::err(request_id, ErrorTag::DbUnavailable, format!("open: {e}"));
         }
     };
 
@@ -87,29 +73,17 @@ pub(super) async fn dispatch_project_create(
 
     match galley.create_project(input, origin).await {
         Ok(brief) => {
-            if let Some(app) = app {
-                let _ = app.emit(
-                    "project-created-external",
-                    ProjectExternalPayload {
-                        project: brief.clone(),
-                        via: "project.create",
-                    },
-                );
-            }
+            ctx.notify(
+                "project-created-external",
+                &ProjectExternalPayload {
+                    project: brief.clone(),
+                    via: "project.create",
+                },
+            );
             SocketResponse::ok(request_id, serde_json::json!({ "project": brief }))
         }
         Err(e) => map_galley_err(request_id, e),
     }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProjectDeleteArgs {
-    project_id: String,
-    #[serde(default)]
-    supervisor: Option<String>,
-    #[serde(default)]
-    reason: Option<String>,
 }
 
 /// Destructive: removes the project row. FK CASCADE SET NULL detaches
@@ -121,22 +95,22 @@ struct ProjectDeleteArgs {
 pub(super) async fn dispatch_project_delete(
     request_id: Option<String>,
     args: Value,
-    app: Option<&AppHandle>,
+    ctx: &HandlerCtx<'_>,
 ) -> SocketResponse {
     let parsed: ProjectDeleteArgs = match serde_json::from_value(args) {
         Ok(a) => a,
         Err(e) => {
             return SocketResponse::err(
                 request_id,
-                "invalid_args",
+                ErrorTag::InvalidArgs,
                 format!("project.delete args: {e}"),
             );
         }
     };
-    let galley = match SqliteGalley::open().await {
+    let galley = match ctx.db.get().await {
         Ok(g) => g,
         Err(e) => {
-            return SocketResponse::err(request_id, "db_unavailable", format!("open: {e}"));
+            return SocketResponse::err(request_id, ErrorTag::DbUnavailable, format!("open: {e}"));
         }
     };
 
@@ -171,9 +145,7 @@ pub(super) async fn dispatch_project_delete(
         detached_sessions: detached_ids.len() as u32,
         detached_session_ids: detached_ids.clone(),
     };
-    if let Some(app) = app {
-        let _ = app.emit("project-deleted-external", payload.clone());
-    }
+    ctx.notify("project-deleted-external", &payload);
     SocketResponse::ok(
         request_id,
         serde_json::json!({

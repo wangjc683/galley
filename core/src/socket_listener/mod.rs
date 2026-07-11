@@ -65,6 +65,13 @@ use crate::api::{
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};
 use crate::managed_runtime;
+use crate::protocol::{
+    LlmSetArgs, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs, SessionBtwArgs,
+    SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
+    SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
+    SessionRestoreArgs, SessionSendArgs, SessionShutdownRunnerArgs, SessionStopArgs,
+    SessionWatchArgs,
+};
 use crate::runner_commands::{
     normalize_external_ga_path, prepare_managed_spawn_args, spawn_emit_task,
 };
@@ -76,7 +83,7 @@ use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::sync::broadcast;
 
 #[cfg(windows)]
@@ -97,16 +104,19 @@ use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::time::timeout;
 
 mod common;
+mod ctx;
 mod llm_cmds;
 mod project_cmds;
 mod session_cmds;
 mod wire;
 
+use crate::notify::{NullNotifier, TauriNotifier};
+pub use ctx::{DbSource, HandlerCtx, RunnerPort};
 use llm_cmds::*;
 use project_cmds::*;
 use session_cmds::*;
 use wire::{write_stream_line, StreamEnvelope, CONNECTION_IDLE_TIMEOUT};
-pub use wire::{SocketRequest, SocketResponse, SCHEMA_VERSION};
+pub use wire::{ErrorTag, SocketRequest, SocketResponse, SCHEMA_VERSION};
 
 #[allow(unused_imports)]
 pub(crate) use llm_cmds::{resolve_llm_selection_for_runtime, ResolvedLlmSelection};
@@ -420,7 +430,7 @@ async fn handle_stream<R, W>(
                 // Idle timeout → polite close
                 let _ = write_resp(
                     &mut write_half,
-                    &SocketResponse::err(None, "idle_timeout", "connection idle > 90s"),
+                    &SocketResponse::err(None, ErrorTag::IdleTimeout, "connection idle > 90s"),
                 )
                 .await;
                 return;
@@ -482,7 +492,7 @@ async fn handle_stream<R, W>(
 
 /// Output of [`dispatch_line`]. Most commands return a single response
 /// (Unary); `session.watch` returns a Stream of broadcast events.
-enum DispatchResult {
+pub enum DispatchResult {
     Unary(SocketResponse),
     Stream {
         request_id: Option<String>,
@@ -503,20 +513,42 @@ async fn write_resp<W: tokio::io::AsyncWrite + Unpin>(
     Ok(())
 }
 
-/// Parse a request line and dispatch to a command handler. Returns either
-/// a single [`SocketResponse`] or a streaming broadcast receiver for
-/// subscription commands like `session.watch`.
+/// Production composition root: build a [`HandlerCtx`] from the global
+/// on-disk DB, the live [`RunnerManager`], and the Tauri app (when
+/// present), then dispatch. Tests skip this and call
+/// [`dispatch_line_with`] with injected fakes.
 async fn dispatch_line(
     line: &str,
     app: Option<&AppHandle>,
     manager: &RunnerManager,
 ) -> DispatchResult {
+    let db = DbSource::Global;
+    let notifier = match app {
+        Some(a) => TauriNotifier::new(a.clone()),
+        None => NullNotifier::arc(),
+    };
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: manager,
+        notifier,
+        app,
+    };
+    dispatch_line_with(&ctx, line).await
+}
+
+/// Parse a request line and dispatch to a command handler. Returns either
+/// a single [`SocketResponse`] or a streaming broadcast receiver for
+/// subscription commands like `session.watch`. Public so integration
+/// tests drive the full routing + handler path through injected seams
+/// (in-memory [`DbSource::Pool`], fake [`RunnerPort`], recording
+/// [`crate::notify::Notifier`]).
+pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchResult {
     let req: SocketRequest = match serde_json::from_str(line) {
         Ok(r) => r,
         Err(e) => {
             return DispatchResult::Unary(SocketResponse::err(
                 None,
-                "invalid_args",
+                ErrorTag::InvalidArgs,
                 format!("malformed request JSON: {e}"),
             ));
         }
@@ -524,7 +556,7 @@ async fn dispatch_line(
     if req.schema_version != SCHEMA_VERSION {
         return DispatchResult::Unary(SocketResponse::err(
             req.request_id,
-            "schema_mismatch",
+            ErrorTag::SchemaMismatch,
             format!(
                 "client schema_version {} != server {}",
                 req.schema_version, SCHEMA_VERSION
@@ -536,7 +568,7 @@ async fn dispatch_line(
     match req.command.as_str() {
         // ---- B1 read commands ----
         "sessions.list" => {
-            DispatchResult::Unary(dispatch_sessions_list(request_id, req.args).await)
+            DispatchResult::Unary(dispatch_sessions_list(request_id, req.args, ctx).await)
         }
         "ping" => DispatchResult::Unary(SocketResponse::ok(
             request_id,
@@ -547,7 +579,7 @@ async fn dispatch_line(
             serde_json::json!({ "schemaVersion": SCHEMA_VERSION }),
         )),
         "app.activate" => {
-            if let Some(app) = app {
+            if let Some(app) = ctx.app {
                 crate::show_main_window(app);
                 DispatchResult::Unary(SocketResponse::ok(
                     request_id,
@@ -556,66 +588,64 @@ async fn dispatch_line(
             } else {
                 DispatchResult::Unary(SocketResponse::err(
                     request_id,
-                    "app_unavailable",
+                    ErrorTag::AppUnavailable,
                     "app handle unavailable",
                 ))
             }
         }
         // ---- B2 M4 write commands ----
         "session.send" => {
-            DispatchResult::Unary(dispatch_session_send(request_id, req.args, app, manager).await)
+            DispatchResult::Unary(dispatch_session_send(request_id, req.args, ctx).await)
         }
         "session.checkpoint" => {
-            DispatchResult::Unary(dispatch_session_checkpoint(request_id, req.args, app).await)
+            DispatchResult::Unary(dispatch_session_checkpoint(request_id, req.args, ctx).await)
         }
-        "session.goal_synthesize" => DispatchResult::Unary(
-            dispatch_session_goal_synthesize(request_id, req.args, app, manager).await,
-        ),
+        "session.goal_synthesize" => {
+            DispatchResult::Unary(dispatch_session_goal_synthesize(request_id, req.args, ctx).await)
+        }
         "session.goal_master_plan" => DispatchResult::Unary(
-            dispatch_session_goal_master_plan(request_id, req.args, app, manager).await,
+            dispatch_session_goal_master_plan(request_id, req.args, ctx).await,
         ),
-        "session.goal_solo_turn" => DispatchResult::Unary(
-            dispatch_session_goal_solo_turn(request_id, req.args, app, manager).await,
-        ),
-        "session.watch" => dispatch_session_watch(request_id, req.args, manager).await,
+        "session.goal_solo_turn" => {
+            DispatchResult::Unary(dispatch_session_goal_solo_turn(request_id, req.args, ctx).await)
+        }
+        "session.watch" => dispatch_session_watch(request_id, req.args, ctx).await,
         // ---- B4 M1 session write commands ----
         "session.new" => {
-            DispatchResult::Unary(dispatch_session_new(request_id, req.args, app, manager).await)
+            DispatchResult::Unary(dispatch_session_new(request_id, req.args, ctx).await)
         }
-        "session.new_goal_worker" => DispatchResult::Unary(
-            dispatch_session_new_goal_worker(request_id, req.args, app, manager).await,
-        ),
+        "session.new_goal_worker" => {
+            DispatchResult::Unary(dispatch_session_new_goal_worker(request_id, req.args, ctx).await)
+        }
         "session.btw" => {
-            DispatchResult::Unary(dispatch_session_btw(request_id, req.args, manager).await)
+            DispatchResult::Unary(dispatch_session_btw(request_id, req.args, ctx).await)
         }
         "session.stop" => {
-            DispatchResult::Unary(dispatch_session_stop(request_id, req.args, manager).await)
+            DispatchResult::Unary(dispatch_session_stop(request_id, req.args, ctx).await)
         }
-        "session.shutdown_runner" => DispatchResult::Unary(
-            dispatch_session_shutdown_runner(request_id, req.args, manager).await,
-        ),
+        "session.shutdown_runner" => {
+            DispatchResult::Unary(dispatch_session_shutdown_runner(request_id, req.args, ctx).await)
+        }
         "session.archive" => {
-            DispatchResult::Unary(dispatch_session_archive(request_id, req.args, app).await)
+            DispatchResult::Unary(dispatch_session_archive(request_id, req.args, ctx).await)
         }
         "session.restore" => {
-            DispatchResult::Unary(dispatch_session_restore(request_id, req.args, app).await)
+            DispatchResult::Unary(dispatch_session_restore(request_id, req.args, ctx).await)
         }
         "session.move" => {
-            DispatchResult::Unary(dispatch_session_move(request_id, req.args, app).await)
+            DispatchResult::Unary(dispatch_session_move(request_id, req.args, ctx).await)
         }
         // ---- B4 M1.3 project + llm write commands ----
         "project.create" => {
-            DispatchResult::Unary(dispatch_project_create(request_id, req.args, app).await)
+            DispatchResult::Unary(dispatch_project_create(request_id, req.args, ctx).await)
         }
         "project.delete" => {
-            DispatchResult::Unary(dispatch_project_delete(request_id, req.args, app).await)
+            DispatchResult::Unary(dispatch_project_delete(request_id, req.args, ctx).await)
         }
-        "llm.set" => {
-            DispatchResult::Unary(dispatch_llm_set(request_id, req.args, app, manager).await)
-        }
+        "llm.set" => DispatchResult::Unary(dispatch_llm_set(request_id, req.args, ctx).await),
         other => DispatchResult::Unary(SocketResponse::err(
             request_id,
-            "unknown_command",
+            ErrorTag::UnknownCommand,
             format!("no handler for '{other}'"),
         )),
     }
@@ -805,7 +835,7 @@ mod tests {
 
     #[test]
     fn response_error_shape() {
-        let resp = SocketResponse::err(None, "not_found", "session does not exist");
+        let resp = SocketResponse::err(None, ErrorTag::NotFound, "session does not exist");
         let s = serde_json::to_string(&resp).unwrap();
         assert!(s.contains("\"ok\":false"));
         assert!(s.contains("\"error\":\"not_found\""));

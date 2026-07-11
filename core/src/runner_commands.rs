@@ -56,7 +56,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::broadcast::error::RecvError;
 
 mod external_spawn;
@@ -406,7 +406,11 @@ pub async fn spawn_runner(
         .await
         .ok_or_else(|| "subscribe failed after spawn (race?)".to_string())?;
 
-    spawn_emit_task(app, session_id.clone(), rx);
+    spawn_emit_task(
+        crate::notify::TauriNotifier::new(app),
+        session_id.clone(),
+        rx,
+    );
 
     eprintln!(
         "[perf] core.spawn_runner.total session_id={} pid={} elapsed_ms={:.1}",
@@ -495,7 +499,7 @@ pub async fn shutdown_all_runners(
 /// when the broadcast channel closes (subprocess exited, all senders
 /// dropped) the task emits a final `runner-closed` event and terminates.
 pub(crate) fn spawn_emit_task(
-    app: AppHandle,
+    notifier: std::sync::Arc<dyn crate::notify::Notifier>,
     session_id: String,
     mut rx: tokio::sync::broadcast::Receiver<BroadcastItem>,
 ) {
@@ -507,14 +511,14 @@ pub(crate) fn spawn_emit_task(
                         session_id: session_id.clone(),
                         event: *boxed,
                     };
-                    let _ = app.emit("runner-event", payload);
+                    crate::notify::notify(notifier.as_ref(), "runner-event", &payload);
                 }
                 Ok(BroadcastItem::Malformed(line)) => {
                     let payload = RunnerMalformedPayload {
                         session_id: session_id.clone(),
                         line,
                     };
-                    let _ = app.emit("runner-malformed", payload);
+                    crate::notify::notify(notifier.as_ref(), "runner-malformed", &payload);
                 }
                 Ok(BroadcastItem::Closed { code, signal }) => {
                     let payload = RunnerClosedPayload {
@@ -522,7 +526,7 @@ pub(crate) fn spawn_emit_task(
                         code,
                         signal,
                     };
-                    let _ = app.emit("runner-closed", payload);
+                    crate::notify::notify(notifier.as_ref(), "runner-closed", &payload);
                     break;
                 }
                 Err(RecvError::Lagged(skipped)) => {
@@ -546,7 +550,7 @@ pub(crate) fn spawn_emit_task(
                         code: None,
                         signal: None,
                     };
-                    let _ = app.emit("runner-closed", payload);
+                    crate::notify::notify(notifier.as_ref(), "runner-closed", &payload);
                     break;
                 }
             }

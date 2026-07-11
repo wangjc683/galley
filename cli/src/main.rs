@@ -17,6 +17,7 @@
 //!     (see [`run`]) so SOPs can branch without parsing.
 
 mod args;
+mod client;
 mod common;
 mod goal;
 mod llm;

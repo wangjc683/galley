@@ -21,26 +21,31 @@ pub(super) fn origin_from_args(supervisor: Option<String>, reason: Option<String
 }
 
 /// Map a [`GalleyError`] onto the wire `SocketResponse` envelope.
-/// Each variant gets its own stable `error` discriminant string so
-/// `cli/src/main.rs::map_error_tag` can round-trip back to a typed
-/// error (and `exit_code_for` lands on the right exit category).
+/// Each variant gets its own stable [`ErrorTag`] discriminant so the
+/// CLI (`cli/src/client.rs::galley_error_for_tag`) can round-trip back
+/// to a typed error (and `exit_code_for` lands on the right exit
+/// category).
 pub(super) fn map_galley_err(
     request_id: Option<String>,
     err: crate::error::GalleyError,
 ) -> SocketResponse {
     use crate::error::GalleyError;
     match err {
-        GalleyError::NotFound { message } => SocketResponse::err(request_id, "not_found", message),
+        GalleyError::NotFound { message } => {
+            SocketResponse::err(request_id, ErrorTag::NotFound, message)
+        }
         GalleyError::InvalidArgs { message } => {
-            SocketResponse::err(request_id, "invalid_args", message)
+            SocketResponse::err(request_id, ErrorTag::InvalidArgs, message)
         }
         GalleyError::DbUnavailable { message } => {
-            SocketResponse::err(request_id, "db_unavailable", message)
+            SocketResponse::err(request_id, ErrorTag::DbUnavailable, message)
         }
         GalleyError::RunnerError { message } => {
-            SocketResponse::err(request_id, "runner_error", message)
+            SocketResponse::err(request_id, ErrorTag::RunnerError, message)
         }
-        GalleyError::Internal { message } => SocketResponse::err(request_id, "internal", message),
+        GalleyError::Internal { message } => {
+            SocketResponse::err(request_id, ErrorTag::Internal, message)
+        }
     }
 }
 
@@ -93,15 +98,19 @@ impl SocketResponseLite {
     pub(super) fn with_request_id(self, request_id: Option<String>) -> SocketResponse {
         match self {
             SocketResponseLite::InvalidArgs(m) => {
-                SocketResponse::err(request_id, "invalid_args", m)
+                SocketResponse::err(request_id, ErrorTag::InvalidArgs, m)
             }
             SocketResponseLite::DbUnavailable(m) => {
-                SocketResponse::err(request_id, "db_unavailable", m)
+                SocketResponse::err(request_id, ErrorTag::DbUnavailable, m)
             }
-            SocketResponseLite::NotFound(m) => SocketResponse::err(request_id, "not_found", m),
-            SocketResponseLite::Internal(m) => SocketResponse::err(request_id, "internal", m),
+            SocketResponseLite::NotFound(m) => {
+                SocketResponse::err(request_id, ErrorTag::NotFound, m)
+            }
+            SocketResponseLite::Internal(m) => {
+                SocketResponse::err(request_id, ErrorTag::Internal, m)
+            }
             SocketResponseLite::RunnerError(m) => {
-                SocketResponse::err(request_id, "runner_error", m)
+                SocketResponse::err(request_id, ErrorTag::RunnerError, m)
             }
             SocketResponseLite::RunnerSpawnError(e) => {
                 SocketResponse::err(request_id, runner_spawn_error_tag(&e), e.to_string())
@@ -110,15 +119,15 @@ impl SocketResponseLite {
     }
 }
 
-pub(super) fn runner_spawn_error_tag(e: &RunnerSpawnError) -> &'static str {
+pub(super) fn runner_spawn_error_tag(e: &RunnerSpawnError) -> ErrorTag {
     match e {
-        RunnerSpawnError::PythonNotFound { .. } => "python_not_found",
-        RunnerSpawnError::GaPathInvalid { .. } => "ga_path_invalid",
-        RunnerSpawnError::ManagedRuntimeInvalid { .. } => "managed_runtime_invalid",
-        RunnerSpawnError::ManagedModelNotConfigured { .. } => "managed_model_not_configured",
-        RunnerSpawnError::BridgeCwdInvalid { .. } => "bridge_cwd_invalid",
-        RunnerSpawnError::PathEncoding { .. } => "path_encoding",
-        RunnerSpawnError::SpawnIo { .. } => "spawn_io",
-        RunnerSpawnError::PipeUnavailable { .. } => "pipe_unavailable",
+        RunnerSpawnError::PythonNotFound { .. } => ErrorTag::PythonNotFound,
+        RunnerSpawnError::GaPathInvalid { .. } => ErrorTag::GaPathInvalid,
+        RunnerSpawnError::ManagedRuntimeInvalid { .. } => ErrorTag::ManagedRuntimeInvalid,
+        RunnerSpawnError::ManagedModelNotConfigured { .. } => ErrorTag::ManagedModelNotConfigured,
+        RunnerSpawnError::BridgeCwdInvalid { .. } => ErrorTag::BridgeCwdInvalid,
+        RunnerSpawnError::PathEncoding { .. } => ErrorTag::PathEncoding,
+        RunnerSpawnError::SpawnIo { .. } => ErrorTag::SpawnIo,
+        RunnerSpawnError::PipeUnavailable { .. } => ErrorTag::PipeUnavailable,
     }
 }

@@ -1,8 +1,9 @@
-use crate::common::{emit_json, SCHEMA_VERSION};
-use crate::transport::unary_command;
+use crate::client::call_print;
+use crate::common::emit_json;
 use galley_core_lib::api::GalleyApi;
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
+use galley_core_lib::protocol::LlmSetArgs;
 use serde_json::Value;
 
 /// `llm list` bypasses the socket and reads the cached `llm_list` pref
@@ -33,13 +34,9 @@ pub(crate) async fn llm_list() -> Result<(), GalleyError> {
 }
 
 pub(crate) async fn llm_set(session_id: String, llm_name: String) -> Result<(), GalleyError> {
-    let req = serde_json::json!({
-        "command": "llm.set",
-        "args": {
-            "sessionId": session_id,
-            "llmName": llm_name,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(LlmSetArgs {
+        session_id,
+        llm_name,
+    })
+    .await
 }

@@ -135,13 +135,6 @@ fn managed_model_display_name(display_name: &str, model: &str) -> String {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LlmSetArgs {
-    session_id: String,
-    llm_name: String,
-}
-
 /// Persist a session's per-bridge LLM choice + best-effort dispatch
 /// `SetLlm` to any live runner. Two-step semantics mirror `session.send`:
 /// the DB row is the source of truth; runner dispatch is opportunistic.
@@ -149,19 +142,22 @@ struct LlmSetArgs {
 pub(super) async fn dispatch_llm_set(
     request_id: Option<String>,
     args: Value,
-    app: Option<&AppHandle>,
-    manager: &RunnerManager,
+    ctx: &HandlerCtx<'_>,
 ) -> SocketResponse {
     let parsed: LlmSetArgs = match serde_json::from_value(args) {
         Ok(a) => a,
         Err(e) => {
-            return SocketResponse::err(request_id, "invalid_args", format!("llm.set args: {e}"));
+            return SocketResponse::err(
+                request_id,
+                ErrorTag::InvalidArgs,
+                format!("llm.set args: {e}"),
+            );
         }
     };
-    let galley = match SqliteGalley::open().await {
+    let galley = match ctx.db.get().await {
         Ok(g) => g,
         Err(e) => {
-            return SocketResponse::err(request_id, "db_unavailable", format!("open: {e}"));
+            return SocketResponse::err(request_id, ErrorTag::DbUnavailable, format!("open: {e}"));
         }
     };
 
@@ -186,7 +182,7 @@ pub(super) async fn dispatch_llm_set(
     else {
         return SocketResponse::err(
             request_id,
-            "invalid_args",
+            ErrorTag::InvalidArgs,
             "llm.set: llm name resolved to empty (cache shape unexpected)",
         );
     };
@@ -208,7 +204,8 @@ pub(super) async fn dispatch_llm_set(
     //    galley handle first so the manager's lock acquisition doesn't
     //    serialize against an unrelated SqliteGalley reference.
     drop(galley);
-    let dispatch_status = match manager
+    let dispatch_status = match ctx
+        .runner
         .send_command(
             &parsed.session_id,
             &IpcCommand::SetLlm(SetLlmCommand {
@@ -222,7 +219,7 @@ pub(super) async fn dispatch_llm_set(
         Err(e) => {
             return SocketResponse::err(
                 request_id,
-                "runner_error",
+                ErrorTag::RunnerError,
                 format!("llm.set runner dispatch: {e}"),
             );
         }
@@ -231,15 +228,13 @@ pub(super) async fn dispatch_llm_set(
     // 4. Mirror to GUI so the Composer pill / Inspector reflect the
     //    new persisted choice. Reuses the session-updated channel that
     //    the M1.2 listener handles via `applyExternalSessionUpdated`.
-    if let Some(app) = app {
-        let _ = app.emit(
-            "session-updated-external",
-            SessionExternalPayload {
-                session: brief.clone(),
-                via: "llm.set",
-            },
-        );
-    }
+    ctx.notify(
+        "session-updated-external",
+        &SessionExternalPayload {
+            session: brief.clone(),
+            via: "llm.set",
+        },
+    );
 
     SocketResponse::ok(
         request_id,

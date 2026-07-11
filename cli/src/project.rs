@@ -1,13 +1,14 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use crate::client::{call_print, client, next_watch_frame_strict};
 use crate::common::{emit_json, is_live_candidate, StreamEndPayload, SCHEMA_VERSION};
-use crate::transport::{open_watch_lines, read_watch_frame, unary_command, WatchFrame};
 use galley_core_lib::api::{
     GalleyApi, MessageBrief, ProjectBrief, SessionBrief, SessionFilter, SessionStatus,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
+use galley_core_lib::protocol::{ProjectCreateArgs, ProjectDeleteArgs, WatchFrame};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -288,20 +289,16 @@ pub(crate) async fn project_create(
             message: "--enable-workspace requires --root-path".into(),
         });
     }
-    let req = serde_json::json!({
-        "command": "project.create",
-        "args": {
-            "name": name,
-            "rootPath": root_path,
-            "workspaceEnabled": enable_workspace,
-            "icon": icon,
-            "color": color,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(ProjectCreateArgs {
+        name,
+        root_path,
+        workspace_enabled: enable_workspace,
+        icon,
+        color,
+        supervisor,
+        reason,
+    })
+    .await
 }
 
 /// `project list` bypasses the socket and opens SQLite directly —
@@ -343,7 +340,7 @@ async fn forward_project_watch(
     report_initial_failure: bool,
     tx: tokio::sync::mpsc::UnboundedSender<ProjectWatchItem>,
 ) {
-    let mut lines = match open_watch_lines(&session_id).await {
+    let mut lines = match client().open_watch(&session_id).await {
         Ok(lines) => lines,
         Err(GalleyError::DbUnavailable { .. }) => {
             if report_initial_failure {
@@ -361,7 +358,7 @@ async fn forward_project_watch(
     };
 
     loop {
-        match read_watch_frame(&mut lines).await {
+        match next_watch_frame_strict(&mut lines).await {
             Ok(Some(WatchFrame::Event(data))) => {
                 if tx
                     .send(ProjectWatchItem::Event {
@@ -376,6 +373,9 @@ async fn forward_project_watch(
             Ok(Some(WatchFrame::End(reason))) => {
                 let _ = tx.send(ProjectWatchItem::End { session_id, reason });
                 return;
+            }
+            Ok(Some(WatchFrame::Error { .. } | WatchFrame::Unparseable(_))) => {
+                unreachable!("next_watch_frame_strict surfaces these as Err")
             }
             Ok(None) => {
                 let _ = tx.send(ProjectWatchItem::End {
@@ -599,14 +599,10 @@ pub(crate) async fn project_delete(
     supervisor: Option<String>,
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
-    let req = serde_json::json!({
-        "command": "project.delete",
-        "args": {
-            "projectId": project_id,
-            "supervisor": supervisor,
-            "reason": reason,
-        },
-        "schemaVersion": SCHEMA_VERSION,
-    });
-    unary_command(req).await
+    call_print(ProjectDeleteArgs {
+        project_id,
+        supervisor,
+        reason,
+    })
+    .await
 }
