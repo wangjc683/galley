@@ -82,9 +82,34 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
 6. `agentmain.GenericAgentHandler` import path
 7. `llmclient.backend.history` read/write semantics
 8. `agent.list_llms()` behavior
+9. `llmclient.last_tools` attribute (reinject-tools reset)
+10. `assets/tool_usable_history.json` path + block schema (mirrors
+    `stapp.py`'s Reinject Tools)
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
+
+### Where each coupling lives in Galley (audit entry points)
+
+Since 2026-07-11 the agent-object couplings have a single code home —
+start the audit there instead of grepping the bridge:
+
+- **[`runner/ga_session.py`](../runner/ga_session.py)** — items 5, 6, 7,
+  9: every internal/underscore/backend touch (`_turn_end_hooks`,
+  `backend.history` read/set/extend + context estimation, `last_tools`,
+  the `GenericAgentHandler` module rebinding). Read the file top to
+  bottom against the new baseline.
+- **[`runner/handlers.py`](../runner/handlers.py)** — items 1–4: the
+  `WorkbenchHandler` subclass and its dispatch/approval assumptions.
+- **`runner/workbench_bridge.py::_handle_reinject_tools`** — item 10:
+  the GA asset file read (path + schema noted in its docstring).
+- **`runner/managed_runtime.py::install_managed_prompt_profile`** — the
+  one backend write outside GaSession (`extra_sys_prompt`); shared with
+  the Bridge-less `managed_im_supervisor` path.
+
+GA *public* API usage (items 8, plus `next_llm` / `verbose` / `inc_out`
+/ `put_task`) is deliberately not wrapped — verify against upstream
+changelog, not a Galley file.
 
 ## Upgrade Triggers
 
