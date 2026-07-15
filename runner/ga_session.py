@@ -41,11 +41,22 @@ from pathlib import Path
 from typing import Any
 
 # Backend session classes whose history shape the restore adaptation has
-# been validated against (E2E, GLM 5.1 via native_claude config). Other
-# GA session classes (NativeOAISession, ClaudeSession, LLMSession,
-# MixinSession) receive the same write but with a loud warning — tracked
-# as PRD §10 open item.
-_VALIDATED_HISTORY_BACKENDS = {"NativeClaudeSession"}
+# been validated against:
+#
+# - NativeClaudeSession: E2E, GLM 5.1 via native_claude config.
+# - NativeOAISession: by code audit (2026-07-15, managed-ga llmcore.py).
+#   It subclasses NativeClaudeSession and inherits `ask()`, so its
+#   in-memory history is the SAME Claude-block shape the validated path
+#   uses; only `raw_ask` differs, converting at request time via
+#   `_msgs_claude2oai`, which handles both block types this module
+#   injects (`text`, base64 `image`). Read-only coupling point: if
+#   upstream GA stops inheriting ask()/history there, drop it from this
+#   set.
+#
+# Other GA session classes (ClaudeSession, LLMSession, MixinSession)
+# receive the same write but with a loud warning — tracked as PRD §10
+# open item.
+_VALIDATED_HISTORY_BACKENDS = {"NativeClaudeSession", "NativeOAISession"}
 
 _SUPPORTED_IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp"}
 

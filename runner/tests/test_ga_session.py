@@ -21,6 +21,12 @@ class NativeClaudeSession(SimpleNamespace):
 
 
 class NativeOAISession(SimpleNamespace):
+    """Named to match GA's OAI backend — validated by code audit (it
+    inherits NativeClaudeSession's ask()/history, so the in-memory
+    shape is identical; see _VALIDATED_HISTORY_BACKENDS)."""
+
+
+class LLMSession(SimpleNamespace):
     """Named to match one of GA's NOT-yet-validated backend classes."""
 
 
@@ -93,16 +99,29 @@ def test_set_history_adapts_to_blocks_on_validated_backend() -> None:
     ]
 
 
-def test_set_history_warns_loudly_on_unvalidated_backend() -> None:
-    # Pre-seam this was a silent blind write (PRD §10); the write still
-    # happens, but the caller now gets a warning to surface.
+def test_set_history_accepts_oai_backend_without_warning() -> None:
+    # NativeOAISession shares NativeClaudeSession's in-memory history
+    # shape (it inherits ask(); only the request-time conversion
+    # differs), so restore is validated for it too.
     backend = NativeOAISession(history=[])
     ga = GaSession(_agent_with_backend(backend))
 
     warning = ga.set_history([{"role": "user", "content": "hello"}])
 
+    assert warning is None
+    assert len(backend.history) == 1
+
+
+def test_set_history_warns_loudly_on_unvalidated_backend() -> None:
+    # Pre-seam this was a silent blind write (PRD §10); the write still
+    # happens, but the caller now gets a warning to surface.
+    backend = LLMSession(history=[])
+    ga = GaSession(_agent_with_backend(backend))
+
+    warning = ga.set_history([{"role": "user", "content": "hello"}])
+
     assert warning is not None
-    assert "NativeOAISession" in warning
+    assert "LLMSession" in warning
     assert len(backend.history) == 1
 
 
