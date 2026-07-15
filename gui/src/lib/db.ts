@@ -330,3 +330,18 @@ export async function setCloseHintCopy(
 ): Promise<void> {
   await invoke("set_close_hint_copy", { title, body });
 }
+
+// ---------------- macOS menu-bar state ----------------
+
+/**
+ * Mirror the conversation width pref into the macOS menu bar's
+ * Conversation Width checkmarks (View menu). Same push pattern as
+ * `setCloseHintCopy`: called during hydrate and on every width change,
+ * best-effort, never blocks the pref write. No-op on platforms without
+ * a native menu bar.
+ */
+export async function setWidthMenuState(
+  width: "compact" | "wide",
+): Promise<void> {
+  await invoke("set_width_menu_state", { width });
+}

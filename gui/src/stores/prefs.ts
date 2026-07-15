@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import type { ApprovalConfig } from "@/components/screens/settings/settings-types";
-import { getPref, setPref } from "@/lib/db";
+import { getPref, setPref, setWidthMenuState } from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
 import {
   resolveLanguagePreference,
@@ -294,6 +294,12 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   // ---- Conversation width ----
   setConversationWidth: async (mode) => {
     set({ conversationWidth: mode });
+    // Mirror into the macOS menu-bar checkmarks (View > Conversation
+    // Width). Best-effort: menu state is cosmetic, the pref write below
+    // must not depend on it.
+    setWidthMenuState(mode).catch((e) => {
+      console.debug("[prefs] setConversationWidth: menu sync failed.", e);
+    });
     try {
       await setPref("conversation_width", mode);
     } catch (e) {
@@ -434,6 +440,13 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       const width = await getPref<"compact" | "wide">("conversation_width");
       if (width === "wide" || width === "compact") {
         set({ conversationWidth: width });
+        // The menu-bar checkmarks boot on the store default ("compact");
+        // re-sync only when the persisted pref differs.
+        if (width !== "compact") {
+          setWidthMenuState(width).catch((e) => {
+            console.debug("[prefs] hydratePrefs: width menu sync failed.", e);
+          });
+        }
       }
     } catch (e) {
       console.warn(

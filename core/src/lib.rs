@@ -46,6 +46,43 @@ pub use desktop_goal::{ensure_goal_master_duty_sop, goal_master_duty_sop_path};
 const DB_URL: &str = "sqlite:workbench.db";
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
+/// Handles to the Conversation Width check items in the macOS menu
+/// bar, held as Tauri state so both the GUI push command and the menu
+/// click handler can flip the checkmarks. The GUI owns the pref; this
+/// only mirrors it outward (same inward-mirror pattern as
+/// `set_close_hint_copy`) and never touches SQLite.
+#[cfg(target_os = "macos")]
+struct WidthMenuState {
+    compact: tauri::menu::CheckMenuItem<tauri::Wry>,
+    wide: tauri::menu::CheckMenuItem<tauri::Wry>,
+}
+
+#[cfg(target_os = "macos")]
+impl WidthMenuState {
+    fn set_width(&self, width: &str) {
+        let compact = width == "compact";
+        let _ = self.compact.set_checked(compact);
+        let _ = self.wide.set_checked(!compact);
+    }
+}
+
+/// Mirror the conversation width pref into the macOS menu-bar
+/// checkmarks. Called by the GUI at hydrate and on every width change.
+/// Registered on all platforms so the GUI can call it unconditionally;
+/// no-op where there is no native menu bar.
+#[tauri::command]
+fn set_width_menu_state(width: String, app: tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::Manager;
+        if let Some(state) = app.try_state::<WidthMenuState>() {
+            state.set_width(&width);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (width, app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -263,6 +300,25 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Remember window size / position / maximized / fullscreen across
+        // launches (saved to `.window-state.json` in the app config dir on
+        // true quit — `app.exit(0)` in tray.rs). Two flags are excluded on
+        // purpose:
+        // - VISIBLE: Background Mode hides the window instead of closing;
+        //   quitting from the tray while hidden must not restore an
+        //   invisible window on next launch.
+        // - DECORATIONS: Windows runs with native decorations off as custom
+        //   chrome (see the setup hook); the plugin must not restore a
+        //   stale decorations value over that.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        & !tauri_plugin_window_state::StateFlags::VISIBLE
+                        & !tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         // RunnerManager is the single Rust authority for Python runner
         // subprocesses (B2 M1). Held as Tauri app state inside an `Arc`
         // so the `spawn_runner` / `send_to_runner` / etc. commands AND
@@ -345,6 +401,7 @@ pub fn run() {
             get_pref_json,
             set_pref_json,
             tray::set_close_hint_copy,
+            set_width_menu_state,
             bulk_archive_sessions,
             bulk_unarchive_sessions,
             bulk_delete_sessions,
@@ -772,10 +829,23 @@ pub fn run() {
                             let _ = tray_toggle_for_menu.set_text(TRAY_HIDE_GALLEY_LABEL);
                             let _ = app.emit("menu:new_chat", ());
                         }
+                        // Width arms: flip the checkmarks in Rust right
+                        // away — AppKit auto-toggles only the clicked
+                        // check item, which would briefly show both (or
+                        // neither) checked until the GUI round-trip
+                        // re-syncs via `set_width_menu_state`.
                         "width_compact" => {
+                            #[cfg(target_os = "macos")]
+                            if let Some(state) = app.try_state::<WidthMenuState>() {
+                                state.set_width("compact");
+                            }
                             let _ = app.emit("menu:width_compact", ());
                         }
                         "width_wide" => {
+                            #[cfg(target_os = "macos")]
+                            if let Some(state) = app.try_state::<WidthMenuState>() {
+                                state.set_width("wide");
+                            }
                             let _ = app.emit("menu:width_wide", ());
                         }
                         "tray_toggle_window" => {
@@ -822,8 +892,8 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 use tauri::menu::{
-                    AboutMetadataBuilder, MenuBuilder, MenuItemBuilder,
-                    PredefinedMenuItem, SubmenuBuilder,
+                    AboutMetadataBuilder, CheckMenuItemBuilder, MenuBuilder,
+                    MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
                 };
 
                 let about_metadata = AboutMetadataBuilder::new()
@@ -852,6 +922,8 @@ pub fn run() {
                             .accelerator("Cmd+,")
                             .build(_app)?,
                     )
+                    .separator()
+                    .item(&PredefinedMenuItem::services(_app, None)?)
                     .separator()
                     .item(&PredefinedMenuItem::hide(_app, None)?)
                     .item(&PredefinedMenuItem::hide_others(_app, None)?)
@@ -884,44 +956,37 @@ pub fn run() {
                     .item(&PredefinedMenuItem::copy(_app, None)?)
                     .item(&PredefinedMenuItem::paste(_app, None)?)
                     .item(&PredefinedMenuItem::select_all(_app, None)?)
-                    .separator()
-                    // Find: V0.2 will wire to in-conversation search.
-                    // Disabled in v0.1 so the shortcut shows but click
-                    // is a no-op (same treatment as Toggle Sidebar).
-                    .item(
-                        &MenuItemBuilder::new("Find")
-                            .id("find")
-                            .accelerator("Cmd+F")
-                            .enabled(false)
-                            .build(_app)?,
-                    )
                     .build()?;
 
+                // Check items (radio semantics: exactly one checked) so
+                // the open menu reflects the active width. Initial state
+                // matches the prefs-store default ("compact"); the GUI
+                // re-syncs via `set_width_menu_state` at hydrate and on
+                // every width change.
+                let width_compact_item = CheckMenuItemBuilder::new("Compact (760px)")
+                    .id("width_compact")
+                    .checked(true)
+                    .build(_app)?;
+                let width_wide_item = CheckMenuItemBuilder::new("Wide (1200px)")
+                    .id("width_wide")
+                    .checked(false)
+                    .build(_app)?;
                 let width_submenu = SubmenuBuilder::new(_app, "Conversation Width")
-                    .item(
-                        &MenuItemBuilder::new("Compact (760px)")
-                            .id("width_compact")
-                            .build(_app)?,
-                    )
-                    .item(
-                        &MenuItemBuilder::new("Wide (1200px)")
-                            .id("width_wide")
-                            .build(_app)?,
-                    )
+                    .item(&width_compact_item)
+                    .item(&width_wide_item)
                     .build()?;
+                _app.manage(WidthMenuState {
+                    compact: width_compact_item,
+                    wide: width_wide_item,
+                });
 
+                // No Sidebar toggle here on purpose: the sidebar is not
+                // collapsible by product decision (multi-session IS the
+                // product shape — see docs/design/layout-and-chrome.md).
                 let view_submenu = SubmenuBuilder::new(_app, "View")
-                    // Toggle Sidebar: V0.1 placeholder — wiring lands
-                    // in V0.2. Disabled so the shortcut shows but click
-                    // is a no-op (consistent with Find).
-                    .item(
-                        &MenuItemBuilder::new("Toggle Sidebar")
-                            .id("toggle_sidebar")
-                            .accelerator("Cmd+\\")
-                            .enabled(false)
-                            .build(_app)?,
-                    )
                     .item(&width_submenu)
+                    .separator()
+                    .item(&PredefinedMenuItem::fullscreen(_app, None)?)
                     .build()?;
 
                 let window_submenu = SubmenuBuilder::new(_app, "Window")
@@ -955,6 +1020,15 @@ pub fn run() {
 
                 _app.set_menu(menu)?;
 
+                // Register with NSApp so AppKit augments the standard
+                // menus: the Window menu gets the open-window list plus
+                // system items (Sequoia window tiling lives there), and
+                // the Help menu gets the native search field. Help would
+                // otherwise only be picked up by AppKit's title
+                // heuristic, which matches the *localized* word "Help"
+                // and silently fails on non-English system languages.
+                window_submenu.set_as_windows_menu_for_nsapp()?;
+                help_submenu.set_as_help_menu_for_nsapp()?;
             }
 
             Ok(())
