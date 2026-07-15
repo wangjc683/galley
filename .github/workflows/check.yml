@@ -96,6 +96,9 @@ jobs:
       - name: Managed GA payload gate
         run: node scripts/check-managed-ga-payload.mjs
 
+      - name: GA baseline metadata drift gate
+        run: node scripts/check-ga-baseline-drift.mjs
+
   python-runner:
     name: Python runner
     needs: workflow-lint

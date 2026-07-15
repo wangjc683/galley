@@ -152,13 +152,36 @@ git -C /tmp/galley-ga-upgrade checkout <target_sha>
 git -C /tmp/galley-ga-upgrade status --short
 ```
 
-3. Review the external / attach integration surface:
+3. Triage the delta shape BEFORE reading any diff. Raw commit counts
+   mislead (the 2026-07-15 range was "362 commits" of which ~350 were an
+   upstream frontend merge Galley never touches):
+
+```bash
+git -C /tmp/galley-ga-upgrade diff <current_baseline>..<target_sha> --stat
+```
+
+   Classify the touched files into: engine core / `frontends/` /
+   `memory/`+`assets/` / packaging-CI. Then build the must-read set as
+   the **union** of:
+
+   - the fixed contract files: `agent_loop.py`, `ga.py`, `agentmain.py`,
+     `llmcore.py`, `pyproject.toml`;
+   - every file the managed patch stack touches
+     (`grep '^diff --git' managed-ga/patches/*.patch`). A hard-coded
+     file list rots — in the 2026-07-15 range the files that mattered
+     most (`TMWebDriver.py`, `plugins/project_mode.py`, `memory/`
+     renames) were all outside the old fixed five.
 
 ```bash
 git -C /tmp/galley-ga-upgrade log <current_baseline>..<target_sha> --oneline
-git -C /tmp/galley-ga-upgrade diff <current_baseline>..<target_sha> -- \
-  agent_loop.py ga.py agentmain.py llmcore.py pyproject.toml
+git -C /tmp/galley-ga-upgrade diff <current_baseline>..<target_sha> -- <must-read set>
 ```
+
+   For each patch in the stack, read upstream's changes to that patch's
+   target files specifically. This predicts, before any replay: patches
+   upstream absorbed (delete them — the `code_run` stdin case), patches
+   whose mechanism upstream replaced (rework them — the project-mode
+   anchor case), and patches that will drift positionally (rebase them).
 
 4. If an interface changed, prefer runtime feature detection over hard-binding
    to a single GenericAgent version. `inspect.signature` is the preferred
@@ -177,20 +200,19 @@ Then inspect the managed patch stack semantically, not just mechanically:
 
 - Did every patch apply?
 - Did every patch land where it was supposed to? Zero-context hunks are
-  purely positional and mis-drop **silently** on shifted files. Always run a
-  compile sweep after replay (the 2026-07-15 upgrade caught two such
-  mis-drops only this way):
+  purely positional and mis-drop **silently** on shifted files.
+  `build-managed-ga.sh` runs a full `py_compile` sweep after replay as a
+  hard gate (added after the 2026-07-15 upgrade caught two such
+  mis-drops only via compilation) — do not bypass it.
+- When the audit predicts more than trivial line drift, do not hand-fix
+  hunks — regenerate the stack with the commit-chain rebase script
+  (replay current stack as commits, byte-verify against the checked-in
+  payload, rebase onto the new baseline, re-export as `-U0` patches;
+  real conflicts stop for manual resolution):
 
 ```bash
-find managed-ga/code -name '*.py' -not -path '*/frontends/desktop/*' \
-  -exec python3 -m py_compile {} +
+./scripts/rebase-managed-ga-patches.sh <target_sha> /tmp/galley-ga-upgrade
 ```
-
-  When more than trivial line drift is involved, prefer regenerating the
-  stack via a commit-chain rebase (replay old stack as commits on the old
-  normalized baseline, `git rebase --onto` the new one, re-export with
-  `git diff -U0`) over hand-fixing individual hunks — see the 2026-07-15
-  devlog.
 - Did upstream add new writes to `memory/`, `sop/`, `skills/`, `temp/`, or
   `model_responses/` that bypass `GALLEY_GA_STATE_ROOT`?
 - Did upstream add an official state-root/profile option that should replace a
@@ -229,15 +251,36 @@ already-generated bundle without rebuilding it. The smoke must verify
 - Managed GA: model config injection, streaming, tools, state under app data,
   restart / restore behavior.
 
-9. Update this document with the new hash, date, delta summary, and devlog link.
+9. Sync every surface that repeats the baseline commit, then run the
+   drift gate (also enforced in CI):
 
-10. Write a devlog entry:
+- `gui/src/stores/defaults.ts`: `gaCommit`, `gaBaseline`, and
+  `gaCommitDate` (from `git -C /tmp/galley-ga-upgrade log -1 --format=%cI <sha>`)
+- `gui/src/lib/managed-runtime-diagnostics.test.ts` fixture commit/date
+- `managed-ga/patches/manifest.md` "Last replay verified" header
+
+```bash
+node scripts/check-ga-baseline-drift.mjs
+```
+
+10. Update this document with the new hash, date, delta summary, and devlog
+    link.
+
+11. Write a devlog entry:
 
 ```text
 docs/devlog/YYYY-MM-DD-ga-upstream-upgrade-<old>-to-<new>.md
 ```
 
-11. Keep the upstream upgrade as an independent commit when possible. If the
+    Origin discipline: any "upstream absorbed / adopted / converged with a
+    Galley capability" claim must be backed by git archaeology first
+    (`git log -S '<code>' --format='%h %an %ad %s'` in the upstream
+    checkout) and the devlog must name the source commit/PR. The
+    2026-07-15 upgrade initially recorded the `_ga_project_mode_name`
+    seam's direction of adoption backwards; two minutes of `log -S`
+    corrected it.
+
+12. Keep the upstream upgrade as an independent commit when possible. If the
     upgrade forces a Galley adapter or packaging guard, include that adapter in
     the same branch and document the product impact.
 

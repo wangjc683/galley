@@ -22,6 +22,7 @@
 // there, because archiving moves files and the mechanical path fix is
 // expected (see docs/README.md § Lifecycle).
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -42,13 +43,37 @@ function listMarkdown(dir) {
   return out;
 }
 
-const files = [
+// Gitignored markdown (e.g. docs/design-handoff/ local uploads) is absent
+// from CI checkouts; scanning it makes the local gate fail where CI
+// passes. Filter through git's ignore rules so both see the same set.
+// `check-ignore` exits 0 (some ignored) or 1 (none); >1 means git itself
+// failed — keep everything rather than silently narrowing the gate.
+function withoutGitignored(paths) {
+  const result = spawnSync("git", ["check-ignore", "--stdin", "-z"], {
+    cwd: repoRoot,
+    input: paths.join("\0"),
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (result.error || result.status === null || result.status > 1) {
+    return paths;
+  }
+  const ignored = new Set(
+    result.stdout
+      .toString("utf8")
+      .split("\0")
+      .filter(Boolean)
+      .map((p) => path.resolve(repoRoot, p)),
+  );
+  return paths.filter((p) => !ignored.has(p));
+}
+
+const files = withoutGitignored([
   ...fs
     .readdirSync(repoRoot)
     .filter((name) => name.toLowerCase().endsWith(".md"))
     .map((name) => path.join(repoRoot, name)),
   ...listMarkdown(path.join(repoRoot, "docs")),
-];
+]);
 
 // Inline links/images: [text](target) — tolerates one level of nested
 // brackets in the text. Reference definitions: [label]: target

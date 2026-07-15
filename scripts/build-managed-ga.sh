@@ -69,20 +69,15 @@ rsync -a \
   --exclude 'model_responses' \
   "$SOURCE"/ "$DEST"/
 
-NORMALIZE_FILES=(
-  "$DEST/.gitignore"
-  "$DEST/TMWebDriver.py"
-  "$DEST/agentmain.py"
-  "$DEST/assets/global_mem_insight_template.txt"
-  "$DEST/assets/global_mem_insight_template_en.txt"
-  "$DEST/ga.py"
-  "$DEST/llmcore.py"
-  "$DEST/frontends/continue_cmd.py"
-  "$DEST/assets/tmwd_cdp_bridge/background.js"
-  "$DEST/assets/tmwd_cdp_bridge/content.js"
-  "$DEST/frontends/conductor.py"
-  "$DEST/memory/incubator_sop.md"
-)
+# Single source of truth for the normalize list is
+# scripts/managed-ga-normalize-files.txt — shared with
+# rebase-managed-ga-patches.sh so patch replay and patch rebasing always
+# normalize the same set.
+NORMALIZE_FILES=()
+while IFS= read -r rel; do
+  [[ -z "$rel" || "$rel" == \#* ]] && continue
+  NORMALIZE_FILES+=("$DEST/$rel")
+done < "$ROOT/scripts/managed-ga-normalize-files.txt"
 
 # Normalize incidental upstream trailing spaces before patch replay so patch
 # contexts do not need to encode whitespace-only upstream artifacts.
@@ -111,6 +106,16 @@ done
 for file in "${NORMALIZE_FILES[@]}"; do
   [[ -f "$file" ]] && perl -0pi -e 's/[ \t]+$//mg; s/\n*\z/\n/' "$file"
 done
+
+# Patch mis-drop gate: the managed patches are zero-context (positional),
+# so after upstream line shifts a hunk can land in the wrong place without
+# `git apply` failing. A full compile sweep turns that silent corruption
+# into a build failure (the 2026-07-15 upgrade caught two such mis-drops
+# only via compilation). __pycache__ is removed afterwards so the
+# checked-in payload stays byte-clean.
+find "$DEST" -name '*.py' -print0 | xargs -0 python3 -m py_compile
+find "$DEST" -name '__pycache__' -type d -prune -exec rm -rf {} +
+echo "Managed GA payload compile sweep: OK"
 
 echo "Managed GA code copied to $DEST"
 echo "Managed GA memory seed copied to $MEMORY_SEED_DEST"

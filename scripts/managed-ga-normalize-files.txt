@@ -1,0 +1,23 @@
+# Files normalized (trailing whitespace stripped, single trailing newline)
+# before AND after managed patch replay, so patch contexts never need to
+# encode incidental upstream whitespace artifacts.
+#
+# Single source of truth: build-managed-ga.sh and
+# rebase-managed-ga-patches.sh both read this list. If patch replay and a
+# patch-rebase run normalize different file sets, the byte-identity check
+# between them silently breaks — never fork this list into a script.
+#
+# Paths are relative to the GenericAgent source root. Lines starting with
+# '#' and blank lines are ignored; missing files are skipped.
+.gitignore
+TMWebDriver.py
+agentmain.py
+assets/global_mem_insight_template.txt
+assets/global_mem_insight_template_en.txt
+ga.py
+llmcore.py
+frontends/continue_cmd.py
+assets/tmwd_cdp_bridge/background.js
+assets/tmwd_cdp_bridge/content.js
+frontends/conductor.py
+memory/incubator_sop.md
