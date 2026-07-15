@@ -132,6 +132,20 @@ running in the background:
 The first version intentionally has no running / approval badge; task state
 remains inside the main UI.
 
+## Window State
+
+Window size / position / maximized / fullscreen persist across launches via
+`tauri-plugin-window-state` (since 2026-07-15), saved to
+`.window-state.json` in the app config dir on true quit. Two state flags are
+deliberately excluded:
+
+- `VISIBLE`: Background Mode hides the window instead of closing. Quitting
+  from the tray while hidden must not restore an invisible window on the
+  next launch.
+- `DECORATIONS`: Windows runs with native decorations off as custom chrome
+  (see the setup hook in `core/src/lib.rs`); the plugin must not restore a
+  stale decorations value over that.
+
 Tauri updater signing is separate from macOS codesigning / Windows Authenticode.
 The private updater key must stay in release secrets; only the public key is
 safe to embed in app builds.

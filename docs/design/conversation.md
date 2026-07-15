@@ -99,7 +99,7 @@ px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 | `strong` | font-medium（正文 normal 400，strong 500，一档可见加粗） |
 | `em` | italic |
 | `~~del~~` (GFM) | line-through ink-muted |
-| `![alt](url)` | `https://` 与绝对本地 raster 图片（png / jpg / jpeg / webp / gif）内联预览；本地路径支持 macOS/Linux 绝对路径、Windows drive path、`file://`；相对路径、`http://`、`data:`、`svg`、加载失败降级为图片链接 pill |
+| `![alt](url)` | `https://` 与绝对本地 raster 图片（png / jpg / jpeg / webp / gif）内联预览；本地路径支持 macOS/Linux 绝对路径、Windows drive path、`file://`；相对路径、`http://`、`data:`、`svg`、加载失败降级为图片链接 pill。首次解码时记录 natural 尺寸（模块级缓存，按 src 键），此后每次渲染带 `width`/`height` 属性——浏览器解码前即预留最终盒子，回访转录时图片不再 pop-in 推挤下方内容（2026-07-15） |
 
 **视觉哲学**：每个 markdown 元素 reuse 现有 Newsreader / Inter / JetBrains-Mono token，不为 markdown 单独引入字号 ramp。整段对话读起来是一个 document，不是 stylesheet 拼贴。
 
@@ -114,6 +114,7 @@ px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 - 视觉容器：**无顶部 header 行**。圆角 6px + `border-line-strong` + 底色 `--color-code-surface`（内凹暖灰，见下方决策）。语言名 + copy/wrap 控件浮在**右上角**：语言名常驻（dim 10px mono uppercase，`text`/`plaintext` 等无信息语言名不显示），copy/wrap 在 hover 时 fade-in，三者都带 `bg-code-surface/85` backdrop 以压住底下的代码。
 - 默认横向 overflow scrollable；hover 显出 wrap 切换，便于读日志、错误栈、长命令（对话区操作当前为 pointer-first，无键盘焦点路径——键盘故事整体待议）
 - 流式期间保留上一帧高亮 HTML 直到新高亮完成（2026-07-05）：否则每个 chunk 都闪一次"无色→上色"；换主题同理。代价是内容滞后一次高亮周期（Shiki 热启动后仅数毫秒）
+- **高亮结果缓存 + 度量恒等（2026-07-15，勿回退）**：高亮 HTML 按 `theme:lang:code` 进模块级 LRU（300 条）。转录在会话切换时整体重挂载，命中缓存的代码块**首帧即彩色**，plain→彩色交换不再发生。首次高亮的异步换入则靠度量恒等保证零回流：字体 / 字号 / 行高已由容器钉死，剩余变量是主题对 markdown/diff token 发出的 bold/italic——字形宽度不同会移动折行点、改变块高。用 `!important` 中和（Shiki 是内联样式），高亮从此 **color-only**，这是有意取舍：牺牲主题的字重表达，换"什么时候高亮到达都不影响布局"
 
 **Copy 按钮**：hover-revealed（11px Phosphor `Copy` thin + uppercase "Copy"，复制后变 ✓ + "Copied" 1.5s），复制内容是**纯代码**——不带 ` ``` ` fence、不带 markdown chrome。Claude.ai / ChatGPT / Cursor 的肌肉记忆位置。
 
@@ -200,6 +201,12 @@ Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不*
 | `turn_progress` chunk 流入 / `turn_end` 来 | 不触发（store 状态变了但 tick 没变） |
 | 用户主动向上翻历史 | 不打断（仅 submit 触发） |
 | 切换历史 session（multi-session 后） | 默认滚到底（看到最后 turn）；不属于此 spec 范畴 |
+
+#### 会话切换：原子换入，不做 skeleton（2026-07-15）
+
+首次访问某会话（本次启动内未加载过、SQLite 有历史）时，`activateSession` **先等转录进内存、再翻 `activeSessionId`**：旧会话画面保持到新转录可以一次 commit 整体换入，"新会话 + 零消息"的空白帧不存在于渲染序列。冷启动（无旧画面可保留）与回访 / 新会话（无需恢复）仍即时翻转。延迟翻转的竞态守卫有两重：activation epoch（快速连点时新点击拥有指针）+ 指针快照（`createSession` / 删除等旁路直写 `activeSessionId` 时过期恢复不得翻回）。
+
+**Skeleton 被明确否决**（决策留痕）：本地 SQLite 读是几十毫秒级，为"本不该被感知的等待"做占位是把它制度化；聊天转录结构不可预测，灰条必然与真实内容对不上（双重跳动）；shimmer 属于动效分类学要删除的 B 类环境动效。正确野心是**让加载态不存在**，而非装修加载态。spinner 保持只用于真慢的事（LLM / 工具 / bridge / 网络），SQLite 路径上不出现任何 loading 指示。
 
 #### Streaming generation（流式 partial 渲染）
 
