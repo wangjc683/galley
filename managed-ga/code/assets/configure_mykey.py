@@ -732,7 +732,7 @@ def _configure_advanced(provider, cfg):
     proxy = ask_input("HTTP 代理地址 (proxy)", default='', hint='如 http://127.0.0.1:2082，留空跳过')
     if proxy:
         cfg['proxy'] = proxy
-    cw = ask_input("上下文窗口阈值 (context_win)", default='', hint='NativeClaude 默认 28000，其他默认 24000')
+    cw = ask_input("上下文窗口阈值 (context_win)", default='', hint='默认 30000，DeepSeek 默认 70000；联动压缩与工具上限')
     if cw:
         cfg['context_win'] = int(cw)
     if cfg.get('thinking_type') == 'enabled':

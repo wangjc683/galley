@@ -1,24 +1,22 @@
 diff --git a/agentmain.py b/agentmain.py
-index 14b2e94..43c86a1 100644
 --- a/agentmain.py
 +++ b/agentmain.py
 @@ -19,0 +20,2 @@ def state_path(*parts):
 +def asset_path(*parts):
 +    return os.path.join(script_dir, 'assets', *parts)
-@@ -22 +24 @@ def load_tool_schema(suffix=''):
+@@ -23 +25 @@ def load_tool_schema(suffix=''):
 -    TS = open(os.path.join(script_dir, f'assets/tools_schema{suffix}.json'), 'r', encoding='utf-8').read()
 +    TS = open(asset_path(f'tools_schema{suffix}.json'), 'r', encoding='utf-8').read()
-@@ -33 +35 @@ if not os.path.exists(mem_insight):
+@@ -35 +37 @@ if not os.path.exists(mem_insight):
 -    t = os.path.join(script_dir, f'assets/global_mem_insight_template{lang_suffix}.txt')
 +    t = asset_path(f'global_mem_insight_template{lang_suffix}.txt')
-@@ -35 +37 @@ if not os.path.exists(mem_insight):
+@@ -37 +39 @@ if not os.path.exists(mem_insight):
 -cdp_cfg = os.path.join(script_dir, 'assets/tmwd_cdp_bridge/config.js')
 +cdp_cfg = asset_path('tmwd_cdp_bridge', 'config.js')
-@@ -43 +45 @@ def get_system_prompt():
+@@ -45 +47 @@ def get_system_prompt():
 -    with open(os.path.join(script_dir, f'assets/sys_prompt{lang_suffix}.txt'), 'r', encoding='utf-8') as f: prompt = f.read()
 +    with open(asset_path(f'sys_prompt{lang_suffix}.txt'), 'r', encoding='utf-8') as f: prompt = f.read()
 diff --git a/ga.py b/ga.py
-index 05adfe1..3784478 100644
 --- a/ga.py
 +++ b/ga.py
 @@ -13,0 +14,2 @@ def state_path(*parts):
@@ -27,6 +25,6 @@ index 05adfe1..3784478 100644
 @@ -30 +32 @@ def code_run(code, code_type="python", timeout=60, cwd=None, code_cwd=None, stop
 -        cr_header = os.path.join(script_dir, 'assets', 'code_run_header.py')
 +        cr_header = asset_path('code_run_header.py')
-@@ -590 +592 @@ def get_global_memory():
+@@ -614 +616 @@ def get_global_memory():
 -        with open(os.path.join(script_dir, f'assets/insight_fixed_structure{suffix}.txt'), 'r', encoding='utf-8') as f: structure = f.read()
 +        with open(asset_path(f'insight_fixed_structure{suffix}.txt'), 'r', encoding='utf-8') as f: structure = f.read()

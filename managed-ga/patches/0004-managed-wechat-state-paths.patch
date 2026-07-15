@@ -1,5 +1,4 @@
 diff --git a/frontends/wechatapp.py b/frontends/wechatapp.py
-index 301f10c..9ce7d9a 100644
 --- a/frontends/wechatapp.py
 +++ b/frontends/wechatapp.py
 @@ -7 +7,2 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -1,0 +1,721 @@
+name: Build Desktop Portable Packages
+
+# Triggers:
+#   - workflow_dispatch  -> build CI artifacts for testing (choose a target platform)
+#   - push tag desktop-portable-*  -> build all three platforms and publish them
+#     together into ONE GitHub Release (tag = the pushed tag)
+# Plain pushes to branches do NOT build (avoids 3 heavy Rust builds per commit).
+"on":
+  push:
+    tags:
+      - "desktop-portable-*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which platform(s) to build (artifacts only; release happens on tag push)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - "all"
+          - "windows"
+          - "linux"
+          - "macos"
+
+permissions:
+  contents: write
+
+jobs:
+  # ----------------------------------------------------------------------------
+  build-windows:
+    name: Windows portable
+    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.target == 'all' || github.event.inputs.target == 'windows' }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontends/desktop/src-tauri -> target
+
+      - name: Install desktop dependencies
+        working-directory: frontends/desktop
+        run: npm install
+
+      - name: Build Windows desktop exe
+        working-directory: frontends/desktop
+        run: npm run tauri build -- --bundles nsis
+
+      - name: Assemble self-contained portable bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          EXE_SRC="$(find frontends/desktop/src-tauri/target/release -maxdepth 1 -type f -name 'ga-desktop.exe' | head -n 1)"
+          [[ -n "$EXE_SRC" ]] || { echo "ga-desktop.exe not found" >&2; exit 1; }
+
+          PKG="artifacts/windows/GenericAgent-Desktop-Windows-Portable"
+          RUNTIME="$PKG/runtime"
+          mkdir -p "$RUNTIME"
+
+          # exe at the top level, named GenericAgent (typical portable form)
+          cp "$EXE_SRC" "$PKG/GenericAgent.exe"
+          cp frontends/desktop/packaging/scripts/windows/install_windows.ps1 "$RUNTIME/install_windows.ps1"
+          # Uninstaller: double-click entry at top level, worker script under runtime/.
+          cp frontends/desktop/packaging/scripts/windows/uninstall.bat "$PKG/uninstall.bat"
+          cp frontends/desktop/packaging/scripts/windows/uninstall_windows.ps1 "$RUNTIME/uninstall_windows.ps1"
+
+          # Embedded Python (python-build-standalone, windows x86_64, 3.12 install_only).
+          # browser_download_url is URL-encoded ('+' -> '%2B'); match loosely with '.*'.
+          PBS_URL="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest \
+            | grep -o '"browser_download_url": *"[^"]*"' \
+            | grep 'cpython-3\.12\.[0-9].*x86_64-pc-windows-msvc-install_only\.tar\.gz' \
+            | head -1 | sed -E 's/.*"(https[^"]+)"/\1/')"
+          [[ -n "$PBS_URL" ]] || { echo "Could not resolve python-build-standalone download URL" >&2; exit 1; }
+          echo "Python build-standalone: $PBS_URL"
+          curl -fsSL -o /tmp/pbs.tar.gz "$PBS_URL"
+          tar -xzf /tmp/pbs.tar.gz -C "$RUNTIME"   # extracts a 'python/' dir (python.exe at top)
+          PY="$RUNTIME/python/python.exe"
+          "$PY" --version
+
+          # App-local UCRT: python-build-standalone links the Universal CRT dynamically
+          # and does NOT bundle it. Win10/11 ship UCRT in-box, but stripped/older images
+          # may not -> python.exe fails to load (missing api-ms-win-crt-*.dll). Copy the
+          # redistributable UCRT DLLs next to python.exe (Microsoft-supported app-local
+          # deployment). Pure SDK source, no System32 fallback, hard-fail if absent so we
+          # never ship a bundle from an unexpected source.
+          UCRT_SRC="$(ls -d "/c/Program Files (x86)/Windows Kits/10/Redist/"*/ucrt/DLLs/x64 2>/dev/null | sort -V | tail -1)"
+          [[ -n "$UCRT_SRC" ]] || { echo "Windows SDK UCRT redist dir not found on runner" >&2; exit 1; }
+          echo "UCRT source: $UCRT_SRC"
+          cp "$UCRT_SRC"/api-ms-win-crt-*.dll "$RUNTIME/python/"
+          cp "$UCRT_SRC"/ucrtbase.dll "$RUNTIME/python/"
+          test -f "$RUNTIME/python/api-ms-win-crt-runtime-l1-1-0.dll" \
+            || { echo "UCRT DLLs missing after copy" >&2; exit 1; }
+
+          # Offline wheels (native win_amd64 wheels for the embedded python)
+          mkdir -p "$RUNTIME/wheels"
+          "$PY" -m pip download --dest "$RUNTIME/wheels" \
+            "requests>=2.28" "beautifulsoup4>=4.12" "bottle>=0.12" "simple-websocket-server>=0.4" "aiohttp>=3.9" psutil \
+            fastapi uvicorn websockets pydantic setuptools wheel
+
+          # Runtime source (project root minus heavy/dev/build dirs)
+          mkdir -p "$RUNTIME/app"
+          tar \
+            --exclude='./.git' --exclude='./.github' \
+            --exclude='./frontends/desktop/src-tauri' \
+            --exclude='./frontends/desktop/node_modules' \
+            --exclude='./frontends/desktop/packaging' --exclude='./docs' \
+            --exclude='./assets/demo' --exclude='./assets/images' \
+            --exclude='./assets/GenericAgent_Technical_Report.pdf' \
+            --exclude='./artifacts' \
+            --exclude='*/node_modules' --exclude='*/target' \
+            --exclude='*/.venv' --exclude='./.venv' \
+            --exclude='*/__pycache__' --exclude='*.pyc' \
+            -cf - . | tar -xf - -C "$RUNTIME/app"
+          test -f "$RUNTIME/app/agentmain.py"
+          test -f "$RUNTIME/app/frontends/desktop_bridge.py"
+          test -f "$RUNTIME/app/frontends/desktop/static/index.html"
+
+          # Drop python debug symbols (.pdb) to slim the package (~80MB)
+          find "$RUNTIME/python" -name '*.pdb' -delete 2>/dev/null || true
+
+          cat > "$PKG/readme.txt" <<'EOF'
+          ================ 中文 ================
+          GenericAgent Desktop — Windows 便携版（自包含）
+
+          无需安装 Python、无需联网装依赖、无需源码仓库——全部已内置。
+
+          前置条件
+          - Windows 10/11 x64
+          - Microsoft Edge WebView2 运行时（Win11 一般自带；缺失时首次运行会提示安装）
+
+          使用
+          1. 解压到任意目录（路径建议不含特殊字符）。
+          2. 双击 GenericAgent.exe。
+          3. 首次启动会自动离线准备运行环境（建虚拟环境、装依赖），界面显示进度，完成后进入主界面。
+          4. 之后启动直接秒进。
+
+          说明
+          - 想真正对话，仍需在程序里配置模型 / API Key。
+          - 如果 Windows Defender 防火墙拦截 `127.0.0.1` / `localhost` 回环连接，程序可能无法启动或连接本机服务。请允许 `GenericAgent.exe` 和 `runtime\python\python.exe` 通过防火墙，然后重启桌面端。
+          - 首次准备完成后不要移动本文件夹；若已移动，删除 runtime\app\.venv 后重新启动即可重建。
+          - runtime\ 是内置运行环境与源码，正常使用无需改动。
+
+          ================ English ================
+          GenericAgent Desktop — Windows Portable (self-contained)
+
+          No Python install, no internet for dependencies, no source checkout — everything is bundled.
+
+          Requirements
+          - Windows 10/11 x64
+          - Microsoft Edge WebView2 runtime (usually preinstalled on Win11; you are prompted if missing)
+
+          Usage
+          1. Extract anywhere (a path without special characters is recommended).
+          2. Double-click GenericAgent.exe.
+          3. The first launch prepares the runtime offline (creates a venv, installs deps) with a
+             progress UI, then opens the main window.
+          4. Subsequent launches start instantly.
+
+          Notes
+          - To actually chat, configure a model / API key inside the app.
+          - If Windows Defender Firewall blocks the `127.0.0.1` / `localhost` loopback connection, the app may fail to start or reach its local service. Allow `GenericAgent.exe` and `runtime\python\python.exe` through the firewall, then restart the desktop app.
+          - Do not move this folder after the first setup; if you did, delete runtime\app\.venv and relaunch to rebuild.
+          - runtime\ holds the bundled runtime and source; no need to touch it.
+          EOF
+          sed -i 's/^          //' "$PKG/readme.txt"
+
+          echo "Package tree (top levels):"
+          find "$PKG" -maxdepth 2 -printf '%y %p\n' | sort | head -40
+
+      - name: Zip portable package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/windows/out | Out-Null
+          Compress-Archive -Path artifacts/windows/GenericAgent-Desktop-Windows-Portable `
+            -DestinationPath artifacts/windows/out/GenericAgent-Desktop-Windows-Portable.zip -Force
+          $h = Get-FileHash artifacts/windows/out/GenericAgent-Desktop-Windows-Portable.zip -Algorithm SHA256
+          "{0}  GenericAgent-Desktop-Windows-Portable.zip" -f $h.Hash.ToLowerInvariant() |
+            Set-Content -Encoding ASCII artifacts/windows/out/SHA256SUMS-windows.txt
+          Get-ChildItem artifacts/windows/out | Format-Table Name, Length
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GenericAgent-Desktop-Windows-Portable-${{ github.run_number }}
+          path: |
+            artifacts/windows/out/GenericAgent-Desktop-Windows-Portable.zip
+            artifacts/windows/out/SHA256SUMS-windows.txt
+          if-no-files-found: error
+
+      - name: Publish into unified Release (tag push only)
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_NAME="${{ github.ref_name }}"
+          TITLE="GenericAgent Desktop ${TAG_NAME}"
+          cat > "${RUNNER_TEMP:-/tmp}/ga_notes.md" <<'EOF'
+          GenericAgent Desktop 桌面版 / Desktop
+
+          无需自行安装 Python、无需联网安装依赖、无需源码；首次启动会自动准备内置运行环境。
+          No separate Python install, no internet for dependencies, no source checkout required; the bundled runtime is prepared on first launch.
+
+          ## 安装方法 / Installation
+          - Windows: 下载 `GenericAgent-Desktop-Windows-Portable.zip`，解压后双击 `GenericAgent.exe` 启动。卸载时先退出应用，再双击包内 `uninstall.bat`，最后删除整个解压目录。
+            Download `GenericAgent-Desktop-Windows-Portable.zip`, extract it, then double-click `GenericAgent.exe`. To uninstall, quit the app, double-click `uninstall.bat`, then delete the extracted folder.
+          - Linux: 下载 `GenericAgent-Desktop-Linux-Portable.tar.gz`，解压后执行 `chmod +x GenericAgent.AppImage`，再运行 `./GenericAgent.AppImage`。卸载时先退出应用，再运行 `./uninstall.sh`，最后删除整个解压目录。
+            Download `GenericAgent-Desktop-Linux-Portable.tar.gz`, extract it, run `chmod +x GenericAgent.AppImage`, then launch `./GenericAgent.AppImage`. To uninstall, quit the app, run `./uninstall.sh`, then delete the extracted folder.
+          - macOS: 下载 `GenericAgent-Desktop-macOS.dmg`，双击打开 DMG，把 `GenericAgent.app` 拖入 `Applications`，之后在“应用程序 / Applications”中启动。若出现“无法验证开发者”等提示，先双击 DMG 内的 `open_anyway.command`，再启动。卸载时先退出应用，再从 Applications 删除 `GenericAgent.app`。
+            Download `GenericAgent-Desktop-macOS.dmg`, open it, drag `GenericAgent.app` to `Applications`, then launch it from Applications. If macOS says the developer cannot be verified, double-click `open_anyway.command` inside the DMG first, then launch again. To uninstall, quit the app, then delete `GenericAgent.app` from Applications.
+
+          ## 首次启动 / First launch
+          首次启动会自动离线准备运行环境（安装依赖），有进度条，完成后进入主界面；之后启动会更快。
+          The first launch prepares the runtime offline (installs deps) with a progress bar, then opens the main window; later launches are faster.
+
+          ## 说明 / Notes
+          - 想真正对话需在程序内配置模型 / API Key。Configure a model / API key in-app to start chatting.
+          - Windows Defender 防火墙可能会拦截 `127.0.0.1` / `localhost` 回环连接，导致程序无法启动或连接本机服务；请允许 `GenericAgent.exe` 和随包的 `python.exe` 通过防火墙后重启。Windows Defender Firewall may block the local loopback connection; allow `GenericAgent.exe` and the bundled `python.exe` through the firewall, then restart the app.
+          - Windows/Linux 为便携包，可整体移动到任意目录后继续使用。Windows/Linux packages are portable and can be moved as a whole folder.
+          - Windows/Linux 包内附 `readme.txt`（中英）。Windows/Linux packages include a bilingual `readme.txt`.
+          EOF
+          # Create the shared release if it does not exist yet (another OS job may win the race).
+          # Race-safe: the 3 OS jobs share ONE release. Retry create until the release
+          # actually exists (a simultaneous create from another job can fail), so the
+          # upload below never races a not-yet-created release.
+          for _ in $(seq 1 15); do
+            gh release view "$TAG_NAME" >/dev/null 2>&1 && break
+            gh release create "$TAG_NAME" --target "${{ github.sha }}" --title "$TITLE" --notes-file "${RUNNER_TEMP:-/tmp}/ga_notes.md" --prerelease 2>/dev/null || true
+            sleep 3
+          done
+          gh release upload "$TAG_NAME" artifacts/windows/out/* --clobber
+
+  # ----------------------------------------------------------------------------
+  build-linux:
+    name: Linux portable
+    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.target == 'all' || github.event.inputs.target == 'linux' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontends/desktop/src-tauri -> target
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install desktop dependencies
+        working-directory: frontends/desktop
+        run: npm install
+
+      - name: Build Linux AppImage
+        working-directory: frontends/desktop
+        run: npm run tauri build -- --bundles appimage
+
+      - name: Assemble self-contained portable bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          APPIMAGE_SRC="$(find frontends/desktop/src-tauri/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' | head -n 1)"
+          [[ -n "$APPIMAGE_SRC" ]] || { echo "No AppImage found" >&2; exit 1; }
+
+          PKG="artifacts/linux/GenericAgent-Desktop-Linux-Portable"
+          RUNTIME="$PKG/runtime"
+          mkdir -p "$RUNTIME"
+
+          # Stable internal name so the generated .desktop Exec= never changes on upgrades.
+          cp "$APPIMAGE_SRC" "$PKG/GenericAgent.AppImage"
+          chmod +x "$PKG/GenericAgent.AppImage"
+          # Icon for the generated .desktop launcher (Icon= needs a real image file on Linux).
+          cp frontends/desktop/src-tauri/icons/icon.png "$PKG/GenericAgent.png"
+          cp frontends/desktop/packaging/scripts/linux/install_linux.sh "$RUNTIME/install_linux.sh"
+          chmod +x "$RUNTIME/install_linux.sh"
+          # Uninstaller: top-level entry next to the AppImage.
+          cp frontends/desktop/packaging/scripts/linux/uninstall.sh "$PKG/uninstall.sh"
+          chmod +x "$PKG/uninstall.sh"
+
+          # Embedded Python (python-build-standalone, linux x86_64, 3.12 install_only).
+          PBS_URL="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest \
+            | grep -o '"browser_download_url": *"[^"]*"' \
+            | grep 'cpython-3\.12\.[0-9].*x86_64-unknown-linux-gnu-install_only\.tar\.gz' \
+            | head -1 | sed -E 's/.*"(https[^"]+)"/\1/')"
+          [[ -n "$PBS_URL" ]] || { echo "Could not resolve python-build-standalone download URL" >&2; exit 1; }
+          echo "Python build-standalone: $PBS_URL"
+          curl -fsSL -o /tmp/pbs.tar.gz "$PBS_URL"
+          tar -xzf /tmp/pbs.tar.gz -C "$RUNTIME"   # extracts a 'python/' dir
+          PY="$RUNTIME/python/bin/python3"
+          "$PY" --version
+
+          # Offline wheels (native linux wheels for the embedded python)
+          mkdir -p "$RUNTIME/wheels"
+          "$PY" -m pip download --dest "$RUNTIME/wheels" \
+            "requests>=2.28" "beautifulsoup4>=4.12" "bottle>=0.12" "simple-websocket-server>=0.4" "aiohttp>=3.9" psutil \
+            fastapi uvicorn websockets pydantic setuptools wheel
+
+          # Runtime source (project root minus heavy/dev/build dirs)
+          mkdir -p "$RUNTIME/app"
+          tar \
+            --exclude='./.git' --exclude='./.github' \
+            --exclude='./frontends/desktop/src-tauri' \
+            --exclude='./frontends/desktop/node_modules' \
+            --exclude='./frontends/desktop/packaging' --exclude='./docs' \
+            --exclude='./assets/demo' --exclude='./assets/images' \
+            --exclude='./assets/GenericAgent_Technical_Report.pdf' \
+            --exclude='./artifacts' \
+            --exclude='*/node_modules' --exclude='*/target' \
+            --exclude='*/.venv' --exclude='./.venv' \
+            --exclude='*/__pycache__' --exclude='*.pyc' \
+            -cf - . | tar -xf - -C "$RUNTIME/app"
+          test -f "$RUNTIME/app/agentmain.py"
+          test -f "$RUNTIME/app/frontends/desktop_bridge.py"
+          test -f "$RUNTIME/app/frontends/desktop/static/index.html"
+
+          # Drop python debug/cache bits to slim the package
+          find "$RUNTIME/python" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+
+          cat > "$PKG/readme.txt" <<'EOF'
+          ================ 中文 ================
+          GenericAgent Desktop — Linux 便携版（自包含）
+
+          无需安装 Python、无需联网装依赖、无需源码仓库——全部已内置。
+
+          前置条件
+          - Linux x86_64（glibc，常见发行版即可）
+          - 桌面环境 + FUSE（运行 AppImage 所需；多数发行版自带）
+
+          使用
+          1. 解压到任意目录（路径建议不含特殊字符）。
+          2. 给 AppImage 执行权限并运行：
+                 chmod +x GenericAgent.AppImage
+                 ./GenericAgent.AppImage
+          3. 首次启动会自动离线准备运行环境（建虚拟环境、装依赖），界面显示进度，完成后进入主界面。
+          4. 之后启动直接秒进。
+
+          说明
+          - 想真正对话，仍需在程序里配置模型 / API Key。
+          - 首次准备完成后不要移动本文件夹；若已移动，删除 runtime/app/.venv 后重新启动即可重建。
+          - runtime/ 是内置运行环境与源码，正常使用无需改动。
+
+          ================ English ================
+          GenericAgent Desktop — Linux Portable (self-contained)
+
+          No Python install, no internet for dependencies, no source checkout — everything is bundled.
+
+          Requirements
+          - Linux x86_64 (glibc; common distributions work)
+          - A desktop environment + FUSE (required to run the AppImage; preinstalled on most distros)
+
+          Usage
+          1. Extract anywhere (a path without special characters is recommended).
+          2. Make the AppImage executable and run it:
+                 chmod +x GenericAgent.AppImage
+                 ./GenericAgent.AppImage
+          3. The first launch prepares the runtime offline (creates a venv, installs deps) with a
+             progress UI, then opens the main window.
+          4. Subsequent launches start instantly.
+
+          Notes
+          - To actually chat, configure a model / API key inside the app.
+          - Do not move this folder after the first setup; if you did, delete runtime/app/.venv and relaunch to rebuild.
+          - runtime/ holds the bundled runtime and source; no need to touch it.
+          EOF
+          sed -i 's/^          //' "$PKG/readme.txt"
+
+          mkdir -p artifacts/linux/out
+          tar -C artifacts/linux -czf artifacts/linux/out/GenericAgent-Desktop-Linux-Portable.tar.gz GenericAgent-Desktop-Linux-Portable
+          ( cd artifacts/linux/out && sha256sum GenericAgent-Desktop-Linux-Portable.tar.gz > SHA256SUMS-linux.txt )
+
+          tar -tzf artifacts/linux/out/GenericAgent-Desktop-Linux-Portable.tar.gz > /tmp/pkglist.txt
+          echo "Package contents (first 40 of $(wc -l < /tmp/pkglist.txt) entries):"
+          head -40 /tmp/pkglist.txt
+          ls -lh artifacts/linux/out
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GenericAgent-Desktop-Linux-Portable-${{ github.run_number }}
+          path: |
+            artifacts/linux/out/GenericAgent-Desktop-Linux-Portable.tar.gz
+            artifacts/linux/out/SHA256SUMS-linux.txt
+          if-no-files-found: error
+
+      - name: Publish into unified Release (tag push only)
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_NAME="${{ github.ref_name }}"
+          TITLE="GenericAgent Desktop ${TAG_NAME}"
+          cat > "${RUNNER_TEMP:-/tmp}/ga_notes.md" <<'EOF'
+          GenericAgent Desktop 桌面版 / Desktop
+
+          无需自行安装 Python、无需联网安装依赖、无需源码；首次启动会自动准备内置运行环境。
+          No separate Python install, no internet for dependencies, no source checkout required; the bundled runtime is prepared on first launch.
+
+          ## 安装方法 / Installation
+          - Windows: 下载 `GenericAgent-Desktop-Windows-Portable.zip`，解压后双击 `GenericAgent.exe` 启动。卸载时先退出应用，再双击包内 `uninstall.bat`，最后删除整个解压目录。
+            Download `GenericAgent-Desktop-Windows-Portable.zip`, extract it, then double-click `GenericAgent.exe`. To uninstall, quit the app, double-click `uninstall.bat`, then delete the extracted folder.
+          - Linux: 下载 `GenericAgent-Desktop-Linux-Portable.tar.gz`，解压后执行 `chmod +x GenericAgent.AppImage`，再运行 `./GenericAgent.AppImage`。卸载时先退出应用，再运行 `./uninstall.sh`，最后删除整个解压目录。
+            Download `GenericAgent-Desktop-Linux-Portable.tar.gz`, extract it, run `chmod +x GenericAgent.AppImage`, then launch `./GenericAgent.AppImage`. To uninstall, quit the app, run `./uninstall.sh`, then delete the extracted folder.
+          - macOS: 下载 `GenericAgent-Desktop-macOS.dmg`，双击打开 DMG，把 `GenericAgent.app` 拖入 `Applications`，之后在“应用程序 / Applications”中启动。若出现“无法验证开发者”等提示，先双击 DMG 内的 `open_anyway.command`，再启动。卸载时先退出应用，再从 Applications 删除 `GenericAgent.app`。
+            Download `GenericAgent-Desktop-macOS.dmg`, open it, drag `GenericAgent.app` to `Applications`, then launch it from Applications. If macOS says the developer cannot be verified, double-click `open_anyway.command` inside the DMG first, then launch again. To uninstall, quit the app, then delete `GenericAgent.app` from Applications.
+
+          ## 首次启动 / First launch
+          首次启动会自动离线准备运行环境（安装依赖），有进度条，完成后进入主界面；之后启动会更快。
+          The first launch prepares the runtime offline (installs deps) with a progress bar, then opens the main window; later launches are faster.
+
+          ## 说明 / Notes
+          - 想真正对话需在程序内配置模型 / API Key。Configure a model / API key in-app to start chatting.
+          - Windows Defender 防火墙可能会拦截 `127.0.0.1` / `localhost` 回环连接，导致程序无法启动或连接本机服务；请允许 `GenericAgent.exe` 和随包的 `python.exe` 通过防火墙后重启。Windows Defender Firewall may block the local loopback connection; allow `GenericAgent.exe` and the bundled `python.exe` through the firewall, then restart the app.
+          - Windows/Linux 为便携包，可整体移动到任意目录后继续使用。Windows/Linux packages are portable and can be moved as a whole folder.
+          - Windows/Linux 包内附 `readme.txt`（中英）。Windows/Linux packages include a bilingual `readme.txt`.
+          EOF
+          # Race-safe: the 3 OS jobs share ONE release. Retry create until the release
+          # actually exists (a simultaneous create from another job can fail), so the
+          # upload below never races a not-yet-created release.
+          for _ in $(seq 1 15); do
+            gh release view "$TAG_NAME" >/dev/null 2>&1 && break
+            gh release create "$TAG_NAME" --target "${{ github.sha }}" --title "$TITLE" --notes-file "${RUNNER_TEMP:-/tmp}/ga_notes.md" --prerelease 2>/dev/null || true
+            sleep 3
+          done
+          gh release upload "$TAG_NAME" artifacts/linux/out/* --clobber
+
+  # ----------------------------------------------------------------------------
+  build-macos:
+    name: macOS DMG
+    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.target == 'all' || github.event.inputs.target == 'macos' }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontends/desktop/src-tauri -> target
+
+      - name: Install desktop dependencies
+        working-directory: frontends/desktop
+        run: npm install
+
+      - name: Build macOS .app
+        working-directory: frontends/desktop
+        run: npm run tauri build -- --bundles app
+
+      - name: Assemble self-contained portable bundle and DMG app
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          APP_SRC="$(find frontends/desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          [[ -n "$APP_SRC" ]] || { echo "No .app found" >&2; exit 1; }
+
+          # Build one runtime/ tree, then reuse it for both macOS deliverables:
+          # 1) Portable zip: GenericAgent.app + runtime/ + helper scripts.
+          # 2) Standard DMG: GenericAgent.app with runtime embedded in Contents/Resources/runtime.
+          RUNTIME_SRC="artifacts/macos/runtime-src"
+          mkdir -p "$RUNTIME_SRC"
+          cp frontends/desktop/packaging/scripts/macos/install_macos.sh "$RUNTIME_SRC/install_macos.sh"
+          chmod +x "$RUNTIME_SRC/install_macos.sh"
+
+          # Embedded Python (python-build-standalone, macOS, 3.12 install_only; aarch64 preferred).
+          PBS_URL="$(python3 - <<'PY'
+          import json, os, urllib.request
+          api='https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest'
+          req=urllib.request.Request(api)
+          token=os.environ.get('GH_TOKEN')
+          if token:
+              req.add_header('Authorization', 'Bearer ' + token)
+          data=json.load(urllib.request.urlopen(req, timeout=60))
+          assets=data.get('assets', [])
+          for arch in ('aarch64-apple-darwin', 'x86_64-apple-darwin'):
+              for a in assets:
+                  name=a.get('name','')
+                  if 'cpython-3.12' in name and arch in name and name.endswith('install_only.tar.gz') and 'stripped' not in name:
+                      print(a['browser_download_url']); raise SystemExit
+          raise SystemExit('No suitable python-build-standalone macOS asset found')
+          PY
+          )"
+          echo "Python build-standalone: $PBS_URL"
+          curl -L --fail --retry 3 -o /tmp/pbs-macos.tar.gz "$PBS_URL"
+          tar -xzf /tmp/pbs-macos.tar.gz -C "$RUNTIME_SRC"   # extracts a 'python/' dir
+          PY="$RUNTIME_SRC/python/bin/python3"
+          "$PY" --version
+
+          # Offline wheels
+          mkdir -p "$RUNTIME_SRC/wheels"
+          "$PY" -m pip download --dest "$RUNTIME_SRC/wheels" \
+            "requests>=2.28" "beautifulsoup4>=4.12" "bottle>=0.12" "simple-websocket-server>=0.4" "aiohttp>=3.9" psutil \
+            fastapi uvicorn websockets pydantic setuptools wheel
+
+          # Runtime source (project root minus heavy/dev/build dirs) — bsdtar exclude syntax.
+          mkdir -p "$RUNTIME_SRC/app"
+          tar \
+            --exclude='.git' --exclude='.github' \
+            --exclude='frontends/desktop/src-tauri' \
+            --exclude='frontends/desktop/node_modules' \
+            --exclude='frontends/desktop/packaging' --exclude='docs' \
+            --exclude='assets/demo' --exclude='assets/images' \
+            --exclude='assets/GenericAgent_Technical_Report.pdf' \
+            --exclude='artifacts' \
+            --exclude='*/node_modules' --exclude='*/target' \
+            --exclude='*/.venv' --exclude='.venv' \
+            --exclude='*/__pycache__' --exclude='*.pyc' \
+            -cf - . | tar -xf - -C "$RUNTIME_SRC/app"
+          test -f "$RUNTIME_SRC/app/agentmain.py"
+          test -f "$RUNTIME_SRC/app/frontends/desktop_bridge.py"
+          test -f "$RUNTIME_SRC/app/frontends/desktop/static/index.html"
+
+          PORTABLE="artifacts/macos/GenericAgent-Desktop-macOS-Portable"
+          DMG_STAGE="artifacts/macos/dmg-stage"
+          DMG_APP="$DMG_STAGE/GenericAgent.app"
+          mkdir -p "$PORTABLE" "$DMG_STAGE"
+
+          # Portable zip: keep the existing release shape and helper scripts.
+          ditto "$APP_SRC" "$PORTABLE/GenericAgent.app"
+          ditto "$RUNTIME_SRC" "$PORTABLE/runtime"
+          cp frontends/desktop/packaging/scripts/macos/uninstall.command "$PORTABLE/uninstall.command"
+          chmod +x "$PORTABLE/uninstall.command"
+          cat > "$PORTABLE/Start GenericAgent.command" <<'EOF'
+          #!/bin/bash
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          xattr -cr "$DIR/GenericAgent.app" 2>/dev/null || true
+          open "$DIR/GenericAgent.app"
+          EOF
+          chmod +x "$PORTABLE/Start GenericAgent.command"
+
+          cat > "$PORTABLE/readme.txt" <<'EOF'
+          ================ 中文 ================
+          GenericAgent Desktop — macOS 便携版（自包含）
+
+          无需安装 Python、无需联网装依赖、无需源码仓库——全部已内置。
+
+          使用
+          推荐：双击 “Start GenericAgent.command” 启动。也可直接双击 GenericAgent.app。
+          请保持目录结构不变：GenericAgent.app 与 runtime/ 必须在同一目录下。
+
+          卸载
+          双击 uninstall.command，或退出程序后删除整个便携文件夹。
+
+          ================ English ================
+          GenericAgent Desktop — macOS Portable (self-contained)
+
+          No Python install, no internet for dependencies, no source checkout — everything is bundled.
+
+          Usage
+          Recommended: double-click "Start GenericAgent.command". You can also double-click GenericAgent.app.
+          Keep the folder layout intact: GenericAgent.app and runtime/ must stay in the same directory.
+
+          Uninstall
+          Double-click uninstall.command, or quit the app and delete the whole portable folder.
+          EOF
+          sed -i '' 's/^          //' "$PORTABLE/readme.txt"
+
+          codesign --force --deep --sign - "$PORTABLE/GenericAgent.app"
+          codesign --verify --deep --strict "$PORTABLE/GenericAgent.app" || true
+
+          # Standard DMG: GenericAgent.app + Applications alias + first-launch helper/guide.
+          ditto "$APP_SRC" "$DMG_APP"
+          mkdir -p "$DMG_APP/Contents/Resources"
+          ditto "$RUNTIME_SRC" "$DMG_APP/Contents/Resources/runtime"
+          codesign --force --deep --sign - "$DMG_APP"
+          codesign --verify --deep --strict "$DMG_APP" || true
+          ln -s /Applications "$DMG_STAGE/Applications"
+
+          cat > "$DMG_STAGE/open_anyway.command" <<'EOF'
+          #!/bin/bash
+          set -e
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          TARGET="/Applications/GenericAgent.app"
+          if [[ ! -d "$TARGET" ]]; then
+            TARGET="$DIR/GenericAgent.app"
+          fi
+          xattr -cr "$TARGET" 2>/dev/null || true
+          osascript -e 'display dialog "GenericAgent 已处理完成。请将 GenericAgent.app 拖入 Applications 后，从 Applications 中启动；如果已经安装，可以直接重新打开。" buttons {"OK"} default button "OK"' >/dev/null 2>&1 || true
+          EOF
+          chmod +x "$DMG_STAGE/open_anyway.command"
+
+          cat > "$DMG_STAGE/readme.txt" <<'EOF'
+          ================ 中文 ================
+          GenericAgent Desktop — macOS DMG 安装版
+
+          安装
+          1. 双击打开 GenericAgent-Desktop-macOS.dmg。
+          2. 将 GenericAgent.app 拖入 Applications。
+          3. 打开“应用程序 / Applications”，双击 GenericAgent.app 启动。
+
+          若出现“无法验证开发者”“Apple 无法检查其是否包含恶意软件”或无法打开：
+          1. 回到 DMG 窗口。
+          2. 双击“open_anyway.command”。
+          3. 再从 Applications 中打开 GenericAgent.app。
+          也可以右键 GenericAgent.app，选择“打开”。
+
+          卸载
+          先退出 GenericAgent，再从 Applications 删除 GenericAgent.app。
+
+          ================ English ================
+          GenericAgent Desktop — macOS DMG installer
+
+          Installation
+          1. Open GenericAgent-Desktop-macOS.dmg.
+          2. Drag GenericAgent.app to Applications.
+          3. Open Applications and launch GenericAgent.app.
+
+          If macOS says the developer cannot be verified, Apple cannot check it for malicious software, or the app cannot be opened:
+          1. Go back to the DMG window.
+          2. Double-click "open_anyway.command".
+          3. Launch GenericAgent.app from Applications again.
+          You can also right-click GenericAgent.app and choose Open.
+
+          Uninstall
+          Quit GenericAgent, then delete GenericAgent.app from Applications.
+          EOF
+          sed -i '' 's/^          //' "$DMG_STAGE/readme.txt"
+
+          mkdir -p artifacts/macos/out
+          hdiutil create \
+            -volname "GenericAgent Desktop" \
+            -srcfolder "$DMG_STAGE" \
+            -ov \
+            -format UDZO \
+            "artifacts/macos/out/GenericAgent-Desktop-macOS.dmg"
+          shasum -a 256 "artifacts/macos/out/GenericAgent-Desktop-macOS.dmg" \
+            > "artifacts/macos/out/GenericAgent-Desktop-macOS.dmg.sha256"
+
+          echo "DMG stage tree:"
+          find "$DMG_STAGE" -maxdepth 2 -print | sort
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GenericAgent-Desktop-macOS-DMG-${{ github.run_number }}
+          path: artifacts/macos/out/*
+          if-no-files-found: error
+
+      - name: Publish into unified Release (tag push only)
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_NAME="${{ github.ref_name }}"
+          TITLE="GenericAgent Desktop ${TAG_NAME}"
+          cat > "${RUNNER_TEMP:-/tmp}/ga_notes.md" <<'EOF'
+          GenericAgent Desktop 桌面版 / Desktop
+
+          无需自行安装 Python、无需联网安装依赖、无需源码；首次启动会自动准备内置运行环境。
+          No separate Python install, no internet for dependencies, no source checkout required; the bundled runtime is prepared on first launch.
+
+          ## 安装方法 / Installation
+          - Windows: 下载 `GenericAgent-Desktop-Windows-Portable.zip`，解压后双击 `GenericAgent.exe` 启动。卸载时先退出应用，再双击包内 `uninstall.bat`，最后删除整个解压目录。
+            Download `GenericAgent-Desktop-Windows-Portable.zip`, extract it, then double-click `GenericAgent.exe`. To uninstall, quit the app, double-click `uninstall.bat`, then delete the extracted folder.
+          - Linux: 下载 `GenericAgent-Desktop-Linux-Portable.tar.gz`，解压后执行 `chmod +x GenericAgent.AppImage`，再运行 `./GenericAgent.AppImage`。卸载时先退出应用，再运行 `./uninstall.sh`，最后删除整个解压目录。
+            Download `GenericAgent-Desktop-Linux-Portable.tar.gz`, extract it, run `chmod +x GenericAgent.AppImage`, then launch `./GenericAgent.AppImage`. To uninstall, quit the app, run `./uninstall.sh`, then delete the extracted folder.
+          - macOS: 下载 `GenericAgent-Desktop-macOS.dmg`，双击打开 DMG，把 `GenericAgent.app` 拖入 `Applications`，之后在“应用程序 / Applications”中启动。若出现“无法验证开发者”等提示，先双击 DMG 内的 `open_anyway.command`，再启动。卸载时先退出应用，再从 Applications 删除 `GenericAgent.app`。
+            Download `GenericAgent-Desktop-macOS.dmg`, open it, drag `GenericAgent.app` to `Applications`, then launch it from Applications. If macOS says the developer cannot be verified, double-click `open_anyway.command` inside the DMG first, then launch again. To uninstall, quit the app, then delete `GenericAgent.app` from Applications.
+
+          ## 首次启动 / First launch
+          首次启动会自动离线准备运行环境（安装依赖），有进度条，完成后进入主界面；之后启动会更快。
+          The first launch prepares the runtime offline (installs deps) with a progress bar, then opens the main window; later launches are faster.
+
+          ## 说明 / Notes
+          - 想真正对话需在程序内配置模型 / API Key。Configure a model / API key in-app to start chatting.
+          - Windows Defender 防火墙可能会拦截 `127.0.0.1` / `localhost` 回环连接，导致程序无法启动或连接本机服务；请允许 `GenericAgent.exe` 和随包的 `python.exe` 通过防火墙后重启。Windows Defender Firewall may block the local loopback connection; allow `GenericAgent.exe` and the bundled `python.exe` through the firewall, then restart the app.
+          - Windows/Linux 为便携包，可整体移动到任意目录后继续使用。Windows/Linux packages are portable and can be moved as a whole folder.
+          - Windows/Linux 包内附 `readme.txt`（中英）。Windows/Linux packages include a bilingual `readme.txt`.
+          EOF
+          # Race-safe: the 3 OS jobs share ONE release. Retry create until the release
+          # actually exists (a simultaneous create from another job can fail), so the
+          # upload below never races a not-yet-created release.
+          for _ in $(seq 1 15); do
+            gh release view "$TAG_NAME" >/dev/null 2>&1 && break
+            gh release create "$TAG_NAME" --target "${{ github.sha }}" --title "$TITLE" --notes-file "${RUNNER_TEMP:-/tmp}/ga_notes.md" --prerelease 2>/dev/null || true
+            sleep 3
+          done
+          gh release upload "$TAG_NAME" artifacts/macos/out/* --clobber

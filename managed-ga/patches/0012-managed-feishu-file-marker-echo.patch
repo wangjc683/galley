@@ -1,5 +1,4 @@
 diff --git a/frontends/fsapp.py b/frontends/fsapp.py
-index 20b5e336..084eeed0 100644
 --- a/frontends/fsapp.py
 +++ b/frontends/fsapp.py
 @@ -770,0 +771,6 @@ def _send_local_file(receive_id, file_path, receive_id_type="open_id"):

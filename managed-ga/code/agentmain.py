@@ -136,6 +136,7 @@ class GenericAgent:
         if isinstance(b, dict): return 'BADCONFIG_MIXIN'
         if model: return b.backend.model.lower()
         return f"{type(b.backend).__name__}/{b.backend.name}"
+    def get_ctx_multiplier(self): return getattr(self.llmclient.backend, 'maxlen_multiplier', 1.0)
 
     def abort(self):
         if not self.is_running: return

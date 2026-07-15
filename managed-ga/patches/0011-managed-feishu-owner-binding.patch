@@ -1,5 +1,4 @@
 diff --git a/frontends/fsapp.py b/frontends/fsapp.py
-index 884fe729..20b5e336 100644
 --- a/frontends/fsapp.py
 +++ b/frontends/fsapp.py
 @@ -334 +334 @@ _galley_connected_once = False

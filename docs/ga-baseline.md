@@ -15,61 +15,71 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `502be0a76d04e6d7063c28b3bbb77adb1047ba6b`
+Locked commit: `1e89c3eece5a54938c06156a0e49de76ca926e07`
 
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-07-10
-- Previous baseline: `b1e173dcbb3cf1a0c7fdeab4211a12a44461c841`
-- Delta: 10 commits
+- Date audited: 2026-07-15
+- Previous baseline: `502be0a76d04e6d7063c28b3bbb77adb1047ba6b`
+- Delta: 362 commits by count, but almost all of it is upstream's merge of the
+  community GA Desktop frontend (PR #671, `frontends/desktop/` + packaging CI).
+  The engine-core delta is 12 files / ~380 lines.
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Result: no external bridge protocol or dependency break; `pyproject.toml`
-  did not change. Managed runtime picked up upstream Claude-refusal handling,
-  `ChunkedEncodingError` retry, suppressed intermittent retry-error yields, the
-  additive `--no-user-tools` flag, opt-in `extra_sys_prompt` / `omit_thinking`
-  session config, an UltraPlan orchestration refactor, and TUI worldline /
-  session-control work. Two managed patches were rebased: `0001` adopts
-  upstream's new `GA_ULTRAPLAN_RUNDIR` env seam (falling back to
-  `GALLEY_GA_STATE_ROOT`), and `0007`'s Codex helper block was regenerated for
-  the shifted `llmcore.py` line numbers (also fixing a latent off-by-one in the
-  insertion hunk's line count). Galley's managed state-root routing, Codex
-  backend payload shape, and managed image attachment path are preserved.
-- Devlog: [GA upstream upgrade b1e173dc -> 502be0a](./devlog/2026-07-10-ga-upstream-upgrade-b1e173dc-to-502be0a.md)
+- Result: no external bridge protocol or dependency break; `agent_loop.py` and
+  `pyproject.toml` did not change at all. Managed runtime picked up the
+  `file_write` / `file_patch` newline-preservation fix (LF files no longer
+  polluted to CRLF), `_arg` tool-argument type coercion, tool-output limits
+  scaled by `context_win`, opt-in `trim_keep_prefix`, `reasoning_effort: max`
+  for OpenAI, TMWebDriver `safe_print` hardening, and the MixinSession
+  routed-facade refactor. Upstream independently shipped a byte-identical
+  `code_run` stdin fix (Galley's `0005` patch → removed) and promoted the
+  `_ga_project_mode_name` attribute — the upstream TUI seam Galley already
+  rides — to Project Mode's only mechanism.
+  The whole managed patch stack was regenerated via a commit-chain rebase
+  (see patch manifest); Galley's managed state-root routing, Codex backend,
+  and image attachment path are preserved.
+- Devlog: [GA upstream upgrade 502be0a -> 1e89c3e](./devlog/2026-07-15-ga-upstream-upgrade-502be0a-to-1e89c3e.md)
 
 Relevant compatibility notes:
 
-- `agent_loop.py`: whitespace-only tweaks to the yielded turn / tool-call
-  markers. `BaseHandler.dispatch`, hook calls (`turn_before` / `llm_before`),
-  and the structured `{'turn': turn}` yield are unchanged; the runner reads the
-  turn number from the `turn_before` hook context, not the text markers, so
-  `WorkbenchHandler` is unaffected.
-- `agentmain.py`: upstream added an additive `--no-user-tools` flag that filters
-  `ask_user` / `start_long_term_update` from the tool schema. Galley does not
-  pass it, so behavior is unchanged; managed image attachment injection and
-  state-root temp routing remain intact.
-- `llmcore.py`: upstream added Claude `stop_reason == "refusal"` handling (no
-  retry), `ChunkedEncodingError` in the retry set, suppression of the
-  intermittent retry-error yield, and two opt-in config keys —
-  `extra_sys_prompt` / `extra_sys_prompt_file` and `omit_thinking`. Default
-  `omit_thinking=False` keeps `llmclient.backend.history` shape identical; the
-  raw-repr / prompt-log formatting changes are logging-only. Galley's Codex
-  patch (`0007`) was regenerated so credential IPC, `ChatGPT-Account-ID`,
-  `store=false`, WHAM quota hints, and forced streaming coexist with the new
-  code.
-- `assets/ga_ultraplan.py` and `memory/ultraplan_sop.md`: upstream refactored
-  UltraPlan orchestration and introduced a `GA_ULTRAPLAN_RUNDIR` env override
-  for the run directory. Galley's `0001` patch now honors that env var first and
-  falls back to `GALLEY_GA_STATE_ROOT/temp` (never the read-only code payload),
-  replacing the previous multi-line `_CODE_ROOT` / `_STATE_ROOT` scaffolding.
-- `mykey_template.py` / `mykey_template_en.py`: upstream simplified the vendor
-  tables and dropped non-native / antigravity configs. Managed mode generates
-  its own model config, and external / attach GA owns its own `mykey.py`, so
-  neither path is affected.
-- `assets/*` and TUI worldline / session-control changes (`frontends/`,
-  `hub.pyw`, background `ljqCtrl` tool, GUI SOP guardrails): bundled as upstream
-  code or state seed with no Galley contract change. Galley does not use the
-  upstream TUI as its authoritative GUI / Core path.
+- `agent_loop.py`: zero diff in this range — dispatch protocol, hooks, and the
+  structured `{'turn': turn}` yield are byte-identical.
+- `ga.py`: upstream now sets `stdin=subprocess.DEVNULL` in `code_run` (Galley's
+  `0005` patch verbatim → patch removed). `file_write` / `file_patch` preserve
+  the target file's existing newline style. Tool handlers use `_arg` type
+  coercion and scale output limits via the additive
+  `GenericAgent.get_ctx_multiplier()`. `GenericAgentHandler` init signature and
+  import path are unchanged.
+- `llmcore.py`: `BaseSession` gains `trim_keep_prefix` (default 0, off) and a
+  `maxlen_multiplier` derived from `context_win`; hard trims can now keep a
+  leading prefix and insert a `"..."` gap turn — history block shape is
+  unchanged. `NativeClaudeSession.ask()` and `NativeOAISession` are untouched,
+  so the history-restore validation for both classes in
+  `runner/ga_session.py::_VALIDATED_HISTORY_BACKENDS` holds at this baseline.
+  `MixinSession` became a routed facade: `history` is now facade-owned state
+  (still plain get/set — GaSession semantics preserved; the class stays
+  outside the validated restore set), but its new `__setattr__` **raises** on
+  node-specific attributes. Galley's managed model config never emits mixin
+  configs, so `install_managed_prompt_profile`'s `extra_sys_prompt` write is
+  unaffected; revisit if managed mode ever grows channel-group models.
+- `plugins/project_mode.py` + `memory/project_mode_sop.md`: upstream replaced
+  the pid-anchor files with the `_ga_project_mode_name` agent attribute — the
+  seam its TUI introduced in June (PR #607) and Galley already sets in
+  `runner/ga_session.py::set_project_mode` (`ga.py` gained
+  `handler.enter_project_mode()` writing the same attribute).
+  `_ga_project_mode_workspace_path` remains Galley-only. `0001`'s project-mode
+  hunk shrank to the `GALLEY_GA_STATE_ROOT` temp redirect.
+- `memory/`: `verify_sop.md` renamed to `deliverable_audit_sop.md` (plus
+  `plan_sop.md` reference updates). The state seed regenerates from upstream,
+  and `scripts/check-managed-ga-payload.mjs`'s critical-file list now names
+  `deliverable_audit_sop.md`.
+- `TMWebDriver.py`: prints wrapped in `safe_print` (survives stdout revoke);
+  `0006` rebased over it cleanly.
+- `mykey_template.py`: comment/doc updates only — no key renames; the managed
+  model config generator is unaffected.
+- `frontends/desktop/` and packaging CI: upstream community desktop app,
+  vendored into the payload as inert upstream code; not on any Galley path.
 - `pyproject.toml`: no dependency diff in this range; bundled Python
   dependencies did not need changes.
 
@@ -166,6 +176,21 @@ node scripts/check-managed-ga-payload.mjs
 Then inspect the managed patch stack semantically, not just mechanically:
 
 - Did every patch apply?
+- Did every patch land where it was supposed to? Zero-context hunks are
+  purely positional and mis-drop **silently** on shifted files. Always run a
+  compile sweep after replay (the 2026-07-15 upgrade caught two such
+  mis-drops only this way):
+
+```bash
+find managed-ga/code -name '*.py' -not -path '*/frontends/desktop/*' \
+  -exec python3 -m py_compile {} +
+```
+
+  When more than trivial line drift is involved, prefer regenerating the
+  stack via a commit-chain rebase (replay old stack as commits on the old
+  normalized baseline, `git rebase --onto` the new one, re-export with
+  `git diff -U0`) over hand-fixing individual hunks — see the 2026-07-15
+  devlog.
 - Did upstream add new writes to `memory/`, `sop/`, `skills/`, `temp/`, or
   `model_responses/` that bypass `GALLEY_GA_STATE_ROOT`?
 - Did upstream add an official state-root/profile option that should replace a

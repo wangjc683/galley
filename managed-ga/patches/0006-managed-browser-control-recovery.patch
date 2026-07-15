@@ -1,23 +1,22 @@
 diff --git a/TMWebDriver.py b/TMWebDriver.py
-index b866de2..d0278b4 100644
 --- a/TMWebDriver.py
 +++ b/TMWebDriver.py
-@@ -41,0 +42,2 @@ class TMWebDriver:
+@@ -45,0 +46,2 @@ class TMWebDriver:
 +        self.extension_client = None
 +        self.extension_connected_at = None
-@@ -87,0 +90 @@ class TMWebDriver:
+@@ -91,0 +94 @@ class TMWebDriver:
 +            if data.get('cmd') == 'get_status': return json.dumps({'r': self.get_status()}, ensure_ascii=False)
-@@ -130,0 +134 @@ class TMWebDriver:
+@@ -134,0 +138 @@ class TMWebDriver:
 +                        driver._register_extension_client(self)
-@@ -177,0 +182,4 @@ class TMWebDriver:
+@@ -181,0 +186,4 @@ class TMWebDriver:
 +    def _register_extension_client(self, client: WebSocket) -> None:
 +        self.extension_client = client
 +        self.extension_connected_at = time.time()
 +
-@@ -178,0 +187,2 @@ class TMWebDriver:
+@@ -182,0 +191,2 @@ class TMWebDriver:
 +        if self.extension_client == client:
 +            self.extension_client = None
-@@ -254,0 +265,11 @@ class TMWebDriver:
+@@ -258,0 +269,11 @@ class TMWebDriver:
 +    def get_status(self):
 +        if self.is_remote:
 +            try: return self._remote_cmd({"cmd": "get_status"}).get('r', {})
@@ -30,7 +29,6 @@ index b866de2..d0278b4 100644
 +        }
 +
 diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/background.js
-index 6dbd4b7..3c9fb57 100644
 --- a/assets/tmwd_cdp_bridge/background.js
 +++ b/assets/tmwd_cdp_bridge/background.js
 @@ -18,0 +19,7 @@ async function handleExtMessage(msg, sender) {
@@ -120,7 +118,6 @@ index 6dbd4b7..3c9fb57 100644
 @@ -388,0 +416 @@ function connectWS() {
 +    clearKeepaliveTimer();
 diff --git a/assets/tmwd_cdp_bridge/content.js b/assets/tmwd_cdp_bridge/content.js
-index 748b2b4..72d642b 100644
 --- a/assets/tmwd_cdp_bridge/content.js
 +++ b/assets/tmwd_cdp_bridge/content.js
 @@ -2,0 +3,10 @@
@@ -135,7 +132,6 @@ index 748b2b4..72d642b 100644
 +}
 +
 diff --git a/ga.py b/ga.py
-index 51894f8..449cf51 100644
 --- a/ga.py
 +++ b/ga.py
 @@ -113,0 +114,11 @@ driver = None

@@ -160,6 +160,12 @@ type ga
 
 如果解析到意料之外的位置，就不要依赖这个快捷命令。请进入安装目录运行 `python launch.pyw` 或 `python frontends/tuiapp_v2.py`。
 
+#### Windows Defender 拦截本机回环网络
+
+桌面端会通过 `127.0.0.1` / `localhost` 连接本机 bridge 服务。部分 Windows 机器上，Windows Defender 防火墙可能会拦截这个本机回环连接，导致桌面端看起来无法启动，或一直连不上服务。
+
+如果遇到这种情况，请在 Windows Defender 防火墙中允许 `GenericAgent.exe` 和随包的 `python.exe` 通过，然后重启桌面端。
+
 #### Windows 上 TUI 显示异常
 
 TUI 在 Windows 上依赖终端、字体和 `textual` 版本。

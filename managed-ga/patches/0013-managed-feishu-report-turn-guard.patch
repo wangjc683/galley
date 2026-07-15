@@ -1,5 +1,4 @@
 diff --git a/frontends/fsapp.py b/frontends/fsapp.py
-index 084eeed0..83379020 100644
 --- a/frontends/fsapp.py
 +++ b/frontends/fsapp.py
 @@ -917,0 +918,8 @@ class _TaskCard:

@@ -1,8 +1,0 @@
-diff --git a/ga.py b/ga.py
-index 3784478..51894f8 100644
---- a/ga.py
-+++ b/ga.py
-@@ -65 +65,2 @@ def code_run(code, code_type="python", timeout=60, cwd=None, code_cwd=None, stop
--            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-+            cmd, stdin=subprocess.DEVNULL,
-+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

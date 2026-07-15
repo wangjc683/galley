@@ -1,7 +1,7 @@
 diff --git a/assets/code_run_header.py b/assets/code_run_header.py
 --- a/assets/code_run_header.py
 +++ b/assets/code_run_header.py
-@@ -2,0 +3,15 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'memory'))
+@@ -2,0 +3,15 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '
 +# Galley managed runtime: redirect keychain storage under GALLEY_GA_STATE_ROOT
 +# so secrets stay inside Galley's managed-ga-state/ instead of leaking to the
 +# user's real home ~/ga_keychain.enc (which would also collide with an external

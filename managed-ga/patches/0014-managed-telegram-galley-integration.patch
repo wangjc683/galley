@@ -1,5 +1,4 @@
 diff --git a/frontends/tgapp.py b/frontends/tgapp.py
-index ea3b3a1..647569f 100644
 --- a/frontends/tgapp.py
 +++ b/frontends/tgapp.py
 @@ -1 +1 @@

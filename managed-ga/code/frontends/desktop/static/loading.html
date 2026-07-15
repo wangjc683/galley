@@ -17,21 +17,16 @@ html,body{height:100%;margin:0;display:flex;align-items:center;justify-content:c
 #ga-bar.indet{width:35%;animation:indet 1.1s ease-in-out infinite}
 @keyframes indet{0%{margin-left:-35%}100%{margin-left:100%}}
 </style>
+<script src="i18n.js?v=2"></script>
 <script>
-// Loading window shows before the main UI, on a different origin than the app, so it can't
-// read the app's saved language; fall back to the system/browser locale.
-var GA_ZH = (navigator.language || '').toLowerCase().indexOf('zh') === 0;
-var GA_MSG = {
-  starting_app: GA_ZH ? '正在启动 GenericAgent…' : 'Starting GenericAgent…',
-  start:        GA_ZH ? '首次启动，正在准备运行环境…' : 'First run: preparing the runtime…',
-  venv:         GA_ZH ? '正在创建运行环境…' : 'Creating the runtime environment…',
-  deps:         GA_ZH ? '正在安装依赖…' : 'Installing dependencies…',
-  done:         GA_ZH ? '依赖安装完成' : 'Dependencies installed',
-  starting:     GA_ZH ? '正在启动服务…' : 'Starting services…'
-};
+const bootT = window.GA_BOOT_I18N?.t || ((key) => key);
 window.gaProgress = function(pct, key){
   var s = document.getElementById('ga-status');
-  if (s) s.textContent = GA_MSG[key] || key;
+  if (s) {
+    var msgKey = 'loading.' + key;
+    var msg = bootT(msgKey);
+    s.textContent = msg === msgKey ? key : msg;
+  }
   var bar = document.querySelector('.bar');
   var fill = document.getElementById('ga-bar');
   if (bar) bar.classList.add('show');
@@ -41,15 +36,14 @@ window.gaProgress = function(pct, key){
   }
 };
 document.addEventListener('DOMContentLoaded', function(){
-  var s = document.getElementById('ga-status');
-  if (s) s.textContent = GA_MSG.starting_app;
+  window.GA_BOOT_I18N?.apply(document);
 });
 </script>
 </head>
 <body>
   <div class="card">
     <div class="spinner"></div>
-    <div id="ga-status">正在启动 GenericAgent…</div>
+    <div id="ga-status" data-i18n="loading.starting_app"></div>
     <div class="bar"><div id="ga-bar"></div></div>
   </div>
 </body>

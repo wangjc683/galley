@@ -1,40 +1,44 @@
 diff --git a/agentmain.py b/agentmain.py
-index b9bf311..14b2e94 100644
 --- a/agentmain.py
 +++ b/agentmain.py
 @@ -16,0 +17,3 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 +state_dir = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or script_dir)
 +def state_path(*parts):
 +    return os.path.join(state_dir, *parts)
-@@ -24 +27 @@ lang_suffix = '_en' if os.environ.get('GA_LANG', '') == 'en' else ''
+@@ -26 +29 @@ lang_suffix = '_en' if os.environ.get('GA_LANG', '') == 'en' else ''
 -mem_dir = os.path.join(script_dir, 'memory')
 +mem_dir = state_path('memory')
-@@ -51 +54 @@ class GenericAgent:
+@@ -53 +56 @@ class GenericAgent:
 -        os.makedirs(os.path.join(script_dir, 'temp'), exist_ok=True)
 +        os.makedirs(state_path('temp'), exist_ok=True)
-@@ -61 +64 @@ class GenericAgent:
+@@ -63 +66 @@ class GenericAgent:
 -        self.log_path = os.path.join(script_dir, f'temp/model_responses/model_responses_{logid}.txt')
 +        self.log_path = state_path('temp', 'model_responses', f'model_responses_{logid}.txt')
-@@ -125 +128 @@ class GenericAgent:
+@@ -128 +131 @@ class GenericAgent:
 -            vfile = os.path.join(script_dir, 'temp', v)
 +            vfile = state_path('temp', v)
-@@ -146 +149 @@ class GenericAgent:
+@@ -149 +152 @@ class GenericAgent:
 -                task_file = os.path.join(script_dir, 'temp', f'user_prompt_{int(time.time())}.md')
 +                task_file = state_path('temp', f'user_prompt_{int(time.time())}.md')
-@@ -153 +156 @@ class GenericAgent:
+@@ -156 +159 @@ class GenericAgent:
 -            handler = GenericAgentHandler(self, self.history, os.path.join(script_dir, 'temp'))
 +            handler = GenericAgentHandler(self, self.history, state_path('temp'))
-@@ -215 +215 @@ if __name__ == '__main__':
+@@ -219 +222 @@ if __name__ == '__main__':
 -            d = os.path.join(script_dir, f'temp/{args.task}'); os.makedirs(d, exist_ok=True)
 +            d = state_path('temp', args.task); os.makedirs(d, exist_ok=True)
-@@ -232 +232 @@ if __name__ == '__main__':
+@@ -236 +239 @@ if __name__ == '__main__':
 -        agent.task_dir = d = os.path.join(script_dir, f'temp/{args.task}'); nround = ''
 +        agent.task_dir = d = state_path('temp', args.task); nround = ''
-@@ -290 +290 @@ if __name__ == '__main__':
+@@ -294 +297 @@ if __name__ == '__main__':
 -                log_dir = os.path.join(script_dir, 'temp/reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 +                log_dir = state_path('temp', 'reflect_logs'); os.makedirs(log_dir, exist_ok=True)
+diff --git a/assets/ga_ultraplan.py b/assets/ga_ultraplan.py
+--- a/assets/ga_ultraplan.py
++++ b/assets/ga_ultraplan.py
+@@ -13 +13 @@ _TASK_SLUG = "task"; _FUNC_SEQ = 0; _PLANNED = False; _SESSION = None; _sessions
+-_RUN_DIR = os.path.abspath(os.environ.get("GA_ULTRAPLAN_RUNDIR", os.path.join(_ROOT, "temp", "ultraplan_default")))
++_RUN_DIR = os.path.abspath(os.environ.get("GA_ULTRAPLAN_RUNDIR") or os.path.join(os.environ.get("GALLEY_GA_STATE_ROOT") or _ROOT, "temp", "ultraplan_default"))
 diff --git a/frontends/continue_cmd.py b/frontends/continue_cmd.py
-index a8dc394..5931ce3 100644
 --- a/frontends/continue_cmd.py
 +++ b/frontends/continue_cmd.py
 @@ -5,2 +5,3 @@ import ast, atexit, glob, json, os, random, re, shutil, threading, time
@@ -46,14 +50,7 @@ index a8dc394..5931ce3 100644
 @@ -12 +13 @@ _ROUND_HEADER_RE = re.compile(rb'^=== (Prompt|Response) ===', re.MULTILINE)
 -_ROUNDS_CACHE_PATH = os.path.join(os.path.expanduser('~'), '.genericagent', 'continue_rounds_cache.json')
 +_ROUNDS_CACHE_PATH = os.path.join(_STATE_ROOT, 'temp', 'continue_rounds_cache.json')
-diff --git a/assets/ga_ultraplan.py b/assets/ga_ultraplan.py
---- a/assets/ga_ultraplan.py
-+++ b/assets/ga_ultraplan.py
-@@ -13 +13 @@
--_RUN_DIR = os.path.abspath(os.environ.get("GA_ULTRAPLAN_RUNDIR", os.path.join(_ROOT, "temp", "ultraplan_default")))
-+_RUN_DIR = os.path.abspath(os.environ.get("GA_ULTRAPLAN_RUNDIR") or os.path.join(os.environ.get("GALLEY_GA_STATE_ROOT") or _ROOT, "temp", "ultraplan_default"))
 diff --git a/frontends/workspace_cmd.py b/frontends/workspace_cmd.py
-index c9c4d98..88a7742 100644
 --- a/frontends/workspace_cmd.py
 +++ b/frontends/workspace_cmd.py
 @@ -38 +38,2 @@ from typing import Optional
@@ -64,7 +61,6 @@ index c9c4d98..88a7742 100644
 -    return os.path.join(_REPO_ROOT, "temp")
 +    return os.path.join(_STATE_ROOT, "temp")
 diff --git a/ga.py b/ga.py
-index 3fe1e3f..05adfe1 100644
 --- a/ga.py
 +++ b/ga.py
 @@ -10,0 +11,4 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -75,28 +71,26 @@ index 3fe1e3f..05adfe1 100644
 @@ -23 +27 @@ def code_run(code, code_type="python", timeout=60, cwd=None, code_cwd=None, stop
 -    cwd = cwd or os.path.join(script_dir, 'temp'); tmp_path = None
 +    cwd = cwd or state_path('temp'); tmp_path = None
-@@ -159 +163 @@ def log_memory_access(path):
+@@ -160 +164 @@ def log_memory_access(path):
 -    stats_file = os.path.join(script_dir, 'memory/file_access_stats.json')
 +    stats_file = state_path('memory', 'file_access_stats.json')
-@@ -587 +591 @@ def get_global_memory():
+@@ -609 +613 @@ def get_global_memory():
 -        with open(os.path.join(script_dir, 'memory/global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
 +        with open(state_path('memory', 'global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
-@@ -589 +593 @@ def get_global_memory():
+@@ -611 +615 @@ def get_global_memory():
 -        prompt += f'cwd = {os.path.join(script_dir, "temp")} (./)\n'
 +        prompt += f'cwd = {state_path("temp")} (./)\n'
 diff --git a/llmcore.py b/llmcore.py
-index c17bd25..aebd6a4 100644
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -924 +924,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
+@@ -949 +949,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
 -        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'temp/model_responses/model_responses_{os.getpid()}.txt')
 +        state_root = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or os.path.dirname(os.path.abspath(__file__)))
 +        log_path = os.path.join(state_root, f'temp/model_responses/model_responses_{os.getpid()}.txt')
 diff --git a/plugins/project_mode.py b/plugins/project_mode.py
-index cca29d3..2726663 100644
 --- a/plugins/project_mode.py
 +++ b/plugins/project_mode.py
-@@ -23 +23,2 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+@@ -19 +19,2 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 -_TEMP = os.path.join(_PROJECT_ROOT, 'temp')
 +_STATE_ROOT = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or _PROJECT_ROOT)
 +_TEMP = os.path.join(_STATE_ROOT, 'temp')

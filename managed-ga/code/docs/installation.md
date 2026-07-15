@@ -160,6 +160,12 @@ type ga
 
 If it resolves to something unexpected, do not rely on the shortcut. Run GA from the install directory with `python launch.pyw` or `python frontends/tuiapp_v2.py`.
 
+#### Windows Defender blocks local loopback
+
+The desktop app talks to its local bridge over `127.0.0.1` / `localhost`. On some Windows machines, Windows Defender Firewall may block this loopback connection, making the desktop app look like it cannot start or cannot connect to the service.
+
+If this happens, allow `GenericAgent.exe` and the bundled `python.exe` through Windows Defender Firewall, then restart the desktop app.
+
 #### Windows TUI rendering issues
 
 TUI rendering on Windows depends on terminal, font, and `textual` version.

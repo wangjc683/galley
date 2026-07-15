@@ -1,14 +1,13 @@
 diff --git a/frontends/fsapp.py b/frontends/fsapp.py
-index ad959f6..4f13dc2 100644
 --- a/frontends/fsapp.py
 +++ b/frontends/fsapp.py
 @@ -1 +1 @@
 -import argparse, asyncio, importlib.util, json, os, queue as Q, re, sys, threading, time, uuid
 +import argparse, asyncio, importlib.metadata, importlib.util, json, os, queue as Q, re, sys, threading, time, uuid
-@@ -101 +101 @@
+@@ -101 +101 @@ _MSG_TYPE_MAP = {"image": "[image]", "audio": "[audio]", "file": "[file]", "medi
 -TEMP_DIR = os.path.join(PROJECT_ROOT, "temp")
 +TEMP_DIR = os.environ.get("GALLEY_FEISHU_TEMP_DIR") or os.path.join(PROJECT_ROOT, "temp")
-@@ -329,0 +330,129 @@
+@@ -329,0 +330,129 @@ agent_lock = threading.Lock()
 +GALLEY_STARTUP_FAILURE_LIMIT = 3
 +_galley_connected_once = False
 +
@@ -138,7 +137,7 @@ index ad959f6..4f13dc2 100644
 +    new_loop = asyncio.new_event_loop()
 +    asyncio.set_event_loop(new_loop)
 +    wsmod.loop = new_loop
-@@ -332,0 +462,9 @@
+@@ -332,0 +462,9 @@ def _load_config():
 +    raw = os.environ.get("GALLEY_FEISHU_CONFIG_JSON")
 +    if raw is not None:
 +        try:
@@ -148,11 +147,11 @@ index ad959f6..4f13dc2 100644
 +        except Exception as e:
 +            raise RuntimeError(f"load Galley Feishu config failed: {e}") from e
 +        raise RuntimeError("Galley Feishu config must be a JSON object")
-@@ -714,0 +853,3 @@
+@@ -714,0 +853,3 @@ def _make_task_hook(card, task_id, on_final):
 +                if ctx.get('summary'):
 +                    detail = _build_step_detail(resp, ctx.get('tool_calls') or [])
 +                    card.step(ctx['summary'], detail)
-@@ -811,0 +953,13 @@
+@@ -811,0 +953,13 @@ def handle_message(data):
 +    try:
 +        return _handle_message_impl(data)
 +    except Exception:
@@ -166,18 +165,18 @@ index ad959f6..4f13dc2 100644
 +
 +
 +def _handle_message_impl(data):
-@@ -851,2 +1005,4 @@
+@@ -851,2 +1005,4 @@ def main():
 -        print(f"错误: 请在 mykey 配置中填写 fs_app_id 和 fs_app_secret\n配置文件: {CONFIG_PATH}", flush=True)
 -        sys.exit(1)
 +        message = f"请在 mykey 配置中填写 fs_app_id 和 fs_app_secret\n配置文件: {CONFIG_PATH}"
 +        print(f"错误: {message}", flush=True)
 +        _emit_galley_status("error", message)
 +        return 1
-@@ -854,0 +1011 @@
+@@ -854,0 +1011 @@ def main():
 +    startup_failures = 0
-@@ -855,0 +1013 @@
+@@ -855,0 +1013 @@ def main():
 +        cli = None
-@@ -858 +1016,23 @@
+@@ -858 +1016,23 @@ def main():
 -            cli = lark.ws.Client(APP_ID, APP_SECRET, event_handler=handler, log_level=lark.LogLevel.INFO)
 +            cli = GalleyStatusWsClient(
 +                APP_ID,
@@ -202,7 +201,7 @@ index ad959f6..4f13dc2 100644
 +                f"hookPath={_galley_hook_path(cli)} teardown=module-loop-reset",
 +                flush=True,
 +            )
-@@ -866,0 +1047,12 @@
+@@ -866,0 +1047,12 @@ def main():
 +            if not _galley_connected_once:
 +                startup_failures += 1
 +                if startup_failures >= GALLEY_STARTUP_FAILURE_LIMIT:
@@ -215,6 +214,6 @@ index ad959f6..4f13dc2 100644
 +            # （不会发生）或 return，teardown 也安全（_conn 为 None 时跳过）。
 +            if cli is not None:
 +                _teardown_lark_client(cli)
-@@ -880 +1072 @@
+@@ -880 +1072 @@ if __name__ == "__main__":
 -        main()
 +        raise SystemExit(main())

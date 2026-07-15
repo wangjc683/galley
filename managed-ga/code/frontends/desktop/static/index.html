@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>GenericAgent</title>
 <link rel="stylesheet" href="assets/fonts/fonts.css?v=2">
-<link rel="stylesheet" href="styles.css?v=181">
+<link rel="stylesheet" href="styles.css?v=186">
 <!-- KaTeX: LaTeX 公式渲染 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 <!-- highlight.js: 代码高亮 -->
@@ -167,7 +167,7 @@
               <div class="input" id="chat-input" contenteditable="true" role="textbox" aria-multiline="true" data-i18n-ph="composer.placeholder"></div>
               <div class="composer-bot">
                 <div class="composer-plus-wrap">
-                  <button type="button" class="ic-btn composer-plus" id="chat-plus-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="collab.plusMenu" title="">
+                  <button type="button" class="ic-btn composer-plus" id="chat-plus-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="collab.plusMenu" data-no-tooltip title="">
                     <span data-ga-icon="plus"></span>
                   </button>
                   <div class="ga-menu composer-menu" id="chat-menu" hidden role="menu">
@@ -317,7 +317,7 @@
               <div class="input" id="cdb-input" contenteditable="true" role="textbox" aria-multiline="true" data-i18n-ph="collab.placeholder"></div>
               <div class="composer-bot">
                 <div class="composer-plus-wrap">
-                  <button type="button" class="ic-btn composer-plus" id="cdb-plus-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="collab.plusMenu" title="">
+                  <button type="button" class="ic-btn composer-plus" id="cdb-plus-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="collab.plusMenu" data-no-tooltip title="">
                     <span data-ga-icon="plus"></span>
                   </button>
                   <div class="ga-menu composer-menu" id="cdb-menu" hidden role="menu">
@@ -640,16 +640,29 @@
         </div>
         <div class="set-block">
           <div class="set-sec-t" data-i18n="set.features"></div>
-          <button class="set-btn" id="import-mykey-btn" type="button">
+          <button class="set-btn" id="import-mykey-btn" type="button" data-i18n-title="set.importMykeyTip">
             <span data-ga-icon="fileText"></span>
             <span data-i18n="set.importMykey"></span>
           </button>
           <input type="file" id="import-mykey-input" accept=".py,text/plain" hidden>
-          <button class="set-btn set-btn-follow" id="export-mykey-btn" type="button">
+          <button class="set-btn set-btn-follow" id="export-mykey-btn" type="button" data-i18n-title="set.exportMykeyTip">
             <span data-ga-icon="folderSimple"></span>
             <span data-i18n="set.exportMykey"></span>
           </button>
-          <button class="set-btn set-btn-follow" id="settings-services-btn" type="button">
+          <button class="set-btn set-btn-follow" id="import-memory-btn" type="button" data-i18n-title="set.importMemoryTip">
+            <span data-ga-icon="folderSimple"></span>
+            <span data-i18n="set.importMemory"></span>
+          </button>
+          <button class="set-btn set-btn-follow" id="ga-source-btn" type="button" data-i18n-title="set.gaSourceTip">
+            <span data-ga-icon="folderSimple"></span>
+            <span data-i18n="set.gaSource"></span>
+          </button>
+          <div class="set-hint" id="ga-source-current" hidden></div>
+          <button class="set-btn set-btn-follow" id="ga-source-clear-btn" type="button" data-i18n-title="set.gaSourceClearTip" hidden>
+            <span data-ga-icon="x"></span>
+            <span data-i18n="set.gaSourceClear"></span>
+          </button>
+          <button class="set-btn set-btn-follow" id="settings-services-btn" type="button" data-i18n-title="set.serviceManagerTip">
             <span data-ga-icon="broadcast"></span>
             <span data-i18n="set.serviceManager"></span>
           </button>
@@ -674,6 +687,7 @@
 <!-- highlight.js -->
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js" crossorigin="anonymous"></script>
 <script src="phosphor-icons.js?v=2"></script>
-<script src="app.js?v=208"></script>
+<script src="i18n.js?v=2"></script>
+<script src="app.js?v=219"></script>
 </body>
 </html>

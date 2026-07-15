@@ -2,24 +2,28 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-07-10` against upstream
-`502be0a76d04e6d7063c28b3bbb77adb1047ba6b`.
-(Full 14-patch stack replayed clean at this baseline. Patches 0001 and 0007
-were rebased for the `502be0a` upgrade: 0001's `ga_ultraplan.py` hunk shrank to
-a single line that adopts upstream's new `GA_ULTRAPLAN_RUNDIR` env seam and
-falls back to `GALLEY_GA_STATE_ROOT`; 0007's Codex helper block was regenerated
-against the shifted `llmcore.py` line numbers, which also fixed a pre-existing
-off-by-one in the insertion hunk's line count.)
+Last replay verified: `2026-07-15` against upstream
+`1e89c3eece5a54938c06156a0e49de76ca926e07`.
+(13-patch stack; replayed clean at this baseline. For the `1e89c3ee` upgrade
+the whole stack was regenerated via a commit-chain rebase — old baseline +
+patch commits rebased onto the new baseline — because the zero-context hunks
+are purely positional and two of them "applied" into wrong locations after
+upstream line shifts. `0005` was dropped: upstream now sets
+`stdin=subprocess.DEVNULL` in `code_run` natively. `0001`'s
+`plugins/project_mode.py` hunk shrank to the `GALLEY_GA_STATE_ROOT` temp
+redirect: upstream replaced the pid-anchor files with the
+`_ga_project_mode_name` agent attribute — the same seam Galley already sets
+from `runner/ga_session.py`. `0007` was merged with upstream's new `copy`
+import and `BaseSession.__init__` defaults.)
 
 Current patches:
 
 | Patch | Upstream files | Reason | Rebase risk | Removal condition |
 |---|---|---|---|---|
-| `0001-managed-state-root.patch` | `agentmain.py`, `ga.py`, `llmcore.py`, `frontends/continue_cmd.py`, `assets/ga_ultraplan.py`, `frontends/workspace_cmd.py`, `plugins/project_mode.py` | Keep Galley-managed user state under `Application Support/app.galley/managed-ga-state` instead of the shipped code payload, including model response logs, long prompt temp files, `/continue` cache, UltraPlan run artifacts, Workspace registry/session maps, and Project Mode anchors / memory files. | Medium: upstream may rename state paths, model response logging, continue-session cache paths, UltraPlan run directories, workspace storage, or project-mode storage paths. | Remove when GenericAgent supports an explicit state root / profile path upstream. |
+| `0001-managed-state-root.patch` | `agentmain.py`, `ga.py`, `llmcore.py`, `frontends/continue_cmd.py`, `assets/ga_ultraplan.py`, `frontends/workspace_cmd.py`, `plugins/project_mode.py` | Keep Galley-managed user state under `Application Support/app.galley/managed-ga-state` instead of the shipped code payload, including model response logs, long prompt temp files, `/continue` cache, UltraPlan run artifacts, Workspace registry/session maps, and Project Mode project memory files. | Medium: upstream may rename state paths, model response logging, continue-session cache paths, UltraPlan run directories, workspace storage, or project-mode storage paths. | Remove when GenericAgent supports an explicit state root / profile path upstream. |
 | `0002-repair-windows-path-tool-json.patch` | `llmcore.py` | Keep managed GA tolerant when models copy Windows paths into `path` / `file_path` / `filepath` tool JSON fields with raw backslashes or doubled quotes. | Low: touches only fallback text-tool JSON parsing for path fields. | Remove when GenericAgent upstream normalizes Windows path values or handles these malformed tool JSON cases. |
 | `0003-normalize-asset-path-joins.patch` | `agentmain.py`, `ga.py` | Join managed GA bundled asset paths with platform path segments so Windows verbatim paths never mix `\\?\` with `/`. | Low: only wraps existing `assets` reads behind an `asset_path` helper. | Remove when upstream stops using slash-containing asset path strings under `script_dir`. |
 | `0004-managed-wechat-state-paths.patch` | `frontends/wechatapp.py` | Let Galley's managed IM launcher keep WeChat token and temp files under Galley managed state instead of `~/.wxbot` / bundled code paths. | Low: two path constants near module startup. | Remove when upstream WeChat frontend supports explicit token/temp paths. |
-| `0005-code-run-noninteractive-stdin.patch` | `ga.py` | Keep managed `code_run` non-interactive by closing child-process stdin, avoiding inherited runner IPC stdin handles that can block Python subprocesses on Windows. | Low: touches only `code_run` subprocess creation. | Remove when GenericAgent upstream closes stdin for non-interactive tool execution. |
 | `0006-managed-browser-control-recovery.patch` | `TMWebDriver.py`, `ga.py`, `assets/tmwd_cdp_bridge/background.js`, `assets/tmwd_cdp_bridge/content.js` | Preserve Galley's managed Browser Control recovery semantics: extension-connected/no-tabs diagnostics, page wake-up messages, and MV3 service-worker keepalive / fast reconnect behavior. | Medium: upstream frequently touches the browser bridge service-worker loop. | Remove when upstream exposes equivalent extension status and recovery hints. |
 | `0007-managed-codex-backend.patch` | `llmcore.py` | Preserve Galley's ChatGPT / Codex managed model backend, including credential IPC refresh, account header propagation, Codex-specific Responses payload shape, forced streaming, and best-effort WHAM quota reset hints on final 429 failures. | Medium: upstream OpenAI request assembly changes can alter nearby contexts. | Remove when upstream supports Galley's Codex credential, request contract, and quota-reset diagnostics directly. |
 | `0008-managed-image-attachments.patch` | `agentmain.py`, `llmcore.py` | Let Galley's managed runtime receive local image attachment paths from the bridge, encode them as real multimodal content blocks, and preserve non-text image blocks through the native tool client. | Medium: touches the managed task loop and native content-block filtering. | Remove when GenericAgent upstream exposes a stable public image-input contract for frontend callers. |

@@ -19,6 +19,26 @@ description = "Save mykey.py via native file dialog."
 commands.allow = ["export_mykey"]
 
 [[permission]]
+identifier = "allow-pick-directory"
+description = "Pick a source directory via native folder dialog (import memory)."
+commands.allow = ["pick_directory"]
+
+[[permission]]
+identifier = "allow-get-ga-source"
+description = "Read the user-set external GenericAgent source directory."
+commands.allow = ["get_ga_source"]
+
+[[permission]]
+identifier = "allow-set-ga-source"
+description = "Point the desktop shell at an external GenericAgent source and restart the bridge."
+commands.allow = ["set_ga_source"]
+
+[[permission]]
+identifier = "allow-clear-ga-source"
+description = "Clear the external GA source override and fall back to the bundled runtime."
+commands.allow = ["clear_ga_source"]
+
+[[permission]]
 identifier = "allow-shortcut-should-ask"
 description = "Check whether to show the first-run desktop-shortcut prompt."
 commands.allow = ["shortcut_should_ask"]

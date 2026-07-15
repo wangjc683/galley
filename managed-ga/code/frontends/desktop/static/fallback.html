@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>GenericAgent — Setup</title>
+<title data-i18n="setup.title">GenericAgent</title>
 <style>
 :root{--bg:#fff;--text:#0a0a0a;--muted:#6b6b6b;--border:#e8e8e8;--accent:#0a0a0a;--accent-text:#fff;--radius:10px;--font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif}
 @media(prefers-color-scheme:dark){:root{--bg:#1a1a1a;--text:#ededed;--muted:#a0a0a0;--border:#2a2a2a;--accent:#ededed;--accent-text:#0a0a0a}}
@@ -21,33 +21,31 @@ button:disabled{opacity:.4;cursor:not-allowed}
 #status{margin-top:1rem;font-size:.85rem;min-height:1.2em}
 .err{color:#dc2626}.ok{color:#16a34a}
 </style>
+<script src="i18n.js?v=2"></script>
 </head>
 <body>
 <div class="card">
-  <h1>⚙️ Setup Required</h1>
-  <p>The backend could not start. Please configure the paths below.</p>
-  <p>后端启动失败，请配置以下路径。</p>
+  <h1><span aria-hidden="true">⚙️</span> <span data-i18n="setup.heading"></span></h1>
+  <p data-i18n="setup.backend_failed"></p>
 
-  <label class="field-label">Python interpreter 解释器路径</label>
+  <label class="field-label" data-i18n="setup.py_label"></label>
   <div class="input-row">
-    <input id="pypath" type="text" placeholder="python / path to interpreter" spellcheck="false">
+    <input id="pypath" type="text" data-i18n-placeholder="setup.py_placeholder" spellcheck="false">
   </div>
-  <p style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
-    e.g. <code>C:/Python312/python.exe</code> / <code>~/miniconda3/envs/myenv/bin/python</code>
-  </p>
+  <p style="color:var(--muted);font-size:.75rem;margin-top:.3rem" data-i18n="setup.py_hint"></p>
 
-  <label class="field-label">Project directory 项目目录</label>
+  <label class="field-label" data-i18n="setup.project_label"></label>
   <div class="input-row">
-    <input id="projdir" type="text" placeholder="path to GenericAgent folder" spellcheck="false">
+    <input id="projdir" type="text" data-i18n-placeholder="setup.project_placeholder" spellcheck="false">
   </div>
-  <p style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
-    The folder containing <code>frontends/desktop_bridge.py</code>
-  </p>
+  <p style="color:var(--muted);font-size:.75rem;margin-top:.3rem" data-i18n="setup.project_hint"></p>
 
-  <button id="start-btn" onclick="doStart()" style="margin-top:1.2rem;width:100%">Start 启动</button>
+  <button id="start-btn" onclick="doStart()" style="margin-top:1.2rem;width:100%" data-i18n="setup.start"></button>
   <div id="status"></div>
 </div>
 <script>
+const bootT = window.GA_BOOT_I18N?.t || ((key, vars) => vars?.error ? `${key}: ${vars.error}` : key);
+window.GA_BOOT_I18N?.apply(document);
 const {invoke} = window.__TAURI__.core;
 const {getCurrentWindow, Window} = window.__TAURI__.window;
 const statusEl = document.getElementById('status');
@@ -61,16 +59,28 @@ invoke('get_config').then(([py, dir]) => {
   if (dir) dirInput.value = dir;
 }).catch(()=>{});
 
+// Surface the actual first-run prepare error (if this screen was reached via a
+// failed install), instead of only showing the generic "configure paths" text.
+invoke('get_prepare_error').then(err => {
+  if (!err) return;
+  const box = document.createElement('p');
+  box.className = 'err';
+  box.style.cssText = 'text-align:left;white-space:pre-wrap;font-size:.8rem;max-height:8em;overflow:auto';
+  box.textContent = bootT('setup.prepare_error') + '\n' + err;
+  const card = document.querySelector('.card');
+  card.insertBefore(box, card.querySelector('.field-label'));
+}).catch(()=>{});
+
 async function doStart() {
   const pythonPath = pyInput.value.trim();
   const projectDir = dirInput.value.trim();
-  if (!pythonPath) { statusEl.className='err'; statusEl.textContent='Please enter Python path / 请输入 Python 路径'; return; }
-  if (!projectDir) { statusEl.className='err'; statusEl.textContent='Please enter project directory / 请输入项目目录'; return; }
+  if (!pythonPath) { statusEl.className='err'; statusEl.textContent=bootT('setup.err_py'); return; }
+  if (!projectDir) { statusEl.className='err'; statusEl.textContent=bootT('setup.err_project'); return; }
   btn.disabled = true;
-  statusEl.className=''; statusEl.textContent='Starting bridge… 正在启动…';
+  statusEl.className=''; statusEl.textContent=bootT('setup.starting_bridge');
   try {
     await invoke('start_bridge_with_config', {pythonPath, projectDir});
-    statusEl.className='ok'; statusEl.textContent='Connected! 已连接，正在打开主窗口…';
+    statusEl.className='ok'; statusEl.textContent=bootT('setup.connected');
     // Show main window and hide setup
     const mainWin = await Window.getByLabel('main');
     if (mainWin) {
@@ -80,7 +90,7 @@ async function doStart() {
     const setupWin = getCurrentWindow();
     await setupWin.hide();
   } catch(e) {
-    statusEl.className='err'; statusEl.textContent='Failed: '+e;
+    statusEl.className='err'; statusEl.textContent=bootT('setup.failed', { error: e });
     btn.disabled = false;
   }
 }
@@ -104,7 +114,7 @@ const _dirInput = document.getElementById('projdir');
       el.value = el.value.slice(0, MAX_LEN);
     }
     if (el.value.length >= MAX_LEN) {
-      hint.textContent = 'Character limit reached (' + MAX_LEN + ') / 已达字数上限（' + MAX_LEN + '）';
+      hint.textContent = bootT('setup.limit', { n: MAX_LEN });
       hint.style.display = 'block';
     } else {
       hint.style.display = 'none';

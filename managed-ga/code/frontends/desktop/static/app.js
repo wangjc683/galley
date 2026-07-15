@@ -216,6 +216,9 @@ let bridgeUiOffline = false;
       case 'services/bridge/exit': return http('/services/bridge/exit', { method: 'POST' });
       case 'services/mykey/get': return http('/services/mykey');
       case 'services/mykey/save': return http('/services/mykey', { method: 'POST', body: params || {} });
+      case 'services/conductor/model/get': return http('/services/conductor/model');
+      case 'services/conductor/model/save': return http('/services/conductor/model', { method: 'POST', body: params || {} });
+      case 'memory/import': return http('/memory/import', { method: 'POST', body: params || {} });
       case 'app/path/selectGaRoot': return http('/config');
       case 'list_continuable_sessions': return { sessions: [] };
       case 'restore_session': throw new Error('restore_session is not implemented in web2 bridge');
@@ -282,6 +285,12 @@ let bridgeUiOffline = false;
     getServicePanel: () => rpc('services/panel', {}),
     getMykeyContent: () => rpc('services/mykey/get', {}),
     saveMykeyContent: (content) => rpc('services/mykey/save', { content }),
+    importMemory: (sourceDir) => rpc('memory/import', { sourceDir }),
+    getGaSource: () => tauriInvoke('get_ga_source'),
+    setGaSource: (dir) => tauriInvoke('set_ga_source', { dir }),
+    clearGaSource: () => tauriInvoke('clear_ga_source'),
+    getConductorModel: () => rpc('services/conductor/model/get', {}),
+    saveConductorModel: (llmNo) => rpc('services/conductor/model/save', { llmNo }),
     tauriInvoke,
     setBridgeUiOffline: (offline) => { bridgeUiOffline = !!offline; },
     pollSession: (sessionId, afterId = 0) => rpc('session/poll', { sessionId, afterId }),
@@ -302,356 +311,9 @@ let bridgeUiOffline = false;
 })();
 
 /* ═══════════════ i18n ═══════════════ */
-const I18N = {
-  zh: {
-    'app.title': 'GenericAgent 桌面版',
-    'brand.sub': '桌面终端',
-    'nav.chat': '聊天', 'nav.services': '后台服务', 'nav.channels': '消息通道', 'nav.status': '状态面板',
-    'nav.collab': '指挥家', 'nav.token': '用量',
-    'foot.settings': '配置', 'foot.ver': 'GenericAgent · 桌面版',
-    'chat.startTitle': '开始对话', 'chat.startSub': '直接输入，或点预设功能一键启动',
-    'preset.butler.t': '指挥家', 'preset.butler.d': '复杂任务自动拆解，只需查看进度和简报',
-    'preset.plan.t': 'Plan 模式', 'preset.plan.d': '加载 Plan SOP，按探索→规划→执行→验证流程',
-    'preset.goal.t': 'Goal 模式', 'preset.goal.d': '设定目标，自主完成',
-    'preset.autonomous.t': '自主行动', 'preset.autonomous.d': '按 SOP 规划/执行任务,产出报告(reflect/autonomous.py 同源)',
-    'preset.hive.t': 'Hive 协作', 'preset.hive.d': '多 worker 协同攻坚',
-    'preset.review.t': '深度复核', 'preset.review.d': '挑刺式质量把关',
-    'preset.findwork.t': '找点事做', 'preset.findwork.d': '分析当前情况,推荐一批让你感兴趣的 TODO',
-    'preset.mine.t': '我的·周报', 'preset.mine.d': '自定义：抓本周提交并写周报',
-    'preset.add.t': '自定义', 'preset.add.d': '任意一句话存为功能',
-    'composer.placeholder': 'GA 能帮你做些什么？',
-    'search.placeholder': '搜索会话…', 'conv.new': '新对话',
-    'ctx.pin': '置顶', 'ctx.unpin': '取消置顶', 'ctx.rename': '重命名', 'ctx.del': '删除',
-    'common.close': '关闭', 'common.more': '更多', 'common.optional': '选填', 'common.save': '保存',
-    'modal.preset': '预设功能', 'modal.addModel': '添加模型', 'modal.editModel': '编辑模型', 'modal.settings': '配置',
-    'modal.customPreset': '自定义预设',
-    'modal.editCustomPreset': '编辑任务',
-    'customPreset.titlePh': '标题，例如「写周报」',
-    'customPreset.promptPh': 'Prompt 内容，发送时会作为消息提交',
-    'customPreset.empty': '标题和 Prompt 不能为空',
-    'customPreset.removeTitle': '删除',
-    'customPreset.editTitle': '编辑',
-    'builtinPreset.restoreBtn': '恢复默认预设',
-    'set.appearance': '外观', 'set.plainUi': '素色', 'set.fontSize': '聊天字号', 'set.lang': '语言', 'set.model': '模型', 'set.addModel': '添加模型', 'set.features': '功能', 'set.importMykey': '导入已有模型配置（mykey.py）', 'set.exportMykey': '导出当前模型配置', 'set.serviceManager': '后台服务管理',
-    'shortcut.askConfirm': '是否在桌面创建 GenericAgent 快捷方式？',
-    'appearance.light': '浅色', 'appearance.dark': '深色',
-    'set.noModels': '暂无模型，点击下方添加',
-    'lang.zh': '简体中文', 'lang.en': 'English',
-    'model.name': '备注', 'model.namePh': '会显示在模型列表',
-    'model.apikey': 'API Key', 'model.apikeyPh': 'sk-...', 'model.apikeyKeep': '留空则保持原 Key 不变',
-    'model.apibase': 'API 地址', 'model.apibasePh': 'https://.../v1/messages',
-    'model.protocol': '协议', 'model.protocolPick': '请选择…', 'model.protocolOai': 'OpenAI 兼容 (chat/completions)', 'model.protocolClaude': 'Anthropic (Claude /v1/messages)',
-    'model.stream': '响应方式', 'model.streamOn': '流式', 'model.streamOff': '非流式',
-    'model.model': '模型', 'model.modelPh': 'model 参数名',
-    'model.modelHint': '须与中转站/官方文档中的 model 字段完全一致',
-    'model.retries': '重试 (次)', 'model.connTimeout': '连接超时 (s)', 'model.readTimeout': '读取超时 (s)',
-    'model.save': '保存', 'common.cancel': '取消', 'common.confirm': '确认', 'common.edit': '编辑', 'common.delete': '删除',
-    'pq.title': '快速接入官方模型', 'pq.sub': '填好 API Key 即可使用', 'pq.toggle': '展开 / 收起',
-    'pq.deepseekDesc': '官方 API · OpenAI 兼容', 'pq.qwenDesc': '通义千问 · 阿里云百炼',
-    'guide.step1': '点击下方链接，登录后创建并复制 API Key',
-    'guide.step2': '把 Key 粘贴到下方「API Key」输入框',
-    'guide.step3': '点击保存，即可在模型列表中选用',
-    'guide.prefillTip': '已为你预填 API 地址、协议与模型，可按需修改',
-    'guide.getKey': '获取 {name} 的 API Key', 'guide.copy': '复制链接', 'guide.copied': '链接已复制',
-    'err.modelSave': '保存失败', 'err.modelRequired': '请填写模型、API Key 和 API 地址',
-    'err.modelDelete': '删除失败', 'err.modelDeleteLast': '至少保留一个模型',
-    'confirm.modelDelete': '确定删除该模型配置？',
-    'model.aggregation': '渠道组（自动故障转移）', 'model.aggregationShort': '渠道组', 'model.aggregationDesc': '按顺序尝试，失败自动切换到下一个',
-    'model.emptyMixin': '尚未加入模型',
-    'model.addToMixin': '加入渠道组', 'model.inMixin': '已在渠道组', 'model.removeFromMixin': '移出渠道组', 'model.alreadyInMixin': '已在渠道组中', 'model.dragReorder': '拖拽调整顺序',
-    'err.mixinFailed': '操作失败',
-    'page.services.title': '后台服务', 'page.services.sub': 'IM 消息通道与后台进程，集中查看、启停与日志',
-    'page.channels.title': '消息通道', 'page.channels.sub': '后台 IM 进程：列表、启停与日志（同 hub.pyw）',
-    'page.status.title': '状态面板', 'page.status.sub': 'hub.pyw 管理的后台进程/服务，集中查看与启停',
-    'page.collab.title': '指挥家', 'page.collab.sub': '交代目标，自动拆活与跟进',
-    'collab.progressTitle': '分工进度',
-    'collab.progressEmpty': '还没有任务在执行。告诉指挥家你的目标后，这里会显示拆分后的处理进度。',
-    'collab.placeholder': '请对指挥家描述你想完成的目标',
-    'collab.guideTitle': '把要完成的事告诉指挥家',
-    'collab.guideWhen': '适合需要多步处理、要花一些时间才能完成的目标。日常聊天和快问快答，请用左侧「聊天」。',
-    'collab.guideStep1t': '描述目标',
-    'collab.guideStep1d': '在聊天框里写下你想做的事，发给指挥家',
-    'collab.guideStep2t': '自动拆解',
-    'collab.guideStep2d': '指挥家自动拆解、分配任务，实时监督和调度',
-    'collab.guideStep3t': '交付摘要',
-    'collab.guideStep3d': '指挥家根据执行状态，呈上任务简报',
-    'collab.guideStep4t': '随时调整',
-    'collab.guideStep4d': '随时补充要求或细节，指挥家都会处理',
-    'collab.chipProgress': '现在进展如何？',
-    'collab.chipPause': '先暂停当前任务',
-    'collab.chipSummary': '总结一下目前的结果',
-    'collab.showProgressTitle': '查看分工进度',
-    'collab.statRunning': '进行中',
-    'collab.statDone': '已完成',
-    'collab.plusMenu': '更多操作',
-    'collab.switchMode': '切换模式',
-    'collab.typing': '指挥家正在处理',
-    'collab.offline': '无法连接指挥家服务，请确认后端已启动。',
-    'collab.retry': '重试',
-    'collab.reconnect': '连接断开，正在重连… 已保留上次任务进度。',
-    'collab.reconnectIn': '{n} 秒后重试',
-    'collab.stRunning': '执行中', 'collab.stReported': '已回报', 'collab.stPaused': '已暂停',
-    'collab.stFailed': '遇到问题', 'collab.stTerminated': '已终止',
-    'collab.summaryRunning': '正在处理中…', 'collab.summaryWait': '等待回报',
-    'collab.taskFallback': '任务 {n}',
-    'collab.timeJust': '刚刚',
-    'collab.timeSec': '{n} 秒前',
-    'collab.timeMin': '{n} 分钟前',
-    'collab.timeHr': '{n} 小时前',
-    'collab.timeDay': '{n} 天前',
-    'page.token.title': '用量', 'page.token.sub': '每会话与累计用量及缓存率',
-    'status.connecting': '正在连接…', 'status.ready': '服务在线', 'status.running': '处理中',
-    'status.disconnected': '服务离线', 'status.stopped': '已停止', 'status.idle': '待命',
-    'conv.emptyList': '暂无会话，点「＋ 新对话」开始', 'conv.defaultTitle': '新对话',
-    'err.bridge': '服务未响应', 'err.newSession': '新建会话失败', 'err.poll': '轮询失败', 'err.stop': '停止失败',
-    'err.interruptTimeout': '等待上一轮停止超时，请稍后再试',
-    'sys.interruptPrev.hint': '已停止上一轮，正在处理新消息',
-    'chat.interrupting': '正在停止上一轮…',
-    'chat.sessionLoading': '正在加载会话…',
-    'sys.stopRequested': '已请求停止',
-    'slash.help': '可用命令：\n/new 新会话  /clear 清屏  /stop 停止  /settings 设置',
-    'slash.unknown': '未知命令',
-    'upload.hint': '上传文件：选择 / 拖拽 / 粘贴',
-    'upload.button': '上传文件',
-    'upload.tooLarge': '文件过大或数量超限', 'upload.empty': '跳过空文件',
-    'upload.failed': '上传失败',
-    'err.charLimit': '已达字数上限（{n}），发送时将自动截断', 'err.charLimitReached': '已达字数上限（{n}）', 'err.numMax': '不能超过 {n}',
-    'file.openFailed': '无法打开文件',
-    'file.kindGeneric': '文件',
-    'file.kindDoc': '文档',
-    'file.kindSheet': '表格',
-    'file.kindSlide': '幻灯片',
-    'file.kindCode': '代码',
-    'file.kindArchive': '压缩包',
-    'file.kindAudio': '音频',
-    'file.kindVideo': '视频',
-    'upload.removeTitle': '移除',
-    'upload.dropHint': '松开以上传文件',
-    'lightbox.closeTitle': '关闭',
-    'fold.thinking': '思考', 'fold.tool': '工具调用', 'fold.toolResult': '工具结果', 'fold.llm': 'LLM Running', 'fold.turn': '第 {n} 轮',
-    'plan.header': '计划 ({done}/{total})', 'plan.complete': '✓ 计划完成 ({n}/{n})',
-    'plan.running': '计划执行中', 'plan.completeTitle': '计划完成',
-    'plan.placeholder': '计划模式已激活', 'plan.waiting': '等待写入 {path} …', 'plan.overflow': '还有 {n} 项',
-    'plan.current': '当前', 'plan.collapse': '收起', 'plan.expand': '展开', 'plan.details': '详情',
-    'plan.capsuleRunning': '运行中', 'plan.capsuleComplete': '已完成',
-    'timing.elapsed': '已运行 {t}',
-    'model.auto': '自动选择',
-    'model.menuLabel': '选择模型',
-    'chip.plan': 'Plan',
-    'chip.auto': 'Auto',
-    'ch.wechat': '微信', 'ch.wecom': '企业微信', 'ch.lark': '飞书', 'ch.dingtalk': '钉钉',
-    'ch.qq': 'QQ', 'ch.telegram': 'Telegram', 'ch.discord': 'Discord',
-    'ch.loading': '加载中…', 'ch.empty': '未发现 IM 进程脚本',
-    'ch.logEmpty': '暂无日志',
-    'err.channelLoad': '加载失败', 'err.channelStart': '启动失败', 'err.channelStop': '停止失败',
-    'err.mykeyImport': '导入模型配置失败',
-    'err.mykeyExport': '导出模型配置失败',
-    'err.channelNotConfigured': '请先在 mykey.py 中配置该平台',
-    'sys.channelStarted': '已启动', 'sys.channelStopped': '已停止',
-    'modal.channelLogs': '进程日志',
-    'modal.mykeyConfig': 'mykey.py 配置',
-    'sys.configSaved': '配置已保存',
-    'sys.mykeyImported': '模型配置已导入',
-    'sys.mykeyExported': '模型配置已导出',
-    'st.starting': '启动中…', 'st.stopping': '停止中…', 'st.online': '在线', 'st.offline': '离线', 'st.error': '错误', 'st.running': '运行', 'st.abnormal': '异常',
-    'act.configure': '配置', 'act.logs': '日志', 'act.restart': '重启', 'act.stop': '停止', 'act.start': '启动', 'act.exit': '退出',
-    'act.copy': '复制', 'act.copied': '已复制', 'act.copyTex': 'TeX', 'act.send': '发送',
-    'proc.imbotWechat': 'imbot · 微信', 'proc.imbotDing': 'imbot · 钉钉', 'proc.scheduler': '定时任务调度', 'proc.conductor': '指挥家',
-    'cm.scheduling': '调度中', 'cm.running': '执行中', 'cm.idleSt': '空闲',
-    'cm.master': '已派 3 子任务', 'cm.w1': '子任务：抓取数据', 'cm.w2': '子任务：复核结果', 'cm.sub': '等待派单',
-    'tok.total': '累计', 'tok.cost': '缓存率', 'tok.today': '今日', 'tok.tabAll': '聊天', 'tok.tabConductor': '指挥家', 'tok.condTotal': '指挥家累计', 'tok.condCurrent': '指挥家本次', 'tok.condTip': '指挥家消耗不计入聊天累计', 'tok.condOffline': '指挥家服务离线', 'tok.disclaimer': '不同 API 网站的计费价格可能会有差异，请以实际网站为准。',
-    'tok.colSession': '会话', 'tok.colIn': '输入', 'tok.colOut': '输出', 'tok.colCacheW': '缓存写入', 'tok.colCache': '缓存读取', 'tok.colCost': '成本',
-    'tok.from': '从', 'tok.to': '到', 'tok.reset': '重置', 'tok.noData': '暂无记录', 'tok.deleted': '此会话已删除',
-    'tok.pricingUnknown': '⚠ 此模型计费规则尚未明确，按默认估算',
-    'tok.priceInput': '输入: $', 'tok.priceOutput': '输出: $',
-    'tok.priceCacheW': '缓存写入: $', 'tok.priceCacheR': '缓存读取: $',
-    'presetPrompt.goal': '进入 Goal 模式：读 L3 goal mode SOP，自主达成我接下来描述的目标。',
-    'presetPrompt.plan': '进入 Plan 模式：先读 memory/plan_sop.md，按其中「探索→规划→执行→验证」流程，等我接下来描述要做的任务。',
-    'presetPrompt.autonomous': '🤖 进入自主行动模式：阅读 memory/autonomous_operation_sop.md，按 SOP 选取或规划任务,独立执行并产出报告。',
-    'presetPrompt.hive': '启动 Goal Hive 模式：按 hive SOP 拉起多个 worker 协同完成我接下来的目标。',
-    'presetPrompt.review': '进入监察者模式：对刚才的产出严格挑刺、逐项复核并报告问题。',
-    'presetPrompt.findwork': '按照自主行动的规划部分，充分分析我的情况，给我生成一批 TODO，务必让我感兴趣。',
-    'presetPrompt.mine': '抓取本周的 git 提交并写一份周报。',
-    'ask.banner': 'GA 等你回答',
-    'ask.replyHint': '在下方输入框回复',
-    'ask.placeholderOpen': '在此输入你的回答… (Enter 发送)',
-  },
-  en: {
-    'app.title': 'GenericAgent Desktop',
-    'brand.sub': 'Desktop terminal',
-    'nav.chat': 'Chat', 'nav.services': 'Services', 'nav.channels': 'Channels', 'nav.status': 'Status',
-    'nav.collab': 'Conductor', 'nav.token': 'Usage',
-    'foot.settings': 'Settings', 'foot.ver': 'GenericAgent · Desktop',
-    'chat.startTitle': 'Start a conversation', 'chat.startSub': 'Type a message, or pick a preset',
-    'preset.butler.t': 'Conductor', 'preset.butler.d': 'Auto-decompose complex tasks; just check progress and briefings',
-    'preset.plan.t': 'Plan mode', 'preset.plan.d': 'Load Plan SOP — explore→plan→execute→verify',
-    'preset.goal.t': 'Goal mode', 'preset.goal.d': 'Set a goal, run autonomously',
-    'preset.autonomous.t': 'Autonomous mode', 'preset.autonomous.d': 'Plan/execute tasks per SOP and produce reports (same as reflect/autonomous.py)',
-    'preset.hive.t': 'Hive', 'preset.hive.d': 'Multi-worker collaboration',
-    'preset.review.t': 'Deep review', 'preset.review.d': 'Strict quality check',
-    'preset.findwork.t': 'Find me work', 'preset.findwork.d': 'Analyze my context and suggest a batch of interesting TODOs',
-    'preset.mine.t': 'My · Weekly', 'preset.mine.d': 'Custom: weekly report from commits',
-    'preset.add.t': 'Custom', 'preset.add.d': 'Save any prompt as a function',
-    'composer.placeholder': 'What can GA do for you?',
-    'search.placeholder': 'Search chats…', 'conv.new': 'New chat',
-    'ctx.pin': 'Pin', 'ctx.unpin': 'Unpin', 'ctx.rename': 'Rename', 'ctx.del': 'Delete',
-    'common.close': 'Close', 'common.more': 'More', 'common.optional': 'Optional', 'common.save': 'Save',
-    'modal.preset': 'Presets', 'modal.addModel': 'Add model', 'modal.editModel': 'Edit model', 'modal.settings': 'Settings',
-    'modal.customPreset': 'Custom preset',
-    'modal.editCustomPreset': 'Edit task',
-    'customPreset.titlePh': 'Title, e.g. "Weekly report"',
-    'customPreset.promptPh': 'Prompt body — sent as the message when clicked',
-    'customPreset.empty': 'Title and Prompt cannot be empty',
-    'customPreset.removeTitle': 'Delete',
-    'customPreset.editTitle': 'Edit',
-    'builtinPreset.restoreBtn': 'Restore defaults',
-    'set.appearance': 'Appearance', 'set.plainUi': 'Plain', 'set.fontSize': 'Chat font size', 'set.lang': 'Language', 'set.model': 'Model', 'set.addModel': 'Add model', 'set.features': 'Features', 'set.importMykey': 'Import model config (mykey.py)', 'set.exportMykey': 'Export current model config', 'set.serviceManager': 'Service manager',
-    'shortcut.askConfirm': 'Create a desktop shortcut for GenericAgent?',
-    'appearance.light': 'Light', 'appearance.dark': 'Dark',
-    'set.noModels': 'No models yet — add one below',
-    'lang.zh': '简体中文', 'lang.en': 'English',
-    'model.name': 'Note', 'model.namePh': 'Shown in the model list',
-    'model.apikey': 'API Key', 'model.apikeyPh': 'sk-...', 'model.apikeyKeep': 'Leave blank to keep the current key',
-    'model.apibase': 'API base URL', 'model.apibasePh': 'https://.../v1/messages',
-    'model.protocol': 'Protocol', 'model.protocolPick': 'Select…', 'model.protocolOai': 'OpenAI-compatible (chat/completions)', 'model.protocolClaude': 'Anthropic (Claude /v1/messages)',
-    'model.stream': 'Response', 'model.streamOn': 'Stream', 'model.streamOff': 'Non-stream',
-    'model.model': 'Model', 'model.modelPh': 'model parameter name',
-    'model.modelHint': 'Must match the model field in your provider docs exactly',
-    'model.retries': 'Retries (×)', 'model.connTimeout': 'Connect (s)', 'model.readTimeout': 'Read (s)',
-    'model.save': 'Save', 'common.cancel': 'Cancel', 'common.confirm': 'Confirm', 'common.edit': 'Edit', 'common.delete': 'Delete',
-    'pq.title': 'Quick connect a model', 'pq.sub': 'Add your API key to get started', 'pq.toggle': 'Expand / collapse',
-    'pq.deepseekDesc': 'Official API · OpenAI-compatible', 'pq.qwenDesc': 'Tongyi Qwen · Aliyun Bailian',
-    'guide.step1': 'Open the link, sign in, then create & copy your API key',
-    'guide.step2': 'Paste the key into the “API Key” field below',
-    'guide.step3': 'Click Save — then pick it from the model list',
-    'guide.prefillTip': 'API base, protocol and model are pre-filled — edit if needed',
-    'guide.getKey': 'Get your {name} API key', 'guide.copy': 'Copy link', 'guide.copied': 'Link copied',
-    'err.modelSave': 'Save failed', 'err.modelRequired': 'Model, API Key and base URL are required',
-    'err.modelDelete': 'Delete failed', 'err.modelDeleteLast': 'At least one model is required',
-    'confirm.modelDelete': 'Delete this model profile?',
-    'model.aggregation': 'Channel group (auto failover)', 'model.aggregationShort': 'Channel group', 'model.aggregationDesc': 'Tries in order, switches to the next on failure',
-    'model.emptyMixin': 'No models added yet',
-    'model.addToMixin': 'Add to channel', 'model.inMixin': 'In channel', 'model.removeFromMixin': 'Remove from channel', 'model.alreadyInMixin': 'Already in the channel', 'model.dragReorder': 'Drag to reorder',
-    'err.mixinFailed': 'Operation failed',
-    'page.services.title': 'Services', 'page.services.sub': 'IM channels and background processes — view, start/stop, logs',
-    'page.channels.title': 'Channels', 'page.channels.sub': 'Background IM processes: list, start/stop, logs (hub.pyw style)',
-    'page.status.title': 'Status', 'page.status.sub': 'Background processes/services managed by hub.pyw',
-    'page.collab.title': 'Conductor', 'page.collab.sub': 'Describe a goal — split, delegate, and follow up',
-    'collab.progressTitle': 'Progress',
-    'collab.progressEmpty': 'No tasks running yet. After you describe a goal to Conductor, split tasks will appear here.',
-    'collab.placeholder': 'Describe the goal you want to accomplish',
-    'collab.guideTitle': 'Tell Conductor what you want done',
-    'collab.guideWhen': 'Best for multi-step goals that take a while. For everyday chat and quick questions, use Chat in the sidebar.',
-    'collab.guideStep1t': 'Describe your goal',
-    'collab.guideStep1d': 'Write what you want done in the chat box and send it to Conductor',
-    'collab.guideStep2t': 'Auto breakdown',
-    'collab.guideStep2d': 'Conductor breaks down, assigns, monitors, and coordinates',
-    'collab.guideStep3t': 'Summary',
-    'collab.guideStep3d': 'Conductor delivers a briefing based on execution status',
-    'collab.guideStep4t': 'Adjust anytime',
-    'collab.guideStep4d': 'Add requirements or details anytime — Conductor handles them',
-    'collab.chipProgress': 'How is it going?',
-    'collab.chipPause': 'Pause current tasks',
-    'collab.chipSummary': 'Summarize progress so far',
-    'collab.showProgressTitle': 'View task progress',
-    'collab.statRunning': 'Running',
-    'collab.statDone': 'Done',
-    'collab.plusMenu': 'More actions',
-    'collab.switchMode': 'Switch mode',
-    'collab.typing': 'Conductor is working',
-    'collab.offline': 'Cannot reach the service. Make sure the backend is running.',
-    'collab.retry': 'Retry',
-    'collab.reconnect': 'Disconnected — reconnecting… Your last progress is kept.',
-    'collab.reconnectIn': 'Retry in {n}s',
-    'collab.stRunning': 'Running', 'collab.stReported': 'Reported', 'collab.stPaused': 'Paused',
-    'collab.stFailed': 'Issue', 'collab.stTerminated': 'Ended',
-    'collab.summaryRunning': 'Working…', 'collab.summaryWait': 'Awaiting report',
-    'collab.taskFallback': 'Task {n}',
-    'collab.timeJust': 'just now',
-    'collab.timeSec': '{n}s ago',
-    'collab.timeMin': '{n}m ago',
-    'collab.timeHr': '{n}h ago',
-    'collab.timeDay': '{n}d ago',
-    'page.token.title': 'Usage', 'page.token.sub': 'Per-session and total usage & cache rate',
-    'status.connecting': 'Connecting…', 'status.ready': 'Service online', 'status.running': 'Working…',
-    'status.disconnected': 'Service offline', 'status.stopped': 'Stopped', 'status.idle': 'Standby',
-    'conv.emptyList': 'No chats yet — click “＋ New chat”', 'conv.defaultTitle': 'New chat',
-    'err.bridge': 'Service not responding', 'err.newSession': 'Failed to create session', 'err.poll': 'Polling failed', 'err.stop': 'Stop failed',
-    'err.interruptTimeout': 'Timed out waiting for the previous reply to stop — try again',
-    'sys.interruptPrev.hint': 'Previous reply stopped — processing new message',
-    'chat.interrupting': 'Stopping previous reply…',
-    'chat.sessionLoading': 'Loading conversation…',
-    'sys.stopRequested': 'Stop requested',
-    'slash.help': 'Commands:\n/new new chat  /clear clear  /stop stop  /settings settings',
-    'slash.unknown': 'Unknown command',
-    'upload.hint': 'Upload file: pick / drag / paste',
-    'upload.button': 'Upload file',
-    'upload.tooLarge': 'File too large or limit reached', 'upload.empty': 'Skipped empty file',
-    'upload.failed': 'Upload failed',
-    'err.charLimit': 'Character limit reached ({n}), text will be truncated on send', 'err.charLimitReached': 'Character limit reached ({n})', 'err.numMax': 'Cannot exceed {n}',
-    'file.openFailed': 'Cannot open file',
-    'file.kindGeneric': 'File',
-    'file.kindDoc': 'Document',
-    'file.kindSheet': 'Spreadsheet',
-    'file.kindSlide': 'Slides',
-    'file.kindCode': 'Code',
-    'file.kindArchive': 'Archive',
-    'file.kindAudio': 'Audio',
-    'file.kindVideo': 'Video',
-    'upload.removeTitle': 'Remove',
-    'upload.dropHint': 'Drop to upload files',
-    'lightbox.closeTitle': 'Close',
-    'fold.thinking': 'Thinking', 'fold.tool': 'Tool call', 'fold.toolResult': 'Tool result', 'fold.llm': 'LLM Running', 'fold.turn': 'Turn {n}',
-    'plan.header': 'Plan ({done}/{total})', 'plan.complete': '✓ Plan complete ({n}/{n})',
-    'plan.running': 'Running plan', 'plan.completeTitle': 'Plan complete',
-    'plan.placeholder': 'Plan mode activated', 'plan.waiting': 'waiting for {path} …', 'plan.overflow': '+{n} more',
-    'plan.current': 'Now', 'plan.collapse': 'Collapse', 'plan.expand': 'Expand', 'plan.details': 'Details',
-    'plan.capsuleRunning': 'Running', 'plan.capsuleComplete': 'Done',
-    'timing.elapsed': 'Elapsed {t}',
-    'model.auto': 'Auto',
-    'model.menuLabel': 'Select model',
-    'chip.plan': 'Plan',
-    'chip.auto': 'Auto',
-    'ch.wechat': 'WeChat', 'ch.wecom': 'WeCom', 'ch.lark': 'Lark', 'ch.dingtalk': 'DingTalk',
-    'ch.qq': 'QQ', 'ch.telegram': 'Telegram', 'ch.discord': 'Discord',
-    'ch.loading': 'Loading…', 'ch.empty': 'No IM process scripts found',
-    'ch.logEmpty': 'No log output yet',
-    'err.channelLoad': 'Failed to load', 'err.channelStart': 'Start failed', 'err.channelStop': 'Stop failed',
-    'err.mykeyImport': 'Failed to import model config',
-    'err.mykeyExport': 'Failed to export model config',
-    'err.channelNotConfigured': 'Configure this platform in mykey.py first',
-    'sys.channelStarted': 'Started', 'sys.channelStopped': 'Stopped',
-    'modal.channelLogs': 'Process logs',
-    'modal.mykeyConfig': 'mykey.py',
-    'sys.configSaved': 'Configuration saved',
-    'sys.mykeyImported': 'Model config imported',
-    'sys.mykeyExported': 'Model config exported',
-    'st.starting': 'Starting…', 'st.stopping': 'Stopping…', 'st.online': 'Online', 'st.offline': 'Offline', 'st.error': 'Error', 'st.running': 'Running', 'st.abnormal': 'Error',
-    'act.configure': 'Configure', 'act.logs': 'Logs', 'act.restart': 'Restart', 'act.stop': 'Stop', 'act.start': 'Start', 'act.exit': 'Exit',
-    'act.copy': 'Copy', 'act.copied': 'Copied', 'act.copyTex': 'TeX', 'act.send': 'Send',
-    'proc.imbotWechat': 'imbot · WeChat', 'proc.imbotDing': 'imbot · DingTalk', 'proc.scheduler': 'Scheduler', 'proc.conductor': 'Conductor',
-    'cm.scheduling': 'Scheduling', 'cm.running': 'Running', 'cm.idleSt': 'Idle',
-    'cm.master': 'Dispatched 3 subtasks', 'cm.w1': 'Subtask: fetch data', 'cm.w2': 'Subtask: review results', 'cm.sub': 'Waiting for tasks',
-    'tok.total': 'Total', 'tok.cost': 'Cache rate', 'tok.today': 'Today', 'tok.tabAll': 'Chat', 'tok.tabConductor': 'Conductor', 'tok.condTotal': 'Conductor Total', 'tok.condCurrent': 'Conductor Current', 'tok.condTip': 'Conductor usage is not included in chat totals', 'tok.condOffline': 'Service offline', 'tok.disclaimer': 'Pricing may vary by API provider. Please refer to the actual website.',
-    'tok.colSession': 'Session', 'tok.colIn': 'Input', 'tok.colOut': 'Output', 'tok.colCacheW': 'Cache write', 'tok.colCache': 'Cache read', 'tok.colCost': 'Cost',
-    'tok.from': 'From', 'tok.to': 'To', 'tok.reset': 'Reset', 'tok.noData': 'No records', 'tok.deleted': 'Session deleted',
-    'tok.pricingUnknown': '⚠ Pricing not confirmed, using defaults',
-    'tok.priceInput': 'Input: $', 'tok.priceOutput': 'Output: $',
-    'tok.priceCacheW': 'Cache write: $', 'tok.priceCacheR': 'Cache read: $',
-    'presetPrompt.goal': 'Enter Goal mode: read the L3 goal-mode SOP and autonomously achieve the goal I describe next.',
-    'presetPrompt.plan': 'Enter Plan mode: first read memory/plan_sop.md, follow its explore→plan→execute→verify flow, and wait for the task I describe next.',
-    'presetPrompt.autonomous': '🤖 Enter autonomous mode: read memory/autonomous_operation_sop.md, follow the SOP to pick or plan a task, execute independently, and produce a report.',
-    'presetPrompt.hive': 'Start Goal Hive mode: per the hive SOP, spawn multiple workers to collaboratively achieve the goal I describe next.',
-    'presetPrompt.review': 'Enter reviewer mode: strictly scrutinize the previous output, review item by item and report issues.',
-    'presetPrompt.findwork': 'Following the autonomous planning section, analyze my situation thoroughly and generate a batch of TODOs that genuinely interest me.',
-    'presetPrompt.mine': 'Collect this week\'s git commits and write a weekly report.',
-    'ask.banner': 'GA is waiting for your answer',
-    'ask.replyHint': 'Reply in the input below',
-    'ask.placeholderOpen': 'Type your answer here… (Enter to send)',
-  },
-};
-const LANGS = ['zh', 'en'];
-const STORE = { lang: 'ga_lang', theme: 'ga_theme', appearance: 'ga_appearance', plain: 'ga_plain', fontSize: 'ga_font_size', llmNo: 'ga_llm_no' };
+const I18N = window.GA_I18N?.dict || { zh: {}, en: {} };
+const LANGS = window.GA_I18N?.languages || ['zh', 'en'];
+const STORE = { lang: 'ga_lang', theme: 'ga_theme', appearance: 'ga_appearance', plain: 'ga_plain', fontSize: 'ga_font_size' };
 const APPEARANCE_IDS = ['light', 'dark'];
 const CHAT_FONT_MIN = 10;
 const CHAT_FONT_MAX = 20;
@@ -694,7 +356,6 @@ function syncBootCache() {
   localStorage.setItem(STORE.fontSize, String(chatFontSize));
   if (plainUi) localStorage.setItem(STORE.plain, '1');
   else localStorage.removeItem(STORE.plain);
-  localStorage.setItem(STORE.llmNo, String(state.llmNo));
 }
 async function persistUiPrefs() {
   try {
@@ -718,7 +379,14 @@ async function bridgeFetch(path, opts = {}) {
   if (!res.ok) throw new Error(data.error || data.message || res.statusText);
   return data;
 }
-function t(key) { return (I18N[lang] && I18N[lang][key]) || (I18N.zh[key]) || key; }
+function t(key, vars) {
+  if (window.GA_I18N?.t) return window.GA_I18N.t(lang, key, vars);
+  let text = (I18N[lang] && I18N[lang][key]) || (I18N.zh && I18N.zh[key]) || key;
+  if (vars) {
+    for (const [name, value] of Object.entries(vars)) text = text.replaceAll(`{${name}}`, String(value));
+  }
+  return text;
+}
 window.gaT = t;
 document.addEventListener('collab:running-count', e => {
   const b = document.getElementById('collab-badge');
@@ -731,6 +399,22 @@ function optionalPh(key) {
   const sep = (lang === 'en') ? ', ' : '，';
   return `${t('common.optional')}${sep}${t(key)}`;
 }
+function setTooltip(el, text) {
+  if (!el) return;
+  const value = String(text || '').trim();
+  el.removeAttribute('title');
+  if (el.hasAttribute('data-no-tooltip')) {
+    delete el.dataset.tooltip;
+    if (value) el.setAttribute('aria-label', value);
+    return;
+  }
+  if (value) {
+    el.dataset.tooltip = value;
+    if (!el.hasAttribute('aria-label')) el.setAttribute('aria-label', value);
+  } else {
+    delete el.dataset.tooltip;
+  }
+}
 function applyI18n() {
   document.documentElement.lang = (lang === 'en') ? 'en' : 'zh-CN';
   document.title = t('app.title');
@@ -741,7 +425,8 @@ function applyI18n() {
     if (el.isContentEditable) el.setAttribute('data-ph', val);  // contenteditable 用 :empty::before 显示
     else el.setAttribute('placeholder', val);
   });
-  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.setAttribute('title', t(el.dataset.i18nTitle)); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { setTooltip(el, t(el.dataset.i18nTitle)); });
+  migrateNativeTooltips();
   renderLangList();
   // 语言切换后重算激活模型 chip 文案；若当前会话已有渠道组运行态模型，保留运行态而非退回首选项
   const _ap = (state.modelProfiles || []).find(p => (p.id ?? 0) === state.llmNo);
@@ -1003,6 +688,85 @@ bindClick('export-mykey-btn', async (e) => {
     showChanToast(t('err.mykeyExport'), err.message || String(err), 'err');
   }
 });
+// 记忆/session 导入与外接 GA 源码。
+async function importMemoryFromDir() {
+  let sourceDir = '';
+  if (window.__TAURI__?.core?.invoke) {
+    sourceDir = await window.ga.tauriInvoke('pick_directory', { title: t('sys.memoryPickTitle') });
+  } else {
+    sourceDir = window.prompt(t('sys.memoryImportPrompt')) || '';
+  }
+  if (!sourceDir) return;
+  const res = await window.ga.importMemory(sourceDir);
+  if (!res || res.ok === false) throw new Error((res && res.error) || 'import failed');
+  const detail = `memory: ${res.memoryCopied}, model_responses: ${res.responsesCopied}`
+    + (res.responsesSkipped ? ` (skip ${res.responsesSkipped})` : '')
+    + `, ${t('sys.memorySessions')}: ${res.sessionsAdded || 0}`
+    + (res.backupDir ? `\n${t('sys.memoryImportBackup')}: ${res.backupDir}` : '');
+  if (res.sessionsAdded) {
+    try { await loadSessions(); renderSessionList(); } catch (_) {}
+  }
+  showChanToast(t('sys.memoryImported'), detail, 'ok');
+}
+bindClick('import-memory-btn', async (e) => {
+  e.stopPropagation();
+  try {
+    await importMemoryFromDir();
+  } catch (err) {
+    showChanToast(t('err.memoryImport'), err.message || String(err), 'err');
+  }
+});
+const gaSourceCurrentEl = document.getElementById('ga-source-current');
+const gaSourceClearBtn = document.getElementById('ga-source-clear-btn');
+async function refreshGaSource() {
+  if (!window.__TAURI__?.core?.invoke) return;
+  let cur = '';
+  try { cur = await window.ga.getGaSource(); } catch (_) { cur = ''; }
+  if (gaSourceCurrentEl) {
+    if (cur) {
+      gaSourceCurrentEl.textContent = `${t('set.gaSourceCurrent')}: ${cur}`;
+      gaSourceCurrentEl.hidden = false;
+    } else {
+      gaSourceCurrentEl.hidden = true;
+    }
+  }
+  if (gaSourceClearBtn) gaSourceClearBtn.hidden = !cur;
+}
+bindClick('ga-source-btn', async (e) => {
+  e.stopPropagation();
+  if (!window.__TAURI__?.core?.invoke) {
+    showChanToast(t('err.gaSourceDesktopOnly'), '', 'err');
+    return;
+  }
+  try {
+    const dir = await window.ga.tauriInvoke('pick_directory', { title: t('sys.gaSourcePickTitle') });
+    if (!dir) return;
+    showChanToast(t('sys.gaSourceSwitching'), dir, 'ok');
+    const project = await window.ga.setGaSource(dir);
+    await refreshGaSource();
+    showChanToast(t('sys.gaSourceSet'), project || dir, 'ok');
+  } catch (err) {
+    showChanToast(t('err.gaSourceSet'), err.message || String(err), 'err');
+  }
+});
+bindClick('ga-source-clear-btn', async (e) => {
+  e.stopPropagation();
+  const confirmed = await showConfirmDialog({
+    title: t('confirm.gaSourceClearTitle'),
+    message: t('confirm.gaSourceClear'),
+    okText: t('set.gaSourceClear'),
+  });
+  if (!confirmed) return;
+  try {
+    showChanToast(t('sys.gaSourceSwitching'), '', 'ok');
+    await window.ga.clearGaSource();
+    await refreshGaSource();
+    showChanToast(t('sys.gaSourceCleared'), '', 'ok');
+  } catch (err) {
+    showChanToast(t('err.gaSourceSet'), err.message || String(err), 'err');
+  }
+});
+refreshGaSource();
 // 侧边栏「快速接入」：点击官方模型按钮 → 打开预填好的添加模型表单
 const pqEl = document.getElementById('provider-quickstart');
 if (pqEl) pqEl.addEventListener('click', (e) => {
@@ -1728,13 +1492,14 @@ function postRenderEnhance(containerEl) {
 const state = {
   sessions: new Map(), activeId: null, bridgeReady: false,
   llmNo: 0, modelProfiles: [], modelName: null,
+  conductorLlmNo: null, conductorModelName: null,
   runtime: new Map(),
   pendingFiles: [],
   fileSeq: 0,
 };
 function rt(sess) {
   let r = state.runtime.get(sess.id);
-  if (!r) { r = { polling:false, busy:false, lastId:0, seen:new Set(), draftEl:null, draftSegs:null, draftTurn:0, taskStartedAt:null, taskEndedAt:null, taskTimerId:null, planCompleteAt:null, planLostAt:null, planHoldItems:[], planLastPayload:null, planLastComplete:false, planHideTimer:null, planDismissedComplete:false, planCollapsed:false, planShowAll:false }; state.runtime.set(sess.id, r); }
+  if (!r) { r = { polling:false, busy:false, lastId:0, seen:new Set(), draftEl:null, draftSegs:null, draftTurn:0, taskStartedAt:null, taskEndedAt:null, taskTimerId:null, planCompleteAt:null, planLostAt:null, planHoldItems:[], planLastPayload:null, planVisiblePayload:null, planLastComplete:false, planHideTimer:null, planDismissedComplete:false, planCollapsed:false, planShowAll:false }; state.runtime.set(sess.id, r); }
   return r;
 }
 const activeSess = () => state.sessions.get(state.activeId) || null;
@@ -1756,7 +1521,8 @@ async function loadSessions() {
       state.sessions.set(s.id, {
         id: s.id, bridgeSessionId: s.id, title: s.title,
         messages: [], untitled: s.untitled ?? true,
-        pinned: s.pinned ?? false, lastActiveTs: s.updatedAt || s.createdAt
+        pinned: s.pinned ?? false, lastActiveTs: s.updatedAt || s.createdAt,
+        llmNo: s.model && s.model.llmNo != null ? s.model.llmNo : null
       });
     }
     // 刷新后固定恢复「上次正在看的会话」（前端持久化的 ga_active），而不是 bridge 的
@@ -1781,12 +1547,8 @@ const MIN_MSG_LOADING_MS = 450;
 const HYDRATE_LOADING_TIMEOUT_MS = 10000;
 const POLL_MSG_LIMIT = 200;
 const PLAN_LOST_GRACE_MS = 1500;  // tuiapp_v2._PLAN_LOST_GRACE_SEC
-const PLAN_COMPLETE_GRACE_MS = 3000;  // tuiapp_v2._PLAN_GRACE_SEC
+const PLAN_DISMISS_STORE = 'ga_plan_dismissed_v1';
 
-function isPlanPresetPrompt(text) {
-  const p = String(text || '').toLowerCase();
-  return p.includes('plan_sop') || p.includes('plan 模式') || p.includes('plan mode');
-}
 let _submitInFlight = false;
 const runToggle  = document.getElementById('run-toggle');
 const chatStatus = pageStatusBar(runToggle);
@@ -1860,6 +1622,43 @@ function planTpl(tpl, v) {
   return String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (v[k] != null ? String(v[k]) : `{${k}}`));
 }
 
+function planItemsSignature(items) {
+  return (items || [])
+    .map(it => `${String(it.status || '')}\u001e${String(it.content || '')}`)
+    .join('\u001f');
+}
+
+function planDismissId(sess, plan) {
+  if (!sess || !plan) return '';
+  const total = plan.total ?? (plan.items || []).length;
+  const done = plan.done ?? (plan.items || []).filter(it => it.status === 'done').length;
+  return `${sess.id || sess.bridgeSessionId || 'session'}\u001d${done}/${total}\u001d${planItemsSignature(plan.items || [])}`;
+}
+
+function readPlanDismissed() {
+  try {
+    const raw = localStorage.getItem(PLAN_DISMISS_STORE);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function isPlanDismissed(sess, plan) {
+  if (!plan?.complete) return false;
+  const id = planDismissId(sess, plan);
+  return !!(id && readPlanDismissed()[id]);
+}
+
+function markPlanDismissed(sess, plan) {
+  const id = planDismissId(sess, plan);
+  if (!id) return;
+  const dismissed = readPlanDismissed();
+  dismissed[id] = Date.now();
+  try { localStorage.setItem(PLAN_DISMISS_STORE, JSON.stringify(dismissed)); } catch (_) {}
+}
+
 let planPollTimer;
 function syncPlanPollTimer() {
   const on = !!(activeSess()?.bridgeSessionId && state.bridgeReady);
@@ -1880,19 +1679,10 @@ function clearPlanGrace(r) {
   r.planCompleteAt = r.planLostAt = null;
   r.planHoldItems = [];
   r.planLastPayload = null;
+  r.planVisiblePayload = null;
   r.planLastComplete = false;
   r.planDismissedComplete = false;
   if (r.planHideTimer) { clearTimeout(r.planHideTimer); r.planHideTimer = null; }
-}
-
-function schedulePlanCompleteDismiss(sess) {
-  const r = rt(sess);
-  if (r.planHideTimer) clearTimeout(r.planHideTimer);
-  r.planHideTimer = setTimeout(() => {
-    r.planHideTimer = null;
-    r.planDismissedComplete = true;
-    if (isActive(sess)) refreshPlanBar(null);
-  }, PLAN_COMPLETE_GRACE_MS);
 }
 
 /** tuiapp_v2._refresh_planbar：用 runtime 里缓存的 items / placeholder 重绘 */
@@ -1906,11 +1696,6 @@ function refreshPlanBarFromRuntime(sess) {
     r.planLostAt = null;
   }
   if (r.planDismissedComplete) {
-    refreshPlanBar(null);
-    return;
-  }
-  if (r.planCompleteAt != null && Date.now() - r.planCompleteAt >= PLAN_COMPLETE_GRACE_MS) {
-    r.planDismissedComplete = true;
     refreshPlanBar(null);
     return;
   }
@@ -1974,7 +1759,9 @@ function applyPlanPayload(sess, raw) {
     const wasComplete = r.planLastComplete;
     if (nowComplete && !wasComplete) {
       r.planCompleteAt = now;
-      schedulePlanCompleteDismiss(sess);
+      r.planDismissedComplete = isPlanDismissed(sess, { ...raw, items: items.length ? items : r.planHoldItems });
+    } else if (nowComplete) {
+      r.planDismissedComplete = isPlanDismissed(sess, { ...raw, items: items.length ? items : r.planHoldItems });
     } else if (!nowComplete) {
       r.planCompleteAt = null;
       r.planDismissedComplete = false;
@@ -2052,16 +1839,23 @@ function bindPlanCardUiOnce() {
     if (!sess) return;
     const r = rt(sess);
     const payload = r.planLastPayload;
-    if (!payload?.active) return;
+    const visiblePayload = r.planVisiblePayload || payload;
+    if (e.target.closest('[data-plan-dismiss]')) {
+      markPlanDismissed(sess, visiblePayload);
+      r.planDismissedComplete = true;
+      refreshPlanBar(null);
+      return;
+    }
+    if (!payload?.active && !visiblePayload?.active) return;
     if (e.target.closest('[data-plan-expand]')) {
       r.planCollapsed = false;
-      refreshPlanBar(payload);
+      refreshPlanBar(visiblePayload);
     } else if (e.target.closest('[data-plan-collapse]')) {
       r.planCollapsed = true;
-      refreshPlanBar(payload);
+      refreshPlanBar(visiblePayload);
     } else if (e.target.closest('[data-plan-details]')) {
       r.planShowAll = !r.planShowAll;
-      refreshPlanBar(payload);
+      refreshPlanBar(visiblePayload);
     }
   });
 }
@@ -2073,6 +1867,7 @@ function refreshPlanBar(plan) {
     planBarEl.hidden = true;
     planBarEl.replaceChildren();
     planBarEl.className = 'plan-card';
+    planBarEl._planRenderSig = '';
     return;
   }
   const sess = activeSess();
@@ -2087,6 +1882,21 @@ function refreshPlanBar(plan) {
     plan.complete ? 'plan-card--complete' : '',
     plan.placeholder ? 'plan-card--placeholder' : '',
   ].filter(Boolean).join(' ');
+  const planItemsSig = planItemsSignature(plan.items || []);
+  if (sess && plan.complete && isPlanDismissed(sess, plan)) {
+    r.planDismissedComplete = true;
+    planBarEl.hidden = true;
+    planBarEl.replaceChildren();
+    planBarEl.className = 'plan-card';
+    planBarEl._planRenderSig = '';
+    return;
+  }
+  r.planVisiblePayload = plan;
+  const renderSig = JSON.stringify([
+    lang, mod, stepText, done, total, !!r.planShowAll, plan.pathHint || '', planItemsSig
+  ]);
+  if (!planBarEl.hidden && planBarEl.className === mod && planBarEl._planRenderSig === renderSig) return;
+  planBarEl._planRenderSig = renderSig;
   planBarEl.hidden = false;
   planBarEl.className = mod;
 
@@ -2099,11 +1909,17 @@ function refreshPlanBar(plan) {
     btn.dataset.planExpand = '1';
     const dot = document.createElement('span');
     dot.className = 'plan-status-dot';
+    const ico = document.createElement('span');
+    ico.className = 'plan-capsule-ic';
+    ico.innerHTML = GA_ICON('listChecks');
     const txt = document.createElement('span');
     txt.className = 'plan-capsule-text';
     if (cap.step) txt.innerHTML = `${escapeHtml(cap.tag)} · <em>${escapeHtml(cap.step)}</em>`;
     else txt.textContent = cap.tag;
-    btn.append(dot, txt);
+    const chev = document.createElement('span');
+    chev.className = 'plan-capsule-chevron';
+    chev.innerHTML = GA_ICON('caretRight');
+    btn.append(dot, ico, txt, chev);
     planBarEl.append(btn);
     return;
   }
@@ -2127,11 +1943,19 @@ function refreshPlanBar(plan) {
   }
   const actions = document.createElement('div');
   actions.className = 'plan-head-actions';
+  if (plan.complete) {
+    const dismissBtn = document.createElement('button');
+    dismissBtn.type = 'button';
+    dismissBtn.className = 'plan-btn';
+    dismissBtn.dataset.planDismiss = '1';
+    dismissBtn.innerHTML = `${GA_ICON('x', 'plan-btn-ic')}<span>${escapeHtml(t('plan.dismiss'))}</span>`;
+    actions.append(dismissBtn);
+  }
   const collapseBtn = document.createElement('button');
   collapseBtn.type = 'button';
   collapseBtn.className = 'plan-btn';
   collapseBtn.dataset.planCollapse = '1';
-  collapseBtn.textContent = t('plan.collapse');
+  collapseBtn.innerHTML = `${GA_ICON('caretDown', 'plan-btn-ic')}<span>${escapeHtml(t('plan.fold'))}</span>`;
   actions.append(collapseBtn);
   head.append(actions);
   frag.append(head);
@@ -2191,7 +2015,7 @@ function refreshPlanBar(plan) {
       det.type = 'button';
       det.className = 'plan-btn';
       det.dataset.planDetails = '1';
-      det.textContent = r.planShowAll ? t('plan.collapse') : t('plan.details');
+      det.innerHTML = `${GA_ICON(r.planShowAll ? 'caretDown' : 'caretRight', 'plan-btn-ic')}<span>${escapeHtml(r.planShowAll ? t('plan.collapse') : t('plan.details'))}</span>`;
       foot.append(det);
     }
     if (foot.childNodes.length) frag.append(foot);
@@ -2780,7 +2604,7 @@ function renderSessionList() {
       `<span class="ci-dot"></span><div class="ci-main">` +
       `<div class="ci-title">${pinSvg}${escapeHtml(displayTitle(sess))}</div>` +
       `<div class="ci-meta">${busy ? t('status.running') : t('status.idle')}</div></div>` +
-      `<button class="ci-more" title="${escapeHtml(t('common.more'))}">${GA_ICON('dotsThreeVertical')}</button>`;
+      `<button class="ci-more" data-no-tooltip aria-label="${escapeHtml(t('common.more'))}">${GA_ICON('dotsThreeVertical')}</button>`;
     convListEl.appendChild(item);
   }
 }
@@ -2860,6 +2684,15 @@ function setActiveSession(id) {
   if (id) localStorage.setItem('ga_active', id);  // 持久化当前会话，刷新后固定恢复它
   const sess = state.sessions.get(id);
   if (!sess) return;
+  // 切会话:回显该会话绑定的模型(后端权威)。未绑定(null)则保持当前全局默认显示。
+  if (sess.llmNo != null && sess.llmNo !== state.llmNo) {
+    state.llmNo = sess.llmNo;
+    state.liveModel = null;
+    const p = (state.modelProfiles || []).find(x => (x.id ?? 0) === sess.llmNo);
+    if (p) state.modelName = modelDisplayName(p);
+    updateModelChip();
+    renderSettingsModels();
+  }
   if (msgsEl) msgsEl.innerHTML = '';
   const r = rt(sess);
   r.draftEl = null;
@@ -2895,11 +2728,48 @@ async function closeSession(id) {
 
 const convMenu = document.getElementById('conv-menu');
 let menuTargetId = null;
+function hideConvMenu() {
+  if (!convMenu) return;
+  convMenu.hidden = true;
+  menuTargetId = null;
+}
+function positionConvMenu(anchor) {
+  if (!convMenu || !anchor) return;
+  convMenu.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  const pad = 8;
+  const gap = 4;
+  const w = convMenu.offsetWidth;
+  const h = convMenu.offsetHeight;
+  const left = Math.max(pad, Math.min(window.innerWidth - w - pad, rect.right - w));
+  const below = rect.bottom + gap;
+  const above = rect.top - h - gap;
+  const top = below + h <= window.innerHeight - pad ? below : Math.max(pad, above);
+  convMenu.style.left = `${left}px`;
+  convMenu.style.top = `${top}px`;
+}
+function isSessionRowInteractiveTarget(target) {
+  const el = target instanceof Element ? target : null;
+  return !!el?.closest?.(
+    '.ci-more, .ci-rename-input, button, input, textarea, select, a, [contenteditable="true"], [data-no-session-select]'
+  );
+}
 convListEl.addEventListener('click', (e) => {
   const more = e.target.closest('.ci-more');
   if (more) {
     e.stopPropagation();
-    menuTargetId = more.closest('.conv-item').dataset.id;
+    hideTooltip();
+    const item = more.closest('.conv-item');
+    const nextTargetId = item?.dataset.id || null;
+    if (!nextTargetId) {
+      hideConvMenu();
+      return;
+    }
+    if (!convMenu.hidden && menuTargetId === nextTargetId) {
+      hideConvMenu();
+      return;
+    }
+    menuTargetId = nextTargetId;
     // 根据当前会话置顶状态切菜单文案:置顶 / 取消置顶
     const tgt = state.sessions.get(menuTargetId);
     const pinSpan = convMenu.querySelector('[data-act="pin"] [data-i18n]');
@@ -2908,12 +2778,10 @@ convListEl.addEventListener('click', (e) => {
       pinSpan.setAttribute('data-i18n', k);
       pinSpan.textContent = t(k);
     }
-    convMenu.hidden = false;
-    const rect = more.getBoundingClientRect();
-    convMenu.style.top = (rect.bottom + 4) + 'px';
-    convMenu.style.left = (rect.right - convMenu.offsetWidth) + 'px';
+    positionConvMenu(more);
     return;
   }
+  if (isSessionRowInteractiveTarget(e.target)) return;
   const it = e.target.closest('.conv-item');
   if (it && it.dataset.id) {
     setActiveSession(it.dataset.id);
@@ -2944,14 +2812,16 @@ convMenu.addEventListener('click', (e) => {
     patchSession(sess, { pinned: sess.pinned });
     renderSessionList();
   } else if (sess && act === 'rename') {
-    convMenu.hidden = true;
+    hideConvMenu();
     const item = convListEl.querySelector(`.conv-item[data-id="${sess.id}"]`);
     if (!item) return;
     const titleEl = item.querySelector('.ci-title');
     if (!titleEl) return;
     const oldTitle = sess.title || '';
+    item.classList.add('renaming');
     const inp = document.createElement('input');
     inp.className = 'ci-rename-input';
+    inp.dataset.noSessionSelect = '1';
     inp.maxLength = 50;
     inp.value = oldTitle;
     titleEl.replaceWith(inp);
@@ -2984,9 +2854,9 @@ convMenu.addEventListener('click', (e) => {
   } else if (sess && act === 'del') {
     closeSession(sess.id);
   }
-  convMenu.hidden = true;
+  hideConvMenu();
 });
-document.addEventListener('click', () => { convMenu.hidden = true; });
+document.addEventListener('click', hideConvMenu);
 newConvBtn.addEventListener('click', (e) => { e.preventDefault(); newSession(); });
 
 /* ═══════════════ 轮询 + 流式 ═══════════════ */
@@ -3107,13 +2977,32 @@ function applyPollResult(sess, result) {
   return busy;
 }
 
-/** 渠道组随故障转移变化时，用运行态当前子模型刷新 chip（非渠道组/无 agent 时不动，保持静态显示） */
+/** 用后端运行态模型刷新 chip + 选择器。后端是权威:
+ *  - 同步该会话绑定的 llmNo(live.llmNo)到 sess/state，切回会话能正确回显；
+ *  - mixin: 显示「渠道组（当前子模型）」，跟随故障转移；
+ *  - native: 显示后端真正在用的模型名(live.current)，而非前端静态选择。 */
 function applyLiveModel(live, sess = activeSess()) {
+  if (!live) return;
+  // 回写该会话绑定的模型下标(权威来自后端)。
+  if (live.llmNo != null && sess) sess.llmNo = live.llmNo;
+  if (isActive(sess) && live.llmNo != null && state.llmNo !== live.llmNo) {
+    state.llmNo = live.llmNo;
+    renderSettingsModels();
+  }
   const selected = (state.modelProfiles || []).find(p => (p.id ?? 0) === state.llmNo);
-  if (!selected || selected.kind !== 'mixin' || !live || !live.isMixin || !live.current) return;
-  state.liveModel = { ...live, sessionId: sess?.id || state.activeId };
-  const label = `${t('model.aggregationShort')}${lang === 'en' ? ' (' : '（'}${profileLabel(live.current) || live.current}${lang === 'en' ? ')' : '）'}`;
-  if (state.modelName !== label) { state.modelName = label; updateModelChip(); }
+  if (!isActive(sess)) return;
+  if (selected && selected.kind === 'mixin') {
+    if (!live.isMixin || !live.current) return;
+    state.liveModel = { ...live, sessionId: sess?.id || state.activeId };
+    const label = `${t('model.aggregationShort')}${lang === 'en' ? ' (' : '（'}${profileLabel(live.current) || live.current}${lang === 'en' ? ')' : '）'}`;
+    if (state.modelName !== label) { state.modelName = label; updateModelChip(); }
+    return;
+  }
+  // native: chip 跟随后端实际模型名(没拿到运行态时回退到选中 profile 的静态名)
+  state.liveModel = null;
+  const label = (live.current ? (profileLabel(live.current) || live.current) : null)
+    || (selected ? modelDisplayName(selected) : null);
+  if (label && state.modelName !== label) { state.modelName = label; updateModelChip(); }
 }
 
 /** hydrate 批量灌历史，避免逐条 appendMessage 触发全量重绘 */
@@ -3167,9 +3056,19 @@ async function pollSession(sess) {
       try {
         const result = await fetchSessionPoll(sess);
         consecutiveErrors = 0;
-        const busy = applyPollResult(sess, result);
+        let busy = applyPollResult(sess, result);
         if (busy) await new Promise(z => setTimeout(z, 500));
         else {
+          const hasFinalAssistant = (result.messages || []).some(m => m && m.role === 'assistant');
+          if (r.draftEl && !hasFinalAssistant) {
+            await new Promise(z => setTimeout(z, 150));
+            const finalResult = await fetchSessionPoll(sess);
+            busy = applyPollResult(sess, finalResult);
+            if (busy) {
+              await new Promise(z => setTimeout(z, 500));
+              continue;
+            }
+          }
           if (r.draftEl) { r.draftEl.remove(); r.draftEl = null; r.draftSegs = null; r.draftTurn = 0; }
           resetTypewriterState(r);
           break;
@@ -3301,16 +3200,6 @@ async function sendPrompt(text) {
   const previewFiles = usedFiles.filter(f => !f.isImage).map(f => ({ id: 'f-' + f.sid, name: f.name, path: f.path }));
   if (previewFiles.length) userMsg.files = previewFiles;
   sess.messages.push(userMsg); appendMessage(sess, userMsg);
-  if (isPlanPresetPrompt(text)) {
-    const pr = rt(sess);
-    pr.planCollapsed = false;
-    pr.planShowAll = false;
-    const sidHint = (sess.bridgeSessionId || sess.id || 'sess').replace(/\//g, '_');
-    applyPlanPayload(sess, {
-      active: true, placeholder: true, done: 0, total: 0, complete: false,
-      step: '', pathHint: `plan_${sidHint}/plan.md`, items: [],
-    });
-  }
   sess.lastActiveTs = Date.now();
   // 仿 TUI:不再从首条消息自动改名 —— 标题在 newSession 时已设为 agent-N,
   // 之后只接受用户手动 rename。
@@ -3331,12 +3220,16 @@ async function sendPrompt(text) {
         localStorage.setItem('ga_active', sess.id);  // 会话 id 因 bridge 重建而变更，同步持久化
       }
     }
-    const res = await window.ga.rpc('session/prompt', { sessionId: sid, prompt: composedPrompt, display: text, llmNo: state.llmNo,
+    const res = await window.ga.rpc('session/prompt', { sessionId: sid, prompt: composedPrompt, display: text,
       files: previewFiles, imageMetas: previewImgs.map(im => ({ name: im.name, path: im.path })) });
     if (res?.error) throw new Error(res.error.message || res.error);
     removeUsedPendingFiles(usedFiles);
     const uid = Number(res.userMessageId || res.result?.userMessageId || 0);
-    if (uid) { r.seen.add(uid); r.lastId = Math.max(r.lastId, uid); }
+    if (uid) {
+      userMsg.id = uid;
+      r.seen.add(uid);
+      r.lastId = Math.max(r.lastId, uid);
+    }
     planPoll(sess);
     pollSession(sess);
     return true;
@@ -3364,9 +3257,10 @@ async function submitInput() {
   if (_submitInFlight) return;
   let text = composerText('chat');
   if (!text.trim()) return;
-  if (text.trim().startsWith('/')) {
+  const slashName = slashCommandName(text);
+  if (slashName) {
     inputEl.innerHTML = '';
-    handleSlash(text.trim());
+    handleSlash(slashName);
     return;
   }
   if (text.length > 20000) {
@@ -3415,8 +3309,103 @@ function showToast(text) {
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
 }
-async function handleSlash(cmd) {
-  const name = cmd.slice(1).split(/\s+/)[0];
+
+let tooltipEl = null;
+let tooltipTarget = null;
+let tooltipTimer = null;
+function ensureTooltipEl() {
+  if (!tooltipEl) {
+    tooltipEl = document.createElement('div');
+    tooltipEl.className = 'ga-tooltip';
+    tooltipEl.hidden = true;
+    document.body.appendChild(tooltipEl);
+  }
+  return tooltipEl;
+}
+function migrateNativeTooltips(root = document) {
+  const nodes = [];
+  if (root?.nodeType === Node.ELEMENT_NODE && root.hasAttribute?.('title')) nodes.push(root);
+  root?.querySelectorAll?.('[title]').forEach(el => nodes.push(el));
+  nodes.forEach(el => {
+    const value = el.getAttribute('title') || '';
+    setTooltip(el, value);
+  });
+}
+function tooltipNodeFromEventTarget(target) {
+  const el = target?.closest?.('[data-tooltip],[title]');
+  if (el?.hasAttribute('title')) {
+    const value = el.getAttribute('title') || '';
+    setTooltip(el, value);
+  }
+  return el?.dataset?.tooltip ? el : null;
+}
+function positionTooltip() {
+  if (!tooltipEl || !tooltipTarget || tooltipEl.hidden) return;
+  const r = tooltipTarget.getBoundingClientRect();
+  const pad = 8;
+  const tw = tooltipEl.offsetWidth;
+  const th = tooltipEl.offsetHeight;
+  const left = Math.max(pad, Math.min(window.innerWidth - tw - pad, r.left + r.width / 2 - tw / 2));
+  const topAbove = r.top - th - 8;
+  const top = topAbove >= pad ? topAbove : Math.min(window.innerHeight - th - pad, r.bottom + 8);
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${Math.max(pad, top)}px`;
+}
+function showTooltip(target) {
+  const text = target?.dataset?.tooltip || '';
+  if (!text) return;
+  tooltipTarget = target;
+  clearTimeout(tooltipTimer);
+  tooltipTimer = setTimeout(() => {
+    const el = ensureTooltipEl();
+    el.textContent = text;
+    el.hidden = false;
+    el.classList.add('show');
+    positionTooltip();
+  }, 180);
+}
+function hideTooltip() {
+  clearTimeout(tooltipTimer);
+  tooltipTimer = null;
+  tooltipTarget = null;
+  if (tooltipEl) {
+    tooltipEl.classList.remove('show');
+    tooltipEl.hidden = true;
+  }
+}
+function initCustomTooltips() {
+  migrateNativeTooltips();
+  document.addEventListener('pointerover', (e) => {
+    const target = tooltipNodeFromEventTarget(e.target);
+    if (target) showTooltip(target);
+  }, true);
+  document.addEventListener('pointerout', (e) => {
+    if (!tooltipTarget) return;
+    const from = e.target?.closest?.('[data-tooltip]');
+    if (from === tooltipTarget && !tooltipTarget.contains(e.relatedTarget)) hideTooltip();
+  }, true);
+  document.addEventListener('focusin', (e) => {
+    const target = tooltipNodeFromEventTarget(e.target);
+    if (target) showTooltip(target);
+  }, true);
+  document.addEventListener('focusout', hideTooltip, true);
+  window.addEventListener('scroll', hideTooltip, true);
+  window.addEventListener('resize', hideTooltip);
+  new MutationObserver((records) => {
+    for (const rec of records) {
+      if (rec.type === 'attributes' && rec.attributeName === 'title') migrateNativeTooltips(rec.target);
+      rec.addedNodes?.forEach(node => migrateNativeTooltips(node));
+    }
+  }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] });
+}
+const SLASH_COMMANDS = new Set(['help', 'new', 'clear', 'stop', 'settings']);
+function slashCommandName(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed.startsWith('/')) return '';
+  const token = trimmed.slice(1).split(/\s+/)[0];
+  return SLASH_COMMANDS.has(token) ? token : '';
+}
+async function handleSlash(name) {
   switch (name) {
     case 'help': showSystem(t('slash.help')); break;
     case 'new': await newSession(); break;
@@ -3468,7 +3457,7 @@ document.querySelectorAll('.feature-grid').forEach(grid => {
 function updateModelChip() {
   const name = state.modelName || '';
   if (modelNameEl) modelNameEl.textContent = name;
-  if (collabModelNameEl) collabModelNameEl.textContent = name;
+  if (collabModelNameEl) collabModelNameEl.textContent = state.conductorModelName || name;
 }
 function modelDisplayName(p, fallbackName) {
   if (p && p.kind === 'mixin') {
@@ -3487,7 +3476,38 @@ async function selectModel(id, name) {
   state.modelName = modelDisplayName(p, name);
   updateModelChip();
   renderSettingsModels();
-  await persistUiPrefs();
+  // 申请切换:有活跃会话 -> 绑定到该会话(后端权威);同时更新全局默认(供新建会话初始值)。
+  // 后端是真相源,前端只发请求;申请失败则回滚显示并提示。
+  const sess = activeSess();
+  if (sess && sess.bridgeSessionId) {
+    const prevNo = sess.llmNo;
+    sess.llmNo = id;
+    try {
+      await bridgeFetch(`/session/${encodeURIComponent(sess.bridgeSessionId)}/model`, { method: 'POST', body: { llmNo: id } });
+    } catch (ex) {
+      // 后端没切成功:回滚到该会话原绑定,避免前端显示与后端不一致。
+      sess.llmNo = prevNo;
+      if (prevNo != null) {
+        state.llmNo = prevNo;
+        const pp = (state.modelProfiles || []).find(x => (x.id ?? 0) === prevNo);
+        if (pp) state.modelName = modelDisplayName(pp);
+        updateModelChip();
+        renderSettingsModels();
+      }
+      showChanToast(t('err.modelSwitch'), ex.message || '', 'err');
+      return;
+    }
+  } else if (sess) {
+    sess.llmNo = id;
+  }
+  await persistUiPrefs();  // 写 ui.llmNo 全局默认
+}
+async function selectConductorModel(id, name) {
+  state.conductorLlmNo = id;
+  const p = (state.modelProfiles || []).find(x => (x.id ?? 0) === id);
+  state.conductorModelName = modelDisplayName(p, name);
+  updateModelChip();
+  try { await window.ga.saveConductorModel(id); } catch (_) {}
 }
 async function addToMixin(id) {
   try {
@@ -3831,6 +3851,12 @@ async function loadModelProfiles() {
       state.llmNo = active.id ?? 0;
       state.modelName = modelDisplayName(active);
     }
+    // conductor chip 的显示名只在 loadBridgeConfig/selectConductorModel 更新；导入密钥等
+    // 仅刷新 profiles 的路径若不在此一并重算，会让 conductor chip 停在旧文案(如空渠道组)。
+    if (state.conductorLlmNo != null) {
+      const cp = state.modelProfiles.find(p => (p.id ?? 0) === state.conductorLlmNo);
+      if (cp) state.conductorModelName = modelDisplayName(cp);
+    }
     updateModelChip();
     renderSettingsModels();
   } catch (_) {}
@@ -3841,10 +3867,12 @@ const collabModelMenu = document.getElementById('cdb-model-menu');
 function renderModelMenu(menuEl) {
   if (!menuEl) return;
   const list = state.modelProfiles || [];
+  const selectedNo = menuEl === collabModelMenu ? state.conductorLlmNo : state.llmNo;
+  const selectedName = menuEl === collabModelMenu ? state.conductorModelName : state.modelName;
   const rows = list.map((p, i) => {
     const no = (p.id ?? i);
-    const isActive = (state.llmNo === no) ? ' active' : '';
-    const label = (isActive && p.kind === 'mixin' && state.modelName) ? state.modelName : modelDisplayName(p);
+    const isActive = (selectedNo === no) ? ' active' : '';
+    const label = (isActive && p.kind === 'mixin' && selectedName) ? selectedName : modelDisplayName(p);
     return `<div class="ga-menu-item${isActive}" data-llmno="${no}">${escapeHtml(label || '')}</div>`;
   });
   menuEl.innerHTML = rows.join('');
@@ -3852,7 +3880,7 @@ function renderModelMenu(menuEl) {
 }
 function openModelMenu(chipEl, menuEl) {
   if (!chipEl || !menuEl) return;
-  if (typeof convMenu !== 'undefined' && convMenu) convMenu.hidden = true;
+  if (typeof hideConvMenu === 'function') hideConvMenu();
   window.collabComposer?.closeMenu?.();
   closeAllModelMenus();
   renderModelMenu(menuEl);
@@ -3872,7 +3900,7 @@ function closeAllModelMenus() {
   if (modelChip) modelChip.classList.remove('open');
   if (collabModelChip) collabModelChip.classList.remove('open');
 }
-function bindModelMenuItemClick(menuEl) {
+function bindModelMenuItemClick(menuEl, onSelect) {
   if (!menuEl) return;
   menuEl.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -3881,12 +3909,12 @@ function bindModelMenuItemClick(menuEl) {
     const no = parseInt(item.dataset.llmno, 10);
     if (Number.isNaN(no)) return;
     const p = (state.modelProfiles || []).find(x => (x.id ?? 0) === no);
-    selectModel(no, (p && p.name) || '');
+    onSelect(no, (p && p.name) || '');
     closeAllModelMenus();
   });
 }
-bindModelMenuItemClick(modelMenu);
-bindModelMenuItemClick(collabModelMenu);
+bindModelMenuItemClick(modelMenu, selectModel);
+bindModelMenuItemClick(collabModelMenu, selectConductorModel);
 if (modelChip) modelChip.addEventListener('click', (e) => {
   e.preventDefault(); e.stopPropagation();
   if (modelMenu && !modelMenu.hidden) { closeAllModelMenus(); return; }
@@ -3942,10 +3970,18 @@ async function loadBridgeConfig() {
       if (p) {
         state.llmNo = cfg.llmNo;
         state.modelName = modelDisplayName(p);
-        updateModelChip();
         renderSettingsModels();
       }
     }
+    const cno = cfg.conductor?.llmNo ?? cfg.llmNo;
+    if (cno != null && state.modelProfiles.length) {
+      const cp = state.modelProfiles.find(x => (x.id ?? 0) === cno);
+      if (cp) {
+        state.conductorLlmNo = cno;
+        state.conductorModelName = modelDisplayName(cp);
+      }
+    }
+    updateModelChip();
     syncBootCache();
   } catch (_) {}
 }
@@ -4387,7 +4423,10 @@ window.ga.onBridgeNotification((msg) => {
   if (msg && msg.type === 'session-state') {
     for (const sess of state.sessions.values()) {
       if (sess.bridgeSessionId === msg.sessionId) {
-        if (msg.status === 'running' || msg.state === 'running') pollSession(sess);
+        if (['running', 'idle', 'error', 'cancelled'].includes(msg.status) ||
+            ['running', 'idle', 'error', 'cancelled'].includes(msg.state)) {
+          pollSession(sess);
+        }
         if (msg.state === 'idle' || msg.status === 'idle') tokPollBridge();
         renderSessionList();
         break;
@@ -4919,49 +4958,13 @@ if (msgArea) {
 function uploadRawUrl(path, download) {
   return `${BRIDGE_ORIGIN}/upload/raw?path=${encodeURIComponent(path || '')}${download ? '&download=1' : ''}`;
 }
-function bridgeIsLocal() {
-  return location.hostname === '127.0.0.1' || location.hostname === 'localhost';
-}
 async function openUploadFile(path, name) {
-  // 远程访问：浏览器无法调起 bridge 那台/本机的系统程序，降级为下载到本机
-  if (!bridgeIsLocal()) {
-    const a = document.createElement('a');
-    a.href = uploadRawUrl(path, true);
-    a.download = name || '';
-    document.body.appendChild(a); a.click(); a.remove();
-    return;
-  }
-  // 本地：bridge 与你同机，调系统默认程序打开 / 在文件夹显示
-  const mode = isPreviewableByName(name || path) ? 'open' : 'reveal';
-  try {
-    const res = await fetch(`${BRIDGE_ORIGIN}/path/open`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'upload', path, mode }),
-    });
-    const j = await res.json();
-    if (!j.ok) throw new Error(j.error || 'open failed');
-  } catch (e) {
-    showChanToast(t('file.openFailed'), e.message || String(e), 'err');
-  }
-}
-
-const PREVIEWABLE_EXTS = new Set([
-  'pdf',
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'tiff',
-  'txt', 'md', 'log', 'json', 'yaml', 'yml', 'xml', 'csv', 'tsv', 'ini', 'toml', 'env', 'rtf',
-  'py', 'js', 'ts', 'tsx', 'jsx', 'java', 'c', 'cpp', 'h', 'hpp', 'rs', 'go', 'rb', 'php', 'sh', 'bash', 'zsh', 'fish', 'lua', 'pl', 'r', 'scala', 'kt', 'swift',
-  'html', 'htm', 'css', 'scss', 'sass', 'less', 'vue', 'svelte', 'sql',
-  'doc', 'docx', 'pages', 'odt',
-  'xls', 'xlsx', 'numbers', 'ods',
-  'ppt', 'pptx', 'key', 'odp',
-  'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a',
-  'mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv',
-]);
-function isPreviewableByName(name) {
-  const m = String(name || '').match(/\.([^./\\]+)$/);
-  if (!m) return false;
-  return PREVIEWABLE_EXTS.has(m[1].toLowerCase());
+  const a = document.createElement('a');
+  a.href = uploadRawUrl(path, true);
+  a.download = name || '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 /* ═══════════════ 后台服务页 Tab（消息通道 / 状态面板） ═══════════════ */
@@ -5615,6 +5618,7 @@ initChatFontStepper();
 applyChatFontSize(chatFontSize, { persist: false });
 syncHljsTheme();
 applyI18n();
+initCustomTooltips();
 updateModelChip();
 renderSessionList();
 loadCustomPresets();

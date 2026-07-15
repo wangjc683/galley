@@ -1,0 +1,7 @@
+# Statically link the MSVC CRT (UCRT + vcruntime) into the Windows exe so the thin
+# shell itself runs on systems lacking an in-box Universal CRT (stripped/older
+# images) — no DLLs needed next to GenericAgent.exe. Target-scoped: macOS/Linux
+# builds never read this section. The embedded python keeps its own app-local UCRT
+# (copied in CI next to python.exe) for the bridge/conductor subprocesses.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
