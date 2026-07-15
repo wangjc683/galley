@@ -10,7 +10,11 @@ interface ToastHostProps extends ErrorCardActions {
   /** Active toasts (typically AppErrors with category bridge / business). */
   toasts: AppError[];
   onDismiss: (id: string) => void;
-  /** Auto-dismiss duration in ms. Default 6000. Set 0 to disable. */
+  /**
+   * Auto-dismiss duration in ms for info toasts. Default 6000. Set 0
+   * to disable. Warning / error toasts never auto-dismiss (unless the
+   * toast itself opts in via its own `autoDismissMs`).
+   */
   autoDismissMs?: number;
 }
 
@@ -29,8 +33,12 @@ interface ToastHostProps extends ErrorCardActions {
  * pointer-events-none so it remains visually present without stealing
  * the surrounding interaction surface.
  *
- * Each toast auto-dismisses after `autoDismissMs` (default 6s) unless
- * the user dismisses it manually first.
+ * Auto-dismiss is severity-gated: info toasts leave after
+ * `autoDismissMs` (default 6s), while warning / error toasts stay
+ * until manually dismissed — there is no toast history, so an
+ * auto-dismissed error is information the user can never get back.
+ * A toast's own `autoDismissMs` still overrides both (deliberate
+ * per-call opt-in to a transient warning, e.g. clipboard fallbacks).
  */
 export function ToastHost({
   toasts,
@@ -65,11 +73,12 @@ function ToastFrame({
   actions: ErrorCardActions;
 }) {
   useEffect(() => {
-    const dismissMs = toast.autoDismissMs ?? autoDismissMs;
+    const dismissMs =
+      toast.autoDismissMs ?? (toast.severity === "info" ? autoDismissMs : 0);
     if (dismissMs <= 0) return;
     const t = setTimeout(() => onDismiss(toast.id), dismissMs);
     return () => clearTimeout(t);
-  }, [toast.id, toast.autoDismissMs, onDismiss, autoDismissMs]);
+  }, [toast.id, toast.autoDismissMs, toast.severity, onDismiss, autoDismissMs]);
 
   return (
     <div className="pointer-events-auto animate-fade-in">
