@@ -155,6 +155,22 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
   },
 }));
 
+// Expose the store on `window.__appUpdateStore` in dev so update UI
+// states (TopBar UpdateIndicator, Settings controls) can be exercised
+// without a real update channel — dev builds are `unconfigured`, so
+// available/downloading/ready are otherwise unreachable. Stripped in
+// production by `import.meta.env.DEV`.
+//
+// Usage in console:
+//   __appUpdateStore.setState({ status: { kind: "available", currentVersion: "0.3.1", version: "0.4.0", body: "notes", date: null } })
+//   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0" } })
+//   __appUpdateStore.setState({ status: { kind: "ready", currentVersion: "0.3.1", version: "0.4.0" } })
+if (import.meta.env.DEV) {
+  (
+    globalThis as { __appUpdateStore?: typeof useAppUpdateStore }
+  ).__appUpdateStore = useAppUpdateStore;
+}
+
 function statusFromCheckResult(result: AppUpdateCheckResult): AppUpdateStatus {
   switch (result.kind) {
     case "unconfigured":

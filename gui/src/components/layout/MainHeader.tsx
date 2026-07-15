@@ -7,11 +7,13 @@ import type { BrowserControlStatus } from "@/lib/browser-control";
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import type { ImSupervisorState } from "@/lib/im-supervisor";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
+import type { AppUpdateStatus } from "@/stores/app-update";
 import type { GoalBrief } from "@/types/goal";
 
 import { WindowControls } from "./WindowControls";
 import { SessionTitleMenu } from "./header/SessionTitleMenu";
 import { TopBarStatusCluster } from "./header/StatusCluster";
+import { updateIndicatorVisible } from "./header/update-indicator-status";
 import { TopBarUtilityCluster } from "./header/UtilityCluster";
 
 export interface MainHeaderProps {
@@ -42,6 +44,15 @@ export interface MainHeaderProps {
   onOpenGoalProject?: (projectId: string) => void;
   onOpenGoal?: (goalId: string) => void;
   onStopGoal?: (goalId: string) => void;
+  /**
+   * App-update awareness (`.scratch/topbar-update-indicator/PRD.md`).
+   * available / downloading / ready render an UpdateIndicator badge at
+   * the tail of the status cluster; every other kind renders nothing.
+   * `hasRunningSessions` gates the restart action inside its popover.
+   */
+  appUpdateStatus?: AppUpdateStatus;
+  hasRunningSessions?: boolean;
+  onRestartAppUpdate?: () => void;
   /**
    * Conversation column width mode. "compact" = 760px (default),
    * "wide" = 1200px. Renders an icon button next to the font-size
@@ -151,6 +162,9 @@ export function MainHeader({
   onOpenGoalProject,
   onOpenGoal,
   onStopGoal,
+  appUpdateStatus = { kind: "idle" },
+  hasRunningSessions = false,
+  onRestartAppUpdate,
   conversationWidth = "compact",
   onToggleConversationWidth,
   conversationFontSize = "standard",
@@ -168,7 +182,8 @@ export function MainHeader({
     yoloMode ||
     activeGoals.length > 0 ||
     browserControlStatus !== null ||
-    Boolean(onOpenChannelsSettings);
+    Boolean(onOpenChannelsSettings) ||
+    updateIndicatorVisible(appUpdateStatus);
   return (
     <div
       data-tauri-drag-region
@@ -260,6 +275,9 @@ export function MainHeader({
             channelsState={channelsState}
             channelsLoadError={channelsLoadError}
             onOpenChannelsSettings={onOpenChannelsSettings}
+            appUpdateStatus={appUpdateStatus}
+            hasRunningSessions={hasRunningSessions}
+            onRestartAppUpdate={onRestartAppUpdate}
           />
         )}
         {hasTopBarStatusItems && (

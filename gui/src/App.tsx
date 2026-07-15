@@ -190,6 +190,7 @@ function App() {
   const pushToast = useUiStore((s) => s.pushToast);
   const dismissToast = useUiStore((s) => s.dismissToast);
   const restartAppUpdate = useAppUpdateStore((s) => s.restart);
+  const appUpdateStatus = useAppUpdateStore((s) => s.status);
   const [emptyComposerFocusTick, setEmptyComposerFocusTick] = useState(0);
 
   const bridgeStatus = useActiveRuntime((r) => r.bridgeStatus, "idle");
@@ -713,6 +714,11 @@ function App() {
               }}
               onStopGoal={(goalId) => {
                 void stopGoalFromTopbar(goalId);
+              }}
+              appUpdateStatus={appUpdateStatus}
+              hasRunningSessions={hasRunningSessions}
+              onRestartAppUpdate={() => {
+                void restartAppUpdate();
               }}
               conversationWidth={conversationWidth}
               onToggleConversationWidth={() => {
