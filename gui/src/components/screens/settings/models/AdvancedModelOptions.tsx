@@ -74,11 +74,16 @@ export function AdvancedModelOptions({
   );
   const apiMode: "chat_completions" | "responses" =
     rawApiMode === "responses" ? "responses" : "chat_completions";
+  const trimKeepPrefix = numberAdvancedOption(
+    effectiveOptions.trim_keep_prefix,
+    recommendedOptions.trim_keep_prefix,
+    0,
+  );
   const openaiReasoning = stringAdvancedOption(
     effectiveOptions.reasoning_effort,
     null,
     "",
-  ) as "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+  ) as "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   const isCodexOauth = authKind === "chatgpt_codex_oauth";
   const claudeReasoning = stringAdvancedOption(
     effectiveOptions.reasoning_effort,
@@ -137,6 +142,18 @@ export function AdvancedModelOptions({
               min={5}
               suffix={copy.secondsSuffix}
               onChange={(value) => setOption("read_timeout", value)}
+            />
+            <AdvancedNumberField
+              label={copy.trimKeepPrefix}
+              value={trimKeepPrefix}
+              min={0}
+              suffix={copy.messagesSuffix}
+              info={copy.trimKeepPrefixInfo}
+              onChange={(value) =>
+                // 0 = GA's own default (keep nothing) — drop the key so the
+                // generated model config stays minimal.
+                setOption("trim_keep_prefix", value === 0 ? null : value)
+              }
             />
           </div>
 
@@ -222,10 +239,14 @@ function openaiReasoningOptions(
   copy: ReturnType<typeof useCopy>["settings"]["models"],
   codexOauth: boolean,
 ): AdvancedChoiceOption<
-  "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
+  "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 >[] {
+  // "max" is OpenAI-protocol only: GA passes it through both api modes,
+  // while the Claude path's output_config mapping warns and ignores it
+  // (llmcore.py `_apply_claude_thinking`) — so the Claude branch below
+  // intentionally stops at xhigh.
   const options: AdvancedChoiceOption<
-    "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
+    "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
   >[] = [
     { value: "", label: copy.reasoningDefault },
     { value: "none", label: copy.reasoningNone },
@@ -233,6 +254,7 @@ function openaiReasoningOptions(
     { value: "medium", label: copy.reasoningMedium },
     { value: "high", label: copy.reasoningHigh },
     { value: "xhigh", label: copy.reasoningXHigh },
+    { value: "max", label: copy.reasoningMax },
   ];
   if (!codexOauth) {
     options.splice(2, 0, { value: "minimal", label: copy.reasoningMinimal });
@@ -245,18 +267,21 @@ function AdvancedNumberField({
   value,
   min,
   suffix,
+  info,
   onChange,
 }: {
   label: string;
   value: number;
   min: number;
   suffix?: string;
+  info?: string;
   onChange: (value: number) => void;
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
-        {label}
+      <span className="mb-1.5 flex items-center gap-1.5 text-ui-meta font-medium text-ink-soft">
+        <span>{label}</span>
+        {info && <InfoTooltip label={label} text={info} />}
       </span>
       <span className="relative block">
         <input
@@ -363,6 +388,7 @@ function advancedCustomCount(
       ? [
           "max_retries",
           "read_timeout",
+          "trim_keep_prefix",
           ...(authKind === "chatgpt_codex_oauth" ? [] : ["stream"]),
           "api_mode",
           "reasoning_effort",
@@ -370,6 +396,7 @@ function advancedCustomCount(
       : [
           "max_retries",
           "read_timeout",
+          "trim_keep_prefix",
           "stream",
           "thinking_type",
           "reasoning_effort",

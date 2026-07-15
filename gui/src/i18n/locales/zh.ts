@@ -621,6 +621,10 @@ export const zhCopy = {
       maxRetries: "重试次数",
       readTimeout: "读取超时",
       secondsSuffix: "秒",
+      trimKeepPrefix: "裁剪时保留开头",
+      messagesSuffix: "条",
+      trimKeepPrefixInfo:
+        "上下文超限触发硬裁剪时，最前面的 N 条消息（如任务说明、项目背景）不会被裁掉。0 为不保留（默认）。",
       streamResponse: "流式返回",
       apiMode: "API 模式",
       apiModeChat: "Chat",
@@ -633,6 +637,7 @@ export const zhCopy = {
       reasoningMedium: "Medium",
       reasoningHigh: "High",
       reasoningXHigh: "XHigh",
+      reasoningMax: "Max",
       thinkingType: "Thinking",
       thinkingAdaptive: "Adaptive",
       thinkingDisabled: "Disabled",

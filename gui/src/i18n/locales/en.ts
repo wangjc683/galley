@@ -652,6 +652,10 @@ export const enCopy: AppCopy = {
       maxRetries: "Retries",
       readTimeout: "Read timeout",
       secondsSuffix: "sec",
+      trimKeepPrefix: "Keep leading messages on trim",
+      messagesSuffix: "msgs",
+      trimKeepPrefixInfo:
+        "When an over-limit context is hard-trimmed, the first N messages (e.g. task briefs, project background) are kept. 0 keeps none (default).",
       streamResponse: "Stream response",
       apiMode: "API mode",
       apiModeChat: "Chat",
@@ -664,6 +668,7 @@ export const enCopy: AppCopy = {
       reasoningMedium: "Medium",
       reasoningHigh: "High",
       reasoningXHigh: "XHigh",
+      reasoningMax: "Max",
       thinkingType: "Thinking",
       thinkingAdaptive: "Adaptive",
       thinkingDisabled: "Disabled",
