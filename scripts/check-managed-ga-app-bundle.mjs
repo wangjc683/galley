@@ -31,7 +31,7 @@ const criticalMemorySeedFiles = [
   "plan_sop.md",
   "tmwebdriver_sop.md",
   "web_setup_sop.md",
-  "verify_sop.md",
+  "deliverable_audit_sop.md",
   "supervisor_sop.md",
   "project_mode_sop.md",
   "L4_raw_sessions/salient_mining_sop.md",
