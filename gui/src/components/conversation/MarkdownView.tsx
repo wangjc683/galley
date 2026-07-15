@@ -321,6 +321,35 @@ const SHIKI_THEMES = {
 
 let _highlighterPromise: Promise<HighlighterCore> | null = null;
 
+// Module-level cache of finished highlight results, keyed by
+// theme:lang:code. Session transcripts remount wholesale on every
+// switch (Conversation is not memoized), and without this every code
+// block re-runs the async highlight pass and repaints plain→colored on
+// each revisit. A cache hit renders the colored HTML in the FIRST
+// paint — no swap at all. Insertion-ordered Map as a cheap LRU: cap
+// bounds memory (highlighted HTML runs ~5-10× the code size), and
+// re-insertion on hit keeps hot transcripts resident.
+const _highlightCache = new Map<string, string>();
+const HIGHLIGHT_CACHE_MAX = 300;
+
+function readHighlightCache(key: string): string | undefined {
+  const html = _highlightCache.get(key);
+  if (html !== undefined) {
+    _highlightCache.delete(key);
+    _highlightCache.set(key, html);
+  }
+  return html;
+}
+
+function writeHighlightCache(key: string, html: string): void {
+  if (_highlightCache.has(key)) _highlightCache.delete(key);
+  _highlightCache.set(key, html);
+  if (_highlightCache.size > HIGHLIGHT_CACHE_MAX) {
+    const oldest = _highlightCache.keys().next().value;
+    if (oldest !== undefined) _highlightCache.delete(oldest);
+  }
+}
+
 function getHighlighter(): Promise<HighlighterCore> {
   if (!_highlighterPromise) {
     _highlighterPromise = createHighlighterCore({
@@ -402,20 +431,33 @@ function CodeBlock({ code, language }: CodeBlockProps) {
   const [highlighted, setHighlighted] = useState<{
     key: string;
     html: string;
-  } | null>(null);
-  // Keep the previous highlighted HTML while the new one is in flight:
-  // during streaming every chunk changes the key, and dropping to the
-  // plain fallback each time made the block strobe plain→colored (same
-  // flash on theme switch). The stale frame lags the newest chunk by
-  // one highlight pass (a few ms once Shiki is warm) — far calmer than
-  // flickering. Only when this block has never highlighted (or has no
-  // language) does the plain <pre> of the CURRENT code render.
+  } | null>(() => {
+    // Seed from the module cache so a remounted block (session
+    // revisit — the transcript remounts wholesale on switch) paints
+    // colored on its very first frame instead of replaying the
+    // plain→colored swap.
+    const cached = lang ? readHighlightCache(highlightKey) : undefined;
+    return cached !== undefined ? { key: highlightKey, html: cached } : null;
+  });
+  // Resolution order:
+  //   1. This block's own state for the current key.
+  //   2. The module cache — hit means a previous mount (earlier visit
+  //      to this session, or this block pre-theme-switch) already paid
+  //      the highlight; colored HTML lands in the first paint.
+  //   3. Keep the previous highlighted HTML while the new one is in
+  //      flight: during streaming every chunk changes the key, and
+  //      dropping to the plain fallback each time made the block
+  //      strobe plain→colored (same flash on theme switch). The stale
+  //      frame lags the newest chunk by one highlight pass (a few ms
+  //      once Shiki is warm) — far calmer than flickering.
+  //   4. Only when this block has never highlighted (or has no
+  //      language) does the plain <pre> of the CURRENT code render.
+  const cachedHtml = lang ? readHighlightCache(highlightKey) : undefined;
   const html =
     highlighted?.key === highlightKey
       ? highlighted.html
-      : lang && highlighted
-        ? highlighted.html
-        : null;
+      : (cachedHtml ??
+        (lang && highlighted ? highlighted.html : null));
   const [wrapped, setWrapped] = useState(false);
   const wrapLabel = wrapped
     ? copy.conversation.scrollCode
@@ -423,6 +465,13 @@ function CodeBlock({ code, language }: CodeBlockProps) {
 
   useEffect(() => {
     if (!lang) return;
+    // Cache hit means this exact (theme, lang, code) is already
+    // rendered — either by this mount's state initializer or via the
+    // render-time cache read above. Recomputing would only churn CPU
+    // on every transcript remount. (State can lag the cache after a
+    // key change back to a cached value; the render path reads the
+    // cache directly, so the paint stays correct.)
+    if (_highlightCache.has(highlightKey)) return;
     let cancelled = false;
     getHighlighter()
       .then((h) => {
@@ -445,6 +494,7 @@ function CodeBlock({ code, language }: CodeBlockProps) {
               },
             ],
           });
+          writeHighlightCache(highlightKey, out);
           setHighlighted({ key: highlightKey, html: out });
         } catch {
           // Unknown language slip — keep the plain fallback below.
@@ -511,6 +561,16 @@ function CodeBlock({ code, language }: CodeBlockProps) {
           // line-box padding leaking in and inflating the block.
           "[&_pre]:m-0 [&_pre]:p-0 [&_pre]:bg-transparent [&_pre]:leading-[1.45]",
           "[&_code]:m-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:[font-size:var(--conversation-code-size)]",
+          // Metric identity: the plain fallback and the colored HTML
+          // must wrap at exactly the same points, or the async swap
+          // reflows the block and everything below it. Font, size and
+          // line-height are pinned above; the remaining variable is
+          // the theme itself — the github themes emit bold/italic for
+          // markdown/diff tokens, and those glyph-width differences
+          // shift wrap points. Shiki inlines them as style attributes,
+          // so the neutralization needs !important. Highlighting is
+          // deliberately color-only.
+          "[&_code_span]:font-normal! [&_code_span]:[font-style:normal]!",
         )}
       >
         {html ? (
@@ -653,6 +713,18 @@ const COMPONENTS: Components = {
   },
 };
 
+// Natural dimensions of agent-output images, learned at first decode
+// and keyed by preview src. The <img> carries no width/height (the
+// markdown only has a path), so its first appearance reserves zero
+// space and pushes content down when the decode lands — tolerable at
+// the bottom of a live stream where sticky-scroll absorbs it, but on
+// every transcript remount (session revisit) the same pop-in replays
+// mid-viewport. With cached dimensions the browser derives the aspect
+// ratio from the width/height attributes and reserves the final box
+// before decode. Entries are two numbers per unique image — no
+// eviction needed.
+const _imageDimsCache = new Map<string, { width: number; height: number }>();
+
 function MarkdownImage({
   src,
   alt,
@@ -695,6 +767,17 @@ function MarkdownImage({
               alt={label}
               loading="lazy"
               decoding="async"
+              width={_imageDimsCache.get(preview.previewSrc)?.width}
+              height={_imageDimsCache.get(preview.previewSrc)?.height}
+              onLoad={(event) => {
+                const el = event.currentTarget;
+                if (el.naturalWidth > 0 && el.naturalHeight > 0) {
+                  _imageDimsCache.set(preview.previewSrc, {
+                    width: el.naturalWidth,
+                    height: el.naturalHeight,
+                  });
+                }
+              }}
               onError={() => setFailedSrc(rawSrc)}
               className="block max-h-[420px] max-w-full rounded-[6px] border border-line bg-surface object-contain"
             />

@@ -110,6 +110,13 @@ interface ProjectBriefWire {
 const GUI_ORIGIN = { via: "gui" } as const;
 const MANAGED_PROMPT_PROFILE = "galley-persona-v1";
 
+// Monotonic counter for activateSession calls. When a first-visit
+// activation defers its activeSessionId flip until the SQLite restore
+// resolves (atomic conversation swap — see activateSession step 4), the
+// captured epoch lets it detect that a newer activation superseded it
+// mid-restore and skip the stale flip.
+let _activationEpoch = 0;
+
 function currentCopy() {
   return copyForLanguage(
     resolveLanguagePreference(usePrefsStore.getState().languagePreference),
@@ -487,9 +494,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
 
   activateSession: async (id) => {
     const activateStartedAt = perfNow();
-    // Step 1: refresh the active session pointer (clears unread on
-    // the row via Rust + sets activeSessionId).
-    get().setActiveSession(id);
+    const epoch = ++_activationEpoch;
     const session = get().sessions.find((s) => s.id === id);
     // Step 2: lazy-init the runtime entry — LLM seed comes from the
     // session row's persisted choice + the active runtime's own model
@@ -522,7 +527,23 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     const msgs = useMessagesStore.getState().byId[id];
     const looksFresh = !msgs || msgs.turns.length === 0;
     const hasHistory = (session?.turnCount ?? 0) > 0;
-    if (looksFresh && hasHistory) {
+    const needsRestore = looksFresh && hasHistory;
+    // Atomic swap: when another conversation is on screen and this one
+    // still needs its SQLite restore, keep the old transcript visible
+    // and flip the active pointer only after the turns are in memory —
+    // otherwise React paints one frame of "new session, zero turns"
+    // (a blank conversation column) between the pointer flip and the
+    // restore commit. When nothing is on screen (cold start / empty
+    // state) deferring buys nothing, so flip immediately; same when no
+    // restore is needed (revisit or fresh session), where the swap is
+    // already synchronous.
+    const prevActiveId = get().activeSessionId;
+    const deferFlip =
+      needsRestore && prevActiveId != null && prevActiveId !== id;
+    if (!deferFlip) {
+      get().setActiveSession(id);
+    }
+    if (needsRestore) {
       const restoreStartedAt = perfNow();
       try {
         await messagesStore.restoreSessionTurns(id);
@@ -536,6 +557,27 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
           sessionId: id,
           turnCount: session?.turnCount ?? 0,
         });
+      }
+    }
+    if (deferFlip) {
+      // Stale-flip guard, two conditions because there are two ways to
+      // lose the race while the restore was in flight:
+      //   - epoch: a newer activateSession click owns the pointer now
+      //     (even if it hasn't flipped yet — flipping here would land
+      //     the user on the older click).
+      //   - pointer: a non-activation path moved it directly
+      //     (createSession, session delete, goal flows write
+      //     activeSessionId without going through activateSession).
+      // Either way we skip: the turns are already restored into
+      // messagesStore, so the superseding action (or a later revisit)
+      // gets them for free. Bridge spawn below still proceeds,
+      // matching the previous behavior where every clicked session got
+      // its bridge (the LRU governor bounds the population).
+      if (
+        epoch === _activationEpoch &&
+        get().activeSessionId === prevActiveId
+      ) {
+        get().setActiveSession(id);
       }
     }
     // Step 5: auto-spawn the bridge when this session has no live
