@@ -369,6 +369,55 @@ samp {
   text-autospace: no-autospace;
 }
 
+/* Scrollbars — Windows only (docs/design/foundations.md §2.6).
+   macOS keeps native overlay scrollbars; on Windows the classic
+   17px gray bars clash with the warm palette, so WebView2 gets a
+   thin token-colored rail. `data-platform` is set by
+   lib/platform.ts::applyPlatformAttribute() at boot.
+
+   Two load-bearing constraints:
+   1. NEVER add standard `scrollbar-width` / `scrollbar-color` here —
+      in Chromium 121+ the standard properties silently disable
+      `::-webkit-scrollbar` rules on the same element.
+   2. NEVER drop the `html[data-platform="windows"]` scope — any
+      matching `::-webkit-scrollbar` rule makes WKWebView abandon
+      native auto-hiding overlay scrollbars for always-visible
+      classic ones, a straight macOS regression. */
+html[data-platform="windows"] ::-webkit-scrollbar {
+  /* Same 10px for the horizontal bars in code blocks / tables /
+     diffs; the 2px thumb inset below makes both read as ~6px. */
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+html[data-platform="windows"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html[data-platform="windows"] ::-webkit-scrollbar-thumb {
+  /* Tokens flip with `data-theme` — no separate dark rules needed. */
+  background-color: var(--color-line-strong);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+html[data-platform="windows"] ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-ink-muted);
+}
+html[data-platform="windows"] ::-webkit-scrollbar-thumb:active {
+  background-color: var(--color-ink-soft);
+}
+html[data-platform="windows"] ::-webkit-scrollbar-corner {
+  /* Kill the opaque square where vertical + horizontal bars meet
+     (code blocks scrolling both axes). */
+  background: transparent;
+}
+/* Reserve the scrollbar lane on the primary panels so content does
+   not shift horizontally when it crosses the overflow threshold.
+   No-op on macOS overlay scrollbars (gutter is zero there). */
+html[data-platform="windows"] .scrollbar-stable {
+  scrollbar-gutter: stable;
+}
+
 @keyframes theme-fade {
   from {
     opacity: 0.88;

@@ -177,7 +177,7 @@ export function Settings({
             showBrowserTab={showBrowserTab}
           />
 
-          <div className="min-w-0 flex-1 overflow-y-auto bg-app">
+          <div className="scrollbar-stable min-w-0 flex-1 overflow-y-auto bg-app">
             <div className="px-8 py-7">
               {tab === "runtime" && (
                 <SettingsRuntime

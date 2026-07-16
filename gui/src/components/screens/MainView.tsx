@@ -319,7 +319,7 @@ export function MainView({
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollContainerRef}
-          className="absolute inset-0 overflow-y-auto px-8 py-6"
+          className="scrollbar-stable absolute inset-0 overflow-y-auto px-8 py-6"
         >
           <div
             className={cn(

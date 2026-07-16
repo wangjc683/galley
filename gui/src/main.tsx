@@ -3,7 +3,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import App from "./App";
+import { applyPlatformAttribute } from "./lib/platform";
 import "./styles/globals.css";
+
+// Platform hook for CSS (`html[data-platform="…"]`) — must be set
+// before first paint of scrollable panels so Windows scrollbar rules
+// apply from frame one. No index.html inline script needed: unlike a
+// wrong theme, a one-frame-late scrollbar style is not visible.
+applyPlatformAttribute();
 
 // App-wide Radix Tooltip provider. delayDuration=100 feels
 // "immediate" while still letting users drift past affordances

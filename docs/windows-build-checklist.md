@@ -87,6 +87,14 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] **Click back on Galley** → controls re-saturate
 - [ ] Win + Arrow keys snap window left / right / fullscreen (handled by OS, should just work)
 
+### Scrollbars (2026-07-16 polish)
+
+- [ ] 转录 / 侧边栏 / Settings 三大面板显示**细的暖灰滚动条**（圆角胶囊 thumb，无上下箭头按钮），不是 Windows 经典灰条
+- [ ] Hover thumb → 颜色加深；按住拖动 → 再加深
+- [ ] 暗色主题下 thumb 依然可见（随 token 自动翻转）
+- [ ] 长代码块横向滚动条同样是细条；纵横双条相交处**没有白色角块**
+- [ ] 流式输出使转录内容跨过溢出阈值时，居中列**不横移**（scrollbar-gutter 生效）
+
 ### Keyboard shortcuts
 
 - [ ] **Ctrl+K** opens Command Palette

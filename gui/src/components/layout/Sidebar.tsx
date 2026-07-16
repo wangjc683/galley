@@ -291,7 +291,7 @@ export function Sidebar({
         activeProjectName={activeProject?.name}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+      <div className="scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2">
         {projectReviewPhase && (
           <SidebarProjectReviewPresence phase={projectReviewPhase}>
             <SidebarProjectReview

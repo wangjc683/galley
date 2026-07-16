@@ -373,6 +373,14 @@ Galley 是桌面客户端，不应暴露不必要的网页线索：
 - 默认不允许随手选中 UI chrome，避免拖拽时出现网页蓝色选区。
 - conversation markdown、用户消息、code block、input / textarea、路径 / key /
   error detail 等内容区域必须保留可选择文本。Galley 是工作台，复制内容是核心任务。
+- 滚动条按平台分治：macOS 保持原生 overlay 滚动条，**禁止**写不带
+  `html[data-platform="windows"]` 前缀的 `::-webkit-scrollbar` 规则——任何命中
+  WKWebView 的该伪元素规则都会让 overlay 滚动条退化为常驻经典条。Windows 走
+  globals.css 的 token 化细滚动条（`line-strong` 静止 / `ink-muted` hover /
+  `ink-soft` active，随 `data-theme` 自动翻转），且**禁止**同文件添加标准
+  `scrollbar-width` / `scrollbar-color`（Chromium 121+ 会静默禁用同元素的
+  webkit 伪元素规则）。主滚动面板（转录 / 侧边栏 / Settings）用
+  `.scrollbar-stable` 预留滚动条槽，防止 Windows 上内容跨溢出阈值时横移。
 
 ### 2.7 动效分类：触发反馈（A）vs 环境噪动（B）
 

@@ -23,6 +23,30 @@ const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
 export const isMac = ua.includes("Macintosh");
 export const isWindows = ua.includes("Windows");
 
+export type PlatformName = "mac" | "windows" | "linux";
+
+/**
+ * "linux" doubles as the safe fallthrough when UA sniffing matches
+ * neither token: no platform-scoped CSS targets it, so an unknown
+ * webview simply keeps native scrollbars and chrome.
+ */
+export const platformName: PlatformName = isMac
+  ? "mac"
+  : isWindows
+    ? "windows"
+    : "linux";
+
+/**
+ * Expose the platform to CSS as `html[data-platform="…"]` (same
+ * mechanism as theme.ts's `root.dataset.theme`). Exists for
+ * platform-scoped styling — currently the Windows scrollbar rules in
+ * globals.css. Mac must stay byte-identical: no stylesheet rule may
+ * match `data-platform="mac"` (see the behavioural rule above).
+ */
+export function applyPlatformAttribute(): void {
+  document.documentElement.dataset.platform = platformName;
+}
+
 /**
  * OS-appropriate example path for the GenericAgent install dir.
  * Used as StepAttach / Settings input placeholder, and tutorial
