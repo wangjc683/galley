@@ -85,7 +85,7 @@ export function ConfirmActionDialog({
               disabled={busy}
               leadingIcon={
                 busy ? (
-                  <CircleNotch size={13} className="animate-spin" />
+                  <CircleNotch size={13} className="spin" />
                 ) : (
                   confirmIcon
                 )

@@ -1,10 +1,14 @@
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
 import {
+  applyProgressEvent,
   checkAppUpdate,
   installAppUpdate,
   relaunchApp,
   type AppUpdateCheckResult,
+  type AppUpdateDownloadProgress,
+  type AppUpdateProgressEvent,
 } from "@/lib/app-update";
 import { getPref, setPref } from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
@@ -26,7 +30,15 @@ export type AppUpdateStatus =
       body: string | null;
       date: string | null;
     }
-  | { kind: "downloading"; version?: string }
+  | {
+      kind: "downloading";
+      version?: string;
+      // Fed by the Rust `app-update-progress` event. Absent until the
+      // first event arrives; `progress` stays absent when the server
+      // sent no Content-Length (UI falls back to the spinner).
+      phase?: "downloading" | "installing";
+      progress?: AppUpdateDownloadProgress;
+    }
   | { kind: "ready"; currentVersion: string; version: string }
   | {
       kind: "error";
@@ -49,6 +61,9 @@ interface AppUpdateStore {
   noteAppLaunched: (currentVersion: string) => Promise<void>;
   resetError: () => void;
 }
+
+// Emitted by core/src/app_update.rs during `install_app_update`.
+const APP_UPDATE_PROGRESS_EVENT = "app-update-progress";
 
 const PREF_LAST_SEEN_VERSION = "app_update_last_seen_version";
 const PREF_PREPARED_VERSION = "app_update_prepared_version";
@@ -112,7 +127,19 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
         version: current.kind === "available" ? current.version : undefined,
       },
     });
+    let unlistenProgress: UnlistenFn | undefined;
     try {
+      // Register before invoking so no early chunk event is missed
+      // (same ordering rule as lib/bridge.ts).
+      unlistenProgress = await listen<AppUpdateProgressEvent>(
+        APP_UPDATE_PROGRESS_EVENT,
+        (event) => {
+          const status = get().status;
+          // A late event must not resurrect a terminal ready/error state.
+          if (status.kind !== "downloading") return;
+          set({ status: { ...status, ...applyProgressEvent(event.payload) } });
+        },
+      );
       const result = await installAppUpdate();
       set({
         status: {
@@ -130,6 +157,8 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
           ...readableUpdateError(error, "install"),
         },
       });
+    } finally {
+      unlistenProgress?.();
     }
   },
 
@@ -164,6 +193,8 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
 // Usage in console:
 //   __appUpdateStore.setState({ status: { kind: "available", currentVersion: "0.3.1", version: "0.4.0", body: "notes", date: null } })
 //   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0" } })
+//   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0", phase: "downloading", progress: { downloaded: 42_000_000, total: 100_000_000 } } })
+//   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0", phase: "installing" } })
 //   __appUpdateStore.setState({ status: { kind: "ready", currentVersion: "0.3.1", version: "0.4.0" } })
 if (import.meta.env.DEV) {
   (

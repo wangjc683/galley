@@ -1601,6 +1601,7 @@ export const enCopy: AppCopy = {
     upToDate: "Up to date",
     foundPreparing: "Downloading update",
     preparing: "Downloading update",
+    installing: "Installing update",
     ready: "New version downloaded. Restart Galley to apply it.",
     readyAfterTasks: "Restart after the current task finishes.",
     foundAfterTasks:

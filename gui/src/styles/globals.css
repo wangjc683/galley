@@ -414,6 +414,14 @@ code {
   display: inline-flex;
   transform-origin: 50% 50%;
 }
+/* Reduced motion: slow down rather than freeze — a static CircleNotch
+   is an ambiguous glyph, and the spinner conveys state, not decoration
+   (DESIGN.md §2.7). */
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 4s;
+  }
+}
 
 /* Gentle fade for callout body / approval reveal transitions */
 @keyframes fade-in {
@@ -756,5 +764,17 @@ code {
 @media (prefers-reduced-motion: reduce) {
   .goal-pill-fill-breathe {
     animation: none;
+  }
+}
+
+/* App-update download bar fill (UpdateIndicator popover). Progress is
+   real bytes from the Rust `app-update-progress` event; the short
+   width ease just smooths the throttled (~150ms) samples. */
+.app-update-bar-fill {
+  transition: width 0.2s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-update-bar-fill {
+    transition: none;
   }
 }

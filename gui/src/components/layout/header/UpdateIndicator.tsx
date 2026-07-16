@@ -8,6 +8,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
+import { downloadPercent } from "@/lib/app-update";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { AppUpdateStatus } from "@/stores/app-update";
@@ -53,6 +54,12 @@ export function UpdateIndicator({
   const copy = useCopy();
   if (!updateIndicatorVisible(status)) return null;
 
+  const installing =
+    status.kind === "downloading" && status.phase === "installing";
+  const downloadBarPercent =
+    status.kind === "downloading" && !installing
+      ? downloadPercent(status.progress)
+      : null;
   const badge = updateBadgeView(status, copy.topbar);
   const version =
     status.kind === "downloading" ? (status.version ?? null) : status.version;
@@ -102,6 +109,11 @@ export function UpdateIndicator({
               `status.body` would show a raw link as prose. Re-add once
               the release SOP produces real notes text. */}
 
+          {/* Downloading with a known Content-Length gets a determinate
+              bar — real byte progress, so the no-fake-progress rule is
+              satisfied. `total: null` and the pre-first-event window fall
+              through to the spinner; the install phase gets its own copy
+              so the bar never freezes at 100%. */}
           {status.kind === "ready" ? (
             <>
               {hasRunningSessions && (
@@ -120,6 +132,26 @@ export function UpdateIndicator({
                 {copy.updates.restart}
               </Button>
             </>
+          ) : downloadBarPercent !== null ? (
+            <div className="mt-3">
+              <div className="flex items-center justify-between gap-2 text-[12px] leading-[1.55] text-ink-muted">
+                <span>{copy.updates.preparing}</span>
+                <span className="tabular-nums">{downloadBarPercent}%</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={downloadBarPercent}
+                aria-label={copy.updates.preparing}
+                className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-brand/15"
+              >
+                <div
+                  className="app-update-bar-fill h-full rounded-full bg-brand"
+                  style={{ width: `${downloadBarPercent}%` }}
+                />
+              </div>
+            </div>
           ) : (
             <p className="mt-3 flex items-center gap-1.5 text-[12px] leading-[1.55] text-ink-muted">
               {status.kind === "available" && hasRunningSessions ? (
@@ -130,7 +162,11 @@ export function UpdateIndicator({
               ) : (
                 <>
                   <CircleNotch size={13} weight="thin" className="spin shrink-0" />
-                  <span>{copy.updates.preparing}</span>
+                  <span>
+                    {installing
+                      ? copy.updates.installing
+                      : copy.updates.preparing}
+                  </span>
                 </>
               )}
             </p>

@@ -1520,6 +1520,7 @@ export const zhCopy = {
     upToDate: "已是最新版本",
     foundPreparing: "正在下载更新",
     preparing: "正在下载更新",
+    installing: "正在安装更新",
     ready: "新版本已下载，重启 Galley 生效",
     readyAfterTasks: "当前任务结束后再重启",
     foundAfterTasks: "发现新版本，当前任务结束后自动准备更新",

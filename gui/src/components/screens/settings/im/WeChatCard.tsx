@@ -121,7 +121,7 @@ export function WeChatCard({
                   disabled={busyAction !== null}
                   leadingIcon={
                     busyAction === "rescan" ? (
-                      <CircleNotch size={13} className="animate-spin" />
+                      <CircleNotch size={13} className="spin" />
                     ) : (
                       <QrCode size={13} />
                     )
@@ -170,7 +170,7 @@ function WeChatSetupAction({
   onRescan: () => void;
 }) {
   const busy = busyAction !== null;
-  const loadingIcon = <CircleNotch size={13} className="animate-spin" />;
+  const loadingIcon = <CircleNotch size={13} className="spin" />;
 
   if (state === "running") return null;
   if (state === "starting" || state === "reconnecting") {

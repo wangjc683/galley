@@ -62,7 +62,7 @@ export function StatusBadge({
         weight={iconState === "running" ? "fill" : "regular"}
         className={
           iconState === "starting" || iconState === "reconnecting"
-            ? "animate-spin"
+            ? "spin"
             : undefined
         }
       />

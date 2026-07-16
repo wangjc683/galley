@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { downloadPercent } from "@/lib/app-update";
 import { useCopy, type AppCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAppUpdateStore, type AppUpdateStatus } from "@/stores/app-update";
@@ -200,14 +201,25 @@ function updateActionView(
           : "border-line bg-elevated text-brand-strong",
         spin: !hasRunningSessions,
       };
-    case "downloading":
+    case "downloading": {
+      // The 24px chip has no room for a second bar; a percent suffix on
+      // the label carries the same real progress the TopBar bar shows.
+      const percent =
+        status.phase === "installing" ? null : downloadPercent(status.progress);
+      const label =
+        status.phase === "installing"
+          ? copy.updates.installing
+          : percent !== null
+            ? `${copy.updates.preparing} · ${percent}%`
+            : copy.updates.preparing;
       return {
         kind: "status",
-        label: copy.updates.preparing,
+        label,
         Icon: CircleNotch,
-        className: "border-line bg-elevated text-brand-strong",
+        className: "border-line bg-elevated text-brand-strong tabular-nums",
         spin: true,
       };
+    }
     case "ready":
       return {
         kind: "button",

@@ -265,7 +265,7 @@ export function FeishuCard({
                     disabled={busy || !canSaveCredentials}
                     leadingIcon={
                       localBusy === "save" ? (
-                        <CircleNotch size={13} className="animate-spin" />
+                        <CircleNotch size={13} className="spin" />
                       ) : (
                         <Check size={13} />
                       )
@@ -292,7 +292,7 @@ export function FeishuCard({
                     disabled={busy || !canStartService}
                     leadingIcon={
                       localBusy === "connect" ? (
-                        <CircleNotch size={13} className="animate-spin" />
+                        <CircleNotch size={13} className="spin" />
                       ) : (
                         <Power size={13} />
                       )

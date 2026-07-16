@@ -178,7 +178,7 @@ export function SettingsIM({
                 disabled={busyAction === "restart"}
                 leadingIcon={
                   busyAction === "restart" ? (
-                    <CircleNotch size={13} className="animate-spin" />
+                    <CircleNotch size={13} className="spin" />
                   ) : (
                     <ArrowsClockwise size={13} />
                   )
@@ -225,7 +225,7 @@ export function SettingsIM({
                 disabled={busyAction === "restart"}
                 leadingIcon={
                   busyAction === "restart" ? (
-                    <CircleNotch size={13} className="animate-spin" />
+                    <CircleNotch size={13} className="spin" />
                   ) : (
                     <ArrowsClockwise size={13} />
                   )
