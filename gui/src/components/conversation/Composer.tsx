@@ -577,7 +577,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         <div
           ref={composerRootRef}
           className={cn(
-            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow] duration-[120ms]",
+            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow] duration-(--motion-fast)",
             "focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/20",
             disabled && "opacity-60",
           )}
@@ -676,7 +676,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                       className={cn(
                         "absolute right-1 top-1 flex size-5 items-center justify-center rounded-full",
                         "bg-elevated/95 text-ink shadow-[var(--shadow-neutral-control)]",
-                        "opacity-0 transition-opacity duration-120 hover:bg-hover outline-none group-hover/image:opacity-100",
+                        "opacity-0 hover:bg-hover outline-none group-hover/image:opacity-100",
                       )}
                     >
                       <X size={12} weight="bold" />
@@ -747,7 +747,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 <span
                   className={cn(
                     "hidden min-w-0 truncate text-[11px] font-medium text-ink-soft sm:inline",
-                    "transition-[max-width,opacity,margin] duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]",
+                    "transition-[max-width,opacity,margin] duration-(--motion-base) ease-firm",
                     effectiveGoalArmed
                       ? "ml-0 max-w-[160px] opacity-100"
                       : "-ml-1.5 max-w-0 opacity-0",

@@ -49,7 +49,7 @@ export function SidebarSessionMenuItems({
 }) {
   const copy = useCopy();
   const itemClass = cn(
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[13px] text-ink-soft outline-none transition-colors",
+    "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-[13px] text-ink-soft outline-none",
     "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
   );
 

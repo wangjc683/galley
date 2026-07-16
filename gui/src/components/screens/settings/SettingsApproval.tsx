@@ -124,7 +124,7 @@ export function SettingsApproval({
                   key={tool}
                   checked={required}
                   onCheckedChange={(c) => toggleRequired(tool, c)}
-                  className="flex items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-hover"
+                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-hover"
                 >
                   <span className="font-mono text-ui-secondary text-ink">
                     {tool}

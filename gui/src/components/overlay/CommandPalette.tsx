@@ -376,7 +376,7 @@ function EmptyHint({
       <button
         type="button"
         onClick={onSubmit}
-        className="inline-flex items-center gap-1.5 rounded-sm text-[13px] font-medium text-brand-strong transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+        className="inline-flex items-center gap-1.5 rounded-sm text-[13px] font-medium text-brand-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
       >
         {copy.command.askDirectly}
         <span className="rounded-sm border border-line bg-app px-1.5 py-px font-mono text-[10px] text-ink-muted">

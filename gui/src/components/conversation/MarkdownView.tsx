@@ -533,7 +533,7 @@ function CodeBlock({ code, language }: CodeBlockProps) {
           }}
           className={cn(
             "inline-flex items-center rounded-sm bg-code-surface/85 px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.08em] backdrop-blur-sm",
-            "transition-[background-color,color,opacity,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-[0.5px] active:duration-[45ms]",
+            "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-[0.5px]",
             wrapped
               ? "text-ink-soft opacity-100"
               : "text-ink-muted opacity-0 hover:text-ink-soft group-hover/codeblock:opacity-100",
@@ -624,7 +624,7 @@ function CodeCopyButton({ code }: { code: string }) {
       }}
       className={cn(
         "inline-flex items-center gap-1 rounded-sm bg-code-surface/85 px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.08em] backdrop-blur-sm",
-        "transition-[background-color,color,opacity,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-[0.5px] active:duration-[45ms]",
+        "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-[0.5px]",
         "opacity-0 group-hover/codeblock:opacity-100",
         copied
           ? "text-success"
@@ -745,7 +745,7 @@ function MarkdownImage({
       ? copy.conversation.openImageInBrowser
       : copy.conversation.openOriginalImageFile;
   const itemClass = cn(
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none transition-colors",
+    "flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none",
     "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
   );
 

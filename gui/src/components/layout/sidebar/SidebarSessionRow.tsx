@@ -301,20 +301,16 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       onClick={handleRowClick}
       className={cn(
         "group relative mx-1.5 grid min-h-[48px] grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
-        "transition-[background-color,box-shadow,color]",
         // No row-level ring while editing — the input inside carries
         // its own brand ring; two nested rings for one focus state
         // was noisier than the app's quiet register.
         isEditing
           ? "bg-elevated"
-          : cn(
-              "cursor-pointer",
-              active
-                ? "bg-selected"
-                : actionsOpen
-                  ? "bg-hover"
-                  : inactiveRowClass,
-            ),
+          : active
+            ? "bg-selected"
+            : actionsOpen
+              ? "bg-hover"
+              : inactiveRowClass,
       )}
     >
       {railKind &&
@@ -368,7 +364,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       </span>
       <div
         className={cn(
-          "min-w-0 flex-1 transition-[padding] duration-[120ms]",
+          "min-w-0 flex-1",
           !sublineText && !isEditing && "self-center",
           showActionTrigger && "group-hover:pr-7",
           actionsOpen && "pr-7",
@@ -418,7 +414,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 tabIndex={-1}
                 aria-label={copy.sidebar.supervisorCreated}
                 className={cn(
-                  "inline-flex shrink-0 items-center rounded-sm text-ink-muted transition-colors",
+                  "inline-flex shrink-0 items-center rounded-sm text-ink-muted",
                   "hover:text-ink-soft",
                 )}
               >
@@ -456,7 +452,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             // entry sits on the row's optical middle for one- and
             // two-line rows alike; sm (28px) button over the old 20px
             // xs — this is a precision target used constantly.
-            "pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center opacity-0 transition-opacity duration-[120ms]",
+            "pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center opacity-0",
             "group-hover:pointer-events-auto group-hover:opacity-100",
             actionsOpen && "pointer-events-auto opacity-100",
           )}

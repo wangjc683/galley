@@ -72,8 +72,12 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  *     rises a crisp 1px (firm shadow, planted — not floaty), press sinks
  *     2px with a slight compression scale and a deep contact inset
  *     (`--shadow-control-press`). Ghost / text-adjacent actions stay flat
- *     (a quiet 1px press, no shadow). Timing is asymmetric: ~70ms snap
- *     down, ~140ms settle up.
+ *     (a quiet 1px press, no shadow).
+ *   - Hover is INSTANT (native desktop convention, §2.5/§2.7): the base
+ *     has no transition, so hover color/lift/shadow flip immediately.
+ *     Only the press animates — the transition lives on `:active` alone,
+ *     so key travel sinks over `--motion-press` and release snaps back
+ *     natively.
  *   - All variants use `rounded-sm` and shared motion timing. Override
  *     via `className` only when you have a specific reason (the
  *     ModeCard / Composer submit-pill remain hand-rolled outliers).
@@ -266,8 +270,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         type={type}
         className={cn(
-          "inline-flex select-none items-center justify-center rounded-sm transition-[background-color,border-color,color,box-shadow,transform]",
-          "duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
+          "inline-flex select-none items-center justify-center rounded-sm",
+          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
           "outline-none disabled:cursor-not-allowed disabled:opacity-40",
           VARIANT_CLASSES[variant],
           SIZE_CLASSES[size],
@@ -316,8 +320,8 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         type={type}
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex select-none items-center justify-center rounded-sm transition-[background-color,border-color,color,box-shadow,transform]",
-          "duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
+          "inline-flex select-none items-center justify-center rounded-sm",
+          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
           "outline-none disabled:cursor-not-allowed disabled:opacity-40",
           ICON_VARIANT_CLASSES[variant],
           ICON_SIZE_CLASSES[size],

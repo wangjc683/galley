@@ -122,6 +122,13 @@ export interface PerSessionMessages {
    * run. Cleared together with agentRunning at run end.
    */
   isStopping: boolean;
+  /**
+   * True while `restoreSessionTurns` is reading this session's turns
+   * back from SQLite. Drives the conversation skeleton on cold start
+   * into a history session (warm switches never see it — activation
+   * defers the active-pointer flip until turns are in memory).
+   */
+  restoring: boolean;
   turnIndexOffset: number;
   lastUserPersistRequestId: number;
 }
@@ -137,6 +144,7 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   pendingAskUser: null,
   sendPhase: null,
   isStopping: false,
+  restoring: false,
   turnIndexOffset: 0,
   lastUserPersistRequestId: 0,
 }) as PerSessionMessages;
@@ -155,6 +163,7 @@ function emptyMessages(): PerSessionMessages {
     pendingAskUser: null,
     sendPhase: null,
     isStopping: false,
+    restoring: false,
     turnIndexOffset: 0,
     lastUserPersistRequestId: 0,
   };
@@ -383,24 +392,32 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
 
   restoreSessionTurns: async (sid) => {
     const startedAt = perfNow();
-    let rows: MessageRow[];
+    set({ byId: patchMessages(get(), sid, (m) => ({ ...m, restoring: true })).byId });
     try {
-      rows = await loadMessagesBySession(sid);
-    } catch (e) {
-      console.debug("[messages] restoreSessionTurns: SQLite unavailable.", e);
-      return;
+      let rows: MessageRow[];
+      try {
+        rows = await loadMessagesBySession(sid);
+      } catch (e) {
+        console.debug("[messages] restoreSessionTurns: SQLite unavailable.", e);
+        return;
+      }
+      rememberMessageRowsForSession(sid, rows);
+      logPerf("messages.restoreSessionTurns", startedAt, {
+        sessionId: sid,
+        rowCount: rows.length,
+        completedTurnCount: sessionCompletedTurnCount(sid),
+      });
+      if (rows.length === 0) return;
+      const turns = rowsToTurns(rows);
+      const state = get();
+      const { byId } = patchMessages(state, sid, (m) => ({ ...m, turns }));
+      set({ byId });
+    } finally {
+      set({
+        byId: patchMessages(get(), sid, (m) => ({ ...m, restoring: false })).byId,
+      });
     }
-    rememberMessageRowsForSession(sid, rows);
-    logPerf("messages.restoreSessionTurns", startedAt, {
-      sessionId: sid,
-      rowCount: rows.length,
-      completedTurnCount: sessionCompletedTurnCount(sid),
-    });
-    if (rows.length === 0) return;
-    const turns = rowsToTurns(rows);
-    const state = get();
-    const { byId } = patchMessages(state, sid, (m) => ({ ...m, turns }));
-    set({ byId });  },
+  },
 
   // ---- conversation writes ----
 

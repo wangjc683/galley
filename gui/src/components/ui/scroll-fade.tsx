@@ -80,7 +80,7 @@ export function ScrollFade({
             "linear-gradient(to bottom, var(--color-surface), transparent)",
         }}
         className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 h-10 transition-opacity duration-150",
+          "pointer-events-none absolute inset-x-0 top-0 h-10 transition-opacity duration-(--motion-fast)",
           atTop ? "opacity-0" : "opacity-100",
         )}
       />
@@ -91,7 +91,7 @@ export function ScrollFade({
             "linear-gradient(to top, var(--color-surface), transparent)",
         }}
         className={cn(
-          "pointer-events-none absolute inset-x-0 bottom-0 h-14 transition-opacity duration-150",
+          "pointer-events-none absolute inset-x-0 bottom-0 h-14 transition-opacity duration-(--motion-fast)",
           atBottom ? "opacity-0" : "opacity-100",
         )}
       />

@@ -136,7 +136,7 @@ export function ProviderCard({
         open && "border-line-strong",
       )}
     >
-      <div className="flex min-w-0 items-center gap-3 px-2 py-1.5 transition-colors">
+      <div className="flex min-w-0 items-center gap-3 px-2 py-1.5">
         <button
           type="button"
           tabIndex={-1}
@@ -144,7 +144,7 @@ export function ProviderCard({
           aria-expanded={open}
           className={cn(
             "group/toggle flex min-w-0 flex-1 items-center gap-3 rounded-sm px-1.5 py-0.5 text-left",
-            "outline-none transition-colors hover:bg-hover",
+            "outline-none hover:bg-hover",
           )}
           onClick={onToggle}
         >
@@ -179,7 +179,7 @@ export function ProviderCard({
         </button>
         <div
           className={cn(
-            "ml-auto flex shrink-0 items-center gap-1.5 opacity-75 transition-opacity",
+            "ml-auto flex shrink-0 items-center gap-1.5 opacity-75",
             "group-hover/provider:opacity-100",
             headerProbeState.kind === "loading" && "opacity-100",
           )}
@@ -385,7 +385,7 @@ function ProviderActionsMenu({
   const appCopy = useCopy();
   const copy = appCopy.settings.models;
   const itemClass =
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover";
+    "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover";
 
   return (
     <DropdownMenu.Root>
@@ -454,7 +454,7 @@ function DetectedModelRow({
           onClick={onEnable}
           className={cn(
             "inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent px-2.5 text-ui-meta leading-none text-ink-muted",
-            "transition-[background-color,border-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
+            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
             "hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20 active:translate-y-[0.5px]",
             "disabled:cursor-not-allowed disabled:opacity-40 disabled:translate-y-0",
           )}

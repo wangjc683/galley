@@ -330,7 +330,7 @@ function SectionHeader({
           size={12}
           weight="bold"
           className={cn(
-            "shrink-0 text-ink-muted transition-transform duration-[120ms]",
+            "shrink-0 text-ink-muted transition-transform duration-(--motion-fast)",
             collapsed && "-rotate-90",
           )}
         />
@@ -407,8 +407,8 @@ function PromptCard({
         // sit compact; custom cards (four-line body preview) stay taller.
         // Hover actions live top-right (see below), so no bottom band is
         // reserved — the card ends right after its text.
-        "group/card relative flex cursor-pointer flex-col rounded-md border border-line bg-surface p-3 text-left",
-        "transition-[background-color,border-color,box-shadow,transform] duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)]",
+        "group/card relative flex flex-col rounded-md border border-line bg-surface p-3 text-left",
+        "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
         "hover:-translate-y-px hover:border-brand/35 hover:bg-elevated hover:shadow-[var(--shadow-neutral-control-hover)]",
         "active:translate-y-[1px] active:scale-[0.995]",
         highlighted && "border-brand/55 ring-2 ring-brand/40",
@@ -443,7 +443,7 @@ function PromptCard({
         onClick={(event) => event.stopPropagation()}
         className={cn(
           "pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-md p-0.5 opacity-0",
-          "transition-opacity duration-120 group-hover/card:pointer-events-auto group-hover/card:opacity-100",
+          "group-hover/card:pointer-events-auto group-hover/card:opacity-100",
         )}
       >
         <PromptCardIconButton

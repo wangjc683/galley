@@ -68,7 +68,7 @@ export function TutorialModal({ tutorial, onClose }: TutorialModalProps) {
                 href={tutorial.upstreamUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-[12.5px] text-brand-strong transition-colors hover:text-brand-strong/80"
+                className="inline-flex items-center gap-1.5 text-[12.5px] text-brand-strong hover:text-brand-strong/80"
               >
                 {tutorial.upstreamLabel ?? copy.onboarding.openFullGuide}
                 <ArrowSquareOut size={12} weight="thin" />

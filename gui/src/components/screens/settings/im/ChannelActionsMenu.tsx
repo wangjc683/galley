@@ -21,7 +21,7 @@ export function ChannelActionsMenu({
   const appCopy = useCopy();
   const imCopy = appCopy.settings.im;
   const itemClass =
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover";
+    "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover";
 
   return (
     <DropdownMenu.Root>

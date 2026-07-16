@@ -109,7 +109,7 @@ export function AdvancedModelOptions({
         type="button"
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
-        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-elevated/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20"
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-elevated/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20"
       >
         <span className="flex min-w-0 items-center gap-2">
           {open ? (
@@ -334,7 +334,7 @@ function AdvancedChoiceField<TValue extends string>({
               aria-pressed={active}
               onClick={() => onChange(option.value)}
               className={cn(
-                "inline-flex min-h-7 items-center rounded-sm border px-2 text-ui-meta transition-colors",
+                "inline-flex min-h-7 items-center rounded-sm border px-2 text-ui-meta",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
                 active
                   ? "border-line bg-elevated text-ink shadow-card"

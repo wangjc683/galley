@@ -132,8 +132,8 @@ export function SessionTitleMenu({
             beginRename();
           }}
           className={cn(
-            "group inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1",
-            "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-hover data-[state=open]:bg-hover active:translate-y-[0.5px] active:duration-[45ms]",
+            "group inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1",
+            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover data-[state=open]:bg-hover active:translate-y-[0.5px]",
             "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           )}
         >
@@ -142,7 +142,7 @@ export function SessionTitleMenu({
             size={11}
             weight="bold"
             className={cn(
-              "shrink-0 text-ink-muted transition-transform",
+              "shrink-0 text-ink-muted transition-transform duration-(--motion-fast)",
               "group-hover:text-ink-soft",
               "group-data-[state=open]:rotate-180 group-data-[state=open]:text-ink-soft",
             )}
@@ -174,7 +174,7 @@ export function SessionTitleMenu({
               <DropdownMenu.Item
                 onSelect={beginRename}
                 className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+                  "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
                   "data-[highlighted]:bg-hover",
                 )}
               >
@@ -191,7 +191,7 @@ export function SessionTitleMenu({
           <DropdownMenu.Item
             onSelect={() => onReinjectTools?.()}
             className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+              "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
               "data-[highlighted]:bg-hover",
             )}
           >
@@ -205,7 +205,7 @@ export function SessionTitleMenu({
           <DropdownMenu.Item
             onSelect={() => onTogglePet?.()}
             className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+              "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
               "data-[highlighted]:bg-hover",
             )}
           >

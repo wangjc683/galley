@@ -12,6 +12,7 @@ import {
   Conversation,
   TurnMarker,
 } from "@/components/conversation/Conversation";
+import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { GoalRunningTail } from "@/components/conversation/GoalRunMarkers";
 import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
 import { GoalWorkerContextBar } from "@/components/conversation/GoalWorkerContextBar";
@@ -220,6 +221,11 @@ export function MainView({
   // previously passed as props from App; see MainViewProps docs above.
   const inFlightContent = useActiveMessages((m) => m.inFlightContent, "");
   const sendPhase = useActiveMessages((m) => m.sendPhase, null);
+  // Cold-start restore: turns are still being read back from SQLite
+  // and there is no previous transcript on screen (warm switches keep
+  // the old one via the sessions.ts atomic swap). Ghost turns instead
+  // of a blank column that would misread as an empty session.
+  const restoring = useActiveMessages((m) => m.restoring, false);
   const currentTurnIndex = useActiveMessages((m) => m.currentTurnIndex, null);
   const currentRunStartedAtMs = useActiveMessages(
     (m) => m.currentRunStartedAtMs,
@@ -327,14 +333,18 @@ export function MainView({
               conversationWidth === "wide" ? "max-w-[1200px]" : "max-w-[760px]",
             )}
           >
-            <Conversation
-              turns={turns}
-              approvalDecisions={approvalDecisions}
-              onApprove={onApprove}
-              projectName={projectName}
-              goals={sessionGoals}
-              onOpenWorkerSession={onOpenSession}
-            />
+            {restoring && turns.length === 0 ? (
+              <ConversationSkeleton />
+            ) : (
+              <Conversation
+                turns={turns}
+                approvalDecisions={approvalDecisions}
+                onApprove={onApprove}
+                projectName={projectName}
+                goals={sessionGoals}
+                onOpenWorkerSession={onOpenSession}
+              />
+            )}
             {/* In-flight pending approvals — rendered after the
               completed turns. The agent has emitted tool_call_pending
               but the turn hasn't ended yet, so these tools aren't in
@@ -523,7 +533,7 @@ export function MainView({
               className={cn(
                 "group pointer-events-auto inline-flex size-8 items-center justify-center rounded-full",
                 "border border-line bg-elevated/92 text-ink-soft shadow-[var(--shadow-float)] backdrop-blur-md",
-                "transition-all duration-[120ms] ease-out",
+                "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
                 "hover:-translate-y-0.5 hover:border-line-strong hover:bg-elevated hover:text-ink hover:shadow-[var(--shadow-float-hover)]",
                 "active:translate-y-0 active:scale-95",
                 "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20",

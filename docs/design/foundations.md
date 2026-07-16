@@ -348,8 +348,14 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
 `Button` / `IconButton` 默认带克制但**扎实**的实体反馈,有真实的键程(A 类反馈,见 §2.7):
 
 - **hover**:干脆升 `1px`(整数,非亚像素)+ "firm"硬边阴影——planted,不上浮气球。
-- **press(active)**:沉 `2px` + `scale(0.97)` 压缩 + 投影塌成 `--shadow-control-press` 深接触 inset(缝隙压没)。
-- **时机不对称**:按下 ~70ms 快速到底、回升 ~140ms 落定;`cubic-bezier(0.2,0,0,1)` ease-out,**不用 bounce / elastic**。
+- **hover 一律瞬时**(2026-07-16):原生桌面惯例。hover 驱动的颜色 / 抬升 /
+  阴影变化不走过渡,瞬间翻转——基础态没有 transition,过渡只存在于 `:active`
+  上(见 Button.tsx 的 canonical pattern)。hover 淡入淡出是最典型的网页手感
+  泄漏,全应用禁止。
+- **press(active)**:沉 `2px` + `scale(0.97)` 压缩 + 投影塌成
+  `--shadow-control-press` 深接触 inset(缝隙压没);下沉走 `--motion-press`
+  (70ms)+ `--ease-firm`,松开随基础态瞬时回弹(原生 snap)。**不用 bounce /
+  elastic**。
 - **ghost / 文字按钮保持平**:只给极轻 `1px` press + 颜色反馈,不加阴影塌陷,把"重物理"留给主 CTA。
 - 所有位移用整数像素;`*-hover` 阴影 token 一律 firm(紧软模糊,无 8–16px 气球)。
 
@@ -371,6 +377,14 @@ Galley 是桌面客户端，不应暴露不必要的网页线索：
 
 - `html` 禁用 overscroll bounce；`body` 不出现整页滚动。
 - 默认不允许随手选中 UI chrome，避免拖拽时出现网页蓝色选区。
+- 交互 chrome（按钮、菜单项、列表行、卡片、展开头）一律用原生箭头光标，
+  **禁止 `cursor-pointer`**——小手是超链接语义，只保留给真实的 `<a href>`
+  外链；内容区域维持 `cursor: text`，disabled 维持 `cursor-not-allowed`。
+- 图片与链接禁止浏览器拖拽幽灵影像（globals.css 全局
+  `-webkit-user-drag: none`）。
+- 页面缩放三层防御：`zoomHotkeysEnabled: false`（tauri.conf.json 显式断言）
+  + Ctrl+wheel 拦截（Chromium/WebView2 的捏合缩放也走这条路）+ WKWebView
+  `gesturestart/gesturechange` 拦截（useGlobalShortcuts.ts）。
 - conversation markdown、用户消息、code block、input / textarea、路径 / key /
   error detail 等内容区域必须保留可选择文本。Galley 是工作台，复制内容是核心任务。
 - 滚动条按平台分治：macOS 保持原生 overlay 滚动条，**禁止**写不带
@@ -404,3 +418,30 @@ state, not decoration”）。`prefers-reduced-motion` 下 A/B 动效一律退�
 > 每秒跳动的 elapsed 计数器承担（皆为功能性 / 信息性指示，非装饰循环）。其余 B 类
 > （sidebar liveness rail、composer stop breath、approval / browser-control
 > attention 等）逐个评估后再处理。
+
+#### Motion tokens（2026-07-16）
+
+时长与缓动收敛为 token（globals.css），**新代码禁止再写 duration / easing
+字面量**：
+
+| Token | 值 | 用途 |
+|---|---|---|
+| `--motion-press` | 70ms | 按压下沉键程 |
+| `--motion-fast` | 120ms | 小型淡入淡出 / 图标旋转 / 开关滑块 |
+| `--motion-base` | 160ms | 标准显隐（fade-in、弹层入场、展开） |
+| `--motion-slow` | 240ms | 较大结构位移（行重排、树展开） |
+| `--ease-firm` | `cubic-bezier(0.2,0,0,1)` | A 类反馈主力 ease-out |
+| `--ease-pop` | `cubic-bezier(0.16,1,0.3,1)` | 弹层 / 内容入场 |
+| `--ease-spring` | `cubic-bezier(0.34,1.2,0.64,1)` | 一次性注意 overshoot |
+
+Tailwind 用法：`duration-(--motion-fast)`（var 简写——duration 没有 theme
+namespace）、`ease-firm`（`--ease-*` 有 namespace，直接成为 utility）。
+
+核心原则：**hover 驱动的变化没有时长**——hover 瞬时翻转（§2.5），token 只
+服务状态驱动的动效（展开 / 显隐 / 位移 / 按压）。B 类循环的周期（呼吸 2.4s
+之类）不属于这个刻度，按语义单独取值。
+
+内容形状的加载面用 `Skeleton`（ui/skeleton.tsx）：轻呼吸占位、非 shimmer
+（shimmer 是被禁的 B 类噪动），`prefers-reduced-motion` 下静止。只用于真实
+内容将以同样形状落位的场景（会话冷启动恢复走 `ConversationSkeleton`、
+Settings 模型列表）；动作型忙碌状态（探测 / 连接按钮）保留 spinner。

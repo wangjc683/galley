@@ -53,14 +53,14 @@ export function ChannelCard({
           onMouseDown={preventMouseFocus}
           aria-expanded={expanded}
           className={cn(
-            "group/toggle flex min-w-0 flex-1 items-center gap-3 rounded-sm px-1.5 py-0.5 text-left transition-colors",
+            "group/toggle flex min-w-0 flex-1 items-center gap-3 rounded-sm px-1.5 py-0.5 text-left",
             "hover:bg-hover outline-none",
           )}
           onClick={onToggle}
         >
           <span
             className={cn(
-              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-ink-soft transition-[color,transform] duration-150 ease-[cubic-bezier(0.2,0,0,1)]",
+              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-ink-soft transition-[color,transform] duration-(--motion-fast) ease-firm",
               expanded ? "rotate-90 text-ink" : "rotate-0",
             )}
           >
@@ -79,7 +79,7 @@ export function ChannelCard({
         </button>
         <div
           className={cn(
-            "ml-auto flex shrink-0 items-center gap-1.5 opacity-80 transition-opacity",
+            "ml-auto flex shrink-0 items-center gap-1.5 opacity-80",
             "group-hover/im:opacity-100",
             busy && "opacity-100",
           )}
@@ -90,7 +90,7 @@ export function ChannelCard({
 
       <div
         className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-[cubic-bezier(0.2,0,0,1)]",
+          "grid transition-[grid-template-rows] duration-(--motion-base) ease-firm",
           expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >

@@ -514,13 +514,13 @@ function SetupGuide({
           <button
             type="button"
             onClick={() => setShowTrouble((show) => !show)}
-            className="flex items-center gap-1 text-ui-meta text-ink-muted transition-colors hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            className="flex items-center gap-1 text-ui-meta text-ink-muted hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
           >
             <CaretRight
               size={11}
               weight="bold"
               className={cn(
-                "transition-transform duration-[120ms]",
+                "transition-transform duration-(--motion-fast) ease-firm",
                 showTrouble && "rotate-90",
               )}
             />

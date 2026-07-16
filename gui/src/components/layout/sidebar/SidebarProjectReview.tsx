@@ -48,11 +48,11 @@ export function SidebarProjectReviewPresence({
         "grid overflow-hidden motion-reduce:transition-none",
         "transition-[grid-template-rows,opacity,transform]",
         phase === "entered" &&
-          "grid-rows-[1fr] translate-y-0 opacity-100 duration-[260ms] ease-[cubic-bezier(0.34,1.2,0.64,1)]",
+          "grid-rows-[1fr] translate-y-0 opacity-100 duration-(--motion-slow) ease-spring",
         phase === "entering" &&
-          "grid-rows-[0fr] -translate-y-2 opacity-0 duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
+          "grid-rows-[0fr] -translate-y-2 opacity-0 duration-(--motion-slow) ease-pop",
         phase === "exiting" &&
-          "grid-rows-[0fr] -translate-y-2 opacity-0 duration-[160ms] ease-[cubic-bezier(0.4,0,1,1)]",
+          "grid-rows-[0fr] -translate-y-2 opacity-0 duration-(--motion-base) ease-in",
       )}
     >
       <div className="min-h-0 overflow-hidden">{children}</div>
@@ -255,9 +255,9 @@ function SidebarProjectReviewEmpty({
         onMouseDown={preventMouseFocus}
         onClick={onNewProject}
         className={cn(
-          "flex w-full cursor-pointer items-center gap-2 rounded-sm border border-brand/30 bg-selected/50 px-3 py-2.5 text-left",
-          "text-[12.5px] font-medium text-ink-soft transition-[background-color,border-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-          "hover:border-brand/50 hover:bg-selected hover:text-ink active:translate-y-px active:duration-[45ms]",
+          "flex w-full items-center gap-2 rounded-sm border border-brand/30 bg-selected/50 px-3 py-2.5 text-left",
+          "text-[12.5px] font-medium text-ink-soft transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          "hover:border-brand/50 hover:bg-selected hover:text-ink active:translate-y-px",
           "outline-none",
         )}
       >
@@ -295,9 +295,9 @@ function SidebarProjectGroupToggle({
       onClick={onToggle}
       aria-expanded={open}
       className={cn(
-        "mx-1.5 mt-3 flex w-[calc(100%-12px)] cursor-pointer items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
-        "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-hover hover:text-ink-soft",
-        "active:translate-y-px active:duration-[45ms]",
+        "mx-1.5 mt-3 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
+        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
+        "active:translate-y-px",
         "outline-none",
       )}
     >
@@ -305,7 +305,7 @@ function SidebarProjectGroupToggle({
         size={10}
         weight="thin"
         className={cn(
-          "transition-transform duration-[120ms]",
+          "transition-transform duration-(--motion-fast)",
           open && "rotate-90",
         )}
       />
@@ -357,9 +357,9 @@ function SidebarProjectRow({
       aria-expanded={expanded}
       onClick={onClick}
       className={cn(
-        "group relative mx-1.5 flex w-[calc(100%-12px)] cursor-pointer items-center gap-2.5 overflow-hidden rounded-sm px-3 py-1.5 text-left text-[13px] outline-none",
-        "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-        "active:translate-y-px active:duration-[45ms]",
+        "group relative mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 overflow-hidden rounded-sm px-3 py-1.5 text-left text-[13px] outline-none",
+        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+        "active:translate-y-px",
         (onStartConversation || hasRowActions) && "group-hover:pr-16",
         actionsOpen && "pr-16",
         active
@@ -373,7 +373,7 @@ function SidebarProjectRow({
         size={14}
         weight="thin"
         className={cn(
-          "shrink-0 transition-colors duration-[120ms]",
+          "shrink-0",
           expanded ? "text-brand-strong" : "text-ink-muted",
         )}
       />
@@ -399,7 +399,7 @@ function SidebarProjectRow({
       {(onStartConversation || hasRowActions) && (
         <div
           className={cn(
-            "pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity duration-[120ms]",
+            "pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-0",
             "group-hover:pointer-events-auto group-hover:opacity-100",
             actionsOpen && "pointer-events-auto opacity-100",
           )}
@@ -420,9 +420,9 @@ function SidebarProjectRow({
                   // light-button rules with the quick-action 新建项目
                   // (layout-and-chrome.md §4.2 Project 行).
                   "inline-flex size-[32px] shrink-0 items-center justify-center rounded-sm",
-                  "text-ink-muted transition-[background-color,color,opacity,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
+                  "text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
                   "group-hover:text-ink-soft",
-                  "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60 active:duration-[45ms]",
+                  "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60",
                   "outline-none",
                 )}
               >
@@ -515,11 +515,11 @@ function SidebarProjectMenuItems({
 }) {
   const copy = useCopy();
   const itemClass = cn(
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none transition-colors duration-[120ms]",
+    "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none",
     "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
   );
   const destructiveItemClass = cn(
-    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-error outline-none transition-colors duration-[120ms]",
+    "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-error outline-none",
     "data-[highlighted]:bg-error/[var(--opacity-soft)] data-[highlighted]:text-error",
   );
 
@@ -651,21 +651,21 @@ function SidebarProjectDrawer({
     <div
       ref={drawerRef}
       className={cn(
-        "grid overflow-hidden transition-[grid-template-rows] duration-[240ms] ease-[cubic-bezier(0.34,1.2,0.64,1)] motion-reduce:transition-none",
+        "grid overflow-hidden transition-[grid-template-rows] duration-(--motion-slow) ease-spring motion-reduce:transition-none",
         expanded
           ? "grid-rows-[1fr]"
-          : "grid-rows-[0fr] duration-[150ms] ease-[cubic-bezier(0.4,0,1,1)]",
+          : "grid-rows-[0fr] duration-(--motion-fast) ease-in",
       )}
     >
       <div className="min-h-0 overflow-hidden">
         <div
           className={cn(
             "ml-6 mr-1.5 border-l border-brand/35 pb-2 pl-1",
-            "transition-[opacity,transform] duration-[200ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none",
+            "transition-[opacity,transform] duration-(--motion-base) ease-pop motion-reduce:transition-none",
             expanded
               ? "translate-y-0 opacity-100 delay-[40ms]"
               : "-translate-y-2 opacity-0",
-            !expanded && "pointer-events-none delay-0 duration-[120ms] ease-in",
+            !expanded && "pointer-events-none delay-0 duration-(--motion-fast) ease-in",
           )}
         >
           {projectEmpty ? (
@@ -727,9 +727,9 @@ function SidebarProjectEmptyHint({
         onClick={onStartProjectConversation}
         aria-label={newConversationTitle}
         className={cn(
-          "mx-1.5 mt-3 flex w-[calc(100%-12px)] cursor-pointer items-center gap-2 rounded-sm border border-line/70 bg-elevated/55 px-3 py-2 text-left",
-          "text-[12px] font-medium text-ink-soft transition-[background-color,border-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-          "hover:border-brand/35 hover:bg-selected/70 hover:text-ink active:translate-y-px active:duration-[45ms]",
+          "mx-1.5 mt-3 flex w-[calc(100%-12px)] items-center gap-2 rounded-sm border border-line/70 bg-elevated/55 px-3 py-2 text-left",
+          "text-[12px] font-medium text-ink-soft transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          "hover:border-brand/35 hover:bg-selected/70 hover:text-ink active:translate-y-px",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         )}
       >

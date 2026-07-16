@@ -187,8 +187,7 @@ function ModelScopeHint({
         aria-label={copy.sessionModelScopeTitle}
         className={cn(
           "inline-flex size-5 items-center justify-center rounded-sm border border-transparent",
-          "text-ink-muted transition-[background-color,border-color,color,transform]",
-          "duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
+          "text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
           "hover:border-line hover:bg-hover hover:text-ink",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           "active:translate-y-[0.5px]",
@@ -262,7 +261,7 @@ function ConfiguredModelRow({
   return (
     <div
       className={cn(
-        "group px-3 py-2 transition-colors duration-150",
+        "group px-3 py-2",
         isEditing
           ? "bg-selected/45"
           : "hover:bg-elevated/55",
@@ -316,7 +315,7 @@ function ConfiguredModelRow({
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          <div className="flex items-center gap-0.5 opacity-50 transition-opacity group-hover:opacity-100">
+          <div className="flex items-center gap-0.5 opacity-50 group-hover:opacity-100">
             <IconButton
               ariaLabel={copy.testModel}
               size="sm"
@@ -376,7 +375,7 @@ function ConfiguredModelRow({
             size="xs"
             disabled={!canMoveUp}
             onClick={onMoveUp}
-            className="text-ink-muted/45 transition-colors group-hover:text-ink-muted hover:text-ink"
+            className="text-ink-muted/45 group-hover:text-ink-muted hover:text-ink"
           >
             <ArrowUp size={11} weight="bold" />
           </IconButton>
@@ -385,7 +384,7 @@ function ConfiguredModelRow({
             size="xs"
             disabled={!canMoveDown}
             onClick={onMoveDown}
-            className="text-ink-muted/45 transition-colors group-hover:text-ink-muted hover:text-ink"
+            className="text-ink-muted/45 group-hover:text-ink-muted hover:text-ink"
           >
             <ArrowDown size={11} weight="bold" />
           </IconButton>

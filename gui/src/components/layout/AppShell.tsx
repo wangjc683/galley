@@ -111,7 +111,7 @@ export function AppShell({
 function ResizeSeparator() {
   return (
     <Separator className="group relative w-1.5 shrink-0 cursor-col-resize">
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line/70 transition-colors duration-[120ms] group-hover:bg-brand group-active:bg-brand" />
+      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line/70 group-hover:bg-brand group-active:bg-brand" />
     </Separator>
   );
 }

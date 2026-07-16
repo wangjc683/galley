@@ -63,7 +63,7 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
           onCheckedChange?.(!checked);
         }}
         className={cn(
-          "relative inline-flex shrink-0 items-center rounded-full transition-colors",
+          "relative inline-flex shrink-0 items-center rounded-full transition-colors duration-(--motion-fast) ease-firm",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
           "disabled:cursor-not-allowed disabled:opacity-40",
           checked ? CHECKED_TONE_CLASSES[tone] : "bg-line-strong",
@@ -75,7 +75,7 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
         <span
           data-checked={checked}
           className={cn(
-            "rounded-full bg-elevated shadow-card transition-transform",
+            "rounded-full bg-elevated shadow-card transition-transform duration-(--motion-fast) ease-firm",
             KNOB_SIZE_CLASSES[size],
           )}
         />

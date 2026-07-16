@@ -1,6 +1,5 @@
 import {
   CheckCircle,
-  CircleNotch,
   Info,
   MagnifyingGlass,
   WarningCircle,
@@ -9,6 +8,7 @@ import type { ReactNode } from "react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { ScrollFade } from "@/components/ui/scroll-fade";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ManagedModelProtocol } from "@/types/managed-models";
@@ -73,7 +73,7 @@ export function ModelSelectionList({
                 aria-pressed={selected}
                 onClick={() => onChange(option)}
                 className={cn(
-                  "flex w-full min-w-0 items-center gap-3 px-3 py-2 text-left transition-colors",
+                  "flex w-full min-w-0 items-center gap-3 px-3 py-2 text-left",
                   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20",
                   selected ? "bg-brand-soft text-ink" : "text-ink hover:bg-hover",
                 )}
@@ -230,14 +230,24 @@ export function InfoLine({ message }: { message: string }) {
   );
 }
 
+/**
+ * Provider-list loading placeholder — two ghost rows in the shape the
+ * ProviderCard headers will land in (§2.7: skeleton for content-shaped
+ * loads, spinner only for action-busy states).
+ */
 export function LoadingRow() {
-  const copy = useCopy().settings.models;
   return (
-    <div className="flex items-center gap-2 px-3 py-3 text-ui-secondary text-ink-muted">
-      <span className="spin">
-        <CircleNotch size={13} weight="thin" />
-      </span>
-      {copy.loading}
+    <div aria-hidden className="flex flex-col gap-4 px-3 py-3.5">
+      <div className="flex items-center gap-2.5">
+        <Skeleton className="size-4" />
+        <Skeleton className="h-3.5 w-36" />
+        <Skeleton className="ml-auto h-3.5 w-14" />
+      </div>
+      <div className="flex items-center gap-2.5">
+        <Skeleton className="size-4" />
+        <Skeleton className="h-3.5 w-28" />
+        <Skeleton className="ml-auto h-3.5 w-14" />
+      </div>
     </div>
   );
 }
@@ -297,7 +307,7 @@ export function InfoTooltip({ label, text }: { label: string; text: string }) {
       <button
         type="button"
         aria-label={label}
-        className="inline-flex size-5 items-center justify-center rounded-sm text-ink-muted transition-colors hover:bg-hover hover:text-ink"
+        className="inline-flex size-5 items-center justify-center rounded-sm text-ink-muted hover:bg-hover hover:text-ink"
       >
         <Info size={11} weight="bold" />
       </button>

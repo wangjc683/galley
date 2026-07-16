@@ -563,13 +563,13 @@ export function StepModelConfig({
                 type="button"
                 onClick={() => setAdvancedOpen((open) => !open)}
                 aria-expanded={advancedOpen}
-                className="flex items-center gap-1 text-[12px] text-ink-muted transition-colors hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                className="flex items-center gap-1 text-[12px] text-ink-muted hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
               >
                 <CaretRight
                   size={11}
                   weight="bold"
                   className={cn(
-                    "transition-transform duration-[120ms]",
+                    "transition-transform duration-(--motion-fast) ease-firm",
                     advancedOpen && "rotate-90",
                   )}
                 />
@@ -609,7 +609,7 @@ export function StepModelConfig({
           <button
             type="button"
             onClick={onAttachExisting}
-            className="inline-flex items-center gap-1 rounded-sm text-[12px] text-ink-muted transition-colors hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            className="inline-flex items-center gap-1 rounded-sm text-[12px] text-ink-muted hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
           >
             {onboardingCopy.connectExistingButton}
             <ArrowSquareOut size={11} weight="thin" />

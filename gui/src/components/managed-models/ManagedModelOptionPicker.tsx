@@ -28,7 +28,7 @@ export function ManagedModelOptionPicker({
           aria-label={placeholder}
           className={cn(
             "group flex w-full min-w-[240px] items-center justify-between gap-3 rounded-sm border border-line bg-surface px-3 py-2 text-left",
-            "outline-none transition-colors hover:bg-hover focus:border-brand focus:ring-[3px] focus:ring-brand/20",
+            "outline-none hover:bg-hover focus:border-brand focus:ring-[3px] focus:ring-brand/20",
             "data-[state=open]:border-brand data-[state=open]:bg-hover data-[state=open]:ring-[3px] data-[state=open]:ring-brand/20",
             className,
           )}
@@ -48,7 +48,7 @@ export function ManagedModelOptionPicker({
             size={12}
             weight="bold"
             className={cn(
-              "shrink-0 text-ink-muted transition-transform",
+              "shrink-0 text-ink-muted transition-transform duration-(--motion-fast)",
               "group-hover:text-ink-soft group-data-[state=open]:rotate-180 group-data-[state=open]:text-ink-soft",
             )}
           />
@@ -71,7 +71,7 @@ export function ManagedModelOptionPicker({
                   title={option}
                   onClick={() => onChange(option)}
                   className={cn(
-                    "flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-2 text-left outline-none transition-colors hover:bg-hover focus:bg-hover",
+                    "flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-2 text-left outline-none hover:bg-hover focus:bg-hover",
                     selected ? "text-ink" : "text-ink-soft",
                   )}
                 >

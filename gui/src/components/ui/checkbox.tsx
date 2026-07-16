@@ -48,7 +48,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
       <label
         className={cn(
           "group inline-flex select-none items-center gap-2",
-          disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer",
+          disabled && "cursor-not-allowed opacity-40",
           className,
         )}
       >
@@ -66,7 +66,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           <span
             aria-hidden
             className={cn(
-              "inline-flex items-center justify-center rounded-sm border transition-colors",
+              "inline-flex items-center justify-center rounded-sm border",
               "peer-focus-visible:ring-2 peer-focus-visible:ring-brand/40",
               checked
                 ? "border-brand bg-brand text-ink"

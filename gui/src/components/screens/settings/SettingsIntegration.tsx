@@ -317,7 +317,7 @@ export function SettingsIntegration() {
                 {example}
               </span>
               <span
-                className={`mt-[1px] flex size-5 shrink-0 items-center justify-center transition-opacity group-hover:text-ink ${
+                className={`mt-[1px] flex size-5 shrink-0 items-center justify-center group-hover:text-ink ${
                   copiedExampleIndex === index
                     ? "text-ink opacity-100"
                     : "text-ink-muted opacity-40 group-hover:opacity-100"
@@ -337,7 +337,7 @@ export function SettingsIntegration() {
       <section className="border-t border-line pt-2">
         <button
           type="button"
-          className="-mx-2 flex w-full items-center justify-between gap-3 rounded-sm px-2 py-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40"
+          className="-mx-2 flex w-full items-center justify-between gap-3 rounded-sm px-2 py-2 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40"
           aria-expanded={advancedOpen}
           onClick={() => setAdvancedOpen((current) => !current)}
         >

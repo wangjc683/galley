@@ -57,7 +57,7 @@ export function LLMPill({
 
   const pillClasses = cn(
     "flex h-7 min-w-0 items-center gap-1 text-[12.5px] text-ink-soft",
-    "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-[0.5px] active:duration-[45ms]",
+    "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-[0.5px]",
     "hover:bg-hover hover:text-ink",
     "outline-none",
     "rounded-sm px-2.5",
@@ -149,7 +149,7 @@ export function LLMPill({
                   onMouseDown={preventMouseFocus}
                   onClick={() => onSelectLLM?.(llm.index)}
                   className={cn(
-                    "group/llm-option flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-hover",
+                    "group/llm-option flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-[12.5px] hover:bg-hover",
                     llm.isCurrent ? "text-ink" : "text-ink-soft",
                   )}
                 >
@@ -169,7 +169,6 @@ export function LLMPill({
                     <span
                       className={cn(
                         "shrink-0 overflow-hidden truncate whitespace-nowrap text-[10px] leading-4 text-ink-muted/50",
-                        "transition-[max-width,opacity] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
                         isDuplicateDisplayName
                           ? "max-w-[96px] opacity-100"
                           : "max-w-0 opacity-0 group-hover/llm-option:max-w-[96px] group-hover/llm-option:opacity-100",
@@ -195,7 +194,7 @@ export function LLMPill({
                   onClick={onConfigureModels}
                   className={cn(
                     "flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
-                    "transition-colors hover:bg-hover hover:text-ink-soft",
+                    "hover:bg-hover hover:text-ink-soft",
                   )}
                 >
                   <Gear size={11} weight="thin" className="shrink-0" />

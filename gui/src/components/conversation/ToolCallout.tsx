@@ -138,7 +138,7 @@ function BlockToolCallout({
   return (
     <div
       className={cn(
-        "relative my-3 overflow-hidden rounded-md border border-line transition-colors",
+        "relative my-3 overflow-hidden rounded-md border border-line transition-colors duration-(--motion-base)",
         cfg.bgClass,
       )}
     >
@@ -152,7 +152,7 @@ function BlockToolCallout({
         className={cn(
           "flex select-none items-center gap-2.5 px-4 pt-3.5",
           open ? "pb-2" : "pb-3.5",
-          !forcedOpen && "cursor-pointer",
+          !forcedOpen && "cursor-default",
         )}
       >
         <span className="inline-flex shrink-0">
@@ -180,7 +180,7 @@ function BlockToolCallout({
               size={12}
               weight="thin"
               className={cn(
-                "transition-transform duration-[120ms]",
+                "transition-transform duration-(--motion-fast)",
                 open && "rotate-180",
               )}
             />
@@ -524,7 +524,7 @@ function InlineToolPill({ tool }: { tool: ConversationToolEvent }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "group flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left transition-colors",
+          "group flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left",
           "text-ink-soft hover:bg-hover hover:text-ink",
         )}
       >
@@ -562,7 +562,7 @@ function InlineToolPill({ tool }: { tool: ConversationToolEvent }) {
             size={10}
             weight="thin"
             className={cn(
-              "text-ink-muted transition-transform duration-[120ms]",
+              "text-ink-muted transition-transform duration-(--motion-fast)",
               open && "rotate-180",
             )}
           />

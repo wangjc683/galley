@@ -36,9 +36,25 @@ export function useGlobalShortcuts({
       if (shouldSkipGlobalContextMenuGuard(e.target)) return;
       e.preventDefault();
     };
+    // Page zoom is a browser affordance, not a desktop-app one. Tauri's
+    // `zoomHotkeysEnabled: false` covers the webview hotkeys; these two
+    // guards cover the input paths it does not: Ctrl+wheel (Chromium /
+    // WebView2 also reports trackpad pinch this way) and WKWebView's
+    // proprietary gesture events (macOS trackpad pinch).
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) e.preventDefault();
+    };
+    const preventGestureZoom = (e: Event) => e.preventDefault();
+    const gestureTarget = window as EventTarget;
     window.addEventListener("contextmenu", onContextMenu);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    gestureTarget.addEventListener("gesturestart", preventGestureZoom);
+    gestureTarget.addEventListener("gesturechange", preventGestureZoom);
     return () => {
       window.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("wheel", onWheel);
+      gestureTarget.removeEventListener("gesturestart", preventGestureZoom);
+      gestureTarget.removeEventListener("gesturechange", preventGestureZoom);
     };
   }, []);
 

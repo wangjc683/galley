@@ -146,8 +146,8 @@ export function GoalTerminalMarker({ goal }: { goal: GoalBrief }) {
 
   const actionClass = cn(
     "inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 text-[11.5px] text-ink-muted",
-    "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-    "hover:bg-hover hover:text-ink active:translate-y-px active:duration-[45ms]",
+    "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
+    "hover:bg-hover hover:text-ink active:translate-y-px",
   );
 
   // Provenance line — the only visible evidence of the "keeps improving
@@ -242,8 +242,8 @@ export function GoalRunningTail({ onStop }: { onStop?: () => void }) {
             type="button"
             className={cn(
               "ml-auto inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 text-[11.5px]",
-              "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-              "active:translate-y-px active:duration-[45ms]",
+              "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
+              "active:translate-y-px",
               confirmingStop
                 ? "border border-error bg-error/[var(--opacity-soft)] font-medium text-error hover:bg-error/[var(--opacity-medium)]"
                 : "text-ink-muted hover:bg-hover hover:text-ink",

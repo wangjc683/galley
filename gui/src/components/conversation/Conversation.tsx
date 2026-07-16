@@ -356,8 +356,7 @@ export function TurnMarker({
         onClick={hasDetail ? () => setOpen((v) => !v) : undefined}
         className={cn(
           "mb-2.5 mt-6 flex min-w-0 items-center gap-2 [font-size:var(--conversation-step-size)] text-ink-soft",
-          hasDetail &&
-            "cursor-pointer transition-colors duration-[120ms] hover:text-ink",
+          hasDetail && "cursor-default hover:text-ink",
         )}
       >
         {stepLabel && (
@@ -374,7 +373,7 @@ export function TurnMarker({
             size={11}
             weight="thin"
             className={cn(
-              "ml-auto shrink-0 text-ink-muted transition-transform duration-[120ms]",
+              "ml-auto shrink-0 text-ink-muted transition-transform duration-(--motion-fast)",
               open && "rotate-180",
             )}
           />

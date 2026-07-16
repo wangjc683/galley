@@ -562,7 +562,7 @@ function ActionButton({
             weight="thin"
             className={cn(
               action.handler === "toggleDetails" &&
-                "transition-transform duration-150",
+                "transition-transform duration-(--motion-fast)",
               action.handler === "toggleDetails" && detailsOpen && "rotate-180",
             )}
           />

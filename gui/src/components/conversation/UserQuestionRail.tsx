@@ -426,7 +426,7 @@ export function UserQuestionRail({
                           ink reading does all the work. */}
                         <span
                           className={cn(
-                            "relative block size-2 rounded-full border-[1.5px] transition-colors",
+                            "relative block size-2 rounded-full border-[1.5px]",
                             item.question.index === activeIndex
                               ? "border-brand-strong bg-brand-strong"
                               : "border-line-strong bg-transparent group-hover:border-ink-soft",
@@ -438,7 +438,7 @@ export function UserQuestionRail({
                   <span
                     role="tooltip"
                     className={cn(
-                      "pointer-events-none absolute right-full z-10 mr-2 flex max-w-[320px] items-center gap-2 truncate whitespace-nowrap rounded-sm border border-line bg-elevated px-2 py-1 text-[11.5px] text-ink-soft opacity-0 shadow-sm transition-opacity duration-100 group-hover:opacity-100",
+                      "pointer-events-none absolute right-full z-10 mr-2 flex max-w-[320px] items-center gap-2 truncate whitespace-nowrap rounded-sm border border-line bg-elevated px-2 py-1 text-[11.5px] text-ink-soft opacity-0 shadow-sm group-hover:opacity-100",
                       item.topPercent < 6
                         ? "top-0"
                         : item.topPercent > 94
@@ -489,7 +489,7 @@ export function UserQuestionRail({
                   >
                     <span
                       className={cn(
-                        "relative block w-2 rounded-full border-[1.5px] transition-colors",
+                        "relative block w-2 rounded-full border-[1.5px]",
                         activeIndex >= item.firstIndex &&
                           activeIndex <= item.lastIndex
                           ? "border-brand-strong bg-brand-strong"
@@ -522,7 +522,7 @@ export function UserQuestionRail({
                       item.questions.length,
                     )}
                     className={cn(
-                      "absolute right-full z-10 mr-2 w-max max-w-[min(320px,calc(100vw-80px))] rounded-sm border border-line bg-elevated py-1 text-[11.5px] text-ink-soft shadow-sm transition-opacity duration-100",
+                      "absolute right-full z-10 mr-2 w-max max-w-[min(320px,calc(100vw-80px))] rounded-sm border border-line bg-elevated py-1 text-[11.5px] text-ink-soft shadow-sm",
                       isClusterOpen
                         ? "pointer-events-auto opacity-100"
                         : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
@@ -541,7 +541,7 @@ export function UserQuestionRail({
                           tabIndex={-1}
                           onMouseDown={preventMouseFocus}
                           onClick={() => handleJump(question.index)}
-                          className="flex w-full items-center gap-2 px-2 py-1 text-left text-ink-soft transition-colors hover:bg-hover hover:text-ink"
+                          className="flex w-full items-center gap-2 px-2 py-1 text-left text-ink-soft hover:bg-hover hover:text-ink"
                         >
                           <span
                             className={cn(

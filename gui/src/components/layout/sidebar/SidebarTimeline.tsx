@@ -214,9 +214,9 @@ function SidebarEarlierEntry({
       onClick={onClick}
       aria-label={copy.sidebar.showAll}
       className={cn(
-        "mx-1.5 mt-2 flex w-[calc(100%-12px)] cursor-pointer items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
-        "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-hover hover:text-ink-soft",
-        "active:translate-y-px active:duration-[45ms]",
+        "mx-1.5 mt-2 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
+        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
+        "active:translate-y-px",
         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
       )}
     >
@@ -241,11 +241,11 @@ export function SidebarTimelinePresence({
   return (
     <div
       className={cn(
-        "transition-[opacity,transform] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none",
+        "transition-[opacity,transform] duration-(--motion-slow) ease-pop motion-reduce:transition-none",
         phase === "entered" && "translate-y-0 opacity-100",
         phase === "entering" && "translate-y-3 opacity-0",
         phase === "exiting" &&
-          "translate-y-4 opacity-0 duration-[160ms] ease-[cubic-bezier(0.4,0,1,1)]",
+          "translate-y-4 opacity-0 duration-(--motion-base) ease-in",
         phase !== "entered" && "pointer-events-none",
       )}
     >

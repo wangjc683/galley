@@ -83,7 +83,7 @@ export function WindowControls() {
   return (
     <div
       className={cn(
-        "flex shrink-0 items-stretch transition-opacity duration-150",
+        "flex shrink-0 items-stretch transition-opacity duration-(--motion-fast)",
         !focused && "opacity-50",
       )}
     >
@@ -135,7 +135,7 @@ function ControlButton({
       // in case Tauri 2's auto-exclusion ever regresses.
       data-tauri-drag-region="false"
       className={cn(
-        "flex h-11 w-[46px] shrink-0 items-center justify-center text-ink-soft transition-colors",
+        "flex h-11 w-[46px] shrink-0 items-center justify-center text-ink-soft",
         variant === "default" && "hover:bg-hover hover:text-ink",
         variant === "close" && "hover:bg-danger hover:text-elevated",
       )}

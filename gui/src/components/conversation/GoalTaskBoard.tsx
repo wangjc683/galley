@@ -111,7 +111,7 @@ export function GoalTaskBoard({
               {clickable ? (
                 <button
                   type="button"
-                  className="-mx-1.5 flex w-full items-start gap-2 rounded-sm px-1.5 py-0.5 text-left transition-colors duration-[120ms] hover:bg-hover"
+                  className="-mx-1.5 flex w-full items-start gap-2 rounded-sm px-1.5 py-0.5 text-left hover:bg-hover"
                   onClick={() => {
                     const owner = task.ownerSessionId;
                     if (owner) onOpenWorkerSession?.(owner);

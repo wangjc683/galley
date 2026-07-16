@@ -210,6 +210,30 @@
   --opacity-soft: 0.12;      /* 轻微强调 */
   --opacity-medium: 0.20;    /* 中等强调 */
   --opacity-strong: 0.40;    /* 强强调 */
+
+  /* --- motion easings (§2.7) — Tailwind emits `ease-firm` etc. --- */
+  /* firm: the workhorse ease-out for A-class feedback — decisive
+     arrival, no bounce. pop: overlay/popover entrances (fast start,
+     soft landing). spring: one-shot attention overshoots only. */
+  --ease-firm: cubic-bezier(0.2, 0, 0, 1);
+  --ease-pop: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+/* Motion durations (§2.7). Plain :root custom properties, not @theme:
+   there is no duration-* theme namespace, and utilities reference them
+   with the var shorthand — `duration-(--motion-fast)`. The scale is the
+   ONLY sanctioned set of interaction durations; hover state changes use
+   none of these (hover is instant, native-style — see §2.5/§2.7).
+     press — key travel down (active sink)
+     fast  — small fades / glyph turns / knob travel
+     base  — standard reveals (fade-in, expands)
+     slow  — larger structural movement (row reorder, tree expand) */
+:root {
+  --motion-press: 70ms;
+  --motion-fast: 120ms;
+  --motion-base: 160ms;
+  --motion-slow: 240ms;
 }
 
 @layer base {
@@ -428,7 +452,15 @@ html[data-platform="windows"] .scrollbar-stable {
 }
 
 html.theme-fade body {
-  animation: theme-fade 0.12s ease-out;
+  animation: theme-fade var(--motion-fast) ease-out;
+}
+
+/* Desktop discipline (§2.6): images and links must not lift off as a
+   browser drag ghost. Content images the user should be able to drag
+   out (if any surface ever wants that) opt back in explicitly. */
+img,
+a {
+  -webkit-user-drag: none;
 }
 
 input,
@@ -447,6 +479,30 @@ code {
   -webkit-user-select: none;
   cursor: default;
   user-select: none;
+}
+
+/* Skeleton ghost blocks (ui/skeleton.tsx) — content-shaped loading.
+   A slow opacity breath, deliberately NOT a shimmer sweep (§2.7 bans
+   decorative shimmer); conveys "content is on its way" and nothing
+   else. Static under reduced motion — the shape alone still reads as
+   a placeholder, unlike a frozen spinner. */
+@keyframes skeleton-breath {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.skeleton-breath {
+  animation: skeleton-breath 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-breath {
+    animation: none;
+    opacity: 0.75;
+  }
 }
 
 /* Spinning helper for status icons (CircleNotch etc.) */
@@ -484,7 +540,7 @@ code {
   }
 }
 .animate-fade-in {
-  animation: fade-in 0.18s ease-out;
+  animation: fade-in var(--motion-base) ease-out;
 }
 
 @keyframes model-row-swap-up {
@@ -508,10 +564,10 @@ code {
   }
 }
 .model-row-swap-up {
-  animation: model-row-swap-up 0.24s ease-out;
+  animation: model-row-swap-up var(--motion-slow) ease-out;
 }
 .model-row-swap-down {
-  animation: model-row-swap-down 0.24s ease-out;
+  animation: model-row-swap-down var(--motion-slow) ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -636,7 +692,7 @@ code {
   }
 }
 .sidebar-step-tick {
-  animation: sidebar-step-tick 0.24s ease-out;
+  animation: sidebar-step-tick var(--motion-slow) ease-out;
 }
 
 @keyframes sidebar-state-pop {
@@ -782,7 +838,7 @@ code {
   }
 }
 .galley-pop-in {
-  animation: galley-pop-in 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: galley-pop-in var(--motion-fast) var(--ease-pop);
   transform-origin: var(
     --radix-popover-content-transform-origin,
     var(--radix-dropdown-menu-content-transform-origin, center)
@@ -820,7 +876,7 @@ code {
    real bytes from the Rust `app-update-progress` event; the short
    width ease just smooths the throttled (~150ms) samples. */
 .app-update-bar-fill {
-  transition: width 0.2s ease-out;
+  transition: width var(--motion-base) ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
   .app-update-bar-fill {

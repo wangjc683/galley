@@ -30,8 +30,7 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  */
 const ACTION_CHIP_BASE = cn(
   "inline-flex select-none items-center justify-center rounded-sm",
-  "transition-[background-color,border-color,color,box-shadow,transform]",
-  "duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
+  "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
   "active:translate-y-px outline-none",
 );
 

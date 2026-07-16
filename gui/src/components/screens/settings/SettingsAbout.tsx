@@ -189,7 +189,7 @@ function ExternalLink({
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="group grid min-w-0 grid-cols-[120px_1fr_18px] items-baseline gap-3 rounded-sm px-1 py-1 text-ui-compact transition-colors hover:bg-hover"
+      className="group grid min-w-0 grid-cols-[120px_1fr_18px] items-baseline gap-3 rounded-sm px-1 py-1 text-ui-compact hover:bg-hover"
     >
       <span className="font-medium text-ink">{label}</span>
       <span className="min-w-0 text-ink-muted group-hover:text-ink-soft">
@@ -198,7 +198,7 @@ function ExternalLink({
       <ArrowSquareOut
         size={11}
         weight="thin"
-        className="shrink-0 translate-y-px text-ink-muted transition-colors group-hover:text-brand-strong"
+        className="shrink-0 translate-y-px text-ink-muted group-hover:text-brand-strong"
       />
     </a>
   );

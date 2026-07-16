@@ -107,7 +107,7 @@ export function GoalWorkerContextBar({
       type="button"
       className={cn(
         barClass,
-        "text-left transition-colors duration-[120ms] hover:bg-brand-tint",
+        "text-left hover:bg-brand-tint",
       )}
       onClick={() => {
         if (master) onOpenMaster?.(master);

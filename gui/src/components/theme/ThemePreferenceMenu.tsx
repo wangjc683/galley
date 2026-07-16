@@ -70,7 +70,7 @@ export function ThemePreferenceMenu({
           key={option.value}
           onSelect={() => onChange(option.value)}
           className={cn(
-            "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+            "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
             "data-[highlighted]:bg-hover",
           )}
         >
@@ -160,7 +160,7 @@ export function ThemePreferenceMenu({
           className={cn(
             "group flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left",
             "text-ink-soft outline-none hover:bg-hover hover:text-ink",
-            "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-px active:duration-[45ms]",
+            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
             "focus-visible:ring-2 focus-visible:ring-brand/30",
             "data-[state=open]:bg-hover data-[state=open]:text-ink",
           )}
@@ -178,7 +178,7 @@ export function ThemePreferenceMenu({
           <CaretRight
             size={11}
             weight="bold"
-            className="shrink-0 text-ink-muted transition-colors group-hover:text-ink-soft"
+            className="shrink-0 text-ink-muted group-hover:text-ink-soft"
           />
         </button>
       </DropdownMenu.Trigger>

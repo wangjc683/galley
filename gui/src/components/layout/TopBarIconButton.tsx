@@ -31,9 +31,9 @@ export const TopBarIconButton = forwardRef<
       type={type}
       className={cn(
         "inline-flex size-7 items-center justify-center rounded-md border border-transparent text-ink-muted",
-        "transition-[background-color,border-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
+        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
         "hover:border-line hover:bg-hover hover:text-ink",
-        "active:translate-y-[0.5px] active:duration-[45ms]",
+        "active:translate-y-[0.5px]",
         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         "data-[state=open]:translate-y-px data-[state=open]:border-line data-[state=open]:bg-hover data-[state=open]:text-ink data-[state=open]:shadow-[var(--shadow-control-press)]",
         className,

@@ -315,7 +315,7 @@ function EarlierRow({
       data-galley-context-menu-trigger={!selectMode ? "" : undefined}
       onClick={handleClick}
       className={cn(
-        "group relative flex cursor-pointer items-start gap-3 px-5 py-3 transition-colors",
+        "group relative flex items-start gap-3 px-5 py-3",
         selectMode && isSelected
           ? "bg-selected hover:bg-selected"
           : "hover:bg-hover",
@@ -345,8 +345,7 @@ function EarlierRow({
       <span
         className={cn(
           "shrink-0 pt-0.5 text-right text-ui-micro tabular-nums tracking-[0.02em] text-ink-muted",
-          !selectMode &&
-            "transition-opacity duration-100 group-hover:opacity-0",
+          !selectMode && "group-hover:opacity-0",
         )}
       >
         {formatSessionDate(session.lastActivityAt)}
@@ -361,7 +360,7 @@ function EarlierRow({
       </span>
 
       {!selectMode && (
-        <div className="pointer-events-none absolute right-5 top-3 flex items-center gap-1 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100">
+        <div className="pointer-events-none absolute right-5 top-3 flex items-center gap-1 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100">
           <IconButton
             onClick={(e) => {
               e.stopPropagation();
@@ -411,7 +410,7 @@ function EarlierRow({
           <ContextMenu.Item
             onSelect={onTogglePin}
             className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-ui-secondary text-ink-soft outline-none transition-colors",
+              "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-ui-secondary text-ink-soft outline-none",
               "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
             )}
           >
@@ -430,7 +429,7 @@ function EarlierRow({
           <ContextMenu.Item
             onSelect={onArchive}
             className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-ui-secondary text-ink-soft outline-none transition-colors",
+              "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-ui-secondary text-ink-soft outline-none",
               "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
             )}
           >

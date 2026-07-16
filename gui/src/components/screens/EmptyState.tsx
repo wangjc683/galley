@@ -181,7 +181,7 @@ export function EmptyState({
                       aria-label={copy.composer.clearProjectContext}
                       className={cn(
                         "flex size-4 shrink-0 items-center justify-center rounded-full text-ink-muted",
-                        "transition-colors hover:bg-hover hover:text-ink",
+                        "hover:bg-hover hover:text-ink",
                         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
                       )}
                     >

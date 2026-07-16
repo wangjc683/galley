@@ -34,7 +34,7 @@ export function RuntimeAccordionRow({
         onClick={onToggle}
         aria-expanded={expanded}
         className={cn(
-          "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors",
+          "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left",
           "hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40",
         )}
       >
@@ -72,7 +72,7 @@ export function RuntimeNavRow({
       disabled={disabled}
       onClick={onOpen}
       className={cn(
-        "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors",
+        "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40",
         disabled ? "cursor-not-allowed opacity-60" : "hover:bg-hover",
       )}

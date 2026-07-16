@@ -66,7 +66,7 @@ export function LanguagePreferenceMenu({
             compact
               ? "inline-flex h-8 items-center gap-1.5 rounded-sm px-2 text-[12px]"
               : "group flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left",
-            "text-ink-soft outline-none transition-colors hover:bg-hover hover:text-ink",
+            "text-ink-soft outline-none hover:bg-hover hover:text-ink",
             "data-[state=open]:bg-hover data-[state=open]:text-ink",
           )}
           aria-label={copy.language.aria}
@@ -97,7 +97,7 @@ export function LanguagePreferenceMenu({
               "shrink-0",
               compact
                 ? ""
-                : "text-ink-muted transition-colors group-hover:text-ink-soft",
+                : "text-ink-muted group-hover:text-ink-soft",
             )}
           />
         </button>
@@ -117,7 +117,7 @@ export function LanguagePreferenceMenu({
               key={option.value}
               onSelect={() => onChange(option.value)}
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+                "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
                 "data-[highlighted]:bg-hover",
               )}
             >

@@ -132,7 +132,7 @@ export function FeishuSetupGuide({
             type="button"
             onClick={() => setStepsExpanded((v) => !v)}
             aria-expanded={stepsExpanded}
-            className="group/disclosure flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-ui-meta font-medium text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/35"
+            className="group/disclosure flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-ui-meta font-medium text-ink-muted hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/35"
           >
             {stepsExpanded ? (
               <CaretDown size={11} weight="bold" />
@@ -246,7 +246,7 @@ function FeishuPermissionsList({
         onClick={onCopy}
         className={cn(
           "absolute right-2 top-2 inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-sm border px-1.5 text-ui-label font-medium",
-          "transition-[background-color,border-color,color,transform] duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-px active:duration-[70ms]",
+          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           copied
             ? "border-success/30 bg-success/[var(--opacity-subtle)] text-success"

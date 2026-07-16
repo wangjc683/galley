@@ -230,7 +230,7 @@ export const MessageUser = memo(function MessageUser({
               tabIndex={-1}
               aria-label={copy.conversation.supervisorMessage}
               className={cn(
-                "inline-flex items-center rounded-sm text-ink-muted transition-colors",
+                "inline-flex items-center rounded-sm text-ink-muted",
                 "hover:text-ink-soft",
               )}
             >
@@ -272,7 +272,7 @@ export const MessageUser = memo(function MessageUser({
             onMouseDown={preventMouseFocus}
             onClick={() => setCollapsed((c) => !c)}
             aria-expanded={!collapsed}
-            className="inline-flex h-6 items-center gap-1 rounded-sm px-1 text-[11.5px] text-ink-muted underline-offset-2 transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-hover hover:text-ink hover:underline active:translate-y-px active:duration-[45ms]"
+            className="inline-flex h-6 items-center gap-1 rounded-sm px-1 text-[11.5px] text-ink-muted underline-offset-2 transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink hover:underline active:translate-y-px"
           >
             {collapsed ? (
               <>
@@ -337,7 +337,6 @@ function UserImageAttachments({
             onClick={() => setPreviewIndex(imageIndex)}
             className={cn(
               "h-24 w-24 overflow-hidden rounded-md border border-brand-strong/25 bg-surface shadow-[var(--shadow-neutral-control)]",
-              "transition-[border-color,box-shadow,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
               "hover:-translate-y-px hover:border-brand-strong/50 hover:shadow-[var(--shadow-neutral-control-hover)] outline-none",
             )}
             aria-label={copy.conversation.previewImage}

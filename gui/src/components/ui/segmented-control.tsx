@@ -64,7 +64,7 @@ export function SegmentedControl<TValue extends string>({
               if (!option.disabled && !active) onValueChange?.(option.value);
             }}
             className={cn(
-              "inline-flex select-none items-center justify-center rounded-sm transition-colors",
+              "inline-flex select-none items-center justify-center rounded-sm",
               // ring-inset, not an outer ring: the track is only p-0.5, so
               // an outer ring on an edge segment collided with the track
               // border / spilled into the neighbor and read as clipped.

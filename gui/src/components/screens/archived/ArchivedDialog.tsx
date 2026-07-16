@@ -339,7 +339,7 @@ function ArchivedRow({
       <li
         onClick={onToggleSelect}
         className={cn(
-          "flex cursor-pointer items-start gap-3 px-5 py-3 transition-colors",
+          "flex items-start gap-3 px-5 py-3",
           isSelected ? "bg-selected hover:bg-selected" : "hover:bg-hover",
         )}
       >
@@ -362,7 +362,7 @@ function ArchivedRow({
   }
 
   return (
-    <li className="group relative flex items-start gap-3 px-5 py-3 transition-colors hover:bg-hover">
+    <li className="group relative flex items-start gap-3 px-5 py-3 hover:bg-hover">
       <div className="min-w-0 flex-1">
         <div className="truncate text-ui-compact font-medium text-ink">
           {session.title}
@@ -378,11 +378,11 @@ function ArchivedRow({
           clean ledger rail down the list (Swiss: alignment is structure).
           Yields to the row actions on hover, the same
           swap the sidebar rows use. */}
-      <span className="shrink-0 pt-0.5 text-ui-micro tabular-nums tracking-[0.02em] text-ink-muted transition-opacity duration-100 group-hover:opacity-0">
+      <span className="shrink-0 pt-0.5 text-ui-micro tabular-nums tracking-[0.02em] text-ink-muted group-hover:opacity-0">
         {formatSessionDate(session.updatedAt)}
       </span>
 
-      <div className="pointer-events-none absolute right-5 top-3 flex items-center gap-1 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100">
+      <div className="pointer-events-none absolute right-5 top-3 flex items-center gap-1 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100">
         <IconButton
           onClick={onRestore}
           title={copy.common.restore}
@@ -470,7 +470,7 @@ function ConfirmEmptyAllDialog({
           <Checkbox
             checked={acknowledged}
             onCheckedChange={setAcknowledged}
-            className="mt-4 flex cursor-pointer select-none items-start gap-2 rounded-sm border border-line bg-app px-3 py-2.5 text-ui-secondary text-ink transition-colors hover:border-line-strong"
+            className="mt-4 flex select-none items-start gap-2 rounded-sm border border-line bg-app px-3 py-2.5 text-ui-secondary text-ink hover:border-line-strong"
           >
             <span>{copy.projects.acknowledgeCannotUndo}</span>
           </Checkbox>

@@ -30,6 +30,10 @@ const twMerge = extendTailwindMerge({
         },
       ],
       leading: [{ leading: ["code", "secondary", "notice", "dense"] }],
+      // Motion easing tokens (globals.css @theme --ease-*). Without
+      // registration `ease-firm` is an unknown class and a later
+      // `ease-*` in the same cn() call would not displace it.
+      ease: [{ ease: ["firm", "pop", "spring"] }],
     },
   },
 });

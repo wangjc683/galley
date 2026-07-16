@@ -18,8 +18,8 @@ import { cn } from "@/lib/utils";
 export const COMPOSER_MAX_HEIGHT_PX = 280;
 
 export const COMPOSER_ACTION_BUTTON = cn(
-  "flex size-8 items-center justify-center rounded-full border transition-[background-color,border-color,color,box-shadow,transform]",
-  "duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
+  "flex size-8 items-center justify-center rounded-full border",
+  "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
   // Full key travel: rises a crisp 1px on hover (key meets finger),
   // sinks 2px on press (~3px of perceptible travel) with a slight
   // compression scale. Integer-pixel movement, never sub-pixel.
@@ -31,7 +31,7 @@ export const COMPOSER_ACTION_BUTTON = cn(
 
 export const COMPOSER_TERTIARY_ICON_BUTTON = cn(
   "flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted",
-  "transition-[background-color,color,transform] duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
+  "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
   "hover:-translate-y-px active:translate-y-[2px] active:scale-[0.97]",
   "hover:bg-hover hover:text-ink outline-none",
   "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:active:translate-y-0 disabled:active:scale-100 disabled:hover:bg-transparent disabled:hover:text-ink-muted",

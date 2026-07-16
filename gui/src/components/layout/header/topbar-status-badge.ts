@@ -18,9 +18,9 @@ export type TopBarStatusTone =
   | "warning";
 
 const TOPBAR_CONTROL_MOTION = cn(
-  "transition-[background-color,border-color,color,transform]",
-  "duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-  "active:translate-y-[0.5px] active:duration-[45ms]",
+  "transition-none active:transition-[transform,box-shadow]",
+  "active:duration-(--motion-press) active:ease-firm",
+  "active:translate-y-[0.5px]",
 );
 
 /**

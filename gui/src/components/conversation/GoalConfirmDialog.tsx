@@ -193,7 +193,7 @@ export function GoalConfirmDialog({
                     disabled={submitting}
                     aria-label={copy.composer.goalDurationCustomInput}
                     className={cn(
-                      "h-8 w-20 rounded-sm border bg-app px-2 text-[12.5px] font-medium text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20",
+                      "h-8 w-20 rounded-sm border bg-app px-2 text-[12.5px] font-medium text-ink outline-none transition-colors duration-(--motion-fast) focus:border-brand focus:ring-2 focus:ring-brand/20",
                       customBudgetValid ? "border-line" : "border-error/40",
                     )}
                   />
@@ -214,7 +214,7 @@ export function GoalConfirmDialog({
                   onClick={() => setMode("hive")}
                   disabled={submitting || !hiveAllowed}
                   className={cn(
-                    "self-start text-[12px] font-medium underline-offset-2 transition-colors",
+                    "self-start text-[12px] font-medium underline-offset-2",
                     hiveAllowed
                       ? "text-ink-muted hover:text-brand hover:underline"
                       : "cursor-not-allowed text-ink-muted/50",
@@ -260,7 +260,7 @@ export function GoalConfirmDialog({
                   type="button"
                   onClick={() => setMode("solo")}
                   disabled={submitting}
-                  className="self-start text-[11.5px] text-ink-muted underline-offset-2 transition-colors hover:text-ink-soft hover:underline"
+                  className="self-start text-[11.5px] text-ink-muted underline-offset-2 hover:text-ink-soft hover:underline"
                 >
                   {copy.composer.goalHiveBackToSolo}
                 </button>

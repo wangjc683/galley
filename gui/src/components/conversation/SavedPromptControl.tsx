@@ -23,7 +23,7 @@ interface SavedPromptControlProps {
 
 const SAVED_PROMPT_TRIGGER_BUTTON = cn(
   "flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted",
-  "transition-[background-color,color,transform] duration-[140ms] ease-[cubic-bezier(0.2,0,0,1)] active:duration-[70ms]",
+  "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
   "hover:-translate-y-px active:translate-y-[2px] active:scale-[0.97]",
   "hover:bg-hover hover:text-ink outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
   "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:active:translate-y-0 disabled:active:scale-100 disabled:hover:bg-transparent disabled:hover:text-ink-muted",

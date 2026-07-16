@@ -76,7 +76,7 @@ function ProjectQuickAction({
   return (
     <div
       className={cn(
-        "mx-1.5 flex w-[calc(100%-12px)] items-center rounded-sm transition-[background-color,box-shadow,color] motion-reduce:transition-none",
+        "mx-1.5 flex w-[calc(100%-12px)] items-center rounded-sm",
         // 激活态用 shadow-inner + 底色压暗 + FolderOpen 翻面,读出
         // "被按住/陷进去"的物理按压感;标签保持「项目」不换字
         // (换字会让行宽跳动),"再按一次 = 退出"由 tooltip / aria
@@ -93,8 +93,8 @@ function ProjectQuickAction({
           aria-pressed={active}
           aria-label={projectActionLabel}
           className={cn(
-            "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2 text-left outline-none",
-            "transition-transform duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] active:translate-y-px active:duration-[45ms]",
+            "flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left outline-none",
+            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
             "focus-visible:ring-2 focus-visible:ring-brand/30",
           )}
         >
@@ -102,7 +102,7 @@ function ProjectQuickAction({
             size={14}
             weight="thin"
             className={cn(
-              "shrink-0 transition-colors duration-[120ms]",
+              "shrink-0",
               active ? "text-brand-strong" : "text-ink-soft",
             )}
           />
@@ -124,8 +124,8 @@ function ProjectQuickAction({
             // 只调图标本身权重,不加任何底色,保持 quick actions 那一排
             // 通透无背景的语言一致。size 提到 14 与 Folder 图标对齐,
             // weight 从 thin→regular 让笔画更扎实,色从 muted→soft 提一档。
-            "text-ink-soft transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
-            "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60 active:duration-[45ms]",
+            "text-ink-soft transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+            "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           )}
         >
@@ -159,9 +159,9 @@ function QuickAction({
       type="button"
       onClick={onClick}
       className={cn(
-        "mx-1.5 flex w-[calc(100%-12px)] cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2 text-left text-[13px] text-ink",
-        "transition-[background-color,color,transform] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-hover",
-        "active:translate-y-px active:duration-[45ms]",
+        "mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-sm px-3 py-2 text-left text-[13px] text-ink",
+        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover",
+        "active:translate-y-px",
         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
       )}
     >
