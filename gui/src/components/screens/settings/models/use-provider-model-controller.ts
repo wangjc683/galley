@@ -169,7 +169,14 @@ export function useProviderModelController({
     return { kind: "opened", modelId: model.id };
   };
 
-  const handleFetchModels = async (provider: ManagedModelProviderRecord) => {
+  const handleFetchModels = async (
+    provider: ManagedModelProviderRecord,
+    // The explicit fetch button opens a manual-add draft when the list
+    // comes back empty or errors ("no list? type it yourself"). The
+    // expand-triggered auto-fetch must not — popping an editor the user
+    // didn't ask for (or clobbering a dirty draft) would be intrusive.
+    { openDraftFallback = true }: { openDraftFallback?: boolean } = {},
+  ) => {
     if (provider.credentialStatus === "missing") return;
     expandProvider(provider.id);
     setModelProbeStates((current) =>
@@ -189,7 +196,7 @@ export function useProviderModelController({
         ...current,
         [provider.id]: result.models,
       }));
-      if (result.models.length === 0) {
+      if (result.models.length === 0 && openDraftFallback) {
         setModelDraft(createDraftForProvider(provider));
       }
       setModelProbeStates((current) =>
@@ -203,7 +210,7 @@ export function useProviderModelController({
         }),
       );
     } catch (e) {
-      if (modelDraft?.providerId !== provider.id) {
+      if (openDraftFallback && modelDraft?.providerId !== provider.id) {
         setModelDraft(createDraftForProvider(provider));
       }
       setModelProbeStates((current) =>

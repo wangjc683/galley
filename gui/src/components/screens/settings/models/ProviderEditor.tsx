@@ -298,7 +298,11 @@ export function ProviderEditor({
             <SettingsInput
               label={copy.apiKey}
               labelTrailing={
-                selectedPreset.apiKeyUrl ? (
+                // Only when the endpoint still points at the preset's
+                // official apiBase — for a custom/proxy endpoint the
+                // preset's key console is likely the wrong place.
+                selectedPreset.apiKeyUrl &&
+                form.apiBase.trim() === selectedPreset.apiBase ? (
                   <ApiKeyPageLink
                     label={copy.getApiKey}
                     url={selectedPreset.apiKeyUrl}

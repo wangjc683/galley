@@ -12,7 +12,7 @@ import {
   Plus,
   Trash,
 } from "@phosphor-icons/react";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { Button, IconButton } from "@/components/ui/button";
 import { ScrollFade } from "@/components/ui/scroll-fade";
@@ -61,6 +61,7 @@ export function ProviderCard({
   onDeleteProvider,
   onTestProvider,
   onFetchModels,
+  onAutoFetchModels,
   onSetModelFilter,
   onStartModelDraft,
   onChangeModelDraft,
@@ -85,6 +86,7 @@ export function ProviderCard({
   onDeleteProvider: () => void;
   onTestProvider: () => void;
   onFetchModels: () => void;
+  onAutoFetchModels: () => void;
   onSetModelFilter: (value: string) => void;
   onStartModelDraft: () => void;
   onChangeModelDraft: (patch: Partial<ModelDraftState>) => void;
@@ -95,13 +97,8 @@ export function ProviderCard({
 }) {
   const copy = useCopy().settings.models;
   const keyMissing = provider.credentialStatus === "missing";
-  const headerUsesModelList = models.length === 0;
-  const providerProbeAction: ProbeAction = headerUsesModelList
-    ? "model-list"
-    : "model-test";
-  const headerProbeState = headerUsesModelList
-    ? modelProbeState
-    : providerProbeState;
+  const providerProbeAction: ProbeAction = "model-test";
+  const headerProbeState = providerProbeState;
   const providerProbeLoading =
     headerProbeState.kind === "loading" &&
     headerProbeState.action === providerProbeAction;
@@ -118,6 +115,37 @@ export function ProviderCard({
   );
   const visibleOptions = filteredOptions.slice(0, 80);
   const open = expanded || !!providerEditor;
+
+  // Expand-triggered auto-fetch: pull the provider's model list once
+  // per session when the card opens with nothing cached, so "可添加模型"
+  // appears without a manual click. Codex providers are skipped (their
+  // backend has no meaningful model listing) and the explicit button
+  // below stays as the refresh path.
+  const autoFetchedRef = useRef(false);
+  useEffect(() => {
+    if (
+      !expanded ||
+      autoFetchedRef.current ||
+      keyMissing ||
+      saving ||
+      provider.authKind === "chatgpt_codex_oauth" ||
+      modelOptions.length > 0 ||
+      modelProbeState.kind === "loading"
+    ) {
+      return;
+    }
+    autoFetchedRef.current = true;
+    onAutoFetchModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    expanded,
+    keyMissing,
+    saving,
+    provider.authKind,
+    modelOptions.length,
+    modelProbeState.kind,
+  ]);
+
   const shouldShowManualModelHint =
     modelProbeState.kind !== "idle" &&
     modelProbeState.action === "model-list" &&
@@ -184,29 +212,7 @@ export function ProviderCard({
             headerProbeState.kind === "loading" && "opacity-100",
           )}
         >
-          {headerUsesModelList ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "px-2 text-ink-muted",
-                providerProbeLoading && "bg-hover text-ink",
-              )}
-              disabled={!canUseProvider}
-              onClick={onFetchModels}
-              leadingIcon={
-                providerProbeLoading ? (
-                  <span className="spin">
-                    <CircleNotch size={12} weight="thin" />
-                  </span>
-                ) : (
-                  <ListMagnifyingGlass size={12} weight="thin" />
-                )
-              }
-            >
-              {copy.fetchModelList}
-            </Button>
-          ) : (
+          {models.length > 0 && (
             <IconButton
               ariaLabel={copy.checkService}
               size="sm"

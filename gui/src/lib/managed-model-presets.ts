@@ -293,18 +293,28 @@ export function customManagedModelProviderPresetId(
   return protocol === "anthropic" ? "custom-anthropic" : "custom-openai";
 }
 
-export function advancedOptionsForManagedModelProvider(
-  provider: ManagedModelProviderRecord,
-): Record<string, unknown> | undefined {
-  const preset = MANAGED_MODEL_PROVIDER_PRESETS.find(
+/** Resolve the original preset for a saved provider record by matching
+ * protocol + auth kind + the preset's canonical apiBase. Undefined for
+ * custom endpoints that don't match any shipped preset. */
+export function managedModelProviderPresetForRecord(
+  provider: Pick<
+    ManagedModelProviderRecord,
+    "protocol" | "authKind" | "apiBase"
+  >,
+): ManagedModelProviderPreset | undefined {
+  return MANAGED_MODEL_PROVIDER_PRESETS.find(
     (item) =>
-      item.advancedOptions &&
       item.protocol === provider.protocol &&
       (item.authKind ?? "api_key") === provider.authKind &&
       item.apiBase !== "" &&
       item.apiBase === provider.apiBase,
   );
-  return preset?.advancedOptions;
+}
+
+export function advancedOptionsForManagedModelProvider(
+  provider: ManagedModelProviderRecord,
+): Record<string, unknown> | undefined {
+  return managedModelProviderPresetForRecord(provider)?.advancedOptions;
 }
 
 export function recommendedAdvancedOptionsForManagedModelProvider(

@@ -15,6 +15,7 @@ import { useCopy } from "@/lib/i18n";
 import {
   customManagedModelProviderPresetId,
   getManagedModelProviderPreset,
+  managedModelProviderPresetForRecord,
   recommendedModelForManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
@@ -241,10 +242,17 @@ export function useProviderFormController({
     expandProvider(provider.id);
     setProviderForm({
       id: provider.id,
-      providerPresetId: customManagedModelProviderPresetId(
-        provider.protocol,
-        provider.authKind,
-      ),
+      // Resolve the original preset by apiBase first so preset-derived
+      // affordances (label, "Get API Key" link) match the provider the
+      // user actually configured — a DeepSeek provider must not edit
+      // as the generic Anthropic preset. Custom endpoints fall back to
+      // the protocol-generic preset.
+      providerPresetId:
+        managedModelProviderPresetForRecord(provider)?.id ??
+        customManagedModelProviderPresetId(
+          provider.protocol,
+          provider.authKind,
+        ),
       protocol: provider.protocol,
       authKind: provider.authKind,
       apiKey: "",

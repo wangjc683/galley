@@ -107,7 +107,13 @@ export function StepModelConfig({
     : null;
   const isCodexProvider =
     selectedPreset?.authKind === "chatgpt_codex_oauth";
-  const apiKeyUrl = selectedPreset?.apiKeyUrl ?? null;
+  // Only surface the key-console link while the endpoint still points
+  // at the preset's official apiBase — for a custom/proxy endpoint the
+  // preset's key console is likely the wrong place.
+  const apiKeyUrl =
+    selectedPreset?.apiKeyUrl && apiBase.trim() === selectedPreset.apiBase
+      ? selectedPreset.apiKeyUrl
+      : null;
   const providerSelected = Boolean(selectedPreset && protocol);
   const apiKeyRevealLabel = apiKeyVisible
     ? modelCopy.hideApiKey

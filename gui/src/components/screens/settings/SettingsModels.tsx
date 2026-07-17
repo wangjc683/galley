@@ -385,6 +385,11 @@ export function SettingsModels({
                 onFetchModels={() =>
                   void providerModelController.handleFetchModels(provider)
                 }
+                onAutoFetchModels={() =>
+                  void providerModelController.handleFetchModels(provider, {
+                    openDraftFallback: false,
+                  })
+                }
                 onSetModelFilter={(value) =>
                   providerModelController.setModelFilterForProvider(
                     provider.id,

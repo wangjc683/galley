@@ -1,10 +1,11 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowDown,
   ArrowUp,
   CheckCircle,
   CircleNotch,
+  DotsThreeVertical,
   Info,
-  PencilSimple,
   PlugsConnected,
   Trash,
 } from "@phosphor-icons/react";
@@ -269,6 +270,16 @@ function ConfiguredModelRow({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
+        <DefaultModelRadio
+          isDefault={isDefault}
+          disabled={saving}
+          setDefaultLabel={copy.setDefault}
+          defaultStatusLabel={copy.defaultModelStatus}
+          onSetDefault={() => {
+            setConfirmingRemove(false);
+            onSetDefault();
+          }}
+        />
         <button
           ref={(node) => onRegisterRow?.(model.id, node)}
           type="button"
@@ -315,61 +326,12 @@ function ConfiguredModelRow({
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          <div className="flex items-center gap-0.5 opacity-50 group-hover:opacity-100">
-            <IconButton
-              ariaLabel={copy.testModel}
-              size="sm"
-              disabled={keyMissing || saving || testing}
-              onClick={() => {
-                setConfirmingRemove(false);
-                onTest();
-              }}
-            >
-              {testing ? (
-                <span className="spin">
-                  <CircleNotch size={13} weight="thin" />
-                </span>
-              ) : (
-                <PlugsConnected size={13} weight="thin" />
-              )}
-            </IconButton>
-            <InlineProbeStatus state={probeState} action="model-test" />
-            {!isDefault && (
-              <IconButton
-                ariaLabel={copy.setDefault}
-                size="sm"
-                disabled={saving}
-                onClick={() => {
-                  setConfirmingRemove(false);
-                  onSetDefault();
-                }}
-              >
-                <CheckCircle size={13} weight="thin" />
-              </IconButton>
-            )}
-            <IconButton
-              ariaLabel={copy.editModel}
-              size="sm"
-              onClick={() => {
-                setConfirmingRemove(false);
-                onToggleEdit();
-              }}
-            >
-              <PencilSimple size={13} weight="thin" />
-            </IconButton>
-            {!isDefault && !showRemoveConfirm && (
-              <IconButton
-                ariaLabel={copy.removeModel}
-                variant="danger"
-                size="sm"
-                disabled={saving}
-                onClick={() => setConfirmingRemove(true)}
-              >
-                <Trash size={13} weight="thin" />
-              </IconButton>
-            )}
-          </div>
-          <span className="mx-0.5 h-4 w-px shrink-0 bg-line" aria-hidden />
+          {testing && (
+            <span className="spin px-1 text-ink-muted" aria-hidden>
+              <CircleNotch size={12} weight="thin" />
+            </span>
+          )}
+          <InlineProbeStatus state={probeState} action="model-test" />
           <IconButton
             ariaLabel={copy.moveUp(display.title)}
             size="xs"
@@ -388,6 +350,18 @@ function ConfiguredModelRow({
           >
             <ArrowDown size={11} weight="bold" />
           </IconButton>
+          <ModelRowActionsMenu
+            canTest={!keyMissing && !saving && !testing}
+            canRemove={!isDefault && !saving}
+            testLabel={copy.testModel}
+            removeLabel={copy.removeModel}
+            moreLabel={appCopy.common.more}
+            onTest={() => {
+              setConfirmingRemove(false);
+              onTest();
+            }}
+            onRemove={() => setConfirmingRemove(true)}
+          />
         </div>
       </div>
 
@@ -441,5 +415,124 @@ function ConfiguredModelRow({
 
       <ProbeErrorLine state={probeState} action="model-test" />
     </div>
+  );
+}
+
+/**
+ * Radio affordance for "default model" — filled dot on the first row,
+ * empty circle elsewhere; clicking an empty circle sets that model as
+ * default (moves it to the top). One click replaces the old hover-only
+ * CheckCircle icon button.
+ */
+function DefaultModelRadio({
+  isDefault,
+  disabled,
+  setDefaultLabel,
+  defaultStatusLabel,
+  onSetDefault,
+}: {
+  isDefault: boolean;
+  disabled: boolean;
+  setDefaultLabel: string;
+  defaultStatusLabel: string;
+  onSetDefault: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={isDefault}
+      aria-label={isDefault ? defaultStatusLabel : setDefaultLabel}
+      title={isDefault ? defaultStatusLabel : setDefaultLabel}
+      disabled={disabled || isDefault}
+      onClick={onSetDefault}
+      className={cn(
+        "group/radio flex size-5 shrink-0 items-center justify-center rounded-full outline-none",
+        "focus-visible:ring-2 focus-visible:ring-brand/30",
+        "disabled:cursor-default",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-3.5 items-center justify-center rounded-full border transition-colors",
+          isDefault
+            ? "border-brand-strong"
+            : "border-line-strong group-hover/radio:border-brand-strong",
+        )}
+      >
+        <span
+          className={cn(
+            "size-1.5 rounded-full transition-colors",
+            isDefault
+              ? "bg-brand-strong"
+              : "bg-transparent group-hover/radio:bg-brand-strong/35",
+          )}
+        />
+      </span>
+    </button>
+  );
+}
+
+/** Low-frequency per-model actions (test / remove), collapsed behind
+ * the same ⋯ menu grammar as the provider cards below. */
+function ModelRowActionsMenu({
+  canTest,
+  canRemove,
+  testLabel,
+  removeLabel,
+  moreLabel,
+  onTest,
+  onRemove,
+}: {
+  canTest: boolean;
+  canRemove: boolean;
+  testLabel: string;
+  removeLabel: string;
+  moreLabel: string;
+  onTest: () => void;
+  onRemove: () => void;
+}) {
+  const itemClass =
+    "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50";
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <IconButton
+          ariaLabel={moreLabel}
+          size="xs"
+          className="text-ink-muted/45 group-hover:text-ink-muted hover:text-ink"
+        >
+          <DotsThreeVertical size={13} weight="bold" />
+        </IconButton>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className={cn(
+            "z-[70] min-w-[112px] rounded-md border border-line bg-elevated p-1",
+            "text-ui-compact text-ink shadow-elevated",
+          )}
+        >
+          <DropdownMenu.Item
+            disabled={!canTest}
+            onSelect={onTest}
+            className={itemClass}
+          >
+            <PlugsConnected size={13} weight="thin" />
+            {testLabel}
+          </DropdownMenu.Item>
+          {canRemove && (
+            <DropdownMenu.Item
+              onSelect={onRemove}
+              className={cn(itemClass, "text-error")}
+            >
+              <Trash size={13} weight="thin" />
+              {removeLabel}
+            </DropdownMenu.Item>
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
