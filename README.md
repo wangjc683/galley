@@ -86,11 +86,11 @@ Galley's orchestration layer — a human in the GUI and a Supervisor Agent on th
 
 ## Quick Start
 
-Prepare a usable LLM service first: API Key, Base URL, and model name. Claude / ChatGPT / DeepSeek / Kimi / GLM / MiniMax presets are built in, and any OpenAI-compatible endpoint works.
+Prepare an API Key for your LLM service first. Claude / ChatGPT / DeepSeek / Kimi / GLM / MiniMax presets are built in (endpoint and a recommended model prefilled), and any OpenAI-compatible endpoint works.
 
 | 1. Download Galley | 2. Configure a model | 3. Start using it |
 |---|---|---|
-| Download the macOS / Windows installer from [Releases](https://github.com/wangjc683/galley/releases). | On first launch, enter your API Key, Base URL, and model name. | Click "Test and start using Galley" to enter the main conversation view. |
+| Download the macOS / Windows installer from [Releases](https://github.com/wangjc683/galley/releases). | On first launch, pick a provider and paste your API Key — the connection is tested automatically. | Click "Start using Galley" to enter the main conversation view. |
 
 | Platform | Installer |
 |---|---|

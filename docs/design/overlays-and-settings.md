@@ -84,9 +84,9 @@
 
 ### 语言与 Tabs
 
-- 语言选项不为当前 Settings 单独新增 `General` tab。现阶段放在左侧 tab
-  list 底部，作为轻量全局偏好。
-- 选项为 `Auto / 跟随系统`、`中文`、`English`；默认 `Auto / 跟随系统`。
+- 语言与外观自 2026-07-17 起住在 `General / 通用` tab（此前在左侧 tab
+  list 底部的轻量菜单；General tab 落地后底部菜单移除，入口唯一）。
+- 语言选项为 `Auto / 跟随系统`、`中文`、`English`；默认 `Auto / 跟随系统`。
 - 首次启动没有保存偏好时，根据 OS / WebView language preference 推断：
   `zh-*` 显示中文，其余显示 English。不要根据 IP、地区或时区判断。
 - 用户显式选择 `中文` 或 `English` 后持久化；之后不再跟随系统语言变化，
@@ -95,6 +95,7 @@
   英文标签。
 
 ```text
+General          / 通用
 Runtime          / 运行环境
 Models           / 模型
 Approval         / 审批
@@ -112,6 +113,23 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
 双语。
 
 ### 当前 Tabs
+
+#### General（2026-07-17 新增）
+
+桌面应用自身的偏好，与引擎配置（Runtime）严格分家。整个 tab 只有一种行
+语法 `PreferenceRow`：左侧标题 + 一行说明，右侧控件。
+
+- **外观与语言**分区三行：主题 / 对话字号 / 语言，右侧都是
+  `SegmentedControl` 三段平铺（与 topbar 主题控件同一交互）。选
+  `跟随系统` 时说明行动态显示当前解析值（`跟随系统 · 当前深色`）。
+- **启动**分区：`开机自动启动` 开关（默认关）。机制与静默启动细节见
+  [desktop-runtime.md](../desktop-runtime.md) §Launch at Login；设计要点
+  是**操作系统为唯一事实源**——开关状态实时读插件 `isEnabled()`，不在
+  prefs 存副本，系统侧移除登录项不产生漂移。
+- 主题与字号在 topbar 保留快捷入口（双入口：topbar 快捷调节，General
+  权威清单）。**对话宽度（compact/wide）有意不进 General**：Settings 是
+  遮住对话区的模态，切宽度看不到任何效果；它是视图控制，入口保持
+  topbar + macOS 菜单栏。
 
 #### Runtime
 
@@ -168,13 +186,13 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
   - 新增 Provider 表单贴着 `服务商` 标题区展开，位于 Provider 列表上方；新增表单不重复显示标题，Provider picker 不显示额外 label，placeholder 用 `选择提供商`，关闭按钮与 picker 同行，避免小区域反复出现“模型提供商”或形成空标题区；编辑已接入 Provider 时，编辑表单必须贴着对应 Provider 原地展开，不跳回页面上方。
   - 全 Tab 只有一种「正在内联编辑」的表面语法：brand 左边条（3px）+ `bg-elevated`，无阴影。Provider 编辑器和 Model 编辑器共用，不因入口不同改变视觉层级；嵌套表单的字段标签用 field 级标签（非 uppercase），页面级眉标不进入编辑器内部。
   - Provider / Model 的局部编辑表单关闭入口统一用右上角 `X` icon button；不要混用右上角文字「取消」。
-  - Provider 展开后才显示模型测试、自动获取列表、手动添加、编辑和删除等维护操作。
+  - Provider 展开后才显示模型维护操作；展开时自动读取一次模型列表（有 Key 且无缓存时；Codex 跳过；失败静默降级），`读取模型列表` 按钮保留为手动刷新入口，零模型 Provider 的卡片 header 不再重复放同名按钮。
   - 获取模型列表后的模型选择必须使用 Galley 自定义 popover dropdown，不使用浏览器原生 `select`。
   - `可添加模型` 列表里的模型行操作使用低权重 `+ 添加`；已加入配置的模型在同一位置显示 `✓ 已添加`，两者高度和占位保持一致，避免形成一列重按钮。
   - 编辑模型里可以折叠显示 `高级配置`，默认关闭。第一版只开放排障/适配项：`max_retries`、`read_timeout`、`stream`、OpenAI-compatible 的 `api_mode` / `reasoning_effort`，以及 Anthropic-compatible 的 `thinking_type`、`reasoning_effort`、`Claude Code 兼容透传`。`thinking_budget_tokens` 不开放，因此 `thinking_type` 暂不提供 `enabled`，避免用户选了实际会被 GA 忽略的配置。
 - 新增 / 编辑 Provider 表单和 Onboarding 首次模型配置中，`提供商显示名称` 是可选身份字段，不放进折叠的 `更多`；它常驻在连接信息和模型字段之后、保存按钮之前，作为最后一步轻量命名。
 - Provider 检查成功态使用低权重 inline 文本，不长期占用绿色块；失败态保留说明块并贴近对应 Provider。
-- Provider 内的默认模型在右侧操作区显示轻量 `默认模型` 状态；非默认模型才显示 `设为默认` 动作。
+- `我的模型` 行首用 radio 圆点承担默认模型：实心 = 默认，点击空心圆点一键设为默认（移到顶部）；标题旁保留轻量 `默认` badge。行右侧常驻控件收敛为 `↑ ↓ ⋯` 三个——测试 / 移除收进与服务商卡片同语法的 `⋯` 菜单，编辑 = 点击行本身，不再放冗余编辑图标（2026-07-17 改版，此前每行最多 6 个 hover 图标按钮）。
 - API Key 字段只用于保存到本地加密凭据存储；列表正常态不展示凭据状态，只有缺少密钥 / 状态异常时显示提示，诊断可显示 `apiKeyRef` 对应状态但不显示密钥。
 - Session 选中模型持久化必须用稳定身份：managed 用 `managed_models.id`，external 用 GA raw LLM name；`llm_index` 只能作为 bridge 命令和旧数据 fallback，不能作为长期身份。
 - 第一版保留为 Settings 高级入口；first-run onboarding 会复用同一套能力，但不暴露高级参数。
@@ -319,6 +337,7 @@ YOLO = "You Only Live Once"。
 ### 视觉
 
 - **Tab list**：每项 32px 高 / 13px Inter / 左侧 16px Phosphor icon
+  - General: `Gear`
   - Runtime: `Cpu`
   - Approval: `ShieldCheck`
   - Agent: `PlugsConnected`
@@ -331,7 +350,7 @@ YOLO = "You Only Live Once"。
 
 ### 推到未来版本的 Tab
 
-- **General / Preferences**（telemetry / launch behavior 等）—— 只有当全局偏好超过左侧轻量入口承载范围时再新增；外观和语言当前不单独触发这个 tab。
+- ~~**General / Preferences**~~ —— 2026-07-17 已落地（外观 / 字号 / 语言 / 开机自启，见上「当前 Tabs → General」）；telemetry 等更多全局偏好仍待未来按需加入。
 - **LLM**（custom displayName / default index）—— per-app preference 已够，custom name V0.2
 - **Data**（SQLite 位置 / export / clear history）—— V0.1 不做高危数据 UI
 - **Developer**（Logs / IPC trace）—— V0.1 用 stderr 调试

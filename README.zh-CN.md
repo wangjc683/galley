@@ -86,11 +86,11 @@ Galley 的编排层——人在 GUI，Supervisor Agent 在 CLI，都是一等操
 
 ## Quick Start
 
-先准备一个可用的 LLM 服务：API Key、Base URL 和模型名。Claude / ChatGPT / DeepSeek / Kimi / GLM / MiniMax 等主流模型开箱可选，也支持任意 OpenAI 兼容端点。
+先准备好 LLM 服务的 API Key。Claude / ChatGPT / DeepSeek / Kimi / GLM / MiniMax 等主流渠道开箱可选（端点和推荐模型已预填），也支持任意 OpenAI 兼容端点。
 
 | 1. 下载 Galley | 2. 配置模型 | 3. 开始使用 |
 |---|---|---|
-| 从 [Releases](https://github.com/wangjc683/galley/releases) 下载 macOS / Windows 安装包。 | 首次启动填入 API Key、Base URL 和模型名。 | 点击「测试并开始使用 Galley」，进入主对话界面。 |
+| 从 [Releases](https://github.com/wangjc683/galley/releases) 下载 macOS / Windows 安装包。 | 首次启动选择渠道、粘贴 API Key，连接自动测试。 | 点击「开始使用 Galley」，进入主对话界面。 |
 
 | 平台 | 安装包 |
 |---|---|
