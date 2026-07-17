@@ -134,6 +134,7 @@ function SidebarBucket({
     pinned: copy.sidebar.bucketPinned,
     today: copy.sidebar.bucketToday,
     week: copy.sidebar.bucketWeek,
+    recent: copy.sidebar.bucketRecent,
     earlier: copy.sidebar.bucketEarlier,
   };
   return (

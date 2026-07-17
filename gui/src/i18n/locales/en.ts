@@ -88,6 +88,7 @@ export const enCopy: AppCopy = {
     bucketPinned: "Pinned",
     bucketToday: "Today",
     bucketWeek: "This week",
+    bucketRecent: "Recent",
     bucketEarlier: "Earlier",
     stepSummary: (index, summary) => `Step ${index} · ${summary}`,
     completedSummary: (summary) => `Done · ${summary}`,

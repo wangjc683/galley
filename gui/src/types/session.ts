@@ -43,9 +43,11 @@ export type RuntimeKind = "managed" | "external";
 
 /**
  * Sidebar grouping bucket. Computed from `lastActivityAt` and `pinned`
- * via `bucketSession()` — not stored on the entity.
+ * via `bucketSession()` — not stored on the entity. `recent` is never
+ * produced by `bucketSession`; it only exists as the backfill target of
+ * `backfillRecentSessions()` when the active window is empty.
  */
-export type SessionBucket = "pinned" | "today" | "week" | "earlier";
+export type SessionBucket = "pinned" | "today" | "week" | "recent" | "earlier";
 
 export interface Session {
   id: string;

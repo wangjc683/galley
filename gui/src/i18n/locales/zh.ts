@@ -85,6 +85,7 @@ export const zhCopy = {
     bucketPinned: "置顶",
     bucketToday: "今天",
     bucketWeek: "本周",
+    bucketRecent: "最近",
     bucketEarlier: "更早",
     stepSummary: (index: number, summary: string) =>
       `第 ${index} 步 · ${summary}`,

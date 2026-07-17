@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { useCopy } from "@/lib/i18n";
 import { sortProjectsForNavigation } from "@/lib/projects";
-import { groupSessions } from "@/lib/sessions";
+import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 
@@ -181,7 +181,7 @@ export function Sidebar({
   // unrelated session mutation happened to retrigger the memo.
   const dayStamp = useDayStamp();
   const globalBuckets = useMemo(
-    () => groupSessions(sessions),
+    () => backfillRecentSessions(groupSessions(sessions)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessions, dayStamp],
   );

@@ -47,7 +47,7 @@ import {
   currentLLMDisplayName,
   managedModelsToLLMs,
 } from "@/lib/managed-model-options";
-import { bucketSession } from "@/lib/sessions";
+import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { useBrowserControlStore } from "@/stores/browser-control";
@@ -556,8 +556,11 @@ function App() {
   // "Earlier (N)" row in the sidebar. Same local-state rationale as
   // archivedOpen.
   const [earlierOpen, setEarlierOpen] = useState(false);
+  // Uses the same grouping+backfill as the sidebar timeline so the
+  // dialog holds exactly what the "更早 N" row counts — sessions
+  // promoted into 最近 by backfillRecentSessions are excluded here too.
   const earlierSessions = useMemo(
-    () => visibleSessions.filter((s) => bucketSession(s) === "earlier"),
+    () => backfillRecentSessions(groupSessions(visibleSessions)).earlier,
     [visibleSessions],
   );
   // Settings-driven Onboarding re-entry (Re-run Health Check / Setup

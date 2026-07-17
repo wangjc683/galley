@@ -103,16 +103,23 @@ export function bucketSession(
   return "earlier";
 }
 
-const BUCKET_ORDER: SessionBucket[] = ["pinned", "today", "week", "earlier"];
+const BUCKET_ORDER: SessionBucket[] = [
+  "pinned",
+  "today",
+  "week",
+  "recent",
+  "earlier",
+];
 
 export type GroupedSessions = Record<SessionBucket, Session[]>;
 
 /**
- * Group sessions into the four sidebar buckets, sorted within each by
+ * Group sessions into the sidebar buckets, sorted within each by
  * lastActivityAt descending (most recent first).
  *
  * Empty buckets are returned as empty arrays — the sidebar decides
- * whether to render the section header.
+ * whether to render the section header. `recent` is always empty here;
+ * it's only populated by `backfillRecentSessions`.
  */
 export function groupSessions(
   sessions: Session[],
@@ -122,6 +129,7 @@ export function groupSessions(
     pinned: [],
     today: [],
     week: [],
+    recent: [],
     earlier: [],
   };
   const sorted = [...sessions].sort((a, b) =>
@@ -133,11 +141,45 @@ export function groupSessions(
   return buckets;
 }
 
+export const RECENT_BACKFILL_COUNT = 5;
+
+/**
+ * Never-empty invariant for the global timeline: a light user coming
+ * back after >7 days away must not be greeted by a bare sidebar — that
+ * reads as "your history is gone" when it's merely bucketed away.
+ *
+ * When the active window is empty (no pinned / today / week sessions)
+ * but older sessions exist, promote the most recent
+ * `RECENT_BACKFILL_COUNT` of them out of `earlier` into `recent`. The
+ * promoted rows leave `earlier` entirely, so the "更早 N" entry count
+ * and the EarlierDialog list stay consistent with what's inlined.
+ *
+ * Applied only to the global timeline (and its EarlierDialog source) —
+ * the Project Review drawers inline-list all buckets and need no
+ * backfill. As soon as any session is pinned or active this week, the
+ * grouping is returned untouched.
+ */
+export function backfillRecentSessions(
+  buckets: GroupedSessions,
+): GroupedSessions {
+  const windowEmpty =
+    buckets.pinned.length === 0 &&
+    buckets.today.length === 0 &&
+    buckets.week.length === 0;
+  if (!windowEmpty || buckets.earlier.length === 0) return buckets;
+  return {
+    ...buckets,
+    recent: buckets.earlier.slice(0, RECENT_BACKFILL_COUNT),
+    earlier: buckets.earlier.slice(RECENT_BACKFILL_COUNT),
+  };
+}
+
 export const SIDEBAR_BUCKET_ORDER = BUCKET_ORDER;
 
 export const BUCKET_LABEL: Record<SessionBucket, string> = {
   pinned: "Pinned",
   today: "Today",
   week: "This week",
+  recent: "Recent",
   earlier: "Earlier",
 };
