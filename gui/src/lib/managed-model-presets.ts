@@ -37,6 +37,11 @@ export interface ManagedModelProviderPreset {
   displayName: string;
   apiKeyPlaceholder?: string;
   modelPlaceholder?: string;
+  /** Console page where the user can create an API key for this
+   * provider. Rendered as a "Get API Key" jump link next to the key
+   * input. Omit when there is no stable key page (OAuth presets) or
+   * we are not confident in the URL. */
+  apiKeyUrl?: string;
   advancedOptions?: Record<string, unknown>;
 }
 
@@ -102,9 +107,10 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     label: "OpenAI",
     protocol: "openai",
     apiBase: "https://api.openai.com/v1",
-    model: "",
+    model: "gpt-5.6-sol",
     displayName: "OpenAI",
     modelPlaceholder: "gpt-5.6-sol",
+    apiKeyUrl: "https://platform.openai.com/api-keys",
     advancedOptions: managedModelProtocolAdvancedDefaults("openai"),
   },
   {
@@ -112,9 +118,10 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     label: "Anthropic",
     protocol: "anthropic",
     apiBase: "https://api.anthropic.com",
-    model: "",
+    model: "claude-opus-4-8",
     displayName: "Anthropic",
     modelPlaceholder: "claude-opus-4-8",
+    apiKeyUrl: "https://platform.claude.com/settings/keys",
     advancedOptions: managedModelProtocolAdvancedDefaults("anthropic"),
   },
   {
@@ -125,6 +132,7 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     model: "deepseek-v4-pro",
     displayName: "DeepSeek",
     modelPlaceholder: "deepseek-v4-pro",
+    apiKeyUrl: "https://platform.deepseek.com/api_keys",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       thinking_type: "adaptive",
@@ -141,6 +149,7 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     model: "k3",
     displayName: "Kimi",
     modelPlaceholder: "k3",
+    apiKeyUrl: "https://www.kimi.com/code",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       fake_cc_system_prompt: true,
@@ -158,6 +167,8 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     model: "MiniMax-M3",
     displayName: "MiniMax",
     modelPlaceholder: "MiniMax-M3",
+    apiKeyUrl:
+      "https://platform.minimaxi.com/user-center/basic-information/interface-key",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       max_retries: 3,
@@ -170,9 +181,10 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     label: "OpenRouter",
     protocol: "openai",
     apiBase: "https://openrouter.ai/api/v1",
-    model: "",
+    model: "anthropic/claude-opus-4.8",
     displayName: "OpenRouter",
-    modelPlaceholder: "anthropic/claude-sonnet-4.5",
+    modelPlaceholder: "anthropic/claude-opus-4.8",
+    apiKeyUrl: "https://openrouter.ai/settings/keys",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       api_mode: "chat_completions",
@@ -188,6 +200,7 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     apiBase: "https://api.siliconflow.cn/v1",
     model: "",
     displayName: "SiliconFlow",
+    apiKeyUrl: "https://cloud.siliconflow.cn/account/ak",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       api_mode: "chat_completions",
@@ -220,6 +233,7 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     model: "glm-5.2",
     displayName: "ZAI",
     modelPlaceholder: "glm-5.2",
+    apiKeyUrl: "https://open.bigmodel.cn/usercenter/apikeys",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       max_retries: 3,
@@ -260,6 +274,15 @@ export function modelPlaceholderForManagedModelProviderPreset(
   preset: ManagedModelProviderPreset,
 ): string {
   return preset.modelPlaceholder ?? DEFAULT_MODEL_PLACEHOLDER;
+}
+
+/** The model we'd suggest for a preset when the user hasn't picked one —
+ * used to auto-select from a fetched model list. Empty string when the
+ * preset has no opinion (e.g. aggregator platforms). */
+export function recommendedModelForManagedModelProviderPreset(
+  preset: ManagedModelProviderPreset,
+): string {
+  return preset.model || preset.modelPlaceholder || "";
 }
 
 export function customManagedModelProviderPresetId(

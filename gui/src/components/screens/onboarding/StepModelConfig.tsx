@@ -21,7 +21,7 @@ import {
 } from "react";
 
 import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
-import { ManagedModelProviderPicker } from "@/components/managed-models/ManagedModelProviderPicker";
+import { ManagedModelProviderCardGrid } from "@/components/managed-models/ManagedModelProviderCardGrid";
 import { ManagedModelOptionPicker } from "@/components/managed-models/ManagedModelOptionPicker";
 import { Button, IconButton } from "@/components/ui/button";
 import {
@@ -38,6 +38,7 @@ import {
   getManagedModelProviderPreset,
   managedModelProviderPresetDraft,
   modelPlaceholderForManagedModelProviderPreset,
+  recommendedModelForManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
 import { cn } from "@/lib/utils";
@@ -87,19 +88,26 @@ export function StepModelConfig({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [codexLoginStart, setCodexLoginStart] =
     useState<CodexDeviceLoginStart | null>(null);
+  const [codexPolling, setCodexPolling] = useState(false);
   const [verifiedFingerprint, setVerifiedFingerprint] = useState<string | null>(
     null,
   );
   const [testedFingerprint, setTestedFingerprint] = useState<string | null>(
     null,
   );
+  const [autoFetchedFingerprint, setAutoFetchedFingerprint] = useState<
+    string | null
+  >(null);
   const connectionTestRequestRef = useRef(0);
   const connectionFingerprintRef = useRef("");
+  const listFingerprintRef = useRef("");
+  const modelRef = useRef("");
   const selectedPreset = providerPresetId
     ? getManagedModelProviderPreset(providerPresetId)
     : null;
   const isCodexProvider =
     selectedPreset?.authKind === "chatgpt_codex_oauth";
+  const apiKeyUrl = selectedPreset?.apiKeyUrl ?? null;
   const providerSelected = Boolean(selectedPreset && protocol);
   const apiKeyRevealLabel = apiKeyVisible
     ? modelCopy.hideApiKey
@@ -116,10 +124,29 @@ export function StepModelConfig({
       }),
     [apiBase, apiKey, model, protocol, providerPresetId, selectedPreset],
   );
+  // Model-independent fingerprint for the silent model-list auto-fetch:
+  // the list only depends on credentials + endpoint, so typing a model
+  // name must not re-trigger it.
+  const listFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        providerPresetId,
+        protocol,
+        apiKey: apiKey.trim(),
+        apiBase: apiBase.trim(),
+      }),
+    [apiBase, apiKey, protocol, providerPresetId],
+  );
 
   useEffect(() => {
     connectionFingerprintRef.current = connectionFingerprint;
   }, [connectionFingerprint]);
+  useEffect(() => {
+    listFingerprintRef.current = listFingerprint;
+  }, [listFingerprint]);
+  useEffect(() => {
+    modelRef.current = model;
+  }, [model]);
 
   const connectionInputComplete =
     providerPresetId !== null &&
@@ -273,6 +300,50 @@ export function StepModelConfig({
     testedFingerprint,
   ]);
 
+  // Silent model-list auto-fetch: as soon as key + endpoint are usable,
+  // pull the provider's model list in the background so the user can
+  // pick instead of type. Success populates the picker (and fills the
+  // model field when it's still empty); failure degrades silently to
+  // manual input — the explicit fetch button stays as the loud path.
+  useEffect(() => {
+    if (!canFetchModels || autoFetchedFingerprint === listFingerprint) {
+      return;
+    }
+
+    const fingerprint = listFingerprint;
+    const timer = setTimeout(() => {
+      setAutoFetchedFingerprint(fingerprint);
+      const input = probeInput();
+      if (!input) return;
+      void listManagedModelOptions(input)
+        .then((result) => {
+          if (fingerprint !== listFingerprintRef.current) return;
+          setModelOptions(result.models);
+          if (modelRef.current.trim() !== "" || result.models.length === 0) {
+            return;
+          }
+          const recommended = selectedPreset
+            ? recommendedModelForManagedModelProviderPreset(selectedPreset)
+            : "";
+          const autoPick = result.models.includes(recommended)
+            ? recommended
+            : result.models.length === 1
+              ? result.models[0]
+              : "";
+          if (autoPick) {
+            setModel(autoPick);
+            resetConnectionTest();
+          }
+        })
+        .catch((e: unknown) => {
+          console.warn("[onboarding] model list auto-fetch failed.", e);
+        });
+    }, AUTO_CONNECTION_TEST_DELAY_MS);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFetchedFingerprint, canFetchModels, listFingerprint, selectedPreset]);
+
   const handleStart = async () => {
     if (!canStart || !protocol) return;
     setState({ kind: "loading", action: "start" });
@@ -327,21 +398,9 @@ export function StepModelConfig({
     }
   };
 
-  const handleCodexOpenLoginPage = async () => {
-    if (!codexLoginStart) return;
-    try {
-      await openUrl(codexLoginStart.verificationUrl);
-    } catch (e) {
-      setState({
-        kind: "error",
-        action: "start",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    }
-  };
-
   const handleCodexCompleteLogin = async () => {
-    if (!codexLoginStart) return;
+    if (!codexLoginStart || codexPolling) return;
+    setCodexPolling(true);
     setState({ kind: "loading", action: "start" });
     try {
       await completeChatGptCodexLogin({
@@ -357,7 +416,28 @@ export function StepModelConfig({
         action: "start",
         message: managedModelProbeErrorMessage(e, modelCopy),
       });
+    } finally {
+      setCodexPolling(false);
     }
+  };
+
+  const handleCodexOpenLoginPage = async () => {
+    if (!codexLoginStart) return;
+    try {
+      await openUrl(codexLoginStart.verificationUrl);
+    } catch (e) {
+      setState({
+        kind: "error",
+        action: "start",
+        message: managedModelProbeErrorMessage(e, modelCopy),
+      });
+      return;
+    }
+    // Start polling right away — the standard device-code flow. The
+    // user finishes sign-in in the browser and Galley continues on its
+    // own; the manual "complete sign-in" button stays as the retry
+    // path after a timeout or error.
+    void handleCodexCompleteLogin();
   };
 
   const handleCodexImport = async () => {
@@ -387,11 +467,9 @@ export function StepModelConfig({
       </p>
 
       <div className="space-y-4">
-        <ManagedModelProviderPicker
+        <ManagedModelProviderCardGrid
           value={providerPresetId}
-          protocol={protocol}
           onChange={handleSelectProviderPreset}
-          className="bg-elevated"
         />
 
         {providerSelected && selectedPreset && protocol && isCodexProvider && (
@@ -462,6 +540,14 @@ export function StepModelConfig({
                   </>
                 )}
               </div>
+              {codexPolling && (
+                <div className="flex items-center gap-1.5 text-[12px] text-ink-muted">
+                  <span className="spin">
+                    <CircleNotch size={12} weight="thin" />
+                  </span>
+                  {modelCopy.codexWaitingForLogin}
+                </div>
+              )}
             </div>
 
             <div className="border-t border-line pt-3">
@@ -486,6 +572,25 @@ export function StepModelConfig({
           <>
             <SetupInput
               label={modelCopy.apiKey}
+              labelTrailing={
+                apiKeyUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void openUrl(apiKeyUrl).catch((e: unknown) => {
+                        console.warn(
+                          "[onboarding] open api key page failed.",
+                          e,
+                        );
+                      });
+                    }}
+                    className="inline-flex items-center gap-1 rounded-sm text-[11px] text-ink-muted hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                  >
+                    {modelCopy.getApiKey}
+                    <ArrowSquareOut size={10} weight="thin" />
+                  </button>
+                ) : undefined
+              }
               type={apiKeyVisible ? "text" : "password"}
               value={apiKey}
               onChange={(value) => {
@@ -681,6 +786,7 @@ export function StepModelConfig({
 
 function SetupInput({
   label,
+  labelTrailing,
   value,
   onChange,
   placeholder,
@@ -689,6 +795,7 @@ function SetupInput({
   reserveTrailing = false,
 }: {
   label: string;
+  labelTrailing?: ReactNode;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -698,9 +805,12 @@ function SetupInput({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-        {label}
-      </label>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+          {label}
+        </label>
+        {labelTrailing}
+      </div>
       <div className="relative">
         <input
           type={type}

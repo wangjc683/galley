@@ -151,6 +151,7 @@ export function SettingsModels({
     canSaveProvider,
     canTestProvider,
     codexLoginStart,
+    codexPolling,
     handleCodexCompleteLogin,
     handleCodexImport,
     handleCodexLogin,
@@ -282,6 +283,7 @@ export function SettingsModels({
               modelOptions={providerFormModelOptions}
               modelFilter={providerFormModelFilter}
               codexLoginStart={codexLoginStart}
+              codexPolling={codexPolling}
               onChange={updateProviderForm}
               onSetModelFilter={setProviderFormModelFilter}
               onSelectProviderPreset={selectProviderPreset}
@@ -351,6 +353,7 @@ export function SettingsModels({
                       modelOptions={providerFormModelOptions}
                       modelFilter={providerFormModelFilter}
                       codexLoginStart={codexLoginStart}
+                      codexPolling={codexPolling}
                       onChange={updateProviderForm}
                       onSetModelFilter={setProviderFormModelFilter}
                       onSelectProviderPreset={selectProviderPreset}

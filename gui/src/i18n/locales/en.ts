@@ -538,6 +538,15 @@ export const enCopy: AppCopy = {
       anthropicPresetDescription:
         "Official API or Anthropic-compatible endpoint",
       chatgptCodexPresetDescription: "Sign in to ChatGPT and use Codex quota",
+      deepseekPresetDescription: "DeepSeek official API",
+      kimiCodingPresetDescription: "Kimi for Coding plan",
+      minimaxPresetDescription: "MiniMax official API",
+      openrouterPresetDescription: "One key for many models",
+      siliconflowPresetDescription: "Chinese & open-model hub",
+      xiaomiMimoPresetDescription: "Xiaomi MiMo token plan",
+      zhipuGlmPresetDescription: "Zhipu GLM official API",
+      getApiKey: "Get API Key",
+      codexWaitingForLogin: "Waiting for sign-in to finish…",
       chatgptCodexBadge: "ChatGPT sign-in",
       chatgptCodexReadyBody:
         "Connect your ChatGPT account so Galley can use your Codex quota.",

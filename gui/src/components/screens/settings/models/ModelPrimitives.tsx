@@ -106,6 +106,7 @@ export function ModelSelectionList({
 
 export function SettingsInput({
   label,
+  labelTrailing,
   value,
   onChange,
   placeholder,
@@ -114,6 +115,7 @@ export function SettingsInput({
   reserveTrailing = false,
 }: {
   label: string;
+  labelTrailing?: ReactNode;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -126,9 +128,12 @@ export function SettingsInput({
       {/* Field-tier label (same tier as SettingsFieldLabel): these
           inputs always render inside nested editors, where page-level
           uppercase eyebrows are off-limits. */}
-      <label className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
-        {label}
-      </label>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label className="block text-ui-meta font-medium text-ink-soft">
+          {label}
+        </label>
+        {labelTrailing}
+      </div>
       <div className="relative">
         <input
           type={type}

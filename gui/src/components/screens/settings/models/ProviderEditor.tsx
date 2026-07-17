@@ -12,6 +12,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
 import { ManagedModelProviderPicker } from "@/components/managed-models/ManagedModelProviderPicker";
@@ -46,6 +47,7 @@ export function ProviderEditor({
   modelOptions,
   modelFilter,
   codexLoginStart,
+  codexPolling = false,
   onChange,
   onSetModelFilter,
   onSelectProviderPreset,
@@ -71,6 +73,7 @@ export function ProviderEditor({
   modelOptions: string[];
   modelFilter: string;
   codexLoginStart?: CodexDeviceLoginStart | null;
+  codexPolling?: boolean;
   onChange: (patch: Partial<ProviderFormState>) => void;
   onSetModelFilter: (value: string) => void;
   onSelectProviderPreset: (
@@ -261,6 +264,14 @@ export function ProviderEditor({
                 )}
                 <InlineProbeStatus state={probeState} action="provider-test" />
               </div>
+              {codexPolling && (
+                <div className="flex items-center gap-1.5 text-ui-secondary text-ink-muted">
+                  <span className="spin">
+                    <CircleNotch size={12} weight="thin" />
+                  </span>
+                  {copy.codexWaitingForLogin}
+                </div>
+              )}
               <ProbeErrorLine state={probeState} action="provider-test" />
             </div>
 
@@ -286,6 +297,14 @@ export function ProviderEditor({
           <>
             <SettingsInput
               label={copy.apiKey}
+              labelTrailing={
+                selectedPreset.apiKeyUrl ? (
+                  <ApiKeyPageLink
+                    label={copy.getApiKey}
+                    url={selectedPreset.apiKeyUrl}
+                  />
+                ) : undefined
+              }
               value={form.apiKey}
               onChange={(apiKey) => onChange({ apiKey })}
               type={apiKeyVisible ? "text" : "password"}
@@ -447,5 +466,22 @@ export function ProviderEditor({
         )}
       </div>
     </div>
+  );
+}
+
+function ApiKeyPageLink({ label, url }: { label: string; url: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void openUrl(url).catch((e: unknown) => {
+          console.warn("[settings] open api key page failed.", e);
+        });
+      }}
+      className="inline-flex items-center gap-1 rounded-sm text-ui-tertiary text-ink-muted hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+    >
+      {label}
+      <ArrowSquareOut size={10} weight="thin" />
+    </button>
   );
 }

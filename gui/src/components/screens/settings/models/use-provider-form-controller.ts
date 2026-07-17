@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import {
@@ -14,6 +14,8 @@ import {
 import { useCopy } from "@/lib/i18n";
 import {
   customManagedModelProviderPresetId,
+  getManagedModelProviderPreset,
+  recommendedModelForManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
 import type { ManagedModelsStore } from "@/stores/managed-models";
@@ -73,6 +75,7 @@ export function useProviderFormController({
   const [providerFormModelFilter, setProviderFormModelFilter] = useState("");
   const [codexLoginStart, setCodexLoginStart] =
     useState<CodexDeviceLoginStart | null>(null);
+  const [codexPolling, setCodexPolling] = useState(false);
 
   const visibleProviderForm =
     providerForm ??
@@ -110,6 +113,78 @@ export function useProviderFormController({
     visibleProviderForm.apiBase.trim() !== "" &&
     visibleProviderForm.apiKey.trim() !== "" &&
     providerFormProbeState.kind !== "loading";
+
+  // Silent model-list auto-fetch for the provider-creation flow (same
+  // behavior as Onboarding's StepModelConfig): once key + endpoint are
+  // usable, pull the model list in the background and pre-select the
+  // preset's recommended model when the field is still empty. Failure
+  // degrades silently — the explicit fetch button stays the loud path.
+  const autoFetchFingerprint =
+    visibleProviderForm && isCreatingProvider && !isCodexProviderForm
+      ? JSON.stringify({
+          providerPresetId: visibleProviderForm.providerPresetId,
+          protocol: visibleProviderForm.protocol,
+          authKind: visibleProviderForm.authKind,
+          apiKey: visibleProviderForm.apiKey.trim(),
+          apiBase: visibleProviderForm.apiBase.trim(),
+        })
+      : null;
+  const visibleProviderFormRef = useRef(visibleProviderForm);
+  const autoFetchFingerprintRef = useRef<string | null>(null);
+  const autoFetchAttemptedRef = useRef<string | null>(null);
+  useEffect(() => {
+    visibleProviderFormRef.current = visibleProviderForm;
+    autoFetchFingerprintRef.current = autoFetchFingerprint;
+  });
+
+  useEffect(() => {
+    if (
+      !autoFetchFingerprint ||
+      !canFetchProviderFormModels ||
+      autoFetchAttemptedRef.current === autoFetchFingerprint
+    ) {
+      return;
+    }
+
+    const fingerprint = autoFetchFingerprint;
+    const timer = setTimeout(() => {
+      const form = visibleProviderFormRef.current;
+      const protocol = form?.protocol;
+      if (!form || !protocol) return;
+      autoFetchAttemptedRef.current = fingerprint;
+      void listManagedModelOptions({
+        protocol,
+        authKind: form.authKind,
+        apiKey: form.apiKey,
+        apiBase: form.apiBase,
+      })
+        .then((result) => {
+          if (autoFetchFingerprintRef.current !== fingerprint) return;
+          setProviderFormModelOptions(result.models);
+          if (result.models.length === 0) return;
+          setProviderForm((current) => {
+            if (!current || current.model.trim() !== "") return current;
+            const preset = current.providerPresetId
+              ? getManagedModelProviderPreset(current.providerPresetId)
+              : null;
+            const recommended = preset
+              ? recommendedModelForManagedModelProviderPreset(preset)
+              : "";
+            const pick = result.models.includes(recommended)
+              ? recommended
+              : result.models.length === 1
+                ? result.models[0]
+                : "";
+            return pick ? { ...current, model: pick } : current;
+          });
+        })
+        .catch((e: unknown) => {
+          console.warn("[settings] model list auto-fetch failed.", e);
+        });
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [autoFetchFingerprint, canFetchProviderFormModels]);
 
   const resetProviderForm = () => {
     setProviderForm(null);
@@ -355,21 +430,9 @@ export function useProviderFormController({
     }
   };
 
-  const handleCodexOpenLoginPage = async () => {
-    if (!codexLoginStart) return;
-    try {
-      await openUrl(codexLoginStart.verificationUrl);
-    } catch (e) {
-      setProviderFormProbeState({
-        kind: "error",
-        action: "provider-test",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    }
-  };
-
   const handleCodexCompleteLogin = async () => {
-    if (!codexLoginStart) return;
+    if (!codexLoginStart || codexPolling) return;
+    setCodexPolling(true);
     setProviderFormProbeState({ kind: "loading", action: "provider-test" });
     try {
       const result = await completeChatGptCodexLogin({
@@ -387,7 +450,28 @@ export function useProviderFormController({
         action: "provider-test",
         message: managedModelProbeErrorMessage(e, modelCopy),
       });
+    } finally {
+      setCodexPolling(false);
     }
+  };
+
+  const handleCodexOpenLoginPage = async () => {
+    if (!codexLoginStart) return;
+    try {
+      await openUrl(codexLoginStart.verificationUrl);
+    } catch (e) {
+      setProviderFormProbeState({
+        kind: "error",
+        action: "provider-test",
+        message: managedModelProbeErrorMessage(e, modelCopy),
+      });
+      return;
+    }
+    // Start polling right away — the standard device-code flow. The
+    // user finishes sign-in in the browser and the provider lands on
+    // its own; the manual "complete sign-in" button stays as the
+    // retry path after a timeout or error.
+    void handleCodexCompleteLogin();
   };
 
   const handleCodexImport = async () => {
@@ -445,6 +529,7 @@ export function useProviderFormController({
     canSaveProvider,
     canTestProvider,
     codexLoginStart,
+    codexPolling,
     handleCodexCompleteLogin,
     handleCodexImport,
     handleCodexLogin,

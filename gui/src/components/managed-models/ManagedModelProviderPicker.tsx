@@ -7,6 +7,7 @@ import {
   MANAGED_MODEL_PROVIDER_PRESETS,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
+import { providerPresetDescription } from "@/lib/managed-model-preset-copy";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ManagedModelProtocol } from "@/types/managed-models";
@@ -126,20 +127,4 @@ export function ManagedModelProviderPicker({
       </Popover.Portal>
     </Popover.Root>
   );
-}
-
-function providerPresetDescription(
-  copy: ReturnType<typeof useCopy>["settings"]["models"],
-  presetId: ManagedModelProviderPresetId,
-): string | null {
-  if (presetId === "custom-openai") {
-    return copy.openaiPresetDescription;
-  }
-  if (presetId === "custom-anthropic") {
-    return copy.anthropicPresetDescription;
-  }
-  if (presetId === "chatgpt-codex") {
-    return copy.chatgptCodexPresetDescription;
-  }
-  return null;
 }
