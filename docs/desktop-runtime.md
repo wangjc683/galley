@@ -132,7 +132,34 @@ running in the background:
 The first version intentionally has no running / approval badge; task state
 remains inside the main UI.
 
-## Window State
+## Launch at Login
+
+Settings -> General offers an opt-in "Launch at login" toggle (since
+2026-07-17, `tauri-plugin-autostart`). Default is off — nothing is written
+until the user enables it.
+
+Mechanism per platform:
+
+- macOS: a LaunchAgent plist under `~/Library/LaunchAgents`. No permission
+  prompt; the item is visible and revocable under System Settings -> Login
+  Items, and macOS posts its own "login item added" notice.
+- Windows: an `HKCU\...\CurrentVersion\Run` value. Current-user scope, no
+  admin, survives NSIS `currentUser` updates (the exe path is stable).
+
+The OS is the single source of truth. The GUI reads the plugin's
+`isEnabled()` live on every Settings visit and after every toggle; the state
+is deliberately **not** mirrored into Galley prefs. Removing the login item
+from system settings therefore shows up in Galley as "off" without any
+reconciliation logic.
+
+Login launches are silent. The registered login item carries `--autostart`;
+the setup hook reads that flag and leaves the main window hidden, so Galley
+starts straight into Background Mode (status item / tray, toggle label
+"Open Galley") with Galley Core, the local socket, and IM autostart all
+live. To support this without a frame flash, the main window is created
+hidden (`visible: false` in `tauri.conf.json`) and shown by the setup hook
+on every non-`--autostart` launch — any change to that show path must keep
+both launch modes working, or normal launches open an invisible window.
 
 Window size / position / maximized / fullscreen persist across launches via
 `tauri-plugin-window-state` (since 2026-07-15), saved to

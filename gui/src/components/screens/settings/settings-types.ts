@@ -1,4 +1,5 @@
 export type SettingsTab =
+  | "general"
   | "runtime"
   | "models"
   | "approval"

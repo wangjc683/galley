@@ -138,6 +138,17 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] Saved model test shows low-weight copy: `模型测试最多 1 个输出 token`
 - [ ] A provider that cannot list models should not be treated as unusable if a saved model test succeeds
 
+### Settings -> General / Launch at login (2026-07-17)
+
+- [ ] Settings sidebar shows `General` first with Chinese helper `通用`; theme + language moved here from the sidebar footer, plus a conversation-font-size row (topbar quick controls unchanged)
+- [ ] Launch-at-login toggle defaults OFF on a fresh install
+- [ ] Enabling the toggle creates the `Galley` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (with `--autostart` argument)
+- [ ] Sign out / sign in (or reboot): Galley starts hidden — tray icon present, no window, tray toggle reads `Open Galley`
+- [ ] After silent autostart, opening from the tray shows the window normally
+- [ ] Disabling the toggle removes the registry value
+- [ ] Disabling the startup entry from Task Manager -> Startup apps shows as OFF in Galley after reopening Settings (no drift)
+- [ ] Normal launch (double-click) still shows the window — no invisible-window regression from the hidden-then-show flow
+
 ### Channels
 
 - [ ] Managed GA mode shows the TopBar Channels icon between Browser Control and Settings

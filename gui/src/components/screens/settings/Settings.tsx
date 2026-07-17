@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { SettingsAbout } from "@/components/screens/settings/SettingsAbout";
 import { SettingsApproval } from "@/components/screens/settings/SettingsApproval";
+import { SettingsGeneral } from "@/components/screens/settings/SettingsGeneral";
 import { SettingsBrowserControl } from "@/components/screens/settings/SettingsBrowserControl";
 import { SettingsIM } from "@/components/screens/settings/SettingsIM";
 import { SettingsIntegration } from "@/components/screens/settings/SettingsIntegration";
@@ -12,6 +13,7 @@ import { SettingsRuntime } from "@/components/screens/settings/SettingsRuntime";
 import { SettingsSidebar } from "@/components/screens/settings/SettingsSidebar";
 import { SettingsShortcuts } from "@/components/screens/settings/SettingsShortcuts";
 import { IconButton } from "@/components/ui/button";
+import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import { useCopy } from "@/lib/i18n";
 import type { LanguagePreference, ResolvedLanguage } from "@/lib/language";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
@@ -62,6 +64,8 @@ export interface SettingsProps {
   themePreference: ThemePreference;
   resolvedTheme: ResolvedTheme;
   onChangeThemePreference: (preference: ThemePreference) => void;
+  conversationFontSize: ConversationFontSize;
+  onChangeConversationFontSize: (size: ConversationFontSize) => void;
 }
 
 /**
@@ -117,6 +121,8 @@ export function Settings({
   themePreference,
   resolvedTheme,
   onChangeThemePreference,
+  conversationFontSize,
+  onChangeConversationFontSize,
   tab: controlledTab,
   onTabChange,
 }: SettingsProps) {
@@ -167,18 +173,25 @@ export function Settings({
           <SettingsSidebar
             tab={tab}
             onChange={setTab}
-            languagePreference={languagePreference}
             resolvedLanguage={resolvedLanguage}
-            onChangeLanguagePreference={onChangeLanguagePreference}
-            themePreference={themePreference}
-            resolvedTheme={resolvedTheme}
-            onChangeThemePreference={onChangeThemePreference}
             showImTab={showImTab}
             showBrowserTab={showBrowserTab}
           />
 
           <div className="scrollbar-stable min-w-0 flex-1 overflow-y-auto bg-app">
             <div className="px-8 py-7">
+              {tab === "general" && (
+                <SettingsGeneral
+                  languagePreference={languagePreference}
+                  resolvedLanguage={resolvedLanguage}
+                  onChangeLanguagePreference={onChangeLanguagePreference}
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onChangeThemePreference={onChangeThemePreference}
+                  conversationFontSize={conversationFontSize}
+                  onChangeConversationFontSize={onChangeConversationFontSize}
+                />
+              )}
               {tab === "runtime" && (
                 <SettingsRuntime
                   info={runtimeInfo}

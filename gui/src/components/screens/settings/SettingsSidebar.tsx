@@ -1,6 +1,7 @@
 import {
   ChatCircleText,
   Cpu,
+  Gear,
   Info,
   Keyboard,
   Key,
@@ -9,39 +10,22 @@ import {
   ShieldCheck,
 } from "@phosphor-icons/react";
 
-import { LanguagePreferenceMenu } from "@/components/language/LanguagePreferenceMenu";
 import { useCopy } from "@/lib/i18n";
-import {
-  isChineseLanguage,
-  type LanguagePreference,
-  type ResolvedLanguage,
-} from "@/lib/language";
-import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
+import { isChineseLanguage, type ResolvedLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
-import { ThemePreferenceMenu } from "@/components/theme/ThemePreferenceMenu";
 
 import type { SettingsTab } from "./settings-types";
 
 export function SettingsSidebar({
   tab,
   onChange,
-  languagePreference,
   resolvedLanguage,
-  onChangeLanguagePreference,
-  themePreference,
-  resolvedTheme,
-  onChangeThemePreference,
   showImTab,
   showBrowserTab,
 }: {
   tab: SettingsTab;
   onChange: (tab: SettingsTab) => void;
-  languagePreference: LanguagePreference;
   resolvedLanguage: ResolvedLanguage;
-  onChangeLanguagePreference: (preference: LanguagePreference) => void;
-  themePreference: ThemePreference;
-  resolvedTheme: ResolvedTheme;
-  onChangeThemePreference: (preference: ThemePreference) => void;
   showImTab: boolean;
   showBrowserTab: boolean;
 }) {
@@ -51,6 +35,13 @@ export function SettingsSidebar({
   return (
     <nav className="flex w-[180px] shrink-0 flex-col border-r border-line bg-app py-3">
       <div>
+        <SettingsTabButton
+          active={tab === "general"}
+          Icon={Gear}
+          label={tabCopy.general.label}
+          subLabel={showChineseHelpers ? tabCopy.general.helper : undefined}
+          onClick={() => onChange("general")}
+        />
         <SettingsTabButton
           active={tab === "runtime"}
           Icon={Cpu}
@@ -110,18 +101,6 @@ export function SettingsSidebar({
           label={tabCopy.about.label}
           subLabel={showChineseHelpers ? tabCopy.about.helper : undefined}
           onClick={() => onChange("about")}
-        />
-      </div>
-      <div className="mt-auto space-y-1 border-t border-line/70 px-2 pt-2">
-        <ThemePreferenceMenu
-          preference={themePreference}
-          resolvedTheme={resolvedTheme}
-          onChange={onChangeThemePreference}
-        />
-        <LanguagePreferenceMenu
-          preference={languagePreference}
-          resolvedLanguage={resolvedLanguage}
-          onChange={onChangeLanguagePreference}
         />
       </div>
     </nav>

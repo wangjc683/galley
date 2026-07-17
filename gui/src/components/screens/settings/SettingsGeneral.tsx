@@ -1,0 +1,244 @@
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+
+import {
+  SettingsPanelHeader,
+  SettingsSectionLabel,
+} from "@/components/screens/settings/settings-ui";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Switch } from "@/components/ui/switch";
+import type { ConversationFontSize } from "@/lib/conversation-font-size";
+import { useCopy } from "@/lib/i18n";
+import type { LanguagePreference, ResolvedLanguage } from "@/lib/language";
+import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
+
+import { ErrorLine } from "./models/ModelPrimitives";
+
+/**
+ * General — desktop-app preferences: appearance, language, launch at
+ * login. Engine configuration stays in Runtime; this tab is for how
+ * the app itself behaves on this machine.
+ *
+ * One row grammar for every preference: title + one-line description
+ * on the left, the control on the right. Theme and language use the
+ * shared SegmentedControl (same interaction as the topbar theme
+ * control) so all three choices are visible and switching is one
+ * click — no popover state. When "follow system" is selected the
+ * description line carries the currently resolved value.
+ *
+ * Launch at login: the OS is the single source of truth. The toggle
+ * reads `isEnabled()` from the autostart plugin on mount and after
+ * every change — nothing is mirrored into Galley prefs, so removing
+ * the login item from system settings shows up here as "off" without
+ * drift. Default is off (the plugin writes nothing until enabled).
+ */
+export function SettingsGeneral({
+  languagePreference,
+  resolvedLanguage,
+  onChangeLanguagePreference,
+  themePreference,
+  resolvedTheme,
+  onChangeThemePreference,
+  conversationFontSize,
+  onChangeConversationFontSize,
+}: {
+  languagePreference: LanguagePreference;
+  resolvedLanguage: ResolvedLanguage;
+  onChangeLanguagePreference: (preference: LanguagePreference) => void;
+  themePreference: ThemePreference;
+  resolvedTheme: ResolvedTheme;
+  onChangeThemePreference: (preference: ThemePreference) => void;
+  conversationFontSize: ConversationFontSize;
+  onChangeConversationFontSize: (size: ConversationFontSize) => void;
+}) {
+  const copy = useCopy();
+  const generalCopy = copy.settings.general;
+  // null = unknown: still loading, or the plugin is unreachable
+  // (Vite-only browser). The toggle stays disabled in that state.
+  const [autostartEnabled, setAutostartEnabled] = useState<boolean | null>(
+    null,
+  );
+  const [autostartBusy, setAutostartBusy] = useState(false);
+  const [autostartError, setAutostartError] = useState<string | null>(null);
+
+  const refreshAutostart = useCallback(async () => {
+    try {
+      setAutostartEnabled(await isEnabled());
+    } catch (e) {
+      console.warn("[settings] autostart isEnabled failed.", e);
+      setAutostartEnabled(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    isEnabled()
+      .then((enabled) => {
+        if (!cancelled) setAutostartEnabled(enabled);
+      })
+      .catch((e: unknown) => {
+        console.warn("[settings] autostart isEnabled failed.", e);
+        if (!cancelled) setAutostartEnabled(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggleAutostart = async (next: boolean) => {
+    if (autostartBusy) return;
+    setAutostartBusy(true);
+    setAutostartError(null);
+    try {
+      if (next) {
+        await enable();
+      } else {
+        await disable();
+      }
+      setAutostartEnabled(await isEnabled());
+    } catch (e) {
+      setAutostartError(
+        generalCopy.launchAtLoginError(
+          e instanceof Error ? e.message : String(e),
+        ),
+      );
+      await refreshAutostart();
+    } finally {
+      setAutostartBusy(false);
+    }
+  };
+
+  const resolvedThemeHint =
+    resolvedTheme === "dark" ? copy.theme.currentDark : copy.theme.currentLight;
+  const resolvedLanguageLabel =
+    resolvedLanguage === "zh-CN" ? copy.language.zh : copy.language.en;
+
+  return (
+    <div className="space-y-6">
+      <SettingsPanelHeader
+        title={copy.settings.tabs.general.label}
+        subtitle={generalCopy.subtitle}
+      />
+
+      <div>
+        <SettingsSectionLabel>
+          {generalCopy.appearanceSectionTitle}
+        </SettingsSectionLabel>
+        <div className="mt-2 divide-y divide-line rounded-sm border border-line bg-surface">
+          <PreferenceRow
+            title={generalCopy.themeRowTitle}
+            description={
+              themePreference === "system"
+                ? generalCopy.systemPreferenceHint(resolvedThemeHint)
+                : generalCopy.themeRowDescription
+            }
+          >
+            <SegmentedControl<ThemePreference>
+              value={themePreference}
+              ariaLabel={copy.theme.aria}
+              onValueChange={onChangeThemePreference}
+              options={[
+                { value: "system", label: copy.theme.system },
+                { value: "light", label: copy.theme.light },
+                { value: "dark", label: copy.theme.dark },
+              ]}
+            />
+          </PreferenceRow>
+          <PreferenceRow
+            title={generalCopy.fontSizeRowTitle}
+            description={generalCopy.fontSizeRowDescription}
+          >
+            <SegmentedControl<ConversationFontSize>
+              value={conversationFontSize}
+              ariaLabel={copy.topbar.conversationFontSize.aria}
+              onValueChange={onChangeConversationFontSize}
+              options={[
+                {
+                  value: "small",
+                  label: copy.topbar.conversationFontSize.smallShort,
+                },
+                {
+                  value: "standard",
+                  label: copy.topbar.conversationFontSize.standardShort,
+                },
+                {
+                  value: "large",
+                  label: copy.topbar.conversationFontSize.largeShort,
+                },
+              ]}
+            />
+          </PreferenceRow>
+          <PreferenceRow
+            title={generalCopy.languageRowTitle}
+            description={
+              languagePreference === "system"
+                ? generalCopy.systemPreferenceHint(
+                    copy.language.current(resolvedLanguageLabel),
+                  )
+                : generalCopy.languageRowDescription
+            }
+          >
+            <SegmentedControl<LanguagePreference>
+              value={languagePreference}
+              ariaLabel={copy.language.aria}
+              onValueChange={onChangeLanguagePreference}
+              options={[
+                { value: "system", label: copy.language.system },
+                { value: "zh-CN", label: copy.language.zh },
+                { value: "en-US", label: copy.language.en },
+              ]}
+            />
+          </PreferenceRow>
+        </div>
+      </div>
+
+      <div>
+        <SettingsSectionLabel>
+          {generalCopy.launchSectionTitle}
+        </SettingsSectionLabel>
+        <div className="mt-2 rounded-sm border border-line bg-surface">
+          <PreferenceRow
+            title={generalCopy.launchAtLogin}
+            description={generalCopy.launchAtLoginDescription}
+          >
+            <Switch
+              checked={autostartEnabled === true}
+              disabled={autostartEnabled === null || autostartBusy}
+              onCheckedChange={(next) => void handleToggleAutostart(next)}
+              ariaLabel={generalCopy.launchAtLogin}
+            />
+          </PreferenceRow>
+          {autostartError && (
+            <div className="px-3 pb-2.5">
+              <ErrorLine message={autostartError} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Shared row grammar for this tab: title + one-line description on
+ * the left, the control on the right. */
+function PreferenceRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-3 py-2.5">
+      <div className="min-w-0">
+        <div className="text-ui-compact font-medium text-ink">{title}</div>
+        <div className="mt-0.5 max-w-[460px] text-ui-meta leading-snug text-ink-muted">
+          {description}
+        </div>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}

@@ -299,6 +299,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
+        // Launch at login (Settings -> General). Default off; the OS is
+        // the single source of truth — the GUI reads `isEnabled()` live
+        // and nothing is mirrored into prefs, so removing the login item
+        // from system settings shows up in Galley as "off" without drift.
+        // macOS uses a LaunchAgent plist (no permission prompt; visible
+        // and revocable under System Settings -> Login Items), Windows a
+        // HKCU Run key (no admin). Login launches carry `--autostart`,
+        // which the setup hook reads to start hidden in the tray.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--autostart"]),
+        ))
         .plugin(tauri_plugin_updater::Builder::new().build())
         // Remember window size / position / maximized / fullscreen across
         // launches (saved to `.window-state.json` in the app config dir on
@@ -693,6 +705,16 @@ pub fn run() {
                 set_shadows(_app, true);
             }
 
+            // Launch-at-login arrives with `--autostart` (baked into the
+            // login item by the autostart plugin). Those launches stay
+            // hidden in the tray / status item: the point of enabling
+            // autostart is having Galley Core + channels waiting in the
+            // background, not a window on every boot. The main window is
+            // created hidden (tauri.conf.json `visible: false`) and shown
+            // below for every normal launch, so autostart never flashes
+            // a frame.
+            let autostart_launch = std::env::args().any(|arg| arg == "--autostart");
+
             // Background Mode. macOS shows the Galley status item in
             // the right-side menu bar; Windows shows the same menu in
             // the system tray. Closing the window hides it instead of
@@ -707,7 +729,13 @@ pub fn run() {
                 let tray_toggle = MenuItem::with_id(
                     _app,
                     "tray_toggle_window",
-                    TRAY_HIDE_GALLEY_LABEL,
+                    // Silent autostart launches begin hidden, so the
+                    // toggle must read "Open Galley" from the start.
+                    if autostart_launch {
+                        TRAY_SHOW_GALLEY_LABEL
+                    } else {
+                        TRAY_HIDE_GALLEY_LABEL
+                    },
                     true,
                     None::<&str>,
                 )?;
@@ -810,6 +838,13 @@ pub fn run() {
                     }
                 });
 
+                // Normal launches show the (config-hidden) window here;
+                // `--autostart` launches skip straight to background mode.
+                if !autostart_launch {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+
                 let tray_toggle_for_menu = tray_toggle.clone();
                 _app.on_menu_event(move |app, event| {
                     use tauri_plugin_opener::OpenerExt;
@@ -869,6 +904,18 @@ pub fn run() {
                         _ => {}
                     }
                 });
+            }
+
+            // Platforms without a tray (not a v0.2 target, but keep the
+            // window reachable): always show — a hidden window with no
+            // tray would be unrecoverable.
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            {
+                use tauri::Manager;
+                let _ = autostart_launch;
+                if let Some(window) = _app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    let _ = window.show();
+                }
             }
 
             // macOS-only top menu bar. On macOS apps that don't install

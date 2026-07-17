@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Galley",
+        "visible": false,
         "width": 1480,
         "height": 920,
         "minWidth": 960,

@@ -432,6 +432,7 @@ export const zhCopy = {
     title: "设置",
     close: "关闭",
     tabs: {
+      general: { label: "General", helper: "通用" },
       runtime: { label: "Runtime", helper: "运行环境" },
       models: { label: "Models", helper: "模型" },
       approval: { label: "Approval", helper: "审批" },
@@ -440,6 +441,22 @@ export const zhCopy = {
       browser: { label: "Browser Control", helper: "浏览器控制" },
       shortcuts: { label: "Shortcuts", helper: "快捷键" },
       about: { label: "About", helper: "关于" },
+    },
+    general: {
+      subtitle: "外观、语言与启动",
+      appearanceSectionTitle: "外观与语言",
+      themeRowTitle: "主题",
+      themeRowDescription: "界面明暗外观",
+      fontSizeRowTitle: "对话字号",
+      fontSizeRowDescription: "对话区文字大小",
+      languageRowTitle: "语言",
+      languageRowDescription: "界面显示语言",
+      systemPreferenceHint: (resolved: string) => `跟随系统 · ${resolved}`,
+      launchSectionTitle: "启动",
+      launchAtLogin: "开机自动启动",
+      launchAtLoginDescription:
+        "登录系统后，Galley 自动在后台待命（菜单栏 / 托盘），不弹出窗口。已连接的 IM 渠道和远程指挥随开机可用。",
+      launchAtLoginError: (detail: string) => `无法更新开机自启设置：${detail}`,
     },
     runtime: {
       subtitle: "Galley 的运行环境",

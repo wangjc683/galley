@@ -1026,6 +1026,10 @@ function App() {
         onChangeThemePreference={(preference) => {
           void setThemePreference(preference);
         }}
+        conversationFontSize={conversationFontSize}
+        onChangeConversationFontSize={(size) => {
+          void setConversationFontSize(size);
+        }}
       />
 
       <ArchivedDialog

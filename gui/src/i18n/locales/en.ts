@@ -449,6 +449,7 @@ export const enCopy: AppCopy = {
     title: "Settings",
     close: "Close",
     tabs: {
+      general: { label: "General", helper: "通用" },
       runtime: { label: "Runtime", helper: "运行环境" },
       models: { label: "Models", helper: "模型" },
       approval: { label: "Approval", helper: "审批" },
@@ -457,6 +458,22 @@ export const enCopy: AppCopy = {
       browser: { label: "Browser Control", helper: "Browser control" },
       shortcuts: { label: "Shortcuts", helper: "快捷键" },
       about: { label: "About", helper: "关于" },
+    },
+    general: {
+      subtitle: "Appearance, language, and startup",
+      appearanceSectionTitle: "Appearance & language",
+      themeRowTitle: "Theme",
+      themeRowDescription: "Light or dark interface",
+      fontSizeRowTitle: "Conversation font size",
+      fontSizeRowDescription: "Text size in the conversation area",
+      languageRowTitle: "Language",
+      languageRowDescription: "Interface display language",
+      systemPreferenceHint: (resolved) => `Follows system · ${resolved}`,
+      launchSectionTitle: "Startup",
+      launchAtLogin: "Launch at login",
+      launchAtLoginDescription:
+        "Galley starts in the background (menu bar / tray) when you sign in — no window pops up. Connected channels and remote supervision are ready from boot.",
+      launchAtLoginError: (detail) => `Could not update launch at login: ${detail}`,
     },
     runtime: {
       subtitle: "Galley's runtime",
