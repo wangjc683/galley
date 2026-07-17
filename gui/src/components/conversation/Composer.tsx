@@ -429,15 +429,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       : (placeholder ?? copy.composer.askAnything);
     const shouldShowByTheWayRequiredHint =
       showByTheWayRequiredHint && stopMode && !isSideQuestion;
-    // While the agent runs, plain Enter does NOT send — the persistent
-    // hint must teach /btw up front ("Enter 发送" would be a lie here);
-    // the transient byTheWayPrefixHint stays as the correction after a
-    // blocked Enter attempt.
+    // Division of labor while the agent runs: the placeholder owns the
+    // /btw lesson (it sits exactly where the prefix gets typed and is
+    // itself the format example), so the persistent hint must NOT
+    // repeat it — it degrades to pure status ("运行中…"). "Enter 发送"
+    // would be a lie here (plain Enter is gated), EXCEPT once /btw is
+    // staged: then Enter really sends again, so the true keyboard hint
+    // comes back. The transient byTheWayPrefixHint stays as the
+    // correction after a blocked Enter attempt.
     const keyboardHint = showFooterHint
       ? shouldShowByTheWayRequiredHint
         ? copy.composer.byTheWayPrefixHint
         : stopMode
-          ? copy.composer.runningHint
+          ? isSideQuestion
+            ? copy.composer.enterHint
+            : copy.composer.runningHint
           : effectiveGoalArmed
             ? // Armed changes what Enter does (opens the Goal preview, not
               // send) — with the wide "启动 Goal" pill gone, this hint and

@@ -284,7 +284,7 @@ export const enCopy: AppCopy = {
     stop: "Stop",
     stopping: "Stopping…",
     enterHint: "Enter sends · Shift+Enter for a new line",
-    runningHint: "Running · start with /btw to ask meanwhile",
+    runningHint: "Running…",
     byTheWayPrefixHint: "Start with /btw first",
     imageOnlyFallback: "Please look at this image.",
     pastedImage: "Pasted image",
