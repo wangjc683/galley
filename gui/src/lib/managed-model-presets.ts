@@ -82,9 +82,9 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     protocol: "openai",
     authKind: "chatgpt_codex_oauth",
     apiBase: "https://chatgpt.com/backend-api/codex",
-    model: "gpt-5.5",
+    model: "gpt-5.6-sol",
     displayName: "ChatGPT / Codex",
-    modelPlaceholder: "gpt-5.5",
+    modelPlaceholder: "gpt-5.6-sol",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       api_mode: "responses",
@@ -104,7 +104,7 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     apiBase: "https://api.openai.com/v1",
     model: "",
     displayName: "OpenAI",
-    modelPlaceholder: "gpt-5.5",
+    modelPlaceholder: "gpt-5.6-sol",
     advancedOptions: managedModelProtocolAdvancedDefaults("openai"),
   },
   {
@@ -114,7 +114,7 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     apiBase: "https://api.anthropic.com",
     model: "",
     displayName: "Anthropic",
-    modelPlaceholder: "claude-sonnet-4-6",
+    modelPlaceholder: "claude-opus-4-8",
     advancedOptions: managedModelProtocolAdvancedDefaults("anthropic"),
   },
   {
@@ -138,9 +138,9 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     label: "Kimi for Coding",
     protocol: "anthropic",
     apiBase: "https://api.kimi.com/coding",
-    model: "kimi-for-coding",
+    model: "k3",
     displayName: "Kimi",
-    modelPlaceholder: "kimi-for-coding",
+    modelPlaceholder: "k3",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       fake_cc_system_prompt: true,
@@ -155,9 +155,9 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     label: "MiniMax",
     protocol: "anthropic",
     apiBase: "https://api.minimaxi.com/anthropic",
-    model: "MiniMax-M2.7",
+    model: "MiniMax-M3",
     displayName: "MiniMax",
-    modelPlaceholder: "MiniMax-M2.7",
+    modelPlaceholder: "MiniMax-M3",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       max_retries: 3,
