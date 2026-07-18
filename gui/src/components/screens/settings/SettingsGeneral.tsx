@@ -9,6 +9,10 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import { useCopy } from "@/lib/i18n";
+import {
+  ensureNotificationPermission,
+  queryNotificationPermission,
+} from "@/lib/notify";
 import type { LanguagePreference, ResolvedLanguage } from "@/lib/language";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
 
@@ -31,6 +35,14 @@ import { ErrorLine } from "./models/ModelPrimitives";
  * every change — nothing is mirrored into Galley prefs, so removing
  * the login item from system settings shows up here as "off" without
  * drift. Default is off (the plugin writes nothing until enabled).
+ *
+ * Notifications / app behavior: pref-driven (SQLite is the source of
+ * truth), unlike launch-at-login. OS notification *permission* is a
+ * second, independent layer: flipping a notification toggle ON asks
+ * for permission, but a denial never flips the toggle back — the pref
+ * records intent, and granting permission later in system settings
+ * makes it effective without revisiting this tab. The hint line below
+ * the section surfaces that mismatch.
  */
 export function SettingsGeneral({
   languagePreference,
@@ -41,6 +53,14 @@ export function SettingsGeneral({
   onChangeThemePreference,
   conversationFontSize,
   onChangeConversationFontSize,
+  notifyOnGoalEnd,
+  onChangeNotifyOnGoalEnd,
+  notifyOnApproval,
+  onChangeNotifyOnApproval,
+  keepInBackgroundOnClose,
+  onChangeKeepInBackgroundOnClose,
+  autoDownloadUpdates,
+  onChangeAutoDownloadUpdates,
 }: {
   languagePreference: LanguagePreference;
   resolvedLanguage: ResolvedLanguage;
@@ -50,6 +70,14 @@ export function SettingsGeneral({
   onChangeThemePreference: (preference: ThemePreference) => void;
   conversationFontSize: ConversationFontSize;
   onChangeConversationFontSize: (size: ConversationFontSize) => void;
+  notifyOnGoalEnd: boolean;
+  onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
+  notifyOnApproval: boolean;
+  onChangeNotifyOnApproval: (enabled: boolean) => void;
+  keepInBackgroundOnClose: boolean;
+  onChangeKeepInBackgroundOnClose: (enabled: boolean) => void;
+  autoDownloadUpdates: boolean;
+  onChangeAutoDownloadUpdates: (enabled: boolean) => void;
 }) {
   const copy = useCopy();
   const generalCopy = copy.settings.general;
@@ -105,6 +133,41 @@ export function SettingsGeneral({
       await refreshAutostart();
     } finally {
       setAutostartBusy(false);
+    }
+  };
+
+  // OS notification permission is missing while at least one
+  // notification pref is on. Pre-filled on mount with a query-only
+  // check (never prompts); refreshed after each toggle-ON, which does
+  // prompt when the OS has never asked.
+  const [notifyPermissionMissing, setNotifyPermissionMissing] =
+    useState(false);
+  const anyNotifyEnabled = notifyOnGoalEnd || notifyOnApproval;
+  useEffect(() => {
+    // No sync state reset here: the hint's render condition already
+    // carries `anyNotifyEnabled`, so a stale `true` stays invisible
+    // while all toggles are off (and toggling back on re-queries).
+    if (!anyNotifyEnabled) return;
+    let cancelled = false;
+    void queryNotificationPermission().then((granted) => {
+      if (!cancelled) setNotifyPermissionMissing(!granted);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [anyNotifyEnabled]);
+
+  const handleToggleNotify = (
+    onChange: (enabled: boolean) => void,
+    next: boolean,
+  ) => {
+    onChange(next);
+    if (next) {
+      // Ask for permission on intent. A denial keeps the pref as set —
+      // see the component docstring for the two-layer rationale.
+      void ensureNotificationPermission().then((granted) =>
+        setNotifyPermissionMissing(!granted),
+      );
     }
   };
 
@@ -213,6 +276,71 @@ export function SettingsGeneral({
               <ErrorLine message={autostartError} />
             </div>
           )}
+        </div>
+      </div>
+
+      <div>
+        <SettingsSectionLabel>
+          {generalCopy.notificationsSectionTitle}
+        </SettingsSectionLabel>
+        <div className="mt-2 divide-y divide-line rounded-sm border border-line bg-surface">
+          <PreferenceRow
+            title={generalCopy.notifyGoalEndTitle}
+            description={generalCopy.notifyGoalEndDescription}
+          >
+            <Switch
+              checked={notifyOnGoalEnd}
+              onCheckedChange={(next) =>
+                handleToggleNotify(onChangeNotifyOnGoalEnd, next)
+              }
+              ariaLabel={generalCopy.notifyGoalEndTitle}
+            />
+          </PreferenceRow>
+          <PreferenceRow
+            title={generalCopy.notifyApprovalTitle}
+            description={generalCopy.notifyApprovalDescription}
+          >
+            <Switch
+              checked={notifyOnApproval}
+              onCheckedChange={(next) =>
+                handleToggleNotify(onChangeNotifyOnApproval, next)
+              }
+              ariaLabel={generalCopy.notifyApprovalTitle}
+            />
+          </PreferenceRow>
+          {anyNotifyEnabled && notifyPermissionMissing && (
+            <div className="px-3 py-2.5">
+              <ErrorLine message={generalCopy.notificationsPermissionHint} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <SettingsSectionLabel>
+          {generalCopy.behaviorSectionTitle}
+        </SettingsSectionLabel>
+        <div className="mt-2 divide-y divide-line rounded-sm border border-line bg-surface">
+          <PreferenceRow
+            title={generalCopy.keepInBackgroundTitle}
+            description={generalCopy.keepInBackgroundDescription}
+          >
+            <Switch
+              checked={keepInBackgroundOnClose}
+              onCheckedChange={onChangeKeepInBackgroundOnClose}
+              ariaLabel={generalCopy.keepInBackgroundTitle}
+            />
+          </PreferenceRow>
+          <PreferenceRow
+            title={generalCopy.autoDownloadUpdatesTitle}
+            description={generalCopy.autoDownloadUpdatesDescription}
+          >
+            <Switch
+              checked={autoDownloadUpdates}
+              onCheckedChange={onChangeAutoDownloadUpdates}
+              ariaLabel={generalCopy.autoDownloadUpdatesTitle}
+            />
+          </PreferenceRow>
         </div>
       </div>
     </div>

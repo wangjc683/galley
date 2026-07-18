@@ -66,6 +66,14 @@ export interface SettingsProps {
   onChangeThemePreference: (preference: ThemePreference) => void;
   conversationFontSize: ConversationFontSize;
   onChangeConversationFontSize: (size: ConversationFontSize) => void;
+  notifyOnGoalEnd: boolean;
+  onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
+  notifyOnApproval: boolean;
+  onChangeNotifyOnApproval: (enabled: boolean) => void;
+  keepInBackgroundOnClose: boolean;
+  onChangeKeepInBackgroundOnClose: (enabled: boolean) => void;
+  autoDownloadUpdates: boolean;
+  onChangeAutoDownloadUpdates: (enabled: boolean) => void;
 }
 
 /**
@@ -123,6 +131,14 @@ export function Settings({
   onChangeThemePreference,
   conversationFontSize,
   onChangeConversationFontSize,
+  notifyOnGoalEnd,
+  onChangeNotifyOnGoalEnd,
+  notifyOnApproval,
+  onChangeNotifyOnApproval,
+  keepInBackgroundOnClose,
+  onChangeKeepInBackgroundOnClose,
+  autoDownloadUpdates,
+  onChangeAutoDownloadUpdates,
   tab: controlledTab,
   onTabChange,
 }: SettingsProps) {
@@ -190,6 +206,16 @@ export function Settings({
                   onChangeThemePreference={onChangeThemePreference}
                   conversationFontSize={conversationFontSize}
                   onChangeConversationFontSize={onChangeConversationFontSize}
+                  notifyOnGoalEnd={notifyOnGoalEnd}
+                  onChangeNotifyOnGoalEnd={onChangeNotifyOnGoalEnd}
+                  notifyOnApproval={notifyOnApproval}
+                  onChangeNotifyOnApproval={onChangeNotifyOnApproval}
+                  keepInBackgroundOnClose={keepInBackgroundOnClose}
+                  onChangeKeepInBackgroundOnClose={
+                    onChangeKeepInBackgroundOnClose
+                  }
+                  autoDownloadUpdates={autoDownloadUpdates}
+                  onChangeAutoDownloadUpdates={onChangeAutoDownloadUpdates}
                 />
               )}
               {tab === "runtime" && (

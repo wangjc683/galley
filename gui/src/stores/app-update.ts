@@ -244,6 +244,10 @@ function ensureAutoPrepareOnIdleWatcher(): void {
       if (hasRunningSessionsInState(state)) return;
       if (!hasRunningSessionsInState(previousState)) return;
 
+      // Re-read the pref at fire time: the watcher registration is
+      // irreversible (module flag), so a user who turns auto-download
+      // off mid-session must be honored here, not at registration.
+      if (!usePrefsStore.getState().autoDownloadUpdates) return;
       const status = useAppUpdateStore.getState().status;
       if (status.kind !== "available") return;
       void useAppUpdateStore.getState().downloadAndInstall();
@@ -251,7 +255,11 @@ function ensureAutoPrepareOnIdleWatcher(): void {
   }
 
   const status = useAppUpdateStore.getState().status;
-  if (status.kind === "available" && !hasRunningSessions()) {
+  if (
+    status.kind === "available" &&
+    !hasRunningSessions() &&
+    usePrefsStore.getState().autoDownloadUpdates
+  ) {
     void useAppUpdateStore.getState().downloadAndInstall();
   }
 }

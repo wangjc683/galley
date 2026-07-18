@@ -299,6 +299,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
+        // System notifications (Settings -> General). Fired from the
+        // GUI only when the window is unfocused — goal terminal states
+        // and pending approvals (gui/src/lib/notify.ts owns the gating).
+        .plugin(tauri_plugin_notification::init())
         // Launch at login (Settings -> General). Default off; the OS is
         // the single source of truth — the GUI reads `isEnabled()` live
         // and nothing is mirrored into prefs, so removing the login item
@@ -413,6 +417,7 @@ pub fn run() {
             get_pref_json,
             set_pref_json,
             tray::set_close_hint_copy,
+            tray::set_keep_in_background,
             set_width_menu_state,
             bulk_archive_sessions,
             bulk_unarchive_sessions,
@@ -571,6 +576,24 @@ pub fn run() {
                 });
                 if seen == Some(true) {
                     CLOSE_HINT_SHOWN.store(true, Ordering::SeqCst);
+                }
+
+                // Same seeding rationale for the "keep in background on
+                // close" preference: the CloseRequested callback reads
+                // the atomic synchronously, so it must hold the persisted
+                // value before the window can be closed. Read failure
+                // leaves the default `true` (historical Background Mode)
+                // — never a surprise-quit regression.
+                let keep_in_background = tauri::async_runtime::block_on(async {
+                    let galley = _app
+                        .state::<SqliteGalley>()
+                        .inner()
+                        .clone();
+                    let value = galley.get_pref_json(KEEP_IN_BACKGROUND_PREF).await.ok()?;
+                    value.and_then(|v| v.as_bool())
+                });
+                if keep_in_background == Some(false) {
+                    KEEP_IN_BACKGROUND_ON_CLOSE.store(false, Ordering::SeqCst);
                 }
             }
 
@@ -827,11 +850,28 @@ pub fn run() {
                         if ALLOW_APP_EXIT.load(Ordering::SeqCst) {
                             return;
                         }
+                        api.prevent_close();
+                        if !KEEP_IN_BACKGROUND_ON_CLOSE.load(Ordering::SeqCst) {
+                            // Settings -> General turned Background Mode
+                            // off: close means quit. Still prevent_close
+                            // above — request_true_quit is async and may
+                            // show a confirm dialog when an agent is
+                            // running; on Cancel the window must survive
+                            // (and stay visible: the quit intent was
+                            // withdrawn, hiding would look like a crash).
+                            // cleanup_and_exit sets ALLOW_APP_EXIT before
+                            // app.exit(0), so the real teardown passes the
+                            // guard above.
+                            request_true_quit(
+                                window_for_close.app_handle().clone(),
+                                true,
+                            );
+                            return;
+                        }
                         // Background Mode: hide instead of quit. Hide
                         // first so the close gesture feels instant, then
                         // surface the one-time hint explaining where the
                         // window went and how to truly quit.
-                        api.prevent_close();
                         let _ = window_for_close.hide();
                         let _ = tray_toggle_for_close.set_text(TRAY_SHOW_GALLEY_LABEL);
                         maybe_show_background_hint(window_for_close.app_handle());

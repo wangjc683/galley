@@ -32,6 +32,19 @@ pub(crate) const CLOSE_HINT_SEEN_PREF: &str = "close_to_background_hint_seen";
 /// because it runs synchronously inside the window-event callback.
 pub(crate) static CLOSE_HINT_SHOWN: AtomicBool = AtomicBool::new(false);
 
+/// Pref key for the Settings -> General "keep running in the
+/// background when the window closes" toggle.
+pub(crate) const KEEP_IN_BACKGROUND_PREF: &str = "keep_in_background_on_close";
+
+/// Process-local mirror of `KEEP_IN_BACKGROUND_PREF`, read by the
+/// synchronous CloseRequested callback (which can't await SQLite).
+/// Starts `true` — a missing or unreadable pref must resolve to the
+/// historical Background Mode behavior. Seeded from the pref during
+/// `setup` (before the window can be closed) and updated live by
+/// `set_keep_in_background` when the user flips the toggle. The GUI
+/// owns persistence; this atomic owns behavior.
+pub(crate) static KEEP_IN_BACKGROUND_ON_CLOSE: AtomicBool = AtomicBool::new(true);
+
 pub(crate) struct TrayMenuState {
     pub(crate) toggle_window_item: tauri::menu::MenuItem<tauri::Wry>,
 }
@@ -243,6 +256,16 @@ pub(crate) fn tray_icon_image() -> tauri::Result<tauri::image::Image<'static>> {
 /// close the window before hydrate runs) and persisted by the close
 /// handler on first show. This command only mirrors copy inward and
 /// never touches SQLite.
+/// Live-push for the "keep in background on close" preference. Only
+/// updates the process-local atomic — persistence belongs to the GUI's
+/// pref write, and setup re-seeds the atomic from SQLite next launch,
+/// so the two sides can fail independently without drift beyond the
+/// current session.
+#[tauri::command]
+pub(crate) fn set_keep_in_background(enabled: bool) {
+    KEEP_IN_BACKGROUND_ON_CLOSE.store(enabled, Ordering::SeqCst);
+}
+
 #[tauri::command]
 pub(crate) fn set_close_hint_copy(
     title: String,

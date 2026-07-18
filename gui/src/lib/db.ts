@@ -331,6 +331,19 @@ export async function setCloseHintCopy(
   await invoke("set_close_hint_copy", { title, body });
 }
 
+/**
+ * Push the "keep in background on close" preference into Galley Core.
+ * The Rust CloseRequested handler is a synchronous window-event
+ * callback and reads a process-local atomic, not SQLite — this command
+ * updates that atomic so a Settings toggle takes effect in the same
+ * launch. Persistence stays with the GUI's `setPref`; Rust re-seeds
+ * the atomic from the pref at next setup, so a failed push self-heals
+ * on restart.
+ */
+export async function setKeepInBackground(enabled: boolean): Promise<void> {
+  await invoke("set_keep_in_background", { enabled });
+}
+
 // ---------------- macOS menu-bar state ----------------
 
 /**

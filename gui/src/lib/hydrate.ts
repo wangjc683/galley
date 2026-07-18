@@ -109,9 +109,14 @@ export async function hydrateApp(): Promise<void> {
   // Update auto-prepare is deliberately after sessions hydrate. If a
   // dev reload preserves an in-flight task in messagesStore, the updater
   // guard can see it and defer install work until the session is idle.
-  void useAppUpdateStore
-    .getState()
-    .check({ silent: true, downloadIfAvailable: true });
+  void useAppUpdateStore.getState().check({
+    silent: true,
+    // Settings -> General "auto-download updates". hydratePrefs already
+    // ran above, so the store holds the persisted value. When off, the
+    // check still runs and the TopBar indicator shows `available` —
+    // only the download is held back.
+    downloadIfAvailable: usePrefsStore.getState().autoDownloadUpdates,
+  });
 
   // 7. Non-critical SQLite housekeeping + FTS backfill. Fire-and-forget:
   // these are nice cleanup/indexing tasks, not requirements for first paint.

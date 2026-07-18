@@ -1,7 +1,12 @@
 import { create } from "zustand";
 
 import type { ApprovalConfig } from "@/components/screens/settings/settings-types";
-import { getPref, setPref, setWidthMenuState } from "@/lib/db";
+import {
+  getPref,
+  setKeepInBackground,
+  setPref,
+  setWidthMenuState,
+} from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
 import {
   resolveLanguagePreference,
@@ -148,6 +153,42 @@ interface PrefsState {
    * SQLite and mirrored to localStorage for first-paint theme setup.
    */
   themePreference: ThemePreference;
+
+  /**
+   * System notification when a goal reaches a terminal state
+   * (completed / failed / stopped). Only fires when the window is
+   * unfocused — the in-app toast covers the focused case (gating
+   * lives in lib/notify.ts). Persisted to pref `notify_on_goal_end`.
+   */
+  notifyOnGoalEnd: boolean;
+
+  /**
+   * System notification when a tool call is waiting for approval.
+   * Same unfocused-only gating as `notifyOnGoalEnd`. Persisted to
+   * pref `notify_on_approval`.
+   */
+  notifyOnApproval: boolean;
+
+  /**
+   * Close the window → keep Galley running in the background (tray /
+   * menu bar). Default `true` = the historical Background Mode
+   * behavior; a missing pref must resolve to the same. When `false`,
+   * closing the window quits the app (with a confirm dialog if an
+   * agent is running). The Rust CloseRequested handler reads a
+   * process-local atomic seeded from this pref at setup and pushed
+   * live via `set_keep_in_background` on toggle. Persisted to pref
+   * `keep_in_background_on_close`.
+   */
+  keepInBackgroundOnClose: boolean;
+
+  /**
+   * Auto-download app updates found by the silent startup check (and
+   * the sessions-idle watcher). When `false`, updates are still
+   * detected — the TopBar indicator shows `available` — but nothing
+   * downloads until the user asks. Manual download / install actions
+   * are never gated. Persisted to pref `auto_download_updates`.
+   */
+  autoDownloadUpdates: boolean;
 }
 
 interface PrefsActions {
@@ -178,6 +219,21 @@ interface PrefsActions {
 
   // ---- Appearance ----
   setThemePreference: (preference: ThemePreference) => Promise<void>;
+
+  // ---- Notifications ----
+  setNotifyOnGoalEnd: (enabled: boolean) => Promise<void>;
+  setNotifyOnApproval: (enabled: boolean) => Promise<void>;
+
+  // ---- App behavior ----
+  /**
+   * Persists the pref AND pushes the value into the Rust close
+   * handler's atomic so the toggle takes effect without a restart.
+   * The two writes are independently best-effort — a failed push
+   * self-heals at next setup, a failed persist still leaves the
+   * current launch behaving as toggled.
+   */
+  setKeepInBackgroundOnClose: (enabled: boolean) => Promise<void>;
+  setAutoDownloadUpdates: (enabled: boolean) => Promise<void>;
 
   // ---- GA config ----
   /**
@@ -227,6 +283,10 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   conversationFontSize: "standard",
   languagePreference: "system",
   themePreference: readCachedThemePreference(),
+  notifyOnGoalEnd: true,
+  notifyOnApproval: true,
+  keepInBackgroundOnClose: true,
+  autoDownloadUpdates: true,
 
   // ---- Approval ----
   setApprovalRequiredTools: (tools) =>
@@ -341,6 +401,60 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       await setPref("theme_preference", preference);
     } catch (e) {
       console.warn("[prefs] setThemePreference: pref persistence failed.", e);
+    }
+  },
+
+  // ---- Notifications ----
+  setNotifyOnGoalEnd: async (enabled) => {
+    set({ notifyOnGoalEnd: enabled });
+    try {
+      await setPref("notify_on_goal_end", enabled);
+    } catch (e) {
+      console.warn("[prefs] setNotifyOnGoalEnd: pref persistence failed.", e);
+    }
+  },
+
+  setNotifyOnApproval: async (enabled) => {
+    set({ notifyOnApproval: enabled });
+    try {
+      await setPref("notify_on_approval", enabled);
+    } catch (e) {
+      console.warn("[prefs] setNotifyOnApproval: pref persistence failed.", e);
+    }
+  },
+
+  // ---- App behavior ----
+  setKeepInBackgroundOnClose: async (enabled) => {
+    set({ keepInBackgroundOnClose: enabled });
+    // Live-push into the Rust close handler's atomic. Independent of
+    // the pref write below: a push failure means this launch keeps the
+    // old close behavior (setup re-seeds from the pref next launch),
+    // and must not block persistence — nor vice versa.
+    setKeepInBackground(enabled).catch((e: unknown) => {
+      console.warn(
+        "[prefs] setKeepInBackgroundOnClose: core push failed.",
+        e,
+      );
+    });
+    try {
+      await setPref("keep_in_background_on_close", enabled);
+    } catch (e) {
+      console.warn(
+        "[prefs] setKeepInBackgroundOnClose: pref persistence failed.",
+        e,
+      );
+    }
+  },
+
+  setAutoDownloadUpdates: async (enabled) => {
+    set({ autoDownloadUpdates: enabled });
+    try {
+      await setPref("auto_download_updates", enabled);
+    } catch (e) {
+      console.warn(
+        "[prefs] setAutoDownloadUpdates: pref persistence failed.",
+        e,
+      );
     }
   },
 
@@ -494,6 +608,55 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     } catch (e) {
       console.warn(
         "[prefs] hydratePrefs: theme_preference pref load failed.",
+        e,
+      );
+    }
+    try {
+      const notifyGoalEnd = await getPref<boolean>("notify_on_goal_end");
+      if (typeof notifyGoalEnd === "boolean") {
+        set({ notifyOnGoalEnd: notifyGoalEnd });
+      }
+    } catch (e) {
+      console.warn(
+        "[prefs] hydratePrefs: notify_on_goal_end pref load failed.",
+        e,
+      );
+    }
+    try {
+      const notifyApproval = await getPref<boolean>("notify_on_approval");
+      if (typeof notifyApproval === "boolean") {
+        set({ notifyOnApproval: notifyApproval });
+      }
+    } catch (e) {
+      console.warn(
+        "[prefs] hydratePrefs: notify_on_approval pref load failed.",
+        e,
+      );
+    }
+    // No core push here: Rust seeds its close-handler atomic from this
+    // pref during setup, before the GUI hydrates (same race-avoidance
+    // as the close-hint seen flag).
+    try {
+      const keepInBackground = await getPref<boolean>(
+        "keep_in_background_on_close",
+      );
+      if (typeof keepInBackground === "boolean") {
+        set({ keepInBackgroundOnClose: keepInBackground });
+      }
+    } catch (e) {
+      console.warn(
+        "[prefs] hydratePrefs: keep_in_background_on_close pref load failed.",
+        e,
+      );
+    }
+    try {
+      const autoDownload = await getPref<boolean>("auto_download_updates");
+      if (typeof autoDownload === "boolean") {
+        set({ autoDownloadUpdates: autoDownload });
+      }
+    } catch (e) {
+      console.warn(
+        "[prefs] hydratePrefs: auto_download_updates pref load failed.",
         e,
       );
     }

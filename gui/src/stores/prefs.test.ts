@@ -47,4 +47,90 @@ describe("prefsStore", () => {
       value: "small",
     });
   });
+
+  it("defaults the notification and app-behavior prefs to true", () => {
+    const state = usePrefsStore.getState();
+    expect(state.notifyOnGoalEnd).toBe(true);
+    expect(state.notifyOnApproval).toBe(true);
+    expect(state.keepInBackgroundOnClose).toBe(true);
+    expect(state.autoDownloadUpdates).toBe(true);
+  });
+
+  it("hydrates persisted false values for the new boolean prefs", async () => {
+    mockPrefs({
+      notify_on_goal_end: false,
+      notify_on_approval: false,
+      keep_in_background_on_close: false,
+      auto_download_updates: false,
+    });
+
+    await usePrefsStore.getState().hydratePrefs();
+
+    const state = usePrefsStore.getState();
+    expect(state.notifyOnGoalEnd).toBe(false);
+    expect(state.notifyOnApproval).toBe(false);
+    expect(state.keepInBackgroundOnClose).toBe(false);
+    expect(state.autoDownloadUpdates).toBe(false);
+  });
+
+  it("keeps the true defaults when the new prefs are missing", async () => {
+    mockPrefs({});
+
+    await usePrefsStore.getState().hydratePrefs();
+
+    const state = usePrefsStore.getState();
+    expect(state.notifyOnGoalEnd).toBe(true);
+    expect(state.notifyOnApproval).toBe(true);
+    expect(state.keepInBackgroundOnClose).toBe(true);
+    expect(state.autoDownloadUpdates).toBe(true);
+  });
+
+  it("persists notification pref changes under their keys", async () => {
+    await usePrefsStore.getState().setNotifyOnGoalEnd(false);
+    await usePrefsStore.getState().setNotifyOnApproval(false);
+    await usePrefsStore.getState().setAutoDownloadUpdates(false);
+
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
+      key: "notify_on_goal_end",
+      value: false,
+    });
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
+      key: "notify_on_approval",
+      value: false,
+    });
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
+      key: "auto_download_updates",
+      value: false,
+    });
+  });
+
+  it("persists keepInBackgroundOnClose and pushes it into core", async () => {
+    await usePrefsStore.getState().setKeepInBackgroundOnClose(false);
+
+    expect(usePrefsStore.getState().keepInBackgroundOnClose).toBe(false);
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("set_keep_in_background", {
+      enabled: false,
+    });
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
+      key: "keep_in_background_on_close",
+      value: false,
+    });
+  });
+
+  it("keeps state updated when the core push for keepInBackground fails", async () => {
+    tauriMocks.invoke.mockImplementation(async (command) => {
+      if (command === "set_keep_in_background") {
+        throw new Error("core unavailable");
+      }
+      return undefined;
+    });
+
+    await usePrefsStore.getState().setKeepInBackgroundOnClose(false);
+
+    expect(usePrefsStore.getState().keepInBackgroundOnClose).toBe(false);
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
+      key: "keep_in_background_on_close",
+      value: false,
+    });
+  });
 });

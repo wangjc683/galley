@@ -183,6 +183,20 @@ function App() {
   const setLanguagePreference = usePrefsStore((s) => s.setLanguagePreference);
   const themePreference = usePrefsStore((s) => s.themePreference);
   const setThemePreference = usePrefsStore((s) => s.setThemePreference);
+  const notifyOnGoalEnd = usePrefsStore((s) => s.notifyOnGoalEnd);
+  const setNotifyOnGoalEnd = usePrefsStore((s) => s.setNotifyOnGoalEnd);
+  const notifyOnApproval = usePrefsStore((s) => s.notifyOnApproval);
+  const setNotifyOnApproval = usePrefsStore((s) => s.setNotifyOnApproval);
+  const keepInBackgroundOnClose = usePrefsStore(
+    (s) => s.keepInBackgroundOnClose,
+  );
+  const setKeepInBackgroundOnClose = usePrefsStore(
+    (s) => s.setKeepInBackgroundOnClose,
+  );
+  const autoDownloadUpdates = usePrefsStore((s) => s.autoDownloadUpdates);
+  const setAutoDownloadUpdates = usePrefsStore(
+    (s) => s.setAutoDownloadUpdates,
+  );
   const petAttachedSessionId = useRuntimeStore((s) => s.petAttachedSessionId);
   const setPendingPetMigration = useUiStore((s) => s.setPendingPetMigration);
 
@@ -1032,6 +1046,22 @@ function App() {
         conversationFontSize={conversationFontSize}
         onChangeConversationFontSize={(size) => {
           void setConversationFontSize(size);
+        }}
+        notifyOnGoalEnd={notifyOnGoalEnd}
+        onChangeNotifyOnGoalEnd={(enabled) => {
+          void setNotifyOnGoalEnd(enabled);
+        }}
+        notifyOnApproval={notifyOnApproval}
+        onChangeNotifyOnApproval={(enabled) => {
+          void setNotifyOnApproval(enabled);
+        }}
+        keepInBackgroundOnClose={keepInBackgroundOnClose}
+        onChangeKeepInBackgroundOnClose={(enabled) => {
+          void setKeepInBackgroundOnClose(enabled);
+        }}
+        autoDownloadUpdates={autoDownloadUpdates}
+        onChangeAutoDownloadUpdates={(enabled) => {
+          void setAutoDownloadUpdates(enabled);
         }}
       />
 

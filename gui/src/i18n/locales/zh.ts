@@ -444,7 +444,7 @@ export const zhCopy = {
       about: { label: "About", helper: "关于" },
     },
     general: {
-      subtitle: "外观、语言与启动",
+      subtitle: "外观、语言与应用行为",
       appearanceSectionTitle: "外观与语言",
       themeRowTitle: "主题",
       themeRowDescription: "界面明暗外观",
@@ -458,6 +458,22 @@ export const zhCopy = {
       launchAtLoginDescription:
         "登录系统后，Galley 自动在后台待命（菜单栏 / 托盘），不弹出窗口。已连接的 IM 渠道和远程指挥随开机可用。",
       launchAtLoginError: (detail: string) => `无法更新开机自启设置：${detail}`,
+      notificationsSectionTitle: "通知",
+      notifyGoalEndTitle: "任务结束时通知",
+      notifyGoalEndDescription:
+        "窗口在后台时，目标完成、失败或停止会发送系统通知",
+      notifyApprovalTitle: "等待审批时通知",
+      notifyApprovalDescription:
+        "窗口在后台时，Agent 等待工具审批会发送系统通知",
+      notificationsPermissionHint:
+        "Galley 的系统通知权限未开启，请在系统设置中允许 Galley 发送通知。",
+      behaviorSectionTitle: "应用行为",
+      keepInBackgroundTitle: "关闭窗口时保持后台运行",
+      keepInBackgroundDescription:
+        "关闭窗口后 Galley 收进菜单栏 / 托盘继续运行，渠道和后台任务不中断；关闭此项则关窗即退出。",
+      autoDownloadUpdatesTitle: "自动下载更新",
+      autoDownloadUpdatesDescription:
+        "发现新版本时在后台自动下载；关闭后仅提示，不主动下载。",
     },
     runtime: {
       subtitle: "Galley 的运行环境",

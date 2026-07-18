@@ -1,0 +1,127 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const notificationMocks = vi.hoisted(() => ({
+  isPermissionGranted: vi.fn(),
+  requestPermission: vi.fn(),
+  sendNotification: vi.fn(),
+}));
+
+const windowMocks = vi.hoisted(() => ({
+  isFocused: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-notification", () => notificationMocks);
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => windowMocks,
+}));
+
+import { sendGatedSystemNotification, shouldThrottle } from "@/lib/notify";
+import { usePrefsStore } from "@/stores/prefs";
+import { resetStores } from "@/test/store-reset";
+
+describe("shouldThrottle", () => {
+  it("never throttles a key that has not fired yet", () => {
+    expect(shouldThrottle(undefined, 1000, 5000)).toBe(false);
+  });
+
+  it("throttles inside the window and releases after it", () => {
+    expect(shouldThrottle(1000, 5999, 5000)).toBe(true);
+    expect(shouldThrottle(1000, 6000, 5000)).toBe(false);
+  });
+});
+
+describe("sendGatedSystemNotification", () => {
+  beforeEach(() => {
+    resetStores();
+    notificationMocks.isPermissionGranted.mockReset();
+    notificationMocks.isPermissionGranted.mockResolvedValue(true);
+    notificationMocks.requestPermission.mockReset();
+    notificationMocks.requestPermission.mockResolvedValue("granted");
+    notificationMocks.sendNotification.mockReset();
+    windowMocks.isFocused.mockReset();
+    windowMocks.isFocused.mockResolvedValue(false);
+  });
+
+  it("sends when the pref is on, window unfocused, permission granted", async () => {
+    await sendGatedSystemNotification("goalEnd", {
+      title: "done",
+      body: "objective",
+    });
+
+    expect(notificationMocks.sendNotification).toHaveBeenCalledWith({
+      title: "done",
+      body: "objective",
+    });
+  });
+
+  it("skips when the matching pref is off", async () => {
+    usePrefsStore.setState({ notifyOnGoalEnd: false });
+
+    await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+
+    expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("gates approval notifications on the approval pref, not the goal pref", async () => {
+    usePrefsStore.setState({ notifyOnGoalEnd: false, notifyOnApproval: true });
+
+    await sendGatedSystemNotification("approval", {
+      title: "t",
+      body: "b",
+      throttleKey: "approval:pref-split",
+    });
+
+    expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips when the window is focused (toast already covers it)", async () => {
+    windowMocks.isFocused.mockResolvedValue(true);
+
+    await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+
+    expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("requests permission lazily and sends on grant", async () => {
+    notificationMocks.isPermissionGranted.mockResolvedValue(false);
+    notificationMocks.requestPermission.mockResolvedValue("granted");
+
+    await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+
+    expect(notificationMocks.requestPermission).toHaveBeenCalled();
+    expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips when permission is denied", async () => {
+    notificationMocks.isPermissionGranted.mockResolvedValue(false);
+    notificationMocks.requestPermission.mockResolvedValue("denied");
+
+    await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+
+    expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("collapses a burst sharing a throttleKey into one notification", async () => {
+    await sendGatedSystemNotification("approval", {
+      title: "t",
+      body: "one",
+      throttleKey: "approval:burst-session",
+    });
+    await sendGatedSystemNotification("approval", {
+      title: "t",
+      body: "two",
+      throttleKey: "approval:burst-session",
+    });
+
+    expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("never throws when the Tauri window API is unavailable", async () => {
+    windowMocks.isFocused.mockRejectedValue(new Error("no tauri runtime"));
+
+    await expect(
+      sendGatedSystemNotification("goalEnd", { title: "t", body: "b" }),
+    ).resolves.toBeUndefined();
+    expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
+  });
+});

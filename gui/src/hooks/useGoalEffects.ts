@@ -7,6 +7,7 @@ import {
   listVisibleGoals,
   markGoalResultSeen,
 } from "@/lib/goals";
+import { sendGatedSystemNotification } from "@/lib/notify";
 import { useSessionsStore } from "@/stores/sessions";
 import { makeAppError, type AppError } from "@/types/app-error";
 import type { GoalBrief, GoalStatus } from "@/types/goal";
@@ -160,6 +161,11 @@ export function useGoalEffects({
           : goal.status === "stopped"
             ? copy.toasts.goalStopped
             : copy.toasts.goalFailed;
+      const message =
+        failed && goal.latestSummary ? goal.latestSummary : goal.objective;
+      // Same content as the toast, for the user who isn't looking at
+      // the window — notify.ts skips it when the window is focused.
+      void sendGatedSystemNotification("goalEnd", { title, body: message });
       pushToast(
         makeAppError({
           category: "business",
@@ -167,7 +173,7 @@ export function useGoalEffects({
           title,
           // On failure the controller records the cause in latestSummary;
           // the objective alone explains nothing ("反馈引导行动").
-          message: failed && goal.latestSummary ? goal.latestSummary : goal.objective,
+          message,
           hint: null,
           retryable: false,
           context: "goal_terminal",

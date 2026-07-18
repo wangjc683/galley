@@ -14,6 +14,7 @@ import {
 } from "@/lib/ipc/history-replay";
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
+import { sendGatedSystemNotification } from "@/lib/notify";
 import {
   buildAgentTurn,
   isFinalAnswerTurn,
@@ -284,6 +285,15 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         args: event.args,
       };
       messages.addPendingApproval(event.sessionId, pending);
+      // The agent is now blocked on a human decision — worth a system
+      // notification when the window is unfocused (notify.ts gates
+      // pref / focus / permission). Per-session throttleKey collapses
+      // GA parallel-tool bursts into one notification.
+      void sendGatedSystemNotification("approval", {
+        title: currentCopy().sidebar.waitingApproval,
+        body: target ? `${event.toolName} · ${target}` : event.toolName,
+        throttleKey: `approval:${event.sessionId}`,
+      });
       // Best-effort Core DB write for audit trail. tool_events
       // joins to messages by (session_id, turn_index) — must use
       // absolute turn index so the join works after restore.

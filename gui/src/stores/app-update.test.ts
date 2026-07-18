@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppUpdateProgressEvent } from "@/lib/app-update";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { getTauriMocks } from "@/test/setup";
+import { resetStores } from "@/test/store-reset";
 
 type ProgressHandler = (event: { payload: AppUpdateProgressEvent }) => void;
 
@@ -99,5 +100,60 @@ describe("app-update store download progress", () => {
     await useAppUpdateStore.getState().downloadAndInstall();
     expect(useAppUpdateStore.getState().status.kind).toBe("error");
     expect(unlisten).toHaveBeenCalled();
+  });
+});
+
+describe("app-update store silent check gating", () => {
+  beforeEach(() => {
+    resetStores();
+    useAppUpdateStore.setState({
+      status: { kind: "idle" },
+      lastCheckedAt: null,
+    });
+  });
+
+  function mockCheckAvailable(): ReturnType<typeof getTauriMocks> {
+    const mocks = getTauriMocks();
+    mocks.invoke.mockImplementation(async (command) => {
+      if (command === "check_app_update") return AVAILABLE;
+      if (command === "install_app_update") {
+        return { currentVersion: "0.3.2", version: "0.4.0" };
+      }
+      return undefined;
+    });
+    return mocks;
+  }
+
+  it("holds back the download when downloadIfAvailable is false", async () => {
+    const mocks = mockCheckAvailable();
+
+    await useAppUpdateStore
+      .getState()
+      .check({ silent: true, downloadIfAvailable: false });
+
+    // Detection still surfaces — the TopBar indicator feeds on this.
+    expect(useAppUpdateStore.getState().status).toMatchObject({
+      kind: "available",
+      version: "0.4.0",
+    });
+    expect(
+      mocks.invoke.mock.calls.some(
+        ([command]) => command === "install_app_update",
+      ),
+    ).toBe(false);
+  });
+
+  it("auto-downloads when downloadIfAvailable is true and sessions idle", async () => {
+    const mocks = mockCheckAvailable();
+
+    await useAppUpdateStore
+      .getState()
+      .check({ silent: true, downloadIfAvailable: true });
+
+    expect(
+      mocks.invoke.mock.calls.some(
+        ([command]) => command === "install_app_update",
+      ),
+    ).toBe(true);
   });
 });

@@ -126,6 +126,24 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
   [desktop-runtime.md](../desktop-runtime.md) §Launch at Login；设计要点
   是**操作系统为唯一事实源**——开关状态实时读插件 `isEnabled()`，不在
   prefs 存副本，系统侧移除登录项不产生漂移。
+- **通知**分区（2026-07-18 新增）两行开关：`任务结束时通知` /
+  `等待审批时通知`（默认都开）。系统通知只在窗口非聚焦时发送——聚焦时
+  应用内 toast 已覆盖，gating 全在 `gui/src/lib/notify.ts`（pref →
+  节流 → isFocused → 权限 → send）。权限是独立于 pref 的第二层事实源：
+  开关拨开时才请求权限，被拒**不回弹开关**，分区下方出提示行引导去
+  系统设置；启动时从不主动弹权限框。审批通知按 session 5 秒节流，
+  防 GA 并行工具连发刷屏。
+- **应用行为**分区（2026-07-18 新增）两行开关：
+  - `关闭窗口时保持后台运行`（默认开 = Background Mode 现状）。关闭后
+    关窗走真退出（有任务运行时先弹确认框）。pref 语义存
+    `keep_in_background_on_close`，Rust 侧 CloseRequested 回调读
+    process-local atomic（setup 时从 pref 种入 + 开关切换时实时
+    push），照 close-hint seen flag 的同一模式。
+  - `自动下载更新`（默认开 = 现状）。关掉后启动静默检查照常、TopBar
+    仍显示 available，只是不自动下载；手动下载永不受此开关限制。
+- 与「启动」分区的事实源区分：自启开关 OS 为唯一事实源；通知与应用
+  行为四个开关 pref（SQLite）为事实源，仅通知**权限**沿用 OS 事实源
+  的提示模式。
 - 主题与字号在 topbar 保留快捷入口（双入口：topbar 快捷调节，General
   权威清单）。**对话宽度（compact/wide）有意不进 General**：Settings 是
   遮住对话区的模态，切宽度看不到任何效果；它是视图控制，入口保持

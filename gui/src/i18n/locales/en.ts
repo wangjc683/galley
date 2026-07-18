@@ -461,7 +461,7 @@ export const enCopy: AppCopy = {
       about: { label: "About", helper: "关于" },
     },
     general: {
-      subtitle: "Appearance, language, and startup",
+      subtitle: "Appearance, language, and app behavior",
       appearanceSectionTitle: "Appearance & language",
       themeRowTitle: "Theme",
       themeRowDescription: "Light or dark interface",
@@ -475,6 +475,22 @@ export const enCopy: AppCopy = {
       launchAtLoginDescription:
         "Galley starts in the background (menu bar / tray) when you sign in — no window pops up. Connected channels and remote supervision are ready from boot.",
       launchAtLoginError: (detail) => `Could not update launch at login: ${detail}`,
+      notificationsSectionTitle: "Notifications",
+      notifyGoalEndTitle: "When a task finishes",
+      notifyGoalEndDescription:
+        "System notification when a goal completes, fails, or stops while the window is in the background",
+      notifyApprovalTitle: "When approval is needed",
+      notifyApprovalDescription:
+        "System notification when an agent is waiting for a tool approval while the window is in the background",
+      notificationsPermissionHint:
+        "Notifications are not enabled for Galley. Allow them in system settings to receive these alerts.",
+      behaviorSectionTitle: "App behavior",
+      keepInBackgroundTitle: "Keep running when the window closes",
+      keepInBackgroundDescription:
+        "Closing the window keeps Galley in the menu bar / tray, so channels and background tasks stay alive. Turn off to quit when the window closes.",
+      autoDownloadUpdatesTitle: "Download updates automatically",
+      autoDownloadUpdatesDescription:
+        "New versions download in the background when found. Turn off to be notified only — nothing downloads until you ask.",
     },
     runtime: {
       subtitle: "Galley's runtime",
