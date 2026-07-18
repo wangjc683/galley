@@ -302,7 +302,9 @@ Use an installed older release build, not `tauri dev`.
 Expected path:
 
 1. Launch older Galley.
-2. Settings -> About or Runtime shows update status.
+2. Settings -> About shows update status (the TopBar indicator surfaces
+   available / downloading / ready states; Runtime only shows the version
+   as plain text).
 3. If no session is running, Galley downloads/prepares in the background.
 4. If a session is running, Galley remembers the update and waits.
 5. After preparation, click restart.

@@ -18,7 +18,6 @@ import { GAVersionCard } from "@/components/screens/settings/runtime/GAVersionCa
 import { HealthCheckSection } from "@/components/screens/settings/runtime/HealthCheckSection";
 import { RuntimeAccordionRow } from "@/components/screens/settings/runtime/RuntimeAccordionRow";
 import type { SettingsRuntimeProps } from "@/components/screens/settings/runtime/types";
-import { SettingsUpdateControl } from "@/components/screens/settings/SettingsUpdateControl";
 import { Button } from "@/components/ui/button";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { useCopy } from "@/lib/i18n";
@@ -161,15 +160,13 @@ export function SettingsRuntime({
         {externalRuntimeDetails}
       </AdvancedRuntimeSettings>
 
+      {/* Version is a plain fact line here. Update discovery lives in
+          the TopBar indicator; the manual check control lives in
+          Settings → About only. */}
       <div className="border-t border-line pt-4">
-        <SettingsUpdateControl
-          hasRunningSessions={hasRunningSessions}
-          leading={
-            <div className="font-mono text-ui-label text-ink-muted">
-              Galley v{info.workbenchVersion}
-            </div>
-          }
-        />
+        <div className="font-mono text-ui-label text-ink-muted">
+          Galley v{info.workbenchVersion}
+        </div>
       </div>
     </div>
   );

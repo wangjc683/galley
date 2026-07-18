@@ -156,7 +156,9 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
     commit + 对齐 badge）、Health Check（说明 + accent-secondary sm
     按钮重跑）。
   - **高级诊断**：手风琴，仅内置内核激活时出现；key-value 只读行。
-- **底部**：`border-line` 分隔后一行 mono `Galley v{x}` + 更新控制。
+- **底部**：`border-line` 分隔后一行 mono `Galley v{x}`，纯文本事实行。
+  更新的发现与安装由 TopBar 更新指示器承担，手动检查控件只保留在
+  About（2026-07-18 收敛，此前 Runtime 底部也带更新控件）。
 
 层级规则（这轮打磨的决策，后续改动不要破坏）：
 
