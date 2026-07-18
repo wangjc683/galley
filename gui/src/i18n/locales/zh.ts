@@ -44,13 +44,16 @@ export const zhCopy = {
     minimize: "最小化",
     maximize: "最大化",
     restoreWindow: "向下还原",
-    closeBackgroundHint: {
-      title: "Galley 仍在后台运行",
-      bodyMac:
-        "关闭窗口只是隐藏 Galley，后台任务和已接入的 Channel 会继续运行。需要彻底退出时，从菜单栏的 Galley 图标选择 Quit Galley。",
-      bodyWindows:
-        "关闭窗口只是隐藏 Galley，后台任务和已接入的 Channel 会继续运行。需要彻底退出时，从系统托盘的 Galley 图标选择 Quit Galley。",
-    },
+  },
+  firstClose: {
+    title: "Galley 可以在后台继续工作",
+    bodyMac:
+      "收进菜单栏后，已接入的 Channel 保持在线、后台任务继续运行，有需要你的事会通知你。要彻底退出，随时可以从菜单栏的 Galley 图标选择 Quit Galley。",
+    bodyWindows:
+      "收进系统托盘后，已接入的 Channel 保持在线、后台任务继续运行，有需要你的事会通知你。要彻底退出，随时可以从托盘的 Galley 图标选择 Quit Galley。",
+    keep: "保持后台运行（推荐）",
+    quit: "退出 Galley",
+    footnote: "以后可在 设置 → 通用 中修改这个行为。",
   },
   sidebar: {
     configureModels: "配置模型",

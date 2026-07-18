@@ -1,14 +1,14 @@
 //! Window chrome, menu-bar / tray background mode, and quit lifecycle for
 //! the desktop app. Extracted from `lib.rs`: these helpers plus the
-//! close-hint state are orchestrated by the Tauri `setup` hook and the
+//! first-close state are orchestrated by the Tauri `setup` hook and the
 //! run-event loop in `lib::run`, which glob-imports this module so those
-//! call sites stay unqualified. The `set_close_hint_copy` command is
-//! registered as `tray::set_close_hint_copy` in the command handler.
+//! call sites stay unqualified. The `set_keep_in_background` and
+//! `resolve_first_close` commands are registered as `tray::…` in the
+//! command handler.
 
 use crate::db::SqliteGalley;
 use crate::{im_supervisor, runner_manager, MAIN_WINDOW_LABEL};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
 
 pub(crate) const TRAY_SHOW_GALLEY_LABEL: &str = "Open Galley";
 pub(crate) const TRAY_HIDE_GALLEY_LABEL: &str = "Hide Galley";
@@ -16,21 +16,33 @@ pub(crate) const TRAY_HIDE_GALLEY_LABEL: &str = "Hide Galley";
 static QUIT_REQUEST_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 pub(crate) static ALLOW_APP_EXIT: AtomicBool = AtomicBool::new(false);
 
-/// Pref key recording whether the one-time "Galley keeps running in the
-/// background after you close the window" hint has been shown on this
-/// device. Written by the close handler the first time the window is
-/// hidden to background (see `CloseRequested`). Mirrors the
-/// `yolo_intro_seen` disclosure-once pattern.
-pub(crate) const CLOSE_HINT_SEEN_PREF: &str = "close_to_background_hint_seen";
+/// Pref key recording that the user has made the first-close choice
+/// (keep in background vs quit) via the GUI's FirstCloseDialog, or —
+/// legacy — saw the old one-time native background hint. The key keeps
+/// its historical string so users who already dismissed the old hint
+/// are not re-asked by the new dialog. Mirrors the `yolo_intro_seen`
+/// disclosure-once pattern.
+pub(crate) const FIRST_CLOSE_CHOICE_PREF: &str = "close_to_background_hint_seen";
 
-/// Process-local guard so the background hint fires at most once per
-/// launch even under rapid repeated close events. Seeded from the
-/// persisted `CLOSE_HINT_SEEN_PREF` during `setup` (right after the SQL
-/// plugin runs migrations), so a returning user who already dismissed
-/// the hint is protected even if they close the window before the GUI
-/// finishes hydrating. The close handler reads this guard, not the DB,
-/// because it runs synchronously inside the window-event callback.
-pub(crate) static CLOSE_HINT_SHOWN: AtomicBool = AtomicBool::new(false);
+/// Process-local mirror of `FIRST_CLOSE_CHOICE_PREF`. While `false`,
+/// `CloseRequested` keeps the window visible and asks the GUI to show
+/// the first-close choice dialog instead of hiding. Seeded from the
+/// pref during `setup` (right after the SQL plugin runs migrations) so
+/// a returning user is protected even if they close the window before
+/// the GUI finishes hydrating; flipped by `resolve_first_close` (the
+/// dialog's verdict) and by `set_keep_in_background` (an explicit
+/// Settings toggle is the same intent expressed elsewhere). The close
+/// handler reads this guard, not the DB, because it runs synchronously
+/// inside the window-event callback.
+pub(crate) static FIRST_CLOSE_CHOICE_MADE: AtomicBool = AtomicBool::new(false);
+
+/// Event asking the GUI to open the first-close choice dialog. Emitted
+/// by the `CloseRequested` handler while `FIRST_CLOSE_CHOICE_MADE` is
+/// false; the GUI answers with the `resolve_first_close` command. If
+/// the webview hasn't registered its listener yet (closing within the
+/// first moments of the very first launch), the emit is lost and the
+/// window simply stays open — the next close attempt asks again.
+pub(crate) const FIRST_CLOSE_REQUESTED_EVENT: &str = "first-close-requested";
 
 /// Pref key for the Settings -> General "keep running in the
 /// background when the window closes" toggle.
@@ -47,29 +59,6 @@ pub(crate) static KEEP_IN_BACKGROUND_ON_CLOSE: AtomicBool = AtomicBool::new(true
 
 pub(crate) struct TrayMenuState {
     pub(crate) toggle_window_item: tauri::menu::MenuItem<tauri::Wry>,
-}
-
-/// Localized copy for the background-mode close hint dialog. The close
-/// handler is a synchronous window-event callback and can't await a
-/// pref read or reach into GUI i18n, so the localized strings are
-/// pushed from the frontend (hydrate + on language change) via
-/// `set_close_hint_copy` and parked here. Defaults to English so the
-/// dialog is still coherent if the frontend hasn't pushed yet.
-pub(crate) struct CloseHintCopy {
-    title: Mutex<String>,
-    body: Mutex<String>,
-}
-
-impl Default for CloseHintCopy {
-    fn default() -> Self {
-        Self {
-            title: Mutex::new("Galley is still running".to_string()),
-            body: Mutex::new(
-                "Closing the window only hides Galley. Background tasks and connected channels keep running. To quit completely, choose Quit Galley from the menu bar / tray."
-                    .to_string(),
-            ),
-        }
-    }
 }
 
 fn set_tray_window_visible(app: &tauri::AppHandle<tauri::Wry>, visible: bool) {
@@ -108,70 +97,22 @@ pub(crate) fn toggle_main_window(app: &tauri::AppHandle<tauri::Wry>) {
     }
 }
 
-/// One-time disclosure that closing the window hides Galley to the
-/// background rather than quitting. Fires the first time the window is
-/// hidden via `CloseRequested` on macOS / Windows. Subsequent closes
-/// (and returning users who already dismissed it) skip silently.
-///
-/// `swap(true)` makes the process-local guard self-arming: the first
-/// caller observes `false` and shows the dialog; everyone after gets
-/// `true` and returns. The guard is also seeded `true` during `setup`
-/// from the persisted `CLOSE_HINT_SEEN_PREF` for users who saw the hint
-/// on a prior launch, so the dialog is genuinely once-per-device, not
-/// once-per-launch — and that seed happens before the window can be
-/// closed, closing the hydrate-timing race.
-///
-/// The seen flag is persisted here — close handling is Rust's authority,
-/// and the GUI only mirrors copy inward. The dialog is shown
-/// non-blocking (single OK button); the window stays hidden underneath,
-/// matching the user's close intent.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-pub(crate) fn maybe_show_background_hint(app: &tauri::AppHandle<tauri::Wry>) {
+/// Flip the first-close-choice guard and persist it. Best-effort
+/// persistence — a write failure only means the dialog may ask once
+/// more on a future launch, never an exit-path regression. `swap`
+/// makes repeat calls (dialog verdict racing a Settings toggle) skip
+/// the redundant SQLite write.
+fn mark_first_close_choice(app: &tauri::AppHandle<tauri::Wry>) {
     use tauri::Manager;
-
-    if CLOSE_HINT_SHOWN.swap(true, Ordering::SeqCst) {
+    if FIRST_CLOSE_CHOICE_MADE.swap(true, Ordering::SeqCst) {
         return;
     }
-
-    // Persist the seen flag so it survives the next launch. Best-effort:
-    // a write failure only means the hint may show once more, never an
-    // exit-path regression.
     let galley = app.state::<SqliteGalley>().inner().clone();
     tauri::async_runtime::spawn(async move {
         let _ = galley
-            .set_pref_json(CLOSE_HINT_SEEN_PREF, serde_json::json!(true))
+            .set_pref_json(FIRST_CLOSE_CHOICE_PREF, serde_json::json!(true))
             .await;
     });
-
-    let (title, body) = match app.try_state::<CloseHintCopy>() {
-        Some(copy) => {
-            let title = copy
-                .title
-                .lock()
-                .map(|g| g.clone())
-                .unwrap_or_else(|_| "Galley is still running".to_string());
-            let body = copy
-                .body
-                .lock()
-                .map(|g| g.clone())
-                .unwrap_or_else(|_| {
-                    "Closing the window only hides Galley. To quit completely, choose Quit Galley from the menu bar / tray.".to_string()
-                });
-            (title, body)
-        }
-        None => (
-            "Galley is still running".to_string(),
-            "Closing the window only hides Galley. To quit completely, choose Quit Galley from the menu bar / tray.".to_string(),
-        ),
-    };
-
-    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-    app.dialog()
-        .message(body)
-        .title(title)
-        .kind(MessageDialogKind::Info)
-        .buttons(MessageDialogButtons::Ok)
-        .show(|_| {});
 }
 
 fn cleanup_and_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
@@ -245,37 +186,43 @@ pub(crate) fn tray_icon_image() -> tauri::Result<tauri::image::Image<'static>> {
     tauri::image::Image::from_bytes(TRAY_ICON_BYTES).map(|image| image.to_owned())
 }
 
-/// Update the localized copy for the background-mode close hint. Called
-/// by the GUI at hydrate and again whenever the UI language changes, so
-/// the native dialog (which runs synchronously inside the close handler
-/// and can't reach GUI i18n) always has the active-language strings
-/// ready.
-///
-/// The seen flag is NOT handled here: it's seeded from the persisted
-/// pref during `setup` (so a returning user is protected even if they
-/// close the window before hydrate runs) and persisted by the close
-/// handler on first show. This command only mirrors copy inward and
-/// never touches SQLite.
-/// Live-push for the "keep in background on close" preference. Only
-/// updates the process-local atomic — persistence belongs to the GUI's
-/// pref write, and setup re-seeds the atomic from SQLite next launch,
-/// so the two sides can fail independently without drift beyond the
-/// current session.
+/// Live-push for the "keep in background on close" preference. Updates
+/// the process-local atomic — persistence of the pref itself belongs to
+/// the GUI's pref write, and setup re-seeds the atomic from SQLite next
+/// launch, so the two sides can fail independently without drift beyond
+/// the current session. An explicit Settings toggle also counts as the
+/// first-close choice: the user has seen and decided what closing
+/// means, so the FirstCloseDialog never needs to ask.
 #[tauri::command]
-pub(crate) fn set_keep_in_background(enabled: bool) {
+pub(crate) fn set_keep_in_background(
+    app: tauri::AppHandle<tauri::Wry>,
+    enabled: bool,
+) {
     KEEP_IN_BACKGROUND_ON_CLOSE.store(enabled, Ordering::SeqCst);
+    mark_first_close_choice(&app);
 }
 
+/// Verdict of the GUI's first-close choice dialog. Records the choice
+/// (guard + pref), mirrors it into the keep-in-background atomic, and
+/// executes what the user picked: hide to background, or the true-quit
+/// path (which still confirms when an agent is running — Cancel there
+/// leaves the window visible, matching the withdrawn quit intent).
+/// The keep-in-background *pref* is persisted by the GUI store setter
+/// alongside this call, same split as `set_keep_in_background`.
 #[tauri::command]
-pub(crate) fn set_close_hint_copy(
-    title: String,
-    body: String,
-    copy: tauri::State<'_, CloseHintCopy>,
+pub(crate) fn resolve_first_close(
+    app: tauri::AppHandle<tauri::Wry>,
+    keep_in_background: bool,
 ) {
-    if let Ok(mut guard) = copy.title.lock() {
-        *guard = title;
-    }
-    if let Ok(mut guard) = copy.body.lock() {
-        *guard = body;
+    use tauri::Manager;
+    mark_first_close_choice(&app);
+    KEEP_IN_BACKGROUND_ON_CLOSE.store(keep_in_background, Ordering::SeqCst);
+    if keep_in_background {
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            let _ = window.hide();
+        }
+        set_tray_window_visible(&app, false);
+    } else {
+        request_true_quit(app, true);
     }
 }

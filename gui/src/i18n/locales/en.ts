@@ -45,13 +45,16 @@ export const enCopy: AppCopy = {
     minimize: "Minimize",
     maximize: "Maximize",
     restoreWindow: "Restore down",
-    closeBackgroundHint: {
-      title: "Galley is still running",
-      bodyMac:
-        "Closing the window only hides Galley. Background tasks and connected channels keep running. To quit completely, choose Quit Galley from the Galley menu bar icon.",
-      bodyWindows:
-        "Closing the window only hides Galley. Background tasks and connected channels keep running. To quit completely, choose Quit Galley from the Galley tray icon.",
-    },
+  },
+  firstClose: {
+    title: "Galley can keep working in the background",
+    bodyMac:
+      "Tucked into the menu bar, connected channels stay online and background tasks keep running — Galley notifies you when something needs you. To quit completely, choose Quit Galley from the menu bar icon anytime.",
+    bodyWindows:
+      "Tucked into the system tray, connected channels stay online and background tasks keep running — Galley notifies you when something needs you. To quit completely, choose Quit Galley from the tray icon anytime.",
+    keep: "Keep running in background (recommended)",
+    quit: "Quit Galley",
+    footnote: "You can change this anytime in Settings → General.",
   },
   sidebar: {
     configureModels: "Set up model",

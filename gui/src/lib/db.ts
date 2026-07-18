@@ -310,25 +310,19 @@ export async function setPref<T>(key: string, value: T): Promise<void> {
   await invoke("set_pref_json", { key, value });
 }
 
-// ---------------- background close hint ----------------
+// ---------------- background close behavior ----------------
 
 /**
- * Push the localized title / body for the background-mode close hint
- * into Galley Core. The Rust close handler fires synchronously inside
- * the window-event callback, so it can't reach GUI i18n — we push the
- * active-language copy here (during hydrate and again on language
- * change) and Rust parks it until a close happens.
- *
- * Best-effort: a failure only means the dialog falls back to its
- * English default; it never blocks startup. The seen flag is owned
- * entirely by Rust (seeded at setup, persisted by the close handler),
- * so this command carries copy only and never touches SQLite.
+ * Answer the first-close choice dialog (FirstCloseDialog). Rust records
+ * the decision (guard + pref) and executes it — hide to background, or
+ * the true-quit path with its running-agent confirm. The
+ * keep-in-background *pref* itself is persisted by the prefs store
+ * setter alongside this call.
  */
-export async function setCloseHintCopy(
-  title: string,
-  body: string,
+export async function resolveFirstClose(
+  keepInBackground: boolean,
 ): Promise<void> {
-  await invoke("set_close_hint_copy", { title, body });
+  await invoke("resolve_first_close", { keepInBackground });
 }
 
 /**

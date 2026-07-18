@@ -340,10 +340,10 @@ pub struct CreateGoalEventInput {
 /// controller's lifecycle checkpoints.
 ///
 /// These rows are written by Rust (Core + the detached CLI controller),
-/// which cannot reach the GUI's i18n. Following the same precedent as the
-/// background close-hint copy, the operator's *resolved* locale is handed
-/// down at launch (`start_desktop_goal` input → `--locale` on the spawned
-/// controller) and the narration text is selected from this table.
+/// which cannot reach the GUI's i18n. The operator's *resolved* locale is
+/// handed down at launch (`start_desktop_goal` input → `--locale` on the
+/// spawned controller) and the narration text is selected from this
+/// table.
 ///
 /// Defaults to `ZhCn` so a caller that omits the locale keeps the
 /// pre-localization behavior (the surface shipped Chinese-only).

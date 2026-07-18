@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { pushCloseHintCopy } from "@/lib/close-hint";
-import type { LanguagePreference } from "@/lib/language";
 import {
   applyResolvedTheme,
   resolveSystemTheme,
@@ -12,11 +10,12 @@ import {
   type ThemePreference,
 } from "@/lib/theme";
 
-export function useThemeAndCloseHintEffects({
-  languagePreference,
+/** Resolves the effective theme from the preference + live system
+ * scheme, applies it to the document, and cross-fades on changes
+ * after the initial paint. */
+export function useThemeEffects({
   themePreference,
 }: {
-  languagePreference: LanguagePreference;
   themePreference: ThemePreference;
 }): ResolvedTheme {
   const [systemTheme, setSystemTheme] = useState(resolveSystemTheme);
@@ -36,15 +35,6 @@ export function useThemeAndCloseHintEffects({
       themeAppliedRef.current = true;
     }
   }, [resolvedTheme]);
-
-  const closeHintLangRef = useRef(false);
-  useEffect(() => {
-    if (!closeHintLangRef.current) {
-      closeHintLangRef.current = true;
-      return;
-    }
-    void pushCloseHintCopy(languagePreference);
-  }, [languagePreference]);
 
   return resolvedTheme;
 }

@@ -138,7 +138,10 @@ normal muted，两行之间保留明确间距。即使 tab 处于 active 状态�
     关窗走真退出（有任务运行时先弹确认框）。pref 语义存
     `keep_in_background_on_close`，Rust 侧 CloseRequested 回调读
     process-local atomic（setup 时从 pref 种入 + 开关切换时实时
-    push），照 close-hint seen flag 的同一模式。
+    push）。首次关窗由应用内 FirstCloseDialog 询问并给这个 pref 赋值
+    （2026-07-18 取代原生一次性提示框，机制见
+    [desktop-runtime.md](../desktop-runtime.md) §Background Mode）；
+    在 Settings 里显式拨过这个开关同样计为已选择，不再弹窗。
   - `自动下载更新`（默认开 = 现状）。关掉后启动静默检查照常、TopBar
     仍显示 available，只是不自动下载；手动下载永不受此开关限制。
 - 与「启动」分区的事实源区分：自启开关 OS 为唯一事实源；通知与应用

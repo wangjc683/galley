@@ -92,18 +92,27 @@ main window hides the window; it does not quit the app or shut down Galley Core.
 This keeps local socket access alive for the CLI, Supervisor automation, and
 external IM / agent frontends while the desktop window is out of the way.
 
-The first time the window is hidden to background on a device, Galley shows a
-one-time native dialog explaining that closing only hides the window and that
-true exit happens via `Quit Galley`. The dialog is informational (single OK
-button); it never offers to quit and never blocks the hide. The seen state is
-persisted in the `close_to_background_hint_seen` pref: written by the Rust close
-handler on first show, and read back during Rust `setup` (right after
-migrations) to arm an in-process guard before the window can be closed. Seeding
-in `setup` rather than at GUI hydrate is deliberate — it keeps the hint
+The first time the user closes the window on a device (2026-07-18, replacing
+the earlier one-time native info dialog), Galley does not hide. The Rust close
+handler keeps the window visible and emits `first-close-requested`; the GUI
+renders the in-app FirstCloseDialog asking what closing should mean — "keep
+running in background" (primary, recommended) or "quit Galley". The verdict is
+reported back via the `resolve_first_close` command, which records the choice,
+writes it into the `keep_in_background_on_close` behavior (Settings → General
+owns it from then on), and executes the hide or the true-quit path. Dismissing
+the dialog (Esc / overlay) cancels the close entirely and asks again next
+time. An explicit Settings → General toggle of the same preference also counts
+as the choice, so the dialog never asks a user who already decided.
+
+The choice state is persisted in the `close_to_background_hint_seen` pref (the
+key keeps its legacy name, so users who dismissed the old hint are not
+re-asked) and read back during Rust `setup` (right after migrations) to arm an
+in-process guard before the window can be closed. Seeding in `setup` rather
+than at GUI hydrate is deliberate — it keeps the question
 at-most-once-per-device even if the user closes the window before the GUI
-finishes hydrating. The dialog copy is localized: the GUI pushes the
-active-language title / body into Galley Core at hydrate and on language change
-(the close handler runs synchronously and cannot reach GUI i18n itself).
+finishes hydrating. If the webview hasn't registered its event listener yet
+(closing within the first moments of the very first launch), the emit is lost
+and the window simply stays open; the next close attempt asks again.
 
 Platform behavior:
 

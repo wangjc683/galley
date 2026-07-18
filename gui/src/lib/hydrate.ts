@@ -39,7 +39,6 @@ import {
   deleteEmptyNewSessions,
   getPref,
 } from "@/lib/db";
-import { pushCloseHintCopy } from "@/lib/close-hint";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
 import { applyManagedRuntimeDiagnostics } from "@/lib/managed-runtime-diagnostics";
@@ -75,13 +74,6 @@ export async function hydrateApp(): Promise<void> {
   if (realVersion) {
     void useAppUpdateStore.getState().noteAppLaunched(realVersion);
   }
-
-  // 2b. Push the background-mode close hint copy into Galley Core for
-  // the current language. The Rust close handler can't reach GUI i18n,
-  // so we hand it the localized strings here. The seen flag is owned by
-  // Rust (seeded at setup), so the GUI only carries copy. Fire-and-
-  // forget — never blocks paint.
-  void pushCloseHintCopy(usePrefsStore.getState().languagePreference);
 
   // 3. Saved prompts. Composer can render defaults before this resolves,
   // but hydrating here prevents the first popover open from doing IO.

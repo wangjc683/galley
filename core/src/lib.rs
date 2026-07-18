@@ -345,12 +345,6 @@ pub fn run() {
         .manage(std::sync::Arc::new(
             im_supervisor::ImSupervisorManager::new(),
         ))
-        // Localized copy for the background-mode close hint, pushed from
-        // the GUI (hydrate + on language change). Managed on every
-        // platform because `set_close_hint_copy` is registered for all
-        // targets; the close handler that consumes it is macOS/Windows
-        // only. Defaults to English until the GUI pushes.
-        .manage(CloseHintCopy::default())
         .invoke_handler(tauri::generate_handler![
             path_exists,
             get_supervisor_sop,
@@ -416,8 +410,8 @@ pub fn run() {
             load_tool_events_by_session,
             get_pref_json,
             set_pref_json,
-            tray::set_close_hint_copy,
             tray::set_keep_in_background,
+            tray::resolve_first_close,
             set_width_menu_state,
             bulk_archive_sessions,
             bulk_unarchive_sessions,
@@ -551,19 +545,20 @@ pub fn run() {
             .map_err(stringify_error)?;
             _app.manage(shared_galley);
 
-            // Seed the background-mode close-hint guard from the
-            // persisted seen flag, now that the SQL plugin above has run
-            // migrations and the `prefs` table exists. This must happen
-            // before the window can receive `CloseRequested` (the close
-            // handler is registered later in this same setup, but the
-            // event can't fire until the event loop starts after setup
-            // returns). Seeding here — not at GUI hydrate — closes the
-            // race where a returning user who closes the window before
-            // hydrate completes would otherwise see the "one-time" hint
-            // again. macOS/Windows only: the hint and its handler don't
-            // exist elsewhere. Best-effort: a read failure leaves the
-            // guard `false`, whose worst case is one extra hint, never a
-            // wrong-exit regression.
+            // Seed the first-close-choice guard from the persisted
+            // flag, now that the SQL plugin above has run migrations
+            // and the `prefs` table exists. This must happen before the
+            // window can receive `CloseRequested` (the close handler is
+            // registered later in this same setup, but the event can't
+            // fire until the event loop starts after setup returns).
+            // Seeding here — not at GUI hydrate — closes the race where
+            // a returning user who closes the window before hydrate
+            // completes would otherwise be asked the "one-time"
+            // first-close question again. macOS/Windows only: the
+            // dialog flow and its handler don't exist elsewhere.
+            // Best-effort: a read failure leaves the guard `false`,
+            // whose worst case is asking once more, never a wrong-exit
+            // regression.
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             {
                 let seen = tauri::async_runtime::block_on(async {
@@ -571,11 +566,11 @@ pub fn run() {
                         .state::<SqliteGalley>()
                         .inner()
                         .clone();
-                    let value = galley.get_pref_json(CLOSE_HINT_SEEN_PREF).await.ok()?;
+                    let value = galley.get_pref_json(FIRST_CLOSE_CHOICE_PREF).await.ok()?;
                     value.and_then(|v| v.as_bool())
                 });
                 if seen == Some(true) {
-                    CLOSE_HINT_SHOWN.store(true, Ordering::SeqCst);
+                    FIRST_CLOSE_CHOICE_MADE.store(true, Ordering::SeqCst);
                 }
 
                 // Same seeding rationale for the "keep in background on
@@ -852,13 +847,14 @@ pub fn run() {
                         }
                         api.prevent_close();
                         if !KEEP_IN_BACKGROUND_ON_CLOSE.load(Ordering::SeqCst) {
-                            // Settings -> General turned Background Mode
-                            // off: close means quit. Still prevent_close
-                            // above — request_true_quit is async and may
-                            // show a confirm dialog when an agent is
-                            // running; on Cancel the window must survive
-                            // (and stay visible: the quit intent was
-                            // withdrawn, hiding would look like a crash).
+                            // Settings -> General (or the first-close
+                            // dialog) turned Background Mode off: close
+                            // means quit. Still prevent_close above —
+                            // request_true_quit is async and may show a
+                            // confirm dialog when an agent is running; on
+                            // Cancel the window must survive (and stay
+                            // visible: the quit intent was withdrawn,
+                            // hiding would look like a crash).
                             // cleanup_and_exit sets ALLOW_APP_EXIT before
                             // app.exit(0), so the real teardown passes the
                             // guard above.
@@ -868,13 +864,26 @@ pub fn run() {
                             );
                             return;
                         }
-                        // Background Mode: hide instead of quit. Hide
-                        // first so the close gesture feels instant, then
-                        // surface the one-time hint explaining where the
-                        // window went and how to truly quit.
+                        if !FIRST_CLOSE_CHOICE_MADE.load(Ordering::SeqCst) {
+                            // First close, no decision recorded: keep the
+                            // window visible and let the GUI ask what
+                            // closing should mean (FirstCloseDialog). The
+                            // GUI answers via `resolve_first_close`, which
+                            // hides or quits. If the webview listener
+                            // isn't up yet the emit is lost and the window
+                            // simply stays open — the next close attempt
+                            // asks again. Dismissing the dialog (Esc /
+                            // overlay) resolves nothing: close cancelled,
+                            // ask again next time.
+                            let _ = window_for_close
+                                .emit(FIRST_CLOSE_REQUESTED_EVENT, ());
+                            return;
+                        }
+                        // Background Mode: hide instead of quit, so the
+                        // close gesture feels instant. The first-close
+                        // dialog already taught where the window goes.
                         let _ = window_for_close.hide();
                         let _ = tray_toggle_for_close.set_text(TRAY_SHOW_GALLEY_LABEL);
-                        maybe_show_background_hint(window_for_close.app_handle());
                     }
                 });
 

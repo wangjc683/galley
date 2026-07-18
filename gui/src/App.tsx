@@ -14,6 +14,9 @@ import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScre
 import { Settings } from "@/components/screens/settings/Settings";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { YoloIntroDialog } from "@/components/screens/YoloIntroDialog";
+import { FirstCloseDialog } from "@/components/screens/FirstCloseDialog";
+import { useFirstCloseRequest } from "@/hooks/useFirstCloseRequest";
+import { resolveFirstClose } from "@/lib/db";
 import { ArchivedDialog } from "@/components/screens/archived/ArchivedDialog";
 import { EarlierDialog } from "@/components/screens/earlier/EarlierDialog";
 import { CreateProjectDialog } from "@/components/screens/project/CreateProjectDialog";
@@ -32,7 +35,7 @@ import { useImSupervisorStatus } from "@/hooks/useImSupervisorStatus";
 import { useMessageSend } from "@/hooks/useMessageSend";
 import { useOnboardingFlow } from "@/hooks/useOnboardingFlow";
 import { useProjectNavigation } from "@/hooks/useProjectNavigation";
-import { useThemeAndCloseHintEffects } from "@/hooks/useThemeAndCloseHintEffects";
+import { useThemeEffects } from "@/hooks/useThemeEffects";
 import {
   aggregateChannelsState,
   restartEnabledImSupervisors,
@@ -235,10 +238,8 @@ function App() {
     () => resolveLanguagePreference(languagePreference),
     [languagePreference],
   );
-  const resolvedTheme = useThemeAndCloseHintEffects({
-    languagePreference,
-    themePreference,
-  });
+  const resolvedTheme = useThemeEffects({ themePreference });
+  const firstClose = useFirstCloseRequest();
   const copy = useMemo(
     () => copyForLanguage(resolvedLanguage),
     [resolvedLanguage],
@@ -1146,6 +1147,18 @@ function App() {
         open={!yoloIntroSeen}
         onAcknowledge={(revertToApproval) => {
           void acknowledgeYoloIntro(revertToApproval);
+        }}
+      />
+
+      <FirstCloseDialog
+        open={firstClose.open}
+        onOpenChange={firstClose.setOpen}
+        onChoose={(keepInBackground) => {
+          firstClose.setOpen(false);
+          // The store setter persists the pref (and pushes the atomic);
+          // resolveFirstClose records the choice and hides or quits.
+          void setKeepInBackgroundOnClose(keepInBackground);
+          void resolveFirstClose(keepInBackground);
         }}
       />
     </CopyProvider>
