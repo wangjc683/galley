@@ -86,30 +86,10 @@ def find_default_ga_root() -> Path:
 DEFAULT_GA_ROOT = find_default_ga_root()
 
 _FINAL_INFO_RE = re.compile(r'\n*`{5}\n*\[Info\] Final response to user\.\n*`{5}\s*$')
-_RUNNING_MARKER_RE = re.compile(
-    r'^\s*\*{0,2}(?:LLM Running\s*\(Turn\s*\d+\)|Turn\s*\d+)\s*\.\.\.\*{0,2}\s*$',
-    re.IGNORECASE | re.MULTILINE,
-)
-_SUMMARY_RE = re.compile(r'<summary>[\s\S]*?</summary>', re.IGNORECASE)
-_TOOL_TRANSCRIPT_RE = re.compile(
-    r'(?ms)^\s*.*?Tool:\s*`.*?`{4}[^\n]*\n.*?`{4}\s*(?:`{5}.*?`{5}\s*)?'
-)
 
 
 def strip_final_info_marker(text: Any) -> str:
     return _FINAL_INFO_RE.sub('', str(text or ''))
-
-
-def strip_non_user_visible_text(text: Any) -> str:
-    cleaned = strip_final_info_marker(text)
-    cleaned = _RUNNING_MARKER_RE.sub('', cleaned)
-    cleaned = _SUMMARY_RE.sub('', cleaned)
-    cleaned = _TOOL_TRANSCRIPT_RE.sub('', cleaned)
-    return cleaned.strip()
-
-
-def has_user_visible_text(text: Any) -> bool:
-    return bool(strip_non_user_visible_text(text))
 
 
 def normalize_final_turn_segs(full: str, outputs: Any) -> Optional[List[str]]:
@@ -851,9 +831,7 @@ class AgentManager:
                     else:
                         pieces.append(str(item))
                 if not full and pieces:
-                    candidate = pieces[-1] if not getattr(agent, "inc_out", False) else "".join(pieces)
-                    if has_user_visible_text(candidate):
-                        full = candidate
+                    full = pieces[-1] if not getattr(agent, "inc_out", False) else "".join(pieces)
             else:
                 full = "GenericAgent object has no put_task method"
             is_current, is_cancelled = turn_state()
@@ -871,14 +849,12 @@ class AgentManager:
                 emit_session_state(sess, "cancelled")
                 return
             if not full:
-                raise RuntimeError("Agent turn ended without a user-visible response.")
+                full = "(completed)"
             with self.lock:
                 if sess.active_turn_id != turn_id:
                     return
                 sess.partial = None
                 full = strip_final_info_marker(full)
-                if not has_user_visible_text(full):
-                    raise RuntimeError("Agent turn ended without a user-visible response.")
                 import plan_state
                 plan_state.sync_plan_path_from_text(sess, full, sess.cwd or self.ga_root)
                 # 轨道2: 落库时带结构化全量轮(权威turn_segs),前端按轮渲染;content保留兜底
@@ -950,7 +926,7 @@ class AgentManager:
             partial_text = ""
             if sess.partial:
                 partial_text = (sess.partial.get("content") or "").strip()
-            if partial_text and has_user_visible_text(partial_text):
+            if partial_text:
                 self.add_message(sess, "assistant", partial_text, stopped=True)
             sess.status = "cancelled"
             sess.active_turn_id = ""

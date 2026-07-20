@@ -3,9 +3,14 @@
 Patch stack id: `galley-managed-ga-patches-v1`
 
 Last replay verified: `2026-07-20` against upstream
-`1e89c3eece5a54938c06156a0e49de76ca926e07` (15-patch stack, through `0015`).
-(History from the 2026-07-15 `1e89c3ee` upgrade: 13-patch stack replayed clean
-at this baseline. For that upgrade
+`5257decc8c7ac2484278c977b91d15cb09990fef` (14-patch stack, through `0015`).
+(History from the 2026-07-20 `5257decc` upgrade: the whole 14-patch stack
+replayed clean onto the new baseline via commit-chain rebase; only `0001` and
+`0003` changed, and only in their zero-context `ga.py` `@@` line numbers —
+upstream's empty-response tweak in `GenericAgentHandler` shifted
+`get_global_memory()` down by 2 lines. No semantic conflict.
+History from the 2026-07-15 `1e89c3ee` upgrade: 13-patch stack replayed clean
+at that baseline. For that upgrade
 the whole stack was regenerated via a commit-chain rebase — old baseline +
 patch commits rebased onto the new baseline — because the zero-context hunks
 are purely positional and two of them "applied" into wrong locations after

@@ -25,6 +25,6 @@ diff --git a/ga.py b/ga.py
 @@ -30 +32 @@ def code_run(code, code_type="python", timeout=60, cwd=None, code_cwd=None, stop
 -        cr_header = os.path.join(script_dir, 'assets', 'code_run_header.py')
 +        cr_header = asset_path('code_run_header.py')
-@@ -614 +616 @@ def get_global_memory():
+@@ -612 +614 @@ def get_global_memory():
 -        with open(os.path.join(script_dir, f'assets/insight_fixed_structure{suffix}.txt'), 'r', encoding='utf-8') as f: structure = f.read()
 +        with open(asset_path(f'insight_fixed_structure{suffix}.txt'), 'r', encoding='utf-8') as f: structure = f.read()

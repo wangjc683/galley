@@ -319,8 +319,8 @@ POST /chat\tbody: {{"msg": "..."}}\t给用户发消息
 POST /subagent\tbody: {{"prompt": "..."}}\t启动新subagent，返回 {{"id": "xxx"}}；指定模型加参数llm(数字/名称)
 POST /approval\tbody: {{"prompt": "...", "source": "..."}}\t推一条待批任务到前端(后端不存)，用户同意则直接派发为subagent
 POST /subagent/{{id}}\tbody: {{"action": "keyinfo", "msg": "..."}}\t注入key_info（agent下轮可见）
-POST /subagent/{{id}}\tbody: {{"action": "input", "msg": "..."}}\t开新一轮任务；指定模型加参数llm(数字/名称)
-POST /subagent/{{id}}\tbody: {{"action": "stop"}}\t中断执行但保留（可继续input/reply）
+POST /subagent/{{id}}\tbody: {{"action": "input", "msg": "..."}}\t对subagent输入下一条指令；指定模型加参数llm(数字/名称)
+POST /subagent/{{id}}\tbody: {{"action": "stop"}}\t中断执行但保留（可继续input）
 GET /chat?last=N\t返回最近N条对话（默认20）
 GET /subagent\t返回 {{"items": [...]}}\t查看所有subagent状态
 GET /subagent/{{id}}?max_len=N\t返回单个subagent详情，reply经清洗后截取尾部max_len字（默认5000）。仅在摘要不够判断时使用

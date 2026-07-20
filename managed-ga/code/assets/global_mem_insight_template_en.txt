@@ -2,7 +2,7 @@
 Read L2 or ls ../memory/ for L3 when needed
 L0(META-SOP): memory_management_sop
 L2: currently empty
-L3: memory_cleanup_sop(memory cleanup) | ui_detect.py | ocr_utils.py | subagent | web_setup_sop | plan_sop
+L3: memory_cleanup_sop(memory cleanup) | ui_detect.py | ocr_utils.py | subagent | web_setup_sop
 | procmem_scanner | keychain | ljqCtrl_sop+.py | tmwebdriver_sop | autonomous_operation_sop | scheduled_task_sop | vision_sop | adb_ui.py
 L4: L4_raw_sessions/ historical sessions
 
@@ -20,4 +20,4 @@ Mobile: adb_ui.py
 5. Processes: never kill python unconditionally (kills self), use exact PID, no os.kill for liveness check
 6. Windows: prefer win32gui title enumeration for GUI state
 7. Web JS: use native setter + event chain for input, check disabled before click, mind quote escaping; if scan empty/incomplete wait then rescan, no conclusions from first scan
-8. SOP: read SOPs not from memory, must use utils if available | complex long-running/user mentions planning -> read plan_sop
+8. SOP: read SOPs not from memory, must use utils if available

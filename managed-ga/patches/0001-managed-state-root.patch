@@ -74,10 +74,10 @@ diff --git a/ga.py b/ga.py
 @@ -160 +164 @@ def log_memory_access(path):
 -    stats_file = os.path.join(script_dir, 'memory/file_access_stats.json')
 +    stats_file = state_path('memory', 'file_access_stats.json')
-@@ -609 +613 @@ def get_global_memory():
+@@ -607 +611 @@ def get_global_memory():
 -        with open(os.path.join(script_dir, 'memory/global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
 +        with open(state_path('memory', 'global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
-@@ -611 +615 @@ def get_global_memory():
+@@ -609 +613 @@ def get_global_memory():
 -        prompt += f'cwd = {os.path.join(script_dir, "temp")} (./)\n'
 +        prompt += f'cwd = {state_path("temp")} (./)\n'
 diff --git a/llmcore.py b/llmcore.py

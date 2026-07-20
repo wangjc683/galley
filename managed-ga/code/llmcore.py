@@ -870,7 +870,7 @@ class NativeClaudeSession(BaseSession):
         messages = _fix_messages(messages)
         if 'claude' in model.lower(): messages = _drop_unsigned_thinking(messages)
         messages = _ensure_thinking_blocks(messages, self.model)
-        beta_parts = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "redact-thinking-2026-02-12", "context-management-2025-06-27", "prompt-caching-scope-2026-01-05", "effort-2025-11-24"]
+        beta_parts = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "redact-thinking-2026-02-12", "thinking-token-count-2026-05-13", "context-management-2025-06-27", "prompt-caching-scope-2026-01-05", "mid-conversation-system-2026-04-07", "effort-2025-11-24", "fallback-credit-2026-06-01"]
         if "[1m]" in model.lower():
             beta_parts.insert(1, "context-1m-2025-08-07"); model = model.replace("[1m]", "").replace("[1M]", "")
         headers = {"Content-Type": "application/json", "anthropic-version": "2023-06-01",

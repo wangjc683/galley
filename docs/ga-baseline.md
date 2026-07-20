@@ -15,54 +15,73 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `1e89c3eece5a54938c06156a0e49de76ca926e07`
+Locked commit: `5257decc8c7ac2484278c977b91d15cb09990fef`
 
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-07-15
-- Previous baseline: `502be0a76d04e6d7063c28b3bbb77adb1047ba6b`
-- Delta: 362 commits by count, but almost all of it is upstream's merge of the
-  community GA Desktop frontend (PR #671, `frontends/desktop/` + packaging CI).
-  The engine-core delta is 12 files / ~380 lines.
+- Date audited: 2026-07-20
+- Previous baseline: `1e89c3eece5a54938c06156a0e49de76ca926e07`
+- Delta: 7 commits, 12 files, ~25 insertions / ~44 deletions. Most of it is
+  upstream's community desktop frontend (`frontends/desktop*`, packaging CI),
+  which is inert on Galley's path. The engine-core delta is just `ga.py` and
+  `llmcore.py`; the rest is `assets/sys_prompt.txt`, memory insight templates,
+  and `.gitignore`.
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
 - Result: no external bridge protocol or dependency break; `agent_loop.py` and
-  `pyproject.toml` did not change at all. Managed runtime picked up the
-  `file_write` / `file_patch` newline-preservation fix (LF files no longer
-  polluted to CRLF), `_arg` tool-argument type coercion, tool-output limits
-  scaled by `context_win`, opt-in `trim_keep_prefix`, `reasoning_effort: max`
-  for OpenAI, TMWebDriver `safe_print` hardening, and the MixinSession
-  routed-facade refactor. Upstream independently shipped a byte-identical
-  `code_run` stdin fix (Galley's `0005` patch → removed) and promoted the
-  `_ga_project_mode_name` attribute — the upstream TUI seam Galley already
-  rides — to Project Mode's only mechanism.
-  The whole managed patch stack was regenerated via a commit-chain rebase
-  (see patch manifest); Galley's managed state-root routing, Codex backend,
-  and image attachment path are preserved.
-- Devlog: [GA upstream upgrade 502be0a -> 1e89c3e](./devlog/2026-07-15-ga-upstream-upgrade-502be0a-to-1e89c3e.md)
+  `pyproject.toml` did not change at all. Managed runtime picked up: a
+  permissive empty-response check in `GenericAgentHandler` (upstream reverted an
+  over-aggressive blank-turn detector that force-retried summary-only /
+  thinking-only turns — Galley inherits fewer spurious retries), three new
+  Anthropic beta headers in `NativeClaudeSession.ask()`
+  (`thinking-token-count-2026-05-13`, `mid-conversation-system-2026-04-07`,
+  `fallback-credit-2026-06-01`), four new execution principles in the base
+  system prompt (action-as-cognition, autonomous-closure, completion-in-reality,
+  deliver-on-block), and the memory templates de-emphasizing `plan_sop`'s
+  hard-coded trigger. The patch stack replayed clean via commit-chain rebase:
+  only `0001` and `0003` changed, and only in their zero-context `ga.py` `@@`
+  line numbers (the empty-response tweak shifted `get_global_memory()` down 2
+  lines). No semantic conflict; Galley's managed state-root routing, Codex
+  backend, and image attachment path are preserved.
+- Devlog: [GA upstream upgrade 1e89c3e -> 5257dec](./devlog/2026-07-20-ga-upstream-upgrade-1e89c3e-to-5257dec.md)
 
-Relevant compatibility notes:
+New in the `1e89c3e` -> `5257dec` range:
 
-- `agent_loop.py`: zero diff in this range — dispatch protocol, hooks, and the
+- `agent_loop.py`: still zero diff — dispatch protocol, hooks, and the
   structured `{'turn': turn}` yield are byte-identical.
-- `ga.py`: upstream now sets `stdin=subprocess.DEVNULL` in `code_run` (Galley's
-  `0005` patch verbatim → patch removed). `file_write` / `file_patch` preserve
-  the target file's existing newline style. Tool handlers use `_arg` type
-  coercion and scale output limits via the additive
-  `GenericAgent.get_ctx_multiplier()`. `GenericAgentHandler` init signature and
-  import path are unchanged.
-- `llmcore.py`: `BaseSession` gains `trim_keep_prefix` (default 0, off) and a
-  `maxlen_multiplier` derived from `context_win`; hard trims can now keep a
-  leading prefix and insert a `"..."` gap turn — history block shape is
-  unchanged. `NativeClaudeSession.ask()` and `NativeOAISession` are untouched,
-  so the history-restore validation for both classes in
-  `runner/ga_session.py::_VALIDATED_HISTORY_BACKENDS` holds at this baseline.
-  `MixinSession` became a routed facade: `history` is now facade-owned state
-  (still plain get/set — GaSession semantics preserved; the class stays
-  outside the validated restore set), but its new `__setattr__` **raises** on
-  node-specific attributes. Galley's managed model config never emits mixin
-  configs, so `install_managed_prompt_profile`'s `extra_sys_prompt` write is
-  unaffected; revisit if managed mode ever grows channel-group models.
+- `ga.py`: `GenericAgentHandler`'s blank-response check in `do_no_tool` was
+  reverted to a permissive form (`not content.strip() and not thinking.strip()`)
+  after an over-aggressive detector force-retried summary-only / thinking-only
+  turns; the incomplete-response check also now catches `content.endswith(
+  '</summary>')`. This is internal to the handler's response handling, not the
+  dispatch signature or Galley's approval gate — `WorkbenchHandler` rides the
+  latter. Galley inherits fewer spurious retries. Init signature and import path
+  unchanged.
+- `llmcore.py`: `NativeClaudeSession.ask()` gained three Anthropic beta headers
+  (`thinking-token-count-2026-05-13`, `mid-conversation-system-2026-04-07`,
+  `fallback-credit-2026-06-01`). The method signature and history block shape are
+  unchanged, so the history-restore validation for `NativeClaudeSession` in
+  `runner/ga_session.py::_VALIDATED_HISTORY_BACKENDS` still holds.
+- `assets/sys_prompt.txt` + memory insight templates: four new execution
+  principles in the base system prompt and a de-emphasis of `plan_sop`'s
+  hard-coded trigger. Behavior-guidance content, vendored into the managed state
+  seed; no code contract.
+
+Carried forward from the `502be0a` -> `1e89c3e` range (unchanged this range,
+still describes the current surface):
+
+- `ga.py`: upstream sets `stdin=subprocess.DEVNULL` in `code_run` (Galley's
+  `0005` patch verbatim → removed). `file_write` / `file_patch` preserve the
+  target file's existing newline style. Tool handlers use `_arg` type coercion
+  and scale output limits via the additive `GenericAgent.get_ctx_multiplier()`.
+- `llmcore.py`: `BaseSession` has `trim_keep_prefix` (default 0, off) and a
+  `maxlen_multiplier` derived from `context_win`. `MixinSession` is a routed
+  facade: `history` is facade-owned state (still plain get/set — GaSession
+  semantics preserved; the class stays outside the validated restore set), but
+  its `__setattr__` **raises** on node-specific attributes. Galley's managed
+  model config never emits mixin configs, so `install_managed_prompt_profile`'s
+  `extra_sys_prompt` write is unaffected; revisit if managed mode ever grows
+  channel-group models.
 - `plugins/project_mode.py` + `memory/project_mode_sop.md`: upstream replaced
   the pid-anchor files with the `_ga_project_mode_name` agent attribute — the
   seam its TUI introduced in June (PR #607) and Galley already sets in

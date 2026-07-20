@@ -65,12 +65,12 @@ export const DEFAULT_RUNTIME_INFO: RuntimeInfo = {
   pythonVersion: "3.11.9 (system)",
   llmDisplayName: DEFAULT_LLM_DISPLAY_NAME,
   bridgePid: 48213,
-  gaCommit: "1e89c3eece5a54938c06156a0e49de76ca926e07",
-  // Matches 1e89c3ee's actual `git log -1 --format=%cI`. The managed
+  gaCommit: "5257decc8c7ac2484278c977b91d15cb09990fef",
+  // Matches 5257decc's actual `git log -1 --format=%cI`. The managed
   // runtime manifest becomes the source of truth once hydrate runs; this
   // fallback keeps first paint aligned before diagnostics arrive.
-  gaCommitDate: "2026-07-14T21:33:44+08:00",
-  gaBaseline: "1e89c3eece5a54938c06156a0e49de76ca926e07",
+  gaCommitDate: "2026-07-20T15:38:01+08:00",
+  gaBaseline: "5257decc8c7ac2484278c977b91d15cb09990fef",
   // Empty string is the honest "not yet known" sentinel — `hydrate.ts`
   // overwrites with the real value from `getVersion()` during app boot.
   workbenchVersion: "",
