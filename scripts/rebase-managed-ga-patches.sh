@@ -40,7 +40,10 @@ normalize_tree() {
 
 patch_touched_files() {
   # All b/ paths across the current patch stack (for the byte-identity check).
-  sed -n 's|^+++ b/||p' "$PATCH_DIR"/*.patch | sort -u
+  # Parse the `diff --git a/… b/…` headers, not `+++` lines: binary hunks carry
+  # no `+++`, so a `+++`-only scan silently skips added binary files (the 0015
+  # icon PNGs) from the byte-identity check.
+  sed -n 's|^diff --git a/.* b/||p' "$PATCH_DIR"/*.patch | sort -u
 }
 
 verify_chain_matches_payload() {
@@ -58,6 +61,34 @@ verify_chain_matches_payload() {
   fi
 }
 
+# Strip `index <sha>..<sha>` lines from TEXT hunks only. They churn on every
+# rebase and `git apply --unidiff-zero` does not need them, so dropping them
+# keeps the checked-in text patches stable. Binary hunks are the opposite:
+# `git apply` reconstructs the blob from the `index` line's SHAs, so a
+# `GIT binary patch` block MUST keep its index line, and `git diff` only emits
+# the literal/delta payload when passed `--binary`. Omitting either silently
+# degrades a binary hunk to a `Binary files ... differ` placeholder — which is
+# how patch 0015's icon PNGs vanished on re-export in the 2026-07-20 upgrade.
+strip_text_index_lines() {
+  awk '
+    function flush(   i) {
+      for (i = 0; i < n; i++) {
+        if (!bin && buf[i] ~ /^index /) continue
+        print buf[i]
+      }
+      n = 0; bin = 0
+    }
+    /^diff --git / { flush() }
+    { buf[n++] = $0; if ($0 ~ /^GIT binary patch/) bin = 1 }
+    END { flush() }
+  '
+}
+
+# A commit touches a binary file iff `git diff --numstat` reports it as `-\t-`.
+commit_touches_binary() {
+  git -C "$1" diff --numstat "$2^" "$2" | awk '$1 == "-" && $2 == "-" { f = 1 } END { exit !f }'
+}
+
 export_patches() {
   local work="$1" c name
   git -C "$work" -c core.quotepath=false rev-list --reverse new-base..chain |
@@ -67,7 +98,14 @@ export_patches() {
       *.patch) ;;
       *) echo "Unexpected commit subject (not a patch filename): $name" >&2; exit 2 ;;
     esac
-    git -C "$work" diff -U0 "$c^" "$c" | sed '/^index /d' > "$PATCH_DIR/$name"
+    git -C "$work" diff -U0 --binary "$c^" "$c" | strip_text_index_lines > "$PATCH_DIR/$name"
+    # Round-trip guard: a commit that touched a binary file must export a
+    # `GIT binary patch` block, or the patch is un-appliable. Catches any
+    # regression in the --binary / index handling on the spot.
+    if commit_touches_binary "$work" "$c" && ! grep -q '^GIT binary patch' "$PATCH_DIR/$name"; then
+      echo "Exported $name dropped its binary hunk — needs 'git diff --binary' + kept index lines." >&2
+      exit 2
+    fi
     echo "exported: $name"
   done
   echo
@@ -109,7 +147,12 @@ git -C "$WORK" commit -qam normalize-old
 BASE_COMMIT="$(git -C "$WORK" rev-parse HEAD)"
 while IFS= read -r patch_name; do
   git -C "$WORK" apply --unidiff-zero --whitespace=nowarn --recount "$PATCH_DIR/$patch_name"
-  git -C "$WORK" commit -qam "$patch_name"
+  # `git add -A`, not `commit -am`: -am only stages modifications to already
+  # tracked files, so a patch that ADDS files (0015's icon PNGs) would apply to
+  # the worktree but never enter the chain commit — dropping the additions from
+  # the rebase and the re-export entirely.
+  git -C "$WORK" add -A
+  git -C "$WORK" commit -qm "$patch_name"
   echo "replayed: $patch_name"
 done < <(python3 -c 'import json,sys
 for p in json.load(open(sys.argv[1]))["patchStack"]["patches"]: print(p)' "$ROOT/managed-ga/manifest.json")

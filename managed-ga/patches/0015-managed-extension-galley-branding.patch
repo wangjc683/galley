@@ -1,5 +1,4 @@
 diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/background.js
-index 3c9fb57..3d401af 100644
 --- a/assets/tmwd_cdp_bridge/background.js
 +++ b/assets/tmwd_cdp_bridge/background.js
 @@ -25,0 +26,4 @@ async function handleExtMessage(msg, sender) {
@@ -30,7 +29,6 @@ index 3c9fb57..3d401af 100644
 @@ -416,0 +436 @@ function connectWS() {
 +    updateActionBadge(false);
 diff --git a/assets/tmwd_cdp_bridge/content.js b/assets/tmwd_cdp_bridge/content.js
-index 72d642b..73c4383 100644
 --- a/assets/tmwd_cdp_bridge/content.js
 +++ b/assets/tmwd_cdp_bridge/content.js
 @@ -16,11 +15,0 @@ document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]').forEach(
@@ -811,7 +809,6 @@ literal 0
 HcmV?d00001
 
 diff --git a/assets/tmwd_cdp_bridge/manifest.json b/assets/tmwd_cdp_bridge/manifest.json
-index 0ed2aa7..37f5f5e 100644
 --- a/assets/tmwd_cdp_bridge/manifest.json
 +++ b/assets/tmwd_cdp_bridge/manifest.json
 @@ -3,3 +3,9 @@
@@ -837,7 +834,6 @@ index 0ed2aa7..37f5f5e 100644
 +      "128": "icons/icon128.png"
 +    }
 diff --git a/assets/tmwd_cdp_bridge/popup.html b/assets/tmwd_cdp_bridge/popup.html
-index d704ace..11e4bff 100644
 --- a/assets/tmwd_cdp_bridge/popup.html
 +++ b/assets/tmwd_cdp_bridge/popup.html
 @@ -6,2 +6,6 @@
@@ -867,7 +863,6 @@ index d704ace..11e4bff 100644
 \ No newline at end of file
 +</html>
 diff --git a/assets/tmwd_cdp_bridge/popup.js b/assets/tmwd_cdp_bridge/popup.js
-index 730ed21..2a5b1d0 100644
 --- a/assets/tmwd_cdp_bridge/popup.js
 +++ b/assets/tmwd_cdp_bridge/popup.js
 @@ -2,4 +2,2 @@ document.addEventListener('DOMContentLoaded', () => {
