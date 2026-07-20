@@ -23,6 +23,10 @@ async function handleExtMessage(msg, sender) {
     }
     return { ok: true };
   }
+  if (msg.cmd === 'bridge_status') {
+    const tabs = (await chrome.tabs.query({})).filter(t => isScriptable(t.url));
+    return { ok: true, data: { connected: !!(ws && ws.readyState === WebSocket.OPEN), tabCount: tabs.length } };
+  }
   if (msg.cmd === 'cookies') return await handleCookies(msg, sender);
   if (msg.cmd === 'cdp') return await handleCDP(msg, sender);
   if (msg.cmd === 'batch') return await handleBatch(msg, sender);
@@ -225,6 +229,17 @@ const PROBE_ALARM_MINUTES = 0.5; // Chrome MV3 alarms are 30s-level fallback.
 let keepaliveTimer = null;
 let probeTimer = null;
 
+// Toolbar badge reflects the real bridge state: ON only while the WS to the
+// local driver is open. There is no in-page indicator.
+function updateActionBadge(connected) {
+  try {
+    chrome.action.setBadgeText({ text: connected ? 'ON' : '' });
+    chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+    chrome.action.setTitle({ title: connected ? 'Galley Browser Bridge — 浏览器控制已连接' : 'Galley Browser Bridge — 待命（Galley 未运行）' });
+  } catch (_) {}
+}
+updateActionBadge(false);
+
 function clearProbeTimer() {
   if (!probeTimer) return;
   clearTimeout(probeTimer);
@@ -258,6 +273,7 @@ function scheduleKeepalive() {
       scheduleKeepalive();
     } else {
       ws = null;
+      updateActionBadge(false);
       scheduleProbe();
     }
   }, KEEPALIVE_MS);
@@ -275,6 +291,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     } else {
       // Connection lost, switch to probe mode
       ws = null;
+      updateActionBadge(false);
       scheduleProbe();
     }
   }
@@ -368,11 +385,13 @@ function connectWS() {
     console.error('[TMWD-WS] Constructor error:', e);
     ws = null;
     clearKeepaliveTimer();
+    updateActionBadge(false);
     scheduleProbe();
     return;
   }
   ws.onopen = async () => {
     console.log('[TMWD-WS] Connected!');
+    updateActionBadge(true);
     clearProbeTimer();
     scheduleKeepalive(); // Keep SW alive while connected
     const tabs = (await chrome.tabs.query({})).filter(t => isScriptable(t.url));
@@ -414,6 +433,7 @@ function connectWS() {
     console.log('[TMWD-WS] Disconnected');
     ws = null;
     clearKeepaliveTimer();
+    updateActionBadge(false);
     scheduleProbe();
   };
   ws.onerror = (e) => {

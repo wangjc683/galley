@@ -36,6 +36,13 @@ Rules:
 - If a compatible GA Browser Control extension is already installed and Galley
   verifies the bridge successfully, treat the capability as ready. Do not ask
   the user to reinstall Galley's copy just to match the extension source path.
+- The extension's user-visible identity is Galley-branded (display name
+  "Galley Browser Bridge", patch `0015`). It injects no in-page indicator:
+  the toolbar icon badge shows `ON` only while the bridge WebSocket to the
+  local driver is actually connected, and the popup is a status panel
+  (connection state + operable tab count; cookie copy sits behind an explicit
+  button). While an agent drives the browser via the debugger, Chromium's own
+  infobar is the in-page signal. Do not reintroduce page-injected indicators.
 - The first supported browser family is Chromium. The UI provides one-click
   open buttons for Chrome and Edge, while copy should mention that other
   Chromium browsers can load the same unpacked extension manually. Safari and
