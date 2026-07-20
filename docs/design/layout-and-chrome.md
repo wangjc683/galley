@@ -174,7 +174,7 @@ Sidebar 的设计目标是一块**可一眼扫描的多 session 状态板**：�
 - **error**：`bg-error` 静态。
 - **completed / idle**：无 rail。
 
-motion 语义专属于 running：静态彩条表示「卡在这、需要你」，呼吸表示「正在前进」，无条表示「无事发生」。rail 不表达百分比，不得从左到右推进成 progress bar。running row 另叠轻量 `bg-brand-soft/60` 底 tint；ask_user / approval 使用极轻 warning tint，error 使用极轻 error tint，强化可扫性但不改变时间线排序。
+motion 语义专属于 running：静态彩条表示「卡在这、需要你」，呼吸表示「正在前进」，无条表示「无事发生」。rail 不表达百分比，不得从左到右推进成 progress bar。ask_user / approval 使用极轻 warning tint，error 使用极轻 error tint，强化可扫性但不改变时间线排序。**running row 不叠底 tint**（2026-07-20 修订）：行背景是「选中」的专属通道——`bg-brand-soft` 与 `bg-selected` 同色值，running 行叠 tint 会与选中行在扫视时无法区分；running 已有呼吸 rail + spinner + brand 状态行 + 加粗标题四条信号，可扫性不依赖底色。blocking 状态保留 tint：色相不同，且属最高 triage 优先级。
 
 ##### 2. 左侧 status icon（兼承未读）
 

@@ -247,13 +247,18 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     setPrevAttentionKey(attentionKey);
     setPopEnabled(true);
   }
+  // Background is selection's channel: bg-selected (apricot) means "you
+  // are here" and nothing else. Running rows must NOT tint the background
+  // — brand-soft is the same color as bg-selected, so a running row and
+  // the selected row were indistinguishable at a glance. Running already
+  // owns four signals (breathing rail, spinner, brand subline, semibold
+  // title). The blocking-state tints stay: warning/error are different
+  // hues and mean "stuck, needs you" — the loudest triage tier.
   const inactiveRowClass = hasBlockingError
     ? "bg-error/[var(--opacity-subtle)] hover:bg-error/[var(--opacity-soft)]"
     : hasPendingAsk || hasPendingApproval
       ? "bg-warning/[var(--opacity-subtle)] hover:bg-warning/[var(--opacity-soft)]"
-      : showRunningActivity || goalRunning
-        ? "bg-brand-soft/60 hover:bg-brand-soft/80"
-        : "hover:bg-hover";
+      : "hover:bg-hover";
   const activateRow = () => {
     if (isEditing) return;
     onClick?.();
