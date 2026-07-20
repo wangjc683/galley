@@ -32,13 +32,12 @@ export interface ComposerLLMOption {
 export interface ComposerApprovalModeState {
   /** Effective mode for the surface (override ?? app-wide default). */
   mode: SessionApprovalMode;
-  /** True when the session carries an explicit override (pinned). */
-  overridden: boolean;
+  /**
+   * Switch the session's mode. Override = deviation: the data layer
+   * clears the override when the picked mode equals the app default,
+   * so a switch-and-back round trip leaves no pinned residue.
+   */
   onSelectMode: (mode: SessionApprovalMode) => void;
-  /** Clear the override → follow the app-wide default again. */
-  onRestoreDefault: () => void;
-  /** Footer deep-link: Settings → 审批 (default + allowlist rules). */
-  onOpenApprovalSettings?: () => void;
 }
 
 /**
@@ -155,19 +154,22 @@ export function LLMPill({
     );
   }
 
-  const modeOptions: { mode: SessionApprovalMode; name: string; description: string }[] =
-    [
-      {
-        mode: "auto",
-        name: modeCopy.autoName,
-        description: modeCopy.autoDescription,
-      },
-      {
-        mode: "approval",
-        name: modeCopy.approvalName,
-        description: modeCopy.approvalDescription,
-      },
-    ];
+  // The mode section is ONE verb row: switch to the other mode. The
+  // current value is already on the trigger icon; popover rows are
+  // actions, not state displays (fifth revision — two state rows plus
+  // two settings links made the subordinate section nearly as tall as
+  // the model list it hangs under).
+  const otherMode: SessionApprovalMode | null = approvalMode
+    ? approvalMode.mode === "auto"
+      ? "approval"
+      : "auto"
+    : null;
+  const otherModeName =
+    otherMode === "approval" ? modeCopy.approvalName : modeCopy.autoName;
+  const otherModeDescription =
+    otherMode === "approval"
+      ? modeCopy.approvalDescription
+      : modeCopy.autoDescription;
 
   return (
     <Popover.Root>
@@ -260,73 +262,42 @@ export function LLMPill({
               </Popover.Close>
             );
           })}
-          {/* Approval-mode section: quieter register on purpose —
-              smaller type, muted icons. Session-scoped rows; the
-              restore action appears only when overridden, surfacing
-              the "default" concept exactly when the scope question can
-              arise. The app-wide default itself lives in Settings
-              (footer deep-link below), never as a control here. */}
-          {approvalMode && (
-            <div className="mt-1 border-t border-line/60 pt-1">
-              {modeOptions.map((option) => (
-                <Popover.Close asChild key={option.mode}>
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onMouseDown={preventMouseFocus}
-                    onClick={() => approvalMode.onSelectMode(option.mode)}
-                    aria-label={`${option.name} — ${option.description}`}
-                    className={cn(
-                      "flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-1 text-left text-[12px] hover:bg-hover",
-                      option.mode === approvalMode.mode
-                        ? "text-ink"
-                        : "text-ink-muted",
-                    )}
-                  >
-                    <span className="flex w-3.5 shrink-0 items-center justify-center">
-                      {option.mode === "auto" ? (
-                        <Lightning size={12} weight="thin" />
-                      ) : (
-                        <HandPalm size={12} weight="thin" />
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">
-                      {option.name}
-                    </span>
-                    {option.mode === approvalMode.mode && (
-                      <Check
-                        size={12}
-                        weight="bold"
-                        className="shrink-0 text-brand-strong"
-                      />
-                    )}
-                  </button>
-                </Popover.Close>
-              ))}
-              {approvalMode.overridden && (
+          {/* Action block: everything below the model list shares ONE
+              quiet 11px register — the mode verb row (switch to the
+              OTHER mode; the current one is on the trigger icon, and
+              popover rows are actions, not state displays), then the
+              settings navigation. Two layers total: content vs
+              actions — no intermediate type size, no conditional
+              rows (override semantics are handled invisibly by the
+              deviation-normalizing data layer; the app-wide default
+              is edited in Settings only). */}
+          {(approvalMode && otherMode) || onConfigureModels ? (
+            <div className="mt-1 border-t border-line/60 px-1.5 pb-1 pt-1">
+              {approvalMode && otherMode && (
                 <Popover.Close asChild>
                   <button
                     type="button"
                     tabIndex={-1}
                     onMouseDown={preventMouseFocus}
-                    onClick={approvalMode.onRestoreDefault}
-                    className="flex w-full items-center rounded-sm px-2.5 py-1 text-left text-[10.5px] leading-[1.4] text-ink-muted/70 hover:bg-hover hover:text-ink-soft"
+                    onClick={() => approvalMode.onSelectMode(otherMode)}
+                    aria-label={`${modeCopy.switchTo(otherModeName)} — ${otherModeDescription}`}
+                    className={cn(
+                      "flex w-full min-w-0 items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
+                      "hover:bg-hover hover:text-ink-soft",
+                    )}
                   >
-                    <span>
-                      {modeCopy.overriddenScope} · {modeCopy.restoreDefault}
+                    {otherMode === "auto" ? (
+                      <Lightning size={11} weight="thin" className="shrink-0" />
+                    ) : (
+                      <HandPalm size={11} weight="thin" className="shrink-0" />
+                    )}
+                    <span className="min-w-0 truncate">
+                      {modeCopy.switchTo(otherModeName)}
                     </span>
                   </button>
                 </Popover.Close>
               )}
-            </div>
-          )}
-          {/* Footer: settings deep-links, one per config domain. Both
-              carry Gear — at this layer the icon means "go to
-              Settings", not the domain itself (mode icons above would
-              collide with the option rows). */}
-          {onConfigureModels || approvalMode?.onOpenApprovalSettings ? (
-            <div className="mt-1 border-t border-line/60 px-1.5 pb-1 pt-1">
-              {onConfigureModels && (
+              {onConfigureModels ? (
                 <Popover.Close asChild>
                   <button
                     type="button"
@@ -342,25 +313,10 @@ export function LLMPill({
                     <span>{copy.composer.configureModels}</span>
                   </button>
                 </Popover.Close>
-              )}
-              {approvalMode?.onOpenApprovalSettings && (
-                <Popover.Close asChild>
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onMouseDown={preventMouseFocus}
-                    onClick={approvalMode.onOpenApprovalSettings}
-                    className={cn(
-                      "flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
-                      "hover:bg-hover hover:text-ink-soft",
-                    )}
-                  >
-                    <Gear size={11} weight="thin" className="shrink-0" />
-                    <span>{modeCopy.approvalSettings}</span>
-                  </button>
-                </Popover.Close>
-              )}
-              {!onConfigureModels && (
+              ) : (
+                // Footer hint: addresses the "为什么这里没有 X 模型"
+                // question right where it surfaces. Quiet metadata,
+                // not a CTA.
                 <div className="px-1.5 pb-0.5 pt-1 text-[10.5px] leading-[1.45] text-ink-muted/70">
                   {footerHint}
                 </div>

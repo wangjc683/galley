@@ -471,26 +471,24 @@ function App() {
   // (conversation.md §4.4). MainView acts on the active session's
   // persisted override; EmptyState configures the NEXT session via
   // pendingApprovalMode (same lifecycle as the LLM pre-pick — consumed
-  // by createSession, always cleared). The app-wide default is edited
-  // only in Settings → 审批 (footer deep-link).
+  // by createSession, always cleared). Override = deviation from the
+  // default: picking the default-equal mode clears it (the sessions
+  // store normalizes; the pending path normalizes here). The app-wide
+  // default is edited only in Settings → 审批.
   const mainApprovalModeState = activeSessionId
     ? {
         mode: effectiveApprovalMode(activeSession?.approvalMode, yoloMode),
-        overridden: activeSession?.approvalMode != null,
         onSelectMode: (mode: "auto" | "approval") =>
           setSessionApprovalMode(activeSessionId, mode),
-        onRestoreDefault: () => setSessionApprovalMode(activeSessionId, null),
-        onOpenApprovalSettings: () => openSettings("approval"),
       }
     : undefined;
   const emptyApprovalModeState = {
     mode: effectiveApprovalMode(pendingApprovalMode, yoloMode),
-    overridden: pendingApprovalMode !== undefined,
     onSelectMode: (mode: "auto" | "approval") =>
-      useRuntimeStore.setState({ pendingApprovalMode: mode }),
-    onRestoreDefault: () =>
-      useRuntimeStore.setState({ pendingApprovalMode: undefined }),
-    onOpenApprovalSettings: () => openSettings("approval"),
+      useRuntimeStore.setState({
+        pendingApprovalMode:
+          mode === (yoloMode ? "auto" : "approval") ? undefined : mode,
+      }),
   };
   const activeSessionGoal = activeSession
     ? (activeGoals.find((goal) => goal.masterSessionId === activeSession.id) ??

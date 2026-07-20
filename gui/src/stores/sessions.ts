@@ -927,6 +927,16 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
   },
 
   setSessionApprovalMode: (sessionId, mode) => {
+    // Override = DEVIATION from the default. Picking the mode that
+    // equals the current default writes NULL (follow the default),
+    // not a coincidentally-equal override — under the verb-row UI,
+    // switching back reads as "undo my earlier switch", and a lingering
+    // pin would keep surfacing restore affordances after a round trip.
+    const defaultMode = effectiveApprovalMode(
+      null,
+      usePrefsStore.getState().yoloMode,
+    );
+    const normalized = mode === defaultMode ? null : mode;
     const now = new Date().toISOString();
     let applied = false;
     set((state) => {
@@ -936,7 +946,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
         (s) => {
           if (s.status === "archived") return s;
           applied = true;
-          return { ...s, approvalMode: mode, updatedAt: now };
+          return { ...s, approvalMode: normalized, updatedAt: now };
         },
       );
       return changed ? { sessions } : {};
@@ -944,7 +954,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     if (!applied) return;
     void invoke("set_session_approval_mode", {
       id: sessionId,
-      mode,
+      mode: normalized,
       origin: GUI_ORIGIN,
     }).catch((e) =>
       console.debug("[sessions] set_session_approval_mode invoke failed.", e),
@@ -954,7 +964,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     // next spawn. Failure direction is safe (bridge keeps its previous
     // flag; approval mode errs toward more prompts, never fewer).
     const effective = effectiveApprovalMode(
-      mode,
+      normalized,
       usePrefsStore.getState().yoloMode,
     );
     void useRuntimeStore

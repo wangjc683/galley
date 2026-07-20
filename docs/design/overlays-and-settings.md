@@ -305,7 +305,7 @@ Control Indicator）。
 
 Radix Dialog，~480，组件 `AutoDefaultConfirmModal`。仅在本页把**新会话
 默认**从逐步审批切为自动执行时出现——默认值的唯一编辑入口就是本页
-（Composer pill 的 popover 只放「审批设置…」深链，不放默认控件，见
+（Composer pill 的 popover 不放任何默认控件或审批设置深链，见
 conversation.md §4.4）。Composer pill 的**会话级**切换不弹确认（会话级、
 可逆）。
 文案（中文）：
