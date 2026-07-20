@@ -145,12 +145,6 @@ export const enCopy: AppCopy = {
       standardShort: "Standard",
       largeShort: "Large",
     },
-    yoloOn: "YOLO is on",
-    yoloTooltip: "YOLO mode: skips all tool approvals",
-    yoloView: "YOLO is on · View details",
-    yoloDetail: "Tool calls run without approval",
-    turnOffNow: "Turn off now",
-    viewInSettings: "View in Settings",
     browserControlPending: "Browser Control · Connect",
     browserControlChecking: "Browser Control · Checking",
     browserControlConnected: "Browser Control · Ready",
@@ -332,6 +326,16 @@ export const enCopy: AppCopy = {
       `Run time dropped below ${minutes} minutes, so this switched back to a single Agent; raise the run time to restore cross-checking.`,
     cannotSwitchRunning: "Can't switch LLMs while running",
     switchCurrent: (name) => `Switch LLM · Current: ${name}`,
+    approvalMode: {
+      autoName: "Auto-run",
+      approvalName: "Step approval",
+      autoDescription: "Tools run without asking each step",
+      approvalDescription: "High-risk actions ask you first",
+      overriddenScope: "This session only",
+      restoreDefault: "Follow the default again",
+      approvalSettings: "Approval settings…",
+      switchTooltip: (name) => `Approval mode · currently ${name}`,
+    },
     configureModels: "Configure models",
     configureModelBeforeSending: "Set up a model first",
     willCreateIn: (projectName) => `Will be created in ${projectName}`,
@@ -737,17 +741,11 @@ export const enCopy: AppCopy = {
     },
     approval: {
       subtitle: "Approval rules for Agent actions",
-      yoloMode: "YOLO mode",
-      yoloTooltip:
-        "You Only Live Once · Let Agent run without approval. Use only in trusted, isolated workspaces.",
-      yoloDescription:
-        "Skip approval for every action. Agent runs on its own; best for trusted sandbox work.",
-      toggleYolo: "Toggle YOLO mode",
-      yoloEnabledTopbar: "YOLO is on · Shown in the top bar",
-      turnOffNow: "Turn off now",
-      yoloRulesPaused:
-        "YOLO is on. The rules below are paused until YOLO is turned off.",
-      yoloRulesTitle: "YOLO is on. The rules below are paused.",
+      defaultModeTitle: "Default for new sessions",
+      defaultModeDescription:
+        "Sessions without their own setting follow this default. Each session can be adjusted next to the composer.",
+      rulesScopeHint:
+        "The rules below apply to sessions running in Step approval.",
       requiredTools: "Tools requiring approval",
       projectAllowlist: (count) => `Project allowlist (${count})`,
       globalAllowlist: (count) => `Global allowlist (${count})`,
@@ -756,17 +754,17 @@ export const enCopy: AppCopy = {
       noGlobalRules: "No global allowlist rules",
       allowlistHint:
         "Rules appear here after you add them from an approval prompt.",
-      turnOnYoloTitle: "Turn on YOLO mode?",
-      yoloModalIntro:
-        'YOLO means "You Only Live Once." Tool calls will run without approval, including:',
+      turnOnAutoTitle: "Make Auto-run the default for new sessions?",
+      autoModalIntro:
+        "In every session that follows the default, tool calls will run without approval — including:",
       goodFor: "Good for",
       notFor: "Not for",
       goodForText:
         "a trusted Agent in a sandboxed workspace, personal repo, or temporary VM",
       notForText:
         "production code, shared systems, unfamiliar Agents, or sensitive data",
-      yoloIndicatorNote:
-        "Galley will show a YOLO indicator in the top bar, and you can turn it off anytime.",
+      perSessionNote:
+        "Any session can still switch to Step approval next to the composer at any time.",
       understandRisk: "Yes, I understand the risk",
       filePatch: "file_patch (modify files)",
       fileWrite: "file_write (write files)",
@@ -1628,9 +1626,9 @@ export const enCopy: AppCopy = {
     pinned: "pinned",
   },
   yoloIntro: {
-    title: "YOLO mode is on by default",
-    body: "All tools run directly without per-tool approval.",
-    revert: "Switch back to approval mode",
+    title: "Galley defaults to Auto-run",
+    body: "Tools run without step-by-step approval. You can switch an individual session to Step approval next to the composer, or change the default in Settings.",
+    revert: "Default new sessions to Step approval",
     acknowledge: "Got it",
   },
   updates: {

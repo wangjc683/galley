@@ -10,6 +10,7 @@ import {
   currentLLMDisplayName,
   managedModelsToLLMs,
 } from "@/lib/managed-model-options";
+import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
 import { logPerf, perfNow } from "@/lib/perf";
@@ -80,6 +81,7 @@ interface SessionBriefWire {
   pinned?: boolean;
   hasUnread?: boolean;
   origin?: Origin;
+  approvalMode?: "auto" | "approval" | null;
   selectedLlmIndex?: number;
   selectedLlmKey?: string;
   selectedLlmDisplayName?: string;
@@ -232,6 +234,7 @@ function sessionFromBrief(b: SessionBriefWire): Session {
     pinned: b.pinned ?? false,
     hasUnread: b.hasUnread ?? false,
     origin: b.origin,
+    approvalMode: b.approvalMode ?? null,
     lastActivityAt: b.lastActivityAt,
     createdAt: b.createdAt,
     updatedAt: b.updatedAt,
@@ -364,6 +367,15 @@ interface SessionsActions {
   unarchiveSession: (sessionId: string) => void;
   renameSession: (sessionId: string, newTitle: string) => void;
   togglePinSession: (sessionId: string) => void;
+  /**
+   * Set or clear (null) the per-session approval-mode override, persist
+   * it, and push the resulting effective mode to the session's live
+   * bridge — unlike an LLM switch this takes effect immediately.
+   */
+  setSessionApprovalMode: (
+    sessionId: string,
+    mode: "auto" | "approval" | null,
+  ) => void;
   deleteSessionPermanently: (sessionId: string) => Promise<void>;
   archiveSessionsBulk: (sessionIds: string[]) => void;
   unarchiveSessionsBulk: (sessionIds: string[]) => void;
@@ -678,6 +690,15 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     );
     const promptProfile =
       gaRuntimeKind === "managed" ? MANAGED_PROMPT_PROFILE : undefined;
+    // EmptyState's approval-mode pill stashes an explicit pre-pick the
+    // same way the LLM picker stashes pendingLLMIndex: there is no
+    // session row yet to write the override onto. Consume (and always
+    // clear) it here so an abandoned pick can't leak into a later
+    // unrelated session.
+    const pendingApprovalMode = useRuntimeStore.getState().pendingApprovalMode;
+    if (pendingApprovalMode !== undefined) {
+      useRuntimeStore.setState({ pendingApprovalMode: undefined });
+    }
     const newSession: Session = {
       id,
       title: DEFAULT_NEW_SESSION_TITLE,
@@ -691,6 +712,7 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
       runtimeLabel: gaRuntimeKind === "managed" ? "内置内核" : "外部 GA",
       gaRuntimeKind,
       promptProfile,
+      approvalMode: pendingApprovalMode ?? null,
       selectedLlmIndex: llmSelection?.index,
       selectedLlmKey: llmSelection?.key,
       selectedLlmDisplayName: llmSelection?.displayName,
@@ -711,9 +733,21 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
         promptProfile,
       } as CreateSessionInputWire,
       origin: GUI_ORIGIN,
-    }).catch((e) => {
-      console.debug("[sessions] create_session invoke failed.", e);
-    });
+    })
+      .then(() => {
+        // Persist the pre-picked override after the row exists. The
+        // bridge-side flag is synced by the on-`ready` handler, which
+        // reads the (already optimistically set) session.approvalMode.
+        if (!pendingApprovalMode) return;
+        return invoke("set_session_approval_mode", {
+          id,
+          mode: pendingApprovalMode,
+          origin: GUI_ORIGIN,
+        });
+      })
+      .catch((e) => {
+        console.debug("[sessions] create_session invoke failed.", e);
+      });
     return id;
   },
 
@@ -890,6 +924,48 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
     }).catch((e) =>
       console.debug("[sessions] set_session_pinned invoke failed.", e),
     );
+  },
+
+  setSessionApprovalMode: (sessionId, mode) => {
+    const now = new Date().toISOString();
+    let applied = false;
+    set((state) => {
+      const { sessions, changed } = patchSessionInList(
+        state.sessions,
+        sessionId,
+        (s) => {
+          if (s.status === "archived") return s;
+          applied = true;
+          return { ...s, approvalMode: mode, updatedAt: now };
+        },
+      );
+      return changed ? { sessions } : {};
+    });
+    if (!applied) return;
+    void invoke("set_session_approval_mode", {
+      id: sessionId,
+      mode,
+      origin: GUI_ORIGIN,
+    }).catch((e) =>
+      console.debug("[sessions] set_session_approval_mode invoke failed.", e),
+    );
+    // Push the effective mode to the live bridge right away. No bridge
+    // alive is fine — the on-`ready` sync in ipc-handlers.ts covers the
+    // next spawn. Failure direction is safe (bridge keeps its previous
+    // flag; approval mode errs toward more prompts, never fewer).
+    const effective = effectiveApprovalMode(
+      mode,
+      usePrefsStore.getState().yoloMode,
+    );
+    void useRuntimeStore
+      .getState()
+      .sendIPCCommand(sessionId, {
+        kind: "set_yolo_mode",
+        enabled: effective === "auto",
+      })
+      .catch((e) =>
+        console.debug("[sessions] approval mode bridge sync failed.", e),
+      );
   },
 
   deleteSessionPermanently: async (sessionId) => {
@@ -1349,6 +1425,9 @@ export const useSessionsStore = create<SessionsStore>((set, get) => ({
           turnCount: brief.turnCount ?? s.turnCount,
           pinned: brief.pinned ?? s.pinned,
           hasUnread: brief.hasUnread ?? s.hasUnread,
+          // Absent (serde skips None) keeps the local value — the GUI
+          // is the only writer and patches optimistically on change.
+          approvalMode: brief.approvalMode ?? s.approvalMode,
           // M1.3 llm.set rides the session-updated channel — patch the
           // persisted LLM fields so the Composer pill / Inspector pick
           // up CLI-driven changes immediately.

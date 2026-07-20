@@ -45,6 +45,9 @@ const MIG_023: &str = include_str!("../../core/migrations/023_native_goal_runtim
 const MIG_024: &str = include_str!("../../core/migrations/024_native_default_runtime.sql");
 const MIG_025: &str = include_str!("../../core/migrations/025_restore_managed_runtime_default.sql");
 const MIG_026: &str = include_str!("../../core/migrations/026_project_workspace.sql");
+// 034 only ADD COLUMN approval_mode to sessions; 027–033 touch unrelated
+// tables and stay out of this fixture.
+const MIG_034: &str = include_str!("../../core/migrations/034_session_approval_mode.sql");
 
 /// Build a temp .db file with all migrations applied + (optionally)
 /// seed rows. Returns the path; caller stashes it for the spawned
@@ -58,7 +61,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_034,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)

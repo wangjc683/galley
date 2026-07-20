@@ -323,10 +323,21 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     } catch (e) {
       console.warn("[prefs] setYoloMode: pref persistence failed.", e);
     }
-    // YOLO is global — notify every alive bridge. Sessions spawned
-    // later sync via the on-`ready` handler in ipc-handlers.ts.
+    // `yolo_mode` is the app-wide DEFAULT (自动执行/逐步审批 for new
+    // and non-overridden sessions). Notify every alive bridge whose
+    // session follows the default; sessions with an explicit
+    // per-session override stay pinned to their own mode. Sessions
+    // spawned later sync via the on-`ready` handler in ipc-handlers.ts.
+    //
+    // Dynamic import: prefs is a leaf in the store slice DAG (AD-09) —
+    // sessions.ts statically imports prefs, so the reverse edge must
+    // stay lazy to avoid a module cycle.
+    const { useSessionsStore } = await import("@/stores/sessions");
+    const sessionRows = useSessionsStore.getState().sessions;
     const runtimeSlots = useRuntimeStore.getState().byId;
     for (const sid of Object.keys(runtimeSlots)) {
+      const override = sessionRows.find((s) => s.id === sid)?.approvalMode;
+      if (override === "auto" || override === "approval") continue;
       try {
         await useRuntimeStore
           .getState()

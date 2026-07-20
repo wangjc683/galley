@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   Composer,
+  type ComposerApprovalModeState,
   type ComposerHandle,
   type ComposerLLMOption,
   type ImageBlockReason,
@@ -45,6 +46,9 @@ export interface EmptyStateProps {
   requiresModelConfig?: boolean;
   /** Fallback for pre-bridge / dev when `llms` is empty. */
   onOpenLLMSwitcher?: () => void;
+  /** Approval-mode pill state — EmptyState configures the NEXT new
+   * session (pendingApprovalMode), same lifecycle as the LLM pre-pick. */
+  approvalMode?: ComposerApprovalModeState;
   /**
    * Width mode from the TopBar toggle. EmptyState's hero block tracks
    * the same setting so the toggle has a visible effect even when no
@@ -104,6 +108,7 @@ export function EmptyState({
   onConfigureModels,
   requiresModelConfig = false,
   onOpenLLMSwitcher,
+  approvalMode,
   conversationWidth = "compact",
   conversationFontSize = "standard",
   projectName,
@@ -164,6 +169,7 @@ export function EmptyState({
           onConfigureModels={onConfigureModels}
           requiresModelConfig={requiresModelConfig}
           onOpenLLMSwitcher={onOpenLLMSwitcher}
+          approvalMode={approvalMode}
           imagesEnabled={imagesEnabled}
           onImageBlocked={onImageBlocked}
           staticHint={

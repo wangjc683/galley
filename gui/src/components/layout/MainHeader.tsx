@@ -23,18 +23,7 @@ export interface MainHeaderProps {
    * italic muted "新对话" placeholder so the bar always has a title slot.
    */
   sessionTitle?: string;
-  /**
-   * YOLO mode (PRD §11.5). When true, render a persistent badge in
-   * the right cluster — clicking it opens a popover with a one-click
-   * disable. Required for V0.1 release; without it users forget the
-   * mode is on and trigger high-risk operations unintentionally
-   * (DESIGN.md §4.1 YOLO Indicator).
-   */
-  yoloMode?: boolean;
-  onDisableYolo?: () => void;
   onOpenSettings?: () => void;
-  /** YOLO popover link: opens Settings directly on the Approval tab. */
-  onOpenApprovalSettings?: () => void;
   browserControlStatus?: BrowserControlStatus | null;
   onOpenBrowserControl?: () => void;
   channelsState?: ImSupervisorState | null;
@@ -149,10 +138,7 @@ export interface MainHeaderProps {
  */
 export function MainHeader({
   sessionTitle,
-  yoloMode = false,
-  onDisableYolo,
   onOpenSettings,
-  onOpenApprovalSettings,
   browserControlStatus = null,
   onOpenBrowserControl,
   channelsState = null,
@@ -179,7 +165,6 @@ export function MainHeader({
 }: MainHeaderProps) {
   const copy = useCopy();
   const hasTopBarStatusItems =
-    yoloMode ||
     activeGoals.length > 0 ||
     browserControlStatus !== null ||
     Boolean(onOpenChannelsSettings) ||
@@ -263,9 +248,6 @@ export function MainHeader({
       <div className="flex shrink-0 items-center gap-2">
         {hasTopBarStatusItems && (
           <TopBarStatusCluster
-            yoloMode={yoloMode}
-            onDisableYolo={onDisableYolo}
-            onOpenYoloSettings={onOpenApprovalSettings ?? onOpenSettings}
             activeGoals={activeGoals}
             onOpenGoalProject={onOpenGoalProject}
             onOpenGoal={onOpenGoal}

@@ -111,6 +111,12 @@ pub struct SessionBrief {
     pub ga_runtime_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_profile: Option<String>,
+    /// Per-session approval-mode override: `"auto"` (run tools without
+    /// step approval) or `"approval"` (gate high-risk tools). Absent /
+    /// None = the session follows the app-wide default. Additive v1
+    /// field — agents may ignore it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_mode: Option<String>,
 }
 
 /// Filter / scope for `list_sessions`. All fields optional — None means

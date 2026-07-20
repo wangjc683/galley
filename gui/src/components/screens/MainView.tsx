@@ -5,6 +5,7 @@ import { ApprovalDock } from "@/components/conversation/ApprovalDock";
 import { AskUserBubble } from "@/components/conversation/AskUserBubble";
 import {
   Composer,
+  type ComposerApprovalModeState,
   type ComposerLLMOption,
   type ImageBlockReason,
 } from "@/components/conversation/Composer";
@@ -108,6 +109,8 @@ export interface MainViewProps {
   requiresModelConfig?: boolean;
   /** Fallback for pre-bridge / dev when `llms` is empty. */
   onOpenLLMSwitcher?: () => void;
+  /** Approval-mode pill state for this session's Composer. */
+  approvalMode?: ComposerApprovalModeState;
   /** Active Goal for this session's Project context, if any. */
   goal?: GoalBrief;
   /** True when a Goal is active anywhere — gates the Composer's Goal entry
@@ -194,6 +197,7 @@ export function MainView({
   onConfigureModels,
   requiresModelConfig = false,
   onOpenLLMSwitcher,
+  approvalMode,
   goal,
   hasActiveGoal,
   sessionGoals,
@@ -592,6 +596,7 @@ export function MainView({
             onConfigureModels={onConfigureModels}
             requiresModelConfig={requiresModelConfig}
             onOpenLLMSwitcher={onOpenLLMSwitcher}
+            approvalMode={approvalMode}
             goal={goal}
             hasActiveGoal={hasActiveGoal}
             goalProjectName={projectName}

@@ -279,30 +279,41 @@ Control Indicator）。
   测试本身不走模型，demo 由 managed GA 通过现有 `web_execute_js` /
   `tabs.create` 协议主动打开搜索页，不写回连接状态。
 
-#### Approval
+#### Approval（2026-07-20 修订：审批模式 per-session 化）
 
-- **YOLO mode toggle**（PRD §11.5）—— Tab 顶部第一项，跟下方常规设置之间留 32px gap + 一条 `border-line` 分隔线，视觉上独立成块（不被埋没在普通 toggle 列表里）
-  - Toggle 行：左 18px Phosphor `Lightning` thin（深琥珀 `--color-warning`）+ "YOLO 模式" Newsreader medium 14px + 右侧 Switch
-  - Toggle 下方一行 muted 12px："跳过所有工具调用的审批，直接执行——适合完全信任 Agent + 沙盒环境"
-  - 当前已开启状态：Switch 杏沙激活 + 行底部一段 13px 文案"YOLO 已启用 · 顶部栏显示状态" + secondary button "立即关闭"
-  - 关闭 → 开启触发 confirm modal（见下）；开启 → 关闭直接生效，无 confirm
-- **需要审批的工具**：复选列表（默认 `code_run` / `file_write` / `file_patch` / `start_long_term_update`），用户可勾选；YOLO 开启时整个 section 显示 `opacity-50` + tooltip "YOLO 已开启，单项工具审批不生效"，但**不禁用**——用户关 YOLO 后仍生效
+- **新会话默认**（原 YOLO toggle）—— Tab 顶部第一项，中性 bordered card
+  （不再用 warning 色相——自动执行是产品默认态，不是警报态）：
+  - 左侧标题「新会话默认」14px semibold + 一行 muted 说明「未单独设置的
+    会话跟随此默认；每个会话可在输入框旁单独调整。」
+  - 右侧共享 `SegmentedControl` 两段：「自动执行 / 逐步审批」（段名复用
+    `copy.composer.approvalMode`，与 Composer pill 用词强一致）。
+  - 逐步审批 → 自动执行触发 confirm modal（见下）；反向直接生效。
+  - 会话级控件在 Composer 审批模式 pill（conversation.md §4.4）；改默认
+    只影响未覆盖的会话，已覆盖会话钉住不动。
+- **需要审批的工具**：复选列表（默认 `code_run` / `file_write` /
+  `file_patch` / `start_long_term_update`），用户可勾选。**常显可编辑,
+  不再因默认为自动执行而置灰**——规则作用于任何处于「逐步审批」的会话。
+  区块上方一行 muted hint：「以下规则作用于「逐步审批」模式下的会话。」
 - **白名单规则**：分两组显示
-  - **Per-project**（当前 attached GA 目录下的）—— 列出 tool name + 添加日期 + remove 按钮
+  - **Per-project** —— 列出 tool name + remove 按钮
   - **Global** —— 同上
-  - YOLO 开启时同样 dimmed
+  - 同样常显，不再 dimmed
 - 改动后弹 toast "已应用到所有 session"（避免"太隐式"）
 - 底部 muted hint："在审批弹窗里加入白名单后，规则会显示在这里。"
 
-##### YOLO 启用 confirm modal
+##### 自动执行默认 confirm modal
 
-Radix Dialog，~480 × 360。文案（中文）：
+Radix Dialog，~480，组件 `AutoDefaultConfirmModal`。仅在本页把**新会话
+默认**从逐步审批切为自动执行时出现——默认值的唯一编辑入口就是本页
+（Composer pill 的 popover 只放「审批设置…」深链，不放默认控件，见
+conversation.md §4.4）。Composer pill 的**会话级**切换不弹确认（会话级、
+可逆）。
+文案（中文）：
 
 ```
-打开 YOLO 模式？
+把新会话默认设为自动执行？
 
-YOLO = "You Only Live Once"。
-所有工具调用将不经审批直接执行——包括：
+所有跟随默认的会话中，工具调用将不经审批直接执行——包括：
 
   · file_patch（修改文件）
   · file_write（写入文件）
@@ -312,14 +323,14 @@ YOLO = "You Only Live Once"。
 适合：完全信任 Agent + 在沙盒环境工作（个人 repo / 临时虚拟机）
 不适合：生产代码 / 共享系统 / 不熟悉的 Agent / 敏感数据
 
-打开后顶部栏会显示 YOLO 状态标识，随时可一键关闭。
+每个会话仍可在输入框旁随时切换为逐步审批。
 
   [取消]  [是的，我知道在做什么]
 ```
 
 视觉细节：
 
-- 标题左侧用 Phosphor `Lightning` + "打开 YOLO 模式？" Newsreader medium 18px
+- 标题左侧用 Phosphor `Lightning` + 标题 Newsreader medium 18px
 - 主体 13px Inter，bullet 列表用 mono `·` 锚点
 - "是的，我知道在做什么" 按钮：深琥珀 `bg-warning` 背景 + 白色文字（不是品牌杏沙——视觉上要显眼但不像"OK"那种条件反射按钮）
 - "取消"：ghost button 默认 focus，回车默认是取消（避免误触确认）

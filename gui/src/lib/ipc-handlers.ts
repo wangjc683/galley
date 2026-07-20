@@ -12,6 +12,7 @@ import {
   finishHistoryReplay,
   markHistoryReplayStale,
 } from "@/lib/ipc/history-replay";
+import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
 import { sendGatedSystemNotification } from "@/lib/notify";
@@ -135,11 +136,19 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         bridgePid: event.pid,
       });
       // Sync session-scoped state to the freshly-spawned bridge.
-      // YOLO mode (PRD §11.5): the bridge boots with yolo_mode=false;
-      // if the user has it persisted as on, push the override now —
-      // it's queued in the bridge's command pipeline and processed
-      // before any subsequent user message can trigger a tool call.
-      if (usePrefsStore.getState().yoloMode) {
+      // Approval mode: the bridge boots with yolo_mode=false (逐步审批);
+      // if this session's effective mode is 自动执行 (per-session
+      // override, else the app-wide default), push it now — it's queued
+      // in the bridge's command pipeline and processed before any
+      // subsequent user message can trigger a tool call.
+      const approvalOverride = useSessionsStore
+        .getState()
+        .sessions.find((s) => s.id === event.sessionId)?.approvalMode;
+      const effectiveMode = effectiveApprovalMode(
+        approvalOverride,
+        usePrefsStore.getState().yoloMode,
+      );
+      if (effectiveMode === "auto") {
         // Failure direction is safe (bridge stays yolo=false → more
         // approval prompts, never fewer), so log-only is enough.
         useRuntimeStore
@@ -149,7 +158,7 @@ export function dispatchIPCEvent(event: IPCEvent): void {
             enabled: true,
           })
           .catch((e) => {
-            console.warn("[ipc] yolo mode sync failed on ready", e);
+            console.warn("[ipc] approval mode sync failed on ready", e);
           });
       }
       // Session Restore (Stage 3 Task 3). If this session has prior

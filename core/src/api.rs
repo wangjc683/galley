@@ -217,6 +217,18 @@ pub trait GalleyApi: Send + Sync {
         origin: Origin,
     ) -> Result<SessionBrief>;
 
+    /// Set or clear the per-session approval-mode override. `mode` is
+    /// `"auto"`, `"approval"`, or None (= follow the app-wide default).
+    /// Archived sessions are rejected, same as `set_session_pinned`.
+    ///
+    /// **Errors**: `not_found`, `invalid_args` (archived / bad mode).
+    async fn set_session_approval_mode(
+        &self,
+        id: SessionId,
+        mode: Option<String>,
+        origin: Origin,
+    ) -> Result<SessionBrief>;
+
     /// Permanently delete the session row. FK CASCADE removes the
     /// associated `messages` / `tool_events` rows in the same statement.
     ///

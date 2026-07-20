@@ -44,14 +44,14 @@
 - session title 左对齐贴 main 栏左 gutter（**不对齐居中的对话列**——对话列宽随 compact/wide 变，对齐它会让标题左右跳）。title 属于「当前对话」，放在对话区上方、视线最先到达处。本栏左侧无 OS chrome 保留区。
 - **Session title menu**：有 active session 时 title + `CaretDown` 是一个按钮，打开 session-scoped 菜单（Rename / Reinject Tools / Desktop Pet）。空状态渲染 italic muted "新对话"，不可点。Rename 进入 inline edit（Enter 提交 / Esc 取消）。
 - 右：两个清晰 group，最后才是 Windows window controls（不属于工具簇）：
-  - **状态簇**（aria label：`运行状态`）：YOLO（条件渲染）→ Goal（条件渲染）→ Browser Control → Channels。
+  - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ Browser Control → Channels。（2026-07-20：原列首的 YOLO 徽章随审批模式 per-session 化退役——审批模式的控件与状态合一，唯一入口是 Composer 的审批模式 pill，见 conversation.md §4.4。）
   - **工具簇**（aria label：`视图与设置`）：conversation width toggle（compact / wide）→ 对话字号（`TextAa`，popover + 分段）→ 外观主题（popover + 分段）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。四个按钮共用 `TopBarIconButton`；宽度箭头图标为 14px（其余 16px）是刻意的视觉补偿——横向箭头光学上偏大，缩一档四个按钮才等重。
   - 两组之间用 1px 竖向分隔线；没有任何状态项时不显示状态簇和分隔线。
 - Windows window controls（min / max-restore / close）贴 MainHeader 最右端 = 窗口右上；macOS 不渲染（由左上 overlay traffic light 接管窗口控制）。
 
 **两 header 共通视觉规约**
 - 状态控件统一视觉语法：文字 badge 统一 28px 高度、6px 圆角、12px 字号、border / hover / press 节奏；icon-only 状态统一 28px 方形按钮、Radix tooltip，且不显示浏览器默认 focus outline。`warning` / `error` / `success` / `neutral` 只表达状态，不给某个功能单独造身份视觉。
-- Topbar 内会打开 menu / popover 的 trigger，打开态需要保留轻微下沉 + press shadow，帮助用户把浮层和来源按钮对应起来；YOLO 因为是风险态，可额外升为实心 warning，其它常规工具只做温和 opened 态。
+- Topbar 内会打开 menu / popover 的 trigger，打开态需要保留轻微下沉 + press shadow，帮助用户把浮层和来源按钮对应起来。
 - **外观类偏好控件的标准形态**（2026-07-05，字号 / 主题已落地）：28px 图标按钮（`TopBarIconButton`）→ 小 popover → 共享 `SegmentedControl` 三选一。用 Popover 而非 DropdownMenu 是刻意的：选后**不自动关闭**，用户可来回切档对比即时效果。按钮面**不用 brand tint 表达「偏离默认」**——已定型的偏好不是可行动信息，常驻高亮是安静工作台的噪音；当前状态放 tooltip 和 popover 内（如「跟随系统」的解析结果做分段下方 caption）。新增外观控件时沿用此形态，不再发明新样式。
 - `SegmentedControl` 选中态（全局，`ui/segmented-control.tsx`）：`bg-hover` 轨道上的白色浮起块 + `text-brand-strong` medium 文字。轨道不用 `bg-surface`——它和 `bg-elevated` 在浅色下几乎同白，放进 elevated 父容器（popover）时选中态会不可读。
 - icon-only controls 必须使用项目统一的 Radix tooltip（`TooltipLabel` / `IconButton` tooltip），不使用原生 `title` 作为 hover 提示（延迟 / 样式 / 出现时机不可控，会让相邻按钮反馈节奏不一致）；可访问名称用 `aria-label` 保留。
@@ -59,30 +59,12 @@
 - **不放 Sidebar toggle**：Sidebar 当前不可折叠，只可拖拽调整宽度。
 - **不显示**：runtime 详情（留在 SidebarHeader 指示，不进入 MainHeader）/ Stop（在 Composer Submit 位置）/ Context Window / 价格。
 
-> 命名注记：组件文件为 `MainHeader.tsx`；其内部 helper（`TopBarStatusCluster` 等）与 i18n 命名空间 `copy.topbar` 保留历史名，仅为限制 churn，不代表仍存在全宽 top bar。下文 YOLO / Browser Control / Channels indicator 小节中的「TopBar」措辞即指 MainHeader 状态簇。
+> 命名注记：组件文件为 `MainHeader.tsx`；其内部 helper（`TopBarStatusCluster` 等）与 i18n 命名空间 `copy.topbar` 保留历史名，仅为限制 churn，不代表仍存在全宽 top bar。下文 Browser Control / Channels indicator 小节中的「TopBar」措辞即指 MainHeader 状态簇。
 
-#### YOLO Indicator（条件渲染，PRD §11.5）
-
-YOLO mode 开启时在右侧状态簇最前渲染 persistent badge：
-
-```
-[ YOLO ]
-```
-
-- 视觉：使用统一 TopBar 状态 badge，`warning` tone；TopBar 折叠态不使用 Phosphor `Lightning`，也不建立 YOLO 专属视觉体系。
-- Hover 时 badge 可升为实心 warning + 轻微上浮；popover open 时保持实心 warning，
-  但改为轻微下沉 + press shadow，表达“当前浮层归属于此按钮”。
-- 内容："YOLO" 12px Inter medium 大写
-- 不闪烁、不脉动——视觉警示靠颜色对比，动效会让用户疲劳后忽略
-- 永远可见（不 hover 显示），这是核心承诺
-- **点击行为**：弹 popover（Radix Popover，宽 280px，14px padding）
-  - Header：Phosphor `Lightning` thin 16px + 标题 13px Inter medium："YOLO 模式已开启"
-  - 一行 12px muted："所有工具调用跳过审批直接执行"
-  - 一个深琥珀 button："立即关闭"——点击直接关 + 关闭 popover + indicator 消失
-  - secondary link "在设置中查看 →"（打开 Settings → Approval tab）
-- **未开启时不渲染**——这个位置完全空（不留占位），TopBar 视觉跟现在一致
-
-设计判断：YOLO 需要可扫视，但不能破坏 Galley 的安静风格。风险由 `warning` tone 表达；折叠态不要用图标、闪烁或专属色系把它做成单独品牌。Popover 是展开后的风险说明面板，可以使用 Lightning 强化语义。
+> 历史注记（2026-07-20）：曾位于状态簇列首的 YOLO Indicator 已退役。审批模式改为
+> per-session（Composer 审批模式 pill 是唯一交互控件，见 conversation.md §4.4；
+> 新会话默认值在 Settings → 审批）。退役理由：默认开启后常亮警示失去警示价值；
+> 全局徽章与会话级控件并存会造成作用域混淆。决策记录见 devlog 2026-07-20。
 
 #### Browser Control Indicator
 

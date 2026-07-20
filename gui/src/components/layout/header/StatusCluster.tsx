@@ -9,11 +9,10 @@ import { ChannelsIndicator } from "./ChannelsIndicator";
 import { GoalIndicator } from "./GoalIndicator";
 import { UpdateIndicator } from "./UpdateIndicator";
 import { updateIndicatorVisible } from "./update-indicator-status";
-import { YoloIndicator } from "./YoloIndicator";
 
 /**
  * Left half of the MainHeader right group: state-of-the-world badges —
- * YOLO / Goal / Browser Control / Channels / app Update. Each child
+ * Goal / Browser Control / Channels / app Update. Each child
  * decides whether it renders as an icon button or a text badge; the
  * cluster only owns the ordering and the group ARIA landmark. The
  * parent gates the whole cluster (and the divider after it) on
@@ -25,9 +24,6 @@ import { YoloIndicator } from "./YoloIndicator";
  * live) without destabilizing the always-on utility buttons.
  */
 export function TopBarStatusCluster({
-  yoloMode,
-  onDisableYolo,
-  onOpenYoloSettings,
   activeGoals,
   onOpenGoalProject,
   onOpenGoal,
@@ -41,9 +37,6 @@ export function TopBarStatusCluster({
   hasRunningSessions,
   onRestartAppUpdate,
 }: {
-  yoloMode: boolean;
-  onDisableYolo?: () => void;
-  onOpenYoloSettings?: () => void;
   activeGoals: GoalBrief[];
   onOpenGoalProject?: (projectId: string) => void;
   onOpenGoal?: (goalId: string) => void;
@@ -65,12 +58,6 @@ export function TopBarStatusCluster({
       aria-label={copy.statusGroupLabel}
       className="flex items-center gap-1"
     >
-      {yoloMode && (
-        <YoloIndicator
-          onDisable={onDisableYolo}
-          onOpenSettings={onOpenYoloSettings}
-        />
-      )}
       {activeGoals.length > 0 && (
         <GoalIndicator
           goals={activeGoals}

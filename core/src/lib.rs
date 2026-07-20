@@ -285,6 +285,12 @@ pub fn run() {
             sql: include_str!("../migrations/033_goal_optional_project.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 34,
+            description: "per-session approval mode override",
+            sql: include_str!("../migrations/034_session_approval_mode.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     // Pre-migration backup hook (B4 M8). Derived — not hard-coded —
@@ -393,6 +399,7 @@ pub fn run() {
             unarchive_session,
             rename_session,
             set_session_pinned,
+            set_session_approval_mode,
             delete_session,
             assign_session_to_project,
             set_session_llm,

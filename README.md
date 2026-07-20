@@ -79,7 +79,7 @@ Galley's orchestration layer — a human in the GUI and a Supervisor Agent on th
 | | |
 |---|---|
 | 🧭 **Project workspace + multiple sessions**<br/>Point a folder — a code repo or a document directory — at a Project workspace; multiple sessions advance around the same project in parallel, then converge. | 🎯 **Galley Goal**<br/>Hand Galley a long-term goal, set the duration and Subagent budget, and it keeps working in the background until the goal is met or the budget runs out. |
-| 🔧 **Tool timeline + approvals**<br/>Every tool call's args, result, and timing are visible inline; risky actions support per-call approval, allowlists, or YOLO mode. | ⚙️ **GUI + CLI dual-native**<br/>You operate in the GUI; a Supervisor Agent goes through the stable `galley` CLI. Both share the same sessions and history, not separate worlds. |
+| 🔧 **Tool timeline + approvals**<br/>Every tool call's args, result, and timing are visible inline; risky actions support step approval, allowlists, or per-session auto-run. | ⚙️ **GUI + CLI dual-native**<br/>You operate in the GUI; a Supervisor Agent goes through the stable `galley` CLI. Both share the same sessions and history, not separate worlds. |
 | 💬 **IM Channels**<br/>Connect WeChat / Feishu, keep the conversation going through everyday chat apps, and dispatch Galley Desktop remotely. | 💾 **Persistence + search + background mode**<br/>Close the window without quitting, dispatch remotely while away, then come back and pick up the thread. Past sessions are fully searchable. |
 
 ---

@@ -678,6 +678,48 @@ impl SqliteGalley {
         self.session_brief(id).await
     }
 
+    pub(super) async fn set_session_approval_mode_db(
+        &self,
+        id: SessionId,
+        mode: Option<String>,
+        _origin: Origin,
+    ) -> Result<SessionBrief> {
+        if let Some(m) = mode.as_deref() {
+            if m != "auto" && m != "approval" {
+                return Err(GalleyError::InvalidArgs {
+                    message: format!(
+                        "approval_mode must be \"auto\", \"approval\", or null; got {m:?}"
+                    ),
+                });
+            }
+        }
+        // Same up-front archived check as set_session_pinned_db: the
+        // override only matters for sessions that can still run.
+        let current_status: Option<String> =
+            sqlx::query_scalar("SELECT status FROM sessions WHERE id = ?")
+                .bind(id.as_str())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+        let status = current_status.ok_or_else(|| GalleyError::NotFound {
+            message: format!("session {id} not found"),
+        })?;
+        if status == "archived" {
+            return Err(GalleyError::InvalidArgs {
+                message: format!("session {id} is archived; cannot change approval mode"),
+            });
+        }
+        let now = chrono_now_iso();
+        sqlx::query("UPDATE sessions SET approval_mode = ?, updated_at = ? WHERE id = ?")
+            .bind(&mode)
+            .bind(&now)
+            .bind(id.as_str())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        self.session_brief(id).await
+    }
+
     pub(super) async fn delete_session_db(&self, id: SessionId, _origin: Origin) -> Result<()> {
         let attachment_dir = crate::app_paths::conversation_attachment_session_dir(id.as_str());
         let res = sqlx::query("DELETE FROM sessions WHERE id = ?")

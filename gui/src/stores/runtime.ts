@@ -119,6 +119,13 @@ interface RuntimeState {
    */
   pendingLLMIndex: number | undefined;
   /**
+   * EmptyState approval-mode pre-pick — same lifecycle as
+   * `pendingLLMIndex`: stashed because no session row exists yet,
+   * consumed (and always cleared) by `sessionsStore.createSession`,
+   * which writes it as the new session's override.
+   */
+  pendingApprovalMode: "auto" | "approval" | undefined;
+  /**
    * Which session currently holds the desktop pet subprocess. Global
    * because the pet is single-instance (one OS-level port). Cleared
    * by `pet_detached` IPC; set by `pet_attached` IPC + this action.
@@ -546,6 +553,7 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
   cachedLLMs: [],
   cachedLLMDisplayName: "",
   pendingLLMIndex: undefined,
+  pendingApprovalMode: undefined,
   petAttachedSessionId: null,
   runtimeInfo: DEFAULT_RUNTIME_INFO,
   _warmupComplete: false,

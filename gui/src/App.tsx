@@ -50,6 +50,7 @@ import {
   currentLLMDisplayName,
   managedModelsToLLMs,
 } from "@/lib/managed-model-options";
+import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useAppUpdateStore } from "@/stores/app-update";
@@ -107,6 +108,9 @@ function App() {
   const unarchiveSession = useSessionsStore((s) => s.unarchiveSession);
   const togglePinSession = useSessionsStore((s) => s.togglePinSession);
   const renameSession = useSessionsStore((s) => s.renameSession);
+  const setSessionApprovalMode = useSessionsStore(
+    (s) => s.setSessionApprovalMode,
+  );
   const projects = useSessionsStore((s) => s.projects);
   const activeProjectFilter = useSessionsStore((s) => s.activeProjectFilter);
   const createProject = useSessionsStore((s) => s.createProject);
@@ -150,6 +154,7 @@ function App() {
   const cachedLLMs = useRuntimeStore((s) => s.cachedLLMs);
   const cachedLLMDisplayName = useRuntimeStore((s) => s.cachedLLMDisplayName);
   const pendingLLMIndex = useRuntimeStore((s) => s.pendingLLMIndex);
+  const pendingApprovalMode = useRuntimeStore((s) => s.pendingApprovalMode);
   const selectLLMForNewSession = useRuntimeStore(
     (s) => s.selectLLMForNewSession,
   );
@@ -462,6 +467,31 @@ function App() {
     }
     return map;
   }, [activeGoals]);
+  // Approval-mode state for the merged conversation-config pill
+  // (conversation.md §4.4). MainView acts on the active session's
+  // persisted override; EmptyState configures the NEXT session via
+  // pendingApprovalMode (same lifecycle as the LLM pre-pick — consumed
+  // by createSession, always cleared). The app-wide default is edited
+  // only in Settings → 审批 (footer deep-link).
+  const mainApprovalModeState = activeSessionId
+    ? {
+        mode: effectiveApprovalMode(activeSession?.approvalMode, yoloMode),
+        overridden: activeSession?.approvalMode != null,
+        onSelectMode: (mode: "auto" | "approval") =>
+          setSessionApprovalMode(activeSessionId, mode),
+        onRestoreDefault: () => setSessionApprovalMode(activeSessionId, null),
+        onOpenApprovalSettings: () => openSettings("approval"),
+      }
+    : undefined;
+  const emptyApprovalModeState = {
+    mode: effectiveApprovalMode(pendingApprovalMode, yoloMode),
+    overridden: pendingApprovalMode !== undefined,
+    onSelectMode: (mode: "auto" | "approval") =>
+      useRuntimeStore.setState({ pendingApprovalMode: mode }),
+    onRestoreDefault: () =>
+      useRuntimeStore.setState({ pendingApprovalMode: undefined }),
+    onOpenApprovalSettings: () => openSettings("approval"),
+  };
   const activeSessionGoal = activeSession
     ? (activeGoals.find((goal) => goal.masterSessionId === activeSession.id) ??
       (activeSession.projectId
@@ -696,10 +726,6 @@ function App() {
           <ThemeProvider theme={resolvedTheme}>
             <MainHeader
               sessionTitle={activeSession?.title}
-              yoloMode={yoloMode}
-              onDisableYolo={() => {
-                void setYoloMode(false);
-              }}
               browserControlStatus={
                 activeRuntimeKind === "managed" ? browserControlStatus : null
               }
@@ -803,7 +829,6 @@ function App() {
                 renameSession(activeSessionId, newTitle);
               }}
               onOpenSettings={() => setSettingsOpen(true)}
-              onOpenApprovalSettings={() => openSettings("approval")}
             />
             <BrowserControlAttentionSurface
               show={showBrowserControlAttention}
@@ -834,6 +859,7 @@ function App() {
                     selectLLMForNewSession(idx);
                   }}
                   onOpenLLMSwitcher={openLLMSwitcherFallback}
+                  approvalMode={emptyApprovalModeState}
                   onGoalSubmit={startGoalFromComposer}
                   hasActiveGoal={goalSlotOccupied}
                   imagesEnabled={activeRuntimeKind === "managed"}
@@ -873,6 +899,7 @@ function App() {
                     }
                   }}
                   onOpenLLMSwitcher={openLLMSwitcherFallback}
+                  approvalMode={mainApprovalModeState}
                   goal={activeSessionGoal}
                   hasActiveGoal={goalSlotOccupied}
                   sessionGoals={sessionGoals}

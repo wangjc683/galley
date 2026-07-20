@@ -1,17 +1,15 @@
-import * as Dialog from "@radix-ui/react-dialog";
-import { Lightning, X } from "@phosphor-icons/react";
+import { X } from "@phosphor-icons/react";
 import { useState } from "react";
 
+import { AutoDefaultConfirmModal } from "@/components/screens/settings/AutoDefaultConfirmModal";
 import {
   SettingsPanelHeader,
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
-import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
-import { IconTooltip } from "@/components/ui/tooltip";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useCopy } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 import type { ApprovalConfig } from "@/components/screens/settings/settings-types";
 
 interface SettingsApprovalProps {
@@ -31,17 +29,23 @@ interface SettingsApprovalProps {
 /**
  * Settings → Approval tab. DESIGN.md §9 Approval tab.
  *
- * Two stacks:
+ * Three stacks:
  *
- *   1. Approval-required tools — checkbox list. Default V0.1 set is
+ *   1. Default mode for new sessions (自动执行 / 逐步审批) — a
+ *      SegmentedControl over the legacy `yolo_mode` pref. Sessions
+ *      without an explicit per-session override (the composer pill)
+ *      follow this default; overridden sessions stay pinned.
+ *      Switching the default TO 自动执行 requires the confirm modal.
+ *
+ *   2. Approval-required tools — checkbox list. Default V0.1 set is
  *      code_run / file_write / file_patch / start_long_term_update;
  *      user can prune. Toggling triggers onChangeRequiredTools with
  *      the new full list.
  *
- *   2. Always-allow rules — split per-project / global, each row
- *      shows tool name + remove button. Toggling fires the toast
- *      "已应用到所有 session" upstream so the user sees the
- *      side-effect (DESIGN.md §9 故意决策).
+ *   3. Always-allow rules — split per-project / global, each row
+ *      shows tool name + remove button. These rules apply to any
+ *      session running 逐步审批, so the section is always editable
+ *      (no more dimming while the default is 自动执行).
  */
 export function SettingsApproval({
   config,
@@ -63,12 +67,13 @@ export function SettingsApproval({
     onChangeRequiredTools?.(next);
   };
 
-  const handleYoloToggle = (next: boolean) => {
-    if (next) {
-      // OFF → ON requires the activation modal (PRD §11.5).
+  const handleDefaultModeChange = (mode: "auto" | "approval") => {
+    if (mode === "auto" && !yoloMode) {
+      // approval → auto widens what runs unattended for every
+      // non-overridden session: confirm first.
       setActivationOpen(true);
-    } else {
-      // ON → OFF is harmless; no confirm.
+    } else if (mode === "approval" && yoloMode) {
+      // auto → approval narrows; no confirm.
       onChangeYoloMode(false);
     }
   };
@@ -80,9 +85,12 @@ export function SettingsApproval({
         subtitle={approvalCopy.subtitle}
       />
 
-      <YoloSection enabled={yoloMode} onToggle={handleYoloToggle} />
+      <DefaultModeSection
+        defaultAuto={yoloMode}
+        onChangeMode={handleDefaultModeChange}
+      />
 
-      <YoloActivationModal
+      <AutoDefaultConfirmModal
         open={activationOpen}
         onOpenChange={setActivationOpen}
         onConfirm={() => {
@@ -91,27 +99,10 @@ export function SettingsApproval({
         }}
       />
 
-      {/* "Rules are disabled" announcement banner — kept OUTSIDE the
-          dimmed container below so it stays at full opacity (it's a
-          status banner, not part of the disabled content) and so the
-          outer space-y-7 gives it normal 28px clearance from the
-          disabled section. Previously it lived inside the opacity-50
-          container with a -mb-2 negative margin and ended up
-          overlapping the required-tools header. */}
-      {yoloMode && (
-        <div className="text-ui-meta italic text-ink-muted">
-          {approvalCopy.yoloRulesPaused}
+      <div className="space-y-7">
+        <div className="text-ui-meta text-ink-muted">
+          {approvalCopy.rulesScopeHint}
         </div>
-      )}
-
-      <div
-        className={cn(
-          "space-y-7",
-          yoloMode && "pointer-events-none opacity-50",
-        )}
-        aria-disabled={yoloMode}
-        title={yoloMode ? approvalCopy.yoloRulesTitle : undefined}
-      >
         <div>
           <SettingsSectionLabel>
             {approvalCopy.requiredTools}
@@ -174,151 +165,48 @@ export function SettingsApproval({
   );
 }
 
-// ---------------- YOLO mode ----------------
+// ---------------- default mode ----------------
 
 /**
- * Top-of-tab YOLO mode block (PRD §11.5 / DESIGN.md §9 Approval).
+ * Top-of-tab default-mode block (DESIGN.md §9 Approval).
  *
- * Visually distinct from the lower per-tool settings:
- * - Lightning icon + apricot/warning hue calls attention
- * - Sits in its own bordered card so it isn't read as "another
- *   checkbox in the list"
- *
- * The actual confirm-on-activation modal is handled by
- * YoloActivationModal — keeping that out of this section means the
- * Switch's disabled-state logic doesn't have to wait for the modal
- * to mount.
+ * The SegmentedControl edits the DEFAULT for new / non-overridden
+ * sessions — per-session control lives on the composer pill, and
+ * scope teaching is one description line here. Neutral chrome on
+ * purpose: 自动执行 is the product default, not an alarm state.
  */
-function YoloSection({
-  enabled,
-  onToggle,
+function DefaultModeSection({
+  defaultAuto,
+  onChangeMode,
 }: {
-  enabled: boolean;
-  onToggle: (next: boolean) => void;
-}) {
-  const copy = useCopy().settings.approval;
-  return (
-    <div
-      className={cn(
-        "rounded-callout border bg-surface px-4 py-3.5",
-        enabled ? "border-warning/30 bg-warning/[var(--opacity-subtle)]" : "border-line",
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-start gap-2.5">
-          <Lightning
-            size={18}
-            weight="thin"
-            className={cn(
-              "mt-0.5 shrink-0",
-              enabled ? "text-warning" : "text-ink-soft",
-            )}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14px] font-semibold text-ink">
-              <IconTooltip text={copy.yoloTooltip}>
-                <span className="cursor-help underline decoration-line-strong decoration-dotted underline-offset-[3px]">
-                  {copy.yoloMode}
-                </span>
-              </IconTooltip>
-            </div>
-            <div className="mt-1 text-ui-meta text-ink-muted">
-              {copy.yoloDescription}
-            </div>
-          </div>
-        </div>
-        <Switch
-          checked={enabled}
-          onCheckedChange={onToggle}
-          ariaLabel={copy.toggleYolo}
-          tone="warning"
-        />
-      </div>
-      {enabled && (
-        <div className="mt-3 flex items-center justify-between border-t border-warning/20 pt-3 text-ui-meta">
-          <span className="text-warning">{copy.yoloEnabledTopbar}</span>
-          <Button variant="ghost" size="sm" onClick={() => onToggle(false)}>
-            {copy.turnOffNow}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Activation modal — shown when toggling YOLO from off to on
- * (PRD §11.5). Confirm button copy "是的，我知道在做什么"
- * deliberately not "确定" to prevent reflexive clicks.
- */
-function YoloActivationModal({
-  open,
-  onOpenChange,
-  onConfirm,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  defaultAuto: boolean;
+  onChangeMode: (mode: "auto" | "approval") => void;
 }) {
   const copy = useCopy();
   const approvalCopy = copy.settings.approval;
+  const modeCopy = copy.composer.approvalMode;
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
-        <Dialog.Content
-          aria-describedby={undefined}
-          className={cn(
-            "fixed left-1/2 top-1/2 z-[60] w-[480px] max-w-[calc(100vw-32px)]",
-            "-translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-elevated p-7 shadow-elevated",
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <Lightning size={20} weight="thin" className="text-warning" />
-            <Dialog.Title className="text-[18px] font-semibold text-ink">
-              {approvalCopy.turnOnYoloTitle}
-            </Dialog.Title>
+    <div className="rounded-callout border border-line bg-surface px-4 py-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-semibold text-ink">
+            {approvalCopy.defaultModeTitle}
           </div>
-
-          <div className="mt-4 space-y-3 text-ui-compact text-ink-soft">
-            <p>{approvalCopy.yoloModalIntro}</p>
-            <ul className="space-y-1 pl-1 font-mono text-ui-secondary text-ink">
-              <li>· {approvalCopy.filePatch}</li>
-              <li>· {approvalCopy.fileWrite}</li>
-              <li>· {approvalCopy.codeRun}</li>
-              <li>· {approvalCopy.otherHighRisk}</li>
-            </ul>
-            <p>
-              <span className="text-ink">{approvalCopy.goodFor}</span>
-              {": "}
-              {approvalCopy.goodForText}
-            </p>
-            <p>
-              <span className="text-ink">{approvalCopy.notFor}</span>
-              {": "}
-              {approvalCopy.notForText}
-            </p>
-            <p className="text-ui-meta text-ink-muted">
-              {approvalCopy.yoloIndicatorNote}
-            </p>
+          <div className="mt-1 text-ui-meta text-ink-muted">
+            {approvalCopy.defaultModeDescription}
           </div>
-
-          <DialogActionRow className="mt-6">
-            <Button
-              variant="ghost"
-              size="lg"
-              onClick={() => onOpenChange(false)}
-              autoFocus
-            >
-              {copy.common.cancel}
-            </Button>
-            <Button variant="warning" size="lg" onClick={onConfirm}>
-              {approvalCopy.understandRisk}
-            </Button>
-          </DialogActionRow>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </div>
+        <SegmentedControl
+          value={defaultAuto ? "auto" : "approval"}
+          onValueChange={onChangeMode}
+          ariaLabel={approvalCopy.defaultModeTitle}
+          options={[
+            { value: "auto", label: modeCopy.autoName },
+            { value: "approval", label: modeCopy.approvalName },
+          ]}
+        />
+      </div>
+    </div>
   );
 }
 

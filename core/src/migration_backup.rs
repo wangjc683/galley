@@ -230,6 +230,11 @@ const SAFE_PREFLIGHT_MIGRATIONS: &[MigrationSpec] = &[
         description: "make goals.project_id optional (solo without a project)",
         sql: include_str!("../migrations/033_goal_optional_project.sql"),
     },
+    MigrationSpec {
+        version: 34,
+        description: "per-session approval mode override",
+        sql: include_str!("../migrations/034_session_approval_mode.sql"),
+    },
 ];
 
 /// Outcome of [`ensure_backup_before_migrate`].
@@ -1487,7 +1492,7 @@ mod tests {
                 .fetch_one(&mut conn)
                 .await
                 .expect("read version");
-            assert_eq!(version, 33);
+            assert_eq!(version, 34);
             for (label, table) in [
                 ("messages", "messages"),
                 ("tool_events", "tool_events"),
@@ -1611,7 +1616,7 @@ mod tests {
                 .fetch_one(&mut conn)
                 .await
                 .expect("read version");
-            assert_eq!(version, 33);
+            assert_eq!(version, 34);
             for table in ["goal_tasks", "goal_events", "goal_deliverables"] {
                 let sql = format!("SELECT COUNT(*) FROM {table}");
                 let count: i64 = sqlx::query_scalar(&sql)

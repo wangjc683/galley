@@ -377,6 +377,37 @@ quick prompt 建议**——能力发现靠"用户主动打开库时看到能力�
 - 长列表在 popover 内滚动（`max-h min(60vh,360px)`）
 - displayName 由 bridge 按 runtime 边界生成：external GA 显示完整 raw name；managed GA 显示 Galley Models 里的显示名或原始 model id（详见 IPC 协议）
 
+#### 审批模式（并入 LLM pill，2026-07-20 定稿）
+
+审批模式（自动执行 / 逐步审批）**没有独立控件**——它是会话配置的一部分，
+与模型选择共用同一个 pill 和同一个 popover（第四次修订收敛于此：独立
+pill 无论文字还是收放形态，都让一个几乎永远等于默认值的设置与每刻都有
+信息量的模型名争夺层级；合并后主从关系由结构表达，不需要任何解释）。
+TopBar 无任何审批徽章（见 layout-and-chrome.md 历史注记）。
+
+- **Trigger**：模式图标（`Lightning` = 自动执行 / `HandPalm` = 逐步审批，
+  12px thin）+ 模型名 + `CaretUp`。图标永远显示当前会话生效模式——
+  控件即状态；模式名进 tooltip / aria。
+- **Popover 结构**（自上而下，主从分层）：
+  1. 模型列表（主，12.5px，现规格不变）；
+  2. 分隔线 + **审批模式区**（从，12px、muted，name-only 两行，行首
+     模式图标、行尾杏沙 ✓ 标当前；描述文案进 aria）。已显式覆盖时区底
+     多一行 10.5px 安静动作「仅此会话 · 恢复跟随默认」——"默认"概念
+     仅在作用域疑问可能出现的时刻语境化露出；
+  3. footer 设置深链两行：「配置模型…」「审批设置…」（都用 `Gear`——
+     此层图标语义是"去设置"，不是功能域；审批入口覆盖默认值+白名单
+     规则，是审批设置页从 composer 出发的唯一路径）。
+- **运行中语义**（合并后的关键行为）：`stopMode` 只封锁**模型切换**
+  （模型行置灰 + 区顶一行「运行中无法切换 LLM」小字），popover 本身
+  照常打开，审批模式区保持可点——`set_yolo_mode` 即时生效，跑着的
+  会话切「逐步审批」正是"我要开始盯着"的合法动作。
+- **显式选择即覆盖**：选了模式（即使与默认相同）就钉住本会话；只有
+  「恢复跟随默认」解除。继承语义 = 跟随默认直到显式覆盖。
+- 会话级切换一键生效、不弹确认；重确认只存在于 Settings 把**新会话
+  默认**切为自动执行时（`AutoDefaultConfirmModal`，Settings 专属）。
+- EmptyState 的同一 pill 配置**下一个新会话**（pendingApprovalMode，
+  与 LLM 预选同生命周期：createSession 消费、必清除）。
+
 #### 不显示
 
 Context Window / 价格 / token estimate（V0.1 拿不到 + 信息噪音）

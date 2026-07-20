@@ -44,6 +44,9 @@ const MIG_026: &str = include_str!("../migrations/026_project_workspace.sql");
 const MIG_027: &str = include_str!("../migrations/027_managed_model_context_win.sql");
 const MIG_028: &str = include_str!("../migrations/028_message_telemetry.sql");
 const MIG_029: &str = include_str!("../migrations/029_managed_model_custom_context_win.sql");
+// 034 only ADD COLUMN approval_mode to sessions; 030–033 touch goal tables
+// this fixture doesn't exercise.
+const MIG_034: &str = include_str!("../migrations/034_session_approval_mode.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -53,6 +56,7 @@ async fn fresh_pool() -> SqlitePool {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029,
+        MIG_034,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)

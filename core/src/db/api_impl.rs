@@ -122,6 +122,15 @@ impl GalleyApi for SqliteGalley {
         self.set_session_pinned_db(id, pinned, _origin).await
     }
 
+    async fn set_session_approval_mode(
+        &self,
+        id: SessionId,
+        mode: Option<String>,
+        _origin: Origin,
+    ) -> Result<SessionBrief> {
+        self.set_session_approval_mode_db(id, mode, _origin).await
+    }
+
     async fn delete_session(&self, id: SessionId, _origin: Origin) -> Result<()> {
         self.delete_session_db(id, _origin).await
     }

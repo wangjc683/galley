@@ -1,7 +1,14 @@
 import * as Popover from "@radix-ui/react-popover";
-import { CaretUp, Check, Gear } from "@phosphor-icons/react";
+import {
+  CaretUp,
+  Check,
+  Gear,
+  HandPalm,
+  Lightning,
+} from "@phosphor-icons/react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
+import type { SessionApprovalMode } from "@/lib/approval-mode";
 import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
@@ -16,8 +23,29 @@ export interface ComposerLLMOption {
 }
 
 /**
- * LLM pill — clickable label showing the current model, opens a
- * dropdown of available models for one-click switching (DESIGN.md §4.4).
+ * Approval-mode slice of the conversation-config pill. The mode icon
+ * (⚡ 自动执行 / ✋ 逐步审批) renders in front of the model name, and
+ * the popover hosts a quiet mode section under the model list —
+ * approval mode is per-session conversation config, same capsule as
+ * the model (2026-07-20, fourth revision; see conversation.md §4.4).
+ */
+export interface ComposerApprovalModeState {
+  /** Effective mode for the surface (override ?? app-wide default). */
+  mode: SessionApprovalMode;
+  /** True when the session carries an explicit override (pinned). */
+  overridden: boolean;
+  onSelectMode: (mode: SessionApprovalMode) => void;
+  /** Clear the override → follow the app-wide default again. */
+  onRestoreDefault: () => void;
+  /** Footer deep-link: Settings → 审批 (default + allowlist rules). */
+  onOpenApprovalSettings?: () => void;
+}
+
+/**
+ * Conversation-config pill — the current model (with the session's
+ * approval-mode icon in front) opening one popover for both concerns:
+ * model list first, then a visually quieter approval-mode section,
+ * then settings deep-links (DESIGN.md §4.4).
  *
  * Two modes:
  *   - `llms` provided (production): renders a Radix Popover with the
@@ -26,9 +54,12 @@ export interface ComposerLLMOption {
  *     callback (e.g. opens Command Palette) so pre-bridge states
  *     and dev tooling still have a click target.
  *
- * `stopMode` (agent mid-run) disables both — switching LLMs while a
- * turn is in flight would race the in-progress request and produce
- * inconsistent state. PRD §13.2.
+ * `stopMode` (agent mid-run) blocks MODEL switching only — switching
+ * LLMs while a turn is in flight would race the in-progress request
+ * (PRD §13.2). The popover itself stays openable when an approval
+ * section is present, because flipping a running session to 逐步审批
+ * is exactly the "I want to watch this now" move (`set_yolo_mode`
+ * applies immediately). Model rows gray out with an inline hint.
  */
 export function LLMPill({
   llmDisplayName,
@@ -37,6 +68,7 @@ export function LLMPill({
   llmConfigHint,
   onConfigureModels,
   onOpenLLMSwitcher,
+  approvalMode,
   disabled,
   stopMode,
 }: {
@@ -46,14 +78,35 @@ export function LLMPill({
   llmConfigHint?: string;
   onConfigureModels?: () => void;
   onOpenLLMSwitcher?: () => void;
+  approvalMode?: ComposerApprovalModeState;
   disabled: boolean;
   stopMode: boolean;
 }) {
   const copy = useCopy();
+  const modeCopy = copy.composer.approvalMode;
   const footerHint = llmConfigHint ?? copy.app.externalModelHint;
+  const currentModeName = approvalMode
+    ? approvalMode.mode === "auto"
+      ? modeCopy.autoName
+      : modeCopy.approvalName
+    : null;
   const title = stopMode
     ? copy.composer.cannotSwitchRunning
     : copy.composer.switchCurrent(llmDisplayName);
+  const ariaLabel = currentModeName
+    ? `${title} · ${modeCopy.switchTooltip(currentModeName)}`
+    : title;
+  // With an approval section the popover must stay reachable mid-run;
+  // only pure-LLM pills keep the old "blocked = won't open" behavior.
+  const blockOpen = disabled && !approvalMode;
+
+  const modeIcon = approvalMode ? (
+    approvalMode.mode === "auto" ? (
+      <Lightning size={12} weight="thin" className="shrink-0" />
+    ) : (
+      <HandPalm size={12} weight="thin" className="shrink-0" />
+    )
+  ) : null;
 
   const pillClasses = cn(
     "flex h-7 min-w-0 items-center gap-1 text-[12.5px] text-ink-soft",
@@ -61,7 +114,7 @@ export function LLMPill({
     "hover:bg-hover hover:text-ink",
     "outline-none",
     "rounded-sm px-2.5",
-    disabled &&
+    blockOpen &&
       "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-ink-soft active:translate-y-0",
   );
 
@@ -82,9 +135,10 @@ export function LLMPill({
             onOpenLLMSwitcher?.();
           }}
           aria-disabled={disabled || undefined}
-          aria-label={title}
+          aria-label={ariaLabel}
           className={pillClasses}
         >
+          {modeIcon}
           <span className="min-w-0 truncate">{llmDisplayName}</span>
           <CaretUp size={10} weight="thin" className="text-ink-muted" />
         </button>
@@ -101,6 +155,20 @@ export function LLMPill({
     );
   }
 
+  const modeOptions: { mode: SessionApprovalMode; name: string; description: string }[] =
+    [
+      {
+        mode: "auto",
+        name: modeCopy.autoName,
+        description: modeCopy.autoDescription,
+      },
+      {
+        mode: "approval",
+        name: modeCopy.approvalName,
+        description: modeCopy.approvalDescription,
+      },
+    ];
+
   return (
     <Popover.Root>
       <TooltipLabel text={title}>
@@ -114,12 +182,13 @@ export function LLMPill({
             // defaultPrevented); aria-disabled keeps the explanatory
             // tooltip reachable, unlike a real `disabled`.
             onClick={(e) => {
-              if (disabled) e.preventDefault();
+              if (blockOpen) e.preventDefault();
             }}
-            aria-disabled={disabled || undefined}
-            aria-label={title}
+            aria-disabled={blockOpen || undefined}
+            aria-label={ariaLabel}
             className={pillClasses}
           >
+            {modeIcon}
             <span className="min-w-0 truncate">{llmDisplayName}</span>
             <CaretUp size={10} weight="thin" className="text-ink-muted" />
           </button>
@@ -137,6 +206,11 @@ export function LLMPill({
             "max-h-[min(60vh,360px)] overflow-y-auto",
           )}
         >
+          {stopMode && (
+            <div className="px-2.5 pb-1 pt-1 text-[10.5px] leading-[1.4] text-ink-muted/70">
+              {copy.composer.cannotSwitchRunning}
+            </div>
+          )}
           {llms.map((llm) => {
             const providerLabel = llm.providerDisplayName?.trim();
             const isDuplicateDisplayName =
@@ -147,10 +221,15 @@ export function LLMPill({
                   type="button"
                   tabIndex={-1}
                   onMouseDown={preventMouseFocus}
-                  onClick={() => onSelectLLM?.(llm.index)}
+                  onClick={() => {
+                    if (disabled) return;
+                    onSelectLLM?.(llm.index);
+                  }}
+                  aria-disabled={disabled || undefined}
                   className={cn(
                     "group/llm-option flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-[12.5px] hover:bg-hover",
                     llm.isCurrent ? "text-ink" : "text-ink-soft",
+                    disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
                   )}
                 >
                   <span className="flex w-3.5 shrink-0 items-center justify-center">
@@ -181,26 +260,111 @@ export function LLMPill({
               </Popover.Close>
             );
           })}
-          {/* Footer hint: addresses the "为什么这里没有 X 模型"
-              question right where it surfaces. Visually quiet on
-              purpose — supplementary metadata, not a CTA. */}
-          {onConfigureModels ? (
+          {/* Approval-mode section: quieter register on purpose —
+              smaller type, muted icons. Session-scoped rows; the
+              restore action appears only when overridden, surfacing
+              the "default" concept exactly when the scope question can
+              arise. The app-wide default itself lives in Settings
+              (footer deep-link below), never as a control here. */}
+          {approvalMode && (
+            <div className="mt-1 border-t border-line/60 pt-1">
+              {modeOptions.map((option) => (
+                <Popover.Close asChild key={option.mode}>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onMouseDown={preventMouseFocus}
+                    onClick={() => approvalMode.onSelectMode(option.mode)}
+                    aria-label={`${option.name} — ${option.description}`}
+                    className={cn(
+                      "flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-1 text-left text-[12px] hover:bg-hover",
+                      option.mode === approvalMode.mode
+                        ? "text-ink"
+                        : "text-ink-muted",
+                    )}
+                  >
+                    <span className="flex w-3.5 shrink-0 items-center justify-center">
+                      {option.mode === "auto" ? (
+                        <Lightning size={12} weight="thin" />
+                      ) : (
+                        <HandPalm size={12} weight="thin" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {option.name}
+                    </span>
+                    {option.mode === approvalMode.mode && (
+                      <Check
+                        size={12}
+                        weight="bold"
+                        className="shrink-0 text-brand-strong"
+                      />
+                    )}
+                  </button>
+                </Popover.Close>
+              ))}
+              {approvalMode.overridden && (
+                <Popover.Close asChild>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onMouseDown={preventMouseFocus}
+                    onClick={approvalMode.onRestoreDefault}
+                    className="flex w-full items-center rounded-sm px-2.5 py-1 text-left text-[10.5px] leading-[1.4] text-ink-muted/70 hover:bg-hover hover:text-ink-soft"
+                  >
+                    <span>
+                      {modeCopy.overriddenScope} · {modeCopy.restoreDefault}
+                    </span>
+                  </button>
+                </Popover.Close>
+              )}
+            </div>
+          )}
+          {/* Footer: settings deep-links, one per config domain. Both
+              carry Gear — at this layer the icon means "go to
+              Settings", not the domain itself (mode icons above would
+              collide with the option rows). */}
+          {onConfigureModels || approvalMode?.onOpenApprovalSettings ? (
             <div className="mt-1 border-t border-line/60 px-1.5 pb-1 pt-1">
-              <Popover.Close asChild>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onMouseDown={preventMouseFocus}
-                  onClick={onConfigureModels}
-                  className={cn(
-                    "flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
-                    "hover:bg-hover hover:text-ink-soft",
-                  )}
-                >
-                  <Gear size={11} weight="thin" className="shrink-0" />
-                  <span>{copy.composer.configureModels}</span>
-                </button>
-              </Popover.Close>
+              {onConfigureModels && (
+                <Popover.Close asChild>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onMouseDown={preventMouseFocus}
+                    onClick={onConfigureModels}
+                    className={cn(
+                      "flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
+                      "hover:bg-hover hover:text-ink-soft",
+                    )}
+                  >
+                    <Gear size={11} weight="thin" className="shrink-0" />
+                    <span>{copy.composer.configureModels}</span>
+                  </button>
+                </Popover.Close>
+              )}
+              {approvalMode?.onOpenApprovalSettings && (
+                <Popover.Close asChild>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onMouseDown={preventMouseFocus}
+                    onClick={approvalMode.onOpenApprovalSettings}
+                    className={cn(
+                      "flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
+                      "hover:bg-hover hover:text-ink-soft",
+                    )}
+                  >
+                    <Gear size={11} weight="thin" className="shrink-0" />
+                    <span>{modeCopy.approvalSettings}</span>
+                  </button>
+                </Popover.Close>
+              )}
+              {!onConfigureModels && (
+                <div className="px-1.5 pb-0.5 pt-1 text-[10.5px] leading-[1.45] text-ink-muted/70">
+                  {footerHint}
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-1 border-t border-line/60 px-2.5 pb-1 pt-1.5 text-[10.5px] leading-[1.45] text-ink-muted/70">

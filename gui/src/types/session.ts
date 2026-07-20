@@ -109,6 +109,13 @@ export interface Session {
   pinned?: boolean;
 
   /**
+   * Per-session approval-mode override ("auto" | "approval").
+   * null / undefined = follow the app-wide default. See
+   * lib/approval-mode.ts for the effective-mode resolution rule.
+   */
+  approvalMode?: "auto" | "approval" | null;
+
+  /**
    * Last LLM index reported by the runtime. Kept for bridge command
    * compatibility and old rows; restore logic prefers `selectedLlmKey`
    * because indexes drift when model order changes.

@@ -121,6 +121,15 @@ refactor-execution rules (I1, I2, I4, I7, I8, I10) live in the
   Never skip, reuse, or edit a shipped migration — dogfood databases have
   already run that number, and editing it makes the two sides drift. A wrong
   migration is fixed by adding a new one on top.
+  **Adding the `.sql` file is not enough** — the runtime does not scan the
+  directory. A new migration must also be registered in BOTH runtime lists:
+  the `Migration` vec in `core/src/lib.rs` and `MIGRATION_SPECS` in
+  `core/src/migration_backup.rs` (plus its latest-version test assertions),
+  or the shipped app silently never applies it and every query touching the
+  new column fails (2026-07-20: sidebar went empty in dogfood exactly this
+  way). Test fixtures keep their own per-file migration lists
+  (`core/tests/*.rs`, `cli/tests/*.rs`) — extend the ones whose tables you
+  touched.
 - **I5 — API surface single source of truth.** The Rust `GalleyApi` trait is
   the only definition of commands. Both transports (Tauri command, socket)
   thin-wrap it. No command may exist on only one transport, and no business

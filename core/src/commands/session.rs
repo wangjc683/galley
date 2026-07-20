@@ -97,6 +97,19 @@ pub(crate) async fn set_session_pinned(
 }
 
 #[tauri::command]
+pub(crate) async fn set_session_approval_mode(
+    galley: State<'_, SqliteGalley>,
+    id: SessionId,
+    mode: Option<String>,
+    origin: Origin,
+) -> std::result::Result<SessionBrief, String> {
+    galley
+        .set_session_approval_mode(id, mode, origin)
+        .await
+        .map_err(stringify_error)
+}
+
+#[tauri::command]
 pub(crate) async fn delete_session(
     galley: State<'_, SqliteGalley>,
     id: SessionId,

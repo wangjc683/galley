@@ -115,6 +115,7 @@ fn test_session(id: &str) -> SessionBrief {
         ga_runtime_kind: RuntimeKind::Managed,
         ga_runtime_id: None,
         prompt_profile: None,
+        approval_mode: None,
     }
 }
 

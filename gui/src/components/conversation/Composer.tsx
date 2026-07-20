@@ -20,6 +20,7 @@ import { GoalConfirmDialog } from "@/components/conversation/GoalConfirmDialog";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
 import {
   LLMPill,
+  type ComposerApprovalModeState,
   type ComposerLLMOption,
 } from "@/components/conversation/LLMPill";
 import { SavedPromptControl } from "@/components/conversation/SavedPromptControl";
@@ -51,6 +52,7 @@ import type { PendingImageAttachment } from "@/types/conversation";
 import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
 
 export type { ComposerLLMOption };
+export type { ComposerApprovalModeState };
 
 /**
  * Imperative handle exposed via `ref` on Composer. Lets callers
@@ -151,6 +153,9 @@ export interface ComposerProps {
    * provided. Today the only caller using this path is the dev-toggle
    * harness; production wires `llms` + `onSelectLLM`. */
   onOpenLLMSwitcher?: () => void;
+  /** Approval-mode pill state (自动执行 / 逐步审批). Undefined hides
+   * the pill (e.g. dev harness without session context). */
+  approvalMode?: ComposerApprovalModeState;
   /** Active Goal in this Composer's Project context, if any. */
   goal?: GoalBrief;
   /** True when a Goal is active anywhere. Galley runs at most one Goal at a
@@ -217,6 +222,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onConfigureModels,
       requiresModelConfig = false,
       onOpenLLMSwitcher,
+      approvalMode,
       goal,
       hasActiveGoal = false,
       goalProjectName,
@@ -701,6 +707,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               llmConfigHint={llmConfigHint}
               onConfigureModels={onConfigureModels}
               onOpenLLMSwitcher={onOpenLLMSwitcher}
+              approvalMode={approvalMode}
               disabled={disabled || stopMode}
               stopMode={stopMode}
             />

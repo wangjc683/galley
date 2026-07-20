@@ -22,6 +22,7 @@ pub(super) struct SessionRow {
     pub(super) ga_runtime_kind: String,
     pub(super) ga_runtime_id: Option<String>,
     pub(super) prompt_profile: Option<String>,
+    pub(super) approval_mode: Option<String>,
 }
 
 impl SessionRow {
@@ -66,6 +67,7 @@ impl SessionRow {
             ga_runtime_kind: runtime_kind,
             ga_runtime_id: self.ga_runtime_id,
             prompt_profile: self.prompt_profile,
+            approval_mode: self.approval_mode,
         })
     }
 }
