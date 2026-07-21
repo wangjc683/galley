@@ -268,6 +268,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [题词可点击：装饰成为第一条消息的入口](./2026-07-21-epigraph-click-to-ask.md) — 空状态题词点击预填解读请求进 Composer（Enter 才发），装饰自身成零打字提问入口
 - [Question Rail：门槛降到 1，间距保持等比映射](./2026-07-21-question-rail-threshold.md) — rail 门槛 3→1（索引 vs 跳转锚双职能），dot 间距保持等比映射不紧凑化
 - [Plan Mode 可视化：GUI 只观察，不做入口](./2026-07-21-plan-mode-visibility.md) — GUI 只观察不做入口：bridge 每 turn_end plan_watch 只读探测发 plan_update，薄条显计划步骤
+- [回复完成通知：只通知 GUI 发起的 run](./2026-07-21-reply-done-notification.md) — replyDone 通知 pending 标记方案，Goal/CLI run 静默，macOS dev 模式通知路由终端坑
 
 ## 格式约定
 
