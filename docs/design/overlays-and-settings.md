@@ -288,8 +288,9 @@ Control Indicator）。
   - 右侧共享 `SegmentedControl` 两段：「自动执行 / 逐步审批」（段名复用
     `copy.composer.approvalMode`，与 Composer pill 用词强一致）。
   - 逐步审批 → 自动执行触发 confirm modal（见下）；反向直接生效。
-  - 会话级控件在 Composer 审批模式 pill（conversation.md §4.4）；改默认
-    只影响未覆盖的会话，已覆盖会话钉住不动。
+  - 会话级控件在 Composer LLM pill 的 popover（审批模式并入其中，无独立
+    pill，conversation.md §4.4）；改默认只影响未覆盖的会话，已覆盖会话
+    钉住不动。
 - **需要审批的工具**：复选列表（默认 `code_run` / `file_write` /
   `file_patch` / `start_long_term_update`），用户可勾选。**常显可编辑,
   不再因默认为自动执行而置灰**——规则作用于任何处于「逐步审批」的会话。

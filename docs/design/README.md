@@ -21,7 +21,7 @@
 | 主题（原章节） | 文件 | 内容 |
 |---|---|---|
 | 设计哲学与 Tokens（§1–§2） | [foundations.md](./foundations.md) | 设计哲学、源头分级；色板 / dark theme、typography scale、icon、圆角阴影、UI primitives、WebView discipline、动效分类 |
-| 整体布局与窗口 Chrome（§3–§4.2） | [layout-and-chrome.md](./layout-and-chrome.md) | 两栏布局；SidebarHeader / MainHeader、YOLO / Browser Control indicator；Sidebar 结构、Session Row、Project 行 |
+| 整体布局与窗口 Chrome（§3–§4.2） | [layout-and-chrome.md](./layout-and-chrome.md) | 两栏布局；SidebarHeader / MainHeader、Browser Control / Channels indicator；Sidebar 结构、Session Row、Project 行 |
 | Conversation 主区与 Composer（§4.3–§4.4、§7） | [conversation.md](./conversation.md) | turn 结构、Goal 章节框、Markdown / 代码块渲染、滚动与流式行为、Message Actions、Composer、Empty State |
 | Tool Callout 与审批（§4.5–§4.7） | [tools-and-approvals.md](./tools-and-approvals.md) | Tool Event Callout 状态映射、Approval Dock / Card、工具特定渲染（diff 等）、Inspector 退役记录 |
 | Onboarding 与卡片家族（§5–§6） | [onboarding-and-cards.md](./onboarding-and-cards.md) | Onboarding 流程、Attach / Health Check、Error Card、overlay 层级、首次失败 hint 系统 |

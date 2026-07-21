@@ -416,7 +416,7 @@ Settings → Agent → "安装 galley 命令" 按钮：
 
 - 静态：什么都不在跑
 - 带数字 badge：N 个 active session
-- 不做 approval 红点（v0.1 已经接受 YOLO 默认，supervisor 场景下 approval 不是主线）
+- 不做 approval 红点（v0.1 已经接受自动执行（原 YOLO）默认，supervisor 场景下 approval 不是主线）
 
 ### 13.3 Menubar 下拉菜单
 

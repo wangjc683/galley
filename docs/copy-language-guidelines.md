@@ -152,7 +152,7 @@ About
 | `CLI`、`API`、`MCP`、`Socket`、`schemaVersion` | 协议 / 契约词，保留 |
 | `Python` | 保留 |
 | `API Key` | 字段名可保留；正文可说「密钥」 |
-| `YOLO` | 模式名，保留 |
+| `YOLO` | 仅内部标识符（wire `set_yolo_mode`、prefs key），**不再出现在用户可见文案**；用户侧模式名为「自动执行 / 逐步审批」（2026-07-20 更名，见 devlog） |
 | `LLM` | 紧凑控件可保留；正文优先说「模型」或「大语言模型」 |
 | 模型 / 服务品牌 | OpenAI、Anthropic、Claude、GPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、Xiaomi MiMo 等保留 |
 | `galley` | 命令名，保留并用 inline code |

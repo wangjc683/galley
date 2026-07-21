@@ -102,7 +102,7 @@ export interface MainHeaderProps {
  * Layout — title left-aligned against the column's left gutter, the
  * action cluster pinned right, and draggable empty space between them.
  * The right group is split into two child clusters:
- *   - TopBarStatusCluster — state-of-the-world badges (YOLO / Goal /
+ *   - TopBarStatusCluster — state-of-the-world badges (Goal /
  *     Browser Control / Channels), gated on `hasTopBarStatusItems`.
  *   - TopBarUtilityCluster — always-on view tools (width / font / theme
  *     / Settings).

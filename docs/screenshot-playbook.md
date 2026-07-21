@@ -9,9 +9,9 @@
 
 - **样板间，不是造假**：内容可以精心布置（行业惯例），但画面里的每个
   任务必须是 Galley 真能跑出来的。展示做不到的事 = 越线。
-- **YOLO 是默认姿态**：不拍审批 dock；hero 的 TopBar 上 YOLO 徽标自然
-  在场（这就是产品的默认形态，诚实）。透明性叙事由画面主体的工具时间线
-  免费承担。
+- **自动执行是默认姿态**：不拍审批 dock；composer 的 LLM pill 自带 ⚡
+  自动执行图标（这就是产品的默认形态，诚实；TopBar 无审批徽章——已于
+  2026-07-20 退役）。透明性叙事由画面主体的工具时间线免费承担。
 - **内容反映定位**：非 coding 主导的知识工作任务为主体，最多一条 dev
   向会话（supervisor 徽标那条）。「维特根斯坦哲学与 LLM」项目作为致敬
   彩蛋延续自旧截图。
@@ -83,7 +83,7 @@ mv "$HOME/Library/Application Support/app.galley"{.real,}
 关键词布点：「整理」出现在 3 条标题（⌘K 场景直接搜「整理」；en 套搜
 "review"，同样 3 条命中）。
 
-不种：error / cancelled 状态（README 场景无需）、审批态（YOLO 默认）、
+不种：error / cancelled 状态（README 场景无需）、审批态（自动执行默认）、
 附件与图片消息（seed 复杂度不值）、「等你回复」态（不可种，见上）。
 
 **拍摄纪律**：不要点开 running 种子行（点开会派生回 idle）；不要点开
@@ -102,7 +102,7 @@ feedback*（supervisor）/ *Book club prep: venue, reading list, invites*
 
 | # | 文件 | 画面 | 必须入镜 |
 |---|---|---|---|
-| 1 | `01-hero.png` | MainView 主对话，hero 任务跑到中段（第 5–8 步，结论未出即可） | 用户消息杏沙锚点；步序号 + 单行 thinking 摘要；≥3 次工具调用且 ≥2 种（web_scan / web_execute_js / update_working_checkpoint）；「工作中 + 秒数」徽标；TopBar YOLO 徽标；composer `/btw` 占位文案；sidebar 满员多状态（置顶、running×2、未读实心点、supervisor 徽标、本周分组） |
+| 1 | `01-hero.png` | MainView 主对话，hero 任务跑到中段（第 5–8 步，结论未出即可） | 用户消息杏沙锚点；步序号 + 单行 thinking 摘要；≥3 次工具调用且 ≥2 种（web_scan / web_execute_js / update_working_checkpoint）；「工作中 + 秒数」徽标；composer LLM pill（⚡ 自动执行图标 + 模型名）；composer `/btw` 占位文案；sidebar 满员多状态（置顶、running×2、未读实心点、supervisor 徽标、本周分组） |
 | 2 | `02-projects.png` | 项目视图：活跃项目展开 + 项目感知输入框 | 「退出项目视图」头部；活跃项目展开（running「思考中」+ 已完成同框）；第二个项目收起在列；输入框占位「在 <项目> 里交代什么？」+ 底部「将创建到 <项目>」提示 |
 | 3 | `03-search.png` | ⌘K 命令面板，已输入「整理」（en: "review"） | ≥3 条命中（标题与对话内容两类结果都出现）；浮层 + 半透明遮罩构图 |
 | 4 | `04-empty.png` | 新对话空状态：「安静待命的工作区」 | 空主区 + 居中 composer（题词占位文案入镜）；sidebar 满员多状态与场景 1 同源 |

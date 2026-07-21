@@ -630,7 +630,12 @@ bridge 在 `tool_call_pending` 之前先查这两个列表，命中则跳过审�
 
 ### 5.7 `set_yolo_mode`
 
-打开或关闭 YOLO mode（PRD §11.5）。可在任意时刻调用，立即生效。
+打开或关闭自动执行模式。可在任意时刻调用，立即生效。
+
+> 命名注记：`yolo` 仅为 wire / 内部标识符（契约稳定，不随文案改）。用户侧
+> 自 2026-07-20 起称「自动执行 / 逐步审批」，per-session 覆盖 + app 级默认
+> （sessions 表 `approval_mode` 列；desktop 控件为 Composer LLM pill 的
+> popover，无独立控件、无 TopBar 徽章）。见 devlog 2026-07-20。
 
 ```json
 {
@@ -641,9 +646,9 @@ bridge 在 `tool_call_pending` 之前先查这两个列表，命中则跳过审�
 
 bridge 收到后更新 `SessionState.yolo_mode`。下一个 tool dispatch 时 `WorkbenchHandler.needs_approval` 第一行检查此 flag——为真则直接放行（不 emit `tool_call_pending`，仍 emit `tool_call_start` / `tool_call_end`）。
 
-**spawn 后同步**：bridge 默认 `yolo_mode = false`。desktop 在收到 `ready` 事件时如果当前 store 的 `yoloMode = true`，立即 `set_yolo_mode { enabled: true }` 同步给 bridge。命令队列保证 spawn 后第一个 user message 之前 yolo state 已生效。
+**spawn 后同步**：bridge 默认 `yolo_mode = false`（逐步审批）。desktop 在收到 `ready` 事件时解析该会话的有效审批模式（per-session 覆盖值，否则 app 级默认，`effectiveApprovalMode`），若为自动执行则立即 `set_yolo_mode { enabled: true }` 同步给 bridge。命令队列保证 spawn 后第一个 user message 之前模式已生效。失败方向安全：同步丢失时 bridge 停留在逐步审批（多弹审批，绝不少弹）。
 
-**与 always_allow 的关系**：YOLO 是上位优先级——开启时 `always_allow_global` / `always_allow_project` 列表不再起作用（也无意义，反正全跳）。bridge 在 `needs_approval` 中先检查 yolo，再依次检查 approval_tools / always_allow。两个 state 独立，关 YOLO 不会清空 always_allow。
+**与 always_allow 的关系**：自动执行是上位优先级——开启时 `always_allow_global` / `always_allow_project` 列表不再起作用（也无意义，反正全跳）。bridge 在 `needs_approval` 中先检查 yolo flag，再依次检查 approval_tools / always_allow。两个 state 独立，切回逐步审批不会清空 always_allow。
 
 ### 5.8 `set_llm`
 

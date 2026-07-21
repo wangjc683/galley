@@ -2,9 +2,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * Shared visual vocabulary for the MainHeader status cluster — the
- * text-badge status indicators (YOLO / Goal / Channels / Browser
- * Control) all key off the same tone map so a colour or motion tweak
- * lands in one place instead of drifting across four call sites.
+ * text-badge status indicators (Goal / Channels / Browser Control)
+ * all key off the same tone map so a colour or motion tweak lands in
+ * one place instead of drifting across the call sites.
  *
  * Icon-form indicators use TopBarIconButton instead; this module is
  * only the text-badge track.

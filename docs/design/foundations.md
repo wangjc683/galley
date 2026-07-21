@@ -90,7 +90,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | `--color-brand-tint` | `bg-brand-tint` | `#F1DECE` | 比 brand-soft 更实的杏沙 band，用作用户消息底（长对话滚动可扫） |
 | `--color-brand-strong` | `bg-brand-strong` / `text-brand-strong` | `#C68762` | 杏沙 hover/active；当前 step 状态 icon、Submit hover |
 | `--color-success` | `text-success` / `bg-success` | `#5A8C5A` | 成功状态 line icon |
-| `--color-warning` | `text-warning` / `bg-warning` | `#BF7A1F` | 深琥珀 warning（与杏沙拉开 13° 色相）。**只表示警示 / 注意**（YOLO、Stop、审批待处理、Browser Control 待连接），不作功能身份色——Goal 等功能用品牌杏沙，避免稀释琥珀的警示力 |
+| `--color-warning` | `text-warning` / `bg-warning` | `#BF7A1F` | 深琥珀 warning（与杏沙拉开 13° 色相）。**只表示警示 / 注意**（自动执行确认、Stop、审批待处理、Browser Control 待连接），不作功能身份色——Goal 等功能用品牌杏沙，避免稀释琥珀的警示力 |
 | `--color-error` | `text-error` / `bg-error` | `#B14545` | 深红 |
 | `--color-info` | `text-info` / `bg-info` | `#7A7A8E` | muted 灰蓝（info severity） |
 

@@ -121,7 +121,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] Managed GA: first user message reaches GA (no spawn errors)
 - [ ] External GA: first user message uses the Python selected by onboarding / runtime probe
 - [ ] LLM streaming visible
-- [ ] Tool approval modal works (if YOLO mode is off; default is on)
+- [ ] Tool approval modal works (switch the session to 逐步审批 via the composer LLM pill; default is 自动执行)
 - [ ] Conversation persists after app restart
 
 ### Settings / runtime

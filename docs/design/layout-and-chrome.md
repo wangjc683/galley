@@ -1,6 +1,6 @@
 # 整体布局与窗口 Chrome
 
-> Galley 设计系统 · 原 DESIGN.md §3–§4.2（2026-07-04 拆分）：两栏布局、SidebarHeader / MainHeader、YOLO / Browser Control indicator、Sidebar 结构、Session Row、Project 行。
+> Galley 设计系统 · 原 DESIGN.md §3–§4.2（2026-07-04 拆分）：两栏布局、SidebarHeader / MainHeader、Browser Control / Channels indicator、Sidebar 结构、Session Row、Project 行。
 
 ## 3. 整体布局
 
@@ -44,7 +44,7 @@
 - session title 左对齐贴 main 栏左 gutter（**不对齐居中的对话列**——对话列宽随 compact/wide 变，对齐它会让标题左右跳）。title 属于「当前对话」，放在对话区上方、视线最先到达处。本栏左侧无 OS chrome 保留区。
 - **Session title menu**：有 active session 时 title + `CaretDown` 是一个按钮，打开 session-scoped 菜单（Rename / Reinject Tools / Desktop Pet）。空状态渲染 italic muted "新对话"，不可点。Rename 进入 inline edit（Enter 提交 / Esc 取消）。
 - 右：两个清晰 group，最后才是 Windows window controls（不属于工具簇）：
-  - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ Browser Control → Channels。（2026-07-20：原列首的 YOLO 徽章随审批模式 per-session 化退役——审批模式的控件与状态合一，唯一入口是 Composer 的审批模式 pill，见 conversation.md §4.4。）
+  - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ Browser Control → Channels。（2026-07-20：原列首的 YOLO 徽章随审批模式 per-session 化退役——审批模式的控件与状态合一，唯一入口是 Composer 的 LLM pill（审批模式并入其 popover，无独立控件），见 conversation.md §4.4。）
   - **工具簇**（aria label：`视图与设置`）：conversation width toggle（compact / wide）→ 对话字号（`TextAa`，popover + 分段）→ 外观主题（popover + 分段）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。四个按钮共用 `TopBarIconButton`；宽度箭头图标为 14px（其余 16px）是刻意的视觉补偿——横向箭头光学上偏大，缩一档四个按钮才等重。
   - 两组之间用 1px 竖向分隔线；没有任何状态项时不显示状态簇和分隔线。
 - Windows window controls（min / max-restore / close）贴 MainHeader 最右端 = 窗口右上；macOS 不渲染（由左上 overlay traffic light 接管窗口控制）。
@@ -62,8 +62,8 @@
 > 命名注记：组件文件为 `MainHeader.tsx`；其内部 helper（`TopBarStatusCluster` 等）与 i18n 命名空间 `copy.topbar` 保留历史名，仅为限制 churn，不代表仍存在全宽 top bar。下文 Browser Control / Channels indicator 小节中的「TopBar」措辞即指 MainHeader 状态簇。
 
 > 历史注记（2026-07-20）：曾位于状态簇列首的 YOLO Indicator 已退役。审批模式改为
-> per-session（Composer 审批模式 pill 是唯一交互控件，见 conversation.md §4.4；
-> 新会话默认值在 Settings → 审批）。退役理由：默认开启后常亮警示失去警示价值；
+> per-session，且**没有独立控件**——并入 Composer 的 LLM pill 及其 popover
+> （见 conversation.md §4.4；新会话默认值在 Settings → 审批）。退役理由：默认开启后常亮警示失去警示价值；
 > 全局徽章与会话级控件并存会造成作用域混淆。决策记录见 devlog 2026-07-20。
 
 #### Browser Control Indicator

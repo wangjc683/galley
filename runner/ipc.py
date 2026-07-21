@@ -366,13 +366,15 @@ class SetApprovalRulesCommand:
 
 @dataclass
 class SetYoloModeCommand:
-    """Toggle YOLO mode (PRD §11.5).
+    """Toggle 自动执行 (auto-execute) mode. `yolo` survives only as
+    the stable wire identifier — user-facing naming has been
+    自动执行 / 逐步审批 since 2026-07-20, scoped per session with an
+    app-level default (desktop control: the composer LLM pill's
+    popover; no TopBar indicator).
 
     When enabled, every dispatched tool call bypasses the approval
     gate — no `tool_call_pending` is emitted; the tool runs as if
-    every approval were `allow_once`. The desktop is expected to
-    keep the user informed via the persistent TopBar indicator
-    (DESIGN.md §4.1).
+    every approval were `allow_once`.
     """
 
     enabled: bool
