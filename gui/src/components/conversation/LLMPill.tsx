@@ -201,11 +201,22 @@ export function LLMPill({
           align="start"
           side="top"
           sideOffset={6}
+          onOpenAutoFocus={(event) => {
+            // Sibling-popover convention (ThemePreferenceMenu /
+            // ConversationFontSizeMenu): suppress Radix's open
+            // autofocus. Every row here is tabIndex={-1}, so the focus
+            // would land on this container itself and WebKit paints
+            // its default blue ring around the whole popover on
+            // keyboard opens. Focus stays on the pill trigger (which
+            // has its own focus-visible ring); Esc-to-close is
+            // unaffected (Radix listens at the document layer).
+            event.preventDefault();
+          }}
           className={cn(
             // Long model lists scroll instead of outgrowing the
             // viewport (conversation.md §4.4).
             "galley-pop-in z-50 min-w-[200px] max-w-[320px] rounded-md border border-line bg-elevated p-1 shadow-elevated",
-            "max-h-[min(60vh,360px)] overflow-y-auto",
+            "max-h-[min(60vh,360px)] overflow-y-auto outline-none",
           )}
         >
           {stopMode && (
