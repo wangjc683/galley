@@ -407,6 +407,9 @@ export const zhCopy = {
   },
   epigraph: {
     regionLabel: "题词",
+    askAction: "解读这句题词",
+    explainPrompt: (quote: string, cite: string, original: string) =>
+      `${cite}写道：“${quote}”（原文：${original}）\n\n请用平实的语言解释：这句话在说什么？它针对什么问题或立场提出？它与今天的 AI / 大语言模型又有什么关联或启发？`,
   },
   empty: {
     globalPlaceholder: "交代什么？",

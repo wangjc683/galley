@@ -424,6 +424,9 @@ export const enCopy: AppCopy = {
   },
   epigraph: {
     regionLabel: "Epigraph",
+    askAction: "Ask about this epigraph",
+    explainPrompt: (quote: string, cite: string, original: string) =>
+      `${cite}: "${quote}" (original: ${original})\n\nIn plain language: what is this line saying? What problem or position is it responding to? And how does it relate to today's AI / large language models?`,
   },
   empty: {
     globalPlaceholder: "What should Galley do?",

@@ -14,11 +14,16 @@ import {
   conversationTypographyStyle,
   type ConversationFontSize,
 } from "@/lib/conversation-font-size";
+import { readComposerDraft } from "@/lib/composer-draft";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { PendingImageAttachment } from "@/types/conversation";
 import type { GoalLaunchConfig } from "@/types/goal";
+
+/** Shared new-conversation draft key — the Composer parks its draft
+ * here (write-through) and the epigraph click-guard reads it back. */
+const EMPTY_STATE_DRAFT_KEY = "empty-state";
 
 export interface EmptyStateProps {
   llmDisplayName: string;
@@ -137,6 +142,21 @@ export function EmptyState({
     if (focusTick > 0) composerRef.current?.focus();
   }, [focusTick]);
 
+  // Epigraph click → prefill the ready-made question; the user presses
+  // Enter to actually send (agency preserved; degrades through the
+  // normal requiresModelConfig path when no model is set). Guard: never
+  // overwrite a draft the user typed — the draft store is write-through
+  // (saved on every change), so reading it here reflects the live
+  // textarea. Re-clicking over our own prefill is idempotent.
+  const handleAskEpigraph = (question: string) => {
+    const draft = readComposerDraft(EMPTY_STATE_DRAFT_KEY)?.text.trim() ?? "";
+    if (draft !== "" && draft !== question.trim()) {
+      composerRef.current?.focus();
+      return;
+    }
+    composerRef.current?.prefillText(question);
+  };
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col items-center justify-center bg-app px-16 py-12"
@@ -148,7 +168,11 @@ export function EmptyState({
           conversationWidth === "wide" ? "max-w-[1200px]" : "max-w-[560px]",
         )}
       >
-        <Epigraph condition={frozenEpigraphCondition} className="mb-5" />
+        <Epigraph
+          condition={frozenEpigraphCondition}
+          className="mb-5"
+          onAskAbout={handleAskEpigraph}
+        />
 
         <Composer
           ref={composerRef}
@@ -161,7 +185,7 @@ export function EmptyState({
           // One shared new-conversation draft: typing here, glancing at a
           // session, and coming back must not lose the text. Submit hands
           // the text to the new session and drops the parked copy.
-          draftKey="empty-state"
+          draftKey={EMPTY_STATE_DRAFT_KEY}
           autoFocus
           llms={llms}
           onSelectLLM={onSelectLLM}

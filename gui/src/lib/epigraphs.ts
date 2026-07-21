@@ -51,6 +51,16 @@ export interface Epigraph {
   zh: string;
   /** English translation. */
   en: string;
+  /**
+   * Full spelled-out citations for the click-to-ask prefill
+   * (`copy.epigraph.explainPrompt`). The display line keeps the light
+   * `source` form; the prefill needs the expanded one because weaker
+   * models can't reliably expand "PI §43" on their own — attribution
+   * is one of the three things the enriched prompt exists to provide
+   * (attribution / original text / aspect scaffolding).
+   */
+  citeZh: string;
+  citeEn: string;
 }
 
 export interface ResolvedEpigraph {
@@ -58,6 +68,8 @@ export interface ResolvedEpigraph {
   primary: string;
   /** German original. Never empty. */
   de: string;
+  /** Spelled-out citation in the user's software language. */
+  cite: string;
   source: string;
   id: string;
 }
@@ -82,6 +94,8 @@ export const EPIGRAPHS: readonly Epigraph[] = [
     de: "Die Bedeutung eines Wortes ist sein Gebrauch in der Sprache.",
     zh: "语词的意义，在于它在语言中的用法。",
     en: "The meaning of a word is its use in the language.",
+    citeZh: "维特根斯坦《哲学研究》§43",
+    citeEn: "Wittgenstein, Philosophical Investigations §43",
   },
   {
     // quiet: an inhabited practice at rest. The accumulated, idle
@@ -91,6 +105,8 @@ export const EPIGRAPHS: readonly Epigraph[] = [
     de: "Sich eine Sprache vorstellen heißt, sich eine Lebensform vorstellen.",
     zh: "想象一种语言，就是想象一种生活形式。",
     en: "To imagine a language is to imagine a form of life.",
+    citeZh: "维特根斯坦《哲学研究》§19",
+    citeEn: "Wittgenstein, Philosophical Investigations §19",
   },
   {
     // silent: the screen is literally silent (no sessions), so *sagen*
@@ -101,6 +117,8 @@ export const EPIGRAPHS: readonly Epigraph[] = [
     de: "Wovon man nicht sprechen kann, darüber muss man schweigen.",
     zh: "凡不可说的，应当沉默。",
     en: "Whereof one cannot speak, thereof one must be silent.",
+    citeZh: "维特根斯坦《逻辑哲学论》命题 7",
+    citeEn: "Wittgenstein, Tractatus Logico-Philosophicus, proposition 7",
   },
 ];
 
@@ -160,8 +178,14 @@ export function resolveEpigraph(
   // `de` falls back to the primary line only if the original is somehow
   // empty — keeps the secondary line non-empty.
   const de = entry.de.trim().length > 0 ? entry.de : primary;
+  const citePreferred = language === "en-US" ? entry.citeEn : entry.citeZh;
+  const cite =
+    citePreferred.trim() ||
+    entry.citeEn.trim() ||
+    entry.citeZh.trim() ||
+    entry.source;
 
-  return { primary, de, source: entry.source, id: entry.id };
+  return { primary, de, cite, source: entry.source, id: entry.id };
 }
 
 /**
@@ -178,6 +202,8 @@ function assertEpigraphIntegrity(): void {
       de: e.de,
       zh: e.zh,
       en: e.en,
+      citeZh: e.citeZh,
+      citeEn: e.citeEn,
     })) {
       if (value.trim().length === 0) {
         throw new Error(
