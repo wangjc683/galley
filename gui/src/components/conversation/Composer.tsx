@@ -35,6 +35,7 @@ import {
 } from "@/components/conversation/composer-styles";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useBlurOnOutsidePointer } from "@/hooks/useBlurOnOutsidePointer";
+import { useFocusOnWindowFocus } from "@/hooks/useFocusOnWindowFocus";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { usePasteFold } from "@/hooks/usePasteFold";
 import { IMAGE_ACCEPT, type ImageBlockReason } from "@/lib/composer-images";
@@ -322,6 +323,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     // Blur-on-outside-pointer WebView focus workaround (see the hook).
     useBlurOnOutsidePointer(textareaRef, composerRootRef);
+
+    // Regain-focus-to-type: window activation focuses the composer when
+    // nothing else holds focus (see the hook).
+    useFocusOnWindowFocus(textareaRef);
 
     const applyComposerText = useCallback(
       (next: string, options: { clearImagesAfterPrefill?: boolean } = {}) => {
