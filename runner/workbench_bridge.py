@@ -31,7 +31,7 @@ import uuid
 from pathlib import Path
 from typing import IO, Any
 
-from runner import _watchdog, managed_runtime
+from runner import _watchdog, managed_runtime, plan_watch
 from runner.ga_session import GaSession
 from runner.ipc import (
     PROTOCOL_VERSION,
@@ -49,6 +49,7 @@ from runner.ipc import (
     LoadHistoryCommand,
     PetAttachedEvent,
     PetDetachedEvent,
+    PlanUpdateEvent,
     ReadyEvent,
     ReinjectToolsCommand,
     RunCompleteEvent,
@@ -483,6 +484,10 @@ class Bridge:
         self.agent: Any = None
         self.agentmain: Any = None
         self._btw_handler: Any = None
+        # Plan-mode observer (read-only; see runner/plan_watch.py).
+        # Lazy-imports GA's plan_state at first snapshot, after
+        # _setup_ga has put <ga_path>/frontends on sys.path.
+        self._plan_watcher = plan_watch.PlanWatcher()
         # Desktop Pet subprocess handle (when attached). None when not
         # running. Only one pet can be attached at a time per bridge —
         # and effectively globally across all bridges, because the pet
@@ -1136,6 +1141,18 @@ class Bridge:
                     absoluteTurnIndex=self._current_absolute_turn_index(turn),
                 )
             )
+
+            # Plan-mode observation (read-only): emit a plan_update
+            # snapshot when GA's plan state changed this turn. The
+            # watcher owns dedupe + the one-shot `active: false` on
+            # exit; None means nothing to say.
+            plan_payload = self._plan_watcher.snapshot(
+                self.agent, str(response_content or "")
+            )
+            if plan_payload is not None:
+                self._emit(
+                    PlanUpdateEvent(sessionId=self.session_id, **plan_payload)
+                )
 
             # ask_user is an explicit interaction request: emit AskUserEvent
             # so desktop can prompt the user.

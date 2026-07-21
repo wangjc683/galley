@@ -489,6 +489,46 @@ bridge 已终止 pet 子进程 + 解除 `_turn_end_hooks` 中对应 entry。
 - `"side_question"`：`/btw` 答案，黄色 callout（跟 AskUserBubble 同色家族）
 - `"system"`（默认）：catch-all，简单 muted 行
 
+### 4.17 `plan_update`
+
+GA plan mode 状态快照。GA 由模型自主进入 plan mode（`plan_sop.md` →
+`handler.enter_plan_mode(path)`）；Galley 不提供开启入口，只观察。bridge 在每个
+turn_end 时通过 `runner/plan_watch.py` 只读探测（GA `frontends/plan_state.py`
+公开 API + `working['in_plan_mode']`，均为已记录的只读耦合点），状态有变化才
+emit——连续相同快照去重，退出时发一次 `active: false` 收尾事件。
+
+```json
+{
+  "kind": "plan_update",
+  "sessionId": "sess_abc123",
+  "active": true,
+  "placeholder": false,
+  "done": 2,
+  "total": 5,
+  "complete": false,
+  "step": "引入版本化快照结构",
+  "pathHint": "plan_x/plan.md",
+  "items": [
+    { "content": "梳理现有恢复路径", "status": "done" },
+    { "content": "引入版本化快照结构", "status": "open" }
+  ],
+  "timestamp": "..."
+}
+```
+
+字段说明：
+
+- `active`：plan mode 是否活跃。`false` 是一次性收尾信号（GA 在 checklist
+  清零后自动退出），desktop 收到后移除进度条
+- `placeholder`：plan mode 已进入但 plan.md 还没有可解析的 checklist（agent
+  正在写计划）。此时 `total = 0`，desktop 显示 `pathHint` + "制定计划中"
+- `done` / `total` / `complete`：checklist 进度（`[✓]` 数 / 总数 / 是否全完成）
+- `step`：最近一次 `📌 当前步骤：…` 摘要（≤60 字符），可为空
+- `pathHint`：plan 路径末两段（如 `plan_x/plan.md`），不含绝对路径
+- `items`：checklist 条目，`status` 为 `"open" | "done"`，上限 100 条
+
+外部 GA 检出版本没有 `plan_state.py` 时该事件永不发出（功能静默关闭）。
+
 ## 5. Commands (workbench → bridge)
 
 每个命令必有 `kind` 字段。

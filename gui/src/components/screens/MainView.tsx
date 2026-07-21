@@ -17,6 +17,7 @@ import { ConversationSkeleton } from "@/components/conversation/ConversationSkel
 import { GoalRunningTail } from "@/components/conversation/GoalRunMarkers";
 import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
 import { GoalWorkerContextBar } from "@/components/conversation/GoalWorkerContextBar";
+import { PlanContextBar } from "@/components/conversation/PlanContextBar";
 import { StreamingCursor } from "@/components/conversation/LiveIndicators";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
@@ -315,6 +316,12 @@ export function MainView({
         sessionId={activeSessionId}
         onOpenMaster={onOpenSession}
       />
+      {/* Plan-mode progress: renders only while GA reports an active
+          plan (plan_update events; store nulls it on exit). Same
+          above-the-scroll placement rationale as the Goal bar —
+          orientation must survive scroll position during a long
+          plan run. */}
+      <PlanContextBar sessionId={activeSessionId} />
       {/* Scrollable conversation column. Width follows the TopBar
           toggle: 760px (typography sweet spot) by default, 1200px
           in wide mode. Bottom stack matches — see MainViewProps doc

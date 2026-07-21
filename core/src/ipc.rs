@@ -67,6 +67,7 @@ pub enum IpcEvent {
     ToolsReinjected(ToolsReinjectedEvent),
     PetAttached(PetAttachedEvent),
     PetDetached(PetDetachedEvent),
+    PlanUpdate(PlanUpdateEvent),
     SystemMessage(SystemMessageEvent),
 }
 
@@ -91,6 +92,7 @@ impl IpcEvent {
             IpcEvent::ToolsReinjected(e) => &e.session_id,
             IpcEvent::PetAttached(e) => &e.session_id,
             IpcEvent::PetDetached(e) => &e.session_id,
+            IpcEvent::PlanUpdate(e) => &e.session_id,
             IpcEvent::SystemMessage(e) => &e.session_id,
         }
     }
@@ -327,6 +329,32 @@ pub struct PetDetachedEvent {
     pub timestamp: String,
 }
 
+/// Snapshot of GA's plan-mode state (docs/ipc-protocol.md §4.17).
+/// GA enters plan mode by itself; the bridge only observes and emits
+/// on change. Core forwards verbatim — no business logic, no DB write.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanUpdateEvent {
+    pub session_id: String,
+    pub active: bool,
+    #[serde(default)]
+    pub placeholder: bool,
+    #[serde(default)]
+    pub done: i64,
+    #[serde(default)]
+    pub total: i64,
+    #[serde(default)]
+    pub complete: bool,
+    #[serde(default)]
+    pub step: String,
+    #[serde(default)]
+    pub path_hint: String,
+    /// `{content: string, status: "open" | "done"}` entries.
+    #[serde(default)]
+    pub items: Vec<Value>,
+    pub timestamp: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemMessageEvent {
@@ -514,6 +542,41 @@ mod tests {
             assert_eq!(telemetry.context_limit_chars, Some(300000));
         } else {
             panic!("wrong variant");
+        }
+    }
+
+    /// Wire line matches what `runner/ipc.py::PlanUpdateEvent` emits
+    /// (camelCase incl. `pathHint`). Round-trip guard: re-serialization
+    /// must keep the wire names so the TS side reads them.
+    #[test]
+    fn parse_plan_update() {
+        let line = r#"{"kind":"plan_update","sessionId":"s1","active":true,"placeholder":false,"done":2,"total":5,"complete":false,"step":"引入版本化快照结构","pathHint":"plan_x/plan.md","items":[{"content":"梳理现有恢复路径","status":"done"}],"timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(line).expect("parse plan_update");
+        assert_eq!(event.session_id(), "s1");
+        if let IpcEvent::PlanUpdate(p) = event {
+            assert!(p.active);
+            assert_eq!((p.done, p.total), (2, 5));
+            assert_eq!(p.path_hint, "plan_x/plan.md");
+            assert_eq!(p.items.len(), 1);
+            let out = serde_json::to_string(&p).unwrap();
+            assert!(out.contains("\"pathHint\":\"plan_x/plan.md\""), "{out}");
+        } else {
+            panic!("expected PlanUpdate variant");
+        }
+    }
+
+    /// The closing signal is a minimal payload — every field except
+    /// `active`/`timestamp` may rely on `#[serde(default)]`.
+    #[test]
+    fn parse_plan_update_inactive_minimal() {
+        let line = r#"{"kind":"plan_update","sessionId":"s1","active":false,"timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(line).expect("parse minimal");
+        if let IpcEvent::PlanUpdate(p) = event {
+            assert!(!p.active);
+            assert_eq!(p.total, 0);
+            assert!(p.items.is_empty());
+        } else {
+            panic!("expected PlanUpdate variant");
         }
     }
 

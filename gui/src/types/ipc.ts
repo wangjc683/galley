@@ -298,6 +298,35 @@ export interface SystemMessageEvent {
   timestamp: string;
 }
 
+/** One checklist entry parsed out of GA's plan.md. */
+export interface PlanChecklistItem {
+  content: string;
+  status: "open" | "done";
+}
+
+/**
+ * Snapshot of GA's plan-mode state (docs/ipc-protocol.md §4.17). GA
+ * enters plan mode by itself (plan_sop.md → `enter_plan_mode`); the
+ * bridge only observes at turn_end and emits when the snapshot
+ * changed. `active: false` is the one-shot closing signal — desktop
+ * drops the plan bar. `placeholder: true` means plan mode is on but
+ * plan.md has no parseable checklist yet (agent still writing it) —
+ * show `pathHint` instead of a progress count.
+ */
+export interface PlanUpdateEvent {
+  kind: "plan_update";
+  sessionId: string;
+  active: boolean;
+  placeholder: boolean;
+  done: number;
+  total: number;
+  complete: boolean;
+  step: string;
+  pathHint: string;
+  items: PlanChecklistItem[];
+  timestamp: string;
+}
+
 export type IPCEvent =
   | ReadyEvent
   | TurnStartEvent
@@ -315,6 +344,7 @@ export type IPCEvent =
   | ToolsReinjectedEvent
   | PetAttachedEvent
   | PetDetachedEvent
+  | PlanUpdateEvent
   | SystemMessageEvent;
 
 // ---------------- Commands (desktop → bridge) ----------------
