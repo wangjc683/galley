@@ -6,7 +6,7 @@
 - [bridge/workbench_bridge.py:358-365](../../bridge/workbench_bridge.py#L358) `_setup_ga` 的 `os.chdir` 分支
 - [useAppStore.ts:1406](../../desktop/src/stores/useAppStore.ts#L1406) cwd 注入点（本次改动核心）
 - [CLAUDE.md "Projects V0.1"](../../CLAUDE.md) Stage 3.5 行
-- [docs/devlog/2026-05-13-project-cwd-copy-and-live-sync-deferred.md](./2026-05-13-project-cwd-copy-and-live-sync-deferred.md) —— rootPath 时代最后一次设计 entry，本 entry 把它收掉
+- [cwd live-sync（deferred 台账）](./deferred.md) —— rootPath 时代的设计讨论已并入台账，本 entry 把绑定收掉
 - GA `ga.py:514` `memory_management_sop.md` 加载路径（external · GenericAgent repo）
 
 ## Context
@@ -48,7 +48,7 @@ GA 深度用户的常规工作流是：在 GA 里跑工具时用绝对路径（�
 
 落地方案 3。理由：
 - 比方案 1 更明确——cwd injection 那一行字面改了，不是靠"UI 没入口所以没人触发"的依赖关系
-- 比方案 2 更可逆——legacy 用户 DB 里残留的 rootPath 字符串作为「曾经的设置」保留下来，未来通过 IPC `set_cwd` 真正实现 live-sync 时（[deferred entry](./2026-05-13-project-cwd-copy-and-live-sync-deferred.md) 已有讨论）数据是现成的
+- 比方案 2 更可逆——legacy 用户 DB 里残留的 rootPath 字符串作为「曾经的设置」保留下来，未来通过 IPC `set_cwd` 真正实现 live-sync 时（[deferred entry](./deferred.md) 已有讨论）数据是现成的
 - 风险最小——零 migration、零 schema 变化、零 DB 写路径变化
 
 ### 落地清单（按文件）
@@ -89,7 +89,7 @@ Stage 3.5 行末追加一个 strikethrough note，标注 rootPath / CWD binding 
 让 bridge `os.chdir(project rootPath)`，但用 monkey-patch 把 `./memory/...` 解析改成相对 GA 安装目录。否决：违反项目宪法「不 monkey-patch GA 工具实现」，且每次 GA 升级都得重新审计 patch 是否还生效，**脆**。
 
 ### 给 bridge 加 IPC `set_cwd` 然后保持 rootPath 入口
-让 bridge 启动时仍然 `os.chdir(ga_path)`，project 第一轮通过 IPC 通知 GA `cd` 进 rootPath。否决：300+ 行工程，需要给 GA agent 注入特殊指令，复杂度远超「干脆不绑」。这条路径是 [2026-05-13 deferred entry](./2026-05-13-project-cwd-copy-and-live-sync-deferred.md) 里假设的"如果将来真痛"再做的方案——证据上看现在还没"真痛"，但已经"真坏"了，先把"真坏"的部分先关掉再说。
+让 bridge 启动时仍然 `os.chdir(ga_path)`，project 第一轮通过 IPC 通知 GA `cd` 进 rootPath。否决：300+ 行工程，需要给 GA agent 注入特殊指令，复杂度远超「干脆不绑」。这条路径是 [2026-05-13 deferred entry](./deferred.md) 里假设的"如果将来真痛"再做的方案——证据上看现在还没"真痛"，但已经"真坏"了，先把"真坏"的部分先关掉再说。
 
 ### 保留 cwd 注入 + 教 agent 用绝对路径访问 memory
 让 agent 收到 system prompt 注入「memory 在 /abs/path 下」。否决：每次会话开头要塞这段、agent 仍可能忘、且不解决 ga.py 内部硬编码 `./memory/...` 的代码路径。
@@ -99,7 +99,7 @@ Stage 3.5 行末追加一个 strikethrough note，标注 rootPath / CWD binding 
 
 ## Open questions
 
-- **将来如果要回来做 cwd 绑定，正确路径是 IPC `set_cwd`**（参见 [2026-05-13 deferred entry](./2026-05-13-project-cwd-copy-and-live-sync-deferred.md) 里写的方案）。本次 rollback 不挡这条路——DB column 还在、类型字段还在，加 IPC 就能 wire 回来。
+- **将来如果要回来做 cwd 绑定，正确路径是 IPC `set_cwd`**（参见 [2026-05-13 deferred entry](./deferred.md) 里写的方案）。本次 rollback 不挡这条路——DB column 还在、类型字段还在，加 IPC 就能 wire 回来。
 - **GA 闲时自主功能**：依赖 GA SOP 文件可达，现在解决了。但 V0.1 还是按上一轮讨论的结论 deferred 到 V0.2（YOLO 已就绪不再是 blocker，但 demand 信号还没强到要做）。
 - **CLAUDE.md 项目宪法读取分级章节** 没有再次受影响——这次改的是 Galley 自己的代码，没有触碰 GA。
 
