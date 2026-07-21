@@ -35,7 +35,14 @@ import type { Turn } from "@/types/conversation";
  * cluster marker; hovering that marker expands a local list so detail
  * remains available without turning the rail into visual noise.
  *
- * Hidden under 3 user-msgs — short conversations don't need an index.
+ * Shown from the FIRST user message (2026-07-21; was hidden under 3).
+ * The rail has two jobs, not one: a question *index* (meaningful from
+ * ~3 questions) and a jump-back *anchor* to the start of a question
+ * (meaningful from question one — the deep-research pattern is one
+ * question, a several-thousand-word answer, and no fast way back up).
+ * The old threshold was set for the first job and starved the second;
+ * a single dot is a barely-there anchor that stays consistent with
+ * what long conversations already taught the user.
  *
  * Anchored DOM: queries `[data-role="user-msg"]` from the passed
  * scroll container ref. That selector is the same stable hook
@@ -44,7 +51,7 @@ import type { Turn } from "@/types/conversation";
  * `role === "user"` turns in the `turns` array, so indices align 1:1.
  */
 const TOP_PADDING = 32;
-const MIN_USER_MSGS_TO_SHOW = 3;
+const MIN_USER_MSGS_TO_SHOW = 1;
 const PREVIEW_CHARS = 50;
 const RAIL_VERTICAL_INSET_PX = 24;
 const DENSE_DOT_GAP_PX = 14;

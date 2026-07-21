@@ -35,9 +35,9 @@
 
 #### Right Question Rail
 
-主区右侧 rail 的首要职责是 **question index**：一颗 dot / 一段 cluster marker 对应一次或一组 user message，用来回跳提问。它不是第二个 Sidebar，也不是 session 状态队列。
+主区右侧 rail 的职责有两个：**question index**（一颗 dot / 一段 cluster marker 对应一次或一组 user message，多问题间回跳）和**回到提问开头的跳转锚**（单问题即成立）。它不是第二个 Sidebar，也不是 session 状态队列。
 
-- 少于 3 条 user message 时隐藏；3 条以上显示为右侧细 spine + dots / dense cluster。
+- 自第 1 条 user message 起显示（2026-07-21 起；原门槛"少于 3 条隐藏"按 index 职能设定，误伤了锚职能——深度研究型对话恰是一问 + 数千字长回答，最需要回跳时 rail 缺席。单点 rail 不再是索引，但作为锚成立，且与长对话中已学会的交互完全一致）。键盘路径 ⌥↑/⌥↓ 与对话长度无关，始终可用。
 - 历史 dots 永远只表达导航位置：active = brand filled，inactive = hollow ring，cluster = vertical capsule。
 - 只有最新 tail marker 可以临时承载 live 状态：running 时 single dot 替换为 Sidebar 同源的 brand `CircleNotch` spinner；waiting（approval / ask_user 合并）时替换为 warning `PauseCircle`。状态结束后恢复普通 dot / cluster。
 - 最新提问落在 dense cluster 里时，保留 cluster capsule 和 hover list，再叠加同源状态图标；不能让状态图标吞掉“这里是一组提问”的导航语义。
