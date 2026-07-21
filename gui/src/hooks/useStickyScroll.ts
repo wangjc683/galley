@@ -6,6 +6,10 @@ import {
   useState,
 } from "react";
 
+import {
+  USER_MSG_ANCHOR_TOLERANCE_PX,
+  USER_MSG_ANCHOR_TOP_PX,
+} from "@/lib/conversation-anchor";
 import type { PendingApproval, PendingAskUser } from "@/types/conversation";
 
 /**
@@ -167,8 +171,7 @@ export function useStickyScroll({
 
     const containerRect = container.getBoundingClientRect();
     const targetTop = target.getBoundingClientRect().top;
-    const TOP_PADDING = 32;
-    const delta = targetTop - containerRect.top - TOP_PADDING;
+    const delta = targetTop - containerRect.top - USER_MSG_ANCHOR_TOP_PX;
     container.scrollBy({ top: delta, behavior: "smooth" });
     setAtBottom(false);
 
@@ -279,8 +282,7 @@ export function useStickyScroll({
       if (!last) return;
       const containerRect = container.getBoundingClientRect();
       const targetTop = last.getBoundingClientRect().top;
-      const TOP_PADDING = 32;
-      const delta = targetTop - containerRect.top - TOP_PADDING;
+      const delta = targetTop - containerRect.top - USER_MSG_ANCHOR_TOP_PX;
       if (Math.abs(delta) < 1) return;
       container.scrollBy({ top: delta, behavior: "smooth" });
     });
@@ -319,11 +321,8 @@ export function useStickyScroll({
       if (userMsgs.length === 0) return;
 
       const containerRect = container.getBoundingClientRect();
-      const TOP_PADDING = 32;
-      // ±8px tolerance so the message currently parked at ~32px
-      // below container top doesn't count as both "above" and
-      // "below" the cursor when rounding error nudges it.
-      const TOLERANCE = 8;
+      const anchor = USER_MSG_ANCHOR_TOP_PX;
+      const tolerance = USER_MSG_ANCHOR_TOLERANCE_PX;
 
       const tops = userMsgs.map(
         (el) => el.getBoundingClientRect().top - containerRect.top,
@@ -332,11 +331,11 @@ export function useStickyScroll({
       let target: HTMLElement | undefined;
       if (e.key === "ArrowDown") {
         // Next user-msg whose top is below the current anchor line.
-        target = userMsgs.find((_, i) => tops[i] > TOP_PADDING + TOLERANCE);
+        target = userMsgs.find((_, i) => tops[i] > anchor + tolerance);
       } else {
         // Previous user-msg whose top is above the current anchor line.
         for (let i = userMsgs.length - 1; i >= 0; i--) {
-          if (tops[i] < TOP_PADDING - TOLERANCE) {
+          if (tops[i] < anchor - tolerance) {
             target = userMsgs[i];
             break;
           }
@@ -346,7 +345,7 @@ export function useStickyScroll({
 
       e.preventDefault();
       const delta =
-        target.getBoundingClientRect().top - containerRect.top - TOP_PADDING;
+        target.getBoundingClientRect().top - containerRect.top - anchor;
       container.scrollBy({ top: delta, behavior: "smooth" });
     };
 

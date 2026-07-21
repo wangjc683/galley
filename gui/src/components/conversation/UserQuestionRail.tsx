@@ -2,6 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PauseCircle } from "@phosphor-icons/react";
 
 import { useCopy } from "@/lib/i18n";
+import {
+  USER_MSG_ANCHOR_TOLERANCE_PX,
+  USER_MSG_ANCHOR_TOP_PX,
+} from "@/lib/conversation-anchor";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
@@ -22,7 +26,7 @@ import type { Turn } from "@/types/conversation";
  *     rail; clusters of follow-up questions show as adjacent dots.
  *     Mirrors the native scrollbar's position semantics.
  *   - "Active" dot = the topmost user-msg whose top is at or above the
- *     viewport's TOP_PADDING anchor line (matches the same line MainView
+ *     viewport's USER_MSG_ANCHOR_TOP_PX anchor line (matches the same line MainView
  *     uses for submit-snap and ⌥↑/⌥↓).
  *
  * Click jumps to that user-msg via the same scrollBy delta pattern as
@@ -50,7 +54,6 @@ import type { Turn } from "@/types/conversation";
  * userSubmitTick / ⌥↑/⌥↓ scroll math — DOM order matches the order of
  * `role === "user"` turns in the `turns` array, so indices align 1:1.
  */
-const TOP_PADDING = 32;
 const MIN_USER_MSGS_TO_SHOW = 1;
 const PREVIEW_CHARS = 50;
 const RAIL_VERTICAL_INSET_PX = 24;
@@ -59,6 +62,15 @@ const MAX_CLUSTER_SPAN_PX = 34;
 const CLUSTER_MARKER_MIN_H_PX = 12;
 const CLUSTER_MARKER_MAX_H_PX = 26;
 const CLUSTER_CLOSE_DELAY_MS = 300;
+/**
+ * Hover intent gate for the previews (single-dot tooltip + cluster
+ * list). The mouse crosses the rail on its way to the scrollbar / the
+ * scroll-to-bottom button; without a short open delay every pass-over
+ * flashes a preview. Disappearance stays immediate — delay is only on
+ * the way in. Matches the `delay-150` Tailwind class on the preview
+ * elements; keep the two in sync.
+ */
+const HOVER_OPEN_DELAY_MS = 150;
 
 type RailTailStatus = "running" | "waiting";
 
@@ -238,10 +250,12 @@ export function UserQuestionRail({
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const closeTimer = useRef<number | null>(null);
+  const openTimer = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
       if (closeTimer.current) window.clearTimeout(closeTimer.current);
+      if (openTimer.current) window.clearTimeout(openTimer.current);
     };
   }, []);
 
@@ -250,10 +264,20 @@ export function UserQuestionRail({
       window.clearTimeout(closeTimer.current);
       closeTimer.current = null;
     }
-    setOpenItemId(id);
+    if (openTimer.current) window.clearTimeout(openTimer.current);
+    // Delayed to match the CSS hover-intent gate — an instant state
+    // flip here would reveal the list before the delay elapses.
+    openTimer.current = window.setTimeout(() => {
+      setOpenItemId(id);
+      openTimer.current = null;
+    }, HOVER_OPEN_DELAY_MS);
   };
 
   const scheduleCloseCluster = () => {
+    if (openTimer.current) {
+      window.clearTimeout(openTimer.current);
+      openTimer.current = null;
+    }
     if (closeTimer.current) window.clearTimeout(closeTimer.current);
     closeTimer.current = window.setTimeout(() => {
       setOpenItemId(null);
@@ -306,7 +330,7 @@ export function UserQuestionRail({
   }, [scrollContainerRef, userContents]);
 
   // Track which dot is "current" — the most recent user-msg whose
-  // top is at or above the viewport's TOP_PADDING anchor (where
+  // top is at or above the viewport's USER_MSG_ANCHOR_TOP_PX anchor (where
   // MainView parks user-msgs after submit / keyboard nav). Same
   // 8px tolerance as MainView's ⌥↑/⌥↓ math so the boundary feels
   // identical.
@@ -320,7 +344,8 @@ export function UserQuestionRail({
       );
       if (userMsgs.length === 0) return;
       const scrollTop = container.scrollTop;
-      const anchorTop = scrollTop + TOP_PADDING + 8;
+      const anchorTop =
+        scrollTop + USER_MSG_ANCHOR_TOP_PX + USER_MSG_ANCHOR_TOLERANCE_PX;
       const containerTop = container.getBoundingClientRect().top;
       let last = -1;
       userMsgs.forEach((el, i) => {
@@ -349,7 +374,7 @@ export function UserQuestionRail({
     const delta =
       target.getBoundingClientRect().top -
       container.getBoundingClientRect().top -
-      TOP_PADDING;
+      USER_MSG_ANCHOR_TOP_PX;
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -366,7 +391,19 @@ export function UserQuestionRail({
     <div
       role="navigation"
       aria-label={copy.conversation.questionIndex}
-      className="pointer-events-none absolute right-1.5 top-6 bottom-6 z-10 w-5"
+      // right-3 (12px) is the structural maximum for the 20px dot hit
+      // area: 12 + 20 = 32 = the scroll container's px-8 content
+      // gutter, so the hit area fills the gutter without ever shading
+      // the prose column at narrow widths. It also clears Windows'
+      // 10px classic scrollbar lane with margin (globals.css
+      // scrollbar-stable) and roughly halves the overlap with macOS
+      // overlay bars in their hover-expanded state — at the original
+      // right-1.5 the hit area's outer 4px sat over the Windows lane
+      // and clicks aimed at the thumb's edge landed on dots.
+      // Perceptually the extra inset also matters: dots hugging the
+      // window edge read as scrollbar-family chrome; they are a
+      // content index and belong on the content's side of that line.
+      className="pointer-events-none absolute right-3 top-6 bottom-6 z-10 w-5"
     >
       <div className="relative h-full">
         {/* Hairline spine — 1px line-subtle vertical, centered under
@@ -443,9 +480,17 @@ export function UserQuestionRail({
                     )}
                   </button>
                   <span
-                    role="tooltip"
+                    // Visual-only duplicate of the button's aria-label
+                    // + preview; hidden from SR so the question isn't
+                    // announced twice. Hover-intent gate: fades in
+                    // after delay-150 (= HOVER_OPEN_DELAY_MS), hides
+                    // immediately (delay only applies toward the
+                    // hovered state) — a mouse crossing the rail on
+                    // its way to the scrollbar doesn't flash previews.
+                    aria-hidden
                     className={cn(
-                      "pointer-events-none absolute right-full z-10 mr-2 flex max-w-[320px] items-center gap-2 truncate whitespace-nowrap rounded-sm border border-line bg-elevated px-2 py-1 text-[11.5px] text-ink-soft opacity-0 shadow-sm group-hover:opacity-100",
+                      "pointer-events-none absolute right-full z-10 mr-2 flex max-w-[320px] items-center gap-2 truncate whitespace-nowrap rounded-sm border border-line bg-elevated px-2 py-1 text-[11.5px] text-ink-soft shadow-sm",
+                      "opacity-0 transition-opacity duration-(--motion-fast) group-hover:opacity-100 group-hover:delay-150",
                       item.topPercent < 6
                         ? "top-0"
                         : item.topPercent > 94
@@ -530,9 +575,13 @@ export function UserQuestionRail({
                     )}
                     className={cn(
                       "absolute right-full z-10 mr-2 w-max max-w-[min(320px,calc(100vw-80px))] rounded-sm border border-line bg-elevated py-1 text-[11.5px] text-ink-soft shadow-sm",
+                      "transition-opacity duration-(--motion-fast)",
+                      // Same hover-intent gate as the single-dot
+                      // tooltip; the state-driven open path is delayed
+                      // to match (see openCluster).
                       isClusterOpen
                         ? "pointer-events-auto opacity-100"
-                        : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
+                        : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-hover:delay-150",
                       item.topPercent < 18
                         ? "top-0"
                         : item.topPercent > 82

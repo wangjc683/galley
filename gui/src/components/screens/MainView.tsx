@@ -501,7 +501,8 @@ export function MainView({
 
         {/* Right-edge question index — one dot per user-msg, click to
             jump. Sibling of the scroll container (not inside it) so
-            it doesn't scroll with content. Hidden under 3 user-msgs. */}
+            it doesn't scroll with content. Shows from the first
+            user-msg (jump-back anchor role; see UserQuestionRail). */}
         <UserQuestionRail
           turns={turns}
           scrollContainerRef={scrollContainerRef}
