@@ -17,6 +17,7 @@ import { MessageUser } from "@/components/conversation/MessageUser";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { annotateGoalThread } from "@/lib/goal-thread";
+import { extractPlanSteps } from "@/lib/ipc/ga-output-cleaning";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { AgentTurn, Turn } from "@/types/conversation";
@@ -165,10 +166,21 @@ function AgentTurnView({
   const askUserQuestion = turn.tools.find((t) => t.name === "ask_user")
     ?.args?.question;
   const isFinalTurn = visibleTools.every((t) => t.name === "no_tool");
-  const answerText =
-    turn.finalAnswer !== null && turn.finalAnswer.trim() !== ""
-      ? turn.finalAnswer
-      : null;
+  // Plan-mode `📌 当前步骤：…` announcements are engine-mandated
+  // scaffolding (ga.py:614), not prose — extracted here (render time,
+  // so live and restored turns share the path) and demoted into
+  // TurnMarker's structural register instead of shouting as bold
+  // narration between steps.
+  //
+  // Intermediate turns ONLY. The scaffolding appears at reply
+  // openings of plan-mode loop turns; a final answer is the user's
+  // deliverable, and the literal string there (a plan-SOP tutorial,
+  // a quoted example, a code block) is content — mutating it would
+  // corrupt what the user asked for.
+  const { steps: planSteps, rest: answerBody } = isFinalTurn
+    ? { steps: [], rest: turn.finalAnswer ?? "" }
+    : extractPlanSteps(turn.finalAnswer ?? "");
+  const answerText = answerBody.trim() !== "" ? answerBody : null;
   const narrationDuplicatesPreamble =
     !isFinalTurn &&
     normalizedInlineText(answerText) !== "" &&
@@ -185,6 +197,7 @@ function AgentTurnView({
           summary={turn.summary}
           thinkingContent={turn.thinking}
           preamble={detailPreamble}
+          planSteps={planSteps}
         />
       )}
 
@@ -276,6 +289,7 @@ export function TurnMarker({
   liveStatus,
   thinkingContent,
   preamble,
+  planSteps,
 }: {
   /**
    * GA-side step number. Optional because the thinking placeholder
@@ -327,6 +341,15 @@ export function TurnMarker({
    * Ignored when `thinking` (placeholder) is true.
    */
   preamble?: string;
+  /**
+   * Plan-mode step announcements extracted from this turn's narration
+   * (`📌 当前步骤：…`, see extractPlanSteps). Rendered as structural
+   * sublines under the marker row — the per-step record of which plan
+   * item the agent was on, demoted from body prose to the same 12px
+   * register as the marker itself. Usually 0 or 1 entry; catch-up
+   * replies can carry several.
+   */
+  planSteps?: string[];
 }) {
   const copy = useCopy();
   const elapsedSec = useElapsedSeconds(thinking);
@@ -379,6 +402,15 @@ export function TurnMarker({
           />
         )}
       </div>
+      {planSteps?.map((step, i) => (
+        <div
+          key={i}
+          className="-mt-1.5 mb-2.5 flex min-w-0 items-center gap-2 [font-size:var(--conversation-step-size)] text-ink-soft"
+        >
+          <span className="h-2.5 w-px shrink-0 bg-line-strong" aria-hidden />
+          <span className="min-w-0 flex-1 truncate select-text">{step}</span>
+        </div>
+      ))}
       {hasDetail && open && (
         <DetailPanel thinking={thinkingContent} preamble={preamble} />
       )}
