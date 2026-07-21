@@ -2,6 +2,7 @@ import { useCallback } from "react";
 
 import type { AppCopy } from "@/lib/i18n";
 import { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
+import { markReplyNotifyPending } from "@/lib/notify";
 import { logPerf, perfNow } from "@/lib/perf";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -331,6 +332,11 @@ export function useMessageSend({
           absoluteTurnIndex,
         });
       }
+      // Reply-done notification is scoped to runs the user started
+      // from this GUI — mark only after the send actually reached the
+      // bridge. (/btw side questions above stay unmarked: their reply
+      // isn't a main-agent run terminus.)
+      markReplyNotifyPending(sid);
     })().catch(reportSendFailure);
   };
 
@@ -484,6 +490,7 @@ async function submitOnEmpty(
       images: persisted.attachments.map((attachment) => attachment.path),
       absoluteTurnIndex,
     });
+    markReplyNotifyPending(id);
     messages.setSendPhase(id, "sent");
     logPerf("app.submitOnEmpty", submitStartedAt, {
       sessionId: id,

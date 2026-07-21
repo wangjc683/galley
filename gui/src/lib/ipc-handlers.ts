@@ -15,7 +15,11 @@ import {
 import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
-import { sendGatedSystemNotification } from "@/lib/notify";
+import {
+  clearReplyNotifyPending,
+  consumeReplyNotifyPending,
+  sendGatedSystemNotification,
+} from "@/lib/notify";
 import {
   buildAgentTurn,
   isFinalAnswerTurn,
@@ -214,6 +218,9 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       messages.setAgentRunning(event.sessionId, false);
       messages.setCurrentTurnIndex(event.sessionId, null);
       messages.clearInFlightContent(event.sessionId);
+      // A dead run must not leave a reply-notify flag behind — it
+      // would mis-fire on the session's next non-GUI-driven run.
+      clearReplyNotifyPending(event.sessionId);
       return;
     }
 
@@ -269,6 +276,29 @@ export function dispatchIPCEvent(event: IPCEvent): void {
             event.turnIndex,
             event.exitReason != null,
           );
+      }
+      // Reply-done system notification: only for the final turn of a
+      // run the user started from this GUI (`consume` returns false
+      // for Goal-nudge / CLI-driven runs — they never marked). Fires
+      // alongside the unread badge; notify.ts gates pref / focus /
+      // permission so a focused window stays silent.
+      if (
+        event.exitReason != null &&
+        visibility === "visible" &&
+        consumeReplyNotifyPending(event.sessionId)
+      ) {
+        const sessionTitle = useSessionsStore
+          .getState()
+          .sessions.find((s) => s.id === event.sessionId)?.title;
+        void sendGatedSystemNotification("replyDone", {
+          title: currentCopy().sidebar.replyDone,
+          body: sessionTitle
+            ? event.summary
+              ? `${sessionTitle} · ${event.summary}`
+              : sessionTitle
+            : (event.summary ?? ""),
+          throttleKey: `reply:${event.sessionId}`,
+        });
       }
       // SQLite: persist under the ABSOLUTE turn index. rowsToTurns
       // reconstructs the per-message step at restore by tracking
@@ -331,6 +361,9 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       messages.setAgentRunning(event.sessionId, false);
       messages.setCurrentTurnIndex(event.sessionId, null);
       messages.clearInFlightContent(event.sessionId);
+      // Run terminus: the happy path already consumed the flag at the
+      // final turn_end; ABORTED / DENIED exits should not notify.
+      clearReplyNotifyPending(event.sessionId);
       return;
     }
 

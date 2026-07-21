@@ -195,6 +195,8 @@ function App() {
   const setNotifyOnGoalEnd = usePrefsStore((s) => s.setNotifyOnGoalEnd);
   const notifyOnApproval = usePrefsStore((s) => s.notifyOnApproval);
   const setNotifyOnApproval = usePrefsStore((s) => s.setNotifyOnApproval);
+  const notifyOnReplyDone = usePrefsStore((s) => s.notifyOnReplyDone);
+  const setNotifyOnReplyDone = usePrefsStore((s) => s.setNotifyOnReplyDone);
   const keepInBackgroundOnClose = usePrefsStore(
     (s) => s.keepInBackgroundOnClose,
   );
@@ -1080,6 +1082,10 @@ function App() {
         notifyOnApproval={notifyOnApproval}
         onChangeNotifyOnApproval={(enabled) => {
           void setNotifyOnApproval(enabled);
+        }}
+        notifyOnReplyDone={notifyOnReplyDone}
+        onChangeNotifyOnReplyDone={(enabled) => {
+          void setNotifyOnReplyDone(enabled);
         }}
         keepInBackgroundOnClose={keepInBackgroundOnClose}
         onChangeKeepInBackgroundOnClose={(enabled) => {

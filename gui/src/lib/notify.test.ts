@@ -15,7 +15,13 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => windowMocks,
 }));
 
-import { sendGatedSystemNotification, shouldThrottle } from "@/lib/notify";
+import {
+  clearReplyNotifyPending,
+  consumeReplyNotifyPending,
+  markReplyNotifyPending,
+  sendGatedSystemNotification,
+  shouldThrottle,
+} from "@/lib/notify";
 import { usePrefsStore } from "@/stores/prefs";
 import { resetStores } from "@/test/store-reset";
 
@@ -27,6 +33,30 @@ describe("shouldThrottle", () => {
   it("throttles inside the window and releases after it", () => {
     expect(shouldThrottle(1000, 5999, 5000)).toBe(true);
     expect(shouldThrottle(1000, 6000, 5000)).toBe(false);
+  });
+});
+
+describe("reply-notify pending flag", () => {
+  it("consume returns true once per mark, then false", () => {
+    markReplyNotifyPending("s1");
+    expect(consumeReplyNotifyPending("s1")).toBe(true);
+    expect(consumeReplyNotifyPending("s1")).toBe(false);
+  });
+
+  it("unmarked sessions (Goal / CLI-driven runs) never consume", () => {
+    expect(consumeReplyNotifyPending("never-marked")).toBe(false);
+  });
+
+  it("clear drops the flag without consuming", () => {
+    markReplyNotifyPending("s2");
+    clearReplyNotifyPending("s2");
+    expect(consumeReplyNotifyPending("s2")).toBe(false);
+  });
+
+  it("flags are per-session", () => {
+    markReplyNotifyPending("s3");
+    expect(consumeReplyNotifyPending("s4")).toBe(false);
+    expect(consumeReplyNotifyPending("s3")).toBe(true);
   });
 });
 
@@ -60,6 +90,20 @@ describe("sendGatedSystemNotification", () => {
     await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
 
     expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("gates replyDone notifications on the replyDone pref", async () => {
+    usePrefsStore.setState({ notifyOnReplyDone: false });
+
+    await sendGatedSystemNotification("replyDone", { title: "t", body: "b" });
+
+    expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
+
+    usePrefsStore.setState({ notifyOnReplyDone: true });
+
+    await sendGatedSystemNotification("replyDone", { title: "t", body: "b" });
+
+    expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
   });
 
   it("gates approval notifications on the approval pref, not the goal pref", async () => {

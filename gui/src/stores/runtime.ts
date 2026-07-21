@@ -12,6 +12,7 @@ import {
 import { setPref } from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
+import { clearReplyNotifyPending } from "@/lib/notify";
 import { logPerf, perfNow } from "@/lib/perf";
 import {
   DEFAULT_LLM_DISPLAY_NAME,
@@ -518,6 +519,10 @@ function makeBridgeHandlers(sessionId: string): BridgeHandlers {
         },
       }));
       useMessagesStore.getState().clearStreamingOnBridgeClose(sessionId);
+      // This bridge can emit no further turn_end — a pending
+      // reply-notify flag is unfulfillable now and must not survive
+      // into the session's next (possibly non-GUI-driven) run.
+      clearReplyNotifyPending(sessionId);
     },
     onError: (msg) => {
       console.error(`[bridge ${sessionId}] error`, msg);

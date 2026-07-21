@@ -170,6 +170,16 @@ interface PrefsState {
   notifyOnApproval: boolean;
 
   /**
+   * System notification when a run the user started from this GUI
+   * (Composer submit) completes its final turn. Goal- and CLI-driven
+   * runs never notify — the pending flag is only set on GUI submit
+   * (see lib/notify.ts `markReplyNotifyPending`). Same unfocused-only
+   * gating as the other kinds. Persisted to pref
+   * `notify_on_reply_done`.
+   */
+  notifyOnReplyDone: boolean;
+
+  /**
    * Close the window → keep Galley running in the background (tray /
    * menu bar). Default `true` = the historical Background Mode
    * behavior; a missing pref must resolve to the same. When `false`,
@@ -223,6 +233,7 @@ interface PrefsActions {
   // ---- Notifications ----
   setNotifyOnGoalEnd: (enabled: boolean) => Promise<void>;
   setNotifyOnApproval: (enabled: boolean) => Promise<void>;
+  setNotifyOnReplyDone: (enabled: boolean) => Promise<void>;
 
   // ---- App behavior ----
   /**
@@ -285,6 +296,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   themePreference: readCachedThemePreference(),
   notifyOnGoalEnd: true,
   notifyOnApproval: true,
+  notifyOnReplyDone: true,
   keepInBackgroundOnClose: true,
   autoDownloadUpdates: true,
 
@@ -431,6 +443,15 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       await setPref("notify_on_approval", enabled);
     } catch (e) {
       console.warn("[prefs] setNotifyOnApproval: pref persistence failed.", e);
+    }
+  },
+
+  setNotifyOnReplyDone: async (enabled) => {
+    set({ notifyOnReplyDone: enabled });
+    try {
+      await setPref("notify_on_reply_done", enabled);
+    } catch (e) {
+      console.warn("[prefs] setNotifyOnReplyDone: pref persistence failed.", e);
     }
   },
 
@@ -641,6 +662,17 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     } catch (e) {
       console.warn(
         "[prefs] hydratePrefs: notify_on_approval pref load failed.",
+        e,
+      );
+    }
+    try {
+      const notifyReplyDone = await getPref<boolean>("notify_on_reply_done");
+      if (typeof notifyReplyDone === "boolean") {
+        set({ notifyOnReplyDone: notifyReplyDone });
+      }
+    } catch (e) {
+      console.warn(
+        "[prefs] hydratePrefs: notify_on_reply_done pref load failed.",
         e,
       );
     }

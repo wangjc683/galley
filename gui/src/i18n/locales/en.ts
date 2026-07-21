@@ -106,6 +106,7 @@ export const enCopy: AppCopy = {
       `${count} approval${count === 1 ? "" : "s"}`,
     errorBadge: (count) => `${count} error${count === 1 ? "" : "s"}`,
     waitingApproval: "Waiting for approval",
+    replyDone: "Reply finished",
     errored: "Error",
     rename: "Rename",
     pin: "Pin",
@@ -484,12 +485,15 @@ export const enCopy: AppCopy = {
         "Galley starts in the background (menu bar / tray) when you sign in — no window pops up. Connected channels and remote supervision are ready from boot.",
       launchAtLoginError: (detail) => `Could not update launch at login: ${detail}`,
       notificationsSectionTitle: "Notifications",
-      notifyGoalEndTitle: "When a task finishes",
+      notifyGoalEndTitle: "When a goal finishes",
       notifyGoalEndDescription:
         "System notification when a goal completes, fails, or stops while the window is in the background",
       notifyApprovalTitle: "When approval is needed",
       notifyApprovalDescription:
         "System notification when an agent is waiting for a tool approval while the window is in the background",
+      notifyReplyDoneTitle: "When a reply finishes",
+      notifyReplyDoneDescription:
+        "System notification when a conversation you started finishes its reply while the window is in the background",
       notificationsPermissionHint:
         "Notifications are not enabled for Galley. Allow them in system settings to receive these alerts.",
       behaviorSectionTitle: "App behavior",

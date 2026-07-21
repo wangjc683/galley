@@ -57,6 +57,8 @@ export function SettingsGeneral({
   onChangeNotifyOnGoalEnd,
   notifyOnApproval,
   onChangeNotifyOnApproval,
+  notifyOnReplyDone,
+  onChangeNotifyOnReplyDone,
   keepInBackgroundOnClose,
   onChangeKeepInBackgroundOnClose,
   autoDownloadUpdates,
@@ -74,6 +76,8 @@ export function SettingsGeneral({
   onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
   notifyOnApproval: boolean;
   onChangeNotifyOnApproval: (enabled: boolean) => void;
+  notifyOnReplyDone: boolean;
+  onChangeNotifyOnReplyDone: (enabled: boolean) => void;
   keepInBackgroundOnClose: boolean;
   onChangeKeepInBackgroundOnClose: (enabled: boolean) => void;
   autoDownloadUpdates: boolean;
@@ -142,7 +146,8 @@ export function SettingsGeneral({
   // prompt when the OS has never asked.
   const [notifyPermissionMissing, setNotifyPermissionMissing] =
     useState(false);
-  const anyNotifyEnabled = notifyOnGoalEnd || notifyOnApproval;
+  const anyNotifyEnabled =
+    notifyOnGoalEnd || notifyOnApproval || notifyOnReplyDone;
   useEffect(() => {
     // No sync state reset here: the hint's render condition already
     // carries `anyNotifyEnabled`, so a stale `true` stays invisible
@@ -284,6 +289,18 @@ export function SettingsGeneral({
           {generalCopy.notificationsSectionTitle}
         </SettingsSectionLabel>
         <div className="mt-2 divide-y divide-line rounded-sm border border-line bg-surface">
+          <PreferenceRow
+            title={generalCopy.notifyReplyDoneTitle}
+            description={generalCopy.notifyReplyDoneDescription}
+          >
+            <Switch
+              checked={notifyOnReplyDone}
+              onCheckedChange={(next) =>
+                handleToggleNotify(onChangeNotifyOnReplyDone, next)
+              }
+              ariaLabel={generalCopy.notifyReplyDoneTitle}
+            />
+          </PreferenceRow>
           <PreferenceRow
             title={generalCopy.notifyGoalEndTitle}
             description={generalCopy.notifyGoalEndDescription}

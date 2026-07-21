@@ -35,7 +35,32 @@ import {
 
 import { usePrefsStore } from "@/stores/prefs";
 
-export type SystemNotifyKind = "goalEnd" | "approval";
+export type SystemNotifyKind = "goalEnd" | "approval" | "replyDone";
+
+/**
+ * Reply-done gating: sessions with a GUI-submitted run awaiting its
+ * final turn. Set on Composer submit, consumed at the final `turn_end`
+ * — so Goal-nudge and CLI/Supervisor-driven runs (which never pass
+ * through the GUI submit path) stay silent. Module-level because it
+ * never renders: ipc-handlers and useMessageSend are the only readers.
+ * Best-effort by design — a GUI restart mid-run drops the flag and
+ * skips one notification, same failure mode as the rest of this file.
+ */
+const replyNotifyPending = new Set<string>();
+
+export function markReplyNotifyPending(sessionId: string): void {
+  replyNotifyPending.add(sessionId);
+}
+
+/** Returns whether the session had a pending flag, clearing it. */
+export function consumeReplyNotifyPending(sessionId: string): boolean {
+  return replyNotifyPending.delete(sessionId);
+}
+
+/** Drop the flag without notifying (run errored / bridge closed). */
+export function clearReplyNotifyPending(sessionId: string): void {
+  replyNotifyPending.delete(sessionId);
+}
 
 const THROTTLE_WINDOW_MS = 5000;
 
@@ -100,17 +125,39 @@ export async function sendGatedSystemNotification(
   try {
     const prefs = usePrefsStore.getState();
     const enabled =
-      kind === "goalEnd" ? prefs.notifyOnGoalEnd : prefs.notifyOnApproval;
-    if (!enabled) return;
+      kind === "goalEnd"
+        ? prefs.notifyOnGoalEnd
+        : kind === "approval"
+          ? prefs.notifyOnApproval
+          : prefs.notifyOnReplyDone;
+    if (!enabled) {
+      console.debug("[notify] skipped: pref off.", { kind });
+      return;
+    }
     if (throttleKey) {
       const now = Date.now();
-      if (shouldThrottle(lastSentAt.get(throttleKey), now)) return;
+      if (shouldThrottle(lastSentAt.get(throttleKey), now)) {
+        console.debug("[notify] skipped: throttled.", { kind, throttleKey });
+        return;
+      }
       lastSentAt.set(throttleKey, now);
     }
     // Focused window → the in-app toast already covers it. A hidden
     // window reports unfocused, which is exactly the case to notify.
-    if (await getCurrentWindow().isFocused()) return;
-    if (!(await ensureNotificationPermission())) return;
+    if (await getCurrentWindow().isFocused()) {
+      console.debug("[notify] skipped: window focused.", { kind });
+      return;
+    }
+    if (!(await ensureNotificationPermission())) {
+      console.debug("[notify] skipped: permission not granted.", { kind });
+      return;
+    }
+    // Note for dev builds: on macOS, `tauri dev` runs outside an .app
+    // bundle, so the OS routes this through the terminal app that
+    // launched dev — it only shows if THAT app (iTerm / Terminal /
+    // VS Code) has notification permission. Bundled builds notify as
+    // Galley normally. https://github.com/tauri-apps/tauri/issues/4965
+    console.debug("[notify] sending.", { kind, title });
     sendNotification({ title, body });
   } catch (e) {
     console.debug("[notify] system notification skipped.", e);

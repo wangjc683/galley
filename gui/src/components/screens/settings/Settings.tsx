@@ -70,6 +70,8 @@ export interface SettingsProps {
   onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
   notifyOnApproval: boolean;
   onChangeNotifyOnApproval: (enabled: boolean) => void;
+  notifyOnReplyDone: boolean;
+  onChangeNotifyOnReplyDone: (enabled: boolean) => void;
   keepInBackgroundOnClose: boolean;
   onChangeKeepInBackgroundOnClose: (enabled: boolean) => void;
   autoDownloadUpdates: boolean;
@@ -135,6 +137,8 @@ export function Settings({
   onChangeNotifyOnGoalEnd,
   notifyOnApproval,
   onChangeNotifyOnApproval,
+  notifyOnReplyDone,
+  onChangeNotifyOnReplyDone,
   keepInBackgroundOnClose,
   onChangeKeepInBackgroundOnClose,
   autoDownloadUpdates,
@@ -210,6 +214,8 @@ export function Settings({
                   onChangeNotifyOnGoalEnd={onChangeNotifyOnGoalEnd}
                   notifyOnApproval={notifyOnApproval}
                   onChangeNotifyOnApproval={onChangeNotifyOnApproval}
+                  notifyOnReplyDone={notifyOnReplyDone}
+                  onChangeNotifyOnReplyDone={onChangeNotifyOnReplyDone}
                   keepInBackgroundOnClose={keepInBackgroundOnClose}
                   onChangeKeepInBackgroundOnClose={
                     onChangeKeepInBackgroundOnClose

@@ -103,6 +103,7 @@ export const zhCopy = {
     pendingApprovalBadge: (count: number) => `${count} 待审批`,
     errorBadge: (count: number) => `${count} 错误`,
     waitingApproval: "等待审批",
+    replyDone: "回复完成",
     errored: "出错",
     rename: "重命名",
     pin: "置顶",
@@ -467,12 +468,15 @@ export const zhCopy = {
         "登录系统后，Galley 自动在后台待命（菜单栏 / 托盘），不弹出窗口。已连接的 IM 渠道和远程指挥随开机可用。",
       launchAtLoginError: (detail: string) => `无法更新开机自启设置：${detail}`,
       notificationsSectionTitle: "通知",
-      notifyGoalEndTitle: "任务结束时通知",
+      notifyGoalEndTitle: "目标结束时通知",
       notifyGoalEndDescription:
         "窗口在后台时，目标完成、失败或停止会发送系统通知",
       notifyApprovalTitle: "等待审批时通知",
       notifyApprovalDescription:
         "窗口在后台时，Agent 等待工具审批会发送系统通知",
+      notifyReplyDoneTitle: "回复完成时通知",
+      notifyReplyDoneDescription:
+        "窗口在后台时，你发起的对话回复完成会发送系统通知",
       notificationsPermissionHint:
         "Galley 的系统通知权限未开启，请在系统设置中允许 Galley 发送通知。",
       behaviorSectionTitle: "应用行为",
