@@ -186,7 +186,6 @@ export function EmptyState({
           // session, and coming back must not lose the text. Submit hands
           // the text to the new session and drops the parked copy.
           draftKey={EMPTY_STATE_DRAFT_KEY}
-          autoFocus
           llms={llms}
           onSelectLLM={onSelectLLM}
           llmConfigHint={llmConfigHint}

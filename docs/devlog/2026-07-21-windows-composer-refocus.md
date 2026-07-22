@@ -87,6 +87,23 @@ bash-only → 移植为跨平台 `.mjs`(tauri.conf 两个 before 命令随改);
 未文档化的 `bundle-python.sh win-x64` 前置、PowerShell ExecutionPolicy、
 16GB 内存并行编译 OOM(`CARGO_BUILD_JOBS=2`)记入 windows-build-checklist。
 
+## 2026-07-22 main 侧处置:摘雷 + 焦点子系统收敛
+
+Windows 调查继续挂在 `debug/win-focus`;main 上先做安全化处置:
+
+- **删除 Rust 无条件 `webview.set_focus()`**(上文纪事第 1 条确认的
+  死循环元凶,即 v0.3.7 draft 挂起的根因)。Windows 回到 v0.3.6 行为:
+  Alt+Tab 后无自动聚焦,但也无焦点弹跳循环。将来的修复从
+  debug/win-focus 结论里长出来,插回 `on_window_event` 同一位置。
+- **焦点接线收敛为一个子系统**:策略(让位名单)提纯为
+  `gui/src/lib/composer-focus.ts` 纯函数 + 单测;三个触发源(mount、
+  窗口激活双监听、outside-pointerdown blur)合并进
+  `gui/src/hooks/useComposerFocus.ts`,替换原 `useFocusOnWindowFocus`
+  和 `useBlurOnOutsidePointer` 两个 hook。
+- **`autoFocus` prop 删除**:两个挂载点(MainView、EmptyState)本就
+  都传 true,「出现即聚焦」升格为 Composer 组件契约,mount 聚焦同样
+  走让位名单。
+
 ## 教训
 
 跨 WebView 的焦点行为不可移植:凡是依赖 `document.activeElement`

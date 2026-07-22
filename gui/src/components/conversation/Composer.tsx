@@ -34,8 +34,7 @@ import {
   COMPOSER_TERTIARY_ICON_BUTTON,
 } from "@/components/conversation/composer-styles";
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useBlurOnOutsidePointer } from "@/hooks/useBlurOnOutsidePointer";
-import { useFocusOnWindowFocus } from "@/hooks/useFocusOnWindowFocus";
+import { useComposerFocus } from "@/hooks/useComposerFocus";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { usePasteFold } from "@/hooks/usePasteFold";
 import { IMAGE_ACCEPT, type ImageBlockReason } from "@/lib/composer-images";
@@ -120,7 +119,6 @@ export interface ComposerProps {
   disabled?: boolean;
 
   placeholder?: string;
-  autoFocus?: boolean;
 
   /**
    * Key for the in-memory draft parking lot (lib/composer-draft.ts).
@@ -215,7 +213,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       submitAckTick = 0,
       disabled = false,
       placeholder,
-      autoFocus = false,
       draftKey,
       llms,
       onSelectLLM,
@@ -303,12 +300,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         },
       });
 
-    useEffect(() => {
-      if (autoFocus && textareaRef.current) {
-        textareaRef.current.focus();
-      }
-    }, [autoFocus]);
-
     // Draft parking (write-through): every text / attachment change
     // updates the parked draft so unmount needs no save step (an
     // unmount-time save could race the image hook's URL bookkeeping).
@@ -321,12 +312,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       });
     }, [draftKey, isControlled, text, pendingImages, expandPastePlaceholders]);
 
-    // Blur-on-outside-pointer WebView focus workaround (see the hook).
-    useBlurOnOutsidePointer(textareaRef, composerRootRef);
-
-    // Regain-focus-to-type: window activation focuses the composer
-    // unless another editing surface / dialog claims focus (see the hook).
-    useFocusOnWindowFocus(textareaRef);
+    // Focus contract: an appearing composer takes the caret, window
+    // activation restores it, and both yield to competing claims — see
+    // lib/composer-focus.ts for the policy and the hook for the wiring.
+    useComposerFocus(textareaRef, composerRootRef);
 
     const applyComposerText = useCallback(
       (next: string, options: { clearImagesAfterPrefill?: boolean } = {}) => {
