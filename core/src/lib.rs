@@ -848,6 +848,22 @@ pub fn run() {
                 let window_for_close = window.clone();
                 let tray_toggle_for_close = tray_toggle.clone();
                 window.on_window_event(move |event| {
+                    // Windows WebView2 does not reliably hand Win32
+                    // keyboard focus back to the webview when the window
+                    // is reactivated (Alt+Tab) — DOM focus calls from JS
+                    // then have no caret and typing goes nowhere until a
+                    // mouse click. Push native focus into the WebView2
+                    // controller on every activation (#13). macOS
+                    // WKWebView restores focus by itself.
+                    #[cfg(target_os = "windows")]
+                    if let WindowEvent::Focused(true) = event {
+                        // AsRef disambiguates to the *webview* (wry
+                        // controller MoveFocus), not WebviewWindow::
+                        // set_focus, which only re-focuses the window.
+                        let webview: &tauri::Webview<tauri::Wry> =
+                            window_for_close.as_ref();
+                        let _ = webview.set_focus();
+                    }
                     if let WindowEvent::CloseRequested { api, .. } = event {
                         if ALLOW_APP_EXIT.load(Ordering::SeqCst) {
                             return;

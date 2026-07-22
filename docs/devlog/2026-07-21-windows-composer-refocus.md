@@ -1,7 +1,7 @@
 # Windows composer 焦点回归修复:Tauri 窗口事件 + 让位守卫
 
 日期:2026-07-21
-状态:已实现;Win11 实机验证待 v0.3.7 构建(macOS 回归已过)
+状态:三层已全部实现;Win11 实机验证待 v0.3.7 重建(macOS 回归已过)
 相关:issue #13 · `gui/src/hooks/useFocusOnWindowFocus.ts` ·
 devlog 索引关键词:WebView2 / 焦点 / Alt+Tab / onFocusChanged
 
@@ -32,11 +32,16 @@ Win11 用户反馈完全不生效。排查确认 v0.3.6 实现依赖两个 WKWeb
   activeElement 是 body、null 或 composer textarea 本身时都执行
   `focus()`——textarea 分支正是修复 Windows 保留 activeElement 场景
   的关键。
-- **预留第三层(未上)**:若 Win11 验证发现 DOM 焦点到位但键盘输入仍
-  不进(WebView2 控件级 Win32 焦点 desync),需要 Rust 侧在
-  `WindowEvent::Focused(true)` 时调 `webview.set_focus()`。社区通行
-  workaround,但有 setFocus 事件回环 / 死锁报告,没有 Windows 实机
-  不盲上。
+- **第三层(Rust 原生焦点,同日补上)**:首个 v0.3.7 draft 的 Win11
+  smoke 证实前两层不够——Alt+Tab 切回后焦点态仍丢失,需要鼠标点一下,
+  即 WebView2 控件级 Win32 焦点 desync。core `lib.rs` 主窗口
+  `on_window_event` 里 `WindowEvent::Focused(true)`(仅 Windows)时对
+  webview 调 `set_focus()`——注意必须经 `AsRef<Webview<Wry>>` 拿到
+  **webview** 级的 set_focus(wry `controller.MoveFocus(PROGRAMMATIC)`,
+  把 Win32 焦点真正推进 WebView2 控件);`WebviewWindow::set_focus`
+  只是 window 级 focus,无效。原生焦点就位后 DOM window focus 事件
+  才会在 Windows 上触发,JS 层的 hook 随之接管 composer 聚焦——三层
+  在此汇合。
 
 ## 教训
 
