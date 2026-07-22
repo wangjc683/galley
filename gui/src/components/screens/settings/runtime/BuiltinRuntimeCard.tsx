@@ -4,6 +4,7 @@ import { SettingsSectionLabel } from "@/components/screens/settings/settings-ui"
 import { Button } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useManagedModelsStore } from "@/stores/managed-models";
 import type { RuntimeKind } from "@/types/session";
 
 export function BuiltinRuntimeCard({
@@ -23,6 +24,7 @@ export function BuiltinRuntimeCard({
 }) {
   const appCopy = useCopy();
   const copy = appCopy.settings.runtime;
+  const models = useManagedModelsStore((s) => s.models);
   const active = value === "managed";
   const canActivate =
     !active &&
@@ -30,8 +32,14 @@ export function BuiltinRuntimeCard({
     !hasRunningSessions &&
     !!onActivate;
   const needsModel = !hasManagedRuntimeConfigured;
+  // Active state avoids restating what the badge already says
+  // ("正在使用"): the detail line carries the one fact the user
+  // actually manages in bundled mode — the default model.
+  const defaultModel = models.find((m) => m.isDefault) ?? models[0];
   const detail = active
-    ? copy.usingBundledGA
+    ? defaultModel
+      ? copy.activeModelDetail(defaultModel.displayName)
+      : copy.usingBundledGA
     : needsModel
       ? copy.needsModel
       : copy.bundledReady;
@@ -57,9 +65,13 @@ export function BuiltinRuntimeCard({
                 <span className="text-ui-compact font-medium text-ink">
                   {copy.bundledGA}
                 </span>
-                <span className="rounded-sm bg-brand-soft px-1.5 py-px text-ui-micro font-medium text-brand-strong">
-                  {copy.recommended}
-                </span>
+                {/* "推荐" is a pitch for the un-activated; once active
+                    it would just be noise next to "正在使用". */}
+                {!active && (
+                  <span className="rounded-sm bg-brand-soft px-1.5 py-px text-ui-micro font-medium text-brand-strong">
+                    {copy.recommended}
+                  </span>
+                )}
                 {active && (
                   <span className="rounded-sm bg-hover px-1.5 py-px text-ui-micro text-ink-muted">
                     {copy.active}

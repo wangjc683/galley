@@ -28,7 +28,6 @@ import {
 import { EXAMPLE_GA_PATH } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useManagedModelsStore } from "@/stores/managed-models";
-import { usePrefsStore } from "@/stores/prefs";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
 import type { RuntimeKind } from "@/types/session";
 
@@ -46,7 +45,8 @@ import type { RuntimeKind } from "@/types/session";
  * Open Setup Assistant routes back through the full Onboarding flow
  * without clearing existing conversations or saved settings.
  *
- * baseline + version are read-only mono labels at the bottom.
+ * No app-version line here: version + manual update check live in
+ * Settings → About, update discovery in the TopBar indicator.
  */
 export function SettingsRuntime({
   info,
@@ -160,14 +160,6 @@ export function SettingsRuntime({
         {externalRuntimeDetails}
       </AdvancedRuntimeSettings>
 
-      {/* Version is a plain fact line here. Update discovery lives in
-          the TopBar indicator; the manual check control lives in
-          Settings → About only. */}
-      <div className="border-t border-line pt-4">
-        <div className="font-mono text-ui-label text-ink-muted">
-          Galley v{info.workbenchVersion}
-        </div>
-      </div>
     </div>
   );
 }
@@ -265,7 +257,6 @@ function ManagedRuntimeCard({
 }) {
   const copy = useCopy().settings.runtime;
   const [expanded, setExpanded] = useState(false);
-  const activeRuntimeKind = usePrefsStore((s) => s.activeRuntimeKind);
   const models = useManagedModelsStore((s) => s.models);
   const upstreamShort =
     diagnostics?.upstreamCommit.slice(0, 7) ?? copy.notLoaded;
@@ -293,12 +284,6 @@ function ManagedRuntimeCard({
       onToggle={() => setExpanded((v) => !v)}
     >
       <div>
-        <RuntimeDiagnosticRow
-          label={copy.currentMode}
-          value={
-            activeRuntimeKind === "managed" ? copy.bundledGA : copy.externalGA
-          }
-        />
         <RuntimeDiagnosticRow label={copy.kernelVersion} value={upstreamShort} />
         <RuntimeDiagnosticRow
           label="Patch stack"

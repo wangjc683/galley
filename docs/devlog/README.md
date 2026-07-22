@@ -269,6 +269,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [Question Rail：门槛降到 1，间距保持等比映射](./2026-07-21-question-rail-threshold.md) — rail 门槛 3→1（索引 vs 跳转锚双职能），dot 间距保持等比映射不紧凑化
 - [Plan Mode 可视化：GUI 只观察，不做入口](./2026-07-21-plan-mode-visibility.md) — GUI 只观察不做入口：bridge 每 turn_end plan_watch 只读探测发 plan_update，薄条显计划步骤
 - [回复完成通知：只通知 GUI 发起的 run](./2026-07-21-reply-done-notification.md) — replyDone 通知 pending 标记方案，Goal/CLI run 静默，macOS dev 模式通知路由终端坑
+- [Runtime tab 瘦身：删版本行 + 激活态去重](./2026-07-21-runtime-tab-slimdown.md) — 删底部版本行/「当前模式」诊断行，内置内核卡激活态去重显默认模型；否掉 Models+Runtime 合并 Engine tab
 
 ## 格式约定
 
