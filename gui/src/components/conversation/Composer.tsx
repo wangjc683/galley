@@ -324,8 +324,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // Blur-on-outside-pointer WebView focus workaround (see the hook).
     useBlurOnOutsidePointer(textareaRef, composerRootRef);
 
-    // Regain-focus-to-type: window activation focuses the composer when
-    // nothing else holds focus (see the hook).
+    // Regain-focus-to-type: window activation focuses the composer
+    // unless another editing surface / dialog claims focus (see the hook).
     useFocusOnWindowFocus(textareaRef);
 
     const applyComposerText = useCallback(
