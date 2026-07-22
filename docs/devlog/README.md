@@ -270,7 +270,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [Plan Mode 可视化：GUI 只观察，不做入口](./2026-07-21-plan-mode-visibility.md) — GUI 只观察不做入口：bridge 每 turn_end plan_watch 只读探测发 plan_update，薄条显计划步骤
 - [回复完成通知：只通知 GUI 发起的 run](./2026-07-21-reply-done-notification.md) — replyDone 通知 pending 标记方案，Goal/CLI run 静默，macOS dev 模式通知路由终端坑
 - [Runtime tab 瘦身：删版本行 + 激活态去重](./2026-07-21-runtime-tab-slimdown.md) — 删底部版本行/「当前模式」诊断行，内置内核卡激活态去重显默认模型；否掉 Models+Runtime 合并 Engine tab
-- [Windows composer 焦点回归修复](./2026-07-21-windows-composer-refocus.md) — WebView2 不发 DOM focus 事件（#4626）+ activeElement 语义差异，改 Tauri onFocusChanged + 让位守卫；预留 Rust webview.set_focus 第三层
+- [Windows composer 焦点回归修复（未决）](./2026-07-21-windows-composer-refocus.md) — WebView2 焦点全链路调查：DOM/wry/SetFocus/MoveFocus(NEXT) 均无效，HWND 布局与死循环教训，裸 app 对照等未试线索；v0.3.7 draft 挂起
 
 ## 格式约定
 

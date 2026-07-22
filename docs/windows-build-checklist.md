@@ -31,14 +31,36 @@ cargo --version            # any
 
 If `cargo` errors with "missing linker", re-run the MSVC Build Tools installer and ensure the C++ workload is checked.
 
+First-run sharp edges on a clean machine (all hit on 2026-07-22 setup):
+
+- **`无法加载文件 pnpm.ps1 … 禁止运行脚本`** — PowerShell execution policy
+  blocks `.ps1` shims. Fix once: `Set-ExecutionPolicy -Scope CurrentUser
+  RemoteSigned` (or call `pnpm.cmd` instead).
+- **rustc OOM during the first big compile** (`memory allocation … failed`,
+  cascading `crate … not found in rlib format` errors) — parallel codegen
+  exhausts RAM on 16 GB machines. Fix: `setx CARGO_BUILD_JOBS 2` (new
+  shells) or `$env:CARGO_BUILD_JOBS = "2"` for the current one, then retry;
+  `cargo clean` under `core/` first if the rlib errors persist.
+
 ## 2 · Build
 
 ```powershell
 git clone https://github.com/wangjc683/galley.git
 cd galley
 pnpm --dir gui install
+# One-time per machine / per GA-dep bump: stage the bundled Python.
+# The script is bash — run it from Git Bash (installed with Git):
+#   ./scripts/bundle-python.sh win-x64
+# Skipping it fails the core build with:
+#   resource path `python-bundle\python` doesn't exist
 pnpm --dir gui tauri build
 ```
+
+The CLI sidecar prep runs automatically: `tauri.conf.json`'s
+`beforeDevCommand` / `beforeBuildCommand` call the cross-platform
+`scripts/prepare-cli-sidecar.mjs` (ported from the bash-only `.sh` on
+2026-07-22 precisely because cmd cannot run `./script.sh`; CI still uses
+the `.sh` in its `shell: bash` steps — keep both in sync).
 
 The repo is not a pnpm workspace: a plain `pnpm install` at the repo root
 installs nothing for `gui/`, and the build then fails on missing frontend

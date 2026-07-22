@@ -9,8 +9,10 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.3.6`.
+- Package version: `0.3.7` (bumped in-repo; **not yet released**).
 - Git tag / GitHub Release: `v0.3.6` is the current published stable release.
+  `v0.3.7` is tagged with a draft build **on hold** — see Current Release
+  State below. Do not publish or promote it.
 - Agent API schema: `schemaVersion: 1`
 - Release tier: stable patch; default update channel points at `v0.3.6`.
   `beta` is kept as a legacy alias for older builds.
@@ -39,6 +41,17 @@ ambiguous. Product shape, Agent API schema (`schemaVersion: 1`), GA baseline
 `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. The live manifest was verified with `--cache-bust` across all
 three platforms (darwin-aarch64, darwin-x86_64, windows-x86_64).
+
+`v0.3.7` is in flight and **blocked on the Windows composer-focus fix**
+(issue #13, reopened 2026-07-21): the tag points at `8f4731a`, a draft
+release with all assets and bilingual notes exists, macOS smoke passed,
+but Win11 smoke failed twice — the fix attempts do not restore the caret
+after Alt+Tab. Investigation continues on the `debug/win-focus` branch on
+JC's Win11 dev machine; full chronicle and remaining leads in devlog
+[2026-07-21-windows-composer-refocus](./devlog/2026-07-21-windows-composer-refocus.md).
+When the fix lands: delete/re-tag `v0.3.7`, rebuild, re-smoke both
+platforms, then publish + promote per the release SOP. `v0.3.7` also
+carries the Runtime tab slimdown (shipped-in-tree, macOS-accepted).
 
 Post-release follow-up:
 
