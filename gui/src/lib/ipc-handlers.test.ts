@@ -336,49 +336,6 @@ describe("dispatchIPCEvent", () => {
     });
   });
 
-  it("plan_update writes plan state and the closing event clears it", () => {
-    seedSession();
-    dispatchIPCEvent({
-      kind: "plan_update",
-      sessionId: "s-test",
-      active: true,
-      placeholder: false,
-      done: 1,
-      total: 3,
-      complete: false,
-      step: "引入版本化快照结构",
-      pathHint: "plan_x/plan.md",
-      items: [
-        { content: "梳理现有恢复路径", status: "done" },
-        { content: "引入版本化快照结构", status: "open" },
-      ],
-      timestamp: "2026-06-18T08:06:00.000Z",
-    });
-
-    expect(useMessagesStore.getState().byId["s-test"].plan).toMatchObject({
-      done: 1,
-      total: 3,
-      step: "引入版本化快照结构",
-      placeholder: false,
-    });
-
-    dispatchIPCEvent({
-      kind: "plan_update",
-      sessionId: "s-test",
-      active: false,
-      placeholder: false,
-      done: 0,
-      total: 0,
-      complete: true,
-      step: "",
-      pathHint: "",
-      items: [],
-      timestamp: "2026-06-18T08:07:00.000Z",
-    });
-
-    expect(useMessagesStore.getState().byId["s-test"].plan).toBeNull();
-  });
-
   it("error clears running state and pushes a toast", () => {
     const store = useMessagesStore.getState();
     store.setAgentRunning("s-test", true);

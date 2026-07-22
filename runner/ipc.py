@@ -247,33 +247,6 @@ class PetDetachedEvent:
 
 
 @dataclass
-class PlanUpdateEvent:
-    """Snapshot of GA's plan-mode state, emitted at turn_end whenever
-    it changed (see `runner/plan_watch.py`). GA enters plan mode by
-    itself (plan_sop.md → `handler.enter_plan_mode`); Galley only
-    observes. Desktop renders the active-plan progress bar from this;
-    `active: false` is the one-shot closing signal that removes it.
-
-    `items` entries are `{content: str, status: "open" | "done"}`.
-    `placeholder` is true when plan mode is on but plan.md has no
-    parseable checklist yet (agent is still writing the plan) —
-    desktop shows `pathHint` instead of a progress count.
-    """
-
-    sessionId: str
-    active: bool
-    placeholder: bool = False
-    done: int = 0
-    total: int = 0
-    complete: bool = False
-    step: str = ""
-    pathHint: str = ""
-    items: list[dict[str, Any]] = field(default_factory=list)
-    timestamp: str = field(default_factory=_now_iso)
-    kind: str = "plan_update"
-
-
-@dataclass
 class SystemMessageEvent:
     """A standalone, non-agent-loop message emitted into the
     conversation. Used by GA's slash-command paths (`/btw`,
@@ -315,7 +288,6 @@ Event = (
     | ToolsReinjectedEvent
     | PetAttachedEvent
     | PetDetachedEvent
-    | PlanUpdateEvent
     | SystemMessageEvent
 )
 
@@ -463,7 +435,6 @@ EVENT_KINDS: dict[str, type] = {
     "tools_reinjected": ToolsReinjectedEvent,
     "pet_attached": PetAttachedEvent,
     "pet_detached": PetDetachedEvent,
-    "plan_update": PlanUpdateEvent,
     "system_message": SystemMessageEvent,
 }
 

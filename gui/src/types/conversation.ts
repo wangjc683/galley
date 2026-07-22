@@ -256,23 +256,3 @@ export interface PendingAskUser {
   /** Quick-fill suggestions. Empty array = open-ended question (no chips). */
   candidates: string[];
 }
-
-/**
- * Live plan-mode state for a session, projected from `plan_update`
- * IPC events (docs/ipc-protocol.md §4.17). Present only while GA's
- * plan mode is active — the bar unmounts when the bridge sends the
- * `active: false` closing event (store nulls the field). Runtime-only:
- * not persisted; a restart re-lights it on the next turn_end.
- */
-export interface PlanStatus {
-  /** Plan mode entered but plan.md has no parseable checklist yet. */
-  placeholder: boolean;
-  done: number;
-  total: number;
-  complete: boolean;
-  /** Latest `📌 当前步骤` snippet (≤60 chars). May be "". */
-  step: string;
-  /** Last two path segments, e.g. "plan_x/plan.md". */
-  pathHint: string;
-  items: Array<{ content: string; status: "open" | "done" }>;
-}

@@ -530,31 +530,6 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       return;
     }
 
-    case "plan_update": {
-      // GA plan-mode snapshot (bridge observes at turn_end, emits on
-      // change). `active: false` is the closing signal — null the
-      // state so PlanContextBar unmounts.
-      console.debug("[ipc] plan_update", {
-        sessionId: event.sessionId,
-        active: event.active,
-        progress: `${event.done}/${event.total}`,
-      });
-      messages.setPlanStatus(
-        event.sessionId,
-        event.active
-          ? {
-              placeholder: event.placeholder,
-              done: event.done,
-              total: event.total,
-              complete: event.complete,
-              step: event.step,
-              pathHint: event.pathHint,
-              items: event.items,
-            }
-          : null,
-      );
-      return;
-    }
 
     case "system_message": {
       console.info("[ipc] system_message", {

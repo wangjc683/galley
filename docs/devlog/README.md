@@ -272,6 +272,10 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [Runtime tab 瘦身：删版本行 + 激活态去重](./2026-07-21-runtime-tab-slimdown.md) — 删底部版本行/「当前模式」诊断行，内置内核卡激活态去重显默认模型；否掉 Models+Runtime 合并 Engine tab
 - [Windows composer 焦点回归修复（未决）](./2026-07-21-windows-composer-refocus.md) — WebView2 焦点全链路调查：DOM/wry/SetFocus/MoveFocus(NEXT) 均无效，HWND 布局与死循环教训，裸 app 对照等未试线索；v0.3.7 draft 挂起
 
+### 2026-07-22
+- [GA upstream upgrade 5257dec -> 1d3c1a09](./2026-07-22-ga-upstream-upgrade-5257dec-to-1d3c1a09.md) — 上游正式弃用 plan mode 当天刷 baseline；0001/0003 两处真冲突，字节门抓出 0015 存量漂移（2848c4b 手改 payload 未回写补丁）
+- [Plan Mode 可视化整链拆除](./2026-07-22-plan-mode-visibility-removal.md) — 上线 24h 即拆：上游弃用抽走前提，"只观察不做入口"成最佳止损位；📌 守卫全删，存量状态残余触发按外观回归接受
+
 ## 格式约定
 
 每个 entry 6 段：

@@ -161,57 +161,6 @@ const TOOL_ACTION_LINE = /^\[Action\] [^\n]*$/gm;
 const PHASE_PREAMBLE = /^\*{0,2}当前阶段\*{0,2}\s*[：:][\s\S]*?(?=\n\n|$)/gm;
 
 /**
- * `📌 当前步骤：…` segments that GA's plan mode obliges the LLM to
- * open its replies with (`ga.py:614` injects "回复开头引用：📌 当前
- * 步骤：..." every 5th turn past turn 10). Protocol output addressed
- * to the engine's plan discipline, not prose for the user — but the
- * LLM typically bolds it, so rendered as narration it looks like a
- * shouting heading between every TurnMarker.
- *
- * `extractPlanSteps` pulls these out for TurnMarker's structural
- * register (12px subline); `cleanPartialContent` / `extractPreamble`
- * strip them outright so the streaming buffer and the DetailPanel
- * don't re-show the same scaffolding.
- *
- * One segment runs from a 📌 up to the next 📌 or end-of-line —
- * catch-up replies cram several pins into one soft-wrapped paragraph
- * (the model repaying skipped turns), so segments can't be assumed
- * one-per-line. Tolerates `**` around the pin/label and full/half
- * width colons.
- */
-const PLAN_STEP_SEGMENT =
-  /\*{0,2}📌\*{0,2}\s*\*{0,2}当前步骤\*{0,2}\s*[：:]\s*((?:(?!📌)[^\n])*)/g;
-
-/**
- * Extract plan-step announcements from an intermediate turn's
- * narration. Returns the cleaned step texts (emoji / label / bold
- * markers / trailing full stop removed) and the remaining prose with
- * the segments cut out. `steps` empty ⇒ `rest` === input (modulo
- * nothing). Storage is untouched — callers apply this at render time
- * so live and restore paths stay one code path.
- */
-export function extractPlanSteps(text: string): {
-  steps: string[];
-  rest: string;
-} {
-  if (!text || !text.includes("📌")) return { steps: [], rest: text };
-  const steps: string[] = [];
-  const rest = text
-    .replace(PLAN_STEP_SEGMENT, (_m, body: string) => {
-      const cleaned = body
-        .replace(/\*{1,2}/g, "")
-        .trim()
-        .replace(/[。.\s]+$/, "");
-      if (cleaned) steps.push(cleaned);
-      return "";
-    })
-    .replace(/^[ \t]+$/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return { steps, rest };
-}
-
-/**
  * Mirror of bridge's `_clean_response_for_display`. Strips GA's
  * structured tags so the user sees the prose-ish final answer
  * MarkdownView can render directly. Bridge emits the raw responseContent
@@ -322,13 +271,6 @@ export function cleanPartialContent(text: string): string {
   //     user reads twice. See PHASE_PREAMBLE comment.
   out = out.replace(PHASE_PREAMBLE, "");
 
-  // 1i. Strip plan-mode `📌 当前步骤：…` announcements so they don't
-  //     flash as bold prose while streaming. The settled turn shows
-  //     them demoted in TurnMarker's structural register (see
-  //     extractPlanSteps), and the live PlanContextBar carries the
-  //     current step meanwhile.
-  out = out.replace(PLAN_STEP_SEGMENT, "");
-
   // 2. Unclosed open tag — truncate at its position.
   let earliestUnclosed = -1;
   for (const name of GA_TAG_NAMES) {
@@ -417,10 +359,6 @@ export function extractPreamble(text: string): string | undefined {
   segment = segment.replace(LLM_RUNNING_MARKER, "");
   segment = segment.replace(TOOL_DISPATCH_MARKER_LINE, "");
   segment = segment.replace(TOOL_ACTION_LINE, "");
-  // Plan-mode step announcements — demoted into TurnMarker's
-  // structural subline via extractPlanSteps; keeping them here would
-  // re-show the same scaffolding inside the expanded DetailPanel.
-  segment = segment.replace(PLAN_STEP_SEGMENT, "");
   segment = segment.replace(FILE_REF_PATTERN, "");
   // Streaming-partial case: an open tag without a matching close
   // means the chunk fell mid-block. Truncate at the open so we

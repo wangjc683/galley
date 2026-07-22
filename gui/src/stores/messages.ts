@@ -15,7 +15,6 @@ import type {
   PendingApproval,
   PendingAskUser,
   PendingImageAttachment,
-  PlanStatus,
   SendPhase,
   SystemTurn,
   Turn,
@@ -114,13 +113,6 @@ export interface PerSessionMessages {
   inFlightContent: string;
   approvalDecisions: Record<string, ApprovalDecision>;
   pendingAskUser: PendingAskUser | null;
-  /**
-   * Live plan-mode state (PlanContextBar). Written by the
-   * `plan_update` IPC handler; null while GA is not in plan mode.
-   * Cleared on bridge close — the bar reflects a live agent's state,
-   * and a fresh bridge re-emits on its next turn_end.
-   */
-  plan: PlanStatus | null;
   sendPhase: SendPhase | null;
   /**
    * True between the user clicking Stop (abort dispatched to the
@@ -150,7 +142,6 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   inFlightContent: "",
   approvalDecisions: EMPTY_DECISIONS,
   pendingAskUser: null,
-  plan: null,
   sendPhase: null,
   isStopping: false,
   restoring: false,
@@ -170,7 +161,6 @@ function emptyMessages(): PerSessionMessages {
     inFlightContent: "",
     approvalDecisions: {},
     pendingAskUser: null,
-    plan: null,
     sendPhase: null,
     isStopping: false,
     restoring: false,
@@ -292,8 +282,6 @@ interface MessagesActions {
    * render time via `useSessionStatusView`.
    */
   setPendingAskUser: (sid: string, value: PendingAskUser | null) => void;
-  /** Write / clear the live plan-mode state (from `plan_update` IPC). */
-  setPlanStatus: (sid: string, value: PlanStatus | null) => void;
   clearConversation: (sid: string) => void;
 
   // ---- approval writes ----
@@ -397,7 +385,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       inFlightContent: "",
       sendPhase: null,
       isStopping: false,
-      plan: null,
     }));
     set({ byId });  },
 
@@ -736,14 +723,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       pendingAskUser: value,
-    }));
-    set({ byId });  },
-
-  setPlanStatus: (sid, value) => {
-    const state = get();
-    const { byId } = patchMessages(state, sid, (m) => ({
-      ...m,
-      plan: value,
     }));
     set({ byId });  },
 

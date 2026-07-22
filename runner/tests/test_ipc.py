@@ -18,7 +18,6 @@ from runner.ipc import (
     LoadHistoryCommand,
     PetAttachedEvent,
     PetDetachedEvent,
-    PlanUpdateEvent,
     ReadyEvent,
     ReinjectToolsCommand,
     RunCompleteEvent,
@@ -237,36 +236,6 @@ def test_run_complete_round_trip() -> None:
     )
     decoded = decode_event(encode(ev))
     assert decoded == ev
-
-
-def test_plan_update_round_trip() -> None:
-    ev = PlanUpdateEvent(
-        sessionId="s1",
-        active=True,
-        done=2,
-        total=5,
-        step="迁移旧数据",
-        pathHint="plan_x/plan.md",
-        items=[
-            {"content": "梳理现有恢复路径", "status": "done"},
-            {"content": "迁移旧数据", "status": "open"},
-        ],
-    )
-    line = encode(ev)
-    payload = json.loads(line)
-    assert payload["kind"] == "plan_update"
-    assert payload["placeholder"] is False  # default
-    decoded = decode_event(line)
-    assert decoded == ev
-
-
-def test_plan_update_inactive_defaults() -> None:
-    ev = PlanUpdateEvent(sessionId="s1", active=False, complete=True)
-    decoded = decode_event(encode(ev))
-    assert isinstance(decoded, PlanUpdateEvent)
-    assert decoded.active is False
-    assert decoded.items == []
-    assert decoded.step == ""
 
 
 def test_error_event_default_fields() -> None:
