@@ -4,9 +4,9 @@
   "version": "0.3.7",
   "identifier": "app.galley",
   "build": {
-    "beforeDevCommand": "./scripts/prepare-cli-sidecar.sh --profile debug && pnpm --dir gui dev",
+    "beforeDevCommand": "node ./scripts/prepare-cli-sidecar.mjs --profile debug && pnpm --dir gui dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "./scripts/prepare-cli-sidecar.sh && pnpm --dir gui build",
+    "beforeBuildCommand": "node ./scripts/prepare-cli-sidecar.mjs && pnpm --dir gui build",
     "frontendDist": "../gui/dist"
   },
   "app": {
