@@ -9,12 +9,12 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.3.7` (bumped in-repo; **not yet released**).
-- Git tag / GitHub Release: `v0.3.6` is the current published stable release.
-  `v0.3.7` is tagged with a draft build **on hold** — see Current Release
-  State below. Do not publish or promote it.
+- Package version: `0.3.7`.
+- Git tag / GitHub Release: `v0.3.7` is the current published stable release
+  (re-tagged at `6103382` on 2026-07-22; the earlier held draft at `8f4731a`
+  was deleted).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.3.6`.
+- Release tier: stable patch; default update channel points at `v0.3.7`.
   `beta` is kept as a legacy alias for older builds.
 - Product shape: dual-native local agent team orchestrator
 
@@ -22,41 +22,40 @@ Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.3.6` is a responsiveness patch shipped the same day as `v0.3.5`. Switching
-back to Galley (Cmd/Alt+Tab or click) now focuses the composer automatically
-when nothing else holds focus — GitHub issue #13, filed and shipped the same
-day. Conversations started from the desktop composer send a "reply finished"
-system notification when the run's final turn completes while the window is in
-the background (new pref `notify_on_reply_done`, default on); Goal-nudge and
-CLI/Supervisor-driven runs stay silent by design (devlog
-2026-07-21-reply-done-notification). The goal-end notification toggle is
-renamed 目标结束时通知 / "When a goal finishes" now that "task" would be
-ambiguous. Product shape, Agent API schema (`schemaVersion: 1`), GA baseline
-(`5257dec`), and update-channel policy stay unchanged.
+`v0.3.7` consolidates composer focus into one policy module: the composer
+takes the caret whenever it appears (app open, new conversation, session
+switch — the `autoFocus` prop became a component contract) and on macOS
+window re-activation, yielding only to dialogs and other text-entry surfaces.
+It also ships the Settings → Runtime slimdown and the cross-platform Node
+port of the CLI sidecar prep. Known limitation, documented in the release
+notes: on Windows, Alt+Tab back still needs one click before typing — the
+WebView2-level investigation is shelved behind the tauri 2.12 tripwire
+(`.scratch/win-composer-focus/`, devlog
+2026-07-21-windows-composer-refocus). Product shape, Agent API schema
+(`schemaVersion: 1`), GA baseline (`5257dec`), and update-channel policy
+stay unchanged.
 
 ## Current Release State
 
-`v0.3.6` is published and promoted as the live stable release. The default
-`updates/stable/latest.json` channel points at `v0.3.6`, with the legacy
-`updates/beta/latest.json` alias pointing at the same version for older
-installed builds. The live manifest was verified with `--cache-bust` across all
-three platforms (darwin-aarch64, darwin-x86_64, windows-x86_64).
+`v0.3.7` is published and promoted as the live stable release (2026-07-22).
+The default `updates/stable/latest.json` channel points at `v0.3.7`, with the
+legacy `updates/beta/latest.json` alias pointing at the same version for older
+installed builds. Both manifests were verified with `--cache-bust` across all
+three platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). Smoke passed
+on macOS and Win11 (JC, installed builds); the Win11 smoke specifically
+confirmed no focus feedback loop — the earlier held draft's regression.
 
-`v0.3.7` is in flight and **blocked on the Windows composer-focus fix**
-(issue #13, reopened 2026-07-21): the tag points at `8f4731a`, a draft
-release with all assets and bilingual notes exists, macOS smoke passed,
-but Win11 smoke failed twice — the fix attempts do not restore the caret
-after Alt+Tab. Investigation continues on the `debug/win-focus` branch on
-JC's Win11 dev machine; full chronicle and remaining leads in devlog
+The Windows Alt+Tab caret restore (issue #13's Windows half) ships as a
+documented known limitation. The investigation is **shelved behind the
+tauri 2.12 tripwire**: when tauri 2.12 releases (tauri#15625), upgrade and
+retest Alt+Tab on Win11; only if still broken, reopen the bare-app bisect.
+Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 [2026-07-21-windows-composer-refocus](./devlog/2026-07-21-windows-composer-refocus.md).
-When the fix lands: delete/re-tag `v0.3.7`, rebuild, re-smoke both
-platforms, then publish + promote per the release SOP. `v0.3.7` also
-carries the Runtime tab slimdown (shipped-in-tree, macOS-accepted).
 
 Post-release follow-up:
 
-1. Dogfood the app-update path from an installed older Galley build to
-   `v0.3.6`.
+1. Dogfood the app-update path from an installed `v0.3.6` build to `v0.3.7`
+   (SOP step 10).
 2. Verify the reply-done / goal-end / approval notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
@@ -74,9 +73,9 @@ Post-release follow-up:
 | Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; audited upstream `b1e173dc` baseline shipped in v0.2.16; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime/README.md) |
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
-| Release path | v0.3.6 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.3.7 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Locked to audited upstream `5257dec` (audited 2026-07-20; shipped in `v0.3.4` and unchanged in `v0.3.5`/`v0.3.6`; `v0.3.2`/`v0.3.3` shipped `1e89c3e`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Locked to audited upstream `5257dec` (audited 2026-07-20; shipped in `v0.3.4` and unchanged through `v0.3.7`; `v0.3.2`/`v0.3.3` shipped `1e89c3e`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -99,7 +98,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.3.6`. For the next release, bump every
+- Current package metadata uses `0.3.7`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
