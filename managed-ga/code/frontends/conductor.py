@@ -558,7 +558,9 @@ def api_get_chat(last: int = 20):
 
 @app.post("/chat")
 def api_chat(body: ChatIn):
-    return add_chat(body.msg, role=body.role)
+    item = add_chat(body.msg, role=body.role)
+    if body.role == "user": conductor.notify({"type": "user_message", "msg": body.msg})
+    return item
 
 @app.post("/approval")
 def api_approval(body: ApprovalIn):

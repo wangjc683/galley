@@ -8,28 +8,28 @@ diff --git a/agentmain.py b/agentmain.py
 @@ -26 +29 @@ lang_suffix = '_en' if os.environ.get('GA_LANG', '') == 'en' else ''
 -mem_dir = os.path.join(script_dir, 'memory')
 +mem_dir = state_path('memory')
-@@ -53 +56 @@ class GenericAgent:
+@@ -47 +50 @@ class GenericAgent:
 -        os.makedirs(os.path.join(script_dir, 'temp'), exist_ok=True)
 +        os.makedirs(state_path('temp'), exist_ok=True)
-@@ -63 +66 @@ class GenericAgent:
+@@ -57 +60 @@ class GenericAgent:
 -        self.log_path = os.path.join(script_dir, f'temp/model_responses/model_responses_{logid}.txt')
 +        self.log_path = state_path('temp', 'model_responses', f'model_responses_{logid}.txt')
-@@ -128 +131 @@ class GenericAgent:
+@@ -122 +125 @@ class GenericAgent:
 -            vfile = os.path.join(script_dir, 'temp', v)
 +            vfile = state_path('temp', v)
-@@ -149 +152 @@ class GenericAgent:
--                task_file = os.path.join(script_dir, 'temp', f'user_prompt_{int(time.time())}.md')
-+                task_file = state_path('temp', f'user_prompt_{int(time.time())}.md')
-@@ -156 +159 @@ class GenericAgent:
+@@ -143 +146 @@ class GenericAgent:
+-                task_file = os.path.join(script_dir, 'temp', f'user_prompt_{os.getpid()}_{time.time_ns()}.md')
++                task_file = state_path('temp', f'user_prompt_{os.getpid()}_{time.time_ns()}.md')
+@@ -150 +153 @@ class GenericAgent:
 -            handler = GenericAgentHandler(self, self.history, os.path.join(script_dir, 'temp'))
 +            handler = GenericAgentHandler(self, self.history, state_path('temp'))
-@@ -219 +222 @@ if __name__ == '__main__':
+@@ -213 +216 @@ if __name__ == '__main__':
 -            d = os.path.join(script_dir, f'temp/{args.task}'); os.makedirs(d, exist_ok=True)
 +            d = state_path('temp', args.task); os.makedirs(d, exist_ok=True)
-@@ -236 +239 @@ if __name__ == '__main__':
+@@ -230 +233 @@ if __name__ == '__main__':
 -        agent.task_dir = d = os.path.join(script_dir, f'temp/{args.task}'); nround = ''
 +        agent.task_dir = d = state_path('temp', args.task); nround = ''
-@@ -294 +297 @@ if __name__ == '__main__':
+@@ -288 +291 @@ if __name__ == '__main__':
 -                log_dir = os.path.join(script_dir, 'temp/reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 +                log_dir = state_path('temp', 'reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 diff --git a/assets/ga_ultraplan.py b/assets/ga_ultraplan.py

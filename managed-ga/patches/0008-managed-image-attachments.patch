@@ -29,11 +29,11 @@ diff --git a/agentmain.py b/agentmain.py
 +        blocks.append({'type': 'image', 'source': {'type': 'base64', 'media_type': mime, 'data': data}})
 +    return blocks or [{'type': 'text', 'text': text or '.'}]
 +
-@@ -146,0 +171 @@ class GenericAgent:
+@@ -140,0 +165 @@ class GenericAgent:
 +            images = task.get("images") or []
-@@ -172,0 +198 @@ class GenericAgent:
+@@ -166,0 +192 @@ class GenericAgent:
 +            initial_user_content = image_content_blocks(raw_query, images) if images else None
-@@ -174 +200 @@ class GenericAgent:
+@@ -168 +194 @@ class GenericAgent:
 -                                    max_turns=180, verbose=self.verbose, yield_info=True)
 +                                    max_turns=180, verbose=self.verbose, initial_user_content=initial_user_content, yield_info=True)
 diff --git a/llmcore.py b/llmcore.py

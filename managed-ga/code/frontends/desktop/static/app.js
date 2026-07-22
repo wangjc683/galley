@@ -767,12 +767,15 @@ bindClick('ga-source-clear-btn', async (e) => {
   }
 });
 refreshGaSource();
-// 侧边栏「快速接入」：点击官方模型按钮 → 打开预填好的添加模型表单
+// 侧边栏「快速接入」：官方模型 → 预填表单；ga-token → 开 portal 写 mykey
 const pqEl = document.getElementById('provider-quickstart');
+const pqGaBtn = document.getElementById('pq-ga-token');
+if (pqGaBtn) bridgeFetch('/subscription-portal').then(r => { pqGaBtn.hidden = !r?.available; }).catch(() => {});
 if (pqEl) pqEl.addEventListener('click', (e) => {
   const btn = e.target.closest('.pq-btn[data-provider]');
   if (!btn) return;
   e.preventDefault(); e.stopPropagation();
+  if (btn.dataset.provider === 'ga-token') { bridgeFetch('/subscription-portal', { method: 'POST', body: {} }); return; }
   openAddModelFormForProvider(btn.dataset.provider);
 });
 // 「快速接入」卡片折叠/展开（向下箭头），状态记忆到 localStorage

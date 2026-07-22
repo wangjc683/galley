@@ -1,6 +1,19 @@
 # Plan Mode SOP
 
-**触发**：3步以上有依赖/多文件协同/条件分支/需并行 | **禁用**：1-2步简单任务直接做
+> ⚠️ **【已弃用 / DEPRECATED】**
+>
+> 本 SOP 已弃用，不适合现阶段模型，**全文仅作历史参考，禁止再按本文进入 plan mode / 起探索 subagent / 写 plan_XXX**。文件未来将被删除。
+>
+> **维护动作**：若在 L1（`global_mem_insight.txt`）中发现对本 SOP（`plan_sop`）的任何索引，**立即删除该索引**，勿再导航到此文件。
+>
+> **请改用（按场景）：**
+> | 场景 | 替代 | 入口 |
+> |------|------|------|
+> | 复杂多阶段 / 多 agent 编排 | `ultraplan_sop` | 仅当用户明确说 `ultraplan` / `UltraPlan` / `ultraplan mode` 时启用 |
+> | 跨会话长期项目认知与记忆 | `project_mode_sop` | 用户要求「进入项目模式」或指定项目名时 |
+> | 其他任务 | 直接执行 | 无需任何 plan/mode |
+
+**触发（历史，已失效）**：30步以上有依赖/多文件协同/条件分支/需并行 | **禁用**：简单任务直接做
 任务开始前必须先创建工作目录 `./plan_XXX/`（XXX=任务英文短名）
 单独使用一个code_run({'inline_eval':True, 'script':'handler.enter_plan_mode("./plan_XXX/plan.md")'})进入plan模式
 handler是inline_eval自动注入的变量

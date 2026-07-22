@@ -2,9 +2,22 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-07-20` against upstream
-`5257decc8c7ac2484278c977b91d15cb09990fef` (14-patch stack, through `0015`).
-(History from the 2026-07-20 `5257decc` upgrade: the whole 14-patch stack
+Last replay verified: `2026-07-22` against upstream
+`1d3c1a09dfdaa76ba5dee82725fa599df7c16be4` (14-patch stack, through `0015`).
+(History from the 2026-07-22 `1d3c1a09` upgrade: commit-chain rebase with two
+real conflicts and one pre-existing drift repair. `0001`: upstream `51f76929`
+made long-prompt temp filenames unique (`pid`+`nanos`) on the same `agentmain.py`
+line the patch relocates — resolved by combining both:
+`state_path('temp', f'user_prompt_{os.getpid()}_{time.time_ns()}.md')`.
+`0003`: upstream `6788fb21` deleted the legacy CDP DOM bridge including the
+`cdp_cfg` seeding block, so the patch's `cdp_cfg` normalization hunk was
+dropped (target code gone); the rest of `0003` is unchanged. `0015`: the
+byte-identity gate caught that repo commit `2848c4b` (2026-07-20, icon-state
+UX iteration) had edited `managed-ga/code` extension files without
+re-exporting the patch — `0015` was regenerated from the checked-in payload
+(the shipped, intended state) before rebasing, and then merged with upstream's
+legacy-DOM-bridge removal in `content.js` (both deletions kept).
+History from the 2026-07-20 `5257decc` upgrade: the whole 14-patch stack
 replayed clean onto the new baseline via commit-chain rebase; only `0001` and
 `0003` changed, and only in their zero-context `ga.py` `@@` line numbers —
 upstream's empty-response tweak in `GenericAgentHandler` shifted

@@ -10,10 +10,7 @@ diff --git a/agentmain.py b/agentmain.py
 @@ -35 +37 @@ if not os.path.exists(mem_insight):
 -    t = os.path.join(script_dir, f'assets/global_mem_insight_template{lang_suffix}.txt')
 +    t = asset_path(f'global_mem_insight_template{lang_suffix}.txt')
-@@ -37 +39 @@ if not os.path.exists(mem_insight):
--cdp_cfg = os.path.join(script_dir, 'assets/tmwd_cdp_bridge/config.js')
-+cdp_cfg = asset_path('tmwd_cdp_bridge', 'config.js')
-@@ -45 +47 @@ def get_system_prompt():
+@@ -39 +41 @@ def get_system_prompt():
 -    with open(os.path.join(script_dir, f'assets/sys_prompt{lang_suffix}.txt'), 'r', encoding='utf-8') as f: prompt = f.read()
 +    with open(asset_path(f'sys_prompt{lang_suffix}.txt'), 'r', encoding='utf-8') as f: prompt = f.read()
 diff --git a/ga.py b/ga.py

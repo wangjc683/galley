@@ -123,8 +123,6 @@ memory/L4_raw_sessions/*
 restore_commit.txt
 
 sche_tasks/
-# CDP Bridge 密钥配置（首次运行自动生成）
-assets/tmwd_cdp_bridge/config.js
 assets/copilot_proxy.pyw
 # 模型 instruction（本地定制，不入库）
 assets/glm52_instruction.txt

@@ -4,19 +4,19 @@ diff --git a/TMWebDriver.py b/TMWebDriver.py
 @@ -45,0 +46,2 @@ class TMWebDriver:
 +        self.extension_client = None
 +        self.extension_connected_at = None
-@@ -91,0 +94 @@ class TMWebDriver:
+@@ -93,0 +96 @@ class TMWebDriver:
 +            if data.get('cmd') == 'get_status': return json.dumps({'r': self.get_status()}, ensure_ascii=False)
-@@ -134,0 +138 @@ class TMWebDriver:
+@@ -136,0 +140 @@ class TMWebDriver:
 +                        driver._register_extension_client(self)
-@@ -181,0 +186,4 @@ class TMWebDriver:
+@@ -183,0 +188,4 @@ class TMWebDriver:
 +    def _register_extension_client(self, client: WebSocket) -> None:
 +        self.extension_client = client
 +        self.extension_connected_at = time.time()
 +
-@@ -182,0 +191,2 @@ class TMWebDriver:
+@@ -184,0 +193,2 @@ class TMWebDriver:
 +        if self.extension_client == client:
 +            self.extension_client = None
-@@ -258,0 +269,11 @@ class TMWebDriver:
+@@ -260,0 +271,11 @@ class TMWebDriver:
 +    def get_status(self):
 +        if self.is_remote:
 +            try: return self._remote_cmd({"cmd": "get_status"}).get('r', {})

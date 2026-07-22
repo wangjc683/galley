@@ -54,6 +54,8 @@ class TMWebDriver:
 
     def start_http_server(self):
         self.app = app = bottle.Bottle()
+        @app.hook('before_request')
+        def reject_web_origin(): request.headers.get('Origin') is not None and bottle.abort(403)
 
         @app.route('/api/longpoll', method=['GET', 'POST'])
         def long_poll():

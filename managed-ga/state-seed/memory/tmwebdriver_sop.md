@@ -43,7 +43,6 @@ fetch('PDF_URL').then(r=>r.blob()).then(b=>{
 
 ## CDP桥(tmwd_cdp_bridge扩展) ⭐首选
 扩展路径：`assets/tmwd_cdp_bridge/`(需安装，含debugger权限)
-⚠TID约定标识：首次运行自动生成到`assets/tmwd_cdp_bridge/config.js`(已gitignore)，扩展通过manifest引用
 调用：`web_execute_js` script直传JSON字符串（工具层自动识别对象格式，走WS→background.js cmd路由）
 ```js
 // 直接传JSON字符串作为script参数，无需DOM操作
@@ -53,7 +52,7 @@ web_execute_js script='{"cmd": "cdp", "tabId": N, "method": "...", "params": {..
 web_execute_js script='{"cmd": "batch", "commands": [...]}'
 // 返回值直接是JSON结果
 ```
-通信方式：⭐JSON字符串直传(首选) | TID DOM方式(TID元素+MutationObserver，web_scan/execute_js底层依赖)
+通信方式：JSON字符串经WS直传background.js；不经过页面DOM
 单命令：`{cmd:'tabs'}` | `{cmd:'cookies'}` | `{cmd:'cdp', tabId:N, method:'...', params:{...}}` | `{cmd:'management', method:'list|reload|disable|enable', extId:'...'}`
 - management：list返回所有扩展信息；reload/disable/enable需传extId
 - contentSettings：`{cmd:'contentSettings', type:'automaticDownloads', pattern:'https://*/*', setting:'allow'}`

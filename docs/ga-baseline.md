@@ -15,60 +15,84 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `5257decc8c7ac2484278c977b91d15cb09990fef`
+Locked commit: `1d3c1a09dfdaa76ba5dee82725fa599df7c16be4`
 
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-07-20
-- Previous baseline: `1e89c3eece5a54938c06156a0e49de76ca926e07`
-- Delta: 7 commits, 12 files, ~25 insertions / ~44 deletions. Most of it is
-  upstream's community desktop frontend (`frontends/desktop*`, packaging CI),
-  which is inert on Galley's path. The engine-core delta is just `ga.py` and
-  `llmcore.py`; the rest is `assets/sys_prompt.txt`, memory insight templates,
-  and `.gitignore`.
+- Date audited: 2026-07-22
+- Previous baseline: `5257decc8c7ac2484278c977b91d15cb09990fef`
+- Delta: 8 commits, 18 files, ~90 insertions / ~63 deletions. Engine-core
+  delta is two one-line changes (`agentmain.py` temp-file naming,
+  `llmcore.py` trim factor) plus the legacy CDP DOM bridge removal; the rest
+  is `memory/` + insight templates (plan-mode deprecation), the tmwebdriver
+  extension, and upstream frontends (`conductor.py`, `stapp.py`,
+  `frontends/desktop*`) that are inert on Galley's path.
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Result: no external bridge protocol or dependency break; `agent_loop.py` and
-  `pyproject.toml` did not change at all. Managed runtime picked up: a
-  permissive empty-response check in `GenericAgentHandler` (upstream reverted an
-  over-aggressive blank-turn detector that force-retried summary-only /
-  thinking-only turns — Galley inherits fewer spurious retries), three new
-  Anthropic beta headers in `NativeClaudeSession.ask()`
-  (`thinking-token-count-2026-05-13`, `mid-conversation-system-2026-04-07`,
-  `fallback-credit-2026-06-01`), four new execution principles in the base
-  system prompt (action-as-cognition, autonomous-closure, completion-in-reality,
-  deliver-on-block), and the memory templates de-emphasizing `plan_sop`'s
-  hard-coded trigger. The patch stack replayed clean via commit-chain rebase:
-  only `0001` and `0003` changed, and only in their zero-context `ga.py` `@@`
-  line numbers (the empty-response tweak shifted `get_global_memory()` down 2
-  lines). No semantic conflict; Galley's managed state-root routing, Codex
-  backend, and image attachment path are preserved.
-- Devlog: [GA upstream upgrade 1e89c3e -> 5257dec](./devlog/2026-07-20-ga-upstream-upgrade-1e89c3e-to-5257dec.md)
+- Result: no external bridge protocol or dependency break; `agent_loop.py`,
+  `ga.py`, and `pyproject.toml` did not change at all. Headline change is
+  **upstream formally deprecating plan mode** (`plan_sop.md` gains a
+  deprecation banner: do not enter plan mode, file will be deleted; replacement
+  routing is ultraplan / project_mode / direct execution) — Galley removed its
+  plan-mode visibility chain in the same change set. Managed runtime also
+  picked up: unique long-prompt temp filenames under concurrency
+  (`pid`+`nanos` — directly relevant to Galley's multi-session use),
+  tmwebdriver HTTP-origin guard + legacy DOM bridge removal, a more
+  aggressive context-trim factor (`maxlen_multiplier` 0.85 → 0.75), and
+  `project_mode_sop` indexed in the L1 templates. Patch-stack rebase had two
+  real conflicts (`0001` temp-file line, `0003` dead `cdp_cfg` hunk) and
+  repaired one pre-existing drift (`0015` regenerated from the shipped
+  payload; see `managed-ga/patches/manifest.md`).
+- Devlog: [GA upstream upgrade 5257dec -> 1d3c1a09](./devlog/2026-07-22-ga-upstream-upgrade-5257dec-to-1d3c1a09.md)
 
-New in the `1e89c3e` -> `5257dec` range:
+New in the `5257dec` -> `1d3c1a09` range:
+
+- `memory/plan_sop.md` + insight templates: plan mode formally deprecated.
+  The SOP text now forbids entering plan mode and routes to `ultraplan_sop`
+  (explicit user opt-in only) / `project_mode_sop` / direct execution;
+  `project_mode_sop` joined the L1 template index. The `ga.py` plan-mode
+  machinery (`enter_plan_mode`, `in_plan_mode` stash, 📌 step injection,
+  `frontends/plan_state.py`) is still present upstream but has lost its only
+  trigger source for newly seeded state. Galley's plan-visibility chain
+  (`plan_watch.py` → `plan_update` IPC → PlanContextBar) was removed with
+  this upgrade; no Galley code couples to plan state anymore, so upstream
+  deleting the machinery later requires no Galley action. Existing seeded
+  user state keeps the old SOP (missing-only seed copy) — residual triggers
+  are possible but rare, and now simply render as ordinary turns.
+- `agentmain.py`: long-prompt temp filename is now
+  `user_prompt_{pid}_{time_ns}.md` (concurrency-safe); the legacy CDP config
+  seeding block is gone. `0001` combines the new naming with the managed
+  state root; `0003` dropped its dead `cdp_cfg` hunk.
+- `llmcore.py`: `maxlen_multiplier` factor 0.85 → 0.75 — context trimming
+  kicks in earlier. Not a contract change (history shape untouched), but
+  long-session behavior may be observably different; watch during dogfood.
+- `TMWebDriver.py` + `assets/tmwd_cdp_bridge/`: local bottle server now
+  rejects requests carrying an `Origin` header (blocks web-page CSRF against
+  the localhost driver), and the legacy in-page DOM bridge
+  (MutationObserver + `config.js`) is fully removed — CDP is the only path.
+  `0006`/`0015` rebased over it (both deletions kept in `content.js`).
+- `frontends/conductor.py` / `stapp.py` / `frontends/desktop*`: conductor now
+  notifies on user chat messages; stapp/desktop UX tweaks. All inert on
+  Galley's path (Galley does not bridge these frontends).
+
+Carried forward from earlier ranges (unchanged this range, still describes
+the current surface — `ga.py` items below were last touched in `1e89c3e` ->
+`5257dec`):
 
 - `agent_loop.py`: still zero diff — dispatch protocol, hooks, and the
   structured `{'turn': turn}` yield are byte-identical.
-- `ga.py`: `GenericAgentHandler`'s blank-response check in `do_no_tool` was
-  reverted to a permissive form (`not content.strip() and not thinking.strip()`)
-  after an over-aggressive detector force-retried summary-only / thinking-only
-  turns; the incomplete-response check also now catches `content.endswith(
-  '</summary>')`. This is internal to the handler's response handling, not the
-  dispatch signature or Galley's approval gate — `WorkbenchHandler` rides the
-  latter. Galley inherits fewer spurious retries. Init signature and import path
-  unchanged.
-- `llmcore.py`: `NativeClaudeSession.ask()` gained three Anthropic beta headers
-  (`thinking-token-count-2026-05-13`, `mid-conversation-system-2026-04-07`,
-  `fallback-credit-2026-06-01`). The method signature and history block shape are
-  unchanged, so the history-restore validation for `NativeClaudeSession` in
-  `runner/ga_session.py::_VALIDATED_HISTORY_BACKENDS` still holds.
-- `assets/sys_prompt.txt` + memory insight templates: four new execution
-  principles in the base system prompt and a de-emphasis of `plan_sop`'s
-  hard-coded trigger. Behavior-guidance content, vendored into the managed state
-  seed; no code contract.
-
-Carried forward from the `502be0a` -> `1e89c3e` range (unchanged this range,
-still describes the current surface):
+- `ga.py`: `GenericAgentHandler`'s blank-response check in `do_no_tool` stays
+  the permissive form (`not content.strip() and not thinking.strip()`); the
+  incomplete-response check catches `content.endswith('</summary>')`. Internal
+  to the handler's response handling, not the dispatch signature or Galley's
+  approval gate. Init signature and import path unchanged.
+- `llmcore.py`: `NativeClaudeSession.ask()` carries the three Anthropic beta
+  headers (`thinking-token-count-2026-05-13`, `mid-conversation-system-2026-04-07`,
+  `fallback-credit-2026-06-01`); method signature and history block shape
+  unchanged, so `runner/ga_session.py::_VALIDATED_HISTORY_BACKENDS` still holds.
+- `assets/sys_prompt.txt`: the four execution principles from `5257dec`
+  (action-as-cognition, autonomous-closure, completion-in-reality,
+  deliver-on-block) are unchanged.
 
 - `ga.py`: upstream sets `stdin=subprocess.DEVNULL` in `code_run` (Galley's
   `0005` patch verbatim → removed). `file_write` / `file_patch` preserve the
