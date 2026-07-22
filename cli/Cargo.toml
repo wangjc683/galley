@@ -1,6 +1,6 @@
 [package]
 name = "galley-cli"
-version = "0.3.6"
+version = "0.3.7"
 edition = "2021"
 description = "Galley CLI — agent-first interface to Galley Core (B1 M4+: 6 read commands)"
 # Workspace root lives at ../core (not in an ancestor of this crate),
