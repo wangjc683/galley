@@ -1,6 +1,12 @@
 # Windows 切换应用后 composer 聚焦(调查重启)
 
-Status: ready-for-agent
+Status: needs-info
+
+> **暂缓(2026-07-22,JC 决定)**:自查成本高(实机 Win32 深潜)而
+> 上游正在收敛,主动调查挂起。唯一活跃项是 issue 02 的绊线:
+> tauri 2.12 发布 → 升级 + 实机回归 Alt+Tab。issue 01/03 在绊线
+> 触发且问题仍在时再启动。v0.3.7 带此已知限制发布
+> (Windows Alt+Tab 切回需点击一次才能打字)。
 
 ## 问题
 

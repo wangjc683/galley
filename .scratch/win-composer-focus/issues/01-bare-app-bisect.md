@@ -1,6 +1,9 @@
 # 01 裸 app 对照 + 窗口栈二分
 
-Status: ready-for-human
+Status: needs-info
+
+> 暂缓中(见 PRD)。仅当 issue 02 绊线触发(tauri 2.12 升级后
+> 问题仍在)且决定重启调查时执行。
 
 需要 Win11 实机(dev 工具链已配好,见
 docs/windows-build-checklist)。目标:一次实验判定 H1。
