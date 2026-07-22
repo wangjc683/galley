@@ -129,6 +129,17 @@ runtime behavior:
    file (for example, the fsapp patches rebase `0009` first); record them in
    the manifest row's rebase-risk column.
 
+### How To Modify An Existing Patch
+
+The no-direct-edit rule applies to iteration too. To change behavior an
+existing patch owns, update that `.patch` file (or redo the change in a
+replay workdir) and rebuild with `scripts/build-managed-ga.sh` — the payload
+must always be reproducible from baseline + stack. Committing a payload edit
+without re-exporting its patch leaves silent drift that nothing catches at
+commit time; it only surfaces at the next baseline upgrade, when the rebase
+script's byte-identity gate refuses to run (see the `0015` repair note in
+the patch ledger).
+
 `managed-ga/patches/manifest.md` is the authoritative ledger for the current
 stack, including the last verified replay date.
 
