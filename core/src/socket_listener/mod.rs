@@ -580,7 +580,7 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         )),
         "app.activate" => {
             if let Some(app) = ctx.app {
-                crate::show_main_window(app);
+                crate::tray::show_main_window(app);
                 DispatchResult::Unary(SocketResponse::ok(
                     request_id,
                     serde_json::json!({ "activated": true }),

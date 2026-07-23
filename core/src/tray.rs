@@ -1,8 +1,8 @@
 //! Window chrome, menu-bar / tray background mode, and quit lifecycle for
-//! the desktop app. Extracted from `lib.rs`: these helpers plus the
-//! first-close state are orchestrated by the Tauri `setup` hook and the
-//! run-event loop in `lib::run`, which glob-imports this module so those
-//! call sites stay unqualified. The `set_keep_in_background` and
+//! the desktop app. Extracted from `lib.rs`: `setup_background_mode`
+//! installs the tray, the window close handler, and the shared menu-event
+//! router from the Tauri `setup` hook (`app_setup`); `handle_run_event`
+//! is the app run-event loop body. The `set_keep_in_background` and
 //! `resolve_first_close` commands are registered as `tray::…` in the
 //! command handler.
 
@@ -194,12 +194,255 @@ pub(crate) fn tray_icon_image() -> tauri::Result<tauri::image::Image<'static>> {
 /// first-close choice: the user has seen and decided what closing
 /// means, so the FirstCloseDialog never needs to ask.
 #[tauri::command]
-pub(crate) fn set_keep_in_background(
-    app: tauri::AppHandle<tauri::Wry>,
-    enabled: bool,
-) {
+pub(crate) fn set_keep_in_background(app: tauri::AppHandle<tauri::Wry>, enabled: bool) {
     KEEP_IN_BACKGROUND_ON_CLOSE.store(enabled, Ordering::SeqCst);
     mark_first_close_choice(&app);
+}
+
+/// Background Mode. macOS shows the Galley status item in
+/// the right-side menu bar; Windows shows the same menu in
+/// the system tray. Closing the window hides it instead of
+/// tearing down Galley Core, so CLI / Supervisor / IM
+/// actions keep reaching the local socket. Also installs the
+/// shared `on_menu_event` router (tray menu + macOS menu bar)
+/// and shows the config-hidden main window for non-autostart
+/// launches.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn setup_background_mode(app: &tauri::App, autostart_launch: bool) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    use tauri::{Emitter, Manager, WindowEvent};
+
+    let tray_toggle = MenuItem::with_id(
+        app,
+        "tray_toggle_window",
+        // Silent autostart launches begin hidden, so the
+        // toggle must read "Open Galley" from the start.
+        if autostart_launch {
+            TRAY_SHOW_GALLEY_LABEL
+        } else {
+            TRAY_HIDE_GALLEY_LABEL
+        },
+        true,
+        None::<&str>,
+    )?;
+    app.manage(TrayMenuState {
+        toggle_window_item: tray_toggle.clone(),
+    });
+    let tray_new_chat = MenuItem::with_id(app, "tray_new_chat", "New Chat", true, None::<&str>)?;
+    let tray_settings = MenuItem::with_id(app, "tray_settings", "Settings...", true, None::<&str>)?;
+    let tray_check_updates = MenuItem::with_id(
+        app,
+        "tray_check_updates",
+        "Check for Updates…",
+        true,
+        None::<&str>,
+    )?;
+    let tray_quit = MenuItem::with_id(app, "tray_quit", "Quit Galley", true, None::<&str>)?;
+    let tray_primary_separator = PredefinedMenuItem::separator(app)?;
+    let tray_quit_separator = PredefinedMenuItem::separator(app)?;
+    let tray_menu = Menu::with_items(
+        app,
+        &[
+            &tray_toggle,
+            &tray_new_chat,
+            &tray_primary_separator,
+            &tray_settings,
+            &tray_check_updates,
+            &tray_quit_separator,
+            &tray_quit,
+        ],
+    )?;
+
+    let tray_icon = match tray_icon_image() {
+        Ok(image) => image,
+        Err(e) => {
+            eprintln!("[tray] custom tray icon load failed: {e}; using app icon");
+            app.default_window_icon()
+                .expect("default window icon must exist")
+                .clone()
+        }
+    };
+    let mut tray_builder = TrayIconBuilder::new()
+        .icon(tray_icon)
+        .menu(&tray_menu)
+        .tooltip("Galley")
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button,
+                button_state,
+                ..
+            } = event
+            {
+                #[cfg(target_os = "macos")]
+                if button == MouseButton::Right && button_state == MouseButtonState::Down {
+                    show_main_window(tray.app_handle());
+                }
+
+                #[cfg(target_os = "windows")]
+                if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                    toggle_main_window(tray.app_handle());
+                }
+            }
+        });
+    #[cfg(target_os = "macos")]
+    {
+        tray_builder = tray_builder
+            .show_menu_on_left_click(true)
+            .icon_as_template(true);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        tray_builder = tray_builder.show_menu_on_left_click(false);
+    }
+    let _tray = tray_builder.build(app)?;
+
+    let window = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .expect("main webview window must exist at setup time");
+    let window_for_close = window.clone();
+    let tray_toggle_for_close = tray_toggle.clone();
+    window.on_window_event(move |event| {
+        // No native focus assertion on Windows activation here:
+        // the v0.3.7 unconditional webview set_focus caused a
+        // Focused(false)/Focused(true) feedback loop (focus
+        // bouncing between HWNDs hundreds of times per second).
+        // The Alt+Tab caret restore on WebView2 is unsolved —
+        // see devlog 2026-07-21-windows-composer-refocus and
+        // the debug/win-focus branch.
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            if ALLOW_APP_EXIT.load(Ordering::SeqCst) {
+                return;
+            }
+            api.prevent_close();
+            if !KEEP_IN_BACKGROUND_ON_CLOSE.load(Ordering::SeqCst) {
+                // Settings -> General (or the first-close
+                // dialog) turned Background Mode off: close
+                // means quit. Still prevent_close above —
+                // request_true_quit is async and may show a
+                // confirm dialog when an agent is running; on
+                // Cancel the window must survive (and stay
+                // visible: the quit intent was withdrawn,
+                // hiding would look like a crash).
+                // cleanup_and_exit sets ALLOW_APP_EXIT before
+                // app.exit(0), so the real teardown passes the
+                // guard above.
+                request_true_quit(window_for_close.app_handle().clone(), true);
+                return;
+            }
+            if !FIRST_CLOSE_CHOICE_MADE.load(Ordering::SeqCst) {
+                // First close, no decision recorded: keep the
+                // window visible and let the GUI ask what
+                // closing should mean (FirstCloseDialog). The
+                // GUI answers via `resolve_first_close`, which
+                // hides or quits. If the webview listener
+                // isn't up yet the emit is lost and the window
+                // simply stays open — the next close attempt
+                // asks again. Dismissing the dialog (Esc /
+                // overlay) resolves nothing: close cancelled,
+                // ask again next time.
+                let _ = window_for_close.emit(FIRST_CLOSE_REQUESTED_EVENT, ());
+                return;
+            }
+            // Background Mode: hide instead of quit, so the
+            // close gesture feels instant. The first-close
+            // dialog already taught where the window goes.
+            let _ = window_for_close.hide();
+            let _ = tray_toggle_for_close.set_text(TRAY_SHOW_GALLEY_LABEL);
+        }
+    });
+
+    // Normal launches show the (config-hidden) window here;
+    // `--autostart` launches skip straight to background mode.
+    if !autostart_launch {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+
+    let tray_toggle_for_menu = tray_toggle.clone();
+    app.on_menu_event(move |app, event| {
+        use tauri_plugin_opener::OpenerExt;
+        match event.id.0.as_str() {
+            "settings" | "tray_settings" => {
+                show_main_window(app);
+                let _ = tray_toggle_for_menu.set_text(TRAY_HIDE_GALLEY_LABEL);
+                let _ = app.emit("menu:settings", ());
+            }
+            "check_updates" | "tray_check_updates" => {
+                show_main_window(app);
+                let _ = tray_toggle_for_menu.set_text(TRAY_HIDE_GALLEY_LABEL);
+                let _ = app.emit("menu:check_updates", ());
+            }
+            "new_chat" | "tray_new_chat" => {
+                show_main_window(app);
+                let _ = tray_toggle_for_menu.set_text(TRAY_HIDE_GALLEY_LABEL);
+                let _ = app.emit("menu:new_chat", ());
+            }
+            // Width arms: flip the checkmarks in Rust right
+            // away — AppKit auto-toggles only the clicked
+            // check item, which would briefly show both (or
+            // neither) checked until the GUI round-trip
+            // re-syncs via `set_width_menu_state`.
+            "width_compact" => {
+                #[cfg(target_os = "macos")]
+                if let Some(state) = app.try_state::<crate::app_menu::WidthMenuState>() {
+                    state.set_width("compact");
+                }
+                let _ = app.emit("menu:width_compact", ());
+            }
+            "width_wide" => {
+                #[cfg(target_os = "macos")]
+                if let Some(state) = app.try_state::<crate::app_menu::WidthMenuState>() {
+                    state.set_width("wide");
+                }
+                let _ = app.emit("menu:width_wide", ());
+            }
+            "tray_toggle_window" => {
+                toggle_main_window(app);
+            }
+            "quit_galley" | "tray_quit" => {
+                request_true_quit(app.clone(), true);
+            }
+            "github" => {
+                let _ = app
+                    .opener()
+                    .open_url("https://github.com/wangjc683/galley", None::<&str>);
+            }
+            "issues" => {
+                let _ = app
+                    .opener()
+                    .open_url("https://github.com/wangjc683/galley/issues", None::<&str>);
+            }
+            _ => {}
+        }
+    });
+
+    Ok(())
+}
+
+/// The app run-event loop body (`Builder::run` callback): routes
+/// exit-requested through the true-quit cleanup path and re-shows the
+/// window on macOS Dock reopen.
+pub(crate) fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    match event {
+        tauri::RunEvent::ExitRequested { api, code, .. } => {
+            if ALLOW_APP_EXIT.load(Ordering::SeqCst) || code == Some(tauri::RESTART_EXIT_CODE) {
+                return;
+            }
+            api.prevent_exit();
+            request_true_quit(app.clone(), true);
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen {
+            has_visible_windows,
+            ..
+        } => {
+            if !has_visible_windows {
+                show_main_window(app);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Verdict of the GUI's first-close choice dialog. Records the choice
@@ -210,10 +453,7 @@ pub(crate) fn set_keep_in_background(
 /// The keep-in-background *pref* is persisted by the GUI store setter
 /// alongside this call, same split as `set_keep_in_background`.
 #[tauri::command]
-pub(crate) fn resolve_first_close(
-    app: tauri::AppHandle<tauri::Wry>,
-    keep_in_background: bool,
-) {
+pub(crate) fn resolve_first_close(app: tauri::AppHandle<tauri::Wry>, keep_in_background: bool) {
     use tauri::Manager;
     mark_first_close_choice(&app);
     KEEP_IN_BACKGROUND_ON_CLOSE.store(keep_in_background, Ordering::SeqCst);
