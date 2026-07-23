@@ -2,16 +2,15 @@ import { useMemo, useState } from "react";
 
 import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
-import { MainHeader } from "@/components/layout/MainHeader";
+import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { resolveSidebarRuntimeIndicator } from "@/components/layout/sidebar/runtime-indicator";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
 import { EmptyState } from "@/components/screens/EmptyState";
 import { MainView } from "@/components/screens/MainView";
 import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
-import { Settings } from "@/components/screens/settings/Settings";
+import { SettingsHost } from "@/components/screens/settings/SettingsHost";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { YoloIntroDialog } from "@/components/screens/YoloIntroDialog";
 import { FirstCloseDialog } from "@/components/screens/FirstCloseDialog";
@@ -27,29 +26,22 @@ import {
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useBrowserControlStartupEffect } from "@/hooks/useBrowserControlStartupEffect";
+import { useChannelsStatus } from "@/hooks/useChannelsStatus";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useGoalActions } from "@/hooks/useGoalActions";
 import { useGoalEffects } from "@/hooks/useGoalEffects";
-import { useImSupervisorStatus } from "@/hooks/useImSupervisorStatus";
+import { useImageBlockedToast } from "@/hooks/useImageBlockedToast";
+import { useLLMDisplay } from "@/hooks/useLLMDisplay";
 import { useMessageSend } from "@/hooks/useMessageSend";
 import { useOnboardingFlow } from "@/hooks/useOnboardingFlow";
 import { useProjectNavigation } from "@/hooks/useProjectNavigation";
 import { useThemeEffects } from "@/hooks/useThemeEffects";
 import {
-  aggregateChannelsState,
-  restartEnabledImSupervisors,
-} from "@/lib/im-supervisor";
-import {
   useActiveMessages,
   useActiveRuntime,
 } from "@/hooks/useActiveSession";
-import { resolveDisplayedLLM } from "@/lib/current-llm";
 import { resolveLanguagePreference } from "@/lib/language";
-import {
-  currentLLMDisplayName,
-  managedModelsToLLMs,
-} from "@/lib/managed-model-options";
 import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import type { EpigraphCondition } from "@/lib/epigraphs";
@@ -61,12 +53,10 @@ import {
   EMPTY_TURNS,
   useMessagesStore,
 } from "@/stores/messages";
-import { useManagedModelsStore } from "@/stores/managed-models";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
-import { makeAppError } from "@/types/app-error";
 import type { GoalBrief } from "@/types/goal";
 
 /**
@@ -76,7 +66,10 @@ import type { GoalBrief } from "@/types/goal";
  * mostly wiring: pull screen / approval / runtime out of the stores,
  * feed them down to the four screens (Onboarding, Empty State, Main
  * View, plus the modal-y Settings + Command Palette + ToastHost),
- * route component callbacks back to store actions.
+ * route component callbacks back to store actions. Header and
+ * Settings wiring self-subscribe in `MainHeaderHost` / `SettingsHost`;
+ * the LLM projection and channel aggregates live in `useLLMDisplay` /
+ * `useChannelsStatus`.
  */
 function App() {
   const screen = useUiStore((s) => s.screen);
@@ -137,29 +130,11 @@ function App() {
     (s) => s.appendUserTurnExternal,
   );
   const appendSystemTurn = useMessagesStore((s) => s.appendSystemTurn);
-  // LLM / runtimeInfo / pet state now live in runtimeStore (M3a).
-  // Subscribe to the active session's per-runtime entry so the
-  // Composer pill + dropdown + Inspector tab re-render on changes.
-  const activeSessionLLMs = useActiveRuntime((r) => r.llms, undefined);
-  const activeSessionLLMDisplayName = useActiveRuntime(
-    (r) => r.llmDisplayName,
-    undefined,
-  );
-  // Only surface the per-session LLM on the main screen (empty / settings
-  // screens fall back to cached / managed in resolveDisplayedLLM).
-  const activeRuntimeLLMs =
-    screen === "main" ? activeSessionLLMs : undefined;
-  const activeRuntimeDisplayName =
-    screen === "main" ? activeSessionLLMDisplayName : undefined;
-  const cachedLLMs = useRuntimeStore((s) => s.cachedLLMs);
-  const cachedLLMDisplayName = useRuntimeStore((s) => s.cachedLLMDisplayName);
-  const pendingLLMIndex = useRuntimeStore((s) => s.pendingLLMIndex);
   const pendingApprovalMode = useRuntimeStore((s) => s.pendingApprovalMode);
   const selectLLMForNewSession = useRuntimeStore(
     (s) => s.selectLLMForNewSession,
   );
   const selectLLMForSession = useRuntimeStore((s) => s.selectLLMForSession);
-  const runtimeInfo = useRuntimeStore((s) => s.runtimeInfo);
 
   // Per-session conversation reads — activeSessionId comes from
   // sessionsStore (declared above), used by every selector below to
@@ -172,49 +147,23 @@ function App() {
   const recordApprovalDecision = useMessagesStore(
     (s) => s.recordApprovalDecision,
   );
-  const approvalConfig = usePrefsStore((s) => s.approvalConfig);
-  const setApprovalRequiredTools = usePrefsStore(
-    (s) => s.setApprovalRequiredTools,
-  );
-  const removeAlwaysAllow = usePrefsStore((s) => s.removeAlwaysAllow);
   const yoloMode = usePrefsStore((s) => s.yoloMode);
-  const setYoloMode = usePrefsStore((s) => s.setYoloMode);
   const yoloIntroSeen = usePrefsStore((s) => s.yoloIntroSeen);
   const acknowledgeYoloIntro = usePrefsStore((s) => s.acknowledgeYoloIntro);
   const conversationWidth = usePrefsStore((s) => s.conversationWidth);
-  const setConversationWidth = usePrefsStore((s) => s.setConversationWidth);
   const conversationFontSize = usePrefsStore((s) => s.conversationFontSize);
-  const setConversationFontSize = usePrefsStore(
-    (s) => s.setConversationFontSize,
-  );
   const languagePreference = usePrefsStore((s) => s.languagePreference);
   const setLanguagePreference = usePrefsStore((s) => s.setLanguagePreference);
   const themePreference = usePrefsStore((s) => s.themePreference);
-  const setThemePreference = usePrefsStore((s) => s.setThemePreference);
-  const notifyOnGoalEnd = usePrefsStore((s) => s.notifyOnGoalEnd);
-  const setNotifyOnGoalEnd = usePrefsStore((s) => s.setNotifyOnGoalEnd);
-  const notifyOnApproval = usePrefsStore((s) => s.notifyOnApproval);
-  const setNotifyOnApproval = usePrefsStore((s) => s.setNotifyOnApproval);
-  const notifyOnReplyDone = usePrefsStore((s) => s.notifyOnReplyDone);
-  const setNotifyOnReplyDone = usePrefsStore((s) => s.setNotifyOnReplyDone);
-  const keepInBackgroundOnClose = usePrefsStore(
-    (s) => s.keepInBackgroundOnClose,
-  );
   const setKeepInBackgroundOnClose = usePrefsStore(
     (s) => s.setKeepInBackgroundOnClose,
   );
-  const autoDownloadUpdates = usePrefsStore((s) => s.autoDownloadUpdates);
-  const setAutoDownloadUpdates = usePrefsStore(
-    (s) => s.setAutoDownloadUpdates,
-  );
   const petAttachedSessionId = useRuntimeStore((s) => s.petAttachedSessionId);
-  const setPendingPetMigration = useUiStore((s) => s.setPendingPetMigration);
 
   const toasts = useUiStore((s) => s.toasts);
   const pushToast = useUiStore((s) => s.pushToast);
   const dismissToast = useUiStore((s) => s.dismissToast);
   const restartAppUpdate = useAppUpdateStore((s) => s.restart);
-  const appUpdateStatus = useAppUpdateStore((s) => s.status);
   const [emptyComposerFocusTick, setEmptyComposerFocusTick] = useState(0);
 
   const bridgeStatus = useActiveRuntime((r) => r.bridgeStatus, "idle");
@@ -224,23 +173,6 @@ function App() {
   const setActiveRuntimeKind = usePrefsStore((s) => s.setActiveRuntimeKind);
   const gaConfig = usePrefsStore((s) => s.gaConfig);
   const activeRuntimeKind = usePrefsStore((s) => s.activeRuntimeKind);
-  const wechatChannelsStatus = useImSupervisorStatus(
-    "wechat",
-    activeRuntimeKind === "managed",
-  );
-  const feishuChannelsStatus = useImSupervisorStatus(
-    "feishu",
-    activeRuntimeKind === "managed",
-  );
-  const telegramChannelsStatus = useImSupervisorStatus(
-    "telegram",
-    activeRuntimeKind === "managed",
-  );
-  const managedModels = useManagedModelsStore((s) => s.models);
-  const managedLLMs = useMemo(
-    () => managedModelsToLLMs(managedModels, pendingLLMIndex),
-    [managedModels, pendingLLMIndex],
-  );
   const resolvedLanguage = useMemo(
     () => resolveLanguagePreference(languagePreference),
     [languagePreference],
@@ -251,72 +183,29 @@ function App() {
     () => copyForLanguage(resolvedLanguage),
     [resolvedLanguage],
   );
-  const managedLLMDisplayName = currentLLMDisplayName(
-    managedLLMs,
-    copy.app.unconfiguredModel,
-  );
-  // Display precedence (active slot > managed/external fallback) lives in
-  // resolveDisplayedLLM now; i18n stays here (managedLLMDisplayName above,
-  // llmConfigHint below).
-  const { llms, displayName: llmDisplayName } = resolveDisplayedLLM({
-    runtimeKind: activeRuntimeKind,
-    activeRuntimeLLMs,
-    activeRuntimeDisplayName,
-    managedLLMs,
-    managedDisplayName: managedLLMDisplayName,
-    cachedLLMs,
-    cachedDisplayName: cachedLLMDisplayName,
-  });
-  const llmConfigHint =
-    activeRuntimeKind === "managed" ? undefined : copy.app.externalModelHint;
-  const hasConfiguredManagedModel = managedModels.some(
-    (model) => model.credentialStatus !== "missing",
-  );
-  const requiresManagedModelConfig =
-    activeRuntimeKind === "managed" && !hasConfiguredManagedModel;
-  const sidebarRuntimeIndicator = resolveSidebarRuntimeIndicator(
-    activeRuntimeKind,
+  const { channelsState, channelsLoadError, restartChannels } =
+    useChannelsStatus({
+      enabled: activeRuntimeKind === "managed",
+      copy,
+      pushToast,
+    });
+  const {
+    llms,
+    llmDisplayName,
+    llmConfigHint,
     hasConfiguredManagedModel,
-    gaConfig,
-  );
+    requiresManagedModelConfig,
+    sidebarRuntimeIndicator,
+  } = useLLMDisplay({ screen, copy });
   const openSettings = (tab: SettingsTab = "runtime") => {
     setSettingsTab(tab);
     setSettingsOpen(true);
   };
   const openModelsForMissingConfig = () => openSettings("models");
-  const showImageBlockedToast = (message: string) => {
-    pushToast(
-      makeAppError({
-        category: "business",
-        severity: "error",
-        title: copy.toasts.imageBlocked,
-        message,
-        hint: null,
-        retryable: false,
-        context: "imagePaste",
-        traceback: null,
-        autoDismissMs: 4200,
-      }),
-    );
-  };
-  // Centralized reason → copy routing for the Composer's onImageBlocked.
-  // The Composer only emits the reason; the toast copy (and which key it
-  // lives under) is an App-level concern, so the mapping stays here.
-  const handleImageBlocked = (
-    reason: "goal" | "external" | "too-large" | "unsupported" | "too-many",
-  ) => {
-    const message =
-      reason === "goal"
-        ? copy.toasts.imageBlockedGoal
-        : reason === "external"
-          ? copy.toasts.imageBlockedExternal
-          : reason === "too-large"
-            ? copy.toasts.imageTooLarge
-            : reason === "too-many"
-              ? copy.toasts.imageTooMany
-              : copy.toasts.imageUnsupported;
-    showImageBlockedToast(message);
-  };
+  const { showImageBlockedToast, handleImageBlocked } = useImageBlockedToast({
+    copy,
+    pushToast,
+  });
   const openModelConfigFromSwitcher =
     activeRuntimeKind === "managed" ? () => openSettings("models") : undefined;
   const openLLMSwitcherFallback = () => {
@@ -325,57 +214,6 @@ function App() {
       return;
     }
     setPaletteOpen(true);
-  };
-  const restartChannelsFromToast = async () => {
-    try {
-      const statuses = await restartEnabledImSupervisors();
-      const wechat = statuses.find((status) => status.platform === "wechat");
-      if (wechat) {
-        wechatChannelsStatus.setStatus(wechat);
-      }
-      const feishu = statuses.find((status) => status.platform === "feishu");
-      if (feishu) {
-        feishuChannelsStatus.setStatus(feishu);
-      }
-      const telegram = statuses.find(
-        (status) => status.platform === "telegram",
-      );
-      if (telegram) {
-        telegramChannelsStatus.setStatus(telegram);
-      }
-      pushToast(
-        makeAppError({
-          id: "channels-restarted",
-          category: "business",
-          severity: "info",
-          title:
-            statuses.length > 0
-              ? copy.toasts.channelsRestarted
-              : copy.toasts.channelsRestartNone,
-          message:
-            statuses.length > 0 ? copy.toasts.channelsRestartedMessage : "",
-          hint: null,
-          retryable: false,
-          context: "restart_enabled_im_supervisors",
-          traceback: null,
-          autoDismissMs: 4200,
-        }),
-      );
-    } catch (e) {
-      pushToast(
-        makeAppError({
-          id: "channels-restart-failed",
-          category: "business",
-          severity: "error",
-          title: copy.toasts.channelsRestartFailed,
-          message: e instanceof Error ? e.message : String(e),
-          hint: null,
-          retryable: false,
-          context: "restart_enabled_im_supervisors",
-          traceback: null,
-        }),
-      );
-    }
   };
 
   const storeTurns = useActiveMessages((m) => m.turns, EMPTY_TURNS);
@@ -724,34 +562,11 @@ function App() {
         }
         main={
           <ThemeProvider theme={resolvedTheme}>
-            <MainHeader
+            <MainHeaderHost
               sessionTitle={activeSession?.title}
-              browserControlStatus={
-                activeRuntimeKind === "managed" ? browserControlStatus : null
-              }
-              onOpenBrowserControl={() => openSettings("browser")}
-              channelsState={
-                activeRuntimeKind === "managed"
-                  ? aggregateChannelsState([
-                      wechatChannelsStatus.status?.state,
-                      feishuChannelsStatus.status?.state,
-                      telegramChannelsStatus.status?.state,
-                    ])
-                  : null
-              }
-              channelsLoadError={
-                activeRuntimeKind === "managed"
-                  ? (wechatChannelsStatus.loadError ??
-                    feishuChannelsStatus.loadError ??
-                    telegramChannelsStatus.loadError)
-                  : null
-              }
-              onOpenChannelsSettings={
-                activeRuntimeKind === "managed"
-                  ? () => openSettings("im")
-                  : undefined
-              }
               activeGoals={activeGoals}
+              channelsState={channelsState}
+              channelsLoadError={channelsLoadError}
               onOpenGoalProject={openGoalProject}
               onOpenGoal={(goalId) => {
                 void openGoal(goalId);
@@ -759,76 +574,9 @@ function App() {
               onStopGoal={(goalId) => {
                 void stopGoalFromTopbar(goalId);
               }}
-              appUpdateStatus={appUpdateStatus}
-              hasRunningSessions={hasRunningSessions}
-              onRestartAppUpdate={() => {
-                void restartAppUpdate();
-              }}
-              conversationWidth={conversationWidth}
-              onToggleConversationWidth={() => {
-                void setConversationWidth(
-                  conversationWidth === "wide" ? "compact" : "wide",
-                );
-              }}
-              conversationFontSize={conversationFontSize}
-              onChangeConversationFontSize={(size) => {
-                void setConversationFontSize(size);
-              }}
-              themePreference={themePreference}
-              resolvedTheme={resolvedTheme}
-              onChangeThemePreference={(preference) => {
-                void setThemePreference(preference);
-              }}
-              onReinjectTools={() => {
-                // Reinject targets the currently active session — that's
-                // the conversation the user is reading when they notice
-                // tool drift. No-op if no active session (button is
-                // available but does nothing rather than throwing).
-                if (!activeSessionId) return;
-                if (bridgeStatus !== "connected") return;
-                void sendIPCCommand(activeSessionId, {
-                  kind: "reinject_tools",
-                });
-              }}
-              onTogglePet={() => {
-                // Three cases (see devlog 2026-05-14 pet UX overhaul):
-                //   1. Active session HOLDS the pet → detach (close).
-                //   2. Pet on another session → implicit migrate:
-                //      detach old + stash target; the pet_detached IPC
-                //      handler fires the follow-up attach once the
-                //      port is released.
-                //   3. No pet anywhere → attach to active.
-                // The sidebar Cat badge tells the user where the pet
-                // currently lives, so the menu's "桌面宠物" always
-                // reads as "I want it here" without surprise.
-                if (!activeSessionId) return;
-                if (petAttachedSessionId === activeSessionId) {
-                  void sendIPCCommand(activeSessionId, {
-                    kind: "detach_pet",
-                  });
-                  return;
-                }
-                if (bridgeStatus !== "connected") return;
-                if (petAttachedSessionId) {
-                  setPendingPetMigration(activeSessionId);
-                  void sendIPCCommand(petAttachedSessionId, {
-                    kind: "detach_pet",
-                  });
-                  return;
-                }
-                void sendIPCCommand(activeSessionId, {
-                  kind: "attach_pet",
-                  port: 41983,
-                });
-              }}
-              currentSessionHasPet={
-                !!activeSessionId && petAttachedSessionId === activeSessionId
-              }
-              onRenameSession={(newTitle) => {
-                if (!activeSessionId) return;
-                renameSession(activeSessionId, newTitle);
-              }}
+              openSettings={openSettings}
               onOpenSettings={() => setSettingsOpen(true)}
+              resolvedTheme={resolvedTheme}
             />
             <BrowserControlAttentionSurface
               show={showBrowserControlAttention}
@@ -982,118 +730,17 @@ function App() {
         }}
       />
 
-      <Settings
+      <SettingsHost
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         tab={settingsTab}
         onTabChange={setSettingsTab}
-        runtimeInfo={runtimeInfo}
-        approval={approvalConfig}
-        projectCount={projects.length}
-        hasRunningSessions={hasRunningSessions}
-        activeRuntimeKind={activeRuntimeKind}
-        hasManagedRuntimeConfigured={hasConfiguredManagedModel}
-        hasExternalRuntimeConfigured={gaConfig.gaPath.trim() !== ""}
-        yoloMode={yoloMode}
-        useExternalPython={gaConfig.useExternalPython}
-        onChangeYoloMode={(enabled) => {
-          // Fire-and-forget: setYoloMode persists + notifies bridge,
-          // but the UI updates synchronously from the store action.
-          void setYoloMode(enabled);
-        }}
-        onChangeRequiredTools={setApprovalRequiredTools}
-        onRemoveAlwaysAllow={removeAlwaysAllow}
-        onChangeGAPath={() => {
-          void pickGAPath(setGAConfig, copy.app.chooseGAFolderTitle);
-        }}
-        onCommitGAPath={async (path) => {
-          // Manual-typed GA path from Settings → Runtime. The
-          // SettingsRuntime field has already validated and refuses to
-          // call this on `not-found`; we trust it here. setGAConfig
-          // shows the same "重启 Galley 才能生效" toast as the picker
-          // flow, keeping both entry points symmetric.
-          await setGAConfig({ gaPath: path });
-        }}
-        onToggleExternalPython={(useExternal) => {
-          // v0.1.1: persist the bundled-vs-external choice. Like
-          // gaPath, takes effect on next bridge spawn (existing live
-          // sessions keep their current Python). setGAConfig shows
-          // the same "重启 Galley" toast.
-          void setGAConfig({ useExternalPython: useExternal });
-        }}
-        onChangeRuntimeKind={(kind) => {
-          if (kind === activeRuntimeKind) return;
-          void (async () => {
-            await setActiveRuntimeKind(kind);
-            useRuntimeStore.setState({ pendingLLMIndex: undefined });
-            setActiveProjectFilter(undefined);
-            setActiveSession(undefined);
-            setScreen("empty");
-            await useSessionsStore.getState().hydrate();
-            pushToast(
-              makeAppError({
-                category: "business",
-                severity: "info",
-                title: copy.toasts.switchedRuntime(kind),
-                message: copy.toasts.runtimeSwitchKept,
-                hint: null,
-                retryable: false,
-                context: null,
-                traceback: null,
-                autoDismissMs: 4200,
-              }),
-            );
-          })();
-        }}
-        // Bridge Python picker intentionally not wired — V0.1 relies
-        // on the python probe to pick the interpreter; advanced users
-        // edit prefs / capabilities by hand. Settings just shows the
-        // resolved path.
-        //
-        // "跑一次 Health Check" routes back through Onboarding's
-        // StepHealth in revisit mode (skips Welcome / Attach). One
-        // canonical health-check UX instead of a divergent inline
-        // copy in Settings — see Settings-Health-Check devlog
-        // 2026-05-15.
+        resolvedTheme={resolvedTheme}
         onReRunHealthCheck={onboarding.enterHealthCheckRevisit}
         onOpenSetupAssistant={onboarding.enterSetupAssistant}
         onRunBrowserControlDemo={() => {
           setSettingsOpen(false);
           void runBrowserControlDemo();
-        }}
-        languagePreference={languagePreference}
-        resolvedLanguage={resolvedLanguage}
-        onChangeLanguagePreference={(preference) => {
-          void setLanguagePreference(preference);
-        }}
-        themePreference={themePreference}
-        resolvedTheme={resolvedTheme}
-        onChangeThemePreference={(preference) => {
-          void setThemePreference(preference);
-        }}
-        conversationFontSize={conversationFontSize}
-        onChangeConversationFontSize={(size) => {
-          void setConversationFontSize(size);
-        }}
-        notifyOnGoalEnd={notifyOnGoalEnd}
-        onChangeNotifyOnGoalEnd={(enabled) => {
-          void setNotifyOnGoalEnd(enabled);
-        }}
-        notifyOnApproval={notifyOnApproval}
-        onChangeNotifyOnApproval={(enabled) => {
-          void setNotifyOnApproval(enabled);
-        }}
-        notifyOnReplyDone={notifyOnReplyDone}
-        onChangeNotifyOnReplyDone={(enabled) => {
-          void setNotifyOnReplyDone(enabled);
-        }}
-        keepInBackgroundOnClose={keepInBackgroundOnClose}
-        onChangeKeepInBackgroundOnClose={(enabled) => {
-          void setKeepInBackgroundOnClose(enabled);
-        }}
-        autoDownloadUpdates={autoDownloadUpdates}
-        onChangeAutoDownloadUpdates={(enabled) => {
-          void setAutoDownloadUpdates(enabled);
         }}
       />
 
@@ -1167,7 +814,7 @@ function App() {
         onViewProject={openProjectInSidebar}
         onViewGoal={openGoal}
         onRestartChannels={() => {
-          void restartChannelsFromToast();
+          void restartChannels();
         }}
         onRestartAppUpdate={() => {
           void restartAppUpdate();
@@ -1197,30 +844,3 @@ function App() {
 }
 
 export default App;
-
-// ---------------- Settings path pickers ----------------
-//
-// Lazy-import the Tauri dialog plugin so a Vite-only dev build doesn't
-// fail to load App.tsx. In Tauri the dialog returns a string (single
-// selection), null on cancel, or string[] when multiple=true.
-
-async function pickGAPath(
-  setGAConfig: (
-    p: Partial<{ python: string; gaPath: string; bridgeCwd: string }>,
-  ) => Promise<void>,
-  title: string,
-): Promise<void> {
-  try {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title,
-    });
-    if (typeof selected === "string" && selected.length > 0) {
-      await setGAConfig({ gaPath: selected });
-    }
-  } catch (e) {
-    console.warn("[settings] pickGAPath failed.", e);
-  }
-}
