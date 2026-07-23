@@ -2,6 +2,7 @@ import { Info, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useProviderSetupController } from "@/components/managed-models/use-provider-setup-controller";
 import {
   SettingsPanelHeader,
   SettingsSectionLabel,
@@ -25,7 +26,6 @@ import { useModelConfigSavedToast } from "./models/use-model-config-toast";
 import { useModelOrderingController } from "./models/use-model-ordering-controller";
 import { useProviderConnectionController } from "./models/use-provider-connection-controller";
 import { useProviderExpansion } from "./models/use-provider-expansion";
-import { useProviderFormController } from "./models/use-provider-form-controller";
 import { useProviderModelController } from "./models/use-provider-model-controller";
 
 export function SettingsModels({
@@ -105,7 +105,7 @@ export function SettingsModels({
     showModelConfigSavedToast,
   });
   const providerConnectionController = useProviderConnectionController();
-  const providerFormController = useProviderFormController({
+  const providerFormController = useProviderSetupController({
     loading,
     providers,
     models: orderedModels,
@@ -114,12 +114,25 @@ export function SettingsModels({
     saveModel,
     loadManagedModels: load,
     expandProvider,
-    clearProviderProbeState:
-      providerConnectionController.clearProviderProbeState,
-    clearModelProbeState: providerModelController.clearModelProbeState,
     rememberProviderModelOptions:
       providerModelController.rememberProviderModelOptions,
-    showModelConfigSavedToast,
+    // Post-save tail, formerly inlined in the settings-only controller:
+    // clear both probe maps for the saved provider, expand its card,
+    // and confirm with the saved toast.
+    onSaved: ({ providerId, isNewProvider }) => {
+      providerConnectionController.clearProviderProbeState(providerId);
+      providerModelController.clearModelProbeState(providerId);
+      expandProvider(providerId);
+      showModelConfigSavedToast(
+        isNewProvider
+          ? modelCopy.providerCreatedToastMessage
+          : copy.toasts.modelConfigSavedMessage,
+      );
+    },
+    onCodexComplete: (providerId) => {
+      expandProvider(providerId);
+      showModelConfigSavedToast(modelCopy.providerCreatedToastMessage);
+    },
   });
   const editingModelId = providerModelController.modelDraft?.id;
 

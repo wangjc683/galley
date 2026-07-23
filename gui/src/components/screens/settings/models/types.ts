@@ -1,35 +1,17 @@
-import type { useCopy } from "@/lib/i18n";
-import type { ManagedModelProviderPresetId } from "@/lib/managed-model-presets";
-import type {
-  ManagedModelAuthKind,
-  ManagedModelProtocol,
-} from "@/types/managed-models";
+import type { ProbeState } from "@/lib/provider-setup";
 
-export type SettingsModelsCopy = ReturnType<
-  typeof useCopy
->["settings"]["models"];
-
-export type ProbeAction = "provider-test" | "model-list" | "model-test";
-
-export type ProbeState =
-  | { kind: "idle" }
-  | { kind: "loading"; action: ProbeAction }
-  | { kind: "success"; action: ProbeAction; message: string }
-  | { kind: "error"; action: ProbeAction; message: string };
+// The provider-form vocabulary moved to the shared provider-setup core
+// (lib/provider-setup.ts) when onboarding and settings converged on
+// one controller; re-exported here so the settings-local imports keep
+// working unchanged.
+export type {
+  ProbeAction,
+  ProbeState,
+  ProviderFormState,
+  SettingsModelsCopy,
+} from "@/lib/provider-setup";
 
 export type ProbeStateMap = Record<string, ProbeState>;
-
-export type ProviderFormState = {
-  id?: string;
-  providerPresetId: ManagedModelProviderPresetId | null;
-  protocol: ManagedModelProtocol | null;
-  authKind: ManagedModelAuthKind;
-  apiKey: string;
-  apiBase: string;
-  model: string;
-  displayName: string;
-  advancedOptions?: Record<string, unknown>;
-};
 
 export type ModelDraftState = {
   providerId: string;

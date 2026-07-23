@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import {
@@ -19,20 +19,39 @@ import {
   recommendedModelForManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
+import {
+  canCommitProviderSetup,
+  connectionSuccessMessage,
+  formToProbeInput,
+  newProviderForm,
+  planAutoPick,
+  providerConnectionFingerprint,
+  providerFormFromPreset,
+  providerListFingerprint,
+  runCodexComplete,
+  runProviderCommit,
+  type ProbeAction,
+  type ProbeState,
+  type ProviderFormState,
+} from "@/lib/provider-setup";
 import type { ManagedModelsStore } from "@/stores/managed-models";
 import type {
   ManagedModelProviderRecord,
   ManagedModelRecord,
 } from "@/types/managed-models";
 
-import {
-  connectionSuccessMessage,
-  newProviderForm,
-  providerFormFromPreset,
-} from "./model-settings-utils";
-import type { ProbeAction, ProbeState, ProviderFormState } from "./types";
-
-export function useProviderFormController({
+/**
+ * Shared provider-config form controller for the two managed-model
+ * surfaces. All option defaults reproduce the Settings → 模型 behavior
+ * exactly; onboarding turns on the extras it historically had on top:
+ * the debounced auto connection test with verified-fingerprint gating
+ * of its Start CTA, the auto-pick-resets-test coupling, the hostname
+ * display-name fallback, and a probe-status (rather than form-reset)
+ * commit presentation. The views stay separate — card grid + Advanced
+ * collapse in onboarding vs popover + inline fields in settings (an
+ * intentional divergence, see devlog 2026-07-17).
+ */
+export function useProviderSetupController({
   loading,
   providers,
   models,
@@ -40,11 +59,17 @@ export function useProviderFormController({
   saveProvider,
   saveModel,
   loadManagedModels,
+  autoConnectionTest = false,
+  autoProbeDelayMs = 800,
+  requireVerifiedConnectionToCommit = false,
+  makeDefault = "whenEmpty",
+  displayNameFallback,
+  trimCredentialsOnSave = false,
+  postSaveForm = "reset",
+  onSaved,
+  onCodexComplete,
   expandProvider,
-  clearProviderProbeState,
-  clearModelProbeState,
   rememberProviderModelOptions,
-  showModelConfigSavedToast,
 }: {
   loading: boolean;
   providers: ManagedModelProviderRecord[];
@@ -53,15 +78,37 @@ export function useProviderFormController({
   saveProvider: ManagedModelsStore["saveProvider"];
   saveModel: ManagedModelsStore["saveModel"];
   loadManagedModels: ManagedModelsStore["load"];
-  expandProvider: (id: string) => void;
-  clearProviderProbeState: (id: string) => void;
-  clearModelProbeState: (id: string) => void;
-  rememberProviderModelOptions: (
+  /** Debounced auto connection test + verified-fingerprint tracking
+   * (onboarding). Off = manual test button only (settings). */
+  autoConnectionTest?: boolean;
+  /** Debounce for the auto test AND the silent model-list fetch. */
+  autoProbeDelayMs?: number;
+  /** Gate `canCommit` on a connection test that passed for the current
+   * fingerprint (onboarding Start CTA). */
+  requireVerifiedConnectionToCommit?: boolean;
+  /** First-model default strategy on create. */
+  makeDefault?: "always" | "whenEmpty";
+  /** Fallback for a blank provider display name at save time. */
+  displayNameFallback?: (apiBase: string) => string;
+  /** Trim apiKey / apiBase at save time (onboarding save shape). */
+  trimCredentialsOnSave?: boolean;
+  /** After a successful commit: reset the form (settings) or show a
+   * success probe status and keep the form (onboarding, which leaves
+   * the screen via `onSaved` anyway). Also selects whether commit
+   * errors surface as probe status ("success-status") or stay silent
+   * for the store's inline error line ("reset"). */
+  postSaveForm?: "reset" | "success-status";
+  onSaved?: (ctx: { providerId: string; isNewProvider: boolean }) => void;
+  /** Post-success strategy for the codex login / import flows. */
+  onCodexComplete?: (providerId: string) => void;
+  /** Settings-only: expand a provider card when editing starts. */
+  expandProvider?: (id: string) => void;
+  /** Settings-only: park fetched model options on the created provider. */
+  rememberProviderModelOptions?: (
     providerId: string,
     options: string[],
     filter: string,
   ) => void;
-  showModelConfigSavedToast: (message?: string) => void;
 }) {
   const copy = useCopy();
   const modelCopy = copy.settings.models;
@@ -77,6 +124,18 @@ export function useProviderFormController({
   const [codexLoginStart, setCodexLoginStart] =
     useState<CodexDeviceLoginStart | null>(null);
   const [codexPolling, setCodexPolling] = useState(false);
+  // Connection-test bookkeeping (active only with autoConnectionTest):
+  // a passing test is pinned to the fingerprint it ran against, and a
+  // request id guards against a stale response landing after the user
+  // edited a field mid-flight.
+  const [verifiedFingerprint, setVerifiedFingerprint] = useState<
+    string | null
+  >(null);
+  const [testedFingerprint, setTestedFingerprint] = useState<string | null>(
+    null,
+  );
+  const connectionTestRequestRef = useRef(0);
+  const connectionFingerprintRef = useRef("");
 
   const visibleProviderForm =
     providerForm ??
@@ -90,14 +149,16 @@ export function useProviderFormController({
   const providerFormIsInlineEdit = !!visibleProviderForm?.id;
   const isCodexProviderForm =
     visibleProviderForm?.authKind === "chatgpt_codex_oauth";
-  const canSaveProvider =
-    !!visibleProviderForm &&
-    !isCodexProviderForm &&
-    visibleProviderForm.protocol !== null &&
-    visibleProviderForm.apiBase.trim() !== "" &&
-    (visibleProviderForm.apiKey.trim() !== "" || providerHasSavedKey) &&
-    (!isCreatingProvider || visibleProviderForm.model.trim() !== "") &&
-    !saving;
+  const canSaveProvider = canCommitProviderSetup({
+    form: visibleProviderForm,
+    saving,
+    probeLoading: providerFormProbeState.kind === "loading",
+    providerHasSavedKey,
+    isCreating: isCreatingProvider,
+    requireVerifiedConnection: false,
+    verifiedFingerprint: null,
+    currentFingerprint: "",
+  });
   const canTestProvider =
     !!visibleProviderForm &&
     visibleProviderForm.protocol !== null &&
@@ -115,20 +176,132 @@ export function useProviderFormController({
     visibleProviderForm.apiKey.trim() !== "" &&
     providerFormProbeState.kind !== "loading";
 
-  // Silent model-list auto-fetch for the provider-creation flow (same
-  // behavior as Onboarding's StepModelConfig): once key + endpoint are
-  // usable, pull the model list in the background and pre-select the
-  // preset's recommended model when the field is still empty. Failure
-  // degrades silently — the explicit fetch button stays the loud path.
+  const connectionFingerprint = visibleProviderForm
+    ? providerConnectionFingerprint(visibleProviderForm)
+    : "";
+  const connectionVerified =
+    verifiedFingerprint !== null &&
+    verifiedFingerprint === connectionFingerprint;
+  const connectionInputComplete =
+    !!visibleProviderForm &&
+    visibleProviderForm.providerPresetId !== null &&
+    visibleProviderForm.protocol !== null &&
+    (isCodexProviderForm || visibleProviderForm.apiKey.trim() !== "") &&
+    visibleProviderForm.apiBase.trim() !== "" &&
+    visibleProviderForm.model.trim() !== "";
+  const canCommit = requireVerifiedConnectionToCommit
+    ? canCommitProviderSetup({
+        form: visibleProviderForm,
+        saving,
+        probeLoading: providerFormProbeState.kind === "loading",
+        providerHasSavedKey,
+        isCreating: isCreatingProvider,
+        requireVerifiedConnection: true,
+        verifiedFingerprint,
+        currentFingerprint: connectionFingerprint,
+      })
+    : canSaveProvider;
+
+  useEffect(() => {
+    connectionFingerprintRef.current = connectionFingerprint;
+  }, [connectionFingerprint]);
+
+  // Invalidate the connection test: any in-flight response becomes
+  // stale (request id bump) and the verified pin is dropped. No-op
+  // cost when autoConnectionTest is off (the states just stay null).
+  const resetConnectionTest = useCallback(() => {
+    connectionTestRequestRef.current += 1;
+    setVerifiedFingerprint(null);
+    setTestedFingerprint(null);
+  }, []);
+
+  const runConnectionTest = useCallback(
+    async ({ force = false }: { force?: boolean } = {}) => {
+      const form = visibleProviderForm;
+      const input = form ? formToProbeInput(form) : null;
+      if (!connectionInputComplete || !input) return;
+
+      const fingerprint = connectionFingerprint;
+      if (!force && testedFingerprint === fingerprint) return;
+
+      const requestId = connectionTestRequestRef.current + 1;
+      connectionTestRequestRef.current = requestId;
+      setVerifiedFingerprint(null);
+      setTestedFingerprint(fingerprint);
+      setProviderFormProbeState({ kind: "loading", action: "model-test" });
+      try {
+        const result = await testManagedModelConnectionWithLatency(input);
+        if (
+          requestId !== connectionTestRequestRef.current ||
+          fingerprint !== connectionFingerprintRef.current
+        ) {
+          return;
+        }
+        setVerifiedFingerprint(fingerprint);
+        setProviderFormProbeState({
+          kind: "success",
+          action: "model-test",
+          message: connectionSuccessMessage(result, "setup-model", modelCopy),
+        });
+      } catch (e) {
+        if (
+          requestId !== connectionTestRequestRef.current ||
+          fingerprint !== connectionFingerprintRef.current
+        ) {
+          return;
+        }
+        setProviderFormProbeState({
+          kind: "error",
+          action: "model-test",
+          message: managedModelProbeErrorMessage(e, modelCopy),
+        });
+      }
+    },
+    [
+      connectionFingerprint,
+      connectionInputComplete,
+      modelCopy,
+      testedFingerprint,
+      visibleProviderForm,
+    ],
+  );
+
+  // Debounced auto connection test (onboarding): once the form is
+  // complete, verify the exact fingerprint after a quiet gap. Edits
+  // clear testedFingerprint (via updateProviderForm), re-arming this.
+  useEffect(() => {
+    if (
+      !autoConnectionTest ||
+      !connectionInputComplete ||
+      providerFormProbeState.kind === "loading" ||
+      testedFingerprint === connectionFingerprint
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void runConnectionTest();
+    }, autoProbeDelayMs);
+
+    return () => clearTimeout(timer);
+  }, [
+    autoConnectionTest,
+    autoProbeDelayMs,
+    connectionFingerprint,
+    connectionInputComplete,
+    providerFormProbeState.kind,
+    runConnectionTest,
+    testedFingerprint,
+  ]);
+
+  // Silent model-list auto-fetch for the provider-creation flow: once
+  // key + endpoint are usable, pull the model list in the background
+  // and pre-select the preset's recommended model when the field is
+  // still empty. Failure degrades silently — the explicit fetch button
+  // stays the loud path.
   const autoFetchFingerprint =
     visibleProviderForm && isCreatingProvider && !isCodexProviderForm
-      ? JSON.stringify({
-          providerPresetId: visibleProviderForm.providerPresetId,
-          protocol: visibleProviderForm.protocol,
-          authKind: visibleProviderForm.authKind,
-          apiKey: visibleProviderForm.apiKey.trim(),
-          apiBase: visibleProviderForm.apiBase.trim(),
-        })
+      ? providerListFingerprint(visibleProviderForm)
       : null;
   const visibleProviderFormRef = useRef(visibleProviderForm);
   const autoFetchFingerprintRef = useRef<string | null>(null);
@@ -162,30 +335,42 @@ export function useProviderFormController({
         .then((result) => {
           if (autoFetchFingerprintRef.current !== fingerprint) return;
           setProviderFormModelOptions(result.models);
-          if (result.models.length === 0) return;
-          setProviderForm((current) => {
-            if (!current || current.model.trim() !== "") return current;
-            const preset = current.providerPresetId
-              ? getManagedModelProviderPreset(current.providerPresetId)
-              : null;
-            const recommended = preset
-              ? recommendedModelForManagedModelProviderPreset(preset)
-              : "";
-            const pick = result.models.includes(recommended)
-              ? recommended
-              : result.models.length === 1
-                ? result.models[0]
-                : "";
-            return pick ? { ...current, model: pick } : current;
+          const current = visibleProviderFormRef.current;
+          if (!current) return;
+          const preset = current.providerPresetId
+            ? getManagedModelProviderPreset(current.providerPresetId)
+            : null;
+          const recommended = preset
+            ? recommendedModelForManagedModelProviderPreset(preset)
+            : "";
+          const pick = planAutoPick({
+            currentModel: current.model,
+            models: result.models,
+            recommended,
           });
+          if (!pick) return;
+          setProviderForm((existing) =>
+            existing && existing.model.trim() === ""
+              ? { ...existing, model: pick }
+              : existing,
+          );
+          // The auto-picked model hasn't been through a connection
+          // test — re-arm the auto test so the Start gate stays honest.
+          if (autoConnectionTest) resetConnectionTest();
         })
         .catch((e: unknown) => {
-          console.warn("[settings] model list auto-fetch failed.", e);
+          console.warn("[provider-setup] model list auto-fetch failed.", e);
         });
-    }, 800);
+    }, autoProbeDelayMs);
 
     return () => clearTimeout(timer);
-  }, [autoFetchFingerprint, canFetchProviderFormModels]);
+  }, [
+    autoConnectionTest,
+    autoFetchFingerprint,
+    autoProbeDelayMs,
+    canFetchProviderFormModels,
+    resetConnectionTest,
+  ]);
 
   const resetProviderForm = () => {
     setProviderForm(null);
@@ -193,6 +378,7 @@ export function useProviderFormController({
     setProviderFormModelFilter("");
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    resetConnectionTest();
   };
 
   const updateProviderForm = (patch: Partial<ProviderFormState>) => {
@@ -212,6 +398,18 @@ export function useProviderFormController({
     }
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    resetConnectionTest();
+  };
+
+  /** Display-name edits don't invalidate a passing connection test —
+   * the name is cosmetic and not part of the probe. (Settings edits
+   * the name through updateProviderForm and keeps its historical
+   * reset-everything behavior.) */
+  const setProviderDisplayName = (displayName: string) => {
+    setProviderForm((current) => ({
+      ...(current ?? newProviderForm()),
+      displayName,
+    }));
   };
 
   const selectProviderPreset = (
@@ -228,6 +426,7 @@ export function useProviderFormController({
     setProviderFormModelFilter("");
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    resetConnectionTest();
   };
 
   const startNewProvider = () => {
@@ -236,10 +435,11 @@ export function useProviderFormController({
     setProviderFormModelFilter("");
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    resetConnectionTest();
   };
 
   const startEditProvider = (provider: ManagedModelProviderRecord) => {
-    expandProvider(provider.id);
+    expandProvider?.(provider.id);
     setProviderForm({
       id: provider.id,
       // Resolve the original preset by apiBase first so preset-derived
@@ -263,6 +463,7 @@ export function useProviderFormController({
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    resetConnectionTest();
   };
 
   const handleProviderFormTest = async () => {
@@ -366,50 +567,49 @@ export function useProviderFormController({
   };
 
   const handleProviderSave = async () => {
-    if (
-      !visibleProviderForm ||
-      !canSaveProvider ||
-      !visibleProviderForm.protocol
-    ) {
+    if (!visibleProviderForm || !canCommit || !visibleProviderForm.protocol) {
       return;
     }
-    const isNewProvider = !visibleProviderForm.id;
+    if (postSaveForm === "success-status") {
+      setProviderFormProbeState({ kind: "loading", action: "commit" });
+    }
     try {
-      const saved = await saveProvider({
-        id: visibleProviderForm.id,
-        protocol: visibleProviderForm.protocol,
-        authKind: visibleProviderForm.authKind,
-        apiKey: visibleProviderForm.apiKey || undefined,
-        apiBase: visibleProviderForm.apiBase,
-        displayName: visibleProviderForm.displayName,
-      });
-      if (isNewProvider) {
-        await saveModel({
-          providerId: saved.id,
-          model: visibleProviderForm.model.trim(),
-          displayName: "",
-          advancedOptions: visibleProviderForm.advancedOptions,
-          makeDefault: models.length === 0,
-        });
-        if (providerFormModelOptions.length > 0) {
-          rememberProviderModelOptions(
-            saved.id,
-            providerFormModelOptions,
-            providerFormModelFilter,
-          );
-        }
-      }
-      clearProviderProbeState(saved.id);
-      clearModelProbeState(saved.id);
-      expandProvider(saved.id);
-      resetProviderForm();
-      showModelConfigSavedToast(
-        isNewProvider
-          ? modelCopy.providerCreatedToastMessage
-          : copy.toasts.modelConfigSavedMessage,
+      const result = await runProviderCommit(
+        { saveProvider, saveModel },
+        {
+          form: visibleProviderForm,
+          makeDefault,
+          modelsCount: models.length,
+          displayNameFallback,
+          trimCredentials: trimCredentialsOnSave,
+        },
       );
-    } catch {
-      // Store-level error is shown inline.
+      if (result.isNewProvider && providerFormModelOptions.length > 0) {
+        rememberProviderModelOptions?.(
+          result.providerId,
+          providerFormModelOptions,
+          providerFormModelFilter,
+        );
+      }
+      if (postSaveForm === "reset") {
+        resetProviderForm();
+      } else {
+        setProviderFormProbeState({
+          kind: "success",
+          action: "commit",
+          message: modelCopy.setupComplete,
+        });
+      }
+      onSaved?.(result);
+    } catch (e) {
+      if (postSaveForm === "success-status") {
+        setProviderFormProbeState({
+          kind: "error",
+          action: "commit",
+          message: managedModelProbeErrorMessage(e, modelCopy),
+        });
+      }
+      // Otherwise: store-level error is shown inline.
     }
   };
 
@@ -443,15 +643,14 @@ export function useProviderFormController({
     setCodexPolling(true);
     setProviderFormProbeState({ kind: "loading", action: "provider-test" });
     try {
-      const result = await completeChatGptCodexLogin({
-        deviceAuthId: codexLoginStart.deviceAuthId,
-        userCode: codexLoginStart.userCode,
-        intervalSeconds: codexLoginStart.intervalSeconds,
-      });
-      await loadManagedModels();
-      expandProvider(result.provider.id);
-      resetProviderForm();
-      showModelConfigSavedToast(modelCopy.providerCreatedToastMessage);
+      const providerId = await runCodexComplete(
+        { complete: completeChatGptCodexLogin, loadManagedModels },
+        codexLoginStart,
+      );
+      if (postSaveForm === "reset") {
+        resetProviderForm();
+      }
+      onCodexComplete?.(providerId);
     } catch (e) {
       setProviderFormProbeState({
         kind: "error",
@@ -494,9 +693,10 @@ export function useProviderFormController({
     try {
       const result = await importChatGptCodexCliLogin();
       await loadManagedModels();
-      expandProvider(result.provider.id);
-      resetProviderForm();
-      showModelConfigSavedToast(modelCopy.providerCreatedToastMessage);
+      if (postSaveForm === "reset") {
+        resetProviderForm();
+      }
+      onCodexComplete?.(result.provider.id);
     } catch (e) {
       setProviderFormProbeState({
         kind: "error",
@@ -533,11 +733,14 @@ export function useProviderFormController({
   };
 
   return {
+    canCommit,
     canFetchProviderFormModels,
     canSaveProvider,
     canTestProvider,
     codexLoginStart,
     codexPolling,
+    connectionInputComplete,
+    connectionVerified,
     handleCodexCompleteLogin,
     handleCodexImport,
     handleCodexLogin,
@@ -546,13 +749,16 @@ export function useProviderFormController({
     handleProviderFormFetchModels,
     handleProviderFormTest,
     handleProviderSave,
+    isCodexProviderForm,
     providerFormIsInlineEdit,
     providerFormModelFilter,
     providerFormModelOptions,
     providerFormProbeState,
     providerHasSavedKey,
     resetProviderForm,
+    runConnectionTest,
     selectProviderPreset,
+    setProviderDisplayName,
     setProviderFormModelFilter,
     startEditProvider,
     startNewProvider,

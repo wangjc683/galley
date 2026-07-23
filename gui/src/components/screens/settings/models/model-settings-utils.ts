@@ -1,45 +1,19 @@
-import type { TimedManagedModelConnectionResult } from "@/lib/managed-models";
-import {
-  managedModelProviderPresetDraft,
-  managedModelProtocolLabel,
-  type ManagedModelProviderPresetId,
-} from "@/lib/managed-model-presets";
+import { managedModelProtocolLabel } from "@/lib/managed-model-presets";
 import type {
   ManagedModelRecord,
   ManagedModelProtocol,
 } from "@/types/managed-models";
 
-import type {
-  ModelDraftState,
-  ModelMoveFeedbackState,
-  ProviderFormState,
-  SettingsModelsCopy,
-} from "./types";
+import type { ModelDraftState, ModelMoveFeedbackState } from "./types";
 
-export function newProviderForm(): ProviderFormState {
-  return {
-    providerPresetId: null,
-    protocol: null,
-    authKind: "api_key",
-    apiKey: "",
-    apiBase: "",
-    model: "",
-    displayName: "",
-  };
-}
-
-export function providerFormFromPreset(
-  providerPresetId: ManagedModelProviderPresetId,
-  preserved?: Pick<ProviderFormState, "id" | "apiKey">,
-): ProviderFormState {
-  const draft = managedModelProviderPresetDraft(providerPresetId);
-  return {
-    ...(preserved?.id ? { id: preserved.id } : {}),
-    ...draft,
-    authKind: draft.authKind ?? "api_key",
-    apiKey: preserved?.apiKey ?? "",
-  };
-}
+// Form builders + the connection success message moved to the shared
+// provider-setup core (lib/provider-setup.ts); re-exported so the
+// settings-local imports keep working unchanged.
+export {
+  connectionSuccessMessage,
+  newProviderForm,
+  providerFormFromPreset,
+} from "@/lib/provider-setup";
 
 export function modelDisplayParts(model: ManagedModelRecord): {
   title: string;
@@ -96,20 +70,4 @@ export function modelSwapAnimationClass(
 
 export function protocolLabel(protocol: ManagedModelProtocol): string {
   return managedModelProtocolLabel(protocol);
-}
-
-export function connectionSuccessMessage(
-  result: TimedManagedModelConnectionResult,
-  context: "provider" | "setup-model" | "saved-model",
-  copy: SettingsModelsCopy,
-): string {
-  const message =
-    context === "provider"
-      ? copy.connectionUsable
-      : context === "saved-model"
-        ? copy.modelUsable
-        : result.modelFound === true
-          ? copy.modelUsable
-          : copy.connectionUsableCanSave;
-  return copy.connectionLatency(message, result.latencyMs);
 }

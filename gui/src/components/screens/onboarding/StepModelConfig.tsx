@@ -11,47 +11,25 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useState, type ReactNode } from "react";
 
 import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
 import { ManagedModelProviderCardGrid } from "@/components/managed-models/ManagedModelProviderCardGrid";
 import { ManagedModelOptionPicker } from "@/components/managed-models/ManagedModelOptionPicker";
+import { useProviderSetupController } from "@/components/managed-models/use-provider-setup-controller";
 import { Button, IconButton } from "@/components/ui/button";
-import {
-  completeChatGptCodexLogin,
-  importChatGptCodexCliLogin,
-  listManagedModelOptions,
-  managedModelProbeErrorMessage,
-  startChatGptCodexLogin,
-  testManagedModelConnectionWithLatency,
-  type CodexDeviceLoginStart,
-} from "@/lib/managed-models";
 import { useCopy } from "@/lib/i18n";
 import {
   getManagedModelProviderPreset,
-  managedModelProviderPresetDraft,
   modelPlaceholderForManagedModelProviderPreset,
-  recommendedModelForManagedModelProviderPreset,
-  type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
+import {
+  providerHostnameFallback,
+  type ProbeAction,
+  type ProbeState,
+} from "@/lib/provider-setup";
 import { cn } from "@/lib/utils";
 import { useManagedModelsStore } from "@/stores/managed-models";
-import type { ManagedModelProtocol } from "@/types/managed-models";
-
-type SetupAction = "list" | "test" | "start";
-
-type SetupState =
-  | { kind: "idle" }
-  | { kind: "loading"; action: SetupAction }
-  | { kind: "success"; action: SetupAction; message: string }
-  | { kind: "error"; action: SetupAction; message: string };
 
 const AUTO_CONNECTION_TEST_DELAY_MS = 800;
 
@@ -69,44 +47,73 @@ export function StepModelConfig({
   const copy = useCopy();
   const modelCopy = copy.settings.models;
   const onboardingCopy = copy.onboarding;
+  const loading = useManagedModelsStore((s) => s.loading);
+  const providers = useManagedModelsStore((s) => s.providers);
+  const models = useManagedModelsStore((s) => s.models);
+  const saving = useManagedModelsStore((s) => s.saving);
   const saveProvider = useManagedModelsStore((s) => s.saveProvider);
   const saveModel = useManagedModelsStore((s) => s.saveModel);
   const loadModels = useManagedModelsStore((s) => s.load);
-  const [providerPresetId, setProviderPresetId] =
-    useState<ManagedModelProviderPresetId | null>(null);
-  const [protocol, setProtocol] = useState<ManagedModelProtocol | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [apiBase, setApiBase] = useState("");
-  const [model, setModel] = useState("");
-  const [providerDisplayNameValue, setProviderDisplayNameValue] = useState("");
-  const [advancedOptions, setAdvancedOptions] = useState<
-    Record<string, unknown> | undefined
-  >(undefined);
-  const [modelOptions, setModelOptions] = useState<string[]>([]);
-  const [state, setState] = useState<SetupState>({ kind: "idle" });
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [codexLoginStart, setCodexLoginStart] =
-    useState<CodexDeviceLoginStart | null>(null);
-  const [codexPolling, setCodexPolling] = useState(false);
-  const [verifiedFingerprint, setVerifiedFingerprint] = useState<string | null>(
-    null,
-  );
-  const [testedFingerprint, setTestedFingerprint] = useState<string | null>(
-    null,
-  );
-  const [autoFetchedFingerprint, setAutoFetchedFingerprint] = useState<
-    string | null
-  >(null);
-  const connectionTestRequestRef = useRef(0);
-  const connectionFingerprintRef = useRef("");
-  const listFingerprintRef = useRef("");
-  const modelRef = useRef("");
+
+  const {
+    canCommit,
+    canFetchProviderFormModels,
+    codexLoginStart,
+    codexPolling,
+    connectionInputComplete,
+    handleCodexCompleteLogin,
+    handleCodexImport,
+    handleCodexLogin,
+    handleCodexOpenLoginPage,
+    handleProviderFormFetchModels,
+    handleProviderSave,
+    isCodexProviderForm,
+    providerFormModelOptions,
+    providerFormProbeState,
+    runConnectionTest,
+    selectProviderPreset,
+    setProviderDisplayName,
+    updateProviderForm,
+    visibleProviderForm,
+  } = useProviderSetupController({
+    loading,
+    providers,
+    models,
+    saving,
+    saveProvider,
+    saveModel,
+    loadManagedModels: loadModels,
+    // The onboarding contract (docs/design/onboarding-and-cards.md
+    // §Step 1): debounced auto connection test, Start CTA gated on a
+    // test that passed for the exact current inputs, first model
+    // always default, hostname fallback for a blank display name, and
+    // a probe-status commit presentation (the screen exits via
+    // onComplete, not a form reset).
+    autoConnectionTest: true,
+    autoProbeDelayMs: AUTO_CONNECTION_TEST_DELAY_MS,
+    requireVerifiedConnectionToCommit: true,
+    makeDefault: "always",
+    displayNameFallback: providerHostnameFallback,
+    trimCredentialsOnSave: true,
+    postSaveForm: "success-status",
+    onSaved: () => onComplete(),
+    onCodexComplete: () => onComplete(),
+  });
+
+  const state = providerFormProbeState;
+  const providerPresetId = visibleProviderForm?.providerPresetId ?? null;
+  const protocol = visibleProviderForm?.protocol ?? null;
+  const apiKey = visibleProviderForm?.apiKey ?? "";
+  const apiBase = visibleProviderForm?.apiBase ?? "";
+  const model = visibleProviderForm?.model ?? "";
+  const providerDisplayNameValue = visibleProviderForm?.displayName ?? "";
+  const modelOptions = providerFormModelOptions;
   const selectedPreset = providerPresetId
     ? getManagedModelProviderPreset(providerPresetId)
     : null;
-  const isCodexProvider =
-    selectedPreset?.authKind === "chatgpt_codex_oauth";
+  const isCodexProvider = isCodexProviderForm;
   // Only surface the key-console link while the endpoint still points
   // at the preset's official apiBase — for a custom/proxy endpoint the
   // preset's key console is likely the wrong place.
@@ -118,350 +125,9 @@ export function StepModelConfig({
   const apiKeyRevealLabel = apiKeyVisible
     ? modelCopy.hideApiKey
     : modelCopy.showApiKey;
-  const connectionFingerprint = useMemo(
-    () =>
-      JSON.stringify({
-        providerPresetId,
-        protocol,
-        apiKey: apiKey.trim(),
-        apiBase: apiBase.trim(),
-        model: model.trim(),
-        authKind: selectedPreset?.authKind ?? "api_key",
-      }),
-    [apiBase, apiKey, model, protocol, providerPresetId, selectedPreset],
-  );
-  // Model-independent fingerprint for the silent model-list auto-fetch:
-  // the list only depends on credentials + endpoint, so typing a model
-  // name must not re-trigger it.
-  const listFingerprint = useMemo(
-    () =>
-      JSON.stringify({
-        providerPresetId,
-        protocol,
-        apiKey: apiKey.trim(),
-        apiBase: apiBase.trim(),
-      }),
-    [apiBase, apiKey, protocol, providerPresetId],
-  );
-
-  useEffect(() => {
-    connectionFingerprintRef.current = connectionFingerprint;
-  }, [connectionFingerprint]);
-  useEffect(() => {
-    listFingerprintRef.current = listFingerprint;
-  }, [listFingerprint]);
-  useEffect(() => {
-    modelRef.current = model;
-  }, [model]);
-
-  const connectionInputComplete =
-    providerPresetId !== null &&
-    protocol !== null &&
-    (isCodexProvider || apiKey.trim() !== "") &&
-    apiBase.trim() !== "" &&
-    model.trim() !== "";
   const isBusy = state.kind === "loading";
-  const canFetchModels =
-    protocol !== null &&
-    !isCodexProvider &&
-    apiKey.trim() !== "" &&
-    apiBase.trim() !== "" &&
-    !isBusy;
-  const canStart =
-    connectionInputComplete &&
-    verifiedFingerprint === connectionFingerprint &&
-    !isBusy;
-
-  const probeInput = useCallback(
-    () =>
-      protocol
-        ? {
-            protocol,
-            authKind: selectedPreset?.authKind,
-            apiKey: apiKey.trim(),
-            apiBase: apiBase.trim(),
-            model: model.trim(),
-            advancedOptions,
-          }
-        : null,
-    [advancedOptions, apiBase, apiKey, model, protocol, selectedPreset],
-  );
-
-  const resetConnectionTest = () => {
-    connectionTestRequestRef.current += 1;
-    setVerifiedFingerprint(null);
-    setTestedFingerprint(null);
-    setState({ kind: "idle" });
-    setCodexLoginStart(null);
-  };
-
-  const handleSelectProviderPreset = (
-    nextProviderPresetId: ManagedModelProviderPresetId,
-  ) => {
-    const draft = managedModelProviderPresetDraft(nextProviderPresetId);
-    setProviderPresetId(draft.providerPresetId);
-    setProtocol(draft.protocol);
-    setApiBase(draft.apiBase);
-    setModel(draft.model);
-    setProviderDisplayNameValue(draft.displayName);
-    setAdvancedOptions(draft.advancedOptions);
-    setCodexLoginStart(null);
-    setModelOptions([]);
-    resetConnectionTest();
-  };
-
-  const handleFetchModels = async () => {
-    const input = probeInput();
-    if (!canFetchModels || !input) return;
-    setState({ kind: "loading", action: "list" });
-    try {
-      const result = await listManagedModelOptions(input);
-      setModelOptions(result.models);
-      setState({
-        kind: "success",
-        action: "list",
-        message:
-          result.models.length > 0
-            ? modelCopy.foundModels(result.models.length)
-            : modelCopy.connectedNoModels,
-      });
-    } catch (e) {
-      setState({
-        kind: "error",
-        action: "list",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    }
-  };
-
-  const runConnectionTest = useCallback(
-    async ({ force = false }: { force?: boolean } = {}) => {
-      const input = probeInput();
-      if (!connectionInputComplete || !input) return;
-
-      const fingerprint = connectionFingerprint;
-      if (!force && testedFingerprint === fingerprint) return;
-
-      const requestId = connectionTestRequestRef.current + 1;
-      connectionTestRequestRef.current = requestId;
-      setVerifiedFingerprint(null);
-      setTestedFingerprint(fingerprint);
-      setState({ kind: "loading", action: "test" });
-      try {
-        const result = await testManagedModelConnectionWithLatency(input);
-        if (
-          requestId !== connectionTestRequestRef.current ||
-          fingerprint !== connectionFingerprintRef.current
-        ) {
-          return;
-        }
-        setVerifiedFingerprint(fingerprint);
-        setState({
-          kind: "success",
-          action: "test",
-          message: connectionSuccessMessage(result, modelCopy),
-        });
-      } catch (e) {
-        if (
-          requestId !== connectionTestRequestRef.current ||
-          fingerprint !== connectionFingerprintRef.current
-        ) {
-          return;
-        }
-        setState({
-          kind: "error",
-          action: "test",
-          message: managedModelProbeErrorMessage(e, modelCopy),
-        });
-      }
-    },
-    [
-      connectionFingerprint,
-      connectionInputComplete,
-      modelCopy,
-      probeInput,
-      testedFingerprint,
-    ],
-  );
-
-  useEffect(() => {
-    if (
-      !connectionInputComplete ||
-      isBusy ||
-      testedFingerprint === connectionFingerprint
-    ) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      void runConnectionTest();
-    }, AUTO_CONNECTION_TEST_DELAY_MS);
-
-    return () => clearTimeout(timer);
-  }, [
-    connectionFingerprint,
-    connectionInputComplete,
-    isBusy,
-    runConnectionTest,
-    testedFingerprint,
-  ]);
-
-  // Silent model-list auto-fetch: as soon as key + endpoint are usable,
-  // pull the provider's model list in the background so the user can
-  // pick instead of type. Success populates the picker (and fills the
-  // model field when it's still empty); failure degrades silently to
-  // manual input — the explicit fetch button stays as the loud path.
-  useEffect(() => {
-    if (!canFetchModels || autoFetchedFingerprint === listFingerprint) {
-      return;
-    }
-
-    const fingerprint = listFingerprint;
-    const timer = setTimeout(() => {
-      setAutoFetchedFingerprint(fingerprint);
-      const input = probeInput();
-      if (!input) return;
-      void listManagedModelOptions(input)
-        .then((result) => {
-          if (fingerprint !== listFingerprintRef.current) return;
-          setModelOptions(result.models);
-          if (modelRef.current.trim() !== "" || result.models.length === 0) {
-            return;
-          }
-          const recommended = selectedPreset
-            ? recommendedModelForManagedModelProviderPreset(selectedPreset)
-            : "";
-          const autoPick = result.models.includes(recommended)
-            ? recommended
-            : result.models.length === 1
-              ? result.models[0]
-              : "";
-          if (autoPick) {
-            setModel(autoPick);
-            resetConnectionTest();
-          }
-        })
-        .catch((e: unknown) => {
-          console.warn("[onboarding] model list auto-fetch failed.", e);
-        });
-    }, AUTO_CONNECTION_TEST_DELAY_MS);
-
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFetchedFingerprint, canFetchModels, listFingerprint, selectedPreset]);
-
-  const handleStart = async () => {
-    if (!canStart || !protocol) return;
-    setState({ kind: "loading", action: "start" });
-    try {
-      const provider = await saveProvider({
-        protocol,
-        authKind: selectedPreset?.authKind ?? "api_key",
-        apiKey: apiKey.trim(),
-        apiBase: apiBase.trim(),
-        displayName:
-          providerDisplayNameValue.trim() ||
-          providerDisplayName(apiBase.trim()),
-      });
-      await saveModel({
-        providerId: provider.id,
-        model: model.trim(),
-        advancedOptions,
-        makeDefault: true,
-      });
-      setState({
-        kind: "success",
-        action: "start",
-        message: modelCopy.setupComplete,
-      });
-      onComplete();
-    } catch (e) {
-      setState({
-        kind: "error",
-        action: "start",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    }
-  };
-
-  const handleCodexLogin = async () => {
-    if (!isCodexProvider) return;
-    setState({ kind: "loading", action: "start" });
-    try {
-      const start = await startChatGptCodexLogin();
-      setCodexLoginStart(start);
-      setState({
-        kind: "success",
-        action: "start",
-        message: modelCopy.chatgptCodexCodeReady,
-      });
-    } catch (e) {
-      setState({
-        kind: "error",
-        action: "start",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    }
-  };
-
-  const handleCodexCompleteLogin = async () => {
-    if (!codexLoginStart || codexPolling) return;
-    setCodexPolling(true);
-    setState({ kind: "loading", action: "start" });
-    try {
-      await completeChatGptCodexLogin({
-        deviceAuthId: codexLoginStart.deviceAuthId,
-        userCode: codexLoginStart.userCode,
-        intervalSeconds: codexLoginStart.intervalSeconds,
-      });
-      await loadModels();
-      onComplete();
-    } catch (e) {
-      setState({
-        kind: "error",
-        action: "start",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    } finally {
-      setCodexPolling(false);
-    }
-  };
-
-  const handleCodexOpenLoginPage = async () => {
-    if (!codexLoginStart) return;
-    try {
-      await openUrl(codexLoginStart.verificationUrl);
-    } catch (e) {
-      setState({
-        kind: "error",
-        action: "start",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-      return;
-    }
-    // Start polling right away — the standard device-code flow. The
-    // user finishes sign-in in the browser and Galley continues on its
-    // own; the manual "complete sign-in" button stays as the retry
-    // path after a timeout or error.
-    void handleCodexCompleteLogin();
-  };
-
-  const handleCodexImport = async () => {
-    if (!isCodexProvider) return;
-    setCodexLoginStart(null);
-    setState({ kind: "loading", action: "start" });
-    try {
-      await importChatGptCodexCliLogin();
-      await loadModels();
-      onComplete();
-    } catch (e) {
-      setState({
-        kind: "error",
-        action: "start",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    }
-  };
+  const canFetchModels = canFetchProviderFormModels;
+  const canStart = canCommit;
 
   return (
     <div className="max-w-[580px]">
@@ -475,7 +141,7 @@ export function StepModelConfig({
       <div className="space-y-4">
         <ManagedModelProviderCardGrid
           value={providerPresetId}
-          onChange={handleSelectProviderPreset}
+          onChange={selectProviderPreset}
         />
 
         {providerSelected && selectedPreset && protocol && isCodexProvider && (
@@ -599,10 +265,7 @@ export function StepModelConfig({
               }
               type={apiKeyVisible ? "text" : "password"}
               value={apiKey}
-              onChange={(value) => {
-                setApiKey(value);
-                resetConnectionTest();
-              }}
+              onChange={(value) => updateProviderForm({ apiKey: value })}
               placeholder={selectedPreset.apiKeyPlaceholder ?? "sk-..."}
               reserveTrailing
               trailing={
@@ -626,10 +289,7 @@ export function StepModelConfig({
             <SetupInput
               label={modelCopy.model}
               value={model}
-              onChange={(value) => {
-                setModel(value);
-                resetConnectionTest();
-              }}
+              onChange={(value) => updateProviderForm({ model: value })}
               placeholder={modelPlaceholderForManagedModelProviderPreset(
                 selectedPreset,
               )}
@@ -640,9 +300,9 @@ export function StepModelConfig({
                 variant="accent-secondary"
                 size="sm"
                 disabled={!canFetchModels}
-                onClick={() => void handleFetchModels()}
+                onClick={() => void handleProviderFormFetchModels()}
                 leadingIcon={
-                  state.kind === "loading" && state.action === "list" ? (
+                  state.kind === "loading" && state.action === "model-list" ? (
                     <span className="spin">
                       <CircleNotch size={12} weight="thin" />
                     </span>
@@ -653,19 +313,16 @@ export function StepModelConfig({
               >
                 {modelCopy.fetchModelList}
               </Button>
-              <InlineSetupStatus state={state} action="list" />
+              <InlineSetupStatus state={state} action="model-list" />
             </div>
-            <SetupErrorLine state={state} action="list" />
+            <SetupErrorLine state={state} action="model-list" />
 
             {modelOptions.length > 0 && (
               <ManagedModelOptionPicker
                 value={modelOptions.includes(model) ? model : ""}
                 options={modelOptions}
                 placeholder={modelCopy.chooseDetectedModel}
-                onChange={(value) => {
-                  setModel(value);
-                  resetConnectionTest();
-                }}
+                onChange={(value) => updateProviderForm({ model: value })}
               />
             )}
 
@@ -691,10 +348,7 @@ export function StepModelConfig({
                   <SetupInput
                     label={modelCopy.apiUrl}
                     value={apiBase}
-                    onChange={(value) => {
-                      setApiBase(value);
-                      resetConnectionTest();
-                    }}
+                    onChange={(value) => updateProviderForm({ apiBase: value })}
                     placeholder={
                       selectedPreset.apiBase ||
                       (protocol === "openai"
@@ -705,7 +359,7 @@ export function StepModelConfig({
                   <SetupInput
                     label={modelCopy.providerName}
                     value={providerDisplayNameValue}
-                    onChange={setProviderDisplayNameValue}
+                    onChange={setProviderDisplayName}
                     placeholder={modelCopy.providerNamePlaceholder}
                   />
                 </div>
@@ -741,16 +395,16 @@ export function StepModelConfig({
             <>
               <InlineSetupStatus
                 state={state}
-                action="test"
+                action="model-test"
                 loadingMessage={modelCopy.autoTestingConnection}
               />
               <Button
                 variant="primary"
                 size="lg"
                 disabled={!canStart}
-                onClick={() => void handleStart()}
+                onClick={() => void handleProviderSave()}
                 leadingIcon={
-                  state.kind === "loading" && state.action === "start" ? (
+                  state.kind === "loading" && state.action === "commit" ? (
                     <span className="spin">
                       <CircleNotch size={14} weight="thin" />
                     </span>
@@ -770,7 +424,7 @@ export function StepModelConfig({
           {!isCodexProvider && (
             <SetupErrorLine
               state={state}
-              action="test"
+              action="model-test"
               actionSlot={
                 <Button
                   variant="secondary"
@@ -783,7 +437,8 @@ export function StepModelConfig({
               }
             />
           )}
-          <SetupErrorLine state={state} action="start" />
+          <SetupErrorLine state={state} action="commit" />
+          <SetupErrorLine state={state} action="provider-test" />
         </div>
       </div>
     </div>
@@ -844,8 +499,8 @@ function InlineSetupStatus({
   action,
   loadingMessage,
 }: {
-  state: SetupState;
-  action: SetupAction;
+  state: ProbeState;
+  action: ProbeAction;
   loadingMessage?: string;
 }) {
   if (state.kind === "loading" && state.action === action && loadingMessage) {
@@ -875,8 +530,8 @@ function SetupErrorLine({
   action,
   actionSlot,
 }: {
-  state: SetupState;
-  action: SetupAction;
+  state: ProbeState;
+  action: ProbeAction;
   actionSlot?: ReactNode;
 }) {
   if (state.kind !== "error" || state.action !== action) return null;
@@ -916,23 +571,4 @@ function StatusLine({
       {message}
     </div>
   );
-}
-
-function connectionSuccessMessage(
-  result: { latencyMs: number; modelFound?: boolean | null },
-  copy: ReturnType<typeof useCopy>["settings"]["models"],
-): string {
-  const message =
-    result.modelFound === true
-      ? copy.modelUsable
-      : copy.connectionUsableCanSave;
-  return copy.connectionLatency(message, result.latencyMs);
-}
-
-function providerDisplayName(apiBase: string): string {
-  try {
-    return new URL(apiBase).hostname;
-  } catch {
-    return apiBase.trim();
-  }
 }
