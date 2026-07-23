@@ -108,6 +108,9 @@ mod ctx;
 mod llm_cmds;
 mod project_cmds;
 mod session_cmds;
+mod session_goal_cmds;
+mod session_new_cmds;
+mod spawn_config;
 mod wire;
 
 use crate::notify::{NullNotifier, TauriNotifier};
@@ -115,6 +118,8 @@ pub use ctx::{DbSource, HandlerCtx, RunnerPort};
 use llm_cmds::*;
 use project_cmds::*;
 use session_cmds::*;
+use session_goal_cmds::*;
+use session_new_cmds::*;
 use wire::{write_stream_line, StreamEnvelope, CONNECTION_IDLE_TIMEOUT};
 pub use wire::{ErrorTag, SocketRequest, SocketResponse, SCHEMA_VERSION};
 
