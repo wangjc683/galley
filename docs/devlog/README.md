@@ -277,6 +277,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [Plan Mode 可视化整链拆除](./2026-07-22-plan-mode-visibility-removal.md) — 上线 24h 即拆：上游弃用抽走前提，"只观察不做入口"成最佳止损位；📌 守卫全删，存量状态残余触发按外观回归接受
 - [GUI 大组件拆分 · 第三轮 + provider 表单合并](./2026-07-22-gui-split-round-three-and-provider-form-merge.md) — Composer 抽 goal hook（重开 07-06 子结论）；sessions store 首个 slice 模式；onboarding/settings 双表单实现合并成共享 controller + 纯核心补测
 
+### 2026-07-23
+- [Rust 大文件拆分五连 + GUI 第四轮](./2026-07-23-rust-and-gui-large-file-split-rounds.md) — lib.rs run()/session_cmds/hive 主循环/codex_oauth/im_supervisor 五拆 + App.tsx host 组件/runtime store 切片/MarkdownView 三拆；migration_backup 决定不拆；workbench_bridge 缓做入 deferred
+
 ## 格式约定
 
 每个 entry 6 段：

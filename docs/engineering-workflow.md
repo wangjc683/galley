@@ -123,7 +123,7 @@ refactor-execution rules (I1, I2, I4, I7, I8, I10) live in the
   migration is fixed by adding a new one on top.
   **Adding the `.sql` file is not enough** — the runtime does not scan the
   directory. A new migration must also be registered in BOTH runtime lists:
-  the `Migration` vec in `core/src/lib.rs` and `MIGRATION_SPECS` in
+  the `Migration` vec in `core/src/db_migrations.rs` and `MIGRATION_SPECS` in
   `core/src/migration_backup.rs` (plus its latest-version test assertions),
   or the shipped app silently never applies it and every query touching the
   new column fails (2026-07-20: sidebar went empty in dogfood exactly this

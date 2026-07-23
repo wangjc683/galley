@@ -179,7 +179,7 @@ deliberately excluded:
   from the tray while hidden must not restore an invisible window on the
   next launch.
 - `DECORATIONS`: Windows runs with native decorations off as custom chrome
-  (see the setup hook in `core/src/lib.rs`); the plugin must not restore a
+  (see the setup hook in `core/src/app_setup.rs`); the plugin must not restore a
   stale decorations value over that.
 
 Tauri updater signing is separate from macOS codesigning / Windows Authenticode.
