@@ -275,6 +275,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ### 2026-07-22
 - [GA upstream upgrade 5257dec -> 1d3c1a09](./2026-07-22-ga-upstream-upgrade-5257dec-to-1d3c1a09.md) — 上游正式弃用 plan mode 当天刷 baseline；0001/0003 两处真冲突，字节门抓出 0015 存量漂移（2848c4b 手改 payload 未回写补丁）
 - [Plan Mode 可视化整链拆除](./2026-07-22-plan-mode-visibility-removal.md) — 上线 24h 即拆：上游弃用抽走前提，"只观察不做入口"成最佳止损位；📌 守卫全删，存量状态残余触发按外观回归接受
+- [GUI 大组件拆分 · 第三轮 + provider 表单合并](./2026-07-22-gui-split-round-three-and-provider-form-merge.md) — Composer 抽 goal hook（重开 07-06 子结论）；sessions store 首个 slice 模式；onboarding/settings 双表单实现合并成共享 controller + 纯核心补测
 
 ## 格式约定
 
