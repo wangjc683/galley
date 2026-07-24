@@ -75,7 +75,7 @@ Post-release follow-up:
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Release path | v0.3.7 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Locked to audited upstream `1d3c1a09` (audited 2026-07-22, upstream deprecates plan mode; not yet shipped — `v0.3.4` through `v0.3.7` shipped `5257dec`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Locked to audited upstream `4086d5c` (audited 2026-07-23, on upstream's rewritten history — pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`; not yet shipped — `v0.3.4` through `v0.3.7` shipped `5257dec`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 

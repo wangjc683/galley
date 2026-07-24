@@ -66,7 +66,7 @@ export const DEFAULT_RUNTIME_INFO: RuntimeInfo = {
   llmDisplayName: DEFAULT_LLM_DISPLAY_NAME,
   bridgePid: 48213,
   gaCommit: "4086d5c858b90e10eb24a106ea3c41ac729bc00e",
-  // Matches 1d3c1a09's actual `git log -1 --format=%cI`. The managed
+  // Matches 4086d5c's actual `git log -1 --format=%cI`. The managed
   // runtime manifest becomes the source of truth once hydrate runs; this
   // fallback keeps first paint aligned before diagnostics arrive.
   gaCommitDate: "2026-07-23T15:30:36+08:00",
