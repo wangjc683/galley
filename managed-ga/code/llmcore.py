@@ -8,7 +8,8 @@ if _ROOT not in sys.path: sys.path.append(_ROOT)
 def _load_mykeys():
     global _mykey_path
     try:
-        import mykey; importlib.reload(mykey); _mykey_path = mykey.__file__
+        sys.modules.pop('mykey', None)
+        import mykey; _mykey_path = mykey.__file__
         return {k: v for k, v in vars(mykey).items() if not k.startswith('_')}
     except ImportError as e:
         if getattr(e, 'name', None) != 'mykey':
@@ -21,13 +22,15 @@ def _load_mykeys():
     if isinstance(mk, dict) and 'remote_url' in mk: return requests.get(mk['remote_url'], timeout=10).json()
     return mk
 
+_mykey_lock = threading.Lock()
 _mykey_path = _mykey_mtime = None
 def reload_mykeys():
     global _mykey_mtime
     try:
         mt = os.stat(_mykey_path).st_mtime_ns if _mykey_path else -1
         if mt == _mykey_mtime: return globals().get('mykeys', {}), False
-        mk = _load_mykeys(); _mykey_mtime = os.stat(_mykey_path).st_mtime_ns
+        with _mykey_lock: mk = _load_mykeys()
+        _mykey_mtime = os.stat(_mykey_path).st_mtime_ns
         print(f'[Info] Load mykeys from {_mykey_path}')
         globals().update(mykeys=mk)
         return mk, True
@@ -1346,6 +1349,7 @@ class NativeToolClient:
 def resolve_session(cfg_name):
     cfg = reload_mykeys()[0].get(cfg_name)
     if not cfg: raise ValueError(f"Config '{cfg_name}' not in mykey")
+    cfg['_mykey_name'] = cfg_name
     if 'native' in cfg_name: return (NativeClaudeSession if 'claude' in cfg_name else NativeOAISession)(cfg=cfg)
     if 'claude' in cfg_name: return ClaudeSession(cfg=cfg)
     return LLMSession(cfg=cfg) if 'oai' in cfg_name else None

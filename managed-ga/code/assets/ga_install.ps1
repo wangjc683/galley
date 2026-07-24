@@ -8,7 +8,7 @@ GenericAgent one-click portable deployer for Windows.
 
 Modes:
 
-  Default/Mainland: download GenericAgent.zip + uv + PortableGit from user's VPS, set China PyPI mirror.
+  Default/Mainland: download GenericAgent.zip + uv from user's VPS, set China PyPI mirror; no Git download.
 
   GLOBAL=1: clone GenericAgent from GitHub; uv and PortableGit also come from GitHub releases; no PyPI mirror.
 
@@ -16,7 +16,7 @@ Modes:
 
 Portable components are installed under <InstallDir>\.portable:
 
-  uv, Python installed by uv, PortableGit.
+  uv and Python installed by uv; GLOBAL=1 also installs PortableGit.
 
 #>
 
@@ -63,6 +63,8 @@ $GitUrl = "$VpsBase/files/PortableGit-2.54.0-64-bit.7z.exe"
 $Deps = @("requests>=2.28", "beautifulsoup4>=4.12", "bottle>=0.12", "simple-websocket-server>=0.4", "streamlit>=1.28")
 
 $MainlandIndex = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+$MainlandPythonMirror = "https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone"
 
 $GlobalMode = ($env:GLOBAL -eq "1")
 
@@ -243,7 +245,11 @@ if (Test-Path $uvPyDir) {
 
 Say "Installing Python $PythonVersion via uv"
 
-$ec = Invoke-Native { & $UvExe python install $PythonVersion }
+$pythonInstallArgs = @("python", "install", $PythonVersion, "--no-bin")
+
+if (!$GlobalMode) { $pythonInstallArgs += @("--mirror", $MainlandPythonMirror) }
+
+$ec = Invoke-Native { & $UvExe @pythonInstallArgs }
 
 if ($ec -ne 0) { Die "uv python install failed" }
 
@@ -255,37 +261,43 @@ Ok "Python: $(& $PythonExe --version)"
 
 
 
-# PortableGit (GitHub release in GLOBAL mode, user's VPS otherwise). Needed for GLOBAL=1 and useful for user shell.
-
-if (!(Test-Path $GitExe) -or $Force) {
-
-    Download-File $GitUrl $GitExeArchive
-
-    if (Test-Path $GitDir) { Remove-Item -Recurse -Force $GitDir }
-
-    New-Item -ItemType Directory -Force -Path $GitDir | Out-Null
-
-    Say "Extracting PortableGit"
-
-    $ec = Invoke-Native { & $GitExeArchive -y -o"$GitDir" | Out-Null }
-
-    if ($ec -ne 0) { Die "PortableGit extraction failed" }
-
-}
-
-if (!(Test-Path $GitExe)) { Die "git.exe missing: $GitExe" }
-
-Ok "Git: $(& $GitExe --version)"
-
-
-
 $PythonDir = Split-Path $PythonExe -Parent
 
-$GitBin = Split-Path $GitExe -Parent
+if ($GlobalMode) {
 
-$GitUsrBin = Join-Path $GitDir "usr\bin"
+    # GLOBAL=1 needs PortableGit to clone GenericAgent from GitHub.
 
-$env:PATH = "$Bin;$PythonDir;$PythonDir\Scripts;$GitBin;$GitUsrBin;$env:PATH"
+    if (!(Test-Path $GitExe) -or $Force) {
+
+        Download-File $GitUrl $GitExeArchive
+
+        if (Test-Path $GitDir) { Remove-Item -Recurse -Force $GitDir }
+
+        New-Item -ItemType Directory -Force -Path $GitDir | Out-Null
+
+        Say "Extracting PortableGit"
+
+        $ec = Invoke-Native { & $GitExeArchive -y -o"$GitDir" | Out-Null }
+
+        if ($ec -ne 0) { Die "PortableGit extraction failed" }
+
+    }
+
+    if (!(Test-Path $GitExe)) { Die "git.exe missing: $GitExe" }
+
+    Ok "Git: $(& $GitExe --version)"
+
+    $GitBin = Split-Path $GitExe -Parent
+
+    $GitUsrBin = Join-Path $GitDir "usr\bin"
+
+    $env:PATH = "$Bin;$PythonDir;$PythonDir\Scripts;$GitBin;$GitUsrBin;$env:PATH"
+
+} else {
+
+    $env:PATH = "$Bin;$PythonDir;$PythonDir\Scripts;$env:PATH"
+
+}
 
 
 
@@ -459,7 +471,7 @@ set "UV_DEFAULT_INDEX=$MainlandIndex"
 
 set "PIP_INDEX_URL=$MainlandIndex"
 
-set "PATH=$Bin;$PythonDir;$PythonDir\Scripts;$GitBin;$GitUsrBin;%PATH%"
+set "PATH=$Bin;$PythonDir;$PythonDir\Scripts;%PATH%"
 
 echo Activated GenericAgent portable env: %GENERICAGENT_HOME%
 
@@ -481,7 +493,7 @@ echo Activated GenericAgent portable env: %GENERICAGENT_HOME%
 
 `$env:PIP_INDEX_URL = "$MainlandIndex"
 
-`$env:PATH = "$Bin;$PythonDir;$PythonDir\Scripts;$GitBin;$GitUsrBin;`$env:PATH"
+`$env:PATH = "$Bin;$PythonDir;$PythonDir\Scripts;`$env:PATH"
 
 Write-Host "Activated GenericAgent portable env: `$env:GENERICAGENT_HOME" -ForegroundColor Green
 
@@ -497,7 +509,7 @@ Ok "Verification:"
 
 & $PythonExe --version
 
-& $GitExe --version
+if ($GlobalMode) { & $GitExe --version }
 
 & $PythonExe -c "import requests, bs4, bottle; print('deps ok')"
 

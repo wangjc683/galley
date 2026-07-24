@@ -117,7 +117,7 @@ web_execute_js script='{"cmd": "batch", "commands": [...]}'
 ## autofill获取与登录
 检测：web_scan输出input带`data-autofilled="true"`，value显示为受保护提示(非真实值，Chrome安全保护需点击释放)
 - ⚠**前置条件：必须先CDP `Page.bringToFront` 切tab到前台**，Chrome仅在前台tab释放autofill保护值，后台tab物理点击无效
-- ⭐**一键释放与登录**：bringToFront → mousePressed点任一字段(无需Released，一个释放全页) → 等500ms → 补input/change事件 → 点登录
+- ⭐**最快登录（✅已验证）**：bringToFront → 无视按钮`disabled`，直接CDP完整点击登录按钮（无需处理字段）；失败再兜底：mousePressed任一字段 → 等500ms → 补input/change → 点登录
 
 ## 验证码/页面视觉截图
 - ⭐首选CDP截图：`Page.captureScreenshot`(format:'png')→返回base64，无需前台/后台tab也行，全页高清

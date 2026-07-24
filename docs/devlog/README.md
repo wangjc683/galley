@@ -279,6 +279,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ### 2026-07-23
 - [Rust 大文件拆分五连 + GUI 第四轮](./2026-07-23-rust-and-gui-large-file-split-rounds.md) — lib.rs run()/session_cmds/hive 主循环/codex_oauth/im_supervisor 五拆 + App.tsx host 组件/runtime store 切片/MarkdownView 三拆；migration_backup 决定不拆；workbench_bridge 缓做入 deferred
+- [GA upstream upgrade 1d3c1a09 -> 4086d5c 与上游历史重写](./2026-07-23-ga-upstream-upgrade-1d3c1a09-to-4086d5c.md) — 上游 force-push 改写 main（提交信息英文化），旧基线 SHA 官方不可达，tree 等价锚点 8a75b39 证明内容同一；真实增量仅 5 提交；get_llm_name 去 Session 后缀 → bridge 容错匹配；基线文档增记 tree hash
 
 ## 格式约定
 

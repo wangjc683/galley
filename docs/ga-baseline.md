@@ -15,20 +15,87 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `1d3c1a09dfdaa76ba5dee82725fa599df7c16be4`
+Locked commit: `4086d5c858b90e10eb24a106ea3c41ac729bc00e`
 
+- Tree hash: `3ce40434f799347e2ba6a9d07616bc29739a8162` (recorded since this
+  upgrade: the tree survives message-only history rewrites and proves code
+  identity when a commit SHA stops resolving upstream)
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-07-22
-- Previous baseline: `5257decc8c7ac2484278c977b91d15cb09990fef`
+- Date audited: 2026-07-23
+- Note: "current baseline" = latest **audited** commit. What a released
+  build actually **ships** can lag one release behind — see
+  [project status](./project-status.md) for the shipped baseline.
+- Previous baseline: `1d3c1a09dfdaa76ba5dee82725fa599df7c16be4` — **no longer
+  reachable on upstream `main`**: upstream force-pushed a rewritten history
+  (commit messages anglicized to conventional commits; code content
+  untouched). The old baseline's tree is byte-identical to new-history
+  `8a75b39` (tree `3817cec4be64604501cd97dc5798b295db050cad`), which is the
+  equivalence anchor this delta was computed against. The pre-rewrite objects
+  survive only in clones that fetched them (e.g. the maintainer's
+  `~/Documents/GenericAgent`).
+- Delta (content, `8a75b39..4086d5c` = 5 new commits): 11 files,
+  ~109 insertions / ~64 deletions. Engine-core delta is LLM-session reload
+  robustness in `agentmain.py` (sticky `llm_no` by backend name, empty/BADMIXIN
+  guards, display-name format change, CN tool-schema switch removed),
+  `reload_mykeys` thread lock + `resolve_session` `_mykey_name` stamp in
+  `llmcore.py`, and working-memory tool tightening in `ga.py` +
+  `assets/tools_schema.json` (`related_sop` param removed,
+  `start_long_term_update` refused before turn 10). The rest is upstream
+  frontends (`stapp.py`, `conductor.*`, `desktop/`) and `ga_install.ps1`,
+  all inert on Galley's path, plus a one-line `tmwebdriver_sop.md` login-flow
+  edit.
+- Result: no bridge protocol or dependency break; `agent_loop.py` and
+  `pyproject.toml` did not change at all. One real compat point:
+  `get_llm_name()` dropped the `Session` suffix from the class segment
+  (`NativeClaudeSession/x` → `NativeClaude/x`), which broke
+  `_initial_llm_index`'s exact-match restore of persisted LLM names —
+  Galley now normalizes both sides (strip `Session`) so names persisted by
+  either GA generation keep resolving in both managed and attach modes.
+  Patch-stack rebase had one real conflict (`0001` `agentmain.py`: upstream's
+  `self.llmclient = None` on the patched `log_path` line — both kept).
+- Devlog: [GA upstream upgrade 1d3c1a09 -> 4086d5c](./devlog/2026-07-23-ga-upstream-upgrade-1d3c1a09-to-4086d5c.md)
+
+New in the `8a75b39` -> `4086d5c` range:
+
+- `agentmain.py`: `load_llm_sessions` keeps the previously selected backend
+  across mykey reloads by re-matching `backend.name` (sticky `llm_no`),
+  guards empty `llmclients`, and renders bad mixin configs as `BADMIXIN_i`
+  placeholders instead of crashing. `next_llm` no longer switches to a CN
+  tool schema for glm/minimax/kimi. `get_llm_name` display format lost the
+  `Session` suffix (see compat point above).
+- `llmcore.py`: `reload_mykeys` is now thread-locked and uses
+  `sys.modules.pop` instead of `importlib.reload`; `resolve_session` stamps
+  `cfg['_mykey_name']` (additive). History shape and
+  `NativeClaudeSession.ask()` untouched.
+- `ga.py` + `assets/tools_schema.json`: working-memory tool guidance
+  tightened — `update_working_checkpoint` lost its `related_sop` parameter,
+  `start_long_term_update` refuses before turn 10, first-turn checkpoint
+  calls get a "don't call again" tip. Behavior tuning at the handler level;
+  dispatch signature unchanged.
+- `memory/tmwebdriver_sop.md`: autofill login flow now prefers a direct CDP
+  click on the login button (ignoring `disabled`), with the old
+  field-release sequence as fallback. The extension itself
+  (`assets/tmwd_cdp_bridge/`) did not change in this range.
+- `frontends/stapp.py` / `conductor.*` / `desktop/`, `assets/ga_install.ps1`:
+  portal/desktop UX and mainland-China no-Git install — all inert on
+  Galley's path.
+
+Baseline history note (2026-07-23): upstream rewrote `main` history once
+(force push). If a recorded SHA stops resolving, diff by tree equivalence
+from a clone that still has the old objects, and record the new-history
+anchor here. `git log -S` archaeology against pre-rewrite history must also
+use such a clone.
+
+Carried forward from the `5257dec` -> `1d3c1a09` range (2026-07-22, audited
+against pre-rewrite SHAs; equivalent new-history tip `8a75b39`):
+
+- Previous-previous baseline: `5257decc8c7ac2484278c977b91d15cb09990fef`
 - Delta: 8 commits, 18 files, ~90 insertions / ~63 deletions. Engine-core
   delta is two one-line changes (`agentmain.py` temp-file naming,
   `llmcore.py` trim factor) plus the legacy CDP DOM bridge removal; the rest
   is `memory/` + insight templates (plan-mode deprecation), the tmwebdriver
   extension, and upstream frontends (`conductor.py`, `stapp.py`,
   `frontends/desktop*`) that are inert on Galley's path.
-- Note: "current baseline" = latest **audited** commit. What a released
-  build actually **ships** can lag one release behind — see
-  [project status](./project-status.md) for the shipped baseline.
 - Result: no external bridge protocol or dependency break; `agent_loop.py`,
   `ga.py`, and `pyproject.toml` did not change at all. Headline change is
   **upstream formally deprecating plan mode** (`plan_sop.md` gains a
@@ -175,6 +242,10 @@ Upgrade is event-driven, not calendar-driven.
 - If users report that a new GenericAgent behavior does not work in Galley,
   audit immediately.
 - If upstream ships a critical stability or security fix, audit immediately.
+- If upstream rewrites published history so the recorded baseline SHA is no
+  longer reachable on `main` (observed 2026-07-23), re-anchor promptly while
+  a clone with the pre-rewrite objects still exists: prove code identity via
+  tree hashes, then bump to a commit on the new history.
 - Do not upgrade just because time has passed.
 
 ## Upgrade Procedure
@@ -306,8 +377,9 @@ already-generated bundle without rebuilding it. The smoke must verify
 node scripts/check-ga-baseline-drift.mjs
 ```
 
-10. Update this document with the new hash, date, delta summary, and devlog
-    link.
+10. Update this document with the new hash, tree hash
+    (`git rev-parse '<sha>^{tree}'` — the durable anchor if upstream ever
+    rewrites history again), date, delta summary, and devlog link.
 
 11. Write a devlog entry:
 

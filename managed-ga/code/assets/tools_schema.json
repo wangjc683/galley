@@ -53,10 +53,9 @@
   }},
   {"type": "function", "function": {
     "name": "update_working_checkpoint",
-    "description": "Short-term working notepad, auto-injected each turn to prevent info loss in long tasks. Call during early/mid stages, not at end. When: (1) after reading SOP, store user needs & key constraints (skip for simple 1-2 step tasks); (2) before subtask switch or context flush; (3) after repeated failures, re-read SOP and must store new findings; (4) on new task, update content, clear old progress but keep valid constraints.\n\nDon't call: simple tasks (1-2 steps), task completed (use long-term memory tool)",
+    "description": "Short-term working notepad (auto-injected each turn). Call early/mid task only when there is non-obvious state worth keeping. When: (1) after reading SOP — store needs & constraints (skip tasks <5 steps); (2) before subtask switch / context flush; (3) after repeated failures — re-read SOP and store new findings; (4) on new task — replace notepad, drop old progress, keep still-valid constraints.\n\nDon't call: tasks <5 steps, greetings, or when the task is done (use start_long_term_update instead).",
     "parameters": {"type": "object", "properties": {
-      "key_info": {"type": "string", "description": "Replaces current notepad (<200 tokens). Incremental update: review existing, keep valid, add/remove/modify. Store: pitfalls, user requirements, key params/findings, file paths, progress, next steps. Don't store: ephemeral info, obvious context, old task info when user switched tasks. Prefer over-updating over losing key info"},
-      "related_sop": {"type": "string", "description": "Related SOP names, tips for further re-read"}}}
+      "key_info": {"type": "string", "description": "Replaces current notepad (<200 tokens). Incremental update: review existing, keep valid, add/remove/modify. Store: pitfalls, user requirements, key params/findings, file paths, progress, next steps. Don't store: ephemeral info, obvious context, old task info when user switched tasks. Prefer over-updating over losing key info"}}}
   }},
   {"type": "function", "function": {
     "name": "ask_user",
@@ -67,7 +66,7 @@
   }},
   {"type": "function", "function": {
     "name": "start_long_term_update",
-    "description": "Start distilling long-term memory. Call when discovering info worth remembering (env facts/user prefs/lessons learned). Skip if memory already updated or in autonomous flow. Must call when a task that took 15+ turns is completed",
+    "description": "After a long task completes, distill long-term memory. Call when discovering info worth remembering (env facts/user prefs/lessons learned). Skip if memory already updated or in autonomous flow. Must call when a task that took 15+ turns is completed.",
     "parameters": {"type": "object", "properties": {}}}
   }
 ]

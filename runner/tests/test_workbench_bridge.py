@@ -156,6 +156,30 @@ def test_llm_display_name_managed_runtime_uses_galley_name(
     assert _llm_display_name("NativeClaudeSession/My GLM") == "My GLM"
 
 
+def test_initial_llm_index_matches_across_ga_name_formats() -> None:
+    """Upstream 4086d5c renamed 'NativeClaudeSession/x' to 'NativeClaude/x';
+    persisted names from either GA generation must keep resolving."""
+    bridge = _new_test_bridge()
+    bridge.agent = SimpleNamespace(
+        list_llms=lambda: [
+            (0, "NativeClaude/glm-5.1", True),
+            (1, "NativeClaude/claude-main", False),
+        ]
+    )
+
+    bridge.llm_name = "NativeClaudeSession/claude-main"
+    assert bridge._initial_llm_index() == 1
+
+    bridge.llm_name = "NativeClaude/claude-main"
+    assert bridge._initial_llm_index() == 1
+
+    bridge.agent = SimpleNamespace(
+        list_llms=lambda: [(0, "NativeClaudeSession/glm-5.1", True)]
+    )
+    bridge.llm_name = "NativeClaude/glm-5.1"
+    assert bridge._initial_llm_index() == 0
+
+
 def test_managed_model_config_maps_connect_timeout_to_ga_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

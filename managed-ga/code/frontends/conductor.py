@@ -414,7 +414,6 @@ API: {base}；requests，GET /readme查用法，GET /chat读未读对话，GET /
                 return
 
     def _run(self):
-        self.agent = GenericAgent()
         self.agent.inc_out = True
         start_agent_runner(self.agent, "conductor-agent")
         self.started = True
@@ -431,18 +430,19 @@ API: {base}；requests，GET /readme查用法，GET /chat读未读对话，GET /
                     self.inbox.task_done()
                 except Exception:
                     break
+            kind = first.get("type"); others = [e for e in events if e.get("type") != kind]; events = [e for e in events if e.get("type") == kind] or [first]
+            for e in others: self.inbox.put(e)
             try:
                 prompt = self._build_prompt(events)
-                # Follow the desktop-selected model live: re-read before each task
-                # so switching models in the UI takes effect without restarting.
-                _apply_desktop_model(self.agent)
                 dq = self.agent.put_task(prompt, source="conductor")
                 self._drain(dq, events)
             except Exception as e:
                 print(f"Conductor error: {e}")
                 add_chat(f"⚠ 回复失败：{e}", role="error")
 
-    def start(self): threading.Thread(target=self._run, name="conductor-loop", daemon=True).start()
+    def start(self):
+        self.agent = GenericAgent(); _apply_desktop_model(self.agent)
+        threading.Thread(target=self._run, name="conductor-loop", daemon=True).start()
 
 
 conductor = Conductor()
@@ -573,9 +573,12 @@ async def websocket(ws: WebSocket):
     ws_clients.add(ws)
     try:
         running = any(s.status == "running" for s in pool.subagents.values())
-        await ws.send_json({"type": "hello", "subagents": pool.snapshot(), "chat": chat_messages, "log": conductor.log, "running": running})
+        await ws.send_json({"type": "hello", "subagents": pool.snapshot(), "chat": chat_messages, "log": conductor.log, "running": running, "llms": conductor.agent.list_llms(), "llm": conductor.agent.llm_no})
         while True:
             data = await ws.receive_json()
+            if "llm" in data:
+                if type(n := data["llm"]) is int and 0 <= n < len(conductor.agent.list_llms()): conductor.agent.next_llm(n)
+                continue
             msg = (data.get("msg") or "").strip()
             if not msg: continue
             add_chat(msg, role="user", files=data.get("files") or [], images=data.get("images") or [])

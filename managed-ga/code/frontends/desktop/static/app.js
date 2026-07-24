@@ -775,7 +775,17 @@ if (pqEl) pqEl.addEventListener('click', (e) => {
   const btn = e.target.closest('.pq-btn[data-provider]');
   if (!btn) return;
   e.preventDefault(); e.stopPropagation();
-  if (btn.dataset.provider === 'ga-token') { bridgeFetch('/subscription-portal', { method: 'POST', body: {} }); return; }
+  if (btn.dataset.provider === 'ga-token') {
+    window.ga.getMykeyContent().then(r => {
+      const base = r?.content || '', t0 = Date.now();
+      bridgeFetch('/subscription-portal', { method: 'POST', body: {} });
+      const timer = setInterval(async () => {
+        const cur = (await window.ga.getMykeyContent().catch(() => null))?.content;
+        if ((cur != null && cur !== base) || Date.now() - t0 > 3e5) { clearInterval(timer); if (cur !== base) await loadModelProfiles(); }
+      }, 3000);
+    });
+    return;
+  }
   openAddModelFormForProvider(btn.dataset.provider);
 });
 // 「快速接入」卡片折叠/展开（向下箭头），状态记忆到 localStorage

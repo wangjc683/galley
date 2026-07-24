@@ -76,6 +76,7 @@
     }
     .title { font-size: 17px; letter-spacing: .2px; font-weight: 700; }
     .hint { color: var(--muted); font-size: 12px; }
+    #llm { max-width: 42vw; margin-left: 10px; padding: 4px 6px; border: 1px solid #dfe5ee; border-radius: 6px; background: #fff; font: 600 12px inherit; }
 
     .cards {
       flex: 1;
@@ -312,7 +313,7 @@
       <!-- 聊天 -->
       <section class="pane chat">
         <div class="head">
-          <div class="title">Conversation</div>
+          <div class="title">Conversation <select id="llm" aria-label="Conductor model" disabled></select></div>
           <div class="hint" id="wsStatus">connecting...</div>
         </div>
         <div class="messages" id="messages"></div>
@@ -331,6 +332,7 @@
     const messagesEl = document.getElementById('messages');
     const inputEl    = document.getElementById('input');
     const sendBtn    = document.getElementById('send');
+    const llmEl      = document.getElementById('llm');
     const wsStatus   = document.getElementById('wsStatus');
     const apprEl     = document.getElementById('approvals');
     const apprBody   = document.getElementById('approvalsBody');
@@ -452,6 +454,7 @@
           renderCards(data.subagents||[]);
           messagesEl.innerHTML=''; (data.chat||[]).forEach(addMsg);
           renderLog(data.log||[]);
+          llmEl.innerHTML=(data.llms||[]).map(x=>`<option value="${x[0]}">${esc(x[1])}</option>`).join(''); llmEl.value=data.llm; llmEl.disabled=!llmEl.options.length;
         } else if(data.type==='subagents'){ renderCards(data.items||[]); }
         else if(data.type==='chat'){ addMsg(data.item); }
         else if(data.type==='chat_read'){ markAllRead(); }
@@ -465,6 +468,7 @@
       ws.send(JSON.stringify({msg})); inputEl.value=''; inputEl.focus();
     }
     sendBtn.addEventListener('click', send);
+    llmEl.addEventListener('change', ()=>{ if(ws?.readyState===1) ws.send(JSON.stringify({llm:+llmEl.value})); });
     inputEl.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey && !e.isComposing && e.keyCode!==229){ e.preventDefault(); send(); } });
 
     // Input length limit (10000 chars)

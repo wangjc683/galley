@@ -15,7 +15,7 @@ import streamlit as st
 import time, json, re, threading, queue
 from datetime import timedelta
 import agentmain
-from agentmain import GeneraticAgent
+from agentmain import GenericAgent
 import chatapp_common  # activate /continue command (monkey patches GeneraticAgent)
 from continue_cmd import handle_frontend_command, reset_conversation, list_sessions, extract_ui_messages
 from btw_cmd import handle_frontend_command as btw_handle_frontend
@@ -51,7 +51,7 @@ I18N = {
         'get_token': '🔑 获取 Token',
         'get_token_toast': '已打开浏览器',
         'need_mykey': '⚠️ 请配置 mykey.py',
-        'reopen_page': '请重新打开程序',
+        'reopen_page': '等待配置写入，完成后将自动进入…',
     },
     'en': {
         'force_stop': 'Force Stop',
@@ -66,26 +66,36 @@ I18N = {
         'get_token': '🔑 Get Token',
         'get_token_toast': 'Opened in browser',
         'need_mykey': '⚠️ Please set mykey.py',
-        'reopen_page': 'Please restart the app',
+        'reopen_page': 'Waiting for config… will enter automatically',
     },
 }
 def T(key): return I18N.get(LANG, I18N['zh']).get(key, key)
 
 @st.cache_resource
 def init():
-    agent = GeneraticAgent()
-    if agent.llmclient is not None:
-        threading.Thread(target=agent.run, daemon=True).start()
+    agent = GenericAgent()
+    threading.Thread(target=agent.run, daemon=True).start()
     return agent
 
 agent = init()
-if agent.llmclient is None:
-    _sp = getattr(agentmain, "start_subscription_portal", None)
-    if _sp:
-        _sp()
-        st.warning(T("reopen_page"))
-    else:
-        st.error(T("need_mykey"))
+_sp = getattr(agentmain, "start_subscription_portal", None)
+
+@st.fragment(run_every=timedelta(seconds=2))
+def _watch_portal():
+    b = st.session_state["portal_wait"]
+    c = tuple(n for _, n, _ in agent.list_llms())
+    if c and c != b:
+        del st.session_state["portal_wait"]
+        st.session_state.pop("sidebar_llm_select", None)
+        st.rerun(scope="app")
+
+if not agent.llmclients and _sp:
+    st.session_state.setdefault("portal_wait", ()); _sp()
+if "portal_wait" in st.session_state: _watch_portal()
+
+if not agent.llmclients:
+    if _sp: st.warning(T("reopen_page"))
+    else: st.error(T("need_mykey"))
     st.stop()
 
 def build_prompt(objective):
@@ -101,7 +111,7 @@ def build_prompt(objective):
 def get_controller():
     b = {'ev': threading.Event(), 'obj': '', 'out': None, 'ready': False}
     def loop():
-        ag = GeneraticAgent(); ag.verbose = False; ag.log_path = False
+        ag = GenericAgent(); ag.verbose = False; ag.log_path = False
         threading.Thread(target=ag.run, daemon=True).start()
         while True:
             b['ev'].wait(); b['ev'].clear()
@@ -185,10 +195,11 @@ def render_sidebar():
             st.session_state.autonomous_enabled = True
             st.toast("✅"); st.rerun(scope="app")
         st.caption(T('auto_off_cap'))
-    if (_sp := getattr(agentmain, "start_subscription_portal", None)):
+    if _sp:
         st.divider()
         if st.button(T("get_token")):
-            _sp(); st.toast(T("get_token_toast"))
+            st.session_state.portal_wait = tuple(n for _, n, _ in agent.list_llms())
+            _sp(); st.rerun(scope="app")
 with st.sidebar: render_sidebar()
 
 def fold_turns(text):

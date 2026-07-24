@@ -607,12 +607,22 @@ class Bridge:
                 context="setup_ga",
             )
 
+    @staticmethod
+    def _normalize_llm_name(name: str) -> str:
+        """GA's get_llm_name() dropped the 'Session' suffix from the backend
+        class segment in upstream 4086d5c ('NativeClaudeSession/x' ->
+        'NativeClaude/x'). Persisted names may be in either form depending on
+        which GA produced them, so strip the suffix on both sides."""
+        backend_cls, sep, rest = name.partition("/")
+        return backend_cls.replace("Session", "") + sep + rest
+
     def _initial_llm_index(self) -> int:
         if not self.llm_name:
             return self.llm_no
+        wanted = self._normalize_llm_name(self.llm_name)
         try:
             for index, name, _ in self.agent.list_llms():
-                if name == self.llm_name:
+                if self._normalize_llm_name(name) == wanted:
                     return int(index)
         except Exception as e:
             print(f"Could not resolve LLM name {self.llm_name!r}: {e}", file=sys.stderr)

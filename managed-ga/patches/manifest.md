@@ -2,9 +2,19 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-07-22` against upstream
-`1d3c1a09dfdaa76ba5dee82725fa599df7c16be4` (14-patch stack, through `0015`).
-(History from the 2026-07-22 `1d3c1a09` upgrade: commit-chain rebase with two
+Last replay verified: `2026-07-23` against upstream
+`4086d5c858b90e10eb24a106ea3c41ac729bc00e` (14-patch stack, through `0015`).
+(History from the 2026-07-23 `4086d5c` upgrade: upstream force-pushed a
+rewritten `main` (commit messages anglicized; old SHAs unreachable), so the
+old baseline `1d3c1a09` only resolves in clones that fetched the pre-rewrite
+history — its tree is identical to new-history `8a75b39`. Commit-chain rebase
+with one real conflict. `0001`: upstream added `self.llmclient = None` on the
+`agentmain.py` line the patch's `log_path` state-root redirect targets —
+resolved by keeping both. The other 13 patches replayed clean; `llmcore.py`
+hunks shifted ~4 lines from the new `reload_mykeys` thread lock and `ga.py`
+hunks ~2 lines from the working-memory tool changes, all handled positionally
+by the rebase.
+History from the 2026-07-22 `1d3c1a09` upgrade: commit-chain rebase with two
 real conflicts and one pre-existing drift repair. `0001`: upstream `51f76929`
 made long-prompt temp filenames unique (`pid`+`nanos`) on the same `agentmain.py`
 line the patch relocates — resolved by combining both:
