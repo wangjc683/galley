@@ -309,6 +309,8 @@ fn start_background_services(app: &tauri::App) {
     tauri::async_runtime::spawn(async move {
         desktop_goal::resume_active_goals(&galley_for_goals).await;
     });
+
+    crate::scheduler::start(app);
 }
 
 /// Windows-only custom chrome: drop native decorations and restore the

@@ -221,5 +221,23 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/034_session_approval_mode.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 35,
+            description: "add scheduled tasks",
+            sql: include_str!("../migrations/035_scheduled_tasks.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 36,
+            description: "add scheduled task monthly repeat",
+            sql: include_str!("../migrations/036_scheduled_tasks_monthly.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 37,
+            description: "add scheduled task per-task model",
+            sql: include_str!("../migrations/037_scheduled_tasks_llm.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

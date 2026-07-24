@@ -78,6 +78,12 @@ export const enCopy: AppCopy = {
     showProjects: "Show projects",
     exitProjects: "Exit projects",
     newProject: "New project",
+    scheduled: "Scheduled",
+    openScheduled: "Manage scheduled tasks",
+    scheduledBlocked: (count: number) =>
+      count === 1
+        ? "1 scheduled session waiting for approval"
+        : `${count} scheduled sessions waiting for approval`,
     working: "Working",
     thinking: "Thinking",
     waitingForYou: "Waiting for you",
@@ -86,6 +92,7 @@ export const enCopy: AppCopy = {
     desktopPetAttachedTitle:
       "Desktop Pet attached · Open this conversation to detach",
     supervisorCreated: "Created by Supervisor",
+    scheduledCreated: "Created by scheduled task",
     newReplyTitle: "New reply",
     emptySessions: "Your conversations will appear here.",
     bucketPinned: "Pinned",
@@ -1629,6 +1636,58 @@ export const enCopy: AppCopy = {
       `Permanently delete ${count} selected conversation${count === 1 ? "" : "s"}`,
     archiveSelected: "Archive",
     pinned: "pinned",
+  },
+  scheduled: {
+    title: "Scheduled tasks",
+    count: (count: number) => `${count} total`,
+    empty: "No scheduled tasks yet.",
+    emptyHint:
+      "A scheduled task opens a new session at the set time and runs its prompt.",
+    exampleDigestTitle: "Morning briefing",
+    exampleDigestPrompt:
+      "Collect the latest updates and news on “a topic you follow” and turn them into a concise morning briefing.",
+    exampleDownloadsTitle: "Tidy the Downloads folder",
+    exampleDownloadsPrompt:
+      "Organize my Downloads folder: file items into subfolders by type, list large files and installers untouched for 30+ days, and suggest what can be deleted.",
+    exampleArchiveTitle: "Monthly archive",
+    exampleArchivePrompt:
+      "Move last month's new screenshots and documents into a month-named folder like “2026-06”, and produce an archive list.",
+    runsOnlyWhileRunning:
+      "Fires only while Galley is running; a missed time is caught up once within the same day.",
+    newTask: "New scheduled task",
+    editTask: "Edit scheduled task",
+    promptLabel: "Prompt",
+    promptPlaceholder: "First message sent to the new session…",
+    projectLabel: "Project",
+    noProject: "No project",
+    modelLabel: "Model",
+    defaultModel: "Default model",
+    repeatLabel: "Repeat",
+    repeatDaily: "Daily",
+    repeatWeekly: "Weekly",
+    repeatMonthly: "Monthly",
+    timeLabel: "Time",
+    weekdayLabel: (isoDay: number) =>
+      ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][isoDay - 1] ?? "?",
+    weekdaysRequired: "Pick at least one weekday",
+    monthdaysRequired: "Pick at least one day",
+    monthlyClampHint: "Months without that day fire on their last day",
+    repeatSummaryDaily: (time: string) => `Daily ${time}`,
+    repeatSummaryWeekly: (days: string, time: string) => `${days} ${time}`,
+    repeatSummaryMonthly: (days: string, time: string) =>
+      `Monthly ${days} · ${time}`,
+    nextFire: (time: string) => `Next ${time}`,
+    lastRunNone: "Not run yet",
+    lastRunFailed: "Last fire failed",
+    lastRunWaitingApproval: "Last run waiting for approval",
+    lastRun: (time: string) => `Last ${time}`,
+    openLastRun: "Open the last run's session",
+    enableAria: (prompt: string) => `Enable scheduled task: ${prompt}`,
+    edit: "Edit",
+    delete: "Delete",
+    deleteTitle: "Delete this scheduled task?",
+    deleteBody: "Sessions it created stay in the timeline.",
+    create: "Create",
   },
   yoloIntro: {
     title: "Galley defaults to Auto-run",

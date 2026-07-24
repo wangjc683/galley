@@ -207,6 +207,41 @@ impl GalleyApi for SqliteGalley {
         self.delete_project_db(id, _origin).await
     }
 
+    async fn list_scheduled_tasks(&self) -> Result<Vec<ScheduledTaskBrief>> {
+        self.list_scheduled_tasks_db().await
+    }
+
+    async fn create_scheduled_task(
+        &self,
+        input: CreateScheduledTaskInput,
+        origin: Origin,
+    ) -> Result<ScheduledTaskBrief> {
+        self.create_scheduled_task_db(input, origin).await
+    }
+
+    async fn update_scheduled_task(
+        &self,
+        id: ScheduledTaskId,
+        patch: ScheduledTaskPatch,
+        origin: Origin,
+    ) -> Result<ScheduledTaskBrief> {
+        self.update_scheduled_task_db(id, patch, origin).await
+    }
+
+    async fn delete_scheduled_task(&self, id: ScheduledTaskId, origin: Origin) -> Result<()> {
+        self.delete_scheduled_task_db(id, origin).await
+    }
+
+    async fn mark_scheduled_task_fired(
+        &self,
+        id: ScheduledTaskId,
+        fired_at_iso: String,
+        session_id: Option<SessionId>,
+    ) -> Result<ScheduledTaskBrief> {
+        self.mark_scheduled_task_fired_db(id, fired_at_iso, session_id)
+            .await
+    }
+
     async fn create_goal_proposal(
         &self,
         input: CreateGoalProposalInput,

@@ -1,4 +1,5 @@
 import {
+  Clock,
   Folder,
   FolderOpen,
   MagnifyingGlass,
@@ -14,6 +15,8 @@ import { cn } from "@/lib/utils";
 export function SidebarQuickActions({
   onNewChat,
   onSearch,
+  onOpenScheduled,
+  scheduledBlockedCount = 0,
   projectViewOpen,
   onToggleProjectView,
   onNewProject,
@@ -21,6 +24,11 @@ export function SidebarQuickActions({
 }: {
   onNewChat?: () => void;
   onSearch?: () => void;
+  onOpenScheduled?: () => void;
+  /** Scheduler-created sessions currently waiting for approval —
+   * rendered as a badge on the 定时 row so an overnight block is
+   * visible at a glance. */
+  scheduledBlockedCount?: number;
   projectViewOpen: boolean;
   onToggleProjectView?: () => void;
   onNewProject?: () => void;
@@ -48,6 +56,21 @@ export function SidebarQuickActions({
         label={copy.sidebar.search}
         hint={formatShortcut("Mod+K")}
         onClick={onSearch}
+      />
+      <QuickAction
+        icon={<Clock size={14} weight="thin" />}
+        label={copy.sidebar.scheduled}
+        onClick={onOpenScheduled}
+        badge={
+          scheduledBlockedCount > 0 ? (
+            <span
+              title={copy.sidebar.scheduledBlocked(scheduledBlockedCount)}
+              className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-warning/15 px-1 text-[10px] font-semibold text-warning"
+            >
+              {scheduledBlockedCount}
+            </span>
+          ) : undefined
+        }
       />
       <ProjectQuickAction
         active={projectViewOpen}
@@ -141,12 +164,16 @@ function QuickAction({
   icon,
   label,
   hint,
+  badge,
   onClick,
   accent = false,
 }: {
   icon: React.ReactNode;
   label: string;
   hint?: string;
+  /** Trailing status badge (e.g. the 定时 row's waiting-approval
+   * count). Rendered in the hint slot position. */
+  badge?: React.ReactNode;
   onClick?: () => void;
   /** Primary/creative action (New Chat): tint the icon brand-strong so
    * the eye lands on it first. New session = creation = a brand moment,
@@ -178,6 +205,7 @@ function QuickAction({
           {hint}
         </span>
       )}
+      {badge && <span className="shrink-0">{badge}</span>}
     </button>
   );
 }

@@ -26,6 +26,7 @@ mod process_command;
 pub mod protocol;
 pub mod runner_commands;
 pub mod runner_manager;
+mod scheduler;
 pub mod socket_listener;
 pub mod sop_install;
 mod tray;
@@ -175,6 +176,11 @@ pub fn run() {
             create_project,
             update_project,
             delete_project,
+            // Scheduled tasks (.scratch/scheduled-tasks)
+            list_scheduled_tasks,
+            create_scheduled_task,
+            update_scheduled_task,
+            delete_scheduled_task,
             list_active_goals,
             list_visible_goals,
             list_goals_for_session,

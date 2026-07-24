@@ -19,6 +19,7 @@ import { resolveFirstClose } from "@/lib/db";
 import { ArchivedDialog } from "@/components/screens/archived/ArchivedDialog";
 import { EarlierDialog } from "@/components/screens/earlier/EarlierDialog";
 import { CreateProjectDialog } from "@/components/screens/project/CreateProjectDialog";
+import { ScheduledTasksDialog } from "@/components/screens/scheduled/ScheduledTasksDialog";
 import {
   ConfirmDeleteProjectDialog,
   EditProjectDialog,
@@ -36,6 +37,7 @@ import { useLLMDisplay } from "@/hooks/useLLMDisplay";
 import { useMessageSend } from "@/hooks/useMessageSend";
 import { useOnboardingFlow } from "@/hooks/useOnboardingFlow";
 import { useProjectNavigation } from "@/hooks/useProjectNavigation";
+import { useSchedulerBlockedCount } from "@/hooks/useSchedulerBlockedCount";
 import { useThemeEffects } from "@/hooks/useThemeEffects";
 import {
   useActiveMessages,
@@ -279,6 +281,7 @@ function App() {
     [sessions],
   );
   const archivedCount = sessions.length - visibleSessions.length;
+  const scheduledBlockedCount = useSchedulerBlockedCount(visibleSessions);
   // Epigraph condition = a read on the workspace pulse at the moment the
   // empty screen is entered. EmptyState snapshots this on mount, so it
   // frames arrival rather than mutating live (the live pulse is the
@@ -435,6 +438,10 @@ function App() {
   // the global store. Persisting across reloads would be confusing
   // (user expects modals to be closed on app re-open).
   const [archivedOpen, setArchivedOpen] = useState(false);
+  // ScheduledTasksDialog: management surface for scheduled tasks,
+  // opened from the sidebar 定时 quick-action row. The sessions the
+  // tasks produce live in the normal timeline.
+  const [scheduledOpen, setScheduledOpen] = useState(false);
   // EarlierDialog: opens when the user clicks the collapsed
   // "Earlier (N)" row in the sidebar. Same local-state rationale as
   // archivedOpen.
@@ -539,6 +546,8 @@ function App() {
             onOpenEarlier={() => setEarlierOpen(true)}
             archivedCount={archivedCount}
             onSearch={() => setPaletteOpen(true)}
+            onOpenScheduled={() => setScheduledOpen(true)}
+            scheduledBlockedCount={scheduledBlockedCount}
             projects={projects}
             activeProjectFilter={activeProjectFilter}
             projectViewOpen={projectViewOpen}
@@ -767,6 +776,24 @@ function App() {
         onArchiveSession={(id) => archiveSession(id)}
         onTogglePinSession={(id) => togglePinSession(id)}
         onArchiveSessionsBulk={(ids) => archiveSessionsBulk(ids)}
+      />
+
+      <ScheduledTasksDialog
+        open={scheduledOpen}
+        onOpenChange={setScheduledOpen}
+        projects={projects}
+        sessions={visibleSessions}
+        llms={llms}
+        onSelectSession={(id) => {
+          // Mirror the Sidebar row click: project context follows the
+          // session, then activate and land in the conversation.
+          const sessionProjectId = visibleSessions.find(
+            (s) => s.id === id,
+          )?.projectId;
+          setActiveProjectFilter(sessionProjectId);
+          void activateSession(id);
+          setScreen("main");
+        }}
       />
 
       <CreateProjectDialog

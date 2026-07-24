@@ -50,6 +50,9 @@ export interface SidebarProps {
   onSelectSession?: (id: string) => void;
   onNewChat?: () => void;
   onSearch?: () => void;
+  onOpenScheduled?: () => void;
+  /** Scheduler sessions blocked on approval — badge on the 定时 row. */
+  scheduledBlockedCount?: number;
   /** Open the CreateProjectDialog. Wired to the quick-action "+"
    * and the empty Project Review hint. */
   onNewProject?: () => void;
@@ -145,6 +148,8 @@ export function Sidebar({
   onSelectSession,
   onNewChat,
   onSearch,
+  onOpenScheduled,
+  scheduledBlockedCount,
   onNewProject,
   onToggleProjectView,
   onToggleProjectExpanded,
@@ -285,6 +290,8 @@ export function Sidebar({
       <SidebarQuickActions
         onNewChat={onNewChat}
         onSearch={onSearch}
+        onOpenScheduled={onOpenScheduled}
+        scheduledBlockedCount={scheduledBlockedCount}
         projectViewOpen={projectViewOpen}
         onToggleProjectView={onToggleProjectView}
         onNewProject={onNewProject}

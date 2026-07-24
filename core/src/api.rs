@@ -17,6 +17,7 @@ pub mod message;
 pub mod model;
 pub mod origin;
 pub mod project;
+pub mod schedule;
 pub mod search;
 pub mod session;
 pub mod status;
@@ -45,6 +46,10 @@ pub use model::{
 };
 pub use origin::{Origin, OriginVia};
 pub use project::{CreateProjectInput, ProjectBrief, ProjectId, ProjectPatch};
+pub use schedule::{
+    CreateScheduledTaskInput, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
+    ScheduledTaskRepeat, SCHEDULED_TASKS_CHANGED_EVENT,
+};
 pub use search::{SearchHit, SearchScope};
 pub use session::{
     CreateSessionInput, RuntimeKind, SessionBrief, SessionFilter, SessionId, SessionStatus,
@@ -339,6 +344,52 @@ pub trait GalleyApi: Send + Sync {
     ///
     /// **Errors**: `not_found`.
     async fn delete_project(&self, id: ProjectId, origin: Origin) -> Result<()>;
+
+    // ---------------- scheduled tasks ----------------
+
+    /// List all scheduled tasks, enabled first, then most recently
+    /// updated. `nextFireAt` is computed at read time from the local
+    /// repeat rule.
+    async fn list_scheduled_tasks(&self) -> Result<Vec<ScheduledTaskBrief>>;
+
+    /// Create a scheduled task with the caller-assigned id (GUI mints
+    /// `sched_<random16>`). Prompt is trimmed server-side; empty after
+    /// trim, bad `time_of_day`, or invalid weekdays → `invalid_args`;
+    /// non-existent `project_id` → `invalid_args` (FK violation).
+    async fn create_scheduled_task(
+        &self,
+        input: CreateScheduledTaskInput,
+        origin: Origin,
+    ) -> Result<ScheduledTaskBrief>;
+
+    /// Apply a [`ScheduledTaskPatch`]. Only present fields are updated;
+    /// `project_id` uses double-`Option` so `Some(None)` detaches.
+    ///
+    /// **Errors**: `not_found`, `invalid_args`.
+    async fn update_scheduled_task(
+        &self,
+        id: ScheduledTaskId,
+        patch: ScheduledTaskPatch,
+        origin: Origin,
+    ) -> Result<ScheduledTaskBrief>;
+
+    /// Delete a scheduled task. Sessions it created are ordinary
+    /// sessions and stay untouched.
+    ///
+    /// **Errors**: `not_found`.
+    async fn delete_scheduled_task(&self, id: ScheduledTaskId, origin: Origin) -> Result<()>;
+
+    /// Record a successful fire: stamps `last_fired_at` (UTC ISO) and
+    /// the created session id. No `origin` — this is a system write
+    /// from the scheduler loop.
+    ///
+    /// **Errors**: `not_found`.
+    async fn mark_scheduled_task_fired(
+        &self,
+        id: ScheduledTaskId,
+        fired_at_iso: String,
+        session_id: Option<SessionId>,
+    ) -> Result<ScheduledTaskBrief>;
 
     // ---------------- goals ----------------
 

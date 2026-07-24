@@ -9,10 +9,11 @@
 
 use galley_core_lib::api::{
     ClaimGoalTaskInput, CreateGoalEventInput, CreateGoalProposalInput, CreateGoalTaskInput,
-    CreateProjectInput, CreateSessionInput, GalleyApi, GoalEventType, GoalMode, GoalStatus,
-    GoalTaskStatus, GoalWriteMode, ManagedModelAuthKind, ManagedModelCredentialStatus,
-    ManagedModelProtocol, MessageTelemetry, MessageVisibility, Origin, ProjectId, ProjectPatch,
-    RuntimeKind, SessionFilter, SessionId, SessionStatus, UpdateGoalTaskInput,
+    CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi, GoalEventType,
+    GoalMode, GoalStatus, GoalTaskStatus, GoalWriteMode, ManagedModelAuthKind,
+    ManagedModelCredentialStatus, ManagedModelProtocol, MessageTelemetry, MessageVisibility,
+    Origin, ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskId, ScheduledTaskPatch,
+    ScheduledTaskRepeat, SessionFilter, SessionId, SessionStatus, UpdateGoalTaskInput,
     DEFAULT_GOAL_BUDGET_SECONDS, DEFAULT_GOAL_WORKER_LIMIT, MAX_GOAL_WORKER_LIMIT,
 };
 use galley_core_lib::credential_store;
@@ -62,6 +63,9 @@ const MIG_030: &str = include_str!("../migrations/030_single_active_goal.sql");
 const MIG_031: &str = include_str!("../migrations/031_message_goal_id.sql");
 const MIG_032: &str = include_str!("../migrations/032_goal_mode.sql");
 const MIG_033: &str = include_str!("../migrations/033_goal_optional_project.sql");
+const MIG_035: &str = include_str!("../migrations/035_scheduled_tasks.sql");
+const MIG_036: &str = include_str!("../migrations/036_scheduled_tasks_monthly.sql");
+const MIG_037: &str = include_str!("../migrations/037_scheduled_tasks_llm.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -102,7 +106,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
-        MIG_031, MIG_032, MIG_033, MIG_034,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -115,8 +119,7 @@ async fn run_migrations_through_028(pool: &SqlitePool) {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028,
-        MIG_034,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_034,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -2841,4 +2844,295 @@ async fn get_pref_json_rejects_corrupt_value() {
         .await
         .expect_err("should reject");
     assert!(matches!(err, GalleyError::InvalidArgs { .. }));
+}
+
+// ---------------- scheduled tasks ----------------
+
+fn sched_input(id: &str) -> CreateScheduledTaskInput {
+    CreateScheduledTaskInput {
+        id: id.into(),
+        project_id: None,
+        prompt: "morning digest".into(),
+        repeat: ScheduledTaskRepeat::Daily,
+        time_of_day: "09:00".into(),
+        llm_name: None,
+        enabled: true,
+    }
+}
+
+#[tokio::test]
+async fn scheduled_task_llm_name_roundtrips_and_clears() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    let brief = galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                llm_name: Some("  Claude Haiku 4.5  ".into()),
+                ..sched_input("sched_llm")
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("create with llm");
+    assert_eq!(brief.llm_name.as_deref(), Some("Claude Haiku 4.5"));
+
+    // Some(None) clears back to the runtime default.
+    let brief = galley
+        .update_scheduled_task(
+            ScheduledTaskId("sched_llm".into()),
+            ScheduledTaskPatch {
+                llm_name: Some(None),
+                ..ScheduledTaskPatch::default()
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("clear llm");
+    assert!(brief.llm_name.is_none());
+}
+
+#[tokio::test]
+async fn create_scheduled_task_roundtrips_and_computes_next_fire() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    let brief = galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                repeat: ScheduledTaskRepeat::Weekly {
+                    // Unsorted + duplicate on purpose: stored normalized.
+                    weekdays: vec![5, 1, 5],
+                },
+                ..sched_input("sched_1")
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("create scheduled task");
+    assert_eq!(brief.id.as_str(), "sched_1");
+    assert_eq!(
+        brief.repeat,
+        ScheduledTaskRepeat::Weekly {
+            weekdays: vec![1, 5]
+        }
+    );
+    assert_eq!(brief.time_of_day, "09:00");
+    assert!(brief.enabled);
+    assert!(brief.last_fired_at.is_none());
+    assert!(
+        brief.next_fire_at.is_some(),
+        "enabled task must expose nextFireAt"
+    );
+
+    let listed = galley.list_scheduled_tasks().await.expect("list");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id.as_str(), "sched_1");
+}
+
+#[tokio::test]
+async fn monthly_scheduled_task_roundtrips_through_036_schema() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    let brief = galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                repeat: ScheduledTaskRepeat::Monthly {
+                    monthdays: vec![31, 1, 31],
+                },
+                ..sched_input("sched_monthly")
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("create monthly task");
+    assert_eq!(
+        brief.repeat,
+        ScheduledTaskRepeat::Monthly {
+            monthdays: vec![1, 31]
+        }
+    );
+    assert!(brief.next_fire_at.is_some());
+
+    let err = galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                repeat: ScheduledTaskRepeat::Monthly { monthdays: vec![0] },
+                ..sched_input("sched_monthly_bad")
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect_err("day 0 rejected");
+    assert!(matches!(err, GalleyError::InvalidArgs { .. }));
+}
+
+#[tokio::test]
+async fn create_scheduled_task_validates_inputs() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    for bad in [
+        CreateScheduledTaskInput {
+            prompt: "   ".into(),
+            ..sched_input("sched_bad_prompt")
+        },
+        CreateScheduledTaskInput {
+            time_of_day: "9am".into(),
+            ..sched_input("sched_bad_time")
+        },
+        CreateScheduledTaskInput {
+            repeat: ScheduledTaskRepeat::Weekly { weekdays: vec![] },
+            ..sched_input("sched_no_days")
+        },
+        CreateScheduledTaskInput {
+            repeat: ScheduledTaskRepeat::Weekly { weekdays: vec![8] },
+            ..sched_input("sched_bad_day")
+        },
+        CreateScheduledTaskInput {
+            project_id: Some("proj_missing".into()),
+            ..sched_input("sched_bad_project")
+        },
+    ] {
+        let err = galley
+            .create_scheduled_task(bad, Origin::gui())
+            .await
+            .expect_err("should reject");
+        assert!(matches!(err, GalleyError::InvalidArgs { .. }));
+    }
+}
+
+#[tokio::test]
+async fn update_scheduled_task_patches_and_detaches_project() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    galley
+        .create_project(
+            CreateProjectInput {
+                id: "proj_sched".into(),
+                name: "Sched".into(),
+                root_path: None,
+                workspace_enabled: false,
+                icon: None,
+                color: None,
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("create project");
+    galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                project_id: Some("proj_sched".into()),
+                ..sched_input("sched_up")
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("create");
+
+    let brief = galley
+        .update_scheduled_task(
+            ScheduledTaskId("sched_up".into()),
+            ScheduledTaskPatch {
+                prompt: Some("weekly repo sweep".into()),
+                repeat: Some(ScheduledTaskRepeat::Weekly { weekdays: vec![1] }),
+                time_of_day: Some("07:30".into()),
+                enabled: Some(false),
+                project_id: Some(None),
+                llm_name: None,
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("update");
+    assert_eq!(brief.prompt, "weekly repo sweep");
+    assert_eq!(brief.time_of_day, "07:30");
+    assert!(!brief.enabled);
+    assert!(brief.project_id.is_none(), "Some(None) detaches project");
+    assert!(
+        brief.next_fire_at.is_none(),
+        "disabled task must not expose nextFireAt"
+    );
+
+    let err = galley
+        .update_scheduled_task(
+            ScheduledTaskId("sched_gone".into()),
+            ScheduledTaskPatch::default(),
+            Origin::gui(),
+        )
+        .await
+        .expect_err("missing id");
+    assert!(matches!(err, GalleyError::NotFound { .. }));
+}
+
+#[tokio::test]
+async fn mark_scheduled_task_fired_stamps_and_survives_session_delete() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    galley
+        .create_scheduled_task(sched_input("sched_fire"), Origin::gui())
+        .await
+        .expect("create");
+    galley
+        .create_session(
+            CreateSessionInput {
+                id: "sess_from_sched".into(),
+                title: "morning digest".into(),
+                project_id: None,
+                selected_llm_index: None,
+                selected_llm_key: None,
+                selected_llm_display_name: None,
+                ga_runtime_kind: None,
+                ga_runtime_id: None,
+                prompt_profile: None,
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("create session");
+
+    let brief = galley
+        .mark_scheduled_task_fired(
+            ScheduledTaskId("sched_fire".into()),
+            "2026-07-23T01:00:00Z".into(),
+            Some(SessionId("sess_from_sched".into())),
+        )
+        .await
+        .expect("mark fired");
+    assert_eq!(brief.last_fired_at.as_deref(), Some("2026-07-23T01:00:00Z"));
+    assert_eq!(
+        brief.last_run_session_id.as_ref().map(|s| s.as_str()),
+        Some("sess_from_sched")
+    );
+
+    // Deleting the produced session must dangle to NULL, not block the
+    // delete or break later reads.
+    galley
+        .delete_session(SessionId("sess_from_sched".into()), Origin::gui())
+        .await
+        .expect("delete session");
+    let listed = galley.list_scheduled_tasks().await.expect("list");
+    assert!(listed[0].last_run_session_id.is_none());
+}
+
+#[tokio::test]
+async fn delete_scheduled_task_removes_row() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    galley
+        .create_scheduled_task(sched_input("sched_del"), Origin::gui())
+        .await
+        .expect("create");
+    galley
+        .delete_scheduled_task(ScheduledTaskId("sched_del".into()), Origin::gui())
+        .await
+        .expect("delete");
+    assert!(galley
+        .list_scheduled_tasks()
+        .await
+        .expect("list")
+        .is_empty());
+    let err = galley
+        .delete_scheduled_task(ScheduledTaskId("sched_del".into()), Origin::gui())
+        .await
+        .expect_err("double delete");
+    assert!(matches!(err, GalleyError::NotFound { .. }));
 }

@@ -45,6 +45,9 @@ tauri-build = { version = "2", features = [] }
 [dev-dependencies]
 tempfile = "3"
 async-trait = "0.1"
+# DST-transition tests for the scheduled-task next-fire math only —
+# production code resolves against chrono::Local.
+chrono-tz = "0.10"
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-png"] }

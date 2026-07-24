@@ -1,9 +1,10 @@
+use crate::api::CreateScheduledTaskInput;
 use crate::api::{
     self, CreateProjectInput, CreateSessionInput, GalleyApi, GoalBrief, GoalId, GoalStatusSnapshot,
     GoalWorkerContext, ManagedModelAuthKind, ManagedModelProbeInput, MessageTelemetry,
     MessageVisibility, Origin, ProjectBrief, ProjectId, ProjectPatch, ReorderManagedModelsInput,
-    RuntimeKind, SaveManagedModelInput, SaveManagedProviderInput, SessionBrief, SessionFilter,
-    SessionId,
+    RuntimeKind, SaveManagedModelInput, SaveManagedProviderInput, ScheduledTaskBrief,
+    ScheduledTaskId, ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId,
 };
 use crate::db::{
     MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage, PersistToolEventPending,
@@ -25,12 +26,14 @@ pub(crate) use tauri::State;
 mod goal;
 mod managed_model;
 mod project;
+mod schedule;
 mod session;
 mod system;
 
 pub(crate) use goal::*;
 pub(crate) use managed_model::*;
 pub(crate) use project::*;
+pub(crate) use schedule::*;
 pub(crate) use session::*;
 pub(crate) use system::*;
 

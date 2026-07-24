@@ -8,6 +8,7 @@ import {
 } from "react";
 import {
   Cat,
+  Clock,
   DotsThree,
   PauseCircle,
   PlugsConnected,
@@ -18,6 +19,7 @@ import { IconTooltip } from "@/components/ui/tooltip";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
+import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
@@ -130,7 +132,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     !hasBlockingError &&
     !isRunning &&
     !goalRunning;
-  const supervisorCreated = session.origin?.via === "supervisor";
+  // Scheduler-created sessions carry via=supervisor on the wire but
+  // must not read as "Supervisor 创建" — the user configured a
+  // scheduled task, not a supervisor; explain provenance in their own
+  // vocabulary (clock, 定时任务创建).
+  const schedulerCreated =
+    session.origin?.supervisor === SCHEDULER_SUPERVISOR;
+  const supervisorCreated =
+    session.origin?.via === "supervisor" && !schedulerCreated;
   // Left status-rail kind — one continuous-state channel scanned down
   // the left edge. running breathes (in progress); waiting / error are
   // static color (needs you / stuck). completed / idle = no rail.
@@ -409,6 +418,21 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 className="inline-flex shrink-0 text-ink-soft"
               >
                 <Cat size={12} weight="thin" />
+              </span>
+            </IconTooltip>
+          )}
+          {schedulerCreated && (
+            <IconTooltip text={copy.sidebar.scheduledCreated}>
+              <span
+                role="img"
+                tabIndex={-1}
+                aria-label={copy.sidebar.scheduledCreated}
+                className={cn(
+                  "inline-flex shrink-0 items-center rounded-sm text-ink-muted",
+                  "hover:text-ink-soft",
+                )}
+              >
+                <Clock size={12} weight="thin" />
               </span>
             </IconTooltip>
           )}
