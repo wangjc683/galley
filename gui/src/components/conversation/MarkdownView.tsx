@@ -75,33 +75,45 @@ export const MarkdownView = memo(function MarkdownView({
       : variant === "narration"
         ? PROSE_NARRATION
         : PROSE_THINKING;
-  // CJK prose overrides the global `antialiased` with `auto` (subpixel
-  // antialiasing). Two reasons, both still valid after the 2026-06-20
-  // CJK→sans switch (PingFang / YaHei):
-  //  ① PingFang under `antialiased` renders thin — grayscale AA softens
-  //    stroke edges into translucency, so glyphs lose density. `auto`
-  //    keeps strokes solid via subpixel rendering, which matters most in
-  //    the long-form reading zones (agent answer, narration, thinking).
-  // ② This deliberately makes agent prose render slightly heavier than
-  //    the user message (which stays on global `antialiased`). That is
-  //    the point: same font / size / weight, but the reading surface
-  //    gets crisper glyphs while the input surface stays soft. If both
-  //    go `auto` the contrast flattens; if both go `antialiased` the
-  //    prose reads as too thin (confirmed by dogfood 2026-06-20). The
-  //    asymmetry is the feature.
-  // (Pre-2026-06-20 this was also needed to dodge a Songti SC glyph-
-  // clipping bug; that rationale is gone with the serif, the thinness
-  // rationale remains.)
+  // CJK prose opts back into macOS font smoothing (`auto`) instead of the
+  // global `antialiased` — but only in LIGHT mode. The attribute below is
+  // just the hook; the rule itself lives in globals.css keyed off
+  // `html:not([data-theme="dark"])`.
+  //
+  // Why the override exists at all (2026-06-20, still valid in light):
+  // ① PingFang under `antialiased` renders thin — grayscale AA softens
+  //   stroke edges into translucency, so glyphs lose density. `auto`
+  //   keeps strokes solid, which matters most in the long-form reading
+  //   zones (agent answer, narration, thinking).
+  // ② It deliberately makes agent prose render slightly heavier than the
+  //   user message (which stays on global `antialiased`). That is the
+  //   point: same font / size / weight, but the reading surface gets
+  //   crisper glyphs while the input surface stays soft. If both go
+  //   `auto` the contrast flattens; if both go `antialiased` the prose
+  //   reads as too thin (confirmed by dogfood 2026-06-20). The asymmetry
+  //   is the feature.
+  // (Pre-2026-06-20 this also dodged a Songti SC glyph-clipping bug; that
+  // rationale is gone with the serif, the thinness rationale remains.)
+  //
+  // Why it is light-only (2026-07-25): `auto` routes through macOS font
+  // smoothing, which dilates strokes. Dilation is mild for dark-on-light
+  // but compounds with the bloom of light-on-dark, so in dark mode this
+  // same rule rendered agent prose fat and glary — the reading column was
+  // the only place in the app that felt "too bright", and only for CJK
+  // answers, which is exactly this rule's footprint. The 2026-06-20
+  // dogfood behind ①/② was run in light only. This scopes the rule to
+  // where it was actually validated; it does NOT revert it — deleting it
+  // outright was already tried and rejected (foundations.md §2.2).
   const usesCjkSerif = cjkDominant(source);
   const proseStyle = {
     "--galley-prose-serif": "var(--font-serif)",
-    WebkitFontSmoothing: usesCjkSerif ? "auto" : undefined,
   } as CSSProperties;
   return (
     <div
       data-selection-copy-scope={
         selectionCopyScope ? "assistant-answer" : undefined
       }
+      data-cjk-prose={usesCjkSerif ? "true" : undefined}
       className={cn("select-text", proseClass, className)}
       style={proseStyle}
     >

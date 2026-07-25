@@ -286,6 +286,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ### 2026-07-25
 - [Dark theme 降暖一档](./2026-07-25-dark-theme-dewarm-pass.md) — dark 表面/墨色 chroma ×0.6（L 与色相不动，对比度 14.97→14.95）；相对饱和度 C/L 指标暴露 light 中性纸 vs dark 染色纸的策略分叉；Ghostty 参考结论是「抬画布」而非低对比，冷蓝色相不借；brand 家族与语义色留待下轮
+- [深色下"主对话区字体太亮"](./2026-07-25-dark-prose-font-smoothing.md) — 病因不是颜色而是 `-webkit-font-smoothing: auto` 的笔画膨胀（macOS 已无次像素渲染），亮字压暗底被放大；覆盖限定浅色（`html:not([data-theme="dark"]) [data-cjk-prose]`），浅色行为不变；抬画布与降 ink 明度（Notion 档）双双未执行，数值留档
 
 ## 格式约定
 

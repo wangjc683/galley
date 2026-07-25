@@ -274,17 +274,28 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
 
 - 全局 `body` 用 `-webkit-font-smoothing: antialiased`（灰度抗锯齿，偏细的"薄字"
   观感，统一 UI chrome）。
-- **CJK prose 例外**：`MarkdownView` 在内容为 CJK-dominant 时，把 prose 容器
-  覆盖为 `-webkit-font-smoothing: auto`（macOS 上即原生次像素抗锯齿）。
+- **CJK prose 例外，且仅限浅色**：`MarkdownView` 在内容含 CJK 时给 prose 容器挂
+  `data-cjk-prose`，globals.css 的
+  `html:not([data-theme="dark"]) [data-cjk-prose]` 把它覆盖为
+  `-webkit-font-smoothing: auto`。**深色不吃这条**，走全局 `antialiased`。
   - 起源（2026-06-09）：当时 CJK fallback 是 Songti SC（衬线），`antialiased`
     + 中文衬线在 macOS WebKit 下会把字形顶部削掉，换 `auto` 修复。
   - 现因（2026-06-20 CJK 改走苹方 / 雅黑后仍然保留）：苹方在 `antialiased`
-    下笔画偏薄、边缘半透明化，长段落阅读发虚；`auto` 的次像素渲染让笔画更实。
+    下笔画偏薄、边缘半透明化，长段落阅读发虚；`auto` 让笔画更实。
     agent 正文 / narration / thinking 是用户读字最多的区域，值得这一档。
   - 这是有意的**不对称**：agent 正文走 `auto`（笔画实），用户消息走全局
     `antialiased`（笔画薄）。同字体同字号同字重下，阅读面更 crisp、输入面更
     soft。dogfood（2026-06-20）验证过——两端都 `antialiased` 时 agent 正文太薄，
     两端都 `auto` 时对比被拉平，唯独这个不对称成立。**不要**为了"统一"去掉。
+  - **限定浅色（2026-07-25，JC 真机验收）**：`auto` 在 macOS 上不是"次像素抗
+    锯齿"——Mojave 已移除次像素渲染，`auto` 走的是系统 font smoothing 的**笔画
+    膨胀**。膨胀对深字压浅底影响轻微，对**亮字压暗底**会和光学晕染叠加，于是
+    深色下 agent 正文渲染得又粗又胀，读作"字体太亮"。症状的两个特征恰好就是
+    这条规则的足迹：只在**主对话区**（用户消息不走 `MarkdownView`）、且只在
+    **中文回答**时出现。上面 ①②的 dogfood 全部是在浅色下做的，这次是给它补
+    上当年没做的主题条件。
+  - **不要退化成"删掉这条覆盖"**：那个方案 2026-06-20 试过并被否（浅色下
+    agent 正文太薄太虚）。浅色行为一字未改。
 - 相邻问题：CommonMark 把 `名叫**"下一个字"**` 这类"`**` 紧贴 CJK + 引号"判为
   字面量；`MarkdownView` 的 `remarkCjkAdjacentQuotedStrong` 插件把这种 LLM 高频
   写法还原成 strong。

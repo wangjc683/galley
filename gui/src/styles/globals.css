@@ -401,6 +401,22 @@ body {
   text-autospace: normal;
 }
 
+/* CJK agent prose opts back into macOS font smoothing, overriding the
+   global `antialiased` above — LIGHT ONLY. PingFang under grayscale AA
+   renders thin on paper and the long-form reading column is where that
+   costs most, so light keeps `auto` (full trail in MarkdownView.tsx).
+   Dark does not: `auto` dilates strokes, and dilation compounds with the
+   bloom of light-on-dark, which read as glary text in the conversation
+   column (2026-07-25).
+
+   Keyed `:not([data-theme="dark"])` rather than `[data-theme="light"]`
+   because applyResolvedTheme() sets the attribute from a React effect —
+   the first paint has no `data-theme` at all, and defaulting to the
+   light behaviour keeps that frame identical to before. */
+html:not([data-theme="dark"]) [data-cjk-prose] {
+  -webkit-font-smoothing: auto;
+}
+
 /* Code is verbatim — no inter-script spacing beautification inside
    comments / strings (docs/typography-principles.md red line). */
 pre,
