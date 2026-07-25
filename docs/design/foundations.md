@@ -106,19 +106,34 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 
 | CSS variable | Dark 值 | 用途 |
 |---|---|---|
-| `--color-app` | `#171411` | 暖黑 app 底 |
-| `--color-surface` | `#1D1915` | 普通卡片底 |
-| `--color-elevated` | `#24201B` | 浮层 / dialog / command palette |
-| `--color-line` | `#332C25` | 默认边框 |
-| `--color-line-strong` | `#4C4035` | hover / focus 边 |
-| `--color-ink` | `#EFE7DC` | 主文本，不用纯白 |
-| `--color-ink-soft` | `#C9BCAD` | 次级文本 |
-| `--color-ink-muted` | `#958878` | hint / timestamp |
-| `--color-hover` | `#28231E` | 中性 hover |
+| `--color-chrome` | `#12100E` | Sidebar chrome，比 app 更沉（同 light 的倒置抬升规则） |
+| `--color-app` | `#161412` | 暖黑 app 底 |
+| `--color-surface` | `#1C1917` | 普通卡片底 |
+| `--color-code-surface` | `#201D1A` | 块代码底 |
+| `--color-elevated` | `#23201D` | 浮层 / dialog / command palette |
+| `--color-line` | `#312D28` | 默认边框 |
+| `--color-line-strong` | `#48413B` | hover / focus 边 |
+| `--color-ink` | `#ECE7E1` | 主文本，不用纯白 |
+| `--color-ink-soft` | `#C5BDB4` | 次级文本 |
+| `--color-ink-muted` | `#91897F` | hint / timestamp |
+| `--color-hover` | `#262320` | 中性 hover |
 | `--color-selected` / `--color-brand-soft` | `#3A2D23` | 杏沙 tint |
 | `--color-brand-tint` | `#4A3829` | 用户消息底（provisional，dark pass 再校） |
 | `--color-brand` | `#D6A083` | 品牌主色 |
 | `--color-brand-strong` | `#E2AE8D` | 品牌 hover / link |
+
+> **2026-07-25 降暖一档（勿回退到旧值）**：上表的表面 / 墨色是原值 chroma
+> 的 **0.6 倍**，L 与色相原样不动——纯 chroma 旋钮，对比度与层级毫无变化
+> （正文 ink/app 14.97:1 → 14.95:1）。起因：light 的表面实质是中性的
+> （C ≈ 0.002，暖度全交给暖墨 + 杏沙），而 dark 曾悄悄换成"染色纸"策略
+> ——按各自明度归一后（C/L），dark 表面比 light 对应项饱和 **15–27 倍**
+> （app 0.0395 vs 0.0017）。这个量级落在尴尬区：不够中性、也不够暖到能读
+> 成刻意的暖炭黑，于是读作发闷的褐。0.6× 保留可辨认的暖炭，噪音减半。
+> 墨色**必须同向同幅**跟着降：只降底不降墨，近中性的底会变成参照物，把
+> 奶油字衬得更黄。同批次跟随 ink 的还有 `--color-line-subtle` 与各
+> `--shadow-*` 里的 `rgba(236,231,225,…)` 高光内嵌。
+> 品牌家族（`brand` / `brand-strong` / `brand-tint` / `selected`）与语义色
+> **有意未动**——先看安静下来的底色之下品牌色的相对响度对不对，再决定下一轮。
 
 交互入口：
 

@@ -248,29 +248,46 @@
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  --color-app: #171411;
-  --color-surface: #1d1915;
-  --color-elevated: #24201b;
+  /* Surface chroma dialed back to 0.6× on 2026-07-25 (L and hue held
+     fixed, so contrast / elevation / readability are untouched — this
+     was a pure chroma knob). Rationale: light-mode surfaces are
+     effectively neutral (C ≈ 0.002) and let the warm inks + apricot
+     brand supply the warmth, but dark had quietly switched strategy to
+     *tinted paper* — relative to their own lightness the dark surfaces
+     ran 15–27× more saturated than their light counterparts (app
+     C/L 0.0395 vs 0.0017). That lands in the ambiguous zone: too much
+     to read as neutral charcoal, not enough to read as deliberate warm
+     charcoal — so it read as muddy brown. 0.6× keeps a recognisably
+     warm charcoal while halving the tint noise. Inks moved by the same
+     factor in the same pass: de-warming the ground alone would make a
+     near-neutral backdrop the reference and push the cream text *more*
+     yellow, not less. Brand family (brand / brand-strong / brand-tint /
+     selected) and the semantic colours are deliberately NOT part of
+     this pass — evaluate their relative loudness against the quieter
+     ground first. */
+  --color-app: #161412;
+  --color-surface: #1c1917;
+  --color-elevated: #23201d;
   /* Dark counterpart of the light chrome: still *darker* than --color-app
      (not lighter) so the sidebar keeps sinking below the conversation
      canvas and the stage "rises" — the same inverted-lightness chrome
      rule as light mode. Without this override the light value (#f4f3f1)
      leaks through and the sidebar renders as a bright panel in dark. */
-  --color-chrome: #13100d;
+  --color-chrome: #12100e;
   /* Dark code fill: a touch lighter than the near-black page (mirrors
      inline code's --color-hover relationship in dark) so the block
      separates as a distinct code medium without a harsh outline. */
-  --color-code-surface: #221d18;
+  --color-code-surface: #201d1a;
 
-  --color-line: #332c25;
-  --color-line-strong: #4c4035;
-  --color-line-subtle: rgba(239, 231, 220, 0.08);
+  --color-line: #312d28;
+  --color-line-strong: #48413b;
+  --color-line-subtle: rgba(236, 231, 225, 0.08);
 
-  --color-ink: #efe7dc;
-  --color-ink-soft: #c9bcad;
-  --color-ink-muted: #958878;
+  --color-ink: #ece7e1;
+  --color-ink-soft: #c5bdb4;
+  --color-ink-muted: #91897f;
 
-  --color-hover: #28231e;
+  --color-hover: #262320;
   --color-selected: #3a2d23;
 
   --color-brand: #d6a083;
@@ -306,44 +323,44 @@ html[data-theme="dark"] {
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18);
   --shadow-elevated:
-    0 14px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(239, 231, 220, 0.03);
+    0 14px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(236, 231, 225, 0.03);
   --shadow-button-raised:
-    0 1px 0 rgba(239, 231, 220, 0.07), 0 2px 8px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(239, 231, 220, 0.08);
+    0 1px 0 rgba(236, 231, 225, 0.07), 0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(236, 231, 225, 0.08);
   --shadow-button-raised-hover:
-    0 2px 0 rgba(239, 231, 220, 0.08), 0 3px 9px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(239, 231, 220, 0.1);
+    0 2px 0 rgba(236, 231, 225, 0.08), 0 3px 9px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(236, 231, 225, 0.1);
   --shadow-button-raised-active: inset 0 1px 3px rgba(0, 0, 0, 0.34);
   --shadow-button-primary:
-    0 1px 0 rgba(239, 231, 220, 0.09), 0 2px 8px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(239, 231, 220, 0.08);
+    0 1px 0 rgba(236, 231, 225, 0.09), 0 2px 8px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(236, 231, 225, 0.08);
   --shadow-button-primary-hover:
-    0 2px 0 rgba(239, 231, 220, 0.1), 0 3px 9px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(239, 231, 220, 0.1);
+    0 2px 0 rgba(236, 231, 225, 0.1), 0 3px 9px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(236, 231, 225, 0.1);
   --shadow-button-primary-active: inset 0 2px 5px rgba(0, 0, 0, 0.44);
   --shadow-brand-control:
     0 1px 0 rgba(226, 174, 141, 0.18), 0 2px 8px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(239, 231, 220, 0.08);
+    inset 0 1px 0 rgba(236, 231, 225, 0.08);
   --shadow-brand-control-hover:
     0 2px 0 rgba(226, 174, 141, 0.22), 0 3px 9px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(239, 231, 220, 0.1);
+    inset 0 1px 0 rgba(236, 231, 225, 0.1);
   --shadow-brand-control-active: inset 0 2px 5px rgba(0, 0, 0, 0.38);
   --shadow-neutral-control:
-    0 1px 0 rgba(239, 231, 220, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(239, 231, 220, 0.07);
+    0 1px 0 rgba(236, 231, 225, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(236, 231, 225, 0.07);
   --shadow-neutral-control-hover:
-    0 2px 0 rgba(239, 231, 220, 0.07), 0 3px 9px rgba(0, 0, 0, 0.26),
-    inset 0 1px 0 rgba(239, 231, 220, 0.09);
+    0 2px 0 rgba(236, 231, 225, 0.07), 0 3px 9px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(236, 231, 225, 0.09);
   --shadow-neutral-control-active: inset 0 2px 5px rgba(0, 0, 0, 0.34);
   --shadow-control-press: inset 0 3px 7px rgba(0, 0, 0, 0.5);
   --shadow-float: 0 10px 24px rgba(0, 0, 0, 0.38);
   --shadow-float-hover: 0 12px 30px rgba(0, 0, 0, 0.46);
   --shadow-composer-stop:
     0 1px 0 rgba(214, 162, 80, 0.22), 0 2px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(239, 231, 220, 0.08), 0 0 0 0 rgba(214, 162, 80, 0.16);
+    inset 0 1px 0 rgba(236, 231, 225, 0.08), 0 0 0 0 rgba(214, 162, 80, 0.16);
   --shadow-composer-stop-pulse:
     0 1px 0 rgba(214, 162, 80, 0.24), 0 2px 8px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(239, 231, 220, 0.08), 0 0 0 4px rgba(214, 162, 80, 0.12);
+    inset 0 1px 0 rgba(236, 231, 225, 0.08), 0 0 0 4px rgba(214, 162, 80, 0.12);
 
   --color-overlay: rgba(0, 0, 0, 0.56);
 }

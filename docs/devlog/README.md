@@ -284,6 +284,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ### 2026-07-24
 - [v0.4.0 发布:定时任务 + 内核基线 4086d5c](./2026-07-24-v0.4.0-release.md) — 聚合 `v0.3.7..HEAD` 打包 minor:定时任务(GUI 闭环 9/10 issue,06 CLI 面刻意留 v1 非目标)+ baseline `5257dec→1d3c1a09→4086d5c` 首发 + plan mode 移除 + Rust/GUI 拆分;版本决策否掉 `0.3.8` patch
 
+### 2026-07-25
+- [Dark theme 降暖一档](./2026-07-25-dark-theme-dewarm-pass.md) — dark 表面/墨色 chroma ×0.6（L 与色相不动，对比度 14.97→14.95）；相对饱和度 C/L 指标暴露 light 中性纸 vs dark 染色纸的策略分叉；Ghostty 参考结论是「抬画布」而非低对比，冷蓝色相不借；brand 家族与语义色留待下轮
+
 ## 格式约定
 
 每个 entry 6 段：
