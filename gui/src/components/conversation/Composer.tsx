@@ -487,6 +487,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         <ComposerFooterHint
           showFooterHint={showFooterHint}
           stopMode={stopMode}
+          hasText={hasText}
           isSideQuestion={isSideQuestion}
           showByTheWayRequiredHint={showByTheWayRequiredHint}
           effectiveGoalArmed={effectiveGoalArmed}

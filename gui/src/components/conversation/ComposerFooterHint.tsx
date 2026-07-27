@@ -23,6 +23,7 @@ function renderComposerHintWithKbd(text: string): ReactNode {
 interface ComposerFooterHintProps {
   showFooterHint: boolean;
   stopMode: boolean;
+  hasText: boolean;
   isSideQuestion: boolean;
   showByTheWayRequiredHint: boolean;
   effectiveGoalArmed: boolean;
@@ -39,6 +40,7 @@ interface ComposerFooterHintProps {
 export function ComposerFooterHint({
   showFooterHint,
   stopMode,
+  hasText,
   isSideQuestion,
   showByTheWayRequiredHint,
   effectiveGoalArmed,
@@ -48,21 +50,30 @@ export function ComposerFooterHint({
   const copy = useCopy();
   const shouldShowByTheWayRequiredHint =
     showByTheWayRequiredHint && stopMode && !isSideQuestion;
-  // Division of labor while the agent runs: the placeholder owns the
-  // /btw lesson (it sits exactly where the prefix gets typed and is
-  // itself the format example), so the persistent hint must NOT
-  // repeat it — it degrades to pure status ("运行中…"). "Enter 发送"
-  // would be a lie here (plain Enter is gated), EXCEPT once /btw is
-  // staged: then Enter really sends again, so the true keyboard hint
-  // comes back. The transient byTheWayPrefixHint stays as the
-  // correction after a blocked Enter attempt.
+  // The slot only ever lists keys that are live right now, so while the
+  // agent runs it degrades exactly as far as stopMode gates — it never
+  // becomes pure status. Three running states, and the placeholder and
+  // this slot hand off between them rather than speaking at once:
+  //   empty draft — the placeholder owns the /btw lesson (it sits where
+  //     the prefix gets typed and is itself the format example), so the
+  //     slot must not repeat the token. Plain Enter is gated but
+  //     Shift+Enter is not (handleKeyDown intercepts Enter only without
+  //     shift), so the legend keeps the half that stays true.
+  //   typing — the placeholder is gone; the slot takes over and states
+  //     what Enter needs, pre-empting the block instead of only
+  //     correcting it afterwards.
+  //   /btw staged — Enter really sends again, so the full hint returns.
+  // The transient byTheWayPrefixHint stays as the correction after a
+  // blocked Enter attempt.
   const keyboardHint = showFooterHint
     ? shouldShowByTheWayRequiredHint
       ? copy.composer.byTheWayPrefixHint
       : stopMode
         ? isSideQuestion
           ? copy.composer.enterHint
-          : copy.composer.runningHint
+          : hasText
+            ? copy.composer.byTheWaySendHint
+            : copy.composer.newlineHint
         : effectiveGoalArmed
           ? // Armed changes what Enter does (opens the Goal preview, not
             // send) — with the wide "启动 Goal" pill gone, this hint and
