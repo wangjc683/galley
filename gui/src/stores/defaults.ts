@@ -20,6 +20,10 @@
  */
 
 import type { ApprovalConfig } from "@/components/screens/settings/settings-types";
+import {
+  GA_BASELINE_COMMIT,
+  GA_BASELINE_COMMIT_DATE,
+} from "@/lib/ga-baseline.gen";
 import { isWindows } from "@/lib/platform";
 import type { RuntimeInfo } from "@/types/inspector";
 
@@ -65,12 +69,12 @@ export const DEFAULT_RUNTIME_INFO: RuntimeInfo = {
   pythonVersion: "3.11.9 (system)",
   llmDisplayName: DEFAULT_LLM_DISPLAY_NAME,
   bridgePid: 48213,
-  gaCommit: "4086d5c858b90e10eb24a106ea3c41ac729bc00e",
-  // Matches 4086d5c's actual `git log -1 --format=%cI`. The managed
-  // runtime manifest becomes the source of truth once hydrate runs; this
-  // fallback keeps first paint aligned before diagnostics arrive.
-  gaCommitDate: "2026-07-23T15:30:36+08:00",
-  gaBaseline: "4086d5c858b90e10eb24a106ea3c41ac729bc00e",
+  // Generated from managed-ga/manifest.json — the manifest is the source
+  // of truth; the live diagnostics overwrite these once hydrate runs, so
+  // they only keep first paint aligned before diagnostics arrive.
+  gaCommit: GA_BASELINE_COMMIT,
+  gaCommitDate: GA_BASELINE_COMMIT_DATE,
+  gaBaseline: GA_BASELINE_COMMIT,
   // Empty string is the honest "not yet known" sentinel — `hydrate.ts`
   // overwrites with the real value from `getVersion()` during app boot.
   workbenchVersion: "",

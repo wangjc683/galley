@@ -365,17 +365,25 @@ already-generated bundle without rebuilding it. The smoke must verify
 - Managed GA: model config injection, streaming, tools, state under app data,
   restart / restore behavior.
 
-9. Sync every surface that repeats the baseline commit, then run the
-   drift gate (also enforced in CI):
-
-- `gui/src/stores/defaults.ts`: `gaCommit`, `gaBaseline`, and
-  `gaCommitDate` (from `git -C /tmp/galley-ga-upgrade log -1 --format=%cI <sha>`)
-- `gui/src/lib/managed-runtime-diagnostics.test.ts` fixture commit/date
-- `managed-ga/patches/manifest.md` "Last replay verified" header
+9. Sync the baseline metadata. `managed-ga/manifest.json`'s `upstream`
+   block is the single source of truth — update all four fields there:
+   `commit`, `commitDate`
+   (`git -C /tmp/galley-ga-upgrade log -1 --format=%cI <sha>`), `treeHash`
+   (`git rev-parse '<sha>^{tree}'`), and `auditedAt`. Then regenerate the
+   GUI constants and run the drift gate (also enforced in CI):
 
 ```bash
-node scripts/check-ga-baseline-drift.mjs
+node scripts/check-ga-baseline-drift.mjs --write   # regenerates gui/src/lib/ga-baseline.gen.ts
+node scripts/check-ga-baseline-drift.mjs           # verifies the doc surfaces below
 ```
+
+   Hand-edited prose the gate still checks: this document's "Current
+   Baseline" block (locked commit, tree hash, audited date),
+   `managed-ga/patches/manifest.md`'s "Last replay verified" header, and
+   the shipped-baseline short SHA in `docs/project-status.md`.
+   (`defaults.ts` and the diagnostics test fixture are no longer sync
+   surfaces: the GUI imports the generated constants, and the fixture
+   uses synthetic values on purpose.)
 
 10. Update this document with the new hash, tree hash
     (`git rev-parse '<sha>^{tree}'` — the durable anchor if upstream ever

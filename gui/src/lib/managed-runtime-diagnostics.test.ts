@@ -5,18 +5,26 @@ import { useRuntimeStore } from "@/stores/runtime";
 import { resetStores } from "@/test/store-reset";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
 
+// Fixture values are deliberately synthetic: the adapter under test is
+// baseline-agnostic (it forwards whatever the diagnostics carry), so a
+// real SHA here would only create a fake sync obligation on every GA
+// baseline upgrade — which is exactly what happened before 2026-07-28,
+// when this fixture drifted freely without failing anything. The real
+// baseline lives in managed-ga/manifest.json.
+const SYNTHETIC_COMMIT = "feedc0defeedc0defeedc0defeedc0defeedc0de";
+
 describe("applyManagedRuntimeDiagnostics", () => {
   it("uses the managed manifest commit as the external GA comparison baseline", () => {
     resetStores();
 
     const diagnostics: ManagedRuntimeDiagnostics = {
       manifestSchemaVersion: 1,
-      upstreamSource: "lsdefine/GenericAgent",
+      upstreamSource: "example/SyntheticAgent",
       upstreamBranch: "main",
-      upstreamCommit: "4086d5c858b90e10eb24a106ea3c41ac729bc00e",
-      upstreamAuditedAt: "2026-07-20",
-      patchStackId: "galley-managed-ga-patches-v1",
-      patchCount: 10,
+      upstreamCommit: SYNTHETIC_COMMIT,
+      upstreamAuditedAt: "2099-01-01",
+      patchStackId: "synthetic-patch-stack",
+      patchCount: 3,
       stateSchemaVersion: 1,
       promptProfileId: "galley-managed-v1",
       promptHash: "12345678",
@@ -58,7 +66,7 @@ describe("applyManagedRuntimeDiagnostics", () => {
     applyManagedRuntimeDiagnostics(diagnostics);
 
     expect(useRuntimeStore.getState().runtimeInfo).toMatchObject({
-      gaBaseline: "4086d5c858b90e10eb24a106ea3c41ac729bc00e",
+      gaBaseline: SYNTHETIC_COMMIT,
       managedRuntime: diagnostics,
     });
   });

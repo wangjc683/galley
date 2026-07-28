@@ -62,3 +62,16 @@
 - **实施要点**：与降暖一档同样是"只动 L、不动 chroma / 色相"的单旋钮改法，可复用同一套 OKLCH 脚本；改完必须复核对比度（正文 / 次级 / 三级 / 边框四档）与阶梯单调性。**必须整条阶梯一起抬**——`surface` 就在 L 21.6，只把 `app` 从 19.3 抬到 21.3 会直接撞上它。注意 `--color-overlay` 与各 `--shadow-*` 的黑色分量在更亮的画布上会显得更重，可能需要同步减弱。
 - **待定**：抬升幅度（+3 / +5 / +8 点）需实看；正文对比是维持 ~15:1 还是顺势降到 12–13:1 是独立的审美判断，不要和抬画布捆绑成一个决定。
 - **关联**：[降暖一档](./2026-07-25-dark-theme-dewarm-pass.md) · `docs/design/foundations.md` §2.1。
+
+---
+
+## 架构审查第二轮剩余候选(hive Origin carrier / useComposerGoal / GaSession gate / quick wins)
+
+- **状态**:暂存
+- **提出**:2026-07-28(架构审查第二轮收尾,见 [审查 devlog](./2026-07-28-architecture-review-deepening-round.md);四个 Strong 候选已落地,以下为 Worth exploring 档)
+- **启动信号**:下次动到对应模块时顺手做,或再跑一轮架构审查时按新鲜度重估。
+- **候选 5 · hive Goal controller helpers 收窄**:`cli/src/goal/hive.rs` 的 phase helpers 接口宽(`resume_ready_worker_slots` 11 参,双 `&mut` 集合 + 返回值双向携带状态);`supervisor`/`reason` 裸对出现在 12 个签名、~53 次 clone,而 `core/src/api/origin.rs:49` 已有 `Origin` 概念可复用。先捆 carrier 再收 controller-state struct,最后重看双向 mutate。**已核对与 ADR-0002 不冲突**(这些 helper 全 `Result + ?` 传播,无分歧 failure contract)。
+- **候选 6 · useComposerGoal 13 出参收成 goalView**:26 成员 interface 罩 ~90 行逻辑,3 个入参是回调回 caller,10 个返回值原样穿过 Composer 进 ComposerGoalControls。改返回 `goalView` 对象 + 4 action。
+- **候选 7 · GaSession seam grep gate**:seam 本身干净(bridge 11 处调用零 reach-in),但"re-audit 面 = 一个文件"的承诺无 CI 强制,且 `managed_im_supervisor.py:346` 的 `_galley_im_prompt_installed` 写入是结构性旁路(该路径无 Bridge)。做法:grep gate(同 `check-supervisor-sop-drift.mjs` 文风)+ docstring 补旁路,或让 supervisor 路径也构造 `GaSession(agent)`。
+- **Quick wins**:`hasRunningSessions` 收成 messages store selector(三处重推导:App.tsx / MainHeaderHost / app-update.ts);`lib/ipc/ga-output-cleaning.ts` 补测试(纯函数、流式热路径、零覆盖);`socket_listener/` 的 `use super::*` 互 glob 改具名 re-export(照 `codex_oauth/mod.rs`);`spawn_args_for_session_new` 7 参改 `&SessionBrief`+2;runtime store 补 slice-merge shape 守卫(照 `sessions.shape.test.ts`)。
+- **关联**:[架构审查第二轮](./2026-07-28-architecture-review-deepening-round.md) · ADR-0002。

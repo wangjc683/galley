@@ -288,6 +288,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [Dark theme 降暖一档](./2026-07-25-dark-theme-dewarm-pass.md) — dark 表面/墨色 chroma ×0.6（L 与色相不动，对比度 14.97→14.95）；相对饱和度 C/L 指标暴露 light 中性纸 vs dark 染色纸的策略分叉；Ghostty 参考结论是「抬画布」而非低对比，冷蓝色相不借；brand 家族与语义色留待下轮
 - [深色下"主对话区字体太亮"](./2026-07-25-dark-prose-font-smoothing.md) — 病因不是颜色而是 `-webkit-font-smoothing: auto` 的笔画膨胀（macOS 已无次像素渲染），亮字压暗底被放大；覆盖限定浅色（`html:not([data-theme="dark"]) [data-cjk-prose]`），浅色行为不变；抬画布与降 ink 明度（Notion 档）双双未执行，数值留档
 
+### 2026-07-28
+- [架构审查第二轮:四个 Strong 候选落地](./2026-07-28-architecture-review-deepening-round.md) — scheduler fire 进 HandlerCtx seam(修时间戳字典序/fail-all 读取/re-enable 三缺陷 + SessionNewResult 类型化);`/btw` 判定统一到 lib/side-question(修 `\t` 不一致真 bug)+ composer-hint 政策抽纯函数;useMessageSend 21 参收 5 + 双 send-phase 状态机合一;GA baseline gate 改生成式(manifest 补 commitDate/treeHash,defaults.ts 与 fixture 退出手动同步);候选 5-7 与 quick wins 入 deferred
+
 ## 格式约定
 
 每个 entry 6 段：
