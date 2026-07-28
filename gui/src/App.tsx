@@ -91,7 +91,6 @@ function App() {
   // frequent non-sidebar updates like turn_progress streaming.
   const sessions = useSessionsStore((s) => s.sessions);
   const activeSessionId = useSessionsStore((s) => s.activeSessionId);
-  const createSession = useSessionsStore((s) => s.createSession);
   const createSessionPersisted = useSessionsStore(
     (s) => s.createSessionPersisted,
   );
@@ -146,9 +145,6 @@ function App() {
     (m) => m.approvalDecisions,
     EMPTY_DECISIONS,
   );
-  const recordApprovalDecision = useMessagesStore(
-    (s) => s.recordApprovalDecision,
-  );
   const yoloMode = usePrefsStore((s) => s.yoloMode);
   const yoloIntroSeen = usePrefsStore((s) => s.yoloIntroSeen);
   const acknowledgeYoloIntro = usePrefsStore((s) => s.acknowledgeYoloIntro);
@@ -170,7 +166,6 @@ function App() {
 
   const bridgeStatus = useActiveRuntime((r) => r.bridgeStatus, "idle");
   const sendIPCCommand = useRuntimeStore((s) => s.sendIPCCommand);
-  const shutdownBridge = useRuntimeStore((s) => s.shutdownBridge);
   const setGAConfig = usePrefsStore((s) => s.setGAConfig);
   const setActiveRuntimeKind = usePrefsStore((s) => s.setActiveRuntimeKind);
   const gaConfig = usePrefsStore((s) => s.gaConfig);
@@ -229,13 +224,6 @@ function App() {
     Object.values(s.byId).some((messages) => messages.agentRunning),
   );
   const pendingAskUser = useActiveMessages((m) => m.pendingAskUser, null);
-  const appendUserTurn = useMessagesStore((s) => s.appendUserTurn);
-  const appendSideQuestionUserTurn = useMessagesStore(
-    (s) => s.appendSideQuestionUserTurn,
-  );
-  const removePendingApproval = useMessagesStore(
-    (s) => s.removePendingApproval,
-  );
 
   useAppHydrationEffects();
   const { activeGoals, sessionGoals, setActiveGoals } = useGoalEffects({
@@ -357,25 +345,9 @@ function App() {
     stopRun,
     runBrowserControlDemo,
   } = useMessageSend({
-    activeSessionId,
     activeSession,
-    pendingAskUser,
     requiresManagedModelConfig,
-    activeRuntimeKind,
-    activeProjectFilter,
     copy,
-    recordApprovalDecision,
-    removePendingApproval,
-    sendIPCCommand,
-    shutdownBridge,
-    activateSession,
-    appendUserTurn,
-    appendSideQuestionUserTurn,
-    createSession,
-    createSessionPersisted,
-    setScreen,
-    setActiveProjectFilter,
-    pushToast,
     showImageBlockedToast,
     openModelsForMissingConfig,
   });
