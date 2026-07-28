@@ -11,11 +11,17 @@ import { useCopy, useLanguage, type AppCopy } from "@/lib/i18n";
 import {
   createScheduledTask,
   deleteScheduledTask,
+  formatFireTime,
+  formDaysValid,
   listScheduledTasks,
   mintScheduledTaskId,
+  repeatFromForm,
+  repeatSummary,
   updateScheduledTask,
+  EMPTY_SCHEDULED_TASK_FORM as EMPTY_FORM,
   SCHEDULED_TASKS_CHANGED_EVENT,
   type ScheduledTask,
+  type ScheduledTaskFormState as FormState,
   type ScheduledTaskRepeat,
 } from "@/lib/scheduled-tasks";
 import { cn } from "@/lib/utils";
@@ -36,51 +42,6 @@ export interface ScheduledTasksDialogProps {
    * closes itself afterwards — the "上次运行 → 会话" jump is the trust
    * loop of the whole feature. */
   onSelectSession: (id: string) => void;
-}
-
-interface FormState {
-  /** Task id when editing; null = creating. */
-  id: string | null;
-  prompt: string;
-  projectId: string;
-  repeatKind: "daily" | "weekly" | "monthly";
-  weekdays: number[];
-  monthdays: number[];
-  timeOfDay: string;
-  /** Model display name; "" = runtime default. */
-  llmName: string;
-}
-
-const EMPTY_FORM: FormState = {
-  id: null,
-  prompt: "",
-  projectId: "",
-  repeatKind: "daily",
-  weekdays: [],
-  monthdays: [],
-  timeOfDay: "09:00",
-  llmName: "",
-};
-
-function repeatSummary(
-  copy: AppCopy,
-  repeat: ScheduledTaskRepeat,
-  timeOfDay: string,
-): string {
-  switch (repeat.kind) {
-    case "daily":
-      return copy.scheduled.repeatSummaryDaily(timeOfDay);
-    case "weekly":
-      return copy.scheduled.repeatSummaryWeekly(
-        repeat.weekdays.map((d) => copy.scheduled.weekdayLabel(d)).join("·"),
-        timeOfDay,
-      );
-    case "monthly":
-      return copy.scheduled.repeatSummaryMonthly(
-        repeat.monthdays.join("·"),
-        timeOfDay,
-      );
-  }
 }
 
 /**
@@ -128,29 +89,6 @@ function formFromExample(example: (typeof EXAMPLES)[number], copy: AppCopy): For
       example.repeat.kind === "monthly" ? example.repeat.monthdays : [],
     timeOfDay: example.timeOfDay,
   };
-}
-
-function repeatFromForm(form: FormState): ScheduledTaskRepeat {
-  switch (form.repeatKind) {
-    case "daily":
-      return { kind: "daily" };
-    case "weekly":
-      return {
-        kind: "weekly",
-        weekdays: [...form.weekdays].sort((a, b) => a - b),
-      };
-    case "monthly":
-      return {
-        kind: "monthly",
-        monthdays: [...form.monthdays].sort((a, b) => a - b),
-      };
-  }
-}
-
-function formDaysValid(form: FormState): boolean {
-  if (form.repeatKind === "weekly") return form.weekdays.length > 0;
-  if (form.repeatKind === "monthly") return form.monthdays.length > 0;
-  return true;
 }
 
 const INPUT_CLASS = cn(
@@ -762,18 +700,4 @@ function Field({
       <div className="mt-1.5">{children}</div>
     </div>
   );
-}
-
-function formatFireTime(iso: string, language: string): string {
-  try {
-    return new Intl.DateTimeFormat(language, {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
 }

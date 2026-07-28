@@ -26,7 +26,7 @@ mod process_command;
 pub mod protocol;
 pub mod runner_commands;
 pub mod runner_manager;
-mod scheduler;
+pub mod scheduler;
 pub mod socket_listener;
 pub mod sop_install;
 mod tray;

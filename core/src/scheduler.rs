@@ -21,20 +21,33 @@
 //! session plumbing. A fire whose session creation fails still consumes
 //! its period (`last_fired_at` stamped, `last_run_session_id` NULL) so
 //! the GUI can show the failure instead of the loop retrying every
-//! minute against a broken runner.
+//! minute against a broken runner. [`fire`] touches its dependencies
+//! only through [`HandlerCtx`], the same seam the socket handlers use —
+//! production adapters are composed in [`tick`], fakes in
+//! `core/tests/scheduler_fire_test.rs`.
+//!
+//! Two more contract points, both pinned by tests:
+//!
+//! - **Read errors are per-task, not fail-all**: a corrupt row is
+//!   skipped (and logged) by the list read in `db/schedule.rs`; the
+//!   healthy tasks keep firing.
+//! - **Re-enabling does not rebase the baseline**: a 09:00 daily task
+//!   disabled for a week and re-enabled at 10:00 fires today's 09:00
+//!   immediately — its period is unconsumed and still inside its local
+//!   day. `updated_at` is deliberately not consulted.
 
 use std::sync::Arc;
 
 use chrono::{DateTime, Local, TimeZone};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 use crate::api::schedule::{
     instant_to_utc_iso, parse_time_of_day, prev_fire_at_or_before, resolve_wall_clock,
     ScheduledTaskBrief, SCHEDULED_TASKS_CHANGED_EVENT,
 };
-use crate::api::{GalleyApi, ScheduledTaskId, SessionId};
+use crate::api::{GalleyApi, ScheduledTaskId};
 use crate::db::SqliteGalley;
-use crate::protocol::{SessionNewArgs, SocketRequest, SCHEMA_VERSION};
+use crate::protocol::{SessionNewArgs, SessionNewResult, SocketRequest, SCHEMA_VERSION};
 use crate::runner_manager::RunnerManager;
 use crate::socket_listener::{dispatch_line_with, DbSource, DispatchResult, HandlerCtx};
 
@@ -42,11 +55,18 @@ const TICK_SECONDS: u64 = 60;
 
 /// Supervisor label stamped on scheduler-created sessions, following
 /// the `galley-desktop` / `galley-core` convention of the Goal
-/// controller spawns.
+/// controller spawns. Mirrored as `SCHEDULER_SUPERVISOR` in
+/// `gui/src/lib/scheduled-tasks.ts` (badge + sidebar marker) and pinned
+/// by `gui/src/lib/scheduled-tasks.test.ts` — a rename must land on
+/// both sides.
 const SCHEDULER_SUPERVISOR: &str = "galley-scheduler";
 
 pub(crate) fn start(app: &tauri::App) {
     let handle = app.handle().clone();
+    // Same injection as `resume_active_goals`: the pool is managed
+    // state by setup time — the loop holds it instead of re-opening the
+    // global on every tick.
+    let galley: SqliteGalley = app.state::<SqliteGalley>().inner().clone();
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(TICK_SECONDS));
         // After a long sleep the timer owes many ticks; the due check is
@@ -56,18 +76,12 @@ pub(crate) fn start(app: &tauri::App) {
             // First tick fires immediately → an app launched at 09:30
             // catches up a missed 09:00 without waiting a minute.
             interval.tick().await;
-            tick(&handle).await;
+            tick(&handle, &galley).await;
         }
     });
 }
 
-async fn tick(app: &tauri::AppHandle) {
-    let galley = match SqliteGalley::open().await {
-        Ok(g) => g,
-        // DB not openable (first run before GUI init, transient IO):
-        // skip quietly, next tick retries. Not worth a per-minute log.
-        Err(_) => return,
-    };
+async fn tick(app: &tauri::AppHandle, galley: &SqliteGalley) {
     let tasks = match galley.list_scheduled_tasks().await {
         Ok(t) => t,
         Err(e) => {
@@ -76,10 +90,25 @@ async fn tick(app: &tauri::AppHandle) {
         }
     };
     let now = Local::now();
-    for task in tasks {
-        if due_fire(&task, &Local, &now) {
-            fire(app, &galley, &task, &now).await;
-        }
+    let due: Vec<_> = tasks
+        .into_iter()
+        .filter(|t| due_fire(t, &Local, &now))
+        .collect();
+    if due.is_empty() {
+        return;
+    }
+    // Compose the production adapters behind the HandlerCtx seam once
+    // per tick; `fire` itself never touches Tauri directly.
+    let db = DbSource::Pool(galley.clone());
+    let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: manager.as_ref(),
+        notifier: crate::notify::TauriNotifier::new(app.clone()),
+        app: Some(app),
+    };
+    for task in &due {
+        fire(&ctx, task, &now).await;
     }
 }
 
@@ -91,7 +120,8 @@ fn due_fire<Tz: TimeZone>(task: &ScheduledTaskBrief, tz: &Tz, now: &DateTime<Tz>
         return false;
     }
     let Ok(tod) = parse_time_of_day(&task.time_of_day) else {
-        // Corrupt row; validation prevents this, don't loop-log on it.
+        // Normally unreachable — the list read already skips (and logs)
+        // corrupt rows. Fail closed for any other caller.
         return false;
     };
     let prev = prev_fire_at_or_before(&task.repeat, tod, now.naive_local());
@@ -106,15 +136,25 @@ fn due_fire<Tz: TimeZone>(task: &ScheduledTaskBrief, tz: &Tz, now: &DateTime<Tz>
     if prev_instant > *now {
         return false;
     }
-    let prev_iso = instant_to_utc_iso(&prev_instant);
-    // ISO-8601 Z strings order lexicographically. Baseline: whatever is
-    // later of "last consumed period" and "task exists since" — periods
-    // before creation, and re-fires within a consumed period, are out.
-    let baseline = match &task.last_fired_at {
-        Some(last) if last.as_str() >= task.created_at.as_str() => last.as_str(),
-        _ => task.created_at.as_str(),
+    // Baseline: whatever is later of "last consumed period" and "task
+    // exists since" — periods before creation, and re-fires within a
+    // consumed period, are out. Compared as parsed instants, never as
+    // strings: the DB holds both `+00:00` (row timestamps) and `Z`
+    // (fire stamps written before the formatters were unified), and
+    // lexicographically `'Z' > '+'` flips exact-second ties.
+    let Some(created) = parse_utc_secs(&task.created_at) else {
+        // Unparseable created_at (manual DB edit): fail closed.
+        return false;
     };
-    prev_iso.as_str() > baseline
+    let last = task.last_fired_at.as_deref().and_then(parse_utc_secs);
+    let baseline = last.map_or(created, |l| l.max(created));
+    prev_instant.timestamp() > baseline
+}
+
+/// Second-resolution UTC instant of an ISO-8601 timestamp; `None` when
+/// unparseable (callers fail closed).
+fn parse_utc_secs(iso: &str) -> Option<i64> {
+    DateTime::parse_from_rfc3339(iso).ok().map(|dt| dt.timestamp())
 }
 
 /// Best-effort per-task model: pre-resolve the pinned display name
@@ -157,18 +197,25 @@ async fn resolve_task_llm(galley: &SqliteGalley, task: &ScheduledTaskBrief) -> O
     }
 }
 
-async fn fire<Tz: TimeZone>(
-    app: &tauri::AppHandle,
-    galley: &SqliteGalley,
-    task: &ScheduledTaskBrief,
-    now: &DateTime<Tz>,
-) {
+/// Fire one due task: create + dispatch its session through the
+/// production `session.new` socket path, then stamp the period
+/// consumed. Everything it touches comes through the [`HandlerCtx`]
+/// seam — public so `core/tests/scheduler_fire_test.rs` can drive it
+/// with the same fakes the socket write handlers are tested with.
+pub async fn fire<Tz: TimeZone>(ctx: &HandlerCtx<'_>, task: &ScheduledTaskBrief, now: &DateTime<Tz>) {
+    let galley = match ctx.db.get().await {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("[scheduler] task {} db unavailable: {e:?}", task.id);
+            return;
+        }
+    };
     let request = SocketRequest {
         command: "session.new".into(),
         args: serde_json::to_value(SessionNewArgs {
             task: task.prompt.clone(),
             project_id: task.project_id.as_ref().map(|p| p.as_str().to_string()),
-            llm_name: resolve_task_llm(galley, task).await,
+            llm_name: resolve_task_llm(&galley, task).await,
             runtime_kind: None,
             supervisor: Some(SCHEDULER_SUPERVISOR.into()),
             reason: Some(format!("scheduled task {}", task.id)),
@@ -179,23 +226,18 @@ async fn fire<Tz: TimeZone>(
     };
     let line = serde_json::to_string(&request).expect("SocketRequest serializes");
 
-    let db = DbSource::Global;
-    let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
-    let ctx = HandlerCtx {
-        db: &db,
-        runner: manager.as_ref(),
-        notifier: crate::notify::TauriNotifier::new(app.clone()),
-        app: Some(app),
-    };
-
-    let session_id = match dispatch_line_with(&ctx, &line).await {
-        DispatchResult::Unary(resp) if resp.ok => resp
-            .result
-            .as_ref()
-            .and_then(|r| r.get("session"))
-            .and_then(|s| s.get("id"))
-            .and_then(|id| id.as_str())
-            .map(|id| SessionId(id.to_string())),
+    let session_id = match dispatch_line_with(ctx, &line).await {
+        DispatchResult::Unary(resp) if resp.ok => resp.result.and_then(|r| {
+            match serde_json::from_value::<SessionNewResult>(r) {
+                Ok(result) => Some(result.session.id),
+                // Unreachable while both ends build `SessionNewResult`;
+                // still a loud log beats a silent "failed run" row.
+                Err(e) => {
+                    eprintln!("[scheduler] task {} session.new result shape: {e}", task.id);
+                    None
+                }
+            }
+        }),
         DispatchResult::Unary(resp) => {
             eprintln!(
                 "[scheduler] task {} fire failed: {} {}",
@@ -225,7 +267,7 @@ async fn fire<Tz: TimeZone>(
     {
         eprintln!("[scheduler] task {} mark fired failed: {e:?}", task.id);
     }
-    let _ = app.emit(SCHEDULED_TASKS_CHANGED_EVENT, ());
+    ctx.notify(SCHEDULED_TASKS_CHANGED_EVENT, &());
 }
 
 #[cfg(test)]
@@ -266,7 +308,10 @@ mod tests {
     }
 
     // 2026-07-22T09:00 America/New_York (EDT, UTC-4) = 13:00Z.
-    const CREATED_LONG_AGO: &str = "2026-07-01T00:00:00Z";
+    // Row timestamps use the `+00:00` shape `chrono_now_iso` actually
+    // writes; fire stamps in these tests keep the `Z` shape so the
+    // mixed-format parsing stays exercised.
+    const CREATED_LONG_AGO: &str = "2026-07-01T00:00:00+00:00";
 
     #[test]
     fn not_due_before_time_of_day() {
@@ -353,6 +398,36 @@ mod tests {
         // 08:59 tick on July 23 fires nothing and 09:00 fires today's.
         assert!(!due_fire(&t, &New_York, &ny(2026, 7, 23, 8, 59)));
         assert!(due_fire(&t, &New_York, &ny(2026, 7, 23, 9, 0)));
+    }
+
+    #[test]
+    fn creation_in_same_second_as_planned_fire_is_not_due() {
+        // Created exactly AT today's planned fire instant (09:00 EDT =
+        // 13:00 UTC). The period does not strictly postdate creation, so
+        // it is not due — regardless of which UTC shape the row carries.
+        // (The old lexicographic compare flipped on this tie: 'Z' > '+'.)
+        for created in ["2026-07-22T13:00:00+00:00", "2026-07-22T13:00:00Z"] {
+            let t = task(ScheduledTaskRepeat::Daily, "09:00", true, created, None);
+            assert!(!due_fire(&t, &New_York, &ny(2026, 7, 22, 9, 0)), "{created}");
+            // Tomorrow's period is the first real fire.
+            assert!(due_fire(&t, &New_York, &ny(2026, 7, 23, 9, 0)), "{created}");
+        }
+    }
+
+    #[test]
+    fn reenabling_does_not_rebase_the_baseline() {
+        // Disabled for days, re-enabled at 10:00 (the `enabled: true`
+        // brief the next tick reads): today's 09:00 is unconsumed and
+        // still inside its local day, so it fires immediately. Contract,
+        // not accident — `updated_at` is deliberately not consulted.
+        let t = task(
+            ScheduledTaskRepeat::Daily,
+            "09:00",
+            true,
+            CREATED_LONG_AGO,
+            Some("2026-07-15T13:00:00Z"), // last consumed a week ago
+        );
+        assert!(due_fire(&t, &New_York, &ny(2026, 7, 22, 10, 0)));
     }
 
     #[test]

@@ -7,7 +7,7 @@
 //! matching the byte shape the CLI's `json!` builders produced before this
 //! module existed.
 
-use crate::api::RuntimeKind;
+use crate::api::{MessageBrief, RuntimeKind, SessionBrief};
 use serde::{Deserialize, Serialize};
 
 /// Binds a command's wire name to its argument shape at the type level.
@@ -114,6 +114,24 @@ pub struct SessionNewArgs {
     pub reason: Option<String>,
 }
 socket_command!(SessionNewArgs, "session.new");
+
+/// Result shape of a successful `session.new` / `session.new_goal_worker`
+/// (schemaVersion 1; documented in agent-api/session-commands). Shared by
+/// the producing handler and the in-process scheduler consumer so a field
+/// rename is a compile error, not a silently dropped session id. Unlike
+/// args structs, `warning` is omitted when absent — that is the wire shape
+/// the handler has always produced.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionNewResult {
+    pub session: SessionBrief,
+    pub message: MessageBrief,
+    /// Always `"dispatched"` on the success envelope; failure modes
+    /// return error envelopes instead (see ADR-0002's table).
+    pub dispatch: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<serde_json::Value>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -83,8 +83,12 @@ silently dropped argument (2026-07-11 decision; see devlog).
   `Unparseable(raw)` variant. Policy is per-caller by design:
   `session watch` passes raw lines through (agents parse the NDJSON);
   programmatic consumers treat `Unparseable` as an error. Results of
-  unary calls stay `Value` — typed results would drop additively-added
-  server fields on reprint.
+  unary calls stay `Value` **on the CLI side** — typed results would
+  drop additively-added server fields on reprint. In-process consumers
+  are the exception: `SessionNewResult` (`core/src/protocol/commands.rs`)
+  is the typed `session.new` result shared by the producing handler and
+  the scheduler, so a field rename is a compile error, not a silently
+  dropped session id (2026-07-27 decision).
 - **`HandlerCtx`** — what a Core socket write handler may touch
   (`core/src/socket_listener/ctx.rs`): `DbSource` (global on-disk DB or
   injected test pool), **`RunnerPort`** (the 6-method trait that IS the

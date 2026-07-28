@@ -318,13 +318,14 @@ async fn dispatch_session_new_inner(
 
     emit_user_message_persisted(ctx, &brief.id.0, &msg, "dispatched");
 
-    let mut result = serde_json::json!({
-        "session": brief,
-        "message": msg,
-        "dispatch": "dispatched",
-    });
-    if let Some(warning) = runtime_warning {
-        result["warning"] = warning;
-    }
-    SocketResponse::ok(request_id, result)
+    let result = SessionNewResult {
+        session: brief,
+        message: msg,
+        dispatch: "dispatched".into(),
+        warning: runtime_warning,
+    };
+    SocketResponse::ok(
+        request_id,
+        serde_json::to_value(result).expect("SessionNewResult serializes"),
+    )
 }

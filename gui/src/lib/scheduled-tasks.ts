@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import type { AppCopy } from "@/lib/i18n";
+
 /**
  * Thin GUI wrappers over Galley Core's scheduled-task commands
  * (core/src/commands/schedule.rs). Rust owns persistence and the
@@ -12,7 +14,9 @@ import { invoke } from "@tauri-apps/api/core";
 export const SCHEDULED_TASKS_CHANGED_EVENT = "scheduled-tasks:changed";
 
 /** Supervisor label Core stamps on scheduler-created sessions
- * (core/src/scheduler.rs). Used to derive the approval-blocked badge. */
+ * (core/src/scheduler.rs). Used to derive the approval-blocked badge.
+ * The literal is pinned on both sides of the language seam by
+ * `scheduled-tasks.test.ts` — a rename must land in Rust too. */
 export const SCHEDULER_SUPERVISOR = "galley-scheduler";
 
 /** Mirror of Rust `ScheduledTaskRepeat` (tagged, snake_case kinds).
@@ -93,4 +97,98 @@ export async function updateScheduledTask(
 
 export async function deleteScheduledTask(id: string): Promise<void> {
   await invoke("delete_scheduled_task", { id, origin: GUI_ORIGIN });
+}
+
+/** Create/edit form state — the GUI half of the form ↔ wire repeat
+ * codec. Lives here (not in the dialog) so the codec and the display
+ * helpers below are covered by the node test suite, mirroring the
+ * Rust-side calendar tests in `core/src/api/schedule.rs`. */
+export interface ScheduledTaskFormState {
+  /** Task id when editing; null = creating. */
+  id: string | null;
+  prompt: string;
+  projectId: string;
+  repeatKind: "daily" | "weekly" | "monthly";
+  weekdays: number[];
+  monthdays: number[];
+  timeOfDay: string;
+  /** Model display name; "" = runtime default. */
+  llmName: string;
+}
+
+export const EMPTY_SCHEDULED_TASK_FORM: ScheduledTaskFormState = {
+  id: null,
+  prompt: "",
+  projectId: "",
+  repeatKind: "daily",
+  weekdays: [],
+  monthdays: [],
+  timeOfDay: "09:00",
+  llmName: "",
+};
+
+/** Form → wire. Days are sorted so the stored CSV matches what Core's
+ * `normalized()` would produce; the day-pick order is a UI accident. */
+export function repeatFromForm(form: ScheduledTaskFormState): ScheduledTaskRepeat {
+  switch (form.repeatKind) {
+    case "daily":
+      return { kind: "daily" };
+    case "weekly":
+      return {
+        kind: "weekly",
+        weekdays: [...form.weekdays].sort((a, b) => a - b),
+      };
+    case "monthly":
+      return {
+        kind: "monthly",
+        monthdays: [...form.monthdays].sort((a, b) => a - b),
+      };
+  }
+}
+
+/** Mirror of Core's non-empty-days validation, checked pre-submit so
+ * the form can disable its confirm instead of surfacing an error. */
+export function formDaysValid(form: ScheduledTaskFormState): boolean {
+  if (form.repeatKind === "weekly") return form.weekdays.length > 0;
+  if (form.repeatKind === "monthly") return form.monthdays.length > 0;
+  return true;
+}
+
+/** One-line repeat description ("每周一·五 09:00") for rows + examples. */
+export function repeatSummary(
+  copy: AppCopy,
+  repeat: ScheduledTaskRepeat,
+  timeOfDay: string,
+): string {
+  switch (repeat.kind) {
+    case "daily":
+      return copy.scheduled.repeatSummaryDaily(timeOfDay);
+    case "weekly":
+      return copy.scheduled.repeatSummaryWeekly(
+        repeat.weekdays.map((d) => copy.scheduled.weekdayLabel(d)).join("·"),
+        timeOfDay,
+      );
+    case "monthly":
+      return copy.scheduled.repeatSummaryMonthly(
+        repeat.monthdays.join("·"),
+        timeOfDay,
+      );
+  }
+}
+
+/** Locale-formatted fire instant; falls back to the raw ISO string when
+ * the value doesn't parse (a real decision — a corrupt timestamp should
+ * degrade visibly, not blank the cell). */
+export function formatFireTime(iso: string, language: string): string {
+  try {
+    return new Intl.DateTimeFormat(language, {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
 }

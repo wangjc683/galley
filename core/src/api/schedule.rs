@@ -11,8 +11,8 @@
 //! ([`resolve_wall_clock`]), where DST gaps / ambiguities are handled.
 
 use chrono::{
-    DateTime, Datelike, Duration, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeZone,
-    Timelike,
+    DateTime, Datelike, Duration, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat,
+    TimeZone, Utc,
 };
 use serde::{Deserialize, Serialize};
 
@@ -177,19 +177,14 @@ pub fn resolve_wall_clock<Tz: TimeZone>(tz: &Tz, naive: NaiveDateTime) -> DateTi
     tz.from_utc_datetime(&naive)
 }
 
-/// Format an instant as the UTC ISO string every other timestamp column
-/// uses (`YYYY-MM-DDTHH:MM:SSZ`).
+/// Format an instant in the exact UTC ISO shape every other timestamp
+/// column uses (`YYYY-MM-DDTHH:MM:SS+00:00`, matching
+/// `db/helpers.rs::iso_from_unix_secs`). Fire stamps written before the
+/// formatters were unified are `…Z`; readers must parse (rfc3339
+/// accepts both), never compare these strings lexicographically.
 pub fn instant_to_utc_iso<Tz: TimeZone>(dt: &DateTime<Tz>) -> String {
-    let utc = dt.naive_utc();
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        utc.year(),
-        utc.month(),
-        utc.day(),
-        utc.hour(),
-        utc.minute(),
-        utc.second()
-    )
+    dt.with_timezone(&Utc)
+        .to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -491,7 +486,7 @@ mod tests {
             // US DST 2026: clocks jump 02:00 → 03:00 on Mar 8. A 02:30
             // task resolves to 03:00 EDT, not skipped.
             let resolved = resolve_wall_clock(&New_York, dt(2026, 3, 8, 2, 30));
-            assert_eq!(instant_to_utc_iso(&resolved), "2026-03-08T07:00:00Z");
+            assert_eq!(instant_to_utc_iso(&resolved), "2026-03-08T07:00:00+00:00");
         }
 
         #[test]
@@ -499,13 +494,13 @@ mod tests {
             // US DST 2026: 01:30 happens twice on Nov 1 (EDT then EST).
             // Earliest wins: 01:30 EDT = 05:30 UTC (EST would be 06:30).
             let resolved = resolve_wall_clock(&New_York, dt(2026, 11, 1, 1, 30));
-            assert_eq!(instant_to_utc_iso(&resolved), "2026-11-01T05:30:00Z");
+            assert_eq!(instant_to_utc_iso(&resolved), "2026-11-01T05:30:00+00:00");
         }
 
         #[test]
         fn plain_time_resolves_singly() {
             let resolved = resolve_wall_clock(&Berlin, dt(2026, 7, 23, 9, 0));
-            assert_eq!(instant_to_utc_iso(&resolved), "2026-07-23T07:00:00Z");
+            assert_eq!(instant_to_utc_iso(&resolved), "2026-07-23T07:00:00+00:00");
         }
     }
 }

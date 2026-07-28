@@ -31,8 +31,8 @@ pub use commands::{
     LlmSetArgs, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs, SessionBtwArgs,
     SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
     SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
-    SessionRestoreArgs, SessionSendArgs, SessionShutdownRunnerArgs, SessionStopArgs,
-    SessionWatchArgs, SocketCommand,
+    SessionNewResult, SessionRestoreArgs, SessionSendArgs, SessionShutdownRunnerArgs,
+    SessionStopArgs, SessionWatchArgs, SocketCommand,
 };
 pub use envelope::{SocketRequest, SocketResponse, StreamEnvelope, WatchFrame, SCHEMA_VERSION};
 pub use error_tag::ErrorTag;

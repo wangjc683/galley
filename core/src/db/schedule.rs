@@ -120,7 +120,19 @@ impl SqliteGalley {
             .fetch_all(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
-        rows.into_iter().map(ScheduledTaskRow::into_brief).collect()
+        // Per-row tolerance: one corrupt row (manual DB edit, version
+        // skew) must not hide the healthy tasks from the GUI or stop
+        // the scheduler from firing them. Skip and log; the single-row
+        // fetch above still errors loudly for direct lookups.
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| {
+                let id = row.id.clone();
+                row.into_brief()
+                    .map_err(|e| eprintln!("[db] scheduled task {id} unreadable, skipped: {e:?}"))
+                    .ok()
+            })
+            .collect())
     }
 
     pub(super) async fn create_scheduled_task_db(

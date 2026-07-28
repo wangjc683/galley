@@ -69,8 +69,8 @@ use crate::protocol::{
     LlmSetArgs, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs, SessionBtwArgs,
     SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
     SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
-    SessionRestoreArgs, SessionSendArgs, SessionShutdownRunnerArgs, SessionStopArgs,
-    SessionWatchArgs,
+    SessionNewResult, SessionRestoreArgs, SessionSendArgs, SessionShutdownRunnerArgs,
+    SessionStopArgs, SessionWatchArgs,
 };
 use crate::runner_commands::{
     normalize_external_ga_path, prepare_managed_spawn_args, spawn_emit_task,
