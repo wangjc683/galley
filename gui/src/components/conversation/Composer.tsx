@@ -36,6 +36,7 @@ import {
 import { useCopy } from "@/lib/i18n";
 import { goalPillLabel } from "@/lib/goals";
 import { isImeCompositionKeydown } from "@/lib/ime";
+import { isSideQuestion } from "@/lib/side-question";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
 
@@ -265,10 +266,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // affordance. Detection lives at this level (not at the
     // App.tsx onSubmit) so the Composer can also flip the submit
     // button back from Stop to Send when /btw is staged.
-    const isSideQuestion =
-      text.trimStart().startsWith("/btw ") ||
-      text.trimStart() === "/btw" ||
-      text.trimStart().startsWith("/btw\t");
+    const sideQuestionStaged = isSideQuestion(text);
 
     const hasText = text.trim().length > 0;
     const hasSendableContent = hasText || hasPendingImages;
@@ -326,7 +324,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         return;
       }
       // Allow /btw through stopMode; everything else stays gated.
-      if (stopMode && !isSideQuestion) {
+      if (stopMode && !sideQuestionStaged) {
         setShowByTheWayRequiredHint(true);
         return;
       }
@@ -469,7 +467,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               />
               <ComposerActionSlot
                 stopMode={stopMode}
-                isSideQuestion={isSideQuestion}
+                isSideQuestion={sideQuestionStaged}
                 isStopping={isStopping}
                 submitAckTick={submitAckTick}
                 disabled={disabled}
@@ -488,7 +486,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           showFooterHint={showFooterHint}
           stopMode={stopMode}
           hasText={hasText}
-          isSideQuestion={isSideQuestion}
+          isSideQuestion={sideQuestionStaged}
           showByTheWayRequiredHint={showByTheWayRequiredHint}
           effectiveGoalArmed={effectiveGoalArmed}
           goalBlockedHintVisible={goalBlockedHintVisible}

@@ -61,6 +61,26 @@ stays in `ipc-handlers`. The round-trip invariant — *live turn ===
 restored turn for the same data* — is pinned by `agent-turn.test.ts`
 (2026-07-11 decision; see devlog).
 
+## Side question (`/btw`)
+
+An interruption-free question asked while the main agent runs — not a
+main-agent turn. The **authoritative predicate** is the bridge's
+(`runner/workbench_bridge.py`, `dispatch_command`'s UserMessageCommand
+branch: lstrip, then exact `/btw`, `/btw `, or `/btw\t`). The GUI
+mirror has one code home:
+[`gui/src/lib/side-question.ts`](./gui/src/lib/side-question.ts) —
+both the Composer stop gate and `useMessageSend`'s routing call it, so
+the two ends of the send path cannot disagree (before 2026-07-27 they
+did, on the tab form). Any predicate change lands in the bridge and
+that module together; `side-question.test.ts` pins the lockstep cases.
+
+The composer's run-state **display policies** sit beside it in `lib/`:
+placeholder register in
+[`composer-register.ts`](./gui/src/lib/composer-register.ts), footer
+hint ladder in
+[`composer-hint.ts`](./gui/src/lib/composer-hint.ts) — pure functions;
+the components only map returned keys through the copy table.
+
 ## Socket protocol
 
 The CLI↔Core socket contract (Agent API, `schemaVersion: 1`). Single code

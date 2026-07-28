@@ -4,6 +4,7 @@ import type { AppCopy } from "@/lib/i18n";
 import { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
 import { markReplyNotifyPending } from "@/lib/notify";
 import { logPerf, perfNow } from "@/lib/perf";
+import { isSideQuestion } from "@/lib/side-question";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
 import type { Screen } from "@/stores/ui";
@@ -278,23 +279,21 @@ export function useMessageSend({
     // user-turn path so it doesn't disturb the main
     // agent's running state — bridge intercepts the
     // user_message command and runs the btw worker
-    // independently of the task queue.
-    const trimmed = t.trimStart();
+    // independently of the task queue. The predicate
+    // is shared with the Composer's stop gate: what
+    // passed the gate as a side question must route
+    // as one here.
     if (images.length > 0) {
       if (activeSession?.gaRuntimeKind !== "managed") {
         showImageBlockedToast(copy.toasts.imageBlockedExternal);
         return false;
       }
-      if (
-        trimmed === "/btw" ||
-        trimmed.startsWith("/btw ") ||
-        pendingAskUser !== null
-      ) {
+      if (isSideQuestion(t) || pendingAskUser !== null) {
         showImageBlockedToast(copy.toasts.imageBlockedGoal);
         return false;
       }
     }
-    if (trimmed === "/btw" || trimmed.startsWith("/btw ")) {
+    if (isSideQuestion(t)) {
       appendSideQuestionUserTurn(sid, t);
       void ensureBridgeThenSend(
         {

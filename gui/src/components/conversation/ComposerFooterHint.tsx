@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { resolveComposerHint } from "@/lib/composer-hint";
 import { useCopy } from "@/lib/i18n";
 
 const COMPOSER_HINT_KBD = new Set(["Shift+Enter", "Enter", "/btw"]);
@@ -35,7 +36,9 @@ interface ComposerFooterHintProps {
  * The single hint slot under every Composer (mt-1.5 / 11px / left).
  * Renders, in priority order: the goal-blocked warning, the keyboard /
  * state hint, or the caller's staticHint. Returns null when empty so
- * the slot collapses.
+ * the slot collapses. Which keyboard hint applies is policy, not
+ * rendering — it lives in `lib/composer-hint.ts` beside the placeholder
+ * policy it hands off to.
  */
 export function ComposerFooterHint({
   showFooterHint,
@@ -48,39 +51,15 @@ export function ComposerFooterHint({
   staticHint,
 }: ComposerFooterHintProps) {
   const copy = useCopy();
-  const shouldShowByTheWayRequiredHint =
-    showByTheWayRequiredHint && stopMode && !isSideQuestion;
-  // The slot only ever lists keys that are live right now, so while the
-  // agent runs it degrades exactly as far as stopMode gates — it never
-  // becomes pure status. Three running states, and the placeholder and
-  // this slot hand off between them rather than speaking at once:
-  //   empty draft — the placeholder owns the /btw lesson (it sits where
-  //     the prefix gets typed and is itself the format example), so the
-  //     slot must not repeat the token. Plain Enter is gated but
-  //     Shift+Enter is not (handleKeyDown intercepts Enter only without
-  //     shift), so the legend keeps the half that stays true.
-  //   typing — the placeholder is gone; the slot takes over and states
-  //     what Enter needs, pre-empting the block instead of only
-  //     correcting it afterwards.
-  //   /btw staged — Enter really sends again, so the full hint returns.
-  // The transient byTheWayPrefixHint stays as the correction after a
-  // blocked Enter attempt.
-  const keyboardHint = showFooterHint
-    ? shouldShowByTheWayRequiredHint
-      ? copy.composer.byTheWayPrefixHint
-      : stopMode
-        ? isSideQuestion
-          ? copy.composer.enterHint
-          : hasText
-            ? copy.composer.byTheWaySendHint
-            : copy.composer.newlineHint
-        : effectiveGoalArmed
-          ? // Armed changes what Enter does (opens the Goal preview, not
-            // send) — with the wide "启动 Goal" pill gone, this hint and
-            // the button tooltip carry that semantic.
-            copy.composer.startGoalWithEnter
-          : copy.composer.enterHint
-    : null;
+  const hintKey = resolveComposerHint({
+    showFooterHint,
+    stopMode,
+    hasText,
+    isSideQuestion,
+    showByTheWayRequiredHint,
+    effectiveGoalArmed,
+  });
+  const keyboardHint = hintKey ? copy.composer[hintKey] : null;
   // Keyboard hints get kbd-token styling; a caller-supplied staticHint
   // is already a ReactNode and renders as-is in the same slot.
   const footerHint: ReactNode = goalBlockedHintVisible ? (
