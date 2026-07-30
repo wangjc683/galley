@@ -34,6 +34,9 @@ export interface TooltipLabelProps {
   /** Alignment along the trigger side. */
   align?: "start" | "center" | "end";
   sideOffset?: number;
+  /** Offset along the align axis, e.g. to anchor near the pointer on a
+   * tall trigger (the sidebar separator). */
+  alignOffset?: number;
   contentClassName?: string;
   /** Per-instance override of the provider's default delay. Use
    * sparingly — consistent timing across the app is what makes the
@@ -47,6 +50,7 @@ export function TooltipLabel({
   side = "top",
   align = "center",
   sideOffset = 6,
+  alignOffset,
   contentClassName,
   delay,
   children,
@@ -61,6 +65,7 @@ export function TooltipLabel({
         side={side}
         align={align}
         sideOffset={sideOffset}
+        alignOffset={alignOffset}
         className={cn(
           "z-[80] select-none rounded-sm border border-line bg-elevated px-2 py-1",
           "text-[11.5px] leading-none text-ink-soft shadow-elevated",

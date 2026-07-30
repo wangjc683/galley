@@ -45,6 +45,7 @@ export const enCopy: AppCopy = {
     minimize: "Minimize",
     maximize: "Maximize",
     restoreWindow: "Restore down",
+    separatorResetHint: "Double-click to reset layout",
   },
   firstClose: {
     title: "Galley can keep working in the background",

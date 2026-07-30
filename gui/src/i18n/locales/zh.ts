@@ -44,6 +44,7 @@ export const zhCopy = {
     minimize: "最小化",
     maximize: "最大化",
     restoreWindow: "向下还原",
+    separatorResetHint: "双击恢复默认布局",
   },
   firstClose: {
     title: "Galley 可以在后台继续工作",

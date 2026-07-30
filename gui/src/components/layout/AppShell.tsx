@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Group,
   Panel,
@@ -10,8 +10,10 @@ import {
 import {
   DEFAULT_PANEL_LAYOUT,
   registerPanelLayoutReset,
-  resetPanelLayout,
+  resetWindowLayout,
 } from "@/lib/layout-reset";
+import { useCopy } from "@/lib/i18n";
+import { TooltipLabel } from "@/components/ui/tooltip";
 
 /**
  * Full app shell:
@@ -131,18 +133,43 @@ export function AppShell({
  * matching the apricot accent we use for other interactive
  * affordances (DESIGN.md §2.1).
  *
- * Double-click resets the split to the curated 20/80 — the established
- * divider convention (spreadsheet column edges, IDE splitters) and the
- * zero-chrome answer to "one-click back to the golden split". Split
- * only: window geometry stays put (that's the full reset's job, Window
- * menu / command palette).
+ * Double-click runs the full "Reset to Default Layout" — split AND
+ * window geometry (unmaximize, golden size, center). JC's 2026-07-30
+ * ruling: the separator is the only visible surface among the three
+ * entry points (Window menu and command palette are hidden), so the
+ * one discoverable gesture should deliver the whole reset, not the
+ * split-only half. A hover tooltip teaches the gesture — and doubles
+ * as fair warning, since the reset now moves the whole window.
+ *
+ * The tooltip trigger is an inner full-size div, not the Separator
+ * itself: the library spreads rest props before its own `ref`, so a
+ * Radix `asChild` ref would be overwritten and the tooltip would lose
+ * its anchor. `alignOffset` pins the bubble to where the pointer
+ * entered instead of the mid-height of a window-tall trigger. Radix
+ * hides the tooltip on pointerdown, so it never lingers into a drag.
  */
 function ResizeSeparator() {
+  const copy = useCopy();
+  const [pointerOffsetY, setPointerOffsetY] = useState(0);
   return (
     <Separator
-      onDoubleClick={resetPanelLayout}
+      onDoubleClick={() => void resetWindowLayout()}
       className="group relative w-1.5 shrink-0 cursor-col-resize"
     >
+      <TooltipLabel
+        text={copy.app.separatorResetHint}
+        side="right"
+        align="start"
+        alignOffset={pointerOffsetY}
+      >
+        <div
+          className="absolute inset-0"
+          onPointerEnter={(e) => {
+            const top = e.currentTarget.getBoundingClientRect().top;
+            setPointerOffsetY(Math.max(0, e.clientY - top - 12));
+          }}
+        />
+      </TooltipLabel>
       <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line/70 group-hover:bg-brand group-active:bg-brand" />
     </Separator>
   );

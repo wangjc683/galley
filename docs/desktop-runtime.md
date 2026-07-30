@@ -185,7 +185,10 @@ deliberately excluded:
 The curated default geometry (1480×920 centered, sidebar at 20%) is
 reachable on demand via **Reset to Default Layout** (2026-07-30): the macOS
 Window menu, the command palette entry (also the Windows entry point), and
-a sidebar-separator double-click for the split-only half. All converge on
+a sidebar-separator double-click — all three run the full reset (the
+separator is the one visible entry point, so its gesture carries the whole
+command; upgraded from split-only same day). A hover tooltip on the
+separator teaches the gesture. All converge on
 `gui/src/lib/layout-reset.ts` + the `reset_window_layout` command; golden
 constants live in `core/src/app_setup.rs` and must match `tauri.conf.json`.
 First launches center via `center: true`, and `fit_window_to_monitor`

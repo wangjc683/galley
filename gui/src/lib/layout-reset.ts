@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 /**
  * "Reset to Default Layout" — the one place all entry points converge
  * (Window menu via `menu:reset_layout`, command palette, and the
- * sidebar separator's double-click for the split-only half).
+ * sidebar separator's double-click; all three run the full reset).
  *
  * The reset has two halves living on two sides of the IPC boundary:
  * window geometry is Rust (`reset_window_layout` — golden size clamped
@@ -27,7 +27,7 @@ export function registerPanelLayoutReset(fn: () => void): () => void {
   };
 }
 
-/** Split-only half (separator double-click). */
+/** Split-only half (used by the full reset below). */
 export function resetPanelLayout(): void {
   panelReset?.();
 }
