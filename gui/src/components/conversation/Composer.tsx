@@ -94,6 +94,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       staticHint,
       imagesEnabled = true,
       onImageBlocked,
+      onTextDropBlocked,
     },
     ref,
   ) {
@@ -127,10 +128,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       setPreviewIndex,
       fileInputRef,
       isDropActive,
-      handleDragEnter,
-      handleDragOver,
-      handleDragLeave,
-      handleDrop,
       handleFileInputChange,
       tryAcceptPastedImages,
       removeImage,
@@ -143,6 +140,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // With a draft key, the parking lot owns preview object URLs
       // across unmount; without one, the hook's unmount sweep applies.
       retainImagesOnUnmount: Boolean(draftKey) && !isControlled,
+      // Drop follows typing: whenever the textarea accepts input, the
+      // window accepts a drop (PRD 定案 6).
+      dropEnabled: !disabled,
+      onTextDropBlocked,
     });
 
     // Long-paste folding ([Pasted text #N +M lines]) + its registry and
@@ -367,14 +368,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             "focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/20",
             disabled && "opacity-60",
           )}
-          // Drag handlers gate on a file drag (text / URI drags fall
-          // through to the textarea default). onDragOver must preventDefault
-          // or the browser treats the drop as navigation / file-open; the
-          // enter/leave pair drives the drop overlay below.
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+          // No HTML5 drag handlers: with dragDropEnabled true, drops
+          // arrive through the native onDragDropEvent subscription inside
+          // useImageAttachments; `isDropActive` below is fed from there.
         >
           {isDropActive && <ComposerDropOverlay imagesEnabled={imagesEnabled} />}
           <textarea

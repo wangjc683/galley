@@ -163,6 +163,7 @@ export interface MainViewProps {
   conversationFontSize?: ConversationFontSize;
   imagesEnabled?: boolean;
   onImageBlocked?: (reason: ImageBlockReason) => void;
+  onTextDropBlocked?: () => void;
 }
 
 /**
@@ -208,6 +209,7 @@ export function MainView({
   conversationFontSize = "standard",
   imagesEnabled = true,
   onImageBlocked,
+  onTextDropBlocked,
 }: MainViewProps) {
   const copy = useCopy();
   const stillWaiting = pendingApprovals.length > 0;
@@ -603,6 +605,7 @@ export function MainView({
             showFooterHint
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}
+            onTextDropBlocked={onTextDropBlocked}
           />
         </div>
       </div>

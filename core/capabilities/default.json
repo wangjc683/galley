@@ -17,6 +17,8 @@
     "fs:default",
     "fs:allow-exists",
     "fs:allow-write-text-file",
+    "fs:allow-read-file",
+    "fs:allow-stat",
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "$HOME/**" }, { "path": "$DOCUMENT/**" }, { "path": "$DESKTOP/**" }, { "path": "$DOWNLOAD/**" }]

@@ -87,6 +87,7 @@ export interface EmptyStateProps {
   epigraphCondition?: EpigraphCondition;
   imagesEnabled?: boolean;
   onImageBlocked?: (reason: ImageBlockReason) => void;
+  onTextDropBlocked?: () => void;
 }
 
 /**
@@ -122,6 +123,7 @@ export function EmptyState({
   epigraphCondition = "quiet",
   imagesEnabled = true,
   onImageBlocked,
+  onTextDropBlocked,
 }: EmptyStateProps) {
   const copy = useCopy();
   const composerRef = useRef<ComposerHandle>(null);
@@ -195,6 +197,7 @@ export function EmptyState({
           approvalMode={approvalMode}
           imagesEnabled={imagesEnabled}
           onImageBlocked={onImageBlocked}
+          onTextDropBlocked={onTextDropBlocked}
           staticHint={
             projectName ? (
               <span className="flex min-w-0 items-center gap-1.5">

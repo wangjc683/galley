@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { readFile } from "@tauri-apps/plugin-fs";
+
 import type { ImagePreviewItem } from "@/components/conversation/ImagePreviewDialog";
 import {
   type ImageBlockReason,
@@ -8,6 +10,12 @@ import {
   readImageFile,
   SUPPORTED_PASTE_IMAGE_TYPES,
 } from "@/lib/composer-images";
+import {
+  dropPathBasename,
+  imageMimeForPath,
+  splitDropPaths,
+} from "@/lib/file-drop";
+import { useNativeDragDrop } from "@/hooks/useNativeDragDrop";
 import type { PendingImageAttachment } from "@/types/conversation";
 
 /**
@@ -16,6 +24,12 @@ import type { PendingImageAttachment } from "@/types/conversation";
  * / drop / file picker) that all funnel through `acceptImageFiles`. Pulled
  * out of Composer so the textarea / paste-fold / goal logic isn't tangled
  * with object-URL lifetime bookkeeping.
+ *
+ * Drop intake is Tauri-native (useNativeDragDrop): the OS hands us
+ * filesystem paths, image-suffixed ones are read back into Files and fed
+ * through the same `acceptImageFiles` pipeline as paste / picker, and
+ * everything else is forwarded to `onNonImagePaths` for path-reference
+ * insertion (the "images attach, files refer" split — PRD 定案 1).
  *
  * Object-URL ownership: every `previewUrl` minted by `readImageFile` is
  * revoked exactly once — on remove (tile X), on clear (submit / prefill),
@@ -28,9 +42,14 @@ export function useImageAttachments({
   pastedImageAlt,
   initialImages,
   retainImagesOnUnmount = false,
+  dropEnabled = true,
+  onNonImagePaths,
+  onTextDropBlocked,
 }: {
-  /** When false, all intake (paste / drop / picker) is refused and routed
-   * to `onImageBlocked("external")` — the runtime can't deliver images. */
+  /** When false, all image intake (paste / drop / picker) is refused and
+   * routed to `onImageBlocked("external")` — the runtime can't deliver
+   * images. Non-image path drops are unaffected: a path in the message
+   * text works on every runtime. */
   imagesEnabled: boolean;
   onImageBlocked?: (reason: ImageBlockReason) => void;
   /** Alt text for the preview tiles / dialog (localized by the caller). */
@@ -43,6 +62,17 @@ export function useImageAttachments({
    * the unmount (see lib/composer-draft.ts ownership notes). Remove /
    * clear still revoke as usual. */
   retainImagesOnUnmount?: boolean;
+  /** Gate for the native drop intake — "can type ⇒ can drop", so the
+   * Composer passes `!disabled`. */
+  dropEnabled?: boolean;
+  /** Dropped paths that are not attachable images (plus images whose
+   * bytes we cannot read back, e.g. outside the fs scope) — the caller
+   * inserts them as file-reference placeholders. */
+  onNonImagePaths?: (paths: string[]) => void;
+  /** A drop that carried no filesystem paths (text / URL drag). Native
+   * interception loses the payload, so the caller toasts an explanation
+   * (accepted trade-off, PRD 定案 8). */
+  onTextDropBlocked?: () => void;
 }) {
   const [pendingImages, setPendingImages] = useState<PendingImageAttachment[]>(
     () => initialImages ?? [],
@@ -51,11 +81,10 @@ export function useImageAttachments({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Drag-over affordance: `isDropActive` drives the Composer's drop
-  // overlay; `dragDepthRef` is an enter/leave counter so the overlay
-  // doesn't flicker as the drag crosses child elements (the classic
-  // dragenter/dragleave bubbling trap).
+  // overlay. Native enter/leave events are window-level, so there is no
+  // child-element bubbling to debounce (the old dragDepth counter died
+  // with the HTML5 handlers).
   const [isDropActive, setIsDropActive] = useState(false);
-  const dragDepthRef = useRef(0);
 
   // Mirror of pendingImages for the unmount cleanup below. Render-time
   // paths (remove / clear) already revoke their own URLs; this is the
@@ -127,51 +156,49 @@ export function useImageAttachments({
     }
   };
 
-  // A file drag (vs a text / URI drag, which should fall through to the
-  // browser default so dropping a URL still inserts it as text).
-  const isFileDrag = (e: React.DragEvent) =>
-    Array.from(e.dataTransfer.types).includes("Files");
-
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!isFileDrag(e)) return;
-    dragDepthRef.current += 1;
-    setIsDropActive(true);
-  };
-
-  // preventDefault marks the Composer a valid drop target (and gives the
-  // OS its copy cursor). No setState here — the overlay's visibility is
-  // owned by the enter/leave counter, so we don't re-render on every
-  // dragover tick.
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!isFileDrag(e)) return;
-    e.preventDefault();
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!isFileDrag(e)) return;
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setIsDropActive(false);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    // Any drop ends the drag, so clear the overlay first thing.
-    dragDepthRef.current = 0;
-    setIsDropActive(false);
-    if (!isFileDrag(e)) return;
-    e.preventDefault();
-    if (!imagesEnabled) {
-      onImageBlocked?.("external");
-      return;
-    }
-    const files = Array.from(e.dataTransfer.files).filter((file) =>
-      SUPPORTED_PASTE_IMAGE_TYPES.has(file.type),
+  // Read dropped image paths back into Files for the shared pipeline.
+  // Successes go through acceptImageFiles (same caps / toasts as paste);
+  // unreadable ones (outside the fs:scope allowlist, external volumes,
+  // permission errors) degrade to path references — the agent can still
+  // reach the file through its own tools, and the visible placeholder
+  // tells the user exactly what happened instead of a dead drop.
+  const intakeImagePaths = async (paths: string[]) => {
+    const files: File[] = [];
+    const unreadable: string[] = [];
+    await Promise.all(
+      paths.map(async (path) => {
+        try {
+          const bytes = await readFile(path);
+          const mime = imageMimeForPath(path) ?? "application/octet-stream";
+          files.push(new File([bytes], dropPathBasename(path), { type: mime }));
+        } catch {
+          unreadable.push(path);
+        }
+      }),
     );
-    if (files.length === 0) {
-      onImageBlocked?.("unsupported");
-      return;
-    }
-    void acceptImageFiles(files);
+    if (files.length > 0) acceptImageFiles(files);
+    if (unreadable.length > 0) onNonImagePaths?.(unreadable);
   };
+
+  // The app's only drop intake (native; HTML5 drop never fires with
+  // dragDropEnabled: true). Splits per PRD 定案 1: image suffixes into
+  // the attachment pipeline, everything else out to path references.
+  useNativeDragDrop({
+    enabled: dropEnabled,
+    onActiveChange: setIsDropActive,
+    onTextDrop: () => onTextDropBlocked?.(),
+    onPathsDrop: (paths) => {
+      const { imagePaths, filePaths } = splitDropPaths(paths);
+      if (imagePaths.length > 0) {
+        if (imagesEnabled) {
+          void intakeImagePaths(imagePaths);
+        } else {
+          onImageBlocked?.("external");
+        }
+      }
+      if (filePaths.length > 0) onNonImagePaths?.(filePaths);
+    },
+  });
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -245,10 +272,6 @@ export function useImageAttachments({
     setPreviewIndex,
     fileInputRef,
     isDropActive,
-    handleDragEnter,
-    handleDragOver,
-    handleDragLeave,
-    handleDrop,
     handleFileInputChange,
     tryAcceptPastedImages,
     removeImage,

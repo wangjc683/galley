@@ -26,7 +26,7 @@
           "x": 16,
           "y": 22
         },
-        "dragDropEnabled": false,
+        "dragDropEnabled": true,
         "zoomHotkeysEnabled": false
       }
     ],

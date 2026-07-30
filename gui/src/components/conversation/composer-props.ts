@@ -137,4 +137,9 @@ export interface ComposerProps {
    *   - `"unsupported"`: mime not in the supported set (HEIC, GIF, …)
    * Replaces the old `onImageSubmitBlocked` (only carried `"goal"`). */
   onImageBlocked?: (reason: ImageBlockReason) => void;
+  /** Called when a native drop carries no filesystem paths (text / URL
+   * drag). The interception loses the dragged content, so the app-level
+   * handler toasts "use copy & paste" — the accepted trade-off of native
+   * drag-drop (PRD 定案 8). */
+  onTextDropBlocked?: () => void;
 }

@@ -1562,6 +1562,9 @@ export const enCopy: AppCopy = {
     imageTooMany: "You can attach up to 4 images. Remove one to add another.",
     imageUnsupported:
       "Unsupported image format. Please paste or pick a PNG, JPEG, or WebP image.",
+    textDropBlocked: "Text can't be dropped here",
+    textDropBlockedMessage:
+      "Dragged text or links can't be received. Use copy & paste instead.",
     toolsReinjected: "Tools reinjected",
     toolsReinjectedMessage: (count) =>
       `Injected ${count} tool definitions into this conversation.`,

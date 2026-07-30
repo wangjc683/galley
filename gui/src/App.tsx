@@ -199,7 +199,8 @@ function App() {
     setSettingsOpen(true);
   };
   const openModelsForMissingConfig = () => openSettings("models");
-  const { showImageBlockedToast, handleImageBlocked } = useImageBlockedToast({
+  const { showImageBlockedToast, handleImageBlocked, handleTextDropBlocked } =
+    useImageBlockedToast({
     copy,
     pushToast,
   });
@@ -593,6 +594,7 @@ function App() {
                   hasActiveGoal={goalSlotOccupied}
                   imagesEnabled={activeRuntimeKind === "managed"}
                   onImageBlocked={handleImageBlocked}
+                  onTextDropBlocked={handleTextDropBlocked}
                   onSubmit={submitFromEmpty}
                 />
               ) : (
@@ -637,6 +639,7 @@ function App() {
                   onGoalSubmit={startGoalFromComposer}
                   imagesEnabled={activeSession?.gaRuntimeKind === "managed"}
                   onImageBlocked={handleImageBlocked}
+                  onTextDropBlocked={handleTextDropBlocked}
                   pendingApprovals={pendingApprovals}
                   approvalDecisions={approvalDecisions}
                   onSubmit={sendUserMessage}

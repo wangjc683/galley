@@ -1487,6 +1487,8 @@ export const zhCopy = {
     imageTooLarge: "图片过大，单张上限 10 MB。",
     imageTooMany: "最多添加 4 张图片，移除一张再继续。",
     imageUnsupported: "不支持的图片格式，请粘贴或选择 PNG / JPEG / WebP。",
+    textDropBlocked: "不支持拖入文本",
+    textDropBlockedMessage: "拖入的文字或链接无法接收，请改用复制粘贴。",
     toolsReinjected: "工具已重新注入",
     toolsReinjectedMessage: (count: number) =>
       `已为本对话注入 ${count} 条工具定义。`,

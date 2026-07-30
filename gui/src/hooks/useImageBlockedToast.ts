@@ -48,5 +48,24 @@ export function useImageBlockedToast({
               : copy.toasts.imageUnsupported;
     showImageBlockedToast(message);
   };
-  return { showImageBlockedToast, handleImageBlocked };
+  /** A native drop carried no filesystem paths (text / URL drag). The
+   * interception loses the dragged content (PRD 定案 8), so all we can
+   * do is explain the copy-paste route. Warning, not error — nothing the
+   * user had is lost. */
+  const handleTextDropBlocked = () => {
+    pushToast(
+      makeAppError({
+        category: "business",
+        severity: "warning",
+        title: copy.toasts.textDropBlocked,
+        message: copy.toasts.textDropBlockedMessage,
+        hint: null,
+        retryable: false,
+        context: "textDrop",
+        traceback: null,
+        autoDismissMs: 4200,
+      }),
+    );
+  };
+  return { showImageBlockedToast, handleImageBlocked, handleTextDropBlocked };
 }
