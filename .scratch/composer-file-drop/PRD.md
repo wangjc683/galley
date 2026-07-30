@@ -1,6 +1,7 @@
 # PRD: Composer 文件拖放引用（File Drop → Path Reference）
 
-Status: ready-for-agent
+Status: done（2026-07-30 随 `v0.4.1` 发运；6 个 issue 全部收口，最后的
+05 Windows smoke 随发布装机终验通过）
 Date: 2026-07-29（同日 JC 裁决全部待定点，issues 已拆分，见 `issues/`）
 来源: JC 与 agent 的设计讨论（本文件是讨论结论的沉淀，尚未开始实现）
 
