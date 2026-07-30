@@ -1,5 +1,17 @@
-import type { ReactNode } from "react";
-import { Group, Panel, Separator } from "react-resizable-panels";
+import { useEffect, type ReactNode } from "react";
+import {
+  Group,
+  Panel,
+  Separator,
+  useDefaultLayout,
+  useGroupRef,
+} from "react-resizable-panels";
+
+import {
+  DEFAULT_PANEL_LAYOUT,
+  registerPanelLayoutReset,
+  resetPanelLayout,
+} from "@/lib/layout-reset";
 
 /**
  * Full app shell:
@@ -19,12 +31,13 @@ import { Group, Panel, Separator } from "react-resizable-panels";
  * columns (Sidebar bg-chrome, Main bg-app).
  *
  * Resizable two-column layout via react-resizable-panels v4 (`Group`
- * + `Panel` + `Separator`). Widths are deliberately NOT persisted
- * (JC, 2026-07-30 — same decision as window geometry, see devlog):
- * every launch opens at the curated default split; drags hold for the
- * run and a restart forgets them. Percentages (not pixels) so it
- * scales gracefully across window sizes; the desktop minimum window
- * is 960px (Tauri config).
+ * + `Panel` + `Separator`). Widths are persisted to localStorage via
+ * `useDefaultLayout` so layout survives across runs; the curated
+ * default split (20/80) is reachable on demand instead — separator
+ * double-click, Window menu, or command palette (see
+ * lib/layout-reset.ts and devlog 2026-07-30). Percentages (not
+ * pixels) so it scales gracefully across window sizes; the desktop
+ * minimum window is 960px (Tauri config).
  *
  * Constraints:
  *   - Sidebar  14–30%  (≈ 134–444px across supported widths)
@@ -68,11 +81,30 @@ export function AppShell({
   sidebar: ReactNode;
   main: ReactNode;
 }) {
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: "ga-workbench-layout-2col-v2",
+    panelIds: ["sidebar", "main"],
+  });
+  // Imperative handle for "Reset to Default Layout": registered in the
+  // module-level slot so out-of-tree callers (menu event handler,
+  // command palette) reach it without a prop path. onLayoutChanged
+  // fires on setLayout too, so the reset value persists like a drag.
+  const groupRef = useGroupRef();
+  useEffect(
+    () =>
+      registerPanelLayoutReset(() => {
+        groupRef.current?.setLayout(DEFAULT_PANEL_LAYOUT);
+      }),
+    [groupRef],
+  );
   return (
     <div className="flex h-screen min-h-[600px] w-screen min-w-[960px] flex-col bg-app text-ink">
       <Group
         id="ga-workbench-layout-2col-v2"
         orientation="horizontal"
+        groupRef={groupRef}
+        defaultLayout={defaultLayout}
+        onLayoutChanged={onLayoutChanged}
         className="flex min-h-0 flex-1"
       >
         <Panel id="sidebar" defaultSize="20%" minSize="14%" maxSize="30%">
@@ -98,10 +130,19 @@ export function AppShell({
  * On hover and during drag (`:active`) the line tints to brand,
  * matching the apricot accent we use for other interactive
  * affordances (DESIGN.md §2.1).
+ *
+ * Double-click resets the split to the curated 20/80 — the established
+ * divider convention (spreadsheet column edges, IDE splitters) and the
+ * zero-chrome answer to "one-click back to the golden split". Split
+ * only: window geometry stays put (that's the full reset's job, Window
+ * menu / command palette).
  */
 function ResizeSeparator() {
   return (
-    <Separator className="group relative w-1.5 shrink-0 cursor-col-resize">
+    <Separator
+      onDoubleClick={resetPanelLayout}
+      className="group relative w-1.5 shrink-0 cursor-col-resize"
+    >
       <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line/70 group-hover:bg-brand group-active:bg-brand" />
     </Separator>
   );

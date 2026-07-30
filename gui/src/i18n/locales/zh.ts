@@ -435,6 +435,7 @@ export const zhCopy = {
     switchLLM: "切换 LLM",
     current: (name: string) => `当前：${name}`,
     runHealthCheck: "跑一次 Health Check",
+    resetLayout: "恢复默认布局",
     openSettings: "打开设置",
     changeGAFolder: "切换 GA 路径",
     back: "返回",

@@ -397,6 +397,16 @@ pub(crate) fn setup_background_mode(app: &tauri::App, autostart_launch: bool) ->
                 }
                 let _ = app.emit("menu:width_wide", ());
             }
+            // Layout reset is GUI-driven (the sidebar split lives in
+            // React), so this only forwards; useGlobalShortcuts calls
+            // the `reset_window_layout` command plus the panel reset.
+            // Show the window first — resetting an invisible window's
+            // geometry would be a no-show surprise on next reveal.
+            "reset_layout" => {
+                show_main_window(app);
+                let _ = tray_toggle_for_menu.set_text(TRAY_HIDE_GALLEY_LABEL);
+                let _ = app.emit("menu:reset_layout", ());
+            }
             "tray_toggle_window" => {
                 toggle_main_window(app);
             }

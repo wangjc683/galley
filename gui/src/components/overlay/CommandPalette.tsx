@@ -6,6 +6,7 @@ import {
   Check,
   Cube,
   FolderOpen,
+  FrameCorners,
   Gear,
   MagnifyingGlass,
   Plus,
@@ -16,6 +17,7 @@ import { useEffect, useState } from "react";
 
 import { searchMessages, type MessageSearchHit } from "@/lib/db";
 import { useCopy } from "@/lib/i18n";
+import { resetWindowLayout } from "@/lib/layout-reset";
 import { formatShortcut, formatShortcutReadable } from "@/lib/shortcuts";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
@@ -188,6 +190,12 @@ export function CommandPalette(props: CommandPaletteProps) {
               props.onReRunHealthCheck?.();
               close();
             }}
+            onResetLayout={() => {
+              // Self-contained module action (lib/layout-reset.ts), so
+              // no prop from App — unlike its sibling handlers.
+              void resetWindowLayout();
+              close();
+            }}
             onOpenSettings={() => {
               props.onOpenSettings?.();
               close();
@@ -229,6 +237,7 @@ function RootPage({
   llmCount,
   currentLLM,
   onReRunHealthCheck,
+  onResetLayout,
   onOpenSettings,
   onAttachGAFolder,
   onSubmitFreeText,
@@ -243,6 +252,7 @@ function RootPage({
   llmCount: number;
   currentLLM?: string;
   onReRunHealthCheck: () => void;
+  onResetLayout: () => void;
   onOpenSettings: () => void;
   onAttachGAFolder: () => void;
   onSubmitFreeText: (text: string) => void;
@@ -335,6 +345,12 @@ function RootPage({
           Icon={ArrowsClockwise}
           label={copy.command.runHealthCheck}
         />
+      </Command.Item>
+      <Command.Item
+        value="reset default layout window 恢复默认布局 窗口"
+        onSelect={onResetLayout}
+      >
+        <PaletteRow Icon={FrameCorners} label={copy.command.resetLayout} />
       </Command.Item>
       <Command.Item value="open settings 设置" onSelect={onOpenSettings}>
         <PaletteRow

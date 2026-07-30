@@ -159,9 +159,19 @@ pub(crate) fn install_macos_menu(app: &tauri::App) -> tauri::Result<()> {
         .item(&PredefinedMenuItem::fullscreen(app, None)?)
         .build()?;
 
+    // "Reset to Default Layout" sits under Zoom — the Window menu is
+    // macOS's home for geometry verbs. It snaps window size (golden,
+    // monitor-clamped, centered) and the sidebar split; the GUI handles
+    // both on `menu:reset_layout` (useGlobalShortcuts) so this entry,
+    // the command palette, and the separator double-click stay in sync.
     let window_submenu = SubmenuBuilder::new(app, "Window")
         .item(&PredefinedMenuItem::minimize(app, None)?)
         .item(&PredefinedMenuItem::maximize(app, Some("Zoom"))?)
+        .item(
+            &MenuItemBuilder::new("Reset to Default Layout")
+                .id("reset_layout")
+                .build(app)?,
+        )
         .separator()
         .item(&PredefinedMenuItem::bring_all_to_front(app, None)?)
         .build()?;

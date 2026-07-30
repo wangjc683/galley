@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { type Dispatch, type SetStateAction, useEffect } from "react";
 
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
+import { resetWindowLayout } from "@/lib/layout-reset";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { usePrefsStore } from "@/stores/prefs";
 import { useSessionsStore } from "@/stores/sessions";
@@ -118,6 +119,12 @@ export function useGlobalShortcuts({
         "menu:width_wide",
         () => {
           void setConversationWidth("wide");
+        },
+      ],
+      [
+        "menu:reset_layout",
+        () => {
+          void resetWindowLayout();
         },
       ],
     ];

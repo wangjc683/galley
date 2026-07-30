@@ -70,14 +70,30 @@ pub fn run() {
             Some(vec!["--autostart"]),
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // No window-state persistence — deliberately (JC, 2026-07-30;
-        // reversed the earlier tauri-plugin-window-state setup). Every
-        // launch presents the curated default: tauri.conf.json size,
-        // centered, sidebar at its default share. Within a run (including
-        // tray hide / show) adjustments stick; a true quit forgets them.
-        // Small displays are handled by `fit_window_to_monitor` in
-        // app_setup.rs. See devlog 2026-07-30 for the reasoning and the
-        // rejected alternative (persist + "reset layout" command).
+        // Remember window size / position / maximized / fullscreen across
+        // launches (saved to `.window-state.json` in the app config dir on
+        // true quit — `app.exit(0)` in tray.rs). Briefly removed on
+        // 2026-07-30 in favor of launch-time amnesia, reversed the same
+        // day: the curated default is instead reachable on demand via the
+        // "Reset to Default Layout" affordances (Window menu / command
+        // palette / separator double-click — see `reset_window_layout` in
+        // commands/system.rs and devlog 2026-07-30). Two flags are
+        // excluded on purpose:
+        // - VISIBLE: Background Mode hides the window instead of closing;
+        //   quitting from the tray while hidden must not restore an
+        //   invisible window on next launch.
+        // - DECORATIONS: Windows runs with native decorations off as custom
+        //   chrome (see the setup hook); the plugin must not restore a
+        //   stale decorations value over that.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        & !tauri_plugin_window_state::StateFlags::VISIBLE
+                        & !tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         // RunnerManager is the single Rust authority for Python runner
         // subprocesses (B2 M1). Held as Tauri app state inside an `Arc`
         // so the `spawn_runner` / `send_to_runner` / etc. commands AND
@@ -90,6 +106,7 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![
             path_exists,
+            reset_window_layout,
             get_supervisor_sop,
             app_update::check_app_update,
             app_update::install_app_update,

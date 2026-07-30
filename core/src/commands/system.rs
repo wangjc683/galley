@@ -209,3 +209,13 @@ pub(crate) async fn restart_enabled_im_supervisors(
 ) -> std::result::Result<Vec<im_supervisor::ImSupervisorStatus>, String> {
     manager.inner().restart_enabled(app).await
 }
+
+/// Snap the main window back to the curated default geometry — golden
+/// size clamped to the monitor, centered, out of fullscreen /
+/// maximized. One half of "Reset to Default Layout": the GUI caller
+/// resets the sidebar split itself (`lib/layout-reset.ts`), so every
+/// entry point (Window menu, command palette) behaves identically.
+#[tauri::command]
+pub(crate) fn reset_window_layout(window: tauri::WebviewWindow) {
+    crate::app_setup::apply_golden_geometry(&window);
+}

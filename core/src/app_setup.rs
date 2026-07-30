@@ -67,40 +67,70 @@ pub(crate) fn setup_app(
     Ok(())
 }
 
-/// Shrink the golden default (tauri.conf.json 1480×920) to fit small
-/// displays. Window geometry is deliberately NOT persisted across
-/// launches (JC, 2026-07-30 — see lib.rs plugin block and devlog), so
-/// every start uses the config size; on a 13" laptop that overflows the
-/// screen and, with no saved state to self-heal from, the user would
-/// re-shrink it every single launch. Runs before the window is shown
-/// (created hidden), so the resize never flashes. Monitor size is the
-/// full panel, not the work area (tauri exposes no work-area API);
-/// the 0.92 factor is the margin that keeps clear of dock / taskbar.
-fn fit_window_to_monitor(app: &tauri::App) {
-    const DEFAULT_W: f64 = 1480.0;
-    const DEFAULT_H: f64 = 920.0;
-    let Some(window) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) else {
-        return;
-    };
+/// The curated default ("golden") window size — must match
+/// tauri.conf.json's `width` / `height`. The sidebar's golden share
+/// (20%) lives on the GUI side (`lib/layout-reset.ts`).
+pub(crate) const GOLDEN_WINDOW_W: f64 = 1480.0;
+pub(crate) const GOLDEN_WINDOW_H: f64 = 920.0;
+
+/// Golden size clamped to the window's monitor. Monitor size is the
+/// full panel, not the work area (tauri exposes no work-area API); the
+/// 0.92 factor is the margin that keeps clear of dock / taskbar.
+/// `set_size` additionally respects the config min (960×600).
+fn golden_size_for(window: &tauri::WebviewWindow) -> tauri::LogicalSize<f64> {
     let monitor = match window.current_monitor() {
-        Ok(Some(m)) => m,
-        _ => match window.primary_monitor() {
-            Ok(Some(m)) => m,
-            _ => return,
-        },
+        Ok(Some(m)) => Some(m),
+        _ => window.primary_monitor().ok().flatten(),
+    };
+    let Some(monitor) = monitor else {
+        return tauri::LogicalSize::new(GOLDEN_WINDOW_W, GOLDEN_WINDOW_H);
     };
     let scale = monitor.scale_factor();
     let logical_w = monitor.size().width as f64 / scale;
     let logical_h = monitor.size().height as f64 / scale;
-    if logical_w >= DEFAULT_W && logical_h >= DEFAULT_H {
+    tauri::LogicalSize::new(
+        GOLDEN_WINDOW_W.min(logical_w * 0.92),
+        GOLDEN_WINDOW_H.min(logical_h * 0.92),
+    )
+}
+
+/// Snap the window to the curated default: leave fullscreen /
+/// maximized, golden size (monitor-clamped), centered. Shared by the
+/// `reset_window_layout` command (Window menu / command palette); the
+/// GUI resets the sidebar split alongside.
+pub(crate) fn apply_golden_geometry(window: &tauri::WebviewWindow) {
+    let _ = window.set_fullscreen(false);
+    let _ = window.unmaximize();
+    let _ = window.set_size(golden_size_for(window));
+    let _ = window.center();
+}
+
+/// First-run / changed-display guard: if the window (config default on
+/// first launch, or restored state after a monitor swap) overflows the
+/// current monitor, snap it to the clamped golden size. Deliberately a
+/// no-op when the window fits — window-state's restored geometry is the
+/// user's own and must win (see the plugin block in lib.rs). Runs
+/// before the window is shown (created hidden), so it never flashes.
+fn fit_window_to_monitor(app: &tauri::App) {
+    let Some(window) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) else {
+        return;
+    };
+    let monitor = match window.current_monitor() {
+        Ok(Some(m)) => Some(m),
+        _ => window.primary_monitor().ok().flatten(),
+    };
+    let Some(monitor) = monitor else { return };
+    let scale = monitor.scale_factor();
+    let monitor_w = monitor.size().width as f64 / scale;
+    let monitor_h = monitor.size().height as f64 / scale;
+    let window_scale = window.scale_factor().unwrap_or(scale);
+    let Ok(size) = window.outer_size() else { return };
+    let window_w = size.width as f64 / window_scale;
+    let window_h = size.height as f64 / window_scale;
+    if window_w <= monitor_w && window_h <= monitor_h {
         return;
     }
-    // set_size respects the config min (960×600); center again since a
-    // resize keeps the origin and the config `center` ran at creation.
-    let _ = window.set_size(tauri::LogicalSize::new(
-        DEFAULT_W.min(logical_w * 0.92),
-        DEFAULT_H.min(logical_h * 0.92),
-    ));
+    let _ = window.set_size(golden_size_for(&window));
     let _ = window.center();
 }
 

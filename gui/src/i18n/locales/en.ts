@@ -455,6 +455,7 @@ export const enCopy: AppCopy = {
     switchLLM: "Switch LLM",
     current: (name) => `Current: ${name}`,
     runHealthCheck: "Run Health Check",
+    resetLayout: "Reset window layout",
     openSettings: "Open Settings",
     changeGAFolder: "Change GA folder",
     back: "Back",
