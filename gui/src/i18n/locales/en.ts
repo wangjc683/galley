@@ -1699,6 +1699,7 @@ export const enCopy: AppCopy = {
     lastRun: (time: string) => `Last ${time}`,
     openLastRun: "Open the last run's session",
     enableAria: (prompt: string) => `Enable scheduled task: ${prompt}`,
+    runNow: "Run once now",
     edit: "Edit",
     delete: "Delete",
     deleteTitle: "Delete this scheduled task?",

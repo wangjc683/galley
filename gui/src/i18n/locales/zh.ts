@@ -1611,6 +1611,7 @@ export const zhCopy = {
     lastRun: (time: string) => `上次 ${time}`,
     openLastRun: "打开上次运行的会话",
     enableAria: (prompt: string) => `启用定时任务：${prompt}`,
+    runNow: "立即运行一次",
     edit: "编辑",
     delete: "删除",
     deleteTitle: "删除这个定时任务？",

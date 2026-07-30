@@ -96,6 +96,22 @@ pub(crate) async fn preview_scheduled_fire(
     crate::scheduler::preview_fire(&brief, &chrono::Local, &now).map_err(stringify_error)
 }
 
+/// Manual "run now" (issue 13). Thin shell over
+/// `scheduler::run_task_now`, which fires through the production
+/// scheduled path — the row's live update comes from the
+/// `scheduled-tasks:changed` emit inside `fire`, so there is nothing
+/// to return here.
+#[tauri::command]
+pub(crate) async fn run_scheduled_task_now(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: ScheduledTaskId,
+) -> std::result::Result<(), String> {
+    crate::scheduler::run_task_now(&app, &galley, id.as_str())
+        .await
+        .map_err(stringify_error)
+}
+
 #[tauri::command]
 pub(crate) async fn delete_scheduled_task(
     app: tauri::AppHandle,

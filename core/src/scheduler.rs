@@ -113,6 +113,44 @@ async fn tick(app: &tauri::AppHandle, galley: &SqliteGalley) {
     }
 }
 
+/// Manual "run now" from the GUI (issue 13): fire this task once,
+/// immediately, through the exact scheduled path — same supervisor
+/// label, same `last_fired_at` stamp, same failure handling. Stamping
+/// is deliberate, not incidental: it makes the manual run the row's
+/// "上次运行" (trust loop) and lets a successful re-run clear the
+/// failed-fire badge, while the due math keeps every *future* planned
+/// fire intact — a manual run at 08:50 leaves today's 09:00 strictly
+/// after the new baseline, so it still fires
+/// (`manual_fire_before_planned_time_keeps_today_due`). The only
+/// period a manual run absorbs is an already-due catch-up, which is
+/// the point — the user just ran it. `enabled` is not checked: firing
+/// a paused task by hand is a legitimate way to test its prompt.
+pub(crate) async fn run_task_now(
+    app: &tauri::AppHandle,
+    galley: &SqliteGalley,
+    id: &str,
+) -> crate::error::Result<()> {
+    let task = galley
+        .list_scheduled_tasks()
+        .await?
+        .into_iter()
+        .find(|t| t.id.as_str() == id)
+        .ok_or_else(|| crate::error::GalleyError::NotFound {
+            message: format!("scheduled task {id} not found"),
+        })?;
+    // Same production-adapter composition as `tick`.
+    let db = DbSource::Pool(galley.clone());
+    let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: manager.as_ref(),
+        notifier: crate::notify::TauriNotifier::new(app.clone()),
+        app: Some(app),
+    };
+    fire(&ctx, &task, &Local::now()).await;
+    Ok(())
+}
+
 /// Pure due check: is this task's most recent planned fire still
 /// unconsumed? Generic over the timezone so DST behavior is unit-tested
 /// with real tz data (production passes `chrono::Local`).
@@ -446,6 +484,22 @@ mod tests {
             // Tomorrow's period is the first real fire.
             assert!(due_fire(&t, &New_York, &ny(2026, 7, 23, 9, 0)), "{created}");
         }
+    }
+
+    #[test]
+    fn manual_fire_before_planned_time_keeps_today_due() {
+        // "Run now" stamps `last_fired_at` like any fire (see
+        // `run_task_now`); the promise is that a manual run must never
+        // eat a future planned fire. Manual run at 08:05 → today's
+        // 09:00 is strictly after the new baseline and still fires.
+        let t = task(
+            ScheduledTaskRepeat::Daily,
+            "09:00",
+            true,
+            CREATED_LONG_AGO,
+            Some("2026-07-22T12:05:00Z"), // manual run, 08:05 EDT today
+        );
+        assert!(due_fire(&t, &New_York, &ny(2026, 7, 22, 9, 0)));
     }
 
     #[test]

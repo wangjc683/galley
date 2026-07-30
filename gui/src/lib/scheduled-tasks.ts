@@ -112,6 +112,16 @@ export async function deleteScheduledTask(id: string): Promise<void> {
   await invoke("delete_scheduled_task", { id, origin: GUI_ORIGIN });
 }
 
+/** Manual "run now": fires the task once through the exact scheduled
+ * path (same supervisor label, same `last_fired_at` stamp), so the run
+ * becomes the row's 上次运行 and a success clears a failed-fire badge.
+ * Future planned fires are never consumed — Core's due math keeps them
+ * strictly after the new baseline. Resolves when the fire completed;
+ * the row itself updates via `scheduled-tasks:changed`. */
+export async function runScheduledTaskNow(id: string): Promise<void> {
+  await invoke("run_scheduled_task_now", { id });
+}
+
 /** Mirror of Rust `FirePreview`: what saving a task with the given rule
  * would do. `dueNow` means an unconsumed period earlier today fires
  * within the next scheduler tick (reachable only when editing). */

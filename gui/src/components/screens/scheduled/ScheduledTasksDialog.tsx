@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Plus, Trash, X as XIcon } from "@phosphor-icons/react";
+import { Play, Plus, Trash, X as XIcon } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -16,6 +16,7 @@ import {
   listScheduledTasks,
   mintScheduledTaskId,
   previewScheduledFire,
+  runScheduledTaskNow,
   repeatFromForm,
   repeatSummary,
   updateScheduledTask,
@@ -381,6 +382,20 @@ function TaskRow({
   const copy = useCopy();
   const language = useLanguage();
   const summary = repeatSummary(copy, task.repeat, task.timeOfDay);
+  // Manual "run now" (issue 13). No confirm — it creates an ordinary,
+  // archivable session — and no auto-jump: the 上次运行 cell turns into
+  // the new session's link live (via the changed event), and the user
+  // decides whether to enter. Disabled while in flight so a double
+  // click can't start two sessions. The row updates itself; failures
+  // surface as the warning cell the user is already looking at.
+  const [runningNow, setRunningNow] = useState(false);
+  const handleRunNow = () => {
+    if (runningNow) return;
+    setRunningNow(true);
+    runScheduledTaskNow(task.id)
+      .catch((e) => console.warn("[scheduled] run now failed.", e))
+      .finally(() => setRunningNow(false));
+  };
   return (
     <div className="group flex items-center gap-3 rounded-sm px-3 py-2.5 hover:bg-hover">
       <Switch
@@ -412,6 +427,17 @@ function TaskRow({
         </div>
       </button>
       <LastRunCell task={task} session={session} onOpenSession={onOpenSession} />
+      <IconButton
+        ariaLabel={copy.scheduled.runNow}
+        disabled={runningNow}
+        className={cn(
+          "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
+          runningNow && "opacity-100",
+        )}
+        onClick={handleRunNow}
+      >
+        <Play size={13} weight="thin" />
+      </IconButton>
       <IconButton
         ariaLabel={copy.scheduled.delete}
         className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"

@@ -187,6 +187,7 @@ pub fn run() {
             create_scheduled_task,
             update_scheduled_task,
             preview_scheduled_fire,
+            run_scheduled_task_now,
             delete_scheduled_task,
             list_active_goals,
             list_visible_goals,
