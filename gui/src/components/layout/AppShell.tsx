@@ -1,10 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  Group,
-  Panel,
-  Separator,
-  useDefaultLayout,
-} from "react-resizable-panels";
+import { Group, Panel, Separator } from "react-resizable-panels";
 
 /**
  * Full app shell:
@@ -24,10 +19,12 @@ import {
  * columns (Sidebar bg-chrome, Main bg-app).
  *
  * Resizable two-column layout via react-resizable-panels v4 (`Group`
- * + `Panel` + `Separator`). Widths are persisted to localStorage via
- * `useDefaultLayout` so layout survives across runs. Percentages (not
- * pixels) so it scales gracefully across window sizes; the desktop
- * minimum window is 960px (Tauri config).
+ * + `Panel` + `Separator`). Widths are deliberately NOT persisted
+ * (JC, 2026-07-30 — same decision as window geometry, see devlog):
+ * every launch opens at the curated default split; drags hold for the
+ * run and a restart forgets them. Percentages (not pixels) so it
+ * scales gracefully across window sizes; the desktop minimum window
+ * is 960px (Tauri config).
  *
  * Constraints:
  *   - Sidebar  14–30%  (≈ 134–444px across supported widths)
@@ -71,17 +68,11 @@ export function AppShell({
   sidebar: ReactNode;
   main: ReactNode;
 }) {
-  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: "ga-workbench-layout-2col-v2",
-    panelIds: ["sidebar", "main"],
-  });
   return (
     <div className="flex h-screen min-h-[600px] w-screen min-w-[960px] flex-col bg-app text-ink">
       <Group
         id="ga-workbench-layout-2col-v2"
         orientation="horizontal"
-        defaultLayout={defaultLayout}
-        onLayoutChanged={onLayoutChanged}
         className="flex min-h-0 flex-1"
       >
         <Panel id="sidebar" defaultSize="20%" minSize="14%" maxSize="30%">

@@ -45,6 +45,8 @@ pub(crate) fn setup_app(
     // autostart never flashes a frame.
     let autostart_launch = std::env::args().any(|arg| arg == "--autostart");
 
+    fit_window_to_monitor(app);
+
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     tray::setup_background_mode(app, autostart_launch)?;
 
@@ -63,6 +65,43 @@ pub(crate) fn setup_app(
     crate::app_menu::install_macos_menu(app)?;
 
     Ok(())
+}
+
+/// Shrink the golden default (tauri.conf.json 1480×920) to fit small
+/// displays. Window geometry is deliberately NOT persisted across
+/// launches (JC, 2026-07-30 — see lib.rs plugin block and devlog), so
+/// every start uses the config size; on a 13" laptop that overflows the
+/// screen and, with no saved state to self-heal from, the user would
+/// re-shrink it every single launch. Runs before the window is shown
+/// (created hidden), so the resize never flashes. Monitor size is the
+/// full panel, not the work area (tauri exposes no work-area API);
+/// the 0.92 factor is the margin that keeps clear of dock / taskbar.
+fn fit_window_to_monitor(app: &tauri::App) {
+    const DEFAULT_W: f64 = 1480.0;
+    const DEFAULT_H: f64 = 920.0;
+    let Some(window) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) else {
+        return;
+    };
+    let monitor = match window.current_monitor() {
+        Ok(Some(m)) => m,
+        _ => match window.primary_monitor() {
+            Ok(Some(m)) => m,
+            _ => return,
+        },
+    };
+    let scale = monitor.scale_factor();
+    let logical_w = monitor.size().width as f64 / scale;
+    let logical_h = monitor.size().height as f64 / scale;
+    if logical_w >= DEFAULT_W && logical_h >= DEFAULT_H {
+        return;
+    }
+    // set_size respects the config min (960×600); center again since a
+    // resize keeps the origin and the config `center` ran at creation.
+    let _ = window.set_size(tauri::LogicalSize::new(
+        DEFAULT_W.min(logical_w * 0.92),
+        DEFAULT_H.min(logical_h * 0.92),
+    ));
+    let _ = window.center();
 }
 
 /// Pre-migration backup (B4 M8 · invariant B4-I6) plus the v0.2.9

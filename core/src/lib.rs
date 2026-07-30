@@ -70,25 +70,14 @@ pub fn run() {
             Some(vec!["--autostart"]),
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // Remember window size / position / maximized / fullscreen across
-        // launches (saved to `.window-state.json` in the app config dir on
-        // true quit — `app.exit(0)` in tray.rs). Two flags are excluded on
-        // purpose:
-        // - VISIBLE: Background Mode hides the window instead of closing;
-        //   quitting from the tray while hidden must not restore an
-        //   invisible window on next launch.
-        // - DECORATIONS: Windows runs with native decorations off as custom
-        //   chrome (see the setup hook); the plugin must not restore a
-        //   stale decorations value over that.
-        .plugin(
-            tauri_plugin_window_state::Builder::default()
-                .with_state_flags(
-                    tauri_plugin_window_state::StateFlags::all()
-                        & !tauri_plugin_window_state::StateFlags::VISIBLE
-                        & !tauri_plugin_window_state::StateFlags::DECORATIONS,
-                )
-                .build(),
-        )
+        // No window-state persistence — deliberately (JC, 2026-07-30;
+        // reversed the earlier tauri-plugin-window-state setup). Every
+        // launch presents the curated default: tauri.conf.json size,
+        // centered, sidebar at its default share. Within a run (including
+        // tray hide / show) adjustments stick; a true quit forgets them.
+        // Small displays are handled by `fit_window_to_monitor` in
+        // app_setup.rs. See devlog 2026-07-30 for the reasoning and the
+        // rejected alternative (persist + "reset layout" command).
         // RunnerManager is the single Rust authority for Python runner
         // subprocesses (B2 M1). Held as Tauri app state inside an `Arc`
         // so the `spawn_runner` / `send_to_runner` / etc. commands AND

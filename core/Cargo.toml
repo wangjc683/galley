@@ -98,7 +98,6 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util", "pr
 anyhow = { version = "1", optional = true }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
-tauri-plugin-window-state = "2"
 
 # Unsigned beta managed model API keys live in Galley's SQLite DB as
 # encrypted local payloads. Signed builds can add a system credential-store
