@@ -294,6 +294,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ### 2026-07-30
 - [窗口几何:失忆→持久化 + Reset to Default Layout](./2026-07-30-window-geometry-amnesia.md) — 同日三次决策:上午裁决启动失忆并实施,复议后反转为持久化 + 恢复默认布局三入口(Window 菜单/命令面板/分隔条双击),发版讨论中第三裁将分隔条双击从仅分栏升级为完整恢复(可发现性)并加 hover tooltip 教学;保留首启居中与小屏钳制两个净收益;失忆实现留在 git(`c7c994fc`)可考古
 - [v0.4.1 发布:composer 文件拖放 + 窗口布局复位](./2026-07-30-v0.4.1-release.md) — 聚合 `v0.4.0..HEAD` 打包:文件拖放/文件引用(5/6 issue done,05 Windows smoke 留发布装机终验)+ 窗口布局 + 架构评审轮收口 + 主题微调;GA baseline 4086d5c 不变;版本定级 JC 裁决按功能量级判为 patch,agent 按 v0.4.0 先例推荐的 `0.5.0` minor 被否
+- [定时任务信任面打磨轮](./2026-07-30-scheduled-tasks-trust-polish.md) — 信任三问框架驱动 issues 11–14:失败可见性(需行动数角标+失败通知)/表单触发预览(preview_scheduled_fire)/立即运行(run_task_now 盖戳语义)/自启条件式引导;否决总任务数角标(alarm fatigue);footer 按钮两轮返工教训(ghost+邻近)
 
 ## 格式约定
 
