@@ -24,6 +24,37 @@ use crate::error::{GalleyError, Result};
 /// refetches; the DB stays authoritative and events are best-effort.
 pub const SCHEDULED_TASKS_CHANGED_EVENT: &str = "scheduled-tasks:changed";
 
+/// Tauri event fired when a scheduler fire fails to create a session.
+/// Carries [`ScheduledFireFailed`]; the GUI turns it into a system
+/// notification through its gated pipeline (`lib/notify.ts`) — Core
+/// must not send OS notifications itself or the two paths would
+/// double-notify (see .scratch/scheduled-tasks issue 05).
+pub const SCHEDULED_TASK_FIRE_FAILED_EVENT: &str = "scheduled-tasks:fire-failed";
+
+/// Payload of [`SCHEDULED_TASK_FIRE_FAILED_EVENT`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduledFireFailed {
+    pub task_id: ScheduledTaskId,
+    pub prompt: String,
+}
+
+/// What saving a task with a given rule would do — drives the
+/// create/edit form's "first / next fire" line so the user sees the
+/// consequence of `next_fire_after`'s strictly-after semantics (a daily
+/// 09:00 task created at 10:00 first fires *tomorrow*) at decision
+/// time instead of discovering it the next day.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FirePreview {
+    /// Saving would fire within the next tick: an unconsumed period
+    /// earlier today, reachable only when editing an existing task
+    /// (a new task's baseline is its creation instant).
+    pub due_now: bool,
+    /// UTC ISO instant of the next planned fire strictly after now.
+    pub next_fire_at: String,
+}
+
 /// Opaque scheduled-task identifier (GUI mints `sched_<random16>`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]

@@ -35,7 +35,11 @@ import {
 
 import { usePrefsStore } from "@/stores/prefs";
 
-export type SystemNotifyKind = "goalEnd" | "approval" | "replyDone";
+export type SystemNotifyKind =
+  | "goalEnd"
+  | "approval"
+  | "replyDone"
+  | "scheduleFailed";
 
 /**
  * Reply-done gating: sessions with a GUI-submitted run awaiting its
@@ -124,12 +128,17 @@ export async function sendGatedSystemNotification(
 ): Promise<void> {
   try {
     const prefs = usePrefsStore.getState();
+    // scheduleFailed has no pref on purpose: a failed scheduled fire is
+    // an error condition, not routine chatter — rare, and always "needs
+    // your action". The focus / permission gates below still apply.
     const enabled =
       kind === "goalEnd"
         ? prefs.notifyOnGoalEnd
         : kind === "approval"
           ? prefs.notifyOnApproval
-          : prefs.notifyOnReplyDone;
+          : kind === "replyDone"
+            ? prefs.notifyOnReplyDone
+            : true;
     if (!enabled) {
       console.debug("[notify] skipped: pref off.", { kind });
       return;

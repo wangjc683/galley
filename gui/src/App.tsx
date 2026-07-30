@@ -37,7 +37,10 @@ import { useLLMDisplay } from "@/hooks/useLLMDisplay";
 import { useMessageSend } from "@/hooks/useMessageSend";
 import { useOnboardingFlow } from "@/hooks/useOnboardingFlow";
 import { useProjectNavigation } from "@/hooks/useProjectNavigation";
-import { useSchedulerBlockedCount } from "@/hooks/useSchedulerBlockedCount";
+import {
+  useSchedulerActionCount,
+  useScheduledFireFailedNotification,
+} from "@/hooks/useSchedulerSignals";
 import { useThemeEffects } from "@/hooks/useThemeEffects";
 import {
   useActiveMessages,
@@ -236,6 +239,7 @@ function App() {
   useBrowserControlStartupEffect(activeRuntimeKind);
   useGlobalShortcuts({ setEmptyComposerFocusTick, setSettingsTab });
   useExternalCoreEvents();
+  useScheduledFireFailedNotification();
 
   // Session creation is **lazy** — we no longer auto-create on
   // landing in the empty screen. Earlier versions did, which
@@ -270,7 +274,7 @@ function App() {
     [sessions],
   );
   const archivedCount = sessions.length - visibleSessions.length;
-  const scheduledBlockedCount = useSchedulerBlockedCount(visibleSessions);
+  const scheduledActionCount = useSchedulerActionCount(visibleSessions);
   // Epigraph condition = a read on the workspace pulse at the moment the
   // empty screen is entered. EmptyState snapshots this on mount, so it
   // frames arrival rather than mutating live (the live pulse is the
@@ -520,7 +524,7 @@ function App() {
             archivedCount={archivedCount}
             onSearch={() => setPaletteOpen(true)}
             onOpenScheduled={() => setScheduledOpen(true)}
-            scheduledBlockedCount={scheduledBlockedCount}
+            scheduledActionCount={scheduledActionCount}
             projects={projects}
             activeProjectFilter={activeProjectFilter}
             projectViewOpen={projectViewOpen}

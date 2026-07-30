@@ -303,4 +303,14 @@ async fn failed_fire_still_consumes_period_without_session() {
     assert!(notifier
         .names()
         .contains(&"scheduled-tasks:changed".to_string()));
+    // And the failure event carries what the GUI notification needs.
+    // (The success path's exact-choreography assertion above pins that
+    // this event does NOT fire on success.)
+    let events = notifier.events.lock().unwrap();
+    let (_, payload) = events
+        .iter()
+        .find(|(n, _)| n == "scheduled-tasks:fire-failed")
+        .expect("fire-failed event emitted");
+    assert_eq!(payload["taskId"], "sched_fire_test");
+    assert_eq!(payload["prompt"], "daily digest");
 }

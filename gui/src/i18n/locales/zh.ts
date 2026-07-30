@@ -79,7 +79,7 @@ export const zhCopy = {
     newProject: "新建项目",
     scheduled: "定时",
     openScheduled: "管理定时任务",
-    scheduledBlocked: (count: number) => `${count} 个定时会话等待审批`,
+    scheduledNeedsAction: (count: number) => `${count} 项定时任务需要处理`,
     working: "正在工作",
     thinking: "思考中",
     waitingForYou: "等你回复",
@@ -1598,6 +1598,13 @@ export const zhCopy = {
     repeatSummaryMonthly: (days: string, time: string) =>
       `每月 ${days} 日 ${time}`,
     nextFire: (time: string) => `下次 ${time}`,
+    previewFirst: (time: string) => `首次触发：${time}`,
+    previewNext: (time: string) => `下次触发：${time}`,
+    previewImmediate: (time: string) =>
+      `保存后将立即触发一次 · 下次触发：${time}`,
+    fireFailedNotifyTitle: "定时任务触发失败",
+    fireFailedNotifyBody: (prompt: string) =>
+      `「${prompt}」未能创建会话，打开 Galley 查看。`,
     lastRunNone: "尚未运行",
     lastRunFailed: "上次触发失败",
     lastRunWaitingApproval: "上次运行等待审批",

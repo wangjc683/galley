@@ -13,6 +13,19 @@ import type { AppCopy } from "@/lib/i18n";
  * (GUI CRUD or a scheduler fire). Payload is empty; refetch. */
 export const SCHEDULED_TASKS_CHANGED_EVENT = "scheduled-tasks:changed";
 
+/** Tauri event emitted by Core when a scheduler fire fails to create a
+ * session (core/src/scheduler.rs). The GUI owns turning it into a
+ * system notification — Core never sends OS notifications (issue 05's
+ * no-double-send rule). Pinned by `scheduled-tasks.test.ts`. */
+export const SCHEDULED_TASK_FIRE_FAILED_EVENT = "scheduled-tasks:fire-failed";
+
+/** Payload of {@link SCHEDULED_TASK_FIRE_FAILED_EVENT} (Rust
+ * `ScheduledFireFailed`). */
+export interface ScheduledFireFailedPayload {
+  taskId: string;
+  prompt: string;
+}
+
 /** Supervisor label Core stamps on scheduler-created sessions
  * (core/src/scheduler.rs). Used to derive the approval-blocked badge.
  * The literal is pinned on both sides of the language seam by
@@ -97,6 +110,36 @@ export async function updateScheduledTask(
 
 export async function deleteScheduledTask(id: string): Promise<void> {
   await invoke("delete_scheduled_task", { id, origin: GUI_ORIGIN });
+}
+
+/** Mirror of Rust `FirePreview`: what saving a task with the given rule
+ * would do. `dueNow` means an unconsumed period earlier today fires
+ * within the next scheduler tick (reachable only when editing). */
+export interface ScheduledFirePreview {
+  dueNow: boolean;
+  /** UTC ISO instant of the next planned fire strictly after now. */
+  nextFireAt: string;
+}
+
+/** Read-only next-fire preview for the create/edit form. Calendar math
+ * (monthly clamping, DST) stays in Rust — the GUI never re-derives it. */
+export async function previewScheduledFire(input: {
+  repeat: ScheduledTaskRepeat;
+  timeOfDay: string;
+  taskId?: string;
+}): Promise<ScheduledFirePreview> {
+  return invoke<ScheduledFirePreview>("preview_scheduled_fire", input);
+}
+
+/** Enabled tasks whose last fire produced no session — the "needs your
+ * action" half the approval-blocked badge count doesn't cover. Disabled
+ * tasks are excluded: pausing is itself the user's handling. The state
+ * clears when the next fire succeeds; there is deliberately no manual
+ * dismiss. */
+export function countFailedTasks(tasks: ScheduledTask[]): number {
+  return tasks.filter(
+    (t) => t.enabled && t.lastFiredAt !== undefined && !t.lastRunSessionId,
+  ).length;
 }
 
 /** Create/edit form state — the GUI half of the form ↔ wire repeat

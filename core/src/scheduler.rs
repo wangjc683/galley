@@ -42,8 +42,9 @@ use chrono::{DateTime, Local, TimeZone};
 use tauri::Manager;
 
 use crate::api::schedule::{
-    instant_to_utc_iso, parse_time_of_day, prev_fire_at_or_before, resolve_wall_clock,
-    ScheduledTaskBrief, SCHEDULED_TASKS_CHANGED_EVENT,
+    instant_to_utc_iso, next_fire_after, parse_time_of_day, prev_fire_at_or_before,
+    resolve_wall_clock, FirePreview, ScheduledFireFailed, ScheduledTaskBrief,
+    SCHEDULED_TASKS_CHANGED_EVENT, SCHEDULED_TASK_FIRE_FAILED_EVENT,
 };
 use crate::api::{GalleyApi, ScheduledTaskId};
 use crate::db::SqliteGalley;
@@ -157,6 +158,26 @@ fn parse_utc_secs(iso: &str) -> Option<i64> {
     DateTime::parse_from_rfc3339(iso).ok().map(|dt| dt.timestamp())
 }
 
+/// Preview what saving a task shaped like `task` would do: whether it
+/// fires immediately (same [`due_fire`] semantics as the loop — an
+/// unconsumed period earlier today, reachable only with an existing
+/// task's baseline) and the next planned fire strictly after `now`.
+/// Callers build the brief: the preview command synthesizes one from
+/// form values, with `created_at = now` for a task being created.
+/// Returns `Err` on an unparseable `time_of_day`.
+pub fn preview_fire<Tz: TimeZone>(
+    task: &ScheduledTaskBrief,
+    tz: &Tz,
+    now: &DateTime<Tz>,
+) -> crate::error::Result<FirePreview> {
+    let tod = parse_time_of_day(&task.time_of_day)?;
+    let next = next_fire_after(&task.repeat, tod, now.naive_local());
+    Ok(FirePreview {
+        due_now: due_fire(task, tz, now),
+        next_fire_at: instant_to_utc_iso(&resolve_wall_clock(tz, next)),
+    })
+}
+
 /// Best-effort per-task model: pre-resolve the pinned display name
 /// against the active runtime so an unresolvable pin (model deleted,
 /// runtime switched) degrades to the default model instead of failing
@@ -257,6 +278,7 @@ pub async fn fire<Tz: TimeZone>(ctx: &HandlerCtx<'_>, task: &ScheduledTaskBrief,
     // Stamp the period consumed even on failure — the GUI renders
     // "fired but no session" as a failed run, and the loop must not
     // retry a broken runner every minute.
+    let failed = session_id.is_none();
     if let Err(e) = galley
         .mark_scheduled_task_fired(
             ScheduledTaskId(task.id.as_str().to_string()),
@@ -268,6 +290,18 @@ pub async fn fire<Tz: TimeZone>(ctx: &HandlerCtx<'_>, task: &ScheduledTaskBrief,
         eprintln!("[scheduler] task {} mark fired failed: {e:?}", task.id);
     }
     ctx.notify(SCHEDULED_TASKS_CHANGED_EVENT, &());
+    // A failed fire is "needs your action" (决策 7): the GUI turns this
+    // into a gated system notification. Emitted only here — the GUI
+    // owns OS notifications (issue 05's no-double-send rule).
+    if failed {
+        ctx.notify(
+            SCHEDULED_TASK_FIRE_FAILED_EVENT,
+            &ScheduledFireFailed {
+                task_id: task.id.clone(),
+                prompt: task.prompt.clone(),
+            },
+        );
+    }
 }
 
 #[cfg(test)]
@@ -455,6 +489,76 @@ mod tests {
         assert!(!due_fire(&t, &New_York, &ny(2026, 7, 22, 9, 30)));
         // Next Monday is due.
         assert!(due_fire(&t, &New_York, &ny(2026, 7, 27, 9, 0)));
+    }
+
+    #[test]
+    fn preview_new_task_first_fire_is_strictly_after_now() {
+        // A task being created carries `created_at = now`, so its
+        // earlier period today can never be due — the preview shows
+        // tomorrow when the time already passed, today when it hasn't.
+        let before = task(
+            ScheduledTaskRepeat::Daily,
+            "09:00",
+            true,
+            "2026-07-22T12:00:00+00:00", // = 08:00 EDT "now"
+            None,
+        );
+        let p = preview_fire(&before, &New_York, &ny(2026, 7, 22, 8, 0)).unwrap();
+        assert!(!p.due_now);
+        assert_eq!(p.next_fire_at, "2026-07-22T13:00:00+00:00"); // today 09:00 EDT
+
+        let after = task(
+            ScheduledTaskRepeat::Daily,
+            "09:00",
+            true,
+            "2026-07-22T14:00:00+00:00", // = 10:00 EDT "now"
+            None,
+        );
+        let p = preview_fire(&after, &New_York, &ny(2026, 7, 22, 10, 0)).unwrap();
+        assert!(!p.due_now);
+        assert_eq!(p.next_fire_at, "2026-07-23T13:00:00+00:00"); // tomorrow
+    }
+
+    #[test]
+    fn preview_edit_reports_due_now_for_unconsumed_period() {
+        // Editing an existing task whose 09:00 today is unconsumed:
+        // saving fires within a tick, and the next planned fire is
+        // tomorrow's — both surfaced so the form can say "fires once
+        // right after saving".
+        let t = task(
+            ScheduledTaskRepeat::Daily,
+            "09:00",
+            true,
+            CREATED_LONG_AGO,
+            Some("2026-07-21T13:00:00Z"), // consumed yesterday only
+        );
+        let p = preview_fire(&t, &New_York, &ny(2026, 7, 22, 10, 0)).unwrap();
+        assert!(p.due_now);
+        assert_eq!(p.next_fire_at, "2026-07-23T13:00:00+00:00");
+
+        // Consumed today → plain "next fire tomorrow".
+        let t = task(
+            ScheduledTaskRepeat::Daily,
+            "09:00",
+            true,
+            CREATED_LONG_AGO,
+            Some("2026-07-22T13:00:00Z"),
+        );
+        let p = preview_fire(&t, &New_York, &ny(2026, 7, 22, 10, 0)).unwrap();
+        assert!(!p.due_now);
+        assert_eq!(p.next_fire_at, "2026-07-23T13:00:00+00:00");
+    }
+
+    #[test]
+    fn preview_rejects_bad_time_of_day() {
+        let t = task(
+            ScheduledTaskRepeat::Daily,
+            "9am",
+            true,
+            CREATED_LONG_AGO,
+            None,
+        );
+        assert!(preview_fire(&t, &New_York, &ny(2026, 7, 22, 8, 0)).is_err());
     }
 
     #[test]

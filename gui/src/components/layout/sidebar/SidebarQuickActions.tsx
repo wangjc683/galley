@@ -16,7 +16,7 @@ export function SidebarQuickActions({
   onNewChat,
   onSearch,
   onOpenScheduled,
-  scheduledBlockedCount = 0,
+  scheduledActionCount = 0,
   projectViewOpen,
   onToggleProjectView,
   onNewProject,
@@ -25,10 +25,12 @@ export function SidebarQuickActions({
   onNewChat?: () => void;
   onSearch?: () => void;
   onOpenScheduled?: () => void;
-  /** Scheduler-created sessions currently waiting for approval —
-   * rendered as a badge on the 定时 row so an overnight block is
-   * visible at a glance. */
-  scheduledBlockedCount?: number;
+  /** Scheduled items needing the user's action — approval-blocked
+   * sessions plus tasks whose last fire failed — rendered as a badge
+   * on the 定时 row so an overnight problem is visible at a glance.
+   * Action-only by design: no idle total-count, so the position stays
+   * meaningful (a number here always means "handle something"). */
+  scheduledActionCount?: number;
   projectViewOpen: boolean;
   onToggleProjectView?: () => void;
   onNewProject?: () => void;
@@ -62,12 +64,12 @@ export function SidebarQuickActions({
         label={copy.sidebar.scheduled}
         onClick={onOpenScheduled}
         badge={
-          scheduledBlockedCount > 0 ? (
+          scheduledActionCount > 0 ? (
             <span
-              title={copy.sidebar.scheduledBlocked(scheduledBlockedCount)}
+              title={copy.sidebar.scheduledNeedsAction(scheduledActionCount)}
               className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-warning/15 px-1 text-[10px] font-semibold text-warning"
             >
-              {scheduledBlockedCount}
+              {scheduledActionCount}
             </span>
           ) : undefined
         }

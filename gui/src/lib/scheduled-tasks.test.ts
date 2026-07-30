@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import { zhCopy } from "@/i18n/locales/zh";
 
 import {
+  countFailedTasks,
   formatFireTime,
   formDaysValid,
   repeatFromForm,
   repeatSummary,
   EMPTY_SCHEDULED_TASK_FORM,
+  SCHEDULED_TASK_FIRE_FAILED_EVENT,
   SCHEDULER_SUPERVISOR,
+  type ScheduledTask,
   type ScheduledTaskFormState,
 } from "./scheduled-tasks";
 
@@ -91,5 +94,50 @@ describe("SCHEDULER_SUPERVISOR", () => {
     // sessions, the GUI filters on it (badge + sidebar marker). A rename
     // must land on both sides — this test is the tripwire.
     expect(SCHEDULER_SUPERVISOR).toBe("galley-scheduler");
+  });
+
+  it("pins the fire-failed event name Core emits in api/schedule.rs", () => {
+    expect(SCHEDULED_TASK_FIRE_FAILED_EVENT).toBe(
+      "scheduled-tasks:fire-failed",
+    );
+  });
+});
+
+describe("countFailedTasks", () => {
+  function task(patch: Partial<ScheduledTask>): ScheduledTask {
+    return {
+      id: "sched_x",
+      prompt: "p",
+      repeat: { kind: "daily" },
+      timeOfDay: "09:00",
+      enabled: true,
+      createdAt: "2026-07-01T00:00:00+00:00",
+      updatedAt: "2026-07-01T00:00:00+00:00",
+      ...patch,
+    };
+  }
+
+  it("counts enabled tasks that fired without producing a session", () => {
+    expect(
+      countFailedTasks([
+        // Fired, no session → the failure the badge must surface.
+        task({ lastFiredAt: "2026-07-30T01:00:00+00:00" }),
+        // Fired with a session → healthy.
+        task({
+          lastFiredAt: "2026-07-30T01:00:00+00:00",
+          lastRunSessionId: "sess_ok",
+        }),
+        // Never fired → nothing to report.
+        task({}),
+      ]),
+    ).toBe(1);
+  });
+
+  it("excludes disabled tasks — pausing is the user's handling", () => {
+    expect(
+      countFailedTasks([
+        task({ lastFiredAt: "2026-07-30T01:00:00+00:00", enabled: false }),
+      ]),
+    ).toBe(0);
   });
 });

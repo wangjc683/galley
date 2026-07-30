@@ -81,10 +81,10 @@ export const enCopy: AppCopy = {
     newProject: "New project",
     scheduled: "Scheduled",
     openScheduled: "Manage scheduled tasks",
-    scheduledBlocked: (count: number) =>
+    scheduledNeedsAction: (count: number) =>
       count === 1
-        ? "1 scheduled session waiting for approval"
-        : `${count} scheduled sessions waiting for approval`,
+        ? "1 scheduled item needs attention"
+        : `${count} scheduled items need attention`,
     working: "Working",
     thinking: "Thinking",
     waitingForYou: "Waiting for you",
@@ -1686,6 +1686,13 @@ export const enCopy: AppCopy = {
     repeatSummaryMonthly: (days: string, time: string) =>
       `Monthly ${days} · ${time}`,
     nextFire: (time: string) => `Next ${time}`,
+    previewFirst: (time: string) => `First fire: ${time}`,
+    previewNext: (time: string) => `Next fire: ${time}`,
+    previewImmediate: (time: string) =>
+      `Fires once right after saving · next fire ${time}`,
+    fireFailedNotifyTitle: "Scheduled task failed to fire",
+    fireFailedNotifyBody: (prompt: string) =>
+      `“${prompt}” could not start a session — open Galley to check.`,
     lastRunNone: "Not run yet",
     lastRunFailed: "Last fire failed",
     lastRunWaitingApproval: "Last run waiting for approval",

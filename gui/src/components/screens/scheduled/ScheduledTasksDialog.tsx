@@ -15,11 +15,13 @@ import {
   formDaysValid,
   listScheduledTasks,
   mintScheduledTaskId,
+  previewScheduledFire,
   repeatFromForm,
   repeatSummary,
   updateScheduledTask,
   EMPTY_SCHEDULED_TASK_FORM as EMPTY_FORM,
   SCHEDULED_TASKS_CHANGED_EVENT,
+  type ScheduledFirePreview,
   type ScheduledTask,
   type ScheduledTaskFormState as FormState,
   type ScheduledTaskRepeat,
@@ -500,8 +502,47 @@ function TaskForm({
   onSubmit: () => void;
 }) {
   const copy = useCopy();
+  const language = useLanguage();
   const daysInvalid = !formDaysValid(form);
   const canSubmit = form.prompt.trim().length > 0 && !daysInvalid && !submitting;
+
+  // Next-fire preview: shows the consequence of the rule at decision
+  // time — a daily 09:00 task created at 10:00 first fires *tomorrow*,
+  // and moving an already-fired time later today fires again today
+  // ("保存后将立即触发"). Calendar math stays Rust-side (issue C);
+  // deps are the rule fields only, so prompt keystrokes don't re-invoke.
+  const { id: taskId, repeatKind, weekdays, monthdays, timeOfDay } = form;
+  const [preview, setPreview] = useState<ScheduledFirePreview | null>(null);
+  useEffect(() => {
+    if (
+      (repeatKind === "weekly" && weekdays.length === 0) ||
+      (repeatKind === "monthly" && monthdays.length === 0)
+    ) {
+      // Deferred reset (react-hooks/set-state-in-effect convention).
+      const t = setTimeout(() => setPreview(null), 0);
+      return () => clearTimeout(t);
+    }
+    // Core normalizes (sorts/dedups) day sets; no need to pre-sort here.
+    const repeat: ScheduledTaskRepeat =
+      repeatKind === "daily"
+        ? { kind: "daily" }
+        : repeatKind === "weekly"
+          ? { kind: "weekly", weekdays }
+          : { kind: "monthly", monthdays };
+    let cancelled = false;
+    previewScheduledFire({ repeat, timeOfDay, taskId: taskId ?? undefined })
+      .then((p) => {
+        if (!cancelled) setPreview(p);
+      })
+      .catch(() => {
+        // Invalid input or no Tauri runtime (browser dev): no preview
+        // line rather than a broken one.
+        if (!cancelled) setPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId, repeatKind, weekdays, monthdays, timeOfDay]);
   const dayChipClass = (active: boolean) =>
     cn(
       "size-7 rounded-sm border text-[12px] outline-none",
@@ -629,6 +670,22 @@ function TaskForm({
           />
         </Field>
       </div>
+
+      {preview && (
+        <p className="text-[11.5px] text-ink-muted">
+          {preview.dueNow
+            ? copy.scheduled.previewImmediate(
+                formatFireTime(preview.nextFireAt, language),
+              )
+            : form.id === null
+              ? copy.scheduled.previewFirst(
+                  formatFireTime(preview.nextFireAt, language),
+                )
+              : copy.scheduled.previewNext(
+                  formatFireTime(preview.nextFireAt, language),
+                )}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
         <Field label={copy.scheduled.projectLabel}>
