@@ -1,6 +1,10 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Play, Plus, Trash, X as XIcon } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
+import {
+  enable as enableAutostart,
+  isEnabled as isAutostartEnabled,
+} from "@tauri-apps/plugin-autostart";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
@@ -119,6 +123,11 @@ export function ScheduledTasksDialog({
   const [form, setForm] = useState<FormState | null>(null);
   const [deleting, setDeleting] = useState<ScheduledTask | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [autostartEnabled, setAutostartEnabled] = useState<boolean | null>(
+    null,
+  );
+  const [autostartBusy, setAutostartBusy] = useState(false);
+  const [autostartError, setAutostartError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     listScheduledTasks()
@@ -133,6 +142,7 @@ export function ScheduledTasksDialog({
       setForm(null);
       setDeleting(null);
       setSubmitting(false);
+      setAutostartError(null);
       reload();
     }, 0);
     // Core emits on every change, including scheduler fires — keep the
@@ -143,6 +153,46 @@ export function ScheduledTasksDialog({
       void unlisten.then((fn) => fn());
     };
   }, [open, reload]);
+
+  // Reliability-precondition hint (issue 14): scheduled fires need a
+  // living Galley, and the common silent gap is launch-at-login being
+  // off — after a reboot the whole day's fires are dropped without a
+  // trace. Contextual, not a Settings relocation: the footer warns
+  // only while autostart is off AND an enabled task exists, with a
+  // one-click fix, and reverts to the static note once resolved.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    isAutostartEnabled()
+      .then((v) => {
+        if (!cancelled) setAutostartEnabled(v);
+      })
+      .catch((e: unknown) => {
+        // Browser dev / plugin unavailable: stay unknown → static
+        // footer, never a false alarm.
+        console.warn("[scheduled] autostart isEnabled failed.", e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+  const handleEnableAutostart = () => {
+    if (autostartBusy) return;
+    setAutostartBusy(true);
+    setAutostartError(null);
+    enableAutostart()
+      .then(() => isAutostartEnabled())
+      .then(setAutostartEnabled)
+      .catch((e: unknown) => {
+        // Same wording as the Settings toggle — it is the same action.
+        setAutostartError(
+          copy.settings.general.launchAtLoginError(
+            e instanceof Error ? e.message : String(e),
+          ),
+        );
+      })
+      .finally(() => setAutostartBusy(false));
+  };
 
   const sessionsById = useMemo(
     () => new Map(sessions.map((s) => [s.id, s])),
@@ -333,9 +383,37 @@ export function ScheduledTasksDialog({
                   ))
                 )}
               </div>
-              <p className="border-t border-line/70 px-5 py-2.5 text-[11.5px] text-ink-muted">
-                {copy.scheduled.runsOnlyWhileRunning}
-              </p>
+              <div className="border-t border-line/70 px-5 py-2.5">
+                {autostartEnabled === false && tasks.some((t) => t.enabled) ? (
+                  <>
+                    <p className="text-[11.5px] text-warning">
+                      {copy.scheduled.autostartHint}{" "}
+                      <button
+                        type="button"
+                        disabled={autostartBusy}
+                        onClick={handleEnableAutostart}
+                        className={cn(
+                          "font-medium underline decoration-warning/40 underline-offset-2",
+                          "outline-none hover:decoration-warning",
+                          "focus-visible:ring-2 focus-visible:ring-brand/30",
+                          "disabled:opacity-60",
+                        )}
+                      >
+                        {copy.scheduled.autostartEnable}
+                      </button>
+                    </p>
+                    {autostartError && (
+                      <p className="mt-1 text-[11.5px] text-error">
+                        {autostartError}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[11.5px] text-ink-muted">
+                    {copy.scheduled.runsOnlyWhileRunning}
+                  </p>
+                )}
+              </div>
             </>
           )}
         </Dialog.Content>

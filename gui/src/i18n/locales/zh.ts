@@ -1576,6 +1576,8 @@ export const zhCopy = {
     exampleArchivePrompt:
       "把上个月新增的截图和文档按「2026-06」这样的月份文件夹归档，并输出一份归档清单。",
     runsOnlyWhileRunning: "仅在 Galley 运行时触发；错过的时间当天内补跑一次。",
+    autostartHint: "Galley 未设为开机自动启动，电脑重启后定时任务不会触发。",
+    autostartEnable: "设为开机自动启动",
     newTask: "新建定时任务",
     editTask: "编辑定时任务",
     promptLabel: "Prompt",

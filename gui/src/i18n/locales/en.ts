@@ -1663,6 +1663,9 @@ export const enCopy: AppCopy = {
       "Move last month's new screenshots and documents into a month-named folder like “2026-06”, and produce an archive list.",
     runsOnlyWhileRunning:
       "Fires only while Galley is running; a missed time is caught up once within the same day.",
+    autostartHint:
+      "Galley doesn't launch at login — after a restart, scheduled tasks won't fire.",
+    autostartEnable: "Turn on launch at login",
     newTask: "New scheduled task",
     editTask: "Edit scheduled task",
     promptLabel: "Prompt",
