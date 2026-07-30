@@ -295,6 +295,8 @@ export const enCopy: AppCopy = {
     imageOnlyFallback: "Please look at this image.",
     pastedImage: "Pasted image",
     attachImage: "Attach image",
+    attachTooltip: "Add images or reference files",
+    referenceFiles: "Reference files…",
     removeImage: "Remove image",
     dropToAttach: "Drop to add images or reference files",
     dropFilesOnly: "Drop to reference files (images aren't supported on this runtime)",

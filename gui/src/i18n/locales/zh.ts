@@ -279,6 +279,8 @@ export const zhCopy = {
     imageOnlyFallback: "请看这张图片。",
     pastedImage: "已粘贴图片",
     attachImage: "添加图片",
+    attachTooltip: "添加图片或引用文件",
+    referenceFiles: "引用文件…",
     removeImage: "移除图片",
     dropToAttach: "拖放以添加图片或引用文件",
     dropFilesOnly: "拖放以引用文件（当前运行时不支持图片）",

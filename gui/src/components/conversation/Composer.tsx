@@ -1,4 +1,5 @@
 import { Target } from "@phosphor-icons/react";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   forwardRef,
   useCallback,
@@ -291,6 +292,22 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (draftKey) dropComposerDraft(draftKey);
     };
 
+    // 📎 → "reference files…": native path picker feeding the same
+    // placeholder insertion as a drop. Whatever the user picks becomes a
+    // reference — the menu split (image vs reference) already carried
+    // the intent, so no extension-based re-routing here.
+    const handleReferenceFiles = async () => {
+      try {
+        const picked = await openFileDialog({ multiple: true });
+        if (!picked) return;
+        await insertPathReferences(Array.isArray(picked) ? picked : [picked]);
+      } catch (err) {
+        // No Tauri runtime (web-only session) or dialog failure — the
+        // click simply does nothing beyond this log.
+        console.warn("[Composer] reference-files dialog failed", err);
+      }
+    };
+
     const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
       // Image-bearing pastes belong to useImageAttachments; if it consumed
       // the paste, stop before the text / paste-fold path below.
@@ -475,12 +492,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     requestAnimationFrame(() => textareaRef.current?.focus());
                   }}
                 />
-                {imagesEnabled && (
-                  <ComposerAttachButton
-                    disabled={disabled || stopMode}
-                    onPick={() => fileInputRef.current?.click()}
-                  />
-                )}
+                <ComposerAttachButton
+                  disabled={disabled || stopMode}
+                  imagesEnabled={imagesEnabled}
+                  onPickImages={() => fileInputRef.current?.click()}
+                  onReferenceFiles={() => void handleReferenceFiles()}
+                />
               </div>
               <ComposerGoalControls
                 canShowGoalEntry={canShowGoalEntry}
