@@ -1,6 +1,11 @@
 # 03: 文件路径占位符——插入、registry、提交时展开
 
-Status: ready-for-agent
+Status: done（2026-07-29 实现完成；typecheck/lint/vitest 全过，纯函数层
+11 个新用例。实现：`lib/composer-file-ref.ts` + `hooks/useFileReferences.ts`，
+结构镜像 paste-fold；展开经 Composer 的 `expandComposerPlaceholders` 统一
+覆盖提交 / Goal / draft 写通三路。展开采用"registry 精确串匹配"，比
+paste-fold 更严——占位符内任何手改都视为放弃展开。draft 按既有约定存展开
+后文本，registry 无需跨挂载存活。）
 Blocked by: 02
 
 （纯函数层不依赖 02，可并行先做并单测；最终接线依赖 02 的非图片分流挂钩。）

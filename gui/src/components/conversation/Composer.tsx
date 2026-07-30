@@ -25,6 +25,7 @@ import { COMPOSER_MAX_HEIGHT_PX } from "@/components/conversation/composer-style
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useComposerFocus } from "@/hooks/useComposerFocus";
 import { useComposerGoal } from "@/hooks/useComposerGoal";
+import { useFileReferences } from "@/hooks/useFileReferences";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { usePasteFold } from "@/hooks/usePasteFold";
 import { IMAGE_ACCEPT, type ImageBlockReason } from "@/lib/composer-images";
@@ -117,6 +118,23 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const composerRootRef = useRef<HTMLDivElement>(null);
 
+    // File references ([File #N: name] placeholders for dropped / picked
+    // non-image paths, expanded to absolute paths at submit). Declared
+    // before the image hook because the drop intake below routes its
+    // non-image subset here.
+    const {
+      insertPathReferences,
+      expandFileRefPlaceholders,
+      resetFileRefRegistry,
+    } = useFileReferences({
+      text,
+      textareaRef,
+      applyValue: (next) => {
+        setInternal(next);
+        onChange?.(next);
+      },
+    });
+
     // Image attachments (pending tiles, hidden file input, preview dialog,
     // and the paste / drop / picker intake) live in their own hook so the
     // object-URL lifetime bookkeeping doesn't tangle with the textarea.
@@ -143,6 +161,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // Drop follows typing: whenever the textarea accepts input, the
       // window accepts a drop (PRD 定案 6).
       dropEnabled: !disabled,
+      onNonImagePaths: (paths) => void insertPathReferences(paths),
       onTextDropBlocked,
     });
 
@@ -160,6 +179,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         },
       });
 
+    // Both placeholder families resolved: paste folds first, then file
+    // references. Order doesn't matter (disjoint grammars); what matters
+    // is that every submit / draft-save path goes through this single
+    // helper so the two registries can't drift apart.
+    const expandComposerPlaceholders = useCallback(
+      (s: string) => expandFileRefPlaceholders(expandPastePlaceholders(s)),
+      [expandFileRefPlaceholders, expandPastePlaceholders],
+    );
+
     // Draft parking (write-through): every text / attachment change
     // updates the parked draft so unmount needs no save step (an
     // unmount-time save could race the image hook's URL bookkeeping).
@@ -167,10 +195,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     useEffect(() => {
       if (!draftKey || isControlled) return;
       saveComposerDraft(draftKey, {
-        text: expandPastePlaceholders(text),
+        text: expandComposerPlaceholders(text),
         images: pendingImages,
       });
-    }, [draftKey, isControlled, text, pendingImages, expandPastePlaceholders]);
+    }, [
+      draftKey,
+      isControlled,
+      text,
+      pendingImages,
+      expandComposerPlaceholders,
+    ]);
 
     // Focus contract: an appearing composer takes the caret, window
     // activation restores it, and both yield to competing claims — see
@@ -184,10 +218,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         } else {
           setInternal(next);
         }
-        // Programmatic prefill is not a user paste — drop any folded
-        // placeholders so the next paste counter starts at #1 and
-        // the registry doesn't carry stale entries.
+        // Programmatic prefill is not a user paste or drop — reset both
+        // placeholder registries so counters start at #1 and no stale
+        // entries linger.
         resetPasteRegistry();
+        resetFileRefRegistry();
         if (options.clearImagesAfterPrefill) clearImages();
         // Focus + caret at end on the next frame, after React has
         // committed the new textarea value. setSelectionRange before
@@ -200,7 +235,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           ta.setSelectionRange(end, end);
         });
       },
-      [isControlled, onChange, clearImages, resetPasteRegistry],
+      [isControlled, onChange, clearImages, resetPasteRegistry, resetFileRefRegistry],
     );
 
     // Imperative API for callers that need to seed the textarea
@@ -248,6 +283,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         setInternal("");
       }
       resetPasteRegistry();
+      resetFileRefRegistry();
       clearImages();
       // Synchronous drop: the write-through effect would clear the entry
       // on the next render, but submit can unmount this Composer first
@@ -297,7 +333,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       hasText,
       hasPendingImages,
       onImageBlocked,
-      getSubmittableText: () => expandPastePlaceholders(text).trim(),
+      getSubmittableText: () => expandComposerPlaceholders(text).trim(),
       resetDraftAfterSubmit,
       focusTextarea: () => {
         requestAnimationFrame(() => textareaRef.current?.focus());
@@ -317,7 +353,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     }, [showByTheWayRequiredHint]);
 
     const handleSubmit = () => {
-      const expanded = expandPastePlaceholders(text);
+      const expanded = expandComposerPlaceholders(text);
       const trimmed = expanded.trim();
       if ((!trimmed && !hasPendingImages) || disabled) return;
       if (requiresModelConfig) {
