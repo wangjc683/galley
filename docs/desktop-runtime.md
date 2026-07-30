@@ -182,6 +182,28 @@ deliberately excluded:
   (see the setup hook in `core/src/app_setup.rs`); the plugin must not restore a
   stale decorations value over that.
 
+The curated default geometry (1480×920 centered, sidebar at 20%) is
+reachable on demand via **Reset to Default Layout** (2026-07-30): the macOS
+Window menu, the command palette entry (also the Windows entry point), and
+a sidebar-separator double-click for the split-only half. All converge on
+`gui/src/lib/layout-reset.ts` + the `reset_window_layout` command; golden
+constants live in `core/src/app_setup.rs` and must match `tauri.conf.json`.
+First launches center via `center: true`, and `fit_window_to_monitor`
+snaps the window to a monitor-clamped golden size only when it overflows
+the current display (first run on small screens, or restored state after a
+monitor swap). A brief same-day launch-amnesia experiment and its reversal
+are chronicled in devlog
+[2026-07-30-window-geometry-amnesia](./devlog/2026-07-30-window-geometry-amnesia.md).
+
+Since 2026-07-29 the main window runs with `dragDropEnabled: true`: OS
+drags arrive through Tauri's native `onDragDropEvent` stream (real
+filesystem paths; the composer's only drop intake), and HTML5 drag-and-drop
+never fires in the webview — including text / URL drags, which are consumed
+with no payload and surfaced as a copy-paste toast. This is an upstream
+wry limitation accepted deliberately; the reasoning and source-level
+findings live in `.scratch/composer-file-drop/issues/01` (devlog entry
+lands when that feature's tracker closes).
+
 Tauri updater signing is separate from macOS codesigning / Windows Authenticode.
 The private updater key must stay in release secrets; only the public key is
 safe to embed in app builds.

@@ -64,6 +64,22 @@ Post-release follow-up:
    the release workflow, bundled Python, updater manifest, and smoke path all
    support `aarch64-pc-windows-msvc`.
 
+## Unreleased On Main (post-`v0.4.0`)
+
+- **Composer file drop** (2026-07-29, `.scratch/composer-file-drop/`): drag
+  any file / folder into the window (or 📎 → "添加文件…") to insert a
+  `[File #N: name]` placeholder that expands to the absolute path on send;
+  images keep the existing attachment pipeline, now fed by Tauri-native
+  drag-drop (`dragDropEnabled: true` — HTML5 DnD including text drags is
+  gone, by accepted trade-off). Done through issue 06 (empty-draft
+  discovery hint); **issue 05 Windows smoke is the open gate** before the
+  tracker can close.
+- **Window layout** (2026-07-30, devlog
+  [2026-07-30-window-geometry-amnesia](./devlog/2026-07-30-window-geometry-amnesia.md)):
+  geometry persistence stays; "Reset to Default Layout" added (Window menu /
+  command palette / separator double-click), plus first-launch centering and
+  a small-display clamp.
+
 ## Status Dashboard
 
 | Area | Status | Read More |

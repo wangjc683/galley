@@ -117,6 +117,16 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] 长代码块横向滚动条同样是细条；纵横双条相交处**没有白色角块**
 - [ ] 流式输出使转录内容跨过溢出阈值时，居中列**不横移**（scrollbar-gutter 生效）
 
+### Drag & drop（2026-07-29 原生迁移，WebView2 是最大回归面）
+
+完整专项清单见 `.scratch/composer-file-drop/issues/05`（tracker 关闭后并回此处）：
+
+- [ ] 拖 PNG 进窗口 → 缩略图附件条（回归项，最重要）
+- [ ] 拖 PDF / 文件夹 → `[File #N: …]` 占位符，发送后展开为反斜杠原样路径
+- [ ] 从浏览器拖选中文字 → toast「不支持拖入文本」，无静默失效
+- [ ] 拖放与 TopBar 双击最大化 / composer focus 行为无交互问题
+- [ ] 📎 菜单「添加文件…」原生对话框正常
+
 ### Keyboard shortcuts
 
 - [ ] **Ctrl+K** opens Command Palette
