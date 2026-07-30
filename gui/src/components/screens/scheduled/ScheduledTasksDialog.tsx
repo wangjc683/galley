@@ -386,22 +386,23 @@ export function ScheduledTasksDialog({
               <div className="border-t border-line/70 px-5 py-2.5">
                 {autostartEnabled === false && tasks.some((t) => t.enabled) ? (
                   <>
-                    <p className="text-[11.5px] text-warning">
-                      {copy.scheduled.autostartHint}{" "}
-                      <button
-                        type="button"
+                    {/* Warning semantics live in the text; the fix is a
+                     * neutral system button (real hover/press feedback),
+                     * not a hand-rolled inline link. */}
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11.5px] text-warning">
+                        {copy.scheduled.autostartHint}
+                      </p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="shrink-0"
                         disabled={autostartBusy}
                         onClick={handleEnableAutostart}
-                        className={cn(
-                          "font-medium underline decoration-warning/40 underline-offset-2",
-                          "outline-none hover:decoration-warning",
-                          "focus-visible:ring-2 focus-visible:ring-brand/30",
-                          "disabled:opacity-60",
-                        )}
                       >
                         {copy.scheduled.autostartEnable}
-                      </button>
-                    </p>
+                      </Button>
+                    </div>
                     {autostartError && (
                       <p className="mt-1 text-[11.5px] text-error">
                         {autostartError}
