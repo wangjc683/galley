@@ -386,15 +386,17 @@ export function ScheduledTasksDialog({
               <div className="border-t border-line/70 px-5 py-2.5">
                 {autostartEnabled === false && tasks.some((t) => t.enabled) ? (
                   <>
-                    {/* Warning semantics live in the text; the fix is a
-                     * neutral system button (real hover/press feedback),
-                     * not a hand-rolled inline link. */}
-                    <div className="flex items-center justify-between gap-3">
+                    {/* One semantic unit: problem statement → fix, so
+                     * the action sits right after the text (no
+                     * justify-between gulf). The visual weight stays on
+                     * the sentence; ghost keeps the button quiet at
+                     * rest with full hover/press feedback. */}
+                    <div className="flex items-center gap-2">
                       <p className="text-[11.5px] text-warning">
                         {copy.scheduled.autostartHint}
                       </p>
                       <Button
-                        variant="secondary"
+                        variant="ghost"
                         size="sm"
                         className="shrink-0"
                         disabled={autostartBusy}
