@@ -62,11 +62,25 @@ describe("resolveComposerHint", () => {
     );
   });
 
-  it("idle: plain Enter hint, or the Goal-preview semantic when armed", () => {
-    expect(resolveComposerHint(state({}))).toBe("enterHint");
+  it("idle + empty draft: states the drag-to-reference capability", () => {
+    // Nothing to send yet — the Enter legend would be dead weight, so
+    // the slot teaches the drop capability instead. A live truth like
+    // every other key here; it never retires.
+    expect(resolveComposerHint(state({}))).toBe("dragToReferenceHint");
+  });
+
+  it("idle + typing: Enter hint, or the Goal-preview semantic when armed", () => {
+    expect(resolveComposerHint(state({ hasText: true }))).toBe("enterHint");
     expect(resolveComposerHint(state({ effectiveGoalArmed: true }))).toBe(
       "startGoalWithEnter",
     );
+    // Armed wins over the drag lesson even with an empty draft — Enter's
+    // changed meaning is the more load-bearing fact.
+    expect(
+      resolveComposerHint(
+        state({ effectiveGoalArmed: true, hasText: true }),
+      ),
+    ).toBe("startGoalWithEnter");
     // While running, arming is irrelevant — the stop gate wins.
     expect(
       resolveComposerHint(state({ stopMode: true, effectiveGoalArmed: true })),

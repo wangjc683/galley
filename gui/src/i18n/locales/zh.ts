@@ -273,6 +273,7 @@ export const zhCopy = {
     stop: "停止",
     stopping: "停止中…",
     enterHint: "Enter 发送 · Shift+Enter 换行",
+    dragToReferenceHint: "拖入任意文件或文件夹即可引用其路径",
     newlineHint: "Shift+Enter 换行",
     byTheWaySendHint: "以 /btw 开头 · Enter 发送",
     byTheWayPrefixHint: "请先以 /btw 开头",

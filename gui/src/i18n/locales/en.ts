@@ -289,6 +289,7 @@ export const enCopy: AppCopy = {
     stop: "Stop",
     stopping: "Stopping…",
     enterHint: "Enter sends · Shift+Enter for a new line",
+    dragToReferenceHint: "Drop any file or folder here to reference its path",
     newlineHint: "Shift+Enter for a new line",
     byTheWaySendHint: "Start with /btw · Enter sends",
     byTheWayPrefixHint: "Start with /btw first",

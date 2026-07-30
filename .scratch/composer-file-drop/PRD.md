@@ -115,6 +115,14 @@ Composer 已有成熟的「占位符 → 提交时展开」机制（`lib/compose
   把静默失效变成有解释的失效。
 - backlog 备选（不进 v1）：macOS 读 `NSPasteboard(.drag)` 兜回文本。
 
+### 9. 发现性：空稿 footer hint，永不退休（2026-07-29 JC 裁决，issue 06）
+
+拖放能力的三个教学面：拖放 overlay（意图时刻）、📎 菜单（可见入口）、
+footer hint（空稿空闲时显示「拖入任意文件或文件夹即可引用其路径」，打字
+后交接回 Enter 图例）。hint 按状态交接而非定时轮播（轮播即闪烁噪音）；
+与 Enter 提示同语义——"当下为真的能力图例"，永不退休、无持久化状态。
+已否决：常驻 placeholder 文案、粘贴路径检测（backlog）、onboarding 蒙层。
+
 ## 技术风险与验证清单
 
 - [x] **早期 spike**：`dragDropEnabled: true` 后文本/URL 拖拽会被原生事件

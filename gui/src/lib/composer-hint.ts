@@ -20,6 +20,11 @@
  *   it afterwards.
  * - /btw staged — Enter really sends again, so the full hint returns.
  *
+ * Idle has its own hasText hand-off: an empty draft shows the
+ * drag-to-reference capability (nothing to send yet, so the Enter
+ * legend would be dead weight); the first typed character swaps it for
+ * the Enter legend, which is now live.
+ *
  * The transient `byTheWayPrefixHint` stays as the correction after a
  * blocked Enter attempt.
  */
@@ -30,7 +35,8 @@ export type ComposerHintKey =
   | "byTheWaySendHint"
   | "newlineHint"
   | "enterHint"
-  | "startGoalWithEnter";
+  | "startGoalWithEnter"
+  | "dragToReferenceHint";
 
 export interface ComposerHintState {
   /** The caller wants a keyboard hint at all (surface-level gate). */
@@ -59,5 +65,11 @@ export function resolveComposerHint(s: ComposerHintState): ComposerHintKey | nul
   // Armed changes what Enter does (opens the Goal preview, not send) —
   // with the wide "启动 Goal" pill gone, this hint and the button
   // tooltip carry that semantic.
-  return s.effectiveGoalArmed ? "startGoalWithEnter" : "enterHint";
+  if (s.effectiveGoalArmed) return "startGoalWithEnter";
+  // Idle hand-off on hasText: with an empty draft there is nothing to
+  // send, so the Enter legend is at its least useful — that gap is where
+  // the drag-to-reference capability gets stated instead. Like every
+  // other key in this slot it is a live truth, not an expiring tip, so
+  // it never retires (JC 裁决 A, .scratch/composer-file-drop/issues/06).
+  return s.hasText ? "enterHint" : "dragToReferenceHint";
 }
