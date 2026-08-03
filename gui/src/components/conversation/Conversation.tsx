@@ -182,20 +182,24 @@ function AgentTurnView({
   // subtitle and again as the body right below it. See
   // summaryEchoesAnswer for GA's exact fallback and normalization.
   //
-  // Dropping the echo outright leaves a bare "第 N 步" with a hairline
-  // under it, which reads as a failed load next to a turn where the
-  // model did write its `<summary>` — the same product showing two
-  // different shapes for a compliance difference the user cannot see.
-  // So a final-answer turn borrows GA's own no-tool fallback wording
-  // (ga.py:599) to fill the slot. Turns that really did call tools
-  // keep the plain step number instead: the tool callouts right below
-  // already say what happened, and "answered directly" would be false.
+  // Dropping the echo outright leaves a bare "第 N 步", which reads as
+  // a failed load next to a turn where the model did write its
+  // `<summary>` — the same product showing two different shapes for a
+  // compliance difference the user cannot see. GA never emits an empty
+  // summary (686/686 rows carry one), so that bare shape would be ours
+  // alone; both branches need words. Wording follows GA's own two-way
+  // fallback at ga.py:599 — the direct-answer line for a turn with no
+  // real tools, the tool name otherwise, which stays true even though
+  // the callouts below repeat it in their own register.
   const summaryIsEcho = summaryEchoesAnswer(turn.summary, answerText);
-  const markerSummary = summaryIsEcho
-    ? isFinalTurn
+  const realToolNames = visibleTools
+    .filter((t) => t.name !== "no_tool")
+    .map((t) => t.name);
+  const markerSummary = !summaryIsEcho
+    ? turn.summary
+    : realToolNames.length === 0
       ? copy.conversation.stepDirectAnswer
-      : undefined
-    : turn.summary;
+      : copy.conversation.stepCalledTools(realToolNames);
 
   return (
     <div>

@@ -1305,8 +1305,12 @@ export const zhCopy = {
     denied: "已拒绝",
     step: (index: number) => `第 ${index} 步`,
     /** GA 的兜底口径（ga.py:599）。模型漏写 <summary> 时 GA 会把整段
-     *  回答当摘要，Galley 抑制该回声后用这句占位，避免步号后空一片。 */
+     *  回答当摘要，Galley 抑制该回声后用这两句占位，避免步号后空一片。
+     *  GA 从不产出空 summary，所以裸步号是 Galley 自己造出来的形态，
+     *  两个分支都必须有词可填。 */
     stepDirectAnswer: "直接回答了用户问题",
+    stepCalledTools: (names: string[]) =>
+      names.length === 1 ? `调用了 ${names[0]}` : `调用了 ${names.length} 个工具`,
     thinking: "思考中…",
     answering: "正在回答…",
     runWorking: "工作中",

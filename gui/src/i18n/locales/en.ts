@@ -1368,6 +1368,8 @@ export const enCopy: AppCopy = {
     denied: "Denied",
     step: (index) => `Step ${index}`,
     stepDirectAnswer: "Answered the question directly",
+    stepCalledTools: (names) =>
+      names.length === 1 ? `Called ${names[0]}` : `Called ${names.length} tools`,
     thinking: "Thinking…",
     answering: "Answering…",
     runWorking: "Working",
