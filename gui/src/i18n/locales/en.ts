@@ -1367,6 +1367,7 @@ export const enCopy: AppCopy = {
     failed: "Failed",
     denied: "Denied",
     step: (index) => `Step ${index}`,
+    stepDirectAnswer: "Answered the question directly",
     thinking: "Thinking…",
     answering: "Answering…",
     runWorking: "Working",

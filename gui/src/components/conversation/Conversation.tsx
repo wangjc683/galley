@@ -156,6 +156,7 @@ function AgentTurnView({
   // live and replay paths (rowsToTurns produces the same shape).
   // We keep it in the underlying turn.tools (SQLite audit trail) and
   // only drop it at render time.
+  const copy = useCopy();
   const visibleTools = turn.tools.filter((t) => t.name !== "ask_user");
   // The ask_user question otherwise has no visible home once the live
   // bubble clears: these turns usually carry no `finalAnswer` (the LLM
@@ -180,8 +181,20 @@ function AgentTurnView({
   // the turn summary, which would print the answer once as the marker
   // subtitle and again as the body right below it. See
   // summaryEchoesAnswer for GA's exact fallback and normalization.
-  const markerSummary = summaryEchoesAnswer(turn.summary, answerText)
-    ? undefined
+  //
+  // Dropping the echo outright leaves a bare "第 N 步" with a hairline
+  // under it, which reads as a failed load next to a turn where the
+  // model did write its `<summary>` — the same product showing two
+  // different shapes for a compliance difference the user cannot see.
+  // So a final-answer turn borrows GA's own no-tool fallback wording
+  // (ga.py:599) to fill the slot. Turns that really did call tools
+  // keep the plain step number instead: the tool callouts right below
+  // already say what happened, and "answered directly" would be false.
+  const summaryIsEcho = summaryEchoesAnswer(turn.summary, answerText);
+  const markerSummary = summaryIsEcho
+    ? isFinalTurn
+      ? copy.conversation.stepDirectAnswer
+      : undefined
     : turn.summary;
 
   return (
