@@ -2711,6 +2711,7 @@ function setActiveSession(id) {
   r.draftEl = null;
   resetTypewriterState(r);
   renderAllMessages(sess);
+  scrollBottom(true);
   setBusy(sess, rt(sess).busy);
   renderSessionList();
   refreshPlanBar(null);

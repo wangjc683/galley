@@ -86,7 +86,7 @@ Nothing yet.
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up | [devlog](./devlog/2026-07-24-v0.4.0-release.md) |
 | Release path | v0.4.1 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Locked to audited upstream `4086d5c` (audited 2026-07-23; first shipped in `v0.4.0` after the `5257dec → 1d3c1a09 → 4086d5c` upgrades — pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Locked to audited upstream `d8d90ee` (audited 2026-08-03, not yet in a release — `v0.4.1` shipped `4086d5c`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 

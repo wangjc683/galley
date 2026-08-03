@@ -81,9 +81,8 @@ def agent_runner_loop(client, system_prompt, user_input, handler, tools_schema,
             gen = handler.dispatch(tool_name, args, response, index=ii, tool_num=len(tool_calls))
             try:
                 v = next(gen)
-                def proxy(): yield v; return (yield from gen)
-                if verbose: yield '`````\n'
-                outcome = (yield from proxy()) if verbose else exhaust(proxy())
+                if verbose: yield '`````\n' + v
+                outcome = (yield from gen) if verbose else exhaust(gen)
                 if verbose: yield '`````\n'
             except StopIteration as e: outcome = e.value
             

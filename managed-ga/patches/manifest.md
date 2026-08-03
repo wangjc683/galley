@@ -2,9 +2,17 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-07-23` against upstream
-`4086d5c858b90e10eb24a106ea3c41ac729bc00e` (14-patch stack, through `0015`).
-(History from the 2026-07-23 `4086d5c` upgrade: upstream force-pushed a
+Last replay verified: `2026-08-03` against upstream
+`d8d90eef8c37cb1ea9aae078a3d099a7d7a759df` (14-patch stack, through `0015`).
+(History from the 2026-08-03 `d8d90ee` upgrade: commit-chain rebase with one
+real conflict. `0007`: upstream capped `retry-after` (`max_retry_after`,
+default 60s) by rewriting the same `_stream_with_retry` `err =` line the
+patch's codex 429 quota enrichment targets — resolved by keeping both in
+order, since the enrichment mutates `body` and upstream's fuller `err` format
+then consumes it. The other 13 patches replayed clean; `llmcore.py` hunks
+shifted from the new `STATS`, `active_response`, and Responses-API terminal
+event handling, all handled positionally by the rebase.
+History from the 2026-07-23 `4086d5c` upgrade: upstream force-pushed a
 rewritten `main` (commit messages anglicized; old SHAs unreachable), so the
 old baseline `1d3c1a09` only resolves in clones that fetched the pre-rewrite
 history — its tree is identical to new-history `8a75b39`. Commit-chain rebase

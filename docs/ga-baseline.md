@@ -15,17 +15,90 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `4086d5c858b90e10eb24a106ea3c41ac729bc00e`
+Locked commit: `d8d90eef8c37cb1ea9aae078a3d099a7d7a759df`
 
-- Tree hash: `3ce40434f799347e2ba6a9d07616bc29739a8162` (recorded since this
-  upgrade: the tree survives message-only history rewrites and proves code
-  identity when a commit SHA stops resolving upstream)
+- Tree hash: `d457b6e8b02c7895504c888da5e7ee064fb43f1a`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-07-23
+- Date audited: 2026-08-03
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `1d3c1a09dfdaa76ba5dee82725fa599df7c16be4` — **no longer
+- Previous baseline: `4086d5c858b90e10eb24a106ea3c41ac729bc00e`
+  (tree `3ce40434f799347e2ba6a9d07616bc29739a8162`)
+- Delta (`4086d5c..d8d90ee` = 20 commits): 20 files, ~971 insertions /
+  ~137 deletions. Roughly two thirds of the diff is upstream's own frontends
+  (`stapp.py` +299, new `frontends/hub.py` + `hub.html` WS peer hub,
+  `conductor.*`, `desktop/static/app.js`, `wechatapp.py`, `model_cmd.py`) plus
+  WeChat QR asset churn — all inert on Galley's path. Engine-core delta is
+  `llmcore.py` (+78), `agentmain.py`, `ga.py`, and `agent_loop.py`.
+- Result: no bridge protocol or dependency break; `pyproject.toml` did not
+  change at all. Patch-stack rebase had one real conflict (`0007`
+  `llmcore.py`: upstream's `retry-after` cap rewrote the same
+  `_stream_with_retry` `err =` line as the codex 429 quota enrichment — both
+  kept, enrichment first so it mutates `body` before upstream's format
+  consumes it).
+- Devlog: [GA upstream upgrade 4086d5c -> d8d90ee](./devlog/2026-08-03-ga-upstream-upgrade-4086d5c-to-d8d90ee.md)
+
+New in the `4086d5c` -> `d8d90ee` range:
+
+- `llmcore.py` — abort responsiveness: `_stream_with_retry` stores the live
+  response on `sess.active_response` and skips retrying when
+  `sess.should_stop()` is set, so a user stop actually tears the stream down
+  instead of letting it run to completion. Pairs with the `agentmain.abort()`
+  change below.
+- `llmcore.py` — `retry-after` capped by a new `max_retry_after` session
+  option (default 60s); an oversized server `Retry-After` used to hang the
+  session. This is the line `0007` conflicted on.
+- `llmcore.py` — Responses API robustness: `response.incomplete` and
+  `response.failed` are now handled as valid terminal events (that stream
+  never sends `[DONE]`, which previously triggered an empty-response retry
+  storm), and `reasoning_text` is captured into a thinking block.
+- `llmcore.py` — **`thinking_delta` now yields into the output stream**
+  (`_parse_claude_sse`), emitting *untagged* reasoning text. This is an open
+  coupling break, **default-on for managed Anthropic models** — see
+  [the devlog](./devlog/2026-08-03-ga-upstream-upgrade-4086d5c-to-d8d90ee.md)
+  for the full chain. Short version: the `<thinking>` tags Galley strips are a
+  *prompted convention* (GA's system prompt at `llmcore.py:894` asks the model
+  to wrap its reasoning in them, and it arrives as ordinary `text_delta`),
+  which is a different channel from the Anthropic API's native thinking blocks
+  that arrive as `thinking_delta`. Galley's
+  `core/src/commands/managed_model.rs` ships `"thinking_type": "adaptive"` as
+  the Anthropic-protocol default; GA's `_apply_claude_thinking` sends any
+  non-`enabled` value straight through, so thinking is requested on every
+  managed Anthropic session. The resulting untagged deltas defeat
+  `runner/workbench_bridge.py`'s `_TAG_PATS` strip and render as normal
+  assistant text, breaking the "GA-raw, with tags" contract documented on
+  `TurnProgressEvent` in `runner/ipc.py`. `omit_thinking` is not a mitigation
+  (it only controls history inclusion, not the stream).
+- `llmcore.py` — `_fix_messages` no longer inserts a `{"type":"text","text":"\n"}`
+  separator when merging same-role messages, and now drops empty text blocks
+  (substituting `"."` when a message would end up empty) to avoid HTTP 400.
+  Relevant to Galley's history injection on restore.
+- `llmcore.py` — new module-level `STATS` dict feeding upstream `stapp`
+  runtime stats; additive, unused by Galley. `reasoning_effort: 'max'` now
+  maps to Claude `output_config.effort` alongside `xhigh`.
+- `agentmain.py` — `abort()` reaches into `llmclient.backend._sessions` to set
+  `should_stop` and close the live response. Guarded by
+  `if not self.is_running: return`, so patch `0001`'s `llmclient = None`
+  initial state is not reachable here. New `all_outputs` accumulator (input +
+  outputs per turn, capped 10000 → trimmed to 5000) and `_current_queue` let a
+  refreshed upstream UI re-attach to a live task; both are memory growth in
+  Galley's long-lived per-session child processes.
+- `ga.py` — `code_run` refuses `timeout > 600` with a message telling the model
+  to background long work; `file_patch` error strings changed from Chinese to
+  English.
+- `agent_loop.py` — the `proxy()` generator wrapper around the first dispatch
+  chunk is gone; in verbose mode that chunk is now concatenated onto the
+  opening fence marker. Content-equivalent, but a stream chunk-boundary change.
+  (First change to this file since the `5257dec` baseline.)
+- `frontends/hub.py` + `hub.html` (new) — upstream WS peer hub: multiple
+  frontends attach to one agent with a shared composer, busy-reject and abort;
+  `stapp` adopts hub tasks as real bubbles. Inert on Galley's path (WS/TCP is
+  outside Rule 2) but a product-direction signal worth tracking.
+
+Carried forward from the `8a75b39` -> `4086d5c` range (2026-07-23):
+
+- Baseline before that: `1d3c1a09dfdaa76ba5dee82725fa599df7c16be4` — **no longer
   reachable on upstream `main`**: upstream force-pushed a rewritten history
   (commit messages anglicized to conventional commits; code content
   untouched). The old baseline's tree is byte-identical to new-history
@@ -55,7 +128,7 @@ Locked commit: `4086d5c858b90e10eb24a106ea3c41ac729bc00e`
   `self.llmclient = None` on the patched `log_path` line — both kept).
 - Devlog: [GA upstream upgrade 1d3c1a09 -> 4086d5c](./devlog/2026-07-23-ga-upstream-upgrade-1d3c1a09-to-4086d5c.md)
 
-New in the `8a75b39` -> `4086d5c` range:
+Detail for that range:
 
 - `agentmain.py`: `load_llm_sessions` keeps the previously selected backend
   across mykey reloads by re-matching `backend.name` (sticky `llm_no`),

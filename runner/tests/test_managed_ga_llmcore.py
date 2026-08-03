@@ -155,6 +155,7 @@ def test_codex_stream_final_429_appends_quota_reset_hint(
     )
     monkeypatch.setattr(llmcore.time, "time", lambda: 1_700_000_000)
     sess = types.SimpleNamespace(
+        name="codex-test",
         max_retries=0,
         stream=True,
         connect_timeout=1,
@@ -206,6 +207,7 @@ def test_non_codex_stream_final_429_is_unchanged(
         raising=False,
     )
     sess = types.SimpleNamespace(
+        name="plain-test",
         max_retries=0,
         stream=True,
         connect_timeout=1,

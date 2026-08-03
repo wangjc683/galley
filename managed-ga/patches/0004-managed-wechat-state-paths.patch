@@ -10,11 +10,11 @@ diff --git a/frontends/wechatapp.py b/frontends/wechatapp.py
 -TOKEN_FILE.parent.mkdir(exist_ok=True)
 +TOKEN_FILE = Path(os.environ.get('GALLEY_WECHAT_TOKEN_FILE') or (Path.home() / '.wxbot' / 'token.json'))
 +TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-@@ -88 +89,3 @@ class WxBotClient:
+@@ -89 +90,3 @@ class WxBotClient:
 -                qrcode.make(url).save(str(self._tf.parent / 'wx_qr.png'))
 +                img = Path(os.environ.get('GALLEY_WECHAT_QR_FILE') or (self._tf.parent / 'wx_qr.png'))
 +                img.parent.mkdir(parents=True, exist_ok=True)
 +                qrcode.make(url).save(str(img))
-@@ -435 +438 @@ if __name__ == '__main__':
+@@ -496 +499 @@ if __name__ == '__main__':
 -    _logf = open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp', 'wechatapp.log'), 'a', encoding='utf-8', buffering=1)
 +    _logf = open(os.path.join(_TEMP_DIR, 'wechatapp.log'), 'a', encoding='utf-8', buffering=1)

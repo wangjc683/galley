@@ -6,10 +6,10 @@ diff --git a/llmcore.py b/llmcore.py
 -from datetime import datetime
 +import os, json, re, time, requests, sys, threading, urllib3, base64, importlib, uuid, pathlib, copy, socket
 +from datetime import datetime, timezone
-@@ -399,0 +400,2 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
+@@ -446,0 +447,2 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
 +                    if r.status_code == 429 and getattr(sess, 'codex_backend', False):
 +                        body = _codex_enrich_quota_error(sess, headers, body)
-@@ -418,0 +421,152 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
+@@ -466,0 +469,152 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
 +def _codex_account_id_from_jwt(access_token):
 +    try:
 +        parts = str(access_token or '').split('.')
@@ -162,7 +162,7 @@ diff --git a/llmcore.py b/llmcore.py
 +    except Exception as e:
 +        raise RuntimeError(f"Galley Codex credential refresh failed: {e}") from e
 +
-@@ -425,2 +579,11 @@ def _openai_stream(sess, messages):
+@@ -473,2 +627,11 @@ def _openai_stream(sess, messages):
 -    headers = {"Authorization": f"Bearer {sess.api_key}", "Content-Type": "application/json", "Accept": "text/event-stream", 'originator': 'codex_exec'}
 -    headers["User-Agent"] = sess.user_agent
 +    api_key = sess.api_key
@@ -176,22 +176,22 @@ diff --git a/llmcore.py b/llmcore.py
 +        if account_id: headers["ChatGPT-Account-ID"] = account_id
 +    else:
 +        headers["User-Agent"] = sess.user_agent
-@@ -428 +591 @@ def _openai_stream(sess, messages):
+@@ -476 +639 @@ def _openai_stream(sess, messages):
 -        url = auto_make_url(sess.api_base, "responses")
 +        url = f"{sess.api_base.rstrip('/')}/responses" if getattr(sess, 'codex_backend', False) else auto_make_url(sess.api_base, "responses")
-@@ -432,0 +596 @@ def _openai_stream(sess, messages):
+@@ -480,0 +644 @@ def _openai_stream(sess, messages):
 +        if getattr(sess, 'codex_backend', False): payload["store"] = False
-@@ -434 +598 @@ def _openai_stream(sess, messages):
+@@ -482 +646 @@ def _openai_stream(sess, messages):
 -        if sess.max_tokens: payload["max_output_tokens"] = sess.max_tokens
 +        if sess.max_tokens and not getattr(sess, 'codex_backend', False): payload["max_output_tokens"] = sess.max_tokens
-@@ -547,0 +712,4 @@ class BaseSession:
+@@ -595,0 +760,4 @@ class BaseSession:
 +        self.codex_backend = bool(cfg.get('codex_backend'))
 +        self.galley_api_key_ref = cfg.get('galley_api_key_ref') or ''
 +        ipc = cfg.get('galley_credential_ipc')
 +        self.galley_credential_ipc = ipc if isinstance(ipc, dict) else None
-@@ -564 +732 @@ class BaseSession:
+@@ -613 +781 @@ class BaseSession:
 -        self.stream = cfg.get('stream', True)
 +        self.stream = True if self.codex_backend else cfg.get('stream', True)
-@@ -572,0 +741,2 @@ class BaseSession:
+@@ -621,0 +790,2 @@ class BaseSession:
 +        if self.codex_backend and self.reasoning_effort == 'minimal':
 +            self.reasoning_effort = 'medium'

@@ -298,6 +298,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ### 2026-08-03
 - [Question Rail:tooltip 加回答预览,用 final answer 而非 summary](./2026-08-03-question-rail-answer-preview.md) — 缺口定位为辨识而非导航,故只改 tooltip 不加 dot;初判推荐 `AgentTurn.summary` 后翻代码改判(它是喂回 agent 的工作记忆、语义前瞻、最终答案轮 `no_tool` 框架失配);跳 ATX 标题取首个正文行;配对取最后一个非 null finalAnswer(JC 裁 (a) 案);逻辑抽进 `lib/rail-preview.ts` 并单测;tooltip 竖直阈值 6/94→10/90
+- [GA upstream 升级 4086d5c -> d8d90ee](./2026-08-03-ga-upstream-upgrade-4086d5c-to-d8d90ee.md) — 20 commits/11 天,2/3 是 upstream 前端(含新 `hub.py` WS peer hub)inert;引擎实质是中断响应性(`active_response`+`should_stop`)、`max_retry_after` 封顶、Responses API `incomplete`/`failed` 终止事件;方法论教训:零上下文 `git apply` 探针全绿≠无冲突,只有 commit-chain rebase 的 3-way merge 才测得出(`0007` codex 429 富化撞上游 retry-after 改写,两边保留);遗留耦合断裂:`thinking_delta` 现在吐**无标签**推理文本,而 Galley 剥的 `<thinking>` 标签是提示词约定(走 `text_delta`)、跟 API 原生 thinking block 是两条通道;因 `managed_model.rs` 默认 `thinking_type: adaptive`,对托管 Anthropic 模型**默认命中**(初判"不可达"系查错了开关名,已纠正),发版前须先修
 
 ## 格式约定
 
