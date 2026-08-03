@@ -7,6 +7,7 @@ import {
   USER_MSG_ANCHOR_TOP_PX,
 } from "@/lib/conversation-anchor";
 import { preventMouseFocus } from "@/lib/pointer-focus";
+import { buildRailExchanges } from "@/lib/rail-preview";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { Turn } from "@/types/conversation";
@@ -33,11 +34,22 @@ import type { Turn } from "@/types/conversation";
  * MainView's keyboard nav (no jarring instant jump, no scroll-into-view
  * blocked-by-flex-parent gotcha).
  *
- * Hover reveals a tooltip on the left with the first 50 chars of the
- * question, so users don't have to click-guess which dot is which. When
- * the rail gets dense, nearby questions collapse into a small vertical
- * cluster marker; hovering that marker expands a local list so detail
- * remains available without turning the rail into visual noise.
+ * Hover reveals a tooltip on the left with two lines — the question,
+ * and the first prose line of the answer that closed that exchange
+ * (2026-08-03) — so users don't have to click-guess which dot is
+ * which. The dots themselves stay one-per-question: the gap the second
+ * line closes is *recognition* ("what did I get out of this one?"),
+ * not navigation, and answering it with more marks would double the
+ * rail's density to solve a tooltip problem. See
+ * `lib/rail-preview.ts` for the pairing rule and for why the preview
+ * is the final answer rather than `AgentTurn.summary`.
+ *
+ * When the rail gets dense, nearby questions collapse into a small
+ * vertical cluster marker; hovering that marker expands a local list so
+ * detail remains available without turning the rail into visual noise.
+ * That list stays one line per question on purpose — it is a
+ * fast-locate surface for the dense end of the rail, not a reading
+ * surface, and five questions × two lines would make it a wall.
  *
  * Shown from the FIRST user message (2026-07-21; was hidden under 3).
  * The rail has two jobs, not one: a question *index* (meaningful from
@@ -55,7 +67,6 @@ import type { Turn } from "@/types/conversation";
  * `role === "user"` turns in the `turns` array, so indices align 1:1.
  */
 const MIN_USER_MSGS_TO_SHOW = 1;
-const PREVIEW_CHARS = 50;
 const RAIL_VERTICAL_INSET_PX = 24;
 const DENSE_DOT_GAP_PX = 14;
 const MAX_CLUSTER_SPAN_PX = 34;
@@ -71,6 +82,20 @@ const CLUSTER_CLOSE_DELAY_MS = 300;
  * elements; keep the two in sync.
  */
 const HOVER_OPEN_DELAY_MS = 150;
+
+/**
+ * Percent-of-rail positions past which the hover tooltip stops being
+ * centered on its dot and pins to the dot's top / bottom edge instead,
+ * so it never hangs outside the conversation's bounds.
+ *
+ * Raised from 6 / 94 when the tooltip grew its second line: that pair
+ * was tuned for a ~24px single-line box, and the ~44px two-line box
+ * overhangs at the extremes in short windows (the rail's half-box
+ * headroom is a percentage of `clientHeight`, so the shorter the
+ * window, the larger the percentage a fixed box height occupies).
+ */
+const TOOLTIP_EDGE_TOP_PERCENT = 10;
+const TOOLTIP_EDGE_BOTTOM_PERCENT = 90;
 
 type RailTailStatus = "running" | "waiting";
 
@@ -99,10 +124,15 @@ interface UserQuestionRailProps {
 
 interface QuestionPosition {
   /** Index into the array of user-msgs (matches DOM order and the
-   * filtered userContents array). */
+   * `exchanges` array). */
   index: number;
-  /** Truncated content for the hover tooltip. */
+  /** Truncated question content — first line of the hover tooltip. */
   preview: string;
+  /** Truncated answer content — second line of the hover tooltip.
+   * null when there is nothing to show (agent still working, run
+   * interrupted, or no previewable prose); the line is then not
+   * rendered at all rather than left as an empty row. */
+  answer: string | null;
   /** Vertical position within the rail, expressed as % of
    * scroll-content height — the same axis the native scrollbar uses. */
   topPercent: number;
@@ -131,26 +161,6 @@ type RailItem = SingleRailItem | ClusterRailItem;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-/**
- * Turn a raw user-message into a clean one-line preview for the rail
- * tooltip / cluster list. Collapses all whitespace (newlines in
- * multi-line messages, runs of spaces) to single spaces, strips a
- * leading markdown marker run (heading #, blockquote >, list bullet,
- * code fence) so the preview reads as prose rather than syntax, then
- * truncates. Returns "" for whitespace-only content; callers render a
- * placeholder for that case.
- */
-function buildPreview(raw: string): string {
-  const normalized = raw.replace(/\s+/g, " ").trim();
-  const stripped = normalized
-    .replace(/^(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+\.\s+|`{1,3})/, "")
-    .trim();
-  if (stripped.length === 0) return "";
-  return stripped.length > PREVIEW_CHARS
-    ? stripped.slice(0, PREVIEW_CHARS).trimEnd() + "…"
-    : stripped;
 }
 
 function RailTailStatusIcon({ status }: { status: RailTailStatus }) {
@@ -237,14 +247,14 @@ export function UserQuestionRail({
   onJump,
 }: UserQuestionRailProps) {
   const copy = useCopy();
-  // Extract user-msg text in turn order. Indices in this array
-  // align with the [data-role="user-msg"] DOM nodes inside the
+  // One entry per user message, in turn order, each carrying the
+  // question preview and the answer that closed it. Indices in this
+  // array align with the [data-role="user-msg"] DOM nodes inside the
   // scroll container — Conversation.tsx renders one MessageUser per
-  // UserTurn in `turns` order.
-  const userContents = useMemo(
-    () => turns.flatMap((t) => (t.role === "user" ? [t.content] : [])),
-    [turns],
-  );
+  // UserTurn in `turns` order. Recomputes on `turns` identity, i.e.
+  // once per turn_end, not per streaming chunk (in-flight text lives
+  // in MainView's visiblePartial, outside `turns`).
+  const exchanges = useMemo(() => buildRailExchanges(turns), [turns]);
 
   const [railItems, setRailItems] = useState<RailItem[]>([]);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
@@ -313,8 +323,14 @@ export function UserQuestionRail({
         const topInContent = getTopInScrollContent(containerTop, scrollTop, el);
         const topPercent = (topInContent / scrollHeight) * 100;
         const topPx = (topPercent / 100) * railHeightPx;
-        const preview = buildPreview(userContents[i] ?? "");
-        positions.push({ index: i, topPercent, topPx, preview });
+        const exchange = exchanges[i];
+        positions.push({
+          index: i,
+          topPercent,
+          topPx,
+          preview: exchange?.question ?? "",
+          answer: exchange?.answer ?? null,
+        });
       });
       setRailItems(buildRailItems(positions, railHeightPx));
     };
@@ -327,7 +343,7 @@ export function UserQuestionRail({
     if (inner instanceof HTMLElement) observer.observe(inner);
 
     return () => observer.disconnect();
-  }, [scrollContainerRef, userContents]);
+  }, [scrollContainerRef, exchanges]);
 
   // Track which dot is "current" — the most recent user-msg whose
   // top is at or above the viewport's USER_MSG_ANCHOR_TOP_PX anchor (where
@@ -359,9 +375,9 @@ export function UserQuestionRail({
     onScroll();
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
-  }, [scrollContainerRef, userContents]);
+  }, [scrollContainerRef, exchanges]);
 
-  if (userContents.length < MIN_USER_MSGS_TO_SHOW) return null;
+  if (exchanges.length < MIN_USER_MSGS_TO_SHOW) return null;
 
   const handleJump = (idx: number) => {
     const container = scrollContainerRef.current;
@@ -422,8 +438,8 @@ export function UserQuestionRail({
             item.kind === "cluster" && openItemId === item.id;
           const isTail =
             item.kind === "single"
-              ? item.question.index === userContents.length - 1
-              : item.lastIndex === userContents.length - 1;
+              ? item.question.index === exchanges.length - 1
+              : item.lastIndex === exchanges.length - 1;
           const showStatus = isTail && tailStatus != null;
           const statusLabel =
             tailStatus === "waiting"
@@ -482,18 +498,29 @@ export function UserQuestionRail({
                   <span
                     // Visual-only duplicate of the button's aria-label
                     // + preview; hidden from SR so the question isn't
-                    // announced twice. Hover-intent gate: fades in
-                    // after delay-150 (= HOVER_OPEN_DELAY_MS), hides
+                    // announced twice. The answer line is visual-only
+                    // for the same reason the question already is —
+                    // the button's aria-label is the navigation
+                    // destination ("跳到第 N 条提问"), not a reading
+                    // surface. Hover-intent gate: fades in after
+                    // delay-150 (= HOVER_OPEN_DELAY_MS), hides
                     // immediately (delay only applies toward the
                     // hovered state) — a mouse crossing the rail on
                     // its way to the scrollbar doesn't flash previews.
+                    //
+                    // Grid rather than flex so the answer line can sit
+                    // in column 3 and self-align with the question's
+                    // start, whatever width the ordinal takes (1 vs
+                    // 10 vs 100). `minmax(0,1fr)` is what lets the two
+                    // text cells truncate instead of forcing the box
+                    // past its max width.
                     aria-hidden
                     className={cn(
-                      "pointer-events-none absolute right-full z-10 mr-2 flex max-w-[320px] items-center gap-2 truncate whitespace-nowrap rounded-sm border border-line bg-elevated px-2 py-1 text-[11.5px] text-ink-soft shadow-sm",
+                      "pointer-events-none absolute right-full z-10 mr-2 grid w-max max-w-[320px] grid-cols-[auto_1px_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 rounded-sm border border-line bg-elevated px-2 py-1 text-[11.5px] text-ink shadow-sm",
                       "opacity-0 transition-opacity duration-(--motion-fast) group-hover:opacity-100 group-hover:delay-150",
-                      item.topPercent < 6
+                      item.topPercent < TOOLTIP_EDGE_TOP_PERCENT
                         ? "top-0"
-                        : item.topPercent > 94
+                        : item.topPercent > TOOLTIP_EDGE_BOTTOM_PERCENT
                           ? "bottom-0"
                           : "top-1/2 -translate-y-1/2",
                     )}
@@ -515,6 +542,24 @@ export function UserQuestionRail({
                     <span className="truncate">
                       {item.question.preview || copy.conversation.questionEmpty}
                     </span>
+                    {/* Answer sits a register below the question, and
+                        the gap is TWO steps of the three-step ink
+                        scale: the box is `text-ink` so the question
+                        inherits it, the answer overrides to
+                        `text-ink-muted` (the scale's floor).
+                        `text-ink-soft` + `text-ink-muted` was tried
+                        first and read as two equal facts — one step
+                        cannot outweigh how parallel the two lines are
+                        structurally (same size, same start column,
+                        same length budget, even gap). Widening the
+                        contrast was chosen over shrinking the answer
+                        (smaller type / shorter budget) so nothing has
+                        to shrink toward the CJK legibility floor. */}
+                    {item.question.answer && (
+                      <span className="col-start-3 truncate text-ink-muted">
+                        {item.question.answer}
+                      </span>
+                    )}
                   </span>
                 </>
               ) : (
