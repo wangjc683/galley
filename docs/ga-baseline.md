@@ -54,8 +54,10 @@ New in the `4086d5c` -> `d8d90ee` range:
   never sends `[DONE]`, which previously triggered an empty-response retry
   storm), and `reasoning_text` is captured into a thinking block.
 - `llmcore.py` — **`thinking_delta` now yields into the output stream**
-  (`_parse_claude_sse`), emitting *untagged* reasoning text. This is an open
-  coupling break, **default-on for managed Anthropic models** — see
+  (`_parse_claude_sse`), emitting *untagged* reasoning text. This was a
+  coupling break, **default-on for managed Anthropic models**, closed in this
+  same upgrade by patch `0016-managed-native-thinking-tags.patch` (accumulate
+  the block, emit it once wrapped in `<thinking>` at `content_block_stop`). See
   [the devlog](./devlog/2026-08-03-ga-upstream-upgrade-4086d5c-to-d8d90ee.md)
   for the full chain. Short version: the `<thinking>` tags Galley strips are a
   *prompted convention* (GA's system prompt at `llmcore.py:894` asks the model

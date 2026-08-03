@@ -125,11 +125,70 @@ bubble.
 `thinking_type: disabled` in advanced options (user values override the
 defaults), but that is a workaround, not a fix.
 
-Not fixed in this upgrade — recorded so it is not rediscovered from a bug
-report, and so the shipping decision is explicit. The fix belongs on Galley's
-side (tag or classify the delta at the bridge), not as a managed-runtime patch
-that would have to be re-litigated on every rebase. **This should be resolved
-before `d8d90ee` ships in a release.**
+### Blast radius if left alone
+
+Agent behavior is unaffected — native thinking blocks still reach API history
+by the normal path, so reasoning, tool calls, approvals and session state are
+all correct. The damage is confined to display and persistence, but there it is
+worse than cosmetic, because `ga-output-cleaning.ts` works by stripping known
+tags and treating **whatever prose remains as the preamble**. Untagged
+reasoning passes every filter and is therefore *promoted* to a first-class
+field rather than merely leaking. Claude puts thinking blocks before text
+blocks, so it lands at the front of the answer.
+
+- Reasoning renders as body text ahead of every answer.
+- The thinking pane goes *empty*: `extractThinking` only matches
+  `<thinking>…</thinking>`, so the real reasoning is not captured. Double miss —
+  what should be hidden is shown, and what should fill the pane does not.
+- `TurnMarker`'s one-line preamble gets an entire reasoning dump.
+- It reaches disk: the GUI-cleaned string is persisted to `final_answer`, so
+  history is contaminated permanently, and fixing the code later does not clean
+  rows already written.
+- FTS indexes `final_answer` precisely to avoid indexing raw `<thinking>`
+  (`gui/src/lib/db.ts:116`); that intent is defeated through the other channel.
+- The Question Rail tooltip (2026-08-03, commit `40c8f7e7`) previews the last
+  non-null `finalAnswer` — it would preview reasoning instead of the answer,
+  negating that change. Sidebar sublines share the path.
+
+`thinking_type: adaptive` leaves the decision to the model, so this is
+intermittent rather than every turn — which makes it harder to report than to
+suffer.
+
+### Fix: patch `0016`, normalize onto the tag convention
+
+Rejected first: setting `thinking_type: disabled` in Galley's Anthropic
+defaults (thinking was already on *before* this upgrade and merely undisplayed,
+so this trades model quality for a display fix), and a one-line revert of the
+`yield` (restores old behavior but keeps native reasoning permanently
+invisible, and is pure divergence).
+
+`0016-managed-native-thinking-tags.patch` instead stops yielding per-delta and
+emits the whole thinking block once at `content_block_stop`, wrapped in
+`<thinking>` tags. This folds the new channel into the convention the system
+prompt already establishes, so every existing strip path works unchanged — and
+`extractThinking` now populates the thinking pane with native reasoning, which
+the revert option would have thrown away.
+
+Whole-block rather than per-delta is deliberate: it allows neutralizing a
+literal `</thinking>` inside the reasoning (plausible, since the system prompt
+tells the model to use those tags) without it straddling a chunk boundary. The
+cost is that reasoning no longer streams live — acceptable, since the GUI
+collapses it anyway, and it matches pre-upgrade behavior. `_parse_claude_json`
+(non-stream) already yielded `""` for thinking blocks and never leaked, so it
+is left alone to keep the patch minimal.
+
+Covered by four tests in `runner/tests/test_managed_ga_llmcore.py`: tagged
+single-block emission, returned `content_blocks` unchanged (history untouched),
+literal-closing-tag neutralization, and whitespace-only thinking emitting
+nothing.
+
+### Follow-up left open
+
+`extractThinking` returns only the **first** `<thinking>` match. When a model
+produces both native reasoning and the prompted narration, the pane now shows
+the native one and the narration is stripped without being displayed. Both are
+correctly kept out of the answer, so this is a presentation choice, not a
+correctness issue — flagged for JC rather than changed unilaterally.
 
 ## Other things to watch
 

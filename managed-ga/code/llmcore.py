@@ -174,9 +174,14 @@ def _parse_claude_sse(resp_lines):
                 if current_block and current_block.get("type") == "text": current_block["text"] += text
                 if text: yield text
             elif delta.get("type") == "thinking_delta":
+                # Galley: accumulate only. Upstream yields each delta raw, which puts
+                # UNTAGGED native reasoning into the same character stream as the answer.
+                # Frontends here separate reasoning from answer by the <thinking> tag
+                # convention the system prompt asks the model to follow, so untagged
+                # deltas are indistinguishable from the answer and render as body text.
+                # Emitted as one tagged block at content_block_stop instead.
                 thinking = delta.get("thinking", "")
                 if current_block and current_block.get("type") == "thinking": current_block["thinking"] += thinking
-                if thinking: yield thinking
             elif delta.get("type") == "signature_delta":
                 if current_block and current_block.get("type") == "thinking":
                     current_block["signature"] = current_block.get("signature", "") + delta.get("signature", "")
@@ -186,6 +191,13 @@ def _parse_claude_sse(resp_lines):
                 if current_block["type"] == "tool_use":
                     try: current_block["input"] = json.loads(tool_json_buf) if tool_json_buf else {}
                     except: current_block["input"] = {"_raw": tool_json_buf}
+                # Galley: normalize native thinking onto the <thinking> tag convention, so
+                # the existing strip/extract path treats both reasoning channels alike.
+                # Whole block at once (not per-delta) so a literal '</thinking>' inside the
+                # reasoning can be neutralized; it cannot straddle a chunk boundary here.
+                if current_block["type"] == "thinking":
+                    _think = current_block.get("thinking", "")
+                    if _think.strip(): yield f"<thinking>{_think.replace('</thinking>', '</ thinking>')}</thinking>"
                 content_blocks.append(current_block)
                 current_block = None
         elif evt_type == "message_delta":

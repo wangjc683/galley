@@ -24,7 +24,8 @@
       "0012-managed-feishu-file-marker-echo.patch",
       "0013-managed-feishu-report-turn-guard.patch",
       "0014-managed-telegram-galley-integration.patch",
-      "0015-managed-extension-galley-branding.patch"
+      "0015-managed-extension-galley-branding.patch",
+      "0016-managed-native-thinking-tags.patch"
     ]
   },
   "stateSchemaVersion": 1

@@ -238,6 +238,85 @@ def _exhaust(gen: Any) -> Any:
         return e.value
 
 
+def _sse(*events: dict[str, Any]) -> list[str]:
+    return [f"data: {json.dumps(e)}" for e in events]
+
+
+def _thinking_stream(*thinking_deltas: str) -> list[str]:
+    return _sse(
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking"}},
+        *(
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": d},
+            }
+            for d in thinking_deltas
+        ),
+        {"type": "content_block_stop", "index": 0},
+        {"type": "content_block_start", "index": 1, "content_block": {"type": "text"}},
+        {
+            "type": "content_block_delta",
+            "index": 1,
+            "delta": {"type": "text_delta", "text": "The answer."},
+        },
+        {"type": "content_block_stop", "index": 1},
+        {"type": "message_stop"},
+    )
+
+
+def test_native_thinking_is_emitted_as_one_tagged_block() -> None:
+    """Patch 0016: upstream yields each thinking_delta raw, which puts untagged
+    reasoning into the same stream as the answer. Galley emits it once, wrapped
+    in <thinking>, so the frontends' existing tag-strip path catches it."""
+    gen = llmcore._parse_claude_sse(_thinking_stream("Let me ", "consider X."))
+    chunks: list[str] = []
+    try:
+        while True:
+            chunks.append(next(gen))
+    except StopIteration:
+        pass
+
+    assert chunks == ["<thinking>Let me consider X.</thinking>", "The answer."]
+
+
+def test_native_thinking_still_reaches_returned_content_blocks() -> None:
+    """Display-side change only: the thinking block must still be returned so
+    session history and signature handling are untouched."""
+    blocks = _exhaust(llmcore._parse_claude_sse(_thinking_stream("inner")))
+
+    thinking = [b for b in blocks if b.get("type") == "thinking"]
+    assert len(thinking) == 1
+    assert thinking[0]["thinking"] == "inner"
+
+
+def test_native_thinking_neutralizes_literal_closing_tag() -> None:
+    """GA's system prompt tells the model to use <thinking> tags, so its native
+    reasoning can quote one. A literal '</thinking>' must not close the wrapper
+    early and leak the remainder as body text."""
+    gen = llmcore._parse_claude_sse(
+        _thinking_stream("I should use </thinking> tags. Now the real reasoning.")
+    )
+    first = next(gen)
+
+    assert first.startswith("<thinking>")
+    assert first.endswith("</thinking>")
+    assert first.count("</thinking>") == 1
+    assert "Now the real reasoning." in first
+
+
+def test_whitespace_only_thinking_emits_nothing() -> None:
+    gen = llmcore._parse_claude_sse(_thinking_stream("   \n  "))
+    chunks: list[str] = []
+    try:
+        while True:
+            chunks.append(next(gen))
+    except StopIteration:
+        pass
+
+    assert chunks == ["The answer."]
+
+
 def test_native_tool_client_keeps_non_text_image_blocks(tmp_path: Path) -> None:
     class FakeBackend:
         def __init__(self) -> None:

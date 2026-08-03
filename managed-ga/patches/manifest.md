@@ -3,7 +3,13 @@
 Patch stack id: `galley-managed-ga-patches-v1`
 
 Last replay verified: `2026-08-03` against upstream
-`d8d90eef8c37cb1ea9aae078a3d099a7d7a759df` (14-patch stack, through `0015`).
+`d8d90eef8c37cb1ea9aae078a3d099a7d7a759df` (15-patch stack, through `0016`).
+(`0016-managed-native-thinking-tags.patch` was added in that same upgrade:
+upstream started yielding `thinking_delta` raw, putting untagged native
+reasoning into the same stream as the answer. The patch accumulates the block
+and emits it once wrapped in `<thinking>` at `content_block_stop`, normalizing
+it onto the tag convention every frontend already strips. Remove this patch if
+upstream ever tags or channels native thinking itself.)
 (History from the 2026-08-03 `d8d90ee` upgrade: commit-chain rebase with one
 real conflict. `0007`: upstream capped `retry-after` (`max_retry_after`,
 default 60s) by rewriting the same `_stream_with_retry` `err =` line the
