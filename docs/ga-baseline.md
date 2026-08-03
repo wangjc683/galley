@@ -20,6 +20,7 @@ Locked commit: `d8d90eef8c37cb1ea9aae078a3d099a7d7a759df`
 - Tree hash: `d457b6e8b02c7895504c888da5e7ee064fb43f1a`
 - Source: `lsdefine/GenericAgent` upstream `main`
 - Date audited: 2026-08-03
+- Shipped in: `v0.4.2` (2026-08-03) — audited and released the same day
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
