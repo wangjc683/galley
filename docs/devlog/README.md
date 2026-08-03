@@ -299,6 +299,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ### 2026-08-03
 - [Question Rail:tooltip 加回答预览,用 final answer 而非 summary](./2026-08-03-question-rail-answer-preview.md) — 缺口定位为辨识而非导航,故只改 tooltip 不加 dot;初判推荐 `AgentTurn.summary` 后翻代码改判(它是喂回 agent 的工作记忆、语义前瞻、最终答案轮 `no_tool` 框架失配);跳 ATX 标题取首个正文行;配对取最后一个非 null finalAnswer(JC 裁 (a) 案);逻辑抽进 `lib/rail-preview.ts` 并单测;tooltip 竖直阈值 6/94→10/90
 - [GA upstream 升级 4086d5c -> d8d90ee](./2026-08-03-ga-upstream-upgrade-4086d5c-to-d8d90ee.md) — 20 commits/11 天,2/3 是 upstream 前端(含新 `hub.py` WS peer hub)inert;引擎实质是中断响应性(`active_response`+`should_stop`)、`max_retry_after` 封顶、Responses API `incomplete`/`failed` 终止事件;方法论教训:零上下文 `git apply` 探针全绿≠无冲突,只有 commit-chain rebase 的 3-way merge 才测得出(`0007` codex 429 富化撞上游 retry-after 改写,两边保留);遗留耦合断裂:`thinking_delta` 现在吐**无标签**推理文本,而 Galley 剥的 `<thinking>` 标签是提示词约定(走 `text_delta`)、跟 API 原生 thinking block 是两条通道;因 `managed_model.rs` 默认 `thinking_type: adaptive`,对托管 Anthropic 模型**默认命中**(初判"不可达"系查错了开关名,已纠正);不动的代价是 `final_answer` 落库+FTS 索引被永久写脏、思考面板反而空、刚做的 rail tooltip 失效;同轮加 `0016` 补丁收口——整块缓冲后包 `<thinking>` 标签发出,归一到既有约定,顺带让原生推理正确进思考面板;否决"关 thinking"(拿模型质量换显示)和"撤 yield"(纯分叉且永久丢失推理)
+- [v0.4.2 发布:定时任务信任面 + 引擎升级到 d8d90ee](./2026-08-03-v0.4.2-release.md) — 聚合 `v0.4.1..HEAD` 11 个提交:定时任务信任面 issues 11–14 + rail tooltip 回答预览 + GA baseline 首发 `d8d90ee`;定级沿用 v0.4.1 的功能量级规则判 patch(v0.2.16 发运审计 baseline 同为 patch);补丁 `0016` 是发运前提而非附带(不打则 thinking 脏数据永久落 `final_answer`);`06 CLI schedule` 继续留作 v1 非目标——属 Agent API 面,不搭 patch 版顺风车;构建机是 Intel Mac,bundled runtime gate 走 mac-x64,arm64 产物由 CI 出
 
 ## 格式约定
 
