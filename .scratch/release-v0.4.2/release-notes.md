@@ -12,6 +12,7 @@ TAG=v0.4.2  VERSION=0.4.2  PREVIOUS_TAG=v0.4.1
 - Find the right question faster: hovering a marker in the question rail now shows the answer alongside the question, so you can tell two similar prompts apart without jumping into the conversation.
 - Stop now really stops: pressing stop tears down the in-flight request immediately instead of letting it finish in the background, and a session no longer hangs when a provider asks for an unreasonably long retry delay.
 - Model reasoning stays in the thinking pane: extended reasoning from Claude models is collected there instead of appearing at the top of the reply.
+- Each step header stays a header: when a model skips its own one-line recap, the step line no longer repeats the whole answer that follows it.
 
 ## Under the Hood
 
@@ -48,6 +49,7 @@ If Windows SmartScreen shows a warning, click "More info" -> "Run anyway".
 - 更快找到那一问:悬停问题导轨上的标记时,现在会连同回答一起显示,不用跳进对话就能区分两个相似的提问。
 - 停止就是立刻停止:按下停止会立即中断在途请求,而不是让它在后台跑完;当服务端要求一个过长的重试等待时,会话也不再卡住。
 - 模型思考内容归位:Claude 模型的深度思考会被收进思考面板,不再出现在回答正文的开头。
+- 步骤标题回归标题:当模型没有写自己的单行小结时,「第 N 步」那一行不再把下方整段回答重复一遍。
 
 ## Under the Hood
 

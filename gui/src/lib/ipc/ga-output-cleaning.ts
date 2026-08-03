@@ -311,6 +311,75 @@ export function cleanPartialContent(text: string): string {
   return out;
 }
 
+/**
+ * GA's `turn_end_callback` (ga.py:594-601) asks the LLM for a one-line
+ * `<summary>` snapshot of the turn, and when the reply carries no
+ * `<summary>` tag it falls back to using the ENTIRE cleaned response:
+ *
+ *   _c = response.content minus ``` fences and <thinking> blocks
+ *   summary = _c.strip()                            # the whole answer
+ *   summary = smart_format(summary.replace('\n',''), max_str_len=80)
+ *
+ * `smart_format` (ga.py:291) returns the string unchanged below 90
+ * chars, otherwise elides the middle: `head40 + ' ... ' + tail40`.
+ *
+ * On GA's side that fallback is defensible — the summary feeds
+ * `history_info`, the agent's working memory, where the real prose
+ * beats a generic placeholder. But Galley also renders it as the
+ * TurnMarker subtitle directly above the identical final answer, so
+ * the user reads the same sentence twice. Which models trip it is a
+ * compliance question, not a protocol one: models that reliably emit
+ * `<summary>` never reach the fallback.
+ *
+ * Suppressing at render (rather than patching GA) keeps the data
+ * correct for GA's own consumers, and cleans up rows already written
+ * to SQLite — the Sidebar subline, which shows the same summary far
+ * away from the answer, deliberately keeps it.
+ *
+ * Comparison mirrors GA's normalization: collapse all whitespace (GA
+ * drops newlines outright and the two sides trim differently), and
+ * try the answer both as-is and minus fenced code blocks, since GA
+ * strips fences before summarizing while `cleanFinalAnswer` keeps
+ * them.
+ */
+const SMART_FORMAT_OMIT = "...";
+
+export function summaryEchoesAnswer(
+  summary: string | null | undefined,
+  finalAnswer: string | null | undefined,
+): boolean {
+  if (!summary || !finalAnswer) return false;
+  const collapse = (s: string) => s.replace(/\s+/g, "");
+  const needle = collapse(summary);
+  if (!needle) return false;
+
+  const candidates = new Set([
+    collapse(finalAnswer),
+    collapse(finalAnswer.replace(/```[\s\S]*?```/g, "")),
+  ]);
+
+  for (const answer of candidates) {
+    if (!answer) continue;
+    if (answer === needle) return true;
+    // smart_format's middle elision — head and tail both have to line
+    // up, and the answer must actually be longer than the two ends.
+    const cut = needle.indexOf(SMART_FORMAT_OMIT);
+    if (cut <= 0) continue;
+    const head = needle.slice(0, cut);
+    const tail = needle.slice(cut + SMART_FORMAT_OMIT.length);
+    if (
+      head &&
+      tail &&
+      answer.length > head.length + tail.length &&
+      answer.startsWith(head) &&
+      answer.endsWith(tail)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function extractThinking(text: string): string | undefined {
   const m = text.match(/<thinking>([\s\S]*?)<\/thinking>/);
   if (!m) return undefined;

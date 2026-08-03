@@ -18,6 +18,7 @@ import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubb
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
+import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
 import { cn } from "@/lib/utils";
 import type { AgentTurn, Turn } from "@/types/conversation";
 import type { GoalBrief } from "@/types/goal";
@@ -174,13 +175,21 @@ function AgentTurnView({
   const detailPreamble = narrationDuplicatesPreamble
     ? undefined
     : turn.preamble;
+  // Same family as narrationDuplicatesPreamble, one field over: when
+  // the LLM omits `<summary>`, GA falls back to the whole answer as
+  // the turn summary, which would print the answer once as the marker
+  // subtitle and again as the body right below it. See
+  // summaryEchoesAnswer for GA's exact fallback and normalization.
+  const markerSummary = summaryEchoesAnswer(turn.summary, answerText)
+    ? undefined
+    : turn.summary;
 
   return (
     <div>
       {turn.turnIndex !== undefined && (
         <TurnMarker
           index={turn.turnIndex}
-          summary={turn.summary}
+          summary={markerSummary}
           thinkingContent={turn.thinking}
           preamble={detailPreamble}
         />
