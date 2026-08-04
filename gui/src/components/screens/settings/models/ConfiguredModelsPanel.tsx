@@ -191,7 +191,7 @@ function ModelScopeHint({
           "text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
           "hover:border-line hover:bg-hover hover:text-ink",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-          "active:translate-y-[0.5px]",
+          "active:translate-y-px",
         )}
       >
         <Info size={12} weight="bold" />

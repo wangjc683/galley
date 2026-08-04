@@ -276,7 +276,7 @@ export function GoalIndicator({
               />
             )}
             <Icon size={14} weight="thin" className="relative z-[1]" />
-            <span className="relative z-[1]">{label}</span>
+            <span className="relative z-[1] tabular-nums">{label}</span>
             {showReviewBadge && (
               <span
                 aria-label={copy.goalReviewCount(reviewCount)}

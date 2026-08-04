@@ -109,7 +109,7 @@ export function LLMPill({
 
   const pillClasses = cn(
     "flex h-7 min-w-0 items-center gap-1 text-[12.5px] text-ink-soft",
-    "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-[0.5px]",
+    "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
     "hover:bg-hover hover:text-ink",
     "outline-none",
     "rounded-sm px-2.5",
@@ -240,7 +240,7 @@ export function LLMPill({
                   }}
                   aria-disabled={disabled || undefined}
                   className={cn(
-                    "group/llm-option flex w-full min-w-0 items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-[12.5px] hover:bg-hover",
+                    "group/llm-option flex w-full min-w-0 items-center gap-2 rounded-callout px-2.5 py-1.5 text-left text-[12.5px] hover:bg-hover",
                     llm.isCurrent ? "text-ink" : "text-ink-soft",
                     disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
                   )}
@@ -293,7 +293,7 @@ export function LLMPill({
                     onClick={() => approvalMode.onSelectMode(otherMode)}
                     aria-label={`${modeCopy.switchTo(otherModeName)} — ${otherModeDescription}`}
                     className={cn(
-                      "flex w-full min-w-0 items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
+                      "flex w-full min-w-0 items-center gap-1.5 rounded-callout px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
                       "hover:bg-hover hover:text-ink-soft",
                     )}
                   >
@@ -316,7 +316,7 @@ export function LLMPill({
                     onMouseDown={preventMouseFocus}
                     onClick={onConfigureModels}
                     className={cn(
-                      "flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
+                      "flex w-full items-center gap-1.5 rounded-callout px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
                       "hover:bg-hover hover:text-ink-soft",
                     )}
                   >

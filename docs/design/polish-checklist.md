@@ -82,3 +82,12 @@ active / loading / empty 全部状态——10% 速度下觉得不对的，就是
   SessionSearchBar 唯一的 `/30` 收齐为 `/20`；计数 / 触发时间
   tabular-nums；空态示例卡补 quiet press。否决候选：日 / 月 chips 28px
   相邻（热区不重叠）；PromptCard div 键盘可达性（归 F1 暂缓档）。
+- 2026-08-04：MainHeader + header 一族四轮 audit（含 ThemePreferenceMenu /
+  LLMPill 菜单）。**裁决**：`active:translate-y-[0.5px]`（devlog
+  2026-06-10 引入的轻按压档，共 8 处）与 §2.5「所有位移用整数像素」冲突，
+  判整数规则胜——全部归一为 `translate-y-px`。理由：非整数倍 DPI
+  （Windows 125% / 150%）下 0.5px 取整不可预测，且这些控件的
+  popover-open 态本就落位 1px。另落地：SessionTitleMenu /
+  ThemePreferenceMenu / LLMPill 菜单项同心圆角（第四批同款）；Goal pill
+  「待查看 · N」标签 tabular-nums。该面其余全部合规（2026-06-10 已专项
+  打磨过）。

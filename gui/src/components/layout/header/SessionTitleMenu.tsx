@@ -133,7 +133,7 @@ export function SessionTitleMenu({
           }}
           className={cn(
             "group inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1",
-            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover data-[state=open]:bg-hover active:translate-y-[0.5px]",
+            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover data-[state=open]:bg-hover active:translate-y-px",
             "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           )}
         >
@@ -174,7 +174,7 @@ export function SessionTitleMenu({
               <DropdownMenu.Item
                 onSelect={beginRename}
                 className={cn(
-                  "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+                  "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
                   "data-[highlighted]:bg-hover",
                 )}
               >
@@ -191,7 +191,7 @@ export function SessionTitleMenu({
           <DropdownMenu.Item
             onSelect={() => onReinjectTools?.()}
             className={cn(
-              "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+              "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
               "data-[highlighted]:bg-hover",
             )}
           >
@@ -205,7 +205,7 @@ export function SessionTitleMenu({
           <DropdownMenu.Item
             onSelect={() => onTogglePet?.()}
             className={cn(
-              "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+              "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
               "data-[highlighted]:bg-hover",
             )}
           >

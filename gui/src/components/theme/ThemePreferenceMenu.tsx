@@ -70,7 +70,7 @@ export function ThemePreferenceMenu({
           key={option.value}
           onSelect={() => onChange(option.value)}
           className={cn(
-            "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none",
+            "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
             "data-[highlighted]:bg-hover",
           )}
         >
