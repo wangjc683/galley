@@ -33,7 +33,7 @@ export function ApprovalDock({ pending, onAdvance }: ApprovalDockProps) {
 
   return (
     <div className="mb-3 flex items-center gap-3 rounded-md border border-warning/30 border-l-[3px] border-l-warning bg-warning/[var(--opacity-subtle)] px-3.5 py-2.5 text-[13px] text-ink">
-      <span className="inline-flex shrink-0 items-center gap-1.5 font-semibold">
+      <span className="inline-flex shrink-0 items-center gap-1.5 font-semibold tabular-nums">
         <Pause
           size={14}
           weight="thin"

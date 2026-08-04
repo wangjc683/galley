@@ -514,12 +514,14 @@ function SidebarProjectMenuItems({
   onDelete?: () => void;
 }) {
   const copy = useCopy();
+  // rounded-callout (8px) = the menu surface's rounded-md (12px) minus
+  // its p-1 (4px) — concentric nested corners (polish-checklist P1).
   const itemClass = cn(
-    "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none",
+    "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none",
     "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
   );
   const destructiveItemClass = cn(
-    "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-error outline-none",
+    "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-[12.5px] text-error outline-none",
     "data-[highlighted]:bg-error/[var(--opacity-soft)] data-[highlighted]:text-error",
   );
 

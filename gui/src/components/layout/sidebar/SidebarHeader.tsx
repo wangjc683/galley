@@ -10,6 +10,14 @@ import type { RuntimeIndicatorView, SidebarRuntimeIndicator } from "./types";
 
 // ---------- subcomponents ----------
 
+// The header's status entries render as one ~21px text line inside the
+// 44px header. A pseudo-element stretches each button's hit target to
+// ~40px tall without changing the visible pill (polish-checklist P6).
+// Costs a sliver of the drag region above/below the button — the
+// wordmark and MainHeader remain the primary drag handles.
+const HEADER_ENTRY_HIT_AREA =
+  "relative after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
+
 export function SidebarHeader({
   runtimeIndicator,
   onOpenRuntimeSettings,
@@ -120,7 +128,10 @@ export function SidebarHeader({
             type="button"
             onClick={onOpenModelsSettings}
             aria-label={indicator.ariaLabel}
-            className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink"
+            className={cn(
+              "flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink",
+              HEADER_ENTRY_HIT_AREA,
+            )}
           >
             <RuntimeDot tone={indicator.tone} />
             <span className="min-w-0 truncate">{indicator.label}</span>
@@ -132,7 +143,10 @@ export function SidebarHeader({
             type="button"
             onClick={onOpenRuntimeSettings}
             aria-label={indicator.ariaLabel}
-            className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink"
+            className={cn(
+              "flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink",
+              HEADER_ENTRY_HIT_AREA,
+            )}
           >
             <RuntimeDot tone={indicator.tone} />
             <span className="min-w-0 truncate">{indicator.label}</span>
@@ -144,7 +158,10 @@ export function SidebarHeader({
             type="button"
             onClick={onOpenAgentSettings}
             aria-label={copy.sidebar.openSupervisorSop}
-            className="inline-flex min-w-0 max-w-[132px] items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            className={cn(
+              "inline-flex min-w-0 max-w-[132px] items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+              HEADER_ENTRY_HIT_AREA,
+            )}
           >
             <PlugsConnected size={13} weight="thin" className="shrink-0" />
             <span className="min-w-0 truncate">{supervisorSopLabel}</span>

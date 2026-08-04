@@ -48,8 +48,10 @@ export function SidebarSessionMenuItems({
   onRequestRename?: () => void;
 }) {
   const copy = useCopy();
+  // rounded-callout (8px) = the menu surface's rounded-md (12px) minus
+  // its p-1 (4px) — concentric nested corners (polish-checklist P1).
   const itemClass = cn(
-    "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-[13px] text-ink-soft outline-none",
+    "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-[13px] text-ink-soft outline-none",
     "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
   );
 

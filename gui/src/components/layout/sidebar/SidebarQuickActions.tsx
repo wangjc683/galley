@@ -67,7 +67,7 @@ export function SidebarQuickActions({
           scheduledActionCount > 0 ? (
             <span
               title={copy.sidebar.scheduledNeedsAction(scheduledActionCount)}
-              className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-warning/15 px-1 text-[10px] font-semibold text-warning"
+              className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-warning/15 px-1 text-[10px] font-semibold tabular-nums text-warning"
             >
               {scheduledActionCount}
             </span>

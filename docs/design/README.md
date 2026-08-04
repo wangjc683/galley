@@ -27,6 +27,7 @@
 | Onboarding 与卡片家族（§5–§6） | [onboarding-and-cards.md](./onboarding-and-cards.md) | Onboarding 流程、Attach / Health Check、Error Card、overlay 层级、首次失败 hint 系统 |
 | Command Palette、Settings 与快捷键（§8–§10） | [overlays-and-settings.md](./overlays-and-settings.md) | ⌘K Command Palette、Settings modal 全部 tab（Runtime / Models / Channels / Approval / About / Agent / Shortcuts）、全局快捷键表 |
 | 未决事项与历史对照（§11–§12） | [status-and-history.md](./status-and-history.md) | 当前 open 问题、推到未来版本的扩展、与 Notion 历史稿的关系 |
+| Polish 审查清单（2026-08-04 新增） | [polish-checklist.md](./polish-checklist.md) | 界面细节 audit 用的采纳 / 否决规则表（同心圆角、光学对齐、热区、tabular-nums 等）与 audit 记录 |
 
 相关的「why」层文档：品牌气质见 [temperament.md](../temperament.md)，文本渲染红线见
 [typography-principles.md](../typography-principles.md)，决策叙事见 [devlog](../devlog/README.md)。

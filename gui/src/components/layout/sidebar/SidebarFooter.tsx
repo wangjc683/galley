@@ -24,7 +24,9 @@ export function SidebarFooter({
     >
       <Archive size={12} weight="thin" className="text-ink-muted" />
       <span>{copy.sidebar.archived}</span>
-      {count > 0 && <span className="ml-auto text-ink-muted">{count}</span>}
+      {count > 0 && (
+        <span className="ml-auto tabular-nums text-ink-muted">{count}</span>
+      )}
     </button>
   );
 }

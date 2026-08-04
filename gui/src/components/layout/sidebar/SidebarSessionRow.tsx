@@ -460,7 +460,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             // almost nothing and was otherwise unrecoverable.
             title={sublineText}
             className={cn(
-              "mt-0.5 truncate text-[11px] leading-[1.4]",
+              // tabular-nums: the subline carries live counts (第 N 步 /
+              // 等待审批 · N / 出错 · N) that tick while visible.
+              "mt-0.5 truncate text-[11px] leading-[1.4] tabular-nums",
               sublineTone === "warning"
                 ? "font-medium text-warning"
                 : sublineTone === "error"

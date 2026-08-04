@@ -83,7 +83,8 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  *     ModeCard / Composer submit-pill remain hand-rolled outliers).
  *   - Icons (leadingIcon / trailingIcon) inherit the gap defined by
  *     the size. Caller is responsible for icon sizing + weight to
- *     match the button text.
+ *     match the button text. The icon side's padding runs 2px tighter
+ *     than the text side (optical alignment — polish-checklist P2).
  */
 
 export type ButtonVariant =
@@ -198,6 +199,21 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
   lg: "gap-2 px-5 py-2 text-[13.5px]",
 };
 
+// An icon carries ~2px of built-in air that text doesn't, so equal
+// padding reads as the icon floating too far inboard. Each map is the
+// size's padding minus 2px, applied only on the side that has an icon
+// (polish-checklist P2).
+const LEADING_ICON_PAD: Record<ButtonSize, string> = {
+  sm: "pl-2",
+  md: "pl-3",
+  lg: "pl-4.5",
+};
+const TRAILING_ICON_PAD: Record<ButtonSize, string> = {
+  sm: "pr-2",
+  md: "pr-3",
+  lg: "pr-4.5",
+};
+
 const ICON_VARIANT_CLASSES: Record<IconButtonVariant, string> = {
   ghost: cn(
     "border border-transparent text-ink-soft",
@@ -275,6 +291,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           "outline-none disabled:cursor-not-allowed disabled:opacity-40",
           VARIANT_CLASSES[variant],
           SIZE_CLASSES[size],
+          leadingIcon != null && LEADING_ICON_PAD[size],
+          trailingIcon != null && TRAILING_ICON_PAD[size],
           className,
         )}
         onMouseDown={(event) => {
