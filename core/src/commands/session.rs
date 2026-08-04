@@ -76,9 +76,17 @@ pub(crate) async fn rename_session(
     id: SessionId,
     title: String,
     origin: Origin,
+    title_source: Option<String>,
 ) -> std::result::Result<SessionBrief, String> {
+    // Only the GUI's first-message truncation may claim "derived" (it
+    // stays auto-title-upgradable); everything else — including omitted —
+    // is a user rename and locks the title.
+    let source = match title_source.as_deref() {
+        Some("derived") => crate::db::RenameTitleSource::Derived,
+        _ => crate::db::RenameTitleSource::User,
+    };
     galley
-        .rename_session(id, title, origin)
+        .rename_session_with_source(id, title, source, origin)
         .await
         .map_err(stringify_error)
 }

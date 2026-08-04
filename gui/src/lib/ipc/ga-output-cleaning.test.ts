@@ -79,3 +79,33 @@ describe("summaryEchoesAnswer", () => {
     expect(summaryEchoesAnswer("嗯...好的", "完全无关的另一段回答内容")).toBe(false);
   });
 });
+
+describe("next-suggestion tag stripping", () => {
+  it("strips the tag from final answers and partials", async () => {
+    const { cleanFinalAnswer, cleanPartialContent, stripGATags } = await import(
+      "@/lib/ipc/ga-output-cleaning"
+    );
+    const raw =
+      "修好了。\n\n<next-suggestion>帮我把剩下两处调用也改掉</next-suggestion>";
+    for (const clean of [cleanFinalAnswer, cleanPartialContent, stripGATags]) {
+      const out = clean(raw);
+      expect(out).toContain("修好了。");
+      expect(out).not.toContain("next-suggestion");
+      expect(out).not.toContain("帮我把剩下两处调用也改掉");
+    }
+  });
+
+  it("truncates an unclosed next-suggestion tag mid-stream", async () => {
+    const { cleanPartialContent } = await import(
+      "@/lib/ipc/ga-output-cleaning"
+    );
+    // Chunk boundary fell inside the tag body — nothing after the
+    // opener may leak as prose.
+    expect(
+      cleanPartialContent("正文结束。\n<next-suggestion>帮我把剩"),
+    ).toBe("正文结束。\n");
+    // Chunk ended inside the tag NAME ("<next-sug") — the partial
+    // opener itself must not flash as text.
+    expect(cleanPartialContent("正文结束。\n<next-sug")).toBe("正文结束。\n");
+  });
+});

@@ -239,5 +239,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/037_scheduled_tasks_llm.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 38,
+            description: "add sessions.title_source (auto-title eligibility)",
+            sql: include_str!("../migrations/038_session_title_source.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

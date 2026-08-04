@@ -153,3 +153,4 @@ pub use rows::{
     PersistToolEventPending, PersistedMessageRow, ToolEventRow, UpsertManagedModelMetadata,
     UpsertManagedModelProviderMetadata,
 };
+pub use session::RenameTitleSource;

@@ -67,6 +67,7 @@ pub enum IpcEvent {
     ToolsReinjected(ToolsReinjectedEvent),
     PetAttached(PetAttachedEvent),
     PetDetached(PetDetachedEvent),
+    TitleGenerated(TitleGeneratedEvent),
     SystemMessage(SystemMessageEvent),
 }
 
@@ -91,6 +92,7 @@ impl IpcEvent {
             IpcEvent::ToolsReinjected(e) => &e.session_id,
             IpcEvent::PetAttached(e) => &e.session_id,
             IpcEvent::PetDetached(e) => &e.session_id,
+            IpcEvent::TitleGenerated(e) => &e.session_id,
             IpcEvent::SystemMessage(e) => &e.session_id,
         }
     }
@@ -198,6 +200,11 @@ pub struct TurnEndEvent {
     pub visibility: Option<String>,
     #[serde(default)]
     pub absolute_turn_index: Option<i64>,
+    /// User-voice next-step suggestion extracted from the final answer's
+    /// `<next-suggestion>` tag. Only present on the final turn_end of a
+    /// run, and only when the model chose to emit one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_suggestion: Option<String>,
     pub timestamp: String,
 }
 
@@ -329,6 +336,14 @@ pub struct PetDetachedEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TitleGeneratedEvent {
+    pub session_id: String,
+    pub title: String,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SystemMessageEvent {
     pub session_id: String,
     pub content: String,
@@ -358,6 +373,7 @@ pub enum IpcCommand {
     ReinjectTools,
     AttachPet(AttachPetCommand),
     DetachPet,
+    GenerateTitle(GenerateTitleCommand),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,6 +444,19 @@ pub struct AttachPetCommand {
     /// strict-int dataclass.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+}
+
+/// Context for the bridge's out-of-band title ask. Core owns the message
+/// store, so the prompt inputs travel in the command — the bridge never
+/// reads backend.history for this. Python default for `finalAnswer` is
+/// `""`, so `None` must serialize as an omitted field, mirroring the
+/// AttachPet `port` convention.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateTitleCommand {
+    pub first_user_message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_answer: Option<String>,
 }
 
 #[cfg(test)]
@@ -588,6 +617,69 @@ mod tests {
     #[test]
     fn protocol_version_constant() {
         assert_eq!(PROTOCOL_VERSION, "0.1");
+    }
+
+    #[test]
+    fn parse_turn_end_next_suggestion_optional() {
+        // Old bridge without the field → None; new bridge carries it.
+        let old = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(old).unwrap();
+        if let IpcEvent::TurnEnd(t) = event {
+            assert!(t.next_suggestion.is_none());
+            let out = serde_json::to_string(&t).unwrap();
+            assert!(
+                !out.contains("nextSuggestion"),
+                "None must be omitted, not null: {out}"
+            );
+        } else {
+            panic!("wrong variant");
+        }
+        let new = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","nextSuggestion":"帮我跑一下测试","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(new).unwrap();
+        if let IpcEvent::TurnEnd(t) = event {
+            assert_eq!(t.next_suggestion.as_deref(), Some("帮我跑一下测试"));
+        } else {
+            panic!("wrong variant");
+        }
+    }
+
+    #[test]
+    fn parse_title_generated_event() {
+        let line = r#"{"kind":"title_generated","sessionId":"s1","title":"登录超时排查","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(line).unwrap();
+        match event {
+            IpcEvent::TitleGenerated(e) => {
+                assert_eq!(e.session_id, "s1");
+                assert_eq!(e.title, "登录超时排查");
+            }
+            _ => panic!("expected TitleGenerated"),
+        }
+    }
+
+    /// Same drift class as `attach_pet_wire_uses_port_not_variant`:
+    /// Python decodes commands with strict kwargs, and its
+    /// `finalAnswer` default is `""` — a `null` on the wire would raise
+    /// in the dataclass. None must serialize as an omitted field.
+    #[test]
+    fn serialize_command_generate_title() {
+        let cmd = IpcCommand::GenerateTitle(GenerateTitleCommand {
+            first_user_message: "帮我看看这个 bug".into(),
+            final_answer: Some("已定位到空指针".into()),
+        });
+        let s = serde_json::to_string(&cmd).unwrap();
+        assert!(s.contains("\"kind\":\"generate_title\""));
+        assert!(s.contains("\"firstUserMessage\":\"帮我看看这个 bug\""));
+        assert!(s.contains("\"finalAnswer\":\"已定位到空指针\""));
+
+        let no_final = IpcCommand::GenerateTitle(GenerateTitleCommand {
+            first_user_message: "hi".into(),
+            final_answer: None,
+        });
+        let s = serde_json::to_string(&no_final).unwrap();
+        assert!(
+            !s.contains("finalAnswer"),
+            "None finalAnswer must be omitted (Python uses str default), got: {s}"
+        );
     }
 
     /// Regression guard: the Rust↔Python `AttachPetCommand` schemas

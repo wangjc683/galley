@@ -287,6 +287,7 @@ bridge 解析 GA yield 出来的 markdown 字符串得到的非结构化进度�
 - `exitReason`：当且仅当 agent_runner_loop 决定退出时非 null（结构与 GA 内部 `exit_reason` 一致：`{"result": "CURRENT_TASK_DONE" | "EXITED" | "MAX_TURNS_EXCEEDED", "data": ...}`）
 - `responseContent`：完整 LLM 响应文本（含 thinking / summary 标签），用于 desktop 自行解析展示
 - `telemetry`：可选。只在带 `exitReason` 的 final `turn_end` 上发送，用于最终回答 footer。字段均可缺失：`elapsedMs`、`inputTokens`、`outputTokens`、`cacheCreateTokens`、`cacheReadTokens`、`requestCount`、`contextUsedChars`、`contextLimitChars`。Managed GA 可通过 Galley-owned runtime hook 统计 token；external GA 不安装 token hook，只做 elapsed 与只读 context snapshot 的 best-effort 降级。
+- `nextSuggestion`：可选（增量字段）。用户口吻的下一步建议，bridge 从最终回答的 `<next-suggestion>` 标签正则提取（标签指令来自 managed runtime prompt profile，`core/src/managed_prompt.rs`）。只在带 `exitReason` 的 final `turn_end` 上非 null；模型未输出标签则缺失。External GA 不会输出该标签——attach 模式自然无此字段。Desktop 渲染为 composer ghost text（`.scratch/composer-next-suggestion/`），并在所有展示路径 strip 该标签（同 `<summary>` 处理）。
 
 ### 4.7a `turn_progress`
 
@@ -488,6 +489,25 @@ bridge 已终止 pet 子进程 + 解除 `_turn_end_hooks` 中对应 entry。
 `variant` 枚举：
 - `"side_question"`：`/btw` 答案，黄色 callout（跟 AskUserBubble 同色家族）
 - `"system"`（默认）：catch-all，简单 muted 行
+
+### 4.17 `title_generated`
+
+`generate_title` 命令（见 5.13）的成功结果：一行清洗后的会话标题（剥标签 /
+引号 / 结尾标点，≤60 字符）。
+
+```json
+{
+  "kind": "title_generated",
+  "sessionId": "sess_abc123",
+  "title": "登录空指针修复",
+  "timestamp": "..."
+}
+```
+
+消费方是 **Core watcher**（`core/src/auto_title.rs`），不是 GUI：Core 对 DB 做
+条件写入（仅当 `title_source` 仍为 seed / derived，CAS 防用户改名竞态），成功后
+经 `session-updated-external` 镜像给 GUI。GUI 的 runner-event 分发器对本事件
+有意 no-op。
 
 ## 5. Commands (workbench → bridge)
 
@@ -692,6 +712,30 @@ Bridge 行为：
 3. emit `pet_detached`（除非走 silent 路径）
 
 `shutdown` 命令路径下 bridge 自动调用 `_handle_detach_pet(silent=True)`，避免 pet 进程随 bridge 死后变 orphan。
+
+### 5.13 `generate_title`
+
+Core 的自动标题 watcher（`core/src/auto_title.rs`）在 `run_complete` 后、会话仍处于
+seed / derived 标题态时发出（见 `.scratch/session-auto-title/`）。上下文随命令传入
+（Core 拥有消息库），bridge **不**读取 `backend.history`——在 worker 线程上用
+`GaSession.side_ask` 对当前 backend 发一次自构造的单消息 `raw_ask`（只读耦合点，
+与 `/btw`、连通性探针同一契约），attach / managed 两模式行为一致。
+
+```json
+{
+  "kind": "generate_title",
+  "firstUserMessage": "帮我看看这个登录 bug",
+  "finalAnswer": "已定位到空指针，修复在 auth.py:42"
+}
+```
+
+- `firstUserMessage`：会话首条可见用户消息（Core 端截断 ≤500 字符）
+- `finalAnswer`：可选，本次 run 的 `finalContent` 截断；缺失时 Python 默认 `""`
+  （Rust 端 None 序列化为省略字段，勿发 `null`）
+
+成功时 emit `title_generated`（见 4.17）；任何失败（超时 / LLM 错误 / 清洗后为空）
+**静默**丢弃，仅 stderr 记日志——Core 会在下次 `run_complete` 时重试，失败不该
+成为用户可见的错误噪音。
 
 ## 6. Approval Flow（端到端示例）
 

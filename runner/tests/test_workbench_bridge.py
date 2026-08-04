@@ -1039,3 +1039,64 @@ def test_fence_filter_flush_drops_carry_inside_fence() -> None:
     f = _FenceFilter()
     f.feed("`````\nhidden tool output ``")
     assert f.flush() == ""
+
+
+# ---------------- auto-title + next-suggestion helpers ----------------
+
+
+def test_extract_next_suggestion_from_final_answer() -> None:
+    from runner.workbench_bridge import _extract_next_suggestion
+
+    raw = "修好了。\n<next-suggestion>帮我把剩下两处调用也改掉</next-suggestion>"
+    assert _extract_next_suggestion(raw) == "帮我把剩下两处调用也改掉"
+    # Whitespace inside the tag collapses to single spaces.
+    raw2 = "<next-suggestion>\n  Fix the   remaining\ncall sites\n</next-suggestion>"
+    assert _extract_next_suggestion(raw2) == "Fix the remaining call sites"
+    assert _extract_next_suggestion("no tag here") is None
+    assert _extract_next_suggestion("") is None
+    assert _extract_next_suggestion("<next-suggestion>  </next-suggestion>") is None
+
+
+def test_clean_response_strips_next_suggestion_tag() -> None:
+    from runner.workbench_bridge import _clean_response_for_display
+
+    raw = "答案正文。\n\n<next-suggestion>帮我跑一下测试</next-suggestion>"
+    cleaned = _clean_response_for_display(raw)
+    assert "next-suggestion" not in cleaned
+    assert "帮我跑一下测试" not in cleaned
+    assert "答案正文。" in cleaned
+
+
+def test_build_title_prompt_truncates_and_orders_context() -> None:
+    from runner.workbench_bridge import _build_title_prompt
+
+    prompt = _build_title_prompt("帮我看这个 bug", "已定位到空指针")
+    assert "[用户] 帮我看这个 bug" in prompt
+    assert "[助手] 已定位到空指针" in prompt
+    # No final answer → the assistant line is omitted entirely.
+    prompt2 = _build_title_prompt("hi", "")
+    assert "[助手]" not in prompt2
+    # Oversized context is capped (500 chars per side).
+    prompt3 = _build_title_prompt("长" * 900, "答" * 900)
+    assert "长" * 500 in prompt3
+    assert "长" * 501 not in prompt3
+
+
+def test_clean_generated_title_normalizes_model_output() -> None:
+    from runner.workbench_bridge import _clean_generated_title
+
+    assert _clean_generated_title("登录超时排查") == "登录超时排查"
+    assert _clean_generated_title("「登录超时排查」") == "登录超时排查"
+    assert _clean_generated_title('"Login timeout hunt."') == "Login timeout hunt"
+    assert _clean_generated_title("标题：登录超时排查\n多余的第二行") == "登录超时排查"
+    assert _clean_generated_title("Title: Fix login") == "Fix login"
+    # Tags are stripped before the first-line pick.
+    assert (
+        _clean_generated_title("<thinking>嗯</thinking>\n登录超时排查")
+        == "登录超时排查"
+    )
+    # Unusable replies come back empty (caller drops silently).
+    assert _clean_generated_title("") == ""
+    assert _clean_generated_title("<thinking>只有思考</thinking>") == ""
+    # Runaway length is capped at 60 chars.
+    assert len(_clean_generated_title("超" * 200)) == 60

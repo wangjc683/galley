@@ -283,6 +283,7 @@ export const enCopy: AppCopy = {
   composer: {
     askAnything: "Ask anything…",
     continueConversation: "Continue…",
+    ghostAcceptHint: "→ to fill in",
     replyToContinue: "Reply, or choose an option above",
     byTheWay: "/btw to ask alongside without interrupting the task…",
     send: "Send",

@@ -542,3 +542,53 @@ def test_pet_detached_event_round_trip() -> None:
     decoded = decode_event(encode(ev))
     assert decoded.sessionId == "s1"
     assert decoded.kind == "pet_detached"
+
+
+def test_turn_end_next_suggestion_round_trip() -> None:
+    ev = TurnEndEvent(
+        sessionId="s1",
+        turnIndex=2,
+        summary="done",
+        toolCalls=[],
+        toolResults=[],
+        responseContent="ok",
+        exitReason={"result": "CURRENT_TASK_DONE", "data": None},
+        nextSuggestion="帮我跑一下测试",
+    )
+    decoded = decode_event(encode(ev))
+    assert isinstance(decoded, TurnEndEvent)
+    assert decoded.nextSuggestion == "帮我跑一下测试"
+    # Old-style payload without the field still decodes (None default).
+    legacy = decode_event(
+        '{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"",'
+        '"toolCalls":[],"toolResults":[],"responseContent":"x",'
+        '"timestamp":"t"}'
+    )
+    assert isinstance(legacy, TurnEndEvent)
+    assert legacy.nextSuggestion is None
+
+
+def test_title_generated_event_round_trip() -> None:
+    from runner.ipc import TitleGeneratedEvent
+
+    ev = TitleGeneratedEvent(sessionId="s1", title="登录超时排查")
+    decoded = decode_event(encode(ev))
+    assert isinstance(decoded, TitleGeneratedEvent)
+    assert decoded.title == "登录超时排查"
+    assert decoded.kind == "title_generated"
+
+
+def test_generate_title_command_round_trip() -> None:
+    from runner.ipc import GenerateTitleCommand
+
+    cmd = decode_command(
+        '{"kind":"generate_title","firstUserMessage":"帮我看看这个 bug",'
+        '"finalAnswer":"已定位到空指针"}'
+    )
+    assert isinstance(cmd, GenerateTitleCommand)
+    assert cmd.firstUserMessage == "帮我看看这个 bug"
+    assert cmd.finalAnswer == "已定位到空指针"
+    # Rust omits finalAnswer when None — Python default fills "".
+    cmd2 = decode_command('{"kind":"generate_title","firstUserMessage":"hi"}')
+    assert isinstance(cmd2, GenerateTitleCommand)
+    assert cmd2.finalAnswer == ""

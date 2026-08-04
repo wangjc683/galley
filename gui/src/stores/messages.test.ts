@@ -181,3 +181,29 @@ describe("messages store", () => {
     );
   });
 });
+
+describe("nextSuggestion (composer ghost text)", () => {
+  it("sets, replaces, and clears on new user turns", async () => {
+    const store = useMessagesStore.getState();
+    store.ensureMessages("s-ghost");
+    store.setNextSuggestion("s-ghost", "帮我跑一下测试");
+    expect(useMessagesStore.getState().byId["s-ghost"].nextSuggestion).toBe(
+      "帮我跑一下测试",
+    );
+
+    // A newer final reply without a tag clears the stale suggestion.
+    store.setNextSuggestion("s-ghost", null);
+    expect(
+      useMessagesStore.getState().byId["s-ghost"].nextSuggestion,
+    ).toBeNull();
+
+    // External user turn (CLI / supervisor dispatch) spends it too.
+    store.setNextSuggestion("s-ghost", "帮我提交");
+    useMessagesStore
+      .getState()
+      .appendUserTurnExternal("s-ghost", "继续", undefined, undefined, true);
+    expect(
+      useMessagesStore.getState().byId["s-ghost"].nextSuggestion,
+    ).toBeNull();
+  });
+});

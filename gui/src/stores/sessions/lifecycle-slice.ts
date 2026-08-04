@@ -753,10 +753,14 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     });
     if (derived) {
       const out = derived as string;
+      // "derived" keeps the row auto-title-upgradable (title_source
+      // semantics, migration 038) — a plain rename would lock it as a
+      // user title and the LLM auto-title would never fire.
       void invoke("rename_session", {
         id: sessionId,
         title: out,
         origin: GUI_ORIGIN,
+        titleSource: "derived",
       }).catch((e) =>
         console.debug("[sessions] maybeDeriveTitle invoke failed.", e),
       );

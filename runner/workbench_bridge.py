@@ -43,6 +43,7 @@ from runner.ipc import (
     Command,
     DetachPetCommand,
     ErrorEvent,
+    GenerateTitleCommand,
     HistoryLoadedEvent,
     IPCProtocolError,
     LLMChangedEvent,
@@ -57,6 +58,7 @@ from runner.ipc import (
     SetYoloModeCommand,
     ShutdownCommand,
     SystemMessageEvent,
+    TitleGeneratedEvent,
     ToolCallPendingEvent,
     ToolsReinjectedEvent,
     TurnEndEvent,
@@ -99,9 +101,31 @@ def _silence_python_stdout() -> None:
 
 _TAG_PATS = [
     r"<" + t + r">.*?</" + t + r">"
-    for t in ("thinking", "summary", "tool_use", "file_content")
+    for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")
 ]
 _FILE_REF_RE = re.compile(r"\[FILE:[^\]]+\]")
+
+# <next-suggestion> — user-voice next-step suggestion the managed
+# runtime prompt profile asks the model to append to its final answer.
+# Extracted into TurnEndEvent.nextSuggestion (and stripped from display
+# via _TAG_PATS above). External GA never emits the tag, so attach mode
+# degrades to "no suggestion" without any mode check.
+_NEXT_SUGGESTION_RE = re.compile(
+    r"<next-suggestion>\s*(.*?)\s*</next-suggestion>", re.DOTALL
+)
+_NEXT_SUGGESTION_MAX_CHARS = 200
+
+
+def _extract_next_suggestion(text: str) -> str | None:
+    if not text:
+        return None
+    m = _NEXT_SUGGESTION_RE.search(text)
+    if m is None:
+        return None
+    suggestion = " ".join(m.group(1).split())
+    if not suggestion:
+        return None
+    return suggestion[:_NEXT_SUGGESTION_MAX_CHARS]
 
 
 def _clean_response_for_display(text: str) -> str:
@@ -113,6 +137,45 @@ def _clean_response_for_display(text: str) -> str:
     cleaned = _FILE_REF_RE.sub("", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+# ---------------- Auto-title helpers ----------------
+
+_TITLE_CONTEXT_MAX_CHARS = 500
+_TITLE_MAX_CHARS = 60
+
+
+def _build_title_prompt(first_user_message: str, final_answer: str) -> str:
+    """Prompt for the one-shot title ask. Written in Chinese with an
+    explicit follow-the-conversation-language rule — the context snippet
+    dominates the language choice in practice."""
+    first = " ".join((first_user_message or "").split())[:_TITLE_CONTEXT_MAX_CHARS]
+    final = " ".join((final_answer or "").split())[:_TITLE_CONTEXT_MAX_CHARS]
+    lines = [
+        "为下面这段对话拟一个简短的会话标题。要求：",
+        "- 概括对话主题；中文不超过 15 个字，英文不超过 6 个词",
+        "- 使用对话本身的主要语言",
+        "- 只输出标题本身：不要引号、不要结尾标点、不要任何解释",
+        "",
+        f"[用户] {first}",
+    ]
+    if final:
+        lines.append(f"[助手] {final}")
+    return "\n".join(lines)
+
+
+def _clean_generated_title(raw: str) -> str:
+    """Normalize a model reply into a bare one-line title; empty string
+    means "unusable, drop silently"."""
+    text = _clean_response_for_display(raw)
+    first_line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+    first_line = re.sub(r"^(标题|title)\s*[:：]\s*", "", first_line, flags=re.IGNORECASE)
+    first_line = first_line.strip("\"'“”‘’「」『』《》<>")
+    first_line = first_line.rstrip("。．.!?！？，,;；")
+    first_line = first_line.strip()
+    if len(first_line) > _TITLE_MAX_CHARS:
+        first_line = first_line[:_TITLE_MAX_CHARS]
+    return first_line
 
 
 def _to_json_safe(obj: Any) -> Any:
@@ -1125,6 +1188,9 @@ class Bridge:
             # exit_reason.data. Coerce to JSON-safe shape before emit.
             safe_exit = _to_json_safe(exit_reason) if exit_reason else None
             telemetry = self._final_turn_telemetry() if exit_reason else None
+            next_suggestion = (
+                _extract_next_suggestion(response_content) if exit_reason else None
+            )
 
             self._emit(
                 TurnEndEvent(
@@ -1144,6 +1210,7 @@ class Bridge:
                     telemetry=telemetry,
                     visibility=self._current_message_visibility,
                     absoluteTurnIndex=self._current_absolute_turn_index(turn),
+                    nextSuggestion=next_suggestion,
                 )
             )
 
@@ -1369,6 +1436,8 @@ class Bridge:
             self._handle_attach_pet(cmd)
         elif isinstance(cmd, DetachPetCommand):
             self._handle_detach_pet()
+        elif isinstance(cmd, GenerateTitleCommand):
+            self._handle_generate_title(cmd)
         elif isinstance(cmd, ShutdownCommand):
             # A pending approval would keep the agent thread blocked
             # through process teardown; deny it so the thread can exit.
@@ -1512,6 +1581,42 @@ class Bridge:
                 blocksAdded=len(tool_hist),
             )
         )
+
+    # ---------------- Auto title (generate_title) ----------------
+
+    TITLE_ASK_TIMEOUT_SECS = 30
+
+    def _handle_generate_title(self, cmd: GenerateTitleCommand) -> None:
+        """One-shot title ask on a worker thread via GaSession.side_ask.
+
+        Silent-failure contract: any error logs to stderr and emits
+        nothing — Core retries with a fresh command at the next
+        run_complete while the session stays seed/derived, so a missed
+        title never becomes user-facing error noise.
+        """
+
+        def worker() -> None:
+            try:
+                prompt = _build_title_prompt(cmd.firstUserMessage, cmd.finalAnswer)
+                raw = self.ga.side_ask(
+                    prompt, time.time() + self.TITLE_ASK_TIMEOUT_SECS
+                )
+                title = _clean_generated_title(raw)
+                if not title:
+                    print(
+                        "[generate_title] empty title after cleaning; dropped",
+                        file=sys.stderr,
+                    )
+                    return
+                self._emit(
+                    TitleGeneratedEvent(sessionId=self.session_id, title=title)
+                )
+            except Exception as e:  # noqa: BLE001
+                print(f"[generate_title] failed: {e}", file=sys.stderr)
+
+        threading.Thread(
+            target=worker, daemon=True, name=f"title-{self.session_id}"
+        ).start()
 
     # ---------------- Side question (/btw) ----------------
 

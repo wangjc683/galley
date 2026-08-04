@@ -406,6 +406,18 @@ pub async fn spawn_runner(
         .await
         .ok_or_else(|| "subscribe failed after spawn (race?)".to_string())?;
 
+    // Second, independent subscriber: the auto-title watcher (v1 scope:
+    // GUI spawn path only — see core/src/auto_title.rs module docs).
+    if let Some(title_rx) = manager.subscribe(&session_id).await {
+        crate::auto_title::spawn_auto_title_task(
+            app.state::<SqliteGalley>().inner().clone(),
+            manager.inner().clone(),
+            crate::notify::TauriNotifier::new(app.clone()),
+            session_id.clone(),
+            title_rx,
+        );
+    }
+
     spawn_emit_task(
         crate::notify::TauriNotifier::new(app),
         session_id.clone(),

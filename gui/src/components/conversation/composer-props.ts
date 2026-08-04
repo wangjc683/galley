@@ -68,6 +68,16 @@ export interface ComposerProps {
   placeholder?: string;
 
   /**
+   * User-voice next-step suggestion (turn_end.nextSuggestion) rendered
+   * as ghost text over the empty textarea; ArrowRight fills it in.
+   * Display is a derived condition — the Composer shows it whenever the
+   * prop is set AND the textarea is empty, so deleting typed text
+   * naturally brings it back. Callers own the session-level predicate
+   * (idle, no pending ask_user) and pass null/undefined otherwise.
+   */
+  ghostSuggestion?: string | null;
+
+  /**
    * Key for the in-memory draft parking lot (lib/composer-draft.ts).
    * When set (and the Composer is uncontrolled), the draft — text,
    * expanded paste-folds, image attachments — survives unmount and is

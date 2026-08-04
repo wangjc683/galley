@@ -440,17 +440,27 @@ pub(super) async fn insert_session_row_inner(
     let prompt_profile = input.prompt_profile.clone().or_else(|| {
         (runtime_kind == RuntimeKind::Managed).then(|| managed_runtime::PROMPT_PROFILE_ID.into())
     });
+    // Auto-title eligibility: rows created with the untouched default
+    // title are 'seed' regardless of which transport created them (the
+    // GUI and `session.new` both fall back to the same constant); any
+    // caller-chosen title is 'user' from birth.
+    let title_source = if title == DEFAULT_NEW_SESSION_TITLE {
+        "seed"
+    } else {
+        "user"
+    };
     sqlx::query(
-        "INSERT INTO sessions (id, project_id, title, status, summary, turn_count, \
+        "INSERT INTO sessions (id, project_id, title, title_source, status, summary, turn_count, \
             pending_approval_count, error_count, pinned, has_unread, \
             llm_index, llm_key, llm_display_name, last_activity_at, created_at, updated_at, \
             created_via, created_by_supervisor, created_origin_note, \
             ga_runtime_kind, ga_runtime_id, prompt_profile) \
-         VALUES (?, ?, ?, 'idle', NULL, 0, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, 'idle', NULL, 0, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(id)
     .bind(&input.project_id)
     .bind(title)
+    .bind(title_source)
     .bind(llm_idx)
     .bind(&input.selected_llm_key)
     .bind(&input.selected_llm_display_name)

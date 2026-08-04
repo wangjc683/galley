@@ -251,6 +251,16 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       if (visibility === "visible") {
         messages.appendAgentTurn(event.sessionId, turn);
       }
+      // Composer ghost text: the final reply's next-step suggestion.
+      // Written unconditionally on the final visible turn_end (null
+      // when the model emitted no tag) so a newer reply always
+      // replaces — or clears — the previous suggestion.
+      if (event.exitReason != null && visibility === "visible") {
+        messages.setNextSuggestion(
+          event.sessionId,
+          event.nextSuggestion?.trim() || null,
+        );
+      }
       // No setAgentRunning(false) here — turn_end is per-step inside
       // GA's agent_runner_loop, not the run terminus. agentRunning
       // stays true until `run_complete` / `error` / bridge close so
@@ -553,6 +563,14 @@ export function dispatchIPCEvent(event: IPCEvent): void {
 
     case "tool_call_start":
     case "tool_call_progress": {
+      console.debug(`[ipc] ${event.kind}`, event);
+      return;
+    }
+
+    case "title_generated": {
+      // Core's auto-title watcher owns this event: it CAS-writes the DB
+      // and mirrors the accepted title through `session-updated-external`,
+      // which the sessions store already applies. Nothing to do here.
       console.debug(`[ipc] ${event.kind}`, event);
       return;
     }

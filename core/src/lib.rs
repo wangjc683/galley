@@ -1,5 +1,6 @@
 pub mod api;
 mod app_menu;
+mod auto_title;
 mod app_paths;
 mod app_setup;
 pub mod app_update;

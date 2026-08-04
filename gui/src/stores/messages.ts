@@ -131,6 +131,14 @@ export interface PerSessionMessages {
   restoring: boolean;
   turnIndexOffset: number;
   lastUserPersistRequestId: number;
+  /**
+   * User-voice next-step suggestion from the latest final reply
+   * (turn_end.nextSuggestion, managed runtime only). Rendered as
+   * composer ghost text while the session is idle; cleared when a new
+   * run starts. In-memory only for v1 — an app restart simply starts
+   * without ghost text until the next reply.
+   */
+  nextSuggestion: string | null;
 }
 
 export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
@@ -147,6 +155,7 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   restoring: false,
   turnIndexOffset: 0,
   lastUserPersistRequestId: 0,
+  nextSuggestion: null,
 }) as PerSessionMessages;
 
 function emptyMessages(): PerSessionMessages {
@@ -166,6 +175,7 @@ function emptyMessages(): PerSessionMessages {
     restoring: false,
     turnIndexOffset: 0,
     lastUserPersistRequestId: 0,
+    nextSuggestion: null,
   };
 }
 
@@ -282,6 +292,13 @@ interface MessagesActions {
    * render time via `useSessionStatusView`.
    */
   setPendingAskUser: (sid: string, value: PendingAskUser | null) => void;
+  /**
+   * Set / clear the latest final reply's next-step suggestion. Written
+   * on every final visible turn_end (null when the reply carried no
+   * tag, so stale suggestions never survive a newer reply); cleared
+   * when a new run starts.
+   */
+  setNextSuggestion: (sid: string, value: string | null) => void;
   clearConversation: (sid: string) => void;
 
   // ---- approval writes ----
@@ -486,6 +503,8 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       // this submission — clear the bubble + yellow sidebar dot
       // so the conversation reverts to normal running visuals.
       pendingAskUser: null,
+      // New run — the previous reply's ghost suggestion is spent.
+      nextSuggestion: null,
       sendPhase: "saving",
       isStopping: false,
       turnIndexOffset: currentTurnCount,
@@ -588,6 +607,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       sendPhase: dispatched ? "waiting_agent" : null,
       turnIndexOffset: offset,
       lastUserPersistRequestId: 0,
+      nextSuggestion: null,
     }));
     // Only the ACTIVE session's submit moves the viewport: external
     // submits into background sessions (supervisor / CLI / goal
@@ -695,6 +715,14 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       isStopping: stopping,
     }));
     set({ byId });  },
+
+  setNextSuggestion: (sid, value) => {
+    const state = get();
+    const { byId } = patchMessages(state, sid, (m) =>
+      m.nextSuggestion === value ? m : { ...m, nextSuggestion: value },
+    );
+    set({ byId });
+  },
 
   appendInFlightDelta: (sid, delta) => {
     // HOT PATH — streaming `turn_progress`. N7 perf baseline measured

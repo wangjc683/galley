@@ -66,6 +66,7 @@ const MIG_033: &str = include_str!("../migrations/033_goal_optional_project.sql"
 const MIG_035: &str = include_str!("../migrations/035_scheduled_tasks.sql");
 const MIG_036: &str = include_str!("../migrations/036_scheduled_tasks_monthly.sql");
 const MIG_037: &str = include_str!("../migrations/037_scheduled_tasks_llm.sql");
+const MIG_038: &str = include_str!("../migrations/038_session_title_source.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -106,7 +107,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
-        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -3135,4 +3136,173 @@ async fn delete_scheduled_task_removes_row() {
         .await
         .expect_err("double delete");
     assert!(matches!(err, GalleyError::NotFound { .. }));
+}
+
+// ============= session-auto-title · title_source semantics =============
+
+fn title_input(id: &str, title: &str) -> CreateSessionInput {
+    CreateSessionInput {
+        id: id.into(),
+        title: title.into(),
+        project_id: None,
+        selected_llm_index: None,
+        selected_llm_key: None,
+        selected_llm_display_name: None,
+        ga_runtime_kind: None,
+        ga_runtime_id: None,
+        prompt_profile: None,
+    }
+}
+
+async fn title_source_of(pool: &SqlitePool, id: &str) -> String {
+    sqlx::query_scalar("SELECT title_source FROM sessions WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .expect("read title_source")
+}
+
+#[tokio::test]
+async fn create_session_marks_seed_vs_user_title_source() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+    galley
+        .create_session(title_input("s_seed", "新对话"), Origin::gui())
+        .await
+        .expect("create seed session");
+    galley
+        .create_session(title_input("s_user", "Deploy pipeline"), Origin::gui())
+        .await
+        .expect("create titled session");
+    assert_eq!(title_source_of(&pool, "s_seed").await, "seed");
+    assert_eq!(title_source_of(&pool, "s_user").await, "user");
+}
+
+#[tokio::test]
+async fn rename_stamps_user_derived_and_seed_reset() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+    galley
+        .create_session(title_input("s_r", "新对话"), Origin::gui())
+        .await
+        .expect("create");
+
+    // GUI first-message truncation keeps the row upgradable.
+    galley
+        .rename_session_with_source(
+            sid("s_r"),
+            "帮我看看这个 bug".into(),
+            galley_core_lib::db::RenameTitleSource::Derived,
+            Origin::gui(),
+        )
+        .await
+        .expect("derived rename");
+    assert_eq!(title_source_of(&pool, "s_r").await, "derived");
+
+    // Plain rename (trait path) locks it as a user title.
+    galley
+        .rename_session(sid("s_r"), "登录问题".into(), Origin::gui())
+        .await
+        .expect("user rename");
+    assert_eq!(title_source_of(&pool, "s_r").await, "user");
+
+    // Clearing the title hands it back to Galley (seed again).
+    galley
+        .rename_session(sid("s_r"), "   ".into(), Origin::gui())
+        .await
+        .expect("clear rename");
+    assert_eq!(title_source_of(&pool, "s_r").await, "seed");
+}
+
+#[tokio::test]
+async fn try_apply_auto_title_cas_respects_eligibility() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+    galley
+        .create_session(title_input("s_cas", "新对话"), Origin::gui())
+        .await
+        .expect("create");
+
+    // seed → auto succeeds.
+    let brief = galley
+        .try_apply_auto_title(&sid("s_cas"), "登录超时排查")
+        .await
+        .expect("cas ok")
+        .expect("eligible row updated");
+    assert_eq!(brief.title, "登录超时排查");
+    assert_eq!(title_source_of(&pool, "s_cas").await, "auto");
+
+    // auto is NOT eligible again — one-shot per session.
+    let second = galley
+        .try_apply_auto_title(&sid("s_cas"), "另一个标题")
+        .await
+        .expect("cas ok");
+    assert!(second.is_none());
+    assert_eq!(title_source_of(&pool, "s_cas").await, "auto");
+
+    // A user rename permanently wins over a late title_generated.
+    galley
+        .rename_session(sid("s_cas"), "我的标题".into(), Origin::gui())
+        .await
+        .expect("user rename");
+    let after_user = galley
+        .try_apply_auto_title(&sid("s_cas"), "迟到的自动标题")
+        .await
+        .expect("cas ok");
+    assert!(after_user.is_none());
+    let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id = 's_cas'")
+        .fetch_one(&pool)
+        .await
+        .expect("read title");
+    assert_eq!(title, "我的标题");
+
+    // Empty / whitespace generated titles are dropped.
+    galley
+        .create_session(title_input("s_cas2", "新对话"), Origin::gui())
+        .await
+        .expect("create 2");
+    let empty = galley
+        .try_apply_auto_title(&sid("s_cas2"), "   ")
+        .await
+        .expect("cas ok");
+    assert!(empty.is_none());
+    assert_eq!(title_source_of(&pool, "s_cas2").await, "seed");
+}
+
+#[tokio::test]
+async fn migration_backfill_marks_existing_seed_rows() {
+    // Simulate a pre-038 database: run everything except 038, insert
+    // rows, then apply 038 and check the backfill split.
+    let pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+        .execute(&pool)
+        .await
+        .expect("enable foreign keys");
+    for sql in [
+        MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
+        MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037,
+    ] {
+        sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
+    }
+    seed_session_idle(&pool, "s_old_seed").await;
+    sqlx::query("UPDATE sessions SET title = '新对话' WHERE id = 's_old_seed'")
+        .execute(&pool)
+        .await
+        .expect("seed title");
+    seed_session_idle(&pool, "s_old_named").await;
+    sqlx::query("UPDATE sessions SET title = '部署流水线' WHERE id = 's_old_named'")
+        .execute(&pool)
+        .await
+        .expect("named title");
+
+    sqlx::raw_sql(MIG_038)
+        .execute(&pool)
+        .await
+        .expect("apply 038");
+    assert_eq!(title_source_of(&pool, "s_old_seed").await, "seed");
+    assert_eq!(title_source_of(&pool, "s_old_named").await, "user");
 }

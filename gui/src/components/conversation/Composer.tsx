@@ -80,6 +80,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       submitAckTick = 0,
       disabled = false,
       placeholder,
+      ghostSuggestion,
       draftKey,
       llms,
       onSelectLLM,
@@ -357,9 +358,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       },
     });
 
+    // Ghost text (next-step suggestion): a derived condition, not a
+    // one-shot event — typing hides it, deleting everything brings it
+    // back, IME composition (non-empty text) hides it. No dismissed
+    // flag by design (.scratch/composer-next-suggestion 定案 5).
+    const ghostVisible = Boolean(
+      ghostSuggestion &&
+        text === "" &&
+        !disabled &&
+        !stopMode &&
+        !effectiveGoalArmed &&
+        !hasPendingImages,
+    );
+
     const resolvedPlaceholder = effectiveGoalArmed
       ? copy.composer.goalPlaceholder
-      : (placeholder ?? copy.composer.askAnything);
+      : ghostVisible
+        ? "" // the ghost overlay occupies the placeholder's visual slot
+        : (placeholder ?? copy.composer.askAnything);
 
     useEffect(() => {
       if (!showByTheWayRequiredHint) return;
@@ -406,6 +422,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         disarmGoal();
         return;
       }
+      // Accept the ghost suggestion. Only reachable while the textarea
+      // is empty (ghostVisible), so this never steals ArrowRight from
+      // caret movement over typed text.
+      if (e.key === "ArrowRight" && ghostVisible && ghostSuggestion) {
+        e.preventDefault();
+        applyComposerText(ghostSuggestion, { clearImagesAfterPrefill: false });
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
@@ -426,6 +450,22 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           // useImageAttachments; `isDropActive` below is fed from there.
         >
           {isDropActive && <ComposerDropOverlay imagesEnabled={imagesEnabled} />}
+          {ghostVisible && (
+            <div
+              aria-hidden
+              // Mirrors the textarea's box exactly (container padding +
+              // font metrics) so the ghost sits where typed text would.
+              // pointer-events-none keeps clicks landing in the textarea.
+              className="pointer-events-none absolute inset-x-3.5 top-3.5 flex items-baseline gap-2 overflow-hidden [font-size:var(--conversation-composer-size)] leading-[1.55]"
+            >
+              <span className="truncate text-ink-muted/50">
+                {ghostSuggestion}
+              </span>
+              <span className="shrink-0 text-[11px] text-ink-muted/40">
+                {copy.composer.ghostAcceptHint}
+              </span>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             rows={2}

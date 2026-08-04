@@ -237,6 +237,13 @@ export function MainView({
     (m) => m.currentRunStartedAtMs,
     null,
   );
+  // Latest final reply's next-step suggestion (managed runtime). The
+  // session-level half of the ghost predicate lives here: idle and not
+  // waiting on an ask_user reply. The Composer derives the rest
+  // (empty textarea, no goal armed) at render time.
+  const nextSuggestion = useActiveMessages((m) => m.nextSuggestion, null);
+  const ghostSuggestion =
+    !isRunning && !pendingAskUser ? nextSuggestion : null;
   const userSubmitTick = useMessagesStore((s) => s.userSubmitTick);
 
   // Stripped partial — empty when nothing renderable yet (e.g. only
@@ -585,6 +592,7 @@ export function MainView({
                 )
               ]
             }
+            ghostSuggestion={ghostSuggestion}
             onSubmit={onSubmit}
             onGoalSubmit={onGoalSubmit}
             stopMode={isRunning}

@@ -267,6 +267,7 @@ export const zhCopy = {
   composer: {
     askAnything: "问点什么…",
     continueConversation: "继续…",
+    ghostAcceptHint: "按 → 填入",
     replyToContinue: "回复，或选择上方候选",
     byTheWay: "/btw 顺便问一句，不打断任务…",
     send: "发送",

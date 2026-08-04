@@ -158,6 +158,13 @@ export interface TurnEndEvent {
   telemetry?: TurnTelemetry | null;
   visibility?: MessageVisibility;
   absoluteTurnIndex?: number | null;
+  /**
+   * User-voice next-step suggestion from the final answer's
+   * `<next-suggestion>` tag (managed runtime only). Present only on the
+   * final turn_end of a run, and only when the model emitted the tag.
+   * Rendered as composer ghost text — never as answer prose.
+   */
+  nextSuggestion?: string | null;
   timestamp: string;
 }
 
@@ -298,6 +305,19 @@ export interface SystemMessageEvent {
   timestamp: string;
 }
 
+/**
+ * LLM-generated session title (auto-title, `generate_title` command).
+ * Consumed by Core's watcher — it CAS-writes the DB and mirrors the
+ * result through `session-updated-external`, so the GUI's runner-event
+ * dispatcher deliberately ignores this kind.
+ */
+export interface TitleGeneratedEvent {
+  kind: "title_generated";
+  sessionId: string;
+  title: string;
+  timestamp: string;
+}
+
 export type IPCEvent =
   | ReadyEvent
   | TurnStartEvent
@@ -315,6 +335,7 @@ export type IPCEvent =
   | ToolsReinjectedEvent
   | PetAttachedEvent
   | PetDetachedEvent
+  | TitleGeneratedEvent
   | SystemMessageEvent;
 
 // ---------------- Commands (desktop → bridge) ----------------

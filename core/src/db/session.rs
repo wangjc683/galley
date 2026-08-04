@@ -2,6 +2,26 @@ use super::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+/// Provenance a rename stamps onto `sessions.title_source`. See
+/// migration `038_session_title_source.sql` for the full value set —
+/// `seed` and `auto` are never chosen by a rename caller directly
+/// (`seed` comes from clearing the title, `auto` from
+/// [`SqliteGalley::try_apply_auto_title`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenameTitleSource {
+    User,
+    Derived,
+}
+
+impl RenameTitleSource {
+    fn as_sql(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Derived => "derived",
+        }
+    }
+}
+
 impl SqliteGalley {
     pub async fn persisted_message_rows(
         &self,
@@ -621,28 +641,101 @@ impl SqliteGalley {
         &self,
         id: SessionId,
         title: String,
+        origin: Origin,
+    ) -> Result<SessionBrief> {
+        self.rename_session_with_source(id, title, RenameTitleSource::User, origin)
+            .await
+    }
+
+    /// Rename + stamp `title_source`. `Derived` is reserved for the GUI's
+    /// first-message truncation (`maybeDeriveTitle`) so auto-title can still
+    /// upgrade it later; every other rename is `User` and locks the title
+    /// for good. An empty title falls back to the seed default AND resets
+    /// the source to 'seed' — clearing the field means "give it back to
+    /// Galley".
+    pub async fn rename_session_with_source(
+        &self,
+        id: SessionId,
+        title: String,
+        source: RenameTitleSource,
         _origin: Origin,
     ) -> Result<SessionBrief> {
         let trimmed = title.trim();
-        let final_title: &str = if trimmed.is_empty() {
-            DEFAULT_NEW_SESSION_TITLE
+        let (final_title, source_sql): (&str, &str) = if trimmed.is_empty() {
+            (DEFAULT_NEW_SESSION_TITLE, "seed")
         } else {
-            trimmed
+            (trimmed, source.as_sql())
         };
         let now = chrono_now_iso();
-        let res = sqlx::query("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?")
-            .bind(final_title)
-            .bind(&now)
-            .bind(id.as_str())
-            .execute(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let res = sqlx::query(
+            "UPDATE sessions SET title = ?, title_source = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(final_title)
+        .bind(source_sql)
+        .bind(&now)
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         if res.rows_affected() == 0 {
             return Err(GalleyError::NotFound {
                 message: format!("session {id} not found"),
             });
         }
         self.session_brief(id).await
+    }
+
+    /// Compare-and-swap write for the auto-title watcher: replaces the
+    /// title only while the row is still eligible (`seed` / `derived`).
+    /// Returns `None` when the row is gone or a user/supervisor title won
+    /// the race — the caller must then drop the generated title silently.
+    pub async fn try_apply_auto_title(
+        &self,
+        id: &SessionId,
+        title: &str,
+    ) -> Result<Option<SessionBrief>> {
+        let trimmed = title.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+        let now = chrono_now_iso();
+        let res = sqlx::query(
+            "UPDATE sessions SET title = ?, title_source = 'auto', updated_at = ? \
+             WHERE id = ? AND title_source IN ('seed', 'derived')",
+        )
+        .bind(trimmed)
+        .bind(&now)
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Ok(None);
+        }
+        self.session_brief(id.clone()).await.map(Some)
+    }
+
+    /// Auto-title eligibility probe. `None` = session missing.
+    pub async fn session_title_source(&self, id: &str) -> Result<Option<String>> {
+        sqlx::query_scalar("SELECT title_source FROM sessions WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)
+    }
+
+    /// First visible user message of a session — the auto-title prompt's
+    /// primary context.
+    pub async fn first_visible_user_message(&self, id: &str) -> Result<Option<String>> {
+        sqlx::query_scalar(
+            "SELECT content FROM messages \
+             WHERE session_id = ? AND role = 'user' AND visibility = 'visible' \
+             ORDER BY turn_index ASC, sequence ASC LIMIT 1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
     }
 
     pub(super) async fn set_session_pinned_db(

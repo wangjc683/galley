@@ -197,3 +197,51 @@ def test_message_to_content_blocks_skips_missing_images(tmp_path: Path) -> None:
 def test_message_to_content_blocks_passes_native_lists_through() -> None:
     native: list[Any] = [{"type": "text", "text": "already blocks"}]
     assert message_to_content_blocks(native) == native
+
+
+# ---------------- side_ask (auto-title one-shot) ----------------
+
+
+def test_side_ask_streams_raw_ask_without_touching_history() -> None:
+    seen_wire: list[Any] = []
+
+    def raw_ask(wire: Any) -> Any:
+        seen_wire.append(wire)
+        yield "登录"
+        yield "超时排查"
+
+    backend = NativeClaudeSession(history=[{"role": "user", "content": "x"}], raw_ask=raw_ask)
+    ga = GaSession(_agent_with_backend(backend))
+
+    out = ga.side_ask("title please", deadline=9e12)
+    assert out == "登录超时排查"
+    # Self-contained single message — history is NOT part of the wire.
+    assert seen_wire == [[{"role": "user", "content": [{"type": "text", "text": "title please"}]}]]
+    assert backend.history == [{"role": "user", "content": "x"}]
+
+
+def test_side_ask_prefers_make_messages_when_available() -> None:
+    def make_messages(msgs: Any) -> Any:
+        return [{"converted": True, "count": len(msgs)}]
+
+    def raw_ask(wire: Any) -> Any:
+        assert wire == [{"converted": True, "count": 1}]
+        yield "ok"
+
+    backend = NativeClaudeSession(
+        history=[], raw_ask=raw_ask, make_messages=make_messages
+    )
+    ga = GaSession(_agent_with_backend(backend))
+    assert ga.side_ask("q", deadline=9e12) == "ok"
+
+
+def test_side_ask_stops_at_deadline() -> None:
+    def raw_ask(wire: Any) -> Any:
+        yield "partial"
+        yield "never-appended"
+
+    backend = NativeClaudeSession(history=[], raw_ask=raw_ask)
+    ga = GaSession(_agent_with_backend(backend))
+    # Deadline already passed: first chunk lands, loop breaks before the
+    # second.
+    assert ga.side_ask("q", deadline=0.0) == "partial"

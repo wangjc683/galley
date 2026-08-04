@@ -118,6 +118,11 @@ class TurnEndEvent:
     telemetry: dict[str, int | None] | None = None
     visibility: str = "visible"
     absoluteTurnIndex: int | None = None
+    # User-voice next-step suggestion extracted from the final answer's
+    # <next-suggestion> tag (managed runtime prompt profile). Only ever
+    # non-None on the final turn_end (exitReason != None); None when the
+    # model emitted no tag — the desktop then simply shows no ghost text.
+    nextSuggestion: str | None = None
     timestamp: str = field(default_factory=_now_iso)
     kind: str = "turn_end"
 
@@ -247,6 +252,20 @@ class PetDetachedEvent:
 
 
 @dataclass
+class TitleGeneratedEvent:
+    """Result of a `generate_title` command: a short LLM-generated
+    session title. Emitted at most once per command; failures are
+    silent (stderr log only) — Galley Core retries by sending a fresh
+    command at the next run_complete while the session stays eligible.
+    """
+
+    sessionId: str
+    title: str
+    timestamp: str = field(default_factory=_now_iso)
+    kind: str = "title_generated"
+
+
+@dataclass
 class SystemMessageEvent:
     """A standalone, non-agent-loop message emitted into the
     conversation. Used by GA's slash-command paths (`/btw`,
@@ -288,6 +307,7 @@ Event = (
     | ToolsReinjectedEvent
     | PetAttachedEvent
     | PetDetachedEvent
+    | TitleGeneratedEvent
     | SystemMessageEvent
 )
 
@@ -399,6 +419,23 @@ class DetachPetCommand:
     kind: str = "detach_pet"
 
 
+@dataclass
+class GenerateTitleCommand:
+    """Ask the bridge for a short LLM-generated session title.
+
+    Sent by Galley Core's auto-title watcher after a run completes while
+    the session still wears a seed/derived title. The context arrives in
+    the command (Core owns the message store) so the bridge never reads
+    backend.history for this — it fires one small out-of-band
+    `backend.raw_ask` with a self-built prompt. Works identically in
+    attach and managed mode.
+    """
+
+    firstUserMessage: str
+    finalAnswer: str = ""
+    kind: str = "generate_title"
+
+
 Command = (
     UserMessageCommand
     | ApprovalResponseCommand
@@ -412,6 +449,7 @@ Command = (
     | ReinjectToolsCommand
     | AttachPetCommand
     | DetachPetCommand
+    | GenerateTitleCommand
 )
 
 
@@ -435,6 +473,7 @@ EVENT_KINDS: dict[str, type] = {
     "tools_reinjected": ToolsReinjectedEvent,
     "pet_attached": PetAttachedEvent,
     "pet_detached": PetDetachedEvent,
+    "title_generated": TitleGeneratedEvent,
     "system_message": SystemMessageEvent,
 }
 
@@ -451,6 +490,7 @@ COMMAND_KINDS: dict[str, type] = {
     "reinject_tools": ReinjectToolsCommand,
     "attach_pet": AttachPetCommand,
     "detach_pet": DetachPetCommand,
+    "generate_title": GenerateTitleCommand,
 }
 
 

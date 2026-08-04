@@ -14,6 +14,8 @@ upgrade can silently move:
 - ``agent._turn_end_hooks``       → register/unregister_turn_hook
 - ``agent.llmclient.backend.history`` → history / set_history /
                                         extend_history / context_usage
+- ``agent.llmclient.backend.raw_ask`` → side_ask (read-only one-shot,
+                                        no history write)
 - ``agent.llmclient.last_tools``  → clear_last_tools
 - ``agent._ga_project_mode_*``    → set_project_mode (Galley-namespaced,
                                     in-memory only per Rule 1)
@@ -36,6 +38,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -186,6 +189,38 @@ class GaSession:
                 f"malformed (PRD §10)"
             )
         return None
+
+    def side_ask(self, prompt: str, deadline: float) -> str:
+        """One-shot out-of-band question to the session's current backend.
+
+        Unlike `/btw` (frontends/btw_cmd.py) this sends a single
+        self-contained user message with NO history snapshot, so no
+        deepcopy/lock dance is needed. Dispatch mirrors btw_cmd's
+        `_build_wire`: BaseSession subclasses get `make_messages`,
+        Native* backends take raw pairs (raw_ask runs its own
+        transforms).
+
+        Read-only coupling point: `backend.raw_ask` never mutates
+        `backend.history` — the same contract btw_cmd.py and core's
+        connectivity probe (`runner_commands/probe.rs`) already rely
+        on. First consumer: the auto-title `generate_title` command.
+        Re-audit at GA baseline upgrades.
+        """
+        backend = self.agent.llmclient.backend
+        user_msg = {
+            "role": "user",
+            "content": [{"type": "text", "text": prompt}],
+        }
+        if hasattr(backend, "make_messages"):
+            wire = backend.make_messages([user_msg])
+        else:
+            wire = [user_msg]
+        text = ""
+        for chunk in backend.raw_ask(wire):
+            text += chunk
+            if time.time() > deadline:
+                break
+        return text
 
     def clear_last_tools(self) -> None:
         """Reset GA's per-LLM "last seen tools" cache so the next prompt
