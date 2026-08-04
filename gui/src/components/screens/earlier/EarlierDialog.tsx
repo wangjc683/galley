@@ -407,10 +407,12 @@ function EarlierRow({
             "z-[60] min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated",
           )}
         >
+          {/* rounded-callout (8px) = the menu surface's rounded-md (12px)
+              minus its p-1 (4px) — concentric corners (polish-checklist P1). */}
           <ContextMenu.Item
             onSelect={onTogglePin}
             className={cn(
-              "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-ui-secondary text-ink-soft outline-none",
+              "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-ui-secondary text-ink-soft outline-none",
               "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
             )}
           >
@@ -429,7 +431,7 @@ function EarlierRow({
           <ContextMenu.Item
             onSelect={onArchive}
             className={cn(
-              "flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-ui-secondary text-ink-soft outline-none",
+              "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-ui-secondary text-ink-soft outline-none",
               "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
             )}
           >

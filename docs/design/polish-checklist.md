@@ -61,3 +61,15 @@ active / loading / empty 全部状态——10% 速度下觉得不对的，就是
   `focus-visible:ring-2 focus-visible:ring-brand/30` 即可。
   其余否决候选（⋯ 按钮热区扩展、callout 圆角、approval breath 动效——
   后者是 §2.7 既有 backlog）记入上表与 §2.7。
+- 2026-08-04：Command Palette + EarlierDialog + ArchivedDialog 二轮 audit。
+  已落地：cmdk 结果行删 `cursor: pointer`（§2.6 红线，palette CSS 是
+  token 制之前的存量）；palette 入场动画字面量换 `--motion-fast` /
+  `--ease-pop` + 补 `prefers-reduced-motion` 退化；palette 圆角 token 化
+  并同心化（容器 `--radius-lg`、结果行 `--radius-callout`）；EarlierDialog
+  右键菜单项同心圆角；清空归档计数 tabular-nums；Esc 键帽精确居中。
+  **裁决（2026-08-04）**：弹层入场 register 统一——全部居中 Dialog
+  （17 处 `Dialog.Content`，含共享的 `SESSION_BROWSER_CONTENT_CLASS` /
+  `ConfirmActionDialog`）复用 `.galley-pop-in`，与菜单 / palette 同
+  register；ImagePreviewDialog 是全屏 lightbox，不适用 scale pop，除外。
+  否决候选：浏览器行内 hover 动作按钮 28px（Sidebar ⋯ 同先例 + 热区
+  不重叠规则）；行元数据 hover 瞬时让位（hover 瞬时规则,正确）。

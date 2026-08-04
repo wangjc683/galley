@@ -126,7 +126,7 @@ export function PromptManagerDialog({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
         <Dialog.Content
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 flex h-[680px] w-[920px] -translate-x-1/2 -translate-y-1/2 flex-col",
+            "galley-pop-in fixed left-1/2 top-1/2 z-50 flex h-[680px] w-[920px] -translate-x-1/2 -translate-y-1/2 flex-col",
             "max-h-[calc(100vh-32px)] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg border border-line bg-app shadow-elevated",
           )}
         >

@@ -146,7 +146,9 @@ export function ArchivedDialog({
                     size="sm"
                     onClick={() => setEmptyConfirmOpen(true)}
                     title={copy.projects.deleteAllArchived}
-                    className="px-1.5 font-normal text-ink-muted hover:bg-error/[var(--opacity-soft)] hover:text-error active:bg-error/[var(--opacity-medium)]"
+                    // tabular-nums: the count updates live as rows are
+                    // deleted / restored while the dialog stays open.
+                    className="px-1.5 font-normal tabular-nums text-ink-muted hover:bg-error/[var(--opacity-soft)] hover:text-error active:bg-error/[var(--opacity-medium)]"
                   >
                     {copy.projects.emptyArchive(archived.length)}
                   </Button>
@@ -448,7 +450,7 @@ function ConfirmEmptyAllDialog({
           role="alertdialog"
           aria-describedby="confirm-empty-all-desc"
           className={cn(
-            "fixed left-1/2 top-1/2 z-[60] w-[460px] -translate-x-1/2 -translate-y-1/2",
+            "galley-pop-in fixed left-1/2 top-1/2 z-[60] w-[460px] -translate-x-1/2 -translate-y-1/2",
             "rounded-lg border border-line bg-elevated p-5 shadow-elevated",
             "max-w-[calc(100vw-32px)]",
           )}

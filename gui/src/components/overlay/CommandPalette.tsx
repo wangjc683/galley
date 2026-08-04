@@ -160,7 +160,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           }
           autoFocus
         />
-        <kbd className="pointer-events-none absolute right-4 top-3.5 rounded-sm border border-line bg-app px-1.5 py-px font-mono text-[10px] text-ink-muted">
+        <kbd className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded-sm border border-line bg-app px-1.5 py-px font-mono text-[10px] text-ink-muted">
           Esc
         </kbd>
       </div>

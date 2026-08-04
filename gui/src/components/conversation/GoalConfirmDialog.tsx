@@ -137,7 +137,7 @@ export function GoalConfirmDialog({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
         <Dialog.Content
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 w-[440px] -translate-x-1/2 -translate-y-1/2",
+            "galley-pop-in fixed left-1/2 top-1/2 z-50 w-[440px] -translate-x-1/2 -translate-y-1/2",
             "max-w-[calc(100vw-32px)] rounded-lg border border-line bg-elevated p-5 shadow-elevated",
           )}
         >

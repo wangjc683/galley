@@ -34,7 +34,7 @@ export function AutoDefaultConfirmModal({
         <Dialog.Content
           aria-describedby={undefined}
           className={cn(
-            "fixed left-1/2 top-1/2 z-[60] w-[480px] max-w-[calc(100vw-32px)]",
+            "galley-pop-in fixed left-1/2 top-1/2 z-[60] w-[480px] max-w-[calc(100vw-32px)]",
             "-translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-elevated p-7 shadow-elevated",
           )}
         >

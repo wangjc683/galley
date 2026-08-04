@@ -36,7 +36,7 @@ export function ArchiveRunningConfirmDialog({
           role="alertdialog"
           aria-describedby="archive-running-desc"
           className={cn(
-            "fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
+            "galley-pop-in fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
             "rounded-lg border border-line bg-elevated p-5 shadow-elevated",
             "max-w-[calc(100vw-32px)]",
           )}

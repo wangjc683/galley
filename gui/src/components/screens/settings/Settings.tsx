@@ -172,7 +172,7 @@ export function Settings({
           onPointerDownOutside={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 flex h-[680px] w-[1040px] -translate-x-1/2 -translate-y-1/2",
+            "galley-pop-in fixed left-1/2 top-1/2 z-50 flex h-[680px] w-[1040px] -translate-x-1/2 -translate-y-1/2",
             "overflow-hidden rounded-lg border border-line bg-elevated shadow-elevated",
             "max-h-[calc(100vh-32px)] max-w-[calc(100vw-32px)]",
           )}
