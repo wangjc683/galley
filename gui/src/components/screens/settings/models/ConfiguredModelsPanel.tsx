@@ -103,7 +103,7 @@ export function ConfiguredModelsPanel({
         <span aria-hidden="true" className="text-ui-tertiary text-ink-muted/45">
           ·
         </span>
-        <span className="text-ui-meta text-ink-muted">
+        <span className="text-ui-meta tabular-nums text-ink-muted">
           {models.length > 0
             ? copy.enabledModelsCount(models.length)
             : copy.noEnabledModels}
@@ -299,7 +299,7 @@ function ConfiguredModelRow({
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div
               className={cn(
-                "truncate text-ui-compact font-medium transition-colors",
+                "truncate text-ui-compact font-medium transition-colors duration-(--motion-fast) ease-firm",
                 isEditing ? "text-brand-strong" : "text-ink",
               )}
             >
@@ -453,7 +453,7 @@ function DefaultModelRadio({
     >
       <span
         className={cn(
-          "flex size-3.5 items-center justify-center rounded-full border transition-colors",
+          "flex size-3.5 items-center justify-center rounded-full border",
           isDefault
             ? "border-brand-strong"
             : "border-line-strong group-hover/radio:border-brand-strong",
@@ -461,7 +461,7 @@ function DefaultModelRadio({
       >
         <span
           className={cn(
-            "size-1.5 rounded-full transition-colors",
+            "size-1.5 rounded-full",
             isDefault
               ? "bg-brand-strong"
               : "bg-transparent group-hover/radio:bg-brand-strong/35",
@@ -492,7 +492,7 @@ function ModelRowActionsMenu({
   onRemove: () => void;
 }) {
   const itemClass =
-    "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50";
+    "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none data-[highlighted]:bg-hover data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50";
 
   return (
     <DropdownMenu.Root>

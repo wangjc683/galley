@@ -121,7 +121,7 @@ export function AdvancedModelOptions({
             {copy.advancedConfig}
           </span>
         </span>
-        <span className="shrink-0 text-ui-tertiary text-ink-muted">
+        <span className="shrink-0 text-ui-tertiary tabular-nums text-ink-muted">
           {customCount > 0
             ? copy.advancedConfigSetCount(customCount)
             : copy.advancedConfigUsingRecommended}
@@ -293,7 +293,7 @@ function AdvancedNumberField({
             if (Number.isFinite(next)) onChange(Math.max(min, next));
           }}
           className={cn(
-            "w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors",
+            "w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors duration-(--motion-fast) ease-firm",
             "placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20",
             suffix && "pr-12",
           )}

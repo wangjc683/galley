@@ -45,7 +45,8 @@ export function ManagedModelProviderCardGrid({
             onClick={() => onChange(preset.id)}
             className={cn(
               "group relative rounded-sm border px-3 py-2 text-left outline-none",
-              "transition-colors focus-visible:ring-[3px] focus-visible:ring-brand/20",
+              "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
+              "focus-visible:ring-[3px] focus-visible:ring-brand/20",
               selected
                 ? "border-brand bg-brand-soft/60 ring-[3px] ring-brand/20"
                 : "border-line bg-elevated hover:border-line-strong hover:bg-hover",

@@ -617,19 +617,31 @@ code {
 }
 
 /* Runtime mode changed. This is a small state acknowledgement, not a
-   decorative flourish: the newly active runtime gets one soft pulse. */
+   decorative flourish: the newly active runtime gets one soft pulse.
+   color-mix off --color-brand so the ring follows the active theme
+   (a hardcoded light-brand rgba didn't flip in dark mode).
+   0.9s is deliberate off-scale (polish-checklist 2026-08-04, J7-class
+   ruling): a tuned one-shot acknowledgement, slower than any --motion-*
+   tier on purpose — and coupled to the 900ms highlight timer in
+   SettingsRuntime.tsx; change both together or neither. */
 @keyframes runtime-mode-highlight {
   0% {
     border-color: var(--color-brand);
-    box-shadow: 0 0 0 0 rgba(217, 167, 138, 0.2);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand) 20%, transparent);
   }
   100% {
     border-color: var(--color-line);
-    box-shadow: 0 0 0 8px rgba(217, 167, 138, 0);
+    box-shadow: 0 0 0 8px transparent;
   }
 }
 .runtime-mode-highlight {
   animation: runtime-mode-highlight 0.9s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-mode-highlight {
+    animation: none;
+  }
 }
 
 /* Pending approval is actionable, so it gets a small attention pulse.

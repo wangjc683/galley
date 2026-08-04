@@ -20,8 +20,10 @@ export function ChannelActionsMenu({
 }) {
   const appCopy = useCopy();
   const imCopy = appCopy.settings.im;
+  // rounded-callout (8px) = the menu surface's rounded-md (12px) minus
+  // its p-1 (4px) — concentric nested corners (polish-checklist P1).
   const itemClass =
-    "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover";
+    "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none data-[highlighted]:bg-hover";
 
   return (
     <DropdownMenu.Root>

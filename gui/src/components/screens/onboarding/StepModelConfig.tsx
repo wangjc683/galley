@@ -480,7 +480,7 @@ function SetupInput({
           placeholder={placeholder}
           spellCheck={false}
           className={cn(
-            "w-full rounded-sm border border-line bg-elevated px-3 py-2 font-mono text-[13px] text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20",
+            "w-full rounded-sm border border-line bg-elevated px-3 py-2 font-mono text-[13px] text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20",
             (trailing || reserveTrailing) && "pr-10",
           )}
         />

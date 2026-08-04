@@ -103,6 +103,31 @@ active / loading / empty 全部状态——10% 速度下觉得不对的，就是
   backlog 已过时——呼吸早已删除，`--shadow-composer-stop-pulse` 现为静态
   halo，可考虑改名；PatchView 每行独立横向滚动条（非违规，Windows 上
   值得观察）。
+- 2026-08-04：Settings 全域六轮 audit（四路并行子代理 + 人工核实，覆盖
+  壳 / 通用 tab / Runtime / BrowserControl / Integration / Models 全家 /
+  IM 全家 / managed-models / 关联 onboarding 输入框）。已落地：
+  **`transition-colors` 无 token 家族清零**——focus / 展开态驱动的一律补
+  `duration-(--motion-fast) ease-firm`（输入框 focus、卡片展开、glyph
+  变色，约 15 处），hover 驱动的一律删 transition 改瞬现（默认单选圈、
+  provider 预设卡）；菜单项同心圆角第六批（ChannelActionsMenu /
+  ProviderCard / ConfiguredModelsPanel 行菜单）；tabular-nums 六处
+  （审批白名单计数 ×2 经 SettingsSectionLabel、启用模型计数 ×2、高级
+  配置计数）；`runtime-mode-highlight` 补 `prefers-reduced-motion`；
+  SettingsIntegration 五个按钮的图标改走 primitive 的
+  leadingIcon / trailingIcon（P2 光学 padding 生效）；provider 预设卡
+  补 quiet press。
+  **接受不改 / 记档**：手风琴头（ChannelCard / ProviderCard /
+  RuntimeAccordionRow / FeishuSetupGuide）光 hover 无 press——四处一致，
+  视为有意的安静 register；combobox 列表（rounded-sm + p-1）项圆角按
+  公式应为 2px、低于刻度——接受偏差；`rounded-[3px]` 行内 code chip、
+  `model-row-swap` 的 ease-out 关键字——低于治理粒度；BrowserControl
+  tab 计数 / visibleOptionsHint——变化频率低于 P4 阈值。
+  **裁决（K2，2026-08-04）**：`runtime-mode-highlight` 的 `0.9s
+  ease-out` 保留——deliberate off-scale（J7 同类：精调一次性确认脉冲，
+  舒缓节奏是其性格；与 SettingsRuntime.tsx 的 900ms JS 计时器耦合，
+  已在 globals.css 注释记档，两者须同改）。顺手修复：keyframe 原硬编码
+  浅色主题品牌色 rgba(217,167,138)，深色下不翻转——已改为
+  `color-mix(in srgb, var(--color-brand) 20%, transparent)` 随主题走。
 - 2026-08-04：MainHeader + header 一族四轮 audit（含 ThemePreferenceMenu /
   LLMPill 菜单）。**裁决**：`active:translate-y-[0.5px]`（devlog
   2026-06-10 引入的轻按压档，共 8 处）与 §2.5「所有位移用整数像素」冲突，

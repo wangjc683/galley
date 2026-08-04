@@ -282,12 +282,14 @@ export function SettingsIntegration() {
             size="sm"
             disabled={sopState.kind === "pending" || !sopBody}
             onClick={() => void copySop()}
+            leadingIcon={
+              sopState.kind === "copied" ? (
+                <Check size={14} weight="bold" />
+              ) : (
+                <Copy size={14} weight="thin" />
+              )
+            }
           >
-            {sopState.kind === "copied" ? (
-              <Check size={14} weight="bold" />
-            ) : (
-              <Copy size={14} weight="thin" />
-            )}
             {sopState.kind === "pending"
               ? agentCopy.sopCopying
               : sopState.kind === "copied"
@@ -414,10 +416,10 @@ export function SettingsIntegration() {
                       "https://github.com/wangjc683/galley/blob/main/docs/agent-api.md",
                     )
                   }
+                  leadingIcon={<BookOpen size={14} weight="thin" />}
+                  trailingIcon={<ArrowSquareOut size={11} weight="thin" />}
                 >
-                  <BookOpen size={14} weight="thin" />
                   {agentCopy.openApiDocs}
-                  <ArrowSquareOut size={11} weight="thin" />
                 </Button>
                 {docOpenError && (
                   <InlineErrorWithCopy
@@ -486,8 +488,8 @@ function PathInstallRow({
           size="sm"
           disabled={busy}
           onClick={onUninstall}
+          leadingIcon={<Terminal size={14} weight="thin" />}
         >
-          <Terminal size={14} weight="thin" />
           {busy ? copy.pathBusy : copy.pathRemove}
         </Button>
       </div>
@@ -514,8 +516,8 @@ function PathInstallRow({
             size="sm"
             disabled={busy}
             onClick={onInstall}
+            leadingIcon={<Terminal size={14} weight="thin" />}
           >
-            <Terminal size={14} weight="thin" />
             {busy ? copy.pathBusy : copy.pathReplace}
           </Button>
           <Button
@@ -541,8 +543,8 @@ function PathInstallRow({
         size="sm"
         disabled={busy}
         onClick={onInstall}
+        leadingIcon={<Terminal size={14} weight="thin" />}
       >
-        <Terminal size={14} weight="thin" />
         {busy ? copy.pathAuth : copy.pathInstall}
       </Button>
     </div>

@@ -7,7 +7,7 @@ export function WeChatGlyph({ active }: { active: boolean }) {
     <span
       aria-hidden="true"
       className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors",
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors duration-(--motion-fast) ease-firm",
         active ? "text-ink" : "text-ink-soft",
       )}
     >
@@ -37,7 +37,7 @@ export function TelegramGlyph({ active }: { active: boolean }) {
     <span
       aria-hidden="true"
       className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors",
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors duration-(--motion-fast) ease-firm",
         active ? "text-ink" : "text-ink-soft",
       )}
     >
@@ -63,7 +63,7 @@ export function FeishuGlyph({ active }: { active: boolean }) {
     <span
       aria-hidden="true"
       className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors",
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors duration-(--motion-fast) ease-firm",
         active ? "text-ink" : "text-ink-soft",
       )}
     >

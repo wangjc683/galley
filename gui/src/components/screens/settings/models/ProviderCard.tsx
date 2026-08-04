@@ -160,7 +160,7 @@ export function ProviderCard({
         // "我的模型" list above must stay the loudest surface on this
         // tab — the maintenance area doesn't lift, shadow, or turn
         // brand-colored on hover.
-        "group/provider overflow-hidden rounded-sm border border-line bg-surface transition-colors",
+        "group/provider overflow-hidden rounded-sm border border-line bg-surface transition-colors duration-(--motion-fast) ease-firm",
         open && "border-line-strong",
       )}
     >
@@ -178,7 +178,7 @@ export function ProviderCard({
         >
           <span
             className={cn(
-              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-colors",
+              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-colors duration-(--motion-fast) ease-firm",
               open ? "text-ink" : "text-ink-soft",
             )}
           >
@@ -196,7 +196,7 @@ export function ProviderCard({
               {provider.displayName}
             </span>
             <CredentialBadge status={provider.credentialStatus} />
-            <span className="inline-flex shrink-0 rounded-sm border border-line bg-surface/80 px-1.5 py-px text-ui-micro text-ink-muted">
+            <span className="inline-flex shrink-0 rounded-sm border border-line bg-surface/80 px-1.5 py-px text-ui-micro tabular-nums text-ink-muted">
               {copy.enabledModelsCount(models.length)}
             </span>
             <ProtocolBadge
@@ -343,7 +343,7 @@ export function ProviderCard({
                           onChange={(e) => onSetModelFilter(e.target.value)}
                           placeholder={copy.filterModels}
                           spellCheck={false}
-                          className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-ui-meta text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
+                          className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-ui-meta text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
                         />
                       </div>
                     </div>
@@ -391,7 +391,7 @@ function ProviderActionsMenu({
   const appCopy = useCopy();
   const copy = appCopy.settings.models;
   const itemClass =
-    "flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover";
+    "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none data-[highlighted]:bg-hover";
 
   return (
     <DropdownMenu.Root>

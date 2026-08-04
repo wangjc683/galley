@@ -93,7 +93,7 @@ export function StepAttach({
           onChange={(e) => onPathChange(e.target.value)}
           placeholder={EXAMPLE_GA_PATH}
           spellCheck={false}
-          className="min-w-0 flex-1 rounded-sm border border-line bg-elevated px-3 py-2 font-mono text-[13px] text-ink outline-none transition-colors placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
+          className="min-w-0 flex-1 rounded-sm border border-line bg-elevated px-3 py-2 font-mono text-[13px] text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
         />
         <Button
           variant="accent-secondary"

@@ -37,13 +37,13 @@ export function ChannelCard({
   return (
     <section
       className={cn(
-        "group/im overflow-hidden rounded-sm border border-line bg-surface transition-colors",
+        "group/im overflow-hidden rounded-sm border border-line bg-surface transition-colors duration-(--motion-fast) ease-firm",
         expanded && "border-line-strong",
       )}
     >
       <div
         className={cn(
-          "flex min-w-0 items-center gap-3 px-2 py-1.5 transition-colors",
+          "flex min-w-0 items-center gap-3 px-2 py-1.5 transition-colors duration-(--motion-fast) ease-firm",
           expanded && "bg-hover/40",
         )}
       >
