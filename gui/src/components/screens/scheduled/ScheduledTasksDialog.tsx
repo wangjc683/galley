@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Play, Plus, Trash, X as XIcon } from "@phosphor-icons/react";
+import { CaretDown, Play, Plus, Trash, X as XIcon } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
 import {
   enable as enableAutostart,
@@ -100,7 +100,9 @@ function formFromExample(example: (typeof EXAMPLES)[number], copy: AppCopy): For
 
 const INPUT_CLASS = cn(
   "w-full rounded-sm border border-line bg-app px-3 text-[13px] text-ink",
-  "placeholder:text-ink-muted focus:border-line-strong focus:outline-none",
+  // Focused = apricot border + soft ring, the app-wide text-input
+  // register (Composer focus-within, PromptManager editor fields).
+  "placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
 );
 
 /**
@@ -257,7 +259,7 @@ export function ScheduledTasksDialog({
                   : copy.scheduled.title}
               </Dialog.Title>
               {!form && tasks.length > 0 && (
-                <span className="text-[11.5px] text-ink-muted">
+                <span className="text-[11.5px] tabular-nums text-ink-muted">
                   {copy.scheduled.count(tasks.length)}
                 </span>
               )}
@@ -308,7 +310,8 @@ export function ScheduledTasksDialog({
                           onClick={() => setForm(formFromExample(example, copy))}
                           className={cn(
                             "w-full rounded-md border border-line px-4 py-3 text-left outline-none",
-                            "hover:bg-hover focus-visible:ring-2 focus-visible:ring-brand/30",
+                            "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
+                            "hover:bg-hover active:translate-y-px focus-visible:ring-2 focus-visible:ring-brand/30",
                           )}
                         >
                           <div className="flex items-baseline justify-between gap-3">
@@ -496,7 +499,9 @@ function TaskRow({
         title={copy.scheduled.edit}
       >
         <div className="truncate text-[13px] text-ink">{task.prompt}</div>
-        <div className="mt-0.5 truncate text-[11.5px] text-ink-muted">
+        {/* tabular-nums: the next-fire time updates live via the
+            changed event while the dialog is open. */}
+        <div className="mt-0.5 truncate text-[11.5px] tabular-nums text-ink-muted">
           {summary}
           {task.llmName && <>{" · "}{task.llmName}</>}
           {task.enabled && task.nextFireAt && (
@@ -512,7 +517,7 @@ function TaskRow({
         ariaLabel={copy.scheduled.runNow}
         disabled={runningNow}
         className={cn(
-          "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
+          "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
           runningNow && "opacity-100",
         )}
         onClick={handleRunNow}
@@ -521,7 +526,7 @@ function TaskRow({
       </IconButton>
       <IconButton
         ariaLabel={copy.scheduled.delete}
-        className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
         onClick={onDelete}
       >
         <Trash size={13} weight="thin" />
@@ -569,7 +574,9 @@ function LastRunCell({
     : copy.scheduled.lastRun(formatFireTime(task.lastFiredAt, language));
   if (!session) {
     return (
-      <span className="shrink-0 text-[11.5px] text-ink-muted">{label}</span>
+      <span className="shrink-0 text-[11.5px] tabular-nums text-ink-muted">
+        {label}
+      </span>
     );
   }
   const sessionId = session.id;
@@ -579,7 +586,7 @@ function LastRunCell({
       onClick={() => onOpenSession(sessionId)}
       title={copy.scheduled.openLastRun}
       className={cn(
-        "shrink-0 rounded-sm px-1.5 py-0.5 text-[11.5px] outline-none",
+        "shrink-0 rounded-sm px-1.5 py-0.5 text-[11.5px] tabular-nums outline-none",
         "focus-visible:ring-2 focus-visible:ring-brand/30",
         waitingApproval
           ? "text-warning hover:bg-warning/10"
@@ -779,7 +786,7 @@ function TaskForm({
       </div>
 
       {preview && (
-        <p className="text-[11.5px] text-ink-muted">
+        <p className="text-[11.5px] tabular-nums text-ink-muted">
           {preview.dueNow
             ? copy.scheduled.previewImmediate(
                 formatFireTime(preview.nextFireAt, language),
@@ -796,41 +803,58 @@ function TaskForm({
 
       <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
         <Field label={copy.scheduled.projectLabel}>
-          <select
-            value={form.projectId}
-            onChange={(e) => onChange({ ...form, projectId: e.target.value })}
-            className={cn(INPUT_CLASS, "h-9 w-[200px] appearance-none pr-8")}
-          >
-            <option value="">{copy.scheduled.noProject}</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          {/* appearance-none strips the native chevron, so the pr-8 slot
+              carries an explicit CaretDown — without it the select reads
+              as a plain text input with no open affordance. */}
+          <div className="relative w-fit">
+            <select
+              value={form.projectId}
+              onChange={(e) => onChange({ ...form, projectId: e.target.value })}
+              className={cn(INPUT_CLASS, "h-9 w-[200px] appearance-none pr-8")}
+            >
+              <option value="">{copy.scheduled.noProject}</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <CaretDown
+              size={12}
+              weight="bold"
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted"
+            />
+          </div>
         </Field>
 
         <Field label={copy.scheduled.modelLabel}>
-          <select
-            value={form.llmName}
-            onChange={(e) => onChange({ ...form, llmName: e.target.value })}
-            className={cn(INPUT_CLASS, "h-9 w-[200px] appearance-none pr-8")}
-          >
-            <option value="">{copy.scheduled.defaultModel}</option>
-            {/* A pinned model missing from the current list (deleted /
-             * runtime switched) stays visible as its own option so the
-             * form doesn't silently rewrite the pin; Core degrades to
-             * the default at fire time anyway. */}
-            {form.llmName &&
-              !llms.some((m) => m.displayName === form.llmName) && (
-                <option value={form.llmName}>{form.llmName}</option>
-              )}
-            {llms.map((m) => (
-              <option key={m.key ?? m.displayName} value={m.displayName}>
-                {m.displayName}
-              </option>
-            ))}
-          </select>
+          <div className="relative w-fit">
+            <select
+              value={form.llmName}
+              onChange={(e) => onChange({ ...form, llmName: e.target.value })}
+              className={cn(INPUT_CLASS, "h-9 w-[200px] appearance-none pr-8")}
+            >
+              <option value="">{copy.scheduled.defaultModel}</option>
+              {/* A pinned model missing from the current list (deleted /
+               * runtime switched) stays visible as its own option so the
+               * form doesn't silently rewrite the pin; Core degrades to
+               * the default at fire time anyway. */}
+              {form.llmName &&
+                !llms.some((m) => m.displayName === form.llmName) && (
+                  <option value={form.llmName}>{form.llmName}</option>
+                )}
+              {llms.map((m) => (
+                <option key={m.key ?? m.displayName} value={m.displayName}>
+                  {m.displayName}
+                </option>
+              ))}
+            </select>
+            <CaretDown
+              size={12}
+              weight="bold"
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted"
+            />
+          </div>
         </Field>
       </div>
 

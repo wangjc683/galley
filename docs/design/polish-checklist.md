@@ -73,3 +73,12 @@ active / loading / empty 全部状态——10% 速度下觉得不对的，就是
   register；ImagePreviewDialog 是全屏 lightbox，不适用 scale pop，除外。
   否决候选：浏览器行内 hover 动作按钮 28px（Sidebar ⋯ 同先例 + 热区
   不重叠规则）；行元数据 hover 瞬时让位（hover 瞬时规则,正确）。
+- 2026-08-04：ScheduledTasksDialog + PromptManagerDialog / SavedPromptControl
+  三轮 audit。提示词侧为新代码，全部合规、零改动。定时任务侧已落地：
+  任务行 hover 按钮删 `transition-opacity`（§2.5 hover 瞬时）；两个
+  `appearance-none` select 补 CaretDown（原本无任何下拉暗示）；表单
+  `INPUT_CLASS` 对齐全局文本输入 focus 约定（`border-brand` +
+  `ring-brand/20`，Composer / Settings / PromptManager 同款），顺带把
+  SessionSearchBar 唯一的 `/30` 收齐为 `/20`；计数 / 触发时间
+  tabular-nums；空态示例卡补 quiet press。否决候选：日 / 月 chips 28px
+  相邻（热区不重叠）；PromptCard div 键盘可达性（归 F1 暂缓档）。

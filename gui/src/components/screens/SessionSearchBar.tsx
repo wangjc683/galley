@@ -33,7 +33,7 @@ export function SessionSearchBar({
         autoFocus
         className={cn(
           "h-7 w-full rounded-sm border border-line bg-surface pl-7 pr-3 text-[12.5px] text-ink",
-          "placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30",
+          "placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
         )}
       />
     </div>
