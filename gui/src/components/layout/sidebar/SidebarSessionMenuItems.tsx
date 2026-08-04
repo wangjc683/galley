@@ -106,7 +106,7 @@ export function SidebarSessionMenuItems({
           <SidebarRowMenuPortal kind={kind}>
             <SidebarRowMenuSubContent
               kind={kind}
-              className="z-50 min-w-[200px] rounded-md border border-line bg-elevated p-1 shadow-elevated"
+              className="galley-pop-in z-50 min-w-[200px] rounded-md border border-line bg-elevated p-1 shadow-elevated"
               sideOffset={4}
             >
               {projects.length === 0 ? (

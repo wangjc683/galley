@@ -108,7 +108,7 @@ export function LanguagePreferenceMenu({
           side={compact ? "bottom" : "right"}
           sideOffset={compact ? 6 : 8}
           className={cn(
-            "z-[70] min-w-[160px] rounded-md border border-line bg-elevated p-1",
+            "galley-pop-in z-[70] min-w-[160px] rounded-md border border-line bg-elevated p-1",
             "text-[13px] text-ink shadow-elevated",
           )}
         >

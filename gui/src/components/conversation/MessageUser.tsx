@@ -338,6 +338,10 @@ function UserImageAttachments({
             className={cn(
               "h-24 w-24 overflow-hidden rounded-md border border-brand-strong/25 bg-surface shadow-[var(--shadow-neutral-control)]",
               "hover:-translate-y-px hover:border-brand-strong/50 hover:shadow-[var(--shadow-neutral-control-hover)] outline-none",
+              // A control that lifts on hover must also sink on press —
+              // lift without travel breaks the §2.5 physics contract.
+              "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+              "active:translate-y-px active:shadow-[var(--shadow-neutral-control)]",
             )}
             aria-label={copy.conversation.previewImage}
           >

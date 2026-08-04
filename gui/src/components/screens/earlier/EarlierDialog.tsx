@@ -404,7 +404,7 @@ function EarlierRow({
       <ContextMenu.Portal>
         <ContextMenu.Content
           className={cn(
-            "z-[60] min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated",
+            "galley-pop-in z-[60] min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated",
           )}
         >
           {/* rounded-callout (8px) = the menu surface's rounded-md (12px)

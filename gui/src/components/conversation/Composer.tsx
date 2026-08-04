@@ -441,7 +441,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         <div
           ref={composerRootRef}
           className={cn(
-            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow] duration-(--motion-fast)",
+            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow] duration-(--motion-fast) ease-firm",
             "focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/20",
             disabled && "opacity-60",
           )}

@@ -576,6 +576,12 @@ code {
   animation: fade-in var(--motion-base) ease-out;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in {
+    animation: none;
+  }
+}
+
 @keyframes model-row-swap-up {
   0% {
     background-color: var(--color-brand-soft);

@@ -462,7 +462,7 @@ function SidebarProjectRow({
                   kind="dropdown"
                   align="end"
                   sideOffset={6}
-                  className="z-50 min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated"
+                  className="galley-pop-in z-50 min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated"
                 >
                   <SidebarProjectMenuItems
                     kind="dropdown"
@@ -486,7 +486,7 @@ function SidebarProjectRow({
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content className="z-50 min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated">
+        <ContextMenu.Content className="galley-pop-in z-50 min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated">
           <SidebarProjectMenuItems
             kind="context"
             project={project}

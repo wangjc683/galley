@@ -84,7 +84,7 @@ export function ManagedModelProviderPicker({
               "min(420px, var(--radix-popover-content-available-height))",
           }}
           className={cn(
-            "z-[80] w-[var(--radix-popover-trigger-width)] overflow-auto rounded-sm border border-line bg-elevated p-1 shadow-elevated",
+            "galley-pop-in z-[80] w-[var(--radix-popover-trigger-width)] overflow-auto rounded-sm border border-line bg-elevated p-1 shadow-elevated",
           )}
         >
           {MANAGED_MODEL_PROVIDER_PRESETS.map((preset) => {

@@ -35,7 +35,7 @@ export function ChannelActionsMenu({
           align="end"
           sideOffset={6}
           className={cn(
-            "z-[70] min-w-[132px] rounded-md border border-line bg-elevated p-1",
+            "galley-pop-in z-[70] min-w-[132px] rounded-md border border-line bg-elevated p-1",
             "text-ui-compact text-ink shadow-elevated",
           )}
         >

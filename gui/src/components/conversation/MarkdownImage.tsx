@@ -45,8 +45,10 @@ export function MarkdownImage({
     preview.kind === "remote"
       ? copy.conversation.openImageInBrowser
       : copy.conversation.openOriginalImageFile;
+  // rounded-callout (8px) = the menu surface's rounded-md (12px) minus
+  // its p-1 (4px) — concentric nested corners (polish-checklist P1).
   const itemClass = cn(
-    "flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none",
+    "flex cursor-default items-center gap-2 rounded-callout px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none",
     "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
   );
 
@@ -80,13 +82,13 @@ export function MarkdownImage({
                 }
               }}
               onError={() => setFailedSrc(rawSrc)}
-              className="block max-h-[420px] max-w-full rounded-[6px] border border-line bg-surface object-contain"
+              className="block max-h-[420px] max-w-full rounded-sm border border-line bg-surface object-contain"
             />
           </a>
         </span>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content className="z-50 min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated">
+        <ContextMenu.Content className="galley-pop-in z-50 min-w-[160px] rounded-md border border-line bg-elevated p-1 shadow-elevated">
           <ContextMenu.Item
             onSelect={() => void saveMarkdownImage(preview, copy)}
             className={itemClass}

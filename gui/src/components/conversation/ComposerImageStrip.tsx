@@ -27,7 +27,13 @@ export function ComposerImageStrip({
       {images.map((image, imageIndex) => (
         <div
           key={image.id}
-          className="group/image relative h-16 w-16 overflow-hidden rounded-md border border-line bg-surface shadow-[var(--shadow-neutral-control)]"
+          // :active propagates up from the inner buttons, so the tile
+          // itself carries the quiet press — translating the full-bleed
+          // preview button alone would slide the image inside its frame.
+          className={cn(
+            "group/image relative h-16 w-16 overflow-hidden rounded-md border border-line bg-surface shadow-[var(--shadow-neutral-control)]",
+            "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
+          )}
         >
           <button
             type="button"
@@ -56,7 +62,7 @@ export function ComposerImageStrip({
               className={cn(
                 "absolute right-1 top-1 flex size-5 items-center justify-center rounded-full",
                 "bg-elevated/95 text-ink shadow-[var(--shadow-neutral-control)]",
-                "opacity-0 hover:bg-hover outline-none group-hover/image:opacity-100",
+                "opacity-0 hover:bg-hover active:bg-selected/70 outline-none group-hover/image:opacity-100",
               )}
             >
               <X size={12} weight="bold" />

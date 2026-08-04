@@ -82,6 +82,27 @@ active / loading / empty 全部状态——10% 速度下觉得不对的，就是
   SessionSearchBar 唯一的 `/30` 收齐为 `/20`；计数 / 触发时间
   tabular-nums；空态示例卡补 quiet press。否决候选：日 / 月 chips 28px
   相邻（热区不重叠）；PromptCard div 键盘可达性（归 F1 暂缓档）。
+- 2026-08-04：Conversation 主区 + Composer 五轮 audit（三路并行子代理筛查
+  + 人工核实）。已落地：**浮层入场 register 收尾**——12 处漏掉
+  `galley-pop-in` 的菜单 / popover（Settings 行菜单、语言菜单、附件菜单、
+  managed-models 选择器、右键菜单等）补齐，至此 Dialog / 菜单 / palette
+  三族入场全部统一；UserQuestionRail hover 预览改瞬现（`duration-0` 保住
+  150ms 意图延迟——删 transition 会连 delay 一起失效，这是该模式的正确
+  改法）；`fade-in` keyframe 补 `prefers-reduced-motion`；附件菜单 / 图片
+  右键菜单项同心圆角（第五批）；三处图片瓦片补按压（MessageUser 96px 瓦片
+  原本只升不降）；GoalTaskBoard 任务进度 tabular-nums；Composer focus 过渡
+  补 `ease-firm`。
+  **裁决（J7，2026-08-04）**：`composer-submit-ack` 确认环保留 `0.36s
+  ease-out`——deliberate off-scale。token 制防的是随手字面量，不磨掉精调
+  的一次性 A 类反馈；360ms 是调出来的节奏，改 240ms 会实际改变手感。
+  下不为例需同等论证。
+  **白名单补录**：StreamingCursor 流式光标呼吸（功能性 liveness，同
+  LiveDots 一族，有 reduced-motion 退化）。
+  **记档**：ImagePreviewDialog 翻页按钮的按压物理被居中 transform 锁死
+  （修复需包 wrapper，收益低，暂不动）；§2.7 的「composer stop breath」
+  backlog 已过时——呼吸早已删除，`--shadow-composer-stop-pulse` 现为静态
+  halo，可考虑改名；PatchView 每行独立横向滚动条（非违规，Windows 上
+  值得观察）。
 - 2026-08-04：MainHeader + header 一族四轮 audit（含 ThemePreferenceMenu /
   LLMPill 菜单）。**裁决**：`active:translate-y-[0.5px]`（devlog
   2026-06-10 引入的轻按压档，共 8 处）与 §2.5「所有位移用整数像素」冲突，

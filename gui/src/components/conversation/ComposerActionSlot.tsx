@@ -140,9 +140,9 @@ export function ComposerActionSlot({
                 (requiresModelConfig && !hasConfigureModels)) &&
                 // Empty/disabled = a quiet neutral "unlit" circle, not a
                 // faded brand fill (50% of pale apricot still read as a
-                // soft button). The brand fill then *blooms* in via the
-                // base button's color/shadow transition the moment the
-                // first character lands.
+                // soft button). The brand fill flips in instantly the
+                // moment the first character lands (the base button is
+                // transition-none; state flips are instant by design).
                 "cursor-not-allowed border-line bg-chrome text-ink-muted shadow-none hover:translate-y-0 hover:border-line hover:bg-chrome hover:text-ink-muted hover:shadow-none active:translate-y-0 active:scale-100",
             )}
           >

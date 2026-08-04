@@ -74,7 +74,7 @@ export function GoalTaskBoard({
   const done = tasks.filter((task) => task.status === "completed").length;
   return (
     <div className="my-4 border-l-[3px] border-brand-strong/30 pl-4">
-      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-brand-strong/70">
+      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.06em] tabular-nums text-brand-strong/70">
         {conv.goalTaskBoardHeading(done, tasks.length)}
       </div>
       <ul className="space-y-1">

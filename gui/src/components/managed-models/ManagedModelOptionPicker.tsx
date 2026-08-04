@@ -59,7 +59,7 @@ export function ManagedModelOptionPicker({
           align="start"
           sideOffset={6}
           className={cn(
-            "z-[80] max-h-[280px] w-[var(--radix-popover-trigger-width)] overflow-auto rounded-sm border border-line bg-elevated p-1 shadow-elevated",
+            "galley-pop-in z-[80] max-h-[280px] w-[var(--radix-popover-trigger-width)] overflow-auto rounded-sm border border-line bg-elevated p-1 shadow-elevated",
           )}
         >
           {options.map((option, index) => {

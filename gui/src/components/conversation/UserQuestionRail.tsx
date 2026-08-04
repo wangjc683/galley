@@ -502,11 +502,14 @@ export function UserQuestionRail({
                     // for the same reason the question already is —
                     // the button's aria-label is the navigation
                     // destination ("跳到第 N 条提问"), not a reading
-                    // surface. Hover-intent gate: fades in after
+                    // surface. Hover-intent gate: appears after
                     // delay-150 (= HOVER_OPEN_DELAY_MS), hides
                     // immediately (delay only applies toward the
                     // hovered state) — a mouse crossing the rail on
                     // its way to the scrollbar doesn't flash previews.
+                    // duration-0: the delay needs a transition to
+                    // exist, but the reveal itself is an instant flip
+                    // (§2.5 hover + the app's tooltip register).
                     //
                     // Grid rather than flex so the answer line can sit
                     // in column 3 and self-align with the question's
@@ -517,7 +520,7 @@ export function UserQuestionRail({
                     aria-hidden
                     className={cn(
                       "pointer-events-none absolute right-full z-10 mr-2 grid w-max max-w-[320px] grid-cols-[auto_1px_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 rounded-sm border border-line bg-elevated px-2 py-1 text-[11.5px] text-ink shadow-sm",
-                      "opacity-0 transition-opacity duration-(--motion-fast) group-hover:opacity-100 group-hover:delay-150",
+                      "opacity-0 transition-opacity duration-0 group-hover:opacity-100 group-hover:delay-150",
                       item.topPercent < TOOLTIP_EDGE_TOP_PERCENT
                         ? "top-0"
                         : item.topPercent > TOOLTIP_EDGE_BOTTOM_PERCENT
@@ -620,10 +623,12 @@ export function UserQuestionRail({
                     )}
                     className={cn(
                       "absolute right-full z-10 mr-2 w-max max-w-[min(320px,calc(100vw-80px))] rounded-sm border border-line bg-elevated py-1 text-[11.5px] text-ink-soft shadow-sm",
-                      "transition-opacity duration-(--motion-fast)",
-                      // Same hover-intent gate as the single-dot
-                      // tooltip; the state-driven open path is delayed
-                      // to match (see openCluster).
+                      // duration-0 keeps the hover-intent delay alive
+                      // while the flip itself is instant — same gate
+                      // as the single-dot tooltip; the state-driven
+                      // open path is delayed in JS to match (see
+                      // openCluster).
+                      "transition-opacity duration-0",
                       isClusterOpen
                         ? "pointer-events-auto opacity-100"
                         : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-hover:delay-150",

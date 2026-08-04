@@ -79,20 +79,20 @@ export function ComposerAttachButton({
           side="top"
           sideOffset={6}
           className={cn(
-            "z-[70] min-w-[168px] rounded-md border border-line bg-elevated p-1",
+            "galley-pop-in z-[70] min-w-[168px] rounded-md border border-line bg-elevated p-1",
             "text-[13px] text-ink shadow-elevated",
           )}
         >
           <DropdownMenu.Item
             onSelect={onPickImages}
-            className="flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover"
+            className="flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none data-[highlighted]:bg-hover"
           >
             <Image size={14} weight="thin" className="shrink-0" />
             {copy.composer.attachImage}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={onReferenceFiles}
-            className="flex items-center gap-2 rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover"
+            className="flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none data-[highlighted]:bg-hover"
           >
             <FileText size={14} weight="thin" className="shrink-0" />
             {copy.composer.referenceFiles}
