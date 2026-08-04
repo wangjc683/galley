@@ -131,6 +131,11 @@ Date: 2026-08-03（JC 与 agent 设计讨论定案）；2026-08-04 实现完成�
    标签；中间步不看。GUI 侧在 final visible turn_end 无条件写入
    （无标签 → null），保证新回复总是替换或清掉旧建议。
 
+后续候选（多建议 chips、ask_user candidates 补全）与辅助 LLM 功能的三条
+准入判据见 `docs/devlog/deferred.md` 与
+`docs/devlog/2026-08-04-auto-title-and-next-suggestion.md`；EmptyState ghost
+text 等被否候选的理由也沉淀在后者，防回锅。
+
 ## 技术风险与验证清单
 
 - [ ] **流式期间标签裸露**：`turn_progress` 的 delta 是 GA-raw、含标签

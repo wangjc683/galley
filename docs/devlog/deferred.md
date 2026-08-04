@@ -75,3 +75,37 @@
 - **候选 7 · GaSession seam grep gate**:seam 本身干净(bridge 11 处调用零 reach-in),但"re-audit 面 = 一个文件"的承诺无 CI 强制,且 `managed_im_supervisor.py:346` 的 `_galley_im_prompt_installed` 写入是结构性旁路(该路径无 Bridge)。做法:grep gate(同 `check-supervisor-sop-drift.mjs` 文风)+ docstring 补旁路,或让 supervisor 路径也构造 `GaSession(agent)`。
 - **Quick wins**:`hasRunningSessions` 收成 messages store selector(三处重推导:App.tsx / MainHeaderHost / app-update.ts);`lib/ipc/ga-output-cleaning.ts` 补测试(纯函数、流式热路径、零覆盖);`socket_listener/` 的 `use super::*` 互 glob 改具名 re-export(照 `codex_oauth/mod.rs`);`spawn_args_for_session_new` 7 参改 `&SessionBrief`+2;runtime store 补 slice-merge shape 守卫(照 `sessions.shape.test.ts`)。
 - **关联**:[架构审查第二轮](./2026-07-28-architecture-review-deepening-round.md) · ADR-0002。
+
+---
+
+## 手动重新生成标题（regenerate title）
+
+- **状态**：暂存（2026-08-04 JC 裁决先不加）
+- **提出**：2026-08-04，自动标题（migration 038 / `generate_title`）发运后的讨论。
+- **启动信号**：dogfood 中「想重新生成标题」的冲动实际出现——JC 自己留意频次，出现即证据。
+- **背景**：自动标题是一次性（CAS 后 `title_source='auto'` 不再有资格）。隐藏出口已存在：**清空标题** 会重置回 seed，下次 `run_complete` 自动重生成（rename 空串路径的副产品，无 UI 提示）。
+- **方案**：不是一个按钮，是三个决策——① 上下文取什么（重生成动机多为话题漂移，应取**最近**交换而非首轮，是另一套上下文策略）；② 锁定语义旁路（`user` 态被显式点按时该被绕过，一次性 CAS 要开洞）；③ 入口放哪（会话行右键菜单 / 标题栏悬停）。runner 的 `generate_title` 通路原样复用。
+- **待定**：见方案三点。
+- **关联**：[自动标题 + 下一步建议](./2026-08-04-auto-title-and-next-suggestion.md)、`.scratch/session-auto-title/PRD.md`。
+
+---
+
+## 多建议 chips（next-suggestion 升级）
+
+- **状态**：暂存
+- **提出**：2026-08-04（ghost text 设计时即预留，准入判据讨论中确认排队）。
+- **启动信号**：ghost text dogfood 证明建议**采纳率**可观——它是同一假设的加注，不是新假设，证据先行。
+- **方案**：A2 标签频道白送——managed prompt 允许模型输出 2-3 条备选（标签格式扩展或多标签），`turn_end.nextSuggestion` 扩为数组（增量字段），渲染复用 `ask_user` candidates 的 chips 组件；主建议仍走 ghost text + →，备选点击填入。
+- **待定**：多条时 ghost 与 chips 的并存形态；标签合同是多标签还是分隔符。
+- **关联**：[自动标题 + 下一步建议](./2026-08-04-auto-title-and-next-suggestion.md)、`.scratch/composer-next-suggestion/PRD.md`。
+
+---
+
+## ask_user candidates 补全（prompt 调优）
+
+- **状态**：暂存
+- **提出**：2026-08-04 准入判据讨论，唯二过筛的候选之一。
+- **启动信号**：dogfood 观察到 GA 提问常不带候选、用户要打字回答本可点选的问题。
+- **方案**：`RUNTIME_PROMPT_STATIC` 加一条「调用 ask_user 提问时尽量附带 candidates」——零成本纯 prompt 调优，现有 chips 渲染（`AskUserBubble`）立刻变勤快。managed 独占（attach 不碰 GA prompt）。
+- **待定**：措辞对不同模型的遵从率；candidates 数量上限建议。
+- **关联**：[自动标题 + 下一步建议](./2026-08-04-auto-title-and-next-suggestion.md)。

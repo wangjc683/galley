@@ -302,6 +302,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [TurnMarker 副标题与回答重复:GA summary 兜底的渲染层去重](./2026-08-03-turn-summary-echo-dedup.md) — draft dogfood 发现同一段话显示两遍;根因是 `ga.py:594-601` 在模型漏写 `<summary>` 时拿整段正文当摘要,Galley 把它渲染在同一段正文正上方;查证**非 v0.4.2 回归**(重复行早于 `d8d90ee` 升级,`turn_end_callback` 逐字未变,补丁 `0016` 不进 `response.content`),也**非协议问题**(是模型合规度:glm-5.2 12 行中 4 行漏写,gpt-5.6-sol 5 行全写);否决改 GA 兜底(summary 进 `history_info` 是 agent 工作记忆,完整正文在那端更有价值),改在渲染层判重,顺带修好已入库历史行;否决前缀匹配(误伤合规短摘要且盖不住带围栏的形状),改用"去围栏候选 + smart_format 省略形"精确比对;preamble 一半已被既有 `narrationDuplicatesPreamble` 盖住
 - [v0.4.2 发布:定时任务信任面 + 引擎升级到 d8d90ee](./2026-08-03-v0.4.2-release.md) — 聚合 `v0.4.1..HEAD` 11 个提交:定时任务信任面 issues 11–14 + rail tooltip 回答预览 + GA baseline 首发 `d8d90ee`;定级沿用 v0.4.1 的功能量级规则判 patch(v0.2.16 发运审计 baseline 同为 patch);补丁 `0016` 是发运前提而非附带(不打则 thinking 脏数据永久落 `final_answer`);`06 CLI schedule` 继续留作 v1 非目标——属 Agent API 面,不搭 patch 版顺风车;构建机是 Intel Mac,bundled runtime gate 走 mac-x64,arm64 产物由 CI 出
 
+### 2026-08-04
+- [自动标题 + 下一步建议 ghost text](./2026-08-04-auto-title-and-next-suggestion.md) — `<next-suggestion>` 标签走 managed prompt 同次补全(否独立侧调用/静态 chips);标题走 `GaSession.side_ask` 每会话一次(否 summary 复用/通用 side-ask 设施);`title_source` 四态 seed/derived/auto/user + CAS 防改名竞态;migration 038;`generate_title`/`title_generated` IPC;ghost 显示是派生条件非一次性事件;零模型选项零开关;立辅助 LLM 功能三条准入判据,否 EmptyState ghost 等一批候选
+
 ## 格式约定
 
 每个 entry 6 段：
