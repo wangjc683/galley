@@ -143,7 +143,17 @@ export function ComposerActionSlot({
                 // soft button). The brand fill flips in instantly the
                 // moment the first character lands (the base button is
                 // transition-none; state flips are instant by design).
-                "cursor-not-allowed border-line bg-chrome text-ink-muted shadow-none hover:translate-y-0 hover:border-line hover:bg-chrome hover:text-ink-muted hover:shadow-none active:translate-y-0 active:scale-100",
+                //
+                // Fill is --color-hover, the neutral "inert control"
+                // step. Was --color-chrome until 2026-08-05, which only
+                // ever fit by greyscale coincidence: chrome is the
+                // sidebar *stage-recession* token and moves whenever
+                // that relationship is retuned (it just did). It also
+                // sat darker than the canvas in dark mode, so an unlit
+                // button read heavier than the surface holding it —
+                // --color-hover sits lighter than the canvas there,
+                // which is the right direction for "not lit yet".
+                "cursor-not-allowed border-line bg-hover text-ink-muted shadow-none hover:translate-y-0 hover:border-line hover:bg-hover hover:text-ink-muted hover:shadow-none active:translate-y-0 active:scale-100",
             )}
           >
             {requiresModelConfig ? (

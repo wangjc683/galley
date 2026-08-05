@@ -44,8 +44,25 @@
      yellow shift — differentiation is by lightness only, per the
      DESIGN.md "明度即抬升" rule, here inverted for chrome). Distinct
      from --color-surface, which means a *raised* card and must stay
-     lighter than app. Do NOT reuse this for cards/insets. */
-  --color-chrome: #f4f3f1;
+     lighter than app.
+
+     Deepened 2026-08-05 (#f4f3f1 → #efeeec): the rule above was stated
+     but not actually delivered — the old pair sat at ΔL* 2.11, right at
+     the just-noticeable threshold, so the sidebar "sank" on paper only.
+     ΔL* now 3.86. Judge this gap with CIE Lab ΔL*, NOT WCAG contrast:
+     WCAG's +0.05 offset is tuned for text legibility and misreports
+     large near-white / near-black fields (the old pair scored 1.05:1
+     light vs 1.03:1 dark — near-identical numbers for visibly different
+     gaps). Calibration: ΔL* ~3-4 reads as "one side sits back"; ΔL* 8+
+     starts reading as two separate panels (Slack / IDE), which is off
+     -temperament for Galley's paper-quiet feel. This token is the
+     restrained end of that band, deliberately.
+
+     Do NOT reuse this for cards/insets, and do NOT borrow it just
+     because the greyscale happens to fit — it is a *stage-recession*
+     token and it moves when that relationship is retuned. Unlit /
+     inert control fills belong to --color-hover. */
+  --color-chrome: #efeeec;
   /* Recessed neutral-grey fill for block code (DESIGN.md §4.3). Distinct
      from the paper the prose floats on (darker than --color-app), and
      in the same family as inline code (--color-hover) so code reads as
@@ -271,9 +288,15 @@ html[data-theme="dark"] {
   /* Dark counterpart of the light chrome: still *darker* than --color-app
      (not lighter) so the sidebar keeps sinking below the conversation
      canvas and the stage "rises" — the same inverted-lightness chrome
-     rule as light mode. Without this override the light value (#f4f3f1)
-     leaks through and the sidebar renders as a bright panel in dark. */
-  --color-chrome: #12100e;
+     rule as light mode. Without this override the light value leaks
+     through and the sidebar renders as a bright panel in dark.
+
+     Deepened 2026-08-05 alongside light (#12100e → #0e0c0a): ΔL* 1.65 →
+     3.03. Held slightly tighter than light's 3.86 on purpose — the app
+     canvas is already #161412, so matching light's gap would push the
+     sidebar to the edge of pure black, where a large field stops
+     reading as a surface and starts reading as a hole. */
+  --color-chrome: #0e0c0a;
   /* Dark code fill: a touch lighter than the near-black page (mirrors
      inline code's --color-hover relationship in dark) so the block
      separates as a distinct code medium without a harsh outline. */
