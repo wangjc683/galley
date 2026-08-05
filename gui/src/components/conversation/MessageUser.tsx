@@ -32,15 +32,27 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *     "checkpoint" in the scroll.
  *   - bg-brand-tint (solid) — apricot band a step deeper than
  *     brand-soft so it stays scannable while scrolling a long
- *     conversation (the fill, not the thin bar, is what the eye
- *     catches during fast scroll). Sibling of the Sidebar active-row /
- *     ApprovalDock apricot family. Still a document callout
- *     (full-width, left-anchored), not an IM bubble.
+ *     conversation. Sibling of the Sidebar active-row / ApprovalDock
+ *     apricot family. Still a document callout (left-anchored), not
+ *     an IM bubble.
+ *   - `w-fit max-w-full` — shrink-to-fit (2026-08-05; was full-width).
+ *     Long messages still fill the column, so nothing changes for the
+ *     content users actually scroll back to; short ones no longer
+ *     render as a near-empty band ("你好" was ~4% of a 760px block).
+ *     Fill weight now tracks content length, which loosely tracks
+ *     "worth finding again" — the anchor is weighted, not weakened.
+ *     Vertical position/height of the brand bar is untouched, and that
+ *     bar is what carries scroll position. NOT a step toward a bubble:
+ *     bubbles are right-aligned, rounded and raised; this stays
+ *     left-anchored with a hard edge.
  *   - sharp right edge (no radius) — a crisp editorial "quoted
  *     input" rectangle anchored by the apricot left bar. Swiss
  *     geometry: structure via a hard edge + the brand rule, not a
  *     softened corner. The warmth stays in the apricot fill + bar;
- *     only the geometry is hardened.
+ *     only the geometry is hardened. Rounding was reconsidered and
+ *     rejected on 2026-08-05: at this aspect ratio a 4px radius moves
+ *     ~0.04% of the block's pixels, and `rounded-*` on a `border-l-4`
+ *     box tapers the brand bar into a wedge at both ends.
  *   - `whitespace-pre-wrap break-words` — preserves the `\n`s in
  *     pasted content (otherwise they'd collapse to spaces under
  *     CSS default whitespace:normal) and lets long Chinese / URL /
@@ -56,9 +68,11 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  * Message actions:
  *   Supervisor provenance stays pinned to the left brand bar. Copy is
  *   a transient floating chip (the same design as the assistant
- *   selection-copy chip) that fades in on hover at the block's
- *   top-right — overlaid on the block so it unambiguously belongs to
- *   this message and never touches the inter-turn gap. The model:
+ *   selection-copy chip) that fades in on hover just outside the
+ *   block's top-right corner — it sat inside the block until
+ *   2026-08-05, when shrink-to-fit made the `pr-10` it needed show up
+ *   as dead fill on short messages. It never touches the inter-turn
+ *   gap, and shares the block's hover region. The model:
  *   persistent actions live in the assistant reply bar; transient copy
  *   surfaces as a floating chip on a user action (hover / select).
  *   Mouse leave delays hiding briefly so the user can move from the
@@ -73,6 +87,7 @@ const COLLAPSE_LINE_THRESHOLD = 6;
 const COLLAPSE_CHAR_THRESHOLD = 500;
 const ACTION_HIDE_DELAY_MS = 1800;
 const COPY_FEEDBACK_MS = 1500;
+
 
 /**
  * Compose the supervisor provenance tooltip for the small icon pinned
@@ -242,7 +257,7 @@ export const MessageUser = memo(function MessageUser({
       <div
         data-role="user-msg"
         className={cn(
-          "relative border-l-4 border-brand-strong bg-brand-tint py-2.5 pl-4 pr-10 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
+          "relative w-fit max-w-full border-l-4 border-brand-strong bg-brand-tint py-2.5 pl-4 pr-4 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",
         )}
       >
@@ -258,11 +273,15 @@ export const MessageUser = memo(function MessageUser({
           <UserImageAttachments attachments={attachments} />
         )}
         {/* Transient copy — a floating chip (same design as the
-            selection-copy chip) that fades in on hover at the block's
-            top-right. Overlaid on the block so it unambiguously belongs
-            to this message and never touches the inter-turn gap. The
-            block reserves `pr-10` so the chip never covers text. */}
-        <div className="absolute right-1.5 top-1.5 z-10">{copyChip}</div>
+            selection-copy chip) that fades in on hover, pinned just
+            outside the block's top-right corner.
+            Sat *inside* the block until 2026-08-05, which is why the
+            block reserved `pr-10`. Shrink-to-fit made that reservation
+            visible: a two-character message would have rendered as a
+            small block trailing 40px of empty fill. Moving the chip out
+            lets the box track its content exactly; it still rides the
+            block's own hover region, so ownership survives. */}
+        <div className="absolute left-full top-1.5 z-10 ml-1.5">{copyChip}</div>
       </div>
       {isLong && (
         <div className="mt-1">

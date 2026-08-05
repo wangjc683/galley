@@ -91,8 +91,10 @@ export function GoalCommissionMarker({
       </div>
       {/* Objective — user register (this is the operator's own words),
           same DNA as MessageUser: 4px brand bar + brand-tint + sharp
-          right edge + Inter medium. */}
-      <div className="relative select-text border-l-4 border-brand-strong bg-brand-tint py-2.5 pl-4 pr-4 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink">
+          right edge + Inter medium + shrink-to-fit (kept in sync
+          2026-08-05 — these two are one visual family; changing the
+          geometry in one place alone breaks the register). */}
+      <div className="relative w-fit max-w-full select-text border-l-4 border-brand-strong bg-brand-tint py-2.5 pl-4 pr-4 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink">
         <span className="block whitespace-pre-wrap break-words">{content}</span>
       </div>
     </div>
