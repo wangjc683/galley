@@ -118,11 +118,20 @@ expect(
   literal("`" + commit + "`"),
   `patch manifest does not name manifest commit ${commit}`,
 );
-expect(
-  "managed-ga/patches/manifest.md",
-  literal("Last replay verified: `" + auditedAt + "`"),
-  `"Last replay verified" does not match manifest auditedAt ${auditedAt}`,
-);
+// Patch-only additions replay the stack after the baseline audit, so the
+// replay date may run ahead of auditedAt — it must never be older (a stale
+// date is the forgotten-update this gate exists to catch).
+{
+  const rel = "managed-ga/patches/manifest.md";
+  const match = read(rel).match(/Last replay verified: `(\d{4}-\d{2}-\d{2})`/);
+  if (!match) {
+    errors.push(`${rel}: "Last replay verified" header missing or malformed`);
+  } else if (match[1] < auditedAt) {
+    errors.push(
+      `${rel}: "Last replay verified" ${match[1]} predates manifest auditedAt ${auditedAt}`,
+    );
+  }
+}
 expect(
   "docs/project-status.md",
   literal(commit.slice(0, 7)),
