@@ -13,10 +13,11 @@ import type { GoalBrief, GoalStatus } from "@/types/goal";
  * (DESIGN.md §4.3 "Goal run = in-thread episode").
  *
  *   - GoalCommissionMarker opens the run: it is the objective the
- *     operator sent in Goal mode, kept in the user register (left brand
- *     bar + brand-tint + Inter — it is still the user's words) but
- *     "crowned" with a Goal eyebrow, the run's fixed parameters, and a
- *     coarse status badge.
+ *     operator sent in Goal mode — still the user's words, dressed in
+ *     the formal bar + brand-tint slab (the pre-2026-08-06 user
+ *     register, deliberately retained after plain user messages moved
+ *     to highlighter strokes) and "crowned" with a Goal eyebrow, the
+ *     run's fixed parameters, and a coarse status badge.
  *   - GoalTerminalMarker closes the run: the durable outcome (done /
  *     failed / stopped) + elapsed + result actions, so reopening a
  *     finished run is not amnesiac.
@@ -89,11 +90,14 @@ export function GoalCommissionMarker({
         </span>
         <GoalStatusBadge status={goal.status} />
       </div>
-      {/* Objective — user register (this is the operator's own words),
-          same DNA as MessageUser: 4px brand bar + brand-tint + sharp
-          right edge + Inter medium + shrink-to-fit (kept in sync
-          2026-08-05 — these two are one visual family; changing the
-          geometry in one place alone breaks the register). */}
+      {/* Objective — the operator's own words in the commission's
+          formal dress: 4px brand bar + brand-tint slab + sharp right
+          edge + Inter medium + shrink-to-fit. Until 2026-08-06 this
+          was "same DNA as MessageUser" and kept in lockstep; plain
+          user messages now render as highlighter strokes and this
+          slab stays behind on purpose — the strokes-vs-slab contrast
+          is part of what marks a Goal commission apart from an
+          ordinary message (DESIGN.md §4.3). */}
       <div className="relative w-fit max-w-full select-text border-l-4 border-brand-strong bg-brand-tint py-2.5 pl-4 pr-4 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink">
         <span className="block whitespace-pre-wrap break-words">{content}</span>
       </div>

@@ -26,31 +26,38 @@
 |---|---|---|
 | 字体 | Inter 500 | Newsreader 400 |
 | 字重 | medium | regular |
-| 锚点 | 左侧 4px 杏沙竖条 + 杏沙底 `bg-brand-tint` + 右侧硬边（无圆角） | 无 |
-| 对齐 | 左对齐 · 宽度随内容（`w-fit max-w-full`） | 左对齐 · 满栏 |
+| 锚点 | 逐行杏沙高亮笔触（`bg-brand-tint` + `box-decoration-clone`，融合成右缘参差的色块） | 无 |
+| 对齐 | 左对齐 · 宽度随内容（`w-fit max-w-full`，bbox 即最长行） | 左对齐 · 满栏 |
 
-不要 right-align 不要气泡 —— 这是文档区，不是聊天 IM。**用户消息是 callout 块，不是 bubble**：左强边线、轻底色、硬右边——参照 Markdown blockquote / Notion callout 的文档语法，而非 IM 单侧浮起。
+不要 right-align 不要气泡 —— 这是文档区，不是聊天 IM。**用户消息是被高亮笔划过的语句，不是 bubble 也不是 callout 块**（2026-08-06 起）：参照纸面文档里读者用荧光笔标出的段落，而非 IM 单侧浮起或 Notion callout 的盒子语法。
 
-长对话里这是用户**回找自己提问**的主视觉锚——杏沙底 + 品牌竖线让每个 user turn 成为滚动停靠点。AI 回复保持纯散文无底色，"提问（高亮锚）→ AI 回复（要读的内容）" 的层次随之建立。
+长对话里这是用户**回找自己提问**的主视觉锚——逐行杏沙笔触让每个 user turn 成为滚动停靠点，回找提问从此是字面意义的「找到被划过的句子」。AI 回复保持纯散文无底色，"提问（高亮锚）→ AI 回复（要读的内容）" 的层次随之建立。
 
-#### 宽度随内容（2026-08-05 起，原为全宽）
+#### 高亮笔（2026-08-06 起，原为 callout 色板）
 
-起因是「这个方框是不是太硬、四个直角」。**圆角被再次否掉**，理由不是立场而是量：17:1 的宽高比下，4px 圆角只改变约 **0.04%** 的像素（四角合计约 13.7px²，块面积约 33440px²）；且 `rounded-*` 加在 `border-l-4` 的盒子上会让左竖条在圆角处渐变收窄、两端削成楔形——要保住竖条就得把它从 border 改成伪元素重做，代价远超收益。
+起因仍是「这个方块生硬、差点意思」——2026-08-05 的 shrink-to-fit（`w-fit max-w-full`，治底色面积与内容量脱钩）没治好体感。复诊结论：病根不是棱角（彼时已量化否决：17:1 slab 上 4px 圆角只动 0.04% 像素），是 **slab 本身**——大面积平涂矩形读作 UI 机件；且 ToolCallout 的机件盒子是 `rounded-md` 圆角的，全视图唯一硬直角的元素恰是人的声音，寄存器倒挂。
 
-真正的变量是**底色面积与内容量脱钩**：「你好」在 760px 宽的实心块里只占约 4%，读起来不再是 callout，而是一条突兀色带。改为 `w-fit max-w-full` 后：
+「一眼认出用户消息」拆成三个任务分析：滚动回找靠前注意信号（颜色/朝向/尺寸）、静读辨声排印足够（访谈体范式）、略读边界感知是中间态。据此做了两轮真机 A/B（MessageUser 内临时 ⌥V 切换器，长 session 实滚）：
 
-- 长消息仍然铺满整栏，`line-clamp-6` 行为不变——**用户真正回找的内容一个像素都没动**；
-- 短消息收缩成小块，视觉权重随内容量走，而内容量粗略正比于「这条值不值得回找」。这不是削弱滚动锚，是给它**自动加权**；满宽方案里「你好」和三行技术提问拿到相同权重，那才是锚点信息的浪费；
-- 滚动定位的载体是那条 4px 竖条，它的**垂直位置与高度完全未变**，缩的只是底色的水平延伸；
-- 仍然不是 bubble：bubble 的定义特征是右对齐 + 圆角 + 浮起，这三样一个都没有。
+- **Round 1**：访谈体三变体（删底色纯排印——竖条原位 / 竖条悬挂栏外 / +Inter 600）vs 高亮笔。**高亮笔在滚动回找的抓眼度上遥遥领先**——色彩面积才是扫视真正依赖的信号，竖条的「颜色+朝向」前注意信号敌不过色域。当年「杏沙底保证滚动可扫视」的断言经受住测试；访谈体（概念上最忠于文档隐喻的方向）被实测干净否决。
+- **Round 2**：笔触行间留细缝 vs 融合成片。**融合版（b-fused）胜出**。
 
-已知的性格漂移：极短消息会读作**标签**而非**引用块**。判断是这个方向诚实——「你好」本来就是寒暄不是提问。**不设 `min-w`**：那个数字无据可推，且会让「你好」与「你好啊我想问一下」等宽，重新把权重和内容量脱钩。
+定案形态：
 
-曾被列为代价的「右边缘参差」经复核**不成立**：user message 之间隔着整段 agent 回复，垂直方向相距很远，锯齿感需要元素密集堆叠才会出现。
+- 逐行杏沙笔触：`bg-brand-tint` + `box-decoration-clone`，纵向 padding 5px 使相邻行在三档字号（leading 1.65–1.75）下都融合成片，右缘随文字参差；
+- **无竖条**——高亮自身就是色彩锚，再加竖条是冗余双锚。4px 竖条退出 user register（滚动锚职能由笔触整体承接，`data-role` / submit 置顶 / Rail 机制不变）；
+- 笔触 **2px 圆角**——2026-08-05 的反圆角论证（0.04% 像素 + border-l 削楔）是 slab 几何的产物，对逐行笔触不迁移：笔触上的圆角可见且读作笔感；
+- **纯空白行不上色**——粘贴内容里的空行不渲染成无字杏沙色块；
+- 笔触的 4px 横向出头用一对偏移 box-shadow 绘制（`±4px 0 0 var(--color-brand-tint)`，不占布局，文字左缘与 agent 散文栏天然对齐）。**不要改回 `px` + 负 margin**：WKWebView 计算 `w-fit` 内在宽度时不计行内横向 padding、布局时又占用它，块会短 8px，`break-words` 随即把短消息拦腰折行（「hey」→「he / y」，2026-08-06 dogfood 发现并修正）；
+- **不给普通消息加 eyebrow / 图标**——会稀释 GoalCommissionMarker 加冠行的对比度。
 
-连带改动:copy chip 从块内移到块外右上角。块原本的 `pr-10` 只为给 chip 预留位置，全宽时藏在大片底色里，收缩后会让每条短消息拖着 40px 空白。chip 仍共享块的 hover 区域，归属不丢。
+随之继承 / 消解的旧决定：
 
-**`GoalRunMarkers` 的 objective 框必须同步**——它与 user 消息是同一视觉家族（组件注释里写作 "same DNA as MessageUser"），只改一处会让 register 断裂。
+- **2026-06-20 排印统一不动**：色彩仍承担 user/agent 区分职能，只是形状从块变笔触，Inter medium 同字号保留。
+- **2026-08-05 shrink-to-fit 的问题域整体消解**：笔触逐行贴文字，底色权重与内容量精确同步（比 `w-fit` 块更彻底），「短消息空色带」「极短消息读作标签」不再存在。
+- `line-clamp-6` 折叠、copy chip 悬浮位、附件缩略图行为全部不变。
+
+**`GoalRunMarkers` 的 objective 框故意不同步**（2026-08-06 裁决，翻转此前的「必须同步」）：委派标记保留旧的竖条 + 色板 + 硬边块形态作为**加冠正装**——平民=笔触、加冠=色板，这个对比本身成为「Goal 委派 vs 普通消息」辨识度的一部分。
 
 #### Right Question Rail
 
@@ -97,7 +104,7 @@ Galley 在 Goal master 线程里讲述 run 进展的旁白（system row）。它
 
 一条 master session 的线程可先后承载**多个 Goal run**（session 复用自身 id 作每个 goal 的 master），中间还会夹普通对话。所以不做"会话级 Header"，而是把每个 run 括成一段**插曲**：开场 = 委派标记，结尾 = 收口标记，中间是该 run 的叙述。单 goal 就是一段干净的头尾，多 goal 自动分段，同一套规则。
 
-- **委派标记（`GoalCommissionMarker`）= objective user message 的加冠版**：它本就是用户在 Goal 模式下发送的第一条消息，保留 user DNA（4px brand 竖条 + `bg-brand-tint` + 硬右边 + Inter medium，就是用户的话），头上加一行 eyebrow：`Target + Goal`（brand 大写字距）+ 右侧直立 tabular 参数（`N 个 Agent · 预算 Xm · 写入模式`）+ 一个粗粒度状态徽标。这同时解决了"objective 被当普通气泡"和"Composer 两种寄存器结果不可辨"——普通发送=普通气泡，Goal 发送=委派标记。
+- **委派标记（`GoalCommissionMarker`）= objective user message 的加冠版**：它本就是用户在 Goal 模式下发送的第一条消息，穿着**加冠正装**（4px brand 竖条 + `bg-brand-tint` 色板 + 硬右边 + Inter medium——2026-08-06 前的 user register，普通消息改高亮笔触后被委派标记专属保留），头上加一行 eyebrow：`Target + Goal`（brand 大写字距）+ 右侧直立 tabular 参数（`N 个 Agent · 预算 Xm · 写入模式`）+ 一个粗粒度状态徽标。这同时解决了"objective 被当普通气泡"和"Composer 两种寄存器结果不可辨"——普通发送=高亮笔触，Goal 发送=委派标记的色板正装。
 - **收口标记（`GoalTerminalMarker`）= run 终态留痕**：`✓ 已完成 / ✕ 失败 / ⏸ 已停止` + `用时 Xm` + 一条 hairline + 操作（`查看结果`/`查看详情` 走 `onOpenGoal`；`产出文件夹` 在有 `workspacePath` 时直接 `revealItemInDir`）。让结果沉淀在对话里，而非划过即逝的 toast；goal 即使已 `result_seen` 从 active 列表移除，回看仍在。
 - **live 归外围**：实时倒计时 / worker 明细 / 停止仍只在 TopBar pill；章节框只在粗粒度状态转变时变（开始 → 进行中 → 终态），不做每秒 ticker（与 §2.7、sidebar/epigraph 的"live 归外围 chrome"一致）。
 - **数据与关联**：标记数据来自只读命令 `list_goals_for_session(masterSessionId)`（全状态，含已读终态）。`annotateGoalThread`（`lib/goal-thread.ts`）用 **objective 文本 + `startedAt ≈ createdAt`** 启发式把 goal 关联到对应的 objective user-turn（消息行不持久化 goalId，恢复后靠此重建）；未命中则优雅退化为无标记的（仍降权的）叙述。run 的收口标记落在其叙述簇之后、后续普通对话之前。
@@ -175,10 +182,11 @@ V0.1 不做：代码块行号 / Edit 在行内（V0.2 候选）。
 - **触发浮现**：用户做动作才出现的复制，统一为 `floating` 变体（实底 `bg-elevated`
   + `border-line` + token 投影，非 glassmorphism），贴相关内容浮出：
   - assistant 里**选中**文字 → 浮在选区旁（gutter）
-  - user 消息上 **hover** → 浮在杏沙块**右上角外侧**（2026-08-05 起；原为覆盖在块
-    内，靠 `pr-10` 留出横向余量。杏沙块改为宽度随内容后，那段预留会在短消息上暴露
-    成 40px 空白拖尾，故把 chip 移出块外。仍共享块的 hover 区域，归属不丢；不占布
-    局、不碰 turn 间距）
+  - user 消息上 **hover** → 浮在高亮块**右上角外侧**（2026-08-05 起；原为覆盖在块
+    内，靠 `pr-10` 留出横向余量。块改为宽度随内容后，那段预留会在短消息上暴露成
+    40px 空白拖尾，故把 chip 移出块外。仍共享块的 hover 区域，归属不丢；不占布
+    局、不碰 turn 间距。2026-08-06 高亮笔改版沿用：chip 贴 `w-fit` bbox 即最长
+    笔触行的右上角）
 
 一条规则统摄：**常驻操作在回答末尾的 bar 里；触发式复制是一个浮动 chip，贴触发的
 内容浮出。** bar 里用 bare chip，浮动的用 floating chip。

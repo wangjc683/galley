@@ -6,7 +6,7 @@ import {
   Copy,
   PlugsConnected,
 } from "@phosphor-icons/react";
-import { useEffect, memo, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, memo, useMemo, useRef, useState } from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
 import {
@@ -20,43 +20,42 @@ import { cn } from "@/lib/utils";
 import type { MessageAttachment, Origin } from "@/types/conversation";
 
 /**
- * User message — document-style callout, NOT a chat bubble.
+ * User message — a highlighter-marked passage in the document, NOT a
+ * chat bubble.
  *
- * Per DESIGN.md §4.3 (as amended 2026-05-14; size/weight unified 2026-06-20):
- *   - font-sans 15px medium — same size & weight as the agent answer body
- *     (MarkdownView PROSE_AGENT). Speaking turns are peers; the apricot
- *     fill + left bar distinguish the user turn, not typography.
- *   - left border 4px brand-strong (apricot) — primary visual anchor
- *     for scroll-back. In long conversations users navigate by their
- *     own questions; the brand bar makes each user turn a strong
- *     "checkpoint" in the scroll.
- *   - bg-brand-tint (solid) — apricot band a step deeper than
- *     brand-soft so it stays scannable while scrolling a long
- *     conversation. Sibling of the Sidebar active-row / ApprovalDock
- *     apricot family. Still a document callout (left-anchored), not
- *     an IM bubble.
- *   - `w-fit max-w-full` — shrink-to-fit (2026-08-05; was full-width).
- *     Long messages still fill the column, so nothing changes for the
- *     content users actually scroll back to; short ones no longer
- *     render as a near-empty band ("你好" was ~4% of a 760px block).
- *     Fill weight now tracks content length, which loosely tracks
- *     "worth finding again" — the anchor is weighted, not weakened.
- *     Vertical position/height of the brand bar is untouched, and that
- *     bar is what carries scroll position. NOT a step toward a bubble:
- *     bubbles are right-aligned, rounded and raised; this stays
- *     left-anchored with a hard edge.
- *   - sharp right edge (no radius) — a crisp editorial "quoted
- *     input" rectangle anchored by the apricot left bar. Swiss
- *     geometry: structure via a hard edge + the brand rule, not a
- *     softened corner. The warmth stays in the apricot fill + bar;
- *     only the geometry is hardened. Rounding was reconsidered and
- *     rejected on 2026-08-05: at this aspect ratio a 4px radius moves
- *     ~0.04% of the block's pixels, and `rounded-*` on a `border-l-4`
- *     box tapers the brand bar into a wedge at both ends.
+ * Per DESIGN.md §4.3 (highlighter redesign 2026-08-06; supersedes the
+ * 2026-05-14 callout slab and its 2026-08-05 shrink-to-fit /
+ * hard-corner iterations):
+ *   - The user's words render as per-line apricot strokes
+ *     (`bg-brand-tint` + `box-decoration-clone`), fused into one
+ *     ragged-right block — a passage marked with a highlighter pen.
+ *     The old solid slab read as UI machinery (heavier and
+ *     harder-cornered than the rounded ToolCallout boxes — the human
+ *     voice dressed as apparatus). The strokes keep the same color
+ *     area, which live A/B testing (2026-08-06, vs typography-only
+ *     variants) showed is the signal scroll-back scanning actually
+ *     runs on, while the ragged right edge kills the slab register.
+ *   - No brand bar: the highlight itself is the color anchor now, and
+ *     a bar next to it would be a redundant double anchor.
+ *   - font-sans 15px medium — unchanged. The 2026-06-20 size/weight
+ *     unification with the agent answer body still holds: color still
+ *     carries the turn distinction, only its shape changed.
+ *   - 2px stroke rounding. The 2026-08-05 anti-rounding argument
+ *     (0.04% of a 17:1 slab's pixels, border-l wedge taper) was slab
+ *     geometry and does not transfer: on a per-line stroke the radius
+ *     is visible and reads as pen work.
+ *   - `w-fit max-w-full` block + per-line strokes — fill weight
+ *     tracks the text line by line, so the 2026-08-05 "short message
+ *     as near-empty band" concern dissolves entirely.
  *   - `whitespace-pre-wrap break-words` — preserves the `\n`s in
  *     pasted content (otherwise they'd collapse to spaces under
  *     CSS default whitespace:normal) and lets long Chinese / URL /
  *     token strings break inside words rather than overflowing.
+ *
+ * GoalCommissionMarker intentionally does NOT follow this redesign:
+ * the crowned objective keeps the old bar + tint slab as its formal
+ * dress. Plain strokes vs slab is now part of what marks a Goal
+ * commission apart from an ordinary message (see GoalRunMarkers).
  *
  * Long-content collapse (≥7 lines or >500 chars):
  *   Collapsed by default to 6 lines via `line-clamp` — a clean
@@ -66,13 +65,13 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   the user pasted a long prompt / stack trace / document.
  *
  * Message actions:
- *   Supervisor provenance stays pinned to the left brand bar. Copy is
- *   a transient floating chip (the same design as the assistant
- *   selection-copy chip) that fades in on hover just outside the
- *   block's top-right corner — it sat inside the block until
- *   2026-08-05, when shrink-to-fit made the `pr-10` it needed show up
- *   as dead fill on short messages. It never touches the inter-turn
- *   gap, and shares the block's hover region. The model:
+ *   Supervisor provenance renders as a small icon above the block.
+ *   Copy is a transient floating chip (the same design as the
+ *   assistant selection-copy chip) that fades in on hover just
+ *   outside the block's top-right corner — it sat inside the block
+ *   until 2026-08-05, when shrink-to-fit made the `pr-10` it needed
+ *   show up as dead fill on short messages. It never touches the
+ *   inter-turn gap, and shares the block's hover region. The model:
  *   persistent actions live in the assistant reply bar; transient copy
  *   surfaces as a floating chip on a user action (hover / select).
  *   Mouse leave delays hiding briefly so the user can move from the
@@ -87,6 +86,48 @@ const COLLAPSE_LINE_THRESHOLD = 6;
 const COLLAPSE_CHAR_THRESHOLD = 500;
 const ACTION_HIDE_DELAY_MS = 1800;
 const COPY_FEEDBACK_MS = 1500;
+
+/**
+ * Per-line highlight strokes. Hard newlines split the content into
+ * runs; each non-whitespace run gets its own stroke span, and
+ * soft-wrapped long lines still stroke per visual line via
+ * `box-decoration-clone`. Whitespace-only lines pass through
+ * unhighlighted so pasted blank lines don't render as empty apricot
+ * blobs. The 5px vertical padding overshoots the natural inter-line
+ * gap at all three conversation font-size steps (leading 1.65–1.75),
+ * fusing adjacent strokes into one ragged block — the fused texture
+ * won over thin per-stroke gaps in the 2026-08-06 dev test.
+ *
+ * The 4px horizontal stroke overhang is painted with a pair of
+ * offset box-shadows, NOT `px-1 -mx-1` padding/margin: WKWebView
+ * leaves inline horizontal padding out of the `w-fit` block's
+ * intrinsic width while still spending it at layout time, so the
+ * padding version came up 8px short and `break-words` folded short
+ * messages mid-word ("hey" → "he/y", dogfood 2026-08-06). The
+ * shadows don't participate in layout at all — the line box is pure
+ * text, which also keeps the text's left edge aligned with the agent
+ * prose column — and they follow each cloned fragment with the
+ * span's own radius, so the painted result is identical.
+ */
+function HighlightedLines({ content }: { content: string }) {
+  const lines = content.split("\n");
+  return (
+    <>
+      {lines.map((line, i) => (
+        <Fragment key={i}>
+          {i > 0 && "\n"}
+          {line.trim().length > 0 ? (
+            <span className="box-decoration-clone rounded-[2px] bg-brand-tint py-[5px] shadow-[-4px_0_0_var(--color-brand-tint),4px_0_0_var(--color-brand-tint)]">
+              {line}
+            </span>
+          ) : (
+            line
+          )}
+        </Fragment>
+      ))}
+    </>
+  );
+}
 
 
 /**
@@ -267,7 +308,7 @@ export const MessageUser = memo(function MessageUser({
       <div
         data-role={askUserReply ? "user-msg-reply" : "user-msg"}
         className={cn(
-          "relative w-fit max-w-full border-l-4 border-brand-strong bg-brand-tint py-2.5 pl-4 pr-4 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
+          "relative w-fit max-w-full py-0.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",
         )}
       >
@@ -277,7 +318,7 @@ export const MessageUser = memo(function MessageUser({
             isLong && collapsed && "line-clamp-6",
           )}
         >
-          {content}
+          <HighlightedLines content={content} />
         </span>
         {attachments.length > 0 && (
           <UserImageAttachments attachments={attachments} />
