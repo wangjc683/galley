@@ -314,6 +314,10 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [完成 run 的过程折叠](./2026-08-06-conversation-run-fold.md) — settled run 过程段折成一行折叠头,`pickToolTier` 哲学升维到 run 层;`run-groups.ts` 单一真相源(折叠+rail 共用,ask_user 回复启发式);折叠时机=注意力交接点(最新展开/提交即折/重开全折);rail 圆点重定义为 run 发起消息;四轮 dogfood:行首 disclosure triangle、工具名走 `copy.tools`、墨阶降档+折叠头 vs Footer 领土表(耗时归折叠头,Footer 删 ⏱)、「用时」前缀防中文时长模板误读
 - [0017 兼容端点 input token 记账修复](./2026-08-06-compat-usage-accounting.md) — Footer ↑0 根因:GLM 等 Anthropic 兼容端点在 message_start 给零 usage、完整 usage 在 message_delta,上游只从 message_start 记 input;llmcore delta 侧兜底(真 Anthropic 不重复计数)+cost_tracker requests 门控;基线重放验证
 - [Settings 泛用入口默认 tab 收口](./2026-08-06-settings-default-tab.md) — 齿轮/命令面板/⌘, 裸调 setSettingsOpen 落点不确定;收口 `openSettings()` 确定落 General(对应性原则);深链不变;否:记住上次 tab
+- [User 消息重设计:callout → 高亮笔](./2026-08-06-user-message-highlighter.md) — 用户消息从大棱角矩形改高亮笔形态(b-fused),文档隐喻重推,两轮真机 A/B 落定
+- [折叠 run 的垂直节奏](./2026-08-06-run-fold-header-spacing.md) — 折叠态移除 StrongHr,折叠头贴紧回答;proximity 绑定修正(header 是回答的 eyebrow)
+- [单步 run 也可折](./2026-08-06-run-fold-single-step.md) — 删 foldable 的 stepCount>=2 条件;耗时归折叠头独家后缺席即丢数据;否:单步专属元数据头、Footer 恢复 ⏱
+- [ask_user 三连修 + 折叠头截断策略](./2026-08-06-ask-user-ux-polish.md) — pending 期回显与气泡同屏去重(askUserPending 抑制);ask_user 终止 run 误发「回复完成」通知改 askUser 类(复用 replyDone 开关);重启后从 tool args 重建 pendingAskUser(chips/黄点复活);折叠头 scent 按次数降序+提问计数移出截断区+溢出 tooltip
 
 ## 格式约定
 
