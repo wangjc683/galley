@@ -433,6 +433,19 @@ export interface DetachPetCommand {
   kind: "detach_pet";
 }
 
+/**
+ * Ask the bridge for a short LLM-generated session title. Sent by
+ * Galley Core's auto-title watcher, never by the GUI — mirrored here
+ * because this file is the ts surface of the full wire protocol. The
+ * prompt context travels in the command (Core owns the message store);
+ * the bridge answers with one out-of-band `backend.raw_ask`.
+ */
+export interface GenerateTitleCommand {
+  kind: "generate_title";
+  firstUserMessage: string;
+  finalAnswer?: string;
+}
+
 export type IPCCommand =
   | UserMessageCommand
   | ApprovalResponseCommand
@@ -445,4 +458,5 @@ export type IPCCommand =
   | ShutdownCommand
   | ReinjectToolsCommand
   | AttachPetCommand
-  | DetachPetCommand;
+  | DetachPetCommand
+  | GenerateTitleCommand;
