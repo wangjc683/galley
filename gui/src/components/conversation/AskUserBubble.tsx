@@ -135,6 +135,11 @@ function CandidateChip({
  * the question from the persisted tool args, in the same yellow
  * register as the live bubble but without the action affordances.
  *
+ * While the question is still pending, the turn that produced it
+ * suppresses this echo (Conversation's `suppressAskUserEcho`) — the
+ * live AskUserBubble at the tail is already showing the same text,
+ * and both rendering at once printed the question twice, stacked.
+ *
  * Visually distinct from the live `AskUserBubble`:
  *   - `ChatCircleDots` glyph + "曾向你提问" label (vs PauseCircle +
  *     "等你回复") — signals the settled, non-actionable state.

@@ -50,6 +50,12 @@ export interface ConversationProps {
   /** Drill-down from a frozen task board row into the owning worker
    * session's raw log. */
   onOpenWorkerSession?: (sessionId: string) => void;
+  /** True while the active session has a live `pendingAskUser`. The
+   * tail AskUserBubble is already showing the question, so the turn
+   * it came from must suppress its static AnsweredAskUser echo —
+   * otherwise the identical question prints twice, stacked right
+   * above the live bubble. */
+  askUserPending?: boolean;
 }
 
 /**
@@ -73,8 +79,26 @@ export function Conversation({
   projectName,
   goals,
   onOpenWorkerSession,
+  askUserPending = false,
 }: ConversationProps) {
   const items = annotateGoalThread(turns, goals ?? []);
+
+  // The turn whose ask_user question is currently live in the tail
+  // AskUserBubble. Positional match (last agent turn carrying an
+  // ask_user tool) rather than question-text comparison — the two
+  // paths strip GA tags independently, so text equality would be a
+  // fragile join key. Searching from the end tolerates trailing
+  // side-worker turns (/btw) appended while the question is pending.
+  const pendingAskUserTurn = useMemo(() => {
+    if (!askUserPending) return null;
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const t = turns[i];
+      if (t.role === "agent" && t.tools.some((tool) => tool.name === "ask_user")) {
+        return t;
+      }
+    }
+    return null;
+  }, [askUserPending, turns]);
 
   // Run fold (conversation-run-fold PRD): settled runs collapse their
   // process section behind a RunFoldHeader. Grouping is the shared
@@ -192,6 +216,7 @@ export function Conversation({
                 hideMarker={
                   turnIndex !== undefined && answerOnly.has(turnIndex)
                 }
+                suppressAskUserEcho={item.turn === pendingAskUserTurn}
               />
             )}
             {/* No divider between turns — the TurnMarker on each
@@ -213,6 +238,7 @@ function AgentTurnView({
   onApprove,
   projectName,
   hideMarker = false,
+  suppressAskUserEcho = false,
 }: {
   turn: AgentTurn;
   approvalDecisions?: Record<string, ApprovalDecision>;
@@ -225,6 +251,11 @@ function AgentTurnView({
    * the StrongHr call site). A closing turn has no narration / real
    * tools / ask_user by definition (run-groups isClosingTurn). */
   hideMarker?: boolean;
+  /** True when this turn's ask_user question is currently live as the
+   * tail AskUserBubble — skip the AnsweredAskUser echo so the question
+   * doesn't render twice. The echo takes over once the user answers
+   * (pendingAskUser clears) or after a restart (pending is transient). */
+  suppressAskUserEcho?: boolean;
 }) {
   // `finalAnswer` is what's left of GA's responseContent after the
   // <thinking> / <tool_use> / <file_content> / <summary> tags have
@@ -330,7 +361,7 @@ function AgentTurnView({
         />
       ))}
 
-      {typeof askUserQuestion === "string" && (
+      {typeof askUserQuestion === "string" && !suppressAskUserEcho && (
         <AnsweredAskUser question={askUserQuestion} />
       )}
 

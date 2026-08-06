@@ -361,6 +361,7 @@ export function MainView({
                 projectName={projectName}
                 goals={sessionGoals}
                 onOpenWorkerSession={onOpenSession}
+                askUserPending={Boolean(pendingAskUser)}
               />
             )}
             {/* In-flight pending approvals — rendered after the
