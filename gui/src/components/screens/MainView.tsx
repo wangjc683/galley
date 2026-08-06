@@ -350,6 +350,11 @@ export function MainView({
               <ConversationSkeleton />
             ) : (
               <Conversation
+                // Keyed per session so fold state (keep-expanded
+                // pointer + manual toggles) resets on switch — a
+                // reopened session starts with every settled run
+                // folded (conversation-run-fold PRD 定案 2).
+                key={activeSessionId ?? "conversation"}
                 turns={turns}
                 approvalDecisions={approvalDecisions}
                 onApprove={onApprove}

@@ -1314,6 +1314,19 @@ export const zhCopy = {
     stepDirectAnswer: "直接回答了用户问题",
     stepCalledTools: (names: string[]) =>
       names.length === 1 ? `调用了 ${names[0]}` : `调用了 ${names.length} 个工具`,
+    /** 完成 run 的折叠头（conversation-run-fold）。时长不复用
+     *  minutesSeconds——那句带「已」前缀，是进行时口径。
+     *  「用时」前缀是防误读装置：「2 步 · 16 秒」套进中文时长短语的
+     *  数字+单字量词韵律模板，扫一眼会读成「2 分 16 秒」；插入标签词
+     *  打断模板（zh 特有问题，en 的 "steps" 一词天然打断）。 */
+    foldSteps: (n: number) => `${n} 步`,
+    foldDurationSeconds: (sec: number) => `用时 ${sec} 秒`,
+    foldDurationMinutes: (minutes: number, sec: number) =>
+      `用时 ${minutes} 分 ${sec} 秒`,
+    foldAskUser: (n: number) => `${n} 次提问`,
+    foldDenied: (n: number) => `${n} 次拒绝`,
+    foldExpand: "展开过程",
+    foldCollapse: "收起过程",
     thinking: "思考中…",
     answering: "正在回答…",
     runWorking: "工作中",

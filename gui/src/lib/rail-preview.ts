@@ -19,6 +19,7 @@
 // its framing does not fit. The final answer is what the user would see
 // on click, which is what a preview should be a thumbnail of.
 
+import { buildRunGroups } from "@/lib/run-groups";
 import type { Turn } from "@/types/conversation";
 
 /**
@@ -71,8 +72,10 @@ export function firstProseLine(markdown: string): string {
 }
 
 /** One user question plus the answer that closed it. One entry per
- * user turn, in turn order — so indices align with the rail's
- * `[data-role="user-msg"]` DOM nodes. */
+ * run-opening user turn, in turn order — so indices align with the
+ * rail's `[data-role="user-msg"]` DOM nodes (run openers only:
+ * ask_user replies render as `user-msg-reply` and goal commissions
+ * render as markers; neither carries the anchor role). */
 export interface RailExchange {
   /** Preview of the user's message. "" when the message was
    * whitespace-only; the rail renders a placeholder for that. */
@@ -84,40 +87,52 @@ export interface RailExchange {
 }
 
 /**
- * Pair each user question with its answer.
+ * Pair each run-opening question with its answer, one exchange per
+ * `buildRunGroups` group that has a non-goal user opener.
  *
- * The answer is the **last** agent turn carrying a non-null
- * `finalAnswer` before the next user message. "Last" rather than "the
- * one whose tools are all `no_tool`" is a deliberate choice (2026-08-03
- * discussion): `finalAnswer` is computed on every `turn_end`, not only
- * on the closing turn, so an intermediate tool turn that wrote prose
- * beyond its "当前阶段：…" preamble also lands a non-null value. Taking
- * the last one keeps a preview in the interrupted-run case instead of
+ * Grouping via run-groups (2026-08-06, conversation-run-fold) replaced
+ * the old "every user turn is an exchange" walk for two reasons:
+ * ask_user replies are process, not questions (and their MessageUser
+ * no longer carries the `user-msg` anchor role, so counting them here
+ * would desync data from DOM); and goal commissions render as markers
+ * without the anchor role at all — the old walk miscounted them in
+ * goal master sessions.
+ *
+ * The answer is the **last** agent turn in the group carrying a
+ * non-null `finalAnswer`. "Last" rather than "the one whose tools are
+ * all `no_tool`" is a deliberate choice (2026-08-03 discussion):
+ * `finalAnswer` is computed on every `turn_end`, not only on the
+ * closing turn, so an intermediate tool turn that wrote prose beyond
+ * its "当前阶段：…" preamble also lands a non-null value. Taking the
+ * last one keeps a preview in the interrupted-run case instead of
  * showing nothing.
  *
  * Agent turns that precede the first user message (restored history,
- * Goal narration opening a session) have no question to attach to and
- * are skipped. System turns are skipped everywhere.
+ * Goal narration opening a session) land in the headless group and are
+ * skipped. System turns are skipped everywhere.
  */
 export function buildRailExchanges(turns: Turn[]): RailExchange[] {
   const exchanges: RailExchange[] = [];
 
-  for (const turn of turns) {
-    if (turn.role === "user") {
-      exchanges.push({ question: buildPreview(turn.content), answer: null });
-      continue;
+  for (const group of buildRunGroups(turns)) {
+    if (group.openerIndex < 0) continue;
+    const opener = turns[group.openerIndex];
+    if (opener.role !== "user") continue;
+    // Goal commissions render as GoalCommissionMarker, not MessageUser
+    // — no anchor node in the DOM, so no exchange here either.
+    if (opener.goalId) continue;
+
+    let answer: string | null = null;
+    for (const i of group.memberIndices) {
+      const turn = turns[i];
+      if (turn.role !== "agent" || turn.finalAnswer == null) continue;
+      // Later answers overwrite earlier ones, including overwriting
+      // with null when the closing turn has no previewable prose.
+      const preview = buildPreview(firstProseLine(turn.finalAnswer));
+      answer = preview.length > 0 ? preview : null;
     }
-    if (turn.role !== "agent") continue;
-    if (turn.finalAnswer == null) continue;
 
-    const current = exchanges[exchanges.length - 1];
-    if (!current) continue;
-
-    // Unconditional assignment — later answers overwrite earlier ones,
-    // including overwriting with null when the closing turn has no
-    // previewable prose. That is what "the last one wins" means.
-    const preview = buildPreview(firstProseLine(turn.finalAnswer));
-    current.answer = preview.length > 0 ? preview : null;
+    exchanges.push({ question: buildPreview(opener.content), answer });
   }
 
   return exchanges;

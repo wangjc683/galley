@@ -2,7 +2,6 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
-  Clock,
   Copy,
   FloppyDisk,
   Gauge,
@@ -16,7 +15,6 @@ import { useCopy } from "@/lib/i18n";
 import {
   contextUsageLabel,
   formatCompactCount,
-  formatElapsedCompact,
   telemetryInputTotal,
 } from "@/lib/telemetry";
 import type { MessageTelemetry } from "@/types/conversation";
@@ -139,16 +137,24 @@ export function MessageActions({ source, telemetry }: MessageActionsProps) {
   );
 }
 
+/**
+ * Machine-invoice line: tokens + context usage. Wall-clock time is
+ * deliberately NOT here (conversation-run-fold, 2026-08-06): elapsed
+ * is the one human-experienced number and lives with the step count
+ * on the RunFoldHeader — the structure row where the live elapsed
+ * counter already ticks. This line is what the run COST the machine;
+ * the fold header is how LONG the run lived. Territory table in
+ * `.scratch/conversation-run-fold/PRD.md`.
+ */
 function AnswerTelemetry({
   telemetry,
 }: {
   telemetry?: MessageTelemetry;
 }) {
-  const elapsed = formatElapsedCompact(telemetry?.elapsedMs);
   const input = formatCompactCount(telemetryInputTotal(telemetry));
   const output = formatCompactCount(telemetry?.outputTokens);
   const context = contextUsageLabel(telemetry);
-  const hasTelemetry = Boolean(elapsed || input || output || context);
+  const hasTelemetry = Boolean(input || output || context);
 
   if (!hasTelemetry) return null;
 
@@ -162,14 +168,6 @@ function AnswerTelemetry({
           "[font-variant-numeric:tabular-nums]",
         ].join(" ")}
       >
-        {elapsed && (
-          <Metric
-            ariaLabel={`elapsed ${elapsed}`}
-            icon={<Clock size={12} weight="thin" />}
-          >
-            {elapsed}
-          </Metric>
-        )}
         {input && (
           <Metric
             ariaLabel={`input ${input}`}

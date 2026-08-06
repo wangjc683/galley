@@ -150,6 +150,15 @@ export interface MessageUserProps {
    * data don't have to plumb it; the tooltip omits time when absent.
    */
   createdAt?: string;
+  /**
+   * True for a mid-run reply to an agent ask_user question
+   * (conversation-run-fold). Switches the DOM anchor to
+   * `data-role="user-msg-reply"`: the question rail and ⌥↑/⌥↓ index
+   * run-opening `user-msg` nodes only, and a reply's node coming and
+   * going with the fold must not shift their data↔DOM alignment. The
+   * submit-snap selector matches both roles so replying still snaps.
+   */
+  askUserReply?: boolean;
 }
 
 export const MessageUser = memo(function MessageUser({
@@ -157,6 +166,7 @@ export const MessageUser = memo(function MessageUser({
   attachments = [],
   origin,
   createdAt,
+  askUserReply = false,
 }: MessageUserProps) {
   const copy = useCopy();
   const lineCount = useMemo(() => content.split("\n").length, [content]);
@@ -255,7 +265,7 @@ export const MessageUser = memo(function MessageUser({
         </div>
       )}
       <div
-        data-role="user-msg"
+        data-role={askUserReply ? "user-msg-reply" : "user-msg"}
         className={cn(
           "relative w-fit max-w-full border-l-4 border-brand-strong bg-brand-tint py-2.5 pl-4 pr-4 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",

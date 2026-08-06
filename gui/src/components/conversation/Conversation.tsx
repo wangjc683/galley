@@ -1,5 +1,5 @@
 import { CaretDown } from "@phosphor-icons/react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { LiveDots } from "@/components/conversation/LiveIndicators";
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
@@ -14,11 +14,13 @@ import {
   MessageAgentNarration,
 } from "@/components/conversation/MessageAgent";
 import { MessageUser } from "@/components/conversation/MessageUser";
+import { RunFoldHeader } from "@/components/conversation/RunFoldHeader";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
+import { buildRunGroups, replyUserIndices, type RunGroup } from "@/lib/run-groups";
 import { cn } from "@/lib/utils";
 import type { AgentTurn, Turn } from "@/types/conversation";
 import type { GoalBrief } from "@/types/goal";
@@ -73,48 +75,134 @@ export function Conversation({
   onOpenWorkerSession,
 }: ConversationProps) {
   const items = annotateGoalThread(turns, goals ?? []);
+
+  // Run fold (conversation-run-fold PRD): settled runs collapse their
+  // process section behind a RunFoldHeader. Grouping is the shared
+  // run-groups pass — the same one the question rail builds its
+  // exchanges from, so fold visibility can never desync the rail's
+  // data↔DOM index contract.
+  const groups = useMemo(() => buildRunGroups(turns), [turns]);
+  const replySet = useMemo(() => replyUserIndices(groups, turns), [groups, turns]);
+  // Turn identity → turns index. annotateGoalThread reorders nothing
+  // and each Turn object appears at most once, so object identity is
+  // a safe join key between its items and the grouping's indices.
+  const turnIndexOf = useMemo(() => {
+    const m = new Map<Turn, number>();
+    turns.forEach((t, i) => m.set(t, i));
+    return m;
+  }, [turns]);
+
+  // Keep-expanded pointer: the run that most recently went live while
+  // this component was mounted. Its completion leaves it expanded (the
+  // "review what it just did" moment); the next run going live moves
+  // the pointer and folds it. A fresh mount starts at null — reopened
+  // sessions fold everything (Conversation is keyed per session in
+  // MainView). Guarded setState-in-render is React's sanctioned
+  // adjust-state-on-render pattern — an effect here would be the
+  // cascade-prone prop→state sync Composer.tsx already avoids.
+  const lastGroup: RunGroup | undefined = groups[groups.length - 1];
+  const liveOpener =
+    lastGroup && !lastGroup.complete ? lastGroup.openerIndex : null;
+  const [keepOpener, setKeepOpener] = useState<number | null>(null);
+  if (liveOpener !== null && liveOpener !== keepOpener) {
+    setKeepOpener(liveOpener);
+  }
+  // Manual toggles, keyed by opener index: true = user expanded,
+  // false = user collapsed, absent = default. Ephemeral per mount.
+  const [foldOverrides, setFoldOverrides] = useState<Record<number, boolean>>(
+    {},
+  );
+
+  // Per-render fold plan. headerFor: opener index → fold header data;
+  // hidden: indices removed from the DOM; answerOnly: closing turns
+  // rendered without their own TurnMarker (the header stands in).
+  const headerFor = new Map<number, { group: RunGroup; folded: boolean }>();
+  const hidden = new Set<number>();
+  const answerOnly = new Set<number>();
+  for (const g of groups) {
+    if (!g.foldable) continue;
+    const override = foldOverrides[g.openerIndex];
+    const folded =
+      override !== undefined ? !override : g.openerIndex !== keepOpener;
+    headerFor.set(g.openerIndex, { group: g, folded });
+    if (!folded) continue;
+    for (const i of g.memberIndices) {
+      if (i === g.openerIndex || i === g.finalTurnIndex) continue;
+      hidden.add(i);
+    }
+    if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
+  }
+
+  const toggleFold = (openerIndex: number, currentlyFolded: boolean) => {
+    setFoldOverrides((prev) => ({ ...prev, [openerIndex]: currentlyFolded }));
+  };
+
   return (
     <div>
-      {items.map((item, i) => (
-        <Fragment key={i}>
-          {item.kind === "commission" ? (
-            <GoalCommissionMarker goal={item.goal} content={item.content} />
-          ) : item.kind === "task-board" ? (
-            <GoalTaskBoard
-              goal={item.goal}
-              onOpenWorkerSession={onOpenWorkerSession}
-            />
-          ) : item.kind === "terminal" ? (
-            <GoalTerminalMarker goal={item.goal} />
-          ) : item.turn.role === "user" ? (
-            <MessageUser
-              content={item.turn.content}
-              attachments={item.turn.attachments}
-              origin={item.turn.origin}
-              createdAt={item.turn.createdAt}
-            />
-          ) : item.turn.role === "system" ? (
-            <SystemMessageBubble
-              content={item.turn.content}
-              variant={item.turn.variant}
-              showGlyph={item.narrationLeading}
-            />
-          ) : (
-            <AgentTurnView
-              turn={item.turn}
-              approvalDecisions={approvalDecisions}
-              onApprove={onApprove}
-              projectName={projectName}
-            />
-          )}
-          {/* No divider between turns — the TurnMarker on each
-              AgentTurn carries the chapter-break feel via its own
-              top-margin and visual weight. Earlier iterations had
-              a SoftHr here (my-9 → my-6 → my-5); even at 40px the
-              hr-plus-marker stack felt like wasted vertical space.
-              Removed in favour of marker-only separation. */}
-        </Fragment>
-      ))}
+      {items.map((item, i) => {
+        const turnIndex =
+          item.kind === "turn" ? turnIndexOf.get(item.turn) : undefined;
+        if (turnIndex !== undefined && hidden.has(turnIndex)) return null;
+        const header =
+          turnIndex !== undefined ? headerFor.get(turnIndex) : undefined;
+        return (
+          <Fragment key={i}>
+            {item.kind === "commission" ? (
+              <GoalCommissionMarker goal={item.goal} content={item.content} />
+            ) : item.kind === "task-board" ? (
+              <GoalTaskBoard
+                goal={item.goal}
+                onOpenWorkerSession={onOpenWorkerSession}
+              />
+            ) : item.kind === "terminal" ? (
+              <GoalTerminalMarker goal={item.goal} />
+            ) : item.turn.role === "user" ? (
+              <>
+                <MessageUser
+                  content={item.turn.content}
+                  attachments={item.turn.attachments}
+                  origin={item.turn.origin}
+                  createdAt={item.turn.createdAt}
+                  askUserReply={
+                    turnIndex !== undefined && replySet.has(turnIndex)
+                  }
+                />
+                {header && (
+                  <RunFoldHeader
+                    stats={header.group.stats}
+                    open={!header.folded}
+                    onToggle={() =>
+                      toggleFold(header.group.openerIndex, header.folded)
+                    }
+                  />
+                )}
+              </>
+            ) : item.turn.role === "system" ? (
+              <SystemMessageBubble
+                content={item.turn.content}
+                variant={item.turn.variant}
+                showGlyph={item.narrationLeading}
+              />
+            ) : (
+              <AgentTurnView
+                turn={item.turn}
+                approvalDecisions={approvalDecisions}
+                onApprove={onApprove}
+                projectName={projectName}
+                hideMarker={
+                  turnIndex !== undefined && answerOnly.has(turnIndex)
+                }
+              />
+            )}
+            {/* No divider between turns — the TurnMarker on each
+                AgentTurn carries the chapter-break feel via its own
+                top-margin and visual weight. Earlier iterations had
+                a SoftHr here (my-9 → my-6 → my-5); even at 40px the
+                hr-plus-marker stack felt like wasted vertical space.
+                Removed in favour of marker-only separation. */}
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
@@ -124,11 +212,18 @@ function AgentTurnView({
   approvalDecisions,
   onApprove,
   projectName,
+  hideMarker = false,
 }: {
   turn: AgentTurn;
   approvalDecisions?: Record<string, ApprovalDecision>;
   onApprove?: (approvalId: string, decision: ApprovalDecision) => void;
   projectName?: string;
+  /** Fold mode for a folded run's closing turn: the RunFoldHeader
+   * stands in for this turn's TurnMarker, so only the answer section
+   * renders. A closing turn has no narration / real tools / ask_user
+   * by definition (run-groups isClosingTurn), so skipping the marker
+   * is the whole difference. */
+  hideMarker?: boolean;
 }) {
   // `finalAnswer` is what's left of GA's responseContent after the
   // <thinking> / <tool_use> / <file_content> / <summary> tags have
@@ -203,7 +298,7 @@ function AgentTurnView({
 
   return (
     <div>
-      {turn.turnIndex !== undefined && (
+      {turn.turnIndex !== undefined && !hideMarker && (
         <TurnMarker
           index={turn.turnIndex}
           summary={markerSummary}

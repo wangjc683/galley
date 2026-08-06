@@ -272,11 +272,16 @@ export function useStickyScroll({
     if (userSubmitTick === 0) return; // initial render — nothing to scroll
     const container = scrollContainerRef.current;
     if (!container) return;
-    // RAF defers to after the new <MessageUser data-role="user-msg">
-    // has actually mounted from the appendUserTurn state update.
+    // RAF defers to after the new <MessageUser> has actually mounted
+    // from the appendUserTurn state update — which also means it runs
+    // after the same commit folded the previous run (conversation-run-
+    // fold), so the measured delta reflects the folded layout.
+    // Both anchor roles matter here: an ask_user reply renders as
+    // `user-msg-reply` (excluded from the rail / ⌥-nav index), but it
+    // is still the just-submitted message this snap must target.
     const handle = requestAnimationFrame(() => {
       const userMsgs = container.querySelectorAll<HTMLElement>(
-        '[data-role="user-msg"]',
+        '[data-role="user-msg"], [data-role="user-msg-reply"]',
       );
       const last = userMsgs[userMsgs.length - 1];
       if (!last) return;

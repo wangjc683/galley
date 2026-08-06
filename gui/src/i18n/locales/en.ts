@@ -1373,6 +1373,13 @@ export const enCopy: AppCopy = {
     stepDirectAnswer: "Answered the question directly",
     stepCalledTools: (names) =>
       names.length === 1 ? `Called ${names[0]}` : `Called ${names.length} tools`,
+    foldSteps: (n) => (n === 1 ? "1 step" : `${n} steps`),
+    foldDurationSeconds: (sec) => `${sec}s`,
+    foldDurationMinutes: (minutes, sec) => `${minutes}m ${sec}s`,
+    foldAskUser: (n) => (n === 1 ? "1 question" : `${n} questions`),
+    foldDenied: (n) => (n === 1 ? "1 denial" : `${n} denials`),
+    foldExpand: "Show steps",
+    foldCollapse: "Hide steps",
     thinking: "Thinking…",
     answering: "Answering…",
     runWorking: "Working",

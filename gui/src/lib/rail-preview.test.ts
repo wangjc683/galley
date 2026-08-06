@@ -15,6 +15,16 @@ function agent(finalAnswer: string | null): AgentTurn {
   return { role: "agent", tools: [], finalAnswer };
 }
 
+function askUserTurn(): AgentTurn {
+  return {
+    role: "agent",
+    tools: [
+      { id: "t-ask", name: "ask_user", status: "success-historical", args: {} },
+    ],
+    finalAnswer: null,
+  };
+}
+
 function system(content: string): SystemTurn {
   return { role: "system", content, variant: "system" };
 }
@@ -126,7 +136,7 @@ describe("buildRailExchanges", () => {
     expect(buildRailExchanges(turns)[0].answer).toBe("应该显示这一行");
   });
 
-  it("keeps one entry per user turn so indices align with the DOM", () => {
+  it("keeps one entry per run opener so indices align with the DOM", () => {
     const turns: Turn[] = [
       user("a"),
       agent("A"),
@@ -137,6 +147,30 @@ describe("buildRailExchanges", () => {
     const exchanges = buildRailExchanges(turns);
     expect(exchanges).toHaveLength(3);
     expect(exchanges.map((e) => e.answer)).toEqual(["A", null, "C"]);
+  });
+
+  it("folds ask_user replies into their run instead of counting them", () => {
+    const turns: Turn[] = [
+      user("问题"),
+      askUserTurn(),
+      user("选 A"),
+      agent("结论"),
+    ];
+    const exchanges = buildRailExchanges(turns);
+    expect(exchanges).toHaveLength(1);
+    expect(exchanges[0]).toEqual({ question: "问题", answer: "结论" });
+  });
+
+  it("skips goal commission openers — they render as markers, not user-msgs", () => {
+    const turns: Turn[] = [
+      { ...user("目标"), goalId: "goal-1" },
+      agent("执行"),
+      user("普通问题"),
+      agent("回答"),
+    ];
+    const exchanges = buildRailExchanges(turns);
+    expect(exchanges).toHaveLength(1);
+    expect(exchanges[0].question).toBe("普通问题");
   });
 
   it("returns an empty question preview for a whitespace-only message", () => {
