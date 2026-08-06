@@ -112,7 +112,7 @@ export function Settings({
   activeRuntimeKind,
   hasManagedRuntimeConfigured,
   hasExternalRuntimeConfigured,
-  defaultTab = "runtime",
+  defaultTab = "general",
   useExternalPython,
   onChangeRequiredTools,
   onRemoveAlwaysAllow,

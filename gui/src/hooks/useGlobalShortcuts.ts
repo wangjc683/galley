@@ -92,7 +92,16 @@ export function useGlobalShortcuts({
     const unlisteners: Array<() => void> = [];
 
     const handlers: Array<[string, () => void]> = [
-      ["menu:settings", () => setSettingsOpen(true)],
+      [
+        "menu:settings",
+        () => {
+          // Generic entry — land on the first tab (matches the tab
+          // list's visual order), same as the gear button and the
+          // command palette. Deep links set their tab explicitly.
+          setSettingsTab("general");
+          setSettingsOpen(true);
+        },
+      ],
       [
         "menu:check_updates",
         () => {

@@ -85,7 +85,7 @@ function App() {
 
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("runtime");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const browserControlStatus = useBrowserControlStore((s) => s.status);
 
   // `sessions` carries only durable row state now; each sidebar row
@@ -197,7 +197,12 @@ function App() {
     requiresManagedModelConfig,
     sidebarRuntimeIndicator,
   } = useLLMDisplay({ screen, copy });
-  const openSettings = (tab: SettingsTab = "runtime") => {
+  // Generic entries (gear button, ⌘,, command palette) land on the
+  // FIRST tab so the highlighted tab matches the list's visual order —
+  // the old "runtime" default predated General growing into a real
+  // tab and left generic opens highlighting mid-list. Purposeful
+  // navigation still deep-links via an explicit tab argument.
+  const openSettings = (tab: SettingsTab = "general") => {
     setSettingsTab(tab);
     setSettingsOpen(true);
   };
@@ -561,7 +566,7 @@ function App() {
                 void stopGoalFromTopbar(goalId);
               }}
               openSettings={openSettings}
-              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenSettings={() => openSettings()}
               resolvedTheme={resolvedTheme}
             />
             <BrowserControlAttentionSurface
@@ -708,7 +713,7 @@ function App() {
           }
         }}
         onReRunHealthCheck={() => console.info("[palette] re-run health check")}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => openSettings()}
         onAttachGAFolder={() =>
           console.info("[palette] attach GA folder — wired in #10")
         }
