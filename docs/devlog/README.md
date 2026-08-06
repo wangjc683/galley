@@ -310,6 +310,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [Next-suggestion 默认强制 + ghost 可达性](./2026-08-05-next-suggestion-mandatory-and-ghost-a11y.md) — dogfood 首轮复现标签遵从率失灵(glm-5.2 散文提议无标签);推翻「有才写」为默认强制+枚举豁免(唯一豁免:对话明确终结),失败模式不对称+格式习惯优于逐次裁量+token 占比 <1%;「结尾提议即下一步」转换规则+grounding 地板;节挪 `RUNTIME_PROMPT_STATIC` 末尾,`prompt_hash` 翻新;ghost hint 改可点击 button(鼠标通道)+`aria-describedby` sr-only(AT 通道)+textarea `title` 看截断全文;否:正文风格管制、散文解析兜底
 
 ### 2026-08-06
+- [v0.4.3 发布](./2026-08-06-v0.4.3-release.md) — 聚合会话智能(自动标题+ghost 建议)、阅读体验(run 折叠+高亮笔)、polish marathon、0017 记账;patch 定级(单功能量级判,不按批次总量);发布准备修掉两个 gate 缺口:ipc.ts 缺 generate_title 镜像(CI 自 08-04 连红)、baseline gate 的 replay=auditedAt 假设被首个补丁单独落地案例打破(改为不早于)
 - [完成 run 的过程折叠](./2026-08-06-conversation-run-fold.md) — settled run 过程段折成一行折叠头,`pickToolTier` 哲学升维到 run 层;`run-groups.ts` 单一真相源(折叠+rail 共用,ask_user 回复启发式);折叠时机=注意力交接点(最新展开/提交即折/重开全折);rail 圆点重定义为 run 发起消息;四轮 dogfood:行首 disclosure triangle、工具名走 `copy.tools`、墨阶降档+折叠头 vs Footer 领土表(耗时归折叠头,Footer 删 ⏱)、「用时」前缀防中文时长模板误读
 - [0017 兼容端点 input token 记账修复](./2026-08-06-compat-usage-accounting.md) — Footer ↑0 根因:GLM 等 Anthropic 兼容端点在 message_start 给零 usage、完整 usage 在 message_delta,上游只从 message_start 记 input;llmcore delta 侧兜底(真 Anthropic 不重复计数)+cost_tracker requests 门控;基线重放验证
 - [Settings 泛用入口默认 tab 收口](./2026-08-06-settings-default-tab.md) — 齿轮/命令面板/⌘, 裸调 setSettingsOpen 落点不确定;收口 `openSettings()` 确定落 General(对应性原则);深链不变;否:记住上次 tab
