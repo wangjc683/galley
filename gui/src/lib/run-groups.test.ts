@@ -116,11 +116,17 @@ describe("buildRunGroups", () => {
     expect(buildRunGroups(turns)[0].foldable).toBe(false);
   });
 
-  it("does not fold single-step runs", () => {
+  it("folds single-step runs (the header is the run's only settled duration surface)", () => {
+    // Reversed 2026-08-06: launch shipped stepCount >= 2 ("nothing to
+    // hide"), but the footer-⏱ removal made the fold header the sole
+    // home of settled elapsed time, and the folded render (header +
+    // answer, no StrongHr) is quieter than the unfolded single-step
+    // stack — so the fold pays even when the hidden set is empty.
     const turns: Turn[] = [user("q"), closing()];
     const groups = buildRunGroups(turns);
     expect(groups[0].complete).toBe(true);
-    expect(groups[0].foldable).toBe(false);
+    expect(groups[0].foldable).toBe(true);
+    expect(groups[0].stats.stepCount).toBe(1);
   });
 
   it("collects orphan leading agent turns into an unfoldable headless group", () => {

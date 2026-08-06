@@ -57,8 +57,14 @@ export interface RunGroup {
   /** True when the run ended with a real final answer. */
   complete: boolean;
   /** True when the conversation may render this run folded: complete,
-   * has intermediate steps worth hiding, not a Goal run, and free of
-   * system turns (/btw exchanges must not be swallowed). */
+   * not a Goal run, and free of system turns (/btw exchanges must not
+   * be swallowed). Single-step runs fold too (2026-08-06, reversing
+   * the launch decision): the header became the only home of settled
+   * run duration when the footer ⏱ was removed — absence now loses
+   * data, not just uniformity — and since the folded render dropped
+   * its StrongHr, header + answer is quieter than the unfolded
+   * marker + rule + answer, so the fold pays even with nothing to
+   * hide. */
   foldable: boolean;
   stats: RunStats;
 }
@@ -133,11 +139,7 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
       finalTurnIndex,
       complete,
       foldable:
-        complete &&
-        g.openerIndex >= 0 &&
-        !isGoalRun &&
-        !g.hasSystem &&
-        agentTurns.length >= 2,
+        complete && g.openerIndex >= 0 && !isGoalRun && !g.hasSystem,
       stats: {
         stepCount: agentTurns.length,
         elapsedMs:
