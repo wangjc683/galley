@@ -1,14 +1,48 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+/**
+ * Release date of the version being built, for Settings → About.
+ *
+ * Definition: the commit date (YYYY-MM-DD) of tag `v<version>`, where
+ * <version> is read from core/tauri.conf.json — the same source
+ * `getVersion()` reports at runtime. Release CI builds from the pushed
+ * tag, so the tag always resolves there. A dev build after the version
+ * bump but before tagging resolves to null and About omits the date —
+ * intentionally: no tag, no release, no date. Deliberately not a build
+ * timestamp: the date describes the version, not the compile.
+ */
+function resolveReleaseDate(): string | null {
+  try {
+    const conf = JSON.parse(
+      readFileSync(path.resolve(__dirname, "../core/tauri.conf.json"), "utf8"),
+    ) as { version?: string };
+    if (!conf.version) return null;
+    const date = execFileSync(
+      "git",
+      ["log", "-1", "--format=%cs", `refs/tags/v${conf.version}`],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+  } catch {
+    return null;
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
+
+  define: {
+    __GALLEY_RELEASE_DATE__: JSON.stringify(resolveReleaseDate()),
+  },
 
   resolve: {
     alias: {

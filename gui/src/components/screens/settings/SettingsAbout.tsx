@@ -5,6 +5,7 @@ import {
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
 import { SettingsUpdateControl } from "@/components/screens/settings/SettingsUpdateControl";
+import { RELEASE_DATE } from "@/lib/build-info";
 import { EPIGRAPHS } from "@/lib/epigraphs";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
@@ -83,7 +84,17 @@ export function SettingsAbout({
           <SettingsUpdateControl
             hasRunningSessions={hasRunningSessions}
             leading={
-              <span className="font-mono text-ink">v{workbenchVersion}</span>
+              <>
+                <span className="font-mono text-ink">v{workbenchVersion}</span>
+                {/* Colophon logic: an edition states when it was
+                    printed. RELEASE_DATE is the tag date of this
+                    version, null in dev builds (no tag, no date). */}
+                {RELEASE_DATE && (
+                  <span className="text-ui-tertiary text-ink-muted">
+                    · {RELEASE_DATE}
+                  </span>
+                )}
+              </>
             }
           />
         </div>
