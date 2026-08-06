@@ -57,24 +57,6 @@ the current tab.
 Then use the returned tab id or `web_scan`. Do not infer or update connection
 status; Galley's setup check owns it.
 
-## Next-Step Suggestion
-
-When you finish a final reply and there is one clear, concrete next step the
-user is likely to ask for, append it at the very end of the reply as:
-
-<next-suggestion>帮我把这三处调用一起改掉</next-suggestion>
-
-Rules:
-- Write it in the user's voice, as an imperative the user would send to you
-  (「帮我……」/ "Fix the remaining two call sites"), never in your own voice
-  ("I can help you…").
-- Use the conversation's dominant language. Keep it under 80 characters.
-- Exactly one suggestion, one tag, at most once per reply, only in the final
-  answer (never mid-task or inside tool output).
-- If no genuinely useful next step exists, omit the tag entirely. Do not
-  invent busywork. Never mention this tag or the suggestion mechanism in the
-  reply body.
-
 ## Past Galley Conversations
 
 When the user asks to find, recall, or search earlier conversations, history, or
@@ -111,7 +93,34 @@ Coverage and limits — state these honestly:
   and are not stored in Galley. Do not claim you can fetch them.
 - Do NOT look for past conversations under ../memory/L4_raw_sessions/. That
   history layer is inactive in Galley's session mode and is always empty — use
-  the CLI above instead."#;
+  the CLI above instead.
+
+## Next-Step Suggestion
+
+End every final reply with exactly one next-step suggestion tag:
+
+<next-suggestion>帮我把这三处调用一起改掉</next-suggestion>
+
+Emitting the tag is the default obligation on every final answer. The only
+exemption: the conversation has clearly concluded — the user's message was a
+goodbye, pure thanks, or a bare acknowledgement with nothing left open.
+Nothing else justifies omission; "no strong suggestion comes to mind" is not
+an exemption — pick the most plausible next user message and write that.
+
+Rules:
+- The suggestion is the message the user is most likely to send next. Write
+  it in the user's voice, as an imperative the user would send to you
+  (「帮我……」 / "Fix the remaining two call sites"), never in your own voice
+  ("I can help you…").
+- If your reply ends by offering something ("如果需要，我可以继续……" /
+  "I can also…"), that offer IS the next step — the tag must carry its
+  user-voice version.
+- Ground it in this conversation: name the concrete thing it acts on. No
+  generic filler like 「帮我继续优化」.
+- Use the conversation's dominant language. Keep it under 80 characters.
+- One tag, at the very end of the final answer only — never mid-task and
+  never inside tool output.
+- Never mention this tag or the suggestion mechanism in the reply body."#;
 
 /// Full managed runtime prompt: static rules plus a session-start state block.
 ///

@@ -306,6 +306,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [UI Polish 马拉松:六轮全域界面细节打磨](./2026-08-04-ui-polish-marathon.md) — polish-checklist 建档(make-interfaces-feel-better 摘录+否决);同心圆角/hover 瞬时/tabular-nums/pop-in register 六轮清扫;裁决:0.5px 按压判负、submit-ack 与 runtime-highlight off-scale 保留、focus-visible 暂缓;transition-colors 家族清零;dark 主题高亮环 color-mix 修复
 - [自动标题 + 下一步建议 ghost text](./2026-08-04-auto-title-and-next-suggestion.md) — `<next-suggestion>` 标签走 managed prompt 同次补全(否独立侧调用/静态 chips);标题走 `GaSession.side_ask` 每会话一次(否 summary 复用/通用 side-ask 设施);`title_source` 四态 seed/derived/auto/user + CAS 防改名竞态;migration 038;`generate_title`/`title_generated` IPC;ghost 显示是派生条件非一次性事件;零模型选项零开关;立辅助 LLM 功能三条准入判据,否 EmptyState ghost 等一批候选
 
+### 2026-08-05
+- [Next-suggestion 默认强制 + ghost 可达性](./2026-08-05-next-suggestion-mandatory-and-ghost-a11y.md) — dogfood 首轮复现标签遵从率失灵(glm-5.2 散文提议无标签);推翻「有才写」为默认强制+枚举豁免(唯一豁免:对话明确终结),失败模式不对称+格式习惯优于逐次裁量+token 占比 <1%;「结尾提议即下一步」转换规则+grounding 地板;节挪 `RUNTIME_PROMPT_STATIC` 末尾,`prompt_hash` 翻新;ghost hint 改可点击 button(鼠标通道)+`aria-describedby` sr-only(AT 通道)+textarea `title` 看截断全文;否:正文风格管制、散文解析兜底
+
 ## 格式约定
 
 每个 entry 6 段：
