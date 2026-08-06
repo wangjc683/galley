@@ -4,6 +4,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useRef,
   useState,
@@ -119,6 +120,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const text = isControlled ? value : internal;
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const composerRootRef = useRef<HTMLDivElement>(null);
+    // Screen-reader bridge for the ghost suggestion: the overlay is
+    // aria-hidden (visual duplicate of what aria-describedby carries),
+    // so AT users hear the suggestion via this sr-only description on
+    // the textarea instead.
+    const ghostDescId = useId();
 
     // File references ([File #N: name] placeholders for dropped / picked
     // non-image paths, expanded to absolute paths at submit). Declared
@@ -455,16 +461,37 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               aria-hidden
               // Mirrors the textarea's box exactly (container padding +
               // font metrics) so the ghost sits where typed text would.
-              // pointer-events-none keeps clicks landing in the textarea.
+              // pointer-events-none keeps clicks landing in the textarea;
+              // only the accept hint below opts back in.
               className="pointer-events-none absolute inset-x-3.5 top-3.5 flex items-baseline gap-2 overflow-hidden [font-size:var(--conversation-composer-size)] leading-[1.55]"
             >
               <span className="truncate text-ink-muted/50">
                 {ghostSuggestion}
               </span>
-              <span className="shrink-0 text-[11px] text-ink-muted/40">
+              {/* Mouse users' accept path (keyboard has ArrowRight).
+                  tabIndex -1: the parent is aria-hidden, so the button
+                  must stay out of the tab order — AT users get the
+                  same action via ArrowRight, announced through the
+                  textarea's aria-describedby. */}
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() =>
+                  ghostSuggestion &&
+                  applyComposerText(ghostSuggestion, {
+                    clearImagesAfterPrefill: false,
+                  })
+                }
+                className="pointer-events-auto shrink-0 cursor-pointer text-[11px] text-ink-muted/40 transition-colors duration-(--motion-fast) hover:text-ink-muted"
+              >
                 {copy.composer.ghostAcceptHint}
-              </span>
+              </button>
             </div>
+          )}
+          {ghostVisible && ghostSuggestion && (
+            <span id={ghostDescId} className="sr-only">
+              {copy.composer.ghostSrDescription(ghostSuggestion)}
+            </span>
           )}
           <textarea
             ref={textareaRef}
@@ -475,6 +502,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={resolvedPlaceholder}
+            // Ghost affordances that the overlay can't carry itself:
+            // native tooltip reveals a truncated suggestion in full
+            // (the overlay is pointer-events-none, so hover lands
+            // here), and aria-describedby announces it to AT.
+            title={ghostVisible && ghostSuggestion ? ghostSuggestion : undefined}
+            aria-describedby={
+              ghostVisible && ghostSuggestion ? ghostDescId : undefined
+            }
             style={{ maxHeight: COMPOSER_MAX_HEIGHT_PX }}
             // `resize-none` keeps the corner grab handle hidden — the
             // height auto-grows via the effect above, so manual resize

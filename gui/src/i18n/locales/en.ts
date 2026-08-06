@@ -284,6 +284,8 @@ export const enCopy: AppCopy = {
     askAnything: "Ask anything…",
     continueConversation: "Continue…",
     ghostAcceptHint: "→ to fill in",
+    ghostSrDescription: (suggestion: string) =>
+      `Suggested next step: ${suggestion}. Press right arrow to fill it in.`,
     replyToContinue: "Reply, or choose an option above",
     byTheWay: "/btw to ask alongside without interrupting the task…",
     send: "Send",
