@@ -1,0 +1,46 @@
+diff --git a/frontends/cost_tracker.py b/frontends/cost_tracker.py
+--- a/frontends/cost_tracker.py
++++ b/frontends/cost_tracker.py
+@@ -137 +137,7 @@ def install() -> None:
+-                t.requests += 1
++                # Galley: messages-mode requests are counted below — compat
++                # providers (zeroed message_start + llmcore's delta-side
++                # input fallback) produce two _record_usage calls per real
++                # request; counting only the call that carries usage keeps
++                # `requests` at one per LLM call on both provider shapes.
++                if api_mode != 'messages':
++                    t.requests += 1
+@@ -148 +154,6 @@ def install() -> None:
+-                    t.last_input = inp + cc + cr
++                    # Galley: see the requests note above — a call that
++                    # carried nothing (zeroed message_start placeholder)
++                    # is not a request, and must not clobber last_input.
++                    if inp or cc or cr or out > 1:
++                        t.requests += 1
++                        t.last_input = inp + cc + cr
+diff --git a/llmcore.py b/llmcore.py
+--- a/llmcore.py
++++ b/llmcore.py
+@@ -148,0 +149,7 @@ def _parse_claude_sse(resp_lines):
++    # Galley: whether the input side of usage has been recorded for this
++    # stream. Real Anthropic reports input_tokens at message_start;
++    # Anthropic-COMPATIBLE providers (e.g. Zhipu GLM) send zero/absent
++    # usage there and put the full cumulative usage on the final
++    # message_delta instead — without the fallback below their input
++    # side is never counted (cost /cost and Galley telemetry read ↑0).
++    input_recorded = False
+@@ -162,0 +170,4 @@ def _parse_claude_sse(resp_lines):
++            # Galley: remember whether input was already counted so the
++            # message_delta fallback stays a no-op on real Anthropic streams.
++            input_recorded = any(int(usage.get(k) or 0) for k in (
++                "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+@@ -208,0 +220,9 @@ def _parse_claude_sse(resp_lines):
++            # Galley: input-side fallback for compat providers (see
++            # input_recorded above). output_tokens is zeroed so the
++            # [Output] print above stays the only output accounting.
++            if not input_recorded:
++                _in_usage = {k: int(out_usage.get(k) or 0) for k in (
++                    "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")}
++                if any(_in_usage.values()):
++                    input_recorded = True
++                    _record_usage({**_in_usage, "output_tokens": 0}, "messages")

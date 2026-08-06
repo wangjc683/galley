@@ -25,7 +25,8 @@
       "0013-managed-feishu-report-turn-guard.patch",
       "0014-managed-telegram-galley-integration.patch",
       "0015-managed-extension-galley-branding.patch",
-      "0016-managed-native-thinking-tags.patch"
+      "0016-managed-native-thinking-tags.patch",
+      "0017-managed-compat-usage-accounting.patch"
     ]
   },
   "stateSchemaVersion": 1

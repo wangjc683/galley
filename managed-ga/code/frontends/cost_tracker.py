@@ -134,7 +134,13 @@ def install() -> None:
         try:
             if usage:
                 t = get(threading.current_thread().name)
-                t.requests += 1
+                # Galley: messages-mode requests are counted below — compat
+                # providers (zeroed message_start + llmcore's delta-side
+                # input fallback) produce two _record_usage calls per real
+                # request; counting only the call that carries usage keeps
+                # `requests` at one per LLM call on both provider shapes.
+                if api_mode != 'messages':
+                    t.requests += 1
                 if api_mode == 'messages':
                     inp = int(usage.get('input_tokens', 0) or 0)
                     cc = int(usage.get('cache_creation_input_tokens', 0) or 0)
@@ -145,7 +151,12 @@ def install() -> None:
                     # placeholder to skip.
                     out = int(usage.get('output_tokens', 0) or 0)
                     if out > 1: t.output += out; t.last_output = out
-                    t.last_input = inp + cc + cr
+                    # Galley: see the requests note above — a call that
+                    # carried nothing (zeroed message_start placeholder)
+                    # is not a request, and must not clobber last_input.
+                    if inp or cc or cr or out > 1:
+                        t.requests += 1
+                        t.last_input = inp + cc + cr
                 elif api_mode == 'chat_completions':
                     cached = int((usage.get('prompt_tokens_details') or {}).get('cached_tokens', 0) or 0)
                     inp = int(usage.get('prompt_tokens', 0) or 0) - cached

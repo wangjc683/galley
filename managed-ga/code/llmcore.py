@@ -146,6 +146,13 @@ def _parse_claude_sse(resp_lines):
     """Parse Anthropic SSE stream. Yields text chunks, returns list[content_block]."""
     content_blocks = []; current_block = None; tool_json_buf = ""
     stop_reason = None; got_message_stop = False; warn = None
+    # Galley: whether the input side of usage has been recorded for this
+    # stream. Real Anthropic reports input_tokens at message_start;
+    # Anthropic-COMPATIBLE providers (e.g. Zhipu GLM) send zero/absent
+    # usage there and put the full cumulative usage on the final
+    # message_delta instead — without the fallback below their input
+    # side is never counted (cost /cost and Galley telemetry read ↑0).
+    input_recorded = False
     for line in resp_lines:
         if not line: continue
         line = line.decode('utf-8') if isinstance(line, bytes) else line
@@ -160,6 +167,10 @@ def _parse_claude_sse(resp_lines):
         if evt_type == "message_start":
             usage = evt.get("message", {}).get("usage", {})
             _record_usage(usage, "messages")
+            # Galley: remember whether input was already counted so the
+            # message_delta fallback stays a no-op on real Anthropic streams.
+            input_recorded = any(int(usage.get(k) or 0) for k in (
+                "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
         elif evt_type == "content_block_start":
             block = evt.get("content_block", {})
             if block.get("type") == "text": current_block = {"type": "text", "text": ""}
@@ -206,6 +217,15 @@ def _parse_claude_sse(resp_lines):
             out_usage = evt.get("usage", {})
             out_tokens = out_usage.get("output_tokens", 0)
             if out_tokens: STATS['out'] = out_tokens; print(f"[Output] tokens={out_tokens} stop_reason={stop_reason}")
+            # Galley: input-side fallback for compat providers (see
+            # input_recorded above). output_tokens is zeroed so the
+            # [Output] print above stays the only output accounting.
+            if not input_recorded:
+                _in_usage = {k: int(out_usage.get(k) or 0) for k in (
+                    "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")}
+                if any(_in_usage.values()):
+                    input_recorded = True
+                    _record_usage({**_in_usage, "output_tokens": 0}, "messages")
         elif evt_type == "message_stop": got_message_stop = True
         elif evt_type == "error":
             err = evt.get("error", {})
