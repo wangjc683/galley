@@ -125,10 +125,17 @@ run」：**当前章节摊开，翻过的章节合上，结论永远可见，过
 
 ### 4. 折叠渲染
 
-折叠态：opener 用户消息 → 折叠头 → StrongHr + 最终答案（含 telemetry
-行、Copy/Save actions）。中间的 agent turns 和 ask_user 回复 user turns
+折叠态：opener 用户消息 → 折叠头 → 最终答案（含 telemetry 行、
+Copy/Save actions）。中间的 agent turns 和 ask_user 回复 user turns
 全部不渲染；最终答案 turn 以 answerOnly 模式渲染（跳过自己的 TurnMarker）。
 展开态：折叠头在顶（chevron 旋转）+ 今日的完整渲染。零信息损失。
+
+> 2026-08-06 修订（验收后同日）：折叠态**不再渲染 StrongHr**——它的
+> 「行动 → 结论」修辞需要可见的机件列作对象，折叠后对象消失，横线反而
+> 把全场最强分隔画在折叠头与其所属回答之间（间距 33px > 问题→折叠头的
+> 24px，邻近性把过程摘要错绑给了问题）。折叠头以 `mb-2.5` 直接贴回答，
+> 读作回答的 eyebrow；展开态 StrongHr 照旧。见 devlog
+> `2026-08-06-run-fold-header-spacing.md`。
 
 ### 5. Run 分组：`lib/run-groups.ts` 单一真相源
 

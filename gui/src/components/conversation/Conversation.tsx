@@ -220,9 +220,10 @@ function AgentTurnView({
   projectName?: string;
   /** Fold mode for a folded run's closing turn: the RunFoldHeader
    * stands in for this turn's TurnMarker, so only the answer section
-   * renders. A closing turn has no narration / real tools / ask_user
-   * by definition (run-groups isClosingTurn), so skipping the marker
-   * is the whole difference. */
+   * renders — without the marker AND without the conclusion StrongHr
+   * (a folded run's header is the answer's eyebrow and hugs it; see
+   * the StrongHr call site). A closing turn has no narration / real
+   * tools / ask_user by definition (run-groups isClosingTurn). */
   hideMarker?: boolean;
 }) {
   // `finalAnswer` is what's left of GA's responseContent after the
@@ -333,9 +334,19 @@ function AgentTurnView({
         <AnsweredAskUser question={askUserQuestion} />
       )}
 
+      {/* StrongHr's "action → conclusion" rhetoric needs a visible
+          action column as its referent. Folded (hideMarker), the run's
+          process is one quiet RunFoldHeader line — the header reads as
+          the answer's eyebrow and must hug it (its mb-2.5 becomes the
+          whole gap). Keeping the full-width rule there put the view's
+          strongest divider *inside* the header+answer unit while the
+          user↔agent boundary above had none, and pushed the
+          header→answer distance (33px) past the question→header
+          distance (24px) — proximity binding the process summary to
+          the wrong neighbour (2026-08-06). */}
       {answerText && isFinalTurn && (
         <>
-          <StrongHr />
+          {!hideMarker && <StrongHr />}
           <MessageAgent telemetry={turn.telemetry}>{answerText}</MessageAgent>
         </>
       )}

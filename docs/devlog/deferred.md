@@ -8,6 +8,25 @@
 
 ---
 
+## 轮间距层级（answer → 下一问 的留白小于对内间距）
+
+- **状态**：观察中
+- **提出**：2026-08-06（折叠 run 垂直节奏讨论的连带观察，见
+  [run-fold header spacing](./2026-08-06-run-fold-header-spacing.md)）
+- **启动信号**：dogfood 中觉得相邻问答对之间「挤」、边界不清。
+- **现状**：轮与轮之间（上一回答 → 下一条用户消息）实际 20px（用户块
+  `my-5`），小于对内的「问题 → 折叠头」24px——严格按邻近性层级是倒挂。
+  但用户消息的高亮笔触是强视觉锚，边界感不完全靠留白扛，未必构成实感
+  问题。
+- **方案**：把 `MessageUser` 外层 wrapper 的上边距升到 `mt-7` / `mt-8`
+  （保持 `mb-5`），使轮间 ≥ 28px > 24px，恢复「对间 > 对内」排序。
+- **待定**：具体档位（28 vs 32px）；`GoalCommissionMarker` 前的间距是否
+  同步。
+- **关联**：[run-fold header spacing](./2026-08-06-run-fold-header-spacing.md)、
+  [user message highlighter](./2026-08-06-user-message-highlighter.md)。
+
+---
+
 ## 自动滚动到最终答案开头（scroll-on-completion）
 
 - **状态**：暂存
