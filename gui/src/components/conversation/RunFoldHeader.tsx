@@ -1,5 +1,7 @@
 import { CaretRight } from "@phosphor-icons/react";
+import { useLayoutEffect, useRef, useState } from "react";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import type { RunStats } from "@/lib/run-groups";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,19 @@ import { cn } from "@/lib/utils";
  *                the wire-level mono name stays one expand away in the
  *                pill's right zone (2026-08-06 dogfood: raw GA names
  *                here read as untranslated codes, not information).
+ *
+ * Long-run truncation policy (2026-08-06): the scent's job is
+ * composition, not chronology — so tools render in count-desc order
+ * (stable sort; first-appearance breaks ties), and what the ellipsis
+ * eats is always the low-frequency tail, never the run's main
+ * activity. RunStats.toolCounts itself stays first-appearance —
+ * ordering is a render concern. The ask_user count sits OUTSIDE the
+ * truncating span, beside the denied badge: both are 留疤-class
+ * signals ("a human was pulled in mid-run") that must survive any
+ * squeeze — though ask_user keeps the row's muted ink; denied stays
+ * the only colored element. When the scent does overflow, a tooltip
+ * on hover serves the full list (mounted only while overflowing, so
+ * the common short-scent row keeps a lean DOM and no tooltip noise).
  *
  * The denied badge is the row's only colored element — a fold keeps
  * its scar visible (折叠但留疤): a run that contains a user denial
@@ -65,13 +80,38 @@ export function RunFoldHeader({
 
   const duration = formatDuration(stats.elapsedMs, copy);
   const toolLabels = copy.tools as Record<string, string>;
-  const scentParts: string[] = stats.toolCounts.map((t) => {
-    const label = toolLabels[t.name] ?? t.name;
-    return t.count === 1 ? label : `${label} ×${t.count}`;
-  });
-  if (stats.askUserCount > 0) {
-    scentParts.push(copy.conversation.foldAskUser(stats.askUserCount));
-  }
+  const scentText = [...stats.toolCounts]
+    .sort((a, b) => b.count - a.count)
+    .map((t) => {
+      const label = toolLabels[t.name] ?? t.name;
+      return t.count === 1 ? label : `${label} ×${t.count}`;
+    })
+    .join(" · ");
+
+  // Overflow detection for the tooltip fallback. Layout-time (not
+  // hover-time) measurement so the Radix trigger is already mounted
+  // when the pointer arrives; the observer tracks window / column
+  // resizes. `scentText` in the deps re-measures when the run's tool
+  // mix changes (a live group settling, locale switch).
+  const scentRef = useRef<HTMLSpanElement | null>(null);
+  const [scentOverflows, setScentOverflows] = useState(false);
+  useLayoutEffect(() => {
+    const el = scentRef.current;
+    if (!el) return;
+    const measure = () => {
+      setScentOverflows(el.scrollWidth > el.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scentText]);
+
+  const scentSpan = scentText !== "" && (
+    <span ref={scentRef} className="min-w-0 truncate">
+      {scentText}
+    </span>
+  );
 
   return (
     <div
@@ -104,11 +144,26 @@ export function RunFoldHeader({
         {copy.conversation.foldSteps(stats.stepCount)}
         {duration && ` · ${duration}`}
       </span>
-      {(scentParts.length > 0 || stats.deniedCount > 0) && (
+      {(scentText !== "" ||
+        stats.askUserCount > 0 ||
+        stats.deniedCount > 0) && (
         <span className="h-2.5 w-px shrink-0 bg-line" aria-hidden />
       )}
-      {scentParts.length > 0 && (
-        <span className="min-w-0 truncate">{scentParts.join(" · ")}</span>
+      {scentOverflows && scentSpan ? (
+        <TooltipLabel
+          text={scentText}
+          sideOffset={4}
+          contentClassName="max-w-[360px] whitespace-normal text-[11.5px] leading-normal"
+        >
+          {scentSpan}
+        </TooltipLabel>
+      ) : (
+        scentSpan
+      )}
+      {stats.askUserCount > 0 && (
+        <span className="shrink-0">
+          {copy.conversation.foldAskUser(stats.askUserCount)}
+        </span>
       )}
       {stats.deniedCount > 0 && (
         <span className="shrink-0 text-warning">
