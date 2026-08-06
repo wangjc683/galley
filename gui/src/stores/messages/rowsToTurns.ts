@@ -5,8 +5,15 @@
 // no store dependency.
 
 import { buildAgentTurn, toolEventsFromRaw } from "@/lib/agent-turn";
+import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
 import { makeMessageStepper } from "@/lib/turn-index";
-import type { Origin, SystemTurn, Turn, UserTurn } from "@/types/conversation";
+import type {
+  Origin,
+  PendingAskUser,
+  SystemTurn,
+  Turn,
+  UserTurn,
+} from "@/types/conversation";
 import type { MessageRow } from "@/types/db";
 
 /**
@@ -94,6 +101,46 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
     // tool rows: skipped at v0.1.
   }
   return turns;
+}
+
+/**
+ * Reconstruct a live `pendingAskUser` from restored turns — the app
+ * restarted (or the bridge died) while a GA question was unanswered.
+ *
+ * `pendingAskUser` itself is transient runtime state, but everything
+ * it holds is in the persisted ask_user tool args (question +
+ * candidates), so restore can rebuild the full live surface — bubble,
+ * chips, sidebar dot — instead of degrading to the quiet
+ * AnsweredAskUser echo that a user who wasn't watching may never
+ * notice. Answering through a rebuilt bubble is safe: on the bridge
+ * side `ask_user_response` and `user_message` both funnel into
+ * `agent.put_task`; the distinct kind is audit-trail semantics, not a
+ * protocol handshake with a waiting loop.
+ *
+ * Rule: the question is pending iff the session's last word is an
+ * unanswered ask_user — scanning from the end, the first user or
+ * agent turn decides. A user turn means it was answered (replies
+ * append a user turn before anything else); a later agent turn means
+ * a newer run superseded the question (e.g. a Supervisor/CLI-driven
+ * run); system turns (/btw exchanges, Goal narration) are bystanders
+ * and skipped. Candidates are coerced through String() to mirror the
+ * bridge's own defensive coercion of GA args.
+ */
+export function derivePendingAskUser(turns: Turn[]): PendingAskUser | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i];
+    if (turn.role === "system") continue;
+    if (turn.role !== "agent") return null;
+    const args = turn.tools.find((t) => t.name === "ask_user")?.args;
+    if (!args || typeof args.question !== "string") return null;
+    return {
+      question: stripGATags(args.question),
+      candidates: Array.isArray(args.candidates)
+        ? args.candidates.map((c) => stripGATags(String(c)))
+        : [],
+    };
+  }
+  return null;
 }
 
 /**

@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { rowsToTurns } from "@/stores/messages/rowsToTurns";
+import {
+  derivePendingAskUser,
+  rowsToTurns,
+} from "@/stores/messages/rowsToTurns";
 import { makeMessageRow } from "@/test/factories";
+import type {
+  AgentTurn,
+  SystemTurn,
+  UserTurn,
+} from "@/types/conversation";
 
 describe("rowsToTurns", () => {
   it("restores user, assistant, and goal system turns", () => {
@@ -232,5 +240,76 @@ describe("rowsToTurns", () => {
     ]);
     // The raw args (incl. GA tags) survive intact here; AnsweredAskUser
     // strips the tags at render time so the displayed text is clean.
+  });
+});
+
+describe("derivePendingAskUser", () => {
+  const askUserTurn = (args: Record<string, unknown>): AgentTurn => ({
+    role: "agent",
+    tools: [
+      { id: "t-ask", name: "ask_user", status: "success-historical", args },
+    ],
+    finalAnswer: null,
+  });
+  const agentTurn = (): AgentTurn => ({
+    role: "agent",
+    tools: [
+      { id: "t-1", name: "file_read", status: "success-historical", args: {} },
+    ],
+    finalAnswer: "done",
+  });
+  const userTurn = (): UserTurn => ({ role: "user", content: "answered" });
+  const systemTurn = (): SystemTurn => ({
+    role: "system",
+    content: "checkpoint",
+    variant: "goal",
+  });
+
+  it("rebuilds pending state from an unanswered trailing ask_user, stripping GA tags", () => {
+    const pending = derivePendingAskUser([
+      userTurn(),
+      askUserTurn({
+        question: "<summary>recap</summary>\nPick a skill to master:",
+        candidates: ["coding", 42],
+      }),
+    ]);
+    // Non-string candidates go through String() — same defensive
+    // coercion the bridge applies to GA args on the live path.
+    expect(pending).toEqual({
+      question: "Pick a skill to master:",
+      candidates: ["coding", "42"],
+    });
+  });
+
+  it("treats missing candidates as an open-ended question", () => {
+    expect(
+      derivePendingAskUser([askUserTurn({ question: "What now?" })]),
+    ).toEqual({ question: "What now?", candidates: [] });
+  });
+
+  it("returns null when a user turn answered the question", () => {
+    expect(
+      derivePendingAskUser([askUserTurn({ question: "Q?" }), userTurn()]),
+    ).toBeNull();
+  });
+
+  it("returns null when a later agent turn superseded the question", () => {
+    expect(
+      derivePendingAskUser([askUserTurn({ question: "Q?" }), agentTurn()]),
+    ).toBeNull();
+  });
+
+  it("skips trailing system turns (goal narration / btw bystanders)", () => {
+    expect(
+      derivePendingAskUser([askUserTurn({ question: "Q?" }), systemTurn()]),
+    ).toEqual({ question: "Q?", candidates: [] });
+  });
+
+  it("returns null for sessions with no ask_user tail", () => {
+    expect(derivePendingAskUser([])).toBeNull();
+    expect(derivePendingAskUser([userTurn(), agentTurn()])).toBeNull();
+    expect(
+      derivePendingAskUser([askUserTurn({ candidates: ["no question"] })]),
+    ).toBeNull();
   });
 });

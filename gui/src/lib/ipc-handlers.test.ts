@@ -9,6 +9,10 @@ import {
 } from "vitest";
 
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
+import {
+  consumeReplyNotifyPending,
+  markReplyNotifyPending,
+} from "@/lib/notify";
 import { deriveSessionStatus } from "@/lib/sessions";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
@@ -311,6 +315,45 @@ describe("dispatchIPCEvent", () => {
       inFlightContent: "",
       turns: [],
     });
+  });
+
+  it("routes the reply-notify flag past an ask_user turn_end to the ask_user handler", () => {
+    // A GUI-started run that ends by asking a question must NOT fire
+    // the replyDone notification at its final turn_end ("回复完成"
+    // would tell an away user the task finished when the agent is
+    // blocked on them). The flag survives turn_end and is consumed by
+    // the ask_user handler that follows, which owns the
+    // waiting-for-you notification instead.
+    markReplyNotifyPending("s-test");
+
+    dispatchIPCEvent({
+      kind: "turn_end",
+      sessionId: "s-test",
+      turnIndex: 1,
+      summary: "Asked the user",
+      toolCalls: [
+        { toolName: "ask_user", args: { question: "Q?", candidates: [] } },
+      ],
+      toolResults: [],
+      responseContent: "",
+      exitReason: { result: "EXITED", data: {} },
+      timestamp: "2026-06-18T08:05:00.000Z",
+    });
+
+    // turn_end left the flag alone …
+    expect(consumeReplyNotifyPending("s-test")).toBe(true);
+    markReplyNotifyPending("s-test");
+
+    dispatchIPCEvent({
+      kind: "ask_user",
+      sessionId: "s-test",
+      question: "Q?",
+      candidates: [],
+      timestamp: "2026-06-18T08:05:01.000Z",
+    });
+
+    // … and the ask_user handler consumed it.
+    expect(consumeReplyNotifyPending("s-test")).toBe(false);
   });
 
   it("ask_user strips GA internal tags from question and candidates", () => {

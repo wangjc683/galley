@@ -7,7 +7,10 @@ import {
 } from "@/lib/db";
 import { logPerf, perfNow } from "@/lib/perf";
 import { useSessionsStore } from "@/stores/sessions";
-import { rowsToTurns } from "@/stores/messages/rowsToTurns";
+import {
+  derivePendingAskUser,
+  rowsToTurns,
+} from "@/stores/messages/rowsToTurns";
 import type {
   AgentTurn,
   MessageAttachment,
@@ -427,7 +430,18 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       if (rows.length === 0) return;
       const turns = rowsToTurns(rows);
       const state = get();
-      const { byId } = patchMessages(state, sid, (m) => ({ ...m, turns }));
+      const { byId } = patchMessages(state, sid, (m) => ({
+        ...m,
+        turns,
+        // A restart (or bridge death) while a GA question was pending
+        // dropped the transient pendingAskUser — rebuild it from the
+        // persisted tool args so the live bubble / chips / sidebar dot
+        // come back instead of degrading to the quiet echo. A live
+        // in-memory value wins: restore only runs on fresh runtimes,
+        // but if a race ever lands one, the IPC event is fresher than
+        // the derivation.
+        pendingAskUser: m.pendingAskUser ?? derivePendingAskUser(turns),
+      }));
       set({ byId });
     } finally {
       set({

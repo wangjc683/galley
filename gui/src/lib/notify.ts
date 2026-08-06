@@ -39,6 +39,7 @@ export type SystemNotifyKind =
   | "goalEnd"
   | "approval"
   | "replyDone"
+  | "askUser"
   | "scheduleFailed";
 
 /**
@@ -131,12 +132,16 @@ export async function sendGatedSystemNotification(
     // scheduleFailed has no pref on purpose: a failed scheduled fire is
     // an error condition, not routine chatter — rare, and always "needs
     // your action". The focus / permission gates below still apply.
+    // askUser shares the replyDone pref: both are run-terminus "the
+    // agent stopped, look at the session" signals, differing only in
+    // register (finished vs asking) — a separate toggle would be
+    // Settings noise for a distinction users don't configure apart.
     const enabled =
       kind === "goalEnd"
         ? prefs.notifyOnGoalEnd
         : kind === "approval"
           ? prefs.notifyOnApproval
-          : kind === "replyDone"
+          : kind === "replyDone" || kind === "askUser"
             ? prefs.notifyOnReplyDone
             : true;
     if (!enabled) {

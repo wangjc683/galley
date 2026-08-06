@@ -292,9 +292,20 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // for Goal-nudge / CLI-driven runs — they never marked). Fires
       // alongside the unread badge; notify.ts gates pref / focus /
       // permission so a focused window stays silent.
+      //
+      // A run that ends by calling ask_user is NOT a finished reply —
+      // "回复完成" would tell an away user the task is done when the
+      // agent is actually blocked on them. Skip here and leave the
+      // notify-pending flag for the AskUserEvent the bridge emits
+      // right after this turn_end; that handler sends the question
+      // itself in the waiting-for-you register instead.
+      const endsInAskUser = event.toolCalls.some(
+        (tc) => tc.toolName === "ask_user",
+      );
       if (
         event.exitReason != null &&
         visibility === "visible" &&
+        !endsInAskUser &&
         consumeReplyNotifyPending(event.sessionId)
       ) {
         const sessionTitle = useSessionsStore
@@ -427,10 +438,27 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // already surfaced via TurnMarker's step subline; stripping it
       // here keeps the AskUserBubble to the real question and avoids
       // showing literal `<summary>` tags to the user.
+      const question = stripGATags(event.question);
       messages.setPendingAskUser(event.sessionId, {
-        question: stripGATags(event.question),
+        question,
         candidates: event.candidates.map(stripGATags),
       });
+      // The agent is blocked on an answer — same "needs you" moment
+      // as an approval wait. The turn_end just before this skipped
+      // its replyDone for exactly this event; consume the flag here
+      // (same GUI-started-run gating) and send the question itself.
+      // `reply:` throttleKey shared with replyDone: they're the same
+      // run-terminus channel, never both firing for one run.
+      if (consumeReplyNotifyPending(event.sessionId)) {
+        const sessionTitle = useSessionsStore
+          .getState()
+          .sessions.find((s) => s.id === event.sessionId)?.title;
+        void sendGatedSystemNotification("askUser", {
+          title: currentCopy().conversation.waitingForYou,
+          body: sessionTitle ? `${sessionTitle} · ${question}` : question,
+          throttleKey: `reply:${event.sessionId}`,
+        });
+      }
       return;
     }
 
