@@ -1,6 +1,6 @@
 # 02: Composer ghost text + ArrowRight 接受
 
-Status: ready-for-human（已实现，待 dogfood 验收）
+Status: done（2026-08-06 JC 真机 dogfood 验收通过）
 
 ## 范围
 

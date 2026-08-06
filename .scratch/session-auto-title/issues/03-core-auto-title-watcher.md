@@ -1,6 +1,6 @@
 # 03: core 自动标题 watcher + GUI 应用
 
-Status: ready-for-human（已实现，待 dogfood 验收）
+Status: done（2026-08-06 JC 真机 dogfood 验收通过）
 
 ## 范围
 

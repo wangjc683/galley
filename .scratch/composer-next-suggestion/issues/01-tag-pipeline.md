@@ -1,6 +1,6 @@
 # 01: `<next-suggestion>` 标签链路（prompt → 提取 → IPC）
 
-Status: ready-for-human（已实现，待 dogfood 验收）
+Status: done（2026-08-06 JC 真机 dogfood 验收通过）
 
 ## 范围
 

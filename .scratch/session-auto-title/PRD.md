@@ -1,6 +1,6 @@
 # PRD: 会话自动标题（Session Auto-Title）
 
-Status: ready-for-human（2026-08-04 已实现，全量验证通过，待 JC 真机 dogfood 验收）
+Status: done（2026-08-04 实现，2026-08-06 JC 真机 dogfood 验收通过，随 v0.4.3 发运）
 Date: 2026-08-03（JC 与 agent 设计讨论定案）；2026-08-04 实现完成并勘误（见「实现勘误」一节）
 关联: `.scratch/composer-next-suggestion/`（同一轮讨论的姊妹 feature，机制完全解耦，本 feature 先行）
 
