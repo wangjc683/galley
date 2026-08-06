@@ -1,7 +1,7 @@
 # PRD: 下一步建议 Ghost Text（Composer Next-Suggestion）
 
-Status: ready-for-human（2026-08-05 定案 2 修订为默认强制 + ghost UI 可达性打磨，
-待 JC 真机 dogfood 验收——重点看强制后的标签遵从率与建议质量地板）
+Status: done（2026-08-06 JC 真机 dogfood 验收通过：默认强制后标签遵从率
+与建议质量达标，ghost UI 可达性打磨一并验收）
 Date: 2026-08-03（JC 与 agent 设计讨论定案）；2026-08-04 实现完成并勘误（见「实现勘误」一节）；
 2026-08-05 定案 2 修订（见「定案变更」一节）
 关联: `.scratch/session-auto-title/`（同一轮讨论的姊妹 feature，机制完全解耦，标题先行——
