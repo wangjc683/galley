@@ -111,8 +111,8 @@ Design references:
 
 ## Hard Engineering Invariants
 
-These rules were forged during the B-phase refactor and remain binding after
-v0.2.0. Violating one is grounds for revert. The IDs are stable because
+Most of these rules were forged during the B-phase refactor and all remain
+binding after v0.2.0; later additions carry their own provenance inline. Violating one is grounds for revert. The IDs are stable because
 devlog entries, playbooks, and commit messages reference them; the retired
 refactor-execution rules (I1, I2, I4, I7, I8, I10) live in the
 [archived invariants file](./archive/refactor/invariants.md).
@@ -147,6 +147,17 @@ refactor-execution rules (I1, I2, I4, I7, I8, I10) live in the
   `kill_on_drop(true)` during unwind. `panic = "abort"` skips Drop and
   orphans every live bridge process. No `[profile.*] panic = "abort"` in
   `core/Cargo.toml`, ever — the ~5% binary-size saving is not worth it.
+- **I12 — Prune before descending when walking user directories.** Any
+  traversal of a user-chosen directory (artifact scans, project discovery,
+  file pickers) must filter directories *before entering them* — Rust
+  `walkdir` with `filter_entry`, never a glob-style descend-then-filter.
+  On macOS 14+ merely listing another app's data directory (containers
+  under `~/Library/Application Support`) trips the TCC "access data from
+  other apps" prompt; a recursive-glob walk of a home-directory workspace
+  fires that alarming system dialog on every refresh. Always exclude
+  dot-directories and OS data dirs at the prune step. (Adopted 2026-08-07
+  from a verified OpenWorker incident + fix — their regression test spies
+  on the walk to assert `~/Library` is never entered.)
 
 Code-level proofs and grep gates for the architecture-layer principles are in
 [architecture demo](./architecture-demo.md).
