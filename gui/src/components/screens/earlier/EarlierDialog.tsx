@@ -17,6 +17,7 @@ import {
 import { Button, IconButton } from "@/components/ui/button";
 import { useSessionSelectMode } from "@/hooks/useSessionSelectMode";
 import { useCopy, useLanguage } from "@/lib/i18n";
+import { cleanSessionSummary } from "@/lib/session-summary";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/types/session";
@@ -334,7 +335,7 @@ function EarlierRow({
         </div>
         {session.summary && (
           <div className="mt-0.5 truncate text-ui-tertiary text-ink-muted">
-            {session.summary}
+            {cleanSessionSummary(session.summary)}
           </div>
         )}
       </div>

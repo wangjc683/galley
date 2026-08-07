@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { useSessionSelectMode } from "@/hooks/useSessionSelectMode";
 import { useCopy } from "@/lib/i18n";
+import { cleanSessionSummary } from "@/lib/session-summary";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/types/session";
 
@@ -352,7 +353,7 @@ function ArchivedRow({
           </div>
           {session.summary && (
             <div className="mt-0.5 truncate text-ui-tertiary text-ink-muted">
-              {session.summary}
+              {cleanSessionSummary(session.summary)}
             </div>
           )}
         </div>
@@ -371,7 +372,7 @@ function ArchivedRow({
         </div>
         {session.summary && (
           <div className="mt-0.5 truncate text-ui-tertiary text-ink-muted">
-            {session.summary}
+            {cleanSessionSummary(session.summary)}
           </div>
         )}
       </div>
