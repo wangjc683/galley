@@ -133,7 +133,7 @@
 
 ## Sidebar selected 行明度持平（chrome 加深次生）
 
-- **状态**：暂存（2026-08-07 hover 修复时发现，JC 裁决先只修 hover）
+- **状态**：暂存（2026-08-07 hover 修复时发现，JC 裁决先只修 hover；同日 JC 真机确认 selected 现状效果 OK——色相锚成立，启动信号未出现）
 - **提出**：2026-08-07，排查 sidebar hover 失明时的连带发现。
 - **启动信号**：dogfood 中觉得选中行「你在这里」不够醒目——出现即证据。
 - **背景**：`--color-selected`（`#F8EDDA`，L* 94.2）与 08-05 加深后的 chrome（`#EFEEEC`，L* 94.1）明度完全持平，session 选中行的明度抬升已失效，现在只靠杏色色相撑。与 hover 的纯明度失明性质不同（hover 无色相可依赖，必修；selected 有饱和暖色对中性灰，暂时成立）。

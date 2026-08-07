@@ -34,19 +34,23 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 ### 2.1 色板（Light-first）
 
 > 命名约定：CSS variable 写 `--color-*`（Tailwind v4 `@theme` 友好），utility class 写 `bg-*` / `text-*` / `border-*`。文字色用 `ink` 命名空间（避开 `text-text-*` 双重命名），边框色用 `line` 命名空间（避开 `border-border-*`）。设计稿与文档讨论时可用语义名（"主文本色 / 卡片边"），代码层用工程名。
+>
+> 2026-08-07 对码同步：下列 light 表值与 `globals.css` 校齐——06-24 中性化收敛（true-neutral + whisper-warm，[devlog](../devlog/2026-06-24-topbar-split-and-light-palette.md)）改了基底 / line / ink 全系但表值未跟。**值以 `globals.css` 为准**，改 token 时同步本表。
 
 #### 基底层
 
 | CSS variable | Utility | 值 | 用途 |
 |---|---|---|---|
-| `--color-app` | `bg-app` | `#FBFAF7` | App background，暖白（不是纯白，比旧奶油更轻） |
-| `--color-surface` | `bg-surface` | `#FDFCF9` | 普通卡片底 |
+| `--color-app` | `bg-app` | `#FAF9F8` | App background，true-neutral + whisper-warm（2026-06-24 收敛：R 比 B 高 ~2 counts，不足以读成色相；暖度由暖墨 + 杏沙承担，底不再带黄） |
+| `--color-surface` | `bg-surface` | `#FCFBFA` | 普通卡片底 |
 | `--color-elevated` | `bg-elevated` | `#FFFFFF` | 浮起卡片（Health Check / Error / Command Palette） |
+| `--color-chrome` | `bg-chrome` | `#EFEEEC` | Sidebar / 双栏 chrome，比 app 沉一档（「明度即抬升」在 chrome 倒置）。2026-08-05 由 `#F4F3F1` 加深，见下方「Chrome 下沉量」。**勿复用给 cards / insets**——舞台后退语义，随该关系重调而移动 |
+| `--color-code-surface` | `bg-code-surface` | `#F2F1F0` | 块代码底：比 app 深、与 inline code（`--color-hover`）同族，代码读作嵌入媒介而非浮起卡片 |
 | `--color-overlay` | `bg-overlay` | `rgba(31,27,23,0.4)` | Command Palette / modal 遮罩 |
 
 #### Elevation 不倒置（系统规范）
 
-明度即抬升:`app (#FBFAF7) < surface (#FDFCF9) < elevated (#FFF)`,越浮起越浅。
+明度即抬升:`app (#FAF9F8) < surface (#FCFBFA) < elevated (#FFF)`,越浮起越浅。
 
 > **规范**:任何"浮起"容器(dialog / menu / card)的**主体区 elevation 必须 ≥ 它自己的 chrome**,绝不更低。**不要把 dialog 主体刷成 `bg-app`**——那是画布(最低档),会让白色 header/footer 浮在一块更深的米板上,读成"头浅身深"的失衡。想表达"内容区下沉",只用**小块 inset**(勾选框、code/args `<pre>`、输入框),不要整片主体下沉。
 
@@ -58,17 +62,17 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 
 | CSS variable | Utility | 值 | 用途 |
 |---|---|---|---|
-| `--color-line` | `border-line` | `#EAE6DE` | 卡片边、divider 默认 |
-| `--color-line-strong` | `border-line-strong` | `#D6CFC0` | hover 边、focus 边（非杏沙时） |
-| `--color-line-subtle` | `border-line-subtle` | `rgba(31,27,23,0.06)` | 更弱的内分隔（如 modal / settings row 之间） |
+| `--color-line` | `border-line` | `#E8E7E5` | 卡片边、divider 默认 |
+| `--color-line-strong` | `border-line-strong` | `#D4D2CF` | hover 边、focus 边（非杏沙时） |
+| `--color-line-subtle` | `border-line-subtle` | `rgba(33,31,28,0.06)` | 更弱的内分隔（如 modal / settings row 之间） |
 
 #### 文字三档（ink 命名空间）
 
 | CSS variable | Utility | 值 | 用途 |
 |---|---|---|---|
-| `--color-ink` | `text-ink` / `bg-ink` | `#1F1B17` | charcoal-warm，标题、主文本、主 CTA 填充 |
-| `--color-ink-soft` | `text-ink-soft` | `#5C544A` | 次要文本、metadata |
-| `--color-ink-muted` | `text-ink-muted` | `#8E867A` | hint、placeholder、timestamp |
+| `--color-ink` | `text-ink` / `bg-ink` | `#211F1C` | charcoal-warm，标题、主文本、主 CTA 填充——暖墨压近中性纸，是暖度的主要来源 |
+| `--color-ink-soft` | `text-ink-soft` | `#57534C` | 次要文本、metadata |
+| `--color-ink-muted` | `text-ink-muted` | `#87827A` | hint、placeholder、timestamp |
 
 #### 互动状态
 
@@ -121,6 +125,10 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 | `--color-brand-tint` | `#4A3829` | 用户消息底（provisional，dark pass 再校） |
 | `--color-brand` | `#D6A083` | 品牌主色 |
 | `--color-brand-strong` | `#E2AE8D` | 品牌 hover / link |
+| `--color-success` | `#8FBF8F` | 成功（较 light 提亮） |
+| `--color-warning` | `#D6A250` | 警示琥珀（较 light 提亮） |
+| `--color-error` | `#D97A76` | 错误红（较 light 提亮） |
+| `--color-info` | `#A8A7C3` | info 灰蓝（较 light 提亮） |
 
 > **2026-07-25 降暖一档（勿回退到旧值）**：上表的表面 / 墨色是原值 chroma
 > 的 **0.6 倍**，L 与色相原样不动——纯 chroma 旋钮，对比度与层级毫无变化
