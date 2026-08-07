@@ -5,6 +5,7 @@ import {
   CheckCircle,
   CircleNotch,
   DotsThreeVertical,
+  Gauge,
   Info,
   PlugsConnected,
   Trash,
@@ -331,12 +332,16 @@ function ConfiguredModelRow({
             </span>
             {/* Reasoning tier, only when explicitly set on the stored
                 snapshot — this is what tells apart effort-variant
-                entries of the same model at a glance. */}
+                entries of the same model at a glance. Same register as
+                the provider chip; the Gauge prefix alone marks the
+                category (tuning state, not identity) — icon+text chip
+                grammar mirrors the default badge, no new hierarchy. */}
             {reasoningTier && (
               <span
-                className="inline-flex shrink-0 rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-micro leading-4 text-ink-muted/80"
+                className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-micro leading-4 text-ink-muted/80"
                 title={`${copy.reasoningEffort}: ${reasoningTierLabels[reasoningTier]}`}
               >
+                <Gauge size={10} weight="bold" />
                 {reasoningTierLabels[reasoningTier]}
               </span>
             )}
