@@ -93,7 +93,7 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,
       api_mode: "responses",
-      reasoning_effort: "medium",
+      reasoning_effort: "high",
       temperature: 1,
       max_retries: 3,
       connect_timeout: 10,
@@ -111,7 +111,16 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     displayName: "OpenAI",
     modelPlaceholder: "gpt-5.6-sol",
     apiKeyUrl: "https://platform.openai.com/api-keys",
-    advancedOptions: managedModelProtocolAdvancedDefaults("openai"),
+    // First-party endpoint: reasoning_effort support is certain, so pin
+    // the quality-forward default explicitly (2026-08-07 adjudication:
+    // high on the three first-party presets only). Third-party compat
+    // presets stay unset — the field is a first-party API contract and
+    // compat layers may reject it; the shared protocol defaults below
+    // also serve arbitrary custom endpoints and must not carry it.
+    advancedOptions: {
+      ...managedModelProtocolAdvancedDefaults("openai"),
+      reasoning_effort: "high",
+    },
   },
   {
     id: "custom-anthropic",
@@ -122,7 +131,11 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     displayName: "Anthropic",
     modelPlaceholder: "claude-opus-4-8",
     apiKeyUrl: "https://platform.claude.com/settings/keys",
-    advancedOptions: managedModelProtocolAdvancedDefaults("anthropic"),
+    // Same first-party-only rule as custom-openai above.
+    advancedOptions: {
+      ...managedModelProtocolAdvancedDefaults("anthropic"),
+      reasoning_effort: "high",
+    },
   },
   {
     id: "deepseek",

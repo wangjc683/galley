@@ -698,7 +698,9 @@ export const zhCopy = {
       apiModeChat: "Chat",
       apiModeResponses: "Responses",
       reasoningEffort: "推理强度",
-      reasoningDefault: "默认",
+      reasoningEffortInfo:
+        "选「默认（跟随服务商）」时不发送该参数，由服务商决定实际强度：OpenAI 系通常为 medium，Claude 由自适应思考按难度分配。第三方兼容端点是否支持该参数取决于其实现。",
+      reasoningDefault: "默认（跟随服务商）",
       reasoningNone: "None",
       reasoningMinimal: "Minimal",
       reasoningLow: "Low",

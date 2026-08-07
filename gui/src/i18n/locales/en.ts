@@ -732,7 +732,9 @@ export const enCopy: AppCopy = {
       apiModeChat: "Chat",
       apiModeResponses: "Responses",
       reasoningEffort: "Reasoning effort",
-      reasoningDefault: "Default",
+      reasoningEffortInfo:
+        "With “Default (provider decides)” the parameter is not sent and the provider picks the actual effort: OpenAI-family APIs usually default to medium, Claude allocates adaptively by difficulty. Whether third-party compatible endpoints support the parameter depends on their implementation.",
+      reasoningDefault: "Default (provider decides)",
       reasoningNone: "None",
       reasoningMinimal: "Minimal",
       reasoningLow: "Low",

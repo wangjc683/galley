@@ -27,6 +27,41 @@ export function modelDisplayParts(model: ManagedModelRecord): {
   return { title: modelName || model.displayName };
 }
 
+const REASONING_EFFORT_TIERS = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+export type ReasoningEffortTier = (typeof REASONING_EFFORT_TIERS)[number];
+
+/**
+ * The model's explicitly-set reasoning tier, read from the stored
+ * advanced-options snapshot — i.e. what the runtime actually sends,
+ * never the preset-recommended overlay (old records haven't absorbed
+ * it, and a badge showing an effort that isn't in effect would lie).
+ * Null when unset: the provider decides, and the row shows no badge.
+ * Mirrors the runner/GA coercion: the Codex backend has no minimal
+ * tier and runs medium instead.
+ */
+export function modelReasoningEffortTier(
+  model: ManagedModelRecord,
+): ReasoningEffortTier | null {
+  const raw = String(model.advancedOptions.reasoning_effort ?? "")
+    .trim()
+    .toLowerCase();
+  if (!(REASONING_EFFORT_TIERS as readonly string[]).includes(raw)) {
+    return null;
+  }
+  if (raw === "minimal" && model.advancedOptions.codex_backend === true) {
+    return "medium";
+  }
+  return raw as ReasoningEffortTier;
+}
+
 export function normalizedModelDisplayName(draft: ModelDraftState): string {
   const displayName = draft.displayName.trim();
   if (displayName === "" || displayName === draft.model.trim()) {

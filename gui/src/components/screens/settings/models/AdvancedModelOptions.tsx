@@ -180,6 +180,7 @@ export function AdvancedModelOptions({
                 label={copy.reasoningEffort}
                 value={isCodexOauth && openaiReasoning === "minimal" ? "medium" : openaiReasoning}
                 options={openaiReasoningOptions(copy, isCodexOauth)}
+                info={copy.reasoningEffortInfo}
                 onChange={(value) =>
                   setOption("reasoning_effort", value || null)
                 }
@@ -206,6 +207,7 @@ export function AdvancedModelOptions({
                   { value: "high", label: copy.reasoningHigh },
                   { value: "xhigh", label: copy.reasoningXHigh },
                 ]}
+                info={copy.reasoningEffortInfo}
                 onChange={(value) =>
                   setOption("reasoning_effort", value || null)
                 }
@@ -313,16 +315,19 @@ function AdvancedChoiceField<TValue extends string>({
   value,
   options,
   onChange,
+  info,
 }: {
   label: string;
   value: TValue;
   options: AdvancedChoiceOption<TValue>[];
   onChange: (value: TValue) => void;
+  info?: string;
 }) {
   return (
     <div>
-      <div className="mb-1.5 text-ui-meta font-medium text-ink-soft">
-        {label}
+      <div className="mb-1.5 flex items-center gap-1.5 text-ui-meta font-medium text-ink-soft">
+        <span>{label}</span>
+        {info && <InfoTooltip label={label} text={info} />}
       </div>
       <div className="flex flex-wrap gap-1">
         {options.map((option) => {
