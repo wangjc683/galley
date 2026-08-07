@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * exception) — body/header/footer sit on `bg-app`, not `bg-elevated`.
  */
 export const SESSION_BROWSER_CONTENT_CLASS = cn(
-  "galley-pop-in fixed left-1/2 top-1/2 z-50 flex h-[520px] w-[640px] -translate-x-1/2 -translate-y-1/2 flex-col",
+  "galley-pop-in fixed left-1/2 top-1/2 z-50 flex h-[680px] w-[920px] -translate-x-1/2 -translate-y-1/2 flex-col",
   "overflow-hidden rounded-lg border border-line bg-app shadow-elevated",
   "max-h-[calc(100vh-32px)] max-w-[calc(100vw-32px)]",
 );

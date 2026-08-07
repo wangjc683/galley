@@ -30,6 +30,7 @@ from runner.workbench_bridge import (
     Bridge,
     SessionState,
     _classify_error,
+    _clean_turn_summary,
     _FenceFilter,
     _llm_display_name,
     _managed_model_config_from_env,
@@ -1100,3 +1101,27 @@ def test_clean_generated_title_normalizes_model_output() -> None:
     assert _clean_generated_title("<thinking>只有思考</thinking>") == ""
     # Runaway length is capped at 60 chars.
     assert len(_clean_generated_title("超" * 200)) == 60
+
+
+def test_clean_turn_summary_passthrough_and_prefix() -> None:
+    # A model-provided <summary> body is already clean — unchanged.
+    assert _clean_turn_summary("定位到空指针并修复") == "定位到空指针并修复"
+    # Legacy GUI-written step prefix is dropped.
+    assert _clean_turn_summary("第 3 步 · 修复了登录超时") == "修复了登录超时"
+
+
+def test_clean_turn_summary_scrubs_fallback_recap_junk() -> None:
+    # GA's no-<summary> fallback: raw reply body, middle-truncated by
+    # smart_format(" ... "), with a <suggestion> tag chopped in half.
+    raw = "两天数据都拿到了！### 🌊 潮汐 ... estion>帮我推荐厦门周末"
+    cleaned = _clean_turn_summary(raw)
+    assert "estion>" not in cleaned
+    assert "#" not in cleaned
+    assert " ... " not in cleaned
+    assert cleaned == "两天数据都拿到了！ 🌊 潮汐 … 帮我推荐厦门周末"
+    # Complete tags and emphasis runs also go; head-side chopped tag too.
+    assert _clean_turn_summary("行内 `code` 与 **强调**") == "行内 code 与 强调"
+    assert _clean_turn_summary("答复 <suggestion>试试这个</suggestion>") == (
+        "答复 试试这个"
+    )
+    assert _clean_turn_summary("已发出 <sugg ...") == "已发出 …"

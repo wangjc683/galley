@@ -2,14 +2,32 @@
 
 > Galley 设计系统 · 原 DESIGN.md §8–§10（2026-07-04 拆分）：⌘K Command Palette、Settings modal 全部 tab、全局快捷键表。
 
+## Overlay 尺寸阶梯
+
+Modal overlay 按任务形态分档，尺寸差异本身传递"停留多久"的信号，
+不追求全局同尺寸（2026-08-07 裁决；同日真机复核后 Command Palette 与
+Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命中卡片和
+标题+摘要预览后已是吃宽度的内容面，640 实测局促）：
+
+| 档位 | 尺寸 | 语义 | 成员 |
+|---|---|---|---|
+| 小 | 420px 宽 | 单表单快速填写 | Create/Edit Project |
+| 内容工作台 | 920px 宽 × 最高 680（固定或自适应） | 富内容浏览 / 编辑 | Prompt Manager、Earlier / Archived（920×680 固定）、Command Palette、Scheduled Tasks（后两者高度自适应，上限 680） |
+| 全局工作台 | 1040 × 680 | 多栏全局配置 | Settings |
+
+新增 overlay 先归档位，再谈特例。（2026-08-07：Earlier / Archived 从
+640×520 跟进 920 档，原"中档"清空移除。）
+
 ## 8. Command Palette（⌘K Overlay）
 
 ### 触发与形态
 
 - `⌘K` 开 / `Esc` 或点遮罩关
 - **居中 overlay**（不贴顶；居中更聚焦，不遮 Top Bar 状态）
-- 宽度 **560px**（不顶天立地）
-- 高度自适应，max 420px（约 8 行结果），超出 scroll
+- 宽度 **920px**（内容工作台档，与 Prompt Manager 同档，见本文件开头的
+  overlay 尺寸阶梯）
+- 高度自适应，max 680px，超出 scroll；小窗口下钳到
+  `min(680px, calc(82vh - 24px))`（窗口 minHeight 600 时不越出下沿）
 - 背景 `surface-elevated` + `shadow-elevated` + 圆角 14px
 - 触发后页面其余加 `surface-overlay` 遮罩，**无模糊**（模糊太花）
 
@@ -66,7 +84,7 @@
 
 ### 形态决策
 
-当前实现是 **Radix Dialog modal overlay**，720 × 560px，左侧 tab list + 右侧内容区。独立 settings window 是历史方向，已从当前基准移出。
+当前实现是 **Radix Dialog modal overlay**，1040 × 680px，左侧 tab list + 右侧内容区。独立 settings window 是历史方向，已从当前基准移出。
 
 理由：
 
@@ -76,7 +94,7 @@
 
 ### 规格
 
-- **720 × 560px / centered modal / `bg-overlay` scrim**
+- **1040 × 680px / centered modal / `bg-overlay` scrim**
 - 左侧 180px Tab list（垂直），右侧主内容区
 - 右上角 28px close icon，Esc 可关闭
 - 触发：主窗口 ⌘, / Sidebar runtime unconfigured / Command Palette "Open settings" / TopBar Gear

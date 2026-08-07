@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 
 import { searchMessages, type MessageSearchHit } from "@/lib/db";
 import { useCopy } from "@/lib/i18n";
+import { cleanSessionSummary } from "@/lib/session-summary";
 import { resetWindowLayout } from "@/lib/layout-reset";
 import { formatShortcut, formatShortcutReadable } from "@/lib/shortcuts";
 import { StatusIcon } from "@/lib/status-icon";
@@ -58,7 +59,7 @@ export interface CommandPaletteProps {
 /**
  * ⌘K command palette. DESIGN.md §8.
  *
- * Centered overlay (not pinned-top), 560px wide, max-height 420px,
+ * Centered overlay (not pinned-top), 920px wide, max-height 680px,
  * surface-elevated bg + shadow-elevated + 14px radius. Backdrop is
  * surface-overlay rgba(31,27,23,0.4) — no blur (Notion-style flat
  * scrim, not magazine-feel blur).
@@ -286,20 +287,26 @@ function RootPage({
         <PaletteRow Icon={FolderOpen} label={copy.command.newProject} />
       </Command.Item>
 
-      {/* Sessions */}
-      {recentSessions.map((s) => (
-        <Command.Item
-          key={s.id}
-          value={`session ${s.title} ${s.summary ?? ""}`}
-          onSelect={() => onOpenSession(s.id)}
-        >
-          <PaletteRow
-            iconNode={<StatusIcon status={s.status} size={14} />}
-            label={s.title}
-            sub={s.summary}
-          />
-        </Command.Item>
-      ))}
+      {/* Sessions. Summary rides inline after the title (muted,
+          truncating) — the right-aligned `sub` slot is for short
+          annotations on action rows and would crush the title when
+          fed an 80-char recap. */}
+      {recentSessions.map((s) => {
+        const preview = s.summary ? cleanSessionSummary(s.summary) : undefined;
+        return (
+          <Command.Item
+            key={s.id}
+            value={`session ${s.title} ${preview ?? ""}`}
+            onSelect={() => onOpenSession(s.id)}
+          >
+            <PaletteRow
+              iconNode={<StatusIcon status={s.status} size={14} />}
+              label={s.title}
+              preview={preview}
+            />
+          </Command.Item>
+        );
+      })}
 
       {/* Matches in conversations — populated only when query >= 2
           chars. forceMount keeps cmdk's fuzzy filter from hiding
@@ -512,6 +519,7 @@ function PaletteRow({
   Icon,
   iconNode,
   label,
+  preview,
   sub,
   shortcut,
   checked,
@@ -519,6 +527,11 @@ function PaletteRow({
   Icon?: PhosphorIcon;
   iconNode?: React.ReactNode;
   label: string;
+  /** Muted one-liner flowing inline after the label (session recap).
+   * Unlike `sub` it truncates freely; the label keeps ≥35% width. */
+  preview?: string;
+  /** Short right-aligned annotation ("当前: x"). Never truncates, so
+   * only feed it bounded strings — long text belongs in `preview`. */
   sub?: string;
   shortcut?: string;
   checked?: boolean;
@@ -528,9 +541,19 @@ function PaletteRow({
       <span className="inline-flex shrink-0 text-ink-soft">
         {iconNode ?? (Icon && <Icon size={16} weight="thin" />)}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
+      <span
+        className={cn(
+          "min-w-0 truncate text-[13px] text-ink",
+          preview ? "max-w-[65%] flex-none" : "flex-1",
+        )}
+      >
         {label}
       </span>
+      {preview && (
+        <span className="min-w-0 flex-1 truncate text-[12px] text-ink-muted">
+          {preview}
+        </span>
+      )}
       {sub && (
         <span className="shrink-0 text-[11.5px] text-ink-muted">{sub}</span>
       )}

@@ -20,6 +20,7 @@ import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
 import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
+import { cleanSessionSummary } from "@/lib/session-summary";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
@@ -175,12 +176,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   //     sessions have status "idle"; the "completed" enum value is
   //     only ever written by the CLI/supervisor surface.)
   //
-  // Legacy data: pre-this-change rows wrote
-  // "第 N 步 · {summary}" into session.summary directly. Strip
-  // that prefix at render so old rows display in the new format
-  // without a DB migration.
+  // cleanSessionSummary repairs legacy "第 N 步 · " prefixes and
+  // GA fallback-recap junk (residual tags / markdown) at render so
+  // old rows display correctly without a DB migration.
   const cleanSummary = session.summary
-    ? stripLegacyStepPrefix(session.summary)
+    ? cleanSessionSummary(session.summary)
     : null;
   const approvalCount = pendingApprovalCount;
   const errorCount = session.errorCount || 0;
@@ -581,15 +581,3 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     </>
   );
 });
-
-/**
- * Strip the legacy "第 N 步 · " prefix that earlier versions of
- * bumpSessionAfterTurn wrote into session.summary. The current
- * write path stores raw summary text and lets the renderer decide
- * which prefix to add (e.g. "已完成 · " when settled). This
- * keeps old rows displaying in the new format without a DB
- * migration — they'll re-save in the new format on next turn_end.
- */
-function stripLegacyStepPrefix(s: string): string {
-  return s.replace(/^第\s*\d+\s*步\s*·\s*/, "");
-}

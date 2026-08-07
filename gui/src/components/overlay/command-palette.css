@@ -5,7 +5,12 @@
  *
  * Per DESIGN.md §8:
  *   - centered overlay (not pinned-top)
- *   - 560px wide, max 420px tall (~8 result rows + 48px input)
+ *   - 920px wide, max 680px tall — the PromptManagerDialog tier
+ *     (2026-08-07: the palette grew full-text hit cards and
+ *     title+recap previews, so it sizes as a content workbench,
+ *     not a bare command list). Height stays adaptive; the max is
+ *     clamped to the viewport so the small-window case (minHeight
+ *     600) never clips the list below the fold
  *   - surface-elevated background + 14px radius + shadow-elevated
  *   - rgba(31,27,23,0.4) flat scrim — no blur
  *   - keyboard / hover selected: bg-hover + 2px charcoal left bar
@@ -24,9 +29,12 @@
   top: 18%;
   left: 50%;
   transform: translateX(-50%);
-  width: 560px;
+  width: 920px;
   max-width: calc(100vw - 32px);
-  max-height: 420px;
+  /* The dialog is anchored at top: 18%, so 82vh is the space below
+     the anchor; 24px keeps a bottom margin at the 600px minimum
+     window height. */
+  max-height: min(680px, calc(82vh - 24px));
   background: var(--color-elevated);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);

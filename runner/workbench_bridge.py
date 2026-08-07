@@ -139,6 +139,26 @@ def _clean_response_for_display(text: str) -> str:
     return cleaned.strip()
 
 
+def _clean_turn_summary(raw: str) -> str:
+    """Sanitize GA's per-turn recap before it reaches TurnEndEvent (and
+    from there the session row + SQLite).
+
+    When the model omits <summary>, GA's turn_end_callback falls back to
+    the raw reply body middle-truncated by smart_format(" ... ") —
+    markdown markers survive, and protocol tags like <suggestion> can be
+    chopped in half, leaving fragments like "estion>". Mirror of the
+    GUI-side cleaner for historical rows
+    (gui/src/lib/session-summary.ts — keep the rules in sync)."""
+    s = re.sub(r"^第\s*\d+\s*步\s*·\s*", "", raw)
+    s = re.sub(r"</?[A-Za-z][\w-]*>", " ", s)
+    s = re.sub(r"<[\w/-]*(?=\s*\.\.\.(\s|$))", "", s)
+    s = re.sub(r"(\.\.\.\s*)[\w/-]+>", r"\1", s)
+    s = re.sub(r"#{1,6}(?=\s|$)", " ", s)
+    s = re.sub(r"[*_]{2,}|`+", "", s)
+    s = re.sub(r"\s*\.\.\.\s*", " … ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 # ---------------- Auto-title helpers ----------------
 
 _TITLE_CONTEXT_MAX_CHARS = 500
@@ -1177,7 +1197,7 @@ class Bridge:
             response = ctx.get("response")
             tool_calls = ctx.get("tool_calls") or []
             tool_results = ctx.get("tool_results") or []
-            summary = str(ctx.get("summary") or "")
+            summary = _clean_turn_summary(str(ctx.get("summary") or ""))
             turn = int(ctx.get("turn") or 0)
             exit_reason = ctx.get("exit_reason") or None
             response_content = (

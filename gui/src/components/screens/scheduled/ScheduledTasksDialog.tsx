@@ -244,9 +244,9 @@ export function ScheduledTasksDialog({
         <Dialog.Content
           aria-describedby={undefined}
           className={cn(
-            "galley-pop-in fixed left-1/2 top-1/2 z-50 flex w-[560px] -translate-x-1/2 -translate-y-1/2 flex-col",
+            "galley-pop-in fixed left-1/2 top-1/2 z-50 flex w-[920px] -translate-x-1/2 -translate-y-1/2 flex-col",
             "overflow-hidden rounded-lg border border-line bg-elevated shadow-elevated",
-            "max-h-[calc(100vh-64px)] max-w-[calc(100vw-32px)]",
+            "max-h-[min(680px,calc(100vh-64px))] max-w-[calc(100vw-32px)]",
           )}
         >
           <div className="flex items-center justify-between px-5 pb-3 pt-4">
@@ -302,31 +302,33 @@ export function ScheduledTasksDialog({
                     <p className="mt-1.5 text-center text-[12px] text-ink-muted">
                       {copy.scheduled.emptyHint}
                     </p>
-                    <div className="mt-5 space-y-2">
+                    {/* Template gallery: one vertical card per example
+                        (grid, not stacked full-width rows — a 920px-wide
+                        row leaves ~700px of dead space between a short
+                        title and the right-aligned schedule). */}
+                    <div className="mt-5 grid grid-cols-3 gap-3">
                       {EXAMPLES.map((example) => (
                         <button
                           key={example.title(copy)}
                           type="button"
                           onClick={() => setForm(formFromExample(example, copy))}
                           className={cn(
-                            "w-full rounded-md border border-line px-4 py-3 text-left outline-none",
+                            "rounded-md border border-line px-4 py-3.5 text-left outline-none",
                             "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
                             "hover:bg-hover active:translate-y-px focus-visible:ring-2 focus-visible:ring-brand/30",
                           )}
                         >
-                          <div className="flex items-baseline justify-between gap-3">
-                            <span className="text-[13px] font-medium text-ink">
-                              {example.title(copy)}
-                            </span>
-                            <span className="shrink-0 text-[11.5px] text-ink-muted">
-                              {repeatSummary(
-                                copy,
-                                example.repeat,
-                                example.timeOfDay,
-                              )}
-                            </span>
+                          <div className="text-[13px] font-medium text-ink">
+                            {example.title(copy)}
                           </div>
-                          <div className="mt-1 text-[12px] leading-relaxed text-ink-muted">
+                          <div className="mt-0.5 text-[11.5px] text-ink-muted">
+                            {repeatSummary(
+                              copy,
+                              example.repeat,
+                              example.timeOfDay,
+                            )}
+                          </div>
+                          <div className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-ink-muted">
                             {example.prompt(copy)}
                           </div>
                         </button>
@@ -679,7 +681,7 @@ function TaskForm({
           value={form.prompt}
           onChange={(e) => onChange({ ...form, prompt: e.target.value })}
           placeholder={copy.scheduled.promptPlaceholder}
-          rows={3}
+          rows={4}
           className={cn(INPUT_CLASS, "resize-none py-2 leading-relaxed")}
         />
       </Field>
