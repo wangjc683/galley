@@ -1,5 +1,5 @@
 import { ArrowDown } from "@phosphor-icons/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { ApprovalDock } from "@/components/conversation/ApprovalDock";
 import { AskUserBubble } from "@/components/conversation/AskUserBubble";
@@ -311,6 +311,34 @@ export function MainView({
     pendingAskUser,
   });
 
+  // Unread-final-answer tracking for the scroll-to-bottom button's
+  // static dot. Edge-triggered, not `!isRunning`: the dot means "a
+  // finished answer landed below while you were away", so it sets
+  // only on the running→idle transition while the user is scrolled
+  // up. A user who watched the answer arrive at the bottom (or who
+  // scrolls up *after* reading it) never sees the badge — otherwise
+  // it would mark read content as unread and lose all meaning.
+  // Cleared the moment the user is back at the bottom; reset on
+  // session switch (the new session snaps to bottom anyway, but the
+  // async SQLite restore makes the explicit reset the safe order).
+  // Render-phase previous-value comparison (the react.dev "storing
+  // information from previous renders" pattern) — the set-state-in-
+  // effect lint rule bans the useEffect version, and this state is
+  // derived purely from values the component already renders with.
+  const [hasUnseenFinal, setHasUnseenFinal] = useState(false);
+  const [prevRunning, setPrevRunning] = useState(isRunning);
+  const [prevSessionId, setPrevSessionId] = useState(activeSessionId);
+  if (prevSessionId !== activeSessionId) {
+    setPrevSessionId(activeSessionId);
+    setPrevRunning(isRunning);
+    setHasUnseenFinal(false);
+  } else if (prevRunning !== isRunning) {
+    setPrevRunning(isRunning);
+    if (prevRunning && !atBottom) setHasUnseenFinal(true);
+  } else if (hasUnseenFinal && atBottom) {
+    setHasUnseenFinal(false);
+  }
+
   return (
     <div
       className="relative flex min-h-0 flex-1 flex-col bg-app"
@@ -543,7 +571,15 @@ export function MainView({
             generation). Visible only when the user has scrolled away
             from the bottom. Centered above the bottom stack so the
             affordance sits on the scroll axis instead of competing
-            with the reading column's right edge. */}
+            with the reading column's right edge.
+            Two-state signal (globals.css scroll-live-ring /
+            scroll-unread-pop): while the agent is running a pulse
+            ring loops on the circumference — content is landing
+            below, click re-attaches to the tail. When the run
+            finishes while the user is scrolled up, the ring gives
+            way to a static unread dot — a finished answer waits
+            below, click jumps to it. The arrow itself never changes:
+            it always answers "where does this go". */}
         {!atBottom && !isScrollingToBottom && (
           <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center">
             <button
@@ -551,7 +587,7 @@ export function MainView({
               onClick={onClickScrollToBottom}
               aria-label={copy.conversation.scrollLatest}
               className={cn(
-                "group pointer-events-auto inline-flex size-8 items-center justify-center rounded-full",
+                "group pointer-events-auto relative inline-flex size-8 items-center justify-center rounded-full",
                 "border border-line bg-elevated/92 text-ink-soft shadow-[var(--shadow-float)] backdrop-blur-md",
                 "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
                 "hover:-translate-y-0.5 hover:border-line-strong hover:bg-elevated hover:text-ink hover:shadow-[var(--shadow-float-hover)]",
@@ -559,6 +595,27 @@ export function MainView({
                 "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20",
               )}
             >
+              {/* Running: pulse ring. Kept mounted so the loop's
+                  current opacity fades out over 200ms on run end
+                  instead of popping off. */}
+              <span
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute inset-0 rounded-full border border-brand",
+                  "transition-opacity duration-200",
+                  isRunning ? "scroll-live-ring" : "opacity-0",
+                )}
+              />
+              {/* Finished while scrolled up: static unread dot on the
+                  circle edge at 45°; the elevated ring lifts it off
+                  the button border. Mount-conditional so the entrance
+                  pop replays each time the badge earns its place. */}
+              {hasUnseenFinal && !isRunning && (
+                <span
+                  aria-hidden
+                  className="scroll-unread-pop absolute top-px right-px size-[7px] rounded-full bg-brand-strong ring-2 ring-elevated"
+                />
+              )}
               <ArrowDown size={14} weight="thin" />
             </button>
           </div>

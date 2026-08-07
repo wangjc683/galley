@@ -130,8 +130,17 @@ export function useStickyScroll({
     setIsScrollingToBottom(true);
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
 
+    // The click's intent is "attach to the tail", not "scroll to the
+    // coordinate the tail happened to be at". While streaming, the
+    // bottom is a moving target: the smooth animation aims at the
+    // scrollHeight sampled on click, chunks land, and the distance
+    // check can stay >24px forever. So the monitor (a) re-aims the
+    // animation whenever the document grows, and (b) on timeout snaps
+    // + attaches instead of giving up. The only path that ends
+    // detached is the user actively pulling away mid-flight.
     const startedAt = performance.now();
     let lastScrollTop = el.scrollTop;
+    let issuedForHeight = el.scrollHeight;
     const monitorScroll = () => {
       const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       if (distFromBottom < 24) {
@@ -140,12 +149,28 @@ export function useStickyScroll({
         return;
       }
 
-      const userPulledAway = el.scrollTop < lastScrollTop - 2;
-      const timedOut = performance.now() - startedAt > 1600;
-      if (userPulledAway || timedOut) {
+      if (el.scrollTop < lastScrollTop - 2) {
+        // User scrolled up against the animation — they changed their
+        // mind; abort without attaching.
         stopMonitoringScrollToBottom();
         setAtBottom(false);
         return;
+      }
+
+      if (performance.now() - startedAt > 1600) {
+        // Streaming outgrew the animation. Finish the job instantly.
+        el.scrollTop = el.scrollHeight;
+        stopMonitoringScrollToBottom();
+        setAtBottom(true);
+        return;
+      }
+
+      // Bottom moved since the last scrollTo — re-aim at the new
+      // bottom. Only on growth, so the smooth animation isn't
+      // restarted (and visibly stuttered) every frame.
+      if (el.scrollHeight !== issuedForHeight) {
+        issuedForHeight = el.scrollHeight;
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       }
 
       lastScrollTop = el.scrollTop;

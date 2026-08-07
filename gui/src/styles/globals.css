@@ -796,6 +796,60 @@ code {
   animation: sidebar-state-pop 0.44s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Scroll-to-bottom button state signal (MainView). Two states, two
+   visual grammars: while the agent is running the button carries a
+   looping pulse ring — motion = content is landing below, click
+   re-attaches to the tail. When a run finishes while the user is
+   scrolled up, a static dot pops in and stays — an unread badge for
+   the final answer waiting below, same pop register as the sidebar's
+   unread state glyph. Reduced motion: the ring falls back to a static
+   low-opacity halo and the dot skips the entrance pop — presence
+   alone carries both signals. */
+@keyframes scroll-live-ring {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+.scroll-live-ring {
+  animation: scroll-live-ring 2s ease-out infinite;
+}
+@keyframes scroll-unread-pop {
+  0% {
+    opacity: 0.3;
+    transform: scale(0.42);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.38);
+  }
+  72% {
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.scroll-unread-pop {
+  animation: scroll-unread-pop 0.44s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-live-ring {
+    animation: none;
+    opacity: 0.35;
+    transform: none;
+  }
+  .scroll-unread-pop {
+    animation: none;
+  }
+}
+
 /* Composer submit acknowledgement. The host bumps a counter after a
    submit is accepted; the action slot remounts and this ring quickly
    expands even if Send has already flipped into Stop. */
