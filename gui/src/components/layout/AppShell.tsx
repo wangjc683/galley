@@ -110,7 +110,10 @@ export function AppShell({
         className="flex min-h-0 flex-1"
       >
         <Panel id="sidebar" defaultSize="20%" minSize="14%" maxSize="30%">
-          <aside className="flex h-full flex-col overflow-hidden border-r border-line/70 bg-chrome">
+          {/* chrome-hover-scope retunes --color-hover for the darker
+              chrome ground (globals.css) — hover fills inherit it
+              across the whole sidebar column. */}
+          <aside className="chrome-hover-scope flex h-full flex-col overflow-hidden border-r border-line/70 bg-chrome">
             {sidebar}
           </aside>
         </Panel>

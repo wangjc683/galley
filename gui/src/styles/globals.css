@@ -83,6 +83,10 @@
   --color-ink-muted: #87827a;
 
   /* --- interaction states --- */
+  /* Calibrated for the *light* surfaces (app / surface / elevated).
+     On the darker chrome layer this value is invisible — the sidebar
+     re-tunes it via the .chrome-hover-scope override further down;
+     see that rule before retuning either token. */
   --color-hover: #f0f0f0;
   --color-selected: #f8edda;
 
@@ -403,6 +407,32 @@ body,
 html {
   color-scheme: light;
   overscroll-behavior: none;
+}
+
+/* Chrome-layer hover retune. --color-hover (#f0f0f0, L* 94.8) is
+   calibrated to darken-on-hover against the light surfaces; after the
+   2026-08-05 chrome deepening (#efeeec, L* 94.1) it ended up
+   *lighter* than the sidebar's own background — hover fills there
+   dropped to ΔL* 0.7 in the wrong direction, i.e. invisible.
+
+   Scoped override instead of a second token so every `bg-hover` /
+   `hover:bg-hover` inside the sidebar — including components added
+   later — picks up the chrome-tuned value with no per-call-site
+   opt-in (forgetting a special token is exactly how this class of bug
+   happens). Value follows the chrome calibration itself: chrome sits
+   ΔL* 3.86 under app, so chrome-hover sits ΔL* ~3.9 under chrome
+   (#e5e3e0, L* 90.2), same warm-neutral axis.
+
+   Radix menus portal out to <body>, so dropdown `data-[highlighted]`
+   fills inside the sidebar keep the global value — correct, since
+   popovers float on bg-elevated where the global tuning applies.
+
+   LIGHT ONLY, keyed :not([data-theme="dark"]) per the first-paint
+   rationale on the [data-cjk-prose] rule below. Dark chrome
+   (#0e0c0a) already sits ΔL* ~10 under the dark hover value — no
+   override needed. */
+html:not([data-theme="dark"]) .chrome-hover-scope {
+  --color-hover: #e5e3e0;
 }
 
 body {
