@@ -60,9 +60,12 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. Dogfood the app-update path from an installed `v0.4.2` build to `v0.4.3`
-   (SOP step 10; carried over — the `v0.4.1` → `v0.4.2` pass was never
-   recorded).
+1. ~~Dogfood the app-update path from an installed `v0.4.2` build to `v0.4.3`
+   (SOP step 10).~~ **Done** — JC ran it after the `v0.4.3` release and it
+   passed; reported late, so this line was not backfilled at the time. Only
+   the `v0.4.1` → `v0.4.2` pass remains unrecorded. Ask for the step 10
+   result explicitly during step 9 backfill — the smoke happens outside any
+   agent tool call, so silence is not evidence it was skipped.
 2. Verify the reply-done / goal-end / approval notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
