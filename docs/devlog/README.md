@@ -319,6 +319,10 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [单步 run 也可折](./2026-08-06-run-fold-single-step.md) — 删 foldable 的 stepCount>=2 条件;耗时归折叠头独家后缺席即丢数据;否:单步专属元数据头、Footer 恢复 ⏱
 - [ask_user 三连修 + 折叠头截断策略](./2026-08-06-ask-user-ux-polish.md) — pending 期回显与气泡同屏去重(askUserPending 抑制);ask_user 终止 run 误发「回复完成」通知改 askUser 类(复用 replyDone 开关);重启后从 tool args 重建 pendingAskUser(chips/黄点复活);折叠头 scent 按次数降序+提问计数移出截断区+溢出 tooltip
 
+### 2026-08-07
+- [滚动按钮双态信号 + 追尾修复](./2026-08-07-scroll-button-two-state-signal.md) — 置底按钮运行中 pulse ring / 完成未读静态点(边沿触发真未读,回底即清);三轮语义翻转(区分→未读反转→双态合成);smooth scroll 追移动靶+超时 snap+attach,点击语义定为「挂上尾部」
+- [Sidebar hover 失明修复](./2026-08-07-sidebar-chrome-hover-retune.md) — 08-05 chrome 加深后 --color-hover 反比底亮(ΔL* 0.7 反向);.chrome-hover-scope 作用域覆写 #E5E3E0(ΔL* ~3.9 复刻 chrome 递进);否:专用 token(忘用即重演)、全局 alpha 叠层(波及 inline code);selected 明度持平记 deferred
+
 ## 格式约定
 
 每个 entry 6 段：

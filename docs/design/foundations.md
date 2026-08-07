@@ -74,7 +74,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 
 | CSS variable | Utility | 值 | 用途 |
 |---|---|---|---|
-| `--color-hover` | `bg-hover` | `#F0EEE9` | 中性灰 hover（不抢戏） |
+| `--color-hover` | `bg-hover` | `#F0F0F0` | 中性灰 hover（不抢戏）。仅对亮表面（app/surface/elevated）校准；**chrome 层（Sidebar 列）经 `.chrome-hover-scope` 覆写为 `#E5E3E0`**——08-05 chrome 加深后全局值比 chrome 底还亮，2026-08-07 [devlog](../devlog/2026-08-07-sidebar-chrome-hover-retune.md) |
 | `--color-selected` | `bg-selected` | `#F8EDDA` | 杏沙 tint（品牌时刻） |
 
 > Button-like controls 不使用浏览器默认蓝色 outline；鼠标点击不应留下

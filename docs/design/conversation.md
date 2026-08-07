@@ -276,7 +276,11 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 - 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 监听 `inFlightContent` 变化把 `scrollTop = scrollHeight`
 - **用户向上滚 → 不跟随**：`atBottom = false`，stream 继续但视图不动
 - **浮动按钮**：`atBottom = false` 时出现 32px 圆形 ghost 按钮（⬇ ArrowDown thin），**水平居中、贴对话列底部 16px**——实现时从"右下角"改为居中（代码注释记录了理由：右下角与 Composer 动作簇视觉打架），2026-07-05 回写
-- 点按钮 → `scrollTo({ top: scrollHeight, behavior: "smooth" })` + `atBottom = true`（重新启用跟随）
+- **双态信号**（2026-08-07，[devlog](../devlog/2026-08-07-scroll-button-two-state-signal.md)）：箭头永不变（永远回答"点了去哪"），按钮上叠加状态信号，两种视觉语法各自自解释——
+  - **运行中**：圆周向外扩散的 pulse ring（`scroll-live-ring`，动 = 内容正在下方落地）；run 结束 200ms 淡出
+  - **完成且未读**：右上 45° 静态杏色小圆点，pop 弹入后落定（`scroll-unread-pop`，静态徽标 = 有完整答案在下面等你）——**边沿触发的真未读**：仅在 run 结束瞬间用户不在底部时置位，回底即清，全程看着答案生成的用户永远不会见到它
+  - reduced-motion：ring 退化为静态低透明度光环、dot 跳过弹入，语义靠存在本身承载
+- 点按钮 → smooth scroll + 监视器**追移动靶**：流式增长时对新 `scrollHeight` 重发 `scrollTo`，1600ms 超时则瞬时 snap；除用户中途主动上拉外，点击的结局必然是 `atBottom = true`（重新挂上跟随）——点击语义是"挂上尾部"，不是"滚到某个坐标"（2026-08-07 修复追不上快流式的 bug）
 - ESC / 任何手动 wheel 不影响按钮可见性（仅 scroll position 决定）
 
 #### Thinking Placeholder（in-flight 占位）

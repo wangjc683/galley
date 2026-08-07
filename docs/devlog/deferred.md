@@ -128,3 +128,15 @@
 - **方案**：`RUNTIME_PROMPT_STATIC` 加一条「调用 ask_user 提问时尽量附带 candidates」——零成本纯 prompt 调优，现有 chips 渲染（`AskUserBubble`）立刻变勤快。managed 独占（attach 不碰 GA prompt）。
 - **待定**：措辞对不同模型的遵从率；candidates 数量上限建议。
 - **关联**：[自动标题 + 下一步建议](./2026-08-04-auto-title-and-next-suggestion.md)。
+
+---
+
+## Sidebar selected 行明度持平（chrome 加深次生）
+
+- **状态**：暂存（2026-08-07 hover 修复时发现，JC 裁决先只修 hover）
+- **提出**：2026-08-07，排查 sidebar hover 失明时的连带发现。
+- **启动信号**：dogfood 中觉得选中行「你在这里」不够醒目——出现即证据。
+- **背景**：`--color-selected`（`#F8EDDA`，L* 94.2）与 08-05 加深后的 chrome（`#EFEEEC`，L* 94.1）明度完全持平，session 选中行的明度抬升已失效，现在只靠杏色色相撑。与 hover 的纯明度失明性质不同（hover 无色相可依赖，必修；selected 有饱和暖色对中性灰，暂时成立）。
+- **方案**：若触发，同走 `.chrome-hover-scope` 的思路给 chrome 层覆写 `--color-selected`（或直接压深一档），保持杏色相、拉开 ΔL*。
+- **待定**：是否随未来 dark pass / chrome 再调整一并处理。
+- **关联**：[Sidebar hover 失明修复](./2026-08-07-sidebar-chrome-hover-retune.md)。
