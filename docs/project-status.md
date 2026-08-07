@@ -9,11 +9,11 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.3`.
-- Git tag / GitHub Release: `v0.4.3` is the current published stable release
-  (tagged at `fc8d7da3` on 2026-08-06, GitHub Latest).
+- Package version: `0.4.4`.
+- Git tag / GitHub Release: `v0.4.4` is the current published stable release
+  (tagged at `84eaf737` on 2026-08-07, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.3`.
+- Release tier: stable patch; default update channel points at `v0.4.4`.
   `beta` is kept as a legacy alias for older builds.
 - Product shape: dual-native local agent team orchestrator
 
@@ -21,7 +21,25 @@ Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.4.3` ships **session intelligence** (LLM auto-titles with the
+`v0.4.4` is a one-day stable patch on top of `v0.4.3`, all of it incremental
+work on existing surfaces: **ask_user reachability** (waiting-for-you
+notification, pending question restored after restart, no duplicate echo
+while the live bubble is up), run-fold header scent (count-desc tools,
+pinned question count, overflow tooltip), the **scroll-to-bottom two-state
+live signal** plus a moving-target chase fix, the **sidebar hover
+regression fix** (v0.4.3's chrome deepening had left `--color-hover`
+brighter than its own ground), the overlay 920 content-workbench tier with
+dual-end session-recap cleaning (`_clean_turn_summary` /
+`cleanSessionSummary`), and reasoning-effort legibility in Models
+(explicit "follow the provider" default, first-party presets at high, a
+per-row tier badge). The release trigger was the hover regression, not
+batch size. Version grading stays patch under the `v0.4.1` rule. Zero Rust
+changes; managed GA untouched, so the bundled-runtime gate was correctly
+skipped. Product shape, Agent API schema (`schemaVersion: 1`), GA baseline
+(`d8d90ee`), and update-channel policy are unchanged. Full narrative:
+devlog [2026-08-07-v0.4.4-release](./devlog/2026-08-07-v0.4.4-release.md).
+
+`v0.4.3` shipped **session intelligence** (LLM auto-titles with the
 seed/derived/auto/user four-state source model, and next-step ghost-text
 suggestions in the composer — mandatory-by-default tag with mouse and AT
 accept paths, bundled-GA only) and a **reading-experience rework of the
@@ -44,12 +62,13 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.3` is published and promoted as the live stable release (2026-08-06).
-The default `updates/stable/latest.json` channel points at `v0.4.3`, with the
+`v0.4.4` is published and promoted as the live stable release (2026-08-07).
+The default `updates/stable/latest.json` channel points at `v0.4.4`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. Both were verified with `--cache-bust` across all three
 platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
 through in one draft cut; JC's install smoke passed on the first build.
+`v0.4.3` (2026-08-06) went through the same path and is now superseded.
 
 The Windows Alt+Tab caret restore (issue #13's Windows half) ships as a
 documented known limitation. The investigation is **shelved behind the
@@ -60,12 +79,13 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. ~~Dogfood the app-update path from an installed `v0.4.2` build to `v0.4.3`
-   (SOP step 10).~~ **Done** — JC ran it after the `v0.4.3` release and it
-   passed; reported late, so this line was not backfilled at the time. Only
-   the `v0.4.1` → `v0.4.2` pass remains unrecorded. Ask for the step 10
-   result explicitly during step 9 backfill — the smoke happens outside any
-   agent tool call, so silence is not evidence it was skipped.
+1. Dogfood the app-update path from an installed `v0.4.3` build to `v0.4.4`
+   (SOP step 10). Prior state: the `v0.4.2` → `v0.4.3` pass **succeeded**
+   (JC ran it after that release, reported late, so it was never backfilled
+   at the time); only the `v0.4.1` → `v0.4.2` pass remains unrecorded. Ask
+   for the step 10 result explicitly during step 9 backfill — the smoke
+   happens outside any agent tool call, so silence is not evidence it was
+   skipped.
 2. Verify the reply-done / goal-end / approval notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
@@ -73,9 +93,11 @@ Post-release follow-up:
    the release workflow, bundled Python, updater manifest, and smoke path all
    support `aarch64-pc-windows-msvc`.
 
-## Unreleased On Main (post-`v0.4.3`)
+## Unreleased On Main (post-`v0.4.4`)
 
-Nothing yet.
+Docs only. The `v0.4.4` tag sits at `84eaf737`; commits after it are the
+app-update dogfood record and this status sync. No code ships outside the
+tag.
 
 ## Status Dashboard
 
@@ -88,7 +110,7 @@ Nothing yet.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.3 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.4 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Locked to audited upstream `d8d90ee`, shipped in `v0.4.2` (audited 2026-08-03; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
@@ -113,7 +135,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.4.3`. For the next release, bump every
+- Current package metadata uses `0.4.4`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
