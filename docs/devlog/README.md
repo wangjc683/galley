@@ -322,6 +322,8 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ### 2026-08-07
 - [滚动按钮双态信号 + 追尾修复](./2026-08-07-scroll-button-two-state-signal.md) — 置底按钮运行中 pulse ring / 完成未读静态点(边沿触发真未读,回底即清);三轮语义翻转(区分→未读反转→双态合成);smooth scroll 追移动靶+超时 snap+attach,点击语义定为「挂上尾部」
 - [Sidebar hover 失明修复](./2026-08-07-sidebar-chrome-hover-retune.md) — 08-05 chrome 加深后 --color-hover 反比底亮(ΔL* 0.7 反向);.chrome-hover-scope 作用域覆写 #E5E3E0(ΔL* ~3.9 复刻 chrome 递进);否:专用 token(忘用即重演)、全局 alpha 叠层(波及 inline code);selected 明度持平记 deferred
+- [Overlay 920 档定型 + session 摘要清洗](./2026-08-07-overlay-920-tier-and-session-recaps.md) — 尺寸阶梯 420/920/1040(否:全统一 Settings 尺寸;640 中档被真机推翻清空);PaletteRow sub 挤压 bug→inline preview;GA 兜底摘要脏数据双端镜像清洗(_clean_turn_summary / cleanSessionSummary);定时空状态 grid-cols-3 模板卡;Earlier/Archived 维持双行(否:与 palette 统一单行,邮件客户端类比)
+- [推理强度默认语义 + 第一方 high + 行徽章](./2026-08-07-reasoning-effort-default-and-badge.md) — 「默认」=不发参数跟随服务商;仅三个第一方预设显式 high(第三方兼容端点保留不传);存量不迁移;Models 行档位 chip 读快照不读推荐叠加;否:Composer 快捷入口(作用域错位,走 effort 变体条目路线,记 deferred)
 
 ## 格式约定
 

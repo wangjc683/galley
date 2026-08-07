@@ -8,6 +8,26 @@
 
 ---
 
+## 推理强度 effort 变体条目引导（per-session 档位切换的承接方案）
+
+- **状态**：暂存
+- **提出**：2026-08-07（Composer 快捷切换入口被否后的替代路线，见
+  [reasoning effort](./2026-08-07-reasoning-effort-default-and-badge.md)）
+- **启动信号**：dogfood 中确实高频出现「这个会话想换档」，且手动配变体
+  条目被抱怨绕。
+- **方案**：同一模型配多个 provider/model 条目、仅 `reasoning_effort`
+  不同（如 `gpt-5.6-sol` high / medium 各一条），复用现有 per-session
+  LLM 切换（⌘K → Switch LLM）。产品化方向是在 Models 里提供「添加
+  effort 变体」一键入口，自动复制条目并置档位；行内档位徽章（已落地）
+  负责区分。
+- **待定**：变体条目是否共享凭据引用；显示名自动后缀格式。
+- **关联**：被否的重方案是 per-session transport override（Core →
+  runner IPC → GA session facade `_TRANSPORT_OVERRIDES`），作用域正确
+  但需整条新管道 + Agent API 波及——只有变体条目路线被实测否掉后才
+  值得重启。
+
+---
+
 ## 轮间距层级（answer → 下一问 的留白小于对内间距）
 
 - **状态**：观察中
