@@ -1,13 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import {
-  ArrowSquareOut,
-  CaretLeft,
-  CaretRight,
-  X,
-} from "@phosphor-icons/react";
+import { ArrowSquareOut, CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { useMemo } from "react";
 
 import { IconButton } from "@/components/ui/button";
+import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -88,17 +84,9 @@ export function ImagePreviewDialog({
                     <ArrowSquareOut size={17} weight="thin" />
                   </IconButton>
                 )}
-                <Dialog.Close asChild>
-                  <IconButton
-                    ariaLabel={copy.conversation.closeImagePreview}
-                    tooltip={copy.conversation.closeImagePreview}
-                    variant="secondary"
-                    size="md"
-                    className="bg-elevated/95"
-                  >
-                    <X size={17} weight="bold" />
-                  </IconButton>
-                </Dialog.Close>
+                {/* size="md" is the documented exception: immersive
+                    full-bleed surface, 28px is too small a target. */}
+                <DialogCloseButton variant="floating" size="md" />
               </div>
 
               {images.length > 1 && (

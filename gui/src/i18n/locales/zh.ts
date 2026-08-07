@@ -453,7 +453,6 @@ export const zhCopy = {
   },
   settings: {
     title: "设置",
-    close: "关闭",
     tabs: {
       general: { label: "General", helper: "通用" },
       runtime: { label: "Runtime", helper: "运行环境" },
@@ -1353,7 +1352,6 @@ export const zhCopy = {
     previewImage: "预览图片",
     previousImage: "上一张图片",
     nextImage: "下一张图片",
-    closeImagePreview: "关闭图片预览",
     saveImage: "保存图片…",
     openImageInBrowser: "在浏览器中打开",
     openOriginalImageFile: "打开原始文件",

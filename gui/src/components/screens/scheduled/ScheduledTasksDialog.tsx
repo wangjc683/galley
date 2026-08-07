@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { CaretDown, Play, Plus, Trash, X as XIcon } from "@phosphor-icons/react";
+import { CaretDown, Play, Plus, Trash } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
 import {
   enable as enableAutostart,
@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import { useCopy, useLanguage, type AppCopy } from "@/lib/i18n";
@@ -273,11 +274,7 @@ export function ScheduledTasksDialog({
                   <Plus size={14} weight="regular" />
                 </IconButton>
               )}
-              <Dialog.Close asChild>
-                <IconButton ariaLabel={copy.common.close} tooltip={false}>
-                  <XIcon size={14} weight="thin" />
-                </IconButton>
-              </Dialog.Close>
+              <DialogCloseButton />
             </div>
           </div>
 

@@ -9,7 +9,6 @@ import {
   PencilSimple,
   Plus,
   Trash,
-  X,
 } from "@phosphor-icons/react";
 import {
   useEffect,
@@ -20,6 +19,7 @@ import {
 } from "react";
 
 import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
+import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import {
   createCopiedPromptTitle,
   resolveSavedPrompts,
@@ -145,11 +145,7 @@ export function PromptManagerDialog({
                   {promptCopy.addCustom}
                 </Button>
               )}
-              <Dialog.Close asChild>
-                <IconButton ariaLabel={copy.common.close} tooltip={false}>
-                  <X size={14} weight="thin" />
-                </IconButton>
-              </Dialog.Close>
+              <DialogCloseButton />
             </div>
           </div>
 

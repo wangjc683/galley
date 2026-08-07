@@ -18,6 +18,34 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 新增 overlay 先归档位，再谈特例。（2026-08-07：Earlier / Archived 从
 640×520 跟进 920 档，原"中档"清空移除。）
 
+## Dialog 关闭按钮（2026-08-07 裁决）
+
+统一承载组件是 `ui/dialog-close-button.tsx` 的 `DialogCloseButton`——
+新 Dialog 不许手拼 `Dialog.Close + IconButton + X`。规则：
+
+- **内容型 Dialog 右上角必有 X**（浏览 / 表单 / 工作台类：Earlier /
+  Archived、Create/Edit Project、Prompt Manager、Scheduled Tasks、
+  Tutorial、Settings、图片预览）。
+- **确认型 / 强制选择型不放 X**：关闭语义走 footer 按钮 + Esc
+  （ConfirmActionDialog 一族、FirstClose、YOLO intro）。给 confirm
+  加 X 会制造第二条模糊的"取消"路径。
+- 两个变体：`inline`（默认，ghost，进 header row）；`floating`
+  （同为 ghost 气质 + `bg-elevated/80` 半透明垫 + backdrop-blur，浮在
+  可滚动内容或图片上，定位由调用方给，如 Settings 的
+  `absolute right-3 top-3`）。真机 A/B（2026-08-07）否掉了 floating 用
+  secondary 边框凸起的旧样式：关闭按钮语义上应安静，"能见"是版面的
+  责任，不靠按钮自我防卫——见下条。
+- **X 浮在滚动内容上的面，版面必须给 X 让出安静背景**：Settings 右栏
+  顶部 48px 安全区（内容 `pt-12` 起步，静止零重叠）+ 同色渐变层
+  （`--color-app` → 透明，`pointer-events-none`，静止隐形、内容上滚时
+  文字在钻到 X 底下前淡出，无需滚动监听）。诊断记录：X 与右对齐控件
+  抢角落是结构问题，皮肤解不了。
+- 图标一律 `X` 14/thin（28px 按钮）；`size="md"`（32px、图标 17）是
+  记录在案的唯一例外，只给沉浸式全出血面（图片预览）。
+- X 一律不带 tooltip，aria-label 统一 `common.close`。
+- 关闭只走 Radix `Dialog.Close` → `onOpenChange(false)` 单一路径，
+  不在关闭按钮上另挂 onClick。
+
 ## 8. Command Palette（⌘K Overlay）
 
 ### 触发与形态
@@ -96,7 +124,8 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 
 - **1040 × 680px / centered modal / `bg-overlay` scrim**
 - 左侧 180px Tab list（垂直），右侧主内容区
-- 右上角 28px close icon，Esc 可关闭
+- 右上角 28px close icon（floating `DialogCloseButton`；右栏顶部 48px
+  安全区 + 同色渐隐给它让位，见「Dialog 关闭按钮」节），Esc 可关闭
 - 触发：主窗口 ⌘, / Sidebar runtime unconfigured / Command Palette "Open settings" / TopBar Gear
 - 内容区 `px-8 py-7`，可滚动；Tab list 固定
 

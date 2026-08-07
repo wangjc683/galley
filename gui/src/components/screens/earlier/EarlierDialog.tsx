@@ -140,7 +140,6 @@ export function EarlierDialog({
             }
             onEnterSelectMode={enterSelectMode}
             onCancelSelectMode={exitSelectMode}
-            onClose={() => onOpenChange(false)}
           />
 
           <SessionSearchBar query={query} onChange={setQuery} />

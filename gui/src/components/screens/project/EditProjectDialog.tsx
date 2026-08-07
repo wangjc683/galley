@@ -1,13 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import {
-  FolderOpen,
-  Trash,
-  WarningCircle,
-  X as XIcon,
-} from "@phosphor-icons/react";
+import { FolderOpen, Trash, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
-import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
+import { Button, DialogActionRow } from "@/components/ui/button";
+import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import { useCopy } from "@/lib/i18n";
 import { pickFolder } from "@/lib/pick-folder";
 import { cn } from "@/lib/utils";
@@ -120,11 +116,7 @@ export function EditProjectDialog({
             <Dialog.Title className="text-[16px] font-semibold text-ink">
               {copy.projects.editProject}
             </Dialog.Title>
-            <Dialog.Close asChild>
-              <IconButton ariaLabel={copy.common.close} tooltip={false}>
-                <XIcon size={14} weight="thin" />
-              </IconButton>
-            </Dialog.Close>
+            <DialogCloseButton />
           </div>
 
           <form

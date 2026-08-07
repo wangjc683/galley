@@ -1,8 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { CheckSquare, Square, X as XIcon } from "@phosphor-icons/react";
+import { CheckSquare, Square } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import { useCopy } from "@/lib/i18n";
 
 /**
@@ -26,7 +27,6 @@ export function SessionBrowserHeader({
   actions,
   onEnterSelectMode,
   onCancelSelectMode,
-  onClose,
 }: {
   title: string;
   total: number;
@@ -42,7 +42,6 @@ export function SessionBrowserHeader({
   actions?: ReactNode;
   onEnterSelectMode: () => void;
   onCancelSelectMode: () => void;
-  onClose: () => void;
 }) {
   const copy = useCopy();
   // Right-side summary mirrors filter + select state so the user can
@@ -80,11 +79,7 @@ export function SessionBrowserHeader({
             {actions}
           </>
         )}
-        <Dialog.Close asChild onClick={onClose}>
-          <IconButton ariaLabel={copy.common.close} tooltip={false}>
-            <XIcon size={14} weight="thin" />
-          </IconButton>
-        </Dialog.Close>
+        <DialogCloseButton />
       </div>
     </div>
   );

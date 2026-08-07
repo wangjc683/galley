@@ -1,8 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowSquareOut, X as XIcon } from "@phosphor-icons/react";
+import { ArrowSquareOut } from "@phosphor-icons/react";
 
 import { MarkdownView } from "@/components/conversation/MarkdownView";
-import { IconButton } from "@/components/ui/button";
+import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Tutorial } from "@/lib/onboarding-tutorials";
@@ -49,11 +49,7 @@ export function TutorialModal({ tutorial, onClose }: TutorialModalProps) {
             <Dialog.Title className="text-[17px] font-semibold text-ink">
               {tutorial?.title ?? ""}
             </Dialog.Title>
-            <Dialog.Close asChild>
-              <IconButton ariaLabel={copy.common.close} tooltip={false}>
-                <XIcon size={14} weight="thin" />
-              </IconButton>
-            </Dialog.Close>
+            <DialogCloseButton />
           </div>
 
           <div className="px-6 pb-5 pt-4">

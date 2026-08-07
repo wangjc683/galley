@@ -473,7 +473,6 @@ export const enCopy: AppCopy = {
   },
   settings: {
     title: "Settings",
-    close: "Close",
     tabs: {
       general: { label: "General", helper: "通用" },
       runtime: { label: "Runtime", helper: "运行环境" },
@@ -1405,7 +1404,6 @@ export const enCopy: AppCopy = {
     previewImage: "Preview image",
     previousImage: "Previous image",
     nextImage: "Next image",
-    closeImagePreview: "Close image preview",
     saveImage: "Save image…",
     openImageInBrowser: "Open in browser",
     openOriginalImageFile: "Open original file",

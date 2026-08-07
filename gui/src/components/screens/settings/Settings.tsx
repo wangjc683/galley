@@ -1,5 +1,4 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { X as XIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { SettingsAbout } from "@/components/screens/settings/SettingsAbout";
@@ -12,7 +11,7 @@ import { SettingsModels } from "@/components/screens/settings/SettingsModels";
 import { SettingsRuntime } from "@/components/screens/settings/SettingsRuntime";
 import { SettingsSidebar } from "@/components/screens/settings/SettingsSidebar";
 import { SettingsShortcuts } from "@/components/screens/settings/SettingsShortcuts";
-import { IconButton } from "@/components/ui/button";
+import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import { useCopy } from "@/lib/i18n";
 import type { LanguagePreference, ResolvedLanguage } from "@/lib/language";
@@ -179,16 +178,10 @@ export function Settings({
         >
           <Dialog.Title className="sr-only">{copy.settings.title}</Dialog.Title>
 
-          <Dialog.Close asChild>
-            <IconButton
-              ariaLabel={copy.settings.close}
-              tooltip={false}
-              variant="secondary"
-              className="absolute right-3 top-3 z-20 bg-elevated/95"
-            >
-              <XIcon size={14} weight="thin" />
-            </IconButton>
-          </Dialog.Close>
+          <DialogCloseButton
+            variant="floating"
+            className="absolute right-3 top-3 z-20"
+          />
 
           <SettingsSidebar
             tab={tab}
@@ -198,8 +191,13 @@ export function Settings({
             showBrowserTab={showBrowserTab}
           />
 
-          <div className="scrollbar-stable min-w-0 flex-1 overflow-y-auto bg-app">
-            <div className="px-8 py-7">
+          {/* The pane owns X legibility, not the button's backdrop: the
+              top safe zone (pt-12 vs the X ending at 40px) keeps first-row
+              controls out of the corner, and the fade below dissolves
+              scrolled content before it passes under the X. */}
+          <div className="relative min-w-0 flex-1">
+            <div className="scrollbar-stable h-full overflow-y-auto bg-app">
+              <div className="px-8 pb-7 pt-12">
               {tab === "general" && (
                 <SettingsGeneral
                   languagePreference={languagePreference}
@@ -274,7 +272,19 @@ export function Settings({
                   hasRunningSessions={hasRunningSessions}
                 />
               )}
+              </div>
             </div>
+            {/* Same color as the pane, so it's invisible at rest and only
+                "appears" as scrolled text fades out beneath it — no scroll
+                listener needed. */}
+            <div
+              aria-hidden
+              style={{
+                background:
+                  "linear-gradient(to bottom, var(--color-app), transparent)",
+              }}
+              className="pointer-events-none absolute inset-x-0 top-0 z-10 h-12"
+            />
           </div>
         </Dialog.Content>
       </Dialog.Portal>
