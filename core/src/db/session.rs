@@ -347,10 +347,30 @@ impl SqliteGalley {
                 });
             }
             None => {
+                // Unset means two very different things depending on the
+                // active engine: under the managed runtime it is the
+                // normal configuration (external GA is optional), while
+                // under external it is a real gap. Nagging "finish
+                // Onboarding" at managed users misled every issue report
+                // carrying `galley health` output. Kind lookup failure
+                // degrades to Managed — same default as a fresh DB.
+                let managed = matches!(
+                    self.active_runtime_kind().await,
+                    Ok(RuntimeKind::Managed) | Err(_)
+                );
                 checks.push(HealthCheck {
                     id: "ga_path".into(),
-                    status: HealthStatus::Warn,
-                    detail: Some("not set — finish Onboarding to attach a GA install".into()),
+                    status: if managed {
+                        HealthStatus::Ok
+                    } else {
+                        HealthStatus::Warn
+                    },
+                    detail: Some(if managed {
+                        "not set — managed runtime active; attaching an external GA is optional"
+                            .into()
+                    } else {
+                        "not set — finish Onboarding to attach a GA install".into()
+                    }),
                 });
             }
         }

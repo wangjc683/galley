@@ -1,0 +1,78 @@
+name: Bug 报告 / Bug report
+description: 报告 Galley 的问题（Report something broken in Galley）
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！环境信息可以在 Galley 里一键获取：Settings → About 查看版本，
+        或用 CLI 运行 `galley health` 获取健康检查结果。
+        粘贴日志前请自行检查并移除敏感内容（API key、含用户名的路径、内网地址等）。
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: 现象 / What happens
+      description: 发生了什么？和你预期的差别是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. 观察到 …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为 / Expected behavior
+    validations:
+      required: false
+  - type: input
+    id: galley-version
+    attributes:
+      label: Galley 版本 / Galley version
+      description: Settings → About 中显示，或 `galley version`
+      placeholder: "0.4.4"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统 / OS
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: 内核模式 / Engine mode
+      description: Settings → Runtime 中显示当前使用的运行时
+      options:
+        - 内置内核（默认） / Bundled engine (default)
+        - 外部 GA / External GenericAgent
+        - 不确定 / Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: health
+    attributes:
+      label: galley health 输出 / Health check output
+      description: CLI 运行 `galley health` 的输出，能贴就贴
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: 附加信息 / Additional context
+      description: 日志、截图、系统版本号等。请先移除敏感信息。
+    validations:
+      required: false

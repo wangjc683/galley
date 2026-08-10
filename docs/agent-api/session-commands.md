@@ -369,7 +369,7 @@ Probe id catalogue (will grow):
 | `id`                | Cover                                                                                                |
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
 | `db_readable`       | `SELECT 1` against the resolved DB path                                                              |
-| `ga_path`           | `prefs.ga_config.gaPath` is set + the path resolves to a directory                                   |
+| `ga_path`           | `prefs.ga_config.gaPath` resolves to a directory; unset is `ok` under the managed runtime (external GA is optional there) and `warn` only when the external runtime is active |
 | `mykey_py`          | gated on `ga_path`; checks `<ga_path>/mykey.py` is a file                                            |
 | `agentmain_import`  | currently deferred; import validation happens when a runner starts or a deeper runtime check is added |
 | `llm_session_init`  | currently deferred; model connection validation belongs to Models setup / live runner startup         |

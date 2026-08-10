@@ -1,0 +1,33 @@
+name: 功能建议 / Feature request
+description: 提出新功能或改进建议（Suggest a new feature or improvement）
+title: "[Feature Request] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 需求 / What I want
+      description: 希望 Galley 做到什么？
+    validations:
+      required: true
+  - type: textarea
+    id: pain
+    attributes:
+      label: 现在的做法与痛点 / Current workaround & pain
+      description: 目前你是怎么绕过去的？哪里最费劲？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案 / Proposed behavior
+      description: 如果你已有具体设想（交互、入口、分期），写在这里
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: 边界与非目标 / Scope notes
+      description: 明确不需要什么，能帮助我们把方案做小
+    validations:
+      required: false
