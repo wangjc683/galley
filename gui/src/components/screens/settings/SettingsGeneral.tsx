@@ -59,6 +59,8 @@ export function SettingsGeneral({
   onChangeNotifyOnApproval,
   notifyOnReplyDone,
   onChangeNotifyOnReplyDone,
+  notifySound,
+  onChangeNotifySound,
   keepInBackgroundOnClose,
   onChangeKeepInBackgroundOnClose,
   autoDownloadUpdates,
@@ -78,6 +80,8 @@ export function SettingsGeneral({
   onChangeNotifyOnApproval: (enabled: boolean) => void;
   notifyOnReplyDone: boolean;
   onChangeNotifyOnReplyDone: (enabled: boolean) => void;
+  notifySound: boolean;
+  onChangeNotifySound: (enabled: boolean) => void;
   keepInBackgroundOnClose: boolean;
   onChangeKeepInBackgroundOnClose: (enabled: boolean) => void;
   autoDownloadUpdates: boolean;
@@ -323,6 +327,19 @@ export function SettingsGeneral({
                 handleToggleNotify(onChangeNotifyOnApproval, next)
               }
               ariaLabel={generalCopy.notifyApprovalTitle}
+            />
+          </PreferenceRow>
+          {/* Sound is a modifier on the kinds above, not a fourth
+              kind — plain onChange, no permission round-trip. */}
+          <PreferenceRow
+            title={generalCopy.notifySoundTitle}
+            description={generalCopy.notifySoundDescription}
+          >
+            <Switch
+              checked={notifySound}
+              disabled={!anyNotifyEnabled}
+              onCheckedChange={onChangeNotifySound}
+              ariaLabel={generalCopy.notifySoundTitle}
             />
           </PreferenceRow>
           {anyNotifyEnabled && notifyPermissionMissing && (

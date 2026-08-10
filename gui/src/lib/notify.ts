@@ -43,6 +43,65 @@ export type SystemNotifyKind =
   | "scheduleFailed";
 
 /**
+ * Audible register of a notification, so an away user can tell from
+ * sound alone whether to come back now ("the agent is blocked on
+ * you") or at leisure ("it finished"). Three tones, not five kinds:
+ * users distinguish outcomes, not event sources.
+ */
+export type NotifyTone = "done" | "needsYou" | "alert";
+
+const KIND_TONE: Record<SystemNotifyKind, NotifyTone> = {
+  goalEnd: "done",
+  replyDone: "done",
+  approval: "needsYou",
+  askUser: "needsYou",
+  scheduleFailed: "alert",
+};
+
+/**
+ * Per-platform sound names, resolved in the JS layer because the
+ * plugin passes the string through verbatim and each OS has its own
+ * namespace:
+ *
+ *   - Windows: `tauri-winrt-notification` `Sound::from_str` names
+ *     (ms-winsoundevent set). An unknown name parses to None → the
+ *     toast renders `<audio silent="true"/>`, i.e. today's bug.
+ *   - macOS: system sound names from /System/Library/Sounds, passed
+ *     to UNNotificationSound. Unknown names fall back to silent.
+ *   - Linux: freedesktop sound-naming-spec names via the notify-rust
+ *     `sound-name` hint; best-effort, theme-dependent.
+ *
+ * Wrong-platform names never throw — they degrade to the silent
+ * status quo — so UA sniffing is safe as the detection mechanism
+ * (no plugin-os dependency for three string picks).
+ */
+const TONE_SOUNDS: Record<string, Record<NotifyTone, string>> = {
+  windows: { done: "Default", needsYou: "IM", alert: "Reminder" },
+  macos: { done: "Glass", needsYou: "Ping", alert: "Basso" },
+  linux: {
+    done: "complete",
+    needsYou: "message-new-instant",
+    alert: "dialog-warning",
+  },
+};
+
+/** Pure resolver, exported for tests. Unknown platform → undefined
+ * (send without sound — the pre-sound behavior). */
+export function resolveNotifySound(
+  tone: NotifyTone,
+  userAgent: string,
+): string | undefined {
+  const platform = /windows/i.test(userAgent)
+    ? "windows"
+    : /mac|darwin/i.test(userAgent)
+      ? "macos"
+      : /linux/i.test(userAgent)
+        ? "linux"
+        : null;
+  return platform ? TONE_SOUNDS[platform][tone] : undefined;
+}
+
+/**
  * Reply-done gating: sessions with a GUI-submitted run awaiting its
  * final turn. Set on Composer submit, consumed at the final `turn_end`
  * — so Goal-nudge and CLI/Supervisor-driven runs (which never pass
@@ -125,7 +184,15 @@ export async function sendGatedSystemNotification(
     title,
     body,
     throttleKey,
-  }: { title: string; body: string; throttleKey?: string },
+    tone,
+  }: {
+    title: string;
+    body: string;
+    throttleKey?: string;
+    /** Override the kind's default tone — e.g. a failed goal is a
+     * `goalEnd` event but should sound like an alert, not a "done". */
+    tone?: NotifyTone;
+  },
 ): Promise<void> {
   try {
     const prefs = usePrefsStore.getState();
@@ -172,7 +239,17 @@ export async function sendGatedSystemNotification(
     // VS Code) has notification permission. Bundled builds notify as
     // Galley normally. https://github.com/tauri-apps/tauri/issues/4965
     console.debug("[notify] sending.", { kind, title });
-    sendNotification({ title, body });
+    // Sound is attached per-send rather than configured OS-side: both
+    // Windows toasts and macOS banners are silent when no sound is
+    // given, which doubles as the mute path for the pref.
+    const sound = prefs.notifySound
+      ? resolveNotifySound(
+          tone ?? KIND_TONE[kind],
+          // navigator is absent under the node test environment.
+          typeof navigator === "undefined" ? "" : navigator.userAgent,
+        )
+      : undefined;
+    sendNotification(sound ? { title, body, sound } : { title, body });
   } catch (e) {
     console.debug("[notify] system notification skipped.", e);
   }

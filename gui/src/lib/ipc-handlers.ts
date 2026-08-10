@@ -348,10 +348,20 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // The agent is now blocked on a human decision — worth a system
       // notification when the window is unfocused (notify.ts gates
       // pref / focus / permission). Per-session throttleKey collapses
-      // GA parallel-tool bursts into one notification.
+      // GA parallel-tool bursts into one notification. Session title
+      // leads the body — with many parallel sessions the user's first
+      // question is "which one wants me", same as replyDone/askUser.
+      const approvalSessionTitle = useSessionsStore
+        .getState()
+        .sessions.find((s) => s.id === event.sessionId)?.title;
+      const approvalDetail = target
+        ? `${event.toolName} · ${target}`
+        : event.toolName;
       void sendGatedSystemNotification("approval", {
         title: currentCopy().sidebar.waitingApproval,
-        body: target ? `${event.toolName} · ${target}` : event.toolName,
+        body: approvalSessionTitle
+          ? `${approvalSessionTitle} · ${approvalDetail}`
+          : approvalDetail,
         throttleKey: `approval:${event.sessionId}`,
       });
       // Best-effort Core DB write for audit trail. tool_events

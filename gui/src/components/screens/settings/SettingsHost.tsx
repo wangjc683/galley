@@ -62,6 +62,8 @@ export function SettingsHost({
   const setNotifyOnApproval = usePrefsStore((s) => s.setNotifyOnApproval);
   const notifyOnReplyDone = usePrefsStore((s) => s.notifyOnReplyDone);
   const setNotifyOnReplyDone = usePrefsStore((s) => s.setNotifyOnReplyDone);
+  const notifySound = usePrefsStore((s) => s.notifySound);
+  const setNotifySound = usePrefsStore((s) => s.setNotifySound);
   const keepInBackgroundOnClose = usePrefsStore(
     (s) => s.keepInBackgroundOnClose,
   );
@@ -193,6 +195,10 @@ export function SettingsHost({
       notifyOnReplyDone={notifyOnReplyDone}
       onChangeNotifyOnReplyDone={(enabled) => {
         void setNotifyOnReplyDone(enabled);
+      }}
+      notifySound={notifySound}
+      onChangeNotifySound={(enabled) => {
+        void setNotifySound(enabled);
       }}
       keepInBackgroundOnClose={keepInBackgroundOnClose}
       onChangeKeepInBackgroundOnClose={(enabled) => {

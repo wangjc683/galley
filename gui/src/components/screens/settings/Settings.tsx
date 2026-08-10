@@ -71,6 +71,8 @@ export interface SettingsProps {
   onChangeNotifyOnApproval: (enabled: boolean) => void;
   notifyOnReplyDone: boolean;
   onChangeNotifyOnReplyDone: (enabled: boolean) => void;
+  notifySound: boolean;
+  onChangeNotifySound: (enabled: boolean) => void;
   keepInBackgroundOnClose: boolean;
   onChangeKeepInBackgroundOnClose: (enabled: boolean) => void;
   autoDownloadUpdates: boolean;
@@ -138,6 +140,8 @@ export function Settings({
   onChangeNotifyOnApproval,
   notifyOnReplyDone,
   onChangeNotifyOnReplyDone,
+  notifySound,
+  onChangeNotifySound,
   keepInBackgroundOnClose,
   onChangeKeepInBackgroundOnClose,
   autoDownloadUpdates,
@@ -214,6 +218,8 @@ export function Settings({
                   onChangeNotifyOnApproval={onChangeNotifyOnApproval}
                   notifyOnReplyDone={notifyOnReplyDone}
                   onChangeNotifyOnReplyDone={onChangeNotifyOnReplyDone}
+                  notifySound={notifySound}
+                  onChangeNotifySound={onChangeNotifySound}
                   keepInBackgroundOnClose={keepInBackgroundOnClose}
                   onChangeKeepInBackgroundOnClose={
                     onChangeKeepInBackgroundOnClose

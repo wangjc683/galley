@@ -165,7 +165,13 @@ export function useGoalEffects({
         failed && goal.latestSummary ? goal.latestSummary : goal.objective;
       // Same content as the toast, for the user who isn't looking at
       // the window — notify.ts skips it when the window is focused.
-      void sendGatedSystemNotification("goalEnd", { title, body: message });
+      // A failed goal shares the goalEnd kind but must not sound like
+      // a completion to an away user.
+      void sendGatedSystemNotification("goalEnd", {
+        title,
+        body: message,
+        tone: failed ? "alert" : "done",
+      });
       pushToast(
         makeAppError({
           category: "business",

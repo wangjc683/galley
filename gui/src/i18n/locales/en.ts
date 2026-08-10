@@ -509,6 +509,9 @@ export const enCopy: AppCopy = {
       notifyReplyDoneTitle: "When a reply finishes",
       notifyReplyDoneDescription:
         "System notification when a conversation you started finishes its reply while the window is in the background",
+      notifySoundTitle: "Notification sound",
+      notifySoundDescription:
+        "Play a sound with system notifications — completion, waiting-for-you, and failure each use a distinct tone",
       notificationsPermissionHint:
         "Notifications are not enabled for Galley. Allow them in system settings to receive these alerts.",
       behaviorSectionTitle: "App behavior",

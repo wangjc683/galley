@@ -180,6 +180,16 @@ interface PrefsState {
   notifyOnReplyDone: boolean;
 
   /**
+   * Play a sound with system notifications. Off restores the
+   * pre-v0.4.5 behavior: both Windows toasts and macOS banners are
+   * silent unless a sound is explicitly attached, so omitting it IS
+   * the mute. The per-state sound choice itself is fixed (see
+   * lib/notify.ts tone mapping) — this is only the master switch.
+   * Persisted to pref `notify_sound`.
+   */
+  notifySound: boolean;
+
+  /**
    * Close the window → keep Galley running in the background (tray /
    * menu bar). Default `true` = the historical Background Mode
    * behavior; a missing pref must resolve to the same. When `false`,
@@ -234,6 +244,7 @@ interface PrefsActions {
   setNotifyOnGoalEnd: (enabled: boolean) => Promise<void>;
   setNotifyOnApproval: (enabled: boolean) => Promise<void>;
   setNotifyOnReplyDone: (enabled: boolean) => Promise<void>;
+  setNotifySound: (enabled: boolean) => Promise<void>;
 
   // ---- App behavior ----
   /**
@@ -297,6 +308,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   notifyOnGoalEnd: true,
   notifyOnApproval: true,
   notifyOnReplyDone: true,
+  notifySound: true,
   keepInBackgroundOnClose: true,
   autoDownloadUpdates: true,
 
@@ -452,6 +464,15 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       await setPref("notify_on_reply_done", enabled);
     } catch (e) {
       console.warn("[prefs] setNotifyOnReplyDone: pref persistence failed.", e);
+    }
+  },
+
+  setNotifySound: async (enabled) => {
+    set({ notifySound: enabled });
+    try {
+      await setPref("notify_sound", enabled);
+    } catch (e) {
+      console.warn("[prefs] setNotifySound: pref persistence failed.", e);
     }
   },
 
@@ -675,6 +696,14 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
         "[prefs] hydratePrefs: notify_on_reply_done pref load failed.",
         e,
       );
+    }
+    try {
+      const notifySound = await getPref<boolean>("notify_sound");
+      if (typeof notifySound === "boolean") {
+        set({ notifySound });
+      }
+    } catch (e) {
+      console.warn("[prefs] hydratePrefs: notify_sound pref load failed.", e);
     }
     // No core push here: Rust seeds its close-handler atomic from this
     // pref during setup, before the GUI hydrates (same race-avoidance

@@ -19,6 +19,7 @@ import {
   clearReplyNotifyPending,
   consumeReplyNotifyPending,
   markReplyNotifyPending,
+  resolveNotifySound,
   sendGatedSystemNotification,
   shouldThrottle,
 } from "@/lib/notify";
@@ -57,6 +58,37 @@ describe("reply-notify pending flag", () => {
     markReplyNotifyPending("s3");
     expect(consumeReplyNotifyPending("s4")).toBe(false);
     expect(consumeReplyNotifyPending("s3")).toBe(true);
+  });
+});
+
+describe("resolveNotifySound", () => {
+  const WIN_UA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+  const MAC_UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15";
+  const LINUX_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36";
+
+  it("maps the three tones to winrt sound names on Windows", () => {
+    expect(resolveNotifySound("done", WIN_UA)).toBe("Default");
+    expect(resolveNotifySound("needsYou", WIN_UA)).toBe("IM");
+    expect(resolveNotifySound("alert", WIN_UA)).toBe("Reminder");
+  });
+
+  it("maps to system sound names on macOS", () => {
+    expect(resolveNotifySound("done", MAC_UA)).toBe("Glass");
+    expect(resolveNotifySound("needsYou", MAC_UA)).toBe("Ping");
+    expect(resolveNotifySound("alert", MAC_UA)).toBe("Basso");
+  });
+
+  it("maps to freedesktop names on Linux", () => {
+    expect(resolveNotifySound("needsYou", LINUX_UA)).toBe(
+      "message-new-instant",
+    );
+  });
+
+  it("returns undefined on an unrecognized platform (send without sound)", () => {
+    expect(resolveNotifySound("done", "Node.js/22")).toBeUndefined();
+    expect(resolveNotifySound("done", "")).toBeUndefined();
   });
 });
 
@@ -143,6 +175,65 @@ describe("sendGatedSystemNotification", () => {
     await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
 
     expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("attaches the tone sound for the detected platform", async () => {
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    });
+    try {
+      await sendGatedSystemNotification("approval", {
+        title: "t",
+        body: "b",
+        throttleKey: "approval:sound-on",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(notificationMocks.sendNotification).toHaveBeenCalledWith({
+      title: "t",
+      body: "b",
+      sound: "IM",
+    });
+  });
+
+  it("honors a tone override (failed goal sounds like an alert)", async () => {
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    });
+    try {
+      await sendGatedSystemNotification("goalEnd", {
+        title: "t",
+        body: "b",
+        tone: "alert",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(notificationMocks.sendNotification).toHaveBeenCalledWith({
+      title: "t",
+      body: "b",
+      sound: "Reminder",
+    });
+  });
+
+  it("omits the sound when the notifySound pref is off", async () => {
+    usePrefsStore.setState({ notifySound: false });
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    });
+    try {
+      await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(notificationMocks.sendNotification).toHaveBeenCalledWith({
+      title: "t",
+      body: "b",
+    });
   });
 
   it("collapses a burst sharing a throttleKey into one notification", async () => {

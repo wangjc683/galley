@@ -489,6 +489,9 @@ export const zhCopy = {
       notifyReplyDoneTitle: "回复完成时通知",
       notifyReplyDoneDescription:
         "窗口在后台时，你发起的对话回复完成会发送系统通知",
+      notifySoundTitle: "通知提示音",
+      notifySoundDescription:
+        "系统通知附带提示音，完成、等待处理与失败使用不同音效",
       notificationsPermissionHint:
         "Galley 的系统通知权限未开启，请在系统设置中允许 Galley 发送通知。",
       behaviorSectionTitle: "应用行为",
