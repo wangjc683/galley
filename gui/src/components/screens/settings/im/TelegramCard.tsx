@@ -32,6 +32,10 @@ import { telegramStatusHintForState } from "./status";
  * console round-trip. The token is stored in the credential store and
  * never echoed back; blank input on save keeps the stored token.
  */
+/** Last-loaded config — same first-frame-correctness cache as
+ * FeishuCard; see the note there and in useImSupervisorStatus. */
+let cachedTelegramConfig: TelegramImConfig | null = null;
+
 export function TelegramCard({
   status,
   statusLoadError,
@@ -43,11 +47,17 @@ export function TelegramCard({
 }) {
   const appCopy = useCopy();
   const imCopy = appCopy.settings.im;
-  const [config, setConfig] = useState<TelegramImConfig | null>(null);
+  const [config, setConfigState] = useState<TelegramImConfig | null>(
+    () => cachedTelegramConfig,
+  );
+  const setConfig = (next: TelegramImConfig | null) => {
+    cachedTelegramConfig = next;
+    setConfigState(next);
+  };
   const [botToken, setBotToken] = useState("");
   const [localBusy, setLocalBusy] = useState<
     "load" | "save" | "connect" | "stop" | "disconnect" | "unbind" | null
-  >("load");
+  >(cachedTelegramConfig ? null : "load");
   const [localError, setLocalError] = useState<string | null>(null);
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(
     null,
@@ -82,11 +92,16 @@ export function TelegramCard({
   const derivedState: ImSupervisorState =
     status?.state ?? (config?.hasBotToken ? "stopped" : "not_connected");
   const attentionState = derivedState === "expired" || derivedState === "error";
+  // Same ready gate as FeishuCard: don't derive auto-expansion from
+  // null config/status — it guesses wrong for configured users and
+  // snaps shut when the fetches land.
+  const ready = config !== null && status !== null;
   const expanded =
     expandedOverride ??
-    (attentionState ||
-      derivedState === "not_connected" ||
-      derivedState === "stopped");
+    (ready &&
+      (attentionState ||
+        derivedState === "not_connected" ||
+        derivedState === "stopped"));
   const running = derivedState === "running";
   const canPause = derivedState === "running";
   const canDisconnect =

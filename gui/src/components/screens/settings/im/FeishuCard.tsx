@@ -27,6 +27,12 @@ import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
 import { feishuStatusHintForState } from "./status";
 
+/** Last-loaded config, module-level for the same reason as the
+ * status cache in useImSupervisorStatus: re-entering Channels should
+ * paint the card's real state on the first frame instead of deriving
+ * a wrong default from null and snapping when the fetch lands. */
+let cachedFeishuConfig: FeishuImConfig | null = null;
+
 export function FeishuCard({
   status,
   statusLoadError,
@@ -38,12 +44,18 @@ export function FeishuCard({
 }) {
   const appCopy = useCopy();
   const imCopy = appCopy.settings.im;
-  const [config, setConfig] = useState<FeishuImConfig | null>(null);
-  const [appId, setAppId] = useState("");
+  const [config, setConfigState] = useState<FeishuImConfig | null>(
+    () => cachedFeishuConfig,
+  );
+  const setConfig = (next: FeishuImConfig | null) => {
+    cachedFeishuConfig = next;
+    setConfigState(next);
+  };
+  const [appId, setAppId] = useState(cachedFeishuConfig?.appId ?? "");
   const [appSecret, setAppSecret] = useState("");
   const [localBusy, setLocalBusy] = useState<
     "load" | "open" | "save" | "connect" | "stop" | "disconnect" | "unbind" | null
-  >("load");
+  >(cachedFeishuConfig ? null : "load");
   const [localError, setLocalError] = useState<string | null>(null);
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(
     null,
@@ -87,13 +99,20 @@ export function FeishuCard({
     status?.state ??
     (config?.appId && config.hasAppSecret ? "stopped" : "not_connected");
   const attentionState = derivedState === "expired" || derivedState === "error";
+  // Auto-expansion waits for both fetches: deriving it from null
+  // config/status guesses "not configured → expand", which is wrong
+  // for every configured user and snaps shut when the data lands.
+  // Collapsed-then-expand (fresh first load, unconfigured) is an
+  // additive motion; expanded-then-collapse is a flash.
+  const ready = config !== null && status !== null;
   const expanded =
     expandedOverride ??
-    (attentionState ||
-      derivedState === "not_connected" ||
-      derivedState === "stopped" ||
-      !canSaveCredentials ||
-      (derivedState !== "running" && !canStartService));
+    (ready &&
+      (attentionState ||
+        derivedState === "not_connected" ||
+        derivedState === "stopped" ||
+        !canSaveCredentials ||
+        (derivedState !== "running" && !canStartService)));
   const canPause = derivedState === "running";
   const canDisconnect =
     derivedState === "running" ||
