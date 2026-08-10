@@ -133,11 +133,17 @@ export function useProviderModelController({
     );
   };
 
+  // No expandProvider here or in toggleModelDraft: an existing model's
+  // editor renders inline in its ConfiguredModelsPanel row, so opening
+  // the provider card below carries no UI — it only shifted layout and
+  // fired the card's expand-triggered model-list fetch (vestige of the
+  // era when every draft rendered inside the card). The draft flows
+  // whose editor DOES live in the card (startModelDraft,
+  // handleFetchModels) keep their expand.
   const openModelDraft = (
     provider: ManagedModelProviderRecord,
     model: ManagedModelRecord,
   ): ModelDraftActivationResult => {
-    expandProvider(provider.id);
     if (modelDraft?.id === model.id) {
       return { kind: "kept-open", modelId: model.id };
     }
@@ -153,7 +159,6 @@ export function useProviderModelController({
     provider: ManagedModelProviderRecord,
     model: ManagedModelRecord,
   ): ModelDraftActivationResult => {
-    expandProvider(provider.id);
     if (modelDraft?.id === model.id) {
       if (isModelDraftDirty(modelDraft)) {
         return { kind: "blocked-dirty", modelId: model.id };

@@ -314,7 +314,13 @@ export function SettingsModels({
 
           {error && <ErrorLine message={error} />}
 
-          {loading && (
+          {/* Stale-while-revalidate: `load()` re-runs on every tab
+              entry, but the store keeps the previous providers, so
+              hiding them behind LoadingRow made the whole column
+              collapse to one row and snap back every visit (same
+              class of flash as the Channels cards). The loading row
+              is for the true first load only. */}
+          {loading && providers.length === 0 && (
             <div className="rounded-sm border border-line bg-surface">
               <LoadingRow />
             </div>
@@ -324,8 +330,7 @@ export function SettingsModels({
               <EmptyRow text={modelCopy.noProviders} />
             </div>
           )}
-          {!loading &&
-            sortedProviders.map((provider) => (
+          {sortedProviders.map((provider) => (
               <ProviderCard
                 key={provider.id}
                 provider={provider}
