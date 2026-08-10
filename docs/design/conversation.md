@@ -63,6 +63,8 @@
 
 主区右侧 rail 的职责有两个：**question index**（一颗 dot / 一段 cluster marker 对应一次或一组 user message，多问题间回跳）和**回到提问开头的跳转锚**（单问题即成立）。它不是第二个 Sidebar，也不是 session 状态队列。
 
+**为什么在右侧**（2026-08-10 裁决，维持右侧）：三条独立理由——① 滚动条家族语义：dot 按 `scrollHeight` 百分比定位，是位置比例型导航（滚动条 / minimap / scrollbar marker 家族，惯例在右），不是语义目录（Google Docs 大纲家族，惯例在左）；② 单侧单层级：左 = Sidebar 的会话间导航，右 = 会话内导航，改左会形成双 rail 贴排；③ 注意力分区：左缘是视线回扫路径，标记会被读作内容（git gutter 效应），右缘是「可及可忽略」的仪器位。唯一真实代价是 Windows 常驻滚动条的拥挤风险——解法是调 inset，不是换边。
+
 - 自第 1 条 user message 起显示（2026-07-21 起；原门槛"少于 3 条隐藏"按 index 职能设定，误伤了锚职能——深度研究型对话恰是一问 + 数千字长回答，最需要回跳时 rail 缺席。单点 rail 不再是索引，但作为锚成立，且与长对话中已学会的交互完全一致）。键盘路径 ⌥↑/⌥↓ 与对话长度无关，始终可用。
 - 历史 dots 永远只表达导航位置：active = brand filled，inactive = hollow ring，cluster = vertical capsule。
 - 只有最新 tail marker 可以临时承载 live 状态：running 时 single dot 替换为 Sidebar 同源的 brand `CircleNotch` spinner；waiting（approval / ask_user 合并）时替换为 warning `PauseCircle`。状态结束后恢复普通 dot / cluster。

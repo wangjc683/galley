@@ -319,6 +319,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [单步 run 也可折](./2026-08-06-run-fold-single-step.md) — 删 foldable 的 stepCount>=2 条件;耗时归折叠头独家后缺席即丢数据;否:单步专属元数据头、Footer 恢复 ⏱
 - [ask_user 三连修 + 折叠头截断策略](./2026-08-06-ask-user-ux-polish.md) — pending 期回显与气泡同屏去重(askUserPending 抑制);ask_user 终止 run 误发「回复完成」通知改 askUser 类(复用 replyDone 开关);重启后从 tool args 重建 pendingAskUser(chips/黄点复活);折叠头 scent 按次数降序+提问计数移出截断区+溢出 tooltip
 
+### 2026-08-10
+- [社区 issue 分批落地与 Settings 打磨](./2026-08-10-community-issues-triage-and-settings-polish.md) — 通知音三音调(done/needsYou/alert,省略 sound 即静音,UA 嗅探否 plugin-os);health ga_path 按运行时分警级;反馈通路 B+A+D(Settings 报告问题 tab + issue forms 预填 + 载荷预览「所见即所发」,否常驻 chrome,About 区块加了又删);#14 Retry/Continue 否决入 deferred;rail 右侧三理由裁决;Settings 入场运动三连修(Channels 闪跳 ready 门槛+缓存、Models 联动展开残留、模型列表软失败 404 归 success/no-list)
+
 ### 2026-08-07
 - [Dialog 关闭按钮统一](./2026-08-07-dialog-close-button-unification.md) — 抽 DialogCloseButton 进 ui/(inline ghost / floating 软化双变体;否 DialogShell:骨架不同构);内容型必有 X、确认型不放 X 成文;真机 A/B 否 secondary 凸起;Settings 右栏 pt-12 安全区+同色渐隐(角落争议是结构问题皮肤解不了);删 session-browser 冗余 onClick 与重复 close 文案 key
 - [v0.4.4 发布](./2026-08-07-v0.4.4-release.md) — 聚合 ask_user 可达性三连、滚动双态信号、overlay 920 档 + 摘要清洗、推理强度徽章;patch 定级(同 v0.4.1 规则,按最大单功能判);发版触发是 v0.4.3 自带的 sidebar hover 失明回归,不是攒够了;零 Rust 改动、未触 managed GA 故跳过 bundled runtime gate;顺带补掉连续两版 carry over 的应用内更新 dogfood 欠账

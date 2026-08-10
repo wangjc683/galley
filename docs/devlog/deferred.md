@@ -8,6 +8,29 @@
 
 ---
 
+## 消息级 Retry（丢弃失败轮重跑，galley#14）
+
+- **状态**：暂存（Continue 按钮已彻底否决，不在此列）
+- **提出**：2026-08-10（社区 issue #14 triage，见
+  [issue 分批落地](./2026-08-10-community-issues-triage-and-settings-polish.md)）
+- **启动信号**：用户反馈里反复出现「bridge 硬死后要手动重贴原请求」——
+  打字近似替代只在轮次完成场景成立；硬失败时 history replay 会丢弃末尾
+  无回复的 user 行，重开会话的 agent 上下文里没有那个失败的请求。
+- **方案**：路线 A（重启 + replay 复用）：新 Core 命令删
+  `turn_index >= N` 的消息行（Rule 5，含 FTS 同步与 turnCount 重算）→
+  GUI 失效 replay 缓存 → bridge 重启 → 现有 `load_history` 注回截断
+  历史 → 原文+附件走正常 submit 重发（user 行删除重发，非保留特殊重发）。
+  已否路线 B（runner 原地 truncate `backend.history`）：GA history 是
+  thinking/tool_use/工具定义混排 blocks，轮边界簿记脆弱，且最需要重试
+  的场景恰是 bridge 状态不可信的场景。
+- **实施要点**：入口 = MessageActions 第三个 chip（仅最后一条 agent 回复
+  显示、运行中禁用）+ 错误气泡上的重试入口（硬失败场景无 agent 回复可
+  挂）；v1 不进 CLI/Agent API。
+- **待定**：错误气泡入口形态；CLI/Supervisor 发起的轮次是否允许 GUI 重试。
+- **关联**：不撤销已执行工具的世界副作用，文案交代即可。
+
+---
+
 ## 推理强度 effort 变体条目引导（per-session 档位切换的承接方案）
 
 - **状态**：暂存
