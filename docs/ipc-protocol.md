@@ -721,6 +721,16 @@ seed / derived 标题态时发出（见 `.scratch/session-auto-title/`）。上�
 `GaSession.side_ask` 对当前 backend 发一次自构造的单消息 `raw_ask`（只读耦合点，
 与 `/btw`、连通性探针同一契约），attach / managed 两模式行为一致。
 
+**「不带 history」不等于「不带上下文」**：`raw_ask` 会设 `payload["system"] =
+self.system`，所以系统提示的常驻输出要求依然生效——`assets/sys_prompt.txt` 的
+`<summary>`、managed 模式下 `core/src/managed_prompt.rs` 的 `<next-suggestion>`。
+这与「只输出标题本身」直接冲突，模型会自行裁决冲突：要么把冲突本身当成标题主题
+（观察到 `**Resolving title and summary conflict**`），要么服从系统提示输出
+`<summary>标题</summary>` 而被 `_TAG_PATS` 整块剥成空标题、静默丢弃。
+`_build_title_prompt` 因此显式豁免这两个标签并点明标题主题是对话内容——这几行是
+功能性的，不是客套（见 devlog 2026-08-10）。任何新的 side_ask 消费者都要自己做
+同样的豁免。
+
 ```json
 {
   "kind": "generate_title",

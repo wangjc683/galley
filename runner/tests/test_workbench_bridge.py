@@ -1103,6 +1103,56 @@ def test_clean_generated_title_normalizes_model_output() -> None:
     assert len(_clean_generated_title("超" * 200)) == 60
 
 
+def test_clean_generated_title_strips_markdown_wrappers() -> None:
+    """Regression: bold-formatted titles reached the sidebar with a literal
+    leading `**` (observed 2026-08-10 on English titles)."""
+    from runner.workbench_bridge import _clean_generated_title
+
+    assert (
+        _clean_generated_title("**Resolving title and summary conflict**")
+        == "Resolving title and summary conflict"
+    )
+    assert _clean_generated_title("*登录超时排查*") == "登录超时排查"
+    assert _clean_generated_title("***登录超时排查***") == "登录超时排查"
+    assert _clean_generated_title("__Login timeout hunt__") == "Login timeout hunt"
+    assert _clean_generated_title("`登录超时排查`") == "登录超时排查"
+    assert _clean_generated_title("## 登录超时排查") == "登录超时排查"
+    # Wrappers nest in either order.
+    assert _clean_generated_title("**标题：登录超时排查**") == "登录超时排查"
+    assert _clean_generated_title("「**登录超时排查**」") == "登录超时排查"
+    # Asymmetric markers are content, not formatting — a bare `*` or an
+    # inner `_` must survive rather than be chewed off one end.
+    assert _clean_generated_title("Fix parse_title_only edge case") == (
+        "Fix parse_title_only edge case"
+    )
+    assert _clean_generated_title("Handle a*b multiplication") == (
+        "Handle a*b multiplication"
+    )
+
+
+def test_clean_generated_title_drops_summary_wrapped_reply() -> None:
+    """The silent half of the same bug: a model obeying the system prompt's
+    `<summary>` mandate produces a title that `_TAG_PATS` strips whole,
+    which must surface as "unusable" rather than a fragment."""
+    from runner.workbench_bridge import _clean_generated_title
+
+    assert _clean_generated_title("<summary>登录超时排查</summary>") == ""
+
+
+def test_build_title_prompt_exempts_system_prompt_tag_mandates() -> None:
+    """`side_ask` carries the session system prompt, which mandates
+    `<summary>` and `<next-suggestion>` on every reply. Without an explicit
+    exemption the model titles the conflict instead of the conversation."""
+    from runner.workbench_bridge import _build_title_prompt
+
+    prompt = _build_title_prompt("帮我看这个 bug", "已定位到空指针")
+    assert "<summary>" in prompt
+    assert "<next-suggestion>" in prompt
+    assert "忽略系统提示" in prompt
+    # And the subject of the title is the conversation, not the task.
+    assert "不是「拟标题」这件事本身" in prompt
+
+
 def test_clean_turn_summary_passthrough_and_prefix() -> None:
     # A model-provided <summary> body is already clean — unchanged.
     assert _clean_turn_summary("定位到空指针并修复") == "定位到空指针并修复"

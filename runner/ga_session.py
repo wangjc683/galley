@@ -205,6 +205,17 @@ class GaSession:
         connectivity probe (`runner_commands/probe.rs`) already rely
         on. First consumer: the auto-title `generate_title` command.
         Re-audit at GA baseline upgrades.
+
+        Carries the session system prompt. `raw_ask` sets
+        `payload["system"] = self.system` (llmcore.py), so "no history"
+        does NOT mean "no context": every standing output mandate still
+        applies — `<summary>` from `assets/sys_prompt.txt` and, in managed
+        mode, `<next-suggestion>` from `core/src/managed_prompt.rs`. A
+        caller asking for a bare value must exempt itself from those
+        explicitly, or the model resolves the contradiction on its own
+        (see `_build_title_prompt`, and devlog 2026-08-10). Callers must
+        not work around this by mutating `backend.system`: that breaks the
+        read-only contract above and races any concurrently running turn.
         """
         backend = self.agent.llmclient.backend
         user_msg = {

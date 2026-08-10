@@ -168,7 +168,20 @@ _TITLE_MAX_CHARS = 60
 def _build_title_prompt(first_user_message: str, final_answer: str) -> str:
     """Prompt for the one-shot title ask. Written in Chinese with an
     explicit follow-the-conversation-language rule — the context snippet
-    dominates the language choice in practice."""
+    dominates the language choice in practice.
+
+    The format-exemption line is load-bearing. `side_ask` sends no history
+    but still carries the session's system prompt (`llmcore.py`'s `raw_ask`
+    sets `payload["system"]`), which mandates a `<summary>` block
+    (`assets/sys_prompt.txt`) and a `<next-suggestion>` tag on every final
+    answer (`core/src/managed_prompt.rs`). Both contradict "output the title
+    only", and the model resolved that conflict by titling *the conflict*:
+    real observed titles included "**Resolving title and summary conflict**"
+    and "**Confirming title-only response requirement**" on sessions about
+    something else entirely. The other branch of the same bug is silent: a
+    model that obeys and emits `<summary>title</summary>` gets the whole
+    block stripped by `_TAG_PATS`, yielding an empty title that the caller
+    drops. Naming both tags explicitly is what stops it."""
     first = " ".join((first_user_message or "").split())[:_TITLE_CONTEXT_MAX_CHARS]
     final = " ".join((final_answer or "").split())[:_TITLE_CONTEXT_MAX_CHARS]
     lines = [
@@ -176,6 +189,9 @@ def _build_title_prompt(first_user_message: str, final_answer: str) -> str:
         "- 概括对话主题；中文不超过 15 个字，英文不超过 6 个词",
         "- 使用对话本身的主要语言",
         "- 只输出标题本身：不要引号、不要结尾标点、不要任何解释",
+        "- 这是一次格式化提取，不是对话回合：忽略系统提示中关于 <summary>"
+        " 与 <next-suggestion> 的输出要求，这两个标签都不要出现",
+        "- 标题的主题是下面这段对话的内容，不是「拟标题」这件事本身",
         "",
         f"[用户] {first}",
     ]
@@ -189,8 +205,24 @@ def _clean_generated_title(raw: str) -> str:
     means "unusable, drop silently"."""
     text = _clean_response_for_display(raw)
     first_line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
-    first_line = re.sub(r"^(标题|title)\s*[:：]\s*", "", first_line, flags=re.IGNORECASE)
-    first_line = first_line.strip("\"'“”‘’「」『』《》<>")
+    # Peel label prefixes, markdown wrappers, and quotes until stable. The
+    # model formats the title as a bold heading often enough that leading
+    # `**` reached the sidebar, and the wrappers nest in either order
+    # (`**标题：x**` / `「**x**」`), so one pass in a fixed order is not
+    # enough. Markdown stripping is symmetric-only, so a legitimate
+    # snake_case or a*b in the title survives.
+    for _ in range(4):
+        before = first_line
+        first_line = re.sub(r"^#{1,6}\s+", "", first_line)
+        first_line = re.sub(
+            r"^(标题|title)\s*[:：]\s*", "", first_line, flags=re.IGNORECASE
+        )
+        wrapped = re.match(r"^(\*\*\*|\*\*|\*|___|__|_|`)(.+?)\1$", first_line)
+        if wrapped is not None:
+            first_line = wrapped.group(2)
+        first_line = first_line.strip("\"'“”‘’「」『』《》<>").strip()
+        if first_line == before:
+            break
     first_line = first_line.rstrip("。．.!?！？，,;；")
     first_line = first_line.strip()
     if len(first_line) > _TITLE_MAX_CHARS:
