@@ -9,11 +9,11 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.4`.
-- Git tag / GitHub Release: `v0.4.4` is the current published stable release
-  (tagged at `84eaf737` on 2026-08-07, GitHub Latest).
+- Package version: `0.4.5`.
+- Git tag / GitHub Release: `v0.4.5` is the current published stable release
+  (tagged at `b27d60ee` on 2026-08-10, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.4`.
+- Release tier: stable patch; default update channel points at `v0.4.5`.
   `beta` is kept as a legacy alias for older builds.
 - Product shape: dual-native local agent team orchestrator
 
@@ -21,7 +21,33 @@ Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.4.4` is a one-day stable patch on top of `v0.4.3`, all of it incremental
+`v0.4.5` is the first release driven by **real user issues** rather than our
+own dogfood: galley#15–#18 came from people running installed Galley. That
+changed the ordering — the feedback path itself was broken (#15's reporter
+could not find the report entry; #17 meant notifications were silent), so it
+shipped first. Contents: notification sounds keyed by state
+(done / needs-you / alert) with a `notify_sound` pref and session-titled
+approval toasts, a Settings -> Feedback tab (prefilled GitHub issue forms
+plus a verbatim environment-payload preview, with matching entries in About,
+the macOS Help menu, and the Windows tray), the auto-title meta-leakage fix
+(`side_ask` carries the session system prompt, so `<summary>` /
+`<next-suggestion>` mandates collided with "output the title only"), footer
+telemetry unit disambiguation (dimensionless inline meter, absolutes in a
+tooltip, cache reads split out), three Settings motion / classification
+fixes, and the managed GA baseline bump `d8d90ee` -> `308153b`.
+
+The baseline bump made the **bundled-runtime gate mandatory** this release
+(`v0.4.4` correctly skipped it — it touched neither managed GA nor the
+baseline). Its user-visible edge is a ~14% tighter tool-output cap: upstream
+raised `default_context_win`, which Galley overrides, so the effect lands not
+on trimming but on `maxlen_multiplier` as a denominator (2.25 -> 1.93,
+`file_read` 33750 -> 28928). Disclosed in the release notes under the hood.
+Version grading stays patch under the `v0.4.1` rule (largest single feature,
+not batch size). Product shape, Agent API schema (`schemaVersion: 1`), and
+update-channel policy are unchanged. Full narrative: devlog
+[2026-08-10-v0.4.5-release](./devlog/2026-08-10-v0.4.5-release.md).
+
+`v0.4.4` was a one-day stable patch on top of `v0.4.3`, all of it incremental
 work on existing surfaces: **ask_user reachability** (waiting-for-you
 notification, pending question restored after restart, no duplicate echo
 while the live bubble is up), run-fold header scent (count-desc tools,
@@ -62,13 +88,13 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.4` is published and promoted as the live stable release (2026-08-07).
-The default `updates/stable/latest.json` channel points at `v0.4.4`, with the
+`v0.4.5` is published and promoted as the live stable release (2026-08-10).
+The default `updates/stable/latest.json` channel points at `v0.4.5`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. Both were verified with `--cache-bust` across all three
 platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
 through in one draft cut; JC's install smoke passed on the first build.
-`v0.4.3` (2026-08-06) went through the same path and is now superseded.
+`v0.4.4` (2026-08-07) went through the same path and is now superseded.
 
 The Windows Alt+Tab caret restore (issue #13's Windows half) ships as a
 documented known limitation. The investigation is **shelved behind the
@@ -79,37 +105,30 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10) is **current**: the `v0.4.3` → `v0.4.4`
-   pass **succeeded** (JC confirmed 2026-08-10 while opening `v0.4.5` prep;
-   backfilled then), as did `v0.4.2` → `v0.4.3`. Only the `v0.4.1` →
-   `v0.4.2` pass remains unrecorded. Keep asking for the step 10 result
+1. Dogfood the app-update path from an installed `v0.4.4` build to `v0.4.5`
+   (SOP step 10). Prior state: `v0.4.3` → `v0.4.4` **succeeded** (JC
+   confirmed 2026-08-10), as did `v0.4.2` → `v0.4.3`; only `v0.4.1` →
+   `v0.4.2` remains unrecorded. Keep asking for the step 10 result
    explicitly during step 9 — the smoke happens outside any agent tool call,
    so silence is not evidence it was skipped.
-2. Verify the reply-done / goal-end / approval notifications on an installed
+2. Watch tool-output truncation on the new GA baseline. `308153b` tightened
+   the tool-output cap ~14% (`maxlen_multiplier` 2.25 → 1.93 as a
+   denominator); JC's release smoke passed, but `...[Truncated]...` arriving
+   sooner is the one regression direction this release could still surface
+   in longer real sessions.
+3. Verify the reply-done / goal-end / approval notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
-3. Keep Windows ARM out of the stable supported matrix. Add it later only after
+   `v0.4.5` adds sounds to these, so the Windows pass now also covers the
+   three tones.
+4. Keep Windows ARM out of the stable supported matrix. Add it later only after
    the release workflow, bundled Python, updater manifest, and smoke path all
    support `aarch64-pc-windows-msvc`.
 
-## Unreleased On Main (post-`v0.4.4`)
+## Unreleased On Main (post-`v0.4.5`)
 
-The `v0.4.4` tag sits at `84eaf737`. Since then main carries 18 commits
-staged for `v0.4.5`: a Settings -> Feedback tab (prefilled issue forms plus
-an environment payload) with matching GitHub issue templates, notification
-sounds keyed by state and session-titled approval toasts, four fixes
-(auto-title leaking session system-prompt meta, Models-tab motion from
-provider auto-expand and the loading flash, the Channels collapse-flash,
-soft model-list failures misreported as errors), a `DialogCloseButton`
-unification, footer telemetry unit disambiguation, the user-message copy
-chip retune, and the managed GA baseline bump `d8d90ee` -> `308153b`.
-
-The baseline bump is the release-risk item: upstream raised
-`default_context_win`, which Galley overrides, so the observable effect is
-**not** later trimming but a ~14% smaller tool-output cap via
-`maxlen_multiplier` (`file_read` 33750 -> 28928). Draft smoke should watch
-for `...[Truncated]...` arriving sooner. See devlog
-[2026-08-10-ga-upstream-upgrade-d8d90ee-to-308153b](./devlog/2026-08-10-ga-upstream-upgrade-d8d90ee-to-308153b.md).
+Docs only. The `v0.4.5` tag sits at `b27d60ee`; the only commit after it is
+this status sync. No code ships outside the tag.
 
 ## Status Dashboard
 
@@ -122,9 +141,9 @@ for `...[Truncated]...` arriving sooner. See devlog
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.4 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.5 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Locked to audited upstream `308153b` (audited 2026-08-10, not yet shipped); latest shipped is `d8d90ee` in `v0.4.2` (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Locked to audited upstream `308153b` (audited 2026-08-10, shipped in `v0.4.5` the same day) (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
