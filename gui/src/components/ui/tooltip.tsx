@@ -23,6 +23,21 @@ import { cn } from "@/lib/utils";
  * The child must be a single element that accepts ref/props
  * (Radix's `asChild` requirement). Wrap a fragment with a single
  * element if you're composing multiple things.
+ *
+ * Multi-line tooltips (`text` accepts a node): the ink step of a second
+ * line encodes what KIND of thing it is, so don't normalize them.
+ *
+ *   - second line is a NOTE (defines/bounds the metric above, same every
+ *     time, read once) → lowest step, `text-ink-muted`. The context
+ *     meter's "不含系统提示与工具定义" is this.
+ *   - second line is DATA (a number that moves every turn) → same weight
+ *     as the first line. Dimming it says "skippable" about the very value
+ *     the reader opened the tooltip to find.
+ *
+ * A tooltip whose extra line is conditional (present only sometimes) is
+ * usually better kept on ONE line: a box that alternates between one and
+ * two lines in the same spot reads as jitter. That is why the `↑` metric
+ * appends its cache split inline instead of stacking it.
  */
 export type TooltipSide = "top" | "right" | "bottom" | "left";
 

@@ -1414,6 +1414,21 @@ export const enCopy: AppCopy = {
     copy: "Copy",
     copySelection: "Copy selection",
     copied: "Copied",
+    // Telemetry tooltips. The meter is prefixed "~" because its number is
+    // converted from GA's char budget by a ×3 heuristic, while input /
+    // output come straight from the provider — same unit, different
+    // precision, and the marker is what keeps them apart.
+    telemetryInputTip: (total: string) => `Input ${total} tokens`,
+    telemetryInputCachedTip: (total: string, cached: string) =>
+      `Input ${total} tokens · ${cached} from cache`,
+    telemetryOutputTip: (total: string) => `Output ${total} tokens`,
+    telemetryContextTip: (used: string, limit: string, percent: string) =>
+      `Context ~${used} / ${limit} tokens (${percent})`,
+    // Answers the question the meter actually provokes — not "what is
+    // this number" but "why is it 60x smaller than ↑". Naming the missing
+    // part closes that on the spot. Rendered at the lowest ink step: it is
+    // read-once information sitting in a tooltip that reopens constantly.
+    telemetryContextNote: "Excludes system prompt and tools",
     wrapCode: "Wrap",
     scrollCode: "Scroll",
     image: "Image",

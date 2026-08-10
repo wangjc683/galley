@@ -1362,6 +1362,21 @@ export const zhCopy = {
     copy: "复制",
     copySelection: "复制选中",
     copied: "已复制",
+    // Telemetry tooltips. The meter says "约" because its number is
+    // converted from GA's char budget by a ×3 heuristic, while input /
+    // output come straight from the provider — same unit, different
+    // precision, and the marker is what keeps them apart.
+    telemetryInputTip: (total: string) => `输入 ${total} tokens`,
+    telemetryInputCachedTip: (total: string, cached: string) =>
+      `输入 ${total} tokens · 其中 ${cached} 命中缓存`,
+    telemetryOutputTip: (total: string) => `输出 ${total} tokens`,
+    telemetryContextTip: (used: string, limit: string, percent: string) =>
+      `上下文 约 ${used} / ${limit} tokens（${percent}）`,
+    // Answers the question the meter actually provokes — not "what is
+    // this number" but "why is it 60x smaller than ↑". Naming the missing
+    // part closes that on the spot. Rendered at the lowest ink step: it is
+    // read-once information sitting in a tooltip that reopens constantly.
+    telemetryContextNote: "不含系统提示与工具定义",
     wrapCode: "自动换行",
     scrollCode: "横向滚动",
     image: "图片",

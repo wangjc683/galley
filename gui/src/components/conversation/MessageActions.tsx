@@ -8,13 +8,23 @@ import {
 } from "@phosphor-icons/react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  type HTMLAttributes,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import {
-  contextUsageLabel,
+  contextUsagePercentLabel,
+  contextUsageTokens,
   formatCompactCount,
+  telemetryCachedInput,
   telemetryInputTotal,
 } from "@/lib/telemetry";
 import type { MessageTelemetry } from "@/types/conversation";
@@ -151,12 +161,44 @@ function AnswerTelemetry({
 }: {
   telemetry?: MessageTelemetry;
 }) {
+  const copy = useCopy();
   const input = formatCompactCount(telemetryInputTotal(telemetry));
   const output = formatCompactCount(telemetry?.outputTokens);
-  const context = contextUsageLabel(telemetry);
+  const context = contextUsagePercentLabel(telemetry);
   const hasTelemetry = Boolean(input || output || context);
 
   if (!hasTelemetry) return null;
+
+  // The `↑` total folds cache reads in, which bill at ~0.1x fresh input —
+  // without the split a cache-heavy turn reads as expensive when it is not.
+  const cached = formatCompactCount(telemetryCachedInput(telemetry));
+  const inputTip =
+    input && cached
+      ? copy.conversation.telemetryInputCachedTip(input, cached)
+      : input
+        ? copy.conversation.telemetryInputTip(input)
+        : "";
+  const contextTokens = contextUsageTokens(telemetry);
+  const contextTipText = contextTokens
+    ? copy.conversation.telemetryContextTip(
+        formatCompactCount(contextTokens.usedTokens) ?? "",
+        formatCompactCount(contextTokens.limitTokens) ?? "",
+        contextTokens.percentLabel,
+      )
+    : "";
+  // Two-tier tooltip: the number, then a read-once note at the lowest ink
+  // step. Separated by spacing rather than a smaller font — 11.5px CJK is
+  // already at the floor for comfortable reading.
+  const contextTip = contextTokens ? (
+    <span className="flex flex-col gap-1.5 leading-tight">
+      <span>{contextTipText}</span>
+      <span className="text-ink-muted">
+        {copy.conversation.telemetryContextNote}
+      </span>
+    </span>
+  ) : (
+    ""
+  );
 
   return (
     <>
@@ -169,47 +211,57 @@ function AnswerTelemetry({
         ].join(" ")}
       >
         {input && (
-          <Metric
-            ariaLabel={`input ${input}`}
-            icon={<ArrowUp size={12} weight="thin" />}
-          >
-            {input}
-          </Metric>
+          <TooltipLabel text={inputTip}>
+            <Metric
+              ariaLabel={inputTip}
+              icon={<ArrowUp size={12} weight="thin" />}
+            >
+              {input}
+            </Metric>
+          </TooltipLabel>
         )}
         {output && (
-          <Metric
-            ariaLabel={`output ${output}`}
-            icon={<ArrowDown size={12} weight="thin" />}
-          >
-            {output}
-          </Metric>
+          <TooltipLabel text={copy.conversation.telemetryOutputTip(output)}>
+            <Metric
+              ariaLabel={copy.conversation.telemetryOutputTip(output)}
+              icon={<ArrowDown size={12} weight="thin" />}
+            >
+              {output}
+            </Metric>
+          </TooltipLabel>
         )}
         {context && (
-          <Metric
-            ariaLabel={`context ${context}`}
-            icon={<Gauge size={12} weight="thin" />}
-          >
-            {context}
-          </Metric>
+          <TooltipLabel text={contextTip}>
+            <Metric
+              ariaLabel={contextTipText}
+              icon={<Gauge size={12} weight="thin" />}
+            >
+              {context}
+            </Metric>
+          </TooltipLabel>
         )}
       </div>
     </>
   );
 }
 
-function Metric({
-  ariaLabel,
-  icon,
-  children,
-}: {
-  ariaLabel: string;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
+/** forwardRef + prop spread so Radix Tooltip's `asChild` trigger can
+ * attach its ref and pointer/focus handlers — without them the tooltip
+ * silently never opens. */
+const Metric = forwardRef<
+  HTMLSpanElement,
+  {
+    ariaLabel: string;
+    icon: ReactNode;
+    children: ReactNode;
+  } & HTMLAttributes<HTMLSpanElement>
+>(function Metric({ ariaLabel, icon, children, ...rest }, ref) {
   return (
     <span
+      ref={ref}
       aria-label={ariaLabel}
       className="inline-flex h-4 items-center gap-0.5 whitespace-nowrap align-middle"
+      {...rest}
     >
       <span
         className="inline-flex size-3 shrink-0 items-center justify-center"
@@ -220,4 +272,4 @@ function Metric({
       <span className="leading-none">{children}</span>
     </span>
   );
-}
+});
