@@ -79,13 +79,12 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. Dogfood the app-update path from an installed `v0.4.3` build to `v0.4.4`
-   (SOP step 10). Prior state: the `v0.4.2` → `v0.4.3` pass **succeeded**
-   (JC ran it after that release, reported late, so it was never backfilled
-   at the time); only the `v0.4.1` → `v0.4.2` pass remains unrecorded. Ask
-   for the step 10 result explicitly during step 9 backfill — the smoke
-   happens outside any agent tool call, so silence is not evidence it was
-   skipped.
+1. App-update dogfood (SOP step 10) is **current**: the `v0.4.3` → `v0.4.4`
+   pass **succeeded** (JC confirmed 2026-08-10 while opening `v0.4.5` prep;
+   backfilled then), as did `v0.4.2` → `v0.4.3`. Only the `v0.4.1` →
+   `v0.4.2` pass remains unrecorded. Keep asking for the step 10 result
+   explicitly during step 9 — the smoke happens outside any agent tool call,
+   so silence is not evidence it was skipped.
 2. Verify the reply-done / goal-end / approval notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
@@ -95,9 +94,22 @@ Post-release follow-up:
 
 ## Unreleased On Main (post-`v0.4.4`)
 
-Docs only. The `v0.4.4` tag sits at `84eaf737`; commits after it are the
-app-update dogfood record and this status sync. No code ships outside the
-tag.
+The `v0.4.4` tag sits at `84eaf737`. Since then main carries 18 commits
+staged for `v0.4.5`: a Settings -> Feedback tab (prefilled issue forms plus
+an environment payload) with matching GitHub issue templates, notification
+sounds keyed by state and session-titled approval toasts, four fixes
+(auto-title leaking session system-prompt meta, Models-tab motion from
+provider auto-expand and the loading flash, the Channels collapse-flash,
+soft model-list failures misreported as errors), a `DialogCloseButton`
+unification, footer telemetry unit disambiguation, the user-message copy
+chip retune, and the managed GA baseline bump `d8d90ee` -> `308153b`.
+
+The baseline bump is the release-risk item: upstream raised
+`default_context_win`, which Galley overrides, so the observable effect is
+**not** later trimming but a ~14% smaller tool-output cap via
+`maxlen_multiplier` (`file_read` 33750 -> 28928). Draft smoke should watch
+for `...[Truncated]...` arriving sooner. See devlog
+[2026-08-10-ga-upstream-upgrade-d8d90ee-to-308153b](./devlog/2026-08-10-ga-upstream-upgrade-d8d90ee-to-308153b.md).
 
 ## Status Dashboard
 
