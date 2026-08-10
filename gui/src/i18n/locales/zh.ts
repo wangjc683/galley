@@ -800,9 +800,6 @@ export const zhCopy = {
       subtitle: "开源的本地 Agent 工作台",
       version: "版本",
       links: "Links",
-      feedbackTitle: "报告问题",
-      feedbackDescription: "提交 Bug 或建议，环境信息自动带上",
-      feedbackButton: "报告问题",
       origin:
         "Galley 最初是 GenericAgent 的 workbench；名字前两个字母 GA，是对它的致意。",
       gaKernelDetail: (commit: string, date?: string) =>

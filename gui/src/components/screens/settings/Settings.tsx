@@ -283,7 +283,6 @@ export function Settings({
                   gaBaseline={runtimeInfo.gaBaseline}
                   managedRuntime={runtimeInfo.managedRuntime}
                   hasRunningSessions={hasRunningSessions}
-                  onOpenFeedback={() => setTab("feedback")}
                 />
               )}
               </div>

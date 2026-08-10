@@ -841,10 +841,6 @@ export const enCopy: AppCopy = {
       subtitle: "An open-source local Agent workbench",
       version: "Version",
       links: "Links",
-      feedbackTitle: "Report an Issue",
-      feedbackDescription:
-        "File a bug or a feature request with your environment info attached",
-      feedbackButton: "Report an Issue",
       origin:
         "Galley started as a workbench for GenericAgent. The first two letters of our name are a quiet bow to where we came from.",
       gaKernelDetail: (commit: string, date?: string) =>

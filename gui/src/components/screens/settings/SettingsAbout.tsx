@@ -5,7 +5,6 @@ import {
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
 import { SettingsUpdateControl } from "@/components/screens/settings/SettingsUpdateControl";
-import { Button } from "@/components/ui/button";
 import { RELEASE_DATE } from "@/lib/build-info";
 import { EPIGRAPHS } from "@/lib/epigraphs";
 import { useCopy, useLanguage } from "@/lib/i18n";
@@ -16,11 +15,6 @@ interface SettingsAboutProps {
   gaBaseline: string;
   managedRuntime?: ManagedRuntimeDiagnostics;
   hasRunningSessions: boolean;
-  /** Switch to Settings → 报告问题. About keeps a feedback entry
-   * because users hunt for it here (issue #15's reporter looked in
-   * About and missed the old colophon-styled link row), but the
-   * single real destination is the feedback tab with its env card. */
-  onOpenFeedback: () => void;
 }
 
 /**
@@ -53,7 +47,6 @@ export function SettingsAbout({
   gaBaseline,
   managedRuntime,
   hasRunningSessions,
-  onOpenFeedback,
 }: SettingsAboutProps) {
   const copy = useCopy();
   const language = useLanguage();
@@ -114,24 +107,6 @@ export function SettingsAbout({
         <p className="m-0 mt-2 text-ui-secondary leading-secondary text-ink-soft">
           {copy.settings.about.typesettingDetail}
         </p>
-      </div>
-
-      {/* Its own labeled section, not a row in the Links colophon:
-          issue #15's reporter read the old link row as credits and
-          filed "no feedback entry exists". An action needs to look
-          like one. */}
-      <div className="border-t border-line pt-6">
-        <SettingsSectionLabel>
-          {copy.settings.about.feedbackTitle}
-        </SettingsSectionLabel>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-          <p className="m-0 text-ui-secondary leading-secondary text-ink-soft">
-            {copy.settings.about.feedbackDescription}
-          </p>
-          <Button variant="secondary" size="sm" onClick={onOpenFeedback}>
-            {copy.settings.about.feedbackButton}
-          </Button>
-        </div>
       </div>
 
       <div className="border-t border-line pt-6">
