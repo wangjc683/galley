@@ -135,9 +135,39 @@ type ManagedModelProbeErrorCopy = {
   errorServer: (status: number) => string;
   errorTimeout: string;
   errorNetwork: string;
-  modelListManualFallback: string;
   errorUnknownWithDetail: (detail: string) => string;
 };
+
+/**
+ * Probe state for a failed model-list fetch. A "soft" failure — the
+ * endpoint answered, but has no usable listing (Anthropic-compatible
+ * endpoints without /models, HTML gateways) — is not an error: the
+ * flow is designed to continue via manual entry, and the earlier
+ * error-kind state made the UI wear the reassuring fallback copy in
+ * an error frame AND duplicate it in the InfoLine right below. Soft
+ * failures land in the same success/no-list state as a genuinely
+ * empty listing; auth / rate-limit / server failures stay errors.
+ * Structural return type (not ProbeState) because provider-setup.ts
+ * imports from this module.
+ */
+export function modelListProbeFailureState(
+  error: unknown,
+  copy: ManagedModelProbeErrorCopy & { connectedNoModels: string },
+): { kind: "success" | "error"; action: "model-list"; message: string } {
+  const detail = extractErrorMessage(error);
+  if (isSoftModelListFailure(detail, extractHttpStatus(detail))) {
+    return {
+      kind: "success",
+      action: "model-list",
+      message: copy.connectedNoModels,
+    };
+  }
+  return {
+    kind: "error",
+    action: "model-list",
+    message: managedModelProbeErrorMessage(error, copy),
+  };
+}
 
 export function managedModelProbeErrorMessage(
   error: unknown,
@@ -145,9 +175,6 @@ export function managedModelProbeErrorMessage(
 ): string {
   const detail = extractErrorMessage(error);
   const status = extractHttpStatus(detail);
-  if (isSoftModelListFailure(detail, status)) {
-    return copy.modelListManualFallback;
-  }
   if (status === 401) return copy.errorUnauthorized;
   if (status === 403) return copy.errorForbidden;
   if (status === 404) return copy.errorNotFound;

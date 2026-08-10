@@ -7,6 +7,7 @@ import {
   listManagedModelOptions,
   logoutChatGptCodexProvider,
   managedModelProbeErrorMessage,
+  modelListProbeFailureState,
   startChatGptCodexLogin,
   testManagedModelConnectionWithLatency,
   type CodexDeviceLoginStart,
@@ -513,11 +514,15 @@ export function useProviderSetupController({
         message,
       });
     } catch (e) {
-      setProviderFormProbeState({
-        kind: "error",
-        action,
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
+      setProviderFormProbeState(
+        action === "model-list"
+          ? modelListProbeFailureState(e, modelCopy)
+          : {
+              kind: "error",
+              action,
+              message: managedModelProbeErrorMessage(e, modelCopy),
+            },
+      );
     }
   };
 
@@ -558,11 +563,7 @@ export function useProviderSetupController({
             : modelCopy.connectedNoModels,
       });
     } catch (e) {
-      setProviderFormProbeState({
-        kind: "error",
-        action: "model-list",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
+      setProviderFormProbeState(modelListProbeFailureState(e, modelCopy));
     }
   };
 

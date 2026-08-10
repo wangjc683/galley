@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   listManagedModelOptions,
   managedModelProbeErrorMessage,
+  modelListProbeFailureState,
   testManagedModelConnectionWithLatency,
 } from "@/lib/managed-models";
 import { useCopy } from "@/lib/i18n";
@@ -219,11 +220,11 @@ export function useProviderModelController({
         setModelDraft(createDraftForProvider(provider));
       }
       setModelProbeStates((current) =>
-        withProbeState(current, provider.id, {
-          kind: "error",
-          action: "model-list",
-          message: managedModelProbeErrorMessage(e, modelCopy),
-        }),
+        withProbeState(
+          current,
+          provider.id,
+          modelListProbeFailureState(e, modelCopy),
+        ),
       );
     }
   };
