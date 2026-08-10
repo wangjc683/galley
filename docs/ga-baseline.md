@@ -57,10 +57,30 @@ New in the `d8d90ee` -> `308153b` range:
   Longer waits between retries on a flaky provider.
 - `llmcore.py` — context defaults raised: `default_context_win` `30000 →
   35000`, `default_cut_msg_interval` `5 → 7` (deepseek `70000 → 80000`), and
-  `trim_messages_history`'s `cut_msg_interval` fallback `5 → 7`. Trimming and
-  tag compression both kick in later. This is the line `0007` conflicted on.
-  Not a contract change, but long-session behavior is observably different —
-  watch during dogfood.
+  `trim_messages_history`'s `cut_msg_interval` fallback `5 → 7`. This is the
+  line `0007` conflicted on.
+
+  **Trimming does not change for Galley, and the real effect runs the other
+  way.** The trim budget is `cap = sess.context_win * 3`, and Galley sets
+  `context_win` explicitly (`MANAGED_MODEL_DEFAULT_CONTEXT_WIN = 90_000`), so
+  the cap stays 270000 chars regardless of what upstream's default is. What
+  moves is `maxlen_multiplier`, which takes `default_context_win` as its
+  **denominator**: `90000/30000*0.75 = 2.25` → `90000/35000*0.75 = 1.93`, a
+  14% drop. Its two consumers:
+
+  - **Tool output limits shrink ~14%.** Via `agentmain.get_ctx_multiplier()`
+    → `ga.py::_get_tool_maxlen`: `code_run` 22500 → 19285, `file_read` 33750
+    → 28928, `web_execute_js` 18000 → 15428, `web_scan` (growth_rate 0.5)
+    56875 → 51250 — all before the `/_tool_num` divisor. **This is the one
+    observable change; dogfood should watch for tool results hitting
+    `...[Truncated]...` sooner, not for trimming behavior.**
+  - `cut_msg_interval` `int(5*2.25)=11` → `int(7*1.929)=13`, so history tag
+    compression runs slightly less often.
+
+  Note the inversion: upstream raised the default to be more generous, but
+  for any downstream that sets a LARGER explicit `context_win`, that constant
+  is a denominator, so raising it tightens rather than loosens. deepseek is
+  unaffected (both sides clamp to 1.0).
 - `llmcore.py` — `_record_usage` gained an `_i()` null-coercion helper
   (`None → 0`) for every usage field across all three API modes. From
   `a1e470b` ("llmcore: null-safe usage"), fixing a `TypeError` when a provider

@@ -42,9 +42,8 @@ delta. That made the read cheap and the prediction sharp.
   `MixinSession._base_delay` default `1.5 → 3.0`.
 - **Context defaults raised.** `default_context_win` `30000 → 35000`,
   `default_cut_msg_interval` `5 → 7` (deepseek `70000 → 80000`), plus the
-  matching `cut_msg_interval` fallback in `trim_messages_history`. Trimming and
-  tag compression both start later. Not a contract change, but long-session
-  behavior is observably different — flagged for dogfood.
+  matching `cut_msg_interval` fallback in `trim_messages_history`. See the
+  correction below — the first read of this one was wrong.
 - **`_record_usage` null coercion.** An `_i()` helper turns `None` into `0`
   across all three API modes. See the origin note below.
 - **`ga.py` prompt-tag renames.** `[System]` → `[ERROR]` on the three
@@ -152,6 +151,40 @@ of the survey: they are not competitors at the same layer. Hub is D-Bus
 (authoritative, owns the runner processes, SQLite-backed, audited). Hub lacks
 exactly what Galley exists to provide: persistence, a task board with claim
 semantics, origin audit, confirmation gates, and write-mode control.
+
+## 更正（当天，JC 追问触发）：context 默认值那条方向反了
+
+初判写的是「裁剪和标签压缩都推迟了，长会话行为可观察变化，留给 dogfood」。
+**这对 Galley 不成立，而且真实影响的方向相反。**
+
+JC 问 `cut_msg_interval` 是什么，顺带提到 Galley 的 `context_win` 早就调到
+90000，一查就塌了：
+
+- 裁剪预算是 `cap = sess.context_win * 3`，只看 `context_win` 本身。Galley
+  显式设 `MANAGED_MODEL_DEFAULT_CONTEXT_WIN = 90_000`，所以 cap 恒为 270000
+  字符，**上游改自己的默认值对它毫无影响**，trim 行为一动没动。
+- 真正变的是 `maxlen_multiplier`，因为它拿 `default_context_win` 当**分母**：
+  `90000/30000*0.75 = 2.25` → `90000/35000*0.75 = 1.93`，降 14%。
+
+而 `maxlen_multiplier` 有个初判完全漏掉的下游：经
+`agentmain.get_ctx_multiplier()` 流到 `ga.py::_get_tool_maxlen`，**直接决定
+工具返回值的截断长度**。`code_run` 22500→19285、`file_read` 33750→28928、
+`web_execute_js` 18000→15428、`web_scan` 56875→51250（均为 `_tool_num=1`）。
+另一个下游才是 `cut_msg_interval`（11→13）。
+
+所以 dogfood 该看的是**工具输出是不是更早被截断**（读大文件、跑输出多的脚本、
+抓网页时更容易撞 `...[Truncated]...`），而不是长会话裁剪。
+
+**方法论教训**：评估上游默认值变化时，先查下游有没有**显式覆盖**那个配置。
+一旦覆盖，该默认常量往往只通过间接路径起作用（这里是当分母），影响方向可能
+与直觉相反——上游抬高 `default_context_win` 本意是放宽，但对任何显式设了更大
+`context_win` 的下游反而是**收紧**。初判是拿 GA 自己的默认值推的，等于假设
+Galley 在用上游默认配置，而 Galley 恰恰不是。
+
+顺带记下反方向的风险：`maxlen_multiplier` 在 `[1.0, 3.0]` 之间 clamp，若哪天
+把 `context_win` 调到 150000，`150000/35000*0.75 = 3.21` 会撞上限,工具输出
+上限变成 ×3（`file_read` 45000 字符），单次工具返回就可能吃掉一大块上下文。
+调 `context_win` 时要记得它同时在放大工具输出。
 
 ## Verification
 
