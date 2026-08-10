@@ -6,18 +6,26 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
 
 /**
  * Shared copy / save action chip for the conversation. One visual
- * vocabulary across the places a copy affordance appears, organized by
- * kind:
+ * vocabulary across the places a copy affordance appears.
  *
- *   - persistent: the reply action bar under an assistant answer
- *     (MessageActions) — bare `inline` chips, always visible.
- *   - transient: a `floating` chip that surfaces on a user action —
- *     beside an assistant text selection (SelectionCopyToolbar), or at
- *     a user message's top-right on hover (MessageUser).
+ * WHEN it shows (persistent vs transient) and WHICH SKIN it wears are
+ * two independent questions — conflating them is what put a bordered
+ * box against a highlighter stroke until 2026-08-10.
  *
- * Single rule: persistent actions live in the reply bar; transient
- * copy is a floating chip that fades in by the content it acts on.
- * Same chip skin throughout.
+ *   - persistent: always visible in the reply action bar under an
+ *     assistant answer (MessageActions).
+ *   - transient: fades in on a user action — hovering a user message
+ *     (MessageUser) or selecting assistant text (SelectionCopyToolbar).
+ *
+ * Skin is decided by WHAT IS BEHIND THE CHIP, not by its lifetime:
+ *
+ *   - `floating` (border + solid `bg-elevated` + shadow): only when the
+ *     chip lands on top of arbitrary content and has to cut itself out
+ *     of it. The portal'd selection toolbar is the one such case.
+ *   - `inline` (bare muted glyph, hover-only background): everywhere the
+ *     chip sits on clean canvas — the reply bar, and a user message's
+ *     hover chip out in the margin. Armour it does not need reads as a
+ *     UI part intruding on the content.
  *
  * Quiet tier of the button-press language (DESIGN.md §2.5): muted →
  * ink on hover, a crisp integer 1px press, success flips to a green

@@ -66,16 +66,17 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *
  * Message actions:
  *   Supervisor provenance renders as a small icon above the block.
- *   Copy is a transient floating chip (the same design as the
- *   assistant selection-copy chip) that fades in on hover just
- *   outside the block's top-right corner — it sat inside the block
- *   until 2026-08-05, when shrink-to-fit made the `pr-10` it needed
- *   show up as dead fill on short messages. It never touches the
- *   inter-turn gap, and shares the block's hover region. The model:
- *   persistent actions live in the assistant reply bar; transient copy
- *   surfaces as a floating chip on a user action (hover / select).
- *   Mouse leave delays hiding briefly so the user can move from the
- *   message body to the action without chasing it.
+ *   Copy is a transient chip that fades in on hover just outside the
+ *   block's top-right corner — it sat inside the block until
+ *   2026-08-05, when shrink-to-fit made the `pr-10` it needed show up
+ *   as dead fill on short messages. It never touches the inter-turn
+ *   gap, and shares the block's hover region. The model: persistent
+ *   actions live in the assistant reply bar; transient copy surfaces
+ *   on a user action (hover / select). It wears the BARE chip skin,
+ *   not the bordered one — see the render site for why the highlighter
+ *   form makes armour wrong here. Mouse leave delays hiding briefly so
+ *   the user can move from the message body to the action without
+ *   chasing it.
  *
  * `data-role="user-msg"` is a stable anchor that MainView's scroll
  * effect uses to find the just-submitted user message and snap its
@@ -84,7 +85,10 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  */
 const COLLAPSE_LINE_THRESHOLD = 6;
 const COLLAPSE_CHAR_THRESHOLD = 500;
-const ACTION_HIDE_DELAY_MS = 1800;
+// The chip sits a few pixels off the block, so the pointer never has to
+// travel to reach it. 1800ms was sized for a longer trip and left a
+// visible tail hanging after the mouse had already moved on.
+const ACTION_HIDE_DELAY_MS = 600;
 const COPY_FEEDBACK_MS = 1500;
 
 /**
@@ -271,7 +275,7 @@ export const MessageUser = memo(function MessageUser({
 
   const copyChip = (
     <ActionChip
-      variant="floating"
+      variant="inline"
       active={copied}
       idleIcon={<Copy size={14} weight="thin" />}
       activeIcon={<Check size={14} weight="bold" />}
@@ -323,16 +327,29 @@ export const MessageUser = memo(function MessageUser({
         {attachments.length > 0 && (
           <UserImageAttachments attachments={attachments} />
         )}
-        {/* Transient copy — a floating chip (same design as the
-            selection-copy chip) that fades in on hover, pinned just
-            outside the block's top-right corner.
+        {/* Transient copy — fades in on hover just outside the block's
+            top-right corner.
             Sat *inside* the block until 2026-08-05, which is why the
             block reserved `pr-10`. Shrink-to-fit made that reservation
             visible: a two-character message would have rendered as a
             small block trailing 40px of empty fill. Moving the chip out
             lets the box track its content exactly; it still rides the
-            block's own hover region, so ownership survives. */}
-        <div className="absolute left-full top-1.5 z-10 ml-1.5">{copyChip}</div>
+            block's own hover region, so ownership survives.
+
+            `ml-3`, not `ml-1.5`: the highlighter draws its 4px horizontal
+            overhang with an offset box-shadow that does NOT participate in
+            layout (2026-08-06), so `left-full` lands on the TEXT edge while
+            the ink reaches 4px further right. The old 6px margin was a 2px
+            gap in practice. 12px here nets the intended ~8px.
+
+            `inline`, not `floating`: the bordered, solid-background chip
+            exists so the selection toolbar can portal itself on top of
+            arbitrary text. This one sits in clean canvas margin and needs
+            no such armour — and a bordered control box pressed against a
+            highlighter stroke inverts the register the 2026-08-06 redesign
+            set out to fix (machine parts crisp, the human voice drawn by
+            hand). */}
+        <div className="absolute left-full top-1.5 z-10 ml-3">{copyChip}</div>
       </div>
       {isLong && (
         <div className="mt-1">
