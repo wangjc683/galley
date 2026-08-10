@@ -5,6 +5,7 @@ import {
   Info,
   Keyboard,
   Key,
+  Megaphone,
   PlugsConnected,
   PuzzlePiece,
   ShieldCheck,
@@ -94,6 +95,13 @@ export function SettingsSidebar({
           label={tabCopy.shortcuts.label}
           subLabel={showChineseHelpers ? tabCopy.shortcuts.helper : undefined}
           onClick={() => onChange("shortcuts")}
+        />
+        <SettingsTabButton
+          active={tab === "feedback"}
+          Icon={Megaphone}
+          label={tabCopy.feedback.label}
+          subLabel={showChineseHelpers ? tabCopy.feedback.helper : undefined}
+          onClick={() => onChange("feedback")}
         />
         <SettingsTabButton
           active={tab === "about"}

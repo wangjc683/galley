@@ -183,7 +183,10 @@ pub(crate) fn install_macos_menu(app: &tauri::App) -> tauri::Result<()> {
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Report a Bug")
+            // "Issue", not "Bug": the chooser it opens offers both the
+            // bug and the feature-request form. Id stays `issues` —
+            // it's a routing key, not copy.
+            &MenuItemBuilder::new("Report an Issue…")
                 .id("issues")
                 .build(app)?,
         )

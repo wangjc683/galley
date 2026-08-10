@@ -219,3 +219,13 @@ pub(crate) async fn restart_enabled_im_supervisors(
 pub(crate) fn reset_window_layout(window: tauri::WebviewWindow) {
     crate::app_setup::apply_golden_geometry(&window);
 }
+
+/// Same probe set as CLI `galley health`, for the Settings → 报告问题
+/// environment card. Exposed as a command (not read from the GUI's
+/// own stores) so the card and the CLI can never disagree.
+#[tauri::command]
+pub(crate) async fn health_report(
+    galley: State<'_, SqliteGalley>,
+) -> std::result::Result<crate::api::HealthReport, String> {
+    galley.health().await.map_err(stringify_error)
+}

@@ -482,6 +482,7 @@ export const enCopy: AppCopy = {
       im: { label: "Channels", helper: "Messaging" },
       browser: { label: "Browser Control", helper: "Browser control" },
       shortcuts: { label: "Shortcuts", helper: "快捷键" },
+      feedback: { label: "Feedback", helper: "报告问题" },
       about: { label: "About", helper: "关于" },
     },
     general: {
@@ -822,11 +823,28 @@ export const enCopy: AppCopy = {
       moveList: "Move through command palette and list items",
       enterSubmenu: "Enter the command palette submenu",
     },
+    feedback: {
+      title: "Report an Issue",
+      subtitle: "File a bug or a feature request on GitHub",
+      intro:
+        "Opens the GitHub issue form in your browser. “Report a bug” pre-fills the environment info below; you can review and edit everything on the page before submitting.",
+      reportBug: "Report a bug",
+      requestFeature: "Request a feature",
+      attachSectionTitle: "Attached to your bug report",
+      envNote: "Versions and statuses only — no paths, usernames, or other sensitive content",
+      copyEnv: "Copy",
+      copied: "Copied",
+      healthLoading: "Running health checks…",
+      healthUnavailable: "Health checks unavailable — omitted from this report",
+    },
     about: {
       subtitle: "An open-source local Agent workbench",
       version: "Version",
       links: "Links",
-      feedback: "Feedback",
+      feedbackTitle: "Report an Issue",
+      feedbackDescription:
+        "File a bug or a feature request with your environment info attached",
+      feedbackButton: "Report an Issue",
       origin:
         "Galley started as a workbench for GenericAgent. The first two letters of our name are a quiet bow to where we came from.",
       gaKernelDetail: (commit: string, date?: string) =>

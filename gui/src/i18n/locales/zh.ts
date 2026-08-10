@@ -462,6 +462,7 @@ export const zhCopy = {
       im: { label: "Channels", helper: "聊天软件" },
       browser: { label: "Browser Control", helper: "浏览器控制" },
       shortcuts: { label: "Shortcuts", helper: "快捷键" },
+      feedback: { label: "Feedback", helper: "报告问题" },
       about: { label: "About", helper: "关于" },
     },
     general: {
@@ -781,11 +782,27 @@ export const zhCopy = {
       moveList: "在命令面板 / 列表中上下选择",
       enterSubmenu: "在命令面板中进入二级菜单",
     },
+    feedback: {
+      title: "报告问题",
+      subtitle: "把 Bug 或建议提交到 GitHub",
+      intro:
+        "点击后会打开 GitHub 提交表单。「报告 Bug」会自动填入下方的环境信息，提交前可以在页面上检查、修改全部内容。",
+      reportBug: "报告 Bug",
+      requestFeature: "提功能建议",
+      attachSectionTitle: "将随 Bug 报告附上",
+      envNote: "只含版本与状态，不含路径、用户名等敏感内容",
+      copyEnv: "复制",
+      copied: "已复制",
+      healthLoading: "健康检查加载中…",
+      healthUnavailable: "健康检查不可用，本次报告将不包含",
+    },
     about: {
       subtitle: "开源的本地 Agent 工作台",
       version: "版本",
       links: "Links",
-      feedback: "反馈建议",
+      feedbackTitle: "报告问题",
+      feedbackDescription: "提交 Bug 或建议，环境信息自动带上",
+      feedbackButton: "报告问题",
       origin:
         "Galley 最初是 GenericAgent 的 workbench；名字前两个字母 GA，是对它的致意。",
       gaKernelDetail: (commit: string, date?: string) =>

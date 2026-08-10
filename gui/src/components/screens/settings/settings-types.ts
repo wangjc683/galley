@@ -7,6 +7,7 @@ export type SettingsTab =
   | "im"
   | "browser"
   | "shortcuts"
+  | "feedback"
   | "about";
 
 export interface ApprovalConfig {

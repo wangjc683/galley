@@ -238,6 +238,16 @@ pub(crate) fn setup_background_mode(app: &tauri::App, autostart_launch: bool) ->
         true,
         None::<&str>,
     )?;
+    // Windows has no menu bar, so the tray is that platform's only
+    // system-convention home for a feedback entry (macOS also gets
+    // Help → Report an Issue).
+    let tray_report_issue = MenuItem::with_id(
+        app,
+        "tray_report_issue",
+        "Report an Issue…",
+        true,
+        None::<&str>,
+    )?;
     let tray_quit = MenuItem::with_id(app, "tray_quit", "Quit Galley", true, None::<&str>)?;
     let tray_primary_separator = PredefinedMenuItem::separator(app)?;
     let tray_quit_separator = PredefinedMenuItem::separator(app)?;
@@ -249,6 +259,7 @@ pub(crate) fn setup_background_mode(app: &tauri::App, autostart_launch: bool) ->
             &tray_primary_separator,
             &tray_settings,
             &tray_check_updates,
+            &tray_report_issue,
             &tray_quit_separator,
             &tray_quit,
         ],
@@ -418,10 +429,14 @@ pub(crate) fn setup_background_mode(app: &tauri::App, autostart_launch: bool) ->
                     .opener()
                     .open_url("https://github.com/wangjc683/galley", None::<&str>);
             }
-            "issues" => {
-                let _ = app
-                    .opener()
-                    .open_url("https://github.com/wangjc683/galley/issues", None::<&str>);
+            // /new/choose (not /issues): the menu item's job is filing,
+            // and the chooser fronts the bug / feature forms. Same
+            // reasoning as the Settings → About link (issue #15).
+            "issues" | "tray_report_issue" => {
+                let _ = app.opener().open_url(
+                    "https://github.com/wangjc683/galley/issues/new/choose",
+                    None::<&str>,
+                );
             }
             _ => {}
         }

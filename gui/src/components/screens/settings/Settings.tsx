@@ -9,6 +9,7 @@ import { SettingsIM } from "@/components/screens/settings/SettingsIM";
 import { SettingsIntegration } from "@/components/screens/settings/SettingsIntegration";
 import { SettingsModels } from "@/components/screens/settings/SettingsModels";
 import { SettingsRuntime } from "@/components/screens/settings/SettingsRuntime";
+import { SettingsFeedback } from "@/components/screens/settings/SettingsFeedback";
 import { SettingsSidebar } from "@/components/screens/settings/SettingsSidebar";
 import { SettingsShortcuts } from "@/components/screens/settings/SettingsShortcuts";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
@@ -270,12 +271,19 @@ export function Settings({
                 <SettingsBrowserControl onRunDemo={onRunBrowserControlDemo} />
               )}
               {tab === "shortcuts" && <SettingsShortcuts />}
+              {tab === "feedback" && (
+                <SettingsFeedback
+                  workbenchVersion={runtimeInfo.workbenchVersion}
+                  managedRuntime={runtimeInfo.managedRuntime}
+                />
+              )}
               {tab === "about" && (
                 <SettingsAbout
                   workbenchVersion={runtimeInfo.workbenchVersion}
                   gaBaseline={runtimeInfo.gaBaseline}
                   managedRuntime={runtimeInfo.managedRuntime}
                   hasRunningSessions={hasRunningSessions}
+                  onOpenFeedback={() => setTab("feedback")}
                 />
               )}
               </div>

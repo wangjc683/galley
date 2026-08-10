@@ -109,6 +109,7 @@ pub fn run() {
             path_exists,
             reset_window_layout,
             get_supervisor_sop,
+            health_report,
             app_update::check_app_update,
             app_update::install_app_update,
             conversation_image::save_conversation_image,
