@@ -138,7 +138,9 @@ async function sync(first){
   if (!cur) return;
   if (!first && document.hidden) return;          // background tab costs nothing
   const name = cur, m = $('#main');
-  let q = `/api/${encodeURIComponent(name)}/messages?last=1`;
+  const olds = first ? [] : [...m.querySelectorAll('.task')];
+  const since = Math.max(0, olds.length - 1);     // rows below the tail are immutable: don't resend them
+  let q = `/api/${encodeURIComponent(name)}/messages?since=${since}`;
   if (!first && sig) q += `&sig=${encodeURIComponent(sig)}`;
   let r;
   try { r = await api(q); } catch(e){ return; }
@@ -148,19 +150,20 @@ async function sync(first){
   if (r.error){ if (first) m.innerHTML = `<div class="empty">${esc(r.error)}</div>`; return; }
 
   const tasks = r.tasks || [];
+  const total = 'nt' in r ? r.nt : tasks.length;  // an old host ignores `since` and sends everything
+  const t0 = tasks.find(t => t.i === 0);
+  // /clear (or trim) rewinds indices -> nothing to reuse, refetch from scratch
+  if (!first && (olds.length > total || (olds.length && t0 && olds[0]._input !== t0.input)))
+    return open_(name);
   const atEnd = m.scrollHeight - m.scrollTop - m.clientHeight < 80;
-  const olds = [...m.querySelectorAll('.task')];
-  // /clear (or trim) rewinds indices -> nothing to reuse, start over
-  const reset = first || olds.length > tasks.length ||
-                (olds.length && olds[0]._input !== (tasks[0] || {}).input);
-  if (reset) m.innerHTML = '<div class="hd"></div>';
+  if (first || !m.querySelector('.hd')) m.innerHTML = '<div class="hd"></div>';
   m.querySelector('.hd').textContent = r.title || name;
 
   for (const t of tasks){
     const el = m.querySelector(`.task[data-i="${t.i}"]`);
     if (el) el.update(t); else m.appendChild(taskEl(name, t));
   }
-  if (reset || atEnd) m.scrollTop = m.scrollHeight;
+  if (first || atEnd) m.scrollTop = m.scrollHeight;
 }
 
 // one agent task: input bubble + collapsible output steps
@@ -198,15 +201,20 @@ function segEl(name, i, s){
       <span class="tt"></span><span class="n"></span></summary>
       <div class="body dim">…</div>`;
   const tt = det.querySelector('.tt'), nn = det.querySelector('.n'), body = det.querySelector('.body');
-  let n = -1, loaded = -1, busy = false;           // loaded = length of the text on screen
+  let n = -1, loaded = -1, busy = false, raw = ''; // raw = full text on screen, kept so growth only fetches the tail
 
-  const pull = async () => {                       // fetch full text of this step, on demand
+  const pull = async () => {                       // fetch only what we don't have yet
     if (busy || loaded === n) return;
     busy = true;
     try {
-      const r = await api(`/api/${encodeURIComponent(name)}/seg/${i}/${s.j}`);
+      const base = `/api/${encodeURIComponent(name)}/seg/${i}/${s.j}`;
+      let off = raw.length;
+      let r = await api(`${base}?off=${off}`);
+      if (!r.error && r.n < off){ off = 0; r = await api(base); }   // step rewound (trim/clear) -> full refetch
       body.classList.remove('dim');
-      body.innerHTML = r.error ? '⚠ ' + esc(r.error) : md(r.content);
+      if (r.error){ body.innerHTML = '⚠ ' + esc(r.error); loaded = n; return; }
+      raw = (off ? raw : '') + (r.content || '');
+      body.innerHTML = md(raw);
       loaded = n;
     } catch(e){} finally { busy = false; }
   };

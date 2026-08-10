@@ -15,32 +15,107 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `d8d90eef8c37cb1ea9aae078a3d099a7d7a759df`
+Locked commit: `308153b1c91401a892401dd896e548e587506cc9`
 
-- Tree hash: `d457b6e8b02c7895504c888da5e7ee064fb43f1a`
+- Tree hash: `6533522b7858869ef93590521466cf3ffdf4aeb7`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-08-03
-- Shipped in: `v0.4.2` (2026-08-03) — audited and released the same day
+- Date audited: 2026-08-10
+- Shipped in: not yet shipped — latest release still carries `d8d90ee`
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `4086d5c858b90e10eb24a106ea3c41ac729bc00e`
-  (tree `3ce40434f799347e2ba6a9d07616bc29739a8162`)
-- Delta (`4086d5c..d8d90ee` = 20 commits): 20 files, ~971 insertions /
-  ~137 deletions. Roughly two thirds of the diff is upstream's own frontends
-  (`stapp.py` +299, new `frontends/hub.py` + `hub.html` WS peer hub,
-  `conductor.*`, `desktop/static/app.js`, `wechatapp.py`, `model_cmd.py`) plus
-  WeChat QR asset churn — all inert on Galley's path. Engine-core delta is
-  `llmcore.py` (+78), `agentmain.py`, `ga.py`, and `agent_loop.py`.
+- Previous baseline: `d8d90eef8c37cb1ea9aae078a3d099a7d7a759df`
+  (tree `d457b6e8b02c7895504c888da5e7ee064fb43f1a`)
+- Delta (`d8d90ee..308153b` = 15 commits): 20 files, ~1661 insertions /
+  ~305 deletions. Roughly 90% of the diff is upstream's own frontends and is
+  inert on Galley's path: the new P2P stack (`frontends/p2p_ws_client.py`
+  +1045, `hub_p2p.py` +103), hub iteration (`hub.py` +103, `hub.html`),
+  `stapp.py` (297), `desktop_pet_v2.pyw`, the community desktop app
+  (`frontends/desktop/**`), and the TUI trio. Engine-core delta is only
+  `llmcore.py` (28), `ga.py` (12), `agentmain.py` (+7), and
+  `assets/tools_schema.json` (2).
 - Result: no bridge protocol or dependency break; `pyproject.toml` did not
-  change at all. Patch-stack rebase had one real conflict (`0007`
-  `llmcore.py`: upstream's `retry-after` cap rewrote the same
-  `_stream_with_retry` `err =` line as the codex 429 quota enrichment — both
-  kept, enrichment first so it mutates `body` before upstream's format
+  change at all, and `agent_loop.py` had zero diff. Patch-stack rebase had
+  one real conflict (`0007` `llmcore.py`: upstream raised the
+  `BaseSession.__init__` context defaults on the same line the codex
+  credential block is inserted before — resolved by keeping the codex lines
+  and adopting upstream's new defaults, since `0007` has no stake in
+  `context_win`).
+- Devlog: [GA upstream upgrade d8d90ee -> 308153b](./devlog/2026-08-10-ga-upstream-upgrade-d8d90ee-to-308153b.md)
+
+New in the `d8d90ee` -> `308153b` range:
+
+- `llmcore.py` — **rate-limit errors now raise `requests.ConnectionError`**
+  from `_parse_claude_sse`'s `error` branch when the SSE error message matches
+  `concurrency|retry later|overloaded|rate.?limit`, routing them into
+  `_stream_with_retry`'s network retry instead of surfacing as an application
+  -layer `!!!Error:` string. Lands two lines above patch `0017`'s
+  `message_delta` hunk; no semantic interaction, but it is why the zero-context
+  hunks had to be re-derived rather than hand-shifted.
+- `llmcore.py` — retry backoff slowed: `_stream_with_retry`'s `_delay` base
+  factor `1.5 → 3.0`, and `MixinSession._base_delay` default `1.5 → 3.0`.
+  Longer waits between retries on a flaky provider.
+- `llmcore.py` — context defaults raised: `default_context_win` `30000 →
+  35000`, `default_cut_msg_interval` `5 → 7` (deepseek `70000 → 80000`), and
+  `trim_messages_history`'s `cut_msg_interval` fallback `5 → 7`. Trimming and
+  tag compression both kick in later. This is the line `0007` conflicted on.
+  Not a contract change, but long-session behavior is observably different —
+  watch during dogfood.
+- `llmcore.py` — `_record_usage` gained an `_i()` null-coercion helper
+  (`None → 0`) for every usage field across all three API modes. From
+  `a1e470b` ("llmcore: null-safe usage"), fixing a `TypeError` when a provider
+  sends explicit `null`. **Does not supersede patch `0017`**: `_i` is type
+  safety on values that arrive, while `0017` covers the compat-provider case
+  where the input side never arrives at `message_start` at all. Verified by
+  reading `a1e470b`; `0017` stays.
+- `agentmain.py` — `hub.connect()` wired into the `--reflect` branch, so a
+  reflect script becomes an addressable hub peer accepting `put_task`. **Inert
+  on Galley's path and structurally unreachable**: the call sits inside
+  `if __name__ == '__main__':`, and Galley imports `agentmain` as a module
+  (`runner/workbench_bridge.py:638`) rather than executing it. Worth a guard at
+  the next upgrade — see the hub note below.
+- `ga.py` — prompt-tag renames only: `[System]` → `[ERROR]` on the three
+  `_retry_or_exit` strings, `[SYSTEM]` → `[TIPS]` on the summary reminder, and
+  the turn-13 / turn-31 checkpoint nudges → `[DANGER]`. Galley greps none of
+  these strings (verified); pure prompt tuning.
+- `assets/tools_schema.json` — `code_run`'s `script` description simplified to
+  `"script"`. Inert: Galley reads `assets/tool_usable_history.json`, not this
+  file.
+- `memory/memory_management_sop.md` — L3 guidance now says not to store
+  project-specific facts. Regenerated into the state seed, missing-only, so
+  existing user memory is untouched.
+- `frontends/hub.py` + new `hub_p2p.py` / `p2p_ws_client.py` — upstream's WS
+  peer hub grew a **P2P phone-pairing sidecar**: bus/panel ports split with a
+  token-authed panel, a 9-digit 2-minute pairing code exchanged for a durable
+  room UUID, and the panel's `/api/` prefix exported to a phone over WebRTC
+  (falling back to an encrypted relay at a hard-coded third-party signal
+  server). Plus incremental polling (`since=` skeleton delta, `nt` rewind
+  marker, `seg ?off` tail fetch, `psig` peer-list delta) to cut relay traffic.
+  All inert on Galley's path — TCP/HTTP/outbound tunnels are outside Rule 2 —
+  but this is now a standing product-direction signal, not a curiosity: hub is
+  a federated peer bus with `put`/`abort` on any attached agent, which would
+  bypass Core's audit and confirmation gates if a Galley session ever attached
+  to it. The isolation today is structural but incidental; a `grep -rn
+  "hub.connect" managed-ga/code/` guard at each upgrade is the cheap defense.
+
+Carried forward from the `4086d5c` -> `d8d90ee` range (2026-08-03):
+
+- Previous-previous baseline: `4086d5c858b90e10eb24a106ea3c41ac729bc00e`
+  (tree `3ce40434f799347e2ba6a9d07616bc29739a8162`)
+- Delta (20 commits): 20 files, ~971 insertions / ~137 deletions. Two thirds
+  upstream frontends (`stapp.py` +299, the brand-new `frontends/hub.py` +
+  `hub.html` WS peer hub, `conductor.*`, `desktop/static/app.js`,
+  `wechatapp.py`, `model_cmd.py`) plus WeChat QR asset churn — all inert.
+  Engine-core delta was `llmcore.py` (+78), `agentmain.py`, `ga.py`,
+  `agent_loop.py`.
+- Result: no bridge protocol or dependency break. Patch-stack rebase had one
+  real conflict (`0007` `llmcore.py`: upstream's `retry-after` cap rewrote the
+  same `_stream_with_retry` `err =` line as the codex 429 quota enrichment —
+  both kept, enrichment first so it mutates `body` before upstream's format
   consumes it).
 - Devlog: [GA upstream upgrade 4086d5c -> d8d90ee](./devlog/2026-08-03-ga-upstream-upgrade-4086d5c-to-d8d90ee.md)
 
-New in the `4086d5c` -> `d8d90ee` range:
+Detail for that range:
 
 - `llmcore.py` — abort responsiveness: `_stream_with_retry` stores the live
   response on `sess.active_response` and skips retrying when

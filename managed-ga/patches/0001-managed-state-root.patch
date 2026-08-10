@@ -29,7 +29,7 @@ diff --git a/agentmain.py b/agentmain.py
 @@ -242 +245 @@ if __name__ == '__main__':
 -        agent.task_dir = d = os.path.join(script_dir, f'temp/{args.task}'); nround = ''
 +        agent.task_dir = d = state_path('temp', args.task); nround = ''
-@@ -300 +303 @@ if __name__ == '__main__':
+@@ -307 +310 @@ if __name__ == '__main__':
 -                log_dir = os.path.join(script_dir, 'temp/reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 +                log_dir = state_path('temp', 'reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 diff --git a/assets/ga_ultraplan.py b/assets/ga_ultraplan.py
@@ -83,7 +83,7 @@ diff --git a/ga.py b/ga.py
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1002 +1002,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
+@@ -1010 +1010,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
 -        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'temp/model_responses/model_responses_{os.getpid()}.txt')
 +        state_root = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or os.path.dirname(os.path.abspath(__file__)))
 +        log_path = os.path.join(state_root, f'temp/model_responses/model_responses_{os.getpid()}.txt')

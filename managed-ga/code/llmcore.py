@@ -104,7 +104,7 @@ def trim_messages_history(history, sess):
     target = int(cap * getattr(sess, 'trim_keep_rate', 0.6))
     kp = sess.trim_keep_prefix
     def cost(ms): return sum(len(json.dumps(m, ensure_ascii=False)) for m in ms)
-    compress_history_tags(history, interval=getattr(sess, 'cut_msg_interval', 5))
+    compress_history_tags(history, interval=getattr(sess, 'cut_msg_interval', 7))
     STATS.update(ctx=(c := cost(history)), msgs=len(history)); print(f'[Debug] Current context: {c} chars, {len(history)} messages.')
     if c <= cap: return
     compress_history_tags(history, keep_recent=4, force=True)
@@ -230,6 +230,8 @@ def _parse_claude_sse(resp_lines):
         elif evt_type == "error":
             err = evt.get("error", {})
             emsg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            if re.search(r'concurrency|retry later|overloaded|rate.?limit', emsg, re.I):
+                raise requests.ConnectionError(emsg)  # 走 _stream_with_retry 网络重试，避免落到 ga 应用层
             warn = f"\n\n!!!Error: SSE {emsg}"; break
     if not warn:
         if not got_message_stop and not stop_reason: warn = "\n\n[!!! 流异常中断，未收到完整响应 !!!]"
@@ -381,18 +383,24 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
 
 def _record_usage(usage, api_mode):
     if not usage: return
+    # 上游常显式给 null；dict.get(k, 0) 遇 null 仍返回 None，后续加法会 TypeError
+    def _i(v, default=0):
+        try:
+            return default if v is None else int(v)
+        except (TypeError, ValueError):
+            return default
     if api_mode == 'responses':
-        cached = (usage.get("input_tokens_details") or {}).get("cached_tokens", 0)
-        inp = usage.get("input_tokens", 0); out = usage.get("output_tokens", 0)
+        cached = _i((usage.get("input_tokens_details") or {}).get("cached_tokens"))
+        inp = _i(usage.get("input_tokens")); out = _i(usage.get("output_tokens"))
         print(f"[Cache] input={inp} cached={cached}")
         if out: print(f"[Output] tokens={out}")
     elif api_mode == 'chat_completions':
-        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
-        inp = usage.get("prompt_tokens", 0); out = usage.get("completion_tokens", 0)
+        cached = _i((usage.get("prompt_tokens_details") or {}).get("cached_tokens"))
+        inp = _i(usage.get("prompt_tokens")); out = _i(usage.get("completion_tokens"))
         print(f"[Cache] input={inp} cached={cached}")
         if out: print(f"[Output] tokens={out}")
     elif api_mode == 'messages':
-        ci, cr, raw_inp = usage.get("cache_creation_input_tokens", 0), usage.get("cache_read_input_tokens", 0), usage.get("input_tokens", 0)
+        ci, cr, raw_inp = _i(usage.get("cache_creation_input_tokens")), _i(usage.get("cache_read_input_tokens")), _i(usage.get("input_tokens"))
         inp, cached, out = raw_inp + ci + cr, cr, 0
         print(f"[Cache] input={raw_inp} creation={ci} read={cr}")
     else: return
@@ -461,7 +469,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
     def _delay(resp, attempt):
         try: ra = float((resp.headers or {}).get("retry-after"))
         except: ra = None
-        return None if ra and ra > cap else max(0.5, ra or min(30.0, 1.5 * (2 ** attempt)))
+        return None if ra and ra > cap else max(0.5, ra or min(30.0, 3.0 * (2 ** attempt)))
     for attempt in range(sess.max_retries + 1):
         streamed = False
         try:
@@ -793,9 +801,9 @@ class BaseSession:
         self.galley_api_key_ref = cfg.get('galley_api_key_ref') or ''
         ipc = cfg.get('galley_credential_ipc')
         self.galley_credential_ipc = ipc if isinstance(ipc, dict) else None
-        default_context_win = 30000; default_cut_msg_interval = 5
+        default_context_win = 35000; default_cut_msg_interval = 7
         if 'deepseek' in self.model.lower():
-            default_context_win = 70000; default_cut_msg_interval = 25; self.trim_keep_rate = 0.3
+            default_context_win = 80000; default_cut_msg_interval = 25; self.trim_keep_rate = 0.3
         self.context_win = cfg.get('context_win', default_context_win)
         self.maxlen_multiplier = min(max(self.context_win / default_context_win * 0.75, 1.0), 3.0)
         self.cut_msg_interval = int(default_cut_msg_interval * self.maxlen_multiplier)
@@ -1283,7 +1291,7 @@ class MixinSession:
 
     def __init__(self, all_sessions, cfg):
         self._retries = cfg.get('max_retries', 3)
-        self._base_delay = cfg.get('base_delay', 1.5)
+        self._base_delay = cfg.get('base_delay', 3.0)
         self._spring_sec = cfg.get('spring_back', 300)
         selected = [all_sessions[i].backend if isinstance(i, int) else
                     next(s.backend for s in all_sessions if type(s) is not dict and s.backend.name == i)
