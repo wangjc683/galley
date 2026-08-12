@@ -132,6 +132,7 @@ px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 | `h4` | Newsreader medium 15.5px |
 | `ul` / `ol` | 标准缩进，`::marker` text-ink-muted |
 | `li` | 紧 paragraph 形态（list 内 `<p>` margin 0） |
+| `- [x]` 任务项 (GFM) | 0.92em 方框，选中填 `brand` + Check 图标，未选中 `border-line-strong` 空框；沿用 `ui/checkbox.tsx` 的视觉语言，`em` 尺寸随档位缩放。`li.task-list-item` 去掉圆点（否则圆点和方框两个标记并排），但只作用在任务项上——混合列表里的普通项保留圆点 |
 | 行内 `code` | mono 0.92em + bg-hover 浅底（pill，`box-decoration-clone` 保证换行不断裂）+ `text-code-ink` 暖褐（2026-08-12 定案，见下方「行内代码的暖色预算」） |
 | 块代码 ` ```python ` | 详见下方 Shiki 段 |
 | `blockquote` | 左 3px brand 竖线 + italic + ink-soft |

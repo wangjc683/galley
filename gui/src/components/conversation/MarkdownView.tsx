@@ -1,3 +1,4 @@
+import { Check } from "@phosphor-icons/react";
 import {
   Children,
   type CSSProperties,
@@ -183,6 +184,13 @@ const PROSE_BASE = cn(
   "[&_ol]:[margin-block:var(--conversation-block-gap)] [&_ol]:ml-5 [&_ol]:list-decimal",
   "[&_li]:[margin-block:calc(var(--conversation-block-gap)*0.3333)] [&_li::marker]:text-ink-muted",
   "[&_li>p]:my-0", // tight paragraphs inside list items
+  // Task lists (GFM). remark-gfm tags the item `.task-list-item` and emits
+  // an <input type=checkbox> inside it; the box itself is drawn by
+  // `COMPONENTS.input` below. All this rule does is drop the disc, because
+  // the item otherwise carries TWO markers — a bullet and a checkbox.
+  // Scoped to the item, not the list: a list can mix task and plain items,
+  // and the plain ones must keep their bullet.
+  "[&_li.task-list-item]:list-none",
   // Nested lists tighter.
   "[&_li>ul]:[margin-block:calc(var(--conversation-block-gap)*0.3333)] [&_li>ol]:[margin-block:calc(var(--conversation-block-gap)*0.3333)]",
   // Inline code — mono token, subtle pill background, warm code ink.
@@ -303,6 +311,37 @@ const COMPONENTS: Components = {
   },
   img({ src, alt }) {
     return <MarkdownImage src={src} alt={alt} />;
+  },
+  /**
+   * GFM task-list checkbox. remark-gfm emits a bare
+   * `<input type=checkbox disabled>`, which renders as the platform
+   * control — a system-blue box sitting in serif prose, in the wrong
+   * register and unaffected by the reading-size tiers.
+   *
+   * Drawn instead in the same visual language as `ui/checkbox.tsx` so a
+   * checkbox means one thing everywhere in the app, and sized in `em` so
+   * it tracks the reading tier. It is a span rather than a styled input
+   * because the tick has to be a child element; `role`/`aria-checked`
+   * carry the semantics the input was providing. Always disabled — agent
+   * output is a record of what happened, not a form.
+   */
+  input({ type, checked }) {
+    if (type !== "checkbox") return null;
+    return (
+      <span
+        role="checkbox"
+        aria-checked={checked ?? false}
+        aria-disabled="true"
+        className={cn(
+          "mr-[0.4em] inline-flex size-[0.92em] shrink-0 items-center justify-center rounded-sm border align-middle",
+          checked
+            ? "border-brand bg-brand text-ink"
+            : "border-line-strong bg-elevated text-transparent",
+        )}
+      >
+        <Check size="0.62em" weight="bold" />
+      </span>
+    );
   },
 };
 

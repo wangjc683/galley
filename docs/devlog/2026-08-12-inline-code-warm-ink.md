@@ -95,9 +95,13 @@ waku 的 `#E0A882` 几乎等于 Galley 的 `brand-strong #E2AE8D`。
 - ~~**间距节奏派生自单一数字**~~ → **已做**，见
   [markdown 纵向节奏](./2026-08-12-markdown-vertical-rhythm.md)。核实后发现
   这不只是整洁问题：间距不随字号档位缩放，调大字号时文档反而变挤。
-- **任务列表 checkbox**：`PROSE_BASE` 完全没有 checkbox 样式，
-  `- [x]` 在衬线正文里渲染成系统原生方块。waku 的几何可直接搬
-  （边长 0.92em、圆角 3、`(line_height - box_size)/2` 压到行中线）。
+- ~~**任务列表 checkbox**~~ → **已做**。实测确认比预想更糟：`ul` 拿到
+  `contains-task-list`、`li` 拿到 `task-list-item`，而 `[&_ul]:list-disc`
+  照样生效，所以渲染出来是 `• ☐ 已完成`——**圆点和系统原生方框两个标记并排**。
+  修法：`li.task-list-item` 去掉 marker（只作用在任务项，混合列表里的普通项
+  保留圆点），checkbox 走 `COMPONENTS.input` 覆写重画成 `ui/checkbox.tsx`
+  的视觉语言（0.92em `em` 尺寸随档位缩放，选中填 brand + Check 图标），
+  用 `role="checkbox"` + `aria-checked` 补回换掉 `<input>` 丢失的语义。
 - **增量解析**（waku `parser.rs` stable boundary）：Galley 是 20Hz 全文
   重解析，长回答 O(n²)。**先测再修**，节流已经压过一轮，收益不明。
 - **不要抄的**：waku 的字号/字重阶梯（h1 1.45×/BOLD，系统 sans 应用的做法，
