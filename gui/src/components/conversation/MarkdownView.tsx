@@ -303,6 +303,12 @@ const COMPONENTS: Components = {
     return <code className={className}>{children}</code>;
   },
   a({ href, children }) {
+    // No href = a link whose destination is still streaming, mended into
+    // place by `mendStreamingMarkdown` and stripped by `markdownUrlTransform`.
+    // It stays an `<a>` so the prose link styling applies and nothing shifts
+    // when the URL lands; without an href it is neither clickable nor
+    // focusable, which is the whole point of mending it early.
+    if (!href) return <a>{children}</a>;
     return (
       <a href={href} target="_blank" rel="noreferrer noopener">
         {children}

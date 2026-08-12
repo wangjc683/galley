@@ -40,6 +40,7 @@ import {
   cleanPartialContent,
   extractPreamble,
 } from "@/lib/ipc/ga-output-cleaning";
+import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { cn } from "@/lib/utils";
 import { useMessagesStore } from "@/stores/messages";
 import type {
@@ -288,7 +289,16 @@ export function MainView({
   // the typewriter cadence for perceived smoothness but only commits
   // a value to the markdown renderer at ~20 Hz, cutting parse work
   // by roughly 3×. Final + boundary values still flush promptly.
-  const markdownPartial = useMarkdownStream(typedPartial);
+  const throttledPartial = useMarkdownStream(typedPartial);
+  // Display-only repair of hanging code spans / link destinations. Applied
+  // here and nowhere else: settled turns render their raw source, so a marker
+  // that never actually closes flips once at the end instead of jittering the
+  // whole way. See `mendStreamingMarkdown` for what it covers and what it
+  // deliberately leaves alone.
+  const markdownPartial = useMemo(
+    () => mendStreamingMarkdown(throttledPartial),
+    [throttledPartial],
+  );
 
   // Conversation scroll behavior — sticky-bottom follow, the
   // scroll-to-bottom button, session-switch snap, stick-to-user-message,

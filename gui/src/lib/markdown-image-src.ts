@@ -1,6 +1,8 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { defaultUrlTransform } from "react-markdown";
 
+import { PENDING_LINK_HREF } from "@/lib/mend-streaming-markdown";
+
 // Pure src / path resolution for markdown images: recognise absolute
 // local paths (POSIX / Windows / UNC / file: URLs) that agents drop
 // into markdown, and convert them to Tauri asset URLs for preview.
@@ -13,6 +15,11 @@ export function markdownUrlTransform(
   key: string,
   node: { tagName?: string },
 ): string | null | undefined {
+  // A link whose URL is still streaming (see `mendStreamingMarkdown`). `null`
+  // drops the href entirely, which is the point: the anchor keeps its prose
+  // styling so nothing shifts when the real URL lands, but a half-typed
+  // address is not clickable.
+  if (value === PENDING_LINK_HREF) return null;
   if (
     key === "src" &&
     node.tagName === "img" &&

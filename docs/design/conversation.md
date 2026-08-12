@@ -146,6 +146,29 @@ px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 
 **视觉哲学**：每个 markdown 元素 reuse 现有 Newsreader / Inter / JetBrains-Mono token，不为 markdown 单独引入字号 ramp。整段对话读起来是一个 document，不是 stylesheet 拼贴。
 
+#### 流式回溯抖动（2026-08-12）
+
+流式输出时未闭合的 ``` `代码` ``` 和 `[文字](链接` 按字面渲染，闭合的瞬间标记
+字符消失、字体切换，**已经排好的文字被改写 → 段落在光标后面重排**。
+`mendStreamingMarkdown` 只对**流式 partial**（`MainView` 那一条路径）补合成
+闭合符；落定的 turn 渲染原文，所以真的永不闭合的标记在结束时诚实地翻一次，
+而不是全程抖。这个「显示态 / 落定态」的分离在 Galley 是白得的——两者本来就是
+两条渲染路径。
+
+只补**代码 span 和链接目标**，实测这两类占位移的 94%。强调（`**`）只占 6%
+却是复杂度的大头（CommonMark 定界符消解需要开定界符栈 + 欠闭合计数，补错了
+文字会先斜后粗地闪），性价比不成立，明确不做。表格（`| a | b |` 在分隔行到达
+前是段落）是 GFM 语法要求，补不出来，只能接受。
+
+链接补完**必须配 pending 哨兵**：`markdownUrlTransform` 把
+`galley:pending-link` 映射成 `null`，`href` 整个不出现——锚点仍匹配 `[&_a]`
+样式所以 URL 落定时零位移，但点不了。注意这修的是一个**已经存在**的问题：
+GFM 的 autolink literal 本来就会把半截 `https://exa` 变成活链接。
+
+回归测试 `mend-streaming-markdown.stream.test.tsx` 逐前缀渲染并统计
+「新一帧不是旧一帧纯追加」的次数：落地时 16 次 / 位移 230 字符 → 6 次 /
+位移 20 字符（**次数降 63%，位移降 91%**）。
+
 #### 纵向节奏（2026-08-12）
 
 markdown 的每一个块间距都是 `--conversation-block-gap` 的倍数，该基数随
