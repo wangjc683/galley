@@ -146,24 +146,46 @@ V1.0 优先服务：
 
 - v0.1 七件事的所有 acceptance criteria 仍然必须通过（multi-session / Tool Timeline / Approval / Session 历史 / Session 状态展示 / LLM 切换 / GA Attach）
 
+> **2026-08-12 校准**：下面两份清单原本以 v0.2 为锚点写就，到 `v0.4.6` 已
+> 出现漂移——`Follow-up Queue` 早已发运，`自动安装 / 升级 / GA` 在 managed
+> runtime 上恰恰相反。本次只订正**事实与死锚点**，不调整任何一条非目标的
+> 强度：原文写「留 v0.6++」的仍然留 v0.6++。逐条核对记录见
+> [devlog](./devlog/2026-08-12-prd-non-goals-reconcile.md)。
+>
+> 维护提示：非目标一旦发运，**删除它并在下方「已发运，不再是非目标」里留一行**，
+> 不要原地改写——否则读者无法区分「本来就没说过」和「说过又反悔」。
+
 ### 6.2 V1.0 Non-goals
 
-- **远程认证 / token 系统**：永远 localhost only（宪法）
-- **Supervisor 注册 / capability 声明 / permission system**：v0.2 不做，留 v0.6++
+- **远程认证 / token 系统**：永远 localhost only（宪法 Rule 2）
+- **Supervisor 注册 / capability 声明 / permission system**：仍未做，留 v0.6++
 - **Galley 作 chat platform**：不存 Supervisor ↔ human 对话，只存动作 + reason
-- **多 agent runtime 同时支持**：v0.2 仍是 GA only。架构允许将来扩展，但 v0.2 不实施
-- **Web / mobile / remote 前端**：不在 v0.2
+  （宪法 Rule 4）
+- **多 agent runtime 同时支持**：仍是 GA only。架构允许将来扩展，尚未实施
+- **Web / mobile / remote 前端**：仍未做
 - **Telemetry / 用量统计**：永远 no telemetry
-- **Homebrew tap / 包管理**：v0.2 不做，v0.6+ 候选
+- **Homebrew tap / 包管理**：仍未做，v0.6+ 候选
 
 ### 6.3 继承自 v0.1 的 Non-goals（仍然成立）
 
-- 自动安装 / 升级 / 修复 GA
-- 完整 IDE（文件树、编辑器、git diff）
+- **自动安装 / 升级 / 修复外部 attach 的 GA**——仅限 attach 模式，由宪法
+  Rule 1 兜底（不碰用户自己的 GA checkout）。**managed runtime 不在此列**：
+  Galley 自 v0.2.0 起就随包发运并升级自己的内置 GA，那是产品引擎，见
+  [managed GA runtime](./managed-ga-runtime/README.md)
+- 完整 IDE（文件树、编辑器、git diff）——tool call 的 `PatchView` diff 不算，
+  它是工具结果的呈现，不是文件浏览 / 编辑面
 - Context Window 占用展示
-- Follow-up Queue
 - Artifacts 一等公民
 - 完整 tracing / 多人审批 / 复杂 policy / RBAC
+
+### 6.3a 已发运，不再是非目标
+
+一条非目标发运后从上面移除并记在这里，好让读者区分「本来就没说过」和
+「说过又反悔」。
+
+| 原非目标 | 发运版本 | 实际形态 |
+|---|---|---|
+| Follow-up Queue | `v0.4.6`（2026-08-12） | 会话消息队列：运行中 / stopping 中发送默认排队，`run_complete` 自动发出，chips 可取消或取回编辑，一键插队；CLI 增 `dispatch: "queued"` 与 `--jump`（additive）。见 [devlog](./devlog/2026-08-12-session-message-queue.md) |
 
 ### 6.4 Goal 模式定位（2026-07-06 定案）
 
