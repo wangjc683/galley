@@ -41,11 +41,12 @@ Key directories:
 
 ## Common Commands
 
-From repo root unless noted:
+From repo root unless noted. The Cargo workspace root is `core/` (there is no
+root `Cargo.toml`), hence `--manifest-path`:
 
 ```bash
-cargo check --workspace
-cargo test --workspace
+cargo check --manifest-path core/Cargo.toml --workspace
+cargo test --manifest-path core/Cargo.toml --workspace
 pnpm --dir gui typecheck
 pnpm --dir gui lint
 pnpm --dir gui build

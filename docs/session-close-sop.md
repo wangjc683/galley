@@ -62,8 +62,8 @@ documentation diff. Do not commit or close the session unless asked.
    - Add Rust checks when Rust or CLI code changed:
 
      ```bash
-     cargo check --workspace
-     cargo test --workspace
+     cargo check --manifest-path core/Cargo.toml --workspace
+     cargo test --manifest-path core/Cargo.toml --workspace
      ```
 
    - When docs changed, run the docs link gate (CI runs it too):

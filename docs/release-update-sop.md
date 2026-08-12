@@ -61,7 +61,9 @@ Replace the example value before every release.
 - [ ] Local verification passed for the change scope:
   - `pnpm --dir gui typecheck`
   - `pnpm --dir gui lint`
-  - `cargo check --workspace` or the narrower Rust check justified by scope
+  - `cargo check --manifest-path core/Cargo.toml --workspace` (the workspace
+    root is `core/`, not the repo root) or the narrower Rust check justified
+    by scope
 - [ ] If the release touches managed GA, the GA baseline, or bundled
       dependencies, the bundled runtime gate passed:
   - `./scripts/bundle-python.sh <target-arch>`

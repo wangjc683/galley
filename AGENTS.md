@@ -187,13 +187,16 @@ what to read. The highest-frequency routes:
 - Node tooling is pnpm — the `packageManager` field pins it and CI runs it.
   `npm` / `yarn` ignore `pnpm-lock.yaml` and can resolve a different tree, so
   use `pnpm --dir gui …` (not `npm`) for every gui command below.
+- The Cargo workspace root is `core/`, not the repo root — there is no root
+  `Cargo.toml`. Pass `--manifest-path core/Cargo.toml` (the cargo counterpart
+  of `pnpm --dir gui`) so every command below runs from the repo root.
 - For release or contract changes, broaden verification.
 
 Common verification:
 
 ```bash
-cargo check --workspace
-cargo test --workspace
+cargo check --manifest-path core/Cargo.toml --workspace
+cargo test --manifest-path core/Cargo.toml --workspace
 pnpm --dir gui typecheck
 pnpm --dir gui lint
 git diff --check
