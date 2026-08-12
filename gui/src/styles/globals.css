@@ -68,6 +68,14 @@
      in the same family as inline code (--color-hover) so code reads as
      one embedded medium rather than a lighter-than-paper card. */
   --color-code-surface: #f2f1f0;
+  /* Inline-code ink (DESIGN.md §4.3, adjudicated 2026-08-12). Deliberately
+     a HUE step off the prose ink, not a lightness step: inline code marks
+     "a different kind of object" (a path, a version, a command), never
+     "less important". Warm-brown, brand-adjacent but darker and more
+     saturated than --color-brand-strong so it stays distinguishable from
+     a link. Contrast on paper ≈5.6:1 — below body ink on purpose; the
+     hue does the work, so the luminance does not have to. */
+  --color-code-ink: #9a5528;
 
   /* --- borders / dividers (named "line" to avoid border-border) --- */
   --color-line: #e8e7e5;
@@ -305,6 +313,10 @@ html[data-theme="dark"] {
      inline code's --color-hover relationship in dark) so the block
      separates as a distinct code medium without a harsh outline. */
   --color-code-surface: #201d1a;
+  /* Dark inline-code ink: same hue, flipped for a dark ground — a light
+     warm tan rather than a dark warm brown, so the hue signal survives
+     without the glare a saturated light-on-dark would carry. */
+  --color-code-ink: #e0a882;
 
   --color-line: #312d28;
   --color-line-strong: #48413b;

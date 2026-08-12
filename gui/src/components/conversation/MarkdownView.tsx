@@ -160,15 +160,34 @@ const PROSE_BASE = cn(
   "[&_li>p]:my-0", // tight paragraphs inside list items
   // Nested lists tighter.
   "[&_li>ul]:my-1 [&_li>ol]:my-1",
-  // Inline code — mono token, subtle pill background.
-  "[&_:not(pre)>code]:rounded-[4px] [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-px [&_:not(pre)>code]:font-mono [&_:not(pre)>code]:text-[0.86em] [&_:not(pre)>code]:text-ink-soft",
+  // Inline code — mono token, subtle pill background, warm code ink.
+  //
+  // The ink is a HUE step off the prose, not a lightness step (token
+  // rationale in globals.css; verdict in devlog 2026-08-12). Inline code
+  // in a coding-agent answer is overwhelmingly paths, filenames, versions
+  // and commands — the things the reader most needs to pick out and copy.
+  // The pre-2026-08-12 treatment (`ink-soft` at 0.86em) demoted exactly
+  // those: a line carrying seven filenames read as one grey smear. Value
+  // scales with density, and density is the normal case here.
+  //
+  // `box-decoration-clone` keeps the wash whole when a span soft-wraps —
+  // without it the continuation row loses its horizontal padding and the
+  // rounded ends, which shows up constantly on long paths.
+  "[&_:not(pre)>code]:rounded-[4px] [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:box-decoration-clone [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-px [&_:not(pre)>code]:font-mono [&_:not(pre)>code]:text-[0.92em] [&_:not(pre)>code]:text-code-ink",
   // Block code lives in CodeBlock component (renders pre + own
   // styles); we keep a fallback for any pre that escapes.
   "[&_pre]:my-3.5",
   // Blockquotes — apricot-bar accent, italic, muted.
   "[&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-brand [&_blockquote]:pl-3.5 [&_blockquote]:font-[var(--galley-prose-serif)] [&_blockquote]:italic [&_blockquote]:text-ink-soft",
-  // Links.
-  "[&_a]:text-brand-strong [&_a]:underline [&_a]:underline-offset-[3px] [&_a]:decoration-brand-strong/40 [&_a:hover]:decoration-brand-strong",
+  // Links — body ink + a muted underline, brand only on hover.
+  //
+  // The warm budget in a paragraph is spent on inline code (above), so
+  // links give theirs up: two warm registers in one paragraph and the
+  // reader cannot tell which one is clickable. The underline still marks
+  // the link, and it is the affordance that actually carries the meaning —
+  // color was redundant with it. Frequency settles the trade: an agent
+  // answer holds many paths and few external links.
+  "[&_a]:text-ink [&_a]:underline [&_a]:underline-offset-[3px] [&_a]:decoration-ink-muted [&_a:hover]:text-brand-strong [&_a:hover]:decoration-brand-strong",
   // Tables — GFM extension. The table component wraps them in an
   // overflow container; cell styling stays here so the typography
   // remains centralized.

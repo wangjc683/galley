@@ -131,10 +131,10 @@ px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 | `h4` | Newsreader medium 15.5px |
 | `ul` / `ol` | 标准缩进，`::marker` text-ink-muted |
 | `li` | 紧 paragraph 形态（list 内 `<p>` margin 0） |
-| 行内 `code` | mono 0.86em + bg-hover 浅底（pill） |
+| 行内 `code` | mono 0.92em + bg-hover 浅底（pill，`box-decoration-clone` 保证换行不断裂）+ `text-code-ink` 暖褐（2026-08-12 定案，见下方「行内代码的暖色预算」） |
 | 块代码 ` ```python ` | 详见下方 Shiki 段 |
 | `blockquote` | 左 3px brand 竖线 + italic + ink-soft |
-| `a` | text-brand-strong + 1px 下划线 + 安全 _blank |
+| `a` | text-ink + ink-muted 1px 下划线，hover 才转 brand-strong + 安全 _blank（暖色预算让给行内代码，2026-08-12） |
 | `table` (GFM) | `overflow-x-auto` 容器 + border-collapse + th `bg-surface` + 单元格 padding 12px×8px |
 | `hr` | 1px line + my-5 |
 | `strong` | font-medium（正文 normal 400，strong 500，一档可见加粗） |
@@ -143,6 +143,18 @@ px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 | `![alt](url)` | `https://` 与绝对本地 raster 图片（png / jpg / jpeg / webp / gif）内联预览；本地路径支持 macOS/Linux 绝对路径、Windows drive path、`file://`；相对路径、`http://`、`data:`、`svg`、加载失败降级为图片链接 pill。首次解码时记录 natural 尺寸（模块级缓存，按 src 键），此后每次渲染带 `width`/`height` 属性——浏览器解码前即预留最终盒子，回访转录时图片不再 pop-in 推挤下方内容（2026-07-15） |
 
 **视觉哲学**：每个 markdown 元素 reuse 现有 Newsreader / Inter / JetBrains-Mono token，不为 markdown 单独引入字号 ramp。整段对话读起来是一个 document，不是 stylesheet 拼贴。
+
+#### 行内代码的暖色预算（2026-08-12 定案）
+
+底色一直是 `--color-hover`，没变；变的是**用什么维度把行内代码和正文区分开**。
+
+- **色相区分，不是明度降级**。2026-08-12 之前行内代码是 `ink-soft` + 0.86em——比正文更淡更小，读作"这个不太重要"。但 coding agent 回答里的行内代码几乎全是**路径 / 文件名 / 版本号 / 命令**，恰恰是读者最需要认清和复制的内容。改为 `--color-code-ink` 暖褐（浅 `#9A5528` / 深 `#E0A882`）+ 0.92em：亮度对比反而低于正文（纸上约 5.6:1 vs 正文 15.7:1），**靠色相而非亮度承载区分**，读作"另一类对象"。
+- **收益随密度放大**。单个 token 差别不大；一行七个文件名时，暖色让它变成可扫描清单，`ink-soft` 会糊成一片灰。这才是本次改动的真实场景。
+- **暖色预算是零和的，链接让位**。同一段里两种暖色，读者分不清哪个能点。链接改为 `text-ink` + `ink-muted` 下划线，hover 才转 `brand-strong`——下划线本来就是承载可点性的 affordance，颜色是冗余的。频率决定分配：agent 回答里路径多、外链少。
+- **`box-decoration-clone` 必须带着**。长路径经常软换行，没有它续行会丢掉横向 padding 和圆角。
+
+参考来源与三变体实测过程见
+[devlog 2026-08-12](../devlog/2026-08-12-inline-code-warm-ink.md)。
 
 #### 代码块语法高亮（Shiki）
 

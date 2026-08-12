@@ -46,6 +46,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | `--color-elevated` | `bg-elevated` | `#FFFFFF` | 浮起卡片（Health Check / Error / Command Palette） |
 | `--color-chrome` | `bg-chrome` | `#EFEEEC` | Sidebar / 双栏 chrome，比 app 沉一档（「明度即抬升」在 chrome 倒置）。2026-08-05 由 `#F4F3F1` 加深，见下方「Chrome 下沉量」。**勿复用给 cards / insets**——舞台后退语义，随该关系重调而移动 |
 | `--color-code-surface` | `bg-code-surface` | `#F2F1F0` | 块代码底：比 app 深、与 inline code（`--color-hover`）同族，代码读作嵌入媒介而非浮起卡片 |
+| `--color-code-ink` | `text-code-ink` | `#9A5528` | 行内代码文字（深色 `#E0A882`）。相对正文墨是**色相**一步、不是明度一步——行内代码标记「另一类对象」（路径 / 版本 / 命令），不是「不太重要」。比 `brand-strong` 更深更饱和以便与链接区分；对比度约 5.6:1（低于正文墨，故意——色相在做功） |
 | `--color-overlay` | `bg-overlay` | `rgba(31,27,23,0.4)` | Command Palette / modal 遮罩 |
 
 #### Elevation 不倒置（系统规范）
