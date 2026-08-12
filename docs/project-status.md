@@ -10,12 +10,11 @@ live in [refactor](./archive/refactor/README.md).
 ## Current Target
 
 - Package version: `0.4.6`.
-- Git tag / GitHub Release: `v0.4.6` is being cut (2026-08-12); `v0.4.5` is
-  the last published stable release (tagged at `b27d60ee` on 2026-08-10).
+- Git tag / GitHub Release: `v0.4.6` is the current published stable release
+  (tagged at `311fc8df` on 2026-08-12, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.5` until
-  `v0.4.6` is published and promoted. `beta` is kept as a legacy alias for
-  older builds.
+- Release tier: stable patch; default update channel points at `v0.4.6`.
+  `beta` is kept as a legacy alias for older builds.
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
@@ -113,18 +112,13 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.6` is **being cut** (2026-08-12): version bumped, all local release
-gates green, tag pushed, awaiting the `release.yml` draft → JC install smoke
-→ publish → stable-channel promotion. Until that completes, `v0.4.5` remains
-the live stable release and the channel still points at it.
-
-`v0.4.5` was published and promoted as the live stable release (2026-08-10).
-The default `updates/stable/latest.json` channel points at `v0.4.5`, with the
+`v0.4.6` is published and promoted as the live stable release (2026-08-12).
+The default `updates/stable/latest.json` channel points at `v0.4.6`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. Both were verified with `--cache-bust` across all three
 platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
 through in one draft cut; JC's install smoke passed on the first build.
-`v0.4.4` (2026-08-07) went through the same path and is now superseded.
+`v0.4.5` (2026-08-10) went through the same path and is now superseded.
 
 The Windows Alt+Tab caret restore (issue #13's Windows half) ships as a
 documented known limitation. The investigation is **shelved behind the
@@ -175,7 +169,7 @@ durable content moved into devlog
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.6 stable patch is being cut; v0.4.5 remains the promoted stable release until publish + promotion complete | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.6 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Locked to audited upstream `308153b` (audited 2026-08-10, shipped in `v0.4.5` the same day) (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
