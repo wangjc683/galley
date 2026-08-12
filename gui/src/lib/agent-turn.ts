@@ -21,7 +21,7 @@
 // The round-trip invariant "live turn === restored turn for the same
 // data" is pinned by agent-turn.test.ts.
 
-import { settledToolStatus } from "@/lib/tool-outcome";
+import { settledToolStatus, toolErrorDisplay } from "@/lib/tool-outcome";
 import type { AgentTurn, ConversationToolEvent } from "@/types/conversation";
 
 /** Loosest common shape of a tool call: the live path's typed IPC
@@ -58,15 +58,23 @@ export function toolEventsFromRaw(
       (typeof result?.toolUseId === "string" && result.toolUseId) ||
       (typeof tc.toolUseId === "string" && tc.toolUseId) ||
       `${idPrefix}${i}`;
+    // Both paths describe settled turns: turn_end is the
+    // post-completion signal, and a persisted row is by definition
+    // settled. Denials and GA error envelopes are detected from the
+    // result payload (lib/tool-outcome.ts); everything else fades
+    // into the document as "success-historical".
+    const status = settledToolStatus(result?.content);
+    const error =
+      status === "failed-historical" ? toolErrorDisplay(result?.content) : null;
     return {
       id,
       name: typeof tc.toolName === "string" ? tc.toolName : "(unknown)",
-      // Both paths describe settled turns: turn_end is the
-      // post-completion signal, and a persisted row is by definition
-      // settled. Denials are detected from the result payload Galley's
-      // own handler wrote (lib/tool-outcome.ts); everything else fades
-      // into the document as "success-historical".
-      status: settledToolStatus(result?.content),
+      status,
+      // Headline-first error rendering (#22): the one-line cause rides
+      // the callout's summary slot (collapsed lead + expanded lead),
+      // the decoded body replaces the raw-envelope preview.
+      summary: error?.headline,
+      errorDetail: error?.detail,
       args: (tc.args as Record<string, unknown>) ?? {},
       resultPreview: previewFromContent(result?.content),
     };

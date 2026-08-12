@@ -1130,6 +1130,7 @@ async fn continue_goal_worker_slot(
                 goal.id, slot.worker_index
             )
         })),
+        false,
     )
     .await?;
     slot.wave = next_wave;
@@ -1355,6 +1356,7 @@ async fn send_goal_worker_protocol_reminders(
                     goal.id, slot.worker_index
                 )
             })),
+            false,
         )
         .await?;
         slot.baseline.reminder_sent = true;

@@ -20,6 +20,7 @@ pub mod managed_model_config;
 pub mod managed_model_probe;
 mod managed_prompt;
 pub mod managed_runtime;
+pub mod message_queue;
 pub mod migration_backup;
 pub mod notify;
 pub mod path_install;
@@ -163,6 +164,10 @@ pub fn run() {
             clear_session_unread,
             session_message_rows,
             persist_user_message,
+            queue_or_dispatch_user_message,
+            queue_jump_message,
+            queue_remove_message,
+            session_queue_snapshot,
             persist_assistant_message,
             delete_empty_new_sessions,
             delete_demo_sessions,

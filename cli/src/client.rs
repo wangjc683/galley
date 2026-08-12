@@ -227,6 +227,7 @@ mod tests {
             content: "hello".into(),
             supervisor: None,
             reason: None,
+            jump: false,
         }
     }
 

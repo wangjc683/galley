@@ -34,6 +34,12 @@ pub struct SessionSendArgs {
     pub supervisor: Option<String>,
     #[serde(default)]
     pub reason: Option<String>,
+    /// Jump the queue (galley#19): when the target session's run is
+    /// open, abort it and run this message first instead of waiting at
+    /// the back. No effect on an idle session. Additive since v1;
+    /// skipped when false so the legacy wire shape is unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub jump: bool,
 }
 socket_command!(SessionSendArgs, "session.send");
 
@@ -284,6 +290,7 @@ mod legacy_equivalence {
                 content: "hello".into(),
                 supervisor: Some("sup".into()),
                 reason: None,
+                jump: false,
             },
             json!({"sessionId": "s1", "content": "hello", "supervisor": "sup", "reason": null}),
         );

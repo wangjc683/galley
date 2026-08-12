@@ -16,6 +16,7 @@ import { ComposerDropOverlay } from "@/components/conversation/ComposerDropOverl
 import { ComposerFooterHint } from "@/components/conversation/ComposerFooterHint";
 import { ComposerGoalControls } from "@/components/conversation/ComposerGoalControls";
 import { ComposerImageStrip } from "@/components/conversation/ComposerImageStrip";
+import { ComposerQueueStrip } from "@/components/conversation/ComposerQueueStrip";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
 import {
   LLMPill,
@@ -41,6 +42,8 @@ import { goalPillLabel } from "@/lib/goals";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { isSideQuestion } from "@/lib/side-question";
 import { cn } from "@/lib/utils";
+import { useQueueStore } from "@/stores/queue";
+import { useSessionsStore } from "@/stores/sessions";
 import type { GoalBrief } from "@/types/goal";
 
 import type {
@@ -114,8 +117,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       draftKey && value === undefined ? readComposerDraft(draftKey) : undefined,
     );
     const [internal, setInternal] = useState(initialDraft?.text ?? "");
-    const [showByTheWayRequiredHint, setShowByTheWayRequiredHint] =
-      useState(false);
     const isControlled = value !== undefined;
     const text = isControlled ? value : internal;
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -280,7 +281,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const next = e.target.value;
       if (!isControlled) setInternal(next);
-      if (showByTheWayRequiredHint) setShowByTheWayRequiredHint(false);
       onChange?.(next);
     };
 
@@ -331,6 +331,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     const hasText = text.trim().length > 0;
     const hasSendableContent = hasText || hasPendingImages;
+
+    // Outbound queue for the active session (galley#19): rendered as
+    // chips above the composer box. Read directly from the stores —
+    // the Composer is keyed per session, and threading these two reads
+    // through every host (MainView / EmptyState) buys no reuse: the
+    // empty screen has no active session and renders no strip.
+    const activeSessionId = useSessionsStore((s) => s.activeSessionId);
+    const queueItems = useQueueStore((s) =>
+      activeSessionId ? (s.bySession[activeSessionId] ?? EMPTY_QUEUE) : EMPTY_QUEUE,
+    );
 
     const {
       canShowGoalEntry,
@@ -383,14 +393,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         ? "" // the ghost overlay occupies the placeholder's visual slot
         : (placeholder ?? copy.composer.askAnything);
 
-    useEffect(() => {
-      if (!showByTheWayRequiredHint) return;
-      const timer = window.setTimeout(() => {
-        setShowByTheWayRequiredHint(false);
-      }, 1600);
-      return () => window.clearTimeout(timer);
-    }, [showByTheWayRequiredHint]);
-
     const handleSubmit = () => {
       const expanded = expandComposerPlaceholders(text);
       const trimmed = expanded.trim();
@@ -399,11 +401,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         onConfigureModels?.();
         return;
       }
-      // Allow /btw through stopMode; everything else stays gated.
-      if (stopMode && !sideQuestionStaged) {
-        setShowByTheWayRequiredHint(true);
-        return;
-      }
+      // No stopMode gate since the message queue (galley#19/#20):
+      // onSubmit's owner (useMessageSend) routes a mid-run send into
+      // Core's queue. /btw keeps its immediate side-question path there
+      // too; images are toast-blocked there and keep the draft.
       if (effectiveGoalArmed) {
         if (hasPendingImages) {
           onImageBlocked?.("goal");
@@ -444,6 +445,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     return (
       <>
+        {activeSessionId && (
+          <ComposerQueueStrip
+            sessionId={activeSessionId}
+            items={queueItems}
+            onRefill={(t) => {
+              applyComposerText(t, { clearImagesAfterPrefill: false });
+              requestAnimationFrame(() => textareaRef.current?.focus());
+            }}
+          />
+        )}
         <div
           ref={composerRootRef}
           className={cn(
@@ -609,9 +620,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         <ComposerFooterHint
           showFooterHint={showFooterHint}
           stopMode={stopMode}
+          isStopping={isStopping}
+          hasQueuedMessages={queueItems.length > 0}
           hasText={hasText}
           isSideQuestion={sideQuestionStaged}
-          showByTheWayRequiredHint={showByTheWayRequiredHint}
           effectiveGoalArmed={effectiveGoalArmed}
           goalBlockedHintVisible={goalBlockedHintVisible}
           staticHint={staticHint}
@@ -625,6 +637,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     );
   },
 );
+
+const EMPTY_QUEUE: never[] = [];
 
 function GoalContextBadge({ goal }: { goal: GoalBrief }) {
   const copy = useCopy();

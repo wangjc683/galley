@@ -99,6 +99,11 @@ export const zhCopy = {
       `第 ${index} 步 · ${summary}`,
     completedSummary: (summary: string) => `已完成 · ${summary}`,
     cancelledSummary: (summary: string) => `已中止 · ${summary}`,
+    // Shown in place of a summary that is really leaked tool-call
+    // markup (#22). Keep in sync with the runner's fixed marker
+    // (workbench_bridge.TURN_PROTOCOL_FAILURE_SUMMARY) — the GUI
+    // exact-matches that string to localize rows the runner wrote.
+    turnProtocolFailure: "回合协议错误：工具调用未能送达",
     archiveRunningTitle: "归档正在运行的对话？",
     archiveRunningBody: (title: string) =>
       `「${title}」仍在运行。归档不会停止它，但它会从侧栏消失，你将看不到后续进展。`,
@@ -279,8 +284,14 @@ export const zhCopy = {
     enterHint: "Enter 发送 · Shift+Enter 换行",
     dragToReferenceHint: "拖入任意文件或文件夹，发给 AI",
     newlineHint: "Shift+Enter 换行",
-    byTheWaySendHint: "以 /btw 开头 · Enter 发送",
-    byTheWayPrefixHint: "请先以 /btw 开头",
+    /** 消息队列（galley#19/#20）：运行中 Enter 不再被闸，改为排队。 */
+    queueEnterHint: "Enter 排队 · 本轮结束后自动发送",
+    stoppingQueueHint: "正在停止，排队的消息会自动发出",
+    queueStripLabel: (count: number) => `排队中 · ${count}`,
+    queueJump: "立即执行",
+    queueJumpTooltip: "打断当前任务，优先执行这条",
+    queueRemove: "删除",
+    queueEditTooltip: "取回编辑（从队列移除并填回输入框）",
     imageOnlyFallback: "请看这张图片。",
     pastedImage: "已粘贴图片",
     attachImage: "添加图片",
@@ -1324,6 +1335,11 @@ export const zhCopy = {
     waitingApproval: "等待审批",
     failed: "失败",
     denied: "已拒绝",
+    /** #22：模型经第三方代理把工具调用当纯文本吐出时，正文只剩
+     *  原始 markup。散文渲染换成这行说明 + 折叠原文。 */
+    turnProtocolFailureLead:
+      "回合协议错误：这一轮的工具调用被当作纯文本返回，未能送达引擎。",
+    turnProtocolFailureRaw: "原始输出",
     step: (index: number) => `第 ${index} 步`,
     /** GA 的兜底口径（ga.py:599）。模型漏写 <summary> 时 GA 会把整段
      *  回答当摘要，Galley 抑制该回声后用这两句占位，避免步号后空一片。
@@ -1542,6 +1558,8 @@ export const zhCopy = {
     imageBlocked: "图片发送受限",
     imageBlockedGoal:
       "Goal、/btw 和回复 Agent 提问暂不支持图片。请先发送普通消息。",
+    imageBlockedQueue:
+      "运行中暂不支持带图排队。等本轮结束后再发送图片，文字可先排队。",
     imageBlockedExternal:
       "当前外部 GA 尚不支持图片输入，请移除图片后发送，或改用内置内核新建会话。",
     imageTooLarge: "图片过大，单张上限 10 MB。",

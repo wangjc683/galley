@@ -13,12 +13,14 @@
 //! handlers do. Each command keeps its own explicit, contract-bound
 //! failure behavior.
 
+use crate::api::QueuedMessage;
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
 use crate::ipc::IpcCommand;
 use crate::notify::{notify, Notifier};
 use crate::runner_manager::{
-    BroadcastItem, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
+    BroadcastItem, QueueJump, QueueOffer, RunnerManager, RunnerSpawnError, SendCommandError,
+    ShutdownError, SpawnArgs,
 };
 use async_trait::async_trait;
 use serde::Serialize;
@@ -50,6 +52,32 @@ pub trait RunnerPort: Send + Sync {
         session_id: &str,
         grace: Option<Duration>,
     ) -> Result<(), ShutdownError>;
+
+    // ---- Outbound message queue (galley#19/#20) ----
+    //
+    // Defaults encode "no queue support": offer always says dispatch
+    // now, everything else is a no-op. The real RunnerManager overrides
+    // all of them; test fakes keep pre-queue behavior for free.
+
+    async fn queue_offer(
+        &self,
+        _session_id: &str,
+        _text: String,
+        _origin: Option<crate::api::Origin>,
+    ) -> QueueOffer {
+        QueueOffer::DispatchNow
+    }
+    async fn queue_release_run(&self, _session_id: &str) {}
+    async fn queue_jump(&self, _session_id: &str, _queue_id: &str) -> QueueJump {
+        QueueJump::NotFound
+    }
+    async fn queue_requeue_front(&self, _session_id: &str, _item: QueuedMessage) {}
+    async fn queue_remove(&self, _session_id: &str, _queue_id: &str) -> Option<QueuedMessage> {
+        None
+    }
+    async fn queue_snapshot(&self, _session_id: &str) -> Vec<QueuedMessage> {
+        Vec::new()
+    }
 }
 
 #[async_trait]
@@ -83,6 +111,30 @@ impl RunnerPort for RunnerManager {
         grace: Option<Duration>,
     ) -> Result<(), ShutdownError> {
         RunnerManager::shutdown(self, session_id, grace).await
+    }
+
+    async fn queue_offer(
+        &self,
+        session_id: &str,
+        text: String,
+        origin: Option<crate::api::Origin>,
+    ) -> QueueOffer {
+        RunnerManager::queue_offer(self, session_id, text, origin).await
+    }
+    async fn queue_release_run(&self, session_id: &str) {
+        RunnerManager::queue_release_run(self, session_id).await
+    }
+    async fn queue_jump(&self, session_id: &str, queue_id: &str) -> QueueJump {
+        RunnerManager::queue_jump(self, session_id, queue_id).await
+    }
+    async fn queue_requeue_front(&self, session_id: &str, item: QueuedMessage) {
+        RunnerManager::queue_requeue_front(self, session_id, item).await
+    }
+    async fn queue_remove(&self, session_id: &str, queue_id: &str) -> Option<QueuedMessage> {
+        RunnerManager::queue_remove(self, session_id, queue_id).await
+    }
+    async fn queue_snapshot(&self, session_id: &str) -> Vec<QueuedMessage> {
+        RunnerManager::queue_snapshot(self, session_id).await
     }
 }
 

@@ -390,6 +390,11 @@ pub(crate) enum SessionCmd {
         /// Free-text reason for the action. Shows up in audit/log views.
         #[arg(long)]
         reason: Option<String>,
+        /// Jump the queue: when the session is mid-run, abort the
+        /// current task and run this message first. Without it a
+        /// mid-run send waits its turn (`dispatch: "queued"`).
+        #[arg(long)]
+        jump: bool,
     },
     /// Stream live IPC events from a session's runner (B2 M4). NDJSON
     /// on stdout — one event per line. Exits cleanly when the

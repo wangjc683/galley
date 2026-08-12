@@ -379,6 +379,24 @@ fn start_background_services(app: &tauri::App) {
         desktop_goal::resume_active_goals(&galley_for_goals).await;
     });
 
+    // Outbound message-queue drain (galley#19/#20): wire the manager's
+    // run-signal channel and start the single global consumer. Must
+    // run before any runner spawn so every spawn attaches a forwarder.
+    {
+        let manager: std::sync::Arc<runner_manager::RunnerManager> = app
+            .state::<std::sync::Arc<runner_manager::RunnerManager>>()
+            .inner()
+            .clone();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        manager.set_run_signal(tx);
+        crate::message_queue::spawn_queue_drain_task(
+            app.state::<SqliteGalley>().inner().clone(),
+            manager,
+            crate::notify::TauriNotifier::new(app.handle().clone()),
+            rx,
+        );
+    }
+
     crate::scheduler::start(app);
 }
 

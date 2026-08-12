@@ -24,9 +24,10 @@ function renderComposerHintWithKbd(text: string): ReactNode {
 interface ComposerFooterHintProps {
   showFooterHint: boolean;
   stopMode: boolean;
+  isStopping: boolean;
+  hasQueuedMessages: boolean;
   hasText: boolean;
   isSideQuestion: boolean;
-  showByTheWayRequiredHint: boolean;
   effectiveGoalArmed: boolean;
   goalBlockedHintVisible: boolean;
   staticHint?: ReactNode;
@@ -43,9 +44,10 @@ interface ComposerFooterHintProps {
 export function ComposerFooterHint({
   showFooterHint,
   stopMode,
+  isStopping,
+  hasQueuedMessages,
   hasText,
   isSideQuestion,
-  showByTheWayRequiredHint,
   effectiveGoalArmed,
   goalBlockedHintVisible,
   staticHint,
@@ -54,9 +56,10 @@ export function ComposerFooterHint({
   const hintKey = resolveComposerHint({
     showFooterHint,
     stopMode,
+    isStopping,
+    hasQueuedMessages,
     hasText,
     isSideQuestion,
-    showByTheWayRequiredHint,
     effectiveGoalArmed,
   });
   const keyboardHint = hintKey ? copy.composer[hintKey] : null;

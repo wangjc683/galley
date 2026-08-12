@@ -151,11 +151,24 @@ Conversation messages for a session, oldest first. NDJSON, one
 | `height`    | int?            | image height when provided by the GUI                                       |
 | `createdAt` | string (ISO8601)|                                                                             |
 
-### 5.5a · `galley session send <id> "<content>" [--supervisor=<x>] [--reason=<y>]`
+### 5.5a · `galley session send <id> "<content>" [--supervisor=<x>] [--reason=<y>] [--jump]`
 
 **Write command** — persists a user message into a session and dispatches
 it to the live runner subprocess. Requires Galley Core to be running
 (exit `4 db_unavailable` if the socket isn't reachable).
+
+**Queue semantics (since v0.4.6-dev, galley#19/#20)**: when the target
+session's run is open (a dispatched message whose `run_complete` has
+not arrived), the message is held in Galley Core's in-memory queue and
+runs automatically, in order, as prior tasks finish. The response then
+carries `dispatch: "queued"`, `message: null` (the row is persisted at
+dequeue, not at accept — a removed queued item leaves no DB row), and
+a `queue` object. `--jump` converts the hold into "abort the current
+task and run this first". Queued items do not survive a Galley Core
+restart. Historical note: before this, a mid-run send silently stacked
+in the engine's internal task queue while reporting `dispatched` with
+a corrupted event stream — `queued` is the same de-facto semantics
+made honest and controllable.
 
 V1 is text-only for CLI writes. Image attachments may appear in read
 metadata when created from the GUI, but `galley session send` does not
@@ -165,6 +178,7 @@ accept or dispatch images inside `schemaVersion: 1`.
 | -------------- | ---------------------------------------- | -------------------------------------------------------------------- |
 | `--supervisor` | (none → `origin.via = cli`)              | Supervisor label. When set, `origin.via` upgrades to `supervisor`.   |
 | `--reason`     | (none)                                   | Free-text rationale. Stored on `messages.origin_note`; appears in audit views. |
+| `--jump`       | off                                      | 插队: mid-run, abort the current task and run this message first (moves to queue front + sends abort; the dequeue happens on `run_complete`). No effect on an idle session. |
 
 ```bash
 $ galley session send sess_abc "summarize the last turn" \
@@ -178,8 +192,9 @@ Response shape:
 
 | Field      | Type          | Notes                                                                             |
 | ---------- | ------------- | --------------------------------------------------------------------------------- |
-| `message`  | `MessageBrief`| The persisted row, including server-assigned `id` + `createdAt`                   |
-| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) — the row is in SQLite either way |
+| `message`  | `MessageBrief \| null` | The persisted row, including server-assigned `id` + `createdAt`. **`null` when `dispatch == "queued"`** — the row is minted at dequeue time. |
+| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) — the row is in SQLite either way; `"queued"` if the session was mid-run and the message is held in Core's queue (additive value — handle unknowns per §stability) |
+| `queue`    | object        | Present only when `dispatch == "queued"`: `{ "queueId": "qm_…", "position": 0 }` (0-based; `--jump` yields position 0) |
 
 **Semantics**: fire-and-forget. The CLI returns as soon as the message
 is persisted; it does **not** wait for the runner to complete the

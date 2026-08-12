@@ -17,6 +17,7 @@ pub mod message;
 pub mod model;
 pub mod origin;
 pub mod project;
+pub mod queue;
 pub mod schedule;
 pub mod search;
 pub mod session;
@@ -46,6 +47,7 @@ pub use model::{
 };
 pub use origin::{Origin, OriginVia};
 pub use project::{CreateProjectInput, ProjectBrief, ProjectId, ProjectPatch};
+pub use queue::{QueuedMessage, SessionQueueChangedPayload, SESSION_QUEUE_CHANGED_EVENT};
 pub use schedule::{
     CreateScheduledTaskInput, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
     ScheduledTaskRepeat, SCHEDULED_TASKS_CHANGED_EVENT,

@@ -5,34 +5,35 @@
  * (`ComposerFooterHint.tsx`) only maps the returned key through the
  * copy table and styles kbd tokens.
  *
- * The slot only ever lists keys that are live right now, so while the
- * agent runs it degrades exactly as far as stopMode gates — it never
- * becomes pure status. Three running states, and the placeholder and
- * this slot hand off between them rather than speaking at once:
+ * The slot only ever lists keys that are live right now. Since the
+ * message queue (galley#19/#20) plain Enter is NEVER gated: while the
+ * agent runs it queues instead of sending, and the slot's job is to
+ * say so. Three running states, and the placeholder and this slot
+ * hand off between them rather than speaking at once:
  *
  * - empty draft — the placeholder owns the /btw lesson (it sits where
  *   the prefix gets typed and is itself the format example), so the
- *   slot must not repeat the token. Plain Enter is gated but
- *   Shift+Enter is not (handleKeyDown intercepts Enter only without
- *   shift), so the legend keeps the half that stays true.
- * - typing — the placeholder is gone; the slot takes over and states
- *   what Enter needs, pre-empting the block instead of only correcting
- *   it afterwards.
- * - /btw staged — Enter really sends again, so the full hint returns.
+ *   slot must not repeat the token; the newline legend stays.
+ * - typing — the placeholder is gone; the slot states that Enter
+ *   queues (auto-runs after the current task).
+ * - /btw staged — Enter sends immediately (side question), so the
+ *   plain Enter legend returns.
+ *
+ * While a stop is in flight and messages are queued, the slot turns
+ * into the one-line status the #20 reporter asked for: the stop's
+ * wait is the software's problem, and this line says the queued
+ * message will go out by itself.
  *
  * Idle has its own hasText hand-off: an empty draft shows the
  * drag-to-reference capability (nothing to send yet, so the Enter
  * legend would be dead weight); the first typed character swaps it for
  * the Enter legend, which is now live.
- *
- * The transient `byTheWayPrefixHint` stays as the correction after a
- * blocked Enter attempt.
  */
 
 /** i18n `composer` key of the hint to show; null collapses the slot. */
 export type ComposerHintKey =
-  | "byTheWayPrefixHint"
-  | "byTheWaySendHint"
+  | "queueEnterHint"
+  | "stoppingQueueHint"
   | "newlineHint"
   | "enterHint"
   | "startGoalWithEnter"
@@ -43,24 +44,26 @@ export interface ComposerHintState {
   showFooterHint: boolean;
   /** Agent is mid-run. */
   stopMode: boolean;
+  /** An abort is in flight (stop clicked, run_complete pending). */
+  isStopping: boolean;
+  /** The session has queued outbound messages. */
+  hasQueuedMessages: boolean;
   /** Draft is non-empty. */
   hasText: boolean;
   /** Draft is a staged `/btw` side question (`lib/side-question.ts`). */
   isSideQuestion: boolean;
-  /** A plain Enter was just blocked by the stop gate (transient). */
-  showByTheWayRequiredHint: boolean;
   /** Goal armed: Enter opens the Goal preview instead of sending. */
   effectiveGoalArmed: boolean;
 }
 
 export function resolveComposerHint(s: ComposerHintState): ComposerHintKey | null {
   if (!s.showFooterHint) return null;
-  if (s.showByTheWayRequiredHint && s.stopMode && !s.isSideQuestion) {
-    return "byTheWayPrefixHint";
-  }
   if (s.stopMode) {
     if (s.isSideQuestion) return "enterHint";
-    return s.hasText ? "byTheWaySendHint" : "newlineHint";
+    // Stop in flight with messages parked: the status line outranks
+    // the keyboard legend — it answers "did my send get lost?".
+    if (s.isStopping && s.hasQueuedMessages) return "stoppingQueueHint";
+    return s.hasText ? "queueEnterHint" : "newlineHint";
   }
   // Armed changes what Enter does (opens the Goal preview, not send) —
   // with the wide "启动 Goal" pill gone, this hint and the button

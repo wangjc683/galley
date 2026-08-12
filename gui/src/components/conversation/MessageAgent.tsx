@@ -1,7 +1,11 @@
-import { isValidElement, memo, type ReactNode } from "react";
+import { CaretDown, XCircle } from "@phosphor-icons/react";
+import { isValidElement, memo, useState, type ReactNode } from "react";
 
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { MessageActions } from "@/components/conversation/MessageActions";
+import { useCopy } from "@/lib/i18n";
+import { isLeakedToolCallMarkup } from "@/lib/ipc/ga-output-cleaning";
+import { cn } from "@/lib/utils";
 import type { MessageTelemetry } from "@/types/conversation";
 
 /**
@@ -36,6 +40,14 @@ export const MessageAgent = memo(function MessageAgent({
   telemetry?: MessageTelemetry;
 }) {
   if (typeof children === "string") {
+    // #22: a "final answer" that is really leaked tool-call markup
+    // (`<invoke …>` returned as plain text by a proxy that never
+    // produced a structured block). Prose-rendering it is unreadable
+    // and looks broken; there is also no deliverable to Copy/Save.
+    // Render an explanatory notice with the raw markup one click away.
+    if (isLeakedToolCallMarkup(children)) {
+      return <ProtocolFailureNotice markup={children} />;
+    }
     return (
       <div>
         <MarkdownView source={children} variant="agent" selectionCopyScope />
@@ -55,6 +67,57 @@ export const MessageAgent = memo(function MessageAgent({
     </div>
   );
 });
+
+/**
+ * Turn-protocol-failure notice (#22): the register of a
+ * failed-historical ToolCallout (faint red bar, auto-collapsed) with
+ * a one-line product-voice explanation as the lead; the raw markup
+ * sits in a mono block one click away for audit. Not MarkdownView —
+ * the content is not prose and must never render as such.
+ */
+function ProtocolFailureNotice({ markup }: { markup: string }) {
+  const copy = useCopy();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative my-3 overflow-hidden rounded-md border border-line bg-app">
+      <div className="absolute inset-y-0 left-0 w-[3px] bg-error/[var(--opacity-medium)]" />
+      <div
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex cursor-default select-none items-center gap-2.5 px-4 pt-3.5",
+          open ? "pb-2" : "pb-3.5",
+        )}
+      >
+        <span className="inline-flex shrink-0">
+          <XCircle size={16} weight="thin" className="text-error" />
+        </span>
+        <span className="text-[12.5px] text-ink-soft">
+          {copy.conversation.turnProtocolFailureLead}
+        </span>
+        <span className="ml-auto inline-flex items-center text-ink-muted">
+          <CaretDown
+            size={12}
+            weight="thin"
+            className={cn(
+              "transition-transform duration-(--motion-fast)",
+              open && "rotate-180",
+            )}
+          />
+        </span>
+      </div>
+      {open && (
+        <div className="animate-fade-in px-4 pb-4">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+            {copy.conversation.turnProtocolFailureRaw}
+          </div>
+          <pre className="max-h-[200px] overflow-y-auto whitespace-pre-wrap rounded-callout border border-line bg-app px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink-soft">
+            {markup}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Intermediate assistant narration — process prose that belongs in

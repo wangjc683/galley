@@ -113,7 +113,7 @@ export const ToolCallout = memo(function ToolCallout({
  * in settled state, and for ANY tool in attention-demanding states
  * (waiting_approval / failed / running / denied). Per DESIGN.md §4.5.
  *
- * Six visual states (see ToolEventStatus):
+ * Seven visual states (see ToolEventStatus):
  *
  *   running             apricot bar + spinning notch + live elapsed + auto-open
  *   success-current     apricot bar + check + auto-open
@@ -121,6 +121,8 @@ export const ToolCallout = memo(function ToolCallout({
  *                       (fades into the document)
  *   waiting_approval    amber bar + pause + amber 4% tint + FORCED OPEN
  *   failed              red bar + X + red 4% tint + FORCED OPEN
+ *   failed-historical   faint red bar + X + auto-collapse with headline
+ *                       lead (#22: settled GA error envelope)
  *   denied              muted bar + prohibit + auto-collapse
  */
 function BlockToolCallout({
@@ -293,6 +295,16 @@ const STATUS_CONFIG: Record<ToolEventStatus, StatusConfig> = {
     forcedOpen: false,
     defaultOpen: false,
   },
+  // The `-historical` treatment of failed (#22): a settled tool whose
+  // result was GA's error envelope. Red accents keep failure scannable
+  // in the transcript, but unlike live `failed` it never forces open —
+  // the headline lead carries the cause; the trace is one click away.
+  "failed-historical": {
+    barClass: "bg-error/[var(--opacity-medium)]",
+    bgClass: "bg-app",
+    forcedOpen: false,
+    defaultOpen: false,
+  },
   waiting_approval: {
     barClass: "bg-warning",
     bgClass: "bg-warning/[var(--opacity-subtle)]",
@@ -328,7 +340,7 @@ function StatusBit({ status }: { status: ToolEventStatus }) {
     return <CheckCircle size={16} weight="thin" className="text-ink-muted" />;
   if (status === "waiting_approval")
     return <PauseCircle size={16} weight="thin" className="text-warning" />;
-  if (status === "failed")
+  if (status === "failed" || status === "failed-historical")
     return <XCircle size={16} weight="thin" className="text-error" />;
   // denied
   return <Prohibit size={16} weight="thin" className="text-ink-muted" />;
@@ -342,6 +354,7 @@ function StatusPill({ status }: { status: ToolEventStatus }) {
     "success-historical": copy.conversation.completed,
     waiting_approval: copy.conversation.waitingApproval,
     failed: copy.conversation.failed,
+    "failed-historical": copy.conversation.failed,
     denied: copy.conversation.denied,
   } satisfies Record<ToolEventStatus, string>;
   return (
@@ -362,6 +375,7 @@ const STATUS_PILL_CLASS: Record<ToolEventStatus, string> = {
   "success-historical": "bg-success/[var(--opacity-soft)] text-success",
   waiting_approval: "bg-warning/[var(--opacity-soft)] text-warning",
   failed: "bg-error/[var(--opacity-soft)] text-error",
+  "failed-historical": "bg-error/[var(--opacity-soft)] text-error",
   denied: "bg-hover text-ink-muted",
 };
 
@@ -404,9 +418,15 @@ function SettledToolBody({ tool }: { tool: ConversationToolEvent }) {
       )}
       {/* A denied tool's "result" is just the internal denial payload
           ({"status": "denied", ...}) — the status chrome already says
-          已拒绝, so echoing the raw JSON adds nothing. */}
-      {tool.resultPreview && tool.status !== "denied" && (
-        <ResultBlock content={tool.resultPreview} />
+          已拒绝, so echoing the raw JSON adds nothing. A failed tool's
+          decoded error body (#22: real newlines, tail-capped, headline
+          already in the summary slot) replaces the raw JSON-escaped
+          envelope preview. */}
+      {tool.errorDetail ? (
+        <ResultBlock content={tool.errorDetail} />
+      ) : (
+        tool.resultPreview &&
+        tool.status !== "denied" && <ResultBlock content={tool.resultPreview} />
       )}
     </>
   );

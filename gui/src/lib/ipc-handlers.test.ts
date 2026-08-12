@@ -379,6 +379,33 @@ describe("dispatchIPCEvent", () => {
     });
   });
 
+  it("turn_start invalidates a pending ask_user question (queue preemption)", () => {
+    // galley#19 dogfood 2026-08-12: a queue 插队 (or CLI send) preempts
+    // the pending question WITHOUT going through the composer's
+    // appendUserTurn — the bubble must still drop the moment the new
+    // run starts, because the bridge now rejects answers mid-run.
+    seedSession();
+    dispatchIPCEvent({
+      kind: "ask_user",
+      sessionId: "s-test",
+      question: "接下来做什么？",
+      candidates: ["继续", "停下"],
+      timestamp: "2026-06-18T08:05:00.000Z",
+    });
+    expect(
+      useMessagesStore.getState().byId["s-test"].pendingAskUser,
+    ).not.toBeNull();
+
+    dispatchIPCEvent({
+      kind: "turn_start",
+      sessionId: "s-test",
+      turnIndex: 1,
+      timestamp: "2026-06-18T08:06:00.000Z",
+    });
+
+    expect(useMessagesStore.getState().byId["s-test"].pendingAskUser).toBeNull();
+  });
+
   it("error clears running state and pushes a toast", () => {
     const store = useMessagesStore.getState();
     store.setAgentRunning("s-test", true);

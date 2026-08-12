@@ -27,10 +27,11 @@ import type { MessageRow } from "@/types/db";
  * assistant row's JSON columns; future Memory Inspector work can
  * surface them.
  *
- * Tools restored from history are always marked `success-historical`:
- * by the time a turn is persisted, every dispatched tool has
- * completed (turn_end is the canonical "finished" signal). The
- * conversation view fades them appropriately.
+ * Tools restored from history are settled by definition (turn_end is
+ * the canonical "finished" signal); agent-turn.ts classifies each as
+ * `success-historical`, `failed-historical` (GA error envelope) or
+ * `denied` from the persisted result payload. The conversation view
+ * fades / accents them appropriately.
  */
 export function rowsToTurns(rows: MessageRow[]): Turn[] {
   const turns: Turn[] = [];

@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import type { AppCopy } from "@/lib/i18n";
 import { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
 import { markReplyNotifyPending } from "@/lib/notify";
+import { queueOrDispatchUserMessage } from "@/lib/session-queue";
 import { logPerf, perfNow } from "@/lib/perf";
 import { isSideQuestion } from "@/lib/side-question";
 import { useMessagesStore } from "@/stores/messages";
@@ -283,6 +284,27 @@ export function useMessageSend({
         { kind: "user_message", text: t, images: [] },
         { ...sendOpts, showPhase: false },
       ).catch(reportSendFailure);
+      return;
+    }
+    // Message queue (galley#19/#20): while a run is open (running or
+    // stop-in-flight) a main-agent send goes to Core's queue command
+    // instead of the bridge. Core decides atomically — if the run
+    // completed a heartbeat ago it persists + dispatches itself, and
+    // the row comes back via `user-message-persisted` either way, so
+    // this path never appends locally. Queued items are text-only
+    // (PRD 定案 6).
+    const sessionMsgs = useMessagesStore.getState().byId[sid];
+    const runOpen = Boolean(
+      sessionMsgs?.agentRunning || sessionMsgs?.isStopping,
+    );
+    if (runOpen && pendingAskUser === null) {
+      if (images.length > 0) {
+        showImageBlockedToast(copy.toasts.imageBlockedQueue);
+        return false;
+      }
+      void queueOrDispatchUserMessage(sid, t)
+        .then(() => markReplyNotifyPending(sid))
+        .catch((e) => reportUserSendFailure(sid, "queue_user_message", e));
       return;
     }
     // ask_user_response and user_message both ultimately call

@@ -409,6 +409,16 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       if (eventVisibility(event) === "internal") {
         return;
       }
+      // A starting run invalidates any pending ask_user question —
+      // the bridge would reject the answer now (business guard), so
+      // the bubble must not keep offering it. The answer path already
+      // cleared it via appendUserTurn; this covers preemption paths
+      // that dispatch without the composer (queue 插队, CLI send —
+      // galley#19 dogfood 2026-08-12: the bubble survived a queue
+      // jump because it relied solely on the user-row append event).
+      if (useMessagesStore.getState().byId[event.sessionId]?.pendingAskUser) {
+        messages.setPendingAskUser(event.sessionId, null);
+      }
       messages.setCurrentTurnIndex(event.sessionId, event.turnIndex);
       // Do not clear inFlightContent here. `turn_start` is a structural
       // clock signal, and on older/racing runners it can arrive after a

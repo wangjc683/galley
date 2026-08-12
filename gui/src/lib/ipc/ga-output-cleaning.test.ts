@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
+import {
+  cleanPartialContent,
+  isLeakedToolCallMarkup,
+  summaryEchoesAnswer,
+} from "@/lib/ipc/ga-output-cleaning";
 
 /**
  * Reproduces GA's fallback (ga.py:594-601) so the tests exercise the
@@ -107,5 +111,40 @@ describe("next-suggestion tag stripping", () => {
     // Chunk ended inside the tag NAME ("<next-sug") — the partial
     // opener itself must not flash as text.
     expect(cleanPartialContent("正文结束。\n<next-sug")).toBe("正文结束。\n");
+  });
+});
+
+// #22 sample 2 (redacted): a proxied model emitted its tool call as
+// plain text — the whole reply body is `<invoke …>` markup and must
+// never render as prose.
+const LEAKED_MARKUP =
+  '<invoke name="code_run">\n<parameter name="script">import json\n' +
+  "info=json.load(open('prov.json'))\nprint(len(js))\n" +
+  "</parameter>\n</invoke>";
+
+describe("leaked tool-call markup (#22)", () => {
+  it("detects a markup-led body, including truncated variants", () => {
+    expect(isLeakedToolCallMarkup(LEAKED_MARKUP)).toBe(true);
+    expect(isLeakedToolCallMarkup('  <parameter name="script">x')).toBe(true);
+  });
+
+  it("leaves prose that merely mentions the markup alone", () => {
+    expect(isLeakedToolCallMarkup("解释一下 <invoke> 的语法")).toBe(false);
+    expect(isLeakedToolCallMarkup("正常回答正文。")).toBe(false);
+  });
+
+  it("suppresses the streaming flash: markup-led partials render empty", () => {
+    expect(cleanPartialContent(LEAKED_MARKUP)).toBe("");
+    // Markup after a stripped thinking block still leads the cleaned
+    // buffer — suppressed too.
+    expect(
+      cleanPartialContent(
+        '<thinking>先跑脚本</thinking>\n<invoke name="code_run">',
+      ),
+    ).toBe("");
+  });
+
+  it("truncates a chunk boundary inside '<invoke' instead of flashing it", () => {
+    expect(cleanPartialContent("正文结束。\n<invo")).toBe("正文结束。\n");
   });
 });

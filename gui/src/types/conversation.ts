@@ -13,12 +13,16 @@
 import type { ApprovalDecision } from "@/types/ipc";
 
 /**
- * 6 visual states for a Tool callout per DESIGN.md §4.5:
+ * 7 visual states for a Tool callout per DESIGN.md §4.5:
  *   - running             : currently executing (apricot spinner)
  *   - success-current     : just completed, current focus (apricot)
  *   - success-historical  : older success (faded; almost invisible)
  *   - waiting_approval    : forced-open form (amber tint accent)
  *   - failed              : forced-open with error detail (red tint)
+ *   - failed-historical   : settled tool whose result was GA's error
+ *                           envelope (#22) — red accents but
+ *                           auto-collapsed with a headline lead, the
+ *                           `-historical` treatment of failed
  *   - denied              : user rejected; collapsed
  */
 export type ToolEventStatus =
@@ -27,6 +31,7 @@ export type ToolEventStatus =
   | "success-historical"
   | "waiting_approval"
   | "failed"
+  | "failed-historical"
   | "denied";
 
 export type RiskLevel = "low" | "medium" | "high";
@@ -57,6 +62,10 @@ export interface ConversationToolEvent {
   argsPreview?: string;
   /** ≤500 char tool result preview (when status is success / failed). */
   resultPreview?: string;
+  /** Decoded error body for `failed-historical` (GA error envelope's
+   * stdout / msg with real newlines, tail-capped) — rendered in place
+   * of the raw resultPreview. See lib/tool-outcome.toolErrorDisplay. */
+  errorDetail?: string;
   /** Approval ID — present when status === "waiting_approval"; sent back
    * via ApprovalResponseCommand. */
   approvalId?: string;

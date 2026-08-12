@@ -421,6 +421,31 @@ impl SqliteGalley {
         Ok(HealthReport { checks })
     }
 
+    /// Read-only twin of the validation inside `insert_message_inner`:
+    /// session exists and isn't archived. Used by the queue path
+    /// (galley#19/#20) to reject a send BEFORE holding the message in
+    /// the in-memory queue — a queued item skips persist (and with it
+    /// the inline validation) until dequeue, but "send to a missing /
+    /// archived session" must still fail at the command, with the same
+    /// error tags as the immediate path.
+    pub async fn assert_session_writable(&self, session_id: &SessionId) -> Result<()> {
+        let row: Option<String> =
+            sqlx::query_scalar("SELECT status FROM sessions WHERE id = ?")
+                .bind(&session_id.0)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+        let status = row.ok_or_else(|| crate::error::GalleyError::NotFound {
+            message: format!("session '{}' does not exist", session_id.0),
+        })?;
+        if status == "archived" {
+            return Err(crate::error::GalleyError::InvalidArgs {
+                message: format!("session {} is archived", session_id.0),
+            });
+        }
+        Ok(())
+    }
+
     pub(super) async fn send_message_db(
         &self,
         session_id: SessionId,

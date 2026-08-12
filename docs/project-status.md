@@ -127,8 +127,23 @@ Post-release follow-up:
 
 ## Unreleased On Main (post-`v0.4.5`)
 
-Docs only. The `v0.4.5` tag sits at `b27d60ee`; the only commit after it is
-this status sync. No code ships outside the tag.
+Two user-issue-driven features implemented 2026-08-11/12, on main but
+untagged:
+
+- **Error display (galley#22)**: attribute-tolerant summary cleaning +
+  markup-dominant placeholder (dual-end), GA error-envelope recognition
+  as `failed-historical` with headline-first collapsed rendering, and a
+  protocol-failure callout for tool-call markup leaked as message text.
+  GUI visual acceptance still pending (checklist in
+  `.scratch/error-display/PRD.md` Comments).
+- **Message queue (galley#19/#20)**: Core-owned per-session outbound
+  queue (in-memory) — mid-run sends queue and auto-run on
+  `run_complete`, stop releases the composer immediately, jump-queue
+  aborts and runs first; CLI `session send` gains `dispatch: "queued"`
+  + `--jump` (additive); bridge rejects mid-run main-agent messages
+  (business error). JC dogfooded the main flows + ask_user interplay
+  2026-08-12; action-slot verdict = variant B (devlog
+  2026-08-12-queue-slot-variant-verdict).
 
 ## Status Dashboard
 

@@ -115,7 +115,8 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             content,
             supervisor,
             reason,
-        }) => session::session_send(id, content, supervisor, reason).await,
+            jump,
+        }) => session::session_send(id, content, supervisor, reason, jump).await,
         Command::Session(SessionCmd::Watch { id }) => session::session_watch(id).await,
         Command::Session(SessionCmd::Follow { id, tail }) => {
             session::session_follow(id, tail).await

@@ -9,9 +9,10 @@ function state(patch: Partial<ComposerHintState>): ComposerHintState {
   return {
     showFooterHint: true,
     stopMode: false,
+    isStopping: false,
+    hasQueuedMessages: false,
     hasText: false,
     isSideQuestion: false,
-    showByTheWayRequiredHint: false,
     effectiveGoalArmed: false,
     ...patch,
   };
@@ -25,29 +26,21 @@ describe("resolveComposerHint", () => {
           showFooterHint: false,
           stopMode: true,
           hasText: true,
-          showByTheWayRequiredHint: true,
         }),
       ),
     ).toBeNull();
   });
 
-  it("corrects a blocked Enter with the /btw prefix lesson", () => {
-    expect(
-      resolveComposerHint(
-        state({ showByTheWayRequiredHint: true, stopMode: true, hasText: true }),
-      ),
-    ).toBe("byTheWayPrefixHint");
+  it("running + typing: Enter queues (galley#19) — the slot says so", () => {
+    expect(resolveComposerHint(state({ stopMode: true, hasText: true }))).toBe(
+      "queueEnterHint",
+    );
   });
 
-  it("drops the correction once /btw is staged — Enter is live again", () => {
+  it("running + /btw staged: Enter sends immediately, plain legend", () => {
     expect(
       resolveComposerHint(
-        state({
-          showByTheWayRequiredHint: true,
-          stopMode: true,
-          hasText: true,
-          isSideQuestion: true,
-        }),
+        state({ stopMode: true, hasText: true, isSideQuestion: true }),
       ),
     ).toBe("enterHint");
   });
@@ -56,10 +49,23 @@ describe("resolveComposerHint", () => {
     expect(resolveComposerHint(state({ stopMode: true }))).toBe("newlineHint");
   });
 
-  it("running + typing: pre-empts the block by stating what Enter needs", () => {
-    expect(resolveComposerHint(state({ stopMode: true, hasText: true }))).toBe(
-      "byTheWaySendHint",
-    );
+  it("stopping with queued messages: the auto-send status outranks the legend", () => {
+    expect(
+      resolveComposerHint(
+        state({
+          stopMode: true,
+          isStopping: true,
+          hasQueuedMessages: true,
+          hasText: true,
+        }),
+      ),
+    ).toBe("stoppingQueueHint");
+    // Stopping with nothing queued keeps the normal legends.
+    expect(
+      resolveComposerHint(
+        state({ stopMode: true, isStopping: true, hasText: true }),
+      ),
+    ).toBe("queueEnterHint");
   });
 
   it("idle + empty draft: states the drag-to-reference capability", () => {
@@ -81,7 +87,7 @@ describe("resolveComposerHint", () => {
         state({ effectiveGoalArmed: true, hasText: true }),
       ),
     ).toBe("startGoalWithEnter");
-    // While running, arming is irrelevant — the stop gate wins.
+    // While running, arming is irrelevant — the running legends win.
     expect(
       resolveComposerHint(state({ stopMode: true, effectiveGoalArmed: true })),
     ).toBe("newlineHint");

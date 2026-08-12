@@ -527,6 +527,14 @@ bridge 已终止 pet 子进程 + 解除 `_turn_end_hooks` 中对应 entry。
 
 `images` 是本地文件绝对路径数组（V0.1 可空）。
 
+**运行中拒绝（galley#19/#20，v0.4.6-dev 起）**：`run_in_progress`
+期间收到主 agent `user_message` / `ask_user_response`，bridge 以
+`error(category=business, context=user_message|ask_user_response)`
+拒绝，不入 GA task_queue（旧行为会静默排队且事件流谎报 turn_start）。
+出站排队由 Galley Core 的会话消息队列负责——Core 只在收到
+`run_complete` 后出队下发，正常流量不会触发该拒绝。`/btw` 旁路
+不受影响。
+
 ### 5.2 `approval_response`
 
 响应 `tool_call_pending`。

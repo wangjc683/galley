@@ -22,7 +22,7 @@
   暖米白底上仅靠竖条不足以传达"停下来看这里"）。head：状态位 +
   mono 工具名 + status pill + elapsed（`tabular-nums`）+ `CaretDown`。
 
-#### 6 状态映射与数据流现实（2026-07-05）
+#### 7 状态映射与数据流现实（2026-07-05；2026-08-11 增 failed-historical）
 
 | 状态 | 形态 | 视觉 | 默认展开 |
 |---|---|---|---|
@@ -31,15 +31,19 @@
 | **success-historical** | **pill** | 安静单行，融入文档 | 折叠 |
 | waiting_approval | block | 琥珀竖条 + 4% tint + `Pause` | **强制展开** |
 | failed | block | 红竖条 + 4% tint + `X` | **强制展开** |
+| failed-historical | block | 淡红竖条 + `X`（红），headline 领行 | 折叠（审计一击可达） |
 | denied | block | muted 竖条 + `Prohibit` | 折叠（决定已知） |
 
-**数据流现实**：`turn_end` / 历史恢复产出 `success-historical` 与
-`denied` 两种结算态。denied 由 GUI 解析 Galley 自己的拒绝载荷识别
-（`{"status": "denied"}`，写入方 `runner/handlers.py`、解析方
-`gui/src/lib/tool-outcome.ts`，双侧注释互指）。**failed 暂无生产者**：
-GA 工具结果没有结构化失败信号，内容嗅探会误标（比不标更伤信任）；
-running / success-current 需要 bridge 增加工具级事件。三者留待
-Phase 2 协议扩展（见 2026-07-05 devlog），视觉与状态位已按上表建好。
+**数据流现实**：`turn_end` / 历史恢复产出 `success-historical`、
+`failed-historical` 与 `denied` 三种结算态。denied 由 GUI 解析
+Galley 自己的拒绝载荷识别（`{"status": "denied"}`，写入方
+`runner/handlers.py`、解析方 `gui/src/lib/tool-outcome.ts`，双侧注释
+互指）。failed-historical（2026-08-11，galley#22）识别 GA 工具的
+错误信封 `{"status": "error", ...}` —— 与 denied 同级的精确匹配
+coupling point，不是内容嗅探；headline（traceback 末行 / msg 首行）
+走 callout 的 summary 槽位，解码后的错误体取代原始 JSON 预览。
+**live `failed` 仍无生产者**；running / success-current 需要 bridge
+增加工具级事件，留待 Phase 2 协议扩展（见 2026-07-05 devlog）。
 
 #### 展开内容
 

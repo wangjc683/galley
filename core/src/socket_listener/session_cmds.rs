@@ -14,6 +14,7 @@
 
 use super::common::{map_galley_err, origin_from_args};
 use super::*;
+use crate::runner_manager::{QueueJump, QueueOffer};
 // Args shapes live in `crate::protocol` (imported via super::*) — the
 // single home for schemaVersion 1 command shapes shared with the CLI.
 // Do not declare per-command arg structs in this module.
@@ -95,7 +96,8 @@ pub(super) async fn dispatch_session_send(
             );
         }
     };
-    // 1. Open DB + write message row with origin = cli/supervisor
+    // 1. Open DB early — even the queued branch validates the session
+    // row first (archived / missing must fail the same as before).
     let galley = match ctx.db.get().await {
         Ok(g) => g,
         Err(e) => {
@@ -104,15 +106,92 @@ pub(super) async fn dispatch_session_send(
     };
     let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
     let session_id = SessionId(parsed.session_id.clone());
+    if let Err(e) = galley.assert_session_writable(&session_id).await {
+        return map_galley_err(request_id, e);
+    }
+
+    // 2. Queue gate (galley#19/#20). A send to a session whose run is
+    // open (or whose queue is non-empty) is HELD in the Core queue and
+    // persisted only at dequeue — the old passthrough silently stacked
+    // it in GA's internal task queue while the bridge's event stream
+    // claimed it had started (`.scratch/message-queue/PRD.md` 调查结论
+    // 3). `dispatch: "queued"` + null `message` is the honest shape;
+    // `--jump` converts the hold into "abort current, run me first".
+    match ctx
+        .runner
+        .queue_offer(&parsed.session_id, parsed.content.clone(), Some(origin.clone()))
+        .await
+    {
+        QueueOffer::Queued { queue_id, position } => {
+            let mut position = position;
+            if parsed.jump {
+                match ctx.runner.queue_jump(&parsed.session_id, &queue_id).await {
+                    QueueJump::AbortThenDrain => {
+                        position = 0;
+                        // Best-effort — abort failure leaves the item
+                        // queued at the front, which still honors the
+                        // "run me first" intent on the next drain.
+                        let _ = ctx
+                            .runner
+                            .send_command(&parsed.session_id, &IpcCommand::Abort)
+                            .await;
+                    }
+                    QueueJump::DispatchNow(item) => {
+                        // Run closed between offer and jump: dispatch
+                        // directly after all.
+                        emit_queue_changed(ctx, &parsed.session_id).await;
+                        return send_now(
+                            request_id,
+                            ctx,
+                            &galley,
+                            &parsed.session_id,
+                            item.text,
+                            origin,
+                        )
+                        .await;
+                    }
+                    QueueJump::NotFound => {}
+                }
+            }
+            emit_queue_changed(ctx, &parsed.session_id).await;
+            let result = serde_json::json!({
+                "message": Value::Null,
+                "dispatch": "queued",
+                "queue": { "queueId": queue_id, "position": position },
+            });
+            SocketResponse::ok(request_id, result)
+        }
+        QueueOffer::DispatchNow => {
+            send_now(request_id, ctx, &galley, &parsed.session_id, parsed.content, origin).await
+        }
+    }
+}
+
+/// The pre-queue immediate path: persist the row, dispatch to the
+/// runner, notify the GUI. The caller holds the run-gate reservation
+/// (QueueOffer::DispatchNow / QueueJump::DispatchNow); a failed
+/// dispatch releases it so the queue never waits on a run that never
+/// started.
+async fn send_now(
+    request_id: Option<String>,
+    ctx: &HandlerCtx<'_>,
+    galley: &crate::db::SqliteGalley,
+    session_id: &str,
+    content: String,
+    origin: crate::api::Origin,
+) -> SocketResponse {
     let brief = match galley
-        .send_message(session_id, parsed.content.clone(), origin)
+        .send_message(SessionId(session_id.to_string()), content.clone(), origin)
         .await
     {
         Ok(b) => b,
-        Err(e) => return map_galley_err(request_id, e),
+        Err(e) => {
+            ctx.runner.queue_release_run(session_id).await;
+            return map_galley_err(request_id, e);
+        }
     };
 
-    // 2. Best-effort dispatch to runner. If the session's runner isn't
+    // Best-effort dispatch to runner. If the session's runner isn't
     // alive (LRU evicted, never spawned, crashed), the message is still
     // persisted in the DB — caller can `galley session watch` and wait
     // for a future spawn / replay path. We surface the runner result in
@@ -121,9 +200,9 @@ pub(super) async fn dispatch_session_send(
     let dispatch_status = match ctx
         .runner
         .send_command(
-            &parsed.session_id,
+            session_id,
             &IpcCommand::UserMessage(UserMessageCommand {
-                text: parsed.content,
+                text: content,
                 images: vec![],
                 visibility: None,
                 absolute_turn_index: brief.turn_index.map(i64::from),
@@ -132,7 +211,10 @@ pub(super) async fn dispatch_session_send(
         .await
     {
         Ok(()) => "dispatched",
-        Err(_) => "persisted_only",
+        Err(_) => {
+            ctx.runner.queue_release_run(session_id).await;
+            "persisted_only"
+        }
     };
 
     // Notify GUI so the conversation view picks up the new user row.
@@ -147,6 +229,18 @@ pub(super) async fn dispatch_session_send(
         "dispatch": dispatch_status,
     });
     SocketResponse::ok(request_id, result)
+}
+
+/// Broadcast the session's queue snapshot after a mutation.
+pub(super) async fn emit_queue_changed(ctx: &HandlerCtx<'_>, session_id: &str) {
+    let items = ctx.runner.queue_snapshot(session_id).await;
+    ctx.notify(
+        crate::api::SESSION_QUEUE_CHANGED_EVENT,
+        &crate::api::SessionQueueChangedPayload {
+            session_id: session_id.to_string(),
+            items,
+        },
+    );
 }
 
 pub(super) async fn dispatch_session_checkpoint(

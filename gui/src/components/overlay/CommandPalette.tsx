@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 
 import { searchMessages, type MessageSearchHit } from "@/lib/db";
 import { useCopy } from "@/lib/i18n";
-import { cleanSessionSummary } from "@/lib/session-summary";
+import { displaySessionSummary } from "@/lib/session-summary";
 import { resetWindowLayout } from "@/lib/layout-reset";
 import { formatShortcut, formatShortcutReadable } from "@/lib/shortcuts";
 import { StatusIcon } from "@/lib/status-icon";
@@ -292,7 +292,9 @@ function RootPage({
           annotations on action rows and would crush the title when
           fed an 80-char recap. */}
       {recentSessions.map((s) => {
-        const preview = s.summary ? cleanSessionSummary(s.summary) : undefined;
+        const preview = s.summary
+          ? displaySessionSummary(s.summary, copy.sidebar.turnProtocolFailure)
+          : undefined;
         return (
           <Command.Item
             key={s.id}

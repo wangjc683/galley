@@ -104,6 +104,7 @@ export const enCopy: AppCopy = {
     stepSummary: (index, summary) => `Step ${index} · ${summary}`,
     completedSummary: (summary) => `Done · ${summary}`,
     cancelledSummary: (summary: string) => `Stopped · ${summary}`,
+    turnProtocolFailure: "Turn protocol error: tool call not delivered",
     archiveRunningTitle: "Archive a running conversation?",
     archiveRunningBody: (title: string) =>
       `"${title}" is still running. Archiving won't stop it, but it will disappear from the sidebar and you won't see its progress.`,
@@ -295,8 +296,13 @@ export const enCopy: AppCopy = {
     enterHint: "Enter sends · Shift+Enter for a new line",
     dragToReferenceHint: "Drop any file or folder here to send it to the AI",
     newlineHint: "Shift+Enter for a new line",
-    byTheWaySendHint: "Start with /btw · Enter sends",
-    byTheWayPrefixHint: "Start with /btw first",
+    queueEnterHint: "Enter queues · runs after the current task",
+    stoppingQueueHint: "Stopping — your queued message will be sent automatically",
+    queueStripLabel: (count) => `Queued · ${count}`,
+    queueJump: "Run now",
+    queueJumpTooltip: "Interrupt the current task and run this first",
+    queueRemove: "Remove",
+    queueEditTooltip: "Take back to edit (removes from the queue)",
     imageOnlyFallback: "Please look at this image.",
     pastedImage: "Pasted image",
     attachImage: "Attach image",
@@ -1387,6 +1393,9 @@ export const enCopy: AppCopy = {
     waitingApproval: "Waiting for approval",
     failed: "Failed",
     denied: "Denied",
+    turnProtocolFailureLead:
+      "Turn protocol error: this turn's tool call came back as plain text and never reached the engine.",
+    turnProtocolFailureRaw: "Raw output",
     step: (index) => `Step ${index}`,
     stepDirectAnswer: "Answered the question directly",
     stepCalledTools: (names) =>
@@ -1606,6 +1615,8 @@ export const enCopy: AppCopy = {
     imageBlocked: "Images are not available here",
     imageBlockedGoal:
       "Goal, /btw, and replies to Agent questions do not support images yet. Send a normal message first.",
+    imageBlockedQueue:
+      "Queued messages are text-only while a run is in progress. Send images after this run finishes; text can queue now.",
     imageBlockedExternal:
       "External GA does not support image input yet. Remove the image before sending, or start a new session with the bundled engine.",
     imageTooLarge: "Image is too large. The limit is 10 MB per image.",

@@ -192,8 +192,9 @@ pub(crate) async fn session_send(
     content: String,
     supervisor: Option<String>,
     reason: Option<String>,
+    jump: bool,
 ) -> Result<(), GalleyError> {
-    let result = session_send_value(id, content, supervisor, reason).await?;
+    let result = session_send_value(id, content, supervisor, reason, jump).await?;
     println!("{result}");
     Ok(())
 }
@@ -203,12 +204,14 @@ pub(crate) async fn session_send_value(
     content: String,
     supervisor: Option<String>,
     reason: Option<String>,
+    jump: bool,
 ) -> Result<serde_json::Value, GalleyError> {
     call_value(SessionSendArgs {
         session_id: id,
         content,
         supervisor,
         reason,
+        jump,
     })
     .await
 }

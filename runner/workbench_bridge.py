@@ -139,6 +139,24 @@ def _clean_response_for_display(text: str) -> str:
     return cleaned.strip()
 
 
+# Fixed replacement for a recap that is really leaked tool-call markup.
+# When a provider passes the model's tool call through as plain text
+# (no structured tool_use block — seen with third-party proxies), GA
+# treats the markup as the reply body and its fallback recap IS the
+# markup. Tag-stripping that recap leaves script residue with zero
+# information, so the whole summary is replaced with this marker
+# instead. The GUI exact-matches the string to localize it at render
+# (gui/src/lib/session-summary.ts — keep in sync); CLI consumers see
+# it verbatim in `sessions list`.
+TURN_PROTOCOL_FAILURE_SUMMARY = "回合协议错误：工具调用未能送达"
+
+# A recap that STARTS with tool-call markup is markup-dominant — the
+# GA fallback recap starts at the reply's first character, so a
+# markup-led reply puts `<invoke …` (or a truncated `<parameter …`)
+# right at the front.
+_TOOL_MARKUP_START_RE = re.compile(r"^\s*</?(?:invoke|parameter)[\s>/]")
+
+
 def _clean_turn_summary(raw: str) -> str:
     """Sanitize GA's per-turn recap before it reaches TurnEndEvent (and
     from there the session row + SQLite).
@@ -146,13 +164,16 @@ def _clean_turn_summary(raw: str) -> str:
     When the model omits <summary>, GA's turn_end_callback falls back to
     the raw reply body middle-truncated by smart_format(" ... ") —
     markdown markers survive, and protocol tags like <suggestion> can be
-    chopped in half, leaving fragments like "estion>". Mirror of the
-    GUI-side cleaner for historical rows
-    (gui/src/lib/session-summary.ts — keep the rules in sync)."""
+    chopped in half, leaving fragments like "estion>". Tags may carry
+    attributes (`<invoke name="code_run">`), so the tag patterns accept
+    an attribute section. Mirror of the GUI-side cleaner for historical
+    rows (gui/src/lib/session-summary.ts — keep the rules in sync)."""
     s = re.sub(r"^第\s*\d+\s*步\s*·\s*", "", raw)
-    s = re.sub(r"</?[A-Za-z][\w-]*>", " ", s)
-    s = re.sub(r"<[\w/-]*(?=\s*\.\.\.(\s|$))", "", s)
-    s = re.sub(r"(\.\.\.\s*)[\w/-]+>", r"\1", s)
+    if _TOOL_MARKUP_START_RE.match(s):
+        return TURN_PROTOCOL_FAILURE_SUMMARY
+    s = re.sub(r"</?[A-Za-z][\w-]*(?:\s[^<>]*)?/?>", " ", s)
+    s = re.sub(r"<[\w/-]*(?:\s[^<>]*)?(?=\s*\.\.\.(\s|$))", "", s)
+    s = re.sub(r"(\.\.\.\s*)[\w\"'=/-]+>", r"\1", s)
     s = re.sub(r"#{1,6}(?=\s|$)", " ", s)
     s = re.sub(r"[*_]{2,}|`+", "", s)
     s = re.sub(r"\s*\.\.\.\s*", " … ", s)
@@ -1284,11 +1305,22 @@ class Bridge:
                     # Abort (command thread) may have already emitted the
                     # completion and cleared the run — don't double-emit.
                     if self.run_in_progress.is_set():
+                        # Leaked tool-call markup as the "final answer"
+                        # (#22): the GUI renders its own protocol-failure
+                        # notice from responseContent; finalContent feeds
+                        # Core's auto-title, which must not title the
+                        # session after a script body. Empty means "no
+                        # usable answer" downstream.
+                        final_content = _clean_response_for_display(
+                            response_content
+                        )
+                        if _TOOL_MARKUP_START_RE.match(final_content):
+                            final_content = ""
                         self._emit(
                             RunCompleteEvent(
                                 sessionId=self.session_id,
                                 exitReason=safe_exit or {},
-                                finalContent=_clean_response_for_display(response_content),
+                                finalContent=final_content,
                                 totalTurns=turn,
                                 visibility=self._current_message_visibility,
                             )
@@ -1384,6 +1416,25 @@ class Bridge:
             ):
                 self._handle_btw_command(cmd.text)
                 return
+            # Defensive gate (galley#19/#20): a main-agent message while
+            # a run is in progress would silently stack in GA's serial
+            # task_queue while the bookkeeping below (turn counter
+            # reset, turn_start(1), a second progress drain) reports it
+            # as already running — the event stream lies and two drains
+            # contend. Core owns the outbound queue now and never sends
+            # mid-run, so anything arriving here is a protocol misuse:
+            # reject it like load_history does instead of corrupting
+            # the stream. (`/btw` above is exempt by design.)
+            if self.run_in_progress.is_set():
+                self._emit_error(
+                    "Cannot start a new task while a run is in progress; "
+                    "Galley Core queues messages and dispatches after "
+                    "run_complete (galley#19)",
+                    None,
+                    category="business",
+                    context="user_message",
+                )
+                return
             # New put_task = new agent_runner_loop, turn counter restarts
             # at 1. Reset dedupe so the first turn_start(1) of the new
             # run isn't suppressed when the previous run also ended at
@@ -1407,6 +1458,17 @@ class Bridge:
                     context="approval_response",
                 )
         elif isinstance(cmd, AskUserResponseCommand):
+            # Same defensive gate as UserMessage: an ask_user pause has
+            # already emitted run_complete, so a legitimate answer
+            # always arrives with the run closed.
+            if self.run_in_progress.is_set():
+                self._emit_error(
+                    "Cannot answer ask_user while a run is in progress",
+                    None,
+                    category="business",
+                    context="ask_user_response",
+                )
+                return
             # Same as UserMessage above — ask_user response triggers a
             # fresh agent_runner_loop with turn counter restarting at 1.
             self._last_emitted_turn = 0

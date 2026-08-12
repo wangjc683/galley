@@ -59,6 +59,12 @@ export function ComposerActionSlot({
       )}
     >
       {stopMode && !isSideQuestion ? (
+        // The slot stays Stop for the whole run — queueing is
+        // Enter-only, taught by the footer hint (variant B verdict,
+        // devlog 2026-08-12-queue-slot-variant-verdict). Geometry
+        // stability again beats a morphing affordance: Stop is used
+        // under impatience, exactly when a shape-shifted slot causes
+        // the worst misclick (meant stop, queued a half-typed draft).
         <TooltipLabel
           text={isStopping ? copy.composer.stopping : copy.composer.stop}
         >

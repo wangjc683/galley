@@ -460,6 +460,50 @@ def test_user_message_emits_turn_start_before_progress_drain() -> None:
     assert bridge.event_queue.empty()
 
 
+def test_user_message_mid_run_is_rejected_as_business_error() -> None:
+    """galley#19/#20 defensive gate: Core owns the outbound queue, so a
+    main-agent message arriving while run_in_progress is protocol
+    misuse — reject with a business error instead of stacking it in
+    GA's task_queue with lying turn_start bookkeeping."""
+
+    class ExplodingAgent:
+        def put_task(self, *_a: Any, **_k: Any) -> object:
+            raise AssertionError("put_task must not be called mid-run")
+
+    bridge = _new_test_bridge()
+    bridge.agent = ExplodingAgent()
+    bridge.run_in_progress.set()
+
+    bridge.dispatch_command(UserMessageCommand(text="queued please"))
+
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "error"
+    assert event["category"] == "business"
+    assert event["context"] == "user_message"
+    # No turn_start / drain bookkeeping happened.
+    assert bridge.event_queue.empty()
+    assert bridge._last_emitted_turn == 0
+
+    bridge.dispatch_command(AskUserResponseCommand(text="yes", absoluteTurnIndex=1))
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "error"
+    assert event["context"] == "ask_user_response"
+
+
+def test_btw_bypass_still_works_mid_run() -> None:
+    bridge = _new_test_bridge()
+    bridge.agent = object()
+    bridge.run_in_progress.set()
+    calls: list[str] = []
+    bridge._btw_handler = lambda _agent, _text: "ok"
+    bridge._handle_btw_command = calls.append  # type: ignore[assignment]
+
+    bridge.dispatch_command(UserMessageCommand(text="/btw still fine"))
+
+    assert calls == ["/btw still fine"]
+    assert bridge.event_queue.empty()
+
+
 def test_btw_user_message_does_not_emit_main_turn_start() -> None:
     bridge = _new_test_bridge()
     bridge.agent = object()
@@ -1175,3 +1219,35 @@ def test_clean_turn_summary_scrubs_fallback_recap_junk() -> None:
         "答复 试试这个"
     )
     assert _clean_turn_summary("已发出 <sugg ...") == "已发出 …"
+
+
+def test_clean_turn_summary_strips_attribute_tags() -> None:
+    # Attribute-carrying tags mid-prose: the old bare-tag pattern
+    # required ">" right after the name and let these through (#22).
+    assert _clean_turn_summary('已改好 <file_content path="a.py">x</file_content> 收尾') == (
+        "已改好 x 收尾"
+    )
+
+
+def test_clean_turn_summary_replaces_markup_dominant_recap() -> None:
+    from runner.workbench_bridge import TURN_PROTOCOL_FAILURE_SUMMARY
+
+    # Real #22 shape: a proxied model emitted its tool call as plain
+    # text, GA's fallback recap IS the markup (middle-cut by
+    # smart_format). Cleaning would leave script residue — replace
+    # with the fixed marker instead.
+    raw = '<invoke name="code_run"><parameter nam ... e(js)print(len(js))'
+    assert _clean_turn_summary(raw) == TURN_PROTOCOL_FAILURE_SUMMARY
+    # Legacy step prefix ahead of the markup doesn't hide it.
+    assert (
+        _clean_turn_summary('第 2 步 · <invoke name="code_run">x')
+        == TURN_PROTOCOL_FAILURE_SUMMARY
+    )
+    # Truncation that starts at a <parameter …> tag counts too.
+    assert (
+        _clean_turn_summary('<parameter name="script">import json')
+        == TURN_PROTOCOL_FAILURE_SUMMARY
+    )
+    # Prose that merely mentions the markup mid-sentence is NOT
+    # markup-dominant — normal cleaning applies.
+    assert "回合协议错误" not in _clean_turn_summary("检查了 invoke 调用的参数")

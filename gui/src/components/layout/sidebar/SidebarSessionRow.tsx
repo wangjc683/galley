@@ -20,7 +20,7 @@ import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
 import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
-import { cleanSessionSummary } from "@/lib/session-summary";
+import { displaySessionSummary } from "@/lib/session-summary";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
@@ -176,11 +176,12 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   //     sessions have status "idle"; the "completed" enum value is
   //     only ever written by the CLI/supervisor surface.)
   //
-  // cleanSessionSummary repairs legacy "第 N 步 · " prefixes and
+  // displaySessionSummary repairs legacy "第 N 步 · " prefixes and
   // GA fallback-recap junk (residual tags / markdown) at render so
-  // old rows display correctly without a DB migration.
+  // old rows display correctly without a DB migration, and swaps
+  // leaked tool-call markup for the localized protocol-failure label.
   const cleanSummary = session.summary
-    ? cleanSessionSummary(session.summary)
+    ? displaySessionSummary(session.summary, copy.sidebar.turnProtocolFailure)
     : null;
   const approvalCount = pendingApprovalCount;
   const errorCount = session.errorCount || 0;

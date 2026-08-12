@@ -191,6 +191,11 @@ const GA_TAG_NAMES = [
   "next-suggestion",
 ];
 
+// Superset used only for the trailing-partial-tag truncation in
+// cleanPartialContent step 3: GA's structured tags plus the leaked
+// tool-call markup tags (see isLeakedToolCallMarkup).
+const PARTIAL_TAG_NAMES = [...GA_TAG_NAMES, "invoke", "parameter"];
+
 /**
  * Stripping for **partial** GA output (turn_progress streaming).
  *
@@ -299,14 +304,16 @@ export function cleanPartialContent(text: string): string {
 
   // 3. Trailing partial open-tag start ("<thi", "<sum", etc.).
   // Find the last "<" — if what follows it is a prefix of any GA tag
-  // name AND there's no ">" yet, drop it.
+  // name AND there's no ">" yet, drop it. Includes the leaked
+  // tool-call markup tags (step 5) so a chunk boundary inside
+  // "<invoke" doesn't flash the fragment for one frame.
   const lastLt = out.lastIndexOf("<");
   if (lastLt !== -1 && out.indexOf(">", lastLt) === -1) {
     const tail = out.slice(lastLt + 1).toLowerCase();
     const couldBeTag =
       tail === "" ||
       tail === "/" ||
-      GA_TAG_NAMES.some(
+      PARTIAL_TAG_NAMES.some(
         (n) =>
           n.startsWith(tail) ||
           // closing form like "</thi" → tail = "/thi"
@@ -318,6 +325,14 @@ export function cleanPartialContent(text: string): string {
   // 4. Cleanups.
   out = out.replace(FILE_REF_PATTERN, "");
   out = out.replace(/\n{3,}/g, "\n\n");
+
+  // 5. Leaked tool-call markup (#22): a buffer that — after all the
+  //    stripping above — starts with `<invoke …` is a tool call the
+  //    provider returned as plain text. Don't stream it as prose;
+  //    return empty so the thinking placeholder holds until turn_end,
+  //    where MessageAgent renders the protocol-failure notice.
+  if (isLeakedToolCallMarkup(out)) return "";
+
   return out;
 }
 
@@ -388,6 +403,24 @@ export function summaryEchoesAnswer(
     }
   }
   return false;
+}
+
+/**
+ * A reply body that IS leaked tool-call markup (#22): the model (via a
+ * third-party proxy that never translates tool calls into structured
+ * blocks) emitted its call as plain text, so GA saw a text-only reply
+ * whose content starts with `<invoke name="…">` / `<parameter …>`.
+ * There is nothing to "clean" — stripping the tags leaves script
+ * residue — so callers render a protocol-failure notice with the raw
+ * markup collapsed behind it (MessageAgent) or suppress the streaming
+ * flash (cleanPartialContent). Deliberately a starts-with rule, same
+ * shape as session-summary's markup-dominant check (keep in sync):
+ * prose that merely quotes the markup mid-answer must not trip it.
+ */
+const LEAKED_TOOL_MARKUP_START = /^\s*<\/?(?:invoke|parameter)[\s>/]/;
+
+export function isLeakedToolCallMarkup(text: string): boolean {
+  return LEAKED_TOOL_MARKUP_START.test(text);
 }
 
 export function extractThinking(text: string): string | undefined {

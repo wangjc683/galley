@@ -29,6 +29,7 @@ import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useBrowserControlStartupEffect } from "@/hooks/useBrowserControlStartupEffect";
 import { useChannelsStatus } from "@/hooks/useChannelsStatus";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
+import { useSessionQueueEvents } from "@/hooks/useSessionQueueEvents";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useGoalActions } from "@/hooks/useGoalActions";
 import { useGoalEffects } from "@/hooks/useGoalEffects";
@@ -244,6 +245,7 @@ function App() {
   useBrowserControlStartupEffect(activeRuntimeKind);
   useGlobalShortcuts({ setEmptyComposerFocusTick, setSettingsTab });
   useExternalCoreEvents();
+  useSessionQueueEvents(activeSessionId ?? null);
   useScheduledFireFailedNotification();
 
   // Session creation is **lazy** — we no longer auto-create on
