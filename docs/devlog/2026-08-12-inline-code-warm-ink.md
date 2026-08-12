@@ -92,9 +92,9 @@ waku 的 `#E0A882` 几乎等于 Galley 的 `brand-strong #E2AE8D`。
   按字面渲染，闭合瞬间星号消失 + 变粗 → 宽度突变 → 段落尾部抖动。waku 只给
   *显示用*解析树追加合成闭合符。Galley 无等价机制（`MainView.tsx` →
   `useMarkdownStream` → `MarkdownView`）。**推荐做，但需先实机确认抖动。**
-- **间距节奏派生自单一数字**：waku 只有一个 `block_gap`，其余按倍数派生
-  （blockquote 1.0× / 列表项间 0.5× / 列表项内 0.6×）；Galley 是十几处
-  硬编码 `my-3` / `my-3.5` / `mt-5 mb-3`。抽 token 后每次打磨改一个变量。
+- ~~**间距节奏派生自单一数字**~~ → **已做**，见
+  [markdown 纵向节奏](./2026-08-12-markdown-vertical-rhythm.md)。核实后发现
+  这不只是整洁问题：间距不随字号档位缩放，调大字号时文档反而变挤。
 - **任务列表 checkbox**：`PROSE_BASE` 完全没有 checkbox 样式，
   `- [x]` 在衬线正文里渲染成系统原生方块。waku 的几何可直接搬
   （边长 0.92em、圆角 3、`(line_height - box_size)/2` 压到行中线）。

@@ -131,9 +131,34 @@ export const MarkdownView = memo(function MarkdownView({
 // ---------- Prose-level typography (variant) ----------
 
 /**
- * Both variants share `[&_p]:mb-3`, list-marker styling, link color,
+ * Both variants share the block rhythm, list-marker styling, link color,
  * etc. via descendant selectors. We just swap the surrounding font
  * register at the top.
+ */
+/**
+ * Vertical rhythm (2026-08-12). Every block margin below is a multiple of
+ * `--conversation-block-gap`, which conversation-font-size.ts scales with
+ * the reading tier (10.5 / 12 / 13.5px). It used to be a dozen hardcoded
+ * Tailwind values while size and leading scaled, so the document silently
+ * tightened as the user asked for a bigger face — see that file for the
+ * numbers.
+ *
+ * The ladder is unchanged from the hardcoded values; it just became
+ * parameterised. Standard tier in brackets:
+ *
+ *   0.3333  [4px]   list items, nested lists
+ *   0.5     [6px]   h4 close
+ *   0.6667  [8px]   h3 close
+ *   0.8333  [10px]  h2 close
+ *   1       [12px]  paragraphs, lists, blockquote, h1 close, h4 open
+ *   1.1667  [14px]  code blocks, tables — an embedded medium earns a
+ *                   little more air than prose does
+ *   1.3333  [16px]  h3 open
+ *   1.6667  [20px]  h1 / h2 open, hr — section breaks
+ *
+ * Headings keep their own descending close ladder (12 / 10 / 8 / 6): the
+ * bigger the heading, the more room under it. Flattening that to one
+ * value would cost more than it saves.
  */
 const PROSE_BASE = cn(
   // Reset child margins so the parent callout (caller's box) can
@@ -144,22 +169,22 @@ const PROSE_BASE = cn(
   // Prose only, never UI chrome (docs/typography-principles.md).
   "[hanging-punctuation:allow-end]",
   // Paragraphs.
-  "[&_p]:my-3 [&_p]:[line-height:var(--conversation-body-leading)] [&_p:last-child]:mb-0",
+  "[&_p]:[margin-block:var(--conversation-block-gap)] [&_p]:[line-height:var(--conversation-body-leading)] [&_p:last-child]:mb-0",
   // Headings (document prose face, slight weight contrast against body).
-  "[&_h1]:mt-5 [&_h1]:mb-3 [&_h1]:font-[var(--galley-prose-serif)] [&_h1]:[font-size:var(--conversation-heading-1-size)] [&_h1]:font-medium [&_h1]:leading-[1.3] [&_h1]:tracking-[0.005em] [&_h1]:text-ink",
-  "[&_h2]:mt-5 [&_h2]:mb-2.5 [&_h2]:font-[var(--galley-prose-serif)] [&_h2]:[font-size:var(--conversation-heading-2-size)] [&_h2]:font-medium [&_h2]:leading-[1.35] [&_h2]:text-ink",
+  "[&_h1]:[margin-top:calc(var(--conversation-block-gap)*1.6667)] [&_h1]:[margin-bottom:var(--conversation-block-gap)] [&_h1]:font-[var(--galley-prose-serif)] [&_h1]:[font-size:var(--conversation-heading-1-size)] [&_h1]:font-medium [&_h1]:leading-[1.3] [&_h1]:tracking-[0.005em] [&_h1]:text-ink",
+  "[&_h2]:[margin-top:calc(var(--conversation-block-gap)*1.6667)] [&_h2]:[margin-bottom:calc(var(--conversation-block-gap)*0.8333)] [&_h2]:font-[var(--galley-prose-serif)] [&_h2]:[font-size:var(--conversation-heading-2-size)] [&_h2]:font-medium [&_h2]:leading-[1.35] [&_h2]:text-ink",
   // h3 deliberately close to body size — DESIGN.md §4.3 calls this
   // out as a way to avoid jarring jumps inside the document flow.
-  "[&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:font-[var(--galley-prose-serif)] [&_h3]:[font-size:var(--conversation-heading-3-size)] [&_h3]:font-medium [&_h3]:text-ink",
-  "[&_h4]:mt-3 [&_h4]:mb-1.5 [&_h4]:font-[var(--galley-prose-serif)] [&_h4]:[font-size:var(--conversation-heading-4-size)] [&_h4]:font-medium [&_h4]:text-ink",
+  "[&_h3]:[margin-top:calc(var(--conversation-block-gap)*1.3333)] [&_h3]:[margin-bottom:calc(var(--conversation-block-gap)*0.6667)] [&_h3]:font-[var(--galley-prose-serif)] [&_h3]:[font-size:var(--conversation-heading-3-size)] [&_h3]:font-medium [&_h3]:text-ink",
+  "[&_h4]:[margin-top:var(--conversation-block-gap)] [&_h4]:[margin-bottom:calc(var(--conversation-block-gap)*0.5)] [&_h4]:font-[var(--galley-prose-serif)] [&_h4]:[font-size:var(--conversation-heading-4-size)] [&_h4]:font-medium [&_h4]:text-ink",
   // Lists. ::marker pulls list bullets into the muted register so
   // they read as structure rather than content.
-  "[&_ul]:my-3 [&_ul]:ml-5 [&_ul]:list-disc",
-  "[&_ol]:my-3 [&_ol]:ml-5 [&_ol]:list-decimal",
-  "[&_li]:my-1 [&_li::marker]:text-ink-muted",
+  "[&_ul]:[margin-block:var(--conversation-block-gap)] [&_ul]:ml-5 [&_ul]:list-disc",
+  "[&_ol]:[margin-block:var(--conversation-block-gap)] [&_ol]:ml-5 [&_ol]:list-decimal",
+  "[&_li]:[margin-block:calc(var(--conversation-block-gap)*0.3333)] [&_li::marker]:text-ink-muted",
   "[&_li>p]:my-0", // tight paragraphs inside list items
   // Nested lists tighter.
-  "[&_li>ul]:my-1 [&_li>ol]:my-1",
+  "[&_li>ul]:[margin-block:calc(var(--conversation-block-gap)*0.3333)] [&_li>ol]:[margin-block:calc(var(--conversation-block-gap)*0.3333)]",
   // Inline code — mono token, subtle pill background, warm code ink.
   //
   // The ink is a HUE step off the prose, not a lightness step (token
@@ -176,9 +201,9 @@ const PROSE_BASE = cn(
   "[&_:not(pre)>code]:rounded-[4px] [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:box-decoration-clone [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-px [&_:not(pre)>code]:font-mono [&_:not(pre)>code]:text-[0.92em] [&_:not(pre)>code]:text-code-ink",
   // Block code lives in CodeBlock component (renders pre + own
   // styles); we keep a fallback for any pre that escapes.
-  "[&_pre]:my-3.5",
+  "[&_pre]:[margin-block:calc(var(--conversation-block-gap)*1.1667)]",
   // Blockquotes — apricot-bar accent, italic, muted.
-  "[&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-brand [&_blockquote]:pl-3.5 [&_blockquote]:font-[var(--galley-prose-serif)] [&_blockquote]:italic [&_blockquote]:text-ink-soft",
+  "[&_blockquote]:[margin-block:var(--conversation-block-gap)] [&_blockquote]:border-l-[3px] [&_blockquote]:border-brand [&_blockquote]:pl-3.5 [&_blockquote]:font-[var(--galley-prose-serif)] [&_blockquote]:italic [&_blockquote]:text-ink-soft",
   // Links — body ink + a muted underline, brand only on hover.
   //
   // The warm budget in a paragraph is spent on inline code (above), so
@@ -194,7 +219,7 @@ const PROSE_BASE = cn(
   "[&_th]:border [&_th]:border-line [&_th]:bg-surface [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-medium [&_th]:text-ink",
   "[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:text-ink",
   // hr inside markdown.
-  "[&_hr]:my-5 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-line",
+  "[&_hr]:[margin-block:calc(var(--conversation-block-gap)*1.6667)] [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-line",
   // Strong / em — keep weight in line with the prose body. Body is normal
   // (400), so strong at medium (500) is one visible weight step up.
   "[&_strong]:font-medium [&_strong]:text-ink",
@@ -245,7 +270,7 @@ function cjkDominant(source: string): boolean {
 const COMPONENTS: Components = {
   table({ className, children, ...props }) {
     return (
-      <div className="my-3.5 overflow-x-auto">
+      <div className="overflow-x-auto [margin-block:calc(var(--conversation-block-gap)*1.1667)]">
         <table
           className={cn(
             "w-max min-w-full border-collapse [font-size:var(--conversation-table-size)]",

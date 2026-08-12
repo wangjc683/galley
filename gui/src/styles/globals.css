@@ -265,6 +265,18 @@
   --motion-slow: 240ms;
 }
 
+/* Fallback for markdown's vertical rhythm base (the `standard` tier's
+   value). The live token is injected per tier by conversation-font-size.ts
+   on the MainView / EmptyState roots, and everything in MarkdownView's
+   PROSE_BASE is a multiple of it. This default exists because MarkdownView
+   also renders OUTSIDE those roots (TutorialModal), where an undefined var
+   would make every `calc()` margin invalid — and an invalid margin computes
+   to 0, collapsing the whole document rather than degrading gracefully the
+   way an inherited font-size does. */
+:root {
+  --conversation-block-gap: 12px;
+}
+
 @layer base {
   button:focus,
   button:focus-visible,

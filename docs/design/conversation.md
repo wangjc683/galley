@@ -120,7 +120,8 @@ Final answer 跟 Thinking summary 都通过 `react-markdown` + `remark-gfm` + Sh
 px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 `--conversation-*` 变量驱动（见 foundations.md「字号 scale」），**不要
 在组件里硬编码 px**（2026-07-05 教训：块代码曾硬编码 13px，用户调大
-字号时代码不跟随）：
+字号时代码不跟随。2026-08-12 同一个坑的第二层：**纵向间距**也全是硬编码，
+见下方「纵向节奏」）：
 
 | markdown | 渲染 |
 |---|---|
@@ -143,6 +144,28 @@ px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 | `![alt](url)` | `https://` 与绝对本地 raster 图片（png / jpg / jpeg / webp / gif）内联预览；本地路径支持 macOS/Linux 绝对路径、Windows drive path、`file://`；相对路径、`http://`、`data:`、`svg`、加载失败降级为图片链接 pill。首次解码时记录 natural 尺寸（模块级缓存，按 src 键），此后每次渲染带 `width`/`height` 属性——浏览器解码前即预留最终盒子，回访转录时图片不再 pop-in 推挤下方内容（2026-07-15） |
 
 **视觉哲学**：每个 markdown 元素 reuse 现有 Newsreader / Inter / JetBrains-Mono token，不为 markdown 单独引入字号 ramp。整段对话读起来是一个 document，不是 stylesheet 拼贴。
+
+#### 纵向节奏（2026-08-12）
+
+markdown 的每一个块间距都是 `--conversation-block-gap` 的倍数，该基数随
+三档字号缩放（10.5 / 12 / 13.5px），倍数阶梯写在 `MarkdownView` 的
+`PROSE_BASE` 注释里。
+
+**为什么必须跟随档位**：字号和行高本来就随档位走（13.5/15/16.5px ×
+1.65/1.70/1.75），但 2026-08-12 之前所有块间距都是写死的 Tailwind 值
+（`my-3` = 12px 三档不变）。段间距除以行盒高，small 档 0.54 行、large 档
+只剩 0.42 行——**用户把字号调大（想要更松），文档反而更挤**，相对分离度
+掉 23%。现在三档都稳在 0.47 附近。
+
+这是 2026-07-05「块代码硬编码 13px」那个教训的第二层：那次修的是**尺寸**
+不跟随，这次是**间距**不跟随。规则统一为：阅读面上任何随档位有意义的量，
+都必须挂 `--conversation-*`，不能是固定 Tailwind class。
+
+倍数阶梯保留了原有的全部区分，没有压平：代码块 / 表格（1.1667×）比正文多
+喘一口——它们是嵌入的另一种介质；标题的 close 阶梯 12/10/8/6 也原样保留，
+标题越大下方留白越多。`:root` 里有一个 12px 兜底值，因为 `MarkdownView`
+也会渲染在注入档位变量的根之外（`TutorialModal`），而变量缺失会让 `calc()`
+整体失效、margin 归零。
 
 #### 行内代码的暖色预算（2026-08-12 定案）
 

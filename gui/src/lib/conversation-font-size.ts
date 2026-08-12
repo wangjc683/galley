@@ -17,12 +17,26 @@ export function isConversationFontSize(
   );
 }
 
+/**
+ * `--conversation-block-gap` is the base unit for markdown's vertical
+ * rhythm — every block margin in `MarkdownView`'s `PROSE_BASE` is a
+ * multiple of it (ratio ladder documented there). It belongs in this
+ * table, not in a fixed Tailwind class, because the gap has to track the
+ * line box or the document's density drifts across the three tiers.
+ *
+ * Before 2026-08-12 every markdown margin was a hardcoded px value while
+ * size and leading scaled, so paragraph separation measured against the
+ * line box ran 0.54 line at `small` and 0.42 at `large`: asking for a
+ * bigger face made the document *tighter*, the opposite of the request.
+ * The values below hold that ratio near 0.47 across all three tiers.
+ */
 const TYPOGRAPHY_VARS: Record<
   ConversationFontSize,
   CSSProperties & Record<`--conversation-${string}`, string>
 > = {
   small: {
     "--conversation-body-size": "13.5px",
+    "--conversation-block-gap": "10.5px",
     "--conversation-body-leading": "1.65",
     "--conversation-composer-size": "13.5px",
     "--conversation-thinking-size": "13px",
@@ -42,6 +56,7 @@ const TYPOGRAPHY_VARS: Record<
   },
   standard: {
     "--conversation-body-size": "15px",
+    "--conversation-block-gap": "12px",
     "--conversation-body-leading": "1.7",
     "--conversation-composer-size": "14.5px",
     "--conversation-thinking-size": "14px",
@@ -61,6 +76,7 @@ const TYPOGRAPHY_VARS: Record<
   },
   large: {
     "--conversation-body-size": "16.5px",
+    "--conversation-block-gap": "13.5px",
     "--conversation-body-leading": "1.75",
     "--conversation-composer-size": "16px",
     "--conversation-thinking-size": "15.5px",
