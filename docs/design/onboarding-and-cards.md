@@ -140,6 +140,15 @@ Onboarding，从第一屏开始，不清空历史、不删除对话、不重置�
 
 Inline 类**不可 dismiss**（属于对话历史）；toast 类可手动 dismiss。
 
+**自动消失的倒计时会暂停**（2026-08-12）：鼠标悬停在 toast 上、或焦点落在
+toast 内部（动作按钮可 Tab 到）时，计时停住；离开后从**剩余时间**继续，且
+保证至少再显示 `TOAST_RESUME_FLOOR_MS = 800ms`——否则一个只剩 40ms 的 toast
+会在指针刚移开的瞬间消失，读起来像「toast 在躲鼠标」，而且把动作按钮一起带走。
+这条对 Galley 是必需而非打磨：toast 带 `重启 Channels` / `查看项目` /
+`查看 Goal` / `重启更新` 这类 CTA，鼠标伸过去的路上消失会点空。下限不会超过
+toast 自己的总时长（调用方要 300ms 就是 300ms）。计时规则是纯函数
+`lib/toast-timing.ts`，可单测。
+
 #### Overlay 层级
 
 - 普通 modal / Settings 使用 `z-50`：当前主任务面板。
