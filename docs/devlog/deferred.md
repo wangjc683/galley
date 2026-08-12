@@ -203,3 +203,32 @@
 - **方案**：若触发，同走 `.chrome-hover-scope` 的思路给 chrome 层覆写 `--color-selected`（或直接压深一档），保持杏色相、拉开 ΔL*。
 - **待定**：是否随未来 dark pass / chrome 再调整一并处理。
 - **关联**：[Sidebar hover 失明修复](./2026-08-07-sidebar-chrome-hover-retune.md)。
+
+---
+
+## Artifacts（会话交付物：scratch 工作区 + API + GUI 面板）
+
+- **状态**：搁置（2026-08-07 裁决，核心设计 1–4 已定案；2026-08-12 补了一个
+  可独立发运的最小切片与路径事实校正）
+- **提出**：2026-08-07（OpenWorker 两轮精读后成 PRD）
+- **启动信号**：主 feature ——「拿到交付清单而不是聊天记录」的需求实际出现
+  （supervisor 侧要结构化产出，或用户反复抱怨找不到 agent 写的文件）。
+  最小切片 ——**一个可测判据**：展开若干真实会话的 `file_patch` / `file_write`
+  tool callout，若 `args.path` 绝对路径占多数，则「打开 / 在 Finder 中显示」
+  按钮值得单做；若相对占多数，说明真问题是产物落点，直接回主 PRD。
+- **方案**：全文在 [.scratch/artifacts/PRD.md](../../.scratch/artifacts/PRD.md)
+  （含 OpenWorker 参考笔记、安全红线、5 个未决问题、UX 走查发现 A/B）。
+  核心洞察：**artifact 不是存储系统，是工作区上的一层透镜**——不建库、
+  不做版本、文件系统是唯一真相源。
+- **实施要点**：scratch 工作区机制必须先行（没有确定落点，面板只能扫用户项目
+  目录，信噪比崩坏）；HTML 预览的 iframe **禁止 `allow-same-origin`**
+  （OpenWorker 在此有真实漏洞）；目录遍历先剪后走（engineering-workflow I12
+  的 macOS TCC 教训）。
+- **待定**：scratch base 终值与目录布局；哪些会话显示面板；`artifact:` 契约
+  注入位置（倾向 Persona）；面板形态（无右栏是 2026-05-12 存档裁决，留了活口）；
+  API 命名与字段。
+- **关联**：PRD §6.3 的「Artifacts 一等公民」非目标仍然成立——本 feature 若启动
+  需先改那条。已否：按扩展名过滤（`.md` 在 coding 仓库里绝大多数是源码，
+  区分不了「仓库文档」和「交付物」）、在 Galley 内重造 app 选择器
+  （Finder 右键「打开方式」更好）、GUI 侧自行解析相对路径
+  （基准在 GA 内部，等于重新实现 GA 逻辑）。

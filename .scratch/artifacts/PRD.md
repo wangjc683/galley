@@ -163,3 +163,115 @@ WKWebView/WebView2 双平台验证；空 scratch 目录清扫时机；scratch ba
 ② Core artifacts 三命令（含剪枝遍历 + 路径安全）→ ③ CLI additive 暴露 →
 ④ GUI 面板 + 必做层预览（含 sandbox 红线）→ ⑤ managed 提示词契约 + `artifact:`
 chip 渲染 → ⑥ 回归与 dogfood（观望层预览的数据收集从这里出）。
+
+## 2026-08-12 补充：最小切片「打开产物」+ 路径事实校正
+
+Status: 暂缓（JC 2026-08-12 裁决；本节是主 PRD 之外可独立发运的最小切片，
+启动信号与主 PRD 不同，见下）
+
+起因是一轮独立讨论（从 waku 的行内代码视觉处理延伸出「artifact 名字要不要
+做视觉处理」），推到一半才发现本目录已有完整设计。**结论：主 PRD 的方向不变，
+但今天核实的路径事实校正了两处，并析出一个不依赖 scratch 工作区的最小切片。**
+
+### 路径事实（2026-08-12 核实，带 file:line）
+
+GA 的解析链：
+
+```
+do_file_patch / do_file_write / do_file_read
+  → self._get_abs_path(args["path"])                 ga.py:318
+  = os.path.abspath(os.path.join(self.cwd, path))
+  self.cwd 默认 './temp'                              ga.py:305
+```
+
+进程 cwd 由 bridge 在 import agentmain 前 chdir 决定（`workbench_bridge.py:683`）：
+
+| 模式 | 进程 cwd | 相对路径落点 |
+|---|---|---|
+| attach + `--cwd` | 该 cwd | `<cwd>/temp/` |
+| managed | `<app_data_dir>/managed-ga-state`（`managed_runtime.rs:328`） | `<app_data_dir>/managed-ga-state/temp/` |
+| 兜底 | `ga_path` | `<ga_path>/temp/` |
+
+**校正一（对主 PRD 发现 A 的确认 + 精确化）**：发现 A 说「project 模式也只是
+symlink 进状态根、不改 cwd」——2026-08-12 复核仍然成立，
+`_activate_project_workspace()`（`workbench_bridge.py:884`）只调
+`workspace_cmd.prepare(root)`，全程无 `os.chdir`。补充的精确化是：落点不是状态
+根本身，而是**状态根下的 `temp/`**（handler 的 `self.cwd` 默认值那一层）。
+
+**校正二（推翻讨论中的一个说法）**：讨论过程中曾说「解析基准随 runtime 模式
+**和 Project Mode** 变」。后半句是错的——Project Mode 不改基准。基准只随
+runtime 模式变。
+
+**校正三**：`sessions.cwd` 是有持久化列的（`001_init.sql:39`，`021` 沿用），
+由 bridge 的 ready 事件带上来。但它是**进程 cwd**，不是 handler 基准，差一层
+`temp/`。想用它在 GUI 侧还原绝对路径，等于重新实现 GA 内部逻辑——不要做。
+
+### 最小切片：绝对路径才给「打开 / 在 Finder 中显示」
+
+不依赖 scratch 工作区、不依赖提示词契约、不依赖面板，因此**可以在主 PRD 仍然
+搁置时独立发运**。
+
+**做法**：`ToolCallout` 的 `file_patch` / `file_write` 行，当 `args.path`
+已经是绝对路径时，hover 出两个按钮：
+
+- **打开** → `openPath(path)`（`@tauri-apps/plugin-opener`，仓库已在用）
+- **在 Finder 中显示** → `revealItemInDir(path)`（同上，`GoalIndicator` 已用）
+
+**为什么「绝对路径」这个闸门是对的，而且是双重正确的**：
+
+1. *技术上*——相对路径的基准在 GA 内部，GUI 算不准，算错就是打开错文件。
+   失败方向必须是「按钮不出现」，不能是「打开了别的东西」。
+2. *相关性上*——这一点是今天新想清楚的：**相对路径的产物恰恰就是发现 A 说的
+   那批「落在 app 内部目录、用户不可见」的文件**。给它们一个打开按钮，用户
+   点进 `~/Library/Application Support/app.galley/managed-ga-state/temp/`，
+   拿到的不是产物而是一个 bug 的现场。绝对路径闸门顺带把这批挡在外面了 ——
+   它们该由主 PRD 的 scratch 工作区来修，不是由一个按钮来遮。
+
+**为什么不按扩展名过滤（讨论中一度想只做 `.md`）**：coding 仓库里 `.md` 绝大
+多数是源码（README / CLAUDE.md / docs / devlog），不是交付物；扩展名区分不了
+「仓库文档」和「给我的交付物」。而「打开」这个动作**不做任何断言**，对 `.rs`
+和 `.md` 一样成立。限定扩展名等于偷偷做一次会错的判断，还缩小了适用面。
+
+**为什么不做 app 选择器**：`openPath` 确实有第二参数可指定程序，但 Finder
+右键的「打开方式」是更好的选择器（系统注册的全部关联程序、记忆偏好、
+「始终以此方式打开」）。「在 Finder 中显示」就是「选用某个程序」的答案。
+⚠️ 已知落差：macOS 上 `.md` 的默认程序常是 TextEdit / Xcode 而非用户的编辑器，
+所以「打开」按钮未必送到想要的编辑器；实测若确认此落差成立，才考虑加**一个
+全局设置**「用这个程序打开」——那时它是在修真实错配，不是重造系统功能。
+
+**不预检文件存在性**：历史会话的文件可能已移动/删除，但每行一次 fs 调用不划算。
+点击失败弹 toast（「文件不存在或已移动」）即可。
+
+### 这个切片的启动信号
+
+与主 PRD 不同，它自己的启动信号是一个**可测的事实**：
+
+> 展开若干真实会话的 `file_patch` / `file_write` tool callout，看 `args.path`
+> 中绝对路径的占比。
+
+- 绝对占多数 → 切片成立，值得单做
+- 相对占多数 → 按钮几乎永不出现，**说明真正的问题是产物落点，应直接回主
+  PRD 的 scratch 工作区，不要在这里打补丁**
+
+这个判据本身就是有价值的：它把「加个按钮」和「修产物落点」这两件事的优先级
+用数据分开了。
+
+### 若切片不成立时的 Stage 2（记录备查，倾向不做）
+
+让 bridge 上报解析后的绝对路径：`runner/handlers.py` 已有 `dispatch` 覆写缝
+（`handlers.py:216`），在那里对写文件类工具调用**继承来的 `self._get_abs_path()`**
+——不是重新实现解析，是调用 GA 自己的函数，结果必然与实际写入一致。宪法上
+干净（`handlers.py` 是 Galley 子类，加上报字段属 CLAUDE.md 允许的 emit-only）。
+
+但代价是 runner → IPC → Core → GUI 一条竖切 + 动 `docs/ipc-protocol.md`
++ Agent API additive 确认。**而如果需要 Stage 2，本身就说明相对路径占多数，
+那更该做主 PRD 的 scratch 工作区**——Stage 2 是在把产物留在不可见的地方、
+只是让 GUI 知道它在哪。倾向不做。
+
+### 与主 PRD 的关系
+
+主 PRD 的「OS 逃生口（Reveal / 用默认应用打开 / Copy path）」已经包含本切片。
+本节不新增范围，只是：① 校正路径事实；② 说明这部分**可以脱离 scratch 工作区
+先行**及其判据；③ 记录扩展名过滤与 app 选择器两条已否路线，免得重提。
+
+主 PRD 一旦启动，本节应并入其 GUI issue，不单独拆。
