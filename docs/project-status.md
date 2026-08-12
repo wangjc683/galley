@@ -129,12 +129,12 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. Dogfood the app-update path from an installed `v0.4.5` build to `v0.4.6`
-   (SOP step 10). Prior state: `v0.4.3` → `v0.4.4` **succeeded** (JC
-   confirmed 2026-08-10), as did `v0.4.2` → `v0.4.3`; `v0.4.1` → `v0.4.2`
-   and `v0.4.4` → `v0.4.5` remain unrecorded. Keep asking for the step 10
-   result explicitly during step 9 — the smoke happens outside any agent
-   tool call, so silence is not evidence it was skipped.
+1. App-update dogfood (SOP step 10): `v0.4.5` → `v0.4.6` **succeeded** (JC
+   confirmed 2026-08-12), as did `v0.4.3` → `v0.4.4` and `v0.4.2` →
+   `v0.4.3`. Still unrecorded: `v0.4.1` → `v0.4.2` and `v0.4.4` → `v0.4.5`.
+   Keep asking for the step 10 result explicitly during step 9 — the smoke
+   happens outside any agent tool call, so silence is not evidence it was
+   skipped.
 2. Watch tool-output truncation on the new GA baseline. `308153b` tightened
    the tool-output cap ~14% (`maxlen_multiplier` 2.25 → 1.93 as a
    denominator); JC's release smoke passed, but `...[Truncated]...` arriving
