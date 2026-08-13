@@ -31,11 +31,24 @@ single-thread semantics of WeChat / Feishu / Telegram are unchanged. Riding
 along: the Telegram bundling gap (`python-telegram-bot` was missing from
 `GA_DEPS`, so Telegram could not start from a real package), the model-config
 toast missing Telegram, the owner-bind generation race (Feishu and Telegram
-benefit immediately), the next-suggestion leak into IM replies, command-palette
-grouping, and channel setup-copy polish.
+benefit immediately), the next-suggestion leak into IM replies, and channel
+setup-copy polish.
+
+The release also carries a **reading-experience and motion polish marathon**
+(13 commits), the same shape as `v0.4.3`'s six-pass run: markdown vertical
+rhythm scaling with the reading tier, warm ink for inline code, GFM task-list
+checkboxes, closing hanging code spans and link destinations while streaming,
+the thinking-row timer reworked onto shimmer, a grid-rows sweep for the run
+fold, the streaming caret moved inline with block-level soft fade, provider
+cards scrolled into view, toast countdown pausing on hold, a scheduled-badge
+count pop, semantic command-palette grouping, and sidebar mode-switch
+transition edges. Two reference audits landed at **zero adoption** (code block,
+sidebar sliding hover highlight) and are recorded to prevent re-proposal.
 
 Version grading stays **patch** (JC ruling, 2026-08-13) even though precedent
 pointed at minor: Telegram, the third channel, was the headline of `v0.3.0`.
+The polish marathon does not move the grade — the `v0.4.1` rule judges the
+largest single feature, not batch size, exactly as it did for `v0.4.3`.
 Two reasons override that precedent — `v0.3.0` also carried the CONC-1..8
 concurrency audit, a 55-finding review, and the independent-product
 repositioning, so its minor was plausibly batch-driven, which the `v0.4.1` rule
