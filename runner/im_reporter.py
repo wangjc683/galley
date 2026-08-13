@@ -1,13 +1,22 @@
 """Proactive completion reporter for the Galley IM Supervisor.
 
-Watches Galley for sessions this channel delegated (``origin.supervisor``
-equals this process's ``GALLEY_SUPERVISOR_ID``) and, when one settles,
-injects a synthetic report turn into the running GA frontend so the model
-composes a short IM report to the bound owner. The reporter core is
-channel-agnostic; per-platform seams (connection state, owner lookup,
-busy check, text rendering, outbound send) live in a ``ChannelAdapter``.
-Feishu and Telegram are wired today. Design:
-docs/devlog/2026-07-03-supervisor-proactive-reporting-design.md
+Watches Galley for settled runs whose reported turn was initiated by one
+of this process's supervisor identities and, when one settles, injects a
+synthetic report turn into the owning GA frontend so the model composes
+a short IM report to the bound owner. One ``ImReporter`` per process — a
+single poll loop and a single state-file writer — dispatching to a
+registry of ``ChannelAdapter`` seams keyed by supervisor id (connection
+state, owner lookup, busy check, text rendering, outbound send).
+Feishu and Telegram register exactly one channel; multi-context
+platforms (Discord: one supervisor id per channel) register many.
+Design: docs/devlog/2026-07-03-supervisor-proactive-reporting-design.md
+
+Routing truth is the **message** origin, not the session origin: a
+session created from one channel can be continued from another (or from
+the GUI), and a report belongs to whoever initiated the reported turn —
+the user message sharing the final answer's ``turnIndex``. The session's
+creation origin is only the fallback when that message is missing from
+the tail or predates the message-origin migration.
 
 Mechanism notes (why polling, not `session watch`): the reporter's truth is
 the Galley DB, read through the public CLI (`sessions list` /
@@ -26,9 +35,11 @@ same message.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -46,6 +57,12 @@ SKIP_SENTINEL = "SKIP_REPORT"
 STATE_FILE_NAME = "reporter_state.json"
 FINAL_TEXT_LIMIT = 2000
 SETTLED_DEAD = ("error", "cancelled")
+# Galley's workbench-composer ghost-text tag. IM prompts no longer mandate
+# it, but a model can imitate it from pre-fix history, and not every
+# channel's render path goes through the frontends' tag strippers
+# (DiscordChannel renders via _strip_discord_transcript only) — so the
+# reporter strips it before any outbound push.
+NEXT_SUGGESTION_RE = re.compile(r"<next-suggestion>.*?</next-suggestion>", re.DOTALL)
 
 
 class ReporterCliError(RuntimeError):
@@ -98,18 +115,50 @@ def run_cli_json_lines(cli: str, args: list[str]) -> list[dict[str, Any]]:
 # ── pure decision logic ──────────────────────────────────────────────
 
 
-def delegated_sessions(
-    sessions: list[dict[str, Any]], supervisor_id: str
-) -> list[dict[str, Any]]:
-    out = []
-    for session in sessions:
-        origin = session.get("origin") or {}
-        if origin.get("supervisor") != supervisor_id:
-            continue
-        if session.get("status") == "archived":
-            continue
-        out.append(session)
-    return out
+def routing_supervisor(
+    session: dict[str, Any],
+    messages: list[dict[str, Any]],
+    final_msg: dict[str, Any] | None,
+) -> str | None:
+    """Supervisor id the report should route to.
+
+    Prefers the origin of the user message that initiated the reported
+    turn (same ``turnIndex`` as the final answer; positional last-user-
+    before-final when turn indexes are absent). Falls back to the
+    session's creation origin when the initiating message is outside the
+    fetched tail, predates message-origin columns, or carries no
+    supervisor (GUI-initiated turns keep the session-origin behavior the
+    single-channel reporter always had).
+    """
+    initiator: dict[str, Any] | None = None
+    if final_msg is not None:
+        final_turn = final_msg.get("turnIndex")
+        if final_turn is not None:
+            for message in messages:
+                if (
+                    message.get("role") == "user"
+                    and message.get("turnIndex") == final_turn
+                ):
+                    initiator = message
+        if initiator is None:
+            for message in messages:
+                if message is final_msg:
+                    break
+                if message.get("role") == "user":
+                    initiator = message
+    else:
+        # Dead-status report with no final output: whoever drove the
+        # session last is the natural recipient.
+        for message in messages:
+            if message.get("role") == "user":
+                initiator = message
+    origin = (initiator or {}).get("origin") or {}
+    supervisor = origin.get("supervisor")
+    if supervisor:
+        return str(supervisor)
+    origin = session.get("origin") or {}
+    supervisor = origin.get("supervisor")
+    return str(supervisor) if supervisor else None
 
 
 def latest_final_output(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -223,6 +272,16 @@ class ReporterState:
         entry: dict[str, Any] = self.data["sessions"].setdefault(session_id, {})
         return entry
 
+    def prune(self, keep_ids: set[str]) -> bool:
+        """Drop entries for sessions no longer listed at all (deleted).
+        The dispatcher now tracks every inspected session, so without
+        pruning the file would grow with the DB's whole history."""
+        sessions = self.data["sessions"]
+        stale = [sid for sid in sessions if sid not in keep_ids]
+        for sid in stale:
+            del sessions[sid]
+        return bool(stale)
+
     def save(self) -> None:
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(
@@ -284,6 +343,11 @@ class ChannelAdapter:
         return raw
 
     def send(self, owner: str, text: str, raw: str) -> None:
+        """Deliver the report. MUST raise on failure — a swallowed
+        exception gets the report marked delivered when it never left
+        the machine. Async platforms bridge here with
+        ``asyncio.run_coroutine_threadsafe(...).result(timeout)`` so the
+        reporter thread gets a real ACK (or a real exception)."""
         raise NotImplementedError
 
 
@@ -381,56 +445,167 @@ class TelegramChannel(ChannelAdapter):
             _telegram_send_text(token, owner, segment)
 
 
+DISCORD_SEND_TIMEOUT_SEC = 30.0
+
+
+class DiscordChannel(ChannelAdapter):
+    """One activated Discord channel (``ch:<channel_id>``).
+
+    Discord is the multi-context platform: each channel owns its own GA
+    agent, its own history and its own supervisor id, so one adapter is
+    registered per channel rather than one per process. The report goes
+    back to the channel that initiated the work — ``owner`` is only the
+    binding gate (a bound owner must exist for any proactive push), not
+    the destination.
+    """
+
+    def __init__(self, dcapp: Any, chat_id: str, agent: Any = None) -> None:
+        self.dcapp = dcapp
+        self.chat_id = chat_id
+        self._agent = agent
+
+    def _app(self) -> Any:
+        return self.dcapp.get_app()
+
+    def connected(self) -> bool:
+        return bool(getattr(self.dcapp, "_galley_connected_once", False)) and (
+            self._app() is not None
+        )
+
+    def owner_id(self) -> str | None:
+        # dcapp keeps no PUBLIC_ACCESS constant (managed mode drops "*"
+        # from the allow-list outright), so ask its own predicate.
+        allowed = getattr(self.dcapp, "ALLOWED", None)
+        checker = getattr(self.dcapp, "public_access", None)
+        public = bool(checker(allowed)) if callable(checker) else False
+        return _single_owner(public, allowed)
+
+    def busy(self) -> bool:
+        app = self._app()
+        if app is not None and app.user_tasks.get(self.chat_id):
+            return True
+        return bool(getattr(self._agent, "is_running", False))
+
+    def agent(self) -> Any:
+        """The channel's agent — normally handed over by dcapp's agent
+        hook at creation time. Channels restored at startup have no agent
+        yet, so fall back to dcapp's per-channel agent accessor (coupling
+        point: same call path an inbound message takes)."""
+        if self._agent is not None:
+            return self._agent
+        app = self._app()
+        if app is None:
+            raise ReporterCliError("Discord app is not running for reporter turn")
+        self._agent = app._get_agent(self.chat_id).agent
+        return self._agent
+
+    def render(self, raw: str) -> str:
+        if not (raw or "").strip():
+            return ""
+        strip = getattr(self.dcapp, "_strip_discord_transcript", None)
+        if callable(strip):
+            return str(strip(raw) or "")
+        clean = getattr(self.dcapp, "clean_reply", None)
+        return str((clean(raw) if callable(clean) else raw) or "")
+
+    def send(self, owner: str, text: str, raw: str) -> None:
+        app = self._app()
+        loop = getattr(app, "loop", None) if app is not None else None
+        if app is None or loop is None:
+            raise ReporterCliError("Discord app has no running loop for reporter send")
+        # deliver_text raises on resolve/send failure and splits internally;
+        # the threadsafe future is what turns that into a real ACK here.
+        future = asyncio.run_coroutine_threadsafe(
+            app.deliver_text(self.chat_id, text), loop
+        )
+        future.result(DISCORD_SEND_TIMEOUT_SEC)
+
+
 # ── reporter core ────────────────────────────────────────────────────
 
 
 class ImReporter:
+    """Process-wide report dispatcher.
+
+    One instance per frontend process: one poll loop, one state file
+    writer, a registry of channels keyed by supervisor id. Single-
+    channel platforms construct it with a one-entry registry; Discord
+    registers/unregisters a channel per activated Discord channel (and
+    re-registers the persisted active set at startup, so routing is
+    restored before any message arrives).
+    """
+
     def __init__(
         self,
-        channel: ChannelAdapter,
-        supervisor_id: str,
+        channels: dict[str, ChannelAdapter],
         state_path: Path,
         poll_interval: float = POLL_INTERVAL_SEC,
+        owned_prefixes: tuple[str, ...] = (),
     ) -> None:
-        self.channel = channel
-        self.supervisor_id = supervisor_id
+        self._channels = dict(channels)
+        self._channels_lock = threading.Lock()
         self.state = ReporterState.load(state_path)
         self.poll_interval = poll_interval
         self.cli: str | None = None
+        # Supervisor-id prefixes this PROCESS owns beyond the currently
+        # registered channels. A report routed to an owned-but-
+        # unregistered id (a Discord channel deactivated by a restart)
+        # is HELD — entry untouched, retried next tick — instead of
+        # being marked seen as foreign, so re-activating the channel
+        # still delivers results that settled in between.
+        self.owned_prefixes = owned_prefixes
 
-    # -- channel readiness --
+    # -- channel registry --
+
+    def register_channel(self, supervisor_id: str, channel: ChannelAdapter) -> None:
+        with self._channels_lock:
+            self._channels[supervisor_id] = channel
+
+    def unregister_channel(self, supervisor_id: str) -> None:
+        with self._channels_lock:
+            self._channels.pop(supervisor_id, None)
+
+    def channels(self) -> dict[str, ChannelAdapter]:
+        with self._channels_lock:
+            return dict(self._channels)
 
     def owner_open_id(self) -> str | None:
-        return self.channel.owner_id()
-
-    def _ready(self) -> tuple[str, str] | None:
-        """(cli_path, owner_id) once the channel can report, else None."""
-        if not self.channel.connected():
+        """Owner of the sole channel — single-channel platforms only."""
+        channels = self.channels()
+        if len(channels) != 1:
             return None
-        if self.cli is None:
-            self.cli = resolve_cli_path()
-        if self.cli is None:
-            return None
-        owner = self.owner_open_id()
-        if owner is None:
-            return None
-        return self.cli, owner
+        return next(iter(channels.values())).owner_id()
 
     # -- one poll iteration --
 
     def tick(self) -> list[Report]:
-        ready = self._ready()
-        if ready is None:
+        channels = self.channels()
+        if not channels:
             return []
-        cli, owner = ready
+        if self.cli is None:
+            self.cli = resolve_cli_path()
+        if self.cli is None:
+            return []
+        cli = self.cli
+        ready: dict[str, tuple[ChannelAdapter, str]] = {}
+        for supervisor_id, channel in channels.items():
+            if not channel.connected():
+                continue
+            owner = channel.owner_id()
+            if owner is None:
+                continue
+            ready[supervisor_id] = (channel, owner)
+        if not ready:
+            return []
         sessions = run_cli_json_lines(cli, ["sessions", "list", "--runtime", "all"])
-        mine = delegated_sessions(sessions, self.supervisor_id)
+        listed_ids = {str(s.get("id")) for s in sessions if s.get("id")}
+        candidates = [s for s in sessions if s.get("status") != "archived"]
         if self.state.is_new:
-            self._baseline(cli, mine)
+            self._baseline(cli, candidates)
             return []
         delivered: list[Report] = []
         dirty = False
-        for session in mine:
+        for session in candidates:
             session_id = str(session.get("id") or "")
             if not session_id:
                 continue
@@ -445,12 +620,33 @@ class ImReporter:
                 mark_seen(entry, session)
                 dirty = True
                 continue
-            outcome = self._deliver(report, owner)
+            routed_to = routing_supervisor(session, messages, report.message)
+            is_ours = routed_to is not None and (
+                routed_to in channels
+                or (self.owned_prefixes and routed_to.startswith(self.owned_prefixes))
+            )
+            if not is_ours:
+                # Not this process's report: the owning frontend's own
+                # reporter handles it. Mark seen so steady state stays
+                # cheap; never mark reported for someone else.
+                mark_seen(entry, session)
+                dirty = True
+                continue
+            target = ready.get(routed_to) if routed_to is not None else None
+            if target is None:
+                # Ours, but not deliverable right now: a registered
+                # channel that is disconnected/unbound, or an owned-
+                # prefix channel that is not activated (Discord after a
+                # restart). Leave the entry untouched so the report is
+                # held until the channel comes back or is re-activated.
+                continue
+            channel, owner = target
+            outcome = self._deliver(channel, report, owner)
             if outcome == "busy":
-                # A user task is mid-flight; leave the entry untouched so the
-                # next tick retries. Stop the whole pass — the channel stays
-                # busy for all pending reports alike.
-                break
+                # A user task is mid-flight on that channel's agent;
+                # leave the entry untouched so the next tick retries.
+                # Other channels' reports keep flowing.
+                continue
             if outcome == "delivered":
                 mark_reported(entry, report)
                 delivered.append(report)
@@ -464,12 +660,14 @@ class ImReporter:
                 # Bounded by REPORT_ATTEMPT_LIMIT via the gave_up branch.
                 entry["reportAttempts"] = int(entry.get("reportAttempts") or 0) + 1
             dirty = True
+        if self.state.prune(listed_ids):
+            dirty = True
         if dirty:
             self.state.save()
         return delivered
 
-    def _baseline(self, cli: str, mine: list[dict[str, Any]]) -> None:
-        for session in mine:
+    def _baseline(self, cli: str, candidates: list[dict[str, Any]]) -> None:
+        for session in candidates:
             session_id = str(session.get("id") or "")
             if not session_id:
                 continue
@@ -486,9 +684,9 @@ class ImReporter:
 
     # -- synthetic report turn --
 
-    def _deliver(self, report: Report, owner: str) -> str:
+    def _deliver(self, channel: ChannelAdapter, report: Report, owner: str) -> str:
         """Returns "delivered" | "busy" | "retry" | "gave_up"."""
-        if self.channel.busy():
+        if channel.busy():
             return "busy"
         entry = self.state.entry(str(report.session.get("id")))
         if int(entry.get("reportAttempts") or 0) >= REPORT_ATTEMPT_LIMIT:
@@ -497,10 +695,10 @@ class ImReporter:
                 f"{report.session.get('id')} after {REPORT_ATTEMPT_LIMIT} attempts"
             )
             return "gave_up"
-        agent = self.channel.agent()
+        agent = channel.agent()
         prompt = build_report_prompt(report)
         raw: str | None = None
-        self.channel.begin_report_turn()
+        channel.begin_report_turn()
         try:
             dq = agent.put_task(prompt, source="galley_reporter")
             deadline = time.time() + REPORT_TURN_TIMEOUT_SEC
@@ -513,17 +711,25 @@ class ImReporter:
                     raw = str(item.get("done") or "")
                     break
         finally:
-            self.channel.end_report_turn()
+            channel.end_report_turn()
         if raw is None:
             print(
                 f"[galley-im-reporter] report turn timed out for session "
                 f"{report.session.get('id')}"
             )
             return "retry"
-        text = self.channel.render(raw).strip()
-        if not text or is_skip_reply(text):
-            return "delivered"
-        self.channel.send(owner, text, raw)
+        # Render + send failures count as attempts (bounded by
+        # REPORT_ATTEMPT_LIMIT) instead of escaping to run_forever's
+        # catch-all — an uncounted crash here re-burned the synthetic
+        # report turn on every tick, forever.
+        try:
+            text = NEXT_SUGGESTION_RE.sub("", channel.render(raw)).strip()
+            if not text or is_skip_reply(text):
+                return "delivered"
+            channel.send(owner, text, raw)
+        except Exception:
+            traceback.print_exc()
+            return "retry"
         return "delivered"
 
     def run_forever(self) -> None:
@@ -543,7 +749,9 @@ class FeishuReporter(ImReporter):
         state_path: Path,
         poll_interval: float = POLL_INTERVAL_SEC,
     ) -> None:
-        super().__init__(FeishuChannel(fsapp), supervisor_id, state_path, poll_interval)
+        super().__init__(
+            {supervisor_id: FeishuChannel(fsapp)}, state_path, poll_interval
+        )
         self.fsapp = fsapp
 
 
@@ -556,9 +764,62 @@ class TelegramReporter(ImReporter):
         poll_interval: float = POLL_INTERVAL_SEC,
     ) -> None:
         super().__init__(
-            TelegramChannel(tgapp), supervisor_id, state_path, poll_interval
+            {supervisor_id: TelegramChannel(tgapp)}, state_path, poll_interval
         )
         self.tgapp = tgapp
+
+
+class DiscordReporter(ImReporter):
+    """Discord dispatcher: a channel registry that grows and shrinks with
+    the activated channels, keyed by ``<base id>/ch:<channel_id>``.
+
+    The launcher drives it through ``attach_channel`` /
+    ``detach_channel`` from dcapp's agent hooks, so it never has to know
+    how a supervisor id is spelled.
+    """
+
+    def __init__(
+        self,
+        dcapp: Any,
+        supervisor_id: str,
+        state_path: Path,
+        poll_interval: float = POLL_INTERVAL_SEC,
+    ) -> None:
+        # The base-id prefix claims every ch:<id> for this process, so
+        # reports for channels deactivated by a restart are held until
+        # the owner re-activates them instead of dropped as foreign.
+        super().__init__(
+            {},
+            state_path,
+            poll_interval,
+            owned_prefixes=(f"{supervisor_id}/",),
+        )
+        self.dcapp = dcapp
+        self.supervisor_id = supervisor_id
+
+    def supervisor_id_for(self, chat_id: str) -> str:
+        return f"{self.supervisor_id}/{chat_id}"
+
+    def attach_channel(self, chat_id: str, agent: Any = None) -> str:
+        supervisor_id = self.supervisor_id_for(chat_id)
+        self.register_channel(supervisor_id, DiscordChannel(self.dcapp, chat_id, agent))
+        return supervisor_id
+
+    def detach_channel(self, chat_id: str) -> None:
+        self.unregister_channel(self.supervisor_id_for(chat_id))
+
+    def restore_active_channels(self) -> list[str]:
+        """Re-register the already-active channels so routing is restored
+        at process start instead of waiting for each channel's next
+        message (a report that landed while the process was down would
+        otherwise have nowhere to go). No-op before dcapp's app exists."""
+        app = self.dcapp.get_app()
+        if app is None:
+            return []
+        chat_ids = [str(chat_id) for chat_id in (app.active_channel_ids() or [])]
+        for chat_id in chat_ids:
+            self.attach_channel(chat_id)
+        return chat_ids
 
 
 def _start_reporter(reporter: ImReporter) -> ImReporter:
@@ -584,5 +845,20 @@ def start_telegram_reporter(tgapp: Any, state_dir: Path) -> TelegramReporter | N
         print("[galley-im-reporter] disabled: GALLEY_SUPERVISOR_ID not set")
         return None
     reporter = TelegramReporter(tgapp, supervisor_id, Path(state_dir) / STATE_FILE_NAME)
+    _start_reporter(reporter)
+    return reporter
+
+
+def start_discord_reporter(dcapp: Any, state_dir: Path) -> DiscordReporter | None:
+    """``GALLEY_SUPERVISOR_ID`` is the process-level base id
+    (``galley-im/discord``); every channel derives its own id from it."""
+    supervisor_id = (os.environ.get("GALLEY_SUPERVISOR_ID") or "").strip()
+    if not supervisor_id:
+        print("[galley-im-reporter] disabled: GALLEY_SUPERVISOR_ID not set")
+        return None
+    reporter = DiscordReporter(dcapp, supervisor_id, Path(state_dir) / STATE_FILE_NAME)
+    restored = reporter.restore_active_channels()
+    if restored:
+        print(f"[galley-im-reporter] restored {len(restored)} Discord channel(s)")
     _start_reporter(reporter)
     return reporter

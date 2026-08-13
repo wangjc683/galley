@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from runner import _watchdog, managed_im_supervisor, managed_runtime
+from runner import _watchdog, im_reporter, managed_im_supervisor, managed_runtime
 
 
 def _write_fake_fsapp(ga_path: Path, body: str) -> None:
@@ -20,9 +20,16 @@ def _write_fake_fsapp(ga_path: Path, body: str) -> None:
     (frontends / "fsapp.py").write_text(body, encoding="utf-8")
 
 
-def _args(ga_path: Path, state_dir: Path) -> Namespace:
+def _write_fake_dcapp(ga_path: Path, body: str) -> None:
+    frontends = ga_path / "frontends"
+    frontends.mkdir(parents=True, exist_ok=True)
+    (frontends / "__init__.py").write_text("", encoding="utf-8")
+    (frontends / "dcapp.py").write_text(body, encoding="utf-8")
+
+
+def _args(ga_path: Path, state_dir: Path, platform: str = "feishu") -> Namespace:
     return Namespace(
-        platform="feishu",
+        platform=platform,
         ga_path=str(ga_path),
         state_dir=str(state_dir),
         sop_path=str(state_dir / "sop.md"),
@@ -39,6 +46,7 @@ def _restore_stdio(stdout: Any, stderr: Any, real_stdout: Any, real_stderr: Any)
 
 def _clear_frontends_modules() -> None:
     sys.modules.pop("frontends.fsapp", None)
+    sys.modules.pop("frontends.dcapp", None)
     sys.modules.pop("frontends", None)
 
 
@@ -302,6 +310,279 @@ def main():
     events = [json.loads(line) for line in out.getvalue().splitlines()]
     assert events[-1]["state"] == "error"
     assert "App ID and App Secret" in events[-1]["lastError"]
+
+
+class _StubReporter:
+    """Stands in for the Discord dispatcher: only the attach/detach seam
+    the launcher drives from dcapp's hooks matters here."""
+
+    def __init__(self) -> None:
+        self.attached: list[str] = []
+        self.detached: list[str] = []
+
+    def attach_channel(self, chat_id: str, agent: Any = None) -> str:
+        self.attached.append(chat_id)
+        return f"galley-im/discord/{chat_id}"
+
+    def detach_channel(self, chat_id: str) -> None:
+        self.detached.append(chat_id)
+
+
+def _run_discord_with_fake_app(
+    monkeypatch: Any,
+    tmp_path: Path,
+    body: str,
+) -> tuple[int, list[dict[str, Any]]]:
+    ga_path = tmp_path / "ga"
+    state_dir = tmp_path / "state"
+    _write_fake_dcapp(ga_path, body)
+    monkeypatch.setattr(managed_runtime, "install_managed_mykey_loader", lambda: None)
+    monkeypatch.setattr(managed_runtime, "managed_state_root", lambda: None)
+    _clear_frontends_modules()
+    out = io.StringIO()
+    stdout, stderr, real_stdout, real_stderr = (
+        sys.stdout,
+        sys.stderr,
+        sys.__stdout__,
+        sys.__stderr__,
+    )
+    cwd = os.getcwd()
+    try:
+        code = managed_im_supervisor._run_discord(
+            _args(ga_path, state_dir, platform="discord"), out
+        )
+    finally:
+        os.chdir(cwd)
+        _restore_stdio(stdout, stderr, real_stdout, real_stderr)
+        _clear_frontends_modules()
+    events = [json.loads(line) for line in out.getvalue().splitlines()]
+    return code, events
+
+
+def test_main_accepts_discord_platform(monkeypatch: Any, tmp_path: Path) -> None:
+    seen: list[str] = []
+
+    def fake_run(args: Any, out: Any) -> int:
+        seen.append(args.platform)
+        return 0
+
+    monkeypatch.setattr(managed_im_supervisor, "_run_discord", fake_run)
+    monkeypatch.setattr(managed_runtime, "is_managed_runtime", lambda: True)
+    monkeypatch.setattr(_watchdog, "start_parent_watchdog", lambda *a, **kw: None)
+    monkeypatch.setattr(managed_im_supervisor, "_capture_real_stdout", io.StringIO)
+    argv = [
+        "--platform",
+        "discord",
+        "--ga-path",
+        str(tmp_path / "ga"),
+        "--state-dir",
+        str(tmp_path / "state"),
+        "--sop-path",
+        str(tmp_path / "sop.md"),
+    ]
+    assert managed_im_supervisor.main(argv) == 0
+    assert seen == ["discord"]
+    # Unknown platforms are still rejected by argparse itself.
+    with pytest.raises(SystemExit):
+        managed_im_supervisor.main([*argv[:1], "slack", *argv[2:]])
+
+
+def test_run_discord_reports_import_failure(monkeypatch: Any, tmp_path: Path) -> None:
+    # dcapp exits with SystemExit when discord.py is missing.
+    code, events = _run_discord_with_fake_app(
+        monkeypatch,
+        tmp_path,
+        """
+raise SystemExit("Please install discord.py to use Discord")
+""",
+    )
+    assert code == 1
+    assert events[-1]["platform"] == "discord"
+    assert events[-1]["state"] == "error"
+    assert "import failed" in events[-1]["lastError"]
+    assert "discord.py" in events[-1]["lastError"]
+
+
+def test_run_discord_reports_missing_token(monkeypatch: Any, tmp_path: Path) -> None:
+    code, events = _run_discord_with_fake_app(
+        monkeypatch,
+        tmp_path,
+        """
+def get_app():
+    return None
+
+def check_config(init_agent=False):
+    return {"ready": False}
+
+def main():
+    raise AssertionError("main should not run")
+""",
+    )
+    assert code == 1
+    assert events[-1]["state"] == "error"
+    assert "Bot Token is required" in events[-1]["lastError"]
+    assert events[-1]["logPath"].endswith("discord.log")
+
+
+def test_run_discord_installs_state_dir_hooks_and_per_channel_identity(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GALLEY_SUPERVISOR_ID", "galley-im/discord")
+    monkeypatch.setenv("GALLEY_IM_SUPERVISOR_PROMPT_TEMPLATE", "id: __GALLEY_SUPERVISOR_ID__")
+    installed: list[tuple[tuple[str, ...], str | None]] = []
+
+    def install_prompt(
+        agent: Any,
+        extra_env_names: tuple[str, ...] = (),
+        supervisor_id: str | None = None,
+    ) -> None:
+        installed.append((extra_env_names, supervisor_id))
+        agent.prompt_installed = True
+
+    monkeypatch.setattr(managed_runtime, "install_managed_prompt_profile", install_prompt)
+    reporter = _StubReporter()
+    monkeypatch.setattr(
+        im_reporter, "start_discord_reporter", lambda dcapp, state_dir: reporter
+    )
+    code, events = _run_discord_with_fake_app(
+        monkeypatch,
+        tmp_path,
+        """
+import os
+
+class Agent:
+    verbose = True
+
+def get_app():
+    return None
+
+def check_config(init_agent=False):
+    return {"ready": True}
+
+def main():
+    assert os.environ["GALLEY_DISCORD_STATE_DIR"].endswith("state")
+    assert os.environ["GA_WORKSPACE_ROOT"].endswith("state")
+    assert os.getcwd() == os.environ["GA_WORKSPACE_ROOT"]
+    agent = Agent()
+    GALLEY_AGENT_HOOK(agent, "ch:42")
+    assert agent.verbose is False
+    assert agent.prompt_installed
+    GALLEY_CHANNEL_RELEASED_HOOK("ch:42")
+    GALLEY_STATUS_HOOK("running", None, botId="galley#4242")
+    GALLEY_STATUS_HOOK("reconnecting", "gateway hiccup")
+    raise KeyboardInterrupt()
+""",
+    )
+
+    assert code == 0
+    assert [event["state"] for event in events] == [
+        "starting",
+        "running",
+        "reconnecting",
+        "stopped",
+    ]
+    assert events[1]["botId"] == "galley#4242"
+    assert events[1]["logPath"].endswith("discord.log")
+    assert events[2]["lastError"] == "gateway hiccup"
+    # Per-channel identity is bound onto the agent instance, from the
+    # template env — never by rewriting os.environ.
+    assert installed == [
+        (
+            (managed_im_supervisor.IM_SUPERVISOR_PROMPT_TEMPLATE_ENV,),
+            "galley-im/discord/ch:42",
+        )
+    ]
+    assert os.environ["GALLEY_SUPERVISOR_ID"] == "galley-im/discord"
+    # Reporter routing follows the channel's lifetime.
+    assert reporter.attached == ["ch:42"]
+    assert reporter.detached == ["ch:42"]
+
+
+def test_run_discord_falls_back_to_rendered_prompt_without_template(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GALLEY_SUPERVISOR_ID", "galley-im/discord")
+    monkeypatch.delenv("GALLEY_IM_SUPERVISOR_PROMPT_TEMPLATE", raising=False)
+    installed: list[tuple[str, ...]] = []
+
+    def install_prompt(
+        agent: Any,
+        extra_env_names: tuple[str, ...] = (),
+        supervisor_id: str | None = None,
+    ) -> None:
+        installed.append(extra_env_names)
+
+    monkeypatch.setattr(managed_runtime, "install_managed_prompt_profile", install_prompt)
+    monkeypatch.setattr(
+        im_reporter, "start_discord_reporter", lambda dcapp, state_dir: None
+    )
+    code, _events = _run_discord_with_fake_app(
+        monkeypatch,
+        tmp_path,
+        """
+class Agent:
+    verbose = True
+
+def get_app():
+    return None
+
+def check_config(init_agent=False):
+    return {"ready": True}
+
+def main():
+    GALLEY_AGENT_HOOK(Agent(), "ch:7")
+    # No reporter: the released hook must still be safe to call.
+    GALLEY_CHANNEL_RELEASED_HOOK("ch:7")
+    raise KeyboardInterrupt()
+""",
+    )
+    assert code == 0
+    assert installed == [(managed_im_supervisor.IM_SUPERVISOR_PROMPT_ENV,)]
+
+
+def test_install_managed_prompt_profile_binds_supervisor_id_per_agent(
+    monkeypatch: Any,
+) -> None:
+    """Discord's per-channel identity binds on the agent instance; the
+    process-wide template env stays untouched (no concurrent os.environ
+    rewriting), so two channels get two different ids from one template."""
+
+    class _Backend:
+        extra_sys_prompt = ""
+
+    class _Client:
+        def __init__(self) -> None:
+            self.backend = _Backend()
+
+    class _Agent:
+        def __init__(self) -> None:
+            self.llmclients = [_Client()]
+
+    template = "Your Galley supervisor identity is `__GALLEY_SUPERVISOR_ID__`."
+    monkeypatch.setenv(managed_runtime.GALLEY_RUNTIME_PROMPT_TEXT_ENV, "base prompt")
+    monkeypatch.setenv(managed_im_supervisor.IM_SUPERVISOR_PROMPT_TEMPLATE_ENV, template)
+
+    installed = []
+    for chat_id in ("ch:1", "ch:2"):
+        agent = _Agent()
+        managed_runtime.install_managed_prompt_profile(
+            agent,
+            extra_env_names=(managed_im_supervisor.IM_SUPERVISOR_PROMPT_TEMPLATE_ENV,),
+            supervisor_id=f"galley-im/discord/{chat_id}",
+        )
+        installed.append(agent.llmclients[0].backend.extra_sys_prompt)
+
+    assert "base prompt" in installed[0]
+    assert "`galley-im/discord/ch:1`" in installed[0]
+    assert "`galley-im/discord/ch:2`" in installed[1]
+    assert managed_runtime.SUPERVISOR_ID_PLACEHOLDER not in "".join(installed)
+    assert os.environ[managed_im_supervisor.IM_SUPERVISOR_PROMPT_TEMPLATE_ENV] == template
+    # Callers without a per-agent identity keep the old behavior.
+    plain = _Agent()
+    managed_runtime.install_managed_prompt_profile(plain)
+    assert plain.llmclients[0].backend.extra_sys_prompt.strip() == "base prompt"
 
 
 def test_run_feishu_reports_malformed_managed_config_without_mykey_fallback(

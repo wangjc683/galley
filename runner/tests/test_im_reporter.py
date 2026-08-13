@@ -6,24 +6,31 @@ approach used in test_managed_feishu_fsapp.py.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import queue
+import threading
 import types
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from runner import im_reporter
 from runner.im_reporter import (
     FeishuReporter,
+    ImReporter,
     Report,
     ReporterState,
     TelegramReporter,
     build_report_prompt,
-    delegated_sessions,
     is_skip_reply,
     latest_final_output,
     needs_check,
     plan_report,
+    routing_supervisor,
 )
 
 SUP = "galley-im/feishu"
@@ -46,24 +53,75 @@ def _session(
     }
 
 
-def _agent_msg(mid: str, final: str | None) -> dict[str, Any]:
+def _agent_msg(
+    mid: str, final: str | None, *, turn: int | None = None
+) -> dict[str, Any]:
     msg: dict[str, Any] = {"id": mid, "role": "agent", "content": "step content"}
     if final is not None:
         msg["finalAnswer"] = final
+    if turn is not None:
+        msg["turnIndex"] = turn
+    return msg
+
+
+def _user_msg(
+    mid: str, *, supervisor: str | None = None, turn: int | None = None
+) -> dict[str, Any]:
+    msg: dict[str, Any] = {"id": mid, "role": "user", "content": "do it"}
+    if turn is not None:
+        msg["turnIndex"] = turn
+    if supervisor is not None:
+        msg["origin"] = {"via": "supervisor", "supervisor": supervisor}
     return msg
 
 
 # ── pure logic ───────────────────────────────────────────────────────
 
 
-def test_delegated_sessions_filters_by_supervisor_and_archive() -> None:
-    sessions = [
-        _session("mine"),
-        _session("other", supervisor="claude-skill/v1"),
-        _session("no-origin", supervisor=None),
-        _session("archived", status="archived"),
+def test_routing_supervisor_prefers_turn_matched_user_origin() -> None:
+    final = _agent_msg("a2", "done", turn=2)
+    messages = [
+        _user_msg("u1", supervisor="galley-im/discord/ch:111", turn=1),
+        _agent_msg("a1", "first", turn=1),
+        _user_msg("u2", supervisor="galley-im/discord/ch:222", turn=2),
+        final,
     ]
-    assert [s["id"] for s in delegated_sessions(sessions, SUP)] == ["mine"]
+    # The session was created from channel 111, but the reported turn
+    # came from channel 222 — the message origin wins.
+    session = _session(supervisor="galley-im/discord/ch:111")
+    assert routing_supervisor(session, messages, final) == "galley-im/discord/ch:222"
+
+
+def test_routing_supervisor_positional_without_turn_index() -> None:
+    final = _agent_msg("a1", "done")
+    messages = [
+        _user_msg("u1", supervisor=SUP),
+        final,
+        _user_msg("u2", supervisor="galley-im/telegram"),
+    ]
+    # No turn indexes: the last user message BEFORE the final counts.
+    assert routing_supervisor(_session(supervisor=None), messages, final) == SUP
+
+
+def test_routing_supervisor_falls_back_to_session_origin() -> None:
+    final = _agent_msg("a1", "done", turn=5)
+    # Initiating user message truncated out of the fetched tail.
+    assert routing_supervisor(_session(), [final], final) == SUP
+    # GUI-initiated turn (no message origin) keeps session-origin routing.
+    messages = [_user_msg("u1", turn=5), final]
+    assert routing_supervisor(_session(), messages, final) == SUP
+    assert routing_supervisor(_session(supervisor=None), messages, final) is None
+
+
+def test_routing_supervisor_dead_status_uses_last_user() -> None:
+    messages = [
+        _user_msg("u1", supervisor="galley-im/feishu"),
+        _user_msg("u2", supervisor="galley-im/telegram"),
+    ]
+    assert (
+        routing_supervisor(_session(supervisor=None), messages, None)
+        == "galley-im/telegram"
+    )
 
 
 def test_latest_final_output_requires_final_answer() -> None:
@@ -409,6 +467,350 @@ def test_telegram_reporter_owner_and_busy_gates(
     assert sent[0][1] == "123456789"
 
 
+# ── Discord channel adapter ──────────────────────────────────────────
+
+
+class _StubDiscordApp:
+    """Stub DiscordApp: the reporter only needs the loop, the per-channel
+    task map, the strict deliver coroutine and the agent accessor."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self.loop = loop
+        self.user_tasks: dict[str, Any] = {}
+        self.sent: list[tuple[str, str]] = []
+        self.active_ids: list[str] = []
+        self.agents: dict[str, _StubAgent] = {}
+        self.deliver_error: Exception | None = None
+
+    def active_channel_ids(self) -> list[str]:
+        return list(self.active_ids)
+
+    async def deliver_text(self, chat_id: str, content: str) -> None:
+        if self.deliver_error is not None:
+            raise self.deliver_error
+        self.sent.append((chat_id, content))
+
+    def _get_agent(self, chat_id: str) -> Any:
+        return types.SimpleNamespace(agent=self.agents.setdefault(chat_id, _StubAgent([])))
+
+
+def _stub_dcapp(app: _StubDiscordApp | None) -> Any:
+    return types.SimpleNamespace(
+        ALLOWED={"555000111"},
+        public_access=lambda allowed: not allowed or "*" in allowed,
+        _galley_connected_once=True,
+        get_app=lambda: app,
+        _strip_discord_transcript=lambda t: (t or "").strip(),
+    )
+
+
+@contextlib.contextmanager
+def _loop_thread() -> Iterator[asyncio.AbstractEventLoop]:
+    """A real loop in a real thread: DiscordChannel.send crosses into it
+    with run_coroutine_threadsafe, and that bridge is the contract."""
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+    try:
+        yield loop
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=5)
+        loop.close()
+
+
+def _discord_payloads(chat_id: str = "ch:1") -> dict[str, list[dict[str, Any]]]:
+    return {
+        "sessions": [_session("s1", supervisor=None)],
+        "show s1": [
+            _user_msg("u1", supervisor=f"galley-im/discord/{chat_id}", turn=1),
+            _agent_msg("a1", "done!", turn=1),
+        ],
+    }
+
+
+def test_discord_channel_delivers_into_its_own_channel(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    _fake_cli(monkeypatch, _discord_payloads())
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        dcapp = _stub_dcapp(app)
+        reporter = im_reporter.DiscordReporter(
+            dcapp, "galley-im/discord", tmp_path / "reporter_state.json"
+        )
+        reporter.cli = "/stub/galley"
+        agent = _StubAgent(["频道任务完成：结果是 X。"])
+        assert reporter.attach_channel("ch:1", agent) == "galley-im/discord/ch:1"
+        # A turn in flight on that channel defers without burning a report.
+        app.user_tasks["ch:1"] = {"running": True}
+        assert reporter.tick() == []
+        assert agent.prompts == []
+        app.user_tasks.clear()
+        assert len(reporter.tick()) == 1
+        # The report goes back to the channel, not to the owner's DM.
+        assert app.sent == [("ch:1", "频道任务完成：结果是 X。")]
+        # Detached channels stop being ours to report.
+        reporter.detach_channel("ch:1")
+        assert reporter.channels() == {}
+        assert reporter.tick() == []
+
+
+def test_discord_channel_requires_a_bound_owner(monkeypatch: Any, tmp_path: Path) -> None:
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    _fake_cli(monkeypatch, _discord_payloads())
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        dcapp = _stub_dcapp(app)
+        channel = im_reporter.DiscordChannel(dcapp, "ch:1", _StubAgent(["report"]))
+        # Unbound (managed dcapp starts with an empty allow-list) → no push.
+        dcapp.ALLOWED = set()
+        assert channel.owner_id() is None
+        dcapp.ALLOWED = {"*"}
+        assert channel.owner_id() is None
+        dcapp.ALLOWED = {"555000111", "555000222"}
+        assert channel.owner_id() is None
+        dcapp.ALLOWED = {"555000111"}
+        assert channel.owner_id() == "555000111"
+        # Disconnected client → not ready either.
+        dcapp._galley_connected_once = False
+        assert not channel.connected()
+        dcapp._galley_connected_once = True
+        assert channel.connected()
+
+
+def test_discord_send_failure_raises_and_counts_attempts(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    _fake_cli(monkeypatch, _discord_payloads())
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        app.deliver_error = RuntimeError("channel deleted")
+        dcapp = _stub_dcapp(app)
+        agent = _StubAgent(["r1", "r2", "r3", "never used"])
+        channel = im_reporter.DiscordChannel(dcapp, "ch:1", agent)
+        # The async bridge surfaces the failure instead of swallowing it.
+        with pytest.raises(RuntimeError, match="channel deleted"):
+            channel.send("555000111", "report", "report")
+        reporter = im_reporter.DiscordReporter(
+            dcapp, "galley-im/discord", tmp_path / "reporter_state.json"
+        )
+        reporter.cli = "/stub/galley"
+        reporter.register_channel("galley-im/discord/ch:1", channel)
+        for _ in range(3):
+            assert reporter.tick() == []
+        assert app.sent == []
+        assert len(agent.prompts) == 3
+        # Bounded: the fourth tick gives up without burning another turn.
+        assert reporter.tick() == []
+        assert len(agent.prompts) == 3
+
+
+def test_start_discord_reporter_restores_active_channels(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("GALLEY_SUPERVISOR_ID", "galley-im/discord")
+    monkeypatch.setattr(im_reporter, "_start_reporter", lambda reporter: reporter)
+    _fake_cli(monkeypatch, _discord_payloads("ch:7"))
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        app.active_ids = ["ch:7", "ch:8"]
+        app.agents["ch:7"] = _StubAgent(["restored report"])
+        reporter = im_reporter.start_discord_reporter(_stub_dcapp(app), tmp_path)
+        assert reporter is not None
+        assert set(reporter.channels()) == {
+            "galley-im/discord/ch:7",
+            "galley-im/discord/ch:8",
+        }
+        reporter.cli = "/stub/galley"
+        # Routing works before any message arrives: the restored channel
+        # resolves its agent through dcapp on first use.
+        assert len(reporter.tick()) == 1
+        assert app.sent == [("ch:7", "restored report")]
+
+
+def test_start_discord_reporter_disabled_without_supervisor_id(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("GALLEY_SUPERVISOR_ID", raising=False)
+    assert im_reporter.start_discord_reporter(_stub_dcapp(None), tmp_path) is None
+
+
+def test_discord_reporter_without_app_is_inert(monkeypatch: Any, tmp_path: Path) -> None:
+    """dcapp builds its app inside main(), after the launcher starts the
+    reporter: restore must be a no-op instead of a crash."""
+    monkeypatch.setenv("GALLEY_SUPERVISOR_ID", "galley-im/discord")
+    monkeypatch.setattr(im_reporter, "_start_reporter", lambda reporter: reporter)
+    reporter = im_reporter.start_discord_reporter(_stub_dcapp(None), tmp_path)
+    assert reporter is not None
+    assert reporter.channels() == {}
+    assert not im_reporter.DiscordChannel(_stub_dcapp(None), "ch:1").connected()
+
+
+# ── dispatcher: message-origin routing + multi-channel registry ─────
+
+
+class _StubChannel(im_reporter.ChannelAdapter):
+    def __init__(self, owner: str | None, replies: list[str]) -> None:
+        self.owner = owner
+        self.agent_obj = _StubAgent(replies)
+        self.sent: list[tuple[str, str]] = []
+        self.is_busy = False
+
+    def connected(self) -> bool:
+        return True
+
+    def owner_id(self) -> str | None:
+        return self.owner
+
+    def busy(self) -> bool:
+        return self.is_busy
+
+    def agent(self) -> Any:
+        return self.agent_obj
+
+    def send(self, owner: str, text: str, raw: str) -> None:
+        self.sent.append((owner, text))
+
+
+def _fake_cli(
+    monkeypatch: Any, cli_payloads: dict[str, list[dict[str, Any]]]
+) -> None:
+    def fake_run(cli: str, args: list[str]) -> list[dict[str, Any]]:
+        key = " ".join(args[:2])
+        if key == "sessions list":
+            return cli_payloads["sessions"]
+        if key == "session show":
+            return cli_payloads.get(f"show {args[2]}", [])
+        raise AssertionError(f"unexpected CLI call: {args}")
+
+    monkeypatch.setattr(im_reporter, "run_cli_json_lines", fake_run)
+
+
+def test_gui_created_session_continued_by_channel_reports(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    fsapp = _stub_fsapp(["report text"])
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    payloads = {
+        "sessions": [_session("s1", supervisor=None)],
+        "show s1": [
+            _user_msg("u1", supervisor=SUP, turn=1),
+            _agent_msg("a1", "done!", turn=1),
+        ],
+    }
+    reporter = _make_reporter(monkeypatch, tmp_path, fsapp, payloads)
+    # Session origin is GUI, but the reported turn came from this
+    # channel — the old session-origin filter never reported these.
+    assert len(reporter.tick()) == 1
+    assert fsapp._sent == [("ou_owner", "report text")]
+
+
+def test_foreign_turn_is_not_reported_here(monkeypatch: Any, tmp_path: Path) -> None:
+    fsapp = _stub_fsapp(["should not be used"])
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    payloads = {
+        "sessions": [_session("s1")],  # created by this channel...
+        "show s1": [
+            _user_msg("u1", supervisor="galley-im/telegram", turn=3),
+            _agent_msg("a1", "done!", turn=3),
+        ],  # ...but the reported turn was driven from Telegram
+    }
+    reporter = _make_reporter(monkeypatch, tmp_path, fsapp, payloads)
+    assert reporter.tick() == []
+    assert fsapp._sent == []
+    assert fsapp._agent.prompts == []
+    # Marked seen: steady state does not re-fetch messages forever.
+    assert reporter.tick() == []
+
+
+def test_send_failure_counts_attempts_and_gives_up(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    fsapp = _stub_fsapp(["r1", "r2", "r3", "never used"])
+
+    def broken_send(rid: str, text: str, **kw: Any) -> None:
+        raise RuntimeError("network down")
+
+    fsapp.send_message = broken_send
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    payloads = {
+        "sessions": [_session("s1")],
+        "show s1": [_agent_msg("a1", "done!")],
+    }
+    reporter = _make_reporter(monkeypatch, tmp_path, fsapp, payloads)
+    # Three failing attempts, each burning one report turn...
+    for _ in range(3):
+        assert reporter.tick() == []
+    assert len(fsapp._agent.prompts) == 3
+    # ...then the attempt limit gives up WITHOUT another turn, and the
+    # session stops being re-checked.
+    assert reporter.tick() == []
+    assert reporter.tick() == []
+    assert len(fsapp._agent.prompts) == 3
+
+
+def test_dispatcher_routes_across_registered_channels(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    ch_a = _StubChannel("owner-a", ["report A"])
+    ch_b = _StubChannel("owner-b", ["report B"])
+    reporter = ImReporter(
+        {"galley-im/discord/ch:1": ch_a, "galley-im/discord/ch:2": ch_b},
+        tmp_path / "reporter_state.json",
+    )
+    reporter.cli = "/stub/galley"
+    payloads = {
+        "sessions": [_session("s1", supervisor=None), _session("s2", supervisor=None)],
+        "show s1": [
+            _user_msg("u1", supervisor="galley-im/discord/ch:1", turn=1),
+            _agent_msg("a1", "done A", turn=1),
+        ],
+        "show s2": [
+            _user_msg("u2", supervisor="galley-im/discord/ch:2", turn=1),
+            _agent_msg("a2", "done B", turn=1),
+        ],
+    }
+    _fake_cli(monkeypatch, payloads)
+    # One channel busy: the other's report still flows this tick.
+    ch_a.is_busy = True
+    assert len(reporter.tick()) == 1
+    assert ch_a.sent == []
+    assert ch_b.sent == [("owner-b", "report B")]
+    ch_a.is_busy = False
+    assert len(reporter.tick()) == 1
+    assert ch_a.sent == [("owner-a", "report A")]
+    # Unregister: that channel's future reports are no longer ours.
+    reporter.unregister_channel("galley-im/discord/ch:1")
+    payloads["sessions"] = [
+        _session("s1", supervisor=None, last_activity="2026-07-03T12:00:00Z"),
+    ]
+    payloads["show s1"].append(_agent_msg("a3", "later result", turn=2))
+    payloads["show s1"].insert(
+        2, _user_msg("u3", supervisor="galley-im/discord/ch:1", turn=2)
+    )
+    assert reporter.tick() == []
+    assert ch_a.sent == [("owner-a", "report A")]
+
+
+def test_state_prunes_deleted_sessions(monkeypatch: Any, tmp_path: Path) -> None:
+    (tmp_path / "reporter_state.json").write_text(
+        '{"sessions":{"s-gone":{"lastSeenStatus":"idle"}}}', encoding="utf-8"
+    )
+    fsapp = _stub_fsapp([])
+    payloads: dict[str, list[dict[str, Any]]] = {"sessions": []}
+    reporter = _make_reporter(monkeypatch, tmp_path, fsapp, payloads)
+    assert reporter.tick() == []
+    assert "s-gone" not in reporter.state.data["sessions"]
+    # Persisted, not just in-memory.
+    reloaded = ReporterState.load(tmp_path / "reporter_state.json")
+    assert "s-gone" not in reloaded.data["sessions"]
+
+
 def test_run_cli_json_lines_parses_ndjson(monkeypatch: Any) -> None:
     proc = types.SimpleNamespace(
         returncode=0,
@@ -418,3 +820,51 @@ def test_run_cli_json_lines_parses_ndjson(monkeypatch: Any) -> None:
     monkeypatch.setattr("runner.im_reporter.subprocess.run", lambda *a, **kw: proc)
     items = im_reporter.run_cli_json_lines("/stub/galley", ["sessions", "list"])
     assert [i["id"] for i in items] == ["s1", "s2"]
+
+
+def test_owned_prefix_report_is_held_until_channel_reactivates(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """A managed restart deactivates every Discord channel (patch
+    semantics), so a session delegated from ch:9 that settles before the
+    owner re-mentions the bot has no registered route. The base-id
+    prefix marks it OURS: it must be held — not marked seen as foreign —
+    and delivered once the channel re-activates."""
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    _fake_cli(monkeypatch, _discord_payloads("ch:9"))
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        dcapp = _stub_dcapp(app)
+        reporter = im_reporter.DiscordReporter(
+            dcapp, "galley-im/discord", tmp_path / "reporter_state.json"
+        )
+        reporter.cli = "/stub/galley"
+        # Some other channel is active, so the tick actually runs.
+        reporter.attach_channel("ch:1")
+        assert reporter.tick() == []
+        assert app.sent == []
+        # Held, not seen: the next tick still re-checks the session.
+        assert reporter.tick() == []
+        # Re-activation registers ch:9; the pending report flows.
+        app.agents["ch:9"] = _StubAgent(["report text"])
+        reporter.attach_channel("ch:9")
+        assert len(reporter.tick()) == 1
+        assert app.sent == [("ch:9", "report text")]
+
+
+def test_reporter_strips_workbench_suggestion_tag(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """The composer's ghost-text tag must never reach an IM push, even if
+    the model imitates it from pre-fix conversation history."""
+    fsapp = _stub_fsapp(
+        ["报告正文。\n\n<next-suggestion>帮我继续下一步</next-suggestion>"]
+    )
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    payloads = {
+        "sessions": [_session("s1")],
+        "show s1": [_agent_msg("a1", "done!")],
+    }
+    reporter = _make_reporter(monkeypatch, tmp_path, fsapp, payloads)
+    assert len(reporter.tick()) == 1
+    assert fsapp._sent == [("ou_owner", "报告正文。")]

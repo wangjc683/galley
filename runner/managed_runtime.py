@@ -19,6 +19,9 @@ GALLEY_MANAGED_STATE_ROOT_ENV = "GALLEY_GA_STATE_ROOT"
 GALLEY_MANAGED_MODEL_CONFIG_ENV = "GALLEY_MANAGED_MODEL_CONFIG_JSON"
 GALLEY_MANAGED_MODEL_CONFIG_PATH_ENV = "GALLEY_MANAGED_MODEL_CONFIG_PATH"
 GALLEY_RUNTIME_PROMPT_TEXT_ENV = "GALLEY_RUNTIME_PROMPT_TEXT"
+# Literal Core leaves in prompt templates whose supervisor identity can
+# only be known per agent instance (core/src/managed_prompt.rs).
+SUPERVISOR_ID_PLACEHOLDER = "__GALLEY_SUPERVISOR_ID__"
 _CREDENTIAL_IPC_TIMEOUT_SECS = 10
 
 
@@ -193,7 +196,17 @@ def install_managed_mykey_loader() -> None:
     llmcore._mykey_mtime = None
 
 
-def managed_prompt_profile(extra_env_names: Iterable[str] = ()) -> str:
+def managed_prompt_profile(
+    extra_env_names: Iterable[str] = (),
+    supervisor_id: str | None = None,
+) -> str:
+    """Compose the managed prompt from Galley-injected env text.
+
+    ``supervisor_id`` resolves the deferred identity placeholder Core
+    leaves in a prompt *template* (see ``install_managed_prompt_profile``).
+    Substitution happens on the composed text, so a prompt without the
+    placeholder is returned unchanged.
+    """
     prompts = []
     for env_name in (
         GALLEY_RUNTIME_PROMPT_TEXT_ENV,
@@ -206,14 +219,26 @@ def managed_prompt_profile(extra_env_names: Iterable[str] = ()) -> str:
     extra_prompt = "\n\n".join(p for p in prompts if p)
     if not extra_prompt:
         raise RuntimeError("managed prompt profile is empty")
+    if supervisor_id:
+        extra_prompt = extra_prompt.replace(SUPERVISOR_ID_PLACEHOLDER, supervisor_id)
     return extra_prompt
 
 
 def install_managed_prompt_profile(
     agent: Any,
     extra_env_names: Iterable[str] = (),
+    supervisor_id: str | None = None,
 ) -> None:
-    extra_prompt = managed_prompt_profile(extra_env_names)
+    """Install Galley's managed prompt onto one agent instance.
+
+    Single-context platforms call this once with the prompt Core already
+    rendered. Multi-context platforms (Discord: one supervisor context
+    per channel) call it once per agent with the prompt *template* env
+    name plus that channel's ``supervisor_id`` — the identity binds per
+    agent instance here instead of process-wide, because concurrently
+    rewriting ``os.environ`` per channel is not an option.
+    """
+    extra_prompt = managed_prompt_profile(extra_env_names, supervisor_id)
 
     clients = list(getattr(agent, "llmclients", []) or [])
     if not clients and getattr(agent, "llmclient", None) is not None:
