@@ -41,6 +41,7 @@ export function useModelConfigSavedToast() {
       void Promise.allSettled([
         getImSupervisorStatus("wechat"),
         getImSupervisorStatus("feishu"),
+        getImSupervisorStatus("telegram"),
       ])
         .then((results) =>
           push(
