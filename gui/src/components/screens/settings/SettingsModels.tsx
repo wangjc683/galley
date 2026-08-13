@@ -335,6 +335,7 @@ export function SettingsModels({
                 key={provider.id}
                 provider={provider}
                 models={modelsByProvider[provider.id] ?? []}
+                defaultModelId={orderedModels[0]?.id}
                 allModelCount={orderedModels.length}
                 saving={saving}
                 expanded={isProviderExpanded(provider.id)}
@@ -441,6 +442,7 @@ export function SettingsModels({
                     modelName,
                   )
                 }
+                onRemoveDetectedModel={handleDeleteModel}
               />
             ))}
         </div>

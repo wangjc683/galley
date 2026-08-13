@@ -12,7 +12,7 @@ import {
   Plus,
   Trash,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button, IconButton } from "@/components/ui/button";
 import { ScrollFade } from "@/components/ui/scroll-fade";
@@ -39,14 +39,17 @@ import type { ModelDraftState, ProbeAction, ProbeState } from "./types";
 
 /**
  * Provider card — a model *source* (credentials + endpoint + protocol)
- * and the place you enable which of its models exist. Per-model
- * arrangement (order / default / edit / test / remove) lives in the
- * "我的模型" list above; this card deliberately does not duplicate it,
- * showing enabled models only as read-only chips.
+ * and the place you decide which of its models exist: the detected-model
+ * list toggles both ways (enable, and remove with the same inline
+ * confirm as "我的模型"; the default model stays non-removable). Per-model
+ * *arrangement* (order / default / edit / test) lives in the "我的模型"
+ * list above; this card deliberately does not duplicate it, showing
+ * enabled models only as read-only chips.
  */
 export function ProviderCard({
   provider,
   models,
+  defaultModelId,
   allModelCount,
   saving,
   expanded,
@@ -69,9 +72,11 @@ export function ProviderCard({
   onTestModelDraft,
   onSaveModelDraft,
   onEnableDetectedModel,
+  onRemoveDetectedModel,
 }: {
   provider: ManagedModelProviderRecord;
   models: ManagedModelRecord[];
+  defaultModelId?: string;
   allModelCount: number;
   saving: boolean;
   expanded: boolean;
@@ -94,6 +99,7 @@ export function ProviderCard({
   onTestModelDraft: (draft: ModelDraftState) => void;
   onSaveModelDraft: (draft: ModelDraftState) => void;
   onEnableDetectedModel: (modelName: string) => void;
+  onRemoveDetectedModel: (model: ManagedModelRecord) => void;
 }) {
   const copy = useCopy().settings.models;
   const keyMissing = provider.credentialStatus === "missing";
@@ -105,8 +111,8 @@ export function ProviderCard({
   const canUseProvider = !keyMissing && !providerProbeLoading && !saving;
   const canFetchModels =
     !keyMissing && modelProbeState.kind !== "loading" && !saving;
-  const enabledModelNames = useMemo(
-    () => new Set(models.map((item) => item.model)),
+  const enabledModelsByName = useMemo(
+    () => new Map(models.map((item) => [item.model, item])),
     [models],
   );
   const normalizedFilter = modelFilter.trim().toLowerCase();
@@ -115,6 +121,36 @@ export function ProviderCard({
   );
   const visibleOptions = filteredOptions.slice(0, 80);
   const open = expanded || !!providerEditor;
+
+  // Expand-triggered scroll: the card grows downward, and in a small
+  // window the new content lands below the fold. `nearest` scrolls the
+  // minimum to reveal the card bottom, and when the card is taller than
+  // the viewport it pins the header to the top instead — either way the
+  // controls are reachable without a manual scroll. This runs twice per
+  // expand at most: once immediately (the card is still short — the
+  // detected-model list hasn't arrived), and once more when the
+  // expand-triggered auto-fetch below delivers the list and the card
+  // takes its full height (`pendingListScrollRef`). Collapsing while the
+  // fetch is in flight cancels the second scroll.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(open);
+  const pendingListScrollRef = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    wasOpenRef.current = open;
+  }, [open]);
+  useEffect(() => {
+    if (!pendingListScrollRef.current) return;
+    if (!open) {
+      pendingListScrollRef.current = false;
+      return;
+    }
+    if (modelOptions.length === 0) return;
+    pendingListScrollRef.current = false;
+    rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [open, modelOptions.length]);
 
   // Expand-triggered auto-fetch: pull the provider's model list once
   // per session when the card opens with nothing cached, so "可添加模型"
@@ -135,6 +171,7 @@ export function ProviderCard({
       return;
     }
     autoFetchedRef.current = true;
+    pendingListScrollRef.current = true;
     onAutoFetchModels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -154,6 +191,7 @@ export function ProviderCard({
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         // Quiet header grammar, matching the ChannelCard / model-row
         // idiom: light hover tint + caret emphasis only. The primary
@@ -352,15 +390,26 @@ export function ProviderCard({
                         {visibleOptions.length === 0 && (
                           <EmptyRow text={copy.noMatchingModels} />
                         )}
-                        {visibleOptions.map((option) => (
-                          <DetectedModelRow
-                            key={option}
-                            modelName={option}
-                            enabled={enabledModelNames.has(option)}
-                            saving={saving}
-                            onEnable={() => onEnableDetectedModel(option)}
-                          />
-                        ))}
+                        {visibleOptions.map((option) => {
+                          const enabledModel = enabledModelsByName.get(option);
+                          return (
+                            <DetectedModelRow
+                              key={option}
+                              modelName={option}
+                              enabled={!!enabledModel}
+                              canRemove={
+                                !!enabledModel &&
+                                enabledModel.id !== defaultModelId
+                              }
+                              saving={saving}
+                              onEnable={() => onEnableDetectedModel(option)}
+                              onRemove={() =>
+                                enabledModel &&
+                                onRemoveDetectedModel(enabledModel)
+                              }
+                            />
+                          );
+                        })}
                       </div>
                     </ScrollFade>
                     {filteredOptions.length > visibleOptions.length && (
@@ -433,41 +482,111 @@ function ProviderActionsMenu({
 function DetectedModelRow({
   modelName,
   enabled,
+  canRemove,
   saving,
   onEnable,
+  onRemove,
 }: {
   modelName: string;
   enabled: boolean;
+  canRemove: boolean;
   saving: boolean;
   onEnable: () => void;
+  onRemove: () => void;
 }) {
-  const copy = useCopy().settings.models;
+  const appCopy = useCopy();
+  const copy = appCopy.settings.models;
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const showRemoveConfirm = confirmingRemove && canRemove;
   return (
-    <div className="flex min-w-0 items-center gap-3 px-2.5 py-1.5">
-      <div className="min-w-0 flex-1 truncate font-mono text-ui-meta text-ink">
-        {modelName}
+    <div className="px-2.5 py-1.5">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="min-w-0 flex-1 truncate font-mono text-ui-meta text-ink">
+          {modelName}
+        </div>
+        {enabled ? (
+          canRemove ? (
+            // Enable's mirror: rests as the green "added" badge, reveals
+            // the remove action on hover / keyboard focus, and confirms
+            // via the same inline strip as the "我的模型" row — one removal
+            // grammar, two surfaces.
+            <button
+              type="button"
+              aria-label={`${appCopy.common.remove} ${modelName}`}
+              disabled={saving}
+              onClick={() => setConfirmingRemove(true)}
+              className={cn(
+                "group/added inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent px-2.5 text-ui-meta leading-none",
+                "bg-success/[var(--opacity-subtle)] text-success",
+                "hover:bg-error/[var(--opacity-subtle)] hover:text-error",
+                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20",
+                "focus-visible:bg-error/[var(--opacity-subtle)] focus-visible:text-error",
+                "disabled:cursor-not-allowed disabled:opacity-40",
+              )}
+            >
+              <span className="inline-flex items-center gap-1 group-hover/added:hidden group-focus-visible/added:hidden">
+                <CheckCircle size={12} weight="fill" />
+                {copy.enabled}
+              </span>
+              <span className="hidden items-center gap-1 group-hover/added:inline-flex group-focus-visible/added:inline-flex">
+                <Trash size={12} weight="thin" />
+                {appCopy.common.remove}
+              </span>
+            </button>
+          ) : (
+            // The default model can't be removed here — same invariant as
+            // the "我的模型" row menu; pick a new default first.
+            <span className="inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent bg-success/[var(--opacity-subtle)] px-2.5 text-ui-meta leading-none text-success">
+              <CheckCircle size={12} weight="fill" />
+              {copy.enabled}
+            </span>
+          )
+        ) : (
+          <button
+            type="button"
+            aria-label={`${copy.enable} ${modelName}`}
+            disabled={saving}
+            onClick={onEnable}
+            className={cn(
+              "inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent px-2.5 text-ui-meta leading-none text-ink-muted",
+              "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+              "hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20 active:translate-y-px",
+              "disabled:cursor-not-allowed disabled:opacity-40 disabled:translate-y-0",
+            )}
+          >
+            <Plus size={12} weight="bold" />
+            {copy.enable}
+          </button>
+        )}
       </div>
-      {enabled ? (
-        <span className="inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent bg-success/[var(--opacity-subtle)] px-2.5 text-ui-meta leading-none text-success">
-          <CheckCircle size={12} weight="fill" />
-          {copy.enabled}
-        </span>
-      ) : (
-        <button
-          type="button"
-          aria-label={`${copy.enable} ${modelName}`}
-          disabled={saving}
-          onClick={onEnable}
+      {showRemoveConfirm && (
+        <div
           className={cn(
-            "inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent px-2.5 text-ui-meta leading-none text-ink-muted",
-            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
-            "hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20 active:translate-y-px",
-            "disabled:cursor-not-allowed disabled:opacity-40 disabled:translate-y-0",
+            "mt-1.5 flex items-center justify-end gap-2 rounded-sm border border-line/70",
+            "bg-surface/60 px-2 py-1.5 text-ui-meta text-ink-soft",
           )}
         >
-          <Plus size={12} weight="bold" />
-          {copy.enable}
-        </button>
+          <span className="min-w-0 flex-1">{copy.removeModelInlineConfirm}</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={saving}
+            onClick={() => setConfirmingRemove(false)}
+          >
+            {appCopy.common.cancel}
+          </Button>
+          <Button
+            variant="destructive-soft"
+            size="sm"
+            disabled={saving}
+            onClick={() => {
+              setConfirmingRemove(false);
+              onRemove();
+            }}
+          >
+            {copy.removeModel}
+          </Button>
+        </div>
       )}
     </div>
   );
