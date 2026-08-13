@@ -93,9 +93,13 @@ Coverage and limits — state these honestly:
   and are not stored in Galley. Do not claim you can fetch them.
 - Do NOT look for past conversations under ../memory/L4_raw_sessions/. That
   history layer is inactive in Galley's session mode and is always empty — use
-  the CLI above instead.
+  the CLI above instead."#;
 
-## Next-Step Suggestion
+/// GUI-composer surface feature: the ghost-text suggestion the workbench
+/// composer renders after each turn. Workbench-only — IM supervisors have
+/// no composer, and mandating the tag there leaked it verbatim into chat
+/// replies on every channel (2026-08-13 Discord/Feishu dogfood).
+pub(crate) const WORKBENCH_SUGGESTION_PROMPT: &str = r#"## Next-Step Suggestion
 
 End every final reply with exactly one next-step suggestion tag:
 
@@ -122,15 +126,33 @@ Rules:
   never inside tool output.
 - Never mention this tag or the suggestion mechanism in the reply body."#;
 
-/// Full managed runtime prompt: static rules plus a session-start state block.
+/// Full managed runtime prompt for the workbench (GUI session) surface:
+/// static rules + the composer's suggestion mandate + a session-start
+/// state block.
 ///
 /// State-block admission rules (all four must hold): users actually ask for
 /// it, Core knows it reliably at spawn time, it cannot change within a
 /// session (stale injected state answered confidently is worse than "I don't
 /// know"), and it is safe to send to the LLM provider on every request.
 pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
+    compose(app_version, true)
+}
+
+/// IM-supervisor variant: same runtime rules WITHOUT the suggestion
+/// mandate. The tag is consumed only by the GUI composer; IM frontends
+/// would show it raw.
+pub(crate) fn compose_im_runtime_prompt(app_version: &str) -> String {
+    compose(app_version, false)
+}
+
+fn compose(app_version: &str, with_suggestion: bool) -> String {
+    let static_rules = if with_suggestion {
+        workbench_static_prompt()
+    } else {
+        RUNTIME_PROMPT_STATIC.to_string()
+    };
     format!(
-        r#"{RUNTIME_PROMPT_STATIC}
+        r#"{static_rules}
 
 ## Galley State
 
@@ -146,6 +168,14 @@ channel, session or project state — do not guess. Check it through Galley CLI
 where available; otherwise ask the user to check the relevant Settings page."#,
         platform = platform_label(),
     )
+}
+
+/// The workbench's full static rules: runtime layer + suggestion mandate,
+/// joined exactly as the pre-split monolithic constant read — so
+/// `prompt_hash()` (which fingerprints these rules) is unchanged by the
+/// refactor that carved the suggestion section out for IM's sake.
+fn workbench_static_prompt() -> String {
+    format!("{RUNTIME_PROMPT_STATIC}\n\n{WORKBENCH_SUGGESTION_PROMPT}")
 }
 
 fn platform_label() -> &'static str {
@@ -164,11 +194,32 @@ pub(crate) fn im_supervisor_id(platform: &str) -> String {
     format!("galley-im/{platform}")
 }
 
+/// Placeholder the runner substitutes with the real per-channel
+/// supervisor id. See [`im_supervisor_prompt_template`].
+pub(crate) const SUPERVISOR_ID_PLACEHOLDER: &str = "__GALLEY_SUPERVISOR_ID__";
+
+/// Entry-layer prompt with the supervisor id left unresolved.
+///
+/// Multi-context platforms (Discord: one supervisor context per
+/// channel) cannot use a prompt rendered once at spawn time — every
+/// channel agent needs its own `galley-im/discord/ch:<id>`, and the
+/// process-wide env var carries only one. Core hands the runner this
+/// template instead (`GALLEY_IM_SUPERVISOR_PROMPT_TEMPLATE`, injected
+/// only for such platforms) and the runner replaces
+/// [`SUPERVISOR_ID_PLACEHOLDER`] when it creates each channel's agent,
+/// rather than mutating `os.environ` concurrently. Same text as
+/// [`im_supervisor_prompt`] otherwise — one prompt body, two binding
+/// times.
+pub(crate) fn im_supervisor_prompt_template(sop_path: &str, platform: &str) -> String {
+    im_supervisor_prompt(sop_path, platform, SUPERVISOR_ID_PLACEHOLDER)
+}
+
 pub(crate) fn im_supervisor_prompt(sop_path: &str, platform: &str, supervisor_id: &str) -> String {
     let platform_label = match platform {
         "wechat" => "WeChat",
         "feishu" => "Feishu",
         "telegram" => "Telegram",
+        "discord" => "Discord",
         _ => "the current IM channel",
     };
     format!(
@@ -220,7 +271,7 @@ unclear."#
 /// not read as new prompt generations.
 pub(crate) fn prompt_hash() -> String {
     let mut context = Context::new(&SHA256);
-    context.update(RUNTIME_PROMPT_STATIC.trim().as_bytes());
+    context.update(workbench_static_prompt().trim().as_bytes());
     short_hex(context.finish().as_ref(), 8)
 }
 
@@ -265,6 +316,21 @@ mod tests {
     }
 
     #[test]
+    fn suggestion_mandate_is_workbench_only() {
+        // The tag is consumed by the GUI composer alone; a mandate in the
+        // IM composition leaks it verbatim into chat replies (2026-08-13
+        // Discord/Feishu dogfood).
+        let workbench = compose_runtime_prompt("0.0.0-test");
+        assert!(workbench.contains("## Next-Step Suggestion"));
+        assert!(workbench.contains("<next-suggestion>"));
+        let im = compose_im_runtime_prompt("0.0.0-test");
+        assert!(!im.contains("next-suggestion"));
+        // Both variants still carry the shared runtime rules + state block.
+        assert!(im.starts_with(RUNTIME_PROMPT_STATIC));
+        assert!(im.contains("## Galley State"));
+    }
+
+    #[test]
     fn im_supervisor_prompt_names_current_platform() {
         let wechat = im_supervisor_prompt("/tmp/sop.md", "wechat", "galley-im/wechat");
         assert!(wechat.contains("## Galley IM Entry Layer"));
@@ -273,6 +339,27 @@ mod tests {
         let feishu = im_supervisor_prompt("/tmp/sop.md", "feishu", "galley-im/feishu");
         assert!(feishu.contains("through Feishu"));
         assert!(feishu.contains("Use this IM chat as a lightweight control surface"));
+    }
+
+    #[test]
+    fn im_supervisor_prompt_names_discord() {
+        let discord = im_supervisor_prompt("/tmp/sop.md", "discord", "galley-im/discord");
+        assert!(discord.contains("through Discord"));
+        assert!(discord.contains("Treat Discord"));
+    }
+
+    #[test]
+    fn im_supervisor_prompt_template_defers_only_the_supervisor_id() {
+        let template = im_supervisor_prompt_template("/tmp/sop.md", "discord");
+        assert!(template.contains(SUPERVISOR_ID_PLACEHOLDER));
+        assert!(template.contains(&format!("--supervisor={SUPERVISOR_ID_PLACEHOLDER}")));
+        // Substituting the placeholder must reproduce the rendered
+        // prompt exactly — the two paths may never drift apart.
+        let channel_id = im_supervisor_id("discord/ch:123");
+        assert_eq!(
+            template.replace(SUPERVISOR_ID_PLACEHOLDER, &channel_id),
+            im_supervisor_prompt("/tmp/sop.md", "discord", &channel_id)
+        );
     }
 
     #[test]

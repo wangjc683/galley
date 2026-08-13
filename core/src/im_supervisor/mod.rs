@@ -4,18 +4,19 @@
 //! GenericAgent checkout.
 //!
 //! `manager` owns the per-platform process slots and lifecycle;
-//! `platform_config` owns the Feishu / Telegram credentials, owner
-//! pairing, and spawn-time env. This file keeps the shared platform
-//! constants, status types, enable-prefs, and path helpers.
+//! `platform_config` owns the Feishu / Telegram / Discord credentials,
+//! owner pairing, and spawn-time env. This file keeps the shared
+//! platform constants, status types, enable-prefs, and path helpers.
 
 mod manager;
 mod platform_config;
 
 pub use manager::ImSupervisorManager;
 pub use platform_config::{
-    delete_feishu_im_config, delete_telegram_im_config, get_feishu_im_config,
-    get_telegram_im_config, save_feishu_im_config, save_telegram_im_config, FeishuImConfig,
-    SaveFeishuImConfigInput, SaveTelegramImConfigInput, TelegramImConfig,
+    delete_discord_im_config, delete_feishu_im_config, delete_telegram_im_config,
+    get_discord_im_config, get_feishu_im_config, get_telegram_im_config, save_discord_im_config,
+    save_feishu_im_config, save_telegram_im_config, DiscordImConfig, FeishuImConfig,
+    SaveDiscordImConfigInput, SaveFeishuImConfigInput, SaveTelegramImConfigInput, TelegramImConfig,
 };
 
 use crate::api::GalleyApi;
@@ -31,15 +32,19 @@ const EVENT_NAME: &str = "im-supervisor-updated";
 const WECHAT: &str = "wechat";
 const FEISHU: &str = "feishu";
 const TELEGRAM: &str = "telegram";
+const DISCORD: &str = "discord";
 const WECHAT_PREF: &str = "im_supervisor_wechat";
 const FEISHU_PREF: &str = "im_supervisor_feishu";
 const TELEGRAM_PREF: &str = "im_supervisor_telegram";
+const DISCORD_PREF: &str = "im_supervisor_discord";
 const FEISHU_CONFIG_PREF: &str = "im_supervisor_feishu_config";
 const TELEGRAM_CONFIG_PREF: &str = "im_supervisor_telegram_config";
+const DISCORD_CONFIG_PREF: &str = "im_supervisor_discord_config";
 const FEISHU_SECRET_REF: &str = "im-supervisor:feishu:app-secret";
 const TELEGRAM_TOKEN_REF: &str = "im-supervisor:telegram:bot-token";
+const DISCORD_TOKEN_REF: &str = "im-supervisor:discord:bot-token";
 const GALLEY_CORE_PID_ENV: &str = "GALLEY_CORE_PID";
-const PLATFORMS: [&str; 3] = [WECHAT, FEISHU, TELEGRAM];
+const PLATFORMS: [&str; 4] = [WECHAT, FEISHU, TELEGRAM, DISCORD];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -106,6 +111,7 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
         WECHAT => Ok(WECHAT),
         FEISHU => Ok(FEISHU),
         TELEGRAM => Ok(TELEGRAM),
+        DISCORD => Ok(DISCORD),
         other => Err(format!("unsupported IM platform: {other}")),
     }
 }
@@ -190,6 +196,7 @@ fn pref_key(platform: &str) -> Option<&'static str> {
         WECHAT => Some(WECHAT_PREF),
         FEISHU => Some(FEISHU_PREF),
         TELEGRAM => Some(TELEGRAM_PREF),
+        DISCORD => Some(DISCORD_PREF),
         _ => None,
     }
 }
@@ -245,7 +252,21 @@ mod tests {
         assert_eq!(normalize_platform(" FeiShu ").unwrap(), FEISHU);
         assert_eq!(normalize_platform("telegram").unwrap(), TELEGRAM);
         assert_eq!(normalize_platform(" Telegram ").unwrap(), TELEGRAM);
-        assert!(normalize_platform("discord").is_err());
+        assert_eq!(normalize_platform("discord").unwrap(), DISCORD);
+        assert_eq!(normalize_platform(" Discord ").unwrap(), DISCORD);
+        // Keep a negative case: the allow-list is closed, not "anything
+        // that looks like an IM".
+        assert!(normalize_platform("slack").is_err());
+    }
+
+    #[test]
+    fn every_platform_has_an_enable_pref_key() {
+        for platform in PLATFORMS {
+            assert!(
+                pref_key(platform).is_some(),
+                "platform {platform} is missing a pref key"
+            );
+        }
     }
 
     #[test]

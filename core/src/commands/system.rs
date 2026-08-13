@@ -175,6 +175,36 @@ pub(crate) async fn unbind_telegram_im_owner(
 }
 
 #[tauri::command]
+pub(crate) async fn get_discord_im_config(
+) -> std::result::Result<im_supervisor::DiscordImConfig, String> {
+    im_supervisor::get_discord_im_config().await
+}
+
+#[tauri::command]
+pub(crate) async fn save_discord_im_config(
+    input: im_supervisor::SaveDiscordImConfigInput,
+) -> std::result::Result<im_supervisor::DiscordImConfig, String> {
+    im_supervisor::save_discord_im_config(input).await
+}
+
+#[tauri::command]
+pub(crate) async fn delete_discord_im_config(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, std::sync::Arc<im_supervisor::ImSupervisorManager>>,
+) -> std::result::Result<im_supervisor::DiscordImConfig, String> {
+    let _ = manager.logout(app, "discord".into()).await;
+    im_supervisor::get_discord_im_config().await
+}
+
+#[tauri::command]
+pub(crate) async fn unbind_discord_im_owner(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, std::sync::Arc<im_supervisor::ImSupervisorManager>>,
+) -> std::result::Result<im_supervisor::ImSupervisorStatus, String> {
+    manager.inner().unbind_owner(app, "discord".into()).await
+}
+
+#[tauri::command]
 pub(crate) async fn start_im_supervisor(
     app: tauri::AppHandle,
     manager: tauri::State<'_, std::sync::Arc<im_supervisor::ImSupervisorManager>>,

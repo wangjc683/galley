@@ -1,5 +1,5 @@
-//! Feishu / Telegram channel configuration: credentials in the
-//! encrypted store, config prefs, owner pairing, and the spawn-time
+//! Feishu / Telegram / Discord channel configuration: credentials in
+//! the encrypted store, config prefs, owner pairing, and the spawn-time
 //! platform env handed to the supervisor process.
 
 use serde::{Deserialize, Serialize};
@@ -10,8 +10,8 @@ use crate::credential_store;
 use crate::db::SqliteGalley;
 
 use super::{
-    now_iso, FEISHU, FEISHU_CONFIG_PREF, FEISHU_SECRET_REF, TELEGRAM, TELEGRAM_CONFIG_PREF,
-    TELEGRAM_TOKEN_REF,
+    now_iso, DISCORD, DISCORD_CONFIG_PREF, DISCORD_TOKEN_REF, FEISHU, FEISHU_CONFIG_PREF,
+    FEISHU_SECRET_REF, TELEGRAM, TELEGRAM_CONFIG_PREF, TELEGRAM_TOKEN_REF,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -69,6 +69,36 @@ pub struct TelegramImConfig {
 pub struct SaveTelegramImConfigInput {
     /// None / blank keeps the already-saved token (it is never echoed
     /// back to the GUI), mirroring the Feishu app-secret semantics.
+    pub bot_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct DiscordConfigPref {
+    updated_at: Option<String>,
+    /// Discord user id (snowflake) of the paired owner. None = locked,
+    /// awaiting pairing. Like Telegram — and unlike Feishu's app-scoped
+    /// open_id — Discord user ids are global, so the binding survives a
+    /// bot-token change: the same human owns the channel regardless of
+    /// which bot application fronts it.
+    owner_user_id: Option<String>,
+    owner_bound_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordImConfig {
+    pub has_bot_token: bool,
+    pub updated_at: Option<String>,
+    pub owner_user_id: Option<String>,
+    pub owner_bound_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveDiscordImConfigInput {
+    /// None / blank keeps the already-saved token (it is never echoed
+    /// back to the GUI), mirroring the Telegram bot-token semantics.
     pub bot_token: Option<String>,
 }
 
@@ -184,6 +214,52 @@ pub async fn delete_telegram_im_config() -> Result<TelegramImConfig, String> {
     read_telegram_im_config_with(&galley).await
 }
 
+pub async fn get_discord_im_config() -> Result<DiscordImConfig, String> {
+    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+    read_discord_im_config_with(&galley).await
+}
+
+pub async fn save_discord_im_config(
+    input: SaveDiscordImConfigInput,
+) -> Result<DiscordImConfig, String> {
+    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+    let token = input
+        .bot_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(token) = token {
+        credential_store::set_secret(&galley, DISCORD_TOKEN_REF, token)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    if !discord_has_token(&galley).await {
+        return Err("Discord Bot Token is required".into());
+    }
+    // The owner binding intentionally survives a token change, same as
+    // Telegram: Discord user ids are global, so the paired human stays
+    // the same even when a different bot application fronts the channel.
+    let mut pref = read_discord_config_pref(&galley).await?;
+    pref.updated_at = Some(now_iso());
+    galley
+        .set_pref_json(DISCORD_CONFIG_PREF, json!(pref))
+        .await
+        .map_err(|e| e.to_string())?;
+    read_discord_im_config_with(&galley).await
+}
+
+pub async fn delete_discord_im_config() -> Result<DiscordImConfig, String> {
+    let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+    credential_store::delete_secret(&galley, DISCORD_TOKEN_REF)
+        .await
+        .map_err(|e| e.to_string())?;
+    galley
+        .set_pref_json(DISCORD_CONFIG_PREF, json!(DiscordConfigPref::default()))
+        .await
+        .map_err(|e| e.to_string())?;
+    read_discord_im_config_with(&galley).await
+}
+
 /// Owner-paired access state resolved at spawn time: either a bound
 /// owner (bot responds only to them) or a fresh pairing code (bot is
 /// locked until someone DMs the code). Empty defaults for platforms
@@ -278,6 +354,45 @@ pub(super) async fn append_platform_env(
                 bind_code,
             })
         }
+        DISCORD => {
+            let galley = SqliteGalley::open().await.map_err(|e| e.to_string())?;
+            let bot_token = credential_store::get_secret(&galley, DISCORD_TOKEN_REF)
+                .await
+                .map_err(|_| "Discord Bot Token is required before connecting".to_string())?;
+            if bot_token.trim().is_empty() {
+                return Err("Discord Bot Token is required before connecting".into());
+            }
+            let config = read_discord_config_pref(&galley).await?;
+            // Same owner-locked semantics as Feishu / Telegram: an empty
+            // allow-list plus a pairing code means "locked, never
+            // public". The key names match what dcapp reads
+            // (`discord_bot_token` / `discord_allowed_users`), not the
+            // `dc_*` names upstream's mykeys configurator writes — the
+            // managed runtime bypasses mykeys through this env var.
+            let owner_user_id = config
+                .owner_user_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned);
+            let bind_code = if owner_user_id.is_none() {
+                Some(generate_bind_code())
+            } else {
+                None
+            };
+            let allowed_users: Vec<&String> = owner_user_id.iter().collect();
+            let config_json = serde_json::to_string(&json!({
+                "discord_bot_token": bot_token.trim(),
+                "discord_allowed_users": allowed_users,
+                "discord_owner_bind_code": bind_code,
+            }))
+            .map_err(|e| e.to_string())?;
+            env.push(("GALLEY_DISCORD_CONFIG_JSON".into(), config_json));
+            Ok(OwnerBindingContext {
+                owner_open_id: owner_user_id,
+                bind_code,
+            })
+        }
         _ => Ok(OwnerBindingContext::default()),
     }
 }
@@ -312,6 +427,11 @@ pub(super) async fn pref_owner(platform: &str) -> Option<String> {
             .ok()?
             .owner_user_id
             .filter(|s| !s.trim().is_empty()),
+        DISCORD => read_discord_config_pref(&galley)
+            .await
+            .ok()?
+            .owner_user_id
+            .filter(|s| !s.trim().is_empty()),
         _ => None,
     }
 }
@@ -337,6 +457,15 @@ pub(super) async fn persist_owner(platform: &str, owner_id: &str) -> Result<(), 
                 .await
                 .map_err(|e| e.to_string())
         }
+        DISCORD => {
+            let mut pref = read_discord_config_pref(&galley).await?;
+            pref.owner_user_id = Some(owner_id.to_string());
+            pref.owner_bound_at = Some(now_iso());
+            galley
+                .set_pref_json(DISCORD_CONFIG_PREF, json!(pref))
+                .await
+                .map_err(|e| e.to_string())
+        }
         other => Err(format!("platform {other} has no owner pairing")),
     }
 }
@@ -359,6 +488,15 @@ pub(super) async fn clear_owner_pref(platform: &str) -> Result<(), String> {
             pref.owner_bound_at = None;
             galley
                 .set_pref_json(TELEGRAM_CONFIG_PREF, json!(pref))
+                .await
+                .map_err(|e| e.to_string())
+        }
+        DISCORD => {
+            let mut pref = read_discord_config_pref(&galley).await?;
+            pref.owner_user_id = None;
+            pref.owner_bound_at = None;
+            galley
+                .set_pref_json(DISCORD_CONFIG_PREF, json!(pref))
                 .await
                 .map_err(|e| e.to_string())
         }
@@ -440,6 +578,40 @@ async fn telegram_has_token(galley: &SqliteGalley) -> bool {
         .unwrap_or(false)
 }
 
+pub(super) async fn discord_config_ready() -> bool {
+    let Ok(galley) = SqliteGalley::open().await else {
+        return false;
+    };
+    discord_has_token(&galley).await
+}
+
+async fn read_discord_im_config_with(galley: &SqliteGalley) -> Result<DiscordImConfig, String> {
+    let pref = read_discord_config_pref(galley).await?;
+    Ok(DiscordImConfig {
+        has_bot_token: discord_has_token(galley).await,
+        updated_at: pref.updated_at,
+        owner_user_id: pref.owner_user_id.filter(|s| !s.trim().is_empty()),
+        owner_bound_at: pref.owner_bound_at,
+    })
+}
+
+async fn read_discord_config_pref(galley: &SqliteGalley) -> Result<DiscordConfigPref, String> {
+    let value = galley
+        .get_pref_json(DISCORD_CONFIG_PREF)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(value
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default())
+}
+
+async fn discord_has_token(galley: &SqliteGalley) -> bool {
+    credential_store::get_secret(galley, DISCORD_TOKEN_REF)
+        .await
+        .map(|token| !token.trim().is_empty())
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,6 +630,32 @@ mod tests {
         let empty: TelegramConfigPref = serde_json::from_str("{}").expect("parse empty pref");
         assert!(empty.owner_user_id.is_none());
         assert!(empty.owner_bound_at.is_none());
+    }
+
+    #[test]
+    fn discord_config_pref_deserializes_defaults() {
+        let empty: DiscordConfigPref = serde_json::from_str("{}").expect("parse empty pref");
+        assert!(empty.owner_user_id.is_none());
+        assert!(empty.owner_bound_at.is_none());
+    }
+
+    #[test]
+    fn discord_config_pref_round_trips_owner_binding() {
+        // The owner survives a token change, so the pref — not the
+        // credential store — is what carries the binding across saves.
+        let pref = DiscordConfigPref {
+            updated_at: Some("2026-08-13T00:00:00Z".into()),
+            owner_user_id: Some("123456789012345678".into()),
+            owner_bound_at: Some("2026-08-13T00:00:01Z".into()),
+        };
+        let encoded = serde_json::to_string(&pref).expect("encode pref");
+        assert!(encoded.contains("ownerUserId"));
+        let decoded: DiscordConfigPref = serde_json::from_str(&encoded).expect("decode pref");
+        assert_eq!(decoded.owner_user_id.as_deref(), Some("123456789012345678"));
+        assert_eq!(
+            decoded.owner_bound_at.as_deref(),
+            Some("2026-08-13T00:00:01Z")
+        );
     }
 
     #[test]

@@ -18,14 +18,15 @@ use crate::process_command;
 use crate::runner_commands::prepare_managed_runtime_context;
 
 use super::platform_config::{
-    append_platform_env, clear_owner_pref, delete_feishu_im_config, delete_telegram_im_config,
-    feishu_config_ready, persist_owner, pref_owner, telegram_config_ready,
+    append_platform_env, clear_owner_pref, delete_discord_im_config, delete_feishu_im_config,
+    delete_telegram_im_config, discord_config_ready, feishu_config_ready, persist_owner,
+    pref_owner, telegram_config_ready,
 };
 use super::{
     im_state_dir, latest_wechat_qr_path, managed_python_for_app, materialize_sop_reference,
     model_config_stale, normalize_platform, now_iso, read_model_config_revision, read_pref,
     remove_wechat_qr_files, write_pref, ImSupervisorPref, ImSupervisorState, ImSupervisorStatus,
-    EVENT_NAME, FEISHU, GALLEY_CORE_PID_ENV, PLATFORMS, TELEGRAM, WECHAT,
+    DISCORD, EVENT_NAME, FEISHU, GALLEY_CORE_PID_ENV, PLATFORMS, TELEGRAM, WECHAT,
 };
 
 struct ProcessSlot {
@@ -46,6 +47,7 @@ pub struct ImSupervisorManager {
     wechat_lifecycle: Mutex<()>,
     feishu_lifecycle: Mutex<()>,
     telegram_lifecycle: Mutex<()>,
+    discord_lifecycle: Mutex<()>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,6 +73,7 @@ impl ImSupervisorManager {
         match platform {
             FEISHU => &self.feishu_lifecycle,
             TELEGRAM => &self.telegram_lifecycle,
+            DISCORD => &self.discord_lifecycle,
             _ => &self.wechat_lifecycle,
         }
     }
@@ -163,6 +166,18 @@ impl ImSupervisorManager {
         }
 
         let mut env = context.env;
+        // The shared context composes the WORKBENCH runtime prompt, whose
+        // Next-Step Suggestion mandate is a GUI-composer feature. IM
+        // supervisors have no composer — the mandate just leaked the tag
+        // verbatim into chat replies (2026-08-13 dogfood) — so swap in
+        // the suggestion-free composition.
+        let app_version = app.package_info().version.to_string();
+        if let Some(entry) = env
+            .iter_mut()
+            .find(|(key, _)| key == "GALLEY_RUNTIME_PROMPT_TEXT")
+        {
+            entry.1 = managed_prompt::compose_im_runtime_prompt(&app_version);
+        }
         let sop_path_str = sop_path.to_string_lossy().into_owned();
         // Stable per-channel supervisor identity. The prompt mandates it on
         // every CLI write, and the completion reporter filters delegated
@@ -173,6 +188,19 @@ impl ImSupervisorManager {
             "GALLEY_IM_SUPERVISOR_PROMPT_TEXT".into(),
             managed_prompt::im_supervisor_prompt(&sop_path_str, platform, &supervisor_id),
         ));
+        // Discord runs one supervisor context per channel, so the
+        // process-wide prompt above cannot carry the identity: every
+        // channel agent needs its own `galley-im/discord/ch:<id>`. Hand
+        // the runner the same prompt with the id left as a placeholder
+        // and let it substitute per channel at agent-creation time
+        // (rewriting `os.environ` concurrently is not an option).
+        // Single-context platforms get no template.
+        if platform == DISCORD {
+            env.push((
+                "GALLEY_IM_SUPERVISOR_PROMPT_TEMPLATE".into(),
+                managed_prompt::im_supervisor_prompt_template(&sop_path_str, platform),
+            ));
+        }
         env.push(("GALLEY_SUPERVISOR_SOP_PATH".into(), sop_path_str));
         env.push(("GALLEY_SUPERVISOR_ID".into(), supervisor_id));
         env.push(("GALLEY_IM_PLATFORM".into(), platform.into()));
@@ -349,6 +377,8 @@ impl ImSupervisorManager {
             let _ = delete_feishu_im_config().await;
         } else if platform == TELEGRAM {
             let _ = delete_telegram_im_config().await;
+        } else if platform == DISCORD {
+            let _ = delete_discord_im_config().await;
         }
         let status = ImSupervisorStatus {
             platform: platform.into(),
@@ -688,6 +718,7 @@ impl ImSupervisorManager {
             let ready = match platform {
                 FEISHU => feishu_config_ready().await,
                 TELEGRAM => telegram_config_ready().await,
+                DISCORD => discord_config_ready().await,
                 _ => false,
             };
             (
@@ -827,6 +858,81 @@ mod tests {
         // `persist_owner` and the cleared pref stays cleared.
         assert!(admit_event(&mut status, Some(42), owner_event("111")).is_none());
         assert!(status.owner_open_id.is_none());
+    }
+
+    fn discord_running_status(pid: Option<u32>) -> ImSupervisorStatus {
+        ImSupervisorStatus {
+            platform: DISCORD.into(),
+            state: ImSupervisorState::Running,
+            enabled: true,
+            pid,
+            bot_id: Some("galley#4242".into()),
+            qr_image_path: None,
+            last_error: None,
+            model_config_revision: None,
+            model_config_stale: false,
+            owner_open_id: None,
+            bind_code: Some("654321".into()),
+            updated_at: "2026-08-13T00:00:00Z".into(),
+        }
+    }
+
+    fn discord_owner_event(owner: &str) -> ImSupervisorLine {
+        serde_json::from_str(&format!(
+            r#"{{"platform":"discord","state":"running","ownerOpenId":"{owner}","updatedAt":"2026-08-13T00:00:01Z"}}"#
+        ))
+        .expect("parse discord owner event")
+    }
+
+    #[test]
+    fn discord_admit_event_binds_owner_and_consumes_bind_code() {
+        let mut status = discord_running_status(Some(77));
+        let (owner, emitted) =
+            admit_event(&mut status, Some(77), discord_owner_event("1234567890"))
+                .expect("admitted");
+        assert_eq!(owner.as_deref(), Some("1234567890"));
+        assert_eq!(emitted.owner_open_id.as_deref(), Some("1234567890"));
+        assert!(emitted.bind_code.is_none());
+    }
+
+    #[test]
+    fn discord_admit_event_rejects_stale_generation() {
+        // The generation gate is platform-agnostic; Discord inherits it
+        // unchanged, so a buffered event from a killed process can never
+        // re-persist an owner that unbind just cleared.
+        let mut status = discord_running_status(Some(78));
+        status.pid = None;
+        status.owner_open_id = None;
+        assert!(admit_event(&mut status, Some(78), discord_owner_event("1234567890")).is_none());
+        assert!(status.owner_open_id.is_none());
+    }
+
+    #[test]
+    fn discord_supervisor_line_parses_owner_binding_event() {
+        let line = r#"{"platform":"discord","state":"running","ownerOpenId":"1234567890","botId":"galley#4242","updatedAt":"2026-08-13T00:00:00Z"}"#;
+        let parsed: ImSupervisorLine = serde_json::from_str(line).expect("parse");
+        assert_eq!(parsed.owner_open_id.as_deref(), Some("1234567890"));
+        assert_eq!(parsed.bot_id.as_deref(), Some("galley#4242"));
+        assert_eq!(parsed.state, ImSupervisorState::Running);
+
+        let plain =
+            r#"{"platform":"discord","state":"starting","updatedAt":"2026-08-13T00:00:00Z"}"#;
+        let parsed: ImSupervisorLine = serde_json::from_str(plain).expect("parse plain");
+        assert!(parsed.owner_open_id.is_none());
+        assert_eq!(parsed.state, ImSupervisorState::Starting);
+    }
+
+    #[test]
+    fn every_platform_gets_a_distinct_lifecycle_lock() {
+        // A shared lock would let two platforms serialize against each
+        // other; a missing arm would silently fall back to WeChat's.
+        let manager = ImSupervisorManager::new();
+        let mut seen: Vec<*const Mutex<()>> = Vec::new();
+        for platform in PLATFORMS {
+            let lock = manager.lifecycle_lock(platform) as *const Mutex<()>;
+            assert!(!seen.contains(&lock), "platform {platform} shares a lock");
+            seen.push(lock);
+        }
     }
 
     #[test]
