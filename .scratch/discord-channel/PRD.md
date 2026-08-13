@@ -1,6 +1,6 @@
 # Discord Channel PRD：私人 Server 多频道的并行监督上下文
 
-Status: deferred（方案已裁决，等启动信号，见文末）
+Status: active（2026-08-13 开工，JC 拍板；实施拆解见 `issues/01-07`）
 日期：2026-08-13
 来源：JC 提议 + 两轮设计讨论（调研：GA 官方 `dcapp.py` 全量精读 +
 Galley IM Channel 架构全量摸底）
@@ -243,10 +243,9 @@ archived thread 发送失败。
    清理）另立小项：
    [ga-log-retention](../ga-log-retention/issues/01-managed-state-log-retention.md)。
 
-## 启动信号
+## 启动信号（已触发）
 
-- 出现真实的海外用户 issue 请求 Discord 接入；或
-- JC 决定把 Galley 推向 Discord 系（海外/开发者）社区。
-
-开工时：本 PRD 拆成 issues（补丁 → runner/reporter → Rust → GUI →
-文案/规范），deferred.md 对应小节拎出落正式 devlog entry。
+2026-08-13 JC 直接拍板开工（原定信号之一）。开工仪式已办：PRD 拆成
+`issues/01-07`，deferred.md 小节已拎出落
+[开工 devlog](../../docs/devlog/2026-08-13-discord-channel-kickoff.md)；
+前置阻塞 `im-owner-bind-race` 已修。
