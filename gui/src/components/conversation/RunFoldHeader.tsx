@@ -136,7 +136,10 @@ export function RunFoldHeader({
         size={11}
         weight="thin"
         className={cn(
-          "shrink-0 transition-transform duration-(--motion-fast)",
+          // Rotation duration matches the RunFoldSection sweep
+          // (--motion-slow) so the triangle and the panel read as one
+          // gesture, not a fast flick beside a slow unfurl.
+          "shrink-0 transition-transform duration-(--motion-slow)",
           open && "rotate-90",
         )}
       />

@@ -1,5 +1,5 @@
 import { CaretDown } from "@phosphor-icons/react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/components/conversation/MessageAgent";
 import { MessageUser } from "@/components/conversation/MessageUser";
 import { RunFoldHeader } from "@/components/conversation/RunFoldHeader";
+import { RunFoldSection } from "@/components/conversation/RunFoldSection";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { annotateGoalThread } from "@/lib/goal-thread";
@@ -134,10 +135,15 @@ export function Conversation({
   );
 
   // Per-render fold plan. headerFor: opener index → fold header data;
-  // hidden: indices removed from the DOM; answerOnly: closing turns
-  // rendered without their own TurnMarker (the header stands in).
+  // sectionOwner: turns indices that render inside the group's
+  // RunFoldSection (every member except the opener — the final turn
+  // included, because its marker + StrongHr belong to the animated
+  // section via `markerOnly` while its answer body stays outside);
+  // answerOnly: closing turns whose flat render is the answer body
+  // alone, expanded or not — the fold toggle is then purely the
+  // section's height sweep, with nothing popping in or out beside it.
   const headerFor = new Map<number, { group: RunGroup; folded: boolean }>();
-  const hidden = new Set<number>();
+  const sectionOwner = new Map<number, number>();
   const answerOnly = new Set<number>();
   for (const g of groups) {
     if (!g.foldable) continue;
@@ -145,10 +151,9 @@ export function Conversation({
     const folded =
       override !== undefined ? !override : g.openerIndex !== keepOpener;
     headerFor.set(g.openerIndex, { group: g, folded });
-    if (!folded) continue;
     for (const i of g.memberIndices) {
-      if (i === g.openerIndex || i === g.finalTurnIndex) continue;
-      hidden.add(i);
+      if (i === g.openerIndex) continue;
+      sectionOwner.set(i, g.openerIndex);
     }
     if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
   }
@@ -157,75 +162,116 @@ export function Conversation({
     setFoldOverrides((prev) => ({ ...prev, [openerIndex]: currentlyFolded }));
   };
 
-  return (
-    <div>
-      {items.map((item, i) => {
-        const turnIndex =
-          item.kind === "turn" ? turnIndexOf.get(item.turn) : undefined;
-        if (turnIndex !== undefined && hidden.has(turnIndex)) return null;
-        const header =
-          turnIndex !== undefined ? headerFor.get(turnIndex) : undefined;
-        return (
-          <Fragment key={i}>
-            {item.kind === "commission" ? (
-              <GoalCommissionMarker goal={item.goal} content={item.content} />
-            ) : item.kind === "task-board" ? (
-              <GoalTaskBoard
-                goal={item.goal}
-                onOpenWorkerSession={onOpenWorkerSession}
-              />
-            ) : item.kind === "terminal" ? (
-              <GoalTerminalMarker goal={item.goal} />
-            ) : item.turn.role === "user" ? (
-              <>
-                <MessageUser
-                  content={item.turn.content}
-                  attachments={item.turn.attachments}
-                  origin={item.turn.origin}
-                  createdAt={item.turn.createdAt}
-                  askUserReply={
-                    turnIndex !== undefined && replySet.has(turnIndex)
-                  }
-                />
-                {header && (
-                  <RunFoldHeader
-                    stats={header.group.stats}
-                    open={!header.folded}
-                    onToggle={() =>
-                      toggleFold(header.group.openerIndex, header.folded)
-                    }
-                  />
-                )}
-              </>
-            ) : item.turn.role === "system" ? (
-              <SystemMessageBubble
-                content={item.turn.content}
-                variant={item.turn.variant}
-                showGlyph={item.narrationLeading}
-              />
-            ) : (
-              <AgentTurnView
-                turn={item.turn}
-                approvalDecisions={approvalDecisions}
-                onApprove={onApprove}
-                projectName={projectName}
-                hideMarker={
-                  turnIndex !== undefined && answerOnly.has(turnIndex)
+  const renderItem = (
+    item: (typeof items)[number],
+    i: number,
+    turnIndex: number | undefined,
+  ) => {
+    const header =
+      turnIndex !== undefined ? headerFor.get(turnIndex) : undefined;
+    return (
+      <Fragment key={i}>
+        {item.kind === "commission" ? (
+          <GoalCommissionMarker goal={item.goal} content={item.content} />
+        ) : item.kind === "task-board" ? (
+          <GoalTaskBoard
+            goal={item.goal}
+            onOpenWorkerSession={onOpenWorkerSession}
+          />
+        ) : item.kind === "terminal" ? (
+          <GoalTerminalMarker goal={item.goal} />
+        ) : item.turn.role === "user" ? (
+          <>
+            <MessageUser
+              content={item.turn.content}
+              attachments={item.turn.attachments}
+              origin={item.turn.origin}
+              createdAt={item.turn.createdAt}
+              askUserReply={turnIndex !== undefined && replySet.has(turnIndex)}
+            />
+            {header && (
+              <RunFoldHeader
+                stats={header.group.stats}
+                open={!header.folded}
+                onToggle={() =>
+                  toggleFold(header.group.openerIndex, header.folded)
                 }
-                suppressAskUserEcho={item.turn === pendingAskUserTurn}
               />
             )}
-            {/* No divider between turns — the TurnMarker on each
-                AgentTurn carries the chapter-break feel via its own
-                top-margin and visual weight. Earlier iterations had
-                a SoftHr here (my-9 → my-6 → my-5); even at 40px the
-                hr-plus-marker stack felt like wasted vertical space.
-                Removed in favour of marker-only separation. */}
-          </Fragment>
-        );
-      })}
-    </div>
-  );
+          </>
+        ) : item.turn.role === "system" ? (
+          <SystemMessageBubble
+            content={item.turn.content}
+            variant={item.turn.variant}
+            showGlyph={item.narrationLeading}
+          />
+        ) : (
+          <AgentTurnView
+            turn={item.turn}
+            approvalDecisions={approvalDecisions}
+            onApprove={onApprove}
+            projectName={projectName}
+            hideMarker={turnIndex !== undefined && answerOnly.has(turnIndex)}
+            suppressAskUserEcho={item.turn === pendingAskUserTurn}
+          />
+        )}
+        {/* No divider between turns — the TurnMarker on each
+            AgentTurn carries the chapter-break feel via its own
+            top-margin and visual weight. Earlier iterations had
+            a SoftHr here (my-9 → my-6 → my-5); even at 40px the
+            hr-plus-marker stack felt like wasted vertical space.
+            Removed in favour of marker-only separation. */}
+      </Fragment>
+    );
+  };
+
+  // Assembly: consecutive items owned by the same foldable group
+  // gather into one RunFoldSection; everything else renders flat.
+  // A foldable final turn contributes twice — its marker + StrongHr
+  // close the section (markerOnly), its answer body renders flat
+  // right after, so collapsing never removes the visible answer.
+  const rendered: ReactNode[] = [];
+  let section: { opener: number; nodes: ReactNode[] } | null = null;
+  const flushSection = () => {
+    if (!section) return;
+    const h = headerFor.get(section.opener);
+    rendered.push(
+      <RunFoldSection key={`fold-${section.opener}`} open={h ? !h.folded : true}>
+        {section.nodes}
+      </RunFoldSection>,
+    );
+    section = null;
+  };
+  items.forEach((item, i) => {
+    const turnIndex =
+      item.kind === "turn" ? turnIndexOf.get(item.turn) : undefined;
+    const owner =
+      turnIndex !== undefined ? sectionOwner.get(turnIndex) : undefined;
+    if (owner === undefined) {
+      flushSection();
+      rendered.push(renderItem(item, i, turnIndex));
+      return;
+    }
+    if (section && section.opener !== owner) flushSection();
+    if (!section) section = { opener: owner, nodes: [] };
+    if (
+      turnIndex !== undefined &&
+      answerOnly.has(turnIndex) &&
+      item.kind === "turn" &&
+      item.turn.role === "agent"
+    ) {
+      section.nodes.push(
+        <AgentTurnView key={`marker-${i}`} turn={item.turn} markerOnly />,
+      );
+      flushSection();
+      rendered.push(renderItem(item, i, turnIndex));
+      return;
+    }
+    section.nodes.push(renderItem(item, i, turnIndex));
+  });
+  flushSection();
+
+  return <div>{rendered}</div>;
 }
 
 function AgentTurnView({
@@ -234,19 +280,26 @@ function AgentTurnView({
   onApprove,
   projectName,
   hideMarker = false,
+  markerOnly = false,
   suppressAskUserEcho = false,
 }: {
   turn: AgentTurn;
   approvalDecisions?: Record<string, ApprovalDecision>;
   onApprove?: (approvalId: string, decision: ApprovalDecision) => void;
   projectName?: string;
-  /** Fold mode for a folded run's closing turn: the RunFoldHeader
-   * stands in for this turn's TurnMarker, so only the answer section
-   * renders — without the marker AND without the conclusion StrongHr
-   * (a folded run's header is the answer's eyebrow and hugs it; see
-   * the StrongHr call site). A closing turn has no narration / real
-   * tools / ask_user by definition (run-groups isClosingTurn). */
+  /** Fold mode for a foldable run's closing turn: its marker and
+   * StrongHr render inside the animated RunFoldSection (see
+   * `markerOnly`), so the flat render is the answer section alone —
+   * expanded or folded. When the section is closed the RunFoldHeader
+   * is the answer's eyebrow and hugs it (see the StrongHr call site).
+   * A closing turn has no narration / real tools / ask_user by
+   * definition (run-groups isClosingTurn). */
   hideMarker?: boolean;
+  /** hideMarker's other half: render ONLY the closing turn's
+   * TurnMarker + StrongHr, as the last nodes inside the RunFoldSection
+   * — they belong to the run's process chapter and must sweep away
+   * with it, not pop in and out beside the animation. */
+  markerOnly?: boolean;
   /** True when this turn's ask_user question is currently live as the
    * tail AskUserBubble — skip the AnsweredAskUser echo so the question
    * doesn't render twice. The echo takes over once the user answers
@@ -323,6 +376,22 @@ function AgentTurnView({
     : realToolNames.length === 0
       ? copy.conversation.stepDirectAnswer
       : copy.conversation.stepCalledTools(realToolNames);
+
+  if (markerOnly) {
+    return (
+      <div>
+        {turn.turnIndex !== undefined && (
+          <TurnMarker
+            index={turn.turnIndex}
+            summary={markerSummary}
+            thinkingContent={turn.thinking}
+            preamble={detailPreamble}
+          />
+        )}
+        {answerText && <StrongHr />}
+      </div>
+    );
+  }
 
   return (
     <div>
