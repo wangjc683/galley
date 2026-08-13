@@ -10,12 +10,11 @@ live in [refactor](./archive/refactor/README.md).
 ## Current Target
 
 - Package version: `0.4.7`.
-- Git tag / GitHub Release: `v0.4.7` is being cut (2026-08-13); `v0.4.6` is
-  the last published stable release (tagged at `311fc8df` on 2026-08-12).
+- Git tag / GitHub Release: `v0.4.7` is the current published stable release
+  (tagged at `ac69f8b8` on 2026-08-13, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.6` until
-  `v0.4.7` is published and promoted. `beta` is kept as a legacy alias for
-  older builds.
+- Release tier: stable patch; default update channel points at `v0.4.7`.
+  `beta` is kept as a legacy alias for older builds.
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
@@ -153,10 +152,12 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.7` is **being cut** (2026-08-13): version bumped, all local release gates
-green, awaiting tag → `release.yml` draft → JC install smoke → publish →
-stable-channel promotion. Until that completes, `v0.4.6` remains the live
-stable release and the channel still points at it.
+`v0.4.7` is published and promoted as the live stable release (2026-08-13).
+The default `updates/stable/latest.json` channel points at `v0.4.7`, with the
+legacy `updates/beta/latest.json` alias pointing at the same version for older
+installed builds. Both were verified with `--cache-bust` across all three
+platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
+through in one draft cut; JC's install smoke passed on the first build.
 
 The mandatory gates for this release closed as follows. The **bundled-runtime
 gate** passed on `mac-x64` from scratch (`import discord` and
@@ -169,13 +170,7 @@ patches applied clean from a fresh clone at the audited baseline and the
 rebuilt payload matched the committed `managed-ga/code` byte-for-byte, retiring
 the `0018` debt and an unrecorded `0019` debt found in the same pass.
 
-`v0.4.6` was published and promoted as the live stable release (2026-08-12).
-The default `updates/stable/latest.json` channel points at `v0.4.6`, with the
-legacy `updates/beta/latest.json` alias pointing at the same version for older
-installed builds. Both were verified with `--cache-bust` across all three
-platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
-through in one draft cut; JC's install smoke passed on the first build.
-`v0.4.5` (2026-08-10) went through the same path and is now superseded.
+`v0.4.6` (2026-08-12) went through the same path and is now superseded.
 
 The Windows Alt+Tab caret restore (issue #13's Windows half) ships as a
 documented known limitation. The investigation is **shelved behind the
@@ -186,12 +181,14 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.4.5` → `v0.4.6` **succeeded** (JC
-   confirmed 2026-08-12), as did `v0.4.3` → `v0.4.4` and `v0.4.2` →
-   `v0.4.3`. Still unrecorded: `v0.4.1` → `v0.4.2` and `v0.4.4` → `v0.4.5`.
-   Keep asking for the step 10 result explicitly during step 9 — the smoke
-   happens outside any agent tool call, so silence is not evidence it was
-   skipped.
+1. App-update dogfood (SOP step 10): **no open gaps.** JC confirmed on
+   2026-08-13 that every in-app update up to this release was tested and
+   behaved normally, which closes the two previously unrecorded hops
+   (`v0.4.1` → `v0.4.2` and `v0.4.4` → `v0.4.5`) alongside the already
+   recorded `v0.4.2` → `v0.4.3`, `v0.4.3` → `v0.4.4`, and `v0.4.5` →
+   `v0.4.6`. `v0.4.6` → `v0.4.7` is the one still to run. Keep asking for
+   the step 10 result explicitly during step 9 — the smoke happens outside
+   any agent tool call, so silence is not evidence it was skipped.
 2. Watch tool-output truncation on the new GA baseline. `308153b` tightened
    the tool-output cap ~14% (`maxlen_multiplier` 2.25 → 1.93 as a
    denominator); JC's release smoke passed, but `...[Truncated]...` arriving
@@ -235,7 +232,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.7 stable patch is being cut; v0.4.6 is still the promoted stable release | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.7 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Locked to audited upstream `308153b` (audited 2026-08-10, shipped in `v0.4.5` the same day) (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
