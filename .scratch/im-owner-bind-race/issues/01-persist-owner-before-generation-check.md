@@ -1,6 +1,6 @@
 # owner 绑定事件先持久化后验代际：旧进程可把已解绑的 owner 写回来
 
-Status: needs-triage
+Status: done
 日期：2026-08-13
 来源：Discord 方案外审（Codex / gpt-5.6-sol）发现。影响现有
 Feishu / Telegram 两个 channel，与 Discord 决策解耦。
@@ -28,3 +28,17 @@ process slot 做归属检查。而 `unbind_owner`（`:363-395`）的流程是
 2. 加 Rust 测试覆盖「unbind 与旧进程迟到 binding 事件并发」的时序。
 3. 将来 Discord 接入直接继承修好后的路径，不复制此竞态
    （`.scratch/discord-channel/PRD.md` 已引用本 issue）。
+
+## Comments
+
+- 2026-08-13（agent）：已修，Discord 开工第一步。实际竞态比首报多一层：
+  `unbind_owner` 原先「先清 pref、后重启换代」，清完到 slot 换 pid 之间
+  旧进程仍是当前代。修复三件套：①事件准入抽成纯函数 `admit_event`——
+  pid 不匹配的事件整体拒绝（既不动 slot 也不返回 owner）；②
+  `persist_owner` 挪到准入校验之后且留在 slots 锁内，与 unbind 的
+  灭代序列原子互斥；③`unbind_owner` 改「杀进程 → slots 锁内 pid 置
+  None 灭代 → 清 pref → 重启」，并补拿 lifecycle 锁（顺手关掉与并发
+  start 的竞争；`start_inner` 照 stop/stop_locked 先例拆出
+  `start_locked` 避免锁重入）。三个回归测试
+  （`admit_event_*` / `retired_generation_cannot_resurrect_cleared_owner`）
+  + workspace 全量测试通过。

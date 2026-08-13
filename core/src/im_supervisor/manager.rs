@@ -107,6 +107,20 @@ impl ImSupervisorManager {
     ) -> Result<ImSupervisorStatus, String> {
         let platform = normalize_platform(&platform)?;
         let _lifecycle = self.lifecycle_lock(platform).lock().await;
+        self.start_locked(app, platform, relogin, force_restart)
+            .await
+    }
+
+    /// Body of [`start_inner`]. Caller must hold the platform's
+    /// lifecycle lock (split out so `unbind_owner` can compose the
+    /// kill → clear-pref → respawn sequence under one lock).
+    async fn start_locked(
+        self: &Arc<Self>,
+        app: AppHandle,
+        platform: &'static str,
+        relogin: bool,
+        force_restart: bool,
+    ) -> Result<ImSupervisorStatus, String> {
         if let Some(status) = self.current_status(platform).await {
             if matches!(
                 status.state,
@@ -366,7 +380,7 @@ impl ImSupervisorManager {
         platform: String,
     ) -> Result<ImSupervisorStatus, String> {
         let platform = normalize_platform(&platform)?;
-        clear_owner_pref(platform).await?;
+        let _lifecycle = self.lifecycle_lock(platform).lock().await;
         let live = matches!(
             self.current_status(platform).await.map(|s| s.state),
             Some(
@@ -376,18 +390,29 @@ impl ImSupervisorManager {
                     | ImSupervisorState::Running
             )
         );
-        if live {
-            return self.start_inner(app, platform.into(), false, true).await;
+        // Retire the live generation BEFORE clearing the pref: a killed
+        // process keeps draining buffered stdout lines, and until the
+        // slot stops matching its pid those lines can re-persist the
+        // owner we are about to clear (`read_stdout` admits events by
+        // pid under the slots lock). Order: kill → de-register the pid
+        // → clear pref → respawn fresh.
+        if let Some(child) = self.take_child(platform).await {
+            let mut child = child.lock().await;
+            let _ = child.start_kill();
+            let _ = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
         }
-        // Not running: just reflect the cleared owner in the slot (if
-        // any) and report the derived state.
         {
             let mut slots = self.slots.lock().await;
             if let Some(slot) = slots.get_mut(platform) {
+                slot.status.pid = None;
                 slot.status.owner_open_id = None;
                 slot.status.bind_code = None;
                 slot.status.updated_at = now_iso();
             }
+        }
+        clear_owner_pref(platform).await?;
+        if live {
+            return self.start_locked(app, platform, false, true).await;
         }
         let status = self.status(&app, platform.into()).await?;
         let _ = app.emit(EVENT_NAME, status.clone());
@@ -527,37 +552,27 @@ impl ImSupervisorManager {
             if event_platform != platform {
                 continue;
             }
-            // Owner binding: persist BEFORE touching the slot, so a crash
-            // right after the bot's confirmation reply cannot leave a
-            // bound bot whose owner is lost on the next spawn.
-            if let Some(owner) = event.owner_open_id.as_deref() {
-                if let Err(e) = persist_owner(platform, owner).await {
-                    eprintln!("[im-supervisor] persisting {platform} owner failed: {e}");
-                }
-            }
             let mut slots = self.slots.lock().await;
             let Some(slot) = slots.get_mut(platform) else {
                 continue;
             };
-            if slot.status.pid != pid {
+            let Some((owner_to_persist, status)) = admit_event(&mut slot.status, pid, event)
+            else {
                 continue;
+            };
+            // Owner binding: persist before releasing the slots lock and
+            // before emitting, so a crash right after the bot's
+            // confirmation reply cannot leave a bound bot whose owner is
+            // lost on the next spawn. Staying inside the lock makes the
+            // admit-check + persist atomic against `unbind_owner`'s
+            // retire-generation-then-clear-pref sequence — a stale
+            // generation's buffered binding event can never resurrect a
+            // cleared owner (issue: im-owner-bind-race).
+            if let Some(owner) = owner_to_persist {
+                if let Err(e) = persist_owner(platform, &owner).await {
+                    eprintln!("[im-supervisor] persisting {platform} owner failed: {e}");
+                }
             }
-            slot.status.state = event.state;
-            slot.status.updated_at = event.updated_at.unwrap_or_else(now_iso);
-            slot.status.bot_id = event.bot_id.or_else(|| slot.status.bot_id.clone());
-            if let Some(owner) = event.owner_open_id {
-                slot.status.owner_open_id = Some(owner);
-                slot.status.bind_code = None;
-            }
-            if let Some(qr) = event.qr_image_path {
-                slot.status.qr_image_path = Some(qr);
-            }
-            if let Some(err) = event.last_error {
-                slot.status.last_error = Some(err);
-            } else if slot.status.state != ImSupervisorState::Error {
-                slot.status.last_error = None;
-            }
-            let status = slot.status.clone();
             drop(slots);
             let _ = app.emit(EVENT_NAME, status);
         }
@@ -714,9 +729,105 @@ impl ImSupervisorManager {
     }
 }
 
+/// Apply a stdout status event from process generation `pid` to the
+/// slot's status. Returns `None` — rejecting the event entirely — when
+/// the event's generation no longer matches the slot: a killed process
+/// keeps draining buffered lines after unbind/restart retires it, and
+/// nothing from a stale generation may touch the slot or the prefs.
+/// On admission, returns the owner to persist (when the event carried
+/// a binding) and the updated status to emit.
+fn admit_event(
+    status: &mut ImSupervisorStatus,
+    pid: Option<u32>,
+    event: ImSupervisorLine,
+) -> Option<(Option<String>, ImSupervisorStatus)> {
+    if status.pid != pid {
+        return None;
+    }
+    status.state = event.state;
+    status.updated_at = event.updated_at.unwrap_or_else(now_iso);
+    status.bot_id = event.bot_id.or_else(|| status.bot_id.clone());
+    let owner_to_persist = event.owner_open_id.clone();
+    if let Some(owner) = event.owner_open_id {
+        status.owner_open_id = Some(owner);
+        status.bind_code = None;
+    }
+    if let Some(qr) = event.qr_image_path {
+        status.qr_image_path = Some(qr);
+    }
+    if let Some(err) = event.last_error {
+        status.last_error = Some(err);
+    } else if status.state != ImSupervisorState::Error {
+        status.last_error = None;
+    }
+    Some((owner_to_persist, status.clone()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn running_status(pid: Option<u32>) -> ImSupervisorStatus {
+        ImSupervisorStatus {
+            platform: TELEGRAM.into(),
+            state: ImSupervisorState::Running,
+            enabled: true,
+            pid,
+            bot_id: Some("my_bot".into()),
+            qr_image_path: None,
+            last_error: None,
+            model_config_revision: None,
+            model_config_stale: false,
+            owner_open_id: None,
+            bind_code: Some("123456".into()),
+            updated_at: "2026-08-13T00:00:00Z".into(),
+        }
+    }
+
+    fn owner_event(owner: &str) -> ImSupervisorLine {
+        serde_json::from_str(&format!(
+            r#"{{"platform":"telegram","state":"running","ownerOpenId":"{owner}","updatedAt":"2026-08-13T00:00:01Z"}}"#
+        ))
+        .expect("parse owner event")
+    }
+
+    #[test]
+    fn admit_event_accepts_matching_generation_and_surfaces_owner() {
+        let mut status = running_status(Some(42));
+        let (owner, emitted) =
+            admit_event(&mut status, Some(42), owner_event("111")).expect("admitted");
+        assert_eq!(owner.as_deref(), Some("111"));
+        assert_eq!(emitted.owner_open_id.as_deref(), Some("111"));
+        // A live binding consumes the pairing code.
+        assert!(emitted.bind_code.is_none());
+    }
+
+    #[test]
+    fn admit_event_rejects_stale_generation_entirely() {
+        // Slot already moved on to a new process generation.
+        let mut status = running_status(Some(43));
+        let before = status.clone();
+        assert!(admit_event(&mut status, Some(42), owner_event("111")).is_none());
+        // Rejection means no status mutation and, above all, no owner
+        // handed back for persistence.
+        assert_eq!(status.owner_open_id, before.owner_open_id);
+        assert_eq!(status.updated_at, before.updated_at);
+    }
+
+    #[test]
+    fn retired_generation_cannot_resurrect_cleared_owner() {
+        // The unbind sequence: kill child, then retire the generation
+        // (pid -> None) and clear owner fields, then clear the pref.
+        let mut status = running_status(Some(42));
+        status.pid = None;
+        status.owner_open_id = None;
+        status.bind_code = None;
+        // A buffered binding event from the killed process arrives late:
+        // it must be rejected outright, so `read_stdout` never reaches
+        // `persist_owner` and the cleared pref stays cleared.
+        assert!(admit_event(&mut status, Some(42), owner_event("111")).is_none());
+        assert!(status.owner_open_id.is_none());
+    }
 
     #[test]
     fn telegram_supervisor_line_parses_owner_binding_event() {
