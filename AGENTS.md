@@ -128,6 +128,11 @@ conversation between a supervisor and the user in IM / Claude / another agent.
 Supervisor history belongs to the supervisor. Galley is an orchestrator, not a
 chat platform.
 
+Interpretation (2026-08-13): logs the GA engine writes for its own operation
+under the managed state root (e.g. `model_responses`, which serves `/restore`
+and debugging) are engine-internal runtime state, not Galley conversation
+storage. This rule governs Galley's own database and product surfaces.
+
 ### 5. Rust Core Is Authoritative
 
 Since v0.2, business authority lives in Rust Galley Core:

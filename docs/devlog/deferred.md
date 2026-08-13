@@ -22,18 +22,31 @@
   内仍单 owner 绑定，非 owner 静默忽略；V1 不读频道内他人消息。UI 零
   新设计（ChannelCard 全家桶复用，卡不管频道，激活/退出在 Discord 内
   完成）。CLI / Agent API 零改动。
-- **实施要点**：唯一硬骨头是完成推送按频道路由（supervisor id 改
-  `galley-im/discord/ch:<id>`，reporter 从单例改按频道实例化，
-  `ChannelAdapter` 抽象已备好）；必修上游债：agent LRU 驱逐泄漏线程
-  （压到 8~16 + 显式 abort）、状态文件从 GA temp 迁 `--state-dir`；
-  `discord.py` 必须进 `GA_DEPS` + 冒烟门禁（勿复制 telegram 缺口，见
-  `.scratch/telegram-bundle-dep/`）。成本估 1.3 × Telegram。
-- **待定**：上游 `configure_mykey.py` 与 `dcapp.py` 的 key 名不一致
-  bug（`dc_bot_token` vs `discord_bot_token`）报不报 upstream。
+- **实施要点**（2026-08-13 Codex/gpt-5.6-sol 外审后修正）：两根硬骨头
+  ——①完成推送路由：按**消息** origin（非 session origin）路由到发起
+  频道，reporter 改进程级单 dispatcher（一次轮询、一个状态写者、启动
+  即恢复路由），send 经 `run_coroutine_threadsafe` + 显式 ACK；
+  ②per-channel supervisor id 注入：现有进程级 env 提示词机制给不了
+  每频道身份，`install_managed_prompt_profile` 要支持 per-agent 注入。
+  必修上游债：真正的 close 协议（abort 停不掉 `run()` 线程）、连接
+  状态机（永久错误要落 error 不能无限重连）、状态文件迁 `--state-dir`、
+  重启/驱逐时取消频道 active；V1 禁用绑定后 DM 对话；`discord.py` 进
+  `GA_DEPS` + 冒烟 + payload checker。成本估 1.5~2 × Telegram。
+- **待定**：仅剩上游 key 名不一致 bug（`dc_bot_token` vs
+  `discord_bot_token`）报不报 upstream。外审重开的四票已于
+  2026-08-13 由 JC 投毕（详见 PRD「外审四票裁决」节）：①②输出
+  可见性与激活语义选**纯文档声明 + 沿用上游隐式激活**（否决了
+  owner-only 频道校验捆绑方案，从轻）③owner 配对只认 DM + 按用户
+  限流（不继承全局作废先例）④Rule 4 解释入宪（引擎日志属引擎状态，
+  见 AGENTS.md Rule 4 补充句）+ 补丁内两件卫生活；日志保留策略拆去
+  `.scratch/ga-log-retention/`。
 - **关联**：Telegram devlog（2026-07-05）的触点清单与「不做 proxy UI」
   「换 token 不解绑」两条先例直接继承；已否决 DM-only V1（放弃并行
   上下文的产品价值）、频道↔session 绑定（太僵）、共享单一 supervisor
-  历史（串台）。
+  历史（串台）。外审顺带揪出两个与 Discord 无关的现存 bug：模型配置
+  toast 漏 Telegram（`.scratch/model-toast-telegram/`，当日已修）、
+  owner 绑定持久化先于进程代际校验的竞态
+  （`.scratch/im-owner-bind-race/`，needs-triage）。
 
 ---
 

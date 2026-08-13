@@ -4,6 +4,9 @@ Status: deferred（方案已裁决，等启动信号，见文末）
 日期：2026-08-13
 来源：JC 提议 + 两轮设计讨论（调研：GA 官方 `dcapp.py` 全量精读 +
 Galley IM Channel 架构全量摸底）
+外审：2026-08-13 Codex（gpt-5.6-sol）14 条发现已折入本文——路由与
+生命周期设计做了实质修正；重开的四票已于当日由 JC 投毕（见「外审
+四票裁决」节）。
 
 ## 产品定位
 
@@ -28,13 +31,17 @@ managed-runtime only（Channels tab 本来就 gated managed）。
    最糟）。
 3. **访问控制**：Server 内仍然**单 owner 绑定**，非 owner 消息静默忽略。
    私人 Server ≠ 单人 Server，bot 背后是能驱动本机 CLI 的 supervisor，
-   不给「Server 成员都能用」开口子。绑定流程：邀请 bot 进 Server →
-   任意频道 `@Galley <6位配对码>` → 绑定 + 该频道激活。
+   不给「Server 成员都能用」开口子。配对流程经外审票 3 修订：**owner
+   配对只认 DM**（bot 与用户同 Server 即 DM 可达），Server 频道里只做
+   激活；配对错误尝试**按用户计数限流**（如单用户 5 次后拉黑其配对
+   尝试），**不继承** Telegram「10 次全局作废」先例——在成员可见 bot
+   的 Discord 语境里那是恶意作废 DoS 按钮。
 4. **频道激活**：沿用上游「@提及激活 + 活跃集持久化（30 天 TTL）」，
-   不做「所有频道常开」。激活语义 = 「把 bot 请进这个对话」；上游中文
-   退出短语 Galley 化成显式命令。
-5. **上下文边界**：V1 只读 owner 发给 bot 的消息，不摄取频道内其他人
-   的消息。「频道讨论摘要」是另一个立项。
+   不做「所有频道常开」（外审票 2 裁定维持上游隐式语义，见外审四票
+   裁决节）。
+5. **上下文边界**：激活期间该频道 owner 的**全部**发言都进 agent
+   （上游语义，票 2 裁定沿用）；仍不摄取频道内其他成员的消息。「频道
+   讨论摘要」是另一个立项。
 6. **Settings 卡不管频道**：卡片维持 Telegram 形态（token + setup +
    绑定态 + 状态徽章），频道激活/退出全在 Discord 内完成（在哪对话就
    在哪管理）。最多在 running 态命令参考表里列频道命令。
@@ -61,26 +68,63 @@ Discord 与 Telegram 同构的先例直接继承：单 Bot Token 凭证
 换 token 不解绑 owner（飞书因 open_id 应用作用域而解绑，是刻意的
 不对称）。
 
-### 唯一硬骨头：完成推送的按频道路由
+### 硬骨头一：完成推送的按频道路由（2026-08-13 外审修正）
 
-现 `im_reporter` 假设单 owner 会话（轮询 `--supervisor=galley-im/<p>`
-标记的 session，推给唯一 DM）。多频道后报告必须回到发起频道：
+现 `im_reporter` 假设单 owner 会话。初稿设想「supervisor id 带
+channel_id + reporter 按频道实例化」，外审证伪了两处，修正后设计：
 
-- 每个频道 agent 用自己的 supervisor id 打标：
-  `galley-im/discord/ch:<channel_id>`（不透明字符串，CLI 零改动）。
-- reporter 从单例改为随频道 agent 按频道实例化；`ChannelAdapter`
-  抽象已备好（`runner/im_reporter.py:262-288`），`DiscordChannel`
-  实现天然携带频道归属。
+- **路由真相是消息 origin，不是 session origin**。reporter 现按
+  `SessionBrief.origin.supervisor`（session 创建来源）过滤，但
+  `session send --supervisor` 写的是消息 origin——频道 A 建的 session
+  被频道 B 续聊，结果会推回 A；GUI 建的 session 被 Discord 续聊则
+  完全不推。正确做法：按最终轮同 turn 的 user message 的
+  `origin.supervisor` 路由，状态键改 `(final_message_id,
+  supervisor_id)`。message origin schema 已存在，仍然零改 Agent API。
+- **进程级单 dispatcher，不做 per-channel reporter**。多实例共享
+  `reporter_state.json` 会写竞争；独立文件则重启后无人恢复路由（agent
+  要等下条消息才建）；N 个 reporter 还各自 20s 全量轮询。改为：一次
+  轮询、一个状态写者、按消息 origin 分发到 channel registry，启动时
+  即恢复路由。`ChannelAdapter` 抽象保留，`DiscordChannel` 携带频道
+  归属。
+- **send 必须跨进 Discord 的 asyncio loop**：`ChannelAdapter.send()`
+  是同步接口，直接调 dcapp 的协程只会拿到未 await 的 coroutine。用
+  `run_coroutine_threadsafe` + 带超时的明确 ACK；发送函数不得吞异常
+  （上游 `send_text` 吞异常会让 reporter 把未送达标成 delivered）。
+  对已归档 thread / 频道被删 / 权限撤销定义可持久化的失败策略。
 
-这是相对 Telegram 的最大工程增量；整体成本估 1.3 × Telegram。
+### 硬骨头二：per-channel supervisor id 的注入机制（外审新增）
 
-### 必修的上游债（进补丁，非可选）
+现有提示词是 core 在进程启动前渲染好、经进程级环境变量
+（`GALLEY_IM_SUPERVISOR_PROMPT_TEXT`）注入的——dcapp 所有频道 agent
+会拿到同一段提示词、同一个 supervisor id。需要：core 提供 entry-layer
+模板/静态基底，runner 在 `_get_agent()` 创建每个频道 agent 时显式
+注入 `galley-im/discord/ch:<id>`（`managed_runtime.
+install_managed_prompt_profile` 是必改触点）；不得靠并发改 `os.environ`。
 
-- **agent LRU 驱逐泄漏线程**：上游 LRU 上限 200、驱逐即丢（`run()`
-  无干净退出）。压到 8~16 并驱逐时显式 abort。
+**DM 路径**：上游保留 `dm:<user_id>` 且激活门控只作用于 guild。V1
+**禁用绑定后的 DM 对话**（推荐；保持「频道即上下文」单一心智，也免去
+为 DM 单独定义 prompt / reporter / 状态文件），复用 Telegram 作为
+DM-supervisor 的定位。
+
+成本估算上调：**1.5~2 × Telegram**（初稿 1.3× 低估了路由返工与
+生命周期治理）。
+
+### 必修的上游债（进补丁，非可选；外审后扩充）
+
+- **agent 生命周期要真正的 close 协议**：初稿写「驱逐时显式 abort」
+  不够——`abort()` 只停当前生成，`run()` 之后仍永久阻塞在
+  `task_queue.get()`（上游 sentinel 分支在 `get()` 之后，传字符串
+  先抛异常）。需要：正确 sentinel + stop event + join worker 线程；
+  LRU 压到 8~16。验收看驱逐后线程数与 RSS 平台，不是看调了 abort。
+- **连接状态机**：上游 `start()` 捕获一切异常永久退避重连——错 token、
+  漏开 MESSAGE CONTENT INTENT、权限错配都落不成 GUI error，会永远
+  displaying starting/reconnecting。补丁需分类：永久错误（token/intent）
+  立即 error 并退出；网络/Gateway 临时错误才 reconnecting；`on_ready`
+  才 running；停止时关闭 client 与后台任务。
 - **状态文件归属**：上游把 `discord_active_channels.json`、附件下载、
   日志写 GA `temp/`；managed 模式必须改进 `--state-dir`
-  （`im/discord/`）——宪法「数据留在 Galley」。
+  （`im/discord/`）。「存了什么」已由外审票 4 裁定：引擎日志属引擎
+  状态；补丁内做 dcapp 日志去内容化 + 附件每 turn 清理两件卫生活。
 - Polish（非裁决点）：1900 字符切分避开 code fence 边界（上游会拦腰
   截断代码块；Discord 原生吃 markdown）。
 
@@ -94,7 +138,17 @@ Discord 与 Telegram 同构的先例直接继承：单 Bot Token 凭证
 - **打包**：`discord.py` 不在 GA pyproject 依赖里，必须进
   `bundle-python.sh` 的 `GA_DEPS` + 冒烟门禁。关联既有缺口：
   [telegram-bundle-dep](../telegram-bundle-dep/issues/01-missing-python-telegram-bot.md)
-  （Telegram 自己就漏了，先修它，Discord 别复制）。
+  （2026-08-13 已修，Discord 落地时照 22.8 的钉版方式办）。
+- **必须先修的现有竞态**：owner 绑定事件先持久化后验进程代际，旧进程
+  可把已解绑 owner 写回来（外审发现，Feishu/Telegram 均中招）。Discord
+  接入前先修，见
+  [im-owner-bind-race](../im-owner-bind-race/issues/01-persist-owner-before-generation-check.md)。
+- **历史易失性要显性化**：频道 agent 历史只活在当前进程 + LRU 命中期，
+  但 active 集跨重启持久——重启/驱逐后频道会静默拿到全新 agent；上游
+  `/restore` 不能兜底（全局最新日志 + glob 指向 code root）。默认设计：
+  重启/驱逐时同步取消该频道 active 并提示重新 @ 激活（与 Telegram 的
+  stateless 定位一致）；若将来要持久化历史，单独立项（票 4 的引擎
+  状态解释不自动授权产品化的历史留存）。
 
 ## UX 设计
 
@@ -106,7 +160,13 @@ Discord 与 Telegram 同构的先例直接继承：单 Bot Token 凭证
 3. 生成邀请链接，把 bot 拉进你的私人 Server（Discord bot 不能凭空收
    消息，必须同 Server；「建私人 Server」在多频道形态下是产品本意
    而非 workaround）
-4. 保存 token、启动服务，任意频道 `@Galley <配对码>` 完成绑定
+4. 保存 token、启动服务，**DM bot 发 6 位配对码**完成绑定（票 3：
+   配对只认 DM），然后到目标频道 `@Galley` 激活
+
+Setup guide 必须承载的两条声明（票 1、2 选了纯文档路线，guide 是
+唯一防线）：bot 在频道里的回复/文件/报告对该频道所有可见成员公开，
+私密内容请用 owner-only 频道；频道激活后你在该频道的全部发言都会
+交给 Galley，退出命令随激活确认一并展示。
 
 ### UI：零新设计，全复用
 
@@ -125,8 +185,11 @@ Discord 与 Telegram 同构的先例直接继承：单 Bot Token 凭证
 `patches/manifest.md` 文档；`discord.py` 进 `GA_DEPS` + 冒烟门禁。
 
 **runner**：`managed_im_supervisor.py` 加 `_run_discord` + argparse
-choices + 分支；`im_reporter.py` 加 `DiscordChannel` adapter +
-按频道实例化改造（本清单唯一的结构性改动）。
+choices + 分支；`im_reporter.py` 改单 dispatcher + 消息 origin 路由 +
+`DiscordChannel` adapter（本清单最大的结构性改动）；
+`managed_runtime.py` 的 `install_managed_prompt_profile` 支持
+per-agent supervisor id 注入；`test_im_reporter.py` /
+`test_managed_im_supervisor.py` 随之扩展。
 
 **core（Rust）**：`im_supervisor/mod.rs` 平台常量 + `PLATFORMS` 数组
 （注意长度）+ `normalize_platform`（改掉那条断言 discord 被拒的测试）；
@@ -137,11 +200,48 @@ choices + 分支；`im_reporter.py` 加 `DiscordChannel` adapter +
 
 **gui**：`lib/im-supervisor.ts` union + 类型 + 4 个 invoke 包装；
 `im/DiscordCard.tsx` + glyph + `status.ts` hint 表；`SettingsIM.tsx` /
-`useChannelsStatus.ts` 三处聚合接线；中英文各 ~35 个 `discord*` key。
+`useChannelsStatus.ts` 聚合接线；**`use-model-config-toast.ts`**（外审
+发现的第四方消费者，Telegram 接入时就漏过它，2026-08-13 已补 telegram，
+见 [model-toast-telegram](../model-toast-telegram/issues/01-toast-misses-telegram.md)）；
+中英文各 ~35 个 `discord*` key。
+
+**scripts**：`bundle-python.sh` GA_DEPS + 冒烟门禁 +
+`check-managed-ga-payload.mjs` 把 `dcapp.py` 列为必须文件。
+
+**验收门禁（外审补）**：Rust 侧 owner 代际/路由测试；集成侧覆盖
+多频道线程数与 RSS 平台、重启后漏报、跨频道续聊路由、共享频道可见性、
+archived thread 发送失败。
 
 **docs**：§9 Channels 规范 + 正式 devlog（把本 PRD 的裁决迁入）。
 
-**零改动**：CLI / Agent API / schemaVersion。
+**零改动**：CLI / Agent API / schemaVersion（消息 origin 路由用的是
+既有 schema 字段）。
+
+## 外审四票裁决（2026-08-13 JC 投票，防重提案）
+
+1. **输出可见性 → c（纯文档声明）**：setup guide 明确声明「bot 的
+   回复、产出文件、完成报告对频道所有可见成员公开；私密内容请用
+   owner-only 频道」，不做技术限制。**已否决**：agent 提议的
+   「激活时 API 校验频道 owner-only + 主动推送前复校验」捆绑方案
+   （理由充分但工程面偏重，JC 裁定 V1 从轻；将来真实泄露反馈出现
+   可重审）。
+2. **激活语义 → c（沿用上游隐式激活）**：@提及激活后，该频道 owner
+   全部发言进 agent、条条刷新 30 天 TTL。**已否决**：条条要 @（太
+   啰嗦）、显式 activate + 二次确认（随捆绑方案一并从轻）。文档侧
+   兜底：激活行为及退出命令写进 setup guide 与命令参考表。
+3. **配对场所 → a（修订版）**：owner 配对只认 DM，Server 内只做频道
+   激活；错误尝试按用户限流，不做全局作废（Telegram「10 次全局作废」
+   先例在 Discord 语境不继承——成员可见 bot，全局作废即 DoS 按钮）。
+4. **Rule 4 解释 → a + 两件卫生活**：GA 运行时自产日志（如
+   `model_responses`）判定为**引擎内部状态**，不算「Galley 存储
+   supervisor 对话」；解释已入宪（CLAUDE.md Rule 4 补充句，
+   2026-08-13）。随补丁做两件卫生活：dcapp 消息日志去内容化（只留
+   事件 metadata）、附件改每 turn 临时目录用后即清。**已否决**：
+   b（判定越线、managed 前端全面禁 prompt/response 日志）——
+   `model_responses` 同时服务 `/restore` 与排障，为解释分歧付引擎
+   减法 + 重构现有两渠道的代价不值。现有渠道日志保留策略（轮转/
+   清理）另立小项：
+   [ga-log-retention](../ga-log-retention/issues/01-managed-state-log-retention.md)。
 
 ## 启动信号
 
