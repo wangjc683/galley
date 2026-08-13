@@ -1,17 +1,5 @@
 import type { MessageTelemetry } from "@/types/conversation";
 
-export function formatElapsedCompact(ms: number | null | undefined): string | null {
-  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return null;
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (totalMinutes < 60) return `${totalMinutes}m${seconds}s`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${hours}h${String(minutes).padStart(2, "0")}m`;
-}
-
 export function formatCompactCount(value: number | null | undefined): string | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return null;

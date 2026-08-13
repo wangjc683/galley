@@ -4,18 +4,11 @@ import {
   contextUsagePercentLabel,
   contextUsageTokens,
   formatCompactCount,
-  formatElapsedCompact,
   telemetryCachedInput,
   telemetryInputTotal,
 } from "@/lib/telemetry";
 
 describe("telemetry formatting", () => {
-  it("formats elapsed durations without clock-like colons", () => {
-    expect(formatElapsedCompact(15_900)).toBe("15s");
-    expect(formatElapsedCompact(135_000)).toBe("2m15s");
-    expect(formatElapsedCompact(3_900_000)).toBe("1h05m");
-  });
-
   it("formats compact counts", () => {
     expect(formatCompactCount(999)).toBe("999");
     expect(formatCompactCount(1_200)).toBe("1.2k");

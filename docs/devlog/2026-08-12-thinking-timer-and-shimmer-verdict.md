@@ -63,3 +63,28 @@ shimmer。定 Shimmer。
   三处——语义是工具 / run / goal 级忙碌而非「LLM 思考」，暂不统一，启动
   信号与方案记 [deferred](./deferred.md)。
 - reduced-motion 下 shimmer 退化为实色文字，计数器独立承担活性。
+
+## 后记（同日）：RunElapsedHud 提前出列
+
+deferred 的启动信号当日即触发——shimmer 上线后 JC 真机立刻感到浮卡与
+thinking 行两种 working 语言同屏刺眼。事后看本可预见：两者都挂
+`isRunning`，**必然**同屏同时出现，是三站点中冲突最直接的一个，当时
+记 deferred 而非当场处理是判断保守。
+
+裁决（均执行）：
+
+1. **三点删除、不换 shimmer**：每秒走字的计数器即活性证明（同 thinking
+   行删「仍在运行」的论证）；上 shimmer 会违反刚立的「一视图至多一处」
+   边界（两处光带异相扫动即噪音）。「外围 liveness 加强」例外条款够不着
+   它——那是为 sidebar 这种远离内容的监控板写的，浮卡悬在会话区右下角、
+   与 shimmer 行同一视野。
+2. **时长改会话方言**：原 `2m15s` 是当初顺手借 telemetry 的
+   `formatElapsedCompact`（查证其唯一消费者就是浮卡，无共享约束，随改
+   随删含测试）；改「45 秒」「1 分 23 秒」后与折叠头「用时 X 分 X 秒」
+   交接同语。1 秒精度保持（run 级是分钟量级监控数，抖十分位读作焦躁）。
+   会话方言无小时形态（折叠头亦分钟封顶），超长 run 显示「95 分 12 秒」
+   ——与折叠头行为一致，若将来觉得别扭应两处同改。
+3. **外形语域不动**：边框 / 底色 / 投影是 chrome 与 document 的正当分层
+   （layout-and-chrome 外围监控面），不是不统一。
+
+deferred 台账收窄至 ToolCallout / GoalRunMarkers 两站点。
