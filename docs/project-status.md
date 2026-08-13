@@ -151,12 +151,21 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing. Both post-`v0.4.5` features (error display, message queue) passed
-JC's real-machine acceptance on 2026-08-12 and ship in `v0.4.6`; their
-`.scratch/` trackers were disposed per the issue-tracker rule after their
-durable content moved into devlog
-([error display](./devlog/2026-08-12-error-display-readability.md),
-[message queue](./devlog/2026-08-12-session-message-queue.md)).
+Post-`v0.4.6` work landed 2026-08-13, all pending the next release:
+
+- **Discord channel** (fourth managed IM channel, first multi-context one)
+  — implemented end to end, dogfood **in progress** (JC has paired, chatted,
+  and walked setup; remaining acceptance in
+  [shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md)).
+  Tracker `.scratch/discord-channel/` stays until dogfood closes.
+- Fixes riding along: Telegram bundle dep gap (`python-telegram-bot` now in
+  `GA_DEPS` — **release gate**: next `bundle-python.sh` run from scratch must
+  verify both new pins), model-config toast missing Telegram, owner-bind
+  generation race, next-suggestion leak into IM replies
+  ([verdict](./devlog/2026-08-13-im-suggestion-leak.md)), command palette
+  grouping, setup-copy polish.
+- Open trackers: `.scratch/ga-log-retention/` (needs-triage);
+  upstream `dc_*` key-name bug report is still an unmade decision.
 
 ## Status Dashboard
 
