@@ -1,0 +1,789 @@
+diff --git a/frontends/dcapp.py b/frontends/dcapp.py
+--- a/frontends/dcapp.py
++++ b/frontends/dcapp.py
+@@ -6 +6 @@
+-import asyncio, json, os, queue as Q, re, sys, threading, time
++import asyncio, json, os, queue as Q, re, shutil, sys, threading, time, uuid
+@@ -26,2 +26,42 @@ agent = GeneraticAgent(); agent.verbose = False
+-BOT_TOKEN = str(mykeys.get("discord_bot_token", "") or "").strip()
+-ALLOWED = {str(x).strip() for x in mykeys.get("discord_allowed_users", []) if str(x).strip()}
++
++
++def _load_galley_config():
++    raw = os.environ.get("GALLEY_DISCORD_CONFIG_JSON")
++    if raw is None:
++        return None
++    try:
++        data = json.loads(raw)
++    except Exception as e:
++        raise RuntimeError(f"load Galley Discord config failed: {e}") from e
++    if not isinstance(data, dict):
++        raise RuntimeError("Galley Discord config must be a JSON object")
++    return data
++
++
++_GALLEY_CFG = _load_galley_config()
++_GALLEY_MANAGED = _GALLEY_CFG is not None
++
++
++def _discord_config():
++    if not _GALLEY_MANAGED:
++        # File-based (non-managed) config keeps upstream semantics untouched.
++        token = str(mykeys.get("discord_bot_token", "") or "").strip()
++        allowed = {str(x).strip() for x in mykeys.get("discord_allowed_users", []) if str(x).strip()}
++        return token, allowed, str(mykeys.get("proxy", "") or "").strip() or None, None
++    cfg = _GALLEY_CFG or {}
++    token = str(cfg.get("discord_bot_token", "") or "").strip()
++    bind_code = str(cfg.get("discord_owner_bind_code", "") or "").strip() or None
++    proxy = str(cfg.get("proxy", "") or "").strip() or None
++    # Discord user ids are numeric snowflakes; keep them as strings so they
++    # compare against str(message.author.id) without int surprises. "*"
++    # (upstream's public marker) is dropped on purpose: the managed bot drives
++    # the owner's machine, so anyone-can-chat is never derivable from config.
++    allowed = {
++        str(item).strip()
++        for item in (cfg.get("discord_allowed_users") or [])
++        if str(item).strip() and str(item).strip() != "*"
++    }
++    return token, allowed, proxy, bind_code
++
++
++BOT_TOKEN, ALLOWED, PROXY, OWNER_BIND_CODE = _discord_config()
+@@ -31,2 +71,5 @@ TEMP_DIR = os.path.join(PROJECT_ROOT, "temp")
+-MEDIA_DIR = os.path.join(TEMP_DIR, "discord_media")
+-ACTIVE_FILE = os.path.join(TEMP_DIR, "discord_active_channels.json")
++# Galley injects a per-channel state dir (im/discord/) so active-channel state
++# and attachment scratch never land in the shipped code payload's temp/.
++STATE_DIR = (os.environ.get("GALLEY_DISCORD_STATE_DIR") or "").strip() or TEMP_DIR
++MEDIA_DIR = os.path.join(STATE_DIR, "discord_media")
++ACTIVE_FILE = os.path.join(STATE_DIR, "discord_active_channels.json")
+@@ -35,0 +79,36 @@ EXIT_THREAD_TEXTS = {"退出该子区", "退出此子区", "退出子区"}
++# One GA agent per channel, each with its own worker thread and history: the
++# cache is a memory ceiling, not a session store. 12 keeps a busy server's
++# thread count and RSS on a plateau; eviction runs the full close protocol.
++AGENT_CACHE_LIMIT = 12
++AGENT_CLOSE_TIMEOUT_SECONDS = 20
++GALLEY_STARTUP_FAILURE_LIMIT = 3
++# Per-user pairing rate limit. Deliberately NOT Telegram's global
++# invalidation: in a server where every member can DM the bot, a global
++# "10 wrong guesses kills the code" rule is a denial-of-service button.
++GALLEY_OWNER_BIND_ATTEMPT_LIMIT = 5
++GALLEY_OWNER_BIND_TRACK_LIMIT = 512
++GALLEY_DM_NOTICE_INTERVAL_SECONDS = 300
++_galley_connected_once = False
++_owner_bind_attempts = OrderedDict()  # user_id -> wrong attempts (LRU capped)
++
++ACTIVATED_TEXT = (
++    "✅ 已在本频道激活。此后你在本频道的发言都会交给 Agent 处理，"
++    "回复、生成的文件与完成报告对本频道所有可见成员公开。\n"
++    "退出：发送「退出该频道」（子区发「退出该子区」）。"
++)
++RETIRED_TEXT = (
++    "ℹ️ 本频道的上下文已释放（同时活跃的频道过多）。"
++    "重新 @ 我即可开启新的上下文；之前的对话历史不会带回来。"
++)
++RESTARTED_TEXT = (
++    "ℹ️ 服务已重启，本频道的上下文已释放。请重新 @ 我激活本频道。"
++)
++DM_DISABLED_TEXT = (
++    "ℹ️ 私信不处理对话。请到你的 Server 频道里 @ 我激活该频道——"
++    "每个频道是一条独立的上下文。"
++)
++OWNER_BOUND_TEXT = (
++    "✓ 已绑定为 Galley 的使用者，现在只响应你的消息。\n"
++    "接下来到你的 Server 频道里 @ 我即可激活该频道；私信不再处理对话。"
++)
++
+@@ -38,0 +118,238 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
++def _emit_galley_status(state, last_error=None, **extra):
++    hook = globals().get("GALLEY_STATUS_HOOK")
++    if not callable(hook):
++        return
++    if extra:
++        try:
++            hook(state, last_error, **extra)
++            return
++        except TypeError:
++            # Older launcher hooks take (state, last_error) only; drop the
++            # extra fields rather than losing the status line entirely.
++            pass
++    hook(state, last_error)
++
++
++def _galley_locked():
++    # Galley-managed mode: an empty allow-list means "locked, waiting for
++    # owner pairing", never public access.
++    return _GALLEY_MANAGED and not ALLOWED
++
++
++def _is_allowed_user(user_id):
++    if _GALLEY_MANAGED:
++        return user_id in ALLOWED
++    return public_access(ALLOWED) or user_id in ALLOWED
++
++
++def _bind_attempt_count(user_id):
++    return _owner_bind_attempts.get(user_id, 0)
++
++
++def _bump_bind_attempt(user_id):
++    count = _owner_bind_attempts.get(user_id, 0) + 1
++    _owner_bind_attempts[user_id] = count
++    _owner_bind_attempts.move_to_end(user_id)
++    while len(_owner_bind_attempts) > GALLEY_OWNER_BIND_TRACK_LIMIT:
++        _owner_bind_attempts.popitem(last=False)
++    return count
++
++
++async def _handle_owner_bind_message(message, is_dm):
++    """Locked mode (managed config, no owner bound yet): the only input that
++    does anything is the pairing code, sent in a DM. Server channels never
++    pair — the bot is visible to every member there. Wrong guesses get no
++    reply (a guesser learns nothing) and only cost that user their own
++    attempt budget; reconnecting from Galley issues a new code."""
++    global ALLOWED, OWNER_BIND_CODE
++    user_id = str(message.author.id)
++    if not is_dm:
++        return
++    if not OWNER_BIND_CODE:
++        print(f"[Discord] pairing code unavailable, ignoring dm from {user_id}")
++        return
++    if _bind_attempt_count(user_id) >= GALLEY_OWNER_BIND_ATTEMPT_LIMIT:
++        print(f"[Discord] pairing attempts exhausted for user {user_id}")
++        return
++    text = (message.content or "").strip()
++    if not text:
++        return
++    if text != OWNER_BIND_CODE:
++        count = _bump_bind_attempt(user_id)
++        print(f"[Discord] pairing code mismatch ({count}/{GALLEY_OWNER_BIND_ATTEMPT_LIMIT}) from {user_id}")
++        return
++    ALLOWED = {user_id}
++    OWNER_BIND_CODE = None
++    _owner_bind_attempts.clear()
++    _emit_galley_status("running", None, ownerOpenId=user_id)
++    try:
++        await message.channel.send(OWNER_BOUND_TEXT)
++    except Exception as e:
++        print(f"[Discord] owner bind ack failed: {e}")
++    print(f"[Discord] bound Galley owner: {user_id}")
++
++
++class _AgentStopSentinel(str):
++    """Stop sentinel for GeneraticAgent.run().
++
++    Upstream's worker reads ``task.get("images")`` *before* its
++    ``isinstance(task, str)`` break, so a plain string sentinel raises
++    AttributeError and tears the thread down through an exception path. A str
++    subclass that also answers ``.get()`` walks upstream's own break branch and
++    lets ``run()`` return normally, no upstream edit needed.
++    """
++
++    def get(self, key, default=None):
++        return default
++
++
++_AGENT_STOP = _AgentStopSentinel("__galley_agent_stop__")
++
++
++class _ChannelAgent:
++    """One GA agent plus its worker thread, with a real close protocol."""
++
++    def __init__(self, chat_id):
++        self.chat_id = chat_id
++        self.agent = GeneraticAgent()
++        self.agent.verbose = False
++        self.stop_event = threading.Event()
++        self.thread = threading.Thread(
++            target=self.agent.run, daemon=True, name=f"discord-agent-{chat_id}"
++        )
++        self.thread.start()
++
++    def close(self, timeout=AGENT_CLOSE_TIMEOUT_SECONDS):
++        """abort() alone is not a close: it stops the current generation, then
++        the worker blocks forever in task_queue.get(). Stop event (so in-flight
++        streamers give up) + sentinel + join is what actually releases the
++        thread and lets the agent be garbage collected."""
++        self.stop_event.set()
++        try:
++            self.agent.abort()
++        except Exception as e:
++            print(f"[Discord] abort failed for {self.chat_id}: {e}")
++        try:
++            self.agent.task_queue.put(_AGENT_STOP)
++        except Exception as e:
++            print(f"[Discord] stop sentinel failed for {self.chat_id}: {e}")
++        self.thread.join(timeout)
++        if self.thread.is_alive():
++            print(f"[Discord] agent worker still alive after {timeout}s: {self.chat_id}")
++        else:
++            print(f"[Discord] agent closed: {self.chat_id}")
++
++
++_FENCE_RE = re.compile(r"^\s*(`{3,})([^\n`]*)$")
++
++
++def _next_fence_state(fence, line):
++    match = _FENCE_RE.match((line or "").rstrip("\r\n"))
++    if not match:
++        return fence
++    marker, info = match.group(1), (match.group(2) or "").strip()
++    if fence:
++        return None if len(marker) >= len(fence[0]) else fence
++    return (marker, info)
++
++
++def _split_discord_text(text, limit):
++    """Split for Discord's message limit without cutting a ``` block in half.
++
++    ``split_text`` only knows line boundaries, so a long reply gets sliced
++    mid-fence: Discord renders half a code block and the next message opens
++    with orphaned code. Track the fence state, close it at the cut, and reopen
++    it (same marker and language) at the top of the next part."""
++    text = (text or "").strip() or "..."
++    if len(text) <= limit:
++        return [text]
++    parts, buf, size, fence = [], [], 0, None
++
++    def flush():
++        nonlocal buf, size
++        body = "".join(buf).rstrip()
++        if fence and body:
++            body += "\n" + fence[0]
++        if body:
++            parts.append(body)
++        if fence:
++            head = f"{fence[0]}{fence[1]}\n"
++            buf, size = [head], len(head)
++        else:
++            buf, size = [], 0
++
++    for line in text.splitlines(keepends=True):
++        room = max(1, limit - (len(fence[0]) + 1 if fence else 0))
++        if size and size + len(line) > room:
++            flush()
++        while len(line) > room:  # a single line longer than one message
++            buf.append(line[:room])
++            size += room
++            line = line[room:]
++            flush()
++            room = max(1, limit - (len(fence[0]) + 1 if fence else 0))
++        buf.append(line)
++        size += len(line)
++        fence = _next_fence_state(fence, line)
++    tail = "".join(buf).rstrip()
++    if fence and tail == f"{fence[0]}{fence[1]}":
++        tail = ""  # nothing followed the reopened fence
++    if tail:
++        parts.append(tail)
++    return [part for part in parts if part] or ["..."]
++
++
++_PERMANENT_LOGIN_ERRORS = tuple(
++    cls
++    for cls in (
++        getattr(discord, "LoginFailure", None),
++        getattr(discord, "PrivilegedIntentsRequired", None),
++    )
++    if isinstance(cls, type)
++)
++_PERMANENT_CLOSE_CODES = {
++    4004: "authentication failed (invalid bot token)",
++    4013: "invalid gateway intents",
++    4014: "privileged gateway intents are not enabled — turn on MESSAGE CONTENT INTENT",
++}
++
++
++def _permanent_connection_error(exc):
++    """Return a reason string when the connection can never succeed until the
++    user changes something (bad token, intents not enabled, bot removed), so
++    the status pipe reports `error` and the process exits instead of backing
++    off forever behind a `reconnecting` badge. Everything else is transient."""
++    intents_exc = getattr(discord, "PrivilegedIntentsRequired", None)
++    if isinstance(intents_exc, type) and isinstance(exc, intents_exc):
++        return ("Discord privileged intents are not enabled: turn on MESSAGE "
++                "CONTENT INTENT in the Developer Portal")
++    if _PERMANENT_LOGIN_ERRORS and isinstance(exc, _PERMANENT_LOGIN_ERRORS):
++        return f"Discord bot token rejected: {exc}"
++    closed_exc = getattr(discord, "ConnectionClosed", None)
++    code = getattr(exc, "code", None)
++    if isinstance(closed_exc, type) and isinstance(exc, closed_exc) and code in _PERMANENT_CLOSE_CODES:
++        return f"Discord gateway closed the connection ({code}): {_PERMANENT_CLOSE_CODES[code]}"
++    http_exc = getattr(discord, "HTTPException", None)
++    if isinstance(http_exc, type) and isinstance(exc, http_exc) and getattr(exc, "status", None) == 401:
++        return f"Discord rejected the bot credentials (HTTP 401): {exc}"
++    return None
++
++
++def _purge_media_dir():
++    """Attachments live for exactly one turn. Sweep leftovers from a crash."""
++    try:
++        for name in os.listdir(MEDIA_DIR):
++            if name.startswith("turn_"):
++                shutil.rmtree(os.path.join(MEDIA_DIR, name), ignore_errors=True)
++    except FileNotFoundError:
++        pass
++    except Exception as e:
++        print(f"[Discord] failed to purge media dir: {e}")
++
++
++def _cleanup_turn_dir(turn_dir):
++    if not turn_dir:
++        return
++    shutil.rmtree(turn_dir, ignore_errors=True)
++
++
+@@ -74,6 +391 @@ class DiscordApp(AgentChatMixin):
+-        intents = discord.Intents.default()
+-        intents.message_content = True
+-        intents.guilds = True
+-        intents.dm_messages = True
+-        proxy = str(mykeys.get("proxy", "") or "").strip() or None
+-        self.client = discord.Client(intents=intents, proxy=proxy)
++        self.client = None
+@@ -80,0 +393,2 @@ class DiscordApp(AgentChatMixin):
++        self.loop = None
++        self._closing = False
+@@ -84 +398 @@ class DiscordApp(AgentChatMixin):
+-        self._agents = OrderedDict()  # chat_id -> GeneraticAgent, each chat has isolated history
++        self._agents = OrderedDict()  # chat_id -> _ChannelAgent, each chat has isolated history
+@@ -85,0 +400,22 @@ class DiscordApp(AgentChatMixin):
++        self._dm_notice_at = {}
++        # Channel history only lives inside this process, but the active set is
++        # persisted: after a restart an "active" channel would silently hand the
++        # user a blank agent. Drop the flag and say so on the next message.
++        # Managed mode only — file-based use keeps upstream's persistence.
++        self._stale_channels = set(self._active_channels) if _GALLEY_MANAGED else set()
++        if self._stale_channels:
++            self._active_channels = {}
++            self._save_active_channels()
++            print(f"[Discord] released {len(self._stale_channels)} channel(s) after restart")
++        self._build_client()
++
++    def _build_client(self):
++        """A discord.Client cannot be restarted after it closes, so each
++        reconnect cycle gets a fresh client (and a fresh channel cache, whose
++        objects are bound to the old client's state)."""
++        intents = discord.Intents.default()
++        intents.message_content = True
++        intents.guilds = True
++        intents.dm_messages = True
++        self.client = discord.Client(intents=intents, proxy=PROXY)
++        self._channel_cache.clear()
+@@ -89 +425,9 @@ class DiscordApp(AgentChatMixin):
+-            print(f"[Discord] bot ready: {self.client.user} ({self.client.user.id})")
++            global _galley_connected_once
++            user = self.client.user
++            print(f"[Discord] bot ready: {user} ({getattr(user, 'id', '')})")
++            first_connect = not _galley_connected_once
++            _galley_connected_once = True
++            if first_connect:
++                _emit_galley_status("running", None, botId=str(user or ""))
++            else:
++                _emit_galley_status("running")
+@@ -100,0 +445,6 @@ class DiscordApp(AgentChatMixin):
++    def _remember_channel(self, chat_id, channel):
++        self._channel_cache[chat_id] = channel
++        self._channel_cache.move_to_end(chat_id)
++        if len(self._channel_cache) > 500:
++            self._channel_cache.popitem(last=False)
++
+@@ -138,6 +488,11 @@ class DiscordApp(AgentChatMixin):
+-            if now - float(item.get("last_seen") or 0) > ACTIVE_TTL_SECONDS:
+-                self._active_channels.pop(chat_id, None)
+-                self._save_active_channels()
+-                print(f"[Discord] channel expired: {chat_id}")
+-                return False
+-            return True
++            expired = now - float(item.get("last_seen") or 0) > ACTIVE_TTL_SECONDS
++        if expired:
++            print(f"[Discord] channel expired: {chat_id}")
++            self._forget_active_channel(chat_id)
++            return False
++        return True
++
++    def active_channel_ids(self):
++        """Currently activated guild chat_ids ('ch:<channel_id>')."""
++        with self._active_lock:
++            return list(self._active_channels)
+@@ -145,0 +501 @@ class DiscordApp(AgentChatMixin):
++        """Refresh the 30-day TTL; return True when this is a fresh activation."""
+@@ -147 +503 @@ class DiscordApp(AgentChatMixin):
+-            return
++            return False
+@@ -148,0 +505 @@ class DiscordApp(AgentChatMixin):
++            fresh = chat_id not in self._active_channels
+@@ -150,0 +508 @@ class DiscordApp(AgentChatMixin):
++        return fresh
+@@ -152 +510 @@ class DiscordApp(AgentChatMixin):
+-    def _deactivate_channel(self, chat_id):
++    def _forget_active_channel(self, chat_id):
+@@ -155,0 +514,6 @@ class DiscordApp(AgentChatMixin):
++        if changed:
++            self._emit_channel_released(chat_id)
++        return changed
++
++    def _deactivate_channel(self, chat_id):
++        changed = self._forget_active_channel(chat_id)
+@@ -158,0 +523,24 @@ class DiscordApp(AgentChatMixin):
++        with self._agent_lock:
++            handle = self._agents.pop(chat_id, None)
++        if handle is not None:
++            self._close_agent_async(handle)
++        return changed
++
++    def _close_agent_async(self, handle):
++        # close() joins a worker thread that may still be finishing a turn;
++        # never do that on the event loop.
++        threading.Thread(
++            target=handle.close, daemon=True, name=f"discord-agent-close-{handle.chat_id}"
++        ).start()
++
++    def _emit_agent_created(self, ga, chat_id):
++        """Seam for the Galley launcher: every freshly created channel agent is
++        handed to the hook together with its chat_id ('ch:<channel_id>'), which
++        is what the launcher needs to install the managed prompt profile with a
++        per-channel supervisor id (galley-im/discord/ch:<channel_id>) and to
++        register the channel with the completion reporter. Purely optional —
++        upstream / file-based use never sets the hook. The hook runs under the
++        agent lock, so it must not call back into DiscordApp."""
++        hook = globals().get("GALLEY_AGENT_HOOK")
++        if not callable(hook):
++            return
+@@ -160 +548 @@ class DiscordApp(AgentChatMixin):
+-            self._get_agent(chat_id).abort()
++            hook(ga, chat_id)
+@@ -162,2 +550,13 @@ class DiscordApp(AgentChatMixin):
+-            print(f"[Discord] deactivate abort failed for {chat_id}: {e}")
+-        return changed
++            print(f"[Discord] agent hook failed for {chat_id}: {e}")
++
++    def _emit_channel_released(self, chat_id):
++        """Counterpart of GALLEY_AGENT_HOOK: the channel stopped being active
++        (exit command, TTL expiry, or agent eviction), so the launcher can
++        unregister it from the completion reporter."""
++        hook = globals().get("GALLEY_CHANNEL_RELEASED_HOOK")
++        if not callable(hook):
++            return
++        try:
++            hook(chat_id)
++        except Exception as e:
++            print(f"[Discord] channel release hook failed for {chat_id}: {e}")
+@@ -165,0 +565,2 @@ class DiscordApp(AgentChatMixin):
++        """Return the _ChannelAgent for a chat, creating it on demand."""
++        evicted = None
+@@ -167,9 +568,7 @@ class DiscordApp(AgentChatMixin):
+-            ga = self._agents.get(chat_id)
+-            if ga is None:
+-                ga = GeneraticAgent()
+-                ga.verbose = False
+-                self._agents[chat_id] = ga
+-                threading.Thread(target=ga.run, daemon=True, name=f"discord-agent-{chat_id}").start()
+-                if len(self._agents) > 200:
+-                    old_chat_id, _old_agent = self._agents.popitem(last=False)
+-                    print(f"[Discord] dropped agent cache entry: {old_chat_id}")
++            handle = self._agents.get(chat_id)
++            if handle is None:
++                handle = _ChannelAgent(chat_id)
++                self._emit_agent_created(handle.agent, chat_id)
++                self._agents[chat_id] = handle
++                if len(self._agents) > AGENT_CACHE_LIMIT:
++                    _old_chat_id, evicted = self._agents.popitem(last=False)
+@@ -178 +577,15 @@ class DiscordApp(AgentChatMixin):
+-            return ga
++        if evicted is not None:
++            self._retire_agent(evicted)
++        return handle
++
++    def _retire_agent(self, handle):
++        chat_id = handle.chat_id
++        # The channel's history dies with its agent, so drop the active flag
++        # too: the user must re-@ instead of silently getting a blank context.
++        self._forget_active_channel(chat_id)
++        state = self.user_tasks.get(chat_id)
++        if state:
++            state["running"] = False
++        print(f"[Discord] evicted agent for {chat_id} (cache limit {AGENT_CACHE_LIMIT})")
++        self._close_agent_async(handle)
++        self._notify_threadsafe(chat_id, RETIRED_TEXT)
+@@ -180,2 +593,16 @@ class DiscordApp(AgentChatMixin):
+-    async def _download_attachments(self, message):
+-        """Download attachments/images to MEDIA_DIR, return list of local paths."""
++    def _notify_threadsafe(self, chat_id, text):
++        loop = self.loop  # set once start() owns a running loop
++        if loop is None or loop.is_closed():
++            return
++        try:
++            asyncio.run_coroutine_threadsafe(self.send_text(chat_id, text), loop)
++        except Exception as e:
++            print(f"[Discord] failed to schedule notice for {chat_id}: {e}")
++
++    def _new_turn_dir(self, chat_id):
++        safe = re.sub(r"[^0-9A-Za-z]", "_", chat_id)
++        return os.path.join(MEDIA_DIR, f"turn_{safe}_{uuid.uuid4().hex[:8]}")
++
++    async def _download_attachments(self, message, turn_dir):
++        """Download attachments/images into this turn's scratch dir, return
++        local paths. The dir is removed once the turn ends."""
+@@ -182,0 +610,3 @@ class DiscordApp(AgentChatMixin):
++        if not message.attachments:
++            return paths
++        os.makedirs(turn_dir, exist_ok=True)
+@@ -185 +615 @@ class DiscordApp(AgentChatMixin):
+-            local_path = os.path.join(MEDIA_DIR, f"{att.id}_{safe_name}")
++            local_path = os.path.join(turn_dir, f"{att.id}_{safe_name}")
+@@ -189 +619 @@ class DiscordApp(AgentChatMixin):
+-                print(f"[Discord] saved attachment: {local_path}")
++                print(f"[Discord] saved attachment {att.id} ({getattr(att, 'size', '?')} bytes)")
+@@ -191 +621 @@ class DiscordApp(AgentChatMixin):
+-                print(f"[Discord] failed to save attachment {att.filename}: {e}")
++                print(f"[Discord] failed to save attachment {att.id}: {e}")
+@@ -194,2 +624 @@ class DiscordApp(AgentChatMixin):
+-    async def send_text(self, chat_id, content, **ctx):
+-        """Send text (and optionally files) to a chat_id."""
++    async def _resolve_channel(self, chat_id):
+@@ -197,14 +626,18 @@ class DiscordApp(AgentChatMixin):
+-        if channel is None:
+-            try:
+-                if chat_id.startswith("dm:"):
+-                    user = await self.client.fetch_user(int(chat_id[3:]))
+-                    channel = await user.create_dm()
+-                else:
+-                    channel = await self.client.fetch_channel(int(chat_id[3:]))
+-                self._channel_cache[chat_id] = channel
+-                if len(self._channel_cache) > 500:
+-                    self._channel_cache.popitem(last=False)
+-            except Exception as e:
+-                print(f"[Discord] cannot resolve channel for {chat_id}: {e}")
+-                return
+-        for part in split_text(content, self.split_limit):
++        if channel is not None:
++            return channel
++        if chat_id.startswith("dm:"):
++            user = await self.client.fetch_user(int(chat_id[3:]))
++            channel = await user.create_dm()
++        else:
++            channel = await self.client.fetch_channel(int(chat_id[3:]))
++        self._remember_channel(chat_id, channel)
++        return channel
++
++    async def send_text(self, chat_id, content, **ctx):
++        """Send text to a chat_id (best effort, upstream semantics)."""
++        try:
++            channel = await self._resolve_channel(chat_id)
++        except Exception as e:
++            print(f"[Discord] cannot resolve channel for {chat_id}: {e}")
++            return
++        for part in _split_discord_text(content, self.split_limit):
+@@ -215,0 +649,8 @@ class DiscordApp(AgentChatMixin):
++    async def deliver_text(self, chat_id, content):
++        """Strict send for programmatic callers (Galley's completion reporter):
++        resolution and send failures raise instead of being logged and
++        swallowed, so the caller never marks an undelivered report delivered."""
++        channel = await self._resolve_channel(chat_id)
++        for part in _split_discord_text(content, self.split_limit):
++            await channel.send(part)
++
+@@ -227 +668,5 @@ class DiscordApp(AgentChatMixin):
+-            channel = self._channel_cache.get(chat_id)
++            try:
++                channel = await self._resolve_channel(chat_id)
++            except Exception as e:
++                print(f"[Discord] cannot resolve channel for files {chat_id}: {e}")
++                channel = None
+@@ -241 +686 @@ class DiscordApp(AgentChatMixin):
+-        ga = self._get_agent(chat_id)
++        ga = self._get_agent(chat_id).agent
+@@ -283 +728 @@ class DiscordApp(AgentChatMixin):
+-    async def run_agent(self, chat_id, text, **ctx):
++    async def run_agent(self, chat_id, text, turn_dir=None, **ctx):
+@@ -285 +730,2 @@ class DiscordApp(AgentChatMixin):
+-        ga = self._get_agent(chat_id)
++        handle = self._get_agent(chat_id)
++        ga = handle.agent
+@@ -294 +740 @@ class DiscordApp(AgentChatMixin):
+-            while state["running"]:
++            while state["running"] and not handle.stop_event.is_set():
+@@ -313 +759 @@ class DiscordApp(AgentChatMixin):
+-            if not state["running"]:
++            if not state["running"] or handle.stop_event.is_set():
+@@ -321,0 +768 @@ class DiscordApp(AgentChatMixin):
++            _cleanup_turn_dir(turn_dir)
+@@ -334,4 +781 @@ class DiscordApp(AgentChatMixin):
+-        self._channel_cache[chat_id] = message.channel
+-        if len(self._channel_cache) > 500:
+-            self._channel_cache.popitem(last=False)
+-
++        self._remember_channel(chat_id, message.channel)
+@@ -339 +782,0 @@ class DiscordApp(AgentChatMixin):
+-        user_name = str(message.author)
+@@ -341,2 +784,7 @@ class DiscordApp(AgentChatMixin):
+-        if not public_access(ALLOWED) and user_id not in ALLOWED:
+-            print(f"[Discord] unauthorized user: {user_name} ({user_id})")
++        if _galley_locked():
++            # Managed mode before pairing: a DM pairing code is the only input
++            # that does anything; guild traffic is ignored outright.
++            return await _handle_owner_bind_message(message, is_dm)
++
++        if not _is_allowed_user(user_id):
++            print(f"[Discord] ignored message from unauthorized user {user_id}")
+@@ -344,0 +793,5 @@ class DiscordApp(AgentChatMixin):
++        if _GALLEY_MANAGED and not is_guild:
++            # V1: the channel is the context. DM conversation stays off, so
++            # there is exactly one place a supervisor context can live.
++            return await self._notify_dm_disabled(chat_id, user_id)
++
+@@ -347,0 +801,3 @@ class DiscordApp(AgentChatMixin):
++                if chat_id in self._stale_channels:
++                    self._stale_channels.discard(chat_id)
++                    await self.send_text(chat_id, RESTARTED_TEXT)
+@@ -349,2 +805,3 @@ class DiscordApp(AgentChatMixin):
+-            if mentioned or active:
+-                self._touch_active_channel(chat_id, now)
++            self._stale_channels.discard(chat_id)
++            if self._touch_active_channel(chat_id, now):
++                await self.send_text(chat_id, ACTIVATED_TEXT)
+@@ -364 +821 @@ class DiscordApp(AgentChatMixin):
+-            print(f"[Discord] manually deactivated {chat_id} by {user_name} ({user_id})")
++            print(f"[Discord] manually deactivated {chat_id} by user {user_id}")
+@@ -367,2 +824,3 @@ class DiscordApp(AgentChatMixin):
+-        # Download attachments
+-        attachment_paths = await self._download_attachments(message)
++        # Download attachments into a per-turn scratch dir
++        turn_dir = self._new_turn_dir(chat_id) if message.attachments else None
++        attachment_paths = await self._download_attachments(message, turn_dir) if turn_dir else []
+@@ -375,0 +834 @@ class DiscordApp(AgentChatMixin):
++            _cleanup_turn_dir(turn_dir)
+@@ -378 +837,7 @@ class DiscordApp(AgentChatMixin):
+-        print(f"[Discord] message from {user_name} ({user_id}, {'dm' if is_dm else 'guild'}): {content[:200]}")
++        # Event metadata only: message bodies are the supervisor's conversation,
++        # not Galley's log material.
++        print(
++            f"[Discord] message: chat={chat_id} user={user_id} "
++            f"scope={'dm' if is_dm else 'guild'} chars={len(content)} "
++            f"attachments={len(attachment_paths)} command={content.startswith('/')}"
++        )
+@@ -381 +846,4 @@ class DiscordApp(AgentChatMixin):
+-            return await self.handle_command(chat_id, content)
++            try:
++                return await self.handle_command(chat_id, content)
++            finally:
++                _cleanup_turn_dir(turn_dir)
+@@ -383 +851 @@ class DiscordApp(AgentChatMixin):
+-        task = asyncio.create_task(self.run_agent(chat_id, content))
++        task = asyncio.create_task(self.run_agent(chat_id, content, turn_dir=turn_dir))
+@@ -386,0 +855,29 @@ class DiscordApp(AgentChatMixin):
++    async def _notify_dm_disabled(self, chat_id, user_id):
++        now = time.time()
++        if now - self._dm_notice_at.get(user_id, 0) < GALLEY_DM_NOTICE_INTERVAL_SECONDS:
++            return
++        self._dm_notice_at[user_id] = now
++        await self.send_text(chat_id, DM_DISABLED_TEXT)
++
++    async def shutdown(self):
++        if self._closing:
++            return
++        self._closing = True
++        for task in list(self.background_tasks):
++            task.cancel()
++        self.background_tasks.clear()
++        try:
++            if self.client is not None and not self.client.is_closed():
++                await self.client.close()
++        except Exception as e:
++            print(f"[Discord] client close error: {e}")
++        with self._agent_lock:
++            handles = list(self._agents.values())
++            self._agents.clear()
++        if handles:
++            await asyncio.gather(
++                *[asyncio.to_thread(handle.close) for handle in handles],
++                return_exceptions=True,
++            )
++        print("[Discord] stopped")
++
+@@ -388,0 +886,2 @@ class DiscordApp(AgentChatMixin):
++        self.loop = asyncio.get_running_loop()
++        _purge_media_dir()
+@@ -390,11 +889,65 @@ class DiscordApp(AgentChatMixin):
+-        while True:
+-            started_at = time.monotonic()
+-            try:
+-                await self.client.start(BOT_TOKEN)
+-            except Exception as e:
+-                print(f"[Discord] error: {e}")
+-            if time.monotonic() - started_at >= 60:
+-                delay = 5
+-            print(f"[Discord] reconnect in {delay}s...")
+-            await asyncio.sleep(delay)
+-            delay = min(delay * 2, max_delay)
++        startup_failures = 0
++        try:
++            while True:
++                started_at = time.monotonic()
++                try:
++                    await self.client.start(BOT_TOKEN)
++                    print("[Discord] client closed")
++                    return 0
++                except asyncio.CancelledError:
++                    raise
++                except Exception as e:
++                    permanent = _permanent_connection_error(e)
++                    if permanent:
++                        print(f"[Discord] fatal: {permanent}")
++                        _emit_galley_status("error", permanent)
++                        return 1
++                    print(f"[Discord] error: {type(e).__name__}: {e}")
++                    if not _galley_connected_once:
++                        startup_failures += 1
++                        if startup_failures >= GALLEY_STARTUP_FAILURE_LIMIT:
++                            _emit_galley_status("error", str(e) or type(e).__name__)
++                            return 1
++                    _emit_galley_status("reconnecting", str(e) or type(e).__name__)
++                if time.monotonic() - started_at >= 60:
++                    delay = 5
++                print(f"[Discord] reconnect in {delay}s...")
++                await asyncio.sleep(delay)
++                delay = min(delay * 2, max_delay)
++                try:
++                    if not self.client.is_closed():
++                        await self.client.close()
++                except Exception as e:
++                    print(f"[Discord] client close error: {e}")
++                self._build_client()
++        finally:
++            await self.shutdown()
++
++
++def check_config(init_agent=False):
++    return {"ready": bool(BOT_TOKEN)}
++
++
++_APP = None
++
++
++def get_app():
++    """The DiscordApp instance main() is running. Galley's completion reporter
++    needs it to push into a channel: `app.deliver_text(chat_id, text)` scheduled
++    on `app.loop` via asyncio.run_coroutine_threadsafe(...).result(timeout)."""
++    return _APP
++
++
++def main():
++    global _APP
++    if not _GALLEY_MANAGED and not BOT_TOKEN:
++        print("[Discord] ERROR: discord_bot_token is empty or missing in mykey.py / mykey.json")
++        return 1
++    require_runtime(agent, "Discord", discord_bot_token=BOT_TOKEN)
++    app = DiscordApp()
++    _APP = app
++    try:
++        return int(asyncio.run(app.start()) or 0)
++    except KeyboardInterrupt:
++        print("[Discord] interrupted")
++        return 0
+@@ -405 +957,0 @@ if __name__ == "__main__":
+-    require_runtime(agent, "Discord", discord_bot_token=BOT_TOKEN)
+@@ -407 +959 @@ if __name__ == "__main__":
+-    asyncio.run(DiscordApp().start())
++    raise SystemExit(main())
