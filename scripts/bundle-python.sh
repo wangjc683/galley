@@ -33,6 +33,7 @@ GA_DEPS=(
   "pycryptodome==3.23.0"
   "python-dotenv==1.2.1"
   "lark-oapi==1.6.8"
+  "python-telegram-bot==22.8"
 )
 
 ARCH="${1:-}"

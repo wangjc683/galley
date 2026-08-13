@@ -76,6 +76,7 @@ import lark_oapi
 import qrcode
 import requests
 import simple_websocket_server
+import telegram
 import TMWebDriver
 from Crypto.Cipher import AES
 from PIL import Image
@@ -84,6 +85,7 @@ from frontends import desktop_bridge
 assert callable(getattr(agentmain, "GenericAgent", None))
 assert importlib.util.find_spec("frontends.wechatapp") is not None
 assert importlib.util.find_spec("frontends.fsapp") is not None
+assert importlib.util.find_spec("frontends.tgapp") is not None
 assert AES is not None
 assert Image is not None
 assert aiohttp is not None
@@ -95,6 +97,7 @@ assert lark_oapi is not None
 assert qrcode is not None
 assert requests is not None
 assert simple_websocket_server is not None
+assert telegram is not None
 assert TMWebDriver is not None
 
 print("  managed GA import OK (bundle is bridge-ready)")
