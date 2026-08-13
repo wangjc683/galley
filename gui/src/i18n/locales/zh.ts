@@ -446,6 +446,8 @@ export const zhCopy = {
     searchLLM: "搜索 LLM…",
     newConversation: "新对话",
     newProject: "新建项目",
+    groupRecentSessions: "最近会话",
+    groupActions: "操作",
     inConversationContent: "在对话内容中",
     switchLLM: "切换 LLM",
     current: (name: string) => `当前：${name}`,

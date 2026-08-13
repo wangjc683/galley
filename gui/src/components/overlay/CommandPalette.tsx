@@ -69,16 +69,20 @@ export interface CommandPaletteProps {
  * and we already have our own design tokens. Avoids the shadcn init
  * step touching globals.css.
  *
- * V0.1 contents (intentionally narrow):
+ * Contents (still intentionally narrow):
  *
- *   - "New chat" (always first)
+ *   - "New chat" / "New project" (always first, ungrouped)
  *   - Recent sessions (≤8, fuzzy on title)
+ *   - Full-text message hits (SQLite FTS5, query ≥ 2 chars)
  *   - Actions: Switch LLM (nested submenu) / Re-run health check /
- *     Open settings / Attach GA folder
+ *     Reset layout / Open settings / Attach GA folder
  *
- * Deliberately excluded: cross-session full-text search, theme
- * switcher, quick prompt insertion, destructive actions. See
- * DESIGN.md §8 "故意排除".
+ * Everything below the pinned creation rows sits in a labeled
+ * Command.Group — the root list mixes four semantic kinds, so
+ * headers always show (DESIGN.md §8, 2026-08-13 adjudication).
+ *
+ * Deliberately excluded: theme switcher, quick prompt insertion,
+ * destructive actions. See DESIGN.md §8 "故意排除".
  */
 export function CommandPalette(props: CommandPaletteProps) {
   const copy = useCopy();
@@ -290,35 +294,39 @@ function RootPage({
       {/* Sessions. Summary rides inline after the title (muted,
           truncating) — the right-aligned `sub` slot is for short
           annotations on action rows and would crush the title when
-          fed an 80-char recap. */}
-      {recentSessions.map((s) => {
-        const preview = s.summary
-          ? displaySessionSummary(s.summary, copy.sidebar.turnProtocolFailure)
-          : undefined;
-        return (
-          <Command.Item
-            key={s.id}
-            value={`session ${s.title} ${preview ?? ""}`}
-            onSelect={() => onOpenSession(s.id)}
-          >
-            <PaletteRow
-              iconNode={<StatusIcon status={s.status} size={14} />}
-              label={s.title}
-              preview={preview}
-            />
-          </Command.Item>
-        );
-      })}
+          fed an 80-char recap. cmdk hides the group (heading
+          included) when the query filters out every session. */}
+      {recentSessions.length > 0 && (
+        <Command.Group heading={copy.command.groupRecentSessions}>
+          {recentSessions.map((s) => {
+            const preview = s.summary
+              ? displaySessionSummary(
+                  s.summary,
+                  copy.sidebar.turnProtocolFailure,
+                )
+              : undefined;
+            return (
+              <Command.Item
+                key={s.id}
+                value={`session ${s.title} ${preview ?? ""}`}
+                onSelect={() => onOpenSession(s.id)}
+              >
+                <PaletteRow
+                  iconNode={<StatusIcon status={s.status} size={14} />}
+                  label={s.title}
+                  preview={preview}
+                />
+              </Command.Item>
+            );
+          })}
+        </Command.Group>
+      )}
 
       {/* Matches in conversations — populated only when query >= 2
           chars. forceMount keeps cmdk's fuzzy filter from hiding
-          these (our SQL match is already authoritative). Group
-          header renders only when there's content. */}
+          these (our SQL match is already authoritative). */}
       {messageHits.length > 0 && (
-        <>
-          <div className="mx-1.5 px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-            {copy.command.inConversationContent}
-          </div>
+        <Command.Group heading={copy.command.inConversationContent} forceMount>
           {messageHits.map((h) => (
             <Command.Item
               key={h.messageId}
@@ -330,50 +338,51 @@ function RootPage({
               <MessageHitRow hit={h} />
             </Command.Item>
           ))}
-        </>
+        </Command.Group>
       )}
 
-      {/* Actions */}
-      <Command.Item
-        value="switch llm 切换"
-        onSelect={onEnterSwitchLLM}
-        disabled={llmCount === 0}
-      >
-        <PaletteRow
-          Icon={Cube}
-          label={copy.command.switchLLM}
-          sub={currentLLM ? copy.command.current(currentLLM) : undefined}
-          shortcut="→"
-        />
-      </Command.Item>
-      <Command.Item
-        value="rerun health check 体检 健康检查"
-        onSelect={onReRunHealthCheck}
-      >
-        <PaletteRow
-          Icon={ArrowsClockwise}
-          label={copy.command.runHealthCheck}
-        />
-      </Command.Item>
-      <Command.Item
-        value="reset default layout window 恢复默认布局 窗口"
-        onSelect={onResetLayout}
-      >
-        <PaletteRow Icon={FrameCorners} label={copy.command.resetLayout} />
-      </Command.Item>
-      <Command.Item value="open settings 设置" onSelect={onOpenSettings}>
-        <PaletteRow
-          Icon={Gear}
-          label={copy.command.openSettings}
-          shortcut={formatShortcutReadable("Mod+,")}
-        />
-      </Command.Item>
-      <Command.Item
-        value="attach ga folder 切换 GA 路径"
-        onSelect={onAttachGAFolder}
-      >
-        <PaletteRow Icon={FolderOpen} label={copy.command.changeGAFolder} />
-      </Command.Item>
+      <Command.Group heading={copy.command.groupActions}>
+        <Command.Item
+          value="switch llm 切换"
+          onSelect={onEnterSwitchLLM}
+          disabled={llmCount === 0}
+        >
+          <PaletteRow
+            Icon={Cube}
+            label={copy.command.switchLLM}
+            sub={currentLLM ? copy.command.current(currentLLM) : undefined}
+            shortcut="→"
+          />
+        </Command.Item>
+        <Command.Item
+          value="rerun health check 体检 健康检查"
+          onSelect={onReRunHealthCheck}
+        >
+          <PaletteRow
+            Icon={ArrowsClockwise}
+            label={copy.command.runHealthCheck}
+          />
+        </Command.Item>
+        <Command.Item
+          value="reset default layout window 恢复默认布局 窗口"
+          onSelect={onResetLayout}
+        >
+          <PaletteRow Icon={FrameCorners} label={copy.command.resetLayout} />
+        </Command.Item>
+        <Command.Item value="open settings 设置" onSelect={onOpenSettings}>
+          <PaletteRow
+            Icon={Gear}
+            label={copy.command.openSettings}
+            shortcut={formatShortcutReadable("Mod+,")}
+          />
+        </Command.Item>
+        <Command.Item
+          value="attach ga folder 切换 GA 路径"
+          onSelect={onAttachGAFolder}
+        >
+          <PaletteRow Icon={FolderOpen} label={copy.command.changeGAFolder} />
+        </Command.Item>
+      </Command.Group>
     </>
   );
 }

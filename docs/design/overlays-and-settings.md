@@ -77,10 +77,11 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 - Re-run health check
 - Open settings
 - Attach GA folder（仅 onboarding 已完成、想换路径时）
+- （V0.1 之后加入：New project、Reset window layout）
 
 #### 故意排除（V0.1 不做）
 
-- 跨 session 全文搜索
+- ~~跨 session 全文搜索~~（已落地：FTS5 message 全文命中，见上）
 - Theme switcher（V0.1 light-only）
 - Quick prompt insertion（empty state 已经有）
 - 任何 destructive action（删除 session 之类，Palette 不该让破坏太轻松）
@@ -90,7 +91,13 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 - **Input row**：48px 高 / 17px Inter / placeholder italic muted "搜索 session 或输入命令…" / 左侧 16px Phosphor `MagnifyingGlass` thin / 右侧 `Esc` shortcut hint（13px muted）
 - **Divider**：1px `border-default`
 - **Result row**：36px 高 / 13px Inter / 左侧 16px Phosphor icon / 中间 label / 右侧 keyboard shortcut（如 `⌘N`）灰色 hint
-- **Section header**（仅多组结果时）：11px Inter uppercase tracked `RECENT` / `ACTIONS` / `LLMS` —— 大多数情况下不显示 header（结果少时 header 是噪音）
+- **Section header / 分组**（2026-08-13 裁决，推翻「结果少时不显示」）：root
+  列表已长成四种语义（新建 / 最近会话 / 对话内容命中 / 操作），默认态即
+  15 行——V0.1「结果少时 header 是噪音」的前提不再成立。现规则：
+  - New chat / New project 裸置顶不进组（"New chat 永远第一项"不变）
+  - 其余三组走 cmdk `Command.Group`，组头**始终显示**：`最近会话` /
+    `在对话内容中` / `操作`（10px semibold uppercase tracking 0.08em
+    muted，即原「对话内容」手写头规格；搜索过滤后空组连头自动隐藏）
 - **Hover / 键盘选中态**：背景 `hover-tint`，左侧 2px charcoal 竖条
 - **Empty state**：输入有内容但无匹配 → 中央一行 muted "没找到。Enter 直接发问？" + Enter shortcut（**做** —— 输入框里写的字 Enter 直接 new chat + 把它当第一句 prompt，是对"文档对话工作台"心智的延伸）
 

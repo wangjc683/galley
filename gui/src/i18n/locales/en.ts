@@ -461,6 +461,8 @@ export const enCopy: AppCopy = {
     searchLLM: "Search LLMs…",
     newConversation: "New conversation",
     newProject: "New project",
+    groupRecentSessions: "Recent sessions",
+    groupActions: "Actions",
     inConversationContent: "In conversation content",
     switchLLM: "Switch LLM",
     current: (name) => `Current: ${name}`,

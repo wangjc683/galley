@@ -106,6 +106,20 @@
   scroll-padding: 4px;
 }
 
+/* Group headings — DESIGN.md §8 (2026-08-13): the root list mixes
+   four semantic kinds, so headers always show. Same spec as the
+   former handwritten "对话内容" header. cmdk hides a heading with
+   its group when the query filters out all of the group's items. */
+[cmdk-group-heading] {
+  margin: 0 6px;
+  padding: 12px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-muted);
+}
+
 [cmdk-item] {
   position: relative;
   display: flex;
