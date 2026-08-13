@@ -5,6 +5,7 @@ import {
   MagnifyingGlass,
   Plus,
 } from "@phosphor-icons/react";
+import { useState } from "react";
 
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -44,6 +45,22 @@ export function SidebarQuickActions({
   const newChatLabel = activeProjectName
     ? copy.sidebar.newConversationInProject(activeProjectName)
     : copy.sidebar.newConversation;
+  // One-shot pop when the action count INCREASES — a new item needing
+  // the user landed while they were looking elsewhere; the pop is the
+  // entry beat, the badge itself carries the persistent state (same
+  // philosophy as SidebarSessionRow's attention pop). Decreases stay
+  // silent (the user just handled something — that's not news), and
+  // the mount state is suppressed via prev-count initialization so app
+  // launch doesn't fire a spurious "look here". Render-phase adjust,
+  // same pattern as the session row's popEnabled latch.
+  const [prevScheduledCount, setPrevScheduledCount] = useState(
+    scheduledActionCount,
+  );
+  const [popScheduledBadge, setPopScheduledBadge] = useState(false);
+  if (scheduledActionCount !== prevScheduledCount) {
+    setPrevScheduledCount(scheduledActionCount);
+    setPopScheduledBadge(scheduledActionCount > prevScheduledCount);
+  }
   return (
     <div className="border-b border-line/70 py-1">
       <QuickAction
@@ -65,9 +82,17 @@ export function SidebarQuickActions({
         onClick={onOpenScheduled}
         badge={
           scheduledActionCount > 0 ? (
+            // Keyed on the count so an increase remounts the span with
+            // the pop class already present — the animation plays
+            // exactly on entry, never mid-state (SidebarSessionRow's
+            // keyed-icon idiom).
             <span
+              key={scheduledActionCount}
               title={copy.sidebar.scheduledNeedsAction(scheduledActionCount)}
-              className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-warning/15 px-1 text-[10px] font-semibold tabular-nums text-warning"
+              className={cn(
+                "inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-warning/15 px-1 text-[10px] font-semibold tabular-nums text-warning",
+                popScheduledBadge && "sidebar-state-pop",
+              )}
             >
               {scheduledActionCount}
             </span>
