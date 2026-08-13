@@ -53,6 +53,10 @@ export function SidebarProjectReviewPresence({
           "grid-rows-[0fr] -translate-y-2 opacity-0 duration-(--motion-slow) ease-pop",
         phase === "exiting" &&
           "grid-rows-[0fr] -translate-y-2 opacity-0 duration-(--motion-base) ease-in",
+        // Opacity-0 content is still hit-testable — without this the
+        // exiting view is a phantom click surface for its last 160ms.
+        // Mirrors SidebarTimelinePresence.
+        phase !== "entered" && "pointer-events-none",
       )}
     >
       <div className="min-h-0 overflow-hidden">{children}</div>

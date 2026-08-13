@@ -7,9 +7,15 @@ export type SidebarAttention =
   | "approval"
   | "unread";
 
-export const GLOBAL_TIMELINE_EXIT_MS = 180;
+/** Unmount timers for the two sidebar-mode presences. Contract: must
+ * exceed the exiting transition's duration (--motion-base, 160ms) plus
+ * a settle margin, or the unmount clips the tail of the exit animation
+ * — PROJECT_REVIEW_EXIT_MS sat at 150ms and cut the last 10ms until
+ * 2026-08-12. Same duration-plus-margin shape as RunFoldSection's
+ * unmount delay. */
+export const GLOBAL_TIMELINE_EXIT_MS = 200;
 
-export const PROJECT_REVIEW_EXIT_MS = 150;
+export const PROJECT_REVIEW_EXIT_MS = 200;
 
 export const PROJECT_ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 

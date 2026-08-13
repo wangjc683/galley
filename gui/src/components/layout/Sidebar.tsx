@@ -225,11 +225,20 @@ export function Sidebar({
       projectViewOpen ? "entered" : null,
     );
   const previousProjectViewOpenRef = useRef(projectViewOpen);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const previousProjectViewOpen = previousProjectViewOpenRef.current;
     previousProjectViewOpenRef.current = projectViewOpen;
     if (projectViewOpen === previousProjectViewOpen) return;
+
+    // Mode flip = a new document: snap the shared scroll container to
+    // the top, instantly. Without this, switching modes from a deeply
+    // scrolled list plays the whole entrance choreography above the
+    // fold and lands with a clamp jump once the old view unmounts.
+    // Instant, not smooth — the entrance animation itself supplies
+    // the motion continuity.
+    scrollContainerRef.current?.scrollTo({ top: 0 });
 
     const frameIds: number[] = [];
     const timeoutIds: number[] = [];
@@ -299,7 +308,10 @@ export function Sidebar({
         activeProjectName={activeProject?.name}
       />
 
-      <div className="scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2">
+      <div
+        ref={scrollContainerRef}
+        className="scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2"
+      >
         {projectReviewPhase && (
           <SidebarProjectReviewPresence phase={projectReviewPhase}>
             <SidebarProjectReview
