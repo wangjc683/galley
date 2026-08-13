@@ -8,6 +8,35 @@
 
 ---
 
+## Discord Channel：私人 Server 多频道的并行监督上下文
+
+- **状态**：暂缓（方案与裁决已齐，完整 PRD 见
+  `.scratch/discord-channel/PRD.md`）
+- **提出**：2026-08-13（JC 提议 + 两轮设计讨论；调研覆盖 GA 官方
+  `dcapp.py` 与 Galley IM 架构全量）
+- **启动信号**：真实的海外用户 issue 请求 Discord 接入，或 JC 决定把
+  Galley 推向 Discord 系（海外/开发者）社区。
+- **方案**：第四个 managed Channel，照 Telegram 补丁模板（env 注入 +
+  状态回调 + owner 绑定码）打在 `dcapp.py` 上，但**保留**其 per-channel
+  agent 路由——一个频道 = 一个独立 supervisor 上下文，@提及激活；Server
+  内仍单 owner 绑定，非 owner 静默忽略；V1 不读频道内他人消息。UI 零
+  新设计（ChannelCard 全家桶复用，卡不管频道，激活/退出在 Discord 内
+  完成）。CLI / Agent API 零改动。
+- **实施要点**：唯一硬骨头是完成推送按频道路由（supervisor id 改
+  `galley-im/discord/ch:<id>`，reporter 从单例改按频道实例化，
+  `ChannelAdapter` 抽象已备好）；必修上游债：agent LRU 驱逐泄漏线程
+  （压到 8~16 + 显式 abort）、状态文件从 GA temp 迁 `--state-dir`；
+  `discord.py` 必须进 `GA_DEPS` + 冒烟门禁（勿复制 telegram 缺口，见
+  `.scratch/telegram-bundle-dep/`）。成本估 1.3 × Telegram。
+- **待定**：上游 `configure_mykey.py` 与 `dcapp.py` 的 key 名不一致
+  bug（`dc_bot_token` vs `discord_bot_token`）报不报 upstream。
+- **关联**：Telegram devlog（2026-07-05）的触点清单与「不做 proxy UI」
+  「换 token 不解绑」两条先例直接继承；已否决 DM-only V1（放弃并行
+  上下文的产品价值）、频道↔session 绑定（太僵）、共享单一 supervisor
+  历史（串台）。
+
+---
+
 ## User 消息 copy chip 的锚点（右上 vs 跟随阅读终点）
 
 - **状态**：暂缓（皮肤与间距已在 2026-08-10 修好，只剩锚点未动）
