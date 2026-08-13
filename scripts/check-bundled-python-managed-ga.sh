@@ -71,6 +71,7 @@ import agentmain
 import aiohttp
 import bottle
 import bs4
+import discord
 import dotenv
 import lark_oapi
 import qrcode
@@ -86,12 +87,14 @@ assert callable(getattr(agentmain, "GenericAgent", None))
 assert importlib.util.find_spec("frontends.wechatapp") is not None
 assert importlib.util.find_spec("frontends.fsapp") is not None
 assert importlib.util.find_spec("frontends.tgapp") is not None
+assert importlib.util.find_spec("frontends.dcapp") is not None
 assert AES is not None
 assert Image is not None
 assert aiohttp is not None
 assert bottle is not None
 assert bs4 is not None
 assert desktop_bridge is not None
+assert discord is not None
 assert dotenv is not None
 assert lark_oapi is not None
 assert qrcode is not None

@@ -34,6 +34,7 @@ GA_DEPS=(
   "python-dotenv==1.2.1"
   "lark-oapi==1.6.8"
   "python-telegram-bot==22.8"
+  "discord.py==2.7.1"
 )
 
 ARCH="${1:-}"
