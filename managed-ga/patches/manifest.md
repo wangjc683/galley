@@ -2,14 +2,17 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-08-10` against upstream
-`308153b1c91401a892401dd896e548e587506cc9` (16-patch stack, through `0017`).
-(`0018-managed-discord-galley-integration.patch` was added on `2026-08-13`
-against that same baseline but has not been through a full
-`scripts/build-managed-ga.sh` replay yet — it was verified in isolation:
-applying it to the checked-in pre-patch `frontends/dcapp.py` reproduces the
-committed payload byte-for-byte. Run the full replay with the next baseline
-build; the stack is 17 patches from here on.)
+Last replay verified: `2026-08-13` against upstream
+`308153b1c91401a892401dd896e548e587506cc9` (18-patch stack, through `0019`).
+All 18 patches applied clean from a fresh clone at the audited baseline and the
+rebuilt payload matched the committed `managed-ga/code` byte-for-byte.
+(This replay retired the `v0.4.7` release debt: `0018` and `0019` both landed on
+`2026-08-13` against the same baseline and had only been verified in isolation
+until this run — `0018` against the checked-in pre-patch `frontends/dcapp.py`,
+while `0019` had none, and it is the riskier of the two to leave unreplayed
+because it edits `frontends/fsapp.py`, a file `0009` / `0011` / `0012` / `0013`
+already patch. Note the numbering gap: `0005` is retired, so 18 patches run
+through `0019`.)
 (History from the 2026-08-10 `308153b` upgrade: commit-chain rebase with one
 real conflict. `0007`: upstream raised `BaseSession.__init__`'s context
 defaults (`default_context_win` 30000→35000, `default_cut_msg_interval` 5→7)

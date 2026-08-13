@@ -9,17 +9,45 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.6`.
-- Git tag / GitHub Release: `v0.4.6` is the current published stable release
-  (tagged at `311fc8df` on 2026-08-12, GitHub Latest).
+- Package version: `0.4.7`.
+- Git tag / GitHub Release: `v0.4.7` is being cut (2026-08-13); `v0.4.6` is
+  the last published stable release (tagged at `311fc8df` on 2026-08-12).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.6`.
-  `beta` is kept as a legacy alias for older builds.
+- Release tier: stable patch; default update channel points at `v0.4.6` until
+  `v0.4.7` is published and promoted. `beta` is kept as a legacy alias for
+  older builds.
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.4.7` returns to self-directed work after two user-issue-driven releases.
+Its single headline is the **Discord channel** — Channels' fourth card and the
+first **parallel supervision context**: one channel (or thread) in a private
+Server is an independent supervisor context with its own GA agent instance and
+its own history, under supervisor ids shaped `galley-im/discord/ch:<id>`. The
+single-thread semantics of WeChat / Feishu / Telegram are unchanged. Riding
+along: the Telegram bundling gap (`python-telegram-bot` was missing from
+`GA_DEPS`, so Telegram could not start from a real package), the model-config
+toast missing Telegram, the owner-bind generation race (Feishu and Telegram
+benefit immediately), the next-suggestion leak into IM replies, command-palette
+grouping, and channel setup-copy polish.
+
+Version grading stays **patch** (JC ruling, 2026-08-13) even though precedent
+pointed at minor: Telegram, the third channel, was the headline of `v0.3.0`.
+Two reasons override that precedent — `v0.3.0` also carried the CONC-1..8
+concurrency audit, a 55-finding review, and the independent-product
+repositioning, so its minor was plausibly batch-driven, which the `v0.4.1` rule
+explicitly rejects as grounds; and the parallel-supervision semantics apply to
+Discord alone, making this a fourth card with a channel-local routing
+semantic rather than a product-line reshape. CLI / Agent API are **untouched**
+— supervisor ids are opaque strings and per-channel routing reuses existing
+message-origin schema fields. Product shape, Agent API schema
+(`schemaVersion: 1`), GA baseline (`308153b`), and update-channel policy are
+unchanged. Because `GA_DEPS` and `managed-ga/` both changed, the
+bundled-runtime gate is **mandatory** this release. Full narrative: devlog
+[2026-08-13-v0.4.7-release](./devlog/2026-08-13-v0.4.7-release.md).
 
 `v0.4.6` is the second user-issue-driven release, and all four of its issues
 came from **one reporter** (Kinda2419): galley#19 / #20 / #22 ship here;
@@ -112,7 +140,23 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.6` is published and promoted as the live stable release (2026-08-12).
+`v0.4.7` is **being cut** (2026-08-13): version bumped, all local release gates
+green, awaiting tag → `release.yml` draft → JC install smoke → publish →
+stable-channel promotion. Until that completes, `v0.4.6` remains the live
+stable release and the channel still points at it.
+
+The mandatory gates for this release closed as follows. The **bundled-runtime
+gate** passed on `mac-x64` from scratch (`import discord` and
+`find_spec("frontends.dcapp")` verified under the bundle's own Python);
+`mac-arm64` and `win-x64` cannot be built on the maintainer's Intel machine,
+because `bundle-python.sh` installs deps by *running* the bundled interpreter —
+`release.yml` runs the same script on each platform's runner and fails the
+build at tag time. The **full patch-stack replay** was brought current: all 18
+patches applied clean from a fresh clone at the audited baseline and the
+rebuilt payload matched the committed `managed-ga/code` byte-for-byte, retiring
+the `0018` debt and an unrecorded `0019` debt found in the same pass.
+
+`v0.4.6` was published and promoted as the live stable release (2026-08-12).
 The default `updates/stable/latest.json` channel points at `v0.4.6`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. Both were verified with `--cache-bust` across all three
@@ -151,21 +195,21 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Post-`v0.4.6` work landed 2026-08-13, all pending the next release:
+Nothing. All post-`v0.4.6` work is folded into the `v0.4.7` cut described
+above; JC's real-machine Discord dogfood passed with no findings, so the
+`.scratch/discord-channel/` tracker was disposed per the issue-tracker rule
+(its nine anti-re-proposal rulings were migrated into the
+[shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) first), as
+were the three shipped fix trackers.
 
-- **Discord channel** (fourth managed IM channel, first multi-context one)
-  — implemented end to end, dogfood **in progress** (JC has paired, chatted,
-  and walked setup; remaining acceptance in
-  [shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md)).
-  Tracker `.scratch/discord-channel/` stays until dogfood closes.
-- Fixes riding along: Telegram bundle dep gap (`python-telegram-bot` now in
-  `GA_DEPS` — **release gate**: next `bundle-python.sh` run from scratch must
-  verify both new pins), model-config toast missing Telegram, owner-bind
-  generation race, next-suggestion leak into IM replies
-  ([verdict](./devlog/2026-08-13-im-suggestion-leak.md)), command palette
-  grouping, setup-copy polish.
-- Open trackers: `.scratch/ga-log-retention/` (needs-triage);
-  upstream `dc_*` key-name bug report is still an unmade decision.
+Open tracker carried forward: `.scratch/ga-log-retention/` (needs-triage) —
+the hygiene half left over after Rule 4's interpretation ruling; a retention
+policy for engine-written logs under the managed state root. Decoupled from
+Discord and unscoped, so it waits for the next release.
+
+The upstream `dc_*` / `discord_*` key-name mismatch **will not be reported**
+(JC ruling, 2026-08-13): it cannot affect Galley's managed mode, which injects
+config through env and aligns with dcapp's read side. That vote is closed.
 
 ## Status Dashboard
 
@@ -178,7 +222,8 @@ Post-`v0.4.6` work landed 2026-08-13, all pending the next release:
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.6 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.7 stable patch is being cut; v0.4.6 is still the promoted stable release | [release / update SOP](./release-update-sop.md) |
+| Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Locked to audited upstream `308153b` (audited 2026-08-10, shipped in `v0.4.5` the same day) (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
@@ -203,7 +248,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.4.6`. For the next release, bump every
+- Current package metadata uses `0.4.7`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.

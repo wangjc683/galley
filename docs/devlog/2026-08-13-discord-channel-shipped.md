@@ -18,6 +18,37 @@ Channels 第四张卡 Discord 全链路落地，同日从提案走到实现完�
 CLI / Agent API / `schemaVersion` 零改动——supervisor id 是不透明字符串，
 按频道路由用的是既有 message origin schema 字段。
 
+## 已裁决（防重提案）
+
+自 PRD 迁入，`.scratch/discord-channel/` 随 `v0.4.7` 销毁前的留痕。全部
+由 JC 于 2026-08-13 确认；其中 3 / 4 两条经 Codex 外审修订，细节见
+[外审四票裁决](./2026-08-13-discord-review-verdicts.md)。
+
+1. **V1 形态**：私人 Server 多频道对话。**已推翻** agent 最初的 DM-only
+   提案——后者更贴 Telegram 先例，但放弃了 dcapp 原生的多频道能力和
+   并行上下文的产品价值。
+2. **频道语义**：一个频道 = 一个独立 supervisor 上下文（沿用 dcapp 原生
+   `ch:<channel_id>` 模型）。**已否决**：频道↔session 绑定（session
+   生灭频率远高于频道，太僵）；多频道共享单一 supervisor 历史（消息
+   串台，最糟）。
+3. **访问控制**：Server 内仍是**单 owner 绑定**，非 owner 消息静默忽略
+   ——私人 Server ≠ 单人 Server，bot 背后是能驱动本机 CLI 的 supervisor，
+   不给「Server 成员都能用」开口子。配对只认 DM，Server 频道里只做激活；
+   错误尝试**按用户限流**（5 次），**不继承** Telegram「10 次全局作废」
+   先例——在成员可见 bot 的 Discord 语境里那是一个恶意作废 DoS 按钮。
+4. **频道激活**：沿用上游「@提及激活 + 活跃集持久化（30 天 TTL）」，
+   **不做**「所有频道常开」。
+5. **上下文边界**：激活期间该频道 owner 的**全部**发言都进 agent（上游
+   语义）；不摄取频道内其他成员的消息。「频道讨论摘要」是另一个立项。
+6. **Settings 卡不管频道**：卡片维持 Telegram 形态（token + setup +
+   绑定态 + 状态徽章），频道激活/退出全在 Discord 内完成——在哪对话就
+   在哪管理。最多在 running 态命令参考表里列频道命令。
+7. **不加 Application ID 字段**：setup guide 教用户在 Developer Portal
+   生成邀请链接（少而精；token 解不出 client id）。
+8. **Proxy UI 不做**：沿用 Telegram 裁决（2026-07-05），情境一致。
+9. **完成推送 reporter 做**：对齐飞书 / Telegram 档位（微信缺席是历史
+   遗留，不是范本）。
+
 ## 组合拳分工
 
 本次是两个 agent 会话（Fable / Opus）并行的组合拳，按票的阻塞关系切成
@@ -175,26 +206,29 @@ snowflake，换 token 不解绑；理由写进代码注释防后人「对齐飞�
 `check-managed-ga-payload.mjs` 与 bundled-python 冒烟门禁、
 `git diff --check`。
 
-剩余（都需要 JC 或一次真实构建）：
+剩余项已在 `v0.4.7` 发布准备时全部闭合（2026-08-13）：
 
-- **真机 dogfood 需 JC 建 Discord 应用**：token + 打开 MESSAGE CONTENT
-  INTENT + 一个测试 Server，跑通 DM 配对 → 频道 @ 激活 → 多频道并行
-  → 完成报告回该频道的全链路。外审补的验收门禁一并在此跑：多频道下
-  线程数与 RSS 平台、重启后漏报、跨频道续聊路由、共享频道可见性声明
-  是否到位、archived thread 发送失败路径。
-- **正式包从零重跑 `bundle-python.sh`**，在真实 bundle 里用真 token
-  起一次服务（同 Telegram 先例）。
-- **0018 未过全栈补丁重放**：本机 GA checkout 不在 pin 的 baseline 且
-  是脏的，只做了隔离重放验证（HEAD payload + 0018 → 与提交的 payload
-  逐字节相同）。`patches/manifest.md` 顶部已注明「下次 baseline 构建时
-  补」。
-- `.scratch/discord-channel/` 按 issue-tracker 惯例**留到 dogfood 关闭
-  后**再清理。
+- **真机 dogfood：JC 已完成，未发现问题。**
+- **`bundle-python.sh` 从零重跑：`mac-x64` 绿**，`import discord` +
+  `find_spec("frontends.dcapp")` 在 bundle 自带 python 下验过。
+  `mac-arm64` / `win-x64` **本机不可验**——脚本靠运行 bundle 里的 python
+  装依赖，而维护者机器是 Intel x86_64；这两个 arch 由 `release.yml` 在
+  各自 runner 上跑同一脚本覆盖。「真 bundle 里起真服务」折进安装冒烟时
+  点一次 Discord 开关，不单列。
+- **全栈补丁重放：已补跑，18/18 干净应用，重建 payload 与仓库中成品
+  零差异。** 用的是 `build-managed-ga.sh` 自己写明的出路（干净临时
+  clone at audited baseline），全程未碰维护者的 checkout。同批发现
+  `0019` 也从未过全栈重放，且它改的 `frontends/fsapp.py` 正是
+  `0009` / `0011` / `0012` / `0013` 都改过的文件，而 `manifest.md` 头部
+  漏记了它的存在——已一并修正。原委见
+  [v0.4.7 发布](./2026-08-13-v0.4.7-release.md)。
+- `.scratch/discord-channel/` 已随 `v0.4.7` 销毁，durable 内容（含上面
+  「已裁决」九条）先迁入本篇。
 
-## 仍开放的一票
+## 那一票的裁决：不报 upstream
 
 上游 `configure_mykey.py` 写 `dc_bot_token` / `dc_allowed_users`，而
 `dcapp.py` 读 `discord_bot_token` / `discord_allowed_users`——官方配置器
-配出来的 Discord 跑不起来。对 Galley managed 模式无影响（env 注入绕开
-mykeys，且我们对齐的是 dcapp 的读侧）。**报不报 upstream 仍待 JC 裁决**，
-不阻塞任何事。
+配出来的 Discord 跑不起来。**JC 裁决不报**（2026-08-13）：对 Galley
+managed 模式无影响（env 注入绕开 mykeys，且我们对齐的是 dcapp 的读侧）。
+此票关闭，不再挂账。
