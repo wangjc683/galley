@@ -37,7 +37,10 @@ def build_help_text(commands=HELP_COMMANDS):
 
 HELP_TEXT = build_help_text()
 FILE_HINT = "If you need to show files to user, use [FILE:filepath] in your response."
-TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content")]
+# next-suggestion is Galley's workbench-composer tag; the managed prompt no
+# longer mandates it on IM surfaces, but a model can still imitate it from
+# pre-fix conversation history, so IM display strips it defensively.
+TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")]
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESTORE_GLOBS = (
     os.path.join(PROJECT_ROOT, "temp", "model_responses", "model_responses_*.txt"),

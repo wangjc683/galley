@@ -1,0 +1,17 @@
+diff --git a/frontends/chatapp_common.py b/frontends/chatapp_common.py
+--- a/frontends/chatapp_common.py
++++ b/frontends/chatapp_common.py
+@@ -40 +40,4 @@ FILE_HINT = "If you need to show files to user, use [FILE:filepath] in your resp
+-TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content")]
++# next-suggestion is Galley's workbench-composer tag; the managed prompt no
++# longer mandates it on IM surfaces, but a model can still imitate it from
++# pre-fix conversation history, so IM display strips it defensively.
++TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")]
+diff --git a/frontends/fsapp.py b/frontends/fsapp.py
+--- a/frontends/fsapp.py
++++ b/frontends/fsapp.py
+@@ -84 +84,3 @@ from frontends.chatapp_common import AgentChatMixin, FILE_HINT, split_text
+-_TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content")]
++# next-suggestion: Galley workbench-composer tag, stripped defensively —
++# see the same note in chatapp_common.TAG_PATS.
++_TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")]
