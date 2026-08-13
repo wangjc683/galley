@@ -1015,8 +1015,65 @@ code {
     opacity: 0.78;
   }
 }
-.streaming-cursor {
+
+/* Streaming-path presentation (`streaming-prose` — MainView's
+   in-flight partial only; settled turns render without the class,
+   the same display/settled separation as mendStreamingMarkdown).
+
+   Block entrance: each new top-level block / list item fades in once,
+   opacity 0.4 → 1 rather than 0 → 1 — at --motion-base scale a
+   from-zero fade reads as flicker while 0.4 reads as "already
+   arriving" (the waku toast lesson, 2026-08-12 devlog). One-shot
+   keyframe on element creation: the stream is append-only, so
+   settled blocks keep their tree position across markdown re-parses
+   and never replay; a tail block that restructures mid-stream
+   (paragraph becoming a list) remounts and re-fades once, masked by
+   its own content change. Word-level entrances were adjudicated
+   against (2026-08-13): stable per-word spans fight react-markdown
+   reconciliation — every residual mend backtrack would re-blur read
+   text — and glossy word-resolve is the register Galley avoids.
+
+   Inline cursor: the caret rides at the end of the last block's text
+   via ::after — the reader's eye is at the last word, and that is
+   where the liveness signal belongs (it used to sit on its own line
+   below the markdown block). A pseudo-element has zero interaction
+   with react-markdown reconciliation. Block-shaped tails (tables,
+   pre) park the caret at the block edge instead of mid-text — known
+   and acceptable. Brand-tinted at 70% like the StreamingCursor
+   component it replaces. */
+@keyframes stream-block-in {
+  from {
+    opacity: 0.4;
+  }
+}
+.streaming-prose > *,
+.streaming-prose li {
+  animation: stream-block-in var(--motion-base) ease-out both;
+}
+.streaming-prose > :last-child:not(ul):not(ol)::after,
+.streaming-prose > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  transform: translateY(2px);
+  background-color: color-mix(
+    in oklab,
+    var(--color-brand-strong) 70%,
+    transparent
+  );
   animation: streaming-cursor-breath 1.55s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .streaming-prose > *,
+  .streaming-prose li {
+    animation: none;
+  }
+  .streaming-prose > :last-child:not(ul):not(ol)::after,
+  .streaming-prose > :is(ul, ol):last-child > li:last-child::after {
+    animation: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1026,8 +1083,7 @@ code {
   .sidebar-liveness-tick,
   .sidebar-step-tick,
   .sidebar-state-pop,
-  .live-dot,
-  .streaming-cursor {
+  .live-dot {
     animation: none;
     opacity: 1;
     filter: none;

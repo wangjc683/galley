@@ -1,29 +1,9 @@
 import { cn } from "@/lib/utils";
 
-/**
- * Blinking cursor appended to mid-turn streaming content. GA throttles
- * its display_queue to push ~50-char deltas, which without this
- * affordance creates the "chunk appears, then dead silence, then
- * another chunk" experience the user reported. The cursor keeps a
- * liveness signal on screen during the gap between pushes.
- *
- * A deeper fix requires a GA-side streaming-granularity change. This is
- * the UI-side mitigation only.
- *
- * Width 2px / height 1em matches a thin caret; brand-tinted at 70%
- * so it reads as agentic, not a system caret.
- */
-export function StreamingCursor({ className }: { className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "streaming-cursor ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] bg-brand-strong/70 align-baseline",
-        className,
-      )}
-    />
-  );
-}
+// StreamingCursor (the standalone caret component) retired 2026-08-13:
+// the streaming caret now lives in globals.css as `streaming-prose`'s
+// ::after pseudo-element, riding inline at the end of the last block's
+// text instead of on its own line below the markdown.
 
 /**
  * Three-dot "working" indicator. One affordance localized to three

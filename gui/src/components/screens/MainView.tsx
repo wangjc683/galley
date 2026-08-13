@@ -17,7 +17,6 @@ import { ConversationSkeleton } from "@/components/conversation/ConversationSkel
 import { GoalRunningTail } from "@/components/conversation/GoalRunMarkers";
 import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
 import { GoalWorkerContextBar } from "@/components/conversation/GoalWorkerContextBar";
-import { StreamingCursor } from "@/components/conversation/LiveIndicators";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
@@ -485,10 +484,13 @@ export function MainView({
                   display_queue chunks from turn_progress IPC events.
                   Replaced by the canonical AgentTurn the moment
                   turn_end fires (store clears inFlightContent in
-                  appendAgentTurn). StreamingCursor below the markdown
-                  gives liveness feedback during the gaps between GA's
-                  ~50-char delta pushes — without it the partial reads
-                  as "stalled" between chunks.
+                  appendAgentTurn). `streaming-prose` (globals.css) is
+                  the display-only presentation layer: an inline caret
+                  rides the last block's text via ::after — liveness at
+                  the point the eye actually follows during the gaps
+                  between GA's ~50-char delta pushes — and new blocks
+                  soft-fade in (0.4 → 1). Settled turns render without
+                  the class, so none of it survives the swap.
                   `markdownPartial` is the typewriter + parse-throttled
                   view of `visiblePartial`. The condition gates on
                   visiblePartial (so the placeholder→partial swap
@@ -497,12 +499,11 @@ export function MainView({
                   so content reveals smoothly without re-parsing the
                   whole document on every rAF tick. */}
                 {visiblePartial && (
-                  <>
-                    <MarkdownView source={markdownPartial} variant="agent" />
-                    <div className="mt-1 leading-none">
-                      <StreamingCursor />
-                    </div>
-                  </>
+                  <MarkdownView
+                    source={markdownPartial}
+                    variant="agent"
+                    className="streaming-prose"
+                  />
                 )}
               </div>
             )}
