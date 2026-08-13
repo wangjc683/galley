@@ -21,6 +21,7 @@ import { ChannelErrorBlock } from "./ChannelErrorBlock";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { DiscordCommandReference } from "./CommandReference";
 import { ConnectionSteps } from "./ConnectionSteps";
+import { stepWithLink } from "./step-link";
 import { DiscordGlyph } from "./Glyphs";
 import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
@@ -208,7 +209,15 @@ export function DiscordCard({
         <div className="space-y-4 pl-8 pr-1">
           <ConnectionSteps
             steps={
-              running ? imCopy.discordConnectedSteps : imCopy.discordSetupSteps
+              running
+                ? imCopy.discordConnectedSteps
+                : imCopy.discordSetupSteps.map((step) =>
+                    stepWithLink(
+                      step,
+                      "Discord Developer Portal",
+                      "https://discord.com/developers/applications",
+                    ),
+                  )
             }
             status={discordStatusHintForState(derivedState, imCopy)}
           />

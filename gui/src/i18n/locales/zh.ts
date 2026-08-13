@@ -1187,7 +1187,7 @@ export const zhCopy = {
         "解绑后机器人立即停止响应当前使用者。若服务正在运行，会自动重启并生成新的配对码，在飞书私聊中发送新码即可重新绑定。",
       telegramTitle: "Telegram",
       telegramSetupSteps: [
-        "在 Telegram 搜索 @BotFather，发送 /newbot 创建机器人并获取 Bot Token。",
+        "在 Telegram 打开 {link}，发送 /newbot 创建机器人并获取 Bot Token。",
         "把 Bot Token 粘贴到下面并保存凭证。",
         "启动服务，然后私聊机器人发送配对码完成绑定。",
       ],
@@ -1238,13 +1238,13 @@ export const zhCopy = {
         "这会停止 Telegram 接入并删除已保存的 Bot Token；下次重新接入需要再粘贴 Token。",
       discordTitle: "Discord",
       discordSetupSteps: [
-        "在 Discord Developer Portal 新建应用，进入 Bot 页面复制 Bot Token。",
-        "在同一个 Bot 页面打开 MESSAGE CONTENT INTENT——不打开的症状是机器人显示在线但对任何消息都不回复。",
-        "在 OAuth2 页面勾选 bot 作用域生成邀请链接，把机器人拉进你自己的 Server：Discord 机器人只能收到它所在 Server 的消息。",
-        "保存 Token 并启动服务后，私聊（DM）机器人发送 6 位配对码完成绑定，再到目标频道 @ 提及机器人激活该频道。",
+        "在 {link} 新建应用，进入 Bot 页复制 Token。",
+        "同页打开 MESSAGE CONTENT INTENT 开关。",
+        "在 OAuth2 页勾选 bot 作用域和 Administrator 权限，用生成的邀请链接把机器人加进你的 Server。",
+        "启动服务后，私聊机器人发送配对码完成绑定；再到频道里 @ 它激活。",
       ],
       discordConnectedSteps: [
-        "在目标频道 @ 提及机器人即可激活该频道；每个频道（子区同理）是一条独立的对话上下文。",
+        "@ 提及机器人激活频道；每个频道/子区是独立的对话上下文。",
         "激活后你在该频道的发言都会交给 Galley，结果回复在同一频道。",
         "保持 Galley 运行，Discord 入口会持续可用。",
       ],

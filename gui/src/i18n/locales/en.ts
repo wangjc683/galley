@@ -1240,7 +1240,7 @@ export const enCopy: AppCopy = {
         "The bot immediately stops responding to the current owner. If the service is running, it restarts with a fresh pairing code — DM the new code to pair again.",
       telegramTitle: "Telegram",
       telegramSetupSteps: [
-        "Search @BotFather in Telegram, send /newbot to create a bot and get its Bot Token.",
+        "Open {link} in Telegram, send /newbot to create a bot and get its Bot Token.",
         "Paste the Bot Token below and save it.",
         "Start the service, then DM the pairing code to the bot to pair.",
       ],
@@ -1293,13 +1293,13 @@ export const enCopy: AppCopy = {
         "This stops the Telegram channel and deletes the saved Bot Token; reconnecting later needs the token again.",
       discordTitle: "Discord",
       discordSetupSteps: [
-        "Create an application in the Discord Developer Portal, open its Bot page and copy the Bot Token.",
-        "Turn on MESSAGE CONTENT INTENT on that same Bot page — without it the bot shows as online but never replies to anything.",
-        "On the OAuth2 page generate an invite link with the bot scope and add the bot to your own server: a Discord bot only receives messages in servers it has joined.",
-        "Save the token and start the service, then DM the bot the 6-digit pairing code to pair, and @-mention the bot in a channel to activate that channel.",
+        "Create an application in the {link}, open its Bot page and copy the token.",
+        "On the same page, turn on the MESSAGE CONTENT INTENT switch.",
+        "On the OAuth2 page, check the bot scope and the Administrator permission, then use the generated invite link to add the bot to your server.",
+        "Start the service, DM the bot the pairing code to pair, then @-mention it in a channel to activate.",
       ],
       discordConnectedSteps: [
-        "@-mention the bot in a channel to activate it; every channel (and thread) is its own conversation context.",
+        "@-mention the bot to activate a channel; every channel/thread is its own conversation context.",
         "Once activated, everything you say in that channel goes to Galley, and replies come back in the same channel.",
         "Keep Galley running to keep the Discord entry available.",
       ],

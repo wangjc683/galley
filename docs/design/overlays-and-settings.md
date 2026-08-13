@@ -301,12 +301,25 @@ Runtime tab 的任何问题）。
   编号步骤 + `OwnerBoundRow` / `BindCodeCallout` + `StatusBadge` +
   `ChannelActionsMenu` + running 态换命令参考表），primary 互斥规则、
   换 Bot Token 不清除绑定（Discord user id 是全局 snowflake）均随
-  Telegram。setup 是 4 步：Developer Portal 建应用拿 token → 打开
-  **MESSAGE CONTENT INTENT** → OAuth2 生成邀请链接把 bot 拉进自己的
-  Server → 保存 token 启动服务后 DM 配对码，再到目标频道 @ 提及激活。
-  第 2 步文案按症状倒推写（「显示在线但对任何消息都不回复」= 没开
-  Intent），第 3 步是 Discord 独有的一步：bot 只能收到它所在 Server 的
-  消息。
+  Telegram。setup 是 4 步：Developer Portal（**可点外链**）建应用拿
+  token → 打开 **MESSAGE CONTENT INTENT** → OAuth2 勾 bot 作用域 +
+  **Administrator 权限**生成邀请链接、把 bot 加进自己的 Server →
+  启动服务后 DM 配对码，再到频道 @ 提及激活。
+  三条文案裁决（2026-08-13 dogfood 后修订）：
+  - **步骤只引路，诊断归错误态**：初版第 2 步带「在线但不回复 = 没开
+    Intent」的症状倒推句，落地后连接状态机已把
+    `PrivilegedIntentsRequired` 判成永久错误并在错误详情里直说开关
+    位置，教程里的症状句成了冗余，删——引路归教程、诊断归错误态。
+  - **权限引导勾 Administrator**：缺权限（如 View Channel）的失败是
+    静默的——bot 收不到 @ 提及、无异常可分类、状态机无能为力。私人
+    Server 语境下一次给足是消灭这类不可诊断坑的最省事默认；trade-off
+    （token 泄露 = 该 Server 被完全接管）在私人 Server 爆炸半径下可
+    接受。若教程将来要服务共享/社区 Server，这条默认必须重审。
+  - **专有名词可点外链**：`stepWithLink`（`im/step-link.tsx`）用
+    `{link}` 占位符把 copy 里的 Portal / @BotFather 换成 inline 外链
+    （样式随 `SettingsUpdateControl` 的 anchor 先例：brand 色 +
+    下划线 + `ArrowSquareOut`）；`ConnectionSteps` 的 steps 宽化为
+    `ReactNode[]`。Telegram 第 1 步的 @BotFather 同步链接化。
 - Discord 卡与 Telegram 卡的刻意差异（Discord 是第一个「一个频道 = 一个
   独立 supervisor 上下文」的渠道，卡片本身不管理频道，频道生灭全在
   Discord 内完成）：

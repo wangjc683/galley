@@ -21,6 +21,7 @@ import { ChannelErrorBlock } from "./ChannelErrorBlock";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { TelegramCommandReference } from "./CommandReference";
 import { ConnectionSteps } from "./ConnectionSteps";
+import { stepWithLink } from "./step-link";
 import { TelegramGlyph } from "./Glyphs";
 import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
@@ -206,7 +207,11 @@ export function TelegramCard({
         <div className="space-y-4 pl-8 pr-1">
           <ConnectionSteps
             steps={
-              running ? imCopy.telegramConnectedSteps : imCopy.telegramSetupSteps
+              running
+                ? imCopy.telegramConnectedSteps
+                : imCopy.telegramSetupSteps.map((step) =>
+                    stepWithLink(step, "@BotFather", "https://t.me/BotFather"),
+                  )
             }
             status={telegramStatusHintForState(derivedState, imCopy)}
           />
