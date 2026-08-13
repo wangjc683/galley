@@ -1291,6 +1291,68 @@ export const enCopy: AppCopy = {
       telegramDisconnectDialogTitle: "Disconnect Telegram?",
       telegramDisconnectDialogBody:
         "This stops the Telegram channel and deletes the saved Bot Token; reconnecting later needs the token again.",
+      discordTitle: "Discord",
+      discordSetupSteps: [
+        "Create an application in the Discord Developer Portal, open its Bot page and copy the Bot Token.",
+        "Turn on MESSAGE CONTENT INTENT on that same Bot page — without it the bot shows as online but never replies to anything.",
+        "On the OAuth2 page generate an invite link with the bot scope and add the bot to your own server: a Discord bot only receives messages in servers it has joined.",
+        "Save the token and start the service, then DM the bot the 6-digit pairing code to pair, and @-mention the bot in a channel to activate that channel.",
+      ],
+      discordConnectedSteps: [
+        "@-mention the bot in a channel to activate it; every channel (and thread) is its own conversation context.",
+        "Once activated, everything you say in that channel goes to Galley, and replies come back in the same channel.",
+        "Keep Galley running to keep the Discord entry available.",
+      ],
+      discordNotConnectedHint:
+        "Create an app in the Developer Portal to get a Bot Token first, save it, then start the service.",
+      discordStartingHint: "Starting the Discord service.",
+      discordReconnectingHint: "Discord connection is retrying.",
+      discordRunningHint:
+        "Discord service is running. @-mention the bot in a server channel to activate that channel.",
+      discordErrorHint:
+        "Connection problem. Check the Bot Token, that MESSAGE CONTENT INTENT is on, and your network (Discord must be reachable), then retry.",
+      discordStoppedHint: "Bot Token saved. Click Start to bring the service up.",
+      discordServiceStarted: "Service running",
+      discordNotStarted: "Not started",
+      discordBotTokenLabel: "Bot Token",
+      discordBotTokenPlaceholder: "MTA1…",
+      discordTokenSavedPlaceholder: "Saved — leave blank to keep it",
+      discordSaveCredentials: "Save credentials",
+      discordStartService: "Start Discord service",
+      discordConfigLoading: "Loading Discord config…",
+      discordTextCommandsTitle: "Discord channel and text commands",
+      discordTextCommandsHint:
+        "An @-mention activates a channel; the rest are sent as plain text in an activated channel.",
+      discordTextCommands: [
+        { command: "@bot", description: "Activate this channel or thread" },
+        {
+          command: "退出该频道",
+          description: "Leave the channel (in a thread: 退出该子区)",
+        },
+        { command: "/llm", description: "List and switch models" },
+        { command: "/stop", description: "Stop the current task" },
+        { command: "/new", description: "Start a new conversation" },
+        { command: "/status", description: "Show runtime status" },
+      ],
+      discordBindWaitingTitle: "Waiting for owner pairing",
+      discordBindWaitingLead: "DM the pairing code to the bot in Discord:",
+      discordBindWaitingAfterCode:
+        "Pairing only works in a DM; whoever sends the code becomes the only user the bot responds to.",
+      discordOwnerSecurityNote:
+        "Galley is a personal assistant: for safety the bot only responds to its paired owner. Messages from anyone else in the server are ignored without a reply.",
+      discordChannelVisibilityNote:
+        "In a channel, the bot's replies, generated files and completion reports are visible to every member who can see that channel — keep private work in a channel only you can see.",
+      discordChannelScopeNote:
+        "Once a channel is activated, everything you say there goes to Galley; send 退出该频道 (in a thread: 退出该子区) to leave.",
+      discordBoundLabel: "Paired owner",
+      discordBoundAt: "Paired at",
+      discordUnbind: "Unpair",
+      discordUnbindDialogTitle: "Unpair the Discord owner?",
+      discordUnbindDialogBody:
+        "The bot immediately stops responding to the current owner. If the service is running, it restarts with a fresh pairing code — DM the new code to pair again.",
+      discordDisconnectDialogTitle: "Disconnect Discord?",
+      discordDisconnectDialogBody:
+        "This stops the Discord channel and deletes the saved Bot Token; reconnecting later needs the token again.",
     },
   },
   onboarding: {

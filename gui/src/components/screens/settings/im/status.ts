@@ -51,3 +51,22 @@ export function telegramStatusHintForState(
     stopped: imCopy.telegramStoppedHint,
   }[state];
 }
+
+export function discordStatusHintForState(
+  state: ImSupervisorState,
+  imCopy: ImCopy,
+) {
+  return {
+    not_connected: imCopy.discordNotConnectedHint,
+    starting: imCopy.discordStartingHint,
+    // Same as Telegram: `waiting_scan` is the WeChat QR state and no
+    // Discord bridge ever reports it. Owner pairing surfaces through the
+    // pairing-code callout, not through a state hint.
+    waiting_scan: imCopy.discordStartingHint,
+    reconnecting: imCopy.discordReconnectingHint,
+    running: imCopy.discordRunningHint,
+    expired: imCopy.discordErrorHint,
+    error: imCopy.discordErrorHint,
+    stopped: imCopy.discordStoppedHint,
+  }[state];
+}

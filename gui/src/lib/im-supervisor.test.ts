@@ -35,4 +35,17 @@ describe("aggregateChannelsState", () => {
   it("falls back to the first present state for same-tier inputs", () => {
     expect(aggregateChannelsState(["stopped"])).toBe("stopped");
   });
+
+  it("keeps the same severity order across all four channels", () => {
+    // WeChat / Feishu / Telegram / Discord — the arity the callers feed in.
+    expect(
+      aggregateChannelsState(["running", "stopped", null, "error"]),
+    ).toBe("error");
+    expect(
+      aggregateChannelsState([null, "stopped", "running", "starting"]),
+    ).toBe("starting");
+    expect(
+      aggregateChannelsState(["stopped", null, undefined, "running"]),
+    ).toBe("running");
+  });
 });

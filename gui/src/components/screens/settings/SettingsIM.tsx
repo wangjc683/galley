@@ -6,6 +6,7 @@ import {
 import { useState } from "react";
 
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import { DiscordCard } from "@/components/screens/settings/im/DiscordCard";
 import { FeishuCard } from "@/components/screens/settings/im/FeishuCard";
 import { TelegramCard } from "@/components/screens/settings/im/TelegramCard";
 import { WeChatCard } from "@/components/screens/settings/im/WeChatCard";
@@ -48,16 +49,25 @@ export function SettingsIM({
     setStatus: setTelegramStatus,
     loadError: telegramStatusLoadError,
   } = useImSupervisorStatus("telegram", hasManagedRuntimeConfigured);
+  const {
+    status: discordStatus,
+    setStatus: setDiscordStatus,
+    loadError: discordStatusLoadError,
+  } = useImSupervisorStatus("discord", hasManagedRuntimeConfigured);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [invokeError, setInvokeError] = useState<string | null>(null);
   const [confirmRestartOpen, setConfirmRestartOpen] = useState(false);
-  const hasEnabledChannel = [wechatStatus, feishuStatus, telegramStatus].some(
-    (status) => status?.enabled,
-  );
+  const hasEnabledChannel = [
+    wechatStatus,
+    feishuStatus,
+    telegramStatus,
+    discordStatus,
+  ].some((status) => status?.enabled);
   const hasStaleEnabledChannel = [
     wechatStatus,
     feishuStatus,
     telegramStatus,
+    discordStatus,
   ].some((status) => status?.enabled && status.modelConfigStale);
 
   const runAction = async (
@@ -90,6 +100,10 @@ export function SettingsIM({
       const telegram = statuses.find((item) => item.platform === "telegram");
       if (telegram) {
         setTelegramStatus(telegram);
+      }
+      const discord = statuses.find((item) => item.platform === "discord");
+      if (discord) {
+        setDiscordStatus(discord);
       }
       useUiStore.getState().pushToast(
         makeAppError({
@@ -214,6 +228,11 @@ export function SettingsIM({
             status={telegramStatus}
             statusLoadError={telegramStatusLoadError}
             onStatusChange={setTelegramStatus}
+          />
+          <DiscordCard
+            status={discordStatus}
+            statusLoadError={discordStatusLoadError}
+            onStatusChange={setDiscordStatus}
           />
 
           {hasEnabledChannel && !hasStaleEnabledChannel && (

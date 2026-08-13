@@ -42,6 +42,7 @@ export function useModelConfigSavedToast() {
         getImSupervisorStatus("wechat"),
         getImSupervisorStatus("feishu"),
         getImSupervisorStatus("telegram"),
+        getImSupervisorStatus("discord"),
       ])
         .then((results) =>
           push(

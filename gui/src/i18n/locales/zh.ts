@@ -1236,6 +1236,65 @@ export const zhCopy = {
       telegramDisconnectDialogTitle: "解除 Telegram 接入？",
       telegramDisconnectDialogBody:
         "这会停止 Telegram 接入并删除已保存的 Bot Token；下次重新接入需要再粘贴 Token。",
+      discordTitle: "Discord",
+      discordSetupSteps: [
+        "在 Discord Developer Portal 新建应用，进入 Bot 页面复制 Bot Token。",
+        "在同一个 Bot 页面打开 MESSAGE CONTENT INTENT——不打开的症状是机器人显示在线但对任何消息都不回复。",
+        "在 OAuth2 页面勾选 bot 作用域生成邀请链接，把机器人拉进你自己的 Server：Discord 机器人只能收到它所在 Server 的消息。",
+        "保存 Token 并启动服务后，私聊（DM）机器人发送 6 位配对码完成绑定，再到目标频道 @ 提及机器人激活该频道。",
+      ],
+      discordConnectedSteps: [
+        "在目标频道 @ 提及机器人即可激活该频道；每个频道（子区同理）是一条独立的对话上下文。",
+        "激活后你在该频道的发言都会交给 Galley，结果回复在同一频道。",
+        "保持 Galley 运行，Discord 入口会持续可用。",
+      ],
+      discordNotConnectedHint:
+        "先在 Developer Portal 建应用拿到 Bot Token，保存后启动服务。",
+      discordStartingHint: "正在启动 Discord 服务。",
+      discordReconnectingHint: "Discord 连接正在重试。",
+      discordRunningHint:
+        "Discord 服务运行中。在 Server 频道里 @ 提及机器人即可激活该频道。",
+      discordErrorHint:
+        "接入异常。检查 Bot Token、MESSAGE CONTENT INTENT 是否开启，以及网络环境（需要能访问 Discord）后重试。",
+      discordStoppedHint: "Bot Token 已保存。点击启动服务即可接入。",
+      discordServiceStarted: "服务已启动",
+      discordNotStarted: "未启动",
+      discordBotTokenLabel: "Bot Token",
+      discordBotTokenPlaceholder: "MTA1…",
+      discordTokenSavedPlaceholder: "已保存，留空保持不变",
+      discordSaveCredentials: "保存凭证",
+      discordStartService: "启动 Discord 服务",
+      discordConfigLoading: "正在读取 Discord 配置…",
+      discordTextCommandsTitle: "Discord 频道与文本命令",
+      discordTextCommandsHint:
+        "@ 提及用于激活频道；其余命令在已激活的频道里直接发送。",
+      discordTextCommands: [
+        { command: "@机器人", description: "激活该频道或子区" },
+        { command: "退出该频道", description: "退出该频道（子区发「退出该子区」）" },
+        { command: "/llm", description: "查看并切换模型" },
+        { command: "/stop", description: "停止当前任务" },
+        { command: "/new", description: "开始新对话" },
+        { command: "/status", description: "查看运行状态" },
+      ],
+      discordBindWaitingTitle: "等待绑定使用者",
+      discordBindWaitingLead: "在 Discord 私聊中向机器人发送配对码：",
+      discordBindWaitingAfterCode:
+        "配对只在私聊中生效；发送配对码的人将成为机器人唯一响应的使用者。",
+      discordOwnerSecurityNote:
+        "Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，Server 内其他人的消息会被静默忽略。",
+      discordChannelVisibilityNote:
+        "机器人在频道里的回复、生成的文件与完成报告，对该频道所有可见成员公开；私密内容请放在只有你可见的频道。",
+      discordChannelScopeNote:
+        "频道一旦激活，你在该频道的全部发言都会交给 Galley；发送「退出该频道」（子区发「退出该子区」）即可退出。",
+      discordBoundLabel: "已绑定使用者",
+      discordBoundAt: "绑定于",
+      discordUnbind: "解绑",
+      discordUnbindDialogTitle: "解绑 Discord 使用者？",
+      discordUnbindDialogBody:
+        "解绑后机器人立即停止响应当前使用者。若服务正在运行，会自动重启并生成新的配对码，在 Discord 私聊中发送新码即可重新绑定。",
+      discordDisconnectDialogTitle: "解除 Discord 接入？",
+      discordDisconnectDialogBody:
+        "这会停止 Discord 接入并删除已保存的 Bot Token；下次重新接入需要再粘贴 Token。",
     },
   },
   onboarding: {

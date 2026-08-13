@@ -9,7 +9,7 @@ import { makeAppError } from "@/types/app-error";
 import type { AppError } from "@/types/app-error";
 
 /**
- * The three IM channel status feeds (WeChat / Feishu / Telegram) plus
+ * The four IM channel status feeds (WeChat / Feishu / Telegram / Discord) plus
  * their MainHeader aggregate and the toast-driven "restart channels"
  * action. `useImSupervisorStatus` holds per-instance polling state, so
  * this hook must be mounted exactly once (App) and its outputs passed
@@ -28,18 +28,21 @@ export function useChannelsStatus({
   const wechatChannelsStatus = useImSupervisorStatus("wechat", enabled);
   const feishuChannelsStatus = useImSupervisorStatus("feishu", enabled);
   const telegramChannelsStatus = useImSupervisorStatus("telegram", enabled);
+  const discordChannelsStatus = useImSupervisorStatus("discord", enabled);
 
   const channelsState: ImSupervisorState | null = enabled
     ? aggregateChannelsState([
         wechatChannelsStatus.status?.state,
         feishuChannelsStatus.status?.state,
         telegramChannelsStatus.status?.state,
+        discordChannelsStatus.status?.state,
       ])
     : null;
   const channelsLoadError = enabled
     ? (wechatChannelsStatus.loadError ??
       feishuChannelsStatus.loadError ??
-      telegramChannelsStatus.loadError)
+      telegramChannelsStatus.loadError ??
+      discordChannelsStatus.loadError)
     : null;
 
   const restartChannels = async () => {
@@ -58,6 +61,10 @@ export function useChannelsStatus({
       );
       if (telegram) {
         telegramChannelsStatus.setStatus(telegram);
+      }
+      const discord = statuses.find((status) => status.platform === "discord");
+      if (discord) {
+        discordChannelsStatus.setStatus(discord);
       }
       pushToast(
         makeAppError({

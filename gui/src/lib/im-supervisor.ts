@@ -10,7 +10,11 @@ export type ImSupervisorState =
   | "error"
   | "stopped";
 
-export type ImSupervisorPlatform = "wechat" | "feishu" | "telegram";
+export type ImSupervisorPlatform =
+  | "wechat"
+  | "feishu"
+  | "telegram"
+  | "discord";
 
 export interface ImSupervisorStatus {
   platform: ImSupervisorPlatform;
@@ -22,8 +26,9 @@ export interface ImSupervisorStatus {
   lastError?: string | null;
   modelConfigRevision?: string | null;
   modelConfigStale: boolean;
-  /** Owner-paired channels (Feishu / Telegram): the bound owner's id
-   * (Feishu open_id / Telegram user id — the bot answers only them). */
+  /** Owner-paired channels (Feishu / Telegram / Discord): the bound
+   * owner's id (Feishu open_id / Telegram user id / Discord snowflake —
+   * the bot answers only them). */
   ownerOpenId?: string | null;
   /** Owner-paired channels: pairing code while running unbound — DM it
    * to bind. */
@@ -120,6 +125,39 @@ export function deleteTelegramImConfig() {
  */
 export function unbindTelegramImOwner() {
   return invoke<ImSupervisorStatus>("unbind_telegram_im_owner");
+}
+
+export interface DiscordImConfig {
+  hasBotToken: boolean;
+  updatedAt?: string | null;
+  ownerUserId?: string | null;
+  ownerBoundAt?: string | null;
+}
+
+export interface SaveDiscordImConfigInput {
+  /** Blank / undefined keeps the already-saved token (never echoed back). */
+  botToken?: string | null;
+}
+
+export function getDiscordImConfig() {
+  return invoke<DiscordImConfig>("get_discord_im_config");
+}
+
+export function saveDiscordImConfig(input: SaveDiscordImConfigInput) {
+  return invoke<DiscordImConfig>("save_discord_im_config", { input });
+}
+
+export function deleteDiscordImConfig() {
+  return invoke<DiscordImConfig>("delete_discord_im_config");
+}
+
+/**
+ * Unpair the Discord owner. Same semantics as the Telegram unbind: a live
+ * bot restarts locked with a fresh pairing code in the returned status,
+ * and the code is only accepted in a DM (server channels only activate).
+ */
+export function unbindDiscordImOwner() {
+  return invoke<ImSupervisorStatus>("unbind_discord_im_owner");
 }
 
 /**

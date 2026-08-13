@@ -20,6 +20,16 @@ export function TelegramCommandReference({ imCopy }: { imCopy: ImCopy }) {
   );
 }
 
+export function DiscordCommandReference({ imCopy }: { imCopy: ImCopy }) {
+  return (
+    <TextCommandReference
+      title={imCopy.discordTextCommandsTitle}
+      hint={imCopy.discordTextCommandsHint}
+      commands={imCopy.discordTextCommands}
+    />
+  );
+}
+
 export function WeChatCommandReference({ imCopy }: { imCopy: ImCopy }) {
   return (
     <TextCommandReference
