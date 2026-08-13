@@ -296,6 +296,39 @@ Runtime tab 的任何问题）。
   （Telegram user id 全局，飞书 open_id 是应用作用域）。「保存凭证 / 启动
   服务」沿用 primary = 当前可执行下一步的互斥规则。不做代理配置 UI：默认
   Telegram 用户具备网络解决能力，错误 hint 提示网络可达性即可。
+- Discord 是第四张卡，凭据同样只有一个 Bot Token（Developer Portal），保存
+  后不回显、留空沿用；卡片是 Telegram 卡的等形态移植（密码框 token +
+  编号步骤 + `OwnerBoundRow` / `BindCodeCallout` + `StatusBadge` +
+  `ChannelActionsMenu` + running 态换命令参考表），primary 互斥规则、
+  换 Bot Token 不清除绑定（Discord user id 是全局 snowflake）均随
+  Telegram。setup 是 4 步：Developer Portal 建应用拿 token → 打开
+  **MESSAGE CONTENT INTENT** → OAuth2 生成邀请链接把 bot 拉进自己的
+  Server → 保存 token 启动服务后 DM 配对码，再到目标频道 @ 提及激活。
+  第 2 步文案按症状倒推写（「显示在线但对任何消息都不回复」= 没开
+  Intent），第 3 步是 Discord 独有的一步：bot 只能收到它所在 Server 的
+  消息。
+- Discord 卡与 Telegram 卡的刻意差异（Discord 是第一个「一个频道 = 一个
+  独立 supervisor 上下文」的渠道，卡片本身不管理频道，频道生灭全在
+  Discord 内完成）：
+  - **绑定与激活是两段式**：owner 配对**只认 DM**（Server 频道里发配对码
+    无效），Server 频道只做 @ 提及激活。配对错误尝试按用户计数限流，
+    不继承 Telegram「10 次错码全局作废」——成员可见 bot 的语境里全局作废
+    是恶意 DoS 按钮。
+  - **两条声明常驻卡底**（setup 与 running 两态都在，与 owner-only 安全
+    提示同处）：频道内的回复 / 生成文件 / 完成报告对该频道所有可见成员
+    公开，私密内容请放只有自己可见的频道；频道一旦激活，你在该频道的
+    全部发言都会交给 Galley，退出命令随声明一并给出。这两条是「不做技术
+    限制」裁决下的唯一防线，不能降级成折叠内容。
+  - **状态 hint 只有 6 条**：`waiting_scan` 是微信扫码专属态，Discord 桥
+    永远不会进这个态，故折叠到 `starting`（同 Telegram map 的先例）；
+    等待配对由 `BindCodeCallout` 承载，不用状态 hint 重复一遍。
+  - **glyph 是内联 SVG 而非 mask PNG**：Discord clyde 本就是单色剪影，
+    `fill="currentColor"` 直接吃主题色（走 `WeChatGlyph` 的内联先例）；
+    飞书 / Telegram 用 mask 是因为原 logo 多色需要先压平。视觉结果一致：
+    单色、随 active 在 `text-ink` / `text-ink-soft` 间切换、规避品牌色。
+  - **英文界面里的退出命令保留中文原文**：`dcapp.py` 的退出词表只认
+    `退出该频道` / `退出该子区`，英文文案若写成 "leave channel" 会给出
+    一条发不出去的命令；en 保留中文命令本体，仅在描述里说明子区变体。
 - 卡内层级规则（与 Runtime tab 同源）：
   - 每张卡同时至多一颗 primary 按钮，primary = 当前可执行的下一步。
     飞书的「保存凭证」和「启动服务」按此互斥：凭证未就绪时保存是

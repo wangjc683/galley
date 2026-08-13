@@ -1,7 +1,16 @@
 # Discord Channel PRD：私人 Server 多频道的并行监督上下文
 
-Status: active（2026-08-13 开工，JC 拍板；实施拆解见 `issues/01-07`）
+Status: implemented（2026-08-13 全票落地，全仓验证绿；**待真机 dogfood
+验收**——需 JC 建 Discord 应用，验收项见
+[落地 devlog](../../docs/devlog/2026-08-13-discord-channel-shipped.md)
+「验证与剩余验收」节）
 日期：2026-08-13
+
+> 本文是**计划态**。实施拆解、实际改动面与有意偏差以
+> `issues/01-07` 各票底部 Comments 为准（例如 reporter 状态键、GUI glyph
+> 与 hint 条数、退出命令 i18n 三处均与本文字面不同）；成文结论见
+> [落地 devlog](../../docs/devlog/2026-08-13-discord-channel-shipped.md)
+> 与 [§9 Channels](../../docs/design/overlays-and-settings.md)。
 来源：JC 提议 + 两轮设计讨论（调研：GA 官方 `dcapp.py` 全量精读 +
 Galley IM Channel 架构全量摸底）
 外审：2026-08-13 Codex（gpt-5.6-sol）14 条发现已折入本文——路由与
