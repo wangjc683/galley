@@ -232,3 +232,25 @@
   区分不了「仓库文档」和「交付物」）、在 Galley 内重造 app 选择器
   （Finder 右键「打开方式」更好）、GUI 侧自行解析相对路径
   （基准在 GA 内部，等于重新实现 GA 逻辑）。
+
+---
+
+## LiveDots 剩余三站点的工作指示语言统一
+
+- **状态**：暂缓（2026-08-12 shimmer 裁决时的自觉遗留）
+- **提出**：2026-08-12（[thinking 计时器与 shimmer 裁决](./2026-08-12-thinking-timer-and-shimmer-verdict.md)）
+- **启动信号**：dogfood 中实际感到「两种 working 语言并存」刺眼——比如
+  thinking 行扫光与 ToolCallout 三点在同屏同时可见时读作两个产品；或任一
+  站点因别的原因重做时顺带评估。
+- **方案**：thinking 行已改状态文字扫光（§2.7 唯一豁免），LiveDots 仍服役于
+  ToolCallout（运行中工具）、RunElapsedHud（run 级浮卡）、GoalRunMarkers
+  （goal 运行尾标）。暂不统一的论证：三处语义是工具 / run / goal 级忙碌，
+  不是「LLM 正在思考」，三点作为通用 working 指示语义成立；且 §2.7 豁免
+  边界写明「一视图至多一处 shimmer」，全量迁移会直接违反刚立的边界。
+- **实施要点**：若启动，方向不是「都改 shimmer」而是逐站点问「这里的状态
+  文字是否承载真实信息、动效折进文字是否成立」；RunElapsedHud 的
+  「工作中」是纯标签，最接近 thinking 行形态；ToolCallout 行内已有
+  spinner + 计数器，三点可能直接删除而非替换。
+- **待定**：「一视图至多一处」边界与多站点迁移的相容方案。
+- **关联**：[foundations.md §2.7](../design/foundations.md) 豁免条款；
+  `LiveIndicators.tsx`。

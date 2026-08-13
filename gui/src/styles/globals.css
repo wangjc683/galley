@@ -615,6 +615,48 @@ code {
   }
 }
 
+/* Thinking-row status text working affordance — a light band
+   sweeping through the glyphs (ThinkingStatus, Conversation.tsx).
+   This is the one sanctioned shimmer: §2.7's in-flight-status-text
+   carve-out (2026-08-12, live A/B verdict over LiveDots — see
+   devlog 2026-08-12-thinking-timer-and-shimmer-verdict). It passes
+   the §2.7 one-sentence test ("the band sweeping the label = the
+   model is generating right now") and stays exclusive to the
+   thinking row; skeleton / container / decorative shimmer remains
+   banned. Base color never drops below ink-muted, so the label stays
+   legible mid-sweep. Loop period is a B-class cycle, hence a literal
+   rather than a --motion-* token (§2.7 motion-token scope). Reduced
+   motion: solid text, no gradient — the ticking decisecond counter
+   next to it still carries liveness. */
+@keyframes thinking-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.thinking-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-ink-muted) 35%,
+    var(--color-ink) 50%,
+    var(--color-ink-muted) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinking-shimmer 1.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-shimmer {
+    animation: none;
+    background-image: none;
+    color: var(--color-ink-soft);
+  }
+}
+
 /* Spinning helper for status icons (CircleNotch etc.) */
 @keyframes spin {
   from {

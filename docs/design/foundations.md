@@ -476,7 +476,26 @@ Galley 的动效按“是不是用户触发”分两类，取向相反：
 循环动效；每一处保留的 B 类动效都要能用一句话说清它传达的状态（“motion conveys
 state, not decoration”）。`prefers-reduced-motion` 下 A/B 动效一律退化为静止或瞬时。
 
-> 已落地的 B 类收敛：thinking 态逐字波浪 → 三点指示 + 等宽计数器；running tool
+**唯一豁免（2026-08-12）：in-flight 状态文字的 shimmer。** thinking 行的工作
+指示由三点改为状态文字上的扫光（`thinking-shimmer`），真机 A/B 裁决（见
+devlog [thinking 计时器与 shimmer 裁决](../devlog/2026-08-12-thinking-timer-and-shimmer-verdict.md)）。
+豁免论证：
+
+- 计时器改为 0 秒起跳、0.1 秒精度后已是行内最强活性证明，三点成为第三个并列
+  信号；shimmer 把动效折进本就存在的文字里，全行信号源从三个减到两个——按本节
+  精神（安静、少仪器感）反而更收敛。规则字面与精神在此案冲突，精神优先。
+- 在「LLM 正在思考」这一语义上，扫光标签已是 LLM 应用的约定俗成（Claude /
+  ChatGPT 同款），符合上方「优先用约定俗成的功能指示」判据，且过得了一句话
+  测试：光带扫过标签 = 模型正在生成。
+- 它不是当年删掉的逐字 opacity 波浪：连续光带平滑扫过 vs 逐字符明暗跳动；且
+  当年收敛的前提（计数器 3 秒后才出现、需要三点掩护空窗）已不存在。
+
+豁免边界：仅限 in-flight 状态文字，一个视图至多一处（当前独占 thinking 行）；
+骨架屏 / 容器 / 装饰性 shimmer 照旧禁止——被禁的是「装修等待」，被豁免的是
+「指示进行中」。
+
+> 已落地的 B 类收敛：thinking 态逐字波浪 → 三点指示 + 等宽计数器（2026-08-12
+> 再裁决：三点 → 状态文字扫光 + 0.1s 计数器，走上方豁免）；running tool
 > 左竖条呼吸 → 删除，running 态 liveness 改由 旋转图标 + 三点指示（`LiveDots`）+
 > 每秒跳动的 elapsed 计数器承担（皆为功能性 / 信息性指示，非装饰循环）。其余 B 类
 > （sidebar liveness rail、composer stop breath、approval / browser-control

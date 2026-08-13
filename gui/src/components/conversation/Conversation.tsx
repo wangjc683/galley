@@ -1,7 +1,6 @@
 import { CaretDown } from "@phosphor-icons/react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
-import { LiveDots } from "@/components/conversation/LiveIndicators";
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
 import {
   GoalCommissionMarker,
@@ -25,9 +24,6 @@ import { cn } from "@/lib/utils";
 import type { AgentTurn, Turn } from "@/types/conversation";
 import type { GoalBrief } from "@/types/goal";
 import type { ApprovalDecision } from "@/types/ipc";
-
-const THINKING_ELAPSED_VISIBLE_AFTER_SEC = 3;
-const THINKING_STILL_RUNNING_VISIBLE_AFTER_SEC = 60;
 
 export interface ConversationProps {
   turns: Turn[];
@@ -460,10 +456,14 @@ export function TurnMarker({
    * True while this step is in flight. Renders a live status in place
    * of the settled summary so the user gets a progress signal during
    * LLM TTFT / tool dispatch / answer streaming. It renders as upright
-   * status text plus a three-dot working indicator. An elapsed-seconds
-   * counter joins after 3s: immediate readout feels mechanical, but
-   * waiting longer makes a real model pause feel like a frozen UI. See
-   * useElapsedSeconds for details.
+   * status text with a shimmer sweep (the working affordance — see
+   * the §2.7 status-text carve-out) and an elapsed counter that
+   * starts at 0.0s immediately, ticking in tenths under a minute.
+   * Deciseconds are what make the immediate start work: a
+   * static "1 秒" sitting there reads as a mechanical readout, but a
+   * fast-moving tenths digit reads as a stopwatch — itself the
+   * liveness proof (2026-08-12, replacing the old 3s-delay rule that
+   * existed to paper over the same deadness).
    *
    * Caller is expected to pass `key={index}` when the marker can
    * outlive multiple steps' worth of placeholder transitions, so
@@ -490,21 +490,16 @@ export function TurnMarker({
   preamble?: string;
 }) {
   const copy = useCopy();
-  const elapsedSec = useElapsedSeconds(thinking);
-  const elapsedLabel =
-    thinking && elapsedSec >= THINKING_ELAPSED_VISIBLE_AFTER_SEC
-      ? formatElapsedSeconds(elapsedSec, copy)
-      : null;
+  const elapsedDs = useElapsedDeciseconds(thinking);
+  const elapsedLabel = thinking
+    ? formatElapsedDeciseconds(elapsedDs, copy)
+    : null;
   const hasDetail = !thinking && Boolean(thinkingContent || preamble);
   const [open, setOpen] = useState(false);
 
   const stepLabel = index != null ? copy.conversation.step(index) : null;
   const trailing = thinking ? (
-    <ThinkingStatus
-      status={liveStatus}
-      elapsedLabel={elapsedLabel}
-      showStillRunning={elapsedSec >= THINKING_STILL_RUNNING_VISIBLE_AFTER_SEC}
-    />
+    <ThinkingStatus status={liveStatus} elapsedLabel={elapsedLabel} />
   ) : summary ? (
     <span className="min-w-0 flex-1 truncate select-text text-ink-soft">
       {summary}
@@ -552,33 +547,37 @@ export function TurnMarker({
  * per-character opacity wave. Swiss register: upright text, a single
  * localized "working" affordance (three staggered dots), and the
  * elapsed counter in tabular figures so the digits don't jitter as
- * they tick. The ticking counter is itself the primary proof of
- * liveness; the dots cover the first seconds before it appears.
+ * they tick. The decisecond counter starts at 0.0 immediately and is
+ * itself the primary proof of liveness.
+ *
+ * The working affordance is a light band sweeping through the status
+ * text (`thinking-shimmer`), adopted 2026-08-12 over the previous
+ * LiveDots after a live A/B — one motion source folded into text the
+ * row already has, instead of a third sibling element. Shimmer here
+ * runs under the §2.7 in-flight-status-text carve-out (globals.css
+ * carries the rationale); it stays exclusive to this row.
  */
 function ThinkingStatus({
   status,
   elapsedLabel,
-  showStillRunning,
 }: {
   status?: string;
   elapsedLabel: string | null;
-  showStillRunning: boolean;
 }) {
   const copy = useCopy();
   // Strip trailing dots from either the live status or the fallback
-  // copy ("思考中...") so they don't double up with LiveDots.
+  // copy ("思考中...") — a trailing ellipsis is redundant next to the
+  // shimmer sweep and the ticking counter, which already say "ongoing".
   const statusText = (status?.trim() || copy.conversation.thinking).replace(
     /[.\u2026]+$/,
     "",
   );
   return (
     <span className="flex min-w-0 flex-1 items-center gap-1.5">
-      <span className="truncate">{statusText}</span>
-      <LiveDots className="pb-px text-ink-muted" />
+      <span className="thinking-shimmer truncate">{statusText}</span>
       {elapsedLabel && (
         <span className="shrink-0 tabular-nums text-ink-muted">
           {` · ${elapsedLabel}`}
-          {showStillRunning && ` · ${copy.conversation.stillRunning}`}
         </span>
       )}
     </span>
@@ -617,49 +616,55 @@ function DetailPanel({
 }
 
 /**
- * Tick once per second while `active` is true; reports total seconds
+ * Tick every 100ms while `active` is true; reports total deciseconds
  * elapsed since the hook started ticking. Returns 0 when inactive.
+ * Always Date.now()-anchored (never a counter increment) so the
+ * display can't drift from wall time over a long step.
  *
  * Reset semantics: a fresh component mount = clock at 0 (via the
  * initial state of `useState`). Callers that need the clock to
  * reset between logical "occurrences" (e.g. each step's thinking
  * placeholder) should re-mount via React `key` rather than toggling
  * the active flag — toggling on the same instance would leave a
- * stale `sec` value between the false→true transition and the
- * first setInterval tick.
+ * stale value between the false→true transition and the first
+ * setInterval tick.
  */
-function useElapsedSeconds(active: boolean): number {
-  const [sec, setSec] = useState(0);
+function useElapsedDeciseconds(active: boolean): number {
+  const [ds, setDs] = useState(0);
   useEffect(() => {
     if (!active) return;
     const start = Date.now();
     const id = window.setInterval(() => {
-      setSec(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
+      setDs(Math.floor((Date.now() - start) / 100));
+    }, 100);
     return () => window.clearInterval(id);
   }, [active]);
-  return active ? sec : 0;
+  return active ? ds : 0;
 }
 
 /**
  * Elapsed-time formatter for the thinking placeholder.
  *
- *   3-59s  → "32 秒"             (neutral info — "this is how long")
- *   60s+   → "已 1 分 23 秒"     ("已" prefix softens the longer wait,
- *                                  acknowledging the duration without
- *                                  alarming the user) + "仍在运行"
+ *   0-59.9s → "12.3 秒"      (tenths: the fast-moving digit is the
+ *                              liveness signal that lets the counter
+ *                              start at zero without reading as a
+ *                              dead readout)
+ *   60s+    → "1 分 23 秒"   (whole seconds: tenths at minute scale
+ *                              tip "progress is happening" over into
+ *                              frenetic)
  *
  * Seconds component always shown past the minute boundary (including
- * "已 1 分 0 秒") so the display ticks continuously each second
- * rather than briefly flashing a shorter form on the round-minute.
+ * "1 分 0 秒") so the display ticks continuously each second rather
+ * than briefly flashing a shorter form on the round-minute.
  */
-function formatElapsedSeconds(
-  sec: number,
+function formatElapsedDeciseconds(
+  ds: number,
   copy: ReturnType<typeof useCopy>,
 ): string {
-  if (sec < 60) return copy.conversation.seconds(sec);
-  const minutes = Math.floor(sec / 60);
-  const remainder = sec % 60;
+  if (ds < 600) return copy.conversation.seconds((ds / 10).toFixed(1));
+  const totalSec = Math.floor(ds / 10);
+  const minutes = Math.floor(totalSec / 60);
+  const remainder = totalSec % 60;
   return copy.conversation.minutesSeconds(minutes, remainder);
 }
 

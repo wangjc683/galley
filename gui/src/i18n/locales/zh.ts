@@ -1349,7 +1349,7 @@ export const zhCopy = {
     stepCalledTools: (names: string[]) =>
       names.length === 1 ? `调用了 ${names[0]}` : `调用了 ${names.length} 个工具`,
     /** 完成 run 的折叠头（conversation-run-fold）。时长不复用
-     *  minutesSeconds——那句带「已」前缀，是进行时口径。
+     *  minutesSeconds——那句是进行时口径（thinking 计时器专用）。
      *  「用时」前缀是防误读装置：「2 步 · 16 秒」套进中文时长短语的
      *  数字+单字量词韵律模板，扫一眼会读成「2 分 16 秒」；插入标签词
      *  打断模板（zh 特有问题，en 的 "steps" 一词天然打断）。 */
@@ -1367,10 +1367,14 @@ export const zhCopy = {
     sendReceived: "已收到",
     sendGettingReady: "正在准备",
     sendWorking: "正在处理",
-    stillRunning: "仍在运行",
-    seconds: (sec: number) => `${sec} 秒`,
+    /** thinking 计时器。sec 是预格式化的字符串（"12.3"），因为
+     *  toFixed(1) 的 "12.0" 过数字插值会缩成 "12"，形态会在整秒
+     *  瞬间抖动。2026-08-12 起 0 秒立即起跳、0.1 秒精度；原「已」
+     *  前缀和「仍在运行」随 3 秒门槛一起删除——跳动的十分位本身
+     *  就是活性证明，不再需要安抚性文案。 */
+    seconds: (sec: string) => `${sec} 秒`,
     minutesSeconds: (minutes: number, sec: number) =>
-      `已 ${minutes} 分 ${sec} 秒`,
+      `${minutes} 分 ${sec} 秒`,
     justNow: "刚刚",
     minutesAgo: (minutes: number) => `${minutes} 分钟前`,
     hoursAgo: (hours: number) => `${hours} 小时前`,

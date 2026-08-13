@@ -1413,7 +1413,6 @@ export const enCopy: AppCopy = {
     sendReceived: "Received",
     sendGettingReady: "Getting ready",
     sendWorking: "Working on it",
-    stillRunning: "Still running",
     seconds: (sec) => `${sec}s`,
     minutesSeconds: (minutes, sec) => `${minutes}m ${sec}s`,
     justNow: "Just now",

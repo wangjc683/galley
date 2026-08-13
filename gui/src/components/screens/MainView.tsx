@@ -454,7 +454,7 @@ export function MainView({
               thinking content, not a one-liner "still working"
               line. Sharing visual register with TurnMarker collapses
               the before/after into one per-step rhythm. */}
-            {isRunning && !stillWaiting && !visiblePartial && (
+            {isRunning && !stillWaiting && (
               // `key` ties the TurnMarker instance to the current step
               // (when known) so the elapsed clock inside resets when
               // the step changes — step 1 took 30s; step 2's clock
@@ -465,6 +465,14 @@ export function MainView({
               // key flips, the placeholder remounts, and the clock
               // resets there too — which is fine since the user just
               // saw "思考中" for that brief window.
+              //
+              // One slot for both the pre-stream placeholder and the
+              // streaming header (they used to be two sibling
+              // conditional slots, which made React rebuild the marker
+              // when streaming began — the step clock visibly snapped
+              // back to zero mid-step, 2026-08-12). Now the marker
+              // instance survives the placeholder→streaming swap and
+              // the clock reads continuously as the step's total time.
               <div>
                 <TurnMarker
                   key={currentTurnIndex ?? "pending"}
@@ -472,38 +480,30 @@ export function MainView({
                   thinking
                   liveStatus={liveStepStatus}
                 />
-              </div>
-            )}
-
-            {/* In-flight streaming partial (DESIGN.md §4.3 streaming
-              generation). Renders accumulated display_queue chunks
-              from turn_progress IPC events. Replaced by the canonical
-              AgentTurn the moment turn_end fires (store clears
-              inFlightContent in appendAgentTurn).
-              StreamingCursor below the markdown gives liveness
-              feedback during the gaps between GA's ~50-char delta
-              pushes — without it the partial reads as "stalled"
-              between chunks. A deeper fix needs GA-side streaming
-              granularity changes; this is the UI-side mitigation. */}
-            {isRunning && !stillWaiting && visiblePartial && (
-              <div>
-                <TurnMarker
-                  key={currentTurnIndex ?? "answering"}
-                  index={currentTurnIndex ?? undefined}
-                  thinking
-                  liveStatus={liveStepStatus}
-                />
-                {/* `markdownPartial` is the typewriter + parse-throttled
-                  view of `visiblePartial`. The condition above gates on
+                {/* In-flight streaming partial (DESIGN.md §4.3
+                  streaming generation). Renders accumulated
+                  display_queue chunks from turn_progress IPC events.
+                  Replaced by the canonical AgentTurn the moment
+                  turn_end fires (store clears inFlightContent in
+                  appendAgentTurn). StreamingCursor below the markdown
+                  gives liveness feedback during the gaps between GA's
+                  ~50-char delta pushes — without it the partial reads
+                  as "stalled" between chunks.
+                  `markdownPartial` is the typewriter + parse-throttled
+                  view of `visiblePartial`. The condition gates on
                   visiblePartial (so the placeholder→partial swap
                   happens the instant GA's first chunk arrives, not
                   a frame later); the actual render uses markdownPartial
                   so content reveals smoothly without re-parsing the
                   whole document on every rAF tick. */}
-                <MarkdownView source={markdownPartial} variant="agent" />
-                <div className="mt-1 leading-none">
-                  <StreamingCursor />
-                </div>
+                {visiblePartial && (
+                  <>
+                    <MarkdownView source={markdownPartial} variant="agent" />
+                    <div className="mt-1 leading-none">
+                      <StreamingCursor />
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
