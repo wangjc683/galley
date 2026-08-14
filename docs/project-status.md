@@ -203,9 +203,14 @@ Post-release follow-up:
    behaved normally, which closes the two previously unrecorded hops
    (`v0.4.1` → `v0.4.2` and `v0.4.4` → `v0.4.5`) alongside the already
    recorded `v0.4.2` → `v0.4.3`, `v0.4.3` → `v0.4.4`, and `v0.4.5` →
-   `v0.4.6`. Still to run: `v0.4.6` → `v0.4.7` and `v0.4.7` → `v0.4.8`. Keep
-   asking for the step 10 result explicitly during step 9 — the smoke happens
-   outside any agent tool call, so silence is not evidence it was skipped.
+   `v0.4.6`. `v0.4.7` → `v0.4.8` passed on 2026-08-14. **`v0.4.6` → `v0.4.7`
+   was never run and is now off the normal path**: the dogfood machine went
+   `v0.4.7` → `v0.4.8`, and a hop can only be tested from the older build
+   still installed, so this one needs a deliberate downgrade or it stays open
+   forever. Decide to reinstall `v0.4.6` or write the hop off — do not let it
+   sit here reading as pending. Keep asking for the step 10 result explicitly
+   during step 9 — the smoke happens outside any agent tool call, so silence
+   is not evidence it was skipped.
 2. Watch tool-output truncation, carried forward from the `308153b` baseline
    (shipped in `v0.4.5`), which tightened the tool-output cap ~14%
    (`maxlen_multiplier` 2.25 → 1.93 as a denominator). `f06d550` did not move
