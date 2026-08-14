@@ -13,17 +13,40 @@
 - Keep the headings stable: `## What's New`, optional `## Under the Hood`,
   `## Installation Guide`, `---`, `## What's New`, optional
   `## Under the Hood`, `## 安装指南`.
-- Write `What's New` bullets as outcome-first user changes: start with the
-  user result, then state the concrete product change. Prefer
-  `<User outcome>: <what changed>, so <why it matters>` over
-  `<implementation area>: <internal detail>`.
-- Tone: concise and professional. One bullet per user-visible change, usually
-  one sentence each. Lead with the result, not the symptom or implementation —
-  "Track long-running sessions", not "Conversation telemetry"; "新增字号切换"
-  (adds a font-size switcher), not "修复了用户反馈的字号问题". Drop hedge /
-  filler like "修复了一个 case", "保持不变", or describing the pre-release
-  state for its own sake. If a sentence does not tell the user something they
-  can see or act on, cut it or move it to `Under the Hood`.
+- **State the change once.** One bullet, one clause, no restatement. A bullet
+  that opens with a result, explains the mechanism, then closes with the same
+  result is saying one thing three times — for a reader who understands the
+  change, the consequence is self-evident. This is the single most common
+  defect in this project's drafts, so it leads the list.
+
+  Worked example, `v0.4.8`:
+
+  > ❌ Fewer repeated answers: a finished reply that ends with its own summary
+  > is no longer mistaken for a truncated stream and regenerated, so completed
+  > turns stop looping.
+  >
+  > ✅ Replies that end with a summary are no longer misclassified as truncated
+  > and regenerated.
+
+  The old rule here mandated `<User outcome>: <what changed>, so <why it
+  matters>`, which assumes the outcome and the change are two pieces of
+  information. For this product's readers they usually are not, and the
+  template reliably produced the ❌ form above. It was removed on 2026-08-14.
+- **Lead with what changed for the user, not with an implementation area.**
+  "Replies that end with a summary…", not "Streaming: …"; "新增字号切换", not
+  "修复了用户反馈的字号问题". Dropping the outcome-restatement tail does not
+  license opening with a subsystem name.
+- **Name what the user has seen.** A concrete token the reader has met in the
+  product — `!!!Error:` appearing in a reply, a setting's actual label — is
+  more precise than a paraphrase of it, and naming it is not "exposing
+  implementation". The test is whether the user could have encountered the
+  thing. Internals they could not have seen stay out: file names, functions,
+  patch numbers, upstream SHAs, internal identifiers.
+- **Tone: technical, terse, professional.** Assume a reader who runs agent
+  tooling. Drop hedges and filler ("修复了一个 case", "保持不变"), and do not
+  describe the pre-release state for its own sake. If a sentence does not tell
+  the reader something they can see or act on, cut it or move it to
+  `Under the Hood`.
 - Use `Under the Hood` only for meaningful engineering maintenance that helps a
   technical reader trust the release but is not itself a user feature. Omit the
   section when there is no such work.
@@ -33,9 +56,14 @@
   A release that ships a new feature plus a fix is not a "hotfix" even if it
   started as one — title and bullets must reflect everything shipped.
 - For patch releases, 3-5 focused bullets are enough. For larger releases, keep
-  the list scannable instead of turning it into a changelog dump. Related
-  changes (e.g. several typography commits) collapse into one bullet rather
-  than one per commit.
+  the list scannable instead of turning it into a changelog dump.
+- **Collapse commits, not changes.** Several commits implementing one change
+  (e.g. six typography commits) become one bullet. Two distinct changes that
+  merely share a theme stay separate — merging them yields a long bullet that
+  is precise about neither, and one short bullet each is both terser per line
+  and more exact. (`v0.4.8`: the Channels auto-expand predicate and the
+  sidebar's Archived count were briefly merged as "quieter navigation chrome",
+  then split back.)
 - Keep established product terms such as `Galley`, `GA`, `GenericAgent`,
   `Agent / CLI`, `Browser Control`, `Channels`, and `ChatGPT / Codex`.
 - Use `内置 GA` in Chinese and `Bundled GA` in English. Do not expose
@@ -61,13 +89,13 @@ the package version (for example `0.2.5`).
 ````markdown
 ## What's New
 
-- <User outcome>: <what changed in the product, and why it matters>.
-- <User outcome>: <what changed in the product, and why it matters>.
-- <Fix / reliability outcome>: <what is now more reliable or easier to recover from>.
+- <What changed for the user, in one clause, stated once>.
+- <What changed for the user, in one clause, stated once>.
+- <What is now more reliable, in one clause, stated once>.
 
 ## Under the Hood
 
-- <Technical maintenance that matters to engineering readers, if any>.
+- <Engineering maintenance a technical reader needs to trust the release; semicolons over conjunctions>.
 
 ## Installation Guide
 
@@ -94,13 +122,13 @@ If Windows SmartScreen shows a warning, click "More info" -> "Run anyway".
 
 ## What's New
 
-- <用户结果>：<产品里发生了什么变化，以及为什么重要>。
-- <用户结果>：<产品里发生了什么变化，以及为什么重要>。
-- <修复 / 可靠性结果>：<现在什么更稳定，或更容易恢复>。
+- <用户侧发生了什么变化，一个从句，只说一次>。
+- <用户侧发生了什么变化，一个从句，只说一次>。
+- <现在什么更可靠，一个从句，只说一次>。
 
 ## Under the Hood
 
-- <如果有值得工程读者知道的技术维护，写在这里>。
+- <技术读者用来建立信任的工程维护；用分号，别用连词串成长句>。
 
 ## 安装指南
 
