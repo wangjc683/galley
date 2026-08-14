@@ -4,10 +4,8 @@ import { useCopy } from "@/lib/i18n";
 
 
 export function SidebarFooter({
-  count,
   onOpenArchived,
 }: {
-  count: number;
   onOpenArchived?: () => void;
 }) {
   const copy = useCopy();
@@ -24,9 +22,6 @@ export function SidebarFooter({
     >
       <Archive size={12} weight="thin" className="text-ink-muted" />
       <span>{copy.sidebar.archived}</span>
-      {count > 0 && (
-        <span className="ml-auto tabular-nums text-ink-muted">{count}</span>
-      )}
     </button>
   );
 }

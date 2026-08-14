@@ -101,8 +101,8 @@ export interface SidebarProps {
   /** Click the Archived footer button → open the Archived dialog
    * (list of archived sessions, with Restore / Delete / Empty all). */
   onOpenArchived?: () => void;
-  /** Count of archived sessions — shown as a small numeral after the
-   * footer label. Omit / 0 → just the label. */
+  /** Count of archived sessions. Not rendered as a numeral — it only
+   * decides whether the footer exists at all (0 → no footer row). */
   archivedCount?: number;
   /** Click the external runtime status → opens Settings → Runtime. */
   onOpenRuntimeSettings?: () => void;
@@ -127,11 +127,13 @@ export interface SidebarProps {
  * Two visual modes, derived from `sessions.length`:
  *
  *   full  — sessions[] non-empty: header + quick actions + bucketed
- *           sections (pinned/today/week/earlier) + archive footer
+ *           sections (pinned/today/week/earlier), plus the archive
+ *           footer when anything is archived
  *   empty — sessions[] empty: header + quick actions + muted hint
- *           ("你的对话会出现在这里。"); no sections, and the archive
- *           footer only if archived sessions exist (it's the sole
- *           path back to them)
+ *           ("你的对话会出现在这里。"); no sections
+ *
+ * Either way the archive footer follows one rule: it exists only when
+ * archived sessions exist.
  *
  * The active session row gets `bg-selected` (apricot tint) — this is a
  * brand moment, not just hover state.
@@ -380,14 +382,16 @@ export function Sidebar({
         )}
       </div>
 
-      {/* Fresh installs (no sessions, nothing archived) keep the quiet
-          empty state — a lone "已归档" button under the hint was chrome
-          for nothing. But if archived sessions exist while the live
-          list is empty, the footer MUST stay: it's the only path back
-          to that data. */}
-      {(!globalEmpty || archivedCount > 0) && (
-        <SidebarFooter count={archivedCount} onOpenArchived={onOpenArchived} />
-      )}
+      {/* The drawer appears the moment it has content, and not before —
+          an empty "已归档" row is chrome for nothing (it opens an empty
+          dialog), which is why fresh installs never showed one. Same
+          rule now covers a used install that has archived nothing yet.
+          Presence carries the whole signal, so the footer needs no
+          numeral: archiving only ever accumulates, and a forever-
+          climbing counter on the quietest row reads as debt for work
+          the user already decided was done. The exact count lives in
+          the ArchivedDialog header, where it is actually consulted. */}
+      {archivedCount > 0 && <SidebarFooter onOpenArchived={onOpenArchived} />}
     </div>
   );
 }
