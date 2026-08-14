@@ -205,8 +205,22 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing. All post-`v0.4.6` work is folded into the `v0.4.7` cut described
-above; JC's real-machine Discord dogfood passed with no findings, so the
+**GA baseline `308153b` -> `f06d550`** (audited 2026-08-14). The shipped
+baseline is still `308153b` — `v0.4.7` shipped it and nothing has been cut
+since. A 7-commit range, the smallest since the baseline was introduced:
+engine-core delta is `ga.py` + `llmcore.py` only, `agent_loop.py` /
+`agentmain.py` / `pyproject.toml` had zero diff, so **`GA_DEPS` did not
+change** and the bundled-runtime gate is not mandatory on dependency
+grounds — but `managed-ga/` did change, so it still applies. Two user-visible
+directions to watch in dogfood: fewer spurious regenerations on final answers
+(upstream length-guarded the `</summary>` incomplete check), and OpenAI-protocol
+managed models now retrying overload at the network layer instead of printing
+`!!!Error:`. Full audit: [GA baseline](./ga-baseline.md); rebase resolutions:
+[patch manifest](../managed-ga/patches/manifest.md); narrative:
+[devlog](./devlog/2026-08-14-ga-upstream-upgrade-308153b-to-f06d550.md).
+
+Everything else: nothing. All post-`v0.4.6` work is folded into the `v0.4.7`
+cut described above; JC's real-machine Discord dogfood passed with no findings, so the
 `.scratch/discord-channel/` tracker was disposed per the issue-tracker rule
 (its nine anti-re-proposal rulings were migrated into the
 [shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) first), as

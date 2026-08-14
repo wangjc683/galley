@@ -15,16 +15,108 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `308153b1c91401a892401dd896e548e587506cc9`
+Locked commit: `f06d5503808ba9d164fb583e4c500d5ce01efd4c`
 
-- Tree hash: `6533522b7858869ef93590521466cf3ffdf4aeb7`
+- Tree hash: `f37171dd32b8f73d653df0fe9dfb5c253148c435`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-08-10
-- Shipped in: `v0.4.5` (2026-08-10) — audited and released the same day
+- Date audited: 2026-08-14
+- Shipped in: not yet released — audited on main after `v0.4.7`
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `d8d90eef8c37cb1ea9aae078a3d099a7d7a759df`
+- Previous baseline: `308153b1c91401a892401dd896e548e587506cc9`
+  (tree `6533522b7858869ef93590521466cf3ffdf4aeb7`)
+- Delta (`308153b..f06d550` = 7 commits): 11 files, ~138 insertions /
+  ~88 deletions — the smallest range since the baseline was introduced.
+  Engine-core delta is only `ga.py` (13) and `llmcore.py` (11);
+  `agent_loop.py`, `agentmain.py`, and `pyproject.toml` had **zero diff**.
+  The rest is upstream frontends (`p2p_ws_client.py` 127,
+  `worldline.py`, `continue_cmd.py`, `hub_p2p.py`, `conductor.html`) and
+  the two `global_mem_insight` templates.
+- Result: no bridge protocol or dependency break. Patch-stack rebase had
+  two real conflicts, both in the browser extension and both caused by
+  the same upstream commit (`e519734`) landing on the exact lines patches
+  `0006` / `0015` own — see
+  [patch manifest](../managed-ga/patches/manifest.md) for the resolutions.
+- Devlog: [GA upstream upgrade 308153b -> f06d550](./devlog/2026-08-14-ga-upstream-upgrade-308153b-to-f06d550.md)
+
+New in the `308153b` -> `f06d550` range:
+
+- `ga.py` — **the `</summary>` incomplete-response check gained a length
+  guard**: `content.endswith('</summary>')` →
+  `(content.endswith('</summary>') and len(content) < 100)`. Upstream's
+  own `sys_prompt` asks the model to emit `<summary>`, so any final
+  answer that legitimately *ended* with its summary block was being
+  classified as a truncated stream and force-regenerated. Galley-positive
+  and observable in managed mode: fewer spurious regenerations on final
+  answers. This supersedes the carried-forward `do_no_tool` note below.
+- `ga.py` — `turn_end_callback` unified its summary extraction:
+  `raw = (<summary> group if present else the stripped body)`, appended to
+  `history_info` **only when non-empty**, and the `[TIPS] 必须包含
+  <summary>` nudge is now conditional on a real tool call
+  (`tool_calls and tool_calls[0]['tool_name'] != 'no_tool'`) instead of
+  firing on every summary-less turn.
+
+  **Coupling point, benign but worth knowing.** `ga.py:599` dispatches
+  turn-end hooks as `hook(locals())`, so Galley's
+  `workbench_bridge._on_turn_end` reads the callback's *local variable
+  table* — and `summary` is now bound inside `if raw:`. When a turn's
+  reply carries no text outside code fences / thinking (common on native
+  tool-use backends, where the model goes straight to a `tool_use`
+  block), the name never exists and `ctx.get("summary")` returns `None`
+  where it used to return a synthesized `"code_run, args: {...}"` recap.
+  Galley already absorbs this: `bump_session_after_turn_db` skips the
+  `summary` column on an empty value specifically so the sidebar row does
+  not blank out mid-conversation, and `session.summary` is the only
+  consumer. Net effect is a *better* row (the previous real recap is kept
+  instead of being overwritten by machine-y tool-args text). Re-verify
+  this if that Rust guard is ever removed.
+- `llmcore.py` — the Claude-SSE overload heuristic was extracted into
+  `_raise_if_retryable_overload()` and **wired into the three OpenAI
+  paths** (`_parse_openai_sse`'s `error` and `response.failed` branches,
+  and `_parse_openai_json`'s `failed` status). Overload / rate-limit
+  bodies arriving as HTTP 200 now raise `requests.ConnectionError` into
+  `_stream_with_retry`'s network backoff on OpenAI-protocol models too,
+  instead of surfacing as an application-layer `!!!Error:` string in the
+  reply. Managed OpenAI-protocol presets get the retry behavior Anthropic
+  ones have had since `308153b`. Not a contract change; the codex path
+  (`0007`) is unaffected because it forces streaming and its 429
+  enrichment lives on the HTTP-status side, not the SSE-body side.
+- `assets/tmwd_cdp_bridge/` — **upstream independently converged on patch
+  `0015`'s complaint.** `e519734` (Liang Jiaqing, 2026-08-13) made the
+  in-page `ljq_driver` badge click-through (`pointer-events:none`,
+  opacity 0.5 → 0.2) and truthful (a 3-state `connected` / `connecting` /
+  `disconnected` broadcast from a new `setStatus`). Those are two of the
+  three defects `0015` cited on 2026-07-20 when it removed the badge
+  outright. Direction verified by `git log -S`: upstream-authored, ~3.5
+  weeks after Galley's patch, with no shared code — convergence, not
+  adoption in either direction. `0015`'s removal condition ("upstream
+  drops its in-page indicator and ships an equivalent truthful toolbar
+  status") is still **not** met — the badge is in-page, and `0015` also
+  carries branding, icons, and the popup cookie-auto-copy fix — so the
+  patch stays and keeps deleting the badge. Worth re-reading at the next
+  upgrade if upstream keeps investing here.
+- `frontends/continue_cmd.py` — `_derive_hist_info` mirrored the same
+  `ga.py` summary rule (skip empty, `<summary>` first else full text).
+  Patch-stack file (`0019` territory is `chatapp_common.py` / `fsapp.py`,
+  not this), inert on Galley's path — Galley does not run `continue_cmd`.
+- `frontends/p2p_ws_client.py` / `hub_p2p.py` — P2P transport hardening
+  (rebuild the socket after signaling loss, keep the relay available
+  during a direct upgrade). Still inert on Galley's path and still the
+  standing product-direction signal recorded in the `308153b` range
+  below; the `grep -rn "hub.connect" managed-ga/code/` guard remains the
+  cheap defense.
+- `frontends/conductor.py` (`conductor.html`) — raw HTML is escaped
+  before `marked` renders it, closing a stored-XSS hole in upstream's own
+  frontend. Inert on Galley's path.
+- `assets/global_mem_insight_template*.txt` — RULES text softened
+  (drops the `es`-mandatory file search, the duckduckgo ban, the `win32gui`
+  specificity, and the "Git 完整闭环" clause). Regenerated into the state
+  seed, missing-only, so existing user memory is untouched.
+
+Carried forward from the `d8d90ee` -> `308153b` range (2026-08-10):
+
+- Previous-previous baseline: `d8d90eef8c37cb1ea9aae078a3d099a7d7a759df`
   (tree `d457b6e8b02c7895504c888da5e7ee064fb43f1a`)
 - Delta (`d8d90ee..308153b` = 15 commits): 20 files, ~1661 insertions /
   ~305 deletions. Roughly 90% of the diff is upstream's own frontends and is
@@ -321,9 +413,11 @@ the current surface — `ga.py` items below were last touched in `1e89c3e` ->
   structured `{'turn': turn}` yield are byte-identical.
 - `ga.py`: `GenericAgentHandler`'s blank-response check in `do_no_tool` stays
   the permissive form (`not content.strip() and not thinking.strip()`); the
-  incomplete-response check catches `content.endswith('</summary>')`. Internal
-  to the handler's response handling, not the dispatch signature or Galley's
-  approval gate. Init signature and import path unchanged.
+  incomplete-response check catches `content.endswith('</summary>')` — as of
+  `f06d550` only when the whole reply is under 100 chars, see the current
+  range above. Internal to the handler's response handling, not the dispatch
+  signature or Galley's approval gate. Init signature and import path
+  unchanged.
 - `llmcore.py`: `NativeClaudeSession.ask()` carries the three Anthropic beta
   headers (`thinking-token-count-2026-05-13`, `mid-conversation-system-2026-04-07`,
   `fallback-credit-2026-06-01`); method signature and history block shape

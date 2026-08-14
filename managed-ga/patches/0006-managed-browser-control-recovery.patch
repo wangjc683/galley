@@ -31,7 +31,7 @@ diff --git a/TMWebDriver.py b/TMWebDriver.py
 diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/background.js
 --- a/assets/tmwd_cdp_bridge/background.js
 +++ b/assets/tmwd_cdp_bridge/background.js
-@@ -18,0 +19,7 @@ async function handleExtMessage(msg, sender) {
+@@ -19,0 +20,7 @@ async function handleExtMessage(msg, sender) {
 +  if (msg.cmd === 'wake') {
 +    connectWS();
 +    if (ws && ws.readyState === WebSocket.OPEN) {
@@ -39,13 +39,13 @@ diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/backg
 +    }
 +    return { ok: true };
 +  }
-@@ -214,0 +222,5 @@ const WS_URL = 'ws://127.0.0.1:18765';
+@@ -217,0 +225,5 @@ function setStatus(s){if(s===status)return;status=s;chrome.tabs.query({}).then(T
 +const KEEPALIVE_MS = 25000;
 +const PROBE_RETRY_MS = 3000;
 +const PROBE_ALARM_MINUTES = 0.5; // Chrome MV3 alarms are 30s-level fallback.
 +let keepaliveTimer = null;
 +let probeTimer = null;
-@@ -216,3 +228,4 @@ const WS_URL = 'ws://127.0.0.1:18765';
+@@ -219,3 +231,4 @@ function setStatus(s){if(s===status)return;status=s;chrome.tabs.query({}).then(T
 -function scheduleProbe() {
 -  // Use chrome.alarms to survive MV3 service worker suspension
 -  chrome.alarms.create('tmwd-ws-probe', { delayInMinutes: 0.083 }); // ~5s
@@ -53,7 +53,7 @@ diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/backg
 +  if (!probeTimer) return;
 +  clearTimeout(probeTimer);
 +  probeTimer = null;
-@@ -221,3 +234,12 @@ function scheduleProbe() {
+@@ -224,3 +237,12 @@ function scheduleProbe() {
 -function scheduleKeepalive() {
 -  // Keep SW alive while WS is connected (~25s, under 30s SW timeout)
 -  chrome.alarms.create('tmwd-ws-keepalive', { delayInMinutes: 0.4 }); // ~24s
@@ -69,7 +69,7 @@ diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/backg
 +    connectWS();
 +  }, PROBE_RETRY_MS);
 +  chrome.alarms.create('tmwd-ws-probe', { delayInMinutes: PROBE_ALARM_MINUTES });
-@@ -225,10 +247,17 @@ function scheduleKeepalive() {
+@@ -228,10 +250,17 @@ function scheduleKeepalive() {
 -
 -async function isServerAlive() {
 -  try {
@@ -97,25 +97,29 @@ diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/backg
 +      scheduleProbe();
 +    }
 +  }, KEEPALIVE_MS);
-@@ -243 +271,0 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
+@@ -246 +274,0 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 -    // Keepalive: ping to keep SW alive + detect dead connections
-@@ -253,0 +282 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
+@@ -256,0 +285 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 +    clearProbeTimer();
-@@ -255,6 +284 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
+@@ -258,7 +287,4 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 -    if (await isServerAlive()) {
 -      console.log('[TMWD-WS] Server detected, connecting...');
 -      connectWS();
 -    } else {
+-      setStatus('disconnected');
 -      scheduleProbe(); // Server not up, keep probing
 -    }
++    // Upstream gates this on isServerAlive(), which this patch removes
++    // (its HTTP poke to the WS port is what stalled recovery on Windows).
++    // connectWS() is the probe; its onclose/onerror re-arms scheduleProbe.
 +    connectWS()
-@@ -337,0 +362 @@ function connectWS() {
+@@ -341,0 +368 @@ function connectWS() {
 +  clearProbeTimer();
-@@ -344,0 +370 @@ function connectWS() {
+@@ -349,0 +377 @@ function connectWS() {
 +    clearKeepaliveTimer();
-@@ -349,0 +376 @@ function connectWS() {
+@@ -355,0 +384 @@ function connectWS() {
 +    clearProbeTimer();
-@@ -388,0 +416 @@ function connectWS() {
+@@ -395,0 +425 @@ function connectWS() {
 +    clearKeepaliveTimer();
 diff --git a/assets/tmwd_cdp_bridge/content.js b/assets/tmwd_cdp_bridge/content.js
 --- a/assets/tmwd_cdp_bridge/content.js

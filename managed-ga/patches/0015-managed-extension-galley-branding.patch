@@ -1,12 +1,12 @@
 diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/background.js
 --- a/assets/tmwd_cdp_bridge/background.js
 +++ b/assets/tmwd_cdp_bridge/background.js
-@@ -25,0 +26,4 @@ async function handleExtMessage(msg, sender) {
+@@ -26,0 +27,4 @@ async function handleExtMessage(msg, sender) {
 +  if (msg.cmd === 'bridge_status') {
 +    const tabs = (await chrome.tabs.query({})).filter(t => isScriptable(t.url));
 +    return { ok: true, data: { connected: !!(ws && ws.readyState === WebSocket.OPEN), tabCount: tabs.length } };
 +  }
-@@ -227,0 +232,14 @@ let probeTimer = null;
+@@ -230,0 +235,14 @@ let probeTimer = null;
 +// Toolbar icon reflects the real bridge state: full-color while the WS to the
 +// local driver is open, desaturated (standby) otherwise. State lives in the
 +// icon itself — no badge text, no in-page indicator. The tooltip carries the
@@ -21,28 +21,30 @@ diff --git a/assets/tmwd_cdp_bridge/background.js b/assets/tmwd_cdp_bridge/backg
 +}
 +updateActionIcon(false);
 +
-@@ -260,0 +279 @@ function scheduleKeepalive() {
+@@ -263,0 +282 @@ function scheduleKeepalive() {
 +      updateActionIcon(false);
-@@ -277,0 +297 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
+@@ -280,0 +300 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 +      updateActionIcon(false);
-@@ -370,0 +391 @@ function connectWS() {
+@@ -377,0 +398 @@ function connectWS() {
 +    updateActionIcon(false);
-@@ -375,0 +397 @@ function connectWS() {
+@@ -383,0 +405 @@ function connectWS() {
 +    updateActionIcon(true);
-@@ -416,0 +439 @@ function connectWS() {
+@@ -425,0 +448 @@ function connectWS() {
 +    updateActionIcon(false);
 diff --git a/assets/tmwd_cdp_bridge/content.js b/assets/tmwd_cdp_bridge/content.js
 --- a/assets/tmwd_cdp_bridge/content.js
 +++ b/assets/tmwd_cdp_bridge/content.js
-@@ -16,11 +15,0 @@ document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]').forEach(
+@@ -16,13 +15,0 @@ document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]').forEach(
 -// Indicator badge at bottom-right (userscript style)
 -(function(){
 -  if(window.self!==window.top)return;
 -  const d=document.createElement('div');
--  d.id='ljq-ind';
--  d.innerText='ljq_driver: 已连接';
--  d.style.cssText='position:fixed;bottom:8px;right:8px;background:#4CAF50;color:white;padding:4px 7px;border-radius:4px;font-size:11px;font-weight:bold;z-index:99999;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);opacity:0.5;';
--  d.addEventListener('click',()=>alert('会话活跃\nURL: '+location.href));
+-  d.textContent='ljq_driver: 已连接';
+-  d.style.cssText='position:fixed;bottom:8px;right:8px;background:#4CAF50;color:white;padding:4px 7px;border-radius:4px;font-size:11px;font-weight:bold;z-index:99999;box-shadow:0 2px 4px rgba(0,0,0,0.2);opacity:0.2;pointer-events:none;';
+-  const S={connected:['已连接','#4CAF50'],connecting:['重连中','#FF9800'],disconnected:['断开','#F44336']};
+-  const R=s=>{const[t,c]=S[s]||S.disconnected;d.textContent='ljq_driver: '+t;d.style.background=c};
+-  chrome.runtime.onMessage.addListener(m=>{if(m?.type==='tmwd_status')R(m.data)});
+-  chrome.runtime.sendMessage({cmd:'status'},r=>R(r?.ok?r.data:'connected'));
 -  (document.body||document.documentElement).appendChild(d);
 -})();
 -

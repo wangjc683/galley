@@ -142,6 +142,11 @@ def _parse_claude_json(data):
         elif b.get("type") == "thinking": yield ""
     return content_blocks
 
+def _raise_if_retryable_overload(emsg):
+    """HTTP 200 SSE/body overload → ConnectionError so _stream_with_retry can backoff."""
+    if emsg and re.search(r'concurrency|retry later|overloaded|rate.?limit', emsg, re.I):
+        raise requests.ConnectionError(emsg)
+
 def _parse_claude_sse(resp_lines):
     """Parse Anthropic SSE stream. Yields text chunks, returns list[content_block]."""
     content_blocks = []; current_block = None; tool_json_buf = ""
@@ -230,8 +235,7 @@ def _parse_claude_sse(resp_lines):
         elif evt_type == "error":
             err = evt.get("error", {})
             emsg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-            if re.search(r'concurrency|retry later|overloaded|rate.?limit', emsg, re.I):
-                raise requests.ConnectionError(emsg)  # 走 _stream_with_retry 网络重试，避免落到 ga 应用层
+            _raise_if_retryable_overload(emsg)  # 走 _stream_with_retry，避免落到 ga 应用层
             warn = f"\n\n!!!Error: SSE {emsg}"; break
     if not warn:
         if not got_message_stop and not stop_reason: warn = "\n\n[!!! 流异常中断，未收到完整响应 !!!]"
@@ -307,6 +311,7 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
             elif etype == "error":
                 err = evt.get("error", {})
                 emsg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                _raise_if_retryable_overload(emsg)
                 if emsg: content_text += f"!!!Error: {emsg}"; yield f"!!!Error: {emsg}"
                 break
             elif etype == "response.completed":
@@ -328,6 +333,7 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
                 _record_usage(usage, api_mode)
                 err = ((evt.get("response") or {}).get("error") or {})
                 emsg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                _raise_if_retryable_overload(emsg)
                 if emsg: content_text += f"!!!Error: {emsg}"; yield f"!!!Error: {emsg}"
                 break
         blocks = []
@@ -428,6 +434,7 @@ def _parse_openai_json(data, api_mode="chat_completions"):
         if status == "failed":
             err = data.get("error") or {}
             emsg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            _raise_if_retryable_overload(emsg)
             if emsg: blocks.append({"type": "text", "text": f"!!!Error: {emsg}"}); yield f"!!!Error: {emsg}"
         elif status == "incomplete" and not any(b.get("type") == "text" for b in blocks):
             reason = ((data.get("incomplete_details") or {}).get("reason", "")) or "unknown"

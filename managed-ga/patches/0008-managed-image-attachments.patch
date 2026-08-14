@@ -39,7 +39,7 @@ diff --git a/agentmain.py b/agentmain.py
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1390,2 +1390,3 @@ class NativeToolClient:
+@@ -1397,2 +1397,3 @@ class NativeToolClient:
 -        # Filter whitespace-only text blocks that cause 400 on strict API proxies
 -        filtered_content = [c for c in combined_content if c.get("text", "").strip()]
 +        # Filter whitespace-only text blocks that cause 400 on strict API proxies,

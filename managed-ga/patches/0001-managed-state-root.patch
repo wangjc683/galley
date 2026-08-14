@@ -74,16 +74,16 @@ diff --git a/ga.py b/ga.py
 @@ -160 +164 @@ def log_memory_access(path):
 -    stats_file = os.path.join(script_dir, 'memory/file_access_stats.json')
 +    stats_file = state_path('memory', 'file_access_stats.json')
-@@ -607 +611 @@ def get_global_memory():
+@@ -606 +610 @@ def get_global_memory():
 -        with open(os.path.join(script_dir, 'memory/global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
 +        with open(state_path('memory', 'global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
-@@ -609 +613 @@ def get_global_memory():
+@@ -608 +612 @@ def get_global_memory():
 -        prompt += f'cwd = {os.path.join(script_dir, "temp")} (./)\n'
 +        prompt += f'cwd = {state_path("temp")} (./)\n'
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1010 +1010,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
+@@ -1017 +1017,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
 -        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'temp/model_responses/model_responses_{os.getpid()}.txt')
 +        state_root = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or os.path.dirname(os.path.abspath(__file__)))
 +        log_path = os.path.join(state_root, f'temp/model_responses/model_responses_{os.getpid()}.txt')

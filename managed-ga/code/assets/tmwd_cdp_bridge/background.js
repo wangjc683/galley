@@ -16,6 +16,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 async function handleExtMessage(msg, sender) {
+  if (msg.cmd === 'status') return { ok: true, data: status };
   if (msg.cmd === 'wake') {
     connectWS();
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -222,7 +223,9 @@ function buildCdpScript(code) {
 
 // --- WebSocket Client for TMWebDriver ---
 let ws = null;
+let status = 'connected';
 const WS_URL = 'ws://127.0.0.1:18765';
+function setStatus(s){if(s===status)return;status=s;chrome.tabs.query({}).then(T=>T.forEach(t=>chrome.tabs.sendMessage(t.id,{type:'tmwd_status',data:s}).catch(()=>{})));}
 const KEEPALIVE_MS = 25000;
 const PROBE_RETRY_MS = 3000;
 const PROBE_ALARM_MINUTES = 0.5; // Chrome MV3 alarms are 30s-level fallback.
@@ -301,6 +304,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'tmwd-ws-probe') {
     clearProbeTimer();
     if (ws && ws.readyState <= 1) return; // Already connected/connecting
+    // Upstream gates this on isServerAlive(), which this patch removes
+    // (its HTTP poke to the WS port is what stalled recovery on Windows).
+    // connectWS() is the probe; its onclose/onerror re-arms scheduleProbe.
     connectWS()
   }
 });
@@ -384,6 +390,7 @@ function connectWS() {
   console.log('[TMWD-WS] Connecting to', WS_URL);
   try {
     ws = new WebSocket(WS_URL);
+    setStatus('connecting');
   } catch (e) {
     console.error('[TMWD-WS] Constructor error:', e);
     ws = null;
@@ -394,6 +401,7 @@ function connectWS() {
   }
   ws.onopen = async () => {
     console.log('[TMWD-WS] Connected!');
+    setStatus('connected');
     updateActionIcon(true);
     clearProbeTimer();
     scheduleKeepalive(); // Keep SW alive while connected
@@ -434,6 +442,7 @@ function connectWS() {
   };
   ws.onclose = () => {
     console.log('[TMWD-WS] Disconnected');
+    setStatus('connecting');
     ws = null;
     clearKeepaliveTimer();
     updateActionIcon(false);
