@@ -17,7 +17,7 @@ import { WeChatCommandReference } from "./CommandReference";
 import { ConnectionSteps } from "./ConnectionSteps";
 import { WeChatGlyph } from "./Glyphs";
 import { StatusBadge } from "./StatusBadge";
-import { statusHintForState, stepsForState } from "./status";
+import { shouldAutoExpand, statusHintForState, stepsForState } from "./status";
 import type { BusyAction, ImCopy } from "./types";
 
 export function WeChatCard({
@@ -47,9 +47,7 @@ export function WeChatCard({
     null,
   );
   const [confirmDisconnectOpen, setConfirmDisconnectOpen] = useState(false);
-  const attentionState =
-    state === "waiting_scan" || state === "expired" || state === "error";
-  const expanded = expandedOverride ?? attentionState;
+  const expanded = expandedOverride ?? shouldAutoExpand(state);
   const showQr = expanded && state === "waiting_scan";
   const canPause = state === "running";
   const canDisconnect =

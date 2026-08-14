@@ -25,7 +25,7 @@ import { FeishuSetupGuide } from "./FeishuSetupGuide";
 import { FeishuGlyph } from "./Glyphs";
 import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
-import { feishuStatusHintForState } from "./status";
+import { feishuStatusHintForState, shouldAutoExpand } from "./status";
 
 /** Last-loaded config, module-level for the same reason as the
  * status cache in useImSupervisorStatus: re-entering Channels should
@@ -98,21 +98,7 @@ export function FeishuCard({
   const derivedState: ImSupervisorState =
     status?.state ??
     (config?.appId && config.hasAppSecret ? "stopped" : "not_connected");
-  const attentionState = derivedState === "expired" || derivedState === "error";
-  // Auto-expansion waits for both fetches: deriving it from null
-  // config/status guesses "not configured → expand", which is wrong
-  // for every configured user and snaps shut when the data lands.
-  // Collapsed-then-expand (fresh first load, unconfigured) is an
-  // additive motion; expanded-then-collapse is a flash.
-  const ready = config !== null && status !== null;
-  const expanded =
-    expandedOverride ??
-    (ready &&
-      (attentionState ||
-        derivedState === "not_connected" ||
-        derivedState === "stopped" ||
-        !canSaveCredentials ||
-        (derivedState !== "running" && !canStartService)));
+  const expanded = expandedOverride ?? shouldAutoExpand(derivedState);
   const canPause = derivedState === "running";
   const canDisconnect =
     derivedState === "running" ||

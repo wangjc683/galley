@@ -25,7 +25,7 @@ import { stepWithLink } from "./step-link";
 import { TelegramGlyph } from "./Glyphs";
 import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
-import { telegramStatusHintForState } from "./status";
+import { shouldAutoExpand, telegramStatusHintForState } from "./status";
 
 /**
  * Telegram channel card. Same owner-paired flow as Feishu with a much
@@ -92,17 +92,7 @@ export function TelegramCard({
   const canStartService = Boolean(config?.hasBotToken);
   const derivedState: ImSupervisorState =
     status?.state ?? (config?.hasBotToken ? "stopped" : "not_connected");
-  const attentionState = derivedState === "expired" || derivedState === "error";
-  // Same ready gate as FeishuCard: don't derive auto-expansion from
-  // null config/status — it guesses wrong for configured users and
-  // snaps shut when the fetches land.
-  const ready = config !== null && status !== null;
-  const expanded =
-    expandedOverride ??
-    (ready &&
-      (attentionState ||
-        derivedState === "not_connected" ||
-        derivedState === "stopped"));
+  const expanded = expandedOverride ?? shouldAutoExpand(derivedState);
   const running = derivedState === "running";
   const canPause = derivedState === "running";
   const canDisconnect =

@@ -279,3 +279,40 @@
 - **待定**：「一视图至多一处」边界与多站点迁移的相容方案。
 - **关联**：[foundations.md §2.7](../design/foundations.md) 豁免条款；
   `LiveIndicators.tsx`。
+
+---
+
+## 已暂停渠道的折叠头「启动」按钮
+
+- **状态**：暂缓（自动展开收窄的已知代价，先观察实感）
+- **提出**：2026-08-13（[自动展开谓词收窄](./2026-08-13-channels-auto-expand-predicate.md)）
+- **启动信号**：dogfood 或用户反馈里出现「重启一个渠道还要先点开卡片」的
+  实感。频率低就不动。
+- **方案**：`stopped` 不再自动展开后，「启动」按钮只在卡体内，重启已配置
+  渠道多一次点击。补救是在折叠头右侧 actions 区（`ChannelActionsMenu` 所在
+  位置）给 `stopped` 状态加一个 ghost「启动」，那块地方本就常驻控件。
+- **实施要点**：四张卡的启动动作签名不同（WeChat 走 `SettingsIM` 的
+  `runAction`，另外三张走卡内 `run("connect")`），补按钮要么各自接、要么先
+  把启动动作提到 `ChannelCard` 的 header 插槽上；别为此把状态推导再复杂化。
+- **待定**：只给 `stopped` 加，还是 `not_connected` 也给（后者点了没用——
+  凭证还没填，会把人送进一个立刻报错的动作）。倾向只给 `stopped`。
+- **关联**：改模型后的批量重启已有 `staleConfig` 横幅那条路，本项只覆盖
+  单渠道手动暂停后的重启。
+
+---
+
+## Channels 展开态跨进出 Settings 记忆
+
+- **状态**：暂缓
+- **提出**：2026-08-13（[自动展开谓词收窄](./2026-08-13-channels-auto-expand-predicate.md)）
+- **启动信号**：配置渠道时实际被打断（去 Models 查个模型再回来）并感到
+  「又要重点一次」。
+- **方案**：`expandedOverride` 是组件态，离开 Settings 即丢。自动展开变稀疏
+  后，配到一半切走再回来要重新点开。照 `FeishuCard` 的 `cachedFeishuConfig`
+  模块级缓存的路子，记住手动展开过的渠道。
+- **实施要点**：只记**手动**展开（`expandedOverride !== null`），别把自动
+  展开的结果写进缓存——否则一次报错会让那张卡此后一直展开，等于把刚删掉的
+  「永久展开」从后门放回来。
+- **待定**：进程内缓存够不够，还是要落 UI 偏好（倾向进程内，跟 config 缓存
+  同级，重启归零是可接受的）。
+- **关联**：`SettingsIM.tsx` 四张卡各自持有 `expandedOverride`。

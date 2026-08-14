@@ -2,6 +2,22 @@ import type { ImSupervisorState } from "@/lib/im-supervisor";
 
 import type { ImCopy } from "./types";
 
+/**
+ * Auto-expansion means "something here needs your hands right now, and the
+ * collapsed header can't say it": the QR to scan, the failure detail to read.
+ * It deliberately excludes `not_connected` / `stopped` — those are the resting
+ * state of every channel the user never adopts, so expanding them keeps two or
+ * three cards permanently open and burns auto-expansion as an attention signal.
+ * A collapsed row already carries the glyph, the name, and the status badge.
+ *
+ * This predicate reads only the supervisor state, never a not-yet-loaded config,
+ * so it can't guess wrong before the fetches land: it stays false and the card
+ * expands additively if the loaded state warrants it.
+ */
+export function shouldAutoExpand(state: ImSupervisorState) {
+  return state === "waiting_scan" || state === "expired" || state === "error";
+}
+
 export function stepsForState(state: ImSupervisorState, imCopy: ImCopy) {
   if (state === "running") return imCopy.connectedSteps;
   return imCopy.setupSteps;

@@ -25,7 +25,7 @@ import { stepWithLink } from "./step-link";
 import { DiscordGlyph } from "./Glyphs";
 import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
-import { discordStatusHintForState } from "./status";
+import { discordStatusHintForState, shouldAutoExpand } from "./status";
 
 /**
  * Discord channel card. Same single-token, owner-paired shape as the
@@ -94,17 +94,7 @@ export function DiscordCard({
   const canStartService = Boolean(config?.hasBotToken);
   const derivedState: ImSupervisorState =
     status?.state ?? (config?.hasBotToken ? "stopped" : "not_connected");
-  const attentionState = derivedState === "expired" || derivedState === "error";
-  // Same ready gate as the other cards: don't derive auto-expansion from
-  // null config/status — it guesses wrong for configured users and snaps
-  // shut when the fetches land.
-  const ready = config !== null && status !== null;
-  const expanded =
-    expandedOverride ??
-    (ready &&
-      (attentionState ||
-        derivedState === "not_connected" ||
-        derivedState === "stopped"));
+  const expanded = expandedOverride ?? shouldAutoExpand(derivedState);
   const running = derivedState === "running";
   const canPause = derivedState === "running";
   const canDisconnect =
