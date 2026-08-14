@@ -9,19 +9,36 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.7`.
-- Git tag / GitHub Release: `v0.4.7` is the current published stable release
-  (tagged at `ac69f8b8` on 2026-08-13, GitHub Latest).
+- Package version: `0.4.8`.
+- Git tag / GitHub Release: `v0.4.8` is the current published stable release
+  (tagged at `8a6c4998` on 2026-08-14, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.7`.
+- Release tier: stable patch; default update channel points at `v0.4.8`.
   `beta` is kept as a legacy alias for older builds.
+- Shipped GA baseline: `f06d550` (audited 2026-08-14) — audited and released
+  the same day, so audited and shipped are aligned for the first time since
+  `v0.4.5`.
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.4.7` returns to self-directed work after two user-issue-driven releases.
+`v0.4.8` is the smallest release so far, and the first whose headline is the
+engine rather than the GUI: the **GA baseline bump `308153b` -> `f06d550`** is
+the only substantial item. Its two user-visible effects both come from upstream
+— a finished reply that ends with its summary is no longer misclassified as a
+truncated stream and regenerated, and OpenAI-protocol models now retry provider
+overload at the network layer instead of surfacing `!!!Error:` in the reply.
+Riding along, both subtractions: the Channels auto-expand predicate narrowed to
+attention states, and the sidebar's Archived entry lost its ever-growing count.
+`patch` was uncontested — the largest single item is maintenance, not a
+feature. The decision worth remembering is *why now rather than batching*: an
+audited-but-unshipped baseline thickens the next release's untested delta, and
+nothing else was close enough to be worth waiting for. Full narrative: devlog
+[2026-08-14-v0.4.8-release](./devlog/2026-08-14-v0.4.8-release.md).
+
+`v0.4.7` returned to self-directed work after two user-issue-driven releases.
 Its single headline is the **Discord channel** — Channels' fourth card and the
 first **parallel supervision context**: one channel (or thread) in a private
 Server is an independent supervisor context with its own GA agent instance and
@@ -186,14 +203,14 @@ Post-release follow-up:
    behaved normally, which closes the two previously unrecorded hops
    (`v0.4.1` → `v0.4.2` and `v0.4.4` → `v0.4.5`) alongside the already
    recorded `v0.4.2` → `v0.4.3`, `v0.4.3` → `v0.4.4`, and `v0.4.5` →
-   `v0.4.6`. `v0.4.6` → `v0.4.7` is the one still to run. Keep asking for
-   the step 10 result explicitly during step 9 — the smoke happens outside
-   any agent tool call, so silence is not evidence it was skipped.
-2. Watch tool-output truncation on the new GA baseline. `308153b` tightened
-   the tool-output cap ~14% (`maxlen_multiplier` 2.25 → 1.93 as a
-   denominator); JC's release smoke passed, but `...[Truncated]...` arriving
-   sooner is the one regression direction this release could still surface
-   in longer real sessions.
+   `v0.4.6`. Still to run: `v0.4.6` → `v0.4.7` and `v0.4.7` → `v0.4.8`. Keep
+   asking for the step 10 result explicitly during step 9 — the smoke happens
+   outside any agent tool call, so silence is not evidence it was skipped.
+2. Watch tool-output truncation, carried forward from the `308153b` baseline
+   (shipped in `v0.4.5`), which tightened the tool-output cap ~14%
+   (`maxlen_multiplier` 2.25 → 1.93 as a denominator). `f06d550` did not move
+   it again, so the watch is unchanged: `...[Truncated]...` arriving sooner is
+   the regression direction that only long real sessions surface.
 3. Verify the reply-done / goal-end / approval notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
@@ -205,31 +222,35 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-**GA baseline `308153b` -> `f06d550`** (audited 2026-08-14). The shipped
-baseline is still `308153b` — `v0.4.7` shipped it and nothing has been cut
-since. A 7-commit range, the smallest since the baseline was introduced:
-engine-core delta is `ga.py` + `llmcore.py` only, `agent_loop.py` /
-`agentmain.py` / `pyproject.toml` had zero diff, so **`GA_DEPS` did not
-change** and the bundled-runtime gate is not mandatory on dependency
-grounds — but `managed-ga/` did change, so it still applies. Two user-visible
-directions to watch in dogfood: fewer spurious regenerations on final answers
-(upstream length-guarded the `</summary>` incomplete check), and OpenAI-protocol
-managed models now retrying overload at the network layer instead of printing
-`!!!Error:`. Full audit: [GA baseline](./ga-baseline.md); rebase resolutions:
-[patch manifest](../managed-ga/patches/manifest.md); narrative:
-[devlog](./devlog/2026-08-14-ga-upstream-upgrade-308153b-to-f06d550.md).
+One docs-only change: the **release-notes writing rules were replaced**
+(2026-08-14, after the `v0.4.8` draft). The old
+`<User outcome>: <what changed>, so <why it matters>` template assumed the
+outcome and the change are two pieces of information; for this product's
+readers they usually are not, so it reliably produced bullets that stated one
+thing three times. The new standard is one clause per bullet stated once, with
+concrete tokens the reader has met in the product (`!!!Error:` in a reply)
+named directly while internals they could not have seen (files, functions,
+patch numbers, upstream SHAs) stay out. See
+[release notes guide](./release-notes-guide.md); the `v0.4.8` ❌/✅ pair is
+inlined there.
 
-Everything else: nothing. All post-`v0.4.6` work is folded into the `v0.4.7`
-cut described above; JC's real-machine Discord dogfood passed with no findings, so the
-`.scratch/discord-channel/` tracker was disposed per the issue-tracker rule
-(its nine anti-re-proposal rulings were migrated into the
-[shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) first), as
-were the three shipped fix trackers.
+Everything else: nothing. All post-`v0.4.7` work shipped in the `v0.4.8` cut
+described above.
 
 Open tracker carried forward: `.scratch/ga-log-retention/` (needs-triage) —
 the hygiene half left over after Rule 4's interpretation ruling; a retention
-policy for engine-written logs under the managed state root. Decoupled from
-Discord and unscoped, so it waits for the next release.
+policy for engine-written logs under the managed state root. Unscoped, so it
+waits for the next release.
+
+Deferred and explicitly bound together (2026-08-14): redirecting the native
+macOS About panel to Settings -> About, and making the sidebar wordmark
+interactive. Two sides of one brand-surface question, so neither starts alone —
+see [deferred](./devlog/deferred.md). The wordmark discussion's conclusions are
+recorded there: the wordmark is currently the sidebar column's window drag
+handle (a click target costs that, and costs it worst at the 134px minimum
+width), the epigraph precedent's misclick-unrecoverability test rules out
+"open a new session", and an easter-egg motion is the only candidate whose
+misfire is harmless.
 
 The upstream `dc_*` / `discord_*` key-name mismatch **will not be reported**
 (JC ruling, 2026-08-13): it cannot affect Galley's managed mode, which injects
@@ -249,7 +270,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Release path | v0.4.7 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Locked to audited upstream `308153b` (audited 2026-08-10, shipped in `v0.4.5` the same day) (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Locked to audited upstream `f06d550` (audited 2026-08-14, shipped in `v0.4.8` the same day) (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
