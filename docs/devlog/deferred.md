@@ -353,3 +353,31 @@
 - **待定**：进程内缓存够不够，还是要落 UI 偏好（倾向进程内，跟 config 缓存
   同级，重启归零是可接受的）。
 - **关联**：`SettingsIM.tsx` 四张卡各自持有 `expandedOverride`。
+
+---
+
+## 原生 About 面板改为通往 Settings → About（品牌门面收口）
+
+- **状态**：暂缓
+- **提出**：2026-08-14（JC 贴出 About 截图问要不要优化；同场排查澄清了两件
+  事：dev 模式下那个蓝色文件夹是**裸二进制没有 bundle**、不是缺陷，装好的
+  App 图标正常；`website` / `website_label` 两行死配置已当场删除）
+- **启动信号**：JC 真的要动品牌门面时——这条和「sidebar wordmark 可交互」
+  是同一件事的两面，别单独启动。或者用户反馈找不到版本/更新入口。
+- **方案**：把 `app_menu.rs` 里的 `PredefinedMenuItem::about` 换成自定义
+  `MenuItemBuilder`，点击直接开 Settings → About（复用现有的 settings
+  菜单项路径）。VS Code / Figma 都是自定义 About 窗口，惯例成本可接受。
+- **实施要点**：落差不在面板本身而在**它是个死胡同**——`SettingsAbout.tsx`
+  有出身故事（「Why Galley?」彩蛋）、版本 + 发布日期 colophon、更新控件、
+  内核 baseline 日期，而走 macOS 惯例路径的人落在一张三行卡片上，没有出口
+  通向那些东西。改完是「一扇门通向好房间」，不是「两个房间各自为政」。
+  注意 `app_menu.rs` 里「Check for Updates…」是 About 下面的独立项，收口后
+  它和 Settings → About 里的更新控件会重复，要一并想。
+- **待定**：原生面板本身其实是对的（正确、符合惯例、图标正常），换掉它换来
+  的是内容深度、付出的是 macOS 惯例——这笔交易划不划算没定论；「Version
+  0.4.7 (0.4.7)」的口吃**不在本项范围**（AppKit 从 `CFBundleVersion` 填括号，
+  Tauri 把它设成和版本号同值，要消掉得引入真实 build number，不值）。
+- **关联**：`core/src/app_menu.rs`（六个字段的注释已写明 macOS 只认哪些）；
+  `gui/src/components/screens/settings/SettingsAbout.tsx`；sidebar wordmark
+  交互讨论（2026-08-14，未落 devlog——被 About 话题打断，结论止于「拖拽把手
+  是硬约束、题词先例判死了开新 session、彩蛋是唯一误触无害的选项」）。

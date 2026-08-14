@@ -66,12 +66,24 @@ pub(crate) fn install_macos_menu(app: &tauri::App) -> tauri::Result<()> {
     };
     use tauri::Manager;
 
+    // macOS's standard About panel reads exactly six option keys, and
+    // muda only forwards those: name, version, short_version, copyright,
+    // icon, credits. `website` / `website_label` are Windows/Linux-only
+    // and were dead here — this menu is macOS-only to begin with.
+    //
+    // No `.icon()`: omitting it lets AppKit fall back to the bundle's own
+    // icon (`CFBundleIconFile` -> `icon.icns`), which is what we want. A
+    // `tauri dev` run has no bundle, so the panel shows a generic system
+    // icon there — that is the dev binary, not a defect in the app.
+    //
+    // The "Version 0.4.7 (0.4.7)" stutter is AppKit filling the
+    // parenthetical from `CFBundleVersion`, which Tauri sets equal to the
+    // version. Killing it would mean inventing a real build number in the
+    // bundle; not worth it for a parenthetical.
     let about_metadata = AboutMetadataBuilder::new()
         .name(Some("Galley"))
         .version(Some(env!("CARGO_PKG_VERSION")))
         .credits(Some("Made by JC Wang".to_string()))
-        .website(Some("https://github.com/wangjc683/galley".to_string()))
-        .website_label(Some("GitHub".to_string()))
         .build();
 
     let app_submenu = SubmenuBuilder::new(app, "Galley")
