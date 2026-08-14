@@ -229,6 +229,43 @@
 
 ---
 
+## Session Workspace（会话产出的落点与可达性）
+
+- **状态**：暂缓实现（2026-08-13 JC 裁决：设计定案，先不动手）
+- **提出**：2026-08-13（读 deepseek-harness 的产物行实现 → 三轮实测 →
+  设计定案，全文在
+  [.scratch/session-workspace/PRD.md](../../.scratch/session-workspace/PRD.md)）
+- **启动信号**：JC 再次遇到「找不到刚才生成的那份东西」并认为该动手；或
+  Artifacts PRD 重启（本项是它点名的前置）；或
+  `managed-ga-state/temp` 文件数从当前 **62** 继续增长到「打开工作区」也无法
+  自救的程度。
+- **方案**：核心事实是**非项目会话的产出全部落在
+  `~/Library/Application Support/.../managed-ga-state/temp` 这一个平面目录**
+  （实测 62 个文件，跨度 6–8 月，与 234 个引擎日志同级）。改为每 session 一个
+  用户可见目录，命名 `YYYY-MM-DD-<短ID>`（标题在 session 开始时还不存在，
+  且 Windows 非法字符 / MAX_PATH / 保留名三条都反对标题命名）。机制走
+  **「软链 + `handler.cwd`」而非改进程 cwd**，配一个 managed patch 改
+  `get_global_memory()` 写死的两句提示词；attach 模式降级为「只建软链 + 提示词
+  引导」。
+- **实施要点**：`workspace_path` 存 `sessions` 表首次定死（照抄
+  `goals.workspace_path`），改设置只影响新 session；空目录 session 结束时回收，
+  **不写标记文件**（会废掉回收）；工具调用的绝对路径**在 bridge 现场解析**
+  （事后推导会在项目模式和 agent 自行 chdir 时猜错，而错的绝对路径比相对路径
+  更坏），存进 `messages.tool_calls` 而**不复活 `tool_events`**（那是审批审计表，
+  线上 0 行是因为跑 YOLO，改用它要付语义扩张 + 写入路径搬家 + 写放大三笔）。
+- **待定**：**根的选址与 artifacts PRD 冲突**——本轮定的是 `~/Documents/Galley`，
+  但 artifacts PRD 早已因 macOS TCC（文稿/桌面/下载在保护区）选了 `~/Galley`，
+  该理由本轮没被提出，需复裁且会影响其余全部路径决策；另有短 ID 取值、空目录
+  回收触发点、IM 渠道 session 是否供给工作区等五条，见 PRD。
+- **关联**：[artifacts PRD](../../.scratch/artifacts/PRD.md) 定案第 1 条点名的
+  前置就是本项，本项落地即满足那一条。已否并留痕：**轮尾「本轮产物」清单行**
+  （dsh 形态——我们 `file_write`/`file_patch` 只 16 次而实际产出 62 个，
+  绝大多数走 `code_run`，一份漏掉大半的清单比没有清单更坏）、正文路径提及做成
+  可点链接（要往 Persona 加提示词，且 dsh 那套成立的前提是提示词与渲染器同包
+  同生死）、检测 agent 自行 `chdir` 后的产出（同一条理由：检测不全比不检测更坏）。
+
+---
+
 ## Artifacts（会话交付物：scratch 工作区 + API + GUI 面板）
 
 - **状态**：搁置（2026-08-07 裁决，核心设计 1–4 已定案；2026-08-12 补了一个
