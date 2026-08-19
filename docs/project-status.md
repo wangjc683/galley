@@ -9,11 +9,11 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.8`.
-- Git tag / GitHub Release: `v0.4.8` is the current published stable release
-  (tagged at `8a6c4998` on 2026-08-14, GitHub Latest).
+- Package version: `0.4.9`.
+- Git tag / GitHub Release: `v0.4.9` is the current published stable release
+  (tagged at `6148cc75` on 2026-08-19, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.8`.
+- Release tier: stable patch; default update channel points at `v0.4.9`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `f06d550` (audited 2026-08-14) — audited and released
   the same day, so audited and shipped are aligned for the first time since
@@ -24,7 +24,22 @@ Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.4.8` is the smallest release so far, and the first whose headline is the
+`v0.4.9` is a single-fix hotfix, now the smallest release: community issue #23
+(Windows, managed runtime) reported blank CMD windows flashing on session
+create/restore and background tasks. The Rust side's `CREATE_NO_WINDOW`
+coverage was complete; the flashes came from the bridge (a console-less
+process) spawning console-subsystem children, which Windows gives a fresh
+visible console. Five leftover spawn sites fixed in one pass — the literal CMD
+window was `workspace_cmd`'s `cmd /c mklink /J` during project-workspace
+session prepare — via a new `runner/process_command.py` (Python mirror of the
+core module) and managed-ga patch `0020` (an upstream-PR candidate). The
+ship-now reasoning repeats `v0.4.8`'s: the maintainer has no Windows machine,
+so publishing *is* the verification channel, and an unshipped managed-ga patch
+thickens the next release's delta. JC verified on a real Windows machine
+before publish: multiple sessions, no black windows. Full narrative: devlog
+[2026-08-18-v0.4.9-release](./devlog/2026-08-18-v0.4.9-release.md).
+
+`v0.4.8` was the smallest release before `v0.4.9`, and the first whose headline is the
 engine rather than the GUI: the **GA baseline bump `308153b` -> `f06d550`** is
 the only substantial item. Its two user-visible effects both come from upstream
 — a finished reply that ends with its summary is no longer misclassified as a
@@ -169,25 +184,26 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.7` is published and promoted as the live stable release (2026-08-13).
-The default `updates/stable/latest.json` channel points at `v0.4.7`, with the
+`v0.4.9` is published and promoted as the live stable release (2026-08-19).
+The default `updates/stable/latest.json` channel points at `v0.4.9`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. Both were verified with `--cache-bust` across all three
 platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
-through in one draft cut; JC's install smoke passed on the first build.
+through in one draft cut. Smoke was a Windows real-machine pass by JC on the
+draft build — multiple sessions, no black CMD windows — which doubles as the
+fix's effectiveness verification (the maintainer's Mac cannot show the bug).
 
-The mandatory gates for this release closed as follows. The **bundled-runtime
-gate** passed on `mac-x64` from scratch (`import discord` and
-`find_spec("frontends.dcapp")` verified under the bundle's own Python);
-`mac-arm64` and `win-x64` cannot be built on the maintainer's Intel machine,
-because `bundle-python.sh` installs deps by *running* the bundled interpreter —
-`release.yml` runs the same script on each platform's runner and fails the
-build at tag time. The **full patch-stack replay** was brought current: all 18
-patches applied clean from a fresh clone at the audited baseline and the
-rebuilt payload matched the committed `managed-ga/code` byte-for-byte, retiring
-the `0018` debt and an unrecorded `0019` debt found in the same pass.
+The mandatory gates closed as follows. The **bundled-runtime gate** passed on
+`mac-x64` from scratch (`managed-ga` changed via patch `0020`); `mac-arm64`
+and `win-x64` remain physically unverifiable on the maintainer's Intel machine
+and are covered by `release.yml`'s per-platform runners, which fail the build
+at tag time. The **full patch-stack replay** ran in the same pre-flight: all
+19 patches applied clean from a fresh clone at the audited `f06d550` baseline
+and the rebuilt payload matched the committed `managed-ga/code` byte-for-byte
+— unlike `0018`/`0019`, patch `0020` carried no unreplayed debt into its
+release.
 
-`v0.4.6` (2026-08-12) went through the same path and is now superseded.
+`v0.4.8` (2026-08-14) went through the same path and is now superseded.
 
 The Windows Alt+Tab caret restore (issue #13's Windows half) ships as a
 documented known limitation. The investigation is **shelved behind the
@@ -198,19 +214,14 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): **no open gaps.** JC confirmed on
-   2026-08-13 that every in-app update up to this release was tested and
-   behaved normally, which closes the two previously unrecorded hops
-   (`v0.4.1` → `v0.4.2` and `v0.4.4` → `v0.4.5`) alongside the already
-   recorded `v0.4.2` → `v0.4.3`, `v0.4.3` → `v0.4.4`, and `v0.4.5` →
-   `v0.4.6`. `v0.4.7` → `v0.4.8` passed on 2026-08-14. **`v0.4.6` → `v0.4.7`
-   was never run and is now off the normal path**: the dogfood machine went
-   `v0.4.7` → `v0.4.8`, and a hop can only be tested from the older build
-   still installed, so this one needs a deliberate downgrade or it stays open
-   forever. Decide to reinstall `v0.4.6` or write the hop off — do not let it
-   sit here reading as pending. Keep asking for the step 10 result explicitly
-   during step 9 — the smoke happens outside any agent tool call, so silence
-   is not evidence it was skipped.
+1. App-update dogfood (SOP step 10): **`v0.4.8` → `v0.4.9` is pending** on
+   the dogfood machine. All earlier hops through `v0.4.7` → `v0.4.8` passed
+   (JC confirmed 2026-08-13 / 2026-08-14), except **`v0.4.6` → `v0.4.7`,
+   never run and off the normal path**: a hop can only be tested from the
+   older build still installed, so it needs a deliberate downgrade or a
+   write-off — do not let it sit here reading as pending. Keep asking for the
+   step 10 result explicitly during step 9 — the smoke happens outside any
+   agent tool call, so silence is not evidence it was skipped.
 2. Watch tool-output truncation, carried forward from the `308153b` baseline
    (shipped in `v0.4.5`), which tightened the tool-output cap ~14%
    (`maxlen_multiplier` 2.25 → 1.93 as a denominator). `f06d550` did not move
@@ -220,27 +231,21 @@ Post-release follow-up:
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
    `v0.4.5` adds sounds to these, so the Windows pass now also covers the
-   three tones.
+   three tones. Now live in issue #16: the reporter says the system sound is
+   inaudible; a clarifying comment (2026-08-18) asks for their version,
+   whether toasts appear, and the Windows per-app sound / Focus Assist
+   settings. An in-app bundled-audio playback design is the standing
+   candidate if the OS-toast sound path proves unreliable.
 4. Keep Windows ARM out of the stable supported matrix. Add it later only after
    the release workflow, bundled Python, updater manifest, and smoke path all
    support `aarch64-pc-windows-msvc`.
 
 ## Unreleased On Main
 
-One docs-only change: the **release-notes writing rules were replaced**
-(2026-08-14, after the `v0.4.8` draft). The old
-`<User outcome>: <what changed>, so <why it matters>` template assumed the
-outcome and the change are two pieces of information; for this product's
-readers they usually are not, so it reliably produced bullets that stated one
-thing three times. The new standard is one clause per bullet stated once, with
-concrete tokens the reader has met in the product (`!!!Error:` in a reply)
-named directly while internals they could not have seen (files, functions,
-patch numbers, upstream SHAs) stay out. See
-[release notes guide](./release-notes-guide.md); the `v0.4.8` ❌/✅ pair is
-inlined there.
-
-Everything else: nothing. All post-`v0.4.7` work shipped in the `v0.4.8` cut
-described above.
+Nothing. All post-`v0.4.8` work — the #23 Windows console fix and the
+release-notes writing-rules replacement (2026-08-14, see
+[release notes guide](./release-notes-guide.md)) — shipped in the `v0.4.9`
+cut described above.
 
 Open tracker carried forward: `.scratch/ga-log-retention/` (needs-triage) —
 the hygiene half left over after Rule 4's interpretation ruling; a retention
@@ -272,7 +277,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.7 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.9 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Locked to audited upstream `f06d550` (audited 2026-08-14, shipped in `v0.4.8` the same day) (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -298,7 +303,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.4.7`. For the next release, bump every
+- Current package metadata uses `0.4.9`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
