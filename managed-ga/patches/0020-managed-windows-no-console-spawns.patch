@@ -1,0 +1,14 @@
+diff --git a/assets/ga_ultraplan.py b/assets/ga_ultraplan.py
+--- a/assets/ga_ultraplan.py
++++ b/assets/ga_ultraplan.py
+@@ -108 +108,2 @@ def _show():
+-        subprocess.Popen([sys.executable, __file__, "--daemon"], cwd=_ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "GA_ULTRAPLAN_DAEMON":"1"})
++        subprocess.Popen([sys.executable, __file__, "--daemon"], cwd=_ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "GA_ULTRAPLAN_DAEMON":"1"},
++                         creationflags=0x08000000 if os.name == 'nt' else 0)  # CREATE_NO_WINDOW: 无控制台父进程下防闪黑窗 (Galley issue #23)
+diff --git a/frontends/workspace_cmd.py b/frontends/workspace_cmd.py
+--- a/frontends/workspace_cmd.py
++++ b/frontends/workspace_cmd.py
+@@ -100,0 +101,3 @@ def make_dir_link(target_abs: str, link_path: str) -> bool:
++                # 父进程(Galley bridge)无控制台时,cmd 子进程会分配新控制台
++                # 闪出黑窗(Galley issue #23);CREATE_NO_WINDOW 抑制之。
++                creationflags=0x08000000,

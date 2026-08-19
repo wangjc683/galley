@@ -31,7 +31,7 @@ import uuid
 from pathlib import Path
 from typing import IO, Any
 
-from runner import _watchdog, managed_runtime
+from runner import _watchdog, managed_runtime, process_command
 from runner.ga_session import GaSession
 from runner.ipc import (
     PROTOCOL_VERSION,
@@ -387,6 +387,7 @@ def _resolve_ga_commit(ga_path: str) -> tuple[str, str]:
             cwd=ga_path,
             text=True,
             stderr=subprocess.DEVNULL,
+            **process_command.no_window_kwargs(),
         ).strip()
         if Path(root).resolve() != Path(ga_path).resolve():
             return "unknown", "unknown"
@@ -395,6 +396,7 @@ def _resolve_ga_commit(ga_path: str) -> tuple[str, str]:
             cwd=ga_path,
             text=True,
             stderr=subprocess.DEVNULL,
+            **process_command.no_window_kwargs(),
         )
         lines = out.strip().splitlines()
         if len(lines) >= 2:
@@ -1816,6 +1818,7 @@ class Bridge:
                 [python_exe, str(pet_script)],
                 stdout=_subprocess.DEVNULL,
                 stderr=_subprocess.DEVNULL,
+                **process_command.no_window_kwargs(),
             )
             self._pet_port = cmd.port
         except Exception as e:

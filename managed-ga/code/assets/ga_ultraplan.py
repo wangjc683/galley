@@ -105,7 +105,8 @@ def _ping():
 def _show():
     if os.environ.get("GA_ULTRAPLAN_DAEMON") == "1" or os.environ.get("GA_ULTRAPLAN_HTML") == "0": return
     if not _ping():
-        subprocess.Popen([sys.executable, __file__, "--daemon"], cwd=_ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "GA_ULTRAPLAN_DAEMON":"1"})
+        subprocess.Popen([sys.executable, __file__, "--daemon"], cwd=_ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "GA_ULTRAPLAN_DAEMON":"1"},
+                         creationflags=0x08000000 if os.name == 'nt' else 0)  # CREATE_NO_WINDOW: 无控制台父进程下防闪黑窗 (Galley issue #23)
         for _ in range(20):
             if _ping(): break
             sleep(0.25)

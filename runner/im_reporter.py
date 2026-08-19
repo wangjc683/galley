@@ -49,6 +49,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from runner import process_command
+
 POLL_INTERVAL_SEC = 20.0
 REPORT_TURN_TIMEOUT_SEC = 300.0
 REPORT_ATTEMPT_LIMIT = 3
@@ -95,6 +97,7 @@ def run_cli_json_lines(cli: str, args: list[str]) -> list[dict[str, Any]]:
         capture_output=True,
         text=True,
         timeout=CLI_TIMEOUT_SEC,
+        **process_command.no_window_kwargs(),
     )
     if proc.returncode != 0:
         raise ReporterCliError(

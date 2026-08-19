@@ -98,6 +98,9 @@ def make_dir_link(target_abs: str, link_path: str) -> bool:
             r = subprocess.run(
                 ["cmd", "/c", "mklink", "/J", link_path, target_abs],
                 capture_output=True, text=True,
+                # 父进程(Galley bridge)无控制台时,cmd 子进程会分配新控制台
+                # 闪出黑窗(Galley issue #23);CREATE_NO_WINDOW 抑制之。
+                creationflags=0x08000000,
             )
         except OSError as e:
             sys.stderr.write(f"[workspace] mklink invoke failed: {e}\n")
