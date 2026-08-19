@@ -2,10 +2,11 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-08-14` against upstream
-`f06d5503808ba9d164fb583e4c500d5ce01efd4c` (18-patch stack, through `0019`).
-All 18 patches applied clean from a fresh clone at the audited baseline and the
-rebuilt payload matched the committed `managed-ga/code` byte-for-byte.
+Last replay verified: `2026-08-18` against upstream
+`f06d5503808ba9d164fb583e4c500d5ce01efd4c` (19-patch stack, through `0020`).
+All 19 patches applied clean from a fresh clone at the audited baseline and the
+rebuilt payload matched the committed `managed-ga/code` byte-for-byte
+(`v0.4.9` pre-flight run).
 
 (From the 2026-08-14 `f06d550` upgrade: commit-chain rebase with two real
 conflicts, both in the browser extension and both from the same upstream
@@ -31,11 +32,10 @@ positionally past upstream's new `_raise_if_retryable_overload` helper and
 were carried by the rebase, which is exactly why the hunks are not
 hand-fixed.)
 
-(`0020` landed `2026-08-18` against the same baseline, verified as a
-top-of-stack `git apply --unidiff-zero` onto the committed payload plus a
-`py_compile` of the two touched files — not a fresh-clone full replay. Same
-standing debt shape as `0018`/`0019` had: retire it at the next full rebase
-run.)
+(`0020` landed `2026-08-18` against the same baseline, initially verified as a
+top-of-stack `git apply --unidiff-zero` plus `py_compile`; the full fresh-clone
+replay above ran the same day for the `v0.4.9` pre-flight, so unlike
+`0018`/`0019` it carried no unreplayed debt into its release.)
 
 (This replay retired the `v0.4.7` release debt: `0018` and `0019` both landed on
 `2026-08-13` against the same baseline and had only been verified in isolation
