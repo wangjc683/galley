@@ -20,7 +20,7 @@ dependencies = [
 # select extras, not all. match current task/env.
 # examples: .[ui] for GUI, bot deps only if bot needed.
 ui = [
-    "streamlit>=1.28",
+    "streamlit>=1.62",
     "pywebview>=4.0",
     "textual>=0.70",
     # tui_v3 (scrollback-first TUI) — prompt_toolkit replaces textual; rich is

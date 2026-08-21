@@ -83,7 +83,7 @@ diff --git a/ga.py b/ga.py
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1017 +1017,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
+@@ -1020 +1020,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
 -        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'temp/model_responses/model_responses_{os.getpid()}.txt')
 +        state_root = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or os.path.dirname(os.path.abspath(__file__)))
 +        log_path = os.path.join(state_root, f'temp/model_responses/model_responses_{os.getpid()}.txt')

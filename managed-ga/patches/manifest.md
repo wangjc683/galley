@@ -2,11 +2,16 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-08-18` against upstream
-`f06d5503808ba9d164fb583e4c500d5ce01efd4c` (19-patch stack, through `0020`).
-All 19 patches applied clean from a fresh clone at the audited baseline and the
-rebuilt payload matched the committed `managed-ga/code` byte-for-byte
-(`v0.4.9` pre-flight run).
+Last replay verified: `2026-08-21` against upstream
+`30b24ad31d679cde47a75f47fb6880df1dd96891` (19-patch stack, through `0020`).
+The `f06d550` -> `30b24ad` commit-chain rebase finished with **zero
+conflicts** — the first clean one since the stack reached 19 patches. Three
+patches (`0001`, `0002`, `0008`) re-exported with new line numbers and
+identical bodies, all shifted by the same +3 lines upstream added above their
+`llmcore.py` hunks. `build-managed-ga.sh` then applied all 19 clean from a
+fresh clone at the new baseline, its `py_compile` sweep passed, and
+`check-managed-ga-payload.mjs` matched the committed `managed-ga/code`
+byte-for-byte.
 
 (From the 2026-08-14 `f06d550` upgrade: commit-chain rebase with two real
 conflicts, both in the browser extension and both from the same upstream

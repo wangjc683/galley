@@ -36,6 +36,18 @@
 
 ---
 
+## `api_key_header` 的 GUI 入口（Anthropic 协议中转的鉴权头覆盖）
+
+- **状态**：暂存（2026-08-21 GA baseline 升级时发现，本次有意不做）
+- **提出**：2026-08-21，`f06d550` -> `30b24ad` 外审读到上游 `c9cb4b5`（社区 PR #751）。
+- **启动信号**：有用户（或 JC 自己）配置「说 Anthropic `/v1/messages` 协议、但 key 不带 `sk-ant-` 前缀」的中转端点时撞 401；或下一次动 Settings -> Models 高级面板时顺手。
+- **背景**：上游给 `NativeClaudeSession` 加了可选 cfg 键 `api_key_header`，取值 `auto`（默认，旧的 `sk-ant-` 前缀启发式）/ `x-api-key` / `bearer`。那类中转（上游举例 opencode.ai）只认 `x-api-key`，而 `auto` 对非 `sk-ant-` key 发 `Bearer`，结果 401 Missing API key。**Galley 的 runner 侧已经通了**：`managed_runtime.managed_model_config_from_env` 是 `cfg.update(advanced)`，模型的 `advancedOptions` 原样透传进 GA session cfg，不需要任何代码改动。差的只是入口——`AdvancedModelOptions` 编辑的是一组策展字段（`max_retries` / `read_timeout` 等），这个键不在其中，用户没法敲进去。
+- **方案**：两条路。① 在高级面板加一个三选一（`auto` / `x-api-key` / `bearer`），只对 `protocol === "anthropic"` 显示；② 不加字段，只在某个中转预设的 `recommendedAdvancedOptions` 里带上——成本更低但只覆盖预设过的端点。
+- **待定**：这是不是一个真需求。目前**没有任何用户报告**撞过这个 401，纯属读上游 diff 读出来的能力。①的成本是给一个策展面板加一个多数人用不到的字段，与「一屏配好模型」的产品方向有张力。等真实信号比现在动手更划算。
+- **关联**：[GA 上游升级 f06d550 -> 30b24ad](./2026-08-21-ga-upstream-upgrade-f06d550-to-30b24ad.md) · `runner/managed_runtime.py` `managed_model_config_from_env` · `gui/src/components/screens/settings/models/AdvancedModelOptions.tsx`
+
+---
+
 ## `shadow-*` utility 在 dark 下静默使用 light 阴影值
 
 - **状态**：暂存（2026-08-21 落选中行抬升时撞见，JC 尚未裁决是否开工）

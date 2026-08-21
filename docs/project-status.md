@@ -15,9 +15,9 @@ live in [refactor](./archive/refactor/README.md).
 - Agent API schema: `schemaVersion: 1`
 - Release tier: stable patch; default update channel points at `v0.4.9`.
   `beta` is kept as a legacy alias for older builds.
-- Shipped GA baseline: `f06d550` (audited 2026-08-14) — audited and released
-  the same day, so audited and shipped are aligned for the first time since
-  `v0.4.5`.
+- Shipped GA baseline: `f06d550` (shipped in `v0.4.8`, carried by `v0.4.9`).
+  Audited baseline on main is now `30b24ad` (2026-08-21) and rides in the
+  next release — see [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
@@ -242,8 +242,24 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-A dark-theme colour pass plus the sidebar selection redesign, both GUI-only
-and both adjudicated by JC on real hardware (2026-08-21):
+A GA baseline bump plus a dark-theme colour pass and the sidebar selection
+redesign:
+
+- **GA baseline `f06d550` -> `30b24ad`** (2026-08-21). Eight upstream
+  commits, 7 files, ~52 / ~31 — the smallest range since the baseline was
+  introduced, and the first patch-stack rebase on record to finish with
+  zero conflicts. Engine-core delta is one line of `ga.py` (the `!!!Error:`
+  tail check now skips the first 50 characters) and 5 / 2 of `llmcore.py`
+  (a new `api_key_header` auth-header override, already reachable through
+  a model's `advancedOptions`; and Anthropic `context_management`
+  disabled in the request payload — the one item worth watching in
+  dogfood). `[project.dependencies]` did not change, so `GA_DEPS` needed
+  no bump. Bundled runtime gate passed on mac-x64. See
+  [the devlog](./devlog/2026-08-21-ga-upstream-upgrade-f06d550-to-30b24ad.md)
+  and [GA baseline](./ga-baseline.md).
+
+The two GUI items below are both GUI-only and both adjudicated by JC on real
+hardware (2026-08-21):
 
 - **Dark canvas lift + chrome flip** (`fd5e9229`). The whole dark surface
   ladder moves up 3.3 OKLCH L, and `--color-chrome` changes *direction*:
@@ -257,11 +273,16 @@ and both adjudicated by JC on real hardware (2026-08-21):
   selected row had ΔL* 0.01 against chrome — no lightness step at all. See
   [the devlog](./devlog/2026-08-21-sidebar-selected-row-three-channels.md).
 
-No Rust, CLI, runner, or managed-GA change, so the Agent API and the bundled
-runtime gate are untouched by this batch.
+No Rust, CLI, or runner change, so the Agent API is untouched by this batch.
+The managed-GA payload moves with the baseline bump above, which is what puts
+the bundled runtime gate back in the release pre-flight.
 
-Two debts were found during that work and deliberately left for later, both
-in [deferred](./devlog/deferred.md): Tailwind v4 inlines `@theme --shadow-*`
+The baseline bump filed one deferred item of its own — giving
+`api_key_header` a GUI entry point in the Settings -> Models advanced panel,
+which no user has yet asked for.
+
+Two debts were found during the dark-theme work and deliberately left for
+later, both in [deferred](./devlog/deferred.md): Tailwind v4 inlines `@theme --shadow-*`
 values into the utilities it generates, so the dark `--shadow-*` block is
 dead for the 52 call sites writing `shadow-card` rather than
 `shadow-[var(--shadow-card)]`; and dark's `--color-brand-tint` is still

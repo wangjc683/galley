@@ -15,28 +15,103 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `f06d5503808ba9d164fb583e4c500d5ce01efd4c`
+Locked commit: `30b24ad31d679cde47a75f47fb6880df1dd96891`
 
-- Tree hash: `f37171dd32b8f73d653df0fe9dfb5c253148c435`
+- Tree hash: `0700767d75ff299258ac79c9e96810364724b4b7`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-08-14
-- Shipped in: not yet released — audited on main after `v0.4.7`
+- Date audited: 2026-08-21
+- Shipped in: not yet released — audited on main after `v0.4.9`
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `308153b1c91401a892401dd896e548e587506cc9`
+- Previous baseline: `f06d5503808ba9d164fb583e4c500d5ce01efd4c`
+  (tree `f37171dd32b8f73d653df0fe9dfb5c253148c435`)
+- Delta (`f06d550..30b24ad` = 8 commits): 7 files, ~52 insertions /
+  ~31 deletions — the smallest range since the baseline was introduced,
+  taking that title from the range before it. Engine-core delta is
+  `ga.py` (1 line) and `llmcore.py` (5 / 2); `agent_loop.py` and
+  `agentmain.py` had **zero diff**, and `pyproject.toml` moved only its
+  `ui` extra. The rest is upstream's Streamlit frontend (`stapp.py` 46,
+  `hub.py` 6), `mykey_template.py` (+20, comments only), and a WeChat
+  group QR image.
+- Result: no bridge protocol or dependency break. Patch-stack rebase had
+  **zero conflicts** — the first conflict-free one in this document's
+  recorded history; every earlier range has at least one. Three patches (`0001`, `0002`, `0008`) drifted purely
+  positionally, all by the same +3 lines upstream added above their
+  `llmcore.py` hunks. `0002`'s is a zero-context **pure insertion**
+  (`@@ -1011,0 +1012,47 @@`) with no deleted line for `git apply` to
+  verify against — the silent-mis-drop class — which is why a range this
+  small still went through the commit-chain rebase script instead of a
+  hand-edited line number.
+- Devlog: [GA upstream upgrade f06d550 -> 30b24ad](./devlog/2026-08-21-ga-upstream-upgrade-f06d550-to-30b24ad.md)
+
+New in the `f06d550` -> `30b24ad` range:
+
+- `llmcore.py` — **`payload["context_management"]` is now commented out**
+  (upstream `3f39e2b`). Every `NativeClaudeSession.raw_ask` used to send
+  `{"edits": [{"type": "clear_thinking_20251015", "keep": "all"}]}`; that
+  line is disabled, while `context-management-2025-06-27` stays in the
+  `anthropic-beta` header. Upstream gave no reason in the commit message.
+  Payload-only change with no Galley coupling: patches `0016` (native
+  thinking tags) and `0017` (usage accounting) both read the SSE stream in
+  `_parse_claude_sse`, not the request body. **The one item in this range
+  worth watching in dogfood** — native-Claude sessions no longer ask the
+  server for that edit, so long conversations may report different input
+  token counts.
+- `llmcore.py` — **`api_key_header` override for `NativeClaudeSession`**
+  (upstream `c9cb4b5`, community PR #751). New optional cfg key:
+  `auto` (default, the old `sk-ant-` prefix heuristic, byte-identical
+  behavior) / `x-api-key` / `bearer`. It exists for relays that speak the
+  Anthropic `/v1/messages` shape but issue non-`sk-ant-` keys and only
+  accept `x-api-key`, where `auto` sends `Bearer` and gets a 401.
+  **Already reachable from Galley with no runner change**:
+  `managed_runtime.managed_model_config_from_env` does `cfg.update(advanced)`,
+  so anything in a model's `advancedOptions` passes through verbatim. The
+  Settings -> Models advanced panel edits a curated field set that does not
+  include it, so it is not yet typeable in the GUI — see
+  [deferred](./devlog/deferred.md).
+- `ga.py` — the `!!!Error:` half of `do_no_tool`'s incomplete-response
+  check moved from `content[-100:]` to `content[50:][-100:]`, so an error
+  marker sitting in the first 50 characters no longer reads as a broken
+  tail. This only changes short contents: for anything past ~150
+  characters the two expressions are the same slice, which is why a *long*
+  `!!!Error: HTTP 4xx: {body}` already fell through before this commit.
+  Net effect is consistency — a short hard failure now surfaces its error
+  text on the first try instead of burning `_retry_or_exit`'s three
+  regenerations first. Galley's model probe is unaffected: `probe.rs`
+  calls `backend.raw_ask` directly and never enters `do_no_tool`.
+- `frontends/hub.py` — `put` / `api_put` reject non-string `text` with
+  `{'code': 'badop'}` (upstream `3f39e2b`). Inert on Galley's path; the
+  standing `grep -rn "hub.connect" managed-ga/code/` guard still shows
+  only `agentmain.py --reflect` and `stapp.py`, neither of which Galley
+  runs.
+- `frontends/stapp.py` + `pyproject.toml` — Streamlit fragment / rerun
+  fixes, with the `ui` extra's floor raised `streamlit>=1.28` ->
+  `>=1.62` to match. **`[project.dependencies]` did not change**, and
+  `bundle-python.sh`'s `GA_DEPS` mirrors only that core list, so the
+  bundled runtime is untouched. Inert.
+- `mykey_template.py` — comment-only block documenting `api_key_header`
+  with an opencode.ai example. Inert: managed mode installs its own
+  mykey loader (`managed_runtime.install_managed_mykey_loader`) and never
+  reads this template.
+- `assets/images/wechat_group22.jpg` — upstream community QR refresh.
+  Inert.
+
+Carried forward from the `308153b` -> `f06d550` range (2026-08-14):
+
+- Previous-previous baseline: `308153b1c91401a892401dd896e548e587506cc9`
   (tree `6533522b7858869ef93590521466cf3ffdf4aeb7`)
 - Delta (`308153b..f06d550` = 7 commits): 11 files, ~138 insertions /
-  ~88 deletions — the smallest range since the baseline was introduced.
-  Engine-core delta is only `ga.py` (13) and `llmcore.py` (11);
-  `agent_loop.py`, `agentmain.py`, and `pyproject.toml` had **zero diff**.
-  The rest is upstream frontends (`p2p_ws_client.py` 127,
-  `worldline.py`, `continue_cmd.py`, `hub_p2p.py`, `conductor.html`) and
-  the two `global_mem_insight` templates.
-- Result: no bridge protocol or dependency break. Patch-stack rebase had
-  two real conflicts, both in the browser extension and both caused by
-  the same upstream commit (`e519734`) landing on the exact lines patches
-  `0006` / `0015` own — see
+  ~88 deletions. Engine-core delta is only `ga.py` (13) and
+  `llmcore.py` (11); `agent_loop.py`, `agentmain.py`, and
+  `pyproject.toml` had **zero diff**. The rest is upstream frontends
+  (`p2p_ws_client.py` 127, `worldline.py`, `continue_cmd.py`,
+  `hub_p2p.py`, `conductor.html`) and the two `global_mem_insight`
+  templates.
+- Result: no bridge protocol or dependency break; shipped in `v0.4.8`.
+  Patch-stack rebase had two real conflicts, both in the browser
+  extension and both caused by the same upstream commit (`e519734`)
+  landing on the exact lines patches `0006` / `0015` own — see
   [patch manifest](../managed-ga/patches/manifest.md) for the resolutions.
 - Devlog: [GA upstream upgrade 308153b -> f06d550](./devlog/2026-08-14-ga-upstream-upgrade-308153b-to-f06d550.md)
 
