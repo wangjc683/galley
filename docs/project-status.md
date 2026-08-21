@@ -242,10 +242,31 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing. All post-`v0.4.8` work — the #23 Windows console fix and the
-release-notes writing-rules replacement (2026-08-14, see
-[release notes guide](./release-notes-guide.md)) — shipped in the `v0.4.9`
-cut described above.
+A dark-theme colour pass plus the sidebar selection redesign, both GUI-only
+and both adjudicated by JC on real hardware (2026-08-21):
+
+- **Dark canvas lift + chrome flip** (`fd5e9229`). The whole dark surface
+  ladder moves up 3.3 OKLCH L, and `--color-chrome` changes *direction*:
+  the rule is no longer "chrome always sinks" but **content takes the
+  extreme, chrome sits toward mid-tone**, so chrome is darker than the light
+  canvas and lighter than the dark one. Body contrast lands at 14.67:1.
+  See [the devlog](./devlog/2026-08-21-dark-canvas-lift-and-chroma-reloosen.md).
+- **Sidebar selected row: three channels** (`fc886953`). Selection had one
+  signal sharing the most crowded channel on the row; it now owns fill, lift,
+  and full-strength title ink. Also fixes a real light-mode bug where the
+  selected row had ΔL* 0.01 against chrome — no lightness step at all. See
+  [the devlog](./devlog/2026-08-21-sidebar-selected-row-three-channels.md).
+
+No Rust, CLI, runner, or managed-GA change, so the Agent API and the bundled
+runtime gate are untouched by this batch.
+
+Two debts were found during that work and deliberately left for later, both
+in [deferred](./devlog/deferred.md): Tailwind v4 inlines `@theme --shadow-*`
+values into the utilities it generates, so the dark `--shadow-*` block is
+dead for the 52 call sites writing `shadow-card` rather than
+`shadow-[var(--shadow-card)]`; and dark's `--color-brand-tint` is still
+carrying a `provisional` marker whose review this very dark pass should have
+done.
 
 Open tracker carried forward: `.scratch/ga-log-retention/` (needs-triage) —
 the hygiene half left over after Rule 4's interpretation ruling; a retention
