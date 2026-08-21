@@ -187,6 +187,15 @@
 
   /* --- shadows (additive; Tailwind defaults remain available) --- */
   --shadow-card: 0 1px 2px rgba(31, 27, 23, 0.04);
+  /* Sidebar's selected session row. Deliberately stronger than
+     --shadow-card, which is tuned for cards sitting on the app canvas and
+     is invisible on the chrome layer. Selection needs a channel of its own:
+     the background fill is shared with hover / warning / error / actions-
+     open / editing, so fill alone reads as "a stronger hover" rather than
+     a different kind of state. This shadow is that second channel — see
+     the SidebarSessionRow comment for the full signal inventory. */
+  --shadow-selected:
+    0 1px 2px rgba(31, 27, 23, 0.1), 0 2px 7px rgba(31, 27, 23, 0.07);
   --shadow-elevated: 0 8px 24px rgba(31, 27, 23, 0.12);
   --shadow-button-raised:
     0 1px 0 rgba(31, 27, 23, 0.12), 0 1px 2px rgba(31, 27, 23, 0.05),
@@ -442,6 +451,12 @@ html[data-theme="dark"] {
   --opacity-strong: 0.46;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18);
+  /* Dark selected row: same role as the light value, but a dark ground
+     swallows a pure drop shadow, so a faint top inset highlight carries
+     the "raised" read that the shadow alone cannot. */
+  --shadow-selected:
+    0 1px 2px rgba(0, 0, 0, 0.4), 0 3px 10px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(237, 231, 224, 0.05);
   --shadow-elevated:
     0 14px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(237, 231, 224, 0.03);
   --shadow-button-raised:
@@ -526,6 +541,27 @@ html {
    first frame means light). */
 html:not([data-theme="dark"]) .chrome-hover-scope {
   --color-hover: #e5e3e0;
+  /* Selected rows had NO lightness step at all on chrome: the global
+     #f8edda sits at L* 94.14 against chrome's 94.12 — ΔL* 0.01, so the
+     apricot hue was carrying the entire "you are here" signal on its own,
+     while hover moved a visible 3.81 in the opposite direction. A row was
+     literally more prominent under the cursor than when selected.
+     deferred.md tracked this from 2026-08-07 and its trigger ("dogfood
+     finds the selected row not prominent enough") fired on 08-21.
+
+     #e7d8c0 goes DOWN, not up: chrome is already at L* 94.12, so lifting
+     buys only ~2.6 before the apricot bleaches into white, while deepening
+     has ~9 to work with. That puts it on the same side as hover, so it
+     clears hover too — ΔL* 3.36 past it — and chroma goes up 1.3x so the
+     fill stays a colour rather than a warm grey. Adjudicated on real
+     hardware against a lift variant.
+
+     Scope-wide on purpose: SidebarQuickActions and SidebarProjectReview
+     also paint bg-selected on chrome and had the same invisible step. The
+     eight bg-selected call sites OUTSIDE the sidebar (dialogs, button
+     active states, composer) sit on app / elevated and keep the global
+     value — which is why this is an override and not a token change. */
+  --color-selected: #e7d8c0;
 }
 
 /* Dark needed no override until the 2026-08-21 chrome flip: with chrome
@@ -535,21 +571,40 @@ html:not([data-theme="dark"]) .chrome-hover-scope {
    with app, collapsing that gap to ΔL* 5.49 — the same failure mode as
    the light bug above, just not yet all the way to invisible.
 
-   Both values are simply what the global tokens were *before* the flip,
-   and that is the whole derivation: the sidebar's ground is now exactly
-   the pre-flip app value, so the interaction fills calibrated against
-   that ground carry over unchanged. hover restores ΔL* 7.85 over chrome
-   (vs 10.35 pre-flip — lower, but far above the ΔL* 3.81 that the light
-   side is calibrated at and has been fine with since 08-07).
+   hover is simply what the global token was *before* the flip, and that
+   is the whole derivation: the sidebar's ground is now exactly the
+   pre-flip app value, so a fill calibrated against that ground carries
+   over unchanged. It restores ΔL* 7.85 over chrome (vs 10.35 pre-flip —
+   lower, but far above the ΔL* 3.81 the light side is calibrated at and
+   has been fine with since 08-07).
 
-   --color-selected joins the override here, unlike light: after the flip
-   the global selected sits only 3.0 OKLCH L over the sidebar hover, so
-   the "row is selected" step would be leaning on hue alone (the exact
-   condition deferred.md tracks as a known weakness on the light side).
-   Restoring the pre-flip value puts it back 5.0 L clear of hover. */
+   --color-selected is overridden here too, unlike light: the global
+   value sits only 3.0 OKLCH L over the sidebar hover after the flip, so
+   "row is selected" would be leaning on hue alone (the exact condition
+   deferred.md tracks as a known weakness on the light side).
+
+   Its value happens to equal --color-brand-tint, the mainview's user-
+   message band. THAT IS A CALIBRATION COINCIDENCE, NOT A BINDING — do
+   not rewrite it as var(--color-brand-tint). The two mean different
+   things (brand-tint = "you wrote this", repeated many times per screen;
+   selected = "you are here", globally unique) and must stay free to move
+   independently; binding them would let a future retune of the mainview
+   band silently move the sidebar's selected row, which is exactly the
+   shared-token mechanism behind the 08-05 → 08-07 hover blindness.
+
+   Why the coincidence exists at all is a direct consequence of the
+   chrome flip: dark chrome is now *lighter* than app while these fills
+   run lighter still, so a fill calibrated on app lands higher than one
+   calibrated on chrome, and brand-tint's absolute value happens to be
+   right where selected wants to sit. In light every sign is reversed, so
+   the same value would land at ΔL* -0.73 from hover — indistinguishable.
+   That is why light keeps its own value and this is not a cross-theme
+   rule. Measured here: ΔL* +16.42 over chrome, +8.57 over hover, +6.22
+   over line (a selection fill should out-light the dividers) and still
+   3.12 under line-strong so borders keep containing it. */
 html[data-theme="dark"] .chrome-hover-scope {
   --color-hover: #2f2b27;
-  --color-selected: #44352a;
+  --color-selected: #4d3b2b;
 }
 
 body {

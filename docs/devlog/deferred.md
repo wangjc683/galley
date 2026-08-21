@@ -8,6 +8,19 @@
 
 ---
 
+## `shadow-*` utility 在 dark 下静默使用 light 阴影值
+
+- **状态**：暂存（2026-08-21 落选中行抬升时撞见，JC 尚未裁决是否开工）
+- **提出**：2026-08-21，给 `--shadow-selected` 建 token 后核对产物时发现。
+- **启动信号**：dogfood 中觉得 dark 下卡片 / dialog / 浮层「贴在背景上、浮不起来」或层次感弱；或下一次要动 dark 阴影时。
+- **背景**：Tailwind v4 为 `@theme` 里的 `--shadow-*` 生成 utility 时**把值内联**进 `--tw-shadow`，不生成 `var()` 引用。产物实测：`.shadow-card{--tw-shadow:0 1px 2px var(--tw-shadow-color,#1f1b170a)}` —— 写死的是 light 的 `rgba(31,27,23,0.04)`。于是 `html[data-theme="dark"]` 块里那一整批 `--shadow-*` 重定义**对直写 utility 的调用点完全不生效**，dark 下拿到的是 light 的淡暖黑（4%）而不是设计意图的纯黑（18%–42%）。
+- **影响面**（2026-08-21 实测）：**52 处直写受影响**（dialog / card / menu / tooltip 为主），**36 处用 `shadow-[var(--shadow-*)]` 写法不受影响**（button、composer、MessageUser 等——07-16 native-feel 那轮显然已经知道这个坑）。
+- **方案**：把 52 处直写统一改成 `shadow-[var(--shadow-*)]` 形式。机械替换，可脚本化；风险在于改完 dark 阴影会**第一次真正生效**，观感会明显变化（变重），需要连带复核 dark 下各浮层的阴影值是否还合适——很可能当年调 dark 阴影值时就是照着「看不见」调的。
+- **待定**：是否顺带把 `--shadow-*` 改成不进 `@theme`、只做普通 CSS 变量（那样 utility 就不存在，强制所有调用点走 var 写法，杜绝重演）。
+- **关联**：[选中行三通道](./2026-08-21-sidebar-selected-row-three-channels.md) 落地时发现；`docs/design/foundations.md` shadow token 段。
+
+---
+
 ## IM 里的下一步建议按钮化（next-suggestion 的 IM 消费端）
 
 - **状态**：暂缓（漏出 bug 已由反方向修复：mandate 移出 IM 提示词）
@@ -200,18 +213,6 @@
 - **方案**：`RUNTIME_PROMPT_STATIC` 加一条「调用 ask_user 提问时尽量附带 candidates」——零成本纯 prompt 调优，现有 chips 渲染（`AskUserBubble`）立刻变勤快。managed 独占（attach 不碰 GA prompt）。
 - **待定**：措辞对不同模型的遵从率；candidates 数量上限建议。
 - **关联**：[自动标题 + 下一步建议](./2026-08-04-auto-title-and-next-suggestion.md)。
-
----
-
-## Sidebar selected 行明度持平（chrome 加深次生）
-
-- **状态**：暂存（2026-08-07 hover 修复时发现，JC 裁决先只修 hover；同日 JC 真机确认 selected 现状效果 OK——色相锚成立，启动信号未出现）
-- **提出**：2026-08-07，排查 sidebar hover 失明时的连带发现。
-- **启动信号**：dogfood 中觉得选中行「你在这里」不够醒目——出现即证据。
-- **背景**：`--color-selected`（`#F8EDDA`，L* 94.2）与 08-05 加深后的 chrome（`#EFEEEC`，L* 94.1）明度完全持平，session 选中行的明度抬升已失效，现在只靠杏色色相撑。与 hover 的纯明度失明性质不同（hover 无色相可依赖，必修；selected 有饱和暖色对中性灰，暂时成立）。
-- **方案**：若触发，同走 `.chrome-hover-scope` 的思路给 chrome 层覆写 `--color-selected`（或直接压深一档），保持杏色相、拉开 ΔL*。
-- **待定**：是否随未来 dark pass / chrome 再调整一并处理。
-- **关联**：[Sidebar hover 失明修复](./2026-08-07-sidebar-chrome-hover-retune.md)。
 
 ---
 

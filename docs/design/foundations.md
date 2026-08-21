@@ -124,7 +124,7 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 | `--color-hover` | `#2A2622` | 中性 hover |
 | `--color-selected` / `--color-brand-soft` | `#3E3026` | 杏沙 tint |
 | `--color-brand-tint` | `#4D3B2B` | 用户消息底（provisional，dark pass 再校） |
-| *(sidebar 内覆写)* | `--color-hover` `#2F2B27` / `--color-selected` `#44352A` | `.chrome-hover-scope`，见下方 |
+| *(sidebar 内覆写)* | `--color-hover` `#2F2B27` / `--color-selected` `#4D3B2B` | `.chrome-hover-scope`，见下方；light 侧同名覆写 `--color-selected` `#E7D8C0`。dark 的 selected 与 `brand-tint` **同值但不绑定**（标定重合，见 [选中行三通道](../devlog/2026-08-21-sidebar-selected-row-three-channels.md)） |
 | `--color-brand` | `#D6A083` | 品牌主色 |
 | `--color-brand-strong` | `#E2AE8D` | 品牌 hover / link |
 | `--color-success` | `#8FBF8F` | 成功（较 light 提亮） |

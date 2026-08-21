@@ -136,7 +136,10 @@ export interface SidebarProps {
  * archived sessions exist.
  *
  * The active session row gets `bg-selected` (apricot tint) — this is a
- * brand moment, not just hover state.
+ * brand moment, not just hover state. Since 2026-08-21 it also carries a
+ * lift (shadow) and full-strength title ink while every other row steps
+ * back to ink-soft; one channel was not enough to catch at a glance. See
+ * the channel inventory in SidebarSessionRow.
  */
 export function Sidebar({
   sessions,

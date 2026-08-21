@@ -264,6 +264,28 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // owns four signals (breathing rail, spinner, brand subline, semibold
   // title). The blocking-state tints stay: warning/error are different
   // hues and mean "stuck, needs you" — the loudest triage tier.
+  //
+  // Selection owns THREE channels as of 2026-08-21, because one was not
+  // enough — JC could not catch the selected row at a glance. The channel
+  // inventory is the argument: fill is shared by six states (selected,
+  // hover, warning, error, actions-open, editing), so competing inside it
+  // only makes selection read as "a stronger hover". The other two are
+  // exclusive to selection:
+  //   1. fill      — bg-selected, deepened on chrome (see globals.css)
+  //   2. lift      — shadow-[var(--shadow-selected)]; nothing else on the
+  //                  row casts a shadow. Written as an arbitrary var()
+  //                  reference, NOT the `shadow-selected` utility: Tailwind
+  //                  v4 inlines a --shadow-* theme value into the utility
+  //                  it generates, so the dark-block redefinition would be
+  //                  ignored and dark would silently render the light
+  //                  shadow. Same reason the composer/button shadows use
+  //                  this form.
+  //   3. focus     — full-strength title ink while every other row steps
+  //                  back to ink-soft (subtractive, see the title below)
+  // Deliberately NOT used: the left rail (running/waiting/error own it,
+  // and the selected row is frequently also the running one) and title
+  // weight (running/unread own it). Adjudicated on real hardware against
+  // a "break the row's shape" variant, which lost to the lift.
   const inactiveRowClass = hasBlockingError
     ? "bg-error/[var(--opacity-subtle)] hover:bg-error/[var(--opacity-soft)]"
     : hasPendingAsk || hasPendingApproval
@@ -322,7 +344,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
         isEditing
           ? "bg-elevated"
           : active
-            ? "bg-selected"
+            ? "bg-selected shadow-[var(--shadow-selected)]"
             : actionsOpen
               ? "bg-hover"
               : inactiveRowClass,
@@ -398,7 +420,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             <div
               title={session.title}
               className={cn(
-                "min-w-0 flex-1 truncate text-[13px] text-ink",
+                "min-w-0 flex-1 truncate text-[13px]",
+                // Subtractive focus: the selected row keeps full-strength
+                // ink and every other row steps back to ink-soft. Dimming
+                // the many is a quieter way to raise the one than shouting
+                // with the selected row itself, and it costs no channel —
+                // title COLOUR was unused, while title WEIGHT belongs to
+                // running/unread and is left alone here.
+                active ? "text-ink" : "text-ink-soft",
                 isRunning ||
                   goalRunning ||
                   showUnread ||

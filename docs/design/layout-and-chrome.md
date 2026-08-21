@@ -158,6 +158,8 @@ Sidebar 的设计目标是一块**可一眼扫描的多 session 状态板**：�
 
 motion 语义专属于 running：静态彩条表示「卡在这、需要你」，呼吸表示「正在前进」，无条表示「无事发生」。rail 不表达百分比，不得从左到右推进成 progress bar。ask_user / approval 使用极轻 warning tint，error 使用极轻 error tint，强化可扫性但不改变时间线排序。**running row 不叠底 tint**（2026-07-20 修订）：行背景是「选中」的专属通道——`bg-brand-soft` 与 `bg-selected` 同色值，running 行叠 tint 会与选中行在扫视时无法区分；running 已有呼吸 rail + spinner + brand 状态行 + 加粗标题四条信号，可扫性不依赖底色。blocking 状态保留 tint：色相不同，且属最高 triage 优先级。
 
+**选中态占三条通道**（2026-08-21 修订，真机裁决）：只靠底色不够——底色这条通道被 selected / hover / warning / error / actionsOpen / editing **六个状态共用**，在里面比响度只会让选中读成「更用力的 hover」。三条通道是 ① 底色（chrome 层专属覆写，见 foundations「Chrome 的方向随主题翻转」）② **抬升**（`--shadow-selected`，全行唯一一个投影）③ **减法聚焦**（选中行标题保持 `ink`，其余行降到 `ink-soft`）。有意不用的两条：左 rail 属 running/waiting/error（且选中行常常同时在 running），标题字重属 running/unread。
+
 ##### 2. 左侧 status icon（兼承未读）
 
 行最左 14px Phosphor 图标，颜色随状态（见 `status-icon.tsx` `STATUS_MAP`）：
