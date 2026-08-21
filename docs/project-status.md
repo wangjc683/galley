@@ -242,6 +242,18 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
+**Release deliberately deferred (JC ruling, 2026-08-21).** This batch was
+scoped and graded for a `v0.4.10` patch, then held to accumulate more first.
+The grading itself is settled and does not need re-litigating: `patch`, the
+same shape as `v0.4.8` — baseline bump as the headline, GUI polish riding
+along. Nothing is blocked; the pre-flight below already passed, so the next
+release session starts from a bumped baseline and a green bundled runtime
+gate. Two things that session must re-check rather than inherit: whether
+upstream GA has moved past `30b24ad` again (audited 2026-08-21, and the
+[upgrade trigger](./ga-baseline.md) is "before a release, normally audit"),
+and the `context_management` dogfood item named below, which has **not** been
+run yet.
+
 A GA baseline bump plus a dark-theme colour pass and the sidebar selection
 redesign:
 
