@@ -152,13 +152,15 @@ export function ComposerActionSlot({
                 //
                 // Fill is --color-hover, the neutral "inert control"
                 // step. Was --color-chrome until 2026-08-05, which only
-                // ever fit by greyscale coincidence: chrome is the
-                // sidebar *stage-recession* token and moves whenever
-                // that relationship is retuned (it just did). It also
-                // sat darker than the canvas in dark mode, so an unlit
-                // button read heavier than the surface holding it —
-                // --color-hover sits lighter than the canvas there,
-                // which is the right direction for "not lit yet".
+                // ever fit by greyscale coincidence: chrome belongs to
+                // the sidebar layer and moves whenever that relationship
+                // is retuned. It has moved twice since — deepened on
+                // 08-05, then lifted and flipped to the *lighter* side
+                // of --color-app in dark on 08-21 — so borrowing it here
+                // would have broken this button twice. --color-hover is
+                // the token that actually means "unlit control", and it
+                // stays a step off the canvas in the right direction in
+                // both themes.
                 "cursor-not-allowed border-line bg-hover text-ink-muted shadow-none hover:translate-y-0 hover:border-line hover:bg-hover hover:text-ink-muted hover:shadow-none active:translate-y-0 active:scale-100",
             )}
           >

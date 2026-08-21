@@ -30,7 +30,10 @@ import { TooltipLabel } from "@/components/ui/tooltip";
  * the resizable panel widths and the resize separator runs full-height
  * between them. The two headers are the same height; their bottom
  * borders align into one continuous top strip across the two-tone
- * columns (Sidebar bg-chrome, Main bg-app).
+ * columns (Sidebar bg-chrome, Main bg-app). Which of the two is the
+ * lighter tone flips with the theme — chrome leans toward mid-tone in
+ * both, so it is darker than the light canvas and lighter than the dark
+ * one; see --color-chrome in globals.css.
  *
  * Resizable two-column layout via react-resizable-panels v4 (`Group`
  * + `Panel` + `Separator`). Widths are persisted to localStorage via
@@ -110,9 +113,11 @@ export function AppShell({
         className="flex min-h-0 flex-1"
       >
         <Panel id="sidebar" defaultSize="20%" minSize="14%" maxSize="30%">
-          {/* chrome-hover-scope retunes --color-hover for the darker
-              chrome ground (globals.css) — hover fills inherit it
-              across the whole sidebar column. */}
+          {/* chrome-hover-scope retunes --color-hover (and, in dark,
+              --color-selected) for the chrome ground, which sits on the
+              opposite side of --color-app in each theme (globals.css)
+              — interaction fills inherit the retune across the whole
+              sidebar column. */}
           <aside className="chrome-hover-scope flex h-full flex-col overflow-hidden border-r border-line/70 bg-chrome">
             {sidebar}
           </aside>

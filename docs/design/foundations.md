@@ -111,19 +111,20 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 
 | CSS variable | Dark 值 | 用途 |
 |---|---|---|
-| `--color-chrome` | `#0E0C0A` | Sidebar chrome，比 app 更沉（同 light 的倒置抬升规则）。2026-08-05 由 `#12100E` 加深，见下方「Chrome 下沉量」 |
-| `--color-app` | `#161412` | 暖黑 app 底 |
-| `--color-surface` | `#1C1917` | 普通卡片底 |
-| `--color-code-surface` | `#201D1A` | 块代码底 |
-| `--color-elevated` | `#23201D` | 浮层 / dialog / command palette |
-| `--color-line` | `#312D28` | 默认边框 |
-| `--color-line-strong` | `#48413B` | hover / focus 边 |
-| `--color-ink` | `#ECE7E1` | 主文本，不用纯白 |
-| `--color-ink-soft` | `#C5BDB4` | 次级文本 |
-| `--color-ink-muted` | `#91897F` | hint / timestamp |
-| `--color-hover` | `#262320` | 中性 hover |
-| `--color-selected` / `--color-brand-soft` | `#3A2D23` | 杏沙 tint |
-| `--color-brand-tint` | `#4A3829` | 用户消息底（provisional，dark pass 再校） |
+| `--color-chrome` | `#1E1B17` | Sidebar chrome。**dark 下比 app 更亮**（与 light 相反），见下方「Chrome 的方向随主题翻转」 |
+| `--color-app` | `#191614` | 暖黑 app 底 |
+| `--color-surface` | `#201B19` | 普通卡片底 |
+| `--color-code-surface` | `#24201C` | 块代码底 |
+| `--color-elevated` | `#27231F` | 浮层 / dialog / command palette |
+| `--color-line` | `#353029` | 默认边框 |
+| `--color-line-strong` | `#4D443C` | hover / focus 边 |
+| `--color-ink` | `#EDE7E0` | 主文本，不用纯白 |
+| `--color-ink-soft` | `#C6BDB2` | 次级文本 |
+| `--color-ink-muted` | `#92897D` | hint / timestamp |
+| `--color-hover` | `#2A2622` | 中性 hover |
+| `--color-selected` / `--color-brand-soft` | `#3E3026` | 杏沙 tint |
+| `--color-brand-tint` | `#4D3B2B` | 用户消息底（provisional，dark pass 再校） |
+| *(sidebar 内覆写)* | `--color-hover` `#2F2B27` / `--color-selected` `#44352A` | `.chrome-hover-scope`，见下方 |
 | `--color-brand` | `#D6A083` | 品牌主色 |
 | `--color-brand-strong` | `#E2AE8D` | 品牌 hover / link |
 | `--color-success` | `#8FBF8F` | 成功（较 light 提亮） |
@@ -144,10 +145,65 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 > 品牌家族（`brand` / `brand-strong` / `brand-tint` / `selected`）与语义色
 > **有意未动**——先看安静下来的底色之下品牌色的相对响度对不对，再决定下一轮。
 
-#### Chrome 下沉量（2026-08-05）
+> **2026-08-21 抬画布 + chroma 松到 0.73× + chrome 翻向**：上表已是本次落地值。
+> 整条表面阶梯上移 **3.3 个 OKLCH L 点**，随后 chrome 与 app 对调、主区阶梯
+> 随 app 回落 2.1（见下方「Chrome 的方向随主题翻转」）。触发信号是 JC 在 dark
+> 下读出「sidebar 太重、头重脚轻」。以 Tokyo Night 为
+> 校准尺（JC 日常主题）：TN **最暗**的 UI 面（sidebar `#16161E`，L 20.4）原本
+> 比 Galley 的**整个对话画布**（L 19.3）还亮，且 TN 的 chrome→canvas 差值只有
+> 2.2 而我们是 3.7。**方向从来不是问题**——TN 的 sidebar 同样比编辑区暗——问题
+> 是绝对深度、差值过大、以及地板处 chroma 近零（近黑 + 近零饱和的大色块读作
+> 「重物」而非「后退」）。
+>
+> chroma 部分是对 0.6× 的**有意部分重开**：只抬 L 会让 C/L 从 .0264 悄悄掉到
+> .0224（等于又降一档），故先按 L 比例补偿回 0.6×，再松 1.21× 至 **~0.73×**
+> （C/L .0321）。仍远低于 TN 的 .078–.095，因为我们是暖相——暖色在冷蓝紫还
+> 撑得住的 chroma 上就已经发闷。07-25「墨色必须同向同幅」的规则继续生效：
+> 墨色同取 1.21×，**明度不动**，故对比度漂移 ≤0.03。`--shadow-*` 的高光内嵌
+> 随 ink 更新为 `rgba(237,231,224,…)`（17 处）。
+>
+> **墨色明度有意未动**，故正文对比是画布位置的因变量：抬画布后 13.96:1，
+> 翻转让画布回落后 **14.67:1**（原 14.95，TN 10.59）。要往 TN 那个区间走必须
+> 下调墨色明度，那会重开 07-25 的暖轴裁决，属于独立一轮。
+>
+> 品牌填充（`selected` / `brand-soft` / `brand-tint`）随阶梯抬明度，但 chroma
+> 只做纯 L 补偿、**不吃 1.21×**——它们当初就没参与 0.6× 降暖，再乘一次等于给
+> 从未降过的东西净加暖。
 
-`--color-chrome` 与 `--color-app` 的差值决定「侧栏沉下去、对话区抬起来」这条
-规则**实际被看见的程度**。两个模式在这次同批加深：
+#### Chrome 的方向随主题翻转（2026-08-21 定案）
+
+**规则不是「chrome 永远下沉」，而是「content 走极端、chrome 走中间调」。**
+Light 的纸是近白的，所以 chrome 比它暗；dark 的画布是近黑的，所以 chrome 比它
+**亮**。与 macOS 原生侧栏材质同理——那层材质在两个外观下都往中灰靠，因此相对
+内容区自动反向。Dark 下 sidebar 因此读作**一层浮起来的材质**而不是一个凹陷，
+这是 JC 真机裁决接受的 trade。
+
+`--color-chrome` 与 `--color-app` 的**差值大小**（不论方向）决定这条规则实际
+被看见的程度。当前值：
+
+| | app | chrome | ΔL\* | 方向 |
+|---|---|---|---|---|
+| Light | `#faf9f8` | `#efeeec` | **3.85** | chrome 更暗 |
+| Dark | `#191614` | `#1E1B17` | **2.46** | **chrome 更亮** |
+
+Dark 的 2.2（OKLCH L）直接抄 Tokyo Night 的 sidebar↔editor 差值；light 的 3.85
+是在近白端标定的，两端不共用一个数字。
+
+Dark 侧的两条承重后果，**都是有意的、不要"修"**：
+
+- chrome（L 22.4）与 `--color-surface`（22.7）基本持平，即 sidebar 与主区卡片
+  共处同一明度带。这正是「浮起来的材质」的读法。
+- 全局 `--color-hover` / `--color-selected` 是按主区阶梯标定的，在 chrome 上
+  贴得太近而不可见——与 light 同病。Sidebar 通过 `.chrome-hover-scope` 覆写
+  两者，取值就是**翻转前的全局值**（sidebar 的地面现在恰好等于翻转前的 app
+  底，故按那个地面标定过的交互色原样成立）：`chrome→hover` ΔL\* 7.85、
+  `hover→selected` ΔL\* 5.66，与主区的 7.95 / 5.67 几乎重合。
+
+以下为这条规则的形成史（数值已被上表取代，保留论证）。
+
+##### 2026-08-05：先把差值做出来
+
+两个模式同批加深：
 
 | | app | chrome 旧 → 新 | ΔL\* 旧 → 新 |
 |---|---|---|---|
@@ -165,10 +221,29 @@ dark 记 1.033，两个近乎相同的数字对应的其实是可感知程度不
 （Slack / IDE 那种分区感），与 Galley 纸感安静的调性冲突。当前值取在这条带的
 克制端，是有意的。
 
-Dark 比 light 收得更紧（3.04 vs 3.85）：app 底已经是 `#161412`，若追平 light 的
-差值会把侧栏推到接近纯黑，大面积近黑不再读作「一个面」，而读作「一个洞」。
+Dark 比 light 收得更紧（3.04 vs 3.85），当时的理由是：app 底已经是 `#161412`，
+若追平 light 的差值会把侧栏推到接近纯黑，大面积近黑不再读作「一个面」而读作
+「一个洞」。
 
-复用禁令随之加强：chrome 是**舞台后退**语义的 token，会随这层关系被重调而移动。
+##### 2026-08-21：加深反噬，先抬画布，再翻方向
+
+`#0e0c0a`（OKLCH L 15.6）贴在地板上，真机读出来不是「洞」而是**重物**（JC：
+头重脚轻）——上面那条自我收敛方向对、但收得不够。**先做的是不翻转的修法**：
+整条阶梯抬 3.3 L 点、差值收到 TN 的 2.2，理由是 Tokyo Night（JC 日常主题）的
+sidebar 同样比编辑区暗，方向从来不是问题（详见
+[当日 devlog](../devlog/2026-08-21-dark-canvas-lift-and-chroma-reloosen.md)）。
+
+**JC 真机 dogfood 该版本后仍要求对调**，于是 chrome 与 app 互换：chrome 取抬
+画布后的 app 值（L 22.4）、app 取 20.3，阶梯保持内部步进随 app 下移 2.1，差值
+2.2 不变、只换符号。画布净值 19.3 → 22.4 → **20.3**，仍比本轮起点高 1.0 点，
+抬画布没有被撤销。
+
+**已知代价（接受，非疏漏）**：正文对比 13.96 → **14.67:1**（抬画布前 14.95，
+TN 10.59）。翻转必然让长文阅读面变暗；若日后读着发刺，解法是墨色那一轮，
+**不是**把画布再抬回去。
+
+复用禁令随之加强：chrome 属于 sidebar 材质层，会随这层关系被重调而移动
+（08-05 加深、08-21 抬升并翻向——十七天内两次）。
 不要因为灰度碰巧合适就借用——未点亮 / 惰性控件的填充属于 `--color-hover`
 （Composer send 按钮的 disabled 态已于同日从 `chrome` 迁走）。
 

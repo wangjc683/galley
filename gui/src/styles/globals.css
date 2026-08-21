@@ -305,47 +305,116 @@ html[data-theme="dark"] {
      yellow, not less. Brand family (brand / brand-strong / brand-tint /
      selected) and the semantic colours are deliberately NOT part of
      this pass — evaluate their relative loudness against the quieter
-     ground first. */
-  --color-app: #161412;
-  --color-surface: #1c1917;
-  --color-elevated: #23201d;
-  /* Dark counterpart of the light chrome: still *darker* than --color-app
-     (not lighter) so the sidebar keeps sinking below the conversation
-     canvas and the stage "rises" — the same inverted-lightness chrome
-     rule as light mode. Without this override the light value leaks
-     through and the sidebar renders as a bright panel in dark.
+     ground first.
 
-     Deepened 2026-08-05 alongside light (#12100e → #0e0c0a): ΔL* 1.65 →
-     3.03. Held slightly tighter than light's 3.86 on purpose — the app
-     canvas is already #161412, so matching light's gap would push the
-     sidebar to the edge of pure black, where a large field stops
-     reading as a surface and starts reading as a hole. */
-  --color-chrome: #0e0c0a;
+     Canvas lift + chroma re-loosen, 2026-08-21 (the deferred "抬画布"
+     item, triggered by JC reading the sidebar as 头重脚轻). Calibrated
+     against Tokyo Night, which JC uses daily: its *darkest* UI surface
+     (sidebar #16161e, OKLCH L 20.4) sat above Galley's whole
+     conversation canvas (L 19.3), and its chrome→canvas gap was 2.2
+     against our 3.7. So the complaint was never the direction — TN also
+     runs its sidebar darker than its editor — it was absolute depth,
+     an oversized gap, and near-zero chroma at the floor. Fix: the whole
+     ladder moves up 3.3 L points, and the chrome↔app gap closes to TN's
+     2.2. Ink lightness deliberately NOT touched — retuning ink means
+     reopening the 07-25 warm-axis decision and is its own pass.
+
+     Then JC dogfooded that build and still wanted the sidebar/mainview
+     swap, so chrome and app traded places (see --color-chrome below);
+     the mainview ladder kept its internal steps and dropped 2.1 L with
+     app. Net effect on the canvas: 19.3 → 22.4 → 20.3, i.e. still 1.0 L
+     above where this pass started, so the lift is not undone — but body
+     contrast lands at 14.67:1, not the 13.96:1 the un-flipped build had
+     (pre-lift was 14.95:1, TN is 10.59:1). That regression is a known,
+     accepted cost of the flip, not an oversight: the flip necessarily
+     darkens the long-form reading surface. If it ever reads as glary,
+     the fix is the ink pass above, not re-lifting the canvas.
+
+     Chroma: lifting L alone would silently *drop* C/L from .0264 to
+     .0224 (an unrequested second de-warm), so C is scaled by the same
+     L ratio to hold 0.6×, then loosened a further 1.21× — landing at
+     ~0.73× of the pre-07-25 chroma (C/L .0321). This is a deliberate
+     partial re-open of the 0.6× verdict, not a drift: TN keeps
+     recognisable colour down at the floor (C/L .078–.095) and a flat
+     near-black warm grey is what reads as a dead weight. We stop far
+     short of TN because the hue is warm — warm goes muddy at a chroma
+     that cool blue-violet still carries. The 07-25 rule that ink must
+     move with the surfaces holds: ink chroma takes the same 1.21×
+     (lightness untouched, so contrast shifts ≤0.03).
+
+     Brand fills (selected / brand-soft / brand-tint) ride the lift but
+     keep their chroma at pure L-compensation — they were excluded from
+     the 07-25 de-warm, so scaling them here would add warmth to
+     something that never lost any. */
+  --color-app: #191614;
+  --color-surface: #201b19;
+  --color-elevated: #27231f;
+  /* DARK CHROME IS *LIGHTER* THAN --color-app. This is the one token
+     whose direction differs between the themes, so read this before
+     "fixing" it back.
+
+     The cross-theme rule is NOT "chrome always sinks" — that was a
+     literal port of the light-mode conclusion, and dark spent three
+     months straining against it (the pre-08-21 comment here had to
+     confess it could not deliver light's ΔL* because the sidebar would
+     hit the black floor). The actual rule is: **content takes the
+     extreme, chrome sits toward mid-tone.** Light paper is near-white,
+     so chrome is darker than it; the dark canvas is near-black, so
+     chrome is lighter than it. Same idea as the macOS sidebar material,
+     which always leans toward mid-grey and therefore reverses relative
+     to the content between the two appearances. Under that rule the
+     sidebar reads as a *material layer* rather than a recess — which is
+     the accepted trade, adjudicated by JC on real hardware.
+
+     History, because the values here have flip-flopped: 2026-08-05
+     deepened dark chrome to #0e0c0a (OKLCH L 15.6), which backfired — a
+     large flat near-black field with near-zero chroma reads as a
+     *weight*, not a recession (JC: 头重脚轻). 2026-08-21 first tried
+     fixing that WITHOUT flipping — lift the whole ladder, calibrated
+     against Tokyo Night, whose sidebar is also darker than its editor.
+     That shipped to dogfood and JC still wanted the flip, so the ladder
+     stayed lifted and chrome/app swapped places: chrome now sits at the
+     lifted app value (OKLCH L 22.4) and app takes 20.3. The gap stays
+     at TN's 2.2 (ΔL* 2.46), only the sign changed.
+
+     Consequences that are load-bearing, not incidental:
+     - chrome (22.4) now sits essentially level with --color-surface
+       (22.7), i.e. the sidebar shares a lightness band with mainview
+       cards. Accepted deliberately — that IS the "floating material"
+       read. Do not "fix" the collision by moving one of them.
+     - the global --color-hover / --color-selected are calibrated for
+       the mainview ladder and are too close to chrome to be visible on
+       it, exactly as in light mode. The sidebar re-tunes both via
+       .chrome-hover-scope further down.
+
+     Judge this gap with CIE Lab ΔL* (or OKLCH L), never WCAG contrast —
+     see the light --color-chrome comment for why. */
+  --color-chrome: #1e1b17;
   /* Dark code fill: a touch lighter than the near-black page (mirrors
      inline code's --color-hover relationship in dark) so the block
      separates as a distinct code medium without a harsh outline. */
-  --color-code-surface: #201d1a;
+  --color-code-surface: #24201c;
   /* Dark inline-code ink: same hue, flipped for a dark ground — a light
      warm tan rather than a dark warm brown, so the hue signal survives
      without the glare a saturated light-on-dark would carry. */
   --color-code-ink: #e0a882;
 
-  --color-line: #312d28;
-  --color-line-strong: #48413b;
-  --color-line-subtle: rgba(236, 231, 225, 0.08);
+  --color-line: #353029;
+  --color-line-strong: #4d443c;
+  --color-line-subtle: rgba(237, 231, 224, 0.08);
 
-  --color-ink: #ece7e1;
-  --color-ink-soft: #c5bdb4;
-  --color-ink-muted: #91897f;
+  --color-ink: #ede7e0;
+  --color-ink-soft: #c6bdb2;
+  --color-ink-muted: #92897d;
 
-  --color-hover: #262320;
-  --color-selected: #3a2d23;
+  --color-hover: #2a2622;
+  --color-selected: #3e3026;
 
   --color-brand: #d6a083;
-  --color-brand-soft: #3a2d23;
+  --color-brand-soft: #3e3026;
   --color-brand-strong: #e2ae8d;
   /* Dark-mode user-message band — provisional; revisit in the dark pass. */
-  --color-brand-tint: #4a3829;
+  --color-brand-tint: #4d3b2b;
 
   --color-success: #8fbf8f;
   --color-warning: #d6a250;
@@ -374,44 +443,44 @@ html[data-theme="dark"] {
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18);
   --shadow-elevated:
-    0 14px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(236, 231, 225, 0.03);
+    0 14px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(237, 231, 224, 0.03);
   --shadow-button-raised:
-    0 1px 0 rgba(236, 231, 225, 0.07), 0 2px 8px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(236, 231, 225, 0.08);
+    0 1px 0 rgba(237, 231, 224, 0.07), 0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(237, 231, 224, 0.08);
   --shadow-button-raised-hover:
-    0 2px 0 rgba(236, 231, 225, 0.08), 0 3px 9px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(236, 231, 225, 0.1);
+    0 2px 0 rgba(237, 231, 224, 0.08), 0 3px 9px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(237, 231, 224, 0.1);
   --shadow-button-raised-active: inset 0 1px 3px rgba(0, 0, 0, 0.34);
   --shadow-button-primary:
-    0 1px 0 rgba(236, 231, 225, 0.09), 0 2px 8px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(236, 231, 225, 0.08);
+    0 1px 0 rgba(237, 231, 224, 0.09), 0 2px 8px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(237, 231, 224, 0.08);
   --shadow-button-primary-hover:
-    0 2px 0 rgba(236, 231, 225, 0.1), 0 3px 9px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(236, 231, 225, 0.1);
+    0 2px 0 rgba(237, 231, 224, 0.1), 0 3px 9px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(237, 231, 224, 0.1);
   --shadow-button-primary-active: inset 0 2px 5px rgba(0, 0, 0, 0.44);
   --shadow-brand-control:
     0 1px 0 rgba(226, 174, 141, 0.18), 0 2px 8px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(236, 231, 225, 0.08);
+    inset 0 1px 0 rgba(237, 231, 224, 0.08);
   --shadow-brand-control-hover:
     0 2px 0 rgba(226, 174, 141, 0.22), 0 3px 9px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(236, 231, 225, 0.1);
+    inset 0 1px 0 rgba(237, 231, 224, 0.1);
   --shadow-brand-control-active: inset 0 2px 5px rgba(0, 0, 0, 0.38);
   --shadow-neutral-control:
-    0 1px 0 rgba(236, 231, 225, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(236, 231, 225, 0.07);
+    0 1px 0 rgba(237, 231, 224, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(237, 231, 224, 0.07);
   --shadow-neutral-control-hover:
-    0 2px 0 rgba(236, 231, 225, 0.07), 0 3px 9px rgba(0, 0, 0, 0.26),
-    inset 0 1px 0 rgba(236, 231, 225, 0.09);
+    0 2px 0 rgba(237, 231, 224, 0.07), 0 3px 9px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(237, 231, 224, 0.09);
   --shadow-neutral-control-active: inset 0 2px 5px rgba(0, 0, 0, 0.34);
   --shadow-control-press: inset 0 3px 7px rgba(0, 0, 0, 0.5);
   --shadow-float: 0 10px 24px rgba(0, 0, 0, 0.38);
   --shadow-float-hover: 0 12px 30px rgba(0, 0, 0, 0.46);
   --shadow-composer-stop:
     0 1px 0 rgba(214, 162, 80, 0.22), 0 2px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(236, 231, 225, 0.08), 0 0 0 0 rgba(214, 162, 80, 0.16);
+    inset 0 1px 0 rgba(237, 231, 224, 0.08), 0 0 0 0 rgba(214, 162, 80, 0.16);
   --shadow-composer-stop-pulse:
     0 1px 0 rgba(214, 162, 80, 0.24), 0 2px 8px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(236, 231, 225, 0.08), 0 0 0 4px rgba(214, 162, 80, 0.12);
+    inset 0 1px 0 rgba(237, 231, 224, 0.08), 0 0 0 4px rgba(214, 162, 80, 0.12);
 
   --color-overlay: rgba(0, 0, 0, 0.56);
 }
@@ -451,12 +520,36 @@ html {
    fills inside the sidebar keep the global value — correct, since
    popovers float on bg-elevated where the global tuning applies.
 
-   LIGHT ONLY, keyed :not([data-theme="dark"]) per the first-paint
-   rationale on the [data-cjk-prose] rule below. Dark chrome
-   (#0e0c0a) already sits ΔL* ~10 under the dark hover value — no
-   override needed. */
+   The light rule is keyed :not([data-theme="dark"]) per the first-paint
+   rationale on the [data-cjk-prose] rule below; the dark rule below it
+   must key [data-theme="dark"] for the same reason (no attribute on the
+   first frame means light). */
 html:not([data-theme="dark"]) .chrome-hover-scope {
   --color-hover: #e5e3e0;
+}
+
+/* Dark needed no override until the 2026-08-21 chrome flip: with chrome
+   pinned to the black floor it sat ΔL* ~10 below the global hover, so
+   the global value worked inside the sidebar by accident. After the flip
+   chrome rose to the *lifted app* value and the mainview ladder dropped
+   with app, collapsing that gap to ΔL* 5.49 — the same failure mode as
+   the light bug above, just not yet all the way to invisible.
+
+   Both values are simply what the global tokens were *before* the flip,
+   and that is the whole derivation: the sidebar's ground is now exactly
+   the pre-flip app value, so the interaction fills calibrated against
+   that ground carry over unchanged. hover restores ΔL* 7.85 over chrome
+   (vs 10.35 pre-flip — lower, but far above the ΔL* 3.81 that the light
+   side is calibrated at and has been fine with since 08-07).
+
+   --color-selected joins the override here, unlike light: after the flip
+   the global selected sits only 3.0 OKLCH L over the sidebar hover, so
+   the "row is selected" step would be leaning on hue alone (the exact
+   condition deferred.md tracks as a known weakness on the light side).
+   Restoring the pre-flip value puts it back 5.0 L clear of hover. */
+html[data-theme="dark"] .chrome-hover-scope {
+  --color-hover: #2f2b27;
+  --color-selected: #44352a;
 }
 
 body {

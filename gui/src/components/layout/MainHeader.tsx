@@ -186,11 +186,14 @@ export function MainHeader({
         }
       }}
       className={cn(
-        // bg-app: the main column tone (lighter). The Sidebar column +
-        // its header are bg-chrome (darker); the two read as a two-tone
-        // workbench split by the full-height resize separator, not one
-        // uniform top bar. Bottom border matches SidebarHeader so the
-        // two column headers line up into one continuous top strip.
+        // bg-app: the main column tone. The Sidebar column + its header
+        // are bg-chrome; the two read as a two-tone workbench split by
+        // the full-height resize separator, not one uniform top bar.
+        // Which tone is lighter flips with the theme (chrome is darker
+        // than the light canvas, lighter than the dark one — see
+        // --color-chrome in globals.css), so do not hardcode either as
+        // "the darker column". Bottom border matches SidebarHeader so
+        // the two column headers line up into one continuous top strip.
         "flex h-11 shrink-0 items-stretch border-b border-line/60 bg-app text-[13px]",
         // Windows: no right padding — WindowControls owns the right edge
         // and hugs the window corner (= window top-right). Mac keeps its
