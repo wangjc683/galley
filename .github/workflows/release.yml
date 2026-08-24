@@ -404,7 +404,13 @@ jobs:
         with:
           draft: true
           prerelease: ${{ steps.meta.outputs.prerelease }}
-          name: Galley ${{ github.ref_name }}
+          # Release title is always exactly the tag (JC ruling,
+          # 2026-08-24): the repo is single-product, so a "Galley"
+          # prefix repeats the container's name on every Release-list
+          # row, and title == tag leaves no second source of truth to
+          # drift (v0.4.1 / v0.4.5 / v0.4.9 had drifted bare while the
+          # rest carried the prefix).
+          name: ${{ github.ref_name }}
           generate_release_notes: true
           files: artifacts/**/*
           fail_on_unmatched_files: true

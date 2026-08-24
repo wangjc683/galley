@@ -7,6 +7,12 @@
 
 ## Writing Rules
 
+- **The release title is exactly the tag** (`v0.4.10`, no `Galley` prefix —
+  JC ruling, 2026-08-24). The repo is single-product, so every GitHub surface
+  that shows the title already names the product, and a prefix repeats the
+  container's name on every Release-list row; title == tag also leaves no
+  second source of truth to drift. `release.yml` sets this on the draft; do
+  not restyle it during review or manual publishes.
 - English first, Chinese second. Both sections should be complete; do not use a
   thin machine translation. Keep the two halves in sync — a bullet in one must
   appear in the other.
