@@ -385,7 +385,9 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 
 - 数据来源：每个 IPC `turn_start` / `turn_end` event 都带 `turnIndex` 字段
 - AgentTurn type 持有 `turnIndex`（一个 user message 在 conversation 里可能产生多个 AgentTurn）
-- 渲染：每个 AgentTurn 的 thinking summary 之上一行，`第 N 步`（`copy.conversation.step`）12px 直立 sans `text-ink-soft`，`tabular-nums` 数字作结构锚点；与 summary 之间用一条 `w-px bg-line-strong` 竖向 hairline 分隔（瑞士结构感，取代旧的 ` · ` 中点）；`mt-6`（24px）上方间距承担 turn 间章节分隔。**不用 italic、不用 serif、不用 uppercase tracking**——结构 metadata 冷静直立，与下方 Newsreader 衬线正文形成对比张力
+- 渲染：每个 AgentTurn 的 thinking summary 之上一行，`第 N 步`（`copy.conversation.step`）12px 直立 sans `text-ink-soft`，`tabular-nums` 数字作结构锚点；与 summary 之间用一条 `w-px bg-line-strong` 竖向 hairline 分隔（瑞士结构感，取代旧的 ` · ` 中点）。**不用 italic、不用 serif、不用 uppercase tracking**——结构 metadata 冷静直立，与下方 Newsreader 衬线正文形成对比张力
+- 上方间距**两档**（2026-08-23 密度 pass）：run 边界（第 1 步）`mt-6`（24px）承担章节分隔；run 内第 2 步起 `mt-3`（12px）。判据直接用 `index === 1`——GA 每次 `put_task` 步号从 1 重数，步号即 run 边界，无需穿 run-group 数据。marker 下方 `mb-1`（4px）
+- **裸步合并**（同一 pass）：GA 未产出 summary 的步，marker 行只剩纯数字——此时若该步恰好只有一个 settled-success 的 inline 工具、且无 DetailPanel 内容 / 无 narration，则 marker 整行取消，由 InlineToolPill 自渲染「第 N 步 │」前缀（`Conversation.tsx` `mergedStepTool` → `ToolCallout` `stepIndex`）。前缀在 button 之外，保住步号左列对齐、hover 目标仍是工具区。任一条件不满足（有 summary / 有 detail / 多工具 / block 态）都维持两行——两行形态仍是常态
 - in-flight 状态：`currentTurnIndex` 从 `turn_start` 读取；thinking placeholder 顶部也显示 `Turn N` 标记让用户感知 agent 当前跑到第几迭代
 - `run_complete` / `error` 时清空 currentTurnIndex
 - **没有 turn 之间的 SoftHr**——TurnMarker 自带 chapter-break 视觉重量，水平横线已删除
@@ -398,9 +400,10 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 2. SoftHr `my-6`（48px）—— 仍反馈"还是大"
 3. SoftHr `my-5`（40px）—— 仍反馈"还是大"
 4. 删除 SoftHr，TurnMarker `mt-7`（28px）+ tracking 加大承担分隔
-5. **现行（2026-06-09 瑞士化）**：直立 sans + tabular 数字 + 竖向 hairline 分隔，去掉 italic 与 uppercase tracking。间距曾短暂提到 `mt-9`（36px），但实测 turn 间隙 ≈ 42px 又触到当年被拒的 SoftHr `my-5`（40px）量级；dogfood 后一路收到 `mt-6`（24px）。结论：瑞士 marker 自带分隔力，结构清晰度承担分隔，不需要靠大留白
+5. 2026-06-09 瑞士化：直立 sans + tabular 数字 + 竖向 hairline 分隔，去掉 italic 与 uppercase tracking。间距曾短暂提到 `mt-9`（36px），但实测 turn 间隙 ≈ 42px 又触到当年被拒的 SoftHr `my-5`（40px）量级；dogfood 后一路收到 `mt-6`（24px）。结论：瑞士 marker 自带分隔力，结构清晰度承担分隔，不需要靠大留白
+6. **现行（2026-08-23 密度 pass）**：`mt-6` 的适用域重新限定为 **run 边界**；run 内步间收到 `mt-3`（12px），marker `mb-2.5`→`mb-1`，inline pill `my-1.5`→`my-0.5`。动因：第 5 条的 24px 裁决隐含「章节有正文」的前提，多步工具 run 里一步只有两根细线（marker + pill），叠上 24px 后留白占一步高度 ~55%，13 步的 live run 超过一屏——纵向体量本身是层级信号，过程日志的体量压过 final answer 把主次滚反了。提密度即降层级。第 5 条「结构承担分隔」的论证方向不变，恰好支持 run 内更紧
 
-教训：当用户反复反馈"间距大"时，缩 hr 到极小已经不是答案；该思考"分隔信号"是不是必须靠 hr 承担。结果：TurnMarker 的章节标识 + 间距 + 字号已经足够。
+教训：当用户反复反馈"间距大"时，缩 hr 到极小已经不是答案；该思考"分隔信号"是不是必须靠 hr 承担。结果：TurnMarker 的章节标识 + 间距 + 字号已经足够。第二层教训（2026-08-23）：一条间距裁决要连同它的内容前提一起记——「turn 间 24px」在 turn 有正文时成立，turn 退化成日志行时同一个值就是另一个设计。
 
 ### 4.4 Composer
 

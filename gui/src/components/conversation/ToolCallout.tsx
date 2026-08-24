@@ -30,6 +30,13 @@ import type {
 
 interface ToolCalloutProps {
   tool: ConversationToolEvent;
+  /** Bare-marker merge (see Conversation.tsx `mergedStepTool`): when
+   * the owning step has no summary and nothing else needs the marker
+   * row, the inline pill absorbs the step identity — it renders the
+   * "第 N 步 │" prefix itself and takes over the step's two-tier top
+   * margin. Inline tier only; block-tier states keep their separate
+   * TurnMarker, so the dispatcher ignores this for them. */
+  stepIndex?: number;
   /** When status === "waiting_approval", drives the inline form. */
   onApprove?: OnApprove;
   /** Approval form's currently-recorded decision (for the "decided"
@@ -90,13 +97,15 @@ function pickToolTier(
 // chunk — see the App.tsx handler wiring.
 export const ToolCallout = memo(function ToolCallout({
   tool,
+  stepIndex,
   onApprove,
   approvalDecision,
   projectName,
 }: ToolCalloutProps) {
   const tier = pickToolTier(tool);
   if (tier === "hidden") return null;
-  if (tier === "inline") return <InlineToolPill tool={tool} />;
+  if (tier === "inline")
+    return <InlineToolPill tool={tool} stepIndex={stepIndex} />;
   return (
     <BlockToolCallout
       tool={tool}
@@ -529,7 +538,13 @@ const TOOL_META: Record<string, { icon: Icon; zh: string }> = {
  * awaiting-approval renders via BlockToolCallout where the status
  * bit carries real signal.
  */
-function InlineToolPill({ tool }: { tool: ConversationToolEvent }) {
+function InlineToolPill({
+  tool,
+  stepIndex,
+}: {
+  tool: ConversationToolEvent;
+  stepIndex?: number;
+}) {
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const meta = TOOL_META[tool.name];
@@ -537,17 +552,27 @@ function InlineToolPill({ tool }: { tool: ConversationToolEvent }) {
   const toolLabel =
     (copy.tools as Record<string, string>)[tool.name] ?? meta?.zh;
   const preview = previewArgs(tool.name, tool.args);
+  // Merged step row (see ToolCalloutProps.stepIndex): the pill takes
+  // over the TurnMarker's identity — prefix + hairline in the marker's
+  // exact register, and the step's two-tier top margin (run boundary
+  // mt-6, in-run mt-3; same test as TurnMarker's `index > 1`). The
+  // prefix sits OUTSIDE the button so the step number keeps the
+  // markers' left column alignment while the hover target stays the
+  // tool zone; the button's -ml-2 tucks its px-2 hover bleed up
+  // against the hairline so the icon lands the usual gap-2 after it.
+  const stepLabel =
+    stepIndex != null ? copy.conversation.step(stepIndex) : null;
 
-  return (
-    <div className="my-1.5">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "group flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left",
-          "text-ink-soft hover:bg-hover hover:text-ink",
-        )}
-      >
+  const row = (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className={cn(
+        "group flex items-center gap-2 rounded-sm px-2 py-1 text-left",
+        "text-ink-soft hover:bg-hover hover:text-ink",
+        stepLabel ? "-ml-2 min-w-0 flex-1" : "w-full",
+      )}
+    >
         {/* Left zone — friendly prose register. */}
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           {ToolIcon && (
@@ -587,13 +612,34 @@ function InlineToolPill({ tool }: { tool: ConversationToolEvent }) {
             )}
           />
         </span>
-      </button>
+    </button>
+  );
 
-      {open && (
-        <div className="ml-3 mt-1 animate-fade-in border-l border-line/60 pl-3">
-          <SettledToolBody tool={tool} />
+  const expandedBody = open && (
+    <div className="ml-3 mt-1 animate-fade-in border-l border-line/60 pl-3">
+      <SettledToolBody tool={tool} />
+    </div>
+  );
+
+  if (stepLabel) {
+    return (
+      <div className={cn("mb-0.5", stepIndex === 1 ? "mt-6" : "mt-3")}>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-medium tabular-nums tracking-[0.01em] [font-size:var(--conversation-step-size)] text-ink-soft">
+            {stepLabel}
+          </span>
+          <span className="h-2.5 w-px shrink-0 bg-line-strong" aria-hidden />
+          {row}
         </div>
-      )}
+        {expandedBody}
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-0.5">
+      {row}
+      {expandedBody}
     </div>
   );
 }

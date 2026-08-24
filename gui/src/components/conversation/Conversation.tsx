@@ -368,14 +368,35 @@ function AgentTurnView({
   // real tools, the tool name otherwise, which stays true even though
   // the callouts below repeat it in their own register.
   const summaryIsEcho = summaryEchoesAnswer(turn.summary, answerText);
-  const realToolNames = visibleTools
-    .filter((t) => t.name !== "no_tool")
-    .map((t) => t.name);
+  const realTools = visibleTools.filter((t) => t.name !== "no_tool");
   const markerSummary = !summaryIsEcho
     ? turn.summary
-    : realToolNames.length === 0
+    : realTools.length === 0
       ? copy.conversation.stepDirectAnswer
-      : copy.conversation.stepCalledTools(realToolNames);
+      : copy.conversation.stepCalledTools(realTools.map((t) => t.name));
+
+  // Bare-marker merge (2026-08-23 density pass): when GA emitted no
+  // summary at all (summaryEchoesAnswer(undefined, …) is false, so the
+  // echo fallback above never engages), the marker line would carry
+  // nothing but the step number — a pure-number orphan line above the
+  // tool pill. Fold the two into one row instead: the pill renders the
+  // "第 N 步 │" prefix itself and the TurnMarker is skipped. Only when
+  // nothing else needs the marker row as its home: no DetailPanel
+  // content (its chevron entry lives there), no narration (it renders
+  // between marker and tools, so merging would time-invert the order),
+  // and exactly one settled-success tool (block-tier states keep the
+  // marker so the in-flight/failed callout has a step heading).
+  const mergedStepTool =
+    turn.turnIndex !== undefined &&
+    !markerSummary &&
+    !turn.thinking &&
+    !detailPreamble &&
+    !(answerText && !isFinalTurn) &&
+    realTools.length === 1 &&
+    (realTools[0].status === "success-current" ||
+      realTools[0].status === "success-historical")
+      ? realTools[0]
+      : null;
 
   if (markerOnly) {
     return (
@@ -395,7 +416,7 @@ function AgentTurnView({
 
   return (
     <div>
-      {turn.turnIndex !== undefined && !hideMarker && (
+      {turn.turnIndex !== undefined && !hideMarker && !mergedStepTool && (
         <TurnMarker
           index={turn.turnIndex}
           summary={markerSummary}
@@ -418,6 +439,7 @@ function AgentTurnView({
         <ToolCallout
           key={tool.id}
           tool={tool}
+          stepIndex={tool === mergedStepTool ? turn.turnIndex : undefined}
           approvalDecision={
             tool.approvalId ? approvalDecisions?.[tool.approvalId] : undefined
           }
@@ -458,12 +480,20 @@ function normalizedInlineText(value?: string | null): string {
  * Per-step header — sits above each agent turn's thinking summary
  * AND carries the chapter-break weight between turns now that
  * SoftHr is gone. Tuned for that double role:
- *   - mt-6 (24px) gives turn-to-turn breathing room (the marker is
- *     now the only chapter-break signal between turns) without the
- *     visual noise of an actual rule. The Swiss marker (tabular
- *     index + hairline) is visually self-separating, so it needs
- *     less surrounding whitespace than a softer label would —
- *     structure does the separating, not a big gap.
+ *   - Two-tier top margin (2026-08-23 density pass): mt-6 (24px) at
+ *     the run boundary (step 1 — GA renumbers from 1 per put_task,
+ *     so `index === 1` IS the boundary test, no run-group threading
+ *     needed), mt-3 (12px) between steps inside a run. The original
+ *     mt-6-everywhere verdict was calibrated for chapters that had
+ *     body content; in a multi-step tool run each "chapter" is two
+ *     thin lines, and 24px between them made whitespace the majority
+ *     pixel (~55% of a step's height). The old lesson — structure
+ *     does the separating, not a big gap — cuts the other way here:
+ *     the Swiss marker itself is the separator, so in-run steps can
+ *     sit at half the gap without ambiguity. Chapter-scale spacing
+ *     is reserved for the run boundary, which also preserves
+ *     RunFoldSection's -mt-2.5 margin-collapse math (it assumes the
+ *     section opens with an mt-6 marker).
  *   - Swiss structural register: upright (not italic), tabular
  *     figures, a thin vertical rule separating the step label from
  *     the summary. The cool, precise metadata deliberately contrasts
@@ -580,7 +610,12 @@ export function TurnMarker({
       <div
         onClick={hasDetail ? () => setOpen((v) => !v) : undefined}
         className={cn(
-          "mb-2.5 mt-6 flex min-w-0 items-center gap-2 [font-size:var(--conversation-step-size)] text-ink-soft",
+          "mb-1 flex min-w-0 items-center gap-2 [font-size:var(--conversation-step-size)] text-ink-soft",
+          // Run boundary keeps the chapter gap; in-run steps tighten.
+          // `index` unknown (pre-turn_start thinking gap) defaults to
+          // the boundary gap — the common case for that window is the
+          // first step right after the user submits.
+          index != null && index > 1 ? "mt-3" : "mt-6",
           hasDetail && "cursor-default hover:text-ink",
         )}
       >
