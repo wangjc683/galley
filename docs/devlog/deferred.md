@@ -23,6 +23,19 @@
 
 ---
 
+## 单步 run 的「第 1 步」前缀收敛（TurnMarker 步号）
+
+- **状态**：暂存（2026-08-23 探讨定案，JC 当日裁决保持现状；agent 复核后同意——见「不启动的理由」）
+- **提出**：2026-08-23，JC 两问：多步 run 里「第 / 步」重复是否无效信息；单步 run 显示「第 1 步」是否别扭。多步部分当场终裁：**保持「第 N 步」，裸数字方案永久否决**——重复标签是排版节奏不是噪音（读者第二行起只扫 tabular 数字），且 thinking 态会变成「3 │ 思考中 · 12.3s」一行两个无单位数字互相打架。此条否决不随本节启动而复活。
+- **启动信号**：JC dogfood 中反复被「第 1 步 · 直接回答了用户问题」的报幕感硌到。判据要计入曝光量事实：它默认只在最近一次交换可见（完成 run 默认折叠、仅 `keepOpener` 展开，`Conversation.tsx:151`），下次交换完成即折进「1 步 · N 秒」的 RunFoldHeader——若这样的瞬态单例曝光仍产生实感，才值得动。
+- **不启动的理由**（2026-08-23）：①曝光是瞬态单例不是累积墙（见上）；②只能收前缀不能删行，而前缀在单步场景兼任「这行是过程元数据」的登记标签，收掉后孤行「直接回答了用户问题」可能更没来头；③换来一条带例外的条件规则（「before/after 视觉一致」要开洞 + run 中段孤步不收的不对称）。「·1 是噪音」（layout-and-chrome.md sidebar 角标条款）类比偏弱——那是纯计数徽章删整个信号，这里行还在、还承载入口。
+- **方案**：settled 且 run 已完成的收尾回答轮、显示步号为 1 → 收掉「第 1 步 │」前缀，保留 summary + chevron（DetailPanel 入口挂在此行）。**按编号段判而非按 run 判**：ask_user 回复也是一次 `put_task`、步号重新从 1 数（`workbench_bridge.py:1474`），收尾孤步段同样收；run 中段孤步（第 1 步即发 ask_user 暂停）不收——那里序列被暂停而非结束。
+- **实施要点**：TurnMarker 已支持 `index` undefined 的无前缀形态（`Conversation.tsx:569`），复用即可；aborted run 不收（无 settle 语义，序列被打断是事实）；en（`Step 1`）结构性同款，零文案改动；sidebar `第 N 步 · {summary}` 不跟随（独立语境需要单位）；`conversation.md` 需注明这是「before/after 视觉一致」的有意例外；判定条件补单测。
+- **待定**：若启动时仍嫌残留孤行冗余，「删整行」要作为对两条既有约束的重审来做（DetailPanel 入口；StrongHr 的 action→conclusion 修辞需上方 action 列，`Conversation.tsx:433`）。
+- **关联**：`conversation.md` TurnMarker 节（步号即结构锚点）；`Conversation.tsx:474`（「步 vs 轮」选词理由）；`layout-and-chrome.md` sidebar 角标「·1 是噪音」条款（规范近亲，非同物）。
+
+---
+
 ## dark 的 `--color-brand-tint` 仍是 provisional（响度未复核）
 
 - **状态**：暂存（2026-08-21 发现，当日 JC 关注点在 light 故未处理）
