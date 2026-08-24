@@ -9,22 +9,42 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.9`.
-- Git tag / GitHub Release: `v0.4.9` is the current published stable release
-  (tagged at `6148cc75` on 2026-08-19, GitHub Latest).
+- Package version: `0.4.10`.
+- Git tag / GitHub Release: `v0.4.10` is the current published stable release
+  (tagged at `d0b6dc0e` on 2026-08-24, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.9`.
+- Release tier: stable patch; default update channel points at `v0.4.10`.
   `beta` is kept as a legacy alias for older builds.
-- Shipped GA baseline: `f06d550` (shipped in `v0.4.8`, carried by `v0.4.9`).
-  Audited baseline on main is now `30b24ad` (2026-08-21) and rides in the
-  next release — see [GA baseline](./ga-baseline.md).
+- Shipped GA baseline: `30b24ad` (shipped in `v0.4.10`). Upstream `main` was
+  at `9e68c20` (10 commits ahead) at release time and was deliberately not
+  bumped — zero engine-core delta, all upstream Desktop 2.0 frontend; the
+  next release audits again. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.4.9` is a single-fix hotfix, now the smallest release: community issue #23
+`v0.4.10` is the 2026-08-21 held batch cashed in, plus the two items that
+accumulated during the hold. Headline pair: the **GA baseline bump
+`f06d550` -> `30b24ad`** (engine delta: the `!!!Error:` tail-check
+consistency fix, `api_key_header` auth override reachable via a model's
+`advancedOptions`, and Anthropic `context_management` disabled in the
+request payload — dogfooded by JC on native Claude long sessions, no
+findings) and the **Goal dispatch gate + truthful busy signal** (the
+community-reported solo-Goal bug pair: galley#19 toast spam and premature
+已停止; internal `session.run_state` probe, idle gate on Goal-turn
+dispatch, baseline re-capture in wrap-up — additive under
+`schemaVersion: 1`). Riding along: the dark canvas lift + chrome flip, the
+sidebar selected-row three-channel redesign, and the multi-step run density
+pass (two-tier in-run spacing, bare-step merge). The ship trigger repeats
+`v0.4.8`/`v0.4.9`: an unshipped user-reported fix thickens the next
+release's unverified delta. The release-day upstream re-check found
+upstream 10 commits ahead at `9e68c20` with zero engine-core delta and
+deliberately did not bump. Full narrative: devlog
+[2026-08-24-v0.4.10-release](./devlog/2026-08-24-v0.4.10-release.md).
+
+`v0.4.9` was a single-fix hotfix, the smallest release: community issue #23
 (Windows, managed runtime) reported blank CMD windows flashing on session
 create/restore and background tasks. The Rust side's `CREATE_NO_WINDOW`
 coverage was complete; the flashes came from the bridge (a console-less
@@ -242,68 +262,16 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-**Release deliberately deferred (JC ruling, 2026-08-21).** This batch was
-scoped and graded for a `v0.4.10` patch, then held to accumulate more first.
-The grading itself is settled and does not need re-litigating: `patch`, the
-same shape as `v0.4.8` — baseline bump as the headline, GUI polish riding
-along. Nothing is blocked; the pre-flight below already passed, so the next
-release session starts from a bumped baseline and a green bundled runtime
-gate. Two things that session must re-check rather than inherit: whether
-upstream GA has moved past `30b24ad` again (audited 2026-08-21, and the
-[upgrade trigger](./ga-baseline.md) is "before a release, normally audit"),
-and the `context_management` dogfood item named below, which has **not** been
-run yet.
+Nothing release-pending: `v0.4.10` (2026-08-24) shipped everything
+substantive that was on main, including the 2026-08-21 held batch. What
+follows are standing items carried across releases, not unshipped work.
 
-A GA baseline bump plus a dark-theme colour pass and the sidebar selection
-redesign:
+The upstream re-check at `v0.4.10` release time left one standing fact: the
+audited baseline `30b24ad` is 10 commits behind upstream `9e68c20`, ruled
+engine-irrelevant (see [GA baseline](./ga-baseline.md)); the next release
+audits upstream again.
 
-- **GA baseline `f06d550` -> `30b24ad`** (2026-08-21). Eight upstream
-  commits, 7 files, ~52 / ~31 — the smallest range since the baseline was
-  introduced, and the first patch-stack rebase on record to finish with
-  zero conflicts. Engine-core delta is one line of `ga.py` (the `!!!Error:`
-  tail check now skips the first 50 characters) and 5 / 2 of `llmcore.py`
-  (a new `api_key_header` auth-header override, already reachable through
-  a model's `advancedOptions`; and Anthropic `context_management`
-  disabled in the request payload — the one item worth watching in
-  dogfood). `[project.dependencies]` did not change, so `GA_DEPS` needed
-  no bump. Bundled runtime gate passed on mac-x64. See
-  [the devlog](./devlog/2026-08-21-ga-upstream-upgrade-f06d550-to-30b24ad.md)
-  and [GA baseline](./ga-baseline.md).
-
-The two GUI items below are both GUI-only and both adjudicated by JC on real
-hardware (2026-08-21):
-
-- **Dark canvas lift + chrome flip** (`fd5e9229`). The whole dark surface
-  ladder moves up 3.3 OKLCH L, and `--color-chrome` changes *direction*:
-  the rule is no longer "chrome always sinks" but **content takes the
-  extreme, chrome sits toward mid-tone**, so chrome is darker than the light
-  canvas and lighter than the dark one. Body contrast lands at 14.67:1.
-  See [the devlog](./devlog/2026-08-21-dark-canvas-lift-and-chroma-reloosen.md).
-- **Sidebar selected row: three channels** (`fc886953`). Selection had one
-  signal sharing the most crowded channel on the row; it now owns fill, lift,
-  and full-strength title ink. Also fixes a real light-mode bug where the
-  selected row had ΔL* 0.01 against chrome — no lightness step at all. See
-  [the devlog](./devlog/2026-08-21-sidebar-selected-row-three-channels.md).
-
-- **Goal dispatch gate + truthful busy signal** (2026-08-23, Rust Core +
-  CLI). Fixes the community-reported solo-Goal bug pair: repeated
-  "galley#19" error toasts during a running Goal, and the sidebar flipping
-  to 已停止 seconds after a stop while the master session visibly kept
-  working. Root cause was the Goal controller reading `sessions.status`
-  (which never persists `running`) as its idle signal. Adds the internal
-  `session.run_state` probe (additive), an idle gate on the three internal
-  Goal-turn dispatch commands (`dispatch: "busy"`, zero side effects), and
-  baseline re-capture in the wrap-up dispatch loop. Runner and GUI are
-  untouched. See
-  [the devlog](./devlog/2026-08-23-goal-dispatch-gate-and-run-state.md).
-
-The Agent API's documented CLI surface is untouched by this batch — the
-2026-08-23 Goal fix adds only internal socket commands, additively under
-`schemaVersion: 1`. The managed-GA payload moves with the baseline bump
-above, which is what puts the bundled runtime gate back in the release
-pre-flight.
-
-The baseline bump filed one deferred item of its own — giving
+The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
 which no user has yet asked for.
 

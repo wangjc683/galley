@@ -20,7 +20,17 @@ Locked commit: `30b24ad31d679cde47a75f47fb6880df1dd96891`
 - Tree hash: `0700767d75ff299258ac79c9e96810364724b4b7`
 - Source: `lsdefine/GenericAgent` upstream `main`
 - Date audited: 2026-08-21
-- Shipped in: not yet released — audited on main after `v0.4.9`
+- Shipped in: `v0.4.10` (2026-08-24)
+- Pre-release re-check (2026-08-24, for `v0.4.10`): upstream `main` had
+  moved 10 commits ahead to `9e68c20`. Per-file compare showed **zero
+  engine-core delta** (`ga.py` / `llmcore.py` / `agent_loop.py` /
+  `agentmain.py` / root `pyproject.toml` all untouched); the entire range
+  is upstream's own Desktop 2.0 frontend (compiled dist assets, packaging,
+  release qualification) plus auxiliary frontends (`conductor.py`,
+  `cost_tracker.py`, `data_backup.py`) and upstream CI/tests. Ruling:
+  ship at `30b24ad`, do not bump — the delta is off Galley's execution
+  path and bumping would only add inert bundle weight while invalidating
+  the green bundled-runtime gate. Next release audits again from here.
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
