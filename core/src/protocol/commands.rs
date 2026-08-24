@@ -104,6 +104,17 @@ pub struct SessionWatchArgs {
 }
 socket_command!(SessionWatchArgs, "session.watch");
 
+/// Live busy probe for one session (additive since v1). The Goal
+/// controller polls this between working turns — the DB `sessions.status`
+/// column persists transient statuses as `idle`, so it cannot answer
+/// "is a run still open".
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRunStateArgs {
+    pub session_id: String,
+}
+socket_command!(SessionRunStateArgs, "session.run_state");
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionNewArgs {

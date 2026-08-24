@@ -37,6 +37,6 @@ pub mod process;
 pub mod queue;
 
 pub use error::{RunnerSpawnError, SendCommandError, ShutdownError};
-pub use manager::{RunSignal, RunnerManager, SpawnArgs};
+pub use manager::{RunSignal, RunState, RunnerManager, SpawnArgs};
 pub use process::{BroadcastItem, RunnerProcess};
 pub use queue::{QueueJump, QueueOffer};

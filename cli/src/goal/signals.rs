@@ -7,6 +7,27 @@ use galley_core_lib::api::{
     GoalEventBrief, GoalEventType, GoalStatusSnapshot, GoalTaskStatus, SessionId,
 };
 
+/// Parse a `session.run_state` response into "the session is busy": a run
+/// is open, the bridge is mid-turn, or messages wait in the outbound
+/// queue. `runnerAlive` alone is NOT busy — an idle warm runner is free
+/// to take the next working turn. `None` = unparseable (older Core
+/// without the command, malformed payload); the caller falls back to the
+/// legacy DB-status read rather than guessing.
+pub(crate) fn goal_run_state_busy(state: &serde_json::Value) -> Option<bool> {
+    let open_run = state.get("openRun")?.as_bool()?;
+    let agent_running = state.get("agentRunning")?.as_bool()?;
+    let queued_count = state.get("queuedCount")?.as_u64()?;
+    Some(open_run || agent_running || queued_count > 0)
+}
+
+/// Did a Goal-turn dispatch (`session.goal_solo_turn` / `goal_synthesize`
+/// / `goal_master_plan`) come back `busy` — the session was mid-run, so
+/// Core sent nothing and persisted nothing? The caller waits and re-sends
+/// a freshly generated prompt.
+pub(crate) fn goal_dispatch_was_busy(response: &serde_json::Value) -> bool {
+    response.get("dispatch").and_then(|d| d.as_str()) == Some("busy")
+}
+
 pub(crate) fn goal_has_incomplete_tasks(snapshot: &GoalStatusSnapshot) -> bool {
     snapshot.tasks.iter().any(|task| {
         matches!(

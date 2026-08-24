@@ -934,3 +934,72 @@ fn solo_turn_produced_output_needs_a_strictly_newer_agent_reply() {
     let first_reply = vec![test_message(MessageRole::Agent, 0, "first", None)];
     assert!(solo_turn_produced_output(&first_reply, None));
 }
+
+/// The busy predicate over `session.run_state`: `open_run` is the
+/// run-level gate (closes only on RunComplete), `agent_running` and the
+/// queue are belt-and-braces, and a merely-alive idle runner is NOT
+/// busy. Unparseable payloads (older Core, malformed data) must return
+/// None so the caller falls back instead of misreading idle.
+#[test]
+fn goal_run_state_busy_reads_gate_agent_and_queue() {
+    use super::signals::goal_run_state_busy;
+    use serde_json::json;
+
+    let idle = json!({
+        "runnerAlive": true, "agentRunning": false,
+        "openRun": false, "queuedCount": 0
+    });
+    assert_eq!(goal_run_state_busy(&idle), Some(false));
+
+    // The inter-step gap of a multi-step turn: agent_running flickers
+    // false but the run gate is still open — must read busy. This is
+    // the exact shape whose misread (via the DB status column) made the
+    // solo loop re-nudge after every step.
+    let inter_step_gap = json!({
+        "runnerAlive": true, "agentRunning": false,
+        "openRun": true, "queuedCount": 0
+    });
+    assert_eq!(goal_run_state_busy(&inter_step_gap), Some(true));
+
+    let mid_turn = json!({
+        "runnerAlive": true, "agentRunning": true,
+        "openRun": true, "queuedCount": 0
+    });
+    assert_eq!(goal_run_state_busy(&mid_turn), Some(true));
+
+    let queued_only = json!({
+        "runnerAlive": true, "agentRunning": false,
+        "openRun": false, "queuedCount": 2
+    });
+    assert_eq!(goal_run_state_busy(&queued_only), Some(true));
+
+    // Dead runner, nothing pending: idle.
+    let dead = json!({
+        "runnerAlive": false, "agentRunning": false,
+        "openRun": false, "queuedCount": 0
+    });
+    assert_eq!(goal_run_state_busy(&dead), Some(false));
+
+    // Missing / mistyped fields → None (fallback), never a guess.
+    assert_eq!(goal_run_state_busy(&json!({})), None);
+    assert_eq!(
+        goal_run_state_busy(&json!({
+            "runnerAlive": true, "agentRunning": "yes",
+            "openRun": false, "queuedCount": 0
+        })),
+        None
+    );
+}
+
+#[test]
+fn goal_dispatch_was_busy_matches_only_the_busy_marker() {
+    use super::signals::goal_dispatch_was_busy;
+    use serde_json::json;
+
+    assert!(goal_dispatch_was_busy(&json!({ "dispatch": "busy" })));
+    assert!(!goal_dispatch_was_busy(
+        &json!({ "dispatch": "dispatched", "message": {} })
+    ));
+    // Legacy Core responses without the field are treated as dispatched.
+    assert!(!goal_dispatch_was_busy(&json!({ "message": {} })));
+}

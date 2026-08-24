@@ -51,18 +51,28 @@ pub(super) async fn dispatch_session_goal_synthesize(
     };
     let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
     let session_id = SessionId(parsed.session_id.clone());
+    // Idle gate (galley#19 family): a mid-run dispatch would be
+    // rejected by the bridge as a user-visible error. `busy` persists
+    // nothing — the controller re-sends a fresh prompt once idle.
+    if !ctx.runner.try_reserve_run(&parsed.session_id).await {
+        return SocketResponse::ok(request_id, serde_json::json!({ "dispatch": "busy" }));
+    }
     let brief = match galley
         .send_message(session_id, visible_content.clone(), origin)
         .await
     {
         Ok(b) => b,
-        Err(e) => return map_galley_err(request_id, e),
+        Err(e) => {
+            ctx.runner.queue_release_run(&parsed.session_id).await;
+            return map_galley_err(request_id, e);
+        }
     };
 
     if let Err(e) =
         ensure_goal_synthesis_runner(&galley, ctx, &parsed.session_id, "session.goal_synthesize")
             .await
     {
+        ctx.runner.queue_release_run(&parsed.session_id).await;
         emit_user_message_persisted(ctx, &parsed.session_id, &brief, "persisted_only");
         return e.with_request_id(request_id);
     }
@@ -91,6 +101,7 @@ pub(super) async fn dispatch_session_goal_synthesize(
             )
         }
         Err(e) => {
+            ctx.runner.queue_release_run(&parsed.session_id).await;
             emit_user_message_persisted(ctx, &parsed.session_id, &brief, "persisted_only");
             SocketResponse::err(
                 request_id,
@@ -133,6 +144,10 @@ pub(super) async fn dispatch_session_goal_master_plan(
     };
     let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
     let session_id = SessionId(parsed.session_id.clone());
+    // Same idle gate as session.goal_synthesize — see the comment there.
+    if !ctx.runner.try_reserve_run(&parsed.session_id).await {
+        return SocketResponse::ok(request_id, serde_json::json!({ "dispatch": "busy" }));
+    }
     let brief = match galley
         .send_message_with_visibility(
             session_id,
@@ -143,13 +158,17 @@ pub(super) async fn dispatch_session_goal_master_plan(
         .await
     {
         Ok(b) => b,
-        Err(e) => return map_galley_err(request_id, e),
+        Err(e) => {
+            ctx.runner.queue_release_run(&parsed.session_id).await;
+            return map_galley_err(request_id, e);
+        }
     };
 
     if let Err(e) =
         ensure_goal_synthesis_runner(&galley, ctx, &parsed.session_id, "session.goal_master_plan")
             .await
     {
+        ctx.runner.queue_release_run(&parsed.session_id).await;
         return e.with_request_id(request_id);
     }
 
@@ -158,7 +177,10 @@ pub(super) async fn dispatch_session_goal_master_plan(
     });
     let absolute_turn_index = match absolute_turn_index {
         Ok(v) => v,
-        Err(e) => return e.with_request_id(request_id),
+        Err(e) => {
+            ctx.runner.queue_release_run(&parsed.session_id).await;
+            return e.with_request_id(request_id);
+        }
     };
 
     match ctx
@@ -181,11 +203,14 @@ pub(super) async fn dispatch_session_goal_master_plan(
                 "dispatch": "dispatched",
             }),
         ),
-        Err(e) => SocketResponse::err(
-            request_id,
-            ErrorTag::RunnerError,
-            format!("session.goal_master_plan runner dispatch: {e}"),
-        ),
+        Err(e) => {
+            ctx.runner.queue_release_run(&parsed.session_id).await;
+            SocketResponse::err(
+                request_id,
+                ErrorTag::RunnerError,
+                format!("session.goal_master_plan runner dispatch: {e}"),
+            )
+        }
     }
 }
 
@@ -233,6 +258,14 @@ pub(super) async fn dispatch_session_goal_solo_turn(
     };
     let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
     let session_id = SessionId(parsed.session_id.clone());
+    // Idle gate (galley#19 family): before this gate existed, a nudge
+    // dispatched while the previous working turn was still mid-run hit
+    // the bridge's defensive rejection and surfaced as an error toast
+    // in the GUI — once per step of a multi-step turn. `busy` persists
+    // nothing; the controller waits and regenerates a fresher nudge.
+    if !ctx.runner.try_reserve_run(&parsed.session_id).await {
+        return SocketResponse::ok(request_id, serde_json::json!({ "dispatch": "busy" }));
+    }
     // Internal — the nudge and the turn it drives stay out of the user thread.
     let brief = match galley
         .send_message_with_visibility(
@@ -244,19 +277,24 @@ pub(super) async fn dispatch_session_goal_solo_turn(
         .await
     {
         Ok(b) => b,
-        Err(e) => return map_galley_err(request_id, e),
+        Err(e) => {
+            ctx.runner.queue_release_run(&parsed.session_id).await;
+            return map_galley_err(request_id, e);
+        }
     };
 
     if let Err(e) =
         ensure_goal_synthesis_runner(&galley, ctx, &parsed.session_id, "session.goal_solo_turn")
             .await
     {
+        ctx.runner.queue_release_run(&parsed.session_id).await;
         return e.with_request_id(request_id);
     }
 
     let absolute_turn_index = match brief.turn_index.map(i64::from) {
         Some(v) => v,
         None => {
+            ctx.runner.queue_release_run(&parsed.session_id).await;
             return SocketResponseLite::runner_error("session.goal_solo_turn missing turn_index")
                 .with_request_id(request_id);
         }
@@ -284,11 +322,14 @@ pub(super) async fn dispatch_session_goal_solo_turn(
                 "dispatch": "dispatched",
             }),
         ),
-        Err(e) => SocketResponse::err(
-            request_id,
-            ErrorTag::RunnerError,
-            format!("session.goal_solo_turn runner dispatch: {e}"),
-        ),
+        Err(e) => {
+            ctx.runner.queue_release_run(&parsed.session_id).await;
+            SocketResponse::err(
+                request_id,
+                ErrorTag::RunnerError,
+                format!("session.goal_solo_turn runner dispatch: {e}"),
+            )
+        }
     }
 }
 

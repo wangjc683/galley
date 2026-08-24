@@ -13,8 +13,8 @@ use galley_core_lib::error::GalleyError;
 use galley_core_lib::protocol::{
     SessionArchiveArgs, SessionBtwArgs, SessionCheckpointArgs, SessionGoalMasterPlanArgs,
     SessionGoalSoloTurnArgs, SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs,
-    SessionNewGoalWorkerArgs, SessionRestoreArgs, SessionSendArgs, SessionShutdownRunnerArgs,
-    SessionStopArgs, WatchFrame,
+    SessionNewGoalWorkerArgs, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
+    SessionShutdownRunnerArgs, SessionStopArgs, WatchFrame,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -465,6 +465,14 @@ pub(crate) async fn session_goal_master_plan_value(
         reason,
     })
     .await
+}
+
+/// Live busy probe (`session.run_state`) — the truthful "is a run still
+/// open" signal. `session_brief().status` reads the DB column, which
+/// persists transient statuses as `idle`, so it must never be used to
+/// decide whether a Goal working turn has finished.
+pub(crate) async fn session_run_state_value(id: String) -> Result<serde_json::Value, GalleyError> {
+    call_value(SessionRunStateArgs { session_id: id }).await
 }
 
 /// Dispatch a visible solo-Goal working turn, spawning the session's runner

@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use crate::common::{emit_json, is_live_candidate, SCHEMA_VERSION};
+use crate::common::{emit_json, SCHEMA_VERSION};
 use crate::goal::prompts::goal_workspace_file_listing;
 use crate::goal::signals::{goal_has_stop_wrap_up_material, goal_worker_session_ids};
 use crate::goal::types::*;
@@ -17,7 +17,9 @@ use galley_core_lib::api::{
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
 
-use super::controller::{compact_text, first_non_empty_line, goal_narration_locale, push_limited};
+use super::controller::{
+    compact_text, first_non_empty_line, goal_narration_locale, goal_session_is_busy, push_limited,
+};
 use super::hive::shutdown_goal_worker_runners;
 
 /// Synthesis wait budget scales with the dispatched prompt size: a
@@ -72,12 +74,16 @@ async fn wait_master_final_answer(
 ) -> Result<Option<MessageBrief>, GalleyError> {
     let started = Instant::now();
     while started.elapsed() < timeout {
-        let session = galley.session_brief(session_id.clone()).await?;
         let messages = galley
             .session_messages(session_id.clone(), Some(12))
             .await?;
         if let Some(message) = master_final_answer_after(&messages, after_agent_turn) {
-            if !is_live_candidate(session.status) {
+            // Truthful idle gate (`session.run_state`): a mid-run step
+            // row can carry a non-empty answer field, so "a qualifying
+            // row exists" alone is not "the wrap-up turn finished". The
+            // old gate here read the DB status column, which persists
+            // as `idle` — it never held anything back.
+            if !goal_session_is_busy(galley, session_id).await? {
                 return Ok(Some(message));
             }
         }
@@ -212,10 +218,6 @@ pub(super) async fn finish_goal_with_master(
         return Ok(());
     };
 
-    // Baseline BEFORE dispatching synthesis: only an agent reply strictly
-    // newer than this counts as the wrap-up answer (see
-    // `master_final_answer_after` for the dogfood incident this fixes).
-    let before_agent_turn = latest_agent_turn_index(galley, &master_session_id).await?;
     let dispatch_content =
         build_goal_synthesis_prompt(galley, &snapshot, worker_session_ids, mode).await?;
     let synthesis_timeout = goal_finish_synthesis_timeout(
@@ -224,24 +226,52 @@ pub(super) async fn finish_goal_with_master(
         goal.mode,
         goal.budget_seconds,
     );
-    session_goal_synthesize_value(
-        master_session_id.0.clone(),
-        goal_synthesizing(goal_narration_locale()).to_string(),
-        dispatch_content,
-        supervisor.clone(),
-        reason
-            .clone()
-            .or_else(|| Some(format!("goal {} master synthesis", goal.id))),
-    )
-    .await?;
-    let Some(final_answer_message) = wait_master_final_answer(
-        galley,
-        &master_session_id,
-        before_agent_turn,
-        synthesis_timeout,
-    )
-    .await?
-    else {
+    // Dispatch-when-idle loop. Core's `session.goal_synthesize` refuses
+    // with `busy` while the master's previous working turn is still
+    // mid-run (a stop can arrive at any point of a multi-step turn) —
+    // before that gate, the dispatch bounced off the bridge as a GUI
+    // error toast while `wait_master_final_answer` latched the OLD run's
+    // next step row as "the wrap-up answer" and stamped the goal
+    // terminal seconds after the stop click, with the old run still
+    // visibly working. The baseline is re-captured immediately before
+    // each attempt: only an agent reply strictly newer than the
+    // successful dispatch counts as the wrap-up answer (see
+    // `master_final_answer_after` for the earlier dogfood incident).
+    let synthesis_started = Instant::now();
+    let mut dispatched_baseline: Option<Option<u32>> = None;
+    while synthesis_started.elapsed() < synthesis_timeout {
+        let before_agent_turn = latest_agent_turn_index(galley, &master_session_id).await?;
+        let response = session_goal_synthesize_value(
+            master_session_id.0.clone(),
+            goal_synthesizing(goal_narration_locale()).to_string(),
+            dispatch_content.clone(),
+            supervisor.clone(),
+            reason
+                .clone()
+                .or_else(|| Some(format!("goal {} master synthesis", goal.id))),
+        )
+        .await?;
+        if !crate::goal::signals::goal_dispatch_was_busy(&response) {
+            dispatched_baseline = Some(before_agent_turn);
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    let final_answer_message = match dispatched_baseline {
+        Some(before_agent_turn) => {
+            wait_master_final_answer(
+                galley,
+                &master_session_id,
+                before_agent_turn,
+                synthesis_timeout.saturating_sub(synthesis_started.elapsed()),
+            )
+            .await?
+        }
+        // Never idle inside the whole synthesis budget: fall through to
+        // the same timeout policy as a dispatched-but-silent wrap.
+        None => None,
+    };
+    let Some(final_answer_message) = final_answer_message else {
         // Timed out — engine + mode decide what that means.
         if goal.mode == GoalMode::Solo {
             // Solo's promise is "the budget ends, you get the current

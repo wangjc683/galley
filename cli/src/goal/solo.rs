@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use crate::common::{emit_json, is_live_candidate, SCHEMA_VERSION};
+use crate::common::{emit_json, SCHEMA_VERSION};
 use crate::goal::types::*;
 use crate::session::session_goal_solo_turn_value;
 use galley_core_lib::api::{
@@ -13,7 +13,9 @@ use galley_core_lib::api::{
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
 
-use super::controller::{goal_budget_left, goal_budget_remaining, goal_follow_timeout};
+use super::controller::{
+    goal_budget_left, goal_budget_remaining, goal_follow_timeout, goal_session_is_busy,
+};
 use super::finish::{finish_goal_with_master, latest_agent_turn_index};
 
 /// Solo Goal engine loop: drive one agent (the goal's session) to the time
@@ -104,6 +106,13 @@ pub(super) async fn run_solo_goal_loop(
         // session has no runner until we drive it). A bare `session.send` only
         // reaches an already-live runner, so it would pile persisted messages
         // onto a dead session — the tight-loop bug.
+        //
+        // `busy` = the session is still mid-run (first loop entry while the
+        // objective turn is working, resume onto a live session, or a race
+        // with a queued user message): Core's idle gate sent and persisted
+        // nothing. The wait below holds until the run settles either way, and
+        // the loop re-enters with a freshly generated nudge — never queue the
+        // stale one.
         session_goal_solo_turn_value(
             session_id.0.clone(),
             solo_continuation_prompt(&goal, remaining),
@@ -112,11 +121,11 @@ pub(super) async fn run_solo_goal_loop(
         )
         .await?;
 
-        // Wait for THIS turn to actually complete before nudging again. Bound
-        // by remaining budget so a wedged Running turn can't hang the loop.
-        // (Spawn failure already errored at dispatch above, so reaching here
-        // means the runner is up and the turn is coming — even a slow cold
-        // start.)
+        // Wait for THIS turn (or the run the busy gate deferred to) to
+        // actually complete before nudging again. Bound by remaining budget
+        // so a wedged Running turn can't hang the loop. (Spawn failure
+        // already errored at dispatch above, so reaching here means the
+        // runner is up and the turn is coming — even a slow cold start.)
         let turn_timeout = goal_follow_timeout(goal_budget_remaining(&goal, controller_started));
         wait_solo_turn(galley, &session_id, before_agent_turn, turn_timeout).await?;
     }
@@ -189,16 +198,27 @@ pub(crate) fn solo_turn_produced_output(
 }
 
 /// Wait for the solo agent's dispatched turn to finish: the session has been
-/// live and returned to idle (or a fresh Agent reply landed and the session
+/// busy and returned to idle (or a fresh Agent reply landed and the session
 /// is idle). Bounded by `timeout` (remaining budget + grace) so a hung/silent
 /// turn can't block past the budget.
+///
+/// Busy comes from `session.run_state` (`goal_session_is_busy`), whose
+/// `open_run` gate closes only on RunComplete — so a multi-step working
+/// turn reads busy from dispatch to its real end. The old read here was
+/// the DB `sessions.status` column, which persists as `idle` for
+/// desktop sessions: every wait degenerated to "a new agent MESSAGE
+/// row exists", and since agent rows land once per STEP, the loop
+/// re-nudged after the first step of every multi-step turn — each nudge
+/// bouncing off the bridge's galley#19 rejection as a GUI error toast.
 ///
 /// Deliberately NO fixed "did it start?" grace. `session.goal_solo_turn`
 /// already spawns the runner and errors at dispatch if that fails, so reaching
 /// here means the runner is up and the turn is coming. A slow managed-GA cold
-/// start keeps the session `Idle` for tens of seconds — treating that as a
-/// dead session (the old 60s grace) wrapped a healthy solo goal after ~1 min,
-/// right as the bridge finished warming.
+/// start keeps the session idle-looking for tens of seconds — treating that
+/// as a dead session (the old 60s grace) wrapped a healthy solo goal after
+/// ~1 min, right as the bridge finished warming. (The run gate closes that
+/// hole for dispatched turns: it is reserved synchronously at dispatch, so
+/// a cold-starting turn already reads busy.)
 async fn wait_solo_turn(
     galley: &SqliteGalley,
     session_id: &SessionId,
@@ -206,12 +226,11 @@ async fn wait_solo_turn(
     timeout: Duration,
 ) -> Result<(), GalleyError> {
     let started = Instant::now();
-    let mut observed_live = false;
+    let mut observed_busy = false;
     loop {
-        let session = galley.session_brief(session_id.clone()).await?;
-        let live = is_live_candidate(session.status);
-        if live {
-            observed_live = true;
+        let busy = goal_session_is_busy(galley, session_id).await?;
+        if busy {
+            observed_busy = true;
         }
         // Internal-inclusive: solo working turns are internal, so the default
         // read would never surface the agent's reply.
@@ -220,9 +239,9 @@ async fn wait_solo_turn(
             .await?;
         let has_new_agent_turn = solo_turn_produced_output(&messages, after_agent_turn);
         // The turn cycle finished: it ran (or a reply landed) and is idle
-        // again. `observed_live` guards against the pre-start Idle window so
+        // again. `observed_busy` guards against the pre-start idle window so
         // we don't return before the (possibly cold-starting) turn even runs.
-        if !live && (observed_live || has_new_agent_turn) {
+        if !busy && (observed_busy || has_new_agent_turn) {
             return Ok(());
         }
         // Budget bound: a silent/hung turn hands control back so the caller

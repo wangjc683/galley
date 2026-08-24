@@ -125,6 +125,20 @@ bracket Goal episodes by exact id instead of matching objective text. Worker
 prompts, Goal ids, task ids, and protocol logs remain in worker sessions and
 the Goal audit stream.
 
+Since 2026-08-23 the three internal Goal-turn dispatch commands
+(`session.goal_solo_turn`, `session.goal_synthesize`,
+`session.goal_master_plan`) are gated on the session being idle: when the
+target session has an open run or queued messages, they return
+`{"dispatch": "busy"}` with no side effects (nothing persisted, nothing sent
+to the bridge) instead of racing the running turn into the bridge's
+run-in-progress rejection. The controller waits and re-dispatches a freshly
+generated prompt. The wait itself polls the internal `session.run_state`
+command (`{sessionId}` → `{runnerAlive, agentRunning, openRun, queuedCount}`,
+additive in schemaVersion 1), which reads the live RunnerManager state —
+`sessions.status` in the DB persists transient statuses as `idle` and must
+not be used as a busy signal. All of these are internal socket commands used
+by the Goal controller; they are not part of the documented CLI surface.
+
 `goal run` emits NDJSON frames:
 
 ```json

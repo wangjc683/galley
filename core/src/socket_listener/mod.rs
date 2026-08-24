@@ -69,8 +69,8 @@ use crate::protocol::{
     LlmSetArgs, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs, SessionBtwArgs,
     SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
     SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
-    SessionNewResult, SessionRestoreArgs, SessionSendArgs, SessionShutdownRunnerArgs,
-    SessionStopArgs, SessionWatchArgs,
+    SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
+    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs,
 };
 use crate::runner_commands::{
     normalize_external_ga_path, prepare_managed_spawn_args, spawn_emit_task,
@@ -613,6 +613,9 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         ),
         "session.goal_solo_turn" => {
             DispatchResult::Unary(dispatch_session_goal_solo_turn(request_id, req.args, ctx).await)
+        }
+        "session.run_state" => {
+            DispatchResult::Unary(dispatch_session_run_state(request_id, req.args, ctx).await)
         }
         "session.watch" => dispatch_session_watch(request_id, req.args, ctx).await,
         // ---- B4 M1 session write commands ----

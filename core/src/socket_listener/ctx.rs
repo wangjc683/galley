@@ -19,8 +19,8 @@ use crate::error::GalleyError;
 use crate::ipc::IpcCommand;
 use crate::notify::{notify, Notifier};
 use crate::runner_manager::{
-    BroadcastItem, QueueJump, QueueOffer, RunnerManager, RunnerSpawnError, SendCommandError,
-    ShutdownError, SpawnArgs,
+    BroadcastItem, QueueJump, QueueOffer, RunState, RunnerManager, RunnerSpawnError,
+    SendCommandError, ShutdownError, SpawnArgs,
 };
 use async_trait::async_trait;
 use serde::Serialize;
@@ -77,6 +77,22 @@ pub trait RunnerPort: Send + Sync {
     }
     async fn queue_snapshot(&self, _session_id: &str) -> Vec<QueuedMessage> {
         Vec::new()
+    }
+    /// Reserve the run gate only when the session is idle with an empty
+    /// queue (Goal-turn dispatch gate). Default says "reserved" so
+    /// queue-less test fakes keep pre-gate behavior for free.
+    async fn try_reserve_run(&self, _session_id: &str) -> bool {
+        true
+    }
+    /// Live run-state snapshot (`session.run_state`). Default reads as
+    /// fully idle, matching the no-queue-support fakes.
+    async fn run_state(&self, _session_id: &str) -> RunState {
+        RunState {
+            runner_alive: false,
+            agent_running: false,
+            open_run: false,
+            queued_count: 0,
+        }
     }
 }
 
@@ -135,6 +151,12 @@ impl RunnerPort for RunnerManager {
     }
     async fn queue_snapshot(&self, session_id: &str) -> Vec<QueuedMessage> {
         RunnerManager::queue_snapshot(self, session_id).await
+    }
+    async fn try_reserve_run(&self, session_id: &str) -> bool {
+        RunnerManager::try_reserve_run(self, session_id).await
+    }
+    async fn run_state(&self, session_id: &str) -> RunState {
+        RunnerManager::run_state(self, session_id).await
     }
 }
 

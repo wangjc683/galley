@@ -23,6 +23,18 @@
 
 ---
 
+## Goal 停止立即 abort 当前轮（stop 响应性）
+
+- **状态**：暂存（2026-08-23 Goal 派发修复时浮出，有意不并入该次修复）
+- **提出**：2026-08-23，[Goal 派发装门](./2026-08-23-goal-dispatch-gate-and-run-state.md) 的余量项。
+- **启动信号**：dogfood 或用户反馈里出现「点了停止还要等好几分钟才开始收尾」的实感——solo 循环只在 loop top 检查 `stop_requested`，正在跑的多步 turn 会先跑完；`confirmStopGoal` 文案承诺的「简短收尾（约 1–2 分钟）」在长 turn 下兑现不了。
+- **方案**：停止路径先对 master 会话发 `IpcCommand::Abort`（bridge 会合成 run_complete、Core 队列门随之关闭），再走现有 busy 重试的 synthesis 派发——机制上与队列 `QueueJump::AbortThenDrain` 同族，基建都在。
+- **实施要点**：abort 丢弃当前轮已产出的中间工作（工具副作用已落世界、不回滚，同消息级 Retry 那条的口径）；aborted turn 在主对话区的形态要过一遍（残缺步序列 + 立刻接收尾轮）；hive 模式 master 通常空闲，基本只影响 solo。
+- **待定**：是否给「温和停止（跑完本轮）/立即停止」两档，还是一刀切 abort；GUI stop 确认弹窗文案是否随之改。
+- **关联**：[Goal 派发装门](./2026-08-23-goal-dispatch-gate-and-run-state.md)；`cli/src/goal/solo.rs` loop-top 检查；`core/src/runner_manager/manager.rs` `queue_jump` 的 AbortThenDrain 先例。
+
+---
+
 ## 单步 run 的「第 1 步」前缀收敛（TurnMarker 步号）
 
 - **状态**：暂存（2026-08-23 探讨定案，JC 当日裁决保持现状；agent 复核后同意——见「不启动的理由」）

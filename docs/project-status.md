@@ -285,9 +285,23 @@ hardware (2026-08-21):
   selected row had ΔL* 0.01 against chrome — no lightness step at all. See
   [the devlog](./devlog/2026-08-21-sidebar-selected-row-three-channels.md).
 
-No Rust, CLI, or runner change, so the Agent API is untouched by this batch.
-The managed-GA payload moves with the baseline bump above, which is what puts
-the bundled runtime gate back in the release pre-flight.
+- **Goal dispatch gate + truthful busy signal** (2026-08-23, Rust Core +
+  CLI). Fixes the community-reported solo-Goal bug pair: repeated
+  "galley#19" error toasts during a running Goal, and the sidebar flipping
+  to 已停止 seconds after a stop while the master session visibly kept
+  working. Root cause was the Goal controller reading `sessions.status`
+  (which never persists `running`) as its idle signal. Adds the internal
+  `session.run_state` probe (additive), an idle gate on the three internal
+  Goal-turn dispatch commands (`dispatch: "busy"`, zero side effects), and
+  baseline re-capture in the wrap-up dispatch loop. Runner and GUI are
+  untouched. See
+  [the devlog](./devlog/2026-08-23-goal-dispatch-gate-and-run-state.md).
+
+The Agent API's documented CLI surface is untouched by this batch — the
+2026-08-23 Goal fix adds only internal socket commands, additively under
+`schemaVersion: 1`. The managed-GA payload moves with the baseline bump
+above, which is what puts the bundled runtime gate back in the release
+pre-flight.
 
 The baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,

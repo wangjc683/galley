@@ -467,6 +467,53 @@ pub(super) async fn dispatch_session_stop(
     }
 }
 
+/// `session.run_state` — the live busy signal for one session, read
+/// straight from the RunnerManager (runner registry + outbound-queue run
+/// gate). Poll target for the Goal controller's turn-completion waits:
+/// `sessions.status` in SQLite persists transient statuses as `idle`, so
+/// a DB read can never answer "is the dispatched run still open".
+pub(super) async fn dispatch_session_run_state(
+    request_id: Option<String>,
+    args: Value,
+    ctx: &HandlerCtx<'_>,
+) -> SocketResponse {
+    let parsed: SessionRunStateArgs = match serde_json::from_value(args) {
+        Ok(a) => a,
+        Err(e) => {
+            return SocketResponse::err(
+                request_id,
+                ErrorTag::InvalidArgs,
+                format!("session.run_state args: {e}"),
+            );
+        }
+    };
+    let galley = match ctx.db.get().await {
+        Ok(g) => g,
+        Err(e) => {
+            return SocketResponse::err(request_id, ErrorTag::DbUnavailable, format!("open: {e}"));
+        }
+    };
+    if let Err(e) = galley
+        .session_brief(SessionId(parsed.session_id.clone()))
+        .await
+    {
+        return map_galley_err(request_id, e);
+    }
+    drop(galley);
+
+    let state = ctx.runner.run_state(&parsed.session_id).await;
+    SocketResponse::ok(
+        request_id,
+        serde_json::json!({
+            "sessionId": parsed.session_id,
+            "runnerAlive": state.runner_alive,
+            "agentRunning": state.agent_running,
+            "openRun": state.open_run,
+            "queuedCount": state.queued_count,
+        }),
+    )
+}
+
 pub(super) async fn dispatch_session_shutdown_runner(
     request_id: Option<String>,
     args: Value,

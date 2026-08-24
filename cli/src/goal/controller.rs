@@ -23,7 +23,7 @@ pub(crate) use crate::goal::signals::{
 pub(crate) use crate::goal::task_seed::goal_seed_task_specs;
 use crate::goal::types::*;
 use galley_core_lib::api::{
-    GalleyApi, GoalBrief, GoalLocale, GoalMode, GoalStatus, GOAL_CONFIRMATION_PHRASE,
+    GalleyApi, GoalBrief, GoalLocale, GoalMode, GoalStatus, SessionId, GOAL_CONFIRMATION_PHRASE,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
@@ -197,6 +197,26 @@ pub(super) fn push_limited(out: &mut String, text: &str, max_chars: usize) {
         out.extend(text.chars().take(remaining.saturating_sub(1)));
         out.push('…');
     }
+}
+
+/// Truthful "is the session busy" poll for the goal wait loops. Asks
+/// Core's `session.run_state` (runner registry + outbound-queue run
+/// gate — closes only on RunComplete, so a multi-step turn reads busy
+/// across its inter-step gaps). Falls back to the legacy DB-status read
+/// when the probe fails (older Core without the command) — that read is
+/// known-blind for desktop sessions (`sessions.status` persists as
+/// `idle`), but blind-and-bounded beats hanging on a probe error.
+pub(super) async fn goal_session_is_busy(
+    galley: &SqliteGalley,
+    session_id: &SessionId,
+) -> Result<bool, GalleyError> {
+    if let Ok(state) = crate::session::session_run_state_value(session_id.0.clone()).await {
+        if let Some(busy) = crate::goal::signals::goal_run_state_busy(&state) {
+            return Ok(busy);
+        }
+    }
+    let session = galley.session_brief(session_id.clone()).await?;
+    Ok(crate::common::is_live_candidate(session.status))
 }
 
 /// Grace added on top of the remaining goal budget when bounding the

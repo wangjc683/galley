@@ -13,13 +13,13 @@
 
 use async_trait::async_trait;
 use galley_core_lib::api::{
-    CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionBrief,
+    CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionBrief, SessionId,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::ipc::IpcCommand;
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
-    BroadcastItem, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
+    BroadcastItem, RunState, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
 };
 use galley_core_lib::socket_listener::{
     dispatch_line_with, DbSource, DispatchResult, HandlerCtx, RunnerPort, SocketResponse,
@@ -128,6 +128,13 @@ struct FakeRunner {
     subscribe_some: bool,
     running: bool,
     sent_commands: Mutex<Vec<(String, String)>>,
+    /// What `try_reserve_run` answers (Goal-turn idle gate). Default true
+    /// mirrors the trait default so pre-gate tests keep their behavior.
+    reserve_result: bool,
+    /// Sessions whose run-gate reservation was released after a failure.
+    released: Mutex<Vec<String>>,
+    /// Fixed `run_state` answer; None falls back to a running-derived one.
+    run_state: Option<RunState>,
 }
 
 impl Default for FakeRunner {
@@ -138,6 +145,9 @@ impl Default for FakeRunner {
             subscribe_some: true,
             running: true,
             sent_commands: Mutex::new(Vec::new()),
+            reserve_result: true,
+            released: Mutex::new(Vec::new()),
+            run_state: None,
         }
     }
 }
@@ -160,6 +170,18 @@ impl FakeRunner {
     fn subscribe_none() -> Self {
         Self {
             subscribe_some: false,
+            ..Self::default()
+        }
+    }
+    fn reserve_busy() -> Self {
+        Self {
+            reserve_result: false,
+            ..Self::default()
+        }
+    }
+    fn with_run_state(state: RunState) -> Self {
+        Self {
+            run_state: Some(state),
             ..Self::default()
         }
     }
@@ -234,6 +256,20 @@ impl RunnerPort for FakeRunner {
                 session_id: session_id.to_string(),
             })
         }
+    }
+    async fn try_reserve_run(&self, _session_id: &str) -> bool {
+        self.reserve_result
+    }
+    async fn queue_release_run(&self, session_id: &str) {
+        self.released.lock().unwrap().push(session_id.to_string());
+    }
+    async fn run_state(&self, _session_id: &str) -> RunState {
+        self.run_state.unwrap_or(RunState {
+            runner_alive: self.running,
+            agent_running: self.running,
+            open_run: false,
+            queued_count: 0,
+        })
     }
 }
 
@@ -581,4 +617,135 @@ async fn llm_set_process_gone_persists_and_emits_updated() {
     assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "persisted_only");
     let payload = h.notifier.payload_of("session-updated-external").unwrap();
     assert_eq!(payload["via"], "llm.set");
+}
+
+// ---------------- session.goal_solo_turn idle gate ----------------
+
+#[tokio::test]
+async fn goal_solo_turn_busy_session_sends_and_persists_nothing() {
+    // The galley#19-family gate: a keep-going nudge against a mid-run
+    // session must come back `busy` with zero side effects — before the
+    // gate it went straight to the bridge, which rejected it as a
+    // user-visible error toast (once per step of a multi-step turn).
+    let h = Harness::new(FakeRunner::reserve_busy()).await;
+    h.seed_session("s-goal").await;
+
+    let resp = h
+        .dispatch(req(
+            "session.goal_solo_turn",
+            json!({"sessionId": "s-goal", "dispatchContent": "[keep going]"}),
+        ))
+        .await;
+
+    assert!(resp.ok, "busy is a normal outcome, not an error: {resp:?}");
+    assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "busy");
+    assert!(h.runner.sent_commands.lock().unwrap().is_empty());
+    let rows = h
+        .galley
+        .session_messages_including_internal(SessionId("s-goal".into()), None)
+        .await
+        .unwrap();
+    assert!(rows.is_empty(), "busy must not persist the nudge row");
+}
+
+#[tokio::test]
+async fn goal_solo_turn_idle_session_dispatches_visible_turn() {
+    let h = Harness::new(FakeRunner::default()).await;
+    h.seed_session("s-goal").await;
+
+    let resp = h
+        .dispatch(req(
+            "session.goal_solo_turn",
+            json!({"sessionId": "s-goal", "dispatchContent": "[keep going]"}),
+        ))
+        .await;
+
+    assert!(resp.ok, "expected ok, got {resp:?}");
+    assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "dispatched");
+    assert_eq!(h.runner.sent_commands.lock().unwrap().len(), 1);
+    assert!(h.runner.released.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn goal_solo_turn_send_failure_releases_run_gate() {
+    // The reservation must not outlive a failed dispatch: a stuck-open
+    // gate would queue every later message behind a RunComplete that
+    // will never come.
+    let h = Harness::new(FakeRunner::send_fails_process_gone()).await;
+    h.seed_session("s-goal").await;
+
+    let resp = h
+        .dispatch(req(
+            "session.goal_solo_turn",
+            json!({"sessionId": "s-goal", "dispatchContent": "[keep going]"}),
+        ))
+        .await;
+
+    assert!(!resp.ok, "runner dispatch failure is an error: {resp:?}");
+    assert_eq!(h.runner.released.lock().unwrap().as_slice(), ["s-goal"]);
+}
+
+#[tokio::test]
+async fn goal_synthesize_busy_session_sends_and_persists_nothing() {
+    let h = Harness::new(FakeRunner::reserve_busy()).await;
+    h.seed_session("s-wrap").await;
+
+    let resp = h
+        .dispatch(req(
+            "session.goal_synthesize",
+            json!({
+                "sessionId": "s-wrap",
+                "visibleContent": "正在整理最终结果…",
+                "dispatchContent": "[wrap up]"
+            }),
+        ))
+        .await;
+
+    assert!(resp.ok, "busy is a normal outcome, not an error: {resp:?}");
+    assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "busy");
+    assert!(h.runner.sent_commands.lock().unwrap().is_empty());
+    let rows = h
+        .galley
+        .session_messages_including_internal(SessionId("s-wrap".into()), None)
+        .await
+        .unwrap();
+    assert!(rows.is_empty(), "busy must not persist the narration row");
+}
+
+// ---------------- session.run_state ----------------
+
+#[tokio::test]
+async fn session_run_state_reports_manager_truth() {
+    let h = Harness::new(FakeRunner::with_run_state(RunState {
+        runner_alive: true,
+        agent_running: false,
+        open_run: true,
+        queued_count: 2,
+    }))
+    .await;
+    h.seed_session("s-live").await;
+
+    let resp = h
+        .dispatch(req("session.run_state", json!({"sessionId": "s-live"})))
+        .await;
+
+    assert!(resp.ok, "expected ok, got {resp:?}");
+    let result = resp.result.unwrap();
+    assert_eq!(result["sessionId"], "s-live");
+    assert_eq!(result["runnerAlive"], true);
+    assert_eq!(result["agentRunning"], false);
+    assert_eq!(result["openRun"], true);
+    assert_eq!(result["queuedCount"], 2);
+}
+
+#[tokio::test]
+async fn session_run_state_unknown_session_is_not_found() {
+    let h = Harness::new(FakeRunner::default()).await;
+
+    let resp = h
+        .dispatch(req("session.run_state", json!({"sessionId": "s-nope"})))
+        .await;
+
+    assert!(!resp.ok);
+    assert_eq!(resp.error.as_deref(), Some("not_found"));
 }

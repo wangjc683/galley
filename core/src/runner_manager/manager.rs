@@ -59,6 +59,23 @@ pub struct RunnerManager {
     run_signal_tx: std::sync::RwLock<Option<mpsc::UnboundedSender<RunSignal>>>,
 }
 
+/// Live run-state snapshot for one session ([`RunnerManager::run_state`]).
+/// The busy truth the DB's `sessions.status` column cannot carry —
+/// transient statuses live in memory and persist as `idle`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunState {
+    /// A runner subprocess is registered and has a pid.
+    pub runner_alive: bool,
+    /// The bridge is mid-turn (flickers false in inter-turn gaps —
+    /// see [`crate::runner_manager::queue`] for why `open_run` is the
+    /// run-level gate).
+    pub agent_running: bool,
+    /// A dispatched run has not seen its `RunCompleteEvent` yet.
+    pub open_run: bool,
+    /// Messages waiting in the outbound queue.
+    pub queued_count: usize,
+}
+
 /// What the per-spawn forwarder reports to the global drain task.
 #[derive(Debug, Clone)]
 pub enum RunSignal {
@@ -537,6 +554,46 @@ impl RunnerManager {
         item
     }
 
+    /// Reserve the run gate ONLY if the session is fully idle (no open
+    /// run, empty queue). The queue-less sibling of [`Self::queue_offer`]
+    /// for callers whose message must not be enqueued on a busy session
+    /// — the Goal controller's keep-going nudge is regenerated fresher
+    /// each cycle, so a stale queued copy is worse than no copy. On
+    /// `false` the caller sends nothing; on `true` the caller must
+    /// dispatch or release via [`Self::queue_release_run`].
+    pub async fn try_reserve_run(&self, session_id: &str) -> bool {
+        let mut q = self.queues.lock().await;
+        let state = q.entry(session_id.to_string()).or_default();
+        if state.open_run || !state.items.is_empty() {
+            false
+        } else {
+            state.open_run = true;
+            true
+        }
+    }
+
+    /// Live run-state snapshot for one session — the truthful busy
+    /// signal `sessions.status` in SQLite cannot provide (transient
+    /// statuses are in-memory only; the DB column persists as `idle`).
+    /// Serves the `session.run_state` socket command the Goal controller
+    /// polls between working turns.
+    pub async fn run_state(&self, session_id: &str) -> RunState {
+        let (open_run, queued_count) = {
+            let q = self.queues.lock().await;
+            q.get(session_id)
+                .map(|s| (s.open_run, s.items.len()))
+                .unwrap_or((false, 0))
+        };
+        let runner_alive = self.pid(session_id).await.is_some();
+        let agent_running = self.agent_running(session_id).await;
+        RunState {
+            runner_alive,
+            agent_running,
+            open_run,
+            queued_count,
+        }
+    }
+
     /// Walk the LRU front-to-back evicting candidates until alive count
     /// is at or under [`cap`](Self::cap). Protected: active session +
     /// any session currently mid-turn (`agent_running == true`).
@@ -778,5 +835,49 @@ mod tests {
         let snap = mgr.queue_snapshot("s").await;
         assert_eq!(snap[0].text, "b");
         assert_eq!(snap[1].text, "c");
+    }
+
+    #[tokio::test]
+    async fn try_reserve_run_only_when_fully_idle() {
+        let mgr = RunnerManager::new();
+        // Idle session: reserved; a second attempt sees the open gate.
+        assert!(mgr.try_reserve_run("s").await);
+        assert!(!mgr.try_reserve_run("s").await);
+        // RunComplete closes the gate: reservable again.
+        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
+        assert!(mgr.try_reserve_run("s").await);
+        // Release (failed dispatch) also reopens.
+        mgr.queue_release_run("s").await;
+        assert!(mgr.try_reserve_run("s").await);
+    }
+
+    #[tokio::test]
+    async fn try_reserve_run_refuses_when_items_queued() {
+        let mgr = RunnerManager::new();
+        let _ = offer(&mgr, "s", "a").await; // DispatchNow, gate open
+        let _ = offer(&mgr, "s", "b").await; // queued
+        assert!(!mgr.try_reserve_run("s").await);
+        // Gate closes on RunComplete but "b" pops with the gate
+        // re-reserved — still not reservable until the queue drains dry.
+        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_some());
+        assert!(!mgr.try_reserve_run("s").await);
+        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
+        assert!(mgr.try_reserve_run("s").await);
+    }
+
+    #[tokio::test]
+    async fn run_state_reflects_gate_and_queue() {
+        let mgr = RunnerManager::new();
+        let idle = mgr.run_state("s").await;
+        assert!(!idle.runner_alive && !idle.agent_running && !idle.open_run);
+        assert_eq!(idle.queued_count, 0);
+        let _ = offer(&mgr, "s", "a").await; // gate open
+        let _ = offer(&mgr, "s", "b").await; // queued
+        let busy = mgr.run_state("s").await;
+        assert!(busy.open_run);
+        assert_eq!(busy.queued_count, 1);
+        // No subprocess in these tests: process-derived fields stay
+        // false; the queue-side truth carries the busy signal.
+        assert!(!busy.runner_alive && !busy.agent_running);
     }
 }

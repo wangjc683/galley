@@ -851,18 +851,33 @@ async fn run_goal_master_planning_turn(
         .await?;
 
     let dispatch_content = goal_master_planning_prompt(snapshot, round);
-    session_goal_master_plan_value(
-        master_session_id.0.clone(),
-        dispatch_content,
-        supervisor,
-        reason.or_else(|| {
-            Some(format!(
-                "goal {} master planning round {round}",
-                snapshot.goal.id
-            ))
-        }),
-    )
-    .await?;
+    let dispatch_reason = reason.or_else(|| {
+        Some(format!(
+            "goal {} master planning round {round}",
+            snapshot.goal.id
+        ))
+    });
+    // Busy-gated dispatch (same gate as solo turns / synthesis): Core
+    // refuses with `busy` while the master is mid-run and sends nothing.
+    // Retry until idle, bounded by the planning timeout so a wedged
+    // master falls through to the existing no-tasks fallbacks.
+    let dispatch_started = Instant::now();
+    loop {
+        let response = session_goal_master_plan_value(
+            master_session_id.0.clone(),
+            dispatch_content.clone(),
+            supervisor.clone(),
+            dispatch_reason.clone(),
+        )
+        .await?;
+        if !crate::goal::signals::goal_dispatch_was_busy(&response) {
+            break;
+        }
+        if dispatch_started.elapsed() >= GOAL_MASTER_PLANNING_TIMEOUT {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
 
     wait_goal_master_planning_result(galley, &snapshot.goal.id, snapshot.tasks.len()).await
 }
