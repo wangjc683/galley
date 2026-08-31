@@ -627,6 +627,18 @@ export const zhCopy = {
       providerNamePlaceholder: "可自定义；方便在列表中识别",
       leaveKeyBlank: "密钥留空会继续使用已保存的 Key",
       leaveExistingKey: "留空表示不修改现有 Key",
+      noAuthKeyHint: "本地端点（如 Ollama）无需鉴权，可留空",
+      noAuthActive: "此服务无需 API Key；输入新 Key 可随时启用鉴权",
+      noAuthEditPlaceholder: "无需鉴权，留空即可",
+      noAuthBadge: "无鉴权",
+      noAuthConfirmTitle: "确认无需鉴权？",
+      noAuthConfirmBody:
+        "未填写 API Key。保存后，Galley 会以无鉴权方式调用该端点（适用于 Ollama 等本地服务）。如果该服务需要 Key，请返回填写。",
+      noAuthConfirmAction: "确认保存",
+      clearApiKey: "清除密钥",
+      clearKeyDialogTitle: "清除已保存的 API Key？",
+      clearKeyDialogBody:
+        "清除后该服务将以无鉴权方式调用，本地保存的 Key 会被删除；重新输入 Key 可随时恢复。",
       showApiKey: "显示 API Key",
       hideApiKey: "隐藏 API Key",
       testConnection: "测试连接",

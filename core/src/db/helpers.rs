@@ -305,6 +305,7 @@ pub(super) fn parse_managed_model_auth_kind(s: &str) -> Result<ManagedModelAuthK
     Ok(match s {
         "api_key" => ManagedModelAuthKind::ApiKey,
         "chatgpt_codex_oauth" => ManagedModelAuthKind::ChatgptCodexOauth,
+        "none" => ManagedModelAuthKind::None,
         other => {
             return Err(GalleyError::Internal {
                 message: format!("unknown managed model auth kind: {other}"),
@@ -317,6 +318,7 @@ pub(super) fn managed_model_auth_kind_sql(auth_kind: ManagedModelAuthKind) -> &'
     match auth_kind {
         ManagedModelAuthKind::ApiKey => "api_key",
         ManagedModelAuthKind::ChatgptCodexOauth => "chatgpt_codex_oauth",
+        ManagedModelAuthKind::None => "none",
     }
 }
 

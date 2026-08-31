@@ -301,21 +301,31 @@ pub(super) struct ManagedModelProviderRow {
 
 impl ManagedModelProviderRow {
     pub(super) fn into_record(self) -> Result<ManagedModelProviderRecord> {
+        let auth_kind = parse_managed_model_auth_kind(&self.auth_kind)?;
         Ok(ManagedModelProviderRecord {
             id: self.id,
             display_name: self.display_name,
             protocol: parse_managed_model_protocol(&self.protocol)?,
-            auth_kind: parse_managed_model_auth_kind(&self.auth_kind)?,
+            auth_kind,
             api_base: self.api_base,
             api_key_ref: self.api_key_ref,
-            credential_status: if self.has_secret != 0 {
-                ManagedModelCredentialStatus::Present
-            } else {
-                ManagedModelCredentialStatus::Missing
-            },
+            credential_status: managed_credential_status(auth_kind, self.has_secret),
             created_at: self.created_at,
             updated_at: self.updated_at,
         })
+    }
+}
+
+/// A no-auth provider deliberately has no secret row — nothing is
+/// missing, so every "re-enter the key" surface must stay quiet.
+fn managed_credential_status(
+    auth_kind: ManagedModelAuthKind,
+    has_secret: i64,
+) -> ManagedModelCredentialStatus {
+    if has_secret != 0 || auth_kind == ManagedModelAuthKind::None {
+        ManagedModelCredentialStatus::Present
+    } else {
+        ManagedModelCredentialStatus::Missing
     }
 }
 
@@ -345,24 +355,21 @@ impl ManagedModelRow {
             .map_err(|e| GalleyError::Internal {
                 message: format!("managed model advanced_options JSON invalid: {e}"),
             })?;
+        let auth_kind = parse_managed_model_auth_kind(&self.auth_kind)?;
         Ok(ManagedModelRecord {
             id: self.id,
             provider_id: self.provider_id,
             provider_display_name: self.provider_display_name,
             display_name: self.display_name,
             protocol: parse_managed_model_protocol(&self.protocol)?,
-            auth_kind: parse_managed_model_auth_kind(&self.auth_kind)?,
+            auth_kind,
             api_base: self.api_base,
             model: self.model,
             api_key_ref: self.api_key_ref,
             advanced_options,
             is_default: self.is_default != 0,
             sort_order: self.sort_order,
-            credential_status: if self.has_secret != 0 {
-                ManagedModelCredentialStatus::Present
-            } else {
-                ManagedModelCredentialStatus::Missing
-            },
+            credential_status: managed_credential_status(auth_kind, self.has_secret),
             last_validated_at: self.last_validated_at,
             created_at: self.created_at,
             updated_at: self.updated_at,

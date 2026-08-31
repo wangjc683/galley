@@ -233,7 +233,10 @@ export function ProviderCard({
             >
               {provider.displayName}
             </span>
-            <CredentialBadge status={provider.credentialStatus} />
+            <CredentialBadge
+              status={provider.credentialStatus}
+              authKind={provider.authKind}
+            />
             <span className="inline-flex shrink-0 rounded-sm border border-line bg-surface/80 px-1.5 py-px text-ui-micro tabular-nums text-ink-muted">
               {copy.enabledModelsCount(models.length)}
             </span>

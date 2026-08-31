@@ -23,6 +23,7 @@ import {
 import {
   canCommitProviderSetup,
   connectionSuccessMessage,
+  effectiveProviderAuthKind,
   formToProbeInput,
   newProviderForm,
   planAutoPick,
@@ -125,6 +126,11 @@ export function useProviderSetupController({
   const [codexLoginStart, setCodexLoginStart] =
     useState<CodexDeviceLoginStart | null>(null);
   const [codexPolling, setCodexPolling] = useState(false);
+  // No-auth guardrails: a blank key resolves to a no-auth provider,
+  // which is confirmed once per save instead of blocking the button;
+  // clearing a saved key (→ no-auth) gets the same explicit confirm.
+  const [noAuthConfirmOpen, setNoAuthConfirmOpen] = useState(false);
+  const [clearKeyConfirmOpen, setClearKeyConfirmOpen] = useState(false);
   // Connection-test bookkeeping (active only with autoConnectionTest):
   // a passing test is pinned to the fingerprint it ran against, and a
   // request id guards against a stale response landing after the user
@@ -150,6 +156,9 @@ export function useProviderSetupController({
   const providerFormIsInlineEdit = !!visibleProviderForm?.id;
   const isCodexProviderForm =
     visibleProviderForm?.authKind === "chatgpt_codex_oauth";
+  const providerFormEffectiveAuthKind = visibleProviderForm
+    ? effectiveProviderAuthKind(visibleProviderForm, providerHasSavedKey)
+    : "api_key";
   const canSaveProvider = canCommitProviderSetup({
     form: visibleProviderForm,
     saving,
@@ -160,13 +169,13 @@ export function useProviderSetupController({
     verifiedFingerprint: null,
     currentFingerprint: "",
   });
+  // A blank key no longer gates the probes: it resolves to a no-auth
+  // probe (local endpoints answer, cloud endpoints report their 401),
+  // which beats a silently dead button in both cases.
   const canTestProvider =
     !!visibleProviderForm &&
     visibleProviderForm.protocol !== null &&
     visibleProviderForm.apiBase.trim() !== "" &&
-    (isCodexProviderForm ||
-      visibleProviderForm.apiKey.trim() !== "" ||
-      providerHasSavedKey) &&
     providerFormProbeState.kind !== "loading";
   const canFetchProviderFormModels =
     !!visibleProviderForm &&
@@ -174,7 +183,6 @@ export function useProviderSetupController({
     visibleProviderForm.protocol !== null &&
     !visibleProviderForm.id &&
     visibleProviderForm.apiBase.trim() !== "" &&
-    visibleProviderForm.apiKey.trim() !== "" &&
     providerFormProbeState.kind !== "loading";
 
   const connectionFingerprint = visibleProviderForm
@@ -187,7 +195,6 @@ export function useProviderSetupController({
     !!visibleProviderForm &&
     visibleProviderForm.providerPresetId !== null &&
     visibleProviderForm.protocol !== null &&
-    (isCodexProviderForm || visibleProviderForm.apiKey.trim() !== "") &&
     visibleProviderForm.apiBase.trim() !== "" &&
     visibleProviderForm.model.trim() !== "";
   const canCommit = requireVerifiedConnectionToCommit
@@ -329,7 +336,8 @@ export function useProviderSetupController({
       autoFetchAttemptedRef.current = fingerprint;
       void listManagedModelOptions({
         protocol,
-        authKind: form.authKind,
+        // Create-only path: blank key resolves to a no-auth fetch.
+        authKind: effectiveProviderAuthKind(form, false),
         apiKey: form.apiKey,
         apiBase: form.apiBase,
       })
@@ -379,6 +387,8 @@ export function useProviderSetupController({
     setProviderFormModelFilter("");
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    setNoAuthConfirmOpen(false);
+    setClearKeyConfirmOpen(false);
     resetConnectionTest();
   };
 
@@ -488,7 +498,7 @@ export function useProviderSetupController({
               id: visibleProviderForm.id,
               providerId: visibleProviderForm.id,
               protocol: visibleProviderForm.protocol,
-              authKind: visibleProviderForm.authKind,
+              authKind: providerFormEffectiveAuthKind,
               apiKey: visibleProviderForm.apiKey || undefined,
               apiBase: visibleProviderForm.apiBase,
               model: testModel,
@@ -502,7 +512,7 @@ export function useProviderSetupController({
               id: visibleProviderForm.id,
               providerId: visibleProviderForm.id,
               protocol: visibleProviderForm.protocol,
-              authKind: visibleProviderForm.authKind,
+              authKind: providerFormEffectiveAuthKind,
               apiKey: visibleProviderForm.apiKey || undefined,
               apiBase: visibleProviderForm.apiBase,
             }),
@@ -541,7 +551,7 @@ export function useProviderSetupController({
     try {
       const result = await listManagedModelOptions({
         protocol: visibleProviderForm.protocol,
-        authKind: visibleProviderForm.authKind,
+        authKind: providerFormEffectiveAuthKind,
         apiKey: visibleProviderForm.apiKey,
         apiBase: visibleProviderForm.apiBase,
       });
@@ -571,6 +581,31 @@ export function useProviderSetupController({
     if (!visibleProviderForm || !canCommit || !visibleProviderForm.protocol) {
       return;
     }
+    // A save that would commit a no-auth provider gets one explicit
+    // confirm — the error-prevention guardrail the removed non-empty
+    // gate used to provide. Re-saving an already no-auth provider
+    // doesn't re-ask.
+    if (
+      providerFormEffectiveAuthKind === "none" &&
+      editingProvider?.authKind !== "none"
+    ) {
+      setNoAuthConfirmOpen(true);
+      return;
+    }
+    await commitProviderSave();
+  };
+
+  const confirmNoAuthSave = () => {
+    setNoAuthConfirmOpen(false);
+    void commitProviderSave();
+  };
+
+  const cancelNoAuthSave = () => setNoAuthConfirmOpen(false);
+
+  const commitProviderSave = async () => {
+    if (!visibleProviderForm || !visibleProviderForm.protocol) {
+      return;
+    }
     if (postSaveForm === "success-status") {
       setProviderFormProbeState({ kind: "loading", action: "commit" });
     }
@@ -581,6 +616,7 @@ export function useProviderSetupController({
           form: visibleProviderForm,
           makeDefault,
           modelsCount: models.length,
+          providerHasSavedKey,
           displayNameFallback,
           trimCredentials: trimCredentialsOnSave,
         },
@@ -611,6 +647,44 @@ export function useProviderSetupController({
         });
       }
       // Otherwise: store-level error is shown inline.
+    }
+  };
+
+  // Clear a saved key: the provider becomes a no-auth endpoint (one
+  // mental model — has key / no key), acting on the *saved* provider
+  // record so unsaved form edits aren't committed as a side effect.
+  // Typing a new key any time upgrades it back to api_key.
+  const canClearProviderKey =
+    !!editingProvider &&
+    editingProvider.authKind === "api_key" &&
+    editingProvider.credentialStatus !== "missing";
+
+  const handleProviderClearKey = () => {
+    if (canClearProviderKey) setClearKeyConfirmOpen(true);
+  };
+
+  const cancelClearProviderKey = () => setClearKeyConfirmOpen(false);
+
+  const confirmClearProviderKey = async () => {
+    const provider = editingProvider;
+    setClearKeyConfirmOpen(false);
+    if (!provider) return;
+    try {
+      await saveProvider({
+        id: provider.id,
+        protocol: provider.protocol,
+        authKind: "none",
+        apiBase: provider.apiBase,
+        displayName: provider.displayName,
+      });
+      setProviderForm((current) =>
+        current && current.id === provider.id
+          ? { ...current, authKind: "none", apiKey: "" }
+          : current,
+      );
+      onSaved?.({ providerId: provider.id, isNewProvider: false });
+    } catch {
+      // Store-level error is shown inline.
     }
   };
 
@@ -735,18 +809,27 @@ export function useProviderSetupController({
 
   return {
     canCommit,
+    canClearProviderKey,
     canFetchProviderFormModels,
     canSaveProvider,
     canTestProvider,
+    cancelClearProviderKey,
+    cancelNoAuthSave,
+    clearKeyConfirmOpen,
     codexLoginStart,
     codexPolling,
+    confirmClearProviderKey,
+    confirmNoAuthSave,
     connectionInputComplete,
     connectionVerified,
+    editingProviderIsNoAuth: editingProvider?.authKind === "none",
+    noAuthConfirmOpen,
     handleCodexCompleteLogin,
     handleCodexImport,
     handleCodexLogin,
     handleCodexLogout,
     handleCodexOpenLoginPage,
+    handleProviderClearKey,
     handleProviderFormFetchModels,
     handleProviderFormTest,
     handleProviderSave,

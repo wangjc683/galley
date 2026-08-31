@@ -76,6 +76,18 @@
 
 ---
 
+## Ollama / 本地端点预设（Settings → Models 预设表）
+
+- **状态**：暂存（2026-08-31 无鉴权 Provider 落地时 JC 裁决本轮不加）
+- **提出**：2026-08-31，[无鉴权 Provider](./2026-08-31-no-auth-provider-empty-apikey.md) 的连带候选——预设表至今没有任何本地条目，本地用户要走「自定义」手填。
+- **启动信号**：本地端点用户反馈「配置 Ollama 要摸索」；或社区再出现 ollama / 本地模型相关 issue。
+- **背景**：无鉴权能力（`authKind: "none"`、key 可留空）已落地，是本项的前置。差的只是一张预设卡：apibase 预填 `http://localhost:11434/v1`、协议 openai、key 留空即可。
+- **方案**：`managed-model-presets.ts` 加 ollama 条目。要一并定的：预设显示名 / 图标；`recommendedModel` 给什么（本地模型名因人而异，可能留空走「读取模型列表」）；是否顺带覆盖 LM Studio（`localhost:1234/v1`）等近亲。
+- **待定**：一张卡还是「本地端点」一类；`apiKeyPlaceholder` 文案（应显式写「无需填写」）。
+- **关联**：[无鉴权 Provider devlog](./2026-08-31-no-auth-provider-empty-apikey.md)；下一节「`api_key_header` 的 GUI 入口」（同为该面的暂缓项，启动时可同批评估）。
+
+---
+
 ## `api_key_header` 的 GUI 入口（Anthropic 协议中转的鉴权头覆盖）
 
 - **状态**：暂存（2026-08-21 GA baseline 升级时发现，本次有意不做）

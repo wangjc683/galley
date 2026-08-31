@@ -212,6 +212,12 @@ pub(crate) async fn prepare_managed_runtime_context(
     let mut credential_allowlist: codex_oauth::CredentialIpcAllowlist = HashMap::new();
     let mut usable_models = Vec::new();
     for model in models {
+        // No-auth models carry no secret at all — usable as-is, and
+        // deliberately kept out of the credential IPC allowlist.
+        if model.auth_kind == ManagedModelAuthKind::None {
+            usable_models.push(model);
+            continue;
+        }
         let has_secret = credential_store::get_secret(&galley, &model.api_key_ref)
             .await
             .map(|secret| !secret.trim().is_empty())
@@ -239,6 +245,9 @@ pub(crate) async fn prepare_managed_runtime_context(
                         .await?;
                 ("galley-codex-oauth".into(), Some(config))
             }
+            // The empty key is the real credential: the runner passes it
+            // through to the engine verbatim, no IPC round-trip.
+            ManagedModelAuthKind::None => (String::new(), None),
         };
         if requested_model_id == Some(model.id.as_str()) {
             requested_model_index = Some(runtime_models.len() as i64);

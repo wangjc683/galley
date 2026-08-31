@@ -263,10 +263,21 @@ export function EmptyRow({ text }: { text: string }) {
 
 export function CredentialBadge({
   status,
+  authKind,
 }: {
   status: "present" | "missing" | "unknown";
+  authKind?: "api_key" | "chatgpt_codex_oauth" | "none";
 }) {
   const copy = useCopy().settings.models;
+  if (authKind === "none") {
+    // No-auth endpoint: a neutral marker, not a warning — nothing is
+    // missing, the provider was deliberately saved without a key.
+    return (
+      <span className="inline-flex shrink-0 rounded-sm border border-line bg-surface/80 px-1.5 py-px text-ui-micro text-ink-muted">
+        {copy.noAuthBadge}
+      </span>
+    );
+  }
   if (status === "present") return null;
   if (status === "unknown") {
     return (

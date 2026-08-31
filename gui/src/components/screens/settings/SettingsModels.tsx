@@ -2,6 +2,7 @@ import { Info, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { useProviderSetupController } from "@/components/managed-models/use-provider-setup-controller";
 import {
   SettingsPanelHeader,
@@ -160,16 +161,25 @@ export function SettingsModels({
   }, [editingModelId, pendingFocusModelId, providers.length]);
 
   const {
+    canClearProviderKey,
     canFetchProviderFormModels,
     canSaveProvider,
     canTestProvider,
+    cancelClearProviderKey,
+    cancelNoAuthSave,
+    clearKeyConfirmOpen,
     codexLoginStart,
     codexPolling,
+    confirmClearProviderKey,
+    confirmNoAuthSave,
+    editingProviderIsNoAuth,
+    noAuthConfirmOpen,
     handleCodexCompleteLogin,
     handleCodexImport,
     handleCodexLogin,
     handleCodexLogout,
     handleCodexOpenLoginPage,
+    handleProviderClearKey,
     handleProviderFormFetchModels,
     handleProviderFormTest,
     handleProviderSave,
@@ -292,6 +302,9 @@ export function SettingsModels({
               canFetchModels={canFetchProviderFormModels}
               canCancel={providers.length > 0 || !!visibleProviderForm.id}
               providerHasSavedKey={providerHasSavedKey}
+              isNoAuthProvider={editingProviderIsNoAuth}
+              canClearKey={canClearProviderKey}
+              onClearKey={handleProviderClearKey}
               probeState={providerFormProbeState}
               modelOptions={providerFormModelOptions}
               modelFilter={providerFormModelFilter}
@@ -368,6 +381,9 @@ export function SettingsModels({
                         providers.length > 0 || !!visibleProviderForm.id
                       }
                       providerHasSavedKey={providerHasSavedKey}
+                      isNoAuthProvider={editingProviderIsNoAuth}
+                      canClearKey={canClearProviderKey}
+                      onClearKey={handleProviderClearKey}
                       probeState={providerFormProbeState}
                       modelOptions={providerFormModelOptions}
                       modelFilter={providerFormModelFilter}
@@ -453,6 +469,32 @@ export function SettingsModels({
         busy={saving}
         onCancel={() => setProviderDeleteCandidate(null)}
         onConfirm={confirmDeleteProvider}
+      />
+
+      <ConfirmActionDialog
+        open={noAuthConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) cancelNoAuthSave();
+        }}
+        busy={saving}
+        title={modelCopy.noAuthConfirmTitle}
+        body={modelCopy.noAuthConfirmBody}
+        confirmLabel={modelCopy.noAuthConfirmAction}
+        confirmVariant="warning"
+        onConfirm={confirmNoAuthSave}
+      />
+
+      <ConfirmActionDialog
+        open={clearKeyConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) cancelClearProviderKey();
+        }}
+        busy={saving}
+        title={modelCopy.clearKeyDialogTitle}
+        body={modelCopy.clearKeyDialogBody}
+        confirmLabel={modelCopy.clearApiKey}
+        confirmVariant="warning"
+        onConfirm={() => void confirmClearProviderKey()}
       />
     </div>
   );

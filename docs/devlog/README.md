@@ -327,6 +327,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [Overlay 920 档定型 + session 摘要清洗](./2026-08-07-overlay-920-tier-and-session-recaps.md) — 尺寸阶梯 420/920/1040(否:全统一 Settings 尺寸;640 中档被真机推翻清空);PaletteRow sub 挤压 bug→inline preview;GA 兜底摘要脏数据双端镜像清洗(_clean_turn_summary / cleanSessionSummary);定时空状态 grid-cols-3 模板卡;Earlier/Archived 维持双行(否:与 palette 统一单行,邮件客户端类比)
 - [推理强度默认语义 + 第一方 high + 行徽章](./2026-08-07-reasoning-effort-default-and-badge.md) — 「默认」=不发参数跟随服务商;仅三个第一方预设显式 high(第三方兼容端点保留不传);存量不迁移;Models 行档位 chip 读快照不读推荐叠加;否:Composer 快捷入口(作用域错位,走 effort 变体条目路线,记 deferred)
 
+### 2026-08-31
+- [无鉴权 Provider：空 API Key（galley#24）](./2026-08-31-no-auth-provider-empty-apikey.md) — 社区问「GA 手改 mykey 可留空 apikey（Ollama 等本地端点），Galley 咋弄」；勘查见空 key 被四层闸门拦死（GUI 保存门 / Rust 保存 / 会话启动过滤 / runner）而 GA 引擎本身无条件发 Authorization 头故**占位 key 与空 key 功能等价**（issue 先回 workaround）；裁决「直觉留表面、显式沉底层」：纯放开空字符串被否（①非空校验是云端用户防错护栏②编辑态留空已有「保持不变」语义、空串兼职会一号两义），落地为新建可留空+确认弹窗、编辑加「清除密钥」（清除=转无鉴权，JC 裁决，顺带堵上已存 key 无法清除的缺口）、底层 `ManagedModelAuthKind` 加 `"none"` 不 special-case 空串；none provider credentialStatus 报 present 让所有「需要凭证」消费点自动安静；本轮不加 Ollama 预设（scoped，单独一轮）；additive、schemaVersion 不动
+
 ### 2026-08-24
 - [v0.4.10 发布](./2026-08-24-v0.4.10-release.md) — 8-21 搁置批次的兑现：GA baseline `f06d550→30b24ad` 领衔 + dark 画布抬升/chrome 翻向 + sidebar 选中行三通道，外加搁置后新增的 Goal 派发装门（社区上报 bug，ship-now 触发器）与步骤密度 pass；搁置记录点名的两项复查均完成——上游已前进 10 提交至 `9e68c20` 但逐文件审计**引擎核心零变动**（全是上游自建 Desktop 2.0 前端 + 辅助工具），裁决按 `30b24ad` 发不 bump（bump 只塞惰性资产并作废已绿打包门禁）；`context_management` JC native Claude 长会话实测无异常；定级 patch 免议（8-21 已终裁）；bundled runtime gate 按「managed-ga/runner/scripts 零提交」继承 8-21 的绿
 

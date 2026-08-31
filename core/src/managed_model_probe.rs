@@ -154,6 +154,11 @@ async fn resolve_secret(input: &ManagedModelProbeInput) -> Result<String> {
     {
         return Ok(secret.to_string());
     }
+    if input.auth_kind == Some(ManagedModelAuthKind::None) {
+        // No-auth endpoint: probe with an empty credential (the auth
+        // header still goes out, mirroring the GA engine's behavior).
+        return Ok(String::new());
+    }
     let has_id = input
         .provider_id
         .as_deref()

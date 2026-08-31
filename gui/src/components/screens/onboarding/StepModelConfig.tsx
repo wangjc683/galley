@@ -18,6 +18,7 @@ import { ManagedModelProviderCardGrid } from "@/components/managed-models/Manage
 import { ManagedModelOptionPicker } from "@/components/managed-models/ManagedModelOptionPicker";
 import { useProviderSetupController } from "@/components/managed-models/use-provider-setup-controller";
 import { Button, IconButton } from "@/components/ui/button";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { useCopy } from "@/lib/i18n";
 import {
   getManagedModelProviderPreset,
@@ -60,9 +61,12 @@ export function StepModelConfig({
   const {
     canCommit,
     canFetchProviderFormModels,
+    cancelNoAuthSave,
     codexLoginStart,
     codexPolling,
+    confirmNoAuthSave,
     connectionInputComplete,
+    noAuthConfirmOpen,
     handleCodexCompleteLogin,
     handleCodexImport,
     handleCodexLogin,
@@ -286,6 +290,11 @@ export function StepModelConfig({
                 ) : null
               }
             />
+            {apiKey.trim() === "" && (
+              <div className="text-[12px] leading-5 text-ink-muted">
+                {modelCopy.noAuthKeyHint}
+              </div>
+            )}
             <SetupInput
               label={modelCopy.model}
               value={model}
@@ -441,6 +450,19 @@ export function StepModelConfig({
           <SetupErrorLine state={state} action="provider-test" />
         </div>
       </div>
+
+      <ConfirmActionDialog
+        open={noAuthConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) cancelNoAuthSave();
+        }}
+        busy={state.kind === "loading"}
+        title={modelCopy.noAuthConfirmTitle}
+        body={modelCopy.noAuthConfirmBody}
+        confirmLabel={modelCopy.noAuthConfirmAction}
+        confirmVariant="warning"
+        onConfirm={confirmNoAuthSave}
+      />
     </div>
   );
 }

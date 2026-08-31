@@ -650,6 +650,20 @@ export const enCopy: AppCopy = {
         "Optional custom name; helps identify it in the list.",
       leaveKeyBlank: "Leave the key blank to keep the saved one",
       leaveExistingKey: "Leave blank to keep the existing key",
+      noAuthKeyHint:
+        "Local endpoints (such as Ollama) need no auth — leave blank",
+      noAuthActive:
+        "This provider uses no API key; enter one to enable auth any time",
+      noAuthEditPlaceholder: "No auth required — leave blank",
+      noAuthBadge: "No auth",
+      noAuthConfirmTitle: "Confirm no authentication?",
+      noAuthConfirmBody:
+        "No API key was entered. After saving, Galley will call this endpoint without authentication (for local services such as Ollama). If the service needs a key, go back and enter it.",
+      noAuthConfirmAction: "Save anyway",
+      clearApiKey: "Clear key",
+      clearKeyDialogTitle: "Clear the saved API key?",
+      clearKeyDialogBody:
+        "After clearing, this provider is called without authentication and the locally saved key is deleted; enter a key again to restore auth any time.",
       showApiKey: "Show API Key",
       hideApiKey: "Hide API Key",
       testConnection: "Test connection",

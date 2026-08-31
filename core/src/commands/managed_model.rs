@@ -46,7 +46,14 @@ pub(crate) async fn save_managed_model_provider(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty());
-    if let Some(api_key) = api_key {
+    if auth_kind == ManagedModelAuthKind::None {
+        // No-auth endpoint: drop any stored secret so the blank
+        // credential is the persisted truth ("clear key" flows through
+        // here). delete_secret is a plain DELETE — idempotent.
+        credential_store::delete_secret(&galley, &api_key_ref)
+            .await
+            .map_err(stringify_error)?;
+    } else if let Some(api_key) = api_key {
         credential_store::set_secret(&galley, &api_key_ref, api_key)
             .await
             .map_err(stringify_error)?;

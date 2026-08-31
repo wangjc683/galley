@@ -12,6 +12,11 @@ pub enum ManagedModelProtocol {
 pub enum ManagedModelAuthKind {
     ApiKey,
     ChatgptCodexOauth,
+    /// No-auth endpoint (e.g. a local Ollama or LAN gateway): no secret
+    /// is stored, and requests go out with an empty credential — the GA
+    /// engine sends the auth header unconditionally, so an empty value
+    /// is equivalent to GA's hand-edited empty `mykey.py` key.
+    None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

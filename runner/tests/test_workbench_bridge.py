@@ -267,6 +267,47 @@ def test_managed_model_config_fetches_api_key_from_credential_ipc(
     ]
 
 
+def test_managed_model_config_keeps_no_auth_model_with_empty_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """authKind "none" is a deliberate no-auth endpoint (e.g. local
+    Ollama): the empty apikey is its real credential and must survive
+    the usability filter; an empty api_key-kind model is still dropped."""
+    monkeypatch.setenv(
+        "GALLEY_MANAGED_MODEL_CONFIG_JSON",
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "protocol": "openai",
+                        "authKind": "none",
+                        "displayName": "Local Model",
+                        "apiKey": "",
+                        "apiBase": "http://localhost:11434/v1/",
+                        "model": "local-model",
+                    },
+                    {
+                        "protocol": "openai",
+                        "authKind": "api_key",
+                        "displayName": "Broken Model",
+                        "apiKey": "",
+                        "apiBase": "https://example.test/v1/",
+                        "model": "cloud-model",
+                    },
+                ]
+            }
+        ),
+    )
+
+    out = _managed_model_config_from_env()
+
+    assert list(out) == ["native_oai_config_0"]
+    cfg = out["native_oai_config_0"]
+    assert cfg["apikey"] == ""
+    assert cfg["apibase"] == "http://localhost:11434/v1"
+    assert cfg["model"] == "local-model"
+
+
 def test_credential_from_ipc_surfaces_structured_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

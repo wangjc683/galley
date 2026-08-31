@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   canCommitProviderSetup,
+  effectiveProviderAuthKind,
   planAutoPick,
   providerConnectionFingerprint,
   providerHostnameFallback,
@@ -65,13 +66,15 @@ describe("canCommitProviderSetup", () => {
         form: form({ apiBase: "  " }),
       }),
     ).toBe(false);
+    // A blank key on create is a valid save: it resolves to a no-auth
+    // provider (the confirm dialog is the guardrail, not this gate).
     expect(
       canCommitProviderSetup({
         ...base,
         ...unverified,
         form: form({ apiKey: "" }),
       }),
-    ).toBe(false);
+    ).toBe(true);
     // Edit flow with a saved key: blank apiKey is allowed.
     expect(
       canCommitProviderSetup({
@@ -147,6 +150,40 @@ describe("canCommitProviderSetup", () => {
         currentFingerprint: fp,
       }),
     ).toBe(false);
+  });
+});
+
+describe("effectiveProviderAuthKind", () => {
+  it("a typed key always means api_key", () => {
+    expect(effectiveProviderAuthKind(form(), false)).toBe("api_key");
+    expect(
+      effectiveProviderAuthKind(form({ authKind: "none" }), false),
+    ).toBe("api_key");
+  });
+
+  it("blank on create means no-auth; blank with a saved key means keep", () => {
+    expect(effectiveProviderAuthKind(form({ apiKey: "" }), false)).toBe("none");
+    expect(effectiveProviderAuthKind(form({ apiKey: "  " }), false)).toBe(
+      "none",
+    );
+    expect(effectiveProviderAuthKind(form({ apiKey: "" }), true)).toBe(
+      "api_key",
+    );
+  });
+
+  it("an already no-auth provider stays no-auth on blank, saved key or not", () => {
+    expect(
+      effectiveProviderAuthKind(form({ authKind: "none", apiKey: "" }), true),
+    ).toBe("none");
+  });
+
+  it("codex oauth is untouched", () => {
+    expect(
+      effectiveProviderAuthKind(
+        form({ authKind: "chatgpt_codex_oauth", apiKey: "" }),
+        false,
+      ),
+    ).toBe("chatgpt_codex_oauth");
   });
 });
 
@@ -258,6 +295,31 @@ describe("runProviderCommit", () => {
         }),
       );
     }
+  });
+
+  it("a blank key on create commits a no-auth provider", async () => {
+    const d = deps();
+    await runProviderCommit(d as never, {
+      form: form({ apiKey: "" }),
+      makeDefault: "always",
+      modelsCount: 0,
+    });
+    expect(d.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ authKind: "none", apiKey: undefined }),
+    );
+  });
+
+  it("a blank key on edit with a saved key keeps api_key semantics", async () => {
+    const d = deps();
+    await runProviderCommit(d as never, {
+      form: form({ id: "prov-9", apiKey: "", model: "" }),
+      makeDefault: "whenEmpty",
+      modelsCount: 1,
+      providerHasSavedKey: true,
+    });
+    expect(d.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ authKind: "api_key", apiKey: undefined }),
+    );
   });
 
   it("applies the display-name fallback only when the name is blank", async () => {

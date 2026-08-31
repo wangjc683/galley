@@ -1,6 +1,6 @@
 export type ManagedModelProtocol = "anthropic" | "openai";
 
-export type ManagedModelAuthKind = "api_key" | "chatgpt_codex_oauth";
+export type ManagedModelAuthKind = "api_key" | "chatgpt_codex_oauth" | "none";
 
 export type ManagedModelCredentialStatus = "present" | "missing" | "unknown";
 

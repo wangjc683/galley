@@ -43,6 +43,9 @@ export function ProviderEditor({
   canFetchModels,
   canCancel,
   providerHasSavedKey,
+  isNoAuthProvider = false,
+  canClearKey = false,
+  onClearKey,
   probeState,
   modelOptions,
   modelFilter,
@@ -69,6 +72,11 @@ export function ProviderEditor({
   canFetchModels: boolean;
   canCancel: boolean;
   providerHasSavedKey: boolean;
+  /** The saved provider record is a no-auth endpoint (authKind "none"). */
+  isNoAuthProvider?: boolean;
+  /** Editing a provider with a stored api_key secret — offer "清除密钥". */
+  canClearKey?: boolean;
+  onClearKey?: () => void;
   probeState: ProbeState;
   modelOptions: string[];
   modelFilter: string;
@@ -137,9 +145,9 @@ export function ProviderEditor({
             <div className="text-ui-compact font-medium text-ink">
               {copy.editProvider}
             </div>
-            {form.id && providerHasSavedKey && (
+            {form.id && (isNoAuthProvider || providerHasSavedKey) && (
               <div className="mt-0.5 text-ui-meta text-ink-muted">
-                {copy.leaveKeyBlank}
+                {isNoAuthProvider ? copy.noAuthActive : copy.leaveKeyBlank}
               </div>
             )}
           </div>
@@ -298,23 +306,36 @@ export function ProviderEditor({
             <SettingsInput
               label={copy.apiKey}
               labelTrailing={
-                // Only when the endpoint still points at the preset's
-                // official apiBase — for a custom/proxy endpoint the
-                // preset's key console is likely the wrong place.
-                selectedPreset.apiKeyUrl &&
-                form.apiBase.trim() === selectedPreset.apiBase ? (
-                  <ApiKeyPageLink
-                    label={copy.getApiKey}
-                    url={selectedPreset.apiKeyUrl}
-                  />
-                ) : undefined
+                <span className="inline-flex items-center gap-2.5">
+                  {canClearKey && onClearKey && (
+                    <button
+                      type="button"
+                      onClick={onClearKey}
+                      className="rounded-sm text-ui-tertiary text-ink-muted hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                    >
+                      {copy.clearApiKey}
+                    </button>
+                  )}
+                  {/* Only when the endpoint still points at the preset's
+                      official apiBase — for a custom/proxy endpoint the
+                      preset's key console is likely the wrong place. */}
+                  {selectedPreset.apiKeyUrl &&
+                    form.apiBase.trim() === selectedPreset.apiBase && (
+                      <ApiKeyPageLink
+                        label={copy.getApiKey}
+                        url={selectedPreset.apiKeyUrl}
+                      />
+                    )}
+                </span>
               }
               value={form.apiKey}
               onChange={(apiKey) => onChange({ apiKey })}
               type={apiKeyVisible ? "text" : "password"}
               placeholder={
                 form.id
-                  ? copy.leaveExistingKey
+                  ? isNoAuthProvider
+                    ? copy.noAuthEditPlaceholder
+                    : copy.leaveExistingKey
                   : selectedPreset.apiKeyPlaceholder ?? "sk-..."
               }
               reserveTrailing
@@ -335,6 +356,9 @@ export function ProviderEditor({
                 ) : null
               }
             />
+            {isCreatingProvider && form.apiKey.trim() === "" && (
+              <InfoLine message={copy.noAuthKeyHint} />
+            )}
             <SettingsInput
               label={copy.apiUrl}
               value={form.apiBase}

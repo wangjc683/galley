@@ -97,6 +97,24 @@ export function connectionSuccessMessage(
   return copy.connectionLatency(message, result.latencyMs);
 }
 
+/**
+ * The auth kind a save or probe should actually carry. A blank key is
+ * overloaded: on an edit with a saved key it means "keep the existing
+ * key" (api_key), everywhere else it means "this endpoint needs no
+ * auth" (none — local endpoints like Ollama). Typing a key always
+ * wins, so a no-auth provider upgrades to api_key by just entering
+ * one.
+ */
+export function effectiveProviderAuthKind(
+  form: Pick<ProviderFormState, "authKind" | "apiKey">,
+  providerHasSavedKey: boolean,
+): ManagedModelAuthKind {
+  if (form.authKind === "chatgpt_codex_oauth") return "chatgpt_codex_oauth";
+  if (form.apiKey.trim() !== "") return "api_key";
+  if (form.authKind === "none") return "none";
+  return providerHasSavedKey ? "api_key" : "none";
+}
+
 /** Trimmed probe input for the auto connection test. Null until a
  * protocol is chosen. */
 export function formToProbeInput(form: ProviderFormState): {
@@ -109,8 +127,10 @@ export function formToProbeInput(form: ProviderFormState): {
 } | null {
   if (!form.protocol) return null;
   return {
+    // Create-flow only (the auto test never runs on an edit), so a
+    // blank key resolves to a no-auth probe rather than "keep saved".
     protocol: form.protocol,
-    authKind: form.authKind,
+    authKind: effectiveProviderAuthKind(form, false),
     apiKey: form.apiKey.trim(),
     apiBase: form.apiBase.trim(),
     model: form.model.trim(),
@@ -166,7 +186,9 @@ export function canCommitProviderSetup(args: {
   if (form.authKind === "chatgpt_codex_oauth") return false;
   if (form.protocol === null) return false;
   if (form.apiBase.trim() === "") return false;
-  if (form.apiKey.trim() === "" && !args.providerHasSavedKey) return false;
+  // A blank key is a valid save: it resolves to a no-auth provider
+  // (effectiveProviderAuthKind), guarded by a confirm dialog instead
+  // of a dead Save button.
   if (args.isCreating && form.model.trim() === "") return false;
   if (args.saving) return false;
   if (!args.requireVerifiedConnection) return true;
@@ -227,6 +249,7 @@ export async function runProviderCommit(
     form: ProviderFormState;
     makeDefault: "always" | "whenEmpty";
     modelsCount: number;
+    providerHasSavedKey?: boolean;
     displayNameFallback?: (apiBase: string) => string;
     trimCredentials?: boolean;
   },
@@ -243,7 +266,7 @@ export async function runProviderCommit(
   const saved = await deps.saveProvider({
     id: form.id,
     protocol: form.protocol,
-    authKind: form.authKind,
+    authKind: effectiveProviderAuthKind(form, args.providerHasSavedKey ?? false),
     apiKey: args.trimCredentials
       ? form.apiKey.trim() || undefined
       : form.apiKey || undefined,
