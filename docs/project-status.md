@@ -9,23 +9,41 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.10`.
-- Git tag / GitHub Release: `v0.4.10` is the current published stable release
-  (tagged at `d0b6dc0e` on 2026-08-24, GitHub Latest).
+- Package version: `0.4.11`.
+- Git tag / GitHub Release: `v0.4.11` is the current published stable release
+  (tagged at `d2e3bc0c` on 2026-08-31, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.10`.
+- Release tier: stable patch; default update channel points at `v0.4.11`.
   `beta` is kept as a legacy alias for older builds.
-- Shipped GA baseline: `30b24ad` (shipped in `v0.4.10`). Audited baseline
-  has since moved to `efb3bc6` (audited 2026-08-31, payload rebuilt on main;
-  ships with the next release) — engine delta is Galley-positive abort
-  responsiveness + trim perf. See [GA baseline](./ga-baseline.md).
+- Shipped GA baseline: `efb3bc6` (audited 2026-08-31, shipped in `v0.4.11`
+  the same day) — engine delta is Galley-positive abort responsiveness +
+  trim perf. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.4.10` is the 2026-08-21 held batch cashed in, plus the two items that
+`v0.4.11` is a single-headline patch: the **no-auth provider**
+(community issue galley#24 — a blank API key on provider create now saves an
+`authKind: "none"` provider behind a one-time confirm, editing gains an
+explicit "clear key" action that converts to no-auth, and the empty
+credential flows through save / probe / session start / runner as an
+explicit auth kind; local endpoints like Ollama no longer need a
+placeholder key). Riding along: the **GA baseline bump
+`30b24ad` -> `efb3bc6`**, cashing in `v0.4.10`'s standing re-audit —
+engine delta is Galley-positive (interruptible retry backoff, abort
+force-wake of a blocked stream recv, linear history trimming), with one
+real patch conflict (0017 × upstream's per-call token ledger) composed to
+keep both sides. The ship trigger repeats `v0.4.8`/`v0.4.9`/`v0.4.10`: an
+unshipped user-reported fix thickens the next release's unverified delta.
+Bundled-runtime gate was mandatory (`runner/` and `managed-ga/` both
+changed) and passed from scratch on mac-x64. JC smoked the draft build
+(no-auth flows, multi-step sessions on the new baseline) before publish.
+Full narrative: devlog
+[2026-08-31-v0.4.11-release](./devlog/2026-08-31-v0.4.11-release.md).
+
+`v0.4.10` was the 2026-08-21 held batch cashed in, plus the two items that
 accumulated during the hold. Headline pair: the **GA baseline bump
 `f06d550` -> `30b24ad`** (engine delta: the `!!!Error:` tail-check
 consistency fix, `api_key_header` auth override reachable via a model's
@@ -204,10 +222,16 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.10` is published and promoted as the live stable release (2026-08-24).
-The default `updates/stable/latest.json` channel points at `v0.4.10`, with the
+`v0.4.11` is published and promoted as the live stable release (2026-08-31).
+The default `updates/stable/latest.json` channel points at `v0.4.11`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
-installed builds.
+installed builds. Both were verified with `--cache-bust` across all three
+platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
+through in one draft cut; JC smoked the draft build before publish (no-auth
+provider flows plus multi-step sessions on the new GA baseline). The
+mandatory bundled-runtime gate passed from scratch on `mac-x64` pre-flight
+(`runner/` and `managed-ga/` both changed); `mac-arm64` and `win-x64` were
+covered by `release.yml`'s per-platform runners at tag time.
 
 For `v0.4.9` (2026-08-18/19): both channels were verified with `--cache-bust`
 across all three platforms (darwin-aarch64, darwin-x86_64, windows-x86_64).
@@ -237,8 +261,10 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): **`v0.4.8` → `v0.4.9` is pending** on
-   the dogfood machine. All earlier hops through `v0.4.7` → `v0.4.8` passed
+1. App-update dogfood (SOP step 10): **`v0.4.10` → `v0.4.11` is pending** on
+   the dogfood machine (and the `v0.4.8` → `v0.4.9` → `v0.4.10` hops were
+   never explicitly reported — confirm or write them off in the same pass).
+   All earlier hops through `v0.4.7` → `v0.4.8` passed
    (JC confirmed 2026-08-13 / 2026-08-14), except **`v0.4.6` → `v0.4.7`,
    never run and off the normal path**: a hop can only be tested from the
    older build still installed, so it needs a deliberate downgrade or a
@@ -265,14 +291,13 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing release-pending: `v0.4.10` (2026-08-24) shipped everything
-substantive that was on main, including the 2026-08-21 held batch. What
-follows are standing items carried across releases, not unshipped work.
+Nothing release-pending: `v0.4.11` (2026-08-31) shipped everything
+substantive that was on main. What follows are standing items carried across
+releases, not unshipped work.
 
-The upstream re-check at `v0.4.10` release time left one standing fact: the
-audited baseline `30b24ad` is 10 commits behind upstream `9e68c20`, ruled
-engine-irrelevant (see [GA baseline](./ga-baseline.md)); the next release
-audits upstream again.
+The GA baseline is fully current as of `v0.4.11` (`efb3bc6` audited and
+shipped the same day); the next release audits upstream again per the
+standard trigger.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -316,7 +341,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.10 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.11 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `efb3bc6` (2026-08-31) on main; released builds ship `30b24ad` (`v0.4.10`) until the next release (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -342,7 +367,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.4.10`. For the next release, bump every
+- Current package metadata uses `0.4.11`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
