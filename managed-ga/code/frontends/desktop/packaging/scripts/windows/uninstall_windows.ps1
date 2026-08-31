@@ -8,8 +8,8 @@ bundle folder itself:
      on the same machine are left alone.
   2. Remove the desktop shortcut (GenericAgent.lnk) — only when it points into
      this bundle.
-  3. Remove ~/.ga_desktop_settings.json (shared settings; other bundles rebuild it
-     automatically on next launch).
+  3. Detach only path settings owned by this bundle while preserving preferences,
+     external source selection, and any second installed bundle.
   4. Schedule deletion of the bundle folder after this script exits (a folder
      cannot delete itself while code runs inside it).
 
@@ -44,11 +44,16 @@ function Path-IsInsideBundle([string]$p) {
 # ── 1. Graceful backend shutdown, then force-kill bundle-owned processes ──────
 Write-Step "Stopping GenericAgent backend services"
 
-# Best-effort graceful exit: tell the bridge to stop its managed extras and quit.
+# Best-effort graceful exit only when identity.app_dir belongs to this bundle.
 try {
-    Invoke-WebRequest -Uri "http://127.0.0.1:14168/services/bridge/exit" -Method Post `
-        -TimeoutSec 3 -UseBasicParsing | Out-Null
-    Start-Sleep -Milliseconds 800
+    $identity = Invoke-RestMethod -Uri "http://127.0.0.1:14168/services/identity" -Method Get -TimeoutSec 3
+    if ($identity.app_dir -and (Path-IsInsideBundle ([string]$identity.app_dir))) {
+        Invoke-WebRequest -Uri "http://127.0.0.1:14168/services/bridge/exit" -Method Post `
+            -TimeoutSec 3 -UseBasicParsing | Out-Null
+        Start-Sleep -Milliseconds 800
+    } else {
+        Write-Info "bridge listener is not owned by this bundle; left running"
+    }
 } catch { }
 
 # Force-kill anything still listening on our ports, but ONLY if the owning process
@@ -97,13 +102,23 @@ if (Test-Path -LiteralPath $lnk) {
 }
 
 # ── 3. Shared settings file ──────────────────────────────────────────────────
-Write-Step "Removing settings file"
+Write-Step "Detaching bundle paths from shared settings"
 $settings = Join-Path $env:USERPROFILE '.ga_desktop_settings.json'
-if (Test-Path -LiteralPath $settings) {
-    Remove-Item -LiteralPath $settings -Force -ErrorAction SilentlyContinue
-    Write-Ok "removed $settings"
+$runtimePy = Join-Path $bundle 'runtime\python\python.exe'
+$projectDir = Join-Path $bundle 'runtime\app'
+$settingsHelper = Join-Path $bundle 'runtime\merge_desktop_settings.py'
+if ((Test-Path -LiteralPath $settings -PathType Leaf) -and
+    (Test-Path -LiteralPath $runtimePy -PathType Leaf) -and
+    (Test-Path -LiteralPath $settingsHelper -PathType Leaf) -and
+    (Test-Path -LiteralPath (Join-Path $projectDir 'frontends\desktop_settings.py') -PathType Leaf)) {
+    & $runtimePy $settingsHelper --settings $settings --project-dir $projectDir --remove-bundle $bundle
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "removed this bundle's path keys; preferences and overrides were kept"
+    } else {
+        Write-Info "settings were invalid or locked; left unchanged"
+    }
 } else {
-    Write-Info "no settings file found"
+    Write-Info "no owned settings paths could be detached"
 }
 
 # ── 3b. WebView2 data dir (cache + localStorage) ─────────────────────────────

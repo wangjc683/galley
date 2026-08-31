@@ -15,6 +15,6 @@ diff --git a/frontends/wechatapp.py b/frontends/wechatapp.py
 +                img = Path(os.environ.get('GALLEY_WECHAT_QR_FILE') or (self._tf.parent / 'wx_qr.png'))
 +                img.parent.mkdir(parents=True, exist_ok=True)
 +                qrcode.make(url).save(str(img))
-@@ -496 +499 @@ if __name__ == '__main__':
+@@ -500 +503 @@ if __name__ == '__main__':
 -    _logf = open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp', 'wechatapp.log'), 'a', encoding='utf-8', buffering=1)
 +    _logf = open(os.path.join(_TEMP_DIR, 'wechatapp.log'), 'a', encoding='utf-8', buffering=1)

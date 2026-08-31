@@ -1,5 +1,6 @@
 import os, sys, re, time, json, uuid, queue, asyncio, threading, argparse, base64, secrets
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 from contextlib import asynccontextmanager, suppress
 
@@ -8,15 +9,19 @@ from fastapi.responses import FileResponse, PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+FRONTENDS_DIR = os.path.dirname(os.path.abspath(__file__))
+if FRONTENDS_DIR not in sys.path: sys.path.insert(0, FRONTENDS_DIR)
+from desktop_settings import DesktopSettingsError, update_settings
+
 def _resolve_ga_root() -> str:
-    """External core dir when launched as the bundle's conductor (design 三).
-    Prefer GA_ROOT env (set by the desktop bridge), else derive from own location."""
-    val = (os.environ.get("GA_ROOT", "") or "").strip()
-    if val:
-        root = os.path.abspath(os.path.expanduser(val))
+    """Use the external core selected by the package-owned desktop bridge when valid."""
+    value = (os.environ.get("GA_ROOT", "") or "").strip()
+    if value:
+        root = os.path.abspath(os.path.expanduser(value))
         if os.path.exists(os.path.join(root, "agentmain.py")):
             return root
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 ROOT = _resolve_ga_root()
 if ROOT not in sys.path: sys.path.insert(0, ROOT)
@@ -24,26 +29,69 @@ if ROOT not in sys.path: sys.path.insert(0, ROOT)
 from agentmain import GenericAgent
 
 HOST = "127.0.0.1"
-PORT = 8900
+DEFAULT_PORT = 8900
+E2E_CONDUCTOR_PORT_ENV = "GA_DESKTOP_E2E_CONDUCTOR_PORT"
+E2E_REPORT_DIR_ENV = "GA_DESKTOP_E2E_REPORT_DIR"
+
+
+def _parse_conductor_port(value: Any) -> int:
+    raw = str(value).strip()
+    if not raw.isascii() or not raw.isdigit():
+        raise argparse.ArgumentTypeError("conductor port must be an integer between 1 and 65535")
+    port = int(raw)
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("conductor port must be an integer between 1 and 65535")
+    return port
+
+
+def _default_conductor_port() -> int:
+    """Keep production on :8900; only the isolated package journey may override it.
+
+    The renderer and production CSP intentionally target :8900.  Treating this as a
+    general runtime setting would make the backend claim configurability the renderer
+    cannot honor, so the override is gated by the existing package-evidence marker.
+    """
+    if not os.environ.get(E2E_REPORT_DIR_ENV):
+        return DEFAULT_PORT
+    raw = os.environ.get(E2E_CONDUCTOR_PORT_ENV)
+    return DEFAULT_PORT if raw is None else _parse_conductor_port(raw)
+
+
+PORT = _default_conductor_port()
 HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "conductor.html")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--host", default=HOST)
-parser.add_argument("--port", type=int, default=PORT)
+parser.add_argument("--port", type=_parse_conductor_port, default=PORT)
 parser.add_argument("--key")
 parser.add_argument("--no-browser", action="store_true")
 args = parser.parse_args()
 if args.host not in ("127.0.0.1", "localhost", "::1") and not args.key:
     parser.error("--key is required for non-loopback listening")
+HOST = args.host
+PORT = args.port
+
+
+SETTINGS_PATH = Path.home() / ".ga_desktop_settings.json"
 
 
 def _settings_doc() -> dict:
     try:
-        from pathlib import Path
-        doc = json.loads((Path.home() / ".ga_desktop_settings.json").read_text(encoding="utf-8"))
+        doc = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
         return doc if isinstance(doc, dict) else {}
     except Exception:
         return {}
+
+
+def _persist_conductor_llm_no(llm_no: int) -> None:
+    def mutate(document: dict) -> None:
+        section = document.get("conductor")
+        if not isinstance(section, dict):
+            section = {}
+            document["conductor"] = section
+        section["llmNo"] = llm_no
+
+    update_settings(SETTINGS_PATH, mutate)
 
 
 def _conductor_llm_no() -> Optional[int]:
@@ -63,47 +111,127 @@ def _client_usable(agent: "GenericAgent") -> bool:
     return hasattr(getattr(agent, "llmclient", None), "backend")
 
 
-def _fallback_usable_model(agent: "GenericAgent") -> None:
-    for i, client in enumerate(getattr(agent, "llmclients", []) or []):
-        if not hasattr(client, "backend"):
-            continue
-        agent.llm_no = i
-        agent.llmclient = client
+def _parse_model_no(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _usable_model(agent: "GenericAgent", no: Optional[int]) -> bool:
+    clients = getattr(agent, "llmclients", []) or []
+    return no is not None and 0 <= no < len(clients) and hasattr(clients[no], "backend")
+
+
+def _activate_model(agent: "GenericAgent", no: int) -> None:
+    if not _usable_model(agent, no):
+        raise ValueError(f"llm index out of range or unavailable: {no}")
+    agent.next_llm(no)
+
+
+def _runtime_model_state(agent: "GenericAgent", configured: Optional[int], reason: Optional[str]) -> dict:
+    effective = getattr(agent, "llm_no", None) if _client_usable(agent) else None
+    current = None
+    if _client_usable(agent):
         with suppress(Exception):
-            agent.llmclient.last_tools = ''
-        return
+            current = str(agent.llmclient.backend.name)
+    return {"configured": configured, "effective": effective,
+            "fallbackReason": reason, "current": current}
 
 
-def _apply_desktop_model(agent: "GenericAgent") -> None:
+def _apply_desktop_model(agent: "GenericAgent") -> dict:
     """Make the conductor's session reflect the current desktop config before a task:
     switch to its bound model if one is set, otherwise still refresh sessions from
     mykey so live key/model edits (e.g. importing keys) take effect without a restart.
     next_llm() already reloads internally; the no-bound-model branch must reload too,
     or a conductor started on an empty/stale mykey would never pick up imported keys."""
-    no = _conductor_llm_no()
-    if no is not None:
-        try:
-            agent.next_llm(int(no))
-        except Exception as e:
-            print(f"[conductor] failed to apply conductor model #{no}: {e}", file=sys.stderr)
-    else:
+    doc = _settings_doc()
+    conductor_cfg = doc.get("conductor") if isinstance(doc.get("conductor"), dict) else {}
+    ui_cfg = doc.get("ui") if isinstance(doc.get("ui"), dict) else {}
+    raw_configured = conductor_cfg.get("llmNo")
+    configured = _parse_model_no(raw_configured)
+    ui_default = _parse_model_no(ui_cfg.get("llmNo"))
+
+    try:
         agent.load_llm_sessions()  # mtime-guarded; rebuilds only when mykey changed
-    if not _client_usable(agent):
-        print("[conductor] selected model is unavailable; falling back to first usable model", file=sys.stderr)
-        _fallback_usable_model(agent)
+    except Exception as e:
+        print(f"[conductor] failed to refresh model sessions: {e}", file=sys.stderr)
+
+    clients = getattr(agent, "llmclients", []) or []
+
+    configured_failed = False
+    if _usable_model(agent, configured):
+        try:
+            _activate_model(agent, configured)
+            return _runtime_model_state(agent, configured, None)
+        except Exception as e:
+            configured_failed = True
+            print(f"[conductor] configured model #{configured} is unavailable: {e}", file=sys.stderr)
+
+    if _usable_model(agent, ui_default):
+        if raw_configured is None:
+            reason = "ui_default"
+        elif configured_failed:
+            reason = "configured_unavailable"
+        elif configured is not None:
+            reason = "configured_unavailable" if 0 <= configured < len(clients) else "invalid_configured"
+        else:
+            reason = "invalid_configured"
+        try:
+            _activate_model(agent, ui_default)
+            return _runtime_model_state(agent, configured, reason)
+        except Exception as e:
+            print(f"[conductor] UI default model #{ui_default} is unavailable: {e}", file=sys.stderr)
+
+    for i, client in enumerate(clients):
+        if hasattr(client, "backend"):
+            try:
+                _activate_model(agent, i)
+                return _runtime_model_state(agent, configured, "first_available")
+            except Exception:
+                continue
+
+    print("[conductor] no usable model is available", file=sys.stderr)
+    return {"configured": configured, "effective": None,
+            "fallbackReason": "no_models", "current": None}
+
+
+def _selected_conductor_llm_no(agent: "GenericAgent") -> int:
+    configured = _conductor_llm_no()
+    return configured if _usable_model(agent, configured) else agent.llm_no
+
+
+def _set_conductor_llm_no(agent: "GenericAgent", value: Any) -> int:
+    """Persist the standalone UI binding without mutating an in-flight client.
+
+    The Conductor loop applies this binding at its existing idle task boundary, so
+    a selection made immediately before sending a message controls that next turn.
+    """
+    no = _parse_model_no(value)
+    if no is None or not _usable_model(agent, no):
+        raise ValueError(f"llm index out of range or unavailable: {value}")
+    _persist_conductor_llm_no(no)
+    return no
 
 
 def _select_llm(agent: "GenericAgent", llm: Any) -> bool:
     if llm is None or str(llm).strip() == "": return False
     q = str(llm).strip()
-    if isinstance(llm, int) or q.isdigit(): agent.next_llm(int(q)); return True
+    if isinstance(llm, int) or q.isdigit():
+        agent.load_llm_sessions()
+        _activate_model(agent, int(q))
+        return True
     q = q.lower(); agent.load_llm_sessions()
     for i, c in enumerate(agent.llmclients):
+        if not hasattr(c, "backend"):
+            continue
         vals = []
         for fn in (lambda: agent.get_llm_name(c), lambda: agent.get_llm_name(c, model=True), lambda: c.backend.name, lambda: c.backend.model):
             try: vals.append(str(fn()).lower())
             except Exception: pass
-        if any(q in v for v in vals): agent.next_llm(i); return True
+        if any(q in v for v in vals): _activate_model(agent, i); return True
     raise ValueError(f"llm not found: {llm}")
 
 
@@ -362,8 +490,8 @@ GET /files?path=...\t列举目录（默认temp，最高到GA上一级）
 GET /file?path=...\t下载文件
 POST /file?name=...\t上传到temp/uploads
 POST /subagent/{{id}}\tbody: {{"action": "keyinfo", "msg": "..."}}\t注入key_info（agent下轮可见）
-POST /subagent/{{id}}\tbody: {{"action": "input", "msg": "..."}}\t对subagent输入下一条指令；指定模型加参数llm(数字/名称)
-POST /subagent/{{id}}\tbody: {{"action": "stop"}}\t中断执行但保留（可继续input）
+POST /subagent/{{id}}\tbody: {{"action": "input", "msg": "..."}}\t开新一轮任务；指定模型加参数llm(数字/名称)
+POST /subagent/{{id}}\tbody: {{"action": "stop"}}\t中断执行但保留（可继续input/reply）
 GET /chat?last=N\t返回最近N条对话（默认20）
 GET /subagent\t返回 {{"items": [...]}}\t查看所有subagent状态
 GET /subagent/{{id}}?max_len=N\t返回单个subagent详情，reply经清洗后截取尾部max_len字（默认5000）。仅在摘要不够判断时使用
@@ -401,9 +529,55 @@ class Conductor:
         self.inbox: "queue.Queue[dict]" = queue.Queue()   # 收件箱：唯一对外接口
         self.agent: Optional[GenericAgent] = None
         self.started = False
+        self._runner_thread: Optional[threading.Thread] = None
         self.log: list = []
+        self._model_lock = threading.RLock()
+        self._model_state = {
+            "configured": None,
+            "effective": None,
+            "fallbackReason": "no_models",
+            "current": None,
+            "running": False,
+        }
+
+    def model_snapshot(self) -> dict:
+        with self._model_lock:
+            return dict(self._model_state)
+
+    def _publish_model_state(self, state: dict, running: bool) -> None:
+        snapshot = {**state, "running": bool(running)}
+        with self._model_lock:
+            self._model_state = snapshot
+        schedule_broadcast({"type": "model", "model": snapshot})
 
     def notify(self, event: dict): self.inbox.put(event)
+
+    def _wait_for_agent_idle(self, timeout: float = 10.0) -> None:
+        """Queue.join semantics with a bounded runner-health escape hatch."""
+        tasks = self.agent.task_queue
+        deadline = time.monotonic() + timeout
+        with tasks.all_tasks_done:
+            while tasks.unfinished_tasks:
+                if self._runner_thread is not None and not self._runner_thread.is_alive():
+                    raise RuntimeError("conductor agent runner stopped before task cleanup")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("conductor agent task cleanup timed out")
+                tasks.all_tasks_done.wait(min(0.25, remaining))
+
+    def _record_unavailable_model(self, events: list) -> None:
+        event_label = ",".join(event.get("type", "") for event in events) or "wake"
+        item = {
+            "id": short_id(),
+            "ts": now_ms(),
+            "event": event_label,
+            "turn": None,
+            "text": "Conductor paused: no usable model profiles are configured; events are deferred.",
+        }
+        self.log.append(item)
+        if len(self.log) > self.LOG_MAX:
+            self.log.pop(0)
+        schedule_broadcast({"type": "log", "item": item})
 
     def _build_prompt(self, events: list) -> str:
         running, stopped = pool.counts()
@@ -460,33 +634,55 @@ API: {base}；requests，GET /readme查用法，GET /chat读未读对话，GET /
 
     def _run(self):
         self.agent.inc_out = True
-        start_agent_runner(self.agent, "conductor-agent")
+        self._runner_thread = start_agent_runner(self.agent, "conductor-agent")
         self.started = True
+        deferred_events: list = []
         while True:
             # Block until first event arrives
             first = self.inbox.get()
             self.inbox.task_done()
             # Short debounce: collect any additional events that arrived meanwhile
             time.sleep(0.3)
-            events = [first]
+            events = [*deferred_events, first]
+            deferred_events = []
             while not self.inbox.empty():
                 try:
                     events.append(self.inbox.get_nowait())
                     self.inbox.task_done()
                 except Exception:
                     break
-            kind = first.get("type"); others = [e for e in events if e.get("type") != kind]; events = [e for e in events if e.get("type") == kind] or [first]
-            for e in others: self.inbox.put(e)
             try:
+                # GenericAgent publishes the display ``done`` item before its
+                # runner finishes history persistence and task cleanup.  Do not
+                # mutate the live client until that previous task has reached
+                # ``task_done``; the queue join is the authoritative idle barrier.
+                self._wait_for_agent_idle()
+                # Settings can change while this long-lived process remains healthy.
+                # Refresh only at the task boundary so an in-flight task keeps its
+                # client, while the next task observes the newly persisted binding.
+                model_state = _apply_desktop_model(self.agent)
+                if model_state.get("effective") is None:
+                    self._publish_model_state(model_state, running=False)
+                    self._record_unavailable_model(events)
+                    deferred_events = events
+                    continue
+                kind = events[0].get("type")
+                other_events = [event for event in events if event.get("type") != kind]
+                events = [event for event in events if event.get("type") == kind]
+                for event in other_events:
+                    self.inbox.put(event)
                 prompt = self._build_prompt(events)
-                dq = self.agent.put_task(prompt, source="conductor")
-                self._drain(dq, events)
-            except Exception as e:
-                print(f"Conductor error: {e}")
-                add_chat(f"⚠ 回复失败：{e}", role="error")
+                self._publish_model_state(model_state, running=True)
+                try:
+                    dq = self.agent.put_task(prompt, source="conductor")
+                    self._drain(dq, events)
+                finally:
+                    self._publish_model_state(model_state, running=False)
+            except Exception as e: print(f"Conductor error: {e}")
 
     def start(self):
-        self.agent = GenericAgent(); _apply_desktop_model(self.agent)
+        self.agent = GenericAgent()
+        self._publish_model_state(_apply_desktop_model(self.agent), running=False)
         threading.Thread(target=self._run, name="conductor-loop", daemon=True).start()
 
 
@@ -494,9 +690,6 @@ conductor = Conductor()
 
 # ---- IM poller: 探测conductor_im_plugins/下各插件,信号变化→唤醒总管 ----
 def _resolve_im_dir() -> str:
-    # 方案三: conductor.py itself is bundle-owned, but IM plugins are user/environment
-    # integrations. Prefer the external core's plugins when GA_ROOT points at one; fall back
-    # to the bundle templates/examples when the external core has no plugin directory.
     external = os.path.join(ROOT, "frontends", "conductor_im_plugins")
     if os.path.isdir(external):
         return external
@@ -640,11 +833,24 @@ async def websocket(ws: WebSocket):
     ws_clients.add(ws)
     try:
         running = any(s.status == "running" for s in pool.subagents.values())
-        await ws.send_json({"type": "hello", "subagents": pool.snapshot(), "chat": chat_messages, "log": conductor.log, "running": running, "llms": conductor.agent.list_llms(), "llm": conductor.agent.llm_no})
+        await ws.send_json({"type": "hello", "subagents": pool.snapshot(), "chat": chat_messages,
+                            "log": conductor.log, "running": running,
+                            "model": conductor.model_snapshot(),
+                            "llms": conductor.agent.list_llms(),
+                            "llm": _selected_conductor_llm_no(conductor.agent)})
         while True:
             data = await ws.receive_json()
             if "llm" in data:
-                if type(n := data["llm"]) is int and 0 <= n < len(conductor.agent.list_llms()): conductor.agent.next_llm(n)
+                try:
+                    llm_no = _set_conductor_llm_no(conductor.agent, data["llm"])
+                except (TypeError, ValueError, OSError, DesktopSettingsError) as error:
+                    await ws.send_json({
+                        "type": "model_error",
+                        "error": str(error),
+                        "llm": _selected_conductor_llm_no(conductor.agent),
+                    })
+                else:
+                    await broadcast({"type": "model_selected", "llm": llm_no})
                 continue
             msg = (data.get("msg") or "").strip()
             if not msg: continue

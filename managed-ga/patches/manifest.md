@@ -2,16 +2,30 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-08-21` against upstream
-`30b24ad31d679cde47a75f47fb6880df1dd96891` (19-patch stack, through `0020`).
-The `f06d550` -> `30b24ad` commit-chain rebase finished with **zero
-conflicts** — the first clean one since the stack reached 19 patches. Three
-patches (`0001`, `0002`, `0008`) re-exported with new line numbers and
-identical bodies, all shifted by the same +3 lines upstream added above their
-`llmcore.py` hunks. `build-managed-ga.sh` then applied all 19 clean from a
-fresh clone at the new baseline, its `py_compile` sweep passed, and
-`check-managed-ga-payload.mjs` matched the committed `managed-ga/code`
-byte-for-byte.
+Last replay verified: `2026-08-31` against upstream
+`efb3bc6ad1db0d7a82dce9eb38aacdf954286513` (19-patch stack, through `0020`).
+The `30b24ad` -> `efb3bc6` commit-chain rebase had **one real conflict**:
+`0017` / `frontends/cost_tracker.py` — upstream's new per-call token ledger
+(`token_ledger.jsonl`, for its own Desktop 2.0 bridge) rewrote the exact
+`record_patched` lines `0017` guards. Resolved by composing both sides:
+upstream's `_append_ledger` calls are kept (inert on Galley's path —
+`init_ledger` is only called by upstream's desktop bridge, so the ledger fd
+stays `None` and appends no-op), and Galley's messages-mode guards
+(`requests` counted only on the usage-carrying call; zeroed placeholder must
+not clobber `last_input`) sit after them, with upstream's new
+`inp = cc = cr = 0` init retained. Six more patches (`0001`, `0002`, `0004`,
+`0007`, `0008`, `0016`) re-exported with positional drift and identical
+bodies — `0007`'s `_stream_with_retry` insertions three-way-merged cleanly
+past upstream's interruptible-backoff rewrite. `build-managed-ga.sh` then
+applied all 19 clean from a fresh clone at the new baseline, its
+`py_compile` sweep passed, and `check-managed-ga-payload.mjs` matched the
+committed `managed-ga/code` byte-for-byte.
+
+(From the 2026-08-21 `30b24ad` upgrade: the `f06d550` -> `30b24ad`
+commit-chain rebase finished with **zero conflicts** — the first clean one
+since the stack reached 19 patches. Three patches (`0001`, `0002`, `0008`)
+re-exported with new line numbers and identical bodies, all shifted by the
+same +3 lines upstream added above their `llmcore.py` hunks.)
 
 (From the 2026-08-14 `f06d550` upgrade: commit-chain rebase with two real
 conflicts, both in the browser extension and both from the same upstream

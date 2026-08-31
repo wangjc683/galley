@@ -7,7 +7,7 @@
 #      only processes whose command line lives inside this bundle.
 #   2. Remove the desktop alias (~/Desktop/GenericAgent.app) — only when it links
 #      into this bundle.
-#   3. Remove ~/.ga_desktop_settings.json (shared settings).
+#   3. Detach only this bundle's path settings while keeping shared preferences.
 #   4. Remove the WKWebView data for the app id under ~/Library.
 #   5. Delete the bundle folder.
 set -u
@@ -22,7 +22,7 @@ echo
 echo "This will completely remove GenericAgent from this computer:"
 echo "  - stop its background services (bridge 14168 / conductor 8900)"
 echo "  - delete the desktop alias"
-echo "  - delete settings (~/.ga_desktop_settings.json)"
+echo "  - detach this bundle from shared desktop settings (preferences are kept)"
 echo "  - delete WebView data (~/Library/.../$APP_ID)"
 echo "  - delete THIS folder and everything in it:"
 echo "      $BUNDLE"
@@ -37,7 +37,19 @@ esac
 
 echo
 echo "==> Stopping GenericAgent backend services"
-curl -fsS -m 3 -X POST "http://127.0.0.1:14168/services/bridge/exit" >/dev/null 2>&1 || true
+RUNTIME_ROOT="$BUNDLE/runtime"
+[[ -d "$RUNTIME_ROOT/app" ]] || RUNTIME_ROOT="$BUNDLE/GenericAgent.app/Contents/Resources/runtime"
+RUNTIME_PY="$RUNTIME_ROOT/python/bin/python3"
+PROJECT_DIR="$RUNTIME_ROOT/app"
+SETTINGS_HELPER="$RUNTIME_ROOT/merge_desktop_settings.py"
+IDENTITY="$(curl -fsS -m 3 "http://127.0.0.1:14168/services/identity" 2>/dev/null || true)"
+if [[ -x "$RUNTIME_PY" && -n "$IDENTITY" ]] && \
+   BUNDLE="$BUNDLE" IDENTITY="$IDENTITY" "$RUNTIME_PY" -c \
+     'import json, os, pathlib; app=pathlib.Path(json.loads(os.environ["IDENTITY"])["app_dir"]).resolve(); bundle=pathlib.Path(os.environ["BUNDLE"]).resolve(); raise SystemExit(0 if app == bundle or bundle in app.parents else 1)'; then
+  curl -fsS -m 3 -X POST "http://127.0.0.1:14168/services/bridge/exit" >/dev/null 2>&1 || true
+else
+  echo "     bridge listener is not owned by this bundle; left running"
+fi
 sleep 1
 
 # Kill any process whose command line lives inside this bundle (no /proc on macOS,
@@ -65,11 +77,19 @@ else
   echo "     no desktop alias found"
 fi
 
-echo "==> Removing settings file"
-if [ -f "$HOME/.ga_desktop_settings.json" ]; then
-  rm -f "$HOME/.ga_desktop_settings.json" && echo "[OK] removed ~/.ga_desktop_settings.json"
+echo "==> Detaching bundle paths from shared settings"
+if [[ -f "$HOME/.ga_desktop_settings.json" && -x "$RUNTIME_PY" \
+      && -f "$SETTINGS_HELPER" && -f "$PROJECT_DIR/frontends/desktop_settings.py" ]]; then
+  if "$RUNTIME_PY" "$SETTINGS_HELPER" \
+      --settings "$HOME/.ga_desktop_settings.json" \
+      --project-dir "$PROJECT_DIR" \
+      --remove-bundle "$BUNDLE"; then
+    echo "[OK] removed this bundle's path keys; preferences and overrides were kept"
+  else
+    echo "     settings were invalid or locked; left unchanged"
+  fi
 else
-  echo "     no settings file found"
+  echo "     no owned settings paths could be detached"
 fi
 
 echo "==> Removing WebView data"

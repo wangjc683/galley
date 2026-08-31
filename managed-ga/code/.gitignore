@@ -9,6 +9,8 @@ venv/
 env/
 build/
 dist/
+!frontends/desktop/dist/
+!frontends/desktop/dist/**
 *.egg-info/
 
 .streamlit/

@@ -1,0 +1,16 @@
+{
+  "identifier": "setup",
+  "description": "Startup-recovery commands for the setup window only",
+  "windows": ["setup"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-start-bridge-with-config",
+    "allow-retry-bootstrap",
+    "allow-get-bootstrap-snapshot",
+    "allow-get-config",
+    "allow-discover-python-for-project",
+    "allow-pick-directory",
+    "allow-pick-python-interpreter"
+  ]
+}

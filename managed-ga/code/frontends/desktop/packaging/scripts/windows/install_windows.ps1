@@ -52,6 +52,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:PYTHONDONTWRITEBYTECODE = "1"
 
 function Write-Step([string]$msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Write-Ok([string]$msg) { Write-Host "[OK] $msg" -ForegroundColor Green }
@@ -159,6 +160,10 @@ function Install-Dependencies([string]$root, [string]$py) {
     # Offline mode (portable bundle): install from local wheels only, no network, no pip self-upgrade.
     if ($WheelDir) {
         $wd = (Resolve-Path $WheelDir -ErrorAction Stop).Path
+        $lockedRequirements = Join-Path $wd "requirements.txt"
+        if (-not (Test-Path $lockedRequirements -PathType Leaf)) {
+            Fail "Pinned offline requirements are missing: $lockedRequirements"
+        }
         Write-Ok "offline wheels: $wd"
         if ($extra.Count) { Write-Ok "extra packages: $($extra -join ', ')" }
         Write-Host "GAPROGRESS|deps"
@@ -167,7 +172,7 @@ function Install-Dependencies([string]$root, [string]$py) {
         # project's absolute path into a .pth. With -NoVenv (deps go into the relocatable embedded
         # python) this keeps the portable bundle movable. The bridge adds the source to sys.path
         # itself (ensure_ga_import_path), so the project itself need not be installed.
-        & $py -m pip install --no-index --find-links $wd "requests>=2.28" "beautifulsoup4>=4.12" "bottle>=0.12" "simple-websocket-server>=0.4" "aiohttp>=3.9" psutil @extra
+        & $py -m pip install --no-compile --no-index --find-links $wd --requirement $lockedRequirements @extra
         if ($LASTEXITCODE -ne 0) { Fail "offline pip install failed (check wheels dir)." }
         Write-Host "GAPROGRESS|done"
         return
@@ -182,14 +187,38 @@ function Install-Dependencies([string]$root, [string]$py) {
         Write-Warn "No pip mirror set; using official PyPI."
     }
     Write-Step "Upgrade pip"
-    & $py -m pip install @pipIndexArgs --upgrade pip
+    & $py -m pip install --no-compile @pipIndexArgs --upgrade pip
     if ($LASTEXITCODE -ne 0) { Fail "pip upgrade failed." }
 
     Write-Step "Install GenericAgent minimal package and desktop bridge extras"
     # pyproject.toml already includes: requests, beautifulsoup4, bottle, simple-websocket-server, aiohttp.
     # desktop_bridge.py additionally imports psutil.
-    & $py -m pip install @pipIndexArgs -e $root psutil @extra
+    & $py -m pip install --no-compile @pipIndexArgs -e $root psutil @extra
     if ($LASTEXITCODE -ne 0) { Fail "pip install failed." }
+}
+
+function Remove-PortableRuntimeBytecode([string]$root, [string]$py) {
+    if (-not $WheelDir -or -not $NoVenv) { return }
+    $runtimeRoot = [System.IO.Path]::GetFullPath((Split-Path $root -Parent))
+    $pythonRoot = [System.IO.Path]::GetFullPath((Join-Path $runtimeRoot "python"))
+    $pythonPrefix = $pythonRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    $pythonPath = [System.IO.Path]::GetFullPath($py)
+    if (-not (Test-Path $pythonRoot -PathType Container) -or
+        -not $pythonPath.StartsWith($pythonPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Fail "Refusing to clean an unverified portable runtime: $runtimeRoot"
+    }
+    Get-ChildItem -LiteralPath $runtimeRoot -Directory -Filter "__pycache__" -Recurse -Force |
+        Sort-Object { $_.FullName.Length } -Descending |
+        Remove-Item -Recurse -Force
+    Get-ChildItem -LiteralPath $runtimeRoot -File -Recurse -Force |
+        Where-Object { $_.Name -match '\.py[co]$' } |
+        Remove-Item -Force
+    $cacheDir = Get-ChildItem -LiteralPath $runtimeRoot -Directory -Filter "__pycache__" -Recurse -Force |
+        Select-Object -First 1
+    $bytecode = Get-ChildItem -LiteralPath $runtimeRoot -File -Recurse -Force |
+        Where-Object { $_.Name -match '\.py[co]$' } |
+        Select-Object -First 1
+    if ($cacheDir -or $bytecode) { Fail "Python bytecode remains in portable runtime" }
 }
 
 function Ensure-MyKey([string]$root) {
@@ -209,17 +238,20 @@ function Ensure-MyKey([string]$root) {
 
 function Write-DesktopSettings([string]$root, [string]$py) {
     $settingsPath = Join-Path $env:USERPROFILE ".ga_desktop_settings.json"
-    $obj = [ordered]@{
-        python_path = $py
-        project_dir = $root
-        bridge_script = (Join-Path $root "frontends\desktop_bridge.py")
+    $bridge = Join-Path $root "frontends\desktop_bridge.py"
+    $scriptRoot = Resolve-ScriptRoot
+    $helper = Join-Path $scriptRoot "merge_desktop_settings.py"
+    if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) {
+        $helper = Join-Path (Split-Path $scriptRoot -Parent) "merge_desktop_settings.py"
     }
-    $json = $obj | ConvertTo-Json -Depth 5
-    # PowerShell 5.1 `Set-Content -Encoding UTF8` writes a UTF-8 BOM.
-    # Rust serde_json does not accept BOM at the beginning, causing the Tauri shell
-    # to ignore this settings file and auto-discover the wrong project directory.
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($settingsPath, $json, $utf8NoBom)
+    if (-not (Test-Path -LiteralPath $bridge -PathType Leaf)) {
+        Fail "desktop_bridge.py not found: $bridge"
+    }
+    if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) {
+        Fail "Desktop settings merge helper not found: $helper"
+    }
+    & $py $helper --settings $settingsPath --python-path $py --project-dir $root --bridge-script $bridge
+    if ($LASTEXITCODE -ne 0) { Fail "Desktop settings merge failed." }
     Write-Ok "Wrote desktop settings: $settingsPath"
 }
 
@@ -269,7 +301,7 @@ function Install-DesktopNpm([string]$root) {
     Write-Step "Install Tauri desktop npm dependencies: $desktop"
     Push-Location $desktop
     try {
-        & cmd /c npm install @npmRegArgs
+        & cmd /c npm install --package-lock=false @npmRegArgs
         if ($LASTEXITCODE -ne 0) { Fail "npm install failed in $desktop" }
         & cmd /c npx tauri --version
         if ($LASTEXITCODE -ne 0) { Fail "npx tauri --version failed after npm install" }
@@ -349,6 +381,7 @@ Write-Ok "Runtime Python: $py"
 Install-Dependencies $root $py
 Ensure-MyKey $root
 Write-DesktopSettings $root $py
+Remove-PortableRuntimeBytecode $root $py
 Test-WebView2Installed
 
 if ($Mode -eq "PrepareOnly") {

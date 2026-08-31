@@ -9,9 +9,24 @@ description = "Spawn bridge from setup with explicit python/project paths."
 commands.allow = ["start_bridge_with_config"]
 
 [[permission]]
+identifier = "allow-retry-bootstrap"
+description = "Retry the unified desktop bootstrap with validated Python and project paths."
+commands.allow = ["retry_bootstrap"]
+
+[[permission]]
+identifier = "allow-get-bootstrap-snapshot"
+description = "Read the current desktop bootstrap state and filtered diagnostics."
+commands.allow = ["get_bootstrap_snapshot"]
+
+[[permission]]
 identifier = "allow-get-config"
 description = "Read saved bridge spawn configuration."
 commands.allow = ["get_config"]
+
+[[permission]]
+identifier = "allow-discover-python-for-project"
+description = "Discover a usable Python environment for a selected application folder."
+commands.allow = ["discover_python_for_project"]
 
 [[permission]]
 identifier = "allow-export-mykey"
@@ -20,13 +35,38 @@ commands.allow = ["export_mykey"]
 
 [[permission]]
 identifier = "allow-pick-directory"
-description = "Pick a source directory via native folder dialog (import memory)."
+description = "Pick a local application, data, or repository directory via a native folder dialog."
 commands.allow = ["pick_directory"]
+
+[[permission]]
+identifier = "allow-pick-python-interpreter"
+description = "Pick a Python environment through a native file dialog."
+commands.allow = ["pick_python_interpreter"]
+
+[[permission]]
+identifier = "allow-pick-data-backup-file"
+description = "Pick a desktop data backup ZIP via a native file dialog."
+commands.allow = ["pick_data_backup_file"]
+
+[[permission]]
+identifier = "allow-pick-data-export-path"
+description = "Choose the destination for a desktop data backup ZIP."
+commands.allow = ["pick_data_export_path"]
+
+[[permission]]
+identifier = "allow-reveal-in-file-manager"
+description = "Reveal a completed local export in the system file manager."
+commands.allow = ["reveal_in_file_manager"]
 
 [[permission]]
 identifier = "allow-get-ga-source"
 description = "Read the user-set external GenericAgent source directory."
 commands.allow = ["get_ga_source"]
+
+[[permission]]
+identifier = "allow-validate-ga-source"
+description = "Validate a local repository without persisting or reconnecting."
+commands.allow = ["validate_ga_source"]
 
 [[permission]]
 identifier = "allow-set-ga-source"
@@ -39,6 +79,11 @@ description = "Clear the external GA source override and fall back to the bundle
 commands.allow = ["clear_ga_source"]
 
 [[permission]]
+identifier = "allow-get-macos-titlebar-metrics"
+description = "Read native macOS traffic-light geometry for the main window."
+commands.allow = ["get_macos_titlebar_metrics"]
+
+[[permission]]
 identifier = "allow-shortcut-should-ask"
 description = "Check whether to show the first-run desktop-shortcut prompt."
 commands.allow = ["shortcut_should_ask"]
@@ -47,8 +92,3 @@ commands.allow = ["shortcut_should_ask"]
 identifier = "allow-shortcut-decide"
 description = "Persist the user's desktop-shortcut choice and create it if enabled."
 commands.allow = ["shortcut_decide"]
-
-[[permission]]
-identifier = "allow-move-ga-runtime"
-description = "Copy the current GA workspace to a user-selected folder and switch to it."
-commands.allow = ["move_ga_runtime"]

@@ -3,7 +3,7 @@
 // gate (CI) fails when this file disagrees with the manifest.
 
 /** Audited upstream GenericAgent commit (full SHA). */
-export const GA_BASELINE_COMMIT = "30b24ad31d679cde47a75f47fb6880df1dd96891";
+export const GA_BASELINE_COMMIT = "efb3bc6ad1db0d7a82dce9eb38aacdf954286513";
 
 /** Committer date of GA_BASELINE_COMMIT (`git log -1 --format=%cI`). */
-export const GA_BASELINE_COMMIT_DATE = "2026-08-21T14:21:27+08:00";
+export const GA_BASELINE_COMMIT_DATE = "2026-08-30T14:21:51+08:00";

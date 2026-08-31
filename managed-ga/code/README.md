@@ -798,21 +798,6 @@ GA Web 工具运行在**真实、持久化的 Chrome/Chromium 会话**中，而�
 
 基于 **MIT License** 发布，详见 [`LICENSE`](LICENSE)。
 
-> *声明：GenericAgent 官方渠道为本 GitHub 仓库和 https://gaagent.ai。DintalClaw 是目前唯一官方授权的商业合作方；除非在此处明确列出，其他使用 GenericAgent 名义的第三方网站、机构、组织或个人均非官方。*
+> *声明：GenericAgent 官方渠道为本 GitHub 仓库和 [https://gaagent.ai](https://gaagent.ai)。DintalClaw 是目前唯一官方授权的商业合作方；除非在此处明确列出，其他使用 GenericAgent 名义的第三方网站、机构、组织或个人均非官方。*
 
----
 
-## 📈 Star History
-
-<div align="center">
-
-<a href="https://star-history.com/#lsdefine/GenericAgent&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=lsdefine/GenericAgent&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=lsdefine/GenericAgent&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=lsdefine/GenericAgent&type=Date" />
-  </picture>
-</a>
-
-<br/><br/>
-</div>

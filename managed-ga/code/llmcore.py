@@ -109,11 +109,12 @@ def trim_messages_history(history, sess):
     if c <= cap: return
     compress_history_tags(history, keep_recent=4, force=True)
     if cost(history) <= target: return
-    pre, post = history[:kp], history[kp:]
-    while len(post) > 9 and cost(pre) + cost(post) > target:
-        post.pop(0)
-        while post and post[0].get('role') != 'user': post.pop(0)
-        if post and post[0].get('role') == 'user': post[0] = _sanitize_leading_user_msg(post[0])
+    pre, post = history[:kp], history[kp:]; costs = [len(json.dumps(m, ensure_ascii=False)) for m in post]; c = cost(pre) + sum(costs); i = 0
+    while len(post) - i > 9 and c > target:
+        c -= costs[i]; i += 1
+        while i < len(post) and post[i].get('role') != 'user': c -= costs[i]; i += 1
+        if i < len(post): old = costs[i]; post[i] = _sanitize_leading_user_msg(post[i]); costs[i] = len(json.dumps(post[i], ensure_ascii=False)); c += costs[i] - old
+    post = post[i:]
     if kp and pre:
         m = pre[-1]
         if m.get('role') == 'assistant' and isinstance(m.get('content'), list):
@@ -477,8 +478,18 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
         try: ra = float((resp.headers or {}).get("retry-after"))
         except: ra = None
         return None if ra and ra > cap else max(0.5, ra or min(30.0, 3.0 * (2 ** attempt)))
+    def _stopped(): return getattr(sess, 'should_stop', None) and sess.should_stop()
+    def _sleep(d):  # interruptible sleep; True if aborted
+        end = time.time() + d
+        while time.time() < end:
+            if _stopped(): return True
+            time.sleep(0.2)
+        return _stopped()
     for attempt in range(sess.max_retries + 1):
+        if _stopped(): return []
         streamed = False
+        STATS.update(t_start=time.time(), t_ttft=None)
+        if not sess.stream: STATS['t_ttft'] = STATS['t_start']
         try:
             with requests.post(url, headers=headers, json=payload, stream=sess.stream,
                                timeout=(sess.connect_timeout, sess.read_timeout), proxies=sess.proxies, verify=sess.verify) as r:
@@ -488,7 +499,8 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                     d = _delay(r, attempt) if r.status_code in _RETRYABLE and attempt < sess.max_retries else None
                     if d is not None:
                         print(f"[LLM Retry] HTTP {r.status_code}, retry in {d:.1f}s ({attempt+1}/{sess.max_retries+1})")
-                        time.sleep(d); continue
+                        if _sleep(d): return []
+                        continue
                     try: body = r.text.strip()[:500]
                     except: body = ""
                     if r.status_code == 429 and getattr(sess, 'codex_backend', False):
@@ -497,9 +509,16 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                     yield err; return [{"type": "text", "text": err}]
                 gen = parse_fn(r)
                 try:
-                    while True: chunk = next(gen); streamed = True; yield chunk
+                    while True:
+                        if getattr(sess, 'should_stop', None) and sess.should_stop():
+                            STATS['t_end'] = time.time(); return []
+                        chunk = next(gen)
+                        if chunk and STATS.get('t_ttft') is None: STATS['t_ttft'] = time.time()
+                        streamed = True; yield chunk
                 except StopIteration as e:
                     if not e.value and not streamed: raise requests.ConnectionError("empty response")
+                    STATS['t_end'] = time.time()
+                    STATS['tps'] = STATS.get('out', 0) / max(1e-9, STATS['t_end'] - max(STATS['t_ttft'] or 0, STATS['t_start']))
                     return e.value or []
         except (requests.Timeout, requests.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
             err = f"!!!Error: {type(e).__name__}: {e}" if str(e) else f"!!!Error: {type(e).__name__}"
@@ -507,7 +526,8 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
             if attempt < sess.max_retries:
                 d = _delay(None, attempt)
                 print(f"[LLM Retry] {type(e).__name__}, retry in {d:.1f}s ({attempt+1}/{sess.max_retries+1})")
-                time.sleep(d); continue
+                if _sleep(d): return []
+                continue
             yield err; return [{"type": "text", "text": err}]
         except Exception as e:
             err = f"\n\n[!!! 流异常中断 {type(e).__name__}: {e} !!!]" if streamed else f"!!!Error: {type(e).__name__}: {e}"

@@ -1,16 +1,16 @@
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -181,0 +182,6 @@ def _parse_claude_sse(resp_lines):
+@@ -182,0 +183,6 @@ def _parse_claude_sse(resp_lines):
 +                # Galley: accumulate only. Upstream yields each delta raw, which puts
 +                # UNTAGGED native reasoning into the same character stream as the answer.
 +                # Frontends here separate reasoning from answer by the <thinking> tag
 +                # convention the system prompt asks the model to follow, so untagged
 +                # deltas are indistinguishable from the answer and render as body text.
 +                # Emitted as one tagged block at content_block_stop instead.
-@@ -184 +189,0 @@ def _parse_claude_sse(resp_lines):
+@@ -185 +190,0 @@ def _parse_claude_sse(resp_lines):
 -                if thinking: yield thinking
-@@ -193,0 +199,7 @@ def _parse_claude_sse(resp_lines):
+@@ -194,0 +200,7 @@ def _parse_claude_sse(resp_lines):
 +                # Galley: normalize native thinking onto the <thinking> tag convention, so
 +                # the existing strip/extract path treats both reasoning channels alike.
 +                # Whole block at once (not per-delta) so a literal '</thinking>' inside the

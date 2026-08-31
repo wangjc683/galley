@@ -8,8 +8,8 @@
 #      install on the same machine is left alone.
 #   2. Remove the desktop shortcut (GenericAgent.desktop) — only when its Exec
 #      points into this bundle.
-#   3. Remove ~/.ga_desktop_settings.json (shared settings; other bundles rebuild
-#      it on next launch).
+#   3. Detach only settings paths owned by this bundle; keep preferences and any
+#      second bundle / external source selection.
 #   4. Remove the WebKitGTK data dir (~/.local/share + ~/.cache for the app id).
 #   5. Delete the bundle folder.
 set -u
@@ -24,7 +24,7 @@ echo
 echo "This will completely remove GenericAgent from this computer:"
 echo "  - stop its background services (bridge 14168 / conductor 8900)"
 echo "  - delete the desktop shortcut"
-echo "  - delete settings (~/.ga_desktop_settings.json)"
+echo "  - detach this bundle from shared desktop settings (preferences are kept)"
 echo "  - delete WebView data (~/.local/share/$APP_ID, ~/.cache/$APP_ID)"
 echo "  - delete THIS folder and everything in it:"
 echo "      $BUNDLE"
@@ -39,8 +39,19 @@ esac
 
 echo
 echo "==> Stopping GenericAgent backend services"
-# Best-effort graceful exit first.
-curl -fsS -m 3 -X POST "http://127.0.0.1:14168/services/bridge/exit" >/dev/null 2>&1 || true
+# Best-effort graceful exit only when the listener reports an app_dir inside
+# this bundle. Never ask a second bundle or foreign listener to shut down.
+RUNTIME_PY="$BUNDLE/runtime/python/bin/python3"
+PROJECT_DIR="$BUNDLE/runtime/app"
+SETTINGS_HELPER="$BUNDLE/runtime/merge_desktop_settings.py"
+IDENTITY="$(curl -fsS -m 3 "http://127.0.0.1:14168/services/identity" 2>/dev/null || true)"
+if [[ -x "$RUNTIME_PY" && -n "$IDENTITY" ]] && \
+   BUNDLE="$BUNDLE" IDENTITY="$IDENTITY" "$RUNTIME_PY" -c \
+     'import json, os, pathlib; app=pathlib.Path(json.loads(os.environ["IDENTITY"])["app_dir"]).resolve(); bundle=pathlib.Path(os.environ["BUNDLE"]).resolve(); raise SystemExit(0 if app == bundle or bundle in app.parents else 1)'; then
+  curl -fsS -m 3 -X POST "http://127.0.0.1:14168/services/bridge/exit" >/dev/null 2>&1 || true
+else
+  echo "     bridge listener is not owned by this bundle; left running"
+fi
 sleep 1
 
 # Kill any process whose exe or command line lives inside this bundle — never touch
@@ -70,11 +81,19 @@ for f in "$HOME/.local/share/applications/GenericAgent.desktop" \
 done
 [ "$removed_shortcut" = 0 ] && echo "     no desktop shortcut for this bundle found"
 
-echo "==> Removing settings file"
-if [ -f "$HOME/.ga_desktop_settings.json" ]; then
-  rm -f "$HOME/.ga_desktop_settings.json" && echo "[OK] removed ~/.ga_desktop_settings.json"
+echo "==> Detaching bundle paths from shared settings"
+if [[ -f "$HOME/.ga_desktop_settings.json" && -x "$RUNTIME_PY" \
+      && -f "$SETTINGS_HELPER" && -f "$PROJECT_DIR/frontends/desktop_settings.py" ]]; then
+  if "$RUNTIME_PY" "$SETTINGS_HELPER" \
+      --settings "$HOME/.ga_desktop_settings.json" \
+      --project-dir "$PROJECT_DIR" \
+      --remove-bundle "$BUNDLE"; then
+    echo "[OK] removed this bundle's path keys; preferences and overrides were kept"
+  else
+    echo "     settings were invalid or locked; left unchanged"
+  fi
 else
-  echo "     no settings file found"
+  echo "     no owned settings paths could be detached"
 fi
 
 echo "==> Removing WebView data"

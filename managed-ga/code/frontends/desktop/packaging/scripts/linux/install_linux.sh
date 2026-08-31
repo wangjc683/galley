@@ -5,6 +5,7 @@ set -euo pipefail
 # read-only mount, which breaks the bundled python ("No module named 'encodings'"). Always
 # run with a clean python env so the embedded interpreter uses its own stdlib/libs.
 unset PYTHONHOME PYTHONPATH LD_LIBRARY_PATH
+export PYTHONDONTWRITEBYTECODE=1
 
 # GenericAgent Desktop Linux installer.
 # Expected normal location: GenericAgent/frontends/install_linux.sh
@@ -91,10 +92,20 @@ resolve_script_root() {
 }
 
 abs_path() {
-  python3 - "$1" <<'PY'
-import os, sys
-print(os.path.abspath(os.path.expanduser(sys.argv[1])))
-PY
+  local value="$1"
+  case "$value" in
+    "~") value="$HOME" ;;
+    "~/"*) value="$HOME/${value#~/}" ;;
+  esac
+  [[ "$value" == /* ]] || value="$PWD/$value"
+  if [[ -d "$value" ]]; then
+    (cd -P "$value" && pwd)
+  else
+    local directory base
+    directory="$(dirname "$value")"
+    base="$(basename "$value")"
+    printf '%s/%s\n' "$(cd -P "$directory" && pwd)" "$base"
+  fi
 }
 
 has_agentmain() { [[ -f "$1/agentmain.py" ]]; }
@@ -199,21 +210,39 @@ install_dependencies() {
   if [[ -n "$WHEEL_DIR" ]]; then
     # Offline (portable bundle): install from local wheels only, no network, no pip self-upgrade.
     log_step "Install dependencies offline from $WHEEL_DIR"
+    local locked_requirements="$WHEEL_DIR/requirements.txt"
+    [[ -f "$locked_requirements" ]] || fail "Pinned offline requirements are missing: $locked_requirements"
     # Install deps directly (NOT an editable -e of the source): an editable install bakes the
     # project's absolute path into a .pth. Combined with --no-venv (deps go into the relocatable
     # embedded python) this keeps the portable bundle movable. The bridge adds the source to
     # sys.path itself (ensure_ga_import_path), so no install of the project is needed.
     # shellcheck disable=SC2086
-    "$py" -m pip install --no-index --find-links "$WHEEL_DIR" \
-      "requests>=2.28" "beautifulsoup4>=4.12" "bottle>=0.12" "simple-websocket-server>=0.4" "aiohttp>=3.9" psutil $EXTRA_PACKAGES \
+    "$py" -m pip install --no-compile --no-index --find-links "$WHEEL_DIR" \
+      --requirement "$locked_requirements" $EXTRA_PACKAGES \
       || fail "Offline pip install failed (check wheel dir)."
   else
     log_step "Install/refresh minimal Python dependencies"
-    "$py" -m pip install --upgrade pip setuptools wheel || fail "pip bootstrap failed."
+    "$py" -m pip install --no-compile --upgrade pip setuptools wheel || fail "pip bootstrap failed."
     # shellcheck disable=SC2086
-    "$py" -m pip install -e "$root" psutil $EXTRA_PACKAGES || fail "pip install failed."
+    "$py" -m pip install --no-compile -e "$root" psutil $EXTRA_PACKAGES || fail "pip install failed."
   fi
   printf 'GAPROGRESS|done\n'
+}
+
+clean_portable_runtime_bytecode() {
+  local root="$1"
+  local py="$2"
+  [[ -n "$WHEEL_DIR" && "$NO_VENV" -eq 1 ]] || return
+  local runtime_root
+  runtime_root="$(cd "$root/.." && pwd -P)"
+  [[ -d "$runtime_root/python" && "$py" == "$runtime_root"/python/* ]] \
+    || fail "Refusing to clean an unverified portable runtime: $runtime_root"
+  find "$runtime_root" -type d -name '__pycache__' -prune -exec rm -rf {} +
+  find "$runtime_root" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+  ! find "$runtime_root" -type d -name '__pycache__' -print -quit | grep -q . \
+    || fail "Python bytecode cache directory remains in portable runtime"
+  ! find "$runtime_root" -type f \( -name '*.pyc' -o -name '*.pyo' \) -print -quit | grep -q . \
+    || fail "Python bytecode remains in portable runtime"
 }
 
 ensure_mykey() {
@@ -235,18 +264,16 @@ write_desktop_settings() {
   local py="$2"
   local bridge="$root/frontends/desktop_bridge.py"
   local settings_path="$HOME/.ga_desktop_settings.json"
+  local helper="$SCRIPT_ROOT/merge_desktop_settings.py"
+  [[ -f "$helper" ]] || helper="$SCRIPT_ROOT/../merge_desktop_settings.py"
   [[ -f "$bridge" ]] || fail "desktop_bridge.py not found: $bridge"
+  [[ -f "$helper" ]] || fail "Desktop settings merge helper not found: $helper"
 
-  "$py" - "$settings_path" "$py" "$root" "$bridge" <<'PY'
-import json, pathlib, sys
-settings_path, python_path, project_dir, bridge_script = sys.argv[1:5]
-obj = {
-    "python_path": python_path,
-    "project_dir": project_dir,
-    "bridge_script": bridge_script,
-}
-pathlib.Path(settings_path).write_text(json.dumps(obj, indent=2), encoding="utf-8")
-PY
+  "$py" "$helper" \
+    --settings "$settings_path" \
+    --python-path "$py" \
+    --project-dir "$root" \
+    --bridge-script "$bridge"
   log_ok "Wrote desktop settings: $settings_path"
 }
 
@@ -296,10 +323,12 @@ find_icon() {
 }
 
 shell_quote() {
-  python3 - "$1" <<'PY'
-import shlex, sys
-print(shlex.quote(sys.argv[1]))
-PY
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//\$/\\\$}"
+  value="${value//\`/\\\`}"
+  printf '"%s"\n' "$value"
 }
 
 write_desktop_file() {
@@ -412,6 +441,7 @@ log_ok "Runtime Python: $PY"
 install_dependencies "$ROOT" "$PY"
 ensure_mykey "$ROOT"
 write_desktop_settings "$ROOT" "$PY"
+clean_portable_runtime_bytecode "$ROOT" "$PY"
 if [[ "$PORTABLE_PREPARE" -eq 0 ]]; then
   install_desktop_launchers "$ROOT" "$APPIMAGE"
 fi

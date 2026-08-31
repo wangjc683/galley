@@ -29,17 +29,17 @@ diff --git a/agentmain.py b/agentmain.py
 +        blocks.append({'type': 'image', 'source': {'type': 'base64', 'media_type': mime, 'data': data}})
 +    return blocks or [{'type': 'text', 'text': text or '.'}]
 +
-@@ -150,0 +175 @@ class GenericAgent:
+@@ -161,0 +186 @@ class GenericAgent:
 +            images = task.get("images") or []
-@@ -178,0 +204 @@ class GenericAgent:
+@@ -189,0 +215 @@ class GenericAgent:
 +            initial_user_content = image_content_blocks(raw_query, images) if images else None
-@@ -180 +206 @@ class GenericAgent:
+@@ -191 +217 @@ class GenericAgent:
 -                                    max_turns=180, verbose=self.verbose, yield_info=True)
 +                                    max_turns=180, verbose=self.verbose, initial_user_content=initial_user_content, yield_info=True)
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1400,2 +1400,3 @@ class NativeToolClient:
+@@ -1420,2 +1420,3 @@ class NativeToolClient:
 -        # Filter whitespace-only text blocks that cause 400 on strict API proxies
 -        filtered_content = [c for c in combined_content if c.get("text", "").strip()]
 +        # Filter whitespace-only text blocks that cause 400 on strict API proxies,

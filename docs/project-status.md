@@ -15,10 +15,10 @@ live in [refactor](./archive/refactor/README.md).
 - Agent API schema: `schemaVersion: 1`
 - Release tier: stable patch; default update channel points at `v0.4.10`.
   `beta` is kept as a legacy alias for older builds.
-- Shipped GA baseline: `30b24ad` (shipped in `v0.4.10`). Upstream `main` was
-  at `9e68c20` (10 commits ahead) at release time and was deliberately not
-  bumped — zero engine-core delta, all upstream Desktop 2.0 frontend; the
-  next release audits again. See [GA baseline](./ga-baseline.md).
+- Shipped GA baseline: `30b24ad` (shipped in `v0.4.10`). Audited baseline
+  has since moved to `efb3bc6` (audited 2026-08-31, payload rebuilt on main;
+  ships with the next release) — engine delta is Galley-positive abort
+  responsiveness + trim perf. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
@@ -204,14 +204,17 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.9` is published and promoted as the live stable release (2026-08-19).
-The default `updates/stable/latest.json` channel points at `v0.4.9`, with the
+`v0.4.10` is published and promoted as the live stable release (2026-08-24).
+The default `updates/stable/latest.json` channel points at `v0.4.10`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
-installed builds. Both were verified with `--cache-bust` across all three
-platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
-through in one draft cut. Smoke was a Windows real-machine pass by JC on the
-draft build — multiple sessions, no black CMD windows — which doubles as the
-fix's effectiveness verification (the maintainer's Mac cannot show the bug).
+installed builds.
+
+For `v0.4.9` (2026-08-18/19): both channels were verified with `--cache-bust`
+across all three platforms (darwin-aarch64, darwin-x86_64, windows-x86_64).
+The release went through in one draft cut. Smoke was a Windows real-machine
+pass by JC on the draft build — multiple sessions, no black CMD windows —
+which doubles as the fix's effectiveness verification (the maintainer's Mac
+cannot show the bug).
 
 The mandatory gates closed as follows. The **bundled-runtime gate** passed on
 `mac-x64` from scratch (`managed-ga` changed via patch `0020`); `mac-arm64`
@@ -313,10 +316,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.9 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.10 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Locked to audited upstream `f06d550` (audited 2026-08-14, shipped in `v0.4.8` the same day) (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `efb3bc6` (2026-08-31) on main; released builds ship `30b24ad` (`v0.4.10`) until the next release (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -339,7 +342,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.4.9`. For the next release, bump every
+- Current package metadata uses `0.4.10`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.

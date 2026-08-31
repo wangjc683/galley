@@ -145,6 +145,17 @@ class GenericAgent:
         if self.handler is not None: self.handler.code_stop_signal.append(1)
         for sess in getattr(self.llmclient.backend, '_sessions', [self.llmclient.backend]):
             sess.should_stop = lambda: self.stop_sig  # live read; cleared by run()'s finally
+            try:  # wake a recv() blocked in another thread. Verified on Windows: shutdown()/close() do NOT
+                  # wake it (makefile refcount defers real closesocket); _real_close() does -> ChunkedEncodingError
+                import socket as _socket
+                raw = sess.active_response.raw
+                fp = getattr(getattr(raw, '_fp', None), 'fp', None)  # http.client response -> buffered socket file
+                sock = fp.raw._sock if fp else raw.connection.sock   # SocketIO._sock (SSL-wrapped OK); fallback urllib3 conn
+                try: sock.shutdown(_socket.SHUT_RDWR)  # for non-Windows semantics
+                except OSError: pass
+                try: sock._real_close()  # CPython internal; bypasses refcount -> actual closesocket
+                except AttributeError: sock.close()
+            except Exception: pass
             try: sess.active_response.close()
             except Exception: pass
 

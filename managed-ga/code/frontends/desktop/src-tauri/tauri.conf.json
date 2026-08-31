@@ -1,41 +1,90 @@
 {
   "productName": "GenericAgent",
-  "version": "0.1.8",
+  "version": "0.2.1",
   "identifier": "com.genericagent.app",
   "build": {
-    "frontendDist": "../static"
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self' tauri: asset:",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data: asset: http://asset.localhost",
+        "img-src": "'self' data: blob: asset: http://asset.localhost http://127.0.0.1:14168 http://localhost:14168",
+        "media-src": "'self' data: blob: http://127.0.0.1:14168 http://localhost:14168",
+        "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:14168 http://localhost:14168 ws://127.0.0.1:14168 ws://localhost:14168 http://127.0.0.1:8900 http://localhost:8900 ws://127.0.0.1:8900 ws://localhost:8900",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'none'",
+        "frame-src": "'none'",
+        "frame-ancestors": "'none'"
+      },
+      "devCsp": {
+        "default-src": "'self' tauri: asset: http://localhost:5173",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173",
+        "style-src": "'self' 'unsafe-inline' http://localhost:5173",
+        "font-src": "'self' data: asset: http://asset.localhost http://localhost:5173",
+        "img-src": "'self' data: blob: asset: http://asset.localhost http://localhost:5173 http://127.0.0.1:14168 http://localhost:14168",
+        "media-src": "'self' data: blob: http://127.0.0.1:14168 http://localhost:14168",
+        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:5173 ws://localhost:5173 http://127.0.0.1:14168 http://localhost:14168 ws://127.0.0.1:14168 ws://localhost:14168 http://127.0.0.1:8900 http://localhost:8900 ws://127.0.0.1:8900 ws://localhost:8900",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'none'",
+        "frame-src": "'none'",
+        "frame-ancestors": "'none'"
+      },
+      "capabilities": ["default", "setup"]
     },
     "windows": [
       {
-        "title": "GenericAgent",
+        "title": "",
         "label": "main",
         "width": 1280,
         "height": 800,
         "resizable": true,
         "maximized": false,
         "visible": false,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 13, "y": 22 },
+        "dragDropEnabled": false,
         "url": "loading.html"
       },
       {
-        "title": "GenericAgent — Setup",
+        "title": "",
         "label": "setup",
         "width": 600,
         "height": 580,
         "resizable": false,
         "visible": false,
         "center": true,
-        "url": "fallback.html"
+        "url": "setup.html"
       }
     ]
   },
   "bundle": {
     "active": true,
     "targets": ["nsis", "dmg"],
-    "icon": ["icons/icon.ico", "icons/icon.png", "icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png"]
+    "icon": ["icons/icon.ico", "icons/icon.png", "icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png"],
+    "macOS": {
+      "dmg": {
+        "windowSize": {
+          "width": 540,
+          "height": 380
+        },
+        "appPosition": {
+          "x": 140,
+          "y": 200
+        },
+        "applicationFolderPosition": {
+          "x": 400,
+          "y": 200
+        }
+      }
+    }
   }
 }

@@ -1,5 +1,12 @@
+# Keep byte-exact tracked text stable across Windows and Unix checkouts.
+* text=auto eol=lf
+
 # Keep platform-specific scripts with safe line endings.
 *.sh text eol=lf
 *.command text eol=lf
 *.ps1 text eol=crlf
 *.bat text eol=crlf
+
+# Preserve the byte-exact third-party notice in source and generated delivery trees.
+frontends/desktop/public/THIRD_PARTY_NOTICES.txt text eol=lf
+frontends/desktop/dist/THIRD_PARTY_NOTICES.txt text eol=lf

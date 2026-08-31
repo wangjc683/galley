@@ -81,9 +81,13 @@ import telegram
 import TMWebDriver
 from Crypto.Cipher import AES
 from PIL import Image
-from frontends import desktop_bridge
 
 assert callable(getattr(agentmain, "GenericAgent", None))
+# find_spec only (do not import): upstream's Desktop 2.0 desktop_bridge
+# uses script-style sibling imports (`from data_backup import ...`) that
+# break under package import — and it is not on Galley's execution path;
+# this line only asserts the payload ships it.
+assert importlib.util.find_spec("frontends.desktop_bridge") is not None
 assert importlib.util.find_spec("frontends.wechatapp") is not None
 assert importlib.util.find_spec("frontends.fsapp") is not None
 assert importlib.util.find_spec("frontends.tgapp") is not None
@@ -93,7 +97,6 @@ assert Image is not None
 assert aiohttp is not None
 assert bottle is not None
 assert bs4 is not None
-assert desktop_bridge is not None
 assert discord is not None
 assert dotenv is not None
 assert lark_oapi is not None

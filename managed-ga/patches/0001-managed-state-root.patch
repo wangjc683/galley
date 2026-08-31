@@ -14,22 +14,22 @@ diff --git a/agentmain.py b/agentmain.py
 @@ -60 +63 @@ class GenericAgent:
 -        self.log_path = os.path.join(script_dir, f'temp/model_responses/model_responses_{logid}.txt')
 +        self.log_path = state_path('temp', 'model_responses', f'model_responses_{logid}.txt')
-@@ -132 +135 @@ class GenericAgent:
+@@ -143 +146 @@ class GenericAgent:
 -            vfile = os.path.join(script_dir, 'temp', v)
 +            vfile = state_path('temp', v)
-@@ -153 +156 @@ class GenericAgent:
+@@ -164 +167 @@ class GenericAgent:
 -                task_file = os.path.join(script_dir, 'temp', f'user_prompt_{os.getpid()}_{time.time_ns()}.md')
 +                task_file = state_path('temp', f'user_prompt_{os.getpid()}_{time.time_ns()}.md')
-@@ -162 +165 @@ class GenericAgent:
+@@ -173 +176 @@ class GenericAgent:
 -            handler = GenericAgentHandler(self, self.history, os.path.join(script_dir, 'temp'))
 +            handler = GenericAgentHandler(self, self.history, state_path('temp'))
-@@ -225 +228 @@ if __name__ == '__main__':
+@@ -236 +239 @@ if __name__ == '__main__':
 -            d = os.path.join(script_dir, f'temp/{args.task}'); os.makedirs(d, exist_ok=True)
 +            d = state_path('temp', args.task); os.makedirs(d, exist_ok=True)
-@@ -242 +245 @@ if __name__ == '__main__':
+@@ -253 +256 @@ if __name__ == '__main__':
 -        agent.task_dir = d = os.path.join(script_dir, f'temp/{args.task}'); nround = ''
 +        agent.task_dir = d = state_path('temp', args.task); nround = ''
-@@ -307 +310 @@ if __name__ == '__main__':
+@@ -318 +321 @@ if __name__ == '__main__':
 -                log_dir = os.path.join(script_dir, 'temp/reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 +                log_dir = state_path('temp', 'reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 diff --git a/assets/ga_ultraplan.py b/assets/ga_ultraplan.py
@@ -83,7 +83,7 @@ diff --git a/ga.py b/ga.py
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1020 +1020,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
+@@ -1040 +1040,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
 -        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'temp/model_responses/model_responses_{os.getpid()}.txt')
 +        state_root = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or os.path.dirname(os.path.abspath(__file__)))
 +        log_path = os.path.join(state_root, f'temp/model_responses/model_responses_{os.getpid()}.txt')

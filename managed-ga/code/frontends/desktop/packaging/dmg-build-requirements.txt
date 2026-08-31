@@ -1,0 +1,5 @@
+# Pure-Python tools used only to write the curated Finder layout.
+ds-store==1.3.3 \
+    --hash=sha256:b92a371efbf1b4ccce2a04d1ed13fceacc4736c81ba09cf5aefb74c088160a35
+mac-alias==2.2.3 \
+    --hash=sha256:7362b521d2132ef92f606a37abfed5fcd849ceb2f28b6f9743e014b02af92f0d

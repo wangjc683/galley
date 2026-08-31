@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "product": "GenericAgent React Desktop 2.0",
+  "version": "0.2.1",
+  "sourceRepository": "https://github.com/abraxas914/GenericAgent",
+  "sourceCommit": "4a67226e18cb003db1210357ea4a283774773acc",
+  "generatedAssetCount": 98,
+  "generatedManifestSha256": "06cbee59e1d232982095bb3966d7b23621b1aa785a6c7e90d82d66dedc5af7ed"
+}

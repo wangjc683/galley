@@ -540,7 +540,12 @@
           messagesEl.innerHTML=''; (data.chat||[]).forEach(addMsg);
           renderLog(data.log||[]);
           llmEl.innerHTML=(data.llms||[]).map(x=>`<option value="${x[0]}">${esc(x[1])}</option>`).join(''); llmEl.value=data.llm; llmEl.disabled=!llmEl.options.length;
-        } else if(data.type==='subagents'){ renderCards(data.items||[]); }
+        } else if(data.type==='model_selected'){ llmEl.value=String(data.llm); }
+        else if(data.type==='model_error'){
+          if(data.llm!==undefined) llmEl.value=String(data.llm);
+          showLimitToast(data.error||'Failed to select model');
+        }
+        else if(data.type==='subagents'){ renderCards(data.items||[]); }
         else if(data.type==='chat'){ addMsg(data.item); }
         else if(data.type==='chat_read'){ markAllRead(); }
         else if(data.type==='log'){ appendLog(data.item); }

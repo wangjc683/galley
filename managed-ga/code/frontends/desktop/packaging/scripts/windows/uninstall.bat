@@ -9,7 +9,7 @@ echo.
 echo This will completely remove GenericAgent from this computer:
 echo   - stop its background services (ports 14168 / 8900)
 echo   - delete the desktop shortcut
-echo   - delete settings (%%USERPROFILE%%\.ga_desktop_settings.json)
+echo   - detach this bundle from shared settings; keep preferences and other installs
 echo   - delete THIS folder and everything in it:
 echo       "%~dp0"
 echo.

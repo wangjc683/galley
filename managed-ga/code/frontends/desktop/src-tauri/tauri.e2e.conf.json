@@ -1,0 +1,19 @@
+{
+  "app": {
+    "security": {
+      "csp": {
+        "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* http://localhost:14168 ws://localhost:14168 http://127.0.0.1:8900 http://localhost:8900 ws://127.0.0.1:8900 ws://localhost:8900"
+      },
+      "capabilities": [
+        "default",
+        "setup",
+        {
+          "identifier": "e2e",
+          "description": "Test-only WebdriverIO capability",
+          "windows": ["main", "setup"],
+          "permissions": ["wdio:default"]
+        }
+      ]
+    }
+  }
+}

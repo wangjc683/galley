@@ -15,44 +15,123 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `30b24ad31d679cde47a75f47fb6880df1dd96891`
+Locked commit: `efb3bc6ad1db0d7a82dce9eb38aacdf954286513`
 
-- Tree hash: `0700767d75ff299258ac79c9e96810364724b4b7`
+- Tree hash: `84e56c2297b6d1ad4d53ecc576fac1ffc6ed3656`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-08-21
-- Shipped in: `v0.4.10` (2026-08-24)
-- Pre-release re-check (2026-08-24, for `v0.4.10`): upstream `main` had
-  moved 10 commits ahead to `9e68c20`. Per-file compare showed **zero
-  engine-core delta** (`ga.py` / `llmcore.py` / `agent_loop.py` /
-  `agentmain.py` / root `pyproject.toml` all untouched); the entire range
-  is upstream's own Desktop 2.0 frontend (compiled dist assets, packaging,
-  release qualification) plus auxiliary frontends (`conductor.py`,
-  `cost_tracker.py`, `data_backup.py`) and upstream CI/tests. Ruling:
-  ship at `30b24ad`, do not bump — the delta is off Galley's execution
-  path and bumping would only add inert bundle weight while invalidating
-  the green bundled-runtime gate. Next release audits again from here.
+- Date audited: 2026-08-31
+- Shipped in: pending — targets the next release
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `f06d5503808ba9d164fb583e4c500d5ce01efd4c`
+- Previous baseline: `30b24ad31d679cde47a75f47fb6880df1dd96891`
+  (tree `0700767d75ff299258ac79c9e96810364724b4b7`)
+- Delta (`30b24ad..efb3bc6` = 19 commits): 168 files, ~17.1k insertions /
+  ~1.6k deletions — but the bulk is upstream's own Desktop 2.0 line
+  (compiled dist, `src-tauri/`, `desktop_bridge.py` +1411, release
+  qualification tooling, ~5k lines of upstream tests), all inert on
+  Galley's path. This range **includes and supersedes** the 10 commits to
+  `9e68c20` already ruled engine-irrelevant at `v0.4.10` release time.
+  Engine-core delta is `llmcore.py` (+28 / −8) and `agentmain.py` (+11);
+  `ga.py`, `agent_loop.py`, and root `pyproject.toml` had **zero diff**
+  (`[project.dependencies]` unchanged → `GA_DEPS` untouched).
+- Result: no bridge protocol or dependency break, and the engine delta is
+  Galley-positive (abort responsiveness + trim perf; details below).
+  Patch-stack rebase had **one real conflict** (`0017` /
+  `frontends/cost_tracker.py`, upstream's new per-call token ledger
+  rewrote the lines `0017` guards — composition kept both sides, see
+  [patch manifest](../managed-ga/patches/manifest.md)); six more patches
+  (`0001`, `0002`, `0004`, `0007`, `0008`, `0016`) drifted purely
+  positionally. `0007`'s `_stream_with_retry` insertions three-way-merged
+  cleanly past upstream's interruptible-backoff rewrite of the same
+  function.
+- Standing guard re-run: `grep -rn "hub.connect" managed-ga/code/` still
+  shows only `agentmain.py --reflect` and `stapp.py` — neither on
+  Galley's path.
+- Devlog: [GA upstream upgrade 30b24ad -> efb3bc6](./devlog/2026-08-31-ga-upstream-upgrade-30b24ad-to-efb3bc6.md)
+
+New in the `30b24ad` -> `efb3bc6` range:
+
+- `llmcore.py` — **interruptible retry backoff + stop checks in
+  `_stream_with_retry`** (upstream `3d62523`): the retry sleep is now a
+  0.2s-granularity loop polling `sess.should_stop()`, each attempt starts
+  with a stop check, and the chunk loop checks stop before every `next()`.
+  Previously a user stop during a retry-backoff window (up to 30s, or a
+  server `Retry-After`) waited the sleep out. **Galley-positive**: managed
+  sessions abort faster during provider flakiness; directly relevant to
+  the deferred "Goal 停止立即 abort" item's responsiveness half. `0007`'s
+  codex insertions in the same function rebased clean.
+- `llmcore.py` — **runtime stream metrics** (upstream `13eef20` /
+  `3327a6c`): `STATS` gains `t_start` / `t_ttft` / `t_end` / `tps`
+  (decode TPS computed at stream end). Additive to upstream's `STATS`
+  dict, which Galley does not read. Inert.
+- `llmcore.py` — **`trim_messages_history` made linear** (upstream
+  `0c235a8`): the drop-from-front loop precomputes per-message costs
+  instead of re-serializing the whole tail per iteration. Same trim
+  semantics and history shape (drops to the same target, still sanitizes
+  the leading user message), so Galley's restore-time history injection is
+  unaffected; long-session trim just stops being quadratic.
+- `agentmain.py` — **`abort()` force-wakes a blocked stream `recv()`**
+  (upstream `3d62523`): reaches through the live response to the
+  underlying socket and calls `shutdown()` + CPython-internal
+  `_real_close()` (upstream verified `shutdown`/`close` alone do not wake
+  a blocked `recv` on Windows). Wrapped in a broad `try/except`.
+  **Galley-positive**: abort during a hung stream actually tears it down;
+  pairs with the `_stream_with_retry` stop checks above. Patch `0001`'s
+  `agentmain.py` hunks sit elsewhere and drifted +11 lines.
+- `frontends/cost_tracker.py` — **per-call token ledger**
+  (`temp/token_ledger.jsonl`, 10MB compaction, legacy-JSON migration) for
+  upstream's Desktop 2.0 `/token-history`. **Inert on Galley's path by
+  construction**: `_append_ledger` no-ops while `init_ledger` has not been
+  called, and only upstream's desktop bridge calls it — Galley's
+  `workbench_bridge` installs the in-memory tracker only. Rule-4 note:
+  were it ever activated, the ledger writes under the state root's `temp/`
+  (engine-internal runtime state per the 2026-08-13 interpretation). This
+  is the file where `0017` had its real conflict.
+- `frontends/wechatapp.py` — Windows-only `creationflags` no longer
+  evaluated on Linux (upstream `17d9f4d`). Adjacent to `0020`'s territory
+  but a different spawn site (`_start_conductor`, which Galley does not
+  reach); `0020`'s removal condition is unmet and `0004` rebased with +4
+  positional drift.
+- `frontends/desktop*` / `frontends/tests/` / release-qualification
+  tooling — upstream Desktop 2.0 v0.2.x line: compiled React dist,
+  Tauri shell (`src-tauri/lib.rs` +3.8k), bridge growth
+  (`desktop_bridge.py` +1411), `desktop_settings.py`, ~5k lines of
+  upstream tests and platform qualification scripts. Vendored into the
+  payload as inert upstream code; not on any Galley path.
+- `memory/ganet_pc_setup_sop.md` — new PC device-link SOP for upstream's
+  ganet/hub line (+207). Seeded missing-only into managed state like every
+  `memory/` doc; the hub product-direction signal from earlier ranges
+  continues, and the `hub.connect` guard above stays the cheap defense.
+- `frontends/stapp.py` — model-selection restore fix (`ffe9734`) and
+  related tweaks. Inert.
+- `assets/sys_prompt.txt` / `sys_prompt_en.txt` — the `<summary>` mandate
+  tightened: now asked for at the **head** of the reply text and under
+  ~30 words/tokens. Galley's couplings (`ga.py` summary extraction, the
+  bridge's tag strip) are position- and length-agnostic; net effect is
+  shorter sidebar recaps. Prompt tuning, benign.
+
+Carried forward from the `f06d550` -> `30b24ad` range (2026-08-21):
+
+- Previous-previous baseline: `f06d5503808ba9d164fb583e4c500d5ce01efd4c`
   (tree `f37171dd32b8f73d653df0fe9dfb5c253148c435`)
 - Delta (`f06d550..30b24ad` = 8 commits): 7 files, ~52 insertions /
-  ~31 deletions — the smallest range since the baseline was introduced,
-  taking that title from the range before it. Engine-core delta is
-  `ga.py` (1 line) and `llmcore.py` (5 / 2); `agent_loop.py` and
-  `agentmain.py` had **zero diff**, and `pyproject.toml` moved only its
-  `ui` extra. The rest is upstream's Streamlit frontend (`stapp.py` 46,
-  `hub.py` 6), `mykey_template.py` (+20, comments only), and a WeChat
-  group QR image.
+  ~31 deletions — the smallest range since the baseline was introduced.
+  Engine-core delta was `ga.py` (1 line) and `llmcore.py` (5 / 2);
+  `agent_loop.py` and `agentmain.py` had **zero diff**, and
+  `pyproject.toml` moved only its `ui` extra. The rest was upstream's
+  Streamlit frontend (`stapp.py` 46, `hub.py` 6), `mykey_template.py`
+  (+20, comments only), and a WeChat group QR image.
 - Result: no bridge protocol or dependency break. Patch-stack rebase had
   **zero conflicts** — the first conflict-free one in this document's
-  recorded history; every earlier range has at least one. Three patches (`0001`, `0002`, `0008`) drifted purely
+  recorded history. Three patches (`0001`, `0002`, `0008`) drifted purely
   positionally, all by the same +3 lines upstream added above their
   `llmcore.py` hunks. `0002`'s is a zero-context **pure insertion**
   (`@@ -1011,0 +1012,47 @@`) with no deleted line for `git apply` to
-  verify against — the silent-mis-drop class — which is why a range this
+  verify against — the silent-mis-drop class — which is why a range that
   small still went through the commit-chain rebase script instead of a
   hand-edited line number.
+- Shipped in `v0.4.10` (2026-08-24).
 - Devlog: [GA upstream upgrade f06d550 -> 30b24ad](./devlog/2026-08-21-ga-upstream-upgrade-f06d550-to-30b24ad.md)
 
 New in the `f06d550` -> `30b24ad` range:

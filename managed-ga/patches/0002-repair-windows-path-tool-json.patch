@@ -1,7 +1,7 @@
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1014,0 +1015,47 @@ def _ensure_text_block(blocks):
+@@ -1034,0 +1035,47 @@ def _ensure_text_block(blocks):
 +_WINDOWS_PATH_KEYS = {'path', 'file_path', 'filepath'}
 +_WINDOWS_PATH_FIELD_RE = re.compile(
 +    r'("(?P<key>path|file_path|filepath)"\s*:\s*)"{1,2}'
@@ -49,19 +49,19 @@ diff --git a/llmcore.py b/llmcore.py
 +        return [_normalize_windows_path_values(v) for v in value]
 +    return value
 +
-@@ -1029 +1076 @@ def tryparse(json_str):
+@@ -1049 +1096 @@ def tryparse(json_str):
 -    try: return json.loads(json_str)
 +    try: return _normalize_windows_path_values(json.loads(json_str))
-@@ -1032 +1079,4 @@ def tryparse(json_str):
+@@ -1052 +1099,4 @@ def tryparse(json_str):
 -    try: return json.loads(json_str)
 +    try: return _normalize_windows_path_values(json.loads(json_str))
 +    except: pass
 +    repaired = _repair_windows_path_fields_in_jsonish(json_str)
 +    try: return _normalize_windows_path_values(json.loads(repaired))
-@@ -1034 +1084 @@ def tryparse(json_str):
+@@ -1054 +1104 @@ def tryparse(json_str):
 -    try: return json.loads(json_str[:-1])
 +    try: return _normalize_windows_path_values(json.loads(json_str[:-1]))
-@@ -1037 +1087,3 @@ def tryparse(json_str):
+@@ -1057 +1107,3 @@ def tryparse(json_str):
 -    return json.loads(json_str)
 +    return _normalize_windows_path_values(
 +        json.loads(_repair_windows_path_fields_in_jsonish(json_str))

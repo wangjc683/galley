@@ -1,0 +1,168 @@
+name: Desktop 2.0 Quality Gates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "agentmain.py"
+      - "llmcore.py"
+      - "llmcore/**"
+      - "frontends/conductor.py"
+      - "frontends/cost_tracker.py"
+      - "frontends/data_backup.py"
+      - "frontends/desktop_bridge.py"
+      - "frontends/desktop_settings.py"
+      - "frontends/ga_contract_probe.py"
+      - "frontends/tests/**"
+      - "frontends/desktop/**"
+      - ".gitattributes"
+      - ".github/workflows/desktop-ci.yml"
+      - ".github/workflows/desktop-release-package.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "agentmain.py"
+      - "llmcore.py"
+      - "llmcore/**"
+      - "frontends/conductor.py"
+      - "frontends/cost_tracker.py"
+      - "frontends/data_backup.py"
+      - "frontends/desktop_bridge.py"
+      - "frontends/desktop_settings.py"
+      - "frontends/ga_contract_probe.py"
+      - "frontends/tests/**"
+      - "frontends/desktop/**"
+      - ".gitattributes"
+      - ".github/workflows/desktop-ci.yml"
+      - ".github/workflows/desktop-release-package.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-v2-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  distribution-contract:
+    name: Compiled distribution contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - name: Verify tracked React distribution and package metadata
+        working-directory: frontends/desktop
+        run: npm run test:dist
+      - name: Verify packaging helper syntax
+        run: |
+          bash -n frontends/desktop/packaging/scripts/macos/install_macos.sh
+          bash -n frontends/desktop/scripts/post-dmg.sh
+          python3 -m py_compile frontends/desktop/scripts/gen_ds_store.py
+      - name: Reject source and local-development leakage
+        run: |
+          test -z "$(git ls-files -- \
+            'frontends/desktop/src/**' \
+            'frontends/desktop/public/**' \
+            'frontends/desktop/vite.config.*' \
+            'frontends/desktop/tsconfig*.json' \
+            '.agents/**' '.codex/**' '.trellis/**')"
+          test -z "$(find frontends/desktop/dist -type f \
+            \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' -o -name '*.jsx' \) -print)"
+          ! git grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- .github frontends
+
+  python-contracts:
+    name: Python ${{ matrix.python-version }}
+    needs: distribution-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: frontends/tests/requirements.txt
+      - name: Install Desktop test dependencies
+        run: python -m pip install -r frontends/tests/requirements.txt
+      - name: Run bridge, conductor, cost and backup contracts
+        run: >-
+          python -m pytest frontends/tests -q
+          --ignore=frontends/tests/test_release_qualification.py
+      - name: Run release qualification tooling contracts
+        if: matrix.python-version == '3.12'
+        run: python -m pytest frontends/tests/test_release_qualification.py -q
+
+  rust-contracts:
+    name: Rust ${{ matrix.feature.name }}
+    needs: distribution-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        feature:
+          - name: production
+            args: ""
+          - name: e2e
+            args: "--features e2e"
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - name: Install Tauri system dependencies
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable action snapshot
+        with:
+          toolchain: "1.95.0"
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+        with:
+          workspaces: frontends/desktop/src-tauri -> target
+      - name: Verify Rust formatting
+        run: cargo fmt --manifest-path frontends/desktop/src-tauri/Cargo.toml --check
+      - name: Lint Tauri shell
+        run: cargo clippy --manifest-path frontends/desktop/src-tauri/Cargo.toml --all-targets ${{ matrix.feature.args }} -- -D warnings
+      - name: Run Tauri shell contracts
+        run: cargo test --manifest-path frontends/desktop/src-tauri/Cargo.toml ${{ matrix.feature.args }}
+
+  linux-tauri-build:
+    name: Linux Tauri build smoke
+    needs: [distribution-contract, python-contracts, rust-contracts]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - name: Install Tauri system dependencies
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable action snapshot
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+        with:
+          workspaces: frontends/desktop/src-tauri -> target
+      - name: Install Tauri CLI only
+        working-directory: frontends/desktop
+        run: |
+          npm install --package-lock=false
+          node -e "const v=require('./node_modules/@tauri-apps/cli/package.json').version; if(v!=='2.11.4') throw new Error('unexpected Tauri CLI '+v)"
+          test ! -e package-lock.json
+      - name: Build tracked Desktop 2.0 distribution into the native shell
+        working-directory: frontends/desktop
+        run: npm run tauri build -- --no-bundle
