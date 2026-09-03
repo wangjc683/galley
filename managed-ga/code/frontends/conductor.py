@@ -26,6 +26,43 @@ def _resolve_ga_root() -> str:
 ROOT = _resolve_ga_root()
 if ROOT not in sys.path: sys.path.insert(0, ROOT)
 
+
+def _install_managed_mykey_loader() -> None:
+    """Propagate the managed-runtime mykey loader into this child process.
+
+    Under the Galley managed runtime, ``runner.managed_runtime.install_
+    managed_mykey_loader()`` is only called in supervisor processes. The
+    conductor is spawned as a separate child process by IM frontends
+    (``_start_conductor`` in wechatapp/qqapp/...), so llmcore never learns
+    about the Galley-owned model config: GenericAgent.__init__ resolves zero
+    llmclients, ``llmclient`` stays None, and the agent loop dies silently on
+    the first incoming message -- the bot receives messages but can never
+    reply.
+    """
+    if not (os.environ.get("GALLEY_MANAGED_MODEL_CONFIG_JSON")
+            or os.environ.get("GALLEY_MANAGED_MODEL_CONFIG_PATH")):
+        return  # not running under the Galley managed runtime
+    here = os.path.dirname(os.path.abspath(__file__))
+    cand = here
+    for _ in range(6):  # repo checkout: <root>/runner; bundled app: <Resources>/runner
+        nxt = os.path.dirname(cand)
+        if nxt == cand:
+            break
+        cand = nxt
+        if os.path.isfile(os.path.join(cand, "runner", "managed_runtime.py")):
+            if cand not in sys.path:
+                sys.path.insert(0, cand)
+            break
+    try:
+        from runner.managed_runtime import install_managed_mykey_loader
+        install_managed_mykey_loader()
+        print("[conductor] managed mykey loader installed")
+    except Exception as exc:  # never block conductor startup over this
+        print(f"[conductor] managed mykey loader skipped: {exc}")
+
+
+_install_managed_mykey_loader()
+
 from agentmain import GenericAgent
 
 HOST = "127.0.0.1"
