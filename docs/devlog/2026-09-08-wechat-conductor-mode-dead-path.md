@@ -64,7 +64,17 @@ supervisor 侧解决，零 patch。`_run_wechat` 本来就在 import 后 poke �
 - **给 wechatapp 打 patch 改默认值**：能做，但 supervisor 侧已有同类 poke 手法，
   多一个 patch 只增加 rebase 面。
 
+## 验证
+
+修复提交为 `5fb75abd`。复核实际 `wechatapp.on_message` 的模式分支及
+`/switch` 入口后，重跑 `runner/tests/test_managed_im_supervisor.py`，13 项
+全部通过。新增用例验证模式固定、普通消息转发和 `/switch` 拦截；使用的是
+模拟前端，不能代替真实微信端到端收发验收。PR 作者的真机结果针对原 PR 的
+loader 修法，不能作为本次 supervisor 替代方案的验收结果。
+
 ## 遗留
+
+- 发布前完成替代修复的真实微信收发验收。
 
 - 基线审计方法要补一条：supervisor import 的前端模块，其模块级默认值属于
   Galley 路径，升级时要看控制流而不只看 spawn 点。已写进 `ga-baseline.md`。

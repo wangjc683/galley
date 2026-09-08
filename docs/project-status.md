@@ -295,7 +295,9 @@ The managed WeChat channel never replied from `v0.4.9` through `v0.4.11`:
 the upstream frontend defaults to forwarding into a detached `conductor.py`
 child that has no managed mykey loader. Fixed on 2026-09-08 in the
 supervisor (agent mode pinned, `/switch` refused); reported by community
-PR #25. A hotfix release is planned once a few more fixes land. See
+PR #25. The 13 supervisor tests pass; real WeChat end-to-end acceptance of
+the replacement fix remains pending. A hotfix release is planned once a few
+more fixes land. See
 [the devlog](./devlog/2026-09-08-wechat-conductor-mode-dead-path.md).
 
 Local file references and Markdown preview are implemented (2026-09-08):
@@ -308,7 +310,9 @@ This work is not released. The items below are standing follow-ups.
 Git worktree review is implemented (2026-09-08), with
 desktop acceptance pending. It reuses the reading panel for read-only changes
 against HEAD and separate untracked-file content, with explicit repository
-selection when no project directory is available. See
+selection when no project directory is available. The Git panel belongs to
+the window and preserves its repository and selection across session/project
+switches. See
 [implementation and limits](./devlog/2026-09-08-git-worktree-review.md).
 
 The GA baseline is fully current as of `v0.4.11` (`efb3bc6` audited and

@@ -57,7 +57,9 @@ Git worktree review shares the same reading panel. `git_review` in Rust owns
 repository discovery, bounded read-only Git subprocesses, and HEAD validation.
 Tauri `review_git` and socket `git.review` share `GalleyApi::review_git`.
 The GUI lazily loads `react-diff-view` for presentation and keeps only transient
-repository/file/layout selection. Git data is not stored in the database and
+repository/file/layout selection at window scope: switching sessions or
+projects preserves the open Git panel and its selection. Markdown preview
+still closes on session change. Git data is not stored in the database and
 is never claimed to be attributable to the active session.
 
 ### CLI

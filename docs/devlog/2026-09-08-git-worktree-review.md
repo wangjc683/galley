@@ -1,7 +1,7 @@
 # Git worktree review in the reading panel
 
 Date: 2026-09-08
-Status: implemented; commit/push authorized; final desktop acceptance pending
+Status: committed and pushed to main in `fe87db98`; final desktop acceptance pending
 Related: [interaction spec](../design/conversation.md#git-工作区改动审阅),
 [transport contract](../agent-api/transports.md#git-review-v1-additive)
 
@@ -90,4 +90,6 @@ Project paths are only initial candidates when no repository was chosen.
 Markdown preview retains its prior session lifetime, including cancellation of
 pending reads and no reappearance when returning to an earlier session. The
 conversation subtree stays keyed by session to preserve its existing reset
-behavior. JC authorized commit and push after this alignment and toolbar polish.
+behavior. Committed and pushed in `fe87db98` after JC approved this alignment
+and toolbar polish. GUI typecheck, lint and all 357 tests passed again after
+the session-lifetime adjustment.
