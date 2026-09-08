@@ -319,10 +319,12 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing user-facing is unreleased as of `v0.4.12` (2026-09-08). Pending
-outward follow-ups from that release: reply on community issues #26 and #27
-and PR #25 (copy is JC's), and ask the #27 commenter whether their project
-drawer was empty (their sidebar report is a separate question, triaged in the
+Nothing user-facing is unreleased as of `v0.4.12` (2026-09-08). Community
+threads for that release are answered (issues #26 and #27 stay open by JC's
+ruling; PR #25's closing is the author's call). One thread is waiting on the
+reporter: the #27 commenter was asked to clarify their sidebar / project
+report before it is classified as an entry-point or a project-filing problem
+(triage notes in the
 [issue #27 devlog](./devlog/2026-09-08-issue-27-message-search-locate.md)).
 Real WeChat end-to-end acceptance of the supervisor-side fix is still owed
 from a machine with a paired WeChat account. The items below are standing
