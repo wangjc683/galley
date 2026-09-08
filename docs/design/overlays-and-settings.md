@@ -261,7 +261,7 @@ Runtime tab 的任何问题）。
   - `我的模型` 是主视图，显示 Galley 当前会使用的模型队列、默认模型和排序。（早期文档名「当前配置模型」已演进为「我的模型」；维护区同期演进为「服务商」。）
   - `我的模型` 的标签行（标题 + `Info` tooltip + 模型数量）放在卡片外，和 `服务商` 的 section 标签同构——卡片只装列表，标签属于页面骨架；配置生效范围放在 `Info` tooltip。标签行下保留一行小字副标题（「按顺序排列，第一个为默认」）：这是「header 不放常驻说明文字」的**有意例外**——顺序 = 切换菜单顺序、第一个 = 默认是不可推断的核心语义，tooltip 藏不起。
   - 模型新增、编辑、排序或设为默认成功后，用短 toast 提醒：新对话立即使用最新配置；如果存在已启用 Channels，toast 带 `重启 Channels` CTA，直接重启已启用 Channel 进程，不要求重新登录。
-  - `我的模型` 行 hover / focus 只做轻底色和排序箭头显性化，提示可操作但不做抬升、缩放或阴影；Provider 名称使用低权重 metadata chip，默认模型标签保留可见但不做重 Badge。行内另有推理强度 chip（同 Provider chip 语域，前缀 10px `Gauge` 图标做类目标记——「图标+文字」chip 语法沿用默认徽章先例，图标只辨类目不加权重），**仅在存量快照显式设置了 `reasoning_effort` 时显示**（读快照而非推荐值叠加，保证徽章反映运行时真实发送的值）——它是同模型 effort 变体条目在列表里的唯一区分线索；未设置不显示，语义是「这个旋钮被拧过」。
+  - `我的模型` 行 hover / focus 只做轻底色和排序箭头显性化，提示可操作但不做抬升、缩放或阴影；Provider 名称使用低权重 metadata chip，默认模型标签保留可见但不做重 Badge。行内另有推理强度 chip：与 Provider chip **同一个灰底容器**（一行只有一种灰 chip 语法），区分靠字形——大写等宽枚举值（`HIGH` / `XHIGH`，`font-mono uppercase text-ui-micro`，正是该字号 token 的本职「uppercase chip」），不带图标、不加颜色。原则是 **Provider 是身份（自然语言专名），推理强度是状态（参数值）**。此前用 10px `Gauge` 图标前缀辨类目，真机上读作一个灰点、两枚 chip 分不开（2026-09-08 改）。**仅在存量快照显式设置了 `reasoning_effort` 时显示**（读快照而非推荐值叠加，保证徽章反映运行时真实发送的值）——它是同模型 effort 变体条目在列表里的唯一区分线索；未设置不显示，语义是「这个旋钮被拧过」。
   - `服务商` 是维护区，标题右侧按钮只写 `添加`，accessible label 保留完整的 `添加模型提供商`；`添加` 按钮只在没有任何服务商时用 primary（此时它是当前唯一的下一步），已有配置后降为 secondary。Provider 摘要压成单行，长名称截断，不撑高卡片；协议类型放在模型数量之后，用低权重 metadata chip 显示，不使用明显边框或等宽字体，避免和 Provider 名称、模型数量抢层级。
   - Provider 卡的 hover 语法必须比主视图安静或同级：轻底色 + caret 显性化，不做抬升、阴影或品牌色 hover——主视图是这个 Tab 视觉上最重的表面，维护区不抢。
   - Provider 摘要行的正常状态不显示 Key 图标或 `Key 已保存`；只有缺少密钥 / 状态异常时才显示 warning badge。
@@ -271,7 +271,7 @@ Runtime tab 的任何问题）。
   - Provider 展开后才显示模型维护操作；展开时自动读取一次模型列表（有 Key 且无缓存时；Codex 跳过；失败静默降级），`读取模型列表` 按钮保留为手动刷新入口，零模型 Provider 的卡片 header 不再重复放同名按钮。
   - 获取模型列表后的模型选择必须使用 Galley 自定义 popover dropdown，不使用浏览器原生 `select`。
   - `可添加模型` 列表里的模型行操作使用低权重 `+ 添加`；已加入配置的模型在同一位置显示 `✓ 已添加`，两者高度和占位保持一致，避免形成一列重按钮。
-  - 编辑模型里可以折叠显示 `高级配置`，默认关闭。第一版只开放排障/适配项：`max_retries`、`read_timeout`、`stream`、OpenAI-compatible 的 `api_mode`，以及 Anthropic-compatible 的 `thinking_type`、`Claude Code 兼容透传`。`reasoning_effort` 自 2026-09-08 起是编辑器的**一级字段**（显示名之后、`高级配置` 之前，`ReasoningEffortField`）：存储仍是 `advancedOptions.reasoning_effort`，只是不再藏在折叠面板里——issue #26 的用户因为「点铅笔 → 展开高级配置」两层折叠而去手改 JSON。面板的「N 项已自定义」计数不含它，「恢复推荐值」也不动它。`thinking_budget_tokens` 不开放，因此 `thinking_type` 暂不提供 `enabled`，避免用户选了实际会被 GA 忽略的配置。
+  - 编辑模型里可以折叠显示 `高级配置`，默认关闭。第一版只开放排障/适配项：`max_retries`、`read_timeout`、`stream`、OpenAI-compatible 的 `api_mode`，以及 Anthropic-compatible 的 `thinking_type`、`Claude Code 兼容透传`。`reasoning_effort` 自 2026-09-08 起是编辑器的**一级字段**（显示名之后、`高级配置` 之前，`ReasoningEffortField`；新增服务商表单的创建步骤在模型选择之后、服务商名称之前放同一个字段，值随 `form.advancedOptions` 写进首个模型；Onboarding 有自己的界面，不带这个字段）：存储仍是 `advancedOptions.reasoning_effort`，只是不再藏在折叠面板里——issue #26 的用户因为「点铅笔 → 展开高级配置」两层折叠而去手改 JSON。面板的「N 项已自定义」计数不含它，「恢复推荐值」也不动它。`thinking_budget_tokens` 不开放，因此 `thinking_type` 暂不提供 `enabled`，避免用户选了实际会被 GA 忽略的配置。
   - `reasoning_effort` 的默认语义（2026-08-07）：未设置 = 不发送该参数、由服务商决定，选项文案写作「默认（跟随服务商）」并带 info 说明。三个第一方预设（Codex / OpenAI / Anthropic）显式写 `high`（支持性确定的端点上采质量优先默认）；第三方兼容 / 任意端点预设一律不写——该字段是第一方 API 契约，兼容层实现无保证。存量模型记录不迁移：运行时始终以创建时快照为准，下次编辑保存时自然吸收新推荐值。
 - 新增 / 编辑 Provider 表单和 Onboarding 首次模型配置中，`提供商显示名称` 是可选身份字段，不放进折叠的 `更多`；它常驻在连接信息和模型字段之后、保存按钮之前，作为最后一步轻量命名。
 - Provider 检查成功态使用低权重 inline 文本，不长期占用绿色块；失败态保留说明块并贴近对应 Provider。

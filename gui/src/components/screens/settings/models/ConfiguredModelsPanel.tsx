@@ -23,7 +23,6 @@ import {
   CircleNotch,
   DotsSixVertical,
   DotsThreeVertical,
-  Gauge,
   Info,
   PlugsConnected,
   Trash,
@@ -424,16 +423,17 @@ function ConfiguredModelRow({
             </span>
             {/* Reasoning tier, only when explicitly set on the stored
                 snapshot — this is what tells apart effort-variant
-                entries of the same model at a glance. Same register as
-                the provider chip; the Gauge prefix alone marks the
-                category (tuning state, not identity) — icon+text chip
-                grammar mirrors the default badge, no new hierarchy. */}
+                entries of the same model at a glance. Same container as
+                the provider chip (one grey chip grammar per row), but
+                set as an uppercase mono enum value: provider = identity
+                in natural language, effort = a parameter value. A 10px
+                icon prefix was the old differentiator and read as a
+                grey dot (2026-09-08). */}
             {reasoningTier && (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-micro leading-4 text-ink-muted/80"
+                className="inline-flex shrink-0 items-center rounded-sm bg-ink-muted/10 px-1.5 py-px font-mono text-ui-micro uppercase leading-4 tracking-[0.04em] text-ink-muted/80"
                 title={`${copy.reasoningEffort}: ${reasoningTierLabels[reasoningTier]}`}
               >
-                <Gauge size={10} weight="bold" />
                 {reasoningTierLabels[reasoningTier]}
               </span>
             )}

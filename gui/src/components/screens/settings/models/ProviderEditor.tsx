@@ -20,12 +20,14 @@ import { Button, IconButton } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import {
   getManagedModelProviderPreset,
+  managedModelProviderPresetDraft,
   modelPlaceholderForManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
 import type { CodexDeviceLoginStart } from "@/lib/managed-models";
 import { cn } from "@/lib/utils";
 
+import { ReasoningEffortField } from "./AdvancedModelOptions";
 import {
   InfoLine,
   InlineProbeStatus,
@@ -423,6 +425,23 @@ export function ProviderEditor({
                   />
                 )}
               </div>
+            )}
+            {/* Same first-level field as the model editor: the value
+                rides `form.advancedOptions` into the first model on
+                save (runProviderCommit). The preset draft is both the
+                seed and the "recommended" baseline, so unset = the
+                preset's opinion (first-party presets say high). */}
+            {isCreatingProvider && (
+              <ReasoningEffortField
+                protocol={form.protocol}
+                authKind={form.authKind}
+                options={form.advancedOptions ?? {}}
+                recommendedOptions={
+                  managedModelProviderPresetDraft(selectedPreset.id)
+                    .advancedOptions ?? {}
+                }
+                onChange={(advancedOptions) => onChange({ advancedOptions })}
+              />
             )}
             <div className="border-t border-line pt-3">
               <SettingsInput
