@@ -1,5 +1,16 @@
 use super::*;
 
+#[tauri::command]
+pub(crate) async fn access_local_file(
+    galley: State<'_, SqliteGalley>,
+    request: crate::local_file::LocalFileRequest,
+) -> std::result::Result<crate::local_file::LocalFileResult, String> {
+    galley
+        .access_local_file(request)
+        .await
+        .map_err(stringify_error)
+}
+
 /// Plain `Path::exists` check that bypasses `tauri-plugin-fs`'s
 /// `fs:scope` glob allow-list.
 ///

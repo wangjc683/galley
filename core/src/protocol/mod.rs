@@ -28,8 +28,8 @@ mod envelope;
 mod error_tag;
 
 pub use commands::{
-    LlmSetArgs, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs, SessionBtwArgs,
-    SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
+    LlmSetArgs, LocalFileRequest, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs,
+    SessionBtwArgs, SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
     SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
     SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
     SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SocketCommand,

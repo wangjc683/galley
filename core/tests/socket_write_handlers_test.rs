@@ -275,6 +275,55 @@ impl RunnerPort for FakeRunner {
 
 // ---------------- harness ----------------
 
+#[tokio::test]
+async fn local_file_access_uses_shared_api_and_existing_error_categories() {
+    use galley_core_lib::api::GalleyApi;
+    use galley_core_lib::local_file::{LocalFileAction, LocalFileRequest};
+    use galley_core_lib::protocol::SocketCommand;
+    let h = Harness::new(FakeRunner::default()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("report.md");
+    std::fs::write(&path, "# Report").unwrap();
+    let args = LocalFileRequest {
+        path: path.to_string_lossy().into_owned(),
+        action: LocalFileAction::Read,
+    };
+    let response = h
+        .dispatch(req(
+            LocalFileRequest::NAME,
+            serde_json::to_value(&args).unwrap(),
+        ))
+        .await;
+    assert!(response.ok, "{response:?}");
+    let direct = h.galley.access_local_file(args).await.unwrap();
+    assert_eq!(
+        response.result.unwrap(),
+        serde_json::to_value(direct).unwrap()
+    );
+    std::fs::remove_file(&path).unwrap();
+    let response = h
+        .dispatch(req(
+            LocalFileRequest::NAME,
+            json!({"path": path, "action": "read"}),
+        ))
+        .await;
+    assert!(!response.ok);
+    assert_eq!(
+        serde_json::to_value(response).unwrap()["error"],
+        "not_found"
+    );
+    let response = h
+        .dispatch(req(
+            LocalFileRequest::NAME,
+            json!({"path": "relative.md", "action": "read"}),
+        ))
+        .await;
+    assert_eq!(
+        serde_json::to_value(response).unwrap()["error"],
+        "invalid_args"
+    );
+}
+
 struct Harness {
     galley: SqliteGalley,
     db: DbSource,

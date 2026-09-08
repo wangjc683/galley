@@ -2,6 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { defaultUrlTransform } from "react-markdown";
 
 import { PENDING_LINK_HREF } from "@/lib/mend-streaming-markdown";
+import { localFilePath } from "@/lib/local-file-path";
 
 // Pure src / path resolution for markdown images: recognise absolute
 // local paths (POSIX / Windows / UNC / file: URLs) that agents drop
@@ -20,6 +21,8 @@ export function markdownUrlTransform(
   // styling so nothing shifts when the real URL lands, but a half-typed
   // address is not clickable.
   if (value === PENDING_LINK_HREF) return null;
+  if (key === "href" && node.tagName === "a" && localFilePath(value, true))
+    return value;
   if (
     key === "src" &&
     node.tagName === "img" &&

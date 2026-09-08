@@ -47,6 +47,12 @@ Tailwind. It presents sessions, messages, approvals, settings, and supervisor
 activity. It does not own business authority; it invokes Rust commands and
 subscribes to events.
 
+Local file references use `LocalFileWorkspace` for session-scoped transient
+preview state. Rust `local_file` validates paths, bounds reads, and invokes the
+OS file manager/default Markdown application. Both Tauri `access_local_file`
+and socket `local_file.access` call `GalleyApi::access_local_file`. This seam
+does not persist file contents, change session state, or touch the runner.
+
 ### CLI
 
 The CLI lives in `cli/` and exposes the `galley` command. Agents use it to list

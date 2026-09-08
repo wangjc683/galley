@@ -2,7 +2,10 @@ import { ArrowSquareOut, DownloadSimple } from "@phosphor-icons/react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { DocumentPathContext, InsideLinkContext } from "@/lib/local-files";
+import { documentReference, localFilePath } from "@/lib/local-file-path";
+import { DocumentImage } from "@/components/conversation/DocumentImage";
 
 import { useCopy, type AppCopy } from "@/lib/i18n";
 import {
@@ -34,10 +37,18 @@ export function MarkdownImage({
   alt?: string | null;
 }) {
   const copy = useCopy();
+  const documentPath = useContext(DocumentPathContext);
+  const insideLink = useContext(InsideLinkContext);
+  const ImageContainer = insideLink ? "span" : "a";
+  src = src ? documentReference(src, documentPath) : src;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const rawSrc = src?.trim() ?? "";
   const preview = failedSrc === rawSrc ? null : markdownImagePreview(src);
   const label = alt?.trim() || "";
+  const documentImagePath =
+    documentPath && src ? localFilePath(src, true) : null;
+  if (documentImagePath)
+    return <DocumentImage path={documentImagePath} alt={alt} />;
 
   if (!preview) return <MarkdownImageLink src={src} alt={alt} />;
 
@@ -59,8 +70,8 @@ export function MarkdownImage({
           data-galley-context-menu-trigger=""
           className="my-3 block max-w-full"
         >
-          <a
-            href={preview.openHref}
+          <ImageContainer
+            {...(!insideLink ? { href: preview.openHref } : {})}
             target="_blank"
             rel="noreferrer noopener"
             className="inline-block max-w-full no-underline"
@@ -84,7 +95,7 @@ export function MarkdownImage({
               onError={() => setFailedSrc(rawSrc)}
               className="block max-h-[420px] max-w-full rounded-sm border border-line bg-surface object-contain"
             />
-          </a>
+          </ImageContainer>
         </span>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>

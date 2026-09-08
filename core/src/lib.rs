@@ -16,6 +16,7 @@ pub mod discovery;
 pub mod error;
 pub mod im_supervisor;
 pub mod ipc;
+pub mod local_file;
 pub mod managed_model_config;
 pub mod managed_model_probe;
 mod managed_prompt;
@@ -108,6 +109,7 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![
             path_exists,
+            access_local_file,
             reset_window_layout,
             get_supervisor_sop,
             health_report,

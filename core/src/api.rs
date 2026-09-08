@@ -64,6 +64,14 @@ use crate::error::Result;
 
 #[async_trait]
 pub trait GalleyApi: Send + Sync {
+    /// Local file presentation shared by desktop and socket callers; no DB writes.
+    async fn access_local_file(
+        &self,
+        request: crate::local_file::LocalFileRequest,
+    ) -> Result<crate::local_file::LocalFileResult> {
+        crate::local_file::access(request).await
+    }
+
     /// List sessions matching the filter. Default sort: pinned first,
     /// then `lastActivityAt` desc.
     async fn list_sessions(&self, filter: SessionFilter) -> Result<Vec<SessionBrief>>;

@@ -6,6 +6,15 @@ names rather than drifting to synonyms. This file is grown lazily — terms are
 added when a decision actually pins them down, not speculatively. See
 [docs/agents/domain.md](./docs/agents/domain.md) for how the skills consume it.
 
+## Local file references
+
+A **file reference** is a message's explicit local link or full-path inline
+code span; it does not assert that the file is an Agent-produced deliverable.
+`gui/src/lib/local-file-path.ts` owns recognition and document-relative URL
+resolution; `core/src/local_file.rs` owns native validation, bounded reading,
+and OS opening. `LocalFileWorkspace` owns only transient preview state, reset
+on session switch. Behavior: [conversation design](./docs/design/conversation.md#本地文件引用与-markdown-预览).
+
 ## Turn numbering
 
 The most collision-prone arithmetic in the GUI. GA's `agent_runner_loop`

@@ -118,6 +118,16 @@ grep -rn "supervisor_chat\|conversation_log\|supervisor_history\|im_messages" co
 
 ## 4. 路径 B 不可逆迁移
 
+Local-file presentation proof (2026-09-08):
+[`GalleyApi::access_local_file`](../core/src/api.rs) delegates to
+[`local_file::access`](../core/src/local_file.rs); the Tauri wrapper in
+[`commands/system.rs`](../core/src/commands/system.rs) and socket dispatch in
+[`socket_listener/mod.rs`](../core/src/socket_listener/mod.rs) share that method.
+`local_file_access_uses_shared_api_and_existing_error_categories` in
+[`socket_write_handlers_test.rs`](../core/tests/socket_write_handlers_test.rs)
+compares direct API and wire results. Neither transport scans user directories,
+persists document content, or starts a runner for this feature.
+
 > v0.2 起，业务逻辑权威全部在 Rust 端 Galley Core：SQLite 写 / Bridge subprocess ownership / Session 生命周期 / 命令调度。
 > 前端（GUI / CLI / 未来扩展）：stateless presenter，订阅 event + invoke 命令。
 

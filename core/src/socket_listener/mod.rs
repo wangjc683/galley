@@ -571,6 +571,32 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
 
     let request_id = req.request_id.clone();
     match req.command.as_str() {
+        "local_file.access" => {
+            let parsed: crate::protocol::LocalFileRequest = match serde_json::from_value(req.args) {
+                Ok(value) => value,
+                Err(e) => {
+                    return DispatchResult::Unary(SocketResponse::err(
+                        request_id,
+                        ErrorTag::InvalidArgs,
+                        e.to_string(),
+                    ))
+                }
+            };
+            let galley = match ctx.db.get().await {
+                Ok(value) => value,
+                Err(e) => {
+                    return DispatchResult::Unary(SocketResponse::err(
+                        request_id,
+                        ErrorTag::DbUnavailable,
+                        e.to_string(),
+                    ))
+                }
+            };
+            DispatchResult::Unary(match galley.access_local_file(parsed).await {
+                Ok(value) => SocketResponse::ok(request_id, serde_json::json!(value)),
+                Err(e) => common::map_galley_err(request_id, e),
+            })
+        }
         // ---- B1 read commands ----
         "sessions.list" => {
             DispatchResult::Unary(dispatch_sessions_list(request_id, req.args, ctx).await)

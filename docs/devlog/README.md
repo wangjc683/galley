@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-09-08
+- [Local file references and Markdown preview](./2026-09-08-local-file-preview.md) — 文件夹一键定位、只读预览、保守路径解析、Core 双入口与外接盘图片
+
 按日期分组，每条一行索引供 agent 路由；hook 只需含**能判断相关性、可 grep 的关键词**（功能名 / 模块名 / 版本号），不追求文采。点标题进对应 entry 看完整叙事。
 
 ### 2026-05-07

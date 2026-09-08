@@ -1,6 +1,27 @@
 import type { AppCopy } from "@/i18n/types";
 
 export const enCopy: AppCopy = {
+  localFiles: {
+    resizePreview: "Resize Markdown preview",
+    resizeHint: "Drag to resize; double-click to restore the default split",
+    imageUnavailable: "Image preview unavailable",
+    preview: "Preview Markdown",
+    locate: "Show in folder",
+    copyPath: "Copy path",
+    openDefault: "Open with default app",
+    refresh: "Refresh",
+    diskContent: "File content at the time of opening or refreshing",
+    missing: "File not found or moved. Copy the path to check its location.",
+    permission: "Permission to read this file was denied.",
+    tooLarge:
+      "This file exceeds 2 MiB. Show it in its folder to open it externally.",
+    encoding: "This file is not previewable UTF-8 text.",
+    unsupported:
+      "Cannot preview or open this path. Use a full local Markdown file path.",
+    failed: "The file operation failed. Check that the file is accessible.",
+    loading: "Reading file…",
+    empty: "This file is empty.",
+  },
   common: {
     close: "Close",
     cancel: "Cancel",

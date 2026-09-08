@@ -18,6 +18,7 @@ import { GoalRunningTail } from "@/components/conversation/GoalRunMarkers";
 import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
 import { GoalWorkerContextBar } from "@/components/conversation/GoalWorkerContextBar";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
+import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
@@ -179,7 +180,18 @@ export interface MainViewProps {
  * Title / runtime / inspector toggle live in the AppShell-level Top
  * Bar; nothing chrome-y belongs here.
  */
-export function MainView({
+export function MainView(props: MainViewProps) {
+  return (
+    <LocalFileWorkspace
+      key={props.activeSessionId}
+      fontSize={props.conversationFontSize}
+    >
+      <MainViewContent {...props} />
+    </LocalFileWorkspace>
+  );
+}
+
+function MainViewContent({
   turns,
   llmDisplayName,
   pendingApprovals = [],
@@ -242,8 +254,7 @@ export function MainView({
   // waiting on an ask_user reply. The Composer derives the rest
   // (empty textarea, no goal armed) at render time.
   const nextSuggestion = useActiveMessages((m) => m.nextSuggestion, null);
-  const ghostSuggestion =
-    !isRunning && !pendingAskUser ? nextSuggestion : null;
+  const ghostSuggestion = !isRunning && !pendingAskUser ? nextSuggestion : null;
   const userSubmitTick = useMessagesStore((s) => s.userSubmitTick);
 
   // Stripped partial — empty when nothing renderable yet (e.g. only

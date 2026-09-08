@@ -130,3 +130,28 @@ A sub-millisecond race window exists between try-connect and rebind;
 in practice it's never been hit. If it does happen, the second
 instance exits its socket setup and CLI clients see `exit 4` until
 the user restarts.
+
+## Local file presentation (v1 additive)
+
+`local_file.access` takes `{path: string, action: "inspect" | "read" |
+"reveal" | "open" | "read_image"}`. Tauri `access_local_file` wraps the same
+`GalleyApi::access_local_file` method. No session or database state changes.
+There is no dedicated CLI subcommand in this increment.
+
+Paths must be native absolute paths or `~/…`; URL decoding belongs to the
+presenter. Relative paths are rejected. Result: `{path, kind, content}`,
+where `kind` is `directory`, `markdown`, or `file`, and `content` is null
+except for `read` / `read_image`. `read_image` accepts PNG, JPEG, GIF, WebP
+regular files up to 10 MiB and returns a data URL in `content` (kind remains
+`file`); this permits document images outside the WebView asset scope without
+widening global filesystem permissions. `read` accepts UTF-8 `.md` / `.markdown` regular files
+up to 2 MiB, with an optional UTF-8 BOM. `reveal` opens directories or
+selects files in the system file manager; `open` uses the default application
+for Markdown only (including validation of a symlink's target extension).
+No shell command supplied by the caller is executed.
+
+Existing error categories remain unchanged: missing paths are `not_found`,
+invalid paths/types/encoding/size are `invalid_args`, and I/O or OS opener
+failures are `internal`. Message reason prefixes are `local_file_missing`,
+`local_file_absolute_required`, `local_file_unsupported`, `local_file_too_large`,
+`local_file_encoding`, `local_file_permission`, and `local_file_io`.

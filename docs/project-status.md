@@ -291,9 +291,12 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing release-pending: `v0.4.11` (2026-08-31) shipped everything
-substantive that was on main. What follows are standing items carried across
-releases, not unshipped work.
+Local file references and Markdown preview are implemented (2026-09-08):
+full local paths in messages gain file-manager actions; Markdown opens a
+session-scoped resizable read-only preview. JC reported Dev desktop acceptance
+passed on 2026-09-08. Verification and platform acceptance scope are
+tracked in [the implementation devlog](./devlog/2026-09-08-local-file-preview.md).
+This work is not released. The items below are standing follow-ups.
 
 The GA baseline is fully current as of `v0.4.11` (`efb3bc6` audited and
 shipped the same day); the next release audits upstream again per the

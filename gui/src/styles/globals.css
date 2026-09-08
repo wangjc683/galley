@@ -1311,3 +1311,53 @@ code {
     transition: none;
   }
 }
+
+/* Document reading measure stays comfortable as the preview grows. Tables,
+   code blocks and image paragraphs can use the full available panel width. */
+.document-preview-content > :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, hr) {
+  max-width: 76ch;
+  margin-inline: auto;
+}
+
+.document-preview-content > p:has(img) {
+  max-width: none;
+}
+
+/* File references and their separate folder buttons share a color response.
+   Each button owns its hover area. Only IconButton gets the quiet 1px press;
+   path text keeps its position, spacing and line wrapping in every state. */
+.file-reveal-button,
+.file-path-button {
+  cursor: default;
+}
+
+.file-reveal-button:hover,
+.file-path-button:hover {
+  background-color: var(--color-brand-soft);
+  color: var(--color-brand-strong);
+}
+
+.file-reveal-button:active,
+.file-path-button:active {
+  background-color: color-mix(
+    in srgb,
+    var(--color-brand) calc(var(--opacity-strong) * 100%),
+    transparent
+  );
+  color: var(--color-brand-strong);
+}
+
+.file-path-button:is(:hover, :active) {
+  text-decoration-color: currentColor;
+}
+
+/* The inline-code wash/ink would otherwise mask the path button's feedback.
+   Paint one surface, not a second translucent layer inside the button. */
+.file-path-button:is(:hover, :active) code {
+  background-color: transparent;
+  color: inherit;
+}
+
+.file-path-button:is(:hover, :active) :is(strong, em) {
+  color: inherit;
+}

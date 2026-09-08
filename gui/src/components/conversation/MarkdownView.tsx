@@ -11,6 +11,12 @@ import remarkGfm from "remark-gfm";
 
 import { CodeBlock } from "@/components/conversation/CodeBlock";
 import { MarkdownImage } from "@/components/conversation/MarkdownImage";
+import {
+  FileAnchor,
+  FileInlineCode,
+} from "@/components/conversation/LocalFileReference";
+import { DocumentPathContext } from "@/lib/local-files";
+import { remarkDocumentHeadings } from "@/lib/remark-document-headings";
 import { markdownUrlTransform } from "@/lib/markdown-image-src";
 import { remarkCjkAdjacentQuotedStrong } from "@/lib/remark-cjk-strong";
 import { cn } from "@/lib/utils";
@@ -55,6 +61,7 @@ interface MarkdownViewProps {
   variant: "agent" | "narration" | "thinking";
   className?: string;
   selectionCopyScope?: boolean;
+  documentPath?: string;
 }
 
 // Memoised: `source` (the markdown string) is the only prop that
@@ -69,6 +76,7 @@ export const MarkdownView = memo(function MarkdownView({
   variant,
   className,
   selectionCopyScope = false,
+  documentPath,
 }: MarkdownViewProps) {
   const proseClass =
     variant === "agent"
@@ -111,6 +119,7 @@ export const MarkdownView = memo(function MarkdownView({
   } as CSSProperties;
   return (
     <div
+      data-document-preview={documentPath ? "" : undefined}
       data-selection-copy-scope={
         selectionCopyScope ? "assistant-answer" : undefined
       }
@@ -118,13 +127,23 @@ export const MarkdownView = memo(function MarkdownView({
       className={cn("select-text", proseClass, className)}
       style={proseStyle}
     >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkCjkAdjacentQuotedStrong]}
-        components={COMPONENTS}
-        urlTransform={markdownUrlTransform}
-      >
-        {source}
-      </ReactMarkdown>
+      <DocumentPathContext.Provider value={documentPath ?? null}>
+        <ReactMarkdown
+          remarkPlugins={
+            documentPath
+              ? [
+                  remarkGfm,
+                  remarkCjkAdjacentQuotedStrong,
+                  remarkDocumentHeadings,
+                ]
+              : [remarkGfm, remarkCjkAdjacentQuotedStrong]
+          }
+          components={COMPONENTS}
+          urlTransform={markdownUrlTransform}
+        >
+          {source}
+        </ReactMarkdown>
+      </DocumentPathContext.Provider>
     </div>
   );
 });
@@ -300,7 +319,7 @@ const COMPONENTS: Components = {
     return <CodeBlock code={text} language={match?.[1] ?? null} />;
   },
   code({ className, children }) {
-    return <code className={className}>{children}</code>;
+    return <FileInlineCode className={className}>{children}</FileInlineCode>;
   },
   a({ href, children }) {
     // No href = a link whose destination is still streaming, mended into
@@ -309,11 +328,7 @@ const COMPONENTS: Components = {
     // when the URL lands; without an href it is neither clickable nor
     // focusable, which is the whole point of mending it early.
     if (!href) return <a>{children}</a>;
-    return (
-      <a href={href} target="_blank" rel="noreferrer noopener">
-        {children}
-      </a>
-    );
+    return <FileAnchor href={href}>{children}</FileAnchor>;
   },
   img({ src, alt }) {
     return <MarkdownImage src={src} alt={alt} />;

@@ -1,4 +1,23 @@
 export const zhCopy = {
+  localFiles: {
+    resizePreview: "调整 Markdown 预览宽度",
+    resizeHint: "拖动调整宽度，双击恢复默认比例",
+    imageUnavailable: "图片无法预览",
+    preview: "预览 Markdown",
+    locate: "在文件夹中显示",
+    copyPath: "复制路径",
+    openDefault: "用默认应用打开",
+    refresh: "刷新",
+    diskContent: "显示打开或刷新时的文件内容",
+    missing: "文件不存在或已移动。可复制路径检查位置。",
+    permission: "没有权限读取此文件。",
+    tooLarge: "文件超过 2 MiB，无法在此预览。可在文件夹中找到并打开。",
+    encoding: "此文件不是可预览的 UTF-8 文本。",
+    unsupported: "无法预览或打开此路径。请使用完整的本地 Markdown 文件路径。",
+    failed: "文件操作未能完成，请检查文件是否可访问。",
+    loading: "正在读取文件…",
+    empty: "此文件为空。",
+  },
   common: {
     close: "关闭",
     cancel: "取消",
