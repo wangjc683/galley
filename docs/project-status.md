@@ -9,22 +9,43 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.11`.
-- Git tag / GitHub Release: `v0.4.11` is the current published stable release
-  (tagged at `d2e3bc0c` on 2026-08-31, GitHub Latest).
+- Package version: `0.4.12`.
+- Git tag / GitHub Release: `v0.4.12` is the current published stable release
+  (tagged at `bc275549` on 2026-09-08, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.11`.
+- Release tier: stable patch; default update channel points at `v0.4.12`.
   `beta` is kept as a legacy alias for older builds.
-- Shipped GA baseline: `efb3bc6` (audited 2026-08-31, shipped in `v0.4.11`
-  the same day) — engine delta is Galley-positive abort responsiveness +
-  trim perf. See [GA baseline](./ga-baseline.md).
+- Shipped GA baseline: `efb3bc6` (audited 2026-08-31, first shipped in
+  `v0.4.11`; unchanged in `v0.4.12`) — engine delta is Galley-positive abort
+  responsiveness + trim perf. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
 
-`v0.4.11` is a single-headline patch: the **no-auth provider**
+`v0.4.12` (2026-09-08) is a week's accumulation shipped as one patch: the
+**managed WeChat channel fix** (community PR #25 diagnosed that since
+`v0.4.9` the upstream frontend forwarded every message into a helper
+process with no model; the supervisor now pins the in-process agent and
+refuses `/switch`), **search-to-message locate** (issue #27: palette hits
+open the session at the matching line with the term highlighted, rows
+highlight too, titles substring-match across all sessions), **model
+settings UX** (issue #26: reasoning effort as a first-level field including
+at provider creation, drag-to-reorder in Your Models), the **opacity token
+fix** (77 tinted fills across 31 files had never rendered because
+`color-mix` rejected unitless tokens), and the **reading panel** — local
+file references with a Markdown preview plus a read-only Git worktree
+review — built by another agent and reworked in a pre-release UX pass
+(shared header, Galley file list, unified notices, 880px split threshold,
+`GitDiff` header icon). Graded patch under the `v0.4.1` rule: the reading
+panel extends the conversation surface rather than standing as its own
+product line. Bundled-runtime gate was mandatory (`runner/` changed) and
+passed on `mac-x64`. JC smoked the draft on the desktop before publish.
+Full narrative: devlog
+[2026-09-08-v0.4.12-release](./devlog/2026-09-08-v0.4.12-release.md).
+
+`v0.4.11` was a single-headline patch: the **no-auth provider**
 (community issue galley#24 — a blank API key on provider create now saves an
 `authKind: "none"` provider behind a one-time confirm, editing gains an
 explicit "clear key" action that converts to no-auth, and the empty
@@ -222,16 +243,22 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.11` is published and promoted as the live stable release (2026-08-31).
-The default `updates/stable/latest.json` channel points at `v0.4.11`, with the
+`v0.4.12` is published and promoted as the live stable release (2026-09-08).
+The default `updates/stable/latest.json` channel points at `v0.4.12`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. Both were verified with `--cache-bust` across all three
 platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
-through in one draft cut; JC smoked the draft build before publish (no-auth
-provider flows plus multi-step sessions on the new GA baseline). The
-mandatory bundled-runtime gate passed from scratch on `mac-x64` pre-flight
-(`runner/` and `managed-ga/` both changed); `mac-arm64` and `win-x64` were
-covered by `release.yml`'s per-platform runners at tag time.
+through in one draft cut; JC smoked the draft build before publish. The
+mandatory bundled-runtime gate passed on `mac-x64` pre-flight (`runner/`
+changed; `managed-ga/` did not); `mac-arm64` and `win-x64` were covered by
+`release.yml`'s per-platform runners at tag time. `check.yml` was green on
+all three targets at the release commit's parent, and the two release-prep
+commits were docs and version files only.
+
+`v0.4.11` (2026-08-31) went through the same path: one draft cut, JC smoked
+the draft build (no-auth provider flows plus multi-step sessions on the new
+GA baseline), bundled-runtime gate from scratch on `mac-x64` with `runner/`
+and `managed-ga/` both changed.
 
 For `v0.4.9` (2026-08-18/19): both channels were verified with `--cache-bust`
 across all three platforms (darwin-aarch64, darwin-x86_64, windows-x86_64).
@@ -261,9 +288,10 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): **`v0.4.10` → `v0.4.11` is pending** on
-   the dogfood machine (and the `v0.4.8` → `v0.4.9` → `v0.4.10` hops were
-   never explicitly reported — confirm or write them off in the same pass).
+1. App-update dogfood (SOP step 10): **`v0.4.11` → `v0.4.12` is pending** on
+   the dogfood machine (and the `v0.4.8` → `v0.4.9` → `v0.4.10` → `v0.4.11`
+   hops were never explicitly reported — confirm or write them off in the
+   same pass).
    All earlier hops through `v0.4.7` → `v0.4.8` passed
    (JC confirmed 2026-08-13 / 2026-08-14), except **`v0.4.6` → `v0.4.7`,
    never run and off the normal path**: a hop can only be tested from the
@@ -291,56 +319,19 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Opacity tokens were unitless numbers that `color-mix` rejects, so 77 fills and
-borders across 31 GUI files had rendered transparent since the tokens were
-introduced; fixed on 2026-09-08 by making the tokens percentages. This is a
-global visual change (accent / warning button fills, tool callouts, badges
-gain their designed tint) that needs JC's desktop pass before release. See
-[foundations](./design/foundations.md) and the issue #27 devlog.
+Nothing user-facing is unreleased as of `v0.4.12` (2026-09-08). Pending
+outward follow-ups from that release: reply on community issues #26 and #27
+and PR #25 (copy is JC's), and ask the #27 commenter whether their project
+drawer was empty (their sidebar report is a separate question, triaged in the
+[issue #27 devlog](./devlog/2026-09-08-issue-27-message-search-locate.md)).
+Real WeChat end-to-end acceptance of the supervisor-side fix is still owed
+from a machine with a paired WeChat account. The items below are standing
+follow-ups.
 
-Palette full-text hits now locate the matched message (2026-09-08, community
-issue #27): opening a hit parks that message at the conversation's shared
-anchor line with a brief brand wash, keyed by the persisted message id.
-Archived-session search and in-session find were declined or deferred. See
-[the devlog](./devlog/2026-09-08-issue-27-message-search-locate.md).
-
-Settings -> Models UX from community issue #26 (2026-09-08): reasoning
-effort is a first-level field in the model editor (storage unchanged), the
-model list gains drag-and-drop reordering via dnd-kit next to the existing
-arrows, and the default radio's tooltip states that it moves the model to the
-top. Desktop acceptance pending on macOS and Windows. See
-[the devlog](./devlog/2026-09-08-issue-26-model-config-ux.md).
-
-The managed WeChat channel never replied from `v0.4.9` through `v0.4.11`:
-the upstream frontend defaults to forwarding into a detached `conductor.py`
-child that has no managed mykey loader. Fixed on 2026-09-08 in the
-supervisor (agent mode pinned, `/switch` refused); reported by community
-PR #25. The 13 supervisor tests pass; real WeChat end-to-end acceptance of
-the replacement fix remains pending. A hotfix release is planned once a few
-more fixes land. See
-[the devlog](./devlog/2026-09-08-wechat-conductor-mode-dead-path.md).
-
-Local file references and Markdown preview are implemented (2026-09-08):
-full local paths in messages gain file-manager actions; Markdown opens a
-session-scoped resizable read-only preview. JC reported Dev desktop acceptance
-passed on 2026-09-08. Verification and platform acceptance scope are
-tracked in [the implementation devlog](./devlog/2026-09-08-local-file-preview.md).
-This work is not released. The items below are standing follow-ups.
-
-Git worktree review is implemented (2026-09-08), with
-desktop acceptance pending. A same-day UX pass reworked both reading-panel
-views (shared header shell, Galley file list instead of a native select,
-unified notices, 880px split threshold); see
-[the polish devlog](./devlog/2026-09-08-reading-panel-polish.md). It reuses the reading panel for read-only changes
-against HEAD and separate untracked-file content, with explicit repository
-selection when no project directory is available. The Git panel belongs to
-the window and preserves its repository and selection across session/project
-switches. See
-[implementation and limits](./devlog/2026-09-08-git-worktree-review.md).
-
-The GA baseline is fully current as of `v0.4.11` (`efb3bc6` audited and
-shipped the same day); the next release audits upstream again per the
-standard trigger.
+The GA baseline is fully current as of `v0.4.12` (`efb3bc6`, audited
+2026-08-31, shipped since `v0.4.11`); the next release audits upstream again
+per the standard trigger. Upstream `7fa5fa4` (WeChat polling fix, 2026-08-30)
+is not in the baseline and is on that audit's list.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -384,10 +375,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.11 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.12 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `efb3bc6` (2026-08-31) on main; released builds ship `30b24ad` (`v0.4.10`) until the next release (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `efb3bc6` (2026-08-31); released builds ship it since `v0.4.11` (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -410,7 +401,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.4.11`. For the next release, bump every
+- Current package metadata uses `0.4.12`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
