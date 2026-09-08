@@ -188,6 +188,7 @@ export function Conversation({
               origin={item.turn.origin}
               createdAt={item.turn.createdAt}
               askUserReply={turnIndex !== undefined && replySet.has(turnIndex)}
+              messageId={item.turn.messageId}
             />
             {header && (
               <RunFoldHeader
@@ -465,7 +466,9 @@ function AgentTurnView({
       {answerText && isFinalTurn && (
         <>
           {!hideMarker && <StrongHr />}
-          <MessageAgent telemetry={turn.telemetry}>{answerText}</MessageAgent>
+          <MessageAgent telemetry={turn.telemetry} messageId={turn.messageId}>
+            {answerText}
+          </MessageAgent>
         </>
       )}
     </div>

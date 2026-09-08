@@ -291,6 +291,12 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
+Palette full-text hits now locate the matched message (2026-09-08, community
+issue #27): opening a hit parks that message at the conversation's shared
+anchor line with a brief brand wash, keyed by the persisted message id.
+Archived-session search and in-session find were declined or deferred. See
+[the devlog](./devlog/2026-09-08-issue-27-message-search-locate.md).
+
 Settings -> Models UX from community issue #26 (2026-09-08): reasoning
 effort is a first-level field in the model editor (storage unchanged), the
 model list gains drag-and-drop reordering via dnd-kit next to the existing

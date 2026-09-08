@@ -48,6 +48,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
       stepper.onUserRow(row.turn_index);
       const userTurn: UserTurn = {
         role: "user",
+        messageId: row.id,
         content: row.content,
         attachments: row.attachments,
         createdAt: row.created_at,
@@ -86,6 +87,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         summary: row.summary,
         telemetry: row.telemetry,
       });
+      turn.messageId = row.id;
       turns.push(turn);
     } else if (row.role === "system") {
       // The only `system` rows persisted to `messages` are Galley Goal

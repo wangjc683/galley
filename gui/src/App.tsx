@@ -84,6 +84,7 @@ function App() {
 
   const paletteOpen = useUiStore((s) => s.paletteOpen);
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen);
+  const requestLocate = useUiStore((s) => s.requestLocate);
 
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
@@ -701,6 +702,15 @@ function App() {
         onOpenSession={(id) => {
           setActiveProjectFilter(undefined);
           void activateSession(id);
+          setScreen("main");
+        }}
+        onOpenMessage={(sessionId, messageId) => {
+          // File the locate first: useStickyScroll's session-switch
+          // snap reads it to stand down, then consumes it once the
+          // restored turns are on screen.
+          requestLocate(sessionId, messageId);
+          setActiveProjectFilter(undefined);
+          void activateSession(sessionId);
           setScreen("main");
         }}
         onSwitchLLM={(idx) => {

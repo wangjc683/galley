@@ -45,6 +45,9 @@ export interface CommandPaletteProps {
   onNewChat?: () => void;
   onNewProject?: () => void;
   onOpenSession?: (id: string) => void;
+  /** Full-text hit: open the session and park that message at the
+   * anchor line. Falls back to onOpenSession when absent. */
+  onOpenMessage?: (sessionId: string, messageId: string) => void;
   onSwitchLLM?: (index: number) => void;
   onReRunHealthCheck?: () => void;
   onOpenSettings?: () => void;
@@ -176,6 +179,14 @@ export function CommandPalette(props: CommandPaletteProps) {
             search={search}
             sessions={props.sessions}
             messageHits={messageHits}
+            onOpenMessage={(sessionId, messageId) => {
+              if (props.onOpenMessage) {
+                props.onOpenMessage(sessionId, messageId);
+              } else {
+                props.onOpenSession?.(sessionId);
+              }
+              close();
+            }}
             onNewChat={() => {
               props.onNewChat?.();
               close();
@@ -238,6 +249,7 @@ function RootPage({
   onNewChat,
   onNewProject,
   onOpenSession,
+  onOpenMessage,
   onEnterSwitchLLM,
   llmCount,
   currentLLM,
@@ -250,6 +262,7 @@ function RootPage({
   search: string;
   sessions: Session[];
   messageHits: MessageSearchHit[];
+  onOpenMessage: (sessionId: string, messageId: string) => void;
   onNewChat: () => void;
   onNewProject: () => void;
   onOpenSession: (id: string) => void;
@@ -333,7 +346,7 @@ function RootPage({
               className="cmdk-message-hit"
               forceMount
               value={`msg-hit ${h.messageId} ${search}`}
-              onSelect={() => onOpenSession(h.sessionId)}
+              onSelect={() => onOpenMessage(h.sessionId, h.messageId)}
             >
               <MessageHitRow hit={h} />
             </Command.Item>

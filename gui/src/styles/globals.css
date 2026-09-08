@@ -911,6 +911,32 @@ code {
   }
 }
 
+/* Located message (palette full-text hit → scroll here). A brand wash
+   that decays over 1.4s — one-shot acknowledgement in the same family
+   as runtime-mode-highlight; coupled to LOCATE_FLASH_MS in
+   useStickyScroll.ts (change both together or neither). Background
+   only: no outline / lift, the block must read as "here", not as a
+   new element. */
+@keyframes message-locate-flash {
+  0% {
+    background-color: color-mix(in srgb, var(--color-brand) 22%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-brand) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+.message-locate-flash {
+  border-radius: var(--radius-sm);
+  animation: message-locate-flash 1.4s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .message-locate-flash {
+    animation: none;
+  }
+}
+
 /* Pending approval is actionable, so it gets a small attention pulse.
    Keep the motion on the icon instead of the dock or button: the user
    should notice the wait, not feel nagged by a flashing CTA. */

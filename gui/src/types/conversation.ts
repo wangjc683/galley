@@ -136,6 +136,12 @@ export interface PendingImageAttachment {
 export interface UserTurn {
   role: "user";
   content: string;
+  /**
+   * `messages.id` of the persisted row (`msg_<session>_<turn>_user`).
+   * The DOM anchor the palette's "locate this hit" scroll targets.
+   * Absent on a not-yet-persisted optimistic turn.
+   */
+  messageId?: string;
   attachments?: MessageAttachment[];
   /** Audit origin for the user message. When `origin.via ===
    * "supervisor"`, MessageUser renders a small provenance icon (B4 M7).
@@ -172,6 +178,9 @@ export interface SystemTurn {
 
 export interface AgentTurn {
   role: "agent";
+  /** `messages.id` of the persisted row (`msg_<session>_<turn>_assistant`);
+   * see UserTurn.messageId. */
+  messageId?: string;
   /** Optional `<thinking>...</thinking>` block from the LLM — first-
    * person inner monologue. Rendered in the TurnMarker DetailPanel
    * alongside `preamble`. */

@@ -144,6 +144,7 @@ describe("rowsToTurns", () => {
     expect(turns).toEqual([
       {
         role: "agent",
+        messageId: "msg_3_1_assistant",
         thinking: undefined,
         preamble: undefined,
         tools: [],
@@ -218,6 +219,7 @@ describe("rowsToTurns", () => {
     expect(turns).toEqual([
       {
         role: "agent",
+        messageId: "msg_1_1_assistant",
         thinking: undefined,
         preamble: undefined,
         tools: [
@@ -240,6 +242,19 @@ describe("rowsToTurns", () => {
     ]);
     // The raw args (incl. GA tags) survive intact here; AnsweredAskUser
     // strips the tags at render time so the displayed text is clean.
+  });
+  it("carries the persisted row id as messageId on user and agent turns", () => {
+    const turns = rowsToTurns([
+      makeMessageRow({ id: "msg_s-test_7_user", role: "user", turn_index: 7 }),
+      makeMessageRow({
+        id: "msg_s-test_7_assistant",
+        role: "assistant",
+        turn_index: 7,
+        final_answer: "done",
+      }),
+    ]);
+    expect((turns[0] as UserTurn).messageId).toBe("msg_s-test_7_user");
+    expect((turns[1] as AgentTurn).messageId).toBe("msg_s-test_7_assistant");
   });
 });
 

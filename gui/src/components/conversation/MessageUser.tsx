@@ -204,6 +204,9 @@ export interface MessageUserProps {
    * submit-snap selector matches both roles so replying still snaps.
    */
   askUserReply?: boolean;
+  /** Persisted `messages.id`; rendered as `data-message-id` on the
+   * anchor block so a palette full-text hit can scroll to it. */
+  messageId?: string;
 }
 
 export const MessageUser = memo(function MessageUser({
@@ -212,6 +215,7 @@ export const MessageUser = memo(function MessageUser({
   origin,
   createdAt,
   askUserReply = false,
+  messageId,
 }: MessageUserProps) {
   const copy = useCopy();
   const lineCount = useMemo(() => content.split("\n").length, [content]);
@@ -311,6 +315,7 @@ export const MessageUser = memo(function MessageUser({
       )}
       <div
         data-role={askUserReply ? "user-msg-reply" : "user-msg"}
+        data-message-id={messageId}
         className={cn(
           "relative w-fit max-w-full py-0.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",

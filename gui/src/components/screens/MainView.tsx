@@ -321,6 +321,7 @@ function MainViewContent({
     turnsLength: turns.length,
     pendingApprovalsLength: pendingApprovals.length,
     pendingAskUser,
+    restoring,
   });
 
   // Unread-final-answer tracking for the scroll-to-bottom button's

@@ -122,6 +122,16 @@
 - **待定**：Codex OAuth 后端是否透传该字段，做之前查 `_stream_openai` 的 codex 分支。
 - **关联**：[issue #26 model config UX](./2026-09-08-issue-26-model-config-ux.md) · `gui/src/components/screens/settings/models/AdvancedModelOptions.tsx`
 
+## 会话内查找（Ctrl+F）
+
+- **状态**：暂存（2026-09-08 JC 裁决先不做）
+- **提出**：2026-09-08，issue #27「如果能顺带支持当前会话内查找，长会话里定位更方便」。
+- **启动信号**：有用户在跨会话定位落地后仍抱怨长会话内找不到；或 JC 自己在几千字回答里回找时觉得 ⌥↑↓ 不够。
+- **背景**：Tauri 的 webview 不带浏览器那条原生查找栏（WKWebView / WebView2 都没有），Ctrl+F 现在是空操作。跨会话的 FTS 命中已经能定位到消息（见 issue #27 devlog），会话内查找是同一根锚线上的另一种入口。
+- **方案**：Composer 上方或对话区右上角一条紧凑查找条，输入即在当前 `turns` 的文本里做子串匹配（不走 SQLite，数据都在内存），命中计数 + 上一个/下一个，定位复用 `USER_MSG_ANCHOR_TOP_PX` 锚线与 `message-locate-flash` 洗染；Esc 关闭。Markdown 渲染后的 DOM 高亮（`<mark>`）是第二步，第一步先做块级定位。
+- **待定**：快捷键归属——Ctrl/⌘F 在 Composer 聚焦时是否让给文本框；rail 的 question index 与查找条是否会在右缘打架。
+- **关联**：[issue #27 devlog](./2026-09-08-issue-27-message-search-locate.md) · `gui/src/hooks/useStickyScroll.ts` 的 locate 效果 · `docs/design/conversation.md` rail 一节
+
 ## `shadow-*` utility 在 dark 下静默使用 light 阴影值
 
 - **状态**：暂存（2026-08-21 落选中行抬升时撞见，JC 尚未裁决是否开工）

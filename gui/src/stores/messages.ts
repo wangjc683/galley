@@ -603,6 +603,9 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const offset =
       typeof turnIndex === "number" ? turnIndex - 1 : currentTurnCount;
     const userTurn: UserTurn = { role: "user", content: text };
+    if (typeof turnIndex === "number") {
+      userTurn.messageId = `msg_${sid}_${turnIndex}_user`;
+    }
     if (origin) userTurn.origin = origin;
     if (createdAt) userTurn.createdAt = createdAt;
     if (goalId) userTurn.goalId = goalId;

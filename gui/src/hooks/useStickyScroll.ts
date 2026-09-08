@@ -10,7 +10,15 @@ import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
   USER_MSG_ANCHOR_TOP_PX,
 } from "@/lib/conversation-anchor";
+import { useUiStore } from "@/stores/ui";
 import type { PendingApproval, PendingAskUser } from "@/types/conversation";
+
+/** How long the located message keeps its wash (matches the CSS
+ * keyframes in globals.css — change both together or neither). */
+const LOCATE_FLASH_MS = 1400;
+/** Frames to keep looking for the anchor node after turns land —
+ * covers Shiki / image reflow committing the node a beat later. */
+const LOCATE_RETRY_FRAMES = 30;
 
 /**
  * Owns the MainView conversation's scroll behavior — one cohesive
@@ -38,10 +46,15 @@ export function useStickyScroll({
   turnsLength,
   pendingApprovalsLength,
   pendingAskUser,
+  restoring = false,
 }: {
   /** Active session id. Identity change re-snaps the new conversation
    * to the bottom. Undefined during pre-session screens. */
   activeSessionId?: string;
+  /** True while the session's turns are still loading from SQLite —
+   * the locate effect waits for it to clear before hunting for the
+   * anchor node. */
+  restoring?: boolean;
   /** Counter the submit path bumps; drives the stick-to-user-message
    * scroll without also firing on every turn_end. */
   userSubmitTick: number;
@@ -250,6 +263,12 @@ export function useStickyScroll({
     if (activeSessionId === undefined) return;
     const el = scrollContainerRef.current;
     if (!el) return;
+    // A pending locate for this session owns the landing position —
+    // snapping to the bottom here would race the locate scroll (and
+    // the ResizeObserver window would keep yanking it back).
+    if (useUiStore.getState().locateRequest?.sessionId === activeSessionId) {
+      return;
+    }
 
     const rafId = requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
@@ -382,6 +401,58 @@ export function useStickyScroll({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // Locate-a-message (palette full-text hit → "open session at this
+  // message"). The request lives in the ui store so the palette can
+  // file it before the session is even active; this effect consumes
+  // it once the target session's turns are on screen. Same anchor
+  // geometry as every other "park a message at the top" path, plus a
+  // transient wash so the eye lands on the right block.
+  const locateRequest = useUiStore((s) => s.locateRequest);
+  const clearLocate = useUiStore((s) => s.clearLocate);
+  useEffect(() => {
+    if (!locateRequest) return;
+    if (locateRequest.sessionId !== activeSessionId) return;
+    if (restoring || turnsLength === 0) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    let frames = 0;
+    let rafId: number | null = null;
+    let flashTimer: number | null = null;
+    const selector = `[data-message-id="${CSS.escape(locateRequest.messageId)}"]`;
+    const attempt = () => {
+      const target = container.querySelector<HTMLElement>(selector);
+      if (!target) {
+        if (frames++ < LOCATE_RETRY_FRAMES) {
+          rafId = requestAnimationFrame(attempt);
+        } else {
+          // Node never appeared (hidden by a fold, or an id the
+          // restore didn't produce) — give up quietly and let the
+          // session render where it is.
+          clearLocate();
+        }
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const delta =
+        target.getBoundingClientRect().top -
+        containerRect.top -
+        USER_MSG_ANCHOR_TOP_PX;
+      container.scrollBy({ top: delta, behavior: "smooth" });
+      setAtBottom(false);
+      target.classList.add("message-locate-flash");
+      flashTimer = window.setTimeout(() => {
+        target.classList.remove("message-locate-flash");
+      }, LOCATE_FLASH_MS);
+      clearLocate();
+    };
+    rafId = requestAnimationFrame(attempt);
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (flashTimer !== null) window.clearTimeout(flashTimer);
+    };
+  }, [locateRequest, activeSessionId, restoring, turnsLength, clearLocate]);
 
   // Callback-ref factory for the in-flight approval cards. The hook
   // owns the id → node map (onClickAdvanceApproval reads it); the

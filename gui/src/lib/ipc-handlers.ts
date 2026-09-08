@@ -248,6 +248,9 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // reuses the same turn's derived fields even when the turn is
       // `visibility: internal` (goal master-plan traffic).
       const turn = turnFromTurnEnd(event);
+      // Same primary key Core mints for the row below — lets a palette
+      // hit on this reply locate the live node without a restore.
+      turn.messageId = `msg_${event.sessionId}_${absoluteTurnIndex}_assistant`;
       if (visibility === "visible") {
         messages.appendAgentTurn(event.sessionId, turn);
       }

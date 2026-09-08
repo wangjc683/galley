@@ -21,6 +21,20 @@ interface UiState {
    * on app exit anyway.
    */
   pendingPetMigrationTo: string | null;
+
+  /**
+   * "Open this session and park this message at the anchor line" —
+   * set by a palette full-text hit, consumed by useStickyScroll once
+   * the session's turns are on screen. `nonce` lets the same message
+   * be re-requested. Pure UI coordination, never persisted.
+   */
+  locateRequest: LocateRequest | null;
+}
+
+export interface LocateRequest {
+  sessionId: string;
+  messageId: string;
+  nonce: number;
 }
 
 interface UiActions {
@@ -34,6 +48,9 @@ interface UiActions {
   dismissToast: (id: string) => void;
 
   setPendingPetMigration: (sessionId: string | null) => void;
+
+  requestLocate: (sessionId: string, messageId: string) => void;
+  clearLocate: () => void;
 }
 
 export type UiStore = UiState & UiActions;
@@ -44,6 +61,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   settingsOpen: false,
   toasts: [],
   pendingPetMigrationTo: null,
+  locateRequest: null,
 
   setScreen: (s) => set({ screen: s }),
   setPaletteOpen: (o) => set({ paletteOpen: o }),
@@ -63,4 +81,8 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   setPendingPetMigration: (sessionId) =>
     set({ pendingPetMigrationTo: sessionId }),
+
+  requestLocate: (sessionId, messageId) =>
+    set({ locateRequest: { sessionId, messageId, nonce: Date.now() } }),
+  clearLocate: () => set({ locateRequest: null }),
 }));
