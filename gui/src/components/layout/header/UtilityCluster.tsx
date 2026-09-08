@@ -10,6 +10,7 @@ import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import { TopBarIconButton } from "../TopBarIconButton";
 import { ConversationFontSizeMenu } from "./ConversationFontSizeMenu";
 import { WidthToggleButton } from "./WidthToggleButton";
+import { ChangesToggleButton } from "./ChangesToggleButton";
 
 /**
  * Right half of the MainHeader right group: global view tools that
@@ -18,6 +19,8 @@ import { WidthToggleButton } from "./WidthToggleButton";
  * state, so the cluster and its ARIA landmark render unconditionally.
  */
 export function TopBarUtilityCluster({
+  changesOpen = false,
+  onToggleChanges,
   conversationWidth,
   onToggleConversationWidth,
   conversationFontSize,
@@ -27,6 +30,8 @@ export function TopBarUtilityCluster({
   onChangeThemePreference,
   onOpenSettings,
 }: {
+  changesOpen?: boolean;
+  onToggleChanges?: (source: HTMLElement) => void;
   conversationWidth: "compact" | "wide";
   onToggleConversationWidth?: () => void;
   conversationFontSize: ConversationFontSize;
@@ -48,6 +53,9 @@ export function TopBarUtilityCluster({
           its own search affordance, and ⌘K opens the palette from
           anywhere. Two click affordances for the same thing was
           chrome clutter without payoff. */}
+      {onToggleChanges && (
+        <ChangesToggleButton open={changesOpen} onToggle={onToggleChanges} />
+      )}
       <WidthToggleButton
         mode={conversationWidth}
         onToggle={onToggleConversationWidth}

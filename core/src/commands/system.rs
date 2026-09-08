@@ -1,6 +1,14 @@
 use super::*;
 
 #[tauri::command]
+pub(crate) async fn review_git(
+    galley: State<'_, SqliteGalley>,
+    request: crate::git_review::GitReviewRequest,
+) -> std::result::Result<crate::git_review::GitReviewResult, String> {
+    galley.review_git(request).await.map_err(stringify_error)
+}
+
+#[tauri::command]
 pub(crate) async fn access_local_file(
     galley: State<'_, SqliteGalley>,
     request: crate::local_file::LocalFileRequest,

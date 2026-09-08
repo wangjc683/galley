@@ -1,6 +1,62 @@
 import type { AppCopy } from "@/i18n/types";
 
 export const enCopy: AppCopy = {
+  gitReview: {
+    openChanges: "View worktree changes",
+    closeChanges: "Close worktree changes",
+    title: "Worktree changes",
+    repository: "Git repository",
+    chooseRepository: "Choose repository",
+    changeRepository: "Switch repository",
+    chooseHint: "Choose a local Git repository to review uncommitted changes.",
+    fromFile: "Review changes in this repository",
+    resizePanel: "Resize reading panel",
+    baseline: (head: string) => `Compared with latest commit · ${head}`,
+    unborn: "No commits yet · tracked files shown as additions",
+    files: (tracked: number, untracked: number) =>
+      `${tracked} tracked · ${untracked} untracked files`,
+    tracked: "Tracked file changes",
+    untracked: "Untracked files",
+    untrackedHint: "Untracked files exclude Git-ignored entries, hidden directories, and system data directories.",
+    selectFile: "Select changed file",
+    status: {
+      added: "Added",
+      modified: "Modified",
+      deleted: "Deleted",
+      type_changed: "Type changed",
+      conflicted: "Conflict",
+      untracked: "Untracked",
+    },
+    untrackedContent: "Untracked file · current contents",
+    netChanges: "Combined staged and unstaged changes",
+    unified: "Unified view",
+    split: "Split view",
+    previous: "Previous change",
+    next: "Next change",
+    contextHint: "Changes and surrounding context only",
+    loading: "Reading changes…",
+    clean: "No uncommitted changes or listed untracked files in this repository.",
+    notRepository:
+      "This path is outside a Git worktree. Choose another repository.",
+    unavailable: "Git was not found. Install Git and try again.",
+    timeout: "Reading timed out. Refresh later or choose a smaller repository.",
+    tooLarge:
+      "The changes or file exceed the preview limit. Use an external tool to review them.",
+    encoding: "This content is not previewable UTF-8 text.",
+    changed: "The repository state changed. Refresh to review it again.",
+    failed:
+      "Unable to read the repository. Check its path and permissions, then retry.",
+    binary: "Text diffs are unavailable for binary files.",
+    submodule:
+      "This submodule changed. Choose its directory to review changes inside it.",
+    conflicted:
+      "This file has unresolved merge conflicts. Use a merge tool to review them.",
+    unsupported: "Preview is unavailable for this file type.",
+    unchanged: "This file no longer has a visible diff. Refresh the file list.",
+    metadataOnly: "Only file properties changed; the contents are unchanged.",
+    renderFailed:
+      "Unable to display this diff. Use an external tool to review it.",
+  },
   localFiles: {
     resizePreview: "Resize Markdown preview",
     resizeHint: "Drag to resize; double-click to restore the default split",

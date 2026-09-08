@@ -17,6 +17,8 @@ import { updateIndicatorVisible } from "./header/update-indicator-status";
 import { TopBarUtilityCluster } from "./header/UtilityCluster";
 
 export interface MainHeaderProps {
+  onToggleChanges?: (source: HTMLElement) => void;
+  changesOpen?: boolean;
   /**
    * Current session title to display in the center-left.
    * Empty / undefined = no session active (Empty State); we render an
@@ -137,6 +139,8 @@ export interface MainHeaderProps {
  * the OS for window drag instead of focusing the input).
  */
 export function MainHeader({
+  onToggleChanges,
+  changesOpen = false,
   sessionTitle,
   onOpenSettings,
   browserControlStatus = null,
@@ -269,6 +273,8 @@ export function MainHeader({
           <div aria-hidden="true" className="h-5 w-px bg-line/80" />
         )}
         <TopBarUtilityCluster
+          changesOpen={changesOpen}
+          onToggleChanges={onToggleChanges}
           conversationWidth={conversationWidth}
           onToggleConversationWidth={onToggleConversationWidth}
           conversationFontSize={conversationFontSize}

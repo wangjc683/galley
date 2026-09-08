@@ -28,6 +28,7 @@ mod envelope;
 mod error_tag;
 
 pub use commands::{
+    GitReviewRequest,
     LlmSetArgs, LocalFileRequest, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs,
     SessionBtwArgs, SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
     SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,

@@ -15,10 +15,14 @@ import {
 } from "react-resizable-panels";
 import {
   useCallback,
+  useMemo,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
+  lazy,
+  Suspense,
 } from "react";
 import { IconButton } from "@/components/ui/button";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
@@ -30,6 +34,7 @@ import {
 } from "@/lib/conversation-font-size";
 import { useCopy } from "@/lib/i18n";
 import { fileName, isMarkdownPath } from "@/lib/local-file-path";
+import { GitReviewContext } from "@/lib/git-review";
 import {
   LocalFilesContext,
   accessLocalFile,
@@ -39,10 +44,17 @@ import {
 } from "@/lib/local-files";
 
 interface Preview {
+  sessionId?: string;
   path: string;
   content: string | null;
   error: unknown | null;
 }
+
+const GitReviewPane = lazy(() =>
+  import("./diff/GitReviewPane").then((module) => ({
+    default: module.GitReviewPane,
+  })),
+);
 
 const CONVERSATION_PANEL = "file-preview-conversation";
 const DOCUMENT_PANEL = "file-preview-document";
@@ -53,18 +65,49 @@ const DEFAULT_PREVIEW_LAYOUT = {
   [DOCUMENT_PANEL]: 46,
 };
 
-/** Mounted per session. Only transient reading state lives here. */
+/** Window-owned Git review; Markdown reads remain scoped to their session. */
 export function LocalFileWorkspace({
   children,
   fontSize = "standard",
+  header: mainHeader,
+  repositoryHint,
+  sessionId,
 }: {
   children: ReactNode;
   fontSize?: ConversationFontSize;
+  header?: ReactNode;
+  repositoryHint?: string;
+  sessionId?: string;
 }) {
   const copy = useCopy();
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [documentPreview, setPreview] = useState<Preview | null>(null);
+  const [documentSession, setDocumentSession] = useState(sessionId);
+  if (documentSession !== sessionId) {
+    setDocumentSession(sessionId);
+    setPreview(null);
+  }
+  const preview =
+    documentPreview?.sessionId === sessionId ? documentPreview : null;
+  const [review, setReview] = useState<{
+    path?: string;
+    id: number;
+    selectedPath?: string;
+    split: boolean;
+  } | null>(null);
+  const repository = useRef<string | undefined>(undefined);
+  const rememberRepository = useCallback((root: string) => {
+    repository.current = root;
+    setReview((current) => (current ? { ...current, path: root } : null));
+  }, []);
+  const rememberFile = useCallback((selectedPath: string) => {
+    setReview((current) => (current ? { ...current, selectedPath } : null));
+  }, []);
+  const changeDiffLayout = useCallback((split: boolean) => {
+    setReview((current) => (current ? { ...current, split } : null));
+  }, []);
   const [wide, setWide] = useState(false);
-  const split = wide && preview !== null;
+  const panelOpen = preview !== null || review !== null;
+  const split = wide && panelOpen;
   const groupRef = useGroupRef();
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: "galley-file-preview-layout-v1",
@@ -78,6 +121,13 @@ export function LocalFileWorkspace({
   const currentPath = useRef<string | null>(null);
   const generation = useRef(0);
   const scroll = useRef(0);
+
+  useLayoutEffect(() => {
+    // Session changes invalidate document reads without closing/reloading Git.
+    generation.current += 1;
+    currentPath.current = null;
+    scroll.current = 0;
+  }, [sessionId]);
 
   useEffect(() => {
     const element = container.current;
@@ -95,20 +145,54 @@ export function LocalFileWorkspace({
     [],
   );
   const previewPath = preview?.path;
+  const reviewId = review?.id;
   useEffect(() => {
-    if (wide && previewPath) pane.current?.focus({ preventScroll: true });
-  }, [wide, previewPath]);
+    if (wide && (previewPath || reviewId))
+      pane.current?.focus({ preventScroll: true });
+  }, [wide, previewPath, reviewId]);
 
   const close = useCallback(() => {
-    generation.current += 1;
+    const ticket = ++generation.current;
     currentPath.current = null;
     setPreview(null);
+    setReview(null);
     const source = origin.current;
     requestAnimationFrame(() => {
-      if (currentPath.current === null && source?.isConnected)
+      if (generation.current === ticket && source?.isConnected)
         source.focus({ preventScroll: true });
     });
   }, []);
+
+  const openReview = useCallback(
+    (path?: string, source?: HTMLElement) => {
+      generation.current += 1;
+      currentPath.current = null;
+      if (source && !pane.current?.contains(source)) origin.current = source;
+      setPreview(null);
+      setReview({
+        path: path ?? repository.current ?? repositoryHint,
+        id: generation.current,
+        split: false,
+      });
+    },
+    [repositoryHint],
+  );
+
+  const reviewOpen = review !== null;
+  const reviewControl = useMemo(
+    () => ({
+      isOpen: reviewOpen,
+      toggle: (source: HTMLElement) => {
+        if (reviewOpen) {
+          origin.current = source;
+          close();
+        } else {
+          openReview(undefined, source);
+        }
+      },
+    }),
+    [reviewOpen, close, openReview],
+  );
 
   const load = useCallback(
     async (path: string, source?: HTMLElement, refresh = false) => {
@@ -131,8 +215,9 @@ export function LocalFileWorkspace({
       const ticket = ++generation.current;
       if (source && !pane.current?.contains(source)) origin.current = source;
       currentPath.current = path;
+      setReview(null);
       if (!refresh) scroll.current = 0;
-      setPreview({ path, content: null, error: null });
+      setPreview({ sessionId, path, content: null, error: null });
       try {
         const file = await accessLocalFile(path, "inspect");
         if (ticket !== generation.current) return;
@@ -144,16 +229,17 @@ export function LocalFileWorkspace({
         const document = await accessLocalFile(file.path, "read");
         if (ticket !== generation.current) return;
         setPreview({
+          sessionId,
           path: document.path,
           content: document.content,
           error: null,
         });
       } catch (error) {
         if (ticket !== generation.current) return;
-        setPreview({ path, content: null, error });
+        setPreview({ sessionId, path, content: null, error });
       }
     },
-    [close, copy],
+    [close, copy, sessionId],
   );
   const activate = useCallback(
     (path: string, source: HTMLElement) => {
@@ -203,6 +289,12 @@ export function LocalFileWorkspace({
           >
             <DropdownMenu.Item
               className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
+              onSelect={() => openReview(preview.path)}
+            >
+              {copy.gitReview.fromFile}
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
               onSelect={() => void fileOperation(preview.path, "copy", copy)}
             >
               {copy.localFiles.copyPath}
@@ -218,130 +310,169 @@ export function LocalFileWorkspace({
       </DropdownMenu.Root>
     </>
   );
-  const body = preview && (
-    <div
-      ref={(element) => {
-        if (element) element.scrollTop = scroll.current;
-      }}
-      onScroll={(event) => {
-        scroll.current = event.currentTarget.scrollTop;
-      }}
-      className="min-h-0 flex-1 overflow-auto overscroll-contain px-6 py-5"
-      style={conversationTypographyStyle(fontSize)}
-      aria-busy={preview.content === null && preview.error === null}
+  const body = review ? (
+    <Suspense
+      fallback={
+        <p role="status" className="p-4 text-sm text-ink-muted">
+          {copy.gitReview.loading}
+        </p>
+      }
     >
-      <p className="mb-5 font-sans text-xs text-ink-muted">
-        {copy.localFiles.diskContent}
-      </p>
-      {preview.error !== null ? (
-        <p role="alert" className="text-sm text-ink-soft">
-          {localFileError(preview.error, copy)}
+      <GitReviewPane
+        key={review.id}
+        initialPath={review.path}
+        onRepository={rememberRepository}
+        initialSelectedPath={review.selectedPath}
+        onSelectFile={rememberFile}
+        split={review.split}
+        onSplitChange={changeDiffLayout}
+      />
+    </Suspense>
+  ) : (
+    preview && (
+      <div
+        ref={(element) => {
+          if (element) element.scrollTop = scroll.current;
+        }}
+        onScroll={(event) => {
+          scroll.current = event.currentTarget.scrollTop;
+        }}
+        className="min-h-0 flex-1 overflow-auto overscroll-contain px-6 py-5"
+        style={conversationTypographyStyle(fontSize)}
+        aria-busy={preview.content === null && preview.error === null}
+      >
+        <p className="mb-5 font-sans text-xs text-ink-muted">
+          {copy.localFiles.diskContent}
         </p>
-      ) : preview.content === null ? (
-        <p role="status" className="text-sm text-ink-muted">
-          {copy.localFiles.loading}
-        </p>
-      ) : preview.content === "" ? (
-        <p className="text-sm text-ink-muted">{copy.localFiles.empty}</p>
-      ) : (
-        <MarkdownView
-          source={preview.content}
-          variant="agent"
-          documentPath={preview.path}
-          className="document-preview-content"
-        />
-      )}
-    </div>
+        {preview.error !== null ? (
+          <p role="alert" className="text-sm text-ink-soft">
+            {localFileError(preview.error, copy)}
+          </p>
+        ) : preview.content === null ? (
+          <p role="status" className="text-sm text-ink-muted">
+            {copy.localFiles.loading}
+          </p>
+        ) : preview.content === "" ? (
+          <p className="text-sm text-ink-muted">{copy.localFiles.empty}</p>
+        ) : (
+          <MarkdownView
+            source={preview.content}
+            variant="agent"
+            documentPath={preview.path}
+            className="document-preview-content"
+          />
+        )}
+      </div>
+    )
   );
 
   return (
     <LocalFilesContext.Provider value={activate}>
-      <div
-        ref={container}
-        className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
-      >
-        <Group
-          id="galley-file-preview"
-          groupRef={groupRef}
-          orientation="horizontal"
-          defaultLayout={defaultLayout}
-          onLayoutChanged={onLayoutChanged}
-          className="min-h-0 min-w-0 flex-1"
+      <GitReviewContext.Provider value={reviewControl}>
+        {mainHeader}
+        <div
+          ref={container}
+          className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
         >
-          <Panel
-            id={CONVERSATION_PANEL}
-            defaultSize={split ? "54%" : "100%"}
-            minSize={split ? "480px" : 0}
+          <Group
+            id="galley-file-preview"
+            groupRef={groupRef}
+            orientation="horizontal"
+            defaultLayout={defaultLayout}
+            onLayoutChanged={onLayoutChanged}
+            className="min-h-0 min-w-0 flex-1"
           >
-            <div className="flex h-full min-h-0 min-w-0 flex-col">
-              {children}
-            </div>
-          </Panel>
-          {split && (
-            <PreviewResizeSeparator
-              onReset={() => {
-                groupRef.current?.setLayout(DEFAULT_PREVIEW_LAYOUT);
-              }}
-            />
-          )}
-          {preview &&
-            (wide ? (
-              <Panel id={DOCUMENT_PANEL} defaultSize="46%" minSize="420px">
-                <div
-                  ref={pane}
-                  tabIndex={-1}
-                  role="region"
-                  aria-label={copy.localFiles.preview}
-                  className="flex h-full min-w-0 flex-col bg-app outline-none"
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape" && !event.defaultPrevented) {
-                      event.stopPropagation();
-                      close();
-                    }
-                  }}
-                >
-                  <div className="flex items-start gap-1 border-b border-line p-4">
-                    {header}
-                    <IconButton
-                      ariaLabel={copy.common.close}
-                      tooltip={false}
-                      onClick={close}
-                    >
-                      <X size={14} weight="thin" />
-                    </IconButton>
-                  </div>
-                  {body}
-                </div>
-              </Panel>
-            ) : (
-              <Dialog.Root
-                open
-                onOpenChange={(open) => {
-                  if (!open) close();
+            <Panel
+              id={CONVERSATION_PANEL}
+              defaultSize={split ? "54%" : "100%"}
+              minSize={split ? "480px" : 0}
+            >
+              <div className="flex h-full min-h-0 min-w-0 flex-col">
+                {children}
+              </div>
+            </Panel>
+            {split && (
+              <PreviewResizeSeparator
+                onReset={() => {
+                  groupRef.current?.setLayout(DEFAULT_PREVIEW_LAYOUT);
                 }}
-              >
-                <Dialog.Portal>
-                  <Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
-                  <Dialog.Content
+              />
+            )}
+            {panelOpen &&
+              (wide ? (
+                <Panel id={DOCUMENT_PANEL} defaultSize="46%" minSize="420px">
+                  <div
                     ref={pane}
-                    className="fixed left-1/2 top-1/2 z-50 flex h-[82vh] max-h-[680px] w-[calc(100vw-64px)] max-w-[920px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-app shadow-elevated outline-none"
-                    onCloseAutoFocus={(event) => event.preventDefault()}
-                    aria-describedby={undefined}
+                    tabIndex={-1}
+                    role="region"
+                    aria-label={
+                      review ? copy.gitReview.title : copy.localFiles.preview
+                    }
+                    className="flex h-full min-w-0 flex-col bg-app outline-none"
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && !event.defaultPrevented) {
+                        event.stopPropagation();
+                        close();
+                      }
+                    }}
                   >
-                    <Dialog.Title className="sr-only">
-                      {copy.localFiles.preview}: {fileName(preview.path)}
-                    </Dialog.Title>
                     <div className="flex items-start gap-1 border-b border-line p-4">
-                      {header}
-                      <DialogCloseButton />
+                      {review ? (
+                        <span className="flex-1 text-sm font-medium text-ink">
+                          {copy.gitReview.title}
+                        </span>
+                      ) : (
+                        header
+                      )}
+                      <IconButton
+                        ariaLabel={copy.common.close}
+                        tooltip={false}
+                        onClick={close}
+                      >
+                        <X size={14} weight="thin" />
+                      </IconButton>
                     </div>
                     {body}
-                  </Dialog.Content>
-                </Dialog.Portal>
-              </Dialog.Root>
-            ))}
-        </Group>
-      </div>
+                  </div>
+                </Panel>
+              ) : (
+                <Dialog.Root
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) close();
+                  }}
+                >
+                  <Dialog.Portal>
+                    <Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
+                    <Dialog.Content
+                      ref={pane}
+                      className="fixed left-1/2 top-1/2 z-50 flex h-[82vh] max-h-[680px] w-[calc(100vw-64px)] max-w-[920px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-app shadow-elevated outline-none"
+                      onCloseAutoFocus={(event) => event.preventDefault()}
+                      aria-describedby={undefined}
+                    >
+                      <Dialog.Title className="sr-only">
+                        {review
+                          ? copy.gitReview.title
+                          : `${copy.localFiles.preview}: ${fileName(preview!.path)}`}
+                      </Dialog.Title>
+                      <div className="flex items-start gap-1 border-b border-line p-4">
+                        {review ? (
+                          <span className="flex-1 text-sm font-medium text-ink">
+                            {copy.gitReview.title}
+                          </span>
+                        ) : (
+                          header
+                        )}
+                        <DialogCloseButton />
+                      </div>
+                      {body}
+                    </Dialog.Content>
+                  </Dialog.Portal>
+                </Dialog.Root>
+              ))}
+          </Group>
+        </div>
+      </GitReviewContext.Provider>
     </LocalFilesContext.Provider>
   );
 }
@@ -351,7 +482,7 @@ function PreviewResizeSeparator({ onReset }: { onReset: () => void }) {
   const [pointerOffsetY, setPointerOffsetY] = useState(0);
   return (
     <Separator
-      aria-label={copy.localFiles.resizePreview}
+      aria-label={copy.gitReview.resizePanel}
       disableDoubleClick
       onDoubleClick={onReset}
       className="group relative w-1.5 shrink-0 cursor-col-resize outline-none"

@@ -128,6 +128,14 @@ Local-file presentation proof (2026-09-08):
 compares direct API and wire results. Neither transport scans user directories,
 persists document content, or starts a runner for this feature.
 
+Git-review proof (2026-09-08): `GalleyApi::review_git` delegates to
+[`git_review::review`](../core/src/git_review.rs). Both `commands/system.rs`
+and `socket_listener/mod.rs` thin-wrap it; `git_review_uses_shared_api_and_existing_error_categories`
+in `socket_write_handlers_test.rs` verifies transport parity. Module tests use
+temporary repositories to cover combined staged/unstaged changes, index
+preservation, unborn branches, worktrees, path literals, stale HEAD, conflicts,
+submodules, untracked symlinks, size limits, and disabled external filters.
+
 > v0.2 起，业务逻辑权威全部在 Rust 端 Galley Core：SQLite 写 / Bridge subprocess ownership / Session 生命周期 / 命令调度。
 > 前端（GUI / CLI / 未来扩展）：stateless presenter，订阅 event + invoke 命令。
 

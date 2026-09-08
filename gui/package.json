@@ -37,6 +37,7 @@
     "cmdk": "^1.1.1",
     "diff": "^9.0.0",
     "react": "^19.1.0",
+    "react-diff-view": "^3.3.3",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.11.0",

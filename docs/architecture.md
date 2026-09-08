@@ -53,6 +53,13 @@ OS file manager/default Markdown application. Both Tauri `access_local_file`
 and socket `local_file.access` call `GalleyApi::access_local_file`. This seam
 does not persist file contents, change session state, or touch the runner.
 
+Git worktree review shares the same reading panel. `git_review` in Rust owns
+repository discovery, bounded read-only Git subprocesses, and HEAD validation.
+Tauri `review_git` and socket `git.review` share `GalleyApi::review_git`.
+The GUI lazily loads `react-diff-view` for presentation and keeps only transient
+repository/file/layout selection. Git data is not stored in the database and
+is never claimed to be attributable to the active session.
+
 ### CLI
 
 The CLI lives in `cli/` and exposes the `galley` command. Agents use it to list

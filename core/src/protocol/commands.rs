@@ -11,6 +11,7 @@ use crate::api::{MessageBrief, RuntimeKind, SessionBrief};
 use serde::{Deserialize, Serialize};
 
 pub use crate::local_file::LocalFileRequest;
+pub use crate::git_review::GitReviewRequest;
 
 /// Binds a command's wire name to its argument shape at the type level.
 /// `SocketClient::call` takes the args struct alone — the command-name
@@ -28,6 +29,7 @@ macro_rules! socket_command {
 }
 
 socket_command!(LocalFileRequest, "local_file.access");
+socket_command!(GitReviewRequest, "git.review");
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

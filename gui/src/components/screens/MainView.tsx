@@ -18,7 +18,6 @@ import { GoalRunningTail } from "@/components/conversation/GoalRunMarkers";
 import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
 import { GoalWorkerContextBar } from "@/components/conversation/GoalWorkerContextBar";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
-import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
@@ -181,14 +180,7 @@ export interface MainViewProps {
  * Bar; nothing chrome-y belongs here.
  */
 export function MainView(props: MainViewProps) {
-  return (
-    <LocalFileWorkspace
-      key={props.activeSessionId}
-      fontSize={props.conversationFontSize}
-    >
-      <MainViewContent {...props} />
-    </LocalFileWorkspace>
-  );
+  return <MainViewContent {...props} />;
 }
 
 function MainViewContent({

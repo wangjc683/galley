@@ -155,3 +155,37 @@ invalid paths/types/encoding/size are `invalid_args`, and I/O or OS opener
 failures are `internal`. Message reason prefixes are `local_file_missing`,
 `local_file_absolute_required`, `local_file_unsupported`, `local_file_too_large`,
 `local_file_encoding`, `local_file_permission`, and `local_file_io`.
+
+## Git review (v1 additive)
+
+`git.review` and Tauri `review_git` share `GalleyApi::review_git`. Requests:
+
+- `{action: "list", path}` discovers the enclosing worktree from an absolute
+  directory/file path and lists net changes relative to its current HEAD.
+- `{action: "diff", path, filePath, head}` reads one repository-relative file.
+  `head` is the full commit ID returned by list, or null for an unborn branch.
+  If HEAD changed since listing, refresh is required instead of mixing bases.
+
+Result: `{root, head, files, patch, content, notice}`. `files` contains
+`{path, status}` entries (`added`, `modified`, `deleted`, `type_changed`,
+`conflicted`, `untracked`). Renames appear as deletion/addition in this first
+increment. `patch` contains a unified Git patch for a tracked file; `content`
+contains bounded UTF-8 text for an untracked file. The other payload is null.
+`notice` explains non-text/unsupported/oversized content, a conflict, submodule,
+or a now-unchanged file. Untracked files remain distinct from tracked additions.
+Unborn repositories list tracked files as additions and have no commit baseline.
+
+This is a read-only view of the whole worktree, not attribution to a session.
+No Git init, stage, commit, checkout, network, or database writes. Git runs
+without shell interpolation, optional locks, external diff, textconv, or configured
+clean/process filter helpers.
+Paths use literal pathspecs; reads and command output are bounded (2 MiB), with
+10-second command timeouts. Lists are capped at 5000 files and rendered patches
+at 5000 lines. Git-ignored files, hidden directories, and OS data directories
+are pruned from the untracked traversal; tracked changes remain visible.
+No dedicated CLI subcommand is added in this increment.
+
+Existing error categories are retained. Reason prefixes: `git_review_invalid_path`,
+`git_review_not_repository`, `git_review_unavailable`, `git_review_failed`,
+`git_review_timeout`, `git_review_too_large`, `git_review_encoding`, and
+`git_review_changed` (refresh required). Missing Git is not an empty change list.

@@ -24,7 +24,7 @@
 - Sidebar **不可折叠**。多 session 是 Galley 的核心产品形态，隐藏 Sidebar 等于隐藏差异化；需要更少 chrome 时通过拖拽缩到 14%。
 - 右侧 Inspector 已退役。详情分散到各自最相关的上下文：Tool callout inline 展示工具细节，Approval Dock/Approval Card 处理审批，Runtime/Approval metadata 进入 Settings。
 - 主区默认只有 Conversation column；阅读宽度由 TopBar 的 compact / wide toggle 控制。
-  点击 Markdown 文件时可临时并排预览：主区至少 1080px 时支持拖拽调整，
+  点击 Markdown 文件或顶部「改动」时可临时打开右侧阅读面板：主区至少 1080px 时支持拖拽调整，
   预览默认占 46%，全局记住比例，双击分隔线复位；
   否则进入内容工作台档的覆盖预览。关闭后恢复原对话布局。完整行为见
   [本地文件引用与预览](./conversation.md#本地文件引用与-markdown-预览)。

@@ -1,4 +1,6 @@
 import { MainHeader } from "@/components/layout/MainHeader";
+import { useContext } from "react";
+import { GitReviewContext } from "@/lib/git-review";
 import { useActiveRuntime } from "@/hooks/useActiveSession";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import type { ImSupervisorState } from "@/lib/im-supervisor";
@@ -46,6 +48,7 @@ export function MainHeaderHost({
   sessionTitle: string | undefined;
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);
+  const gitReview = useContext(GitReviewContext);
   const activeRuntimeKind = usePrefsStore((s) => s.activeRuntimeKind);
   const conversationWidth = usePrefsStore((s) => s.conversationWidth);
   const setConversationWidth = usePrefsStore((s) => s.setConversationWidth);
@@ -69,6 +72,8 @@ export function MainHeaderHost({
 
   return (
     <MainHeader
+      onToggleChanges={gitReview?.toggle}
+      changesOpen={gitReview?.isOpen}
       sessionTitle={sessionTitle}
       browserControlStatus={
         activeRuntimeKind === "managed" ? browserControlStatus : null

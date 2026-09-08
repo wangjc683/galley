@@ -64,6 +64,14 @@ use crate::error::Result;
 
 #[async_trait]
 pub trait GalleyApi: Send + Sync {
+    /// Read-only repository review, shared by the desktop and socket presenters.
+    async fn review_git(
+        &self,
+        request: crate::git_review::GitReviewRequest,
+    ) -> Result<crate::git_review::GitReviewResult> {
+        crate::git_review::review(request).await
+    }
+
     /// Local file presentation shared by desktop and socket callers; no DB writes.
     async fn access_local_file(
         &self,

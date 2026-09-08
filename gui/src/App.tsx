@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
 import { EmptyState } from "@/components/screens/EmptyState";
 import { MainView } from "@/components/screens/MainView";
+import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace";
 import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
 import { SettingsHost } from "@/components/screens/settings/SettingsHost";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
@@ -555,116 +556,131 @@ function App() {
         }
         main={
           <ThemeProvider theme={resolvedTheme}>
-            <MainHeaderHost
-              sessionTitle={activeSession?.title}
-              activeGoals={activeGoals}
-              channelsState={channelsState}
-              channelsLoadError={channelsLoadError}
-              onOpenGoalProject={openGoalProject}
-              onOpenGoal={(goalId) => {
-                void openGoal(goalId);
-              }}
-              onStopGoal={(goalId) => {
-                void stopGoalFromTopbar(goalId);
-              }}
-              openSettings={openSettings}
-              onOpenSettings={() => openSettings()}
-              resolvedTheme={resolvedTheme}
-            />
-            <BrowserControlAttentionSurface
-              show={showBrowserControlAttention}
-              onOpen={() => openSettings("browser")}
+            <LocalFileWorkspace
+              sessionId={activeSessionId}
+              fontSize={conversationFontSize}
+              repositoryHint={
+                screen === "empty"
+                  ? (activeProject?.rootPath ?? undefined)
+                  : (projects.find(
+                      (project) => project.id === activeSession?.projectId,
+                    )?.rootPath ?? undefined)
+              }
+              header={
+                <MainHeaderHost
+                  sessionTitle={activeSession?.title}
+                  activeGoals={activeGoals}
+                  channelsState={channelsState}
+                  channelsLoadError={channelsLoadError}
+                  onOpenGoalProject={openGoalProject}
+                  onOpenGoal={(goalId) => {
+                    void openGoal(goalId);
+                  }}
+                  onStopGoal={(goalId) => {
+                    void stopGoalFromTopbar(goalId);
+                  }}
+                  openSettings={openSettings}
+                  onOpenSettings={() => openSettings()}
+                  resolvedTheme={resolvedTheme}
+                />
+              }
             >
-              {screen === "empty" ? (
-                <EmptyState
-                  llmDisplayName={llmDisplayName}
-                  conversationWidth={conversationWidth}
-                  conversationFontSize={conversationFontSize}
-                  projectName={activeProject?.name}
-                  onClearProjectContext={() =>
-                    setActiveProjectFilter(undefined)
-                  }
-                  focusTick={emptyComposerFocusTick}
-                  epigraphCondition={epigraphCondition}
-                  llms={llms}
-                  llmConfigHint={llmConfigHint}
-                  onConfigureModels={openModelConfigFromSwitcher}
-                  requiresModelConfig={requiresManagedModelConfig}
-                  onSelectLLM={(idx) => {
-                    // EmptyState always configures the *next* new
-                    // session: stash pendingLLMIndex + flip the
-                    // top-level llms projection so the Composer pill
-                    // reflects the pick. activateSession consumes
-                    // pendingLLMIndex when submitOnEmpty creates and
-                    // spawns the fresh session.
-                    selectLLMForNewSession(idx);
-                  }}
-                  onOpenLLMSwitcher={openLLMSwitcherFallback}
-                  approvalMode={emptyApprovalModeState}
-                  onGoalSubmit={startGoalFromComposer}
-                  hasActiveGoal={goalSlotOccupied}
-                  imagesEnabled={activeRuntimeKind === "managed"}
-                  onImageBlocked={handleImageBlocked}
-                  onTextDropBlocked={handleTextDropBlocked}
-                  onSubmit={submitFromEmpty}
-                />
-              ) : (
-                <MainView
-                  turns={turns}
-                  llmDisplayName={llmDisplayName}
-                  projectName={
-                    activeSession?.projectId
-                      ? projects.find((p) => p.id === activeSession.projectId)
-                          ?.name
-                      : undefined
-                  }
-                  llms={llms}
-                  llmConfigHint={llmConfigHint}
-                  onConfigureModels={openModelConfigFromSwitcher}
-                  requiresModelConfig={requiresManagedModelConfig}
-                  onSelectLLM={(idx) => {
-                    if (!activeSessionId) return;
-                    // Flip local + persisted state immediately so the
-                    // picker never depends on a bridge round-trip for
-                    // visible feedback. The live bridge, when available,
-                    // still receives set_llm and will confirm via
-                    // llm_changed.
-                    selectLLMForSession(activeSessionId, idx);
-                    if (
-                      bridgeStatus === "connected" ||
-                      bridgeStatus === "spawning"
-                    ) {
-                      void sendIPCCommand(activeSessionId, {
-                        kind: "set_llm",
-                        llmIndex: idx,
-                      });
+              <BrowserControlAttentionSurface
+                show={showBrowserControlAttention}
+                onOpen={() => openSettings("browser")}
+              >
+                {screen === "empty" ? (
+                  <EmptyState
+                    llmDisplayName={llmDisplayName}
+                    conversationWidth={conversationWidth}
+                    conversationFontSize={conversationFontSize}
+                    projectName={activeProject?.name}
+                    onClearProjectContext={() =>
+                      setActiveProjectFilter(undefined)
                     }
-                  }}
-                  onOpenLLMSwitcher={openLLMSwitcherFallback}
-                  approvalMode={mainApprovalModeState}
-                  goal={activeSessionGoal}
-                  hasActiveGoal={goalSlotOccupied}
-                  sessionGoals={sessionGoals}
-                  onOpenSession={(sid) => void activateSession(sid)}
-                  onStopGoal={(goalId) => void stopGoalFromTopbar(goalId)}
-                  onGoalSubmit={startGoalFromComposer}
-                  imagesEnabled={activeSession?.gaRuntimeKind === "managed"}
-                  onImageBlocked={handleImageBlocked}
-                  onTextDropBlocked={handleTextDropBlocked}
-                  pendingApprovals={pendingApprovals}
-                  approvalDecisions={approvalDecisions}
-                  onSubmit={sendUserMessage}
-                  onApprove={handleApprove}
-                  onStop={stopRun}
-                  isRunning={isRunning}
-                  isStopping={isStopping}
-                  pendingAskUser={pendingAskUser}
-                  conversationWidth={conversationWidth}
-                  conversationFontSize={conversationFontSize}
-                  activeSessionId={activeSessionId}
-                />
-              )}
-            </BrowserControlAttentionSurface>
+                    focusTick={emptyComposerFocusTick}
+                    epigraphCondition={epigraphCondition}
+                    llms={llms}
+                    llmConfigHint={llmConfigHint}
+                    onConfigureModels={openModelConfigFromSwitcher}
+                    requiresModelConfig={requiresManagedModelConfig}
+                    onSelectLLM={(idx) => {
+                      // EmptyState always configures the *next* new
+                      // session: stash pendingLLMIndex + flip the
+                      // top-level llms projection so the Composer pill
+                      // reflects the pick. activateSession consumes
+                      // pendingLLMIndex when submitOnEmpty creates and
+                      // spawns the fresh session.
+                      selectLLMForNewSession(idx);
+                    }}
+                    onOpenLLMSwitcher={openLLMSwitcherFallback}
+                    approvalMode={emptyApprovalModeState}
+                    onGoalSubmit={startGoalFromComposer}
+                    hasActiveGoal={goalSlotOccupied}
+                    imagesEnabled={activeRuntimeKind === "managed"}
+                    onImageBlocked={handleImageBlocked}
+                    onTextDropBlocked={handleTextDropBlocked}
+                    onSubmit={submitFromEmpty}
+                  />
+                ) : (
+                  <MainView
+                    key={activeSessionId}
+                    turns={turns}
+                    llmDisplayName={llmDisplayName}
+                    projectName={
+                      activeSession?.projectId
+                        ? projects.find((p) => p.id === activeSession.projectId)
+                            ?.name
+                        : undefined
+                    }
+                    llms={llms}
+                    llmConfigHint={llmConfigHint}
+                    onConfigureModels={openModelConfigFromSwitcher}
+                    requiresModelConfig={requiresManagedModelConfig}
+                    onSelectLLM={(idx) => {
+                      if (!activeSessionId) return;
+                      // Flip local + persisted state immediately so the
+                      // picker never depends on a bridge round-trip for
+                      // visible feedback. The live bridge, when available,
+                      // still receives set_llm and will confirm via
+                      // llm_changed.
+                      selectLLMForSession(activeSessionId, idx);
+                      if (
+                        bridgeStatus === "connected" ||
+                        bridgeStatus === "spawning"
+                      ) {
+                        void sendIPCCommand(activeSessionId, {
+                          kind: "set_llm",
+                          llmIndex: idx,
+                        });
+                      }
+                    }}
+                    onOpenLLMSwitcher={openLLMSwitcherFallback}
+                    approvalMode={mainApprovalModeState}
+                    goal={activeSessionGoal}
+                    hasActiveGoal={goalSlotOccupied}
+                    sessionGoals={sessionGoals}
+                    onOpenSession={(sid) => void activateSession(sid)}
+                    onStopGoal={(goalId) => void stopGoalFromTopbar(goalId)}
+                    onGoalSubmit={startGoalFromComposer}
+                    imagesEnabled={activeSession?.gaRuntimeKind === "managed"}
+                    onImageBlocked={handleImageBlocked}
+                    onTextDropBlocked={handleTextDropBlocked}
+                    pendingApprovals={pendingApprovals}
+                    approvalDecisions={approvalDecisions}
+                    onSubmit={sendUserMessage}
+                    onApprove={handleApprove}
+                    onStop={stopRun}
+                    isRunning={isRunning}
+                    isStopping={isStopping}
+                    pendingAskUser={pendingAskUser}
+                    conversationWidth={conversationWidth}
+                    conversationFontSize={conversationFontSize}
+                    activeSessionId={activeSessionId}
+                  />
+                )}
+              </BrowserControlAttentionSurface>
+            </LocalFileWorkspace>
           </ThemeProvider>
         }
       />

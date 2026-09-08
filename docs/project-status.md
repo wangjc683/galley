@@ -298,6 +298,12 @@ passed on 2026-09-08. Verification and platform acceptance scope are
 tracked in [the implementation devlog](./devlog/2026-09-08-local-file-preview.md).
 This work is not released. The items below are standing follow-ups.
 
+Git worktree review is implemented (2026-09-08), with
+desktop acceptance pending. It reuses the reading panel for read-only changes
+against HEAD and separate untracked-file content, with explicit repository
+selection when no project directory is available. See
+[implementation and limits](./devlog/2026-09-08-git-worktree-review.md).
+
 The GA baseline is fully current as of `v0.4.11` (`efb3bc6` audited and
 shipped the same day); the next release audits upstream again per the
 standard trigger.

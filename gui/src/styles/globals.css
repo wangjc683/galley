@@ -1361,3 +1361,45 @@ code {
 .file-path-button:is(:hover, :active) :is(strong, em) {
   color: inherit;
 }
+
+/* Git review inherits Galley's colors in both themes. */
+.git-review-diff {
+  --diff-background-color: var(--color-app);
+  --diff-text-color: var(--color-ink);
+  --diff-font-family: var(--font-mono);
+  --diff-selection-background-color: var(--color-brand-soft);
+  --diff-code-insert-background-color: color-mix(
+    in srgb,
+    var(--color-success) 10%,
+    transparent
+  );
+  --diff-code-delete-background-color: color-mix(
+    in srgb,
+    var(--color-error) 10%,
+    transparent
+  );
+  --diff-gutter-insert-background-color: color-mix(
+    in srgb,
+    var(--color-success) 18%,
+    transparent
+  );
+  --diff-gutter-delete-background-color: color-mix(
+    in srgb,
+    var(--color-error) 18%,
+    transparent
+  );
+  --diff-code-insert-edit-background-color: color-mix(
+    in srgb,
+    var(--color-success) 25%,
+    transparent
+  );
+  --diff-code-delete-edit-background-color: color-mix(
+    in srgb,
+    var(--color-error) 25%,
+    transparent
+  );
+}
+.git-review-diff .diff-gutter {
+  cursor: default;
+  color: var(--color-ink-muted);
+}

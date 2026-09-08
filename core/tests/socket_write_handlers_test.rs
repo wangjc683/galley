@@ -276,6 +276,25 @@ impl RunnerPort for FakeRunner {
 // ---------------- harness ----------------
 
 #[tokio::test]
+async fn git_review_uses_shared_api_and_existing_error_categories() {
+    use galley_core_lib::api::GalleyApi;
+    use galley_core_lib::protocol::{GitReviewRequest, SocketCommand};
+    let h = Harness::new(FakeRunner::default()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let output = std::process::Command::new("git").arg("init").arg(dir.path()).output().unwrap();
+    assert!(output.status.success());
+    std::fs::write(dir.path().join("report.md"), "# Report").unwrap();
+    let args = GitReviewRequest::List { path: dir.path().to_string_lossy().into() };
+    let response = h.dispatch(req(GitReviewRequest::NAME, serde_json::to_value(&args).unwrap())).await;
+    assert!(response.ok, "{response:?}");
+    assert_eq!(response.result.unwrap(), serde_json::to_value(h.galley.review_git(args).await.unwrap()).unwrap());
+    let response = h.dispatch(req(GitReviewRequest::NAME, json!({"action": "list", "path": "relative"}))).await;
+    assert_eq!(serde_json::to_value(response).unwrap()["error"], "invalid_args");
+    let response = h.dispatch(req(GitReviewRequest::NAME, json!({"action": "checkout", "path": dir.path()}))).await;
+    assert_eq!(serde_json::to_value(response).unwrap()["error"], "invalid_args");
+}
+
+#[tokio::test]
 async fn local_file_access_uses_shared_api_and_existing_error_categories() {
     use galley_core_lib::api::GalleyApi;
     use galley_core_lib::local_file::{LocalFileAction, LocalFileRequest};
