@@ -282,9 +282,16 @@ function RootPage({
 
   return (
     <>
-      <Command.Empty>
-        <EmptyHint search={search} onSubmit={() => onSubmitFreeText(search)} />
-      </Command.Empty>
+      {/* cmdk's own empty predicate counts only the items it scored
+          when the query changed; the debounced FTS hits mount later
+          and register their value after their item, so they render
+          but never bump `filtered.count`. Gate the empty state on our
+          hits too — "no results" is wrong while a hit is on screen. */}
+      {messageHits.length === 0 && (
+        <Command.Empty>
+          <EmptyHint search={search} onSubmit={() => onSubmitFreeText(search)} />
+        </Command.Empty>
+      )}
 
       {/* Always-first: New chat. Plain Item, no group header. */}
       <Command.Item
