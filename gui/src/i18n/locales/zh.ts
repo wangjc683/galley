@@ -32,6 +32,10 @@ export const zhCopy = {
     previous: "上一处改动",
     next: "下一处改动",
     contextHint: "仅显示改动及相邻上下文",
+    changePosition: (index: number, total: number) =>
+      index > 0 ? `第 ${index} / ${total} 处改动` : `共 ${total} 处改动`,
+    hunkAt: (line: number) => `第 ${line} 行起`,
+    layout: "差异布局",
     loading: "正在读取改动…",
     clean: "此仓库没有未提交改动或可列出的未跟踪文件。",
     notRepository: "此路径不在 Git 工作区内。请选择其他仓库。",

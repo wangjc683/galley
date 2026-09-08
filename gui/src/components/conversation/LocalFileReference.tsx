@@ -46,13 +46,17 @@ export function LocalFileReference({
                 {children}
               </button>
             </TooltipLabel>
+            {/* Sized to the line, not the toolbar: a 24px control inside
+                a 15px prose line pushed the leading; 20px with the glyph
+                on the text baseline sits inside it. */}
             {markdown && (
               <IconButton
                 ariaLabel={copy.localFiles.locate}
-                className="file-reveal-button ml-0.5 inline-flex h-6 w-6 align-middle"
+                size="xs"
+                className="file-reveal-button ml-0.5 inline-flex h-5 w-5 align-[-0.3em]"
                 onClick={() => void fileOperation(path, "reveal", copy)}
               >
-                <FolderOpen size={14} weight="thin" />
+                <FolderOpen size={13} weight="thin" />
               </IconButton>
             )}
           </span>

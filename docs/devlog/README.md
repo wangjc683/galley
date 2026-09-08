@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-08
+- [阅读面板打磨](./2026-09-08-reading-panel-polish.md) — Markdown 预览 / Git 改动视图 UX 复审：原生 select 换 GitFileList、三层 header 合一（ReadingPanelHeader）、PanelNotice 状态、分栏阈值 880、hunk 头与计数
 - [issue #27 搜索定位到消息](./2026-09-08-issue-27-message-search-locate.md) — 全文搜索早有、缺定位；`data-message-id` 锚点 + ui store locate 请求 + useStickyScroll 消费；归档 / 文案不做，Ctrl+F 进 deferred；评论者侧栏问题排查
 - [issue #26 模型配置 UX](./2026-09-08-issue-26-model-config-ux.md) — 推理强度提为一级字段、我的模型拖拽排序（dnd-kit）、fast / Composer 强度进 deferred
 - [托管微信渠道 conductor 死路](./2026-09-08-wechat-conductor-mode-dead-path.md) — PR #25 诊断、`wechatapp._MODE` 默认 conductor 不回消息、supervisor 侧 pin agent + 屏蔽 /switch、审计更正

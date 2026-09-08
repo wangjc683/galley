@@ -15,7 +15,10 @@ export function ChangesToggleButton({
       <TopBarIconButton
         aria-label={copy.title}
         aria-pressed={open}
-        className="aria-pressed:border-line aria-pressed:bg-hover aria-pressed:text-ink"
+        // "Panel is open" is a selected state, not a hover: bg-selected
+        // keeps it a different material from the pointer feedback around it
+        // (the sidebar's selected-row lesson, 2026-08-21).
+        className="aria-pressed:border-line aria-pressed:bg-selected aria-pressed:text-ink"
         onClick={(event) => onToggle(event.currentTarget)}
       >
         {/* Match Phosphor's 256-unit grid and thin stroke; the file and

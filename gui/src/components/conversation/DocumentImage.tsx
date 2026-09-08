@@ -47,7 +47,7 @@ export function DocumentImage({
   }, [path]);
   const src = result?.path === path ? result.src : null;
   return (
-    <span ref={container} className="my-3 block max-w-full">
+    <span ref={container} className="group/image my-3 block max-w-full">
       {src ? (
         <img
           src={src}
@@ -65,10 +65,12 @@ export function DocumentImage({
             : copy.localFiles.loading}
         </span>
       )}
+      {/* A report with many figures grew a column of "show in folder"
+          links; keep the action but let it surface on hover / focus. */}
       {!insideLink && (
         <button
           type="button"
-          className="mt-1 text-xs text-ink-muted underline underline-offset-2"
+          className="mt-1 text-xs text-ink-muted underline underline-offset-2 opacity-0 transition-opacity duration-(--motion-fast) group-hover/image:opacity-100 focus-visible:opacity-100"
           onClick={() => void fileOperation(path, "reveal", copy)}
         >
           {copy.localFiles.locate}

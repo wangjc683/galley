@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { CaretDown, CaretUp } from "@phosphor-icons/react";
 import {
   Decoration,
@@ -23,6 +23,8 @@ export function GitPatchView({
   const copy = useCopy().gitReview;
   const container = useRef<HTMLDivElement>(null);
   const current = useRef(-1);
+  // Mirrors `current` for the "2 / 7" readout; -1 = not navigated yet.
+  const [position, setPosition] = useState(-1);
   const parsed = useMemo(() => {
     try {
       if (!patch.startsWith("diff --git ")) return null;
@@ -53,6 +55,7 @@ export function GitPatchView({
           : hunks.length - 1
         : (current.current + direction + hunks.length) % hunks.length;
     hunks[current.current].scrollIntoView({ block: "start" });
+    setPosition(current.current);
   };
   if (!parsed?.length)
     return (
@@ -60,23 +63,36 @@ export function GitPatchView({
         {copy.renderFailed}
       </p>
     );
-  const hasHunks = parsed.some((file) => file.hunks.length > 0);
+  const hunkCount = parsed.reduce((sum, file) => sum + file.hunks.length, 0);
   return (
     <div ref={container} className="git-review-diff min-w-0 text-[12px]">
-      {hasHunks ? (
-        <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-1 text-xs text-ink-muted">
-          <span>{copy.contextHint}</span>
+      {hunkCount > 0 ? (
+        <div
+          title={copy.contextHint}
+          className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-line bg-app px-3 py-1 text-ui-tertiary text-ink-muted"
+        >
+          <span className="tabular-nums">
+            {copy.changePosition(position < 0 ? 0 : position + 1, hunkCount)}
+          </span>
           <div className="flex">
-            <IconButton ariaLabel={copy.previous} onClick={() => navigate(-1)}>
-              <CaretUp size={14} />
+            <IconButton
+              ariaLabel={copy.previous}
+              size="xs"
+              onClick={() => navigate(-1)}
+            >
+              <CaretUp size={13} weight="bold" />
             </IconButton>
-            <IconButton ariaLabel={copy.next} onClick={() => navigate(1)}>
-              <CaretDown size={14} />
+            <IconButton
+              ariaLabel={copy.next}
+              size="xs"
+              onClick={() => navigate(1)}
+            >
+              <CaretDown size={13} weight="bold" />
             </IconButton>
           </div>
         </div>
       ) : (
-        <p className="p-4 text-sm text-ink-soft">{copy.metadataOnly}</p>
+        <p className="p-4 text-ui-secondary text-ink-soft">{copy.metadataOnly}</p>
       )}
       {parsed.map((file, index) => (
         <Diff
@@ -90,11 +106,15 @@ export function GitPatchView({
             hunks.map((hunk) => (
               <Fragment key={hunk.content}>
                 <Decoration>
+                  {/* Git's `@@ -a,b +c,d @@` header is a machine locator;
+                      readers want "where does this hunk start". Keep the raw
+                      form reachable via title for anyone pasting line refs. */}
                   <div
                     data-git-hunk
-                    className="border-y border-line bg-surface px-3 py-2 text-ink-muted"
+                    title={hunk.content}
+                    className="border-y border-line/70 bg-surface px-3 py-1 font-sans text-ui-tertiary text-ink-muted"
                   >
-                    {hunk.content}
+                    {copy.hunkAt(hunk.newStart)}
                   </div>
                 </Decoration>
                 <Hunk hunk={hunk} />

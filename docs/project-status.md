@@ -328,7 +328,10 @@ tracked in [the implementation devlog](./devlog/2026-09-08-local-file-preview.md
 This work is not released. The items below are standing follow-ups.
 
 Git worktree review is implemented (2026-09-08), with
-desktop acceptance pending. It reuses the reading panel for read-only changes
+desktop acceptance pending. A same-day UX pass reworked both reading-panel
+views (shared header shell, Galley file list instead of a native select,
+unified notices, 880px split threshold); see
+[the polish devlog](./devlog/2026-09-08-reading-panel-polish.md). It reuses the reading panel for read-only changes
 against HEAD and separate untracked-file content, with explicit repository
 selection when no project directory is available. The Git panel belongs to
 the window and preserves its repository and selection across session/project

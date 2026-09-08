@@ -34,6 +34,12 @@ export const enCopy: AppCopy = {
     previous: "Previous change",
     next: "Next change",
     contextHint: "Changes and surrounding context only",
+    changePosition: (index, total) =>
+      index > 0
+        ? `Change ${index} of ${total}`
+        : `${total} change${total === 1 ? "" : "s"}`,
+    hunkAt: (line) => `From line ${line}`,
+    layout: "Diff layout",
     loading: "Reading changes…",
     clean: "No uncommitted changes or listed untracked files in this repository.",
     notRepository:

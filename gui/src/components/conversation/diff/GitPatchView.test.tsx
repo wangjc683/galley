@@ -31,6 +31,10 @@ describe("Git patch presentation", () => {
       expect(html).toContain("after");
       expect(html).toContain("上一处改动");
       expect(html).toContain("data-git-hunk");
+      // Reader-facing hunk locator + change counter replace the raw @@ header.
+      expect(html).toContain("第 1 行起");
+      expect(html).toContain("共 1 处改动");
+      expect(html).not.toContain("@@ -1,2 +1,2 @@</div>");
     }
   });
   it("keeps source HTML inert", () => {

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowClockwise, FolderOpen, GitDiff } from "@phosphor-icons/react";
 import { Button, IconButton } from "@/components/ui/button";
-import { TooltipLabel } from "@/components/ui/tooltip";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useCopy } from "@/lib/i18n";
 import { fileName } from "@/lib/local-file-path";
 import { fileOperation } from "@/lib/local-files";
@@ -12,7 +12,11 @@ import {
   type GitReviewResult,
 } from "@/lib/git-review";
 import { pickFolder } from "@/lib/pick-folder";
+import { PanelNotice } from "../reading/PanelNotice";
+import { ReadingPanelHeader } from "../reading/ReadingPanelHeader";
+import { GitFileList } from "./GitFileList";
 import { GitPatchView } from "./GitPatchView";
+import { PlainFileLines } from "./PlainFileLines";
 
 export function GitReviewPane({
   initialPath,
@@ -21,6 +25,7 @@ export function GitReviewPane({
   onSelectFile,
   split,
   onSplitChange,
+  close,
 }: {
   initialPath?: string;
   onRepository: (root: string) => void;
@@ -28,6 +33,9 @@ export function GitReviewPane({
   onSelectFile: (path: string) => void;
   split: boolean;
   onSplitChange: (split: boolean) => void;
+  /** Host-supplied close control (wide pane IconButton or the dialog's
+   * close button) — the pane owns the header now, so it places it. */
+  close?: ReactNode;
 }) {
   const copy = useCopy();
   const labels = copy.gitReview;
@@ -133,10 +141,6 @@ export function GitReviewPane({
     repository?.files.filter((file) => file.status !== "untracked") ?? [];
   const untracked =
     repository?.files.filter((file) => file.status === "untracked") ?? [];
-  const groups = [
-    { label: labels.tracked, files: tracked },
-    { label: labels.untracked, files: untracked },
-  ];
   const notices: Record<string, string> = {
     binary: labels.binary,
     encoding: labels.encoding,
@@ -146,154 +150,140 @@ export function GitReviewPane({
     unsupported: labels.unsupported,
     unchanged: labels.unchanged,
   };
+
+  // Header: repository identity + baseline in the shared shell. The
+  // former "工作区改动" title row carried the least information of the
+  // three stacked headers; the repository name is the real title.
+  const header = (
+    <ReadingPanelHeader
+      title={repository ? fileName(repository.root) : labels.title}
+      subtitle={
+        repository
+          ? repository.head
+            ? labels.baseline(repository.head.slice(0, 8))
+            : labels.unborn
+          : labels.chooseHint
+      }
+      subtitleTooltip={repository?.root ?? requestedPath}
+      actions={
+        <>
+          <Button variant="ghost" size="sm" onClick={() => void choose()}>
+            {repository ? labels.changeRepository : labels.chooseRepository}
+          </Button>
+          <IconButton
+            ariaLabel={copy.localFiles.refresh}
+            disabled={loading || !requestedPath}
+            onClick={() => {
+              if (requestedPath) load(repository?.root ?? requestedPath, true);
+            }}
+          >
+            <ArrowClockwise size={16} weight="thin" />
+          </IconButton>
+        </>
+      }
+      close={close}
+    />
+  );
+
+  let body: ReactNode;
+  if (error !== null) {
+    body = <PanelNotice kind="error">{gitReviewError(error, copy)}</PanelNotice>;
+  } else if (loading) {
+    body = <PanelNotice kind="loading">{labels.loading}</PanelNotice>;
+  } else if (!repository) {
+    body = (
+      <PanelNotice kind="empty" icon={<GitDiff size={28} weight="thin" />}>
+        {labels.chooseHint}
+      </PanelNotice>
+    );
+  } else if (repository.files.length === 0) {
+    body = (
+      <PanelNotice kind="empty" icon={<GitDiff size={28} weight="thin" />}>
+        {labels.clean}
+      </PanelNotice>
+    );
+  } else {
+    body = (
+      <>
+        <GitFileList
+          tracked={tracked}
+          untracked={untracked}
+          selectedPath={selected?.path ?? null}
+          onSelect={(file) => void selectFile(repository, file)}
+        />
+        <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2">
+          <span className="min-w-0 truncate text-ui-tertiary text-ink-muted">
+            {selected?.status === "untracked"
+              ? labels.untrackedContent
+              : labels.netChanges}
+          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {selected?.status !== "untracked" && (
+              <SegmentedControl
+                size="sm"
+                ariaLabel={labels.layout}
+                value={split ? "split" : "unified"}
+                options={[
+                  { value: "unified", label: labels.unified },
+                  { value: "split", label: labels.split },
+                ]}
+                onValueChange={(value) => onSplitChange(value === "split")}
+              />
+            )}
+            {selected && selected.status !== "deleted" && (
+              <IconButton
+                ariaLabel={copy.localFiles.locate}
+                className="file-reveal-button"
+                onClick={() =>
+                  void fileOperation(
+                    `${repository.root}/${selected.path}`,
+                    "reveal",
+                    copy,
+                  )
+                }
+              >
+                <FolderOpen size={15} weight="thin" />
+              </IconButton>
+            )}
+          </div>
+        </div>
+        <div
+          ref={scroll}
+          className="flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain"
+          aria-busy={loadingFile}
+        >
+          {detailError !== null ? (
+            <PanelNotice kind="error">
+              {gitReviewError(detailError, copy)}
+            </PanelNotice>
+          ) : loadingFile ? (
+            <PanelNotice kind="loading">{labels.loading}</PanelNotice>
+          ) : detail?.notice ? (
+            <PanelNotice kind="info">
+              {notices[detail.notice] ?? labels.unsupported}
+            </PanelNotice>
+          ) : detail?.patch ? (
+            <GitPatchView
+              key={selected?.path}
+              patch={detail.patch}
+              split={split}
+            />
+          ) : detail?.content !== null && detail?.content !== undefined ? (
+            detail.content === "" ? (
+              <PanelNotice kind="info">{copy.localFiles.empty}</PanelNotice>
+            ) : (
+              <PlainFileLines content={detail.content} />
+            )
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <TooltipLabel
-            text={repository?.root ?? requestedPath ?? labels.chooseHint}
-          >
-            <p className="truncate text-sm font-medium text-ink">
-              {repository ? fileName(repository.root) : labels.repository}
-            </p>
-          </TooltipLabel>
-          <p className="mt-1 text-xs text-ink-muted">
-            {repository
-              ? repository.head
-                ? labels.baseline(repository.head.slice(0, 8))
-                : labels.unborn
-              : labels.chooseHint}
-          </p>
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => void choose()}>
-          {repository ? labels.changeRepository : labels.chooseRepository}
-        </Button>
-        <IconButton
-          ariaLabel={copy.localFiles.refresh}
-          disabled={loading || !requestedPath}
-          onClick={() => {
-            if (requestedPath) load(repository?.root ?? requestedPath, true);
-          }}
-        >
-          <ArrowClockwise size={16} />
-        </IconButton>
-      </div>
-      {error !== null ? (
-        <p role="alert" className="p-4 text-sm text-ink-soft">
-          {gitReviewError(error, copy)}
-        </p>
-      ) : loading ? (
-        <p role="status" className="p-4 text-sm text-ink-muted">
-          {labels.loading}
-        </p>
-      ) : !repository ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-ink-muted">
-          <GitDiff size={28} weight="thin" />
-          <p>{labels.chooseHint}</p>
-        </div>
-      ) : repository.files.length === 0 ? (
-        <p className="p-6 text-sm text-ink-muted">{labels.clean}</p>
-      ) : (
-        <>
-          <div className="border-b border-line p-3">
-            <label
-              title={labels.untrackedHint}
-              className="mb-2 block text-xs text-ink-muted"
-              htmlFor="git-review-file"
-            >
-              {labels.files(tracked.length, untracked.length)}
-            </label>
-            <select
-              id="git-review-file"
-              aria-label={labels.selectFile}
-              className="w-full min-w-0 rounded-sm border border-line bg-surface px-2 py-2 font-mono text-xs text-ink outline-none focus-visible:ring-1 focus-visible:ring-brand"
-              value={selected?.path ?? ""}
-              onChange={(event) => {
-                const file = repository.files.find(
-                  (entry) => entry.path === event.target.value,
-                );
-                if (file) void selectFile(repository, file);
-              }}
-            >
-              {groups.map(
-                ({ label, files }) =>
-                  files.length > 0 && (
-                    <optgroup key={label} label={label}>
-                      {files.map((file) => (
-                        <option key={file.path} value={file.path}>
-                          {labels.status[file.status]} · {file.path}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ),
-              )}
-            </select>
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-xs text-ink-muted">
-                {selected?.status === "untracked"
-                  ? labels.untrackedContent
-                  : labels.netChanges}
-              </span>
-              <div className="flex items-center gap-1">
-                {selected?.status !== "untracked" && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-pressed={split}
-                    onClick={() => onSplitChange(!split)}
-                  >
-                    {split ? labels.unified : labels.split}
-                  </Button>
-                )}
-                {selected && selected.status !== "deleted" && (
-                  <IconButton
-                    ariaLabel={copy.localFiles.locate}
-                    className="file-reveal-button"
-                    onClick={() =>
-                      void fileOperation(
-                        `${repository.root}/${selected.path}`,
-                        "reveal",
-                        copy,
-                      )
-                    }
-                  >
-                    <FolderOpen size={15} />
-                  </IconButton>
-                )}
-              </div>
-            </div>
-          </div>
-          <div
-            ref={scroll}
-            className="min-h-0 flex-1 overflow-auto overscroll-contain"
-            aria-busy={loadingFile}
-          >
-            {detailError !== null ? (
-              <p role="alert" className="p-4 text-sm text-ink-soft">
-                {gitReviewError(detailError, copy)}
-              </p>
-            ) : loadingFile ? (
-              <p role="status" className="p-4 text-sm text-ink-muted">
-                {labels.loading}
-              </p>
-            ) : detail?.notice ? (
-              <p className="p-4 text-sm text-ink-soft">
-                {notices[detail.notice] ?? labels.unsupported}
-              </p>
-            ) : detail?.patch ? (
-              <GitPatchView
-                key={selected?.path}
-                patch={detail.patch}
-                split={split}
-              />
-            ) : detail?.content !== null && detail?.content !== undefined ? (
-              <pre className="whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-ink">
-                {detail.content || copy.localFiles.empty}
-              </pre>
-            ) : null}
-          </div>
-        </>
-      )}
+      {header}
+      {body}
     </div>
   );
 }

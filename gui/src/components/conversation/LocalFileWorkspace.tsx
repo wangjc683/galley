@@ -28,6 +28,8 @@ import { IconButton } from "@/components/ui/button";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
+import { PanelNotice } from "@/components/conversation/reading/PanelNotice";
+import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
 import {
   conversationTypographyStyle,
   type ConversationFontSize,
@@ -64,6 +66,12 @@ const DEFAULT_PREVIEW_LAYOUT = {
   [CONVERSATION_PANEL]: 54,
   [DOCUMENT_PANEL]: 46,
 };
+// Split when both reading areas can keep a usable measure. The first
+// cut (1080px) never split on a 1280px window once the sidebar took its
+// 20%, so every preview there became a dialog over the conversation.
+const SPLIT_MIN_WIDTH = 880;
+const CONVERSATION_MIN = "440px";
+const DOCUMENT_MIN = "400px";
 
 /** Window-owned Git review; Markdown reads remain scoped to their session. */
 export function LocalFileWorkspace({
@@ -133,7 +141,7 @@ export function LocalFileWorkspace({
     const element = container.current;
     if (!element) return;
     const observer = new ResizeObserver(([entry]) =>
-      setWide(entry.contentRect.width >= 1080),
+      setWide(entry.contentRect.width >= SPLIT_MIN_WIDTH),
     );
     observer.observe(element);
     return () => observer.disconnect();
@@ -162,6 +170,29 @@ export function LocalFileWorkspace({
         source.focus({ preventScroll: true });
     });
   }, []);
+
+  // Escape closes the wide pane from anywhere that is not a text field
+  // — the pane only had it while focused, so Esc from the Composer did
+  // nothing. The dialog host keeps Radix's own Escape handling.
+  useEffect(() => {
+    if (!(wide && panelOpen)) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      close();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [wide, panelOpen, close]);
 
   const openReview = useCallback(
     (path?: string, source?: HTMLElement) => {
@@ -248,123 +279,127 @@ export function LocalFileWorkspace({
     [load],
   );
 
-  const header = preview && (
-    <>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="truncate text-sm font-medium text-ink">
-          {fileName(preview.path)}
-        </span>
-        <TooltipLabel text={preview.path}>
-          <span className="truncate font-mono text-[11px] text-ink-muted">
-            {preview.path}
-          </span>
-        </TooltipLabel>
-      </div>
-      <IconButton
-        ariaLabel={copy.localFiles.locate}
-        className="file-reveal-button"
-        onClick={() => void fileOperation(preview.path, "reveal", copy)}
-      >
-        <FolderOpen size={16} weight="thin" />
-      </IconButton>
-      <IconButton
-        ariaLabel={copy.localFiles.refresh}
-        disabled={preview.content === null && preview.error === null}
-        onClick={() =>
-          void load(currentPath.current ?? preview.path, undefined, true)
+  // Markdown header in the shared reading-panel shell. The refresh
+  // control carries the "content as of open/refresh" note as its
+  // tooltip; it used to sit as a permanent line above every document.
+  const markdownHeader = (close: ReactNode) =>
+    preview && (
+      <ReadingPanelHeader
+        title={fileName(preview.path)}
+        subtitle={preview.path}
+        subtitleTooltip={preview.path}
+        subtitleMono
+        actions={
+          <>
+            <IconButton
+              ariaLabel={copy.localFiles.locate}
+              className="file-reveal-button"
+              onClick={() => void fileOperation(preview.path, "reveal", copy)}
+            >
+              <FolderOpen size={16} weight="thin" />
+            </IconButton>
+            <IconButton
+              ariaLabel={copy.localFiles.refresh}
+              tooltip={`${copy.localFiles.refresh} · ${copy.localFiles.diskContent}`}
+              disabled={preview.content === null && preview.error === null}
+              onClick={() =>
+                void load(currentPath.current ?? preview.path, undefined, true)
+              }
+            >
+              <ArrowClockwise size={16} weight="thin" />
+            </IconButton>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <IconButton ariaLabel={copy.common.more}>
+                  <DotsThree size={18} />
+                </IconButton>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  className="z-[70] min-w-40 rounded-md border border-line bg-elevated p-1 text-[12.5px] text-ink shadow-elevated"
+                  align="end"
+                >
+                  <DropdownMenu.Item
+                    className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
+                    onSelect={() => openReview(preview.path)}
+                  >
+                    {copy.gitReview.fromFile}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
+                    onSelect={() => void fileOperation(preview.path, "copy", copy)}
+                  >
+                    {copy.localFiles.copyPath}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
+                    onSelect={() => void fileOperation(preview.path, "open", copy)}
+                  >
+                    {copy.localFiles.openDefault}
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          </>
+        }
+        close={close}
+      />
+    );
+  const body = (close: ReactNode) =>
+    review ? (
+      <Suspense
+        fallback={
+          <PanelNotice kind="loading">{copy.gitReview.loading}</PanelNotice>
         }
       >
-        <ArrowClockwise size={16} weight="thin" />
-      </IconButton>
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <IconButton ariaLabel={copy.common.more}>
-            <DotsThree size={18} />
-          </IconButton>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            className="z-[70] min-w-40 rounded-md border border-line bg-elevated p-1 text-[12.5px] text-ink shadow-elevated"
-            align="end"
+        <GitReviewPane
+          key={review.id}
+          initialPath={review.path}
+          onRepository={rememberRepository}
+          initialSelectedPath={review.selectedPath}
+          onSelectFile={rememberFile}
+          split={review.split}
+          onSplitChange={changeDiffLayout}
+          close={close}
+        />
+      </Suspense>
+    ) : (
+      preview && (
+        <>
+          {markdownHeader(close)}
+          <div
+            ref={(element) => {
+              if (element) element.scrollTop = scroll.current;
+            }}
+            onScroll={(event) => {
+              scroll.current = event.currentTarget.scrollTop;
+            }}
+            className="flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain"
+            style={conversationTypographyStyle(fontSize)}
+            aria-busy={preview.content === null && preview.error === null}
           >
-            <DropdownMenu.Item
-              className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
-              onSelect={() => openReview(preview.path)}
-            >
-              {copy.gitReview.fromFile}
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
-              onSelect={() => void fileOperation(preview.path, "copy", copy)}
-            >
-              {copy.localFiles.copyPath}
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
-              onSelect={() => void fileOperation(preview.path, "open", copy)}
-            >
-              {copy.localFiles.openDefault}
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </>
-  );
-  const body = review ? (
-    <Suspense
-      fallback={
-        <p role="status" className="p-4 text-sm text-ink-muted">
-          {copy.gitReview.loading}
-        </p>
-      }
-    >
-      <GitReviewPane
-        key={review.id}
-        initialPath={review.path}
-        onRepository={rememberRepository}
-        initialSelectedPath={review.selectedPath}
-        onSelectFile={rememberFile}
-        split={review.split}
-        onSplitChange={changeDiffLayout}
-      />
-    </Suspense>
-  ) : (
-    preview && (
-      <div
-        ref={(element) => {
-          if (element) element.scrollTop = scroll.current;
-        }}
-        onScroll={(event) => {
-          scroll.current = event.currentTarget.scrollTop;
-        }}
-        className="min-h-0 flex-1 overflow-auto overscroll-contain px-6 py-5"
-        style={conversationTypographyStyle(fontSize)}
-        aria-busy={preview.content === null && preview.error === null}
-      >
-        <p className="mb-5 font-sans text-xs text-ink-muted">
-          {copy.localFiles.diskContent}
-        </p>
-        {preview.error !== null ? (
-          <p role="alert" className="text-sm text-ink-soft">
-            {localFileError(preview.error, copy)}
-          </p>
-        ) : preview.content === null ? (
-          <p role="status" className="text-sm text-ink-muted">
-            {copy.localFiles.loading}
-          </p>
-        ) : preview.content === "" ? (
-          <p className="text-sm text-ink-muted">{copy.localFiles.empty}</p>
-        ) : (
-          <MarkdownView
-            source={preview.content}
-            variant="agent"
-            documentPath={preview.path}
-            className="document-preview-content"
-          />
-        )}
-      </div>
-    )
-  );
+            {preview.error !== null ? (
+              <PanelNotice kind="error">
+                {localFileError(preview.error, copy)}
+              </PanelNotice>
+            ) : preview.content === null ? (
+              <PanelNotice kind="loading">{copy.localFiles.loading}</PanelNotice>
+            ) : preview.content === "" ? (
+              <PanelNotice kind="info">{copy.localFiles.empty}</PanelNotice>
+            ) : (
+              <div className="px-6 py-5">
+                <MarkdownView
+                  source={preview.content}
+                  variant="agent"
+                  documentPath={preview.path}
+                  className="document-preview-content"
+                />
+              </div>
+            )}
+          </div>
+        </>
+      )
+    );
 
   return (
     <LocalFilesContext.Provider value={activate}>
@@ -385,7 +420,7 @@ export function LocalFileWorkspace({
             <Panel
               id={CONVERSATION_PANEL}
               defaultSize={split ? "54%" : "100%"}
-              minSize={split ? "480px" : 0}
+              minSize={split ? CONVERSATION_MIN : 0}
             >
               <div className="flex h-full min-h-0 min-w-0 flex-col">
                 {children}
@@ -400,7 +435,11 @@ export function LocalFileWorkspace({
             )}
             {panelOpen &&
               (wide ? (
-                <Panel id={DOCUMENT_PANEL} defaultSize="46%" minSize="420px">
+                <Panel
+                  id={DOCUMENT_PANEL}
+                  defaultSize="46%"
+                  minSize={DOCUMENT_MIN}
+                >
                   <div
                     ref={pane}
                     tabIndex={-1}
@@ -409,30 +448,16 @@ export function LocalFileWorkspace({
                       review ? copy.gitReview.title : copy.localFiles.preview
                     }
                     className="flex h-full min-w-0 flex-col bg-app outline-none"
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape" && !event.defaultPrevented) {
-                        event.stopPropagation();
-                        close();
-                      }
-                    }}
                   >
-                    <div className="flex items-start gap-1 border-b border-line p-4">
-                      {review ? (
-                        <span className="flex-1 text-sm font-medium text-ink">
-                          {copy.gitReview.title}
-                        </span>
-                      ) : (
-                        header
-                      )}
+                    {body(
                       <IconButton
                         ariaLabel={copy.common.close}
                         tooltip={false}
                         onClick={close}
                       >
                         <X size={14} weight="thin" />
-                      </IconButton>
-                    </div>
-                    {body}
+                      </IconButton>,
+                    )}
                   </div>
                 </Panel>
               ) : (
@@ -455,17 +480,7 @@ export function LocalFileWorkspace({
                           ? copy.gitReview.title
                           : `${copy.localFiles.preview}: ${fileName(preview!.path)}`}
                       </Dialog.Title>
-                      <div className="flex items-start gap-1 border-b border-line p-4">
-                        {review ? (
-                          <span className="flex-1 text-sm font-medium text-ink">
-                            {copy.gitReview.title}
-                          </span>
-                        ) : (
-                          header
-                        )}
-                        <DialogCloseButton />
-                      </div>
-                      {body}
+                      {body(<DialogCloseButton />)}
                     </Dialog.Content>
                   </Dialog.Portal>
                 </Dialog.Root>
