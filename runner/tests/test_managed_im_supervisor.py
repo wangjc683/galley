@@ -27,6 +27,13 @@ def _write_fake_dcapp(ga_path: Path, body: str) -> None:
     (frontends / "dcapp.py").write_text(body, encoding="utf-8")
 
 
+def _write_fake_wechatapp(ga_path: Path, body: str) -> None:
+    frontends = ga_path / "frontends"
+    frontends.mkdir(parents=True, exist_ok=True)
+    (frontends / "__init__.py").write_text("", encoding="utf-8")
+    (frontends / "wechatapp.py").write_text(body, encoding="utf-8")
+
+
 def _args(ga_path: Path, state_dir: Path, platform: str = "feishu") -> Namespace:
     return Namespace(
         platform=platform,
@@ -47,6 +54,7 @@ def _restore_stdio(stdout: Any, stderr: Any, real_stdout: Any, real_stderr: Any)
 def _clear_frontends_modules() -> None:
     sys.modules.pop("frontends.fsapp", None)
     sys.modules.pop("frontends.dcapp", None)
+    sys.modules.pop("frontends.wechatapp", None)
     sys.modules.pop("frontends", None)
 
 
@@ -646,3 +654,95 @@ def main():
     events = [json.loads(line) for line in out.getvalue().splitlines()]
     assert events[-1]["state"] == "error"
     assert "load Galley Feishu config failed" in events[-1]["lastError"]
+
+
+def test_run_wechat_pins_agent_mode_and_blocks_switch(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Upstream wechatapp defaults to forwarding into a detached conductor
+    child that has no managed mykey loader and no Galley prompt, so it never
+    replies. The supervisor must pin the in-process agent mode before the
+    poll loop starts and must not let ``/switch`` toggle back."""
+    ga_path = tmp_path / "ga"
+    state_dir = tmp_path / "state"
+    _write_fake_wechatapp(
+        ga_path,
+        """
+_TEMP_DIR = "unset"
+_MODE, _cond_seq = "conductor", 0
+SEEN = []
+
+
+class AuthExpired(Exception):
+    pass
+
+
+class Agent:
+    verbose = True
+
+    def run(self):
+        pass
+
+
+agent = Agent()
+
+
+class WxBotClient:
+    bot_id = "bot-test"
+    token = "tok"
+    sent = []
+
+    def __init__(self, token_file):
+        self.token_file = token_file
+
+    def extract_text(self, msg):
+        return msg["text"]
+
+    def send_text(self, uid, text, context_token=""):
+        self.sent.append((uid, text, context_token))
+
+    def run_loop(self, on_message, poll_timeout=30):
+        on_message(self, {"text": "/switch", "from_user_id": "u1", "context_token": "c1"})
+        on_message(self, {"text": "hello", "from_user_id": "u1", "context_token": "c2"})
+        raise KeyboardInterrupt()
+
+
+def on_message(bot, msg):
+    SEEN.append((msg["text"], _MODE))
+""",
+    )
+    monkeypatch.setattr(managed_runtime, "install_managed_mykey_loader", lambda: None)
+    monkeypatch.setattr(managed_runtime, "managed_state_root", lambda: None)
+    monkeypatch.setattr(
+        managed_runtime,
+        "install_managed_prompt_profile",
+        lambda agent, extra_env_names: None,
+    )
+    _clear_frontends_modules()
+    out = io.StringIO()
+    stdout, stderr, real_stdout, real_stderr = (
+        sys.stdout,
+        sys.stderr,
+        sys.__stdout__,
+        sys.__stderr__,
+    )
+    cwd = os.getcwd()
+    try:
+        code = managed_im_supervisor._run_wechat(
+            _args(ga_path, state_dir, platform="wechat"), out
+        )
+        wechatapp = sys.modules["frontends.wechatapp"]
+    finally:
+        os.chdir(cwd)
+        _restore_stdio(stdout, stderr, real_stdout, real_stderr)
+        _clear_frontends_modules()
+
+    assert code == 0
+    assert wechatapp._MODE == "agent"
+    assert wechatapp.SEEN == [("hello", "agent")]
+    assert wechatapp.WxBotClient.sent == [
+        ("u1", managed_im_supervisor.WECHAT_SWITCH_BLOCKED_REPLY, "c1")
+    ]
+    events = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert [event["state"] for event in events] == ["starting", "running", "stopped"]

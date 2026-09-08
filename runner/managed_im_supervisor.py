@@ -12,6 +12,7 @@ import os
 import sys
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Any
@@ -24,6 +25,13 @@ IM_SUPERVISOR_PROMPT_ENV = "GALLEY_IM_SUPERVISOR_PROMPT_TEXT"
 # channel and therefore cannot ride a process-wide env var.
 IM_SUPERVISOR_PROMPT_TEMPLATE_ENV = "GALLEY_IM_SUPERVISOR_PROMPT_TEMPLATE"
 IM_SUPERVISOR_LOCK_NAME = "supervisor.lock"
+# Upstream ``wechatapp`` defaults ``_MODE`` to ``"conductor"`` and forwards every
+# incoming message to a detached ``conductor.py`` child on a fixed port. That
+# child carries neither the managed mykey loader nor the Galley supervisor
+# prompt, so under the managed runtime it never answers. Galley pins the
+# in-process agent and refuses ``/switch`` instead of patching the child.
+WECHAT_MANAGED_MODE = "agent"
+WECHAT_SWITCH_BLOCKED_REPLY = "Galley 托管的微信渠道固定由 supervisor 处理消息，不支持 /switch。"
 
 
 def _capture_real_stdout() -> IO[str]:
@@ -183,6 +191,22 @@ def _flush_and_release_lock(logf: IO[str], lock: _SupervisorLock) -> None:
     lock.close()
 
 
+def _managed_wechat_on_message(wechatapp: Any) -> Callable[[Any, Any], None]:
+    """Wrap upstream ``on_message`` so ``/switch`` cannot leave the managed agent mode."""
+
+    def on_message(bot: Any, msg: Any) -> None:
+        if bot.extract_text(msg).strip() == "/switch":
+            bot.send_text(
+                msg.get("from_user_id", ""),
+                WECHAT_SWITCH_BLOCKED_REPLY,
+                context_token=msg.get("context_token", ""),
+            )
+            return
+        wechatapp.on_message(bot, msg)
+
+    return on_message
+
+
 def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
     state_dir = Path(args.state_dir).expanduser().resolve()
     temp_dir = state_dir / "temp"
@@ -222,6 +246,7 @@ def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
         return 1
 
     wechatapp._TEMP_DIR = str(temp_dir)
+    wechatapp._MODE = WECHAT_MANAGED_MODE
     wechatapp.agent.verbose = False
     managed_runtime.install_managed_prompt_profile(
         wechatapp.agent,
@@ -288,7 +313,7 @@ def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
     )
 
     try:
-        bot.run_loop(wechatapp.on_message)
+        bot.run_loop(_managed_wechat_on_message(wechatapp))
     except wechatapp.AuthExpired:
         _emit(out, platform="wechat", state="expired", lastError="WeChat login expired")
         return 2

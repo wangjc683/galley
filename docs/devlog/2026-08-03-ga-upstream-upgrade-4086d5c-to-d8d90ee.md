@@ -208,7 +208,13 @@ correctness issue — flagged for JC rather than changed unilaterally.
 
 No new engine-core writes bypassing `GALLEY_GA_STATE_ROOT`. The new path
 constants (`FILE_HOME`, `UPLOAD_DIR`, `hub.html`) all live in `hub.py` /
-`conductor.py`, which Galley does not run. Upstream added no official
+`conductor.py`, which Galley does not run. (Correction 2026-09-08: this
+was wrong for `conductor.py`. This same baseline bump brought upstream
+`a1f7368`, which makes `wechatapp` forward every message into a spawned
+`conductor.py` by default, so the managed WeChat channel did run it — and
+never replied, because that child has no managed mykey loader. See
+[the devlog](./2026-09-08-wechat-conductor-mode-dead-path.md).)
+Upstream added no official
 state-root or profile option, so patch `0001` stays. No config key renames;
 `max_retry_after` is purely additive.
 

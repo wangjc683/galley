@@ -90,9 +90,18 @@ New in the `30b24ad` -> `efb3bc6` range:
   is the file where `0017` had its real conflict.
 - `frontends/wechatapp.py` — Windows-only `creationflags` no longer
   evaluated on Linux (upstream `17d9f4d`). Adjacent to `0020`'s territory
-  but a different spawn site (`_start_conductor`, which Galley does not
-  reach); `0020`'s removal condition is unmet and `0004` rebased with +4
-  positional drift.
+  but a different spawn site (`_start_conductor`); `0020`'s removal
+  condition is unmet and `0004` rebased with +4 positional drift.
+  Correction (2026-09-08): this audit and the 2026-08-03 one both claimed
+  Galley never reaches `_start_conductor`. Wrong — upstream `a1f7368`
+  (2026-07-25, in the baseline since 08-03) defaults `wechatapp._MODE` to
+  `"conductor"`, so every managed WeChat message was forwarded into a
+  detached `conductor.py` child that has no managed mykey loader and no
+  Galley prompt, and never replied. The supervisor now pins `_MODE = "agent"`
+  and refuses `/switch`; see
+  [the devlog](./devlog/2026-09-08-wechat-conductor-mode-dead-path.md).
+  Audit rule going forward: a frontend's module-level defaults are part of
+  Galley's path whenever the supervisor imports that module.
 - `frontends/desktop*` / `frontends/tests/` / release-qualification
   tooling — upstream Desktop 2.0 v0.2.x line: compiled React dist,
   Tauri shell (`src-tauri/lib.rs` +3.8k), bridge growth

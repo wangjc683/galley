@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-08
+- [托管微信渠道 conductor 死路](./2026-09-08-wechat-conductor-mode-dead-path.md) — PR #25 诊断、`wechatapp._MODE` 默认 conductor 不回消息、supervisor 侧 pin agent + 屏蔽 /switch、审计更正
 - [Git worktree review](./2026-09-08-git-worktree-review.md) — 右侧 Git diff、仓库选择、HEAD 基准、未跟踪文件、只读双入口
 - [Local file references and Markdown preview](./2026-09-08-local-file-preview.md) — 文件夹一键定位、只读预览、保守路径解析、Core 双入口与外接盘图片
 

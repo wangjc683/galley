@@ -291,6 +291,13 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
+The managed WeChat channel never replied from `v0.4.9` through `v0.4.11`:
+the upstream frontend defaults to forwarding into a detached `conductor.py`
+child that has no managed mykey loader. Fixed on 2026-09-08 in the
+supervisor (agent mode pinned, `/switch` refused); reported by community
+PR #25. A hotfix release is planned once a few more fixes land. See
+[the devlog](./devlog/2026-09-08-wechat-conductor-mode-dead-path.md).
+
 Local file references and Markdown preview are implemented (2026-09-08):
 full local paths in messages gain file-manager actions; Markdown opens a
 session-scoped resizable read-only preview. JC reported Dev desktop acceptance
