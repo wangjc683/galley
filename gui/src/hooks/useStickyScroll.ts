@@ -408,6 +408,17 @@ export function useStickyScroll({
   // it once the target session's turns are on screen. Same anchor
   // geometry as every other "park a message at the top" path, plus a
   // transient wash so the eye lands on the right block.
+  //
+  // The landing is a HARD scrollTop write, not a smooth scrollBy: on
+  // a fresh session mount this effect replaces the session-switch
+  // snap above (which stands down while a locate is pending), and
+  // that snap's scrollTop write doubled as the WKWebView paint nudge
+  // described there. Without a real scrollTop change the restored
+  // conversation can stay unpainted until the user scrolls (seen on
+  // 2026-09-08: blank column, rail dots present, content appears on
+  // the first wheel tick). The 500ms ResizeObserver window mirrors
+  // the snap's too — Shiki / image reflow after the first paint would
+  // otherwise shift the parked message off the anchor line.
   const locateRequest = useUiStore((s) => s.locateRequest);
   const clearLocate = useUiStore((s) => s.clearLocate);
   useEffect(() => {
@@ -420,7 +431,26 @@ export function useStickyScroll({
     let frames = 0;
     let rafId: number | null = null;
     let flashTimer: number | null = null;
+    let observer: ResizeObserver | null = null;
+    let observerTimer: number | null = null;
     const selector = `[data-message-id="${CSS.escape(locateRequest.messageId)}"]`;
+
+    const park = (target: HTMLElement): number => {
+      const containerRect = container.getBoundingClientRect();
+      const delta =
+        target.getBoundingClientRect().top -
+        containerRect.top -
+        USER_MSG_ANCHOR_TOP_PX;
+      const top = Math.max(0, container.scrollTop + delta);
+      if (Math.abs(container.scrollTop - top) < 1) {
+        // Same pixel — the write would be optimized away and paint
+        // nothing. Bounce one pixel so WKWebView sees a real change.
+        container.scrollTop = top + 1;
+      }
+      container.scrollTop = top;
+      return top;
+    };
+
     const attempt = () => {
       const target = container.querySelector<HTMLElement>(selector);
       if (!target) {
@@ -434,23 +464,39 @@ export function useStickyScroll({
         }
         return;
       }
-      const containerRect = container.getBoundingClientRect();
-      const delta =
-        target.getBoundingClientRect().top -
-        containerRect.top -
-        USER_MSG_ANCHOR_TOP_PX;
-      container.scrollBy({ top: delta, behavior: "smooth" });
+      let parkedAt = park(target);
       setAtBottom(false);
       target.classList.add("message-locate-flash");
       flashTimer = window.setTimeout(() => {
         target.classList.remove("message-locate-flash");
       }, LOCATE_FLASH_MS);
       clearLocate();
+
+      // Re-park while late layout settles; bail as soon as the user
+      // scrolls away from where we put them.
+      const inner = container.firstElementChild;
+      if (inner instanceof HTMLElement) {
+        observer = new ResizeObserver(() => {
+          if (Math.abs(container.scrollTop - parkedAt) > 4) {
+            observer?.disconnect();
+            observer = null;
+            return;
+          }
+          parkedAt = park(target);
+        });
+        observer.observe(inner);
+        observerTimer = window.setTimeout(() => {
+          observer?.disconnect();
+          observer = null;
+        }, 500);
+      }
     };
     rafId = requestAnimationFrame(attempt);
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (flashTimer !== null) window.clearTimeout(flashTimer);
+      if (observerTimer !== null) window.clearTimeout(observerTimer);
+      observer?.disconnect();
     };
   }, [locateRequest, activeSessionId, restoring, turnsLength, clearLocate]);
 
