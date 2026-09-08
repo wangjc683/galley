@@ -34,6 +34,10 @@ interface UiState {
 export interface LocateRequest {
   sessionId: string;
   messageId: string;
+  /** The palette query that produced the hit — term-highlighted inside
+   * the located message and used to park its first occurrence, not
+   * just the block, at the anchor line. */
+  query?: string;
   nonce: number;
 }
 
@@ -49,7 +53,7 @@ interface UiActions {
 
   setPendingPetMigration: (sessionId: string | null) => void;
 
-  requestLocate: (sessionId: string, messageId: string) => void;
+  requestLocate: (sessionId: string, messageId: string, query?: string) => void;
   clearLocate: () => void;
 }
 
@@ -82,7 +86,14 @@ export const useUiStore = create<UiStore>((set, get) => ({
   setPendingPetMigration: (sessionId) =>
     set({ pendingPetMigrationTo: sessionId }),
 
-  requestLocate: (sessionId, messageId) =>
-    set({ locateRequest: { sessionId, messageId, nonce: Date.now() } }),
+  requestLocate: (sessionId, messageId, query) =>
+    set({
+      locateRequest: {
+        sessionId,
+        messageId,
+        query: query?.trim() || undefined,
+        nonce: Date.now(),
+      },
+    }),
   clearLocate: () => set({ locateRequest: null }),
 }));

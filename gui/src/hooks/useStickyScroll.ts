@@ -19,6 +19,62 @@ const LOCATE_FLASH_MS = 1400;
 /** Frames to keep looking for the anchor node after turns land —
  * covers Shiki / image reflow committing the node a beat later. */
 const LOCATE_RETRY_FRAMES = 30;
+/** CSS Custom Highlight registry key; styled by `::highlight(...)` in
+ * globals.css. */
+const LOCATE_HIGHLIGHT_NAME = "galley-locate";
+const LOCATE_MAX_TERM_RANGES = 200;
+
+/**
+ * Case-insensitive substring occurrences of `query` inside `root`'s
+ * text nodes, as DOM Ranges — the same "does this text contain the
+ * query" semantics as the palette's trigram / LIKE search, applied to
+ * the rendered message. Matches never span two text nodes (a term
+ * split by inline markup is missed, which is acceptable: the block
+ * wash still says which message).
+ */
+function findTermRanges(root: HTMLElement, query: string): Range[] {
+  const needle = query.toLowerCase();
+  if (!needle) return [];
+  const ranges: Range[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (
+    let node = walker.nextNode();
+    node && ranges.length < LOCATE_MAX_TERM_RANGES;
+    node = walker.nextNode()
+  ) {
+    const text = node.textContent ?? "";
+    const hay = text.toLowerCase();
+    let from = 0;
+    for (;;) {
+      const at = hay.indexOf(needle, from);
+      if (at < 0) break;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + needle.length);
+      ranges.push(range);
+      from = at + needle.length;
+      if (ranges.length >= LOCATE_MAX_TERM_RANGES) break;
+    }
+  }
+  return ranges;
+}
+
+/** Term highlight lives outside the React tree (CSS Custom Highlight
+ * API), so react-markdown's DOM is never touched. No-op where the API
+ * is missing: the block wash alone then marks the message. */
+function setLocateHighlight(ranges: Range[]): void {
+  if (typeof CSS === "undefined" || !("highlights" in CSS)) return;
+  if (ranges.length === 0) {
+    CSS.highlights.delete(LOCATE_HIGHLIGHT_NAME);
+    return;
+  }
+  CSS.highlights.set(LOCATE_HIGHLIGHT_NAME, new Highlight(...ranges));
+}
+
+function clearLocateHighlight(): void {
+  if (typeof CSS === "undefined" || !("highlights" in CSS)) return;
+  CSS.highlights.delete(LOCATE_HIGHLIGHT_NAME);
+}
 
 /**
  * Owns the MainView conversation's scroll behavior — one cohesive
@@ -435,12 +491,13 @@ export function useStickyScroll({
     let observerTimer: number | null = null;
     const selector = `[data-message-id="${CSS.escape(locateRequest.messageId)}"]`;
 
-    const park = (target: HTMLElement): number => {
+    // Park the first term occurrence when there is one — a long answer
+    // can carry the match hundreds of px below the block's top — else
+    // the block itself.
+    const park = (target: HTMLElement, focal: Range | null): number => {
       const containerRect = container.getBoundingClientRect();
-      const delta =
-        target.getBoundingClientRect().top -
-        containerRect.top -
-        USER_MSG_ANCHOR_TOP_PX;
+      const focalTop = (focal ?? target).getBoundingClientRect().top;
+      const delta = focalTop - containerRect.top - USER_MSG_ANCHOR_TOP_PX;
       const top = Math.max(0, container.scrollTop + delta);
       if (Math.abs(container.scrollTop - top) < 1) {
         // Same pixel — the write would be optimized away and paint
@@ -464,7 +521,15 @@ export function useStickyScroll({
         }
         return;
       }
-      let parkedAt = park(target);
+      const ranges = locateRequest.query
+        ? findTermRanges(target, locateRequest.query)
+        : [];
+      // Lifecycle (2026-09-08 ruling): the term highlight stays until
+      // the next locate, a session switch, or Esc — the user reads
+      // around the hit after landing, and 1.4s is too short for that.
+      setLocateHighlight(ranges);
+      const focal = ranges[0] ?? null;
+      let parkedAt = park(target, focal);
       setAtBottom(false);
       target.classList.add("message-locate-flash");
       flashTimer = window.setTimeout(() => {
@@ -482,7 +547,7 @@ export function useStickyScroll({
             observer = null;
             return;
           }
-          parkedAt = park(target);
+          parkedAt = park(target, focal);
         });
         observer.observe(inner);
         observerTimer = window.setTimeout(() => {
@@ -499,6 +564,20 @@ export function useStickyScroll({
       observer?.disconnect();
     };
   }, [locateRequest, activeSessionId, restoring, turnsLength, clearLocate]);
+
+  // Term highlight lifecycle: gone on session switch / unmount, and on
+  // Esc (no preventDefault — whoever else handles Esc still does).
+  useEffect(() => {
+    clearLocateHighlight();
+    return clearLocateHighlight;
+  }, [activeSessionId]);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") clearLocateHighlight();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Callback-ref factory for the in-flight approval cards. The hook
   // owns the id → node map (onClickAdvanceApproval reads it); the

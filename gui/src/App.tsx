@@ -704,11 +704,11 @@ function App() {
           void activateSession(id);
           setScreen("main");
         }}
-        onOpenMessage={(sessionId, messageId) => {
+        onOpenMessage={(sessionId, messageId, query) => {
           // File the locate first: useStickyScroll's session-switch
           // snap reads it to stand down, then consumes it once the
           // restored turns are on screen.
-          requestLocate(sessionId, messageId);
+          requestLocate(sessionId, messageId, query);
           setActiveProjectFilter(undefined);
           void activateSession(sessionId);
           setScreen("main");

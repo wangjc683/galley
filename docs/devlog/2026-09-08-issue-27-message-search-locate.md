@@ -60,6 +60,24 @@ DOM 快速换掉后有时跳过重绘，直到一次输入事件才画。原来�
 500ms 的 ResizeObserver 窗口在后续 reflow 时重新停靠、用户一滚就退出。教训：
 那个 snap 效果承担着两个职责，只看到"回底部"没看到"触发重绘"。
 
+## 第三轮：看不到搜的那个词
+
+重绘修好后 JC 反馈"跳过去没看到搜索词"。结构性原因：停靠的是消息块顶端，
+词可能在块里几百像素以下，洗染又是整块。裁决两件一起做、生命周期选"停留到
+下一次定位 / 切会话 / Esc"：
+
+- 搜索词随 `LocateRequest.query` 带过去；在定位到的块里 TreeWalker 扫文本
+  节点做不分大小写子串匹配（跨文本节点的命中不管，块级洗染兜底），
+  上限 200 个 Range。
+- 高亮用 **CSS Custom Highlight API**（`CSS.highlights.set("galley-locate")`
+  + `::highlight()`），不往 react-markdown 的 DOM 里塞 `<mark>`——那会和
+  React 调和打架。WKWebView（macOS 12 更新后的 WebKit）和 WebView2 都支持；
+  没有就静默退回块级洗染。
+- 锚线停第一个命中的行（`Range.getBoundingClientRect()`），ResizeObserver
+  重停靠也跟着这个焦点走。
+- 被否：rehype 插件包 `<mark>`（侵入 MarkdownView 且破坏 memo）；只停行不
+  高亮（词还是要靠眼睛找）；高亮跟洗染 1.4s 一起消失（读的时间不够）。
+
 ## 被否 / 搁置
 
 - 归档纳入搜索：JC 裁决不做。已归档在产品语义上是"收起来的"，搜索跟随。
