@@ -9,7 +9,10 @@ import type {
   ManagedModelProtocol,
 } from "@/types/managed-models";
 
-import { AdvancedModelOptions } from "./AdvancedModelOptions";
+import {
+  AdvancedModelOptions,
+  ReasoningEffortField,
+} from "./AdvancedModelOptions";
 import {
   InlineProbeStatus,
   ProbeErrorLine,
@@ -95,6 +98,13 @@ export function ModelDraftEditor({
         value={draft.displayName}
         onChange={(displayName) => onChange({ displayName })}
         placeholder={copy.displayNamePlaceholder}
+      />
+      <ReasoningEffortField
+        protocol={protocol}
+        authKind={authKind}
+        options={draft.advancedOptions}
+        recommendedOptions={draft.recommendedAdvancedOptions}
+        onChange={(advancedOptions) => onChange({ advancedOptions })}
       />
       <AdvancedModelOptions
         open={advancedOpen}

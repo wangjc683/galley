@@ -796,6 +796,7 @@ export const enCopy: AppCopy = {
       defaultModelStatus: "Default model",
       moveUp: (name) => `Move ${name} up`,
       moveDown: (name) => `Move ${name} down`,
+      dragToReorder: (name) => `Drag to reorder ${name}`,
       saveService: "Save service",
       saveAndEnableModel: "Save and enable model",
       providerCreatedToastMessage:
@@ -809,7 +810,7 @@ export const enCopy: AppCopy = {
       visibleOptionsHint: (count) =>
         `Showing the first ${count}; keep typing to narrow the list.`,
       test: "Test",
-      setDefault: "Set as default",
+      setDefault: "Set as default (move to top)",
       enabled: "Added",
       enable: "Add",
       manualAddModel: "Add model manually",

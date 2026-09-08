@@ -16,6 +16,90 @@ type AdvancedChoiceOption<TValue extends string> = {
   label: string;
 };
 
+type ReasoningEffortValue =
+  | ""
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+
+/** Merge one key into the effective option set the way the advanced
+ * panel does: null / "" drops the key so the generated config stays
+ * minimal (unset = "follow the provider"). */
+function withAdvancedOption(
+  options: Record<string, unknown>,
+  recommendedOptions: Record<string, unknown>,
+  key: string,
+  value: string | number | boolean | null,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...recommendedOptions, ...options };
+  if (value === null || value === "") {
+    delete next[key];
+  } else {
+    next[key] = value;
+  }
+  return next;
+}
+
+/**
+ * First-level reasoning effort field for the model editor. It still
+ * reads and writes `advancedOptions.reasoning_effort` — the storage
+ * contract is unchanged — it just no longer hides behind the collapsed
+ * 高级配置 panel (issue #26: users went to hand-edit JSON because two
+ * folds stood between them and this one dropdown). The option list is
+ * protocol-aware: OpenAI passes every tier through, the Claude mapping
+ * stops at xhigh, Codex OAuth has no minimal tier and runs medium.
+ */
+export function ReasoningEffortField({
+  protocol,
+  authKind = "api_key",
+  options,
+  recommendedOptions,
+  onChange,
+}: {
+  protocol: ManagedModelProtocol;
+  authKind?: ManagedModelAuthKind;
+  options: Record<string, unknown>;
+  recommendedOptions: Record<string, unknown>;
+  onChange: (options: Record<string, unknown>) => void;
+}) {
+  const copy = useCopy().settings.models;
+  const effectiveOptions = { ...recommendedOptions, ...options };
+  const isCodexOauth = authKind === "chatgpt_codex_oauth";
+  const raw = stringAdvancedOption(
+    effectiveOptions.reasoning_effort,
+    null,
+    "",
+  ) as ReasoningEffortValue;
+  const value: ReasoningEffortValue =
+    isCodexOauth && raw === "minimal" ? "medium" : raw;
+  const choices =
+    protocol === "openai"
+      ? openaiReasoningOptions(copy, isCodexOauth)
+      : claudeReasoningOptions(copy);
+  return (
+    <AdvancedChoiceField
+      label={copy.reasoningEffort}
+      value={value}
+      options={choices}
+      info={copy.reasoningEffortInfo}
+      onChange={(next) =>
+        onChange(
+          withAdvancedOption(
+            options,
+            recommendedOptions,
+            "reasoning_effort",
+            next || null,
+          ),
+        )
+      }
+    />
+  );
+}
+
 export function AdvancedModelOptions({
   open,
   onOpenChange,
@@ -43,13 +127,7 @@ export function AdvancedModelOptions({
   );
 
   const setOption = (key: string, value: string | number | boolean | null) => {
-    const next = { ...effectiveOptions };
-    if (value === null || value === "") {
-      delete next[key];
-    } else {
-      next[key] = value;
-    }
-    onChange(next);
+    onChange(withAdvancedOption(options, recommendedOptions, key, value));
   };
 
   const maxRetries = numberAdvancedOption(
@@ -79,17 +157,7 @@ export function AdvancedModelOptions({
     recommendedOptions.trim_keep_prefix,
     0,
   );
-  const openaiReasoning = stringAdvancedOption(
-    effectiveOptions.reasoning_effort,
-    null,
-    "",
-  ) as "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   const isCodexOauth = authKind === "chatgpt_codex_oauth";
-  const claudeReasoning = stringAdvancedOption(
-    effectiveOptions.reasoning_effort,
-    null,
-    "",
-  ) as "" | "low" | "medium" | "high" | "xhigh";
   const rawThinkingType = stringAdvancedOption(
     effectiveOptions.thinking_type,
     recommendedOptions.thinking_type,
@@ -176,15 +244,6 @@ export function AdvancedModelOptions({
                 ]}
                 onChange={(value) => setOption("api_mode", value)}
               />
-              <AdvancedChoiceField
-                label={copy.reasoningEffort}
-                value={isCodexOauth && openaiReasoning === "minimal" ? "medium" : openaiReasoning}
-                options={openaiReasoningOptions(copy, isCodexOauth)}
-                info={copy.reasoningEffortInfo}
-                onChange={(value) =>
-                  setOption("reasoning_effort", value || null)
-                }
-              />
             </>
           ) : (
             <>
@@ -196,21 +255,6 @@ export function AdvancedModelOptions({
                   { value: "disabled", label: copy.thinkingDisabled },
                 ]}
                 onChange={(value) => setOption("thinking_type", value)}
-              />
-              <AdvancedChoiceField
-                label={copy.reasoningEffort}
-                value={claudeReasoning}
-                options={[
-                  { value: "", label: copy.reasoningDefault },
-                  { value: "low", label: copy.reasoningLow },
-                  { value: "medium", label: copy.reasoningMedium },
-                  { value: "high", label: copy.reasoningHigh },
-                  { value: "xhigh", label: copy.reasoningXHigh },
-                ]}
-                info={copy.reasoningEffortInfo}
-                onChange={(value) =>
-                  setOption("reasoning_effort", value || null)
-                }
               />
               <AdvancedSwitchRow
                 label={copy.claudeCodePassthrough}
@@ -227,7 +271,18 @@ export function AdvancedModelOptions({
             variant="ghost"
             size="sm"
             className="px-0 text-ink-muted"
-            onClick={() => onChange(recommendedOptions)}
+            onClick={() =>
+              // Reasoning effort lives outside this panel now, so the
+              // panel's restore leaves the user's tier choice alone.
+              onChange(
+                effectiveOptions.reasoning_effort === undefined
+                  ? recommendedOptions
+                  : {
+                      ...recommendedOptions,
+                      reasoning_effort: effectiveOptions.reasoning_effort,
+                    },
+              )
+            }
           >
             {copy.restoreRecommended}
           </Button>
@@ -240,16 +295,12 @@ export function AdvancedModelOptions({
 function openaiReasoningOptions(
   copy: ReturnType<typeof useCopy>["settings"]["models"],
   codexOauth: boolean,
-): AdvancedChoiceOption<
-  "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
->[] {
+): AdvancedChoiceOption<ReasoningEffortValue>[] {
   // "max" is OpenAI-protocol only: GA passes it through both api modes,
   // while the Claude path's output_config mapping warns and ignores it
-  // (llmcore.py `_apply_claude_thinking`) — so the Claude branch below
+  // (llmcore.py `_apply_claude_thinking`) — so the Claude list below
   // intentionally stops at xhigh.
-  const options: AdvancedChoiceOption<
-    "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
-  >[] = [
+  const options: AdvancedChoiceOption<ReasoningEffortValue>[] = [
     { value: "", label: copy.reasoningDefault },
     { value: "none", label: copy.reasoningNone },
     { value: "low", label: copy.reasoningLow },
@@ -262,6 +313,18 @@ function openaiReasoningOptions(
     options.splice(2, 0, { value: "minimal", label: copy.reasoningMinimal });
   }
   return options;
+}
+
+function claudeReasoningOptions(
+  copy: ReturnType<typeof useCopy>["settings"]["models"],
+): AdvancedChoiceOption<ReasoningEffortValue>[] {
+  return [
+    { value: "", label: copy.reasoningDefault },
+    { value: "low", label: copy.reasoningLow },
+    { value: "medium", label: copy.reasoningMedium },
+    { value: "high", label: copy.reasoningHigh },
+    { value: "xhigh", label: copy.reasoningXHigh },
+  ];
 }
 
 function AdvancedNumberField({
@@ -396,7 +459,6 @@ function advancedCustomCount(
           "trim_keep_prefix",
           ...(authKind === "chatgpt_codex_oauth" ? [] : ["stream"]),
           "api_mode",
-          "reasoning_effort",
         ]
       : [
           "max_retries",
@@ -404,9 +466,11 @@ function advancedCustomCount(
           "trim_keep_prefix",
           "stream",
           "thinking_type",
-          "reasoning_effort",
           "fake_cc_system_prompt",
         ];
+  // `reasoning_effort` is deliberately absent: it renders as a
+  // first-level field (ReasoningEffortField), so counting it here would
+  // report "1 custom setting" for something the user can already see.
   return keys.filter((key) => {
     const current = options[key] ?? null;
     const baseline = recommended[key] ?? null;

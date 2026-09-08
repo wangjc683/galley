@@ -96,9 +96,31 @@
 - **背景**：上游给 `NativeClaudeSession` 加了可选 cfg 键 `api_key_header`，取值 `auto`（默认，旧的 `sk-ant-` 前缀启发式）/ `x-api-key` / `bearer`。那类中转（上游举例 opencode.ai）只认 `x-api-key`，而 `auto` 对非 `sk-ant-` key 发 `Bearer`，结果 401 Missing API key。**Galley 的 runner 侧已经通了**：`managed_runtime.managed_model_config_from_env` 是 `cfg.update(advanced)`，模型的 `advancedOptions` 原样透传进 GA session cfg，不需要任何代码改动。差的只是入口——`AdvancedModelOptions` 编辑的是一组策展字段（`max_retries` / `read_timeout` 等），这个键不在其中，用户没法敲进去。
 - **方案**：两条路。① 在高级面板加一个三选一（`auto` / `x-api-key` / `bearer`），只对 `protocol === "anthropic"` 显示；② 不加字段，只在某个中转预设的 `recommendedAdvancedOptions` 里带上——成本更低但只覆盖预设过的端点。
 - **待定**：这是不是一个真需求。目前**没有任何用户报告**撞过这个 401，纯属读上游 diff 读出来的能力。①的成本是给一个策展面板加一个多数人用不到的字段，与「一屏配好模型」的产品方向有张力。等真实信号比现在动手更划算。
+- **第二信号（2026-09-08）**：issue #26 提出「高级参数键值编辑区」作为退路。但它要的是策展字段（推理强度 / fast），不是自由 KV；推理强度当日已提为一级字段解决，本条状态不变。
 - **关联**：[GA 上游升级 f06d550 -> 30b24ad](./2026-08-21-ga-upstream-upgrade-f06d550-to-30b24ad.md) · `runner/managed_runtime.py` `managed_model_config_from_env` · `gui/src/components/screens/settings/models/AdvancedModelOptions.tsx`
 
 ---
+
+## Composer 里的会话级推理强度切换（effort pill）
+
+- **状态**：暂存（2026-09-08 探讨成型，JC 裁决「不进 Composer」）
+- **提出**：2026-09-08，issue #26 第三步「输入框旁一排切换控件：模型 / 推理强度 / fast」。模型切换已有（LLMPill + 命令面板，`set_llm` 本就 per-session）；差的是推理强度。
+- **启动信号**：JC 自己在对话里频繁想临时调强度；或再有用户提这条。
+- **背景（已查明，别重查）**：内核本来就有运行时覆盖——`/session.reasoning_effort=high` 写在 mykey 模板注释里，`agentmain._handle_slash_cmd` 一行 `setattr(self.llmclient.backend, k, v)`；请求时才读，OpenAI 进 payload `reasoning_effort`，Claude 映射 `output_config.effort`（xhigh → max），`MixinSession.__setattr__` 转发到所有路由节点。Galley Composer 文本直通 `put_task`，bridge 还处理 slash 命令的 `done` 回显，所以**今天在 Galley 里打这条命令就生效**。
+- **方案**：runner 加 IPC 命令做同一行 setattr，回 `session_option_changed`（协议纯增量）；Core session 表加 `reasoning_effort` 列，restore 带回；Composer 在 LLMPill 旁加强度 pill，选项复用 `AdvancedModelOptions` 的协议分档表，初始值取模型配置的推理强度，「默认」= 不发参数。只作用当前 session。
+- **实施要点**：覆盖挂在当前 llmclient 上、不在 agent 上——`set_llm` 切模型不跟随、模型配置保存后 Core 改 marker → GA 重建全部 session 覆盖全丢、GA 不发事件。**状态必须 Galley 持有**，在 `llm_changed` / 重建 / bridge 重连 / restore 后重放；管线抄 `llmIndex`（DB 列、restore、pending 值）。attach 模式改的是 GA session 属性，靠上游公开 slash 命令背书，文档记耦合点。
+- **待定**：Thinking 开关要不要一起上；被否的替代「同模型不同强度存两条模型条目、用现成切换器切」——JC 觉得把配置层的事推给了用户，太复杂。三层都要动，不适合 hotfix。
+- **关联**：[issue #26 model config UX](./2026-09-08-issue-26-model-config-ux.md) · `runner/workbench_bridge.py` `_handle_set_llm` · `managed-ga/code/agentmain.py` `_handle_slash_cmd`
+
+## OpenAI `service_tier`（fast / priority 档）进高级面板
+
+- **状态**：暂存（2026-09-08 JC 裁决「fast 先不做」）
+- **提出**：2026-09-08，issue #26 第二步「fast 开关，更快但更贵」。
+- **启动信号**：有用户明确说在用 priority tier；或上游给 Claude 加 fast（`speed`）时一并做。
+- **背景**：内核 `_enum('service_tier', {auto, default, priority, flex})` 已支持，只在 OpenAI payload 发送；GUI 没暴露，属于「有能力没入口」。Claude 的 fast 内核根本没有，按管理运行时纪律等上游，不自己 patch llmcore。
+- **方案**：高级面板加三选一 `auto` / `priority` / `flex`，只对 `protocol === "openai"` 显示，文案标注「更快、计费更高」。不进 Composer。
+- **待定**：Codex OAuth 后端是否透传该字段，做之前查 `_stream_openai` 的 codex 分支。
+- **关联**：[issue #26 model config UX](./2026-09-08-issue-26-model-config-ux.md) · `gui/src/components/screens/settings/models/AdvancedModelOptions.tsx`
 
 ## `shadow-*` utility 在 dark 下静默使用 light 阴影值
 

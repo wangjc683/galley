@@ -1,9 +1,27 @@
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowDown,
   ArrowUp,
   CheckCircle,
   CircleNotch,
+  DotsSixVertical,
   DotsThreeVertical,
   Gauge,
   Info,
@@ -44,6 +62,10 @@ import type {
  * switch between in the Composer: order = menu order, first = default.
  * All per-model actions (reorder / set default / edit / test / remove)
  * live here. Providers below own only credentials + which models exist.
+ *
+ * Reordering has two paths that write the same full id list: the ↑ ↓
+ * buttons (one step, keyboard-reachable) and the row-start drag handle
+ * (any distance — the path that scales past a handful of models).
  */
 export function ConfiguredModelsPanel({
   models,
@@ -52,6 +74,7 @@ export function ConfiguredModelsPanel({
   moveFeedback,
   modelDraft,
   onMoveModel,
+  onReorderModels,
   onSetDefaultModel,
   onToggleModelDraft,
   onChangeModelDraft,
@@ -70,6 +93,7 @@ export function ConfiguredModelsPanel({
   moveFeedback: ModelMoveFeedbackState | null;
   modelDraft: ModelDraftState | null;
   onMoveModel: (modelId: string, direction: ModelMoveDirection) => void;
+  onReorderModels: (orderedIds: string[]) => void;
   onSetDefaultModel: (model: ManagedModelRecord) => void;
   onToggleModelDraft: (
     provider: ManagedModelProviderRecord,
@@ -93,6 +117,23 @@ export function ConfiguredModelsPanel({
 }) {
   const appCopy = useCopy();
   const copy = appCopy.settings.models;
+  // Pointer drags need a few px of travel before they start so a plain
+  // click on the handle never turns into a drag; the keyboard sensor
+  // gives the focused handle Space + Arrow reordering.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const modelIds = models.map((model) => model.id);
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const from = modelIds.indexOf(String(active.id));
+    const to = modelIds.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    onReorderModels(arrayMove(modelIds, from, to));
+  };
   return (
     // Section label lives outside the card, same grammar as the
     // 服务商 section below — cards contain lists, labels belong to the
@@ -116,47 +157,63 @@ export function ConfiguredModelsPanel({
         {copy.myModelsSubtitle}
       </div>
       {models.length > 0 ? (
-        <div className="mt-2 divide-y divide-line rounded-sm border border-line bg-surface">
-          {models.map((model, index) => {
-            const provider = providers.find((p) => p.id === model.providerId);
-            return (
-              <ConfiguredModelRow
-                key={model.id}
-                model={model}
-                provider={provider}
-                isDefault={index === 0}
-                isEditing={modelDraft?.id === model.id}
-                draft={modelDraft?.id === model.id ? modelDraft : null}
-                allModelCount={models.length}
-                saving={saving}
-                canMoveUp={!saving && index > 0}
-                canMoveDown={!saving && index < models.length - 1}
-                moveFeedback={moveFeedback}
-                probeState={savedModelProbeStateFor(model.id)}
-                draftProbeState={
-                  provider
-                    ? modelDraftProbeStateForProvider(provider.id)
-                    : savedModelProbeStateFor(model.id)
-                }
-                onToggleEdit={() => provider && onToggleModelDraft(provider, model)}
-                onSetDefault={() => onSetDefaultModel(model)}
-                onTest={() => onTestModel(model)}
-                onDelete={() => onDeleteModel(model)}
-                onMoveUp={() => onMoveModel(model.id, "up")}
-                onMoveDown={() => onMoveModel(model.id, "down")}
-                onChangeDraft={(patch) =>
-                  provider && onChangeModelDraft(provider.id, patch)
-                }
-                onCancelDraft={onCancelModelDraft}
-                onTestDraft={(draft) =>
-                  provider && onTestModelDraft(provider, draft)
-                }
-                onSaveDraft={onSaveModelDraft}
-                onRegisterRow={onRegisterModelRow}
-              />
-            );
-          })}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={modelIds}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="mt-2 divide-y divide-line rounded-sm border border-line bg-surface">
+              {models.map((model, index) => {
+                const provider = providers.find(
+                  (p) => p.id === model.providerId,
+                );
+                return (
+                  <ConfiguredModelRow
+                    key={model.id}
+                    model={model}
+                    provider={provider}
+                    isDefault={index === 0}
+                    isEditing={modelDraft?.id === model.id}
+                    draft={modelDraft?.id === model.id ? modelDraft : null}
+                    allModelCount={models.length}
+                    saving={saving}
+                    canDrag={!saving && models.length > 1}
+                    canMoveUp={!saving && index > 0}
+                    canMoveDown={!saving && index < models.length - 1}
+                    moveFeedback={moveFeedback}
+                    probeState={savedModelProbeStateFor(model.id)}
+                    draftProbeState={
+                      provider
+                        ? modelDraftProbeStateForProvider(provider.id)
+                        : savedModelProbeStateFor(model.id)
+                    }
+                    onToggleEdit={() =>
+                      provider && onToggleModelDraft(provider, model)
+                    }
+                    onSetDefault={() => onSetDefaultModel(model)}
+                    onTest={() => onTestModel(model)}
+                    onDelete={() => onDeleteModel(model)}
+                    onMoveUp={() => onMoveModel(model.id, "up")}
+                    onMoveDown={() => onMoveModel(model.id, "down")}
+                    onChangeDraft={(patch) =>
+                      provider && onChangeModelDraft(provider.id, patch)
+                    }
+                    onCancelDraft={onCancelModelDraft}
+                    onTestDraft={(draft) =>
+                      provider && onTestModelDraft(provider, draft)
+                    }
+                    onSaveDraft={onSaveModelDraft}
+                    onRegisterRow={onRegisterModelRow}
+                  />
+                );
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : (
         <div className="mt-2 rounded-sm border border-line bg-surface px-3 py-3 text-ui-secondary text-ink-muted">
           {copy.myModelsEmpty}
@@ -211,6 +268,7 @@ function ConfiguredModelRow({
   draft,
   allModelCount,
   saving,
+  canDrag,
   canMoveUp,
   canMoveDown,
   moveFeedback,
@@ -235,6 +293,7 @@ function ConfiguredModelRow({
   draft: ModelDraftState | null;
   allModelCount: number;
   saving: boolean;
+  canDrag: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   moveFeedback: ModelMoveFeedbackState | null;
@@ -271,18 +330,51 @@ function ConfiguredModelRow({
   const testing =
     probeState.kind === "loading" && probeState.action === "model-test";
   const showRemoveConfirm = confirmingRemove && !isDefault;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: model.id, disabled: !canDrag });
 
   return (
     <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "group px-3 py-2",
         isEditing
           ? "bg-selected/45"
           : "hover:bg-elevated/55",
+        // Dragging keeps the row's quiet register (no lift / shadow, same
+        // as the hover rule): a solid elevated fill plus z-index so it
+        // reads above the rows sliding underneath it.
+        isDragging && "relative z-10 bg-elevated",
         swapClass,
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          aria-label={copy.dragToReorder(display.title)}
+          title={copy.dragToReorder(display.title)}
+          disabled={!canDrag}
+          className={cn(
+            "-ml-1 flex size-5 shrink-0 touch-none items-center justify-center rounded-sm outline-none",
+            "text-ink-muted/45 group-hover:text-ink-muted hover:text-ink",
+            "focus-visible:ring-2 focus-visible:ring-brand/30",
+            "disabled:cursor-default disabled:opacity-40",
+            canDrag && (isDragging ? "cursor-grabbing" : "cursor-grab"),
+          )}
+          {...attributes}
+          {...listeners}
+        >
+          <DotsSixVertical size={13} weight="bold" />
+        </button>
         <DefaultModelRadio
           isDefault={isDefault}
           disabled={saving}

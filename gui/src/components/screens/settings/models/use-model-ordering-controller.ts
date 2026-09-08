@@ -112,10 +112,28 @@ export function useModelOrderingController({
     }
   };
 
+  // Drag-and-drop path: the panel hands back the full id list already
+  // in its final order. No swap animation — dnd-kit already animated
+  // the rows into place, a second flash would double the motion.
+  const handleReorderConfiguredModels = async (orderedIds: string[]) => {
+    if (saving || orderedIds.length <= 1) return;
+    const currentIds = orderedModels.map((item) => item.id);
+    if (currentIds.every((id, index) => id === orderedIds[index])) return;
+    setOptimisticModelIds(orderedIds);
+    try {
+      await reorderModels(orderedIds);
+      setOptimisticModelIds(null);
+      showModelConfigSavedToast();
+    } catch {
+      setOptimisticModelIds(null);
+    }
+  };
+
   return {
     orderedModels,
     modelMoveFeedback,
     handleMoveConfiguredModel,
+    handleReorderConfiguredModels,
     handleSetDefaultModel,
   };
 }

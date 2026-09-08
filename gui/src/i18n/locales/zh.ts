@@ -758,6 +758,7 @@ export const zhCopy = {
       defaultModelStatus: "默认模型",
       moveUp: (name: string) => `上移 ${name}`,
       moveDown: (name: string) => `下移 ${name}`,
+      dragToReorder: (name: string) => `拖动调整 ${name} 的顺序`,
       saveService: "保存服务",
       saveAndEnableModel: "保存并启用模型",
       providerCreatedToastMessage:
@@ -771,7 +772,7 @@ export const zhCopy = {
       visibleOptionsHint: (count: number) =>
         `已显示前 ${count} 个，继续输入可缩小范围。`,
       test: "测试",
-      setDefault: "设为默认",
+      setDefault: "设为默认（移到顶部）",
       enabled: "已添加",
       enable: "添加",
       manualAddModel: "手动添加模型",

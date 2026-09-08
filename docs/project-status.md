@@ -291,6 +291,13 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
+Settings -> Models UX from community issue #26 (2026-09-08): reasoning
+effort is a first-level field in the model editor (storage unchanged), the
+model list gains drag-and-drop reordering via dnd-kit next to the existing
+arrows, and the default radio's tooltip states that it moves the model to the
+top. Desktop acceptance pending on macOS and Windows. See
+[the devlog](./devlog/2026-09-08-issue-26-model-config-ux.md).
+
 The managed WeChat channel never replied from `v0.4.9` through `v0.4.11`:
 the upstream frontend defaults to forwarding into a detached `conductor.py`
 child that has no managed mykey loader. Fixed on 2026-09-08 in the

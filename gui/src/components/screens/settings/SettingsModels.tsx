@@ -66,6 +66,7 @@ export function SettingsModels({
     orderedModels,
     modelMoveFeedback,
     handleMoveConfiguredModel,
+    handleReorderConfiguredModels,
     handleSetDefaultModel,
   } = useModelOrderingController({
     models,
@@ -239,6 +240,7 @@ export function SettingsModels({
         moveFeedback={modelMoveFeedback}
         modelDraft={providerModelController.modelDraft}
         onMoveModel={handleMoveConfiguredModel}
+        onReorderModels={(ids) => void handleReorderConfiguredModels(ids)}
         onSetDefaultModel={(model) => void handleSetDefaultModel(model)}
         onToggleModelDraft={(provider, model) => {
           const result = providerModelController.toggleModelDraft(

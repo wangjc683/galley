@@ -271,11 +271,11 @@ Runtime tab 的任何问题）。
   - Provider 展开后才显示模型维护操作；展开时自动读取一次模型列表（有 Key 且无缓存时；Codex 跳过；失败静默降级），`读取模型列表` 按钮保留为手动刷新入口，零模型 Provider 的卡片 header 不再重复放同名按钮。
   - 获取模型列表后的模型选择必须使用 Galley 自定义 popover dropdown，不使用浏览器原生 `select`。
   - `可添加模型` 列表里的模型行操作使用低权重 `+ 添加`；已加入配置的模型在同一位置显示 `✓ 已添加`，两者高度和占位保持一致，避免形成一列重按钮。
-  - 编辑模型里可以折叠显示 `高级配置`，默认关闭。第一版只开放排障/适配项：`max_retries`、`read_timeout`、`stream`、OpenAI-compatible 的 `api_mode` / `reasoning_effort`，以及 Anthropic-compatible 的 `thinking_type`、`reasoning_effort`、`Claude Code 兼容透传`。`thinking_budget_tokens` 不开放，因此 `thinking_type` 暂不提供 `enabled`，避免用户选了实际会被 GA 忽略的配置。
+  - 编辑模型里可以折叠显示 `高级配置`，默认关闭。第一版只开放排障/适配项：`max_retries`、`read_timeout`、`stream`、OpenAI-compatible 的 `api_mode`，以及 Anthropic-compatible 的 `thinking_type`、`Claude Code 兼容透传`。`reasoning_effort` 自 2026-09-08 起是编辑器的**一级字段**（显示名之后、`高级配置` 之前，`ReasoningEffortField`）：存储仍是 `advancedOptions.reasoning_effort`，只是不再藏在折叠面板里——issue #26 的用户因为「点铅笔 → 展开高级配置」两层折叠而去手改 JSON。面板的「N 项已自定义」计数不含它，「恢复推荐值」也不动它。`thinking_budget_tokens` 不开放，因此 `thinking_type` 暂不提供 `enabled`，避免用户选了实际会被 GA 忽略的配置。
   - `reasoning_effort` 的默认语义（2026-08-07）：未设置 = 不发送该参数、由服务商决定，选项文案写作「默认（跟随服务商）」并带 info 说明。三个第一方预设（Codex / OpenAI / Anthropic）显式写 `high`（支持性确定的端点上采质量优先默认）；第三方兼容 / 任意端点预设一律不写——该字段是第一方 API 契约，兼容层实现无保证。存量模型记录不迁移：运行时始终以创建时快照为准，下次编辑保存时自然吸收新推荐值。
 - 新增 / 编辑 Provider 表单和 Onboarding 首次模型配置中，`提供商显示名称` 是可选身份字段，不放进折叠的 `更多`；它常驻在连接信息和模型字段之后、保存按钮之前，作为最后一步轻量命名。
 - Provider 检查成功态使用低权重 inline 文本，不长期占用绿色块；失败态保留说明块并贴近对应 Provider。
-- `我的模型` 行首用 radio 圆点承担默认模型：实心 = 默认，点击空心圆点一键设为默认（移到顶部）；标题旁保留轻量 `默认` badge。行右侧常驻控件收敛为 `↑ ↓ ⋯` 三个——测试 / 移除收进与服务商卡片同语法的 `⋯` 菜单，编辑 = 点击行本身，不再放冗余编辑图标（2026-07-17 改版，此前每行最多 6 个 hover 图标按钮）。
+- `我的模型` 行首最左是拖拽把手（`DotsSixVertical`，与排序箭头同一 hover 显性化权重；拖动态只做 `bg-elevated` 实底 + z-index，不抬升、不加阴影，沿用行 hover 规则；把手可聚焦，Space 拿起、方向键移动、Space 放下），其后是 radio 圆点承担默认模型：实心 = 默认，点击空心圆点一键设为默认（移到顶部，tooltip 明写这一等价）；标题旁保留轻量 `默认` badge。行右侧常驻控件收敛为 `↑ ↓ ⋯` 三个——`↑ ↓` 保留为单步 / 键盘路径，长距离移动走拖拽（2026-09-08 起，dnd-kit）；测试 / 移除收进与服务商卡片同语法的 `⋯` 菜单，编辑 = 点击行本身，不再放冗余编辑图标（2026-07-17 改版，此前每行最多 6 个 hover 图标按钮）。
 - API Key 字段只用于保存到本地加密凭据存储；列表正常态不展示凭据状态，只有缺少密钥 / 状态异常时显示提示，诊断可显示 `apiKeyRef` 对应状态但不显示密钥。
 - Session 选中模型持久化必须用稳定身份：managed 用 `managed_models.id`，external 用 GA raw LLM name；`llm_index` 只能作为 bridge 命令和旧数据 fallback，不能作为长期身份。
 - 第一版保留为 Settings 高级入口；first-run onboarding 会复用同一套能力，但不暴露高级参数。
