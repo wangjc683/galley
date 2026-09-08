@@ -99,6 +99,21 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | `--color-error` | `text-error` / `bg-error` | `#B14545` | 深红 |
 | `--color-info` | `text-info` / `bg-info` | `#7A7A8E` | muted 灰蓝（info severity） |
 
+#### 透明度 tokens（`--opacity-*`）
+
+四档：`subtle` 4% / `soft` 12% / `medium` 20% / `strong` 40%（dark 各抬一档：
+10 / 20 / 28 / 46%）。**值是百分比，不是无单位小数**——所有消费方都是
+Tailwind 颜色修饰符 `bg-brand/[var(--opacity-soft)]`，编译成
+`color-mix(in oklab, <color> var(--opacity-soft), transparent)`，而 `color-mix`
+只认百分比：写成 `0.12` 时整条声明作废、底色变透明。2026-09-08 从命令面板
+的搜索 mark 看不见这一件事往下挖，发现全仓 **77 处填充 / 描边（31 个文件）
+自 token 建立起从未渲染过**：accent-secondary / warning 按钮填充、ToolCallout
+十处、审批表单、健康检查卡、TopBar 状态徽章、模型设置原语……修法是把
+四个 token 改成百分比，一处修、77 处同时活过来；观感会第一次真正长出这
+些填充，与 deferred 里 `shadow-*` dark 不生效那条同族（token 写了、utility
+生成了、值不合法）。这些 token **不能**当 `opacity:` 的值用（那个属性要
+数字）。
+
 #### Dark theme（暖炭黑）
 
 Dark theme 是 Galley light theme 的夜间版本，不是另一个产品方向。视觉目标是

@@ -78,6 +78,29 @@ DOM 快速换掉后有时跳过重绘，直到一次输入事件才画。原来�
 - 被否：rehype 插件包 `<mark>`（侵入 MarkdownView 且破坏 memo）；只停行不
   高亮（词还是要靠眼睛找）；高亮跟洗染 1.4s 一起消失（读的时间不够）。
 
+## 第四轮：面板候选里的高亮
+
+JC 问"搜索 dialog 的候选里是不是也该高亮"，截图里 `Terminal` 两边有空隙
+但没底色。往下挖出两件事加一项裁决：
+
+- **搜索 mark 一直在，只是画不出来。** 产物里是 `color-mix(in oklab,
+  var(--color-brand) var(--opacity-soft), transparent)`，而 token 值是 `0.12`，
+  `color-mix` 只认百分比，整条声明作废。全仓 `bg-xxx/[var(--opacity-*)]` 写法
+  **77 处、31 个文件**全部静默透明：按钮的 accent-secondary / warning 填充、
+  ToolCallout 十处、审批表单、健康检查卡、侧栏行、TopBar 徽章、模型设置原语。
+  JC 裁决现在修：四个 token 改成百分比（light 4/12/20/40，dark 10/20/28/46），
+  `globals.css` 里唯一一处 `calc(var(--opacity-strong) * 100%)` 去掉乘法。
+  产物 grep 确认 `12%` / `20%` 且 hex fallback 带对了 alpha。**全局观感变化**，
+  几十处填充第一次真正长出来，等 JC 真机过一遍。规则写进 foundations。
+- **"没找到"和命中同屏。** cmdk 在查询变化时统计匹配数；防抖后才到的
+  FTS 命中挂载晚、值注册在条目之后，渲染了却不更新 `filtered.count`。
+  修法：有命中就不渲染 `Command.Empty`。
+- **裁决**：面板 mark 响度和对话内统一（都用 `--opacity-strong`，一个常量
+  `SEARCH_MARK_CLASS` 供两处 `<mark>`）；「最近会话」组改**子串匹配**（cmdk
+  `filter` 自定义，全面板一种包含语义），标题 / 摘要按子串切片打 mark；候选池
+  有查询时扩到全部会话、最多 8 条——原来只在最近 8 条里模糊匹配，按标题找
+  老会话根本够不到。被否：保留模糊只在子串命中时高亮（两套规则）。
+
 ## 被否 / 搁置
 
 - 归档纳入搜索：JC 裁决不做。已归档在产品语义上是"收起来的"，搜索跟随。

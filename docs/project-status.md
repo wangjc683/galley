@@ -291,6 +291,13 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
+Opacity tokens were unitless numbers that `color-mix` rejects, so 77 fills and
+borders across 31 GUI files had rendered transparent since the tokens were
+introduced; fixed on 2026-09-08 by making the tokens percentages. This is a
+global visual change (accent / warning button fills, tool callouts, badges
+gain their designed tint) that needs JC's desktop pass before release. See
+[foundations](./design/foundations.md) and the issue #27 devlog.
+
 Palette full-text hits now locate the matched message (2026-09-08, community
 issue #27): opening a hit parks that message at the conversation's shared
 anchor line with a brief brand wash, keyed by the persisted message id.

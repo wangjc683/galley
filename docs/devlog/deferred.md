@@ -138,6 +138,7 @@
 - **提出**：2026-08-21，给 `--shadow-selected` 建 token 后核对产物时发现。
 - **启动信号**：dogfood 中觉得 dark 下卡片 / dialog / 浮层「贴在背景上、浮不起来」或层次感弱；或下一次要动 dark 阴影时。
 - **背景**：Tailwind v4 为 `@theme` 里的 `--shadow-*` 生成 utility 时**把值内联**进 `--tw-shadow`，不生成 `var()` 引用。产物实测：`.shadow-card{--tw-shadow:0 1px 2px var(--tw-shadow-color,#1f1b170a)}` —— 写死的是 light 的 `rgba(31,27,23,0.04)`。于是 `html[data-theme="dark"]` 块里那一整批 `--shadow-*` 重定义**对直写 utility 的调用点完全不生效**，dark 下拿到的是 light 的淡暖黑（4%）而不是设计意图的纯黑（18%–42%）。
+- **同族先例（2026-09-08）**：`--opacity-*` token 写成无单位小数、被 `color-mix` 整条丢弃，77 处填充静默透明，已修（改成百分比）。这条 shadow 的病因不同（内联值）但症状同类：token 建了、产物里不生效、没人看得出来。修本条时照 09-08 的办法先在产物里 grep 验证。
 - **影响面**（2026-08-21 实测）：**52 处直写受影响**（dialog / card / menu / tooltip 为主），**36 处用 `shadow-[var(--shadow-*)]` 写法不受影响**（button、composer、MessageUser 等——07-16 native-feel 那轮显然已经知道这个坑）。
 - **方案**：把 52 处直写统一改成 `shadow-[var(--shadow-*)]` 形式。机械替换，可脚本化；风险在于改完 dark 阴影会**第一次真正生效**，观感会明显变化（变重），需要连带复核 dark 下各浮层的阴影值是否还合适——很可能当年调 dark 阴影值时就是照着「看不见」调的。
 - **待定**：是否顺带把 `--shadow-*` 改成不进 `@theme`、只做普通 CSS 变量（那样 utility 就不存在，强制所有调用点走 var 写法，杜绝重演）。

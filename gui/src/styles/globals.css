@@ -243,11 +243,18 @@
   /* --- overlay (for ⌘K palette / modals) --- */
   --color-overlay: rgba(31, 27, 23, 0.4);
 
-  /* --- opacity tokens (unified transparency system) --- */
-  --opacity-subtle: 0.04;    /* 极淡背景 tint */
-  --opacity-soft: 0.12;      /* 轻微强调 */
-  --opacity-medium: 0.20;    /* 中等强调 */
-  --opacity-strong: 0.40;    /* 强强调 */
+  /* --- opacity tokens (unified transparency system) ---
+     Percentages, not unitless numbers: every consumer is a Tailwind
+     color modifier (`bg-brand/[var(--opacity-soft)]`), which compiles
+     to `color-mix(in oklab, <color> var(--opacity-soft), transparent)`
+     — and color-mix rejects a bare `0.12`, silently dropping the whole
+     declaration. 77 fills / borders across 31 files rendered
+     transparent this way until 2026-09-08. Never use these as a bare
+     `opacity:` value; that property needs a number. */
+  --opacity-subtle: 4%;      /* 极淡背景 tint */
+  --opacity-soft: 12%;       /* 轻微强调 */
+  --opacity-medium: 20%;     /* 中等强调 */
+  --opacity-strong: 40%;     /* 强强调 */
 
   /* --- motion easings (§2.7) — Tailwind emits `ease-firm` etc. --- */
   /* firm: the workhorse ease-out for A-class feedback — decisive
@@ -445,10 +452,10 @@ html[data-theme="dark"] {
      vanish the hardest) and keep the ramp strictly monotonic. Same
      single-source pattern as the color tokens: light values live in
      @theme above, only the dark deltas live here. */
-  --opacity-subtle: 0.10;
-  --opacity-soft: 0.20;
-  --opacity-medium: 0.28;
-  --opacity-strong: 0.46;
+  --opacity-subtle: 10%;
+  --opacity-soft: 20%;
+  --opacity-medium: 28%;
+  --opacity-strong: 46%;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18);
   /* Dark selected row: same role as the light value, but a dark ground
@@ -932,13 +939,14 @@ code {
   animation: message-locate-flash 1.4s ease-out;
 }
 /* The located search term itself (CSS Custom Highlight API, registered
-   by useStickyScroll as "galley-locate"). Same brand family as the
-   palette snippet <mark>, but deliberately stronger than --opacity-soft
-   / -medium: it must still read on top of the user message's
-   brand-tint band, not only on bare prose. Stays until the next
-   locate, a session switch, or Esc. */
+   by useStickyScroll as "galley-locate"). ONE register with the palette
+   rows' <mark> (`bg-brand/[var(--opacity-strong)]`, .cmdk-search-mark):
+   the word the user typed looks the same from the candidate list to
+   the landed message. `strong` rather than soft/medium because it must
+   still read on top of the user message's brand-tint band, not only on
+   bare prose. Stays until the next locate, a session switch, or Esc. */
 ::highlight(galley-locate) {
-  background-color: color-mix(in srgb, var(--color-brand) 42%, transparent);
+  background-color: color-mix(in srgb, var(--color-brand) var(--opacity-strong), transparent);
   color: var(--color-ink);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1377,7 +1385,7 @@ code {
 .file-path-button:active {
   background-color: color-mix(
     in srgb,
-    var(--color-brand) calc(var(--opacity-strong) * 100%),
+    var(--color-brand) var(--opacity-strong),
     transparent
   );
   color: var(--color-brand-strong);

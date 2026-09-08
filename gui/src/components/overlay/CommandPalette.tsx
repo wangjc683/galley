@@ -13,7 +13,7 @@ import {
   User,
   type Icon as PhosphorIcon,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { searchMessages, type MessageSearchHit } from "@/lib/db";
 import { useCopy } from "@/lib/i18n";
@@ -153,6 +153,12 @@ export function CommandPalette(props: CommandPaletteProps) {
       onOpenChange={props.onOpenChange}
       label={copy.command.label}
       shouldFilter={page === "root"}
+      // Substring, not cmdk's fuzzy subsequence: the row highlight
+      // marks the literal query, and a fuzzy hit ("部署文档" matching
+      // "文档部署方案") would show a matched row with nothing lit up.
+      // Same containment semantics as the FTS group below, so the two
+      // groups follow one rule.
+      filter={substringFilter}
     >
       <div className="relative shrink-0">
         <MagnifyingGlass
@@ -278,7 +284,28 @@ function RootPage({
   const copy = useCopy();
   // Show only the most recent 8 sessions when there's no search; cmdk
   // handles fuzzy filtering when the user starts typing.
-  const recentSessions = sessions.slice(0, 8);
+  // No query: the 8 most recent. With a query: substring-match title +
+  // recap across ALL sessions, capped at 8 — "find that old session by
+  // title" must reach past the recent window (cmdk's filter runs on
+  // the same value string, so it never hides what we pre-selected).
+  const query = search.trim().toLowerCase();
+  const recentSessions = useMemo(() => {
+    if (!query) return sessions.slice(0, 8);
+    const matches: Session[] = [];
+    for (const s of sessions) {
+      const preview = s.summary
+        ? displaySessionSummary(s.summary, copy.sidebar.turnProtocolFailure)
+        : "";
+      if (
+        s.title.toLowerCase().includes(query) ||
+        preview.toLowerCase().includes(query)
+      ) {
+        matches.push(s);
+        if (matches.length >= 8) break;
+      }
+    }
+    return matches;
+  }, [sessions, query, copy.sidebar.turnProtocolFailure]);
 
   return (
     <>
@@ -335,6 +362,7 @@ function RootPage({
                   iconNode={<StatusIcon status={s.status} size={14} />}
                   label={s.title}
                   preview={preview}
+                  query={search.trim()}
                 />
               </Command.Item>
             );
@@ -357,7 +385,7 @@ function RootPage({
                 onOpenMessage(h.sessionId, h.messageId, search.trim())
               }
             >
-              <MessageHitRow hit={h} />
+              <MessageHitRow hit={h} query={search.trim()} />
             </Command.Item>
           ))}
         </Command.Group>
@@ -488,9 +516,51 @@ function SwitchLLMPage({
   );
 }
 
+// ---------------- Search marks ----------------
+
+/**
+ * One register for "the word you typed", from the candidate rows here
+ * to the landed message (`::highlight(galley-locate)` in globals.css
+ * uses the same strong token). Kept as a constant so the two <mark>
+ * producers below cannot drift.
+ */
+const SEARCH_MARK_CLASS =
+  "box-decoration-clone rounded-sm bg-brand/[var(--opacity-strong)] px-0.5 text-ink";
+
+/** cmdk `filter`: 1 for a case-insensitive substring hit, else 0. */
+function substringFilter(value: string, search: string): number {
+  const q = search.trim().toLowerCase();
+  if (!q) return 1;
+  return value.toLowerCase().includes(q) ? 1 : 0;
+}
+
+/** Wrap every case-insensitive occurrence of `query` in the search
+ * mark. Plain text only (titles, recaps) — the FTS snippet path has
+ * its own «» markers from SQLite. */
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const q = query.toLowerCase();
+  if (!q) return <>{text}</>;
+  const hay = text.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let from = 0;
+  for (;;) {
+    const at = hay.indexOf(q, from);
+    if (at < 0) break;
+    if (at > from) parts.push(text.slice(from, at));
+    parts.push(
+      <mark key={at} className={SEARCH_MARK_CLASS}>
+        {text.slice(at, at + q.length)}
+      </mark>,
+    );
+    from = at + q.length;
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return <>{parts}</>;
+}
+
 // ---------------- Message hit row ----------------
 
-function MessageHitRow({ hit }: { hit: MessageSearchHit }) {
+function MessageHitRow({ hit, query }: { hit: MessageSearchHit; query: string }) {
   const copy = useCopy();
   return (
     <div className="flex min-w-0 w-full items-start gap-2.5">
@@ -510,7 +580,7 @@ function MessageHitRow({ hit }: { hit: MessageSearchHit }) {
       </span>
       <div className="min-w-0 flex-1 overflow-hidden">
         <div className="truncate text-[12.5px] text-ink-soft">
-          {hit.sessionTitle}
+          <HighlightedText text={hit.sessionTitle} query={query} />
         </div>
         <div className="mt-0.5 line-clamp-2 break-words text-[12px] leading-[1.45] text-ink">
           <HighlightedSnippet raw={hit.snippet} />
@@ -532,10 +602,7 @@ function HighlightedSnippet({ raw }: { raw: string }) {
     <>
       {parts.map((p, i) =>
         i % 2 === 1 ? (
-          <mark
-            key={i}
-            className="box-decoration-clone rounded-sm bg-brand/[var(--opacity-soft)] px-0.5 text-ink"
-          >
+          <mark key={i} className={SEARCH_MARK_CLASS}>
             {p}
           </mark>
         ) : (
@@ -556,10 +623,14 @@ function PaletteRow({
   sub,
   shortcut,
   checked,
+  query,
 }: {
   Icon?: PhosphorIcon;
   iconNode?: React.ReactNode;
   label: string;
+  /** Current search; substring occurrences in label / preview get the
+   * shared search mark. */
+  query?: string;
   /** Muted one-liner flowing inline after the label (session recap).
    * Unlike `sub` it truncates freely; the label keeps ≥35% width. */
   preview?: string;
@@ -580,11 +651,11 @@ function PaletteRow({
           preview ? "max-w-[65%] flex-none" : "flex-1",
         )}
       >
-        {label}
+        {query ? <HighlightedText text={label} query={query} /> : label}
       </span>
       {preview && (
         <span className="min-w-0 flex-1 truncate text-[12px] text-ink-muted">
-          {preview}
+          {query ? <HighlightedText text={preview} query={query} /> : preview}
         </span>
       )}
       {sub && (

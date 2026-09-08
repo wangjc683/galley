@@ -68,7 +68,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 #### Session 类（主轴）
 
 - 最近 8 个 session（按 `lastActiveAt` 倒序）
-- 搜索：按 title 模糊匹配（V0.2 加 message 内容全文搜索）
+- 搜索（2026-09-08 改）：**不分大小写子串匹配**，不再用 cmdk 的模糊子序列——行内要给命中的字面词打 mark，模糊命中（"部署文档" 匹配 "文档部署方案"）会出现"这行匹配了却没东西亮"的怪状；与下方 FTS 组同一种包含语义。候选池：无查询时最近 8 条；有查询时在**全部**会话的标题 + 摘要里找，最多显示 8 条（"按标题找那个老会话"必须能越过最近窗口）。标题 / 摘要 / FTS 片段里的命中统一用 `.cmdk` 的搜索 mark（`bg-brand/[var(--opacity-strong)]`），和落地后对话内的 `::highlight(galley-locate)` 同一寄存器：用户敲的那个词从候选到落点长得一样。
 - "New chat" 永远固定在第一项
 
 #### Action 类（少而精）
@@ -116,8 +116,9 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
   **词级高亮 + 停到词所在行**（同日第二轮）：搜索词随定位请求带过去，在
   定位到的块里按不分大小写子串扫文本节点（与 FTS 三元组 / LIKE 同语义），
   用 CSS Custom Highlight API 注册 `galley-locate`——不改 DOM，react-markdown
-  的树不受影响；样式是 brand 42% 填充，刻意高于 `--opacity-soft/medium`，
-  因为它要在用户消息的 brand-tint 笔触上也读得出。锚线停的是**第一个命中
+  的树不受影响；样式是 brand `--opacity-strong` 填充（与面板行 mark 同一
+  寄存器），取 strong 而非 soft/medium 是因为它要在用户消息的 brand-tint
+  笔触上也读得出。锚线停的是**第一个命中
   所在行**而不是块顶（长回答里词可能在块顶几百像素之下），块级洗染照旧。
   生命周期：停留到下一次定位、切会话或 Esc（用户落地后要在附近上下读，
   1.4s 太短；它不改 DOM，留着零成本）。API 不可用时退回块级洗染。
