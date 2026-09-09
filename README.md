@@ -41,7 +41,7 @@
 
 ## What Is Galley
 
-Galley is a personal AI assistant that runs on your own computer and actually gets things done — driving your browser, terminal, and files, even your phone. Its harness is deliberately thin: the engine keeps the tool set minimal and the context dense, so the model's own ability does the work, and every model upgrade lands as a Galley upgrade instead of a rewrite.
+Galley is a personal AI assistant that runs on your own computer and actually gets things done — driving your browser, terminal, and files, even your phone. Its harness is deliberately thin: the engine keeps the tool set minimal and the context dense, so the model's own ability does the work, and every model upgrade lands as a Galley upgrade — no waiting for us to catch up.
 
 When one assistant isn't enough, Galley becomes a team. Multiple sessions advance in parallel, ready to switch, take over, and resume at any time. You watch progress, send instructions, and approve actions in the GUI; a Supervisor Agent orchestrates the same team through the CLI — two roles, one shared state, all of it on your machine.
 
@@ -61,7 +61,7 @@ Powered by the bundled engine — a derivative work of [GenericAgent](https://gi
 |---|---|
 | 🖥️ **System-level execution**<br/>Terminal, filesystem, keyboard and mouse, screen vision, all the way to driving a phone over ADB — from looking things up to actually getting them done. | 🌐 **Your real browser**<br/>Connect Chrome / Edge and the agent works in the browser you are already signed into — accounts, memberships, and work consoles are all there. No re-login. |
 | 🧬 **Self-evolving skills**<br/>Every new task it solves is crystallized into a reusable skill; the longer you use it, the more capable it gets — and the skill tree lives on your machine. | 💰 **Token efficiency, measured**<br/>The engine keeps context dense instead of long. In the [GenericAgent paper](https://arxiv.org/abs/2604.17091) it completed Lifelong AgentBench at 100% accuracy on 3–6× fewer input tokens than leading agents. Galley sets the default window at 90K tokens, leaving headroom for long tasks. |
-| 🔌 **Any model, including local ones**<br/>Presets for Anthropic, OpenAI / ChatGPT, DeepSeek, Kimi, GLM, MiniMax, OpenRouter, SiliconFlow, and Xiaomi MiMo, plus any OpenAI-compatible endpoint. A local server such as Ollama connects with no API key at all. | 📖 **Reading panel**<br/>Reference local files from the composer and preview Markdown beside the conversation; point it at a Git repository and review uncommitted changes read-only, unified or split, without leaving Galley. |
+| 🔌 **Any model, including local ones**<br/>Presets for Anthropic, OpenAI / ChatGPT, DeepSeek, Kimi, GLM, MiniMax, OpenRouter, SiliconFlow, and Xiaomi MiMo, plus any OpenAI- or Anthropic-compatible endpoint. A local server such as Ollama connects with no API key at all. | 📖 **Reading panel**<br/>Reference local files from the composer and preview Markdown beside the conversation; point it at a Git repository and review uncommitted changes read-only, unified or split, without leaving Galley. |
 
 ### One team you can actually manage
 
@@ -86,7 +86,7 @@ Galley's orchestration layer. You operate in the GUI; a Supervisor Agent goes th
 
 ## Quick Start
 
-Prepare an API Key for your LLM service first. Presets for Anthropic, OpenAI / ChatGPT, DeepSeek, Kimi, GLM, MiniMax, OpenRouter, SiliconFlow, and Xiaomi MiMo are built in (endpoint and a recommended model prefilled), and any OpenAI-compatible endpoint works. A local server such as Ollama needs no key.
+Prepare an API Key for your LLM service first. Presets for Anthropic, OpenAI / ChatGPT, DeepSeek, Kimi, GLM, MiniMax, OpenRouter, SiliconFlow, and Xiaomi MiMo are built in (endpoint and a recommended model prefilled), and any OpenAI- or Anthropic-compatible endpoint works. A local server such as Ollama needs no key.
 
 | 1. Download Galley | 2. Configure a model | 3. Start using it |
 |---|---|---|
