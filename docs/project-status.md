@@ -319,8 +319,17 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing user-facing is unreleased as of `v0.4.12` (2026-09-08). Community
-threads for that release are answered (issues #26 and #27 stay open by JC's
+Unreleased on main since `v0.4.12` (as of 2026-09-09): two small GUI
+polish items surfaced by the README screenshot reshoot — message Markdown
+tables now fill the reading column and wrap cells (they used to be
+max-content wide and scroll sideways, clipping long-text columns at compact
+width), and the Git review pane's status chip / line-number gutter / code
+wrapping fixes (`a427ffff`). Docs-side, the README was repositioned around
+"Less harness. More model." with a fresh bilingual screenshot set
+(devlogs 2026-09-09). One new deferred item from the reshoot: a scheduled
+task's same-day catch-up fire produced no session twice in a row (root cause
+unknown, see [deferred](./devlog/deferred.md)). Community
+threads for `v0.4.12` are answered (issues #26 and #27 stay open by JC's
 ruling; PR #25's closing is the author's call). One thread is waiting on the
 reporter: the #27 commenter was asked to clarify their sidebar / project
 report before it is classified as an entry-point or a project-filing problem

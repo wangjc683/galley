@@ -30,6 +30,7 @@ subset of the task table below; when the two disagree, this index wins and
 | Check architecture invariants | [architecture demo](./architecture-demo.md) — code-level proofs and grep gates; hard engineering invariants (I3/I5/I6/I9/I11) are in [engineering workflow](./engineering-workflow.md) |
 | Prepare or update a release | [release / update SOP](./release-update-sop.md) (runbook), then [release workflow](./release-workflow.md) (background) |
 | Write GitHub Release notes | [release notes guide](./release-notes-guide.md) — writing rules and bilingual templates |
+| Retake README screenshots | [screenshot playbook](./screenshot-playbook.md) — scene list, seed script, mv-swap isolation, asset policy |
 | Close a long coding session or sync project knowledge | [session close SOP](./session-close-sop.md) |
 | Smoke Windows builds | [Windows checklist](./windows-build-checklist.md) |
 | Touch GenericAgent integration | [GA baseline](./ga-baseline.md) — pinned upstream compatibility |
