@@ -14,7 +14,7 @@
 
 use super::common::{map_galley_err, origin_from_args};
 use super::*;
-use crate::runner_manager::{QueueJump, QueueOffer};
+use crate::runner_manager::{QueueJump, QueueOffer, RunState};
 // Args shapes live in `crate::protocol` (imported via super::*) — the
 // single home for schemaVersion 1 command shapes shared with the CLI.
 // Do not declare per-command arg structs in this module.
@@ -502,16 +502,55 @@ pub(super) async fn dispatch_session_run_state(
     drop(galley);
 
     let state = ctx.runner.run_state(&parsed.session_id).await;
-    SocketResponse::ok(
-        request_id,
-        serde_json::json!({
-            "sessionId": parsed.session_id,
-            "runnerAlive": state.runner_alive,
-            "agentRunning": state.agent_running,
-            "openRun": state.open_run,
-            "queuedCount": state.queued_count,
-        }),
-    )
+    SocketResponse::ok(request_id, run_state_json(&parsed.session_id, state))
+}
+
+/// One session's live state as the wire object shared by
+/// `session.run_state` and `sessions.run_state`. `busy` is the derived
+/// verdict the CLI's Goal controller already computes
+/// (`openRun || agentRunning || queuedCount > 0`) — exposed so Supervisors
+/// don't each re-derive it.
+pub(super) fn run_state_json(session_id: &str, state: RunState) -> Value {
+    serde_json::json!({
+        "sessionId": session_id,
+        "runnerAlive": state.runner_alive,
+        "agentRunning": state.agent_running,
+        "openRun": state.open_run,
+        "queuedCount": state.queued_count,
+        "busy": state.open_run || state.agent_running || state.queued_count > 0,
+    })
+}
+
+/// `sessions.run_state` — bulk form of `session.run_state`. With
+/// `sessionIds`, answers for exactly those ids (unknown ids read as idle;
+/// no DB existence check, so a `sessions list` caller can pass its whole
+/// page in one round-trip). Without ids, answers for every session the
+/// RunnerManager holds state for. Result: `{"sessions": [ ... ]}`.
+pub(super) async fn dispatch_sessions_run_state(
+    request_id: Option<String>,
+    args: Value,
+    ctx: &HandlerCtx<'_>,
+) -> SocketResponse {
+    let parsed: SessionsRunStateArgs = match serde_json::from_value(args) {
+        Ok(a) => a,
+        Err(e) => {
+            return SocketResponse::err(
+                request_id,
+                ErrorTag::InvalidArgs,
+                format!("sessions.run_state args: {e}"),
+            );
+        }
+    };
+    let ids = match parsed.session_ids {
+        Some(ids) => ids,
+        None => ctx.runner.known_session_ids().await,
+    };
+    let mut sessions = Vec::with_capacity(ids.len());
+    for id in &ids {
+        let state = ctx.runner.run_state(id).await;
+        sessions.push(run_state_json(id, state));
+    }
+    SocketResponse::ok(request_id, serde_json::json!({ "sessions": sessions }))
 }
 
 pub(super) async fn dispatch_session_shutdown_runner(

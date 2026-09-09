@@ -337,59 +337,30 @@ struct Origin {
 
 ## 11. Galley CLI 命令 surface
 
-完整规范见 [docs/agent-api.md](./agent-api.md)（v0.2 ship 时 publish）。本节列 surface。
+**命令表不在本节维护。** 已发布的 surface（命令、flag、JSON 字段、exit
+code）以 [docs/agent-api/](./agent-api/README.md) 为唯一来源；本节曾内嵌
+一份 v0.2 规划期的命令表，与实际 ship 的 surface 漂移（`--pretty`、
+`--scope`、`--filter` 从未落地，`wait` / `follow` / `goal` 又不在表里），
+2026-09-09 退役。这里只保留设计原则。
 
-### 11.1 命令表
+### 11.1 输出契约（5 条规则）
 
-```bash
-# Inventory (read)
-galley sessions list [--project=X] [--status=...] [--json|--pretty]
-galley sessions search "<kw>" [--scope=all|active]
-galley session brief <id>                # digested 1-2 行
-galley session show <id> [--tail=N]      # 完整 message log
-galley status                            # 一句话 team 总览
-galley health                            # 类似 GUI health check 5 项
-galley version                           # Galley + schema 版本
-
-# Operate session (write)
-galley session new "<task>" [--project=X] [--llm=...] [--supervisor=...] [--reason=...]
-galley session send <id> "<msg>" [--supervisor=...] [--reason=...]
-galley session btw <id> "<q>" [--supervisor=...]
-galley session stop <id>
-galley session archive <id>
-galley session restore <id>
-galley session move <id> [--to=<project-id>] [--supervisor=...]   # session 是 subject；no --to = 拆出 project
-galley session watch <id> [--filter=...] [--until=idle]            # NDJSON stream
-
-# Project
-galley project create "<name>" [--description=...] [--supervisor=...]
-galley project list
-galley project delete <id> [--supervisor=...] [--reason=...]   # v0.2: destructive，sessions 自动拆到 ungrouped；v0.6+ 再 ship 真正的 `project archive` (reversible)
-
-# Config
-galley llm list
-galley llm set <session> <llm>
-```
-
-### 11.2 输出契约（6 条规则）
-
-1. **默认 JSON / NDJSON**：NDJSON 一行一对象 streaming 友好，single-result 用 JSON 对象。`--pretty` flag 触发 human-readable table
-2. **错误是 JSON**：`{"error": "<code>", "message": "<human>", ...context}`
-3. **Exit code 分类**：0=success / 1=generic / 2=invalid args / 3=not found / 4=backend unavailable / 5=runner error
+1. **默认 JSON / NDJSON**：NDJSON 一行一对象 streaming 友好，single-result 用 JSON 对象。没有 human-readable 模式——CLI 的读者是 agent
+2. **错误是 JSON，走 stdout**：`{"error": "<code>", "message": "<human>"}`；stderr 只留 panic
+3. **Exit code 分类**：0=success / 1=internal / 2=invalid args / 3=not found / 4=db unavailable / 5=runner error
 4. **Schema versioned, additive-only**：v1 内只加不删，break = bump v2
-5. **Command grammar**：`galley <noun> <verb>`（`session create` 不是 `create-session`）
-6. **`--pretty` 是 derived view**：JSON canonical
+5. **Command grammar**：`galley <noun> <verb>`（`session new` 不是 `new-session`）；session 是 `move` 的主语，project 不 shuffle
 
-### 11.3 Supervisor identity 字段
+### 11.2 Supervisor identity 字段
 
-`--supervisor=<freeform-string>` 由 supervisor 自己定（如 `ga-wechat-bot`、`claude-skill-galley-mgr/v1.2`）。Galley 只记录、不校验、不注册。
+`--supervisor=<freeform-string>` 由 supervisor 自己定（如 `galley-im/feishu`、`claude-skill-galley-supervisor/v1`）。Galley 只记录、不校验、不注册。
 
-### 11.4 不在 v0.2 surface 的命令
+### 11.3 有意不进 surface 的命令
 
-- `galley pet attach / detach`（桌宠，supervisor 用不到）
 - `galley config get/set`（Settings 是 GUI 的事）
 - `galley memory ...`（GA memory 由 GA 自己管，宪法约束）
-- `galley supervisors register / list`（permission system 雏形，v0.6+ 候选）
+- `galley supervisors register / list`（permission system 雏形，未立项）
+- 已延后的 additive 候选（`session kill`、`project archive`、`watch --from`、`llm warmup`）见 [agent-api roadmap](./agent-api/roadmap-and-references.md)
 
 ## 12. CLI 发包
 

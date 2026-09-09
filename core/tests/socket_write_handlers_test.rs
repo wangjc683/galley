@@ -807,6 +807,46 @@ async fn session_run_state_reports_manager_truth() {
 }
 
 #[tokio::test]
+async fn sessions_run_state_answers_for_requested_ids_with_busy_verdict() {
+    let h = Harness::new(FakeRunner::with_run_state(RunState {
+        runner_alive: true,
+        agent_running: false,
+        open_run: true,
+        queued_count: 0,
+    }))
+    .await;
+
+    // No DB existence check: a `sessions list` caller passes its whole
+    // page, including ids Core has never spawned.
+    let resp = h
+        .dispatch(req(
+            "sessions.run_state",
+            json!({"sessionIds": ["s-a", "s-never-spawned"]}),
+        ))
+        .await;
+
+    assert!(resp.ok, "expected ok, got {resp:?}");
+    let sessions = resp.result.unwrap()["sessions"].as_array().unwrap().clone();
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(sessions[0]["sessionId"], "s-a");
+    assert_eq!(sessions[0]["openRun"], true);
+    assert_eq!(sessions[0]["busy"], true);
+    assert_eq!(sessions[1]["sessionId"], "s-never-spawned");
+}
+
+#[tokio::test]
+async fn sessions_run_state_without_ids_scopes_to_known_sessions() {
+    // The fake holds no live state, so the unscoped form is empty —
+    // the same answer a fresh Core gives before any runner spawned.
+    let h = Harness::new(FakeRunner::default()).await;
+
+    let resp = h.dispatch(req("sessions.run_state", json!({}))).await;
+
+    assert!(resp.ok, "expected ok, got {resp:?}");
+    assert_eq!(resp.result.unwrap()["sessions"], json!([]));
+}
+
+#[tokio::test]
 async fn session_run_state_unknown_session_is_not_found() {
     let h = Harness::new(FakeRunner::default()).await;
 

@@ -119,7 +119,7 @@ pub(crate) async fn call_value<C: SocketCommand>(args: C) -> Result<Value, Galle
 /// the shape every plain write command emits for agents.
 pub(crate) async fn call_print<C: SocketCommand>(args: C) -> Result<(), GalleyError> {
     let result = client().call(args).await?;
-    println!("{result}");
+    crate::common::emit_line(&result.to_string());
     Ok(())
 }
 

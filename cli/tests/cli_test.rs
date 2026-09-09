@@ -651,6 +651,194 @@ async fn session_watch_socket_error_emits_single_cli_error() {
     assert_eq!(parsed.get("ok"), None);
 }
 
+// ---------------- `live` run-state decoration ----------------
+
+/// Without Galley Core the read commands still answer from SQLite, and
+/// the `live` key is simply absent — never a fabricated "idle".
+#[tokio::test]
+async fn sessions_list_without_core_omits_live() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s1", "one", "idle", "2026-05-18T00:00:00Z").await;
+    drop(pool);
+
+    let (stdout, code) =
+        run_galley_with_tmpdir(&db, td.path(), &["sessions", "list", "--runtime", "all"]);
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let row: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(row["id"], "s1");
+    assert_eq!(row.get("live"), None);
+    // Key order survives the `live` splice: `id` stays the first key so
+    // an agent skimming NDJSON sees the identifier before anything else.
+    assert!(
+        stdout.trim_start().starts_with(r#"{"id":"s1""#),
+        "stdout = {stdout}"
+    );
+
+    let (stdout, code) = run_galley_with_tmpdir(&db, td.path(), &["status"]);
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let status: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(status.get("live"), None);
+}
+
+/// Serve one fake `sessions.run_state` answer on the tempdir socket.
+/// Returns the request line Core saw so the test can assert the command
+/// name and the ids the CLI asked about.
+#[cfg(unix)]
+fn fake_run_state_server(
+    socket_path: std::path::PathBuf,
+    result: serde_json::Value,
+) -> tokio::task::JoinHandle<String> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixListener;
+    let listener = UnixListener::bind(&socket_path).expect("bind fake socket");
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept");
+        let (read_half, mut write_half) = stream.into_split();
+        let mut lines = BufReader::new(read_half).lines();
+        let request = lines
+            .next_line()
+            .await
+            .expect("read request")
+            .expect("request line");
+        let response = serde_json::json!({
+            "ok": true,
+            "requestId": null,
+            "result": result,
+        });
+        write_half
+            .write_all(response.to_string().as_bytes())
+            .await
+            .expect("write response");
+        write_half.write_all(b"\n").await.expect("write newline");
+        request
+    })
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn session_brief_attaches_live_from_core() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s-live", "busy one", "idle", "2026-05-18T00:00:00Z").await;
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let server = fake_run_state_server(
+        socket_path,
+        serde_json::json!({"sessions": [{
+            "sessionId": "s-live", "runnerAlive": true, "agentRunning": true,
+            "openRun": true, "queuedCount": 1, "busy": true
+        }]}),
+    );
+
+    let (stdout, code) = run_galley_with_tmpdir(&db, td.path(), &["session", "brief", "s-live"]);
+    let request = server.await.expect("fake socket task");
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let req: serde_json::Value = serde_json::from_str(&request).expect("request json");
+    assert_eq!(req["command"], "sessions.run_state");
+    assert_eq!(req["args"]["sessionIds"], serde_json::json!(["s-live"]));
+
+    let row: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    // Persisted status is untouched; the live truth rides alongside it.
+    assert_eq!(row["status"], "idle");
+    assert_eq!(row["live"]["busy"], true);
+    assert_eq!(row["live"]["openRun"], true);
+    assert_eq!(row["live"]["queuedCount"], 1);
+    assert_eq!(
+        row["live"].get("sessionId"),
+        None,
+        "sessionId is redundant inside live"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn status_attaches_live_busy_and_queued_counts() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s1", "one", "idle", "2026-05-18T00:00:00Z").await;
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let server = fake_run_state_server(
+        socket_path,
+        serde_json::json!({"sessions": [
+            {"sessionId": "a", "runnerAlive": true, "agentRunning": true,
+             "openRun": true, "queuedCount": 2, "busy": true},
+            {"sessionId": "b", "runnerAlive": true, "agentRunning": false,
+             "openRun": false, "queuedCount": 0, "busy": false},
+            {"sessionId": "c", "runnerAlive": false, "agentRunning": false,
+             "openRun": false, "queuedCount": 1, "busy": true}
+        ]}),
+    );
+
+    let (stdout, code) = run_galley_with_tmpdir(&db, td.path(), &["status"]);
+    let request = server.await.expect("fake socket task");
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let req: serde_json::Value = serde_json::from_str(&request).expect("request json");
+    assert_eq!(req["command"], "sessions.run_state");
+    // Unscoped: `status` asks about everything Core holds state for.
+    assert_eq!(
+        req["args"].get("sessionIds"),
+        Some(&serde_json::Value::Null)
+    );
+
+    let status: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(status["total"], 1);
+    assert_eq!(status["live"]["busy"], 2);
+    assert_eq!(status["live"]["queued"], 3);
+}
+
+/// `galley sessions list | head` closes stdout early. That must end the
+/// process quietly (exit 0, empty stderr) — not with a Rust panic trace,
+/// which is what `println!` produced on a broken pipe.
+#[cfg(unix)]
+#[tokio::test]
+async fn closed_stdout_ends_quietly_without_panic() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    for i in 0..200 {
+        seed_session(
+            &pool,
+            &format!("s{i}"),
+            &format!("session number {i} with a title long enough to fill pipes"),
+            "idle",
+            "2026-05-18T00:00:00Z",
+        )
+        .await;
+    }
+    drop(pool);
+
+    let bin = std::path::PathBuf::from(env!("CARGO_BIN_EXE_galley"));
+    let out = Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "\"{}\" sessions list --runtime all | head -c 10 >/dev/null",
+            bin.display()
+        ))
+        .env("GALLEY_DB_PATH", &db)
+        .env("TMPDIR", td.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn shell");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("panicked"),
+        "broken pipe must not panic: stderr = {stderr}"
+    );
+    assert!(
+        !stderr.contains("Broken pipe"),
+        "broken pipe must be silent: stderr = {stderr}"
+    );
+}
+
 /// Variant of run_galley that also sets TMPDIR so the CLI's
 /// `socket_path()` helper resolves to a tempdir-relative socket — keeps
 /// these tests from accidentally picking up a real Galley Core socket

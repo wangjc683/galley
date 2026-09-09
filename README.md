@@ -143,7 +143,7 @@ You can also connect WeChat / Feishu / Telegram / Discord from **Settings → Ch
 When Galley is running, a Supervisor Agent on the same machine can dispatch tasks through `galley`:
 
 ```bash
-# What's running right now?
+# What's running right now? (`live.busy` on each row is the truthful signal)
 galley status
 galley sessions list
 
@@ -165,7 +165,7 @@ galley session new "Read-only check of packaging, release workflow, bundled reso
 galley project follow proj_from_create --tail=80 --until-idle --final-show
 
 # Long-term goal: create a proposal first, then start the Goal controller after explicit confirmation
-galley goal propose "ship the next patch release" \
+galley goal propose "ship the next patch release" --mode=solo \
   --supervisor=ga-claude-1 --reason="prepare Goal plan and wait for user confirmation"
 
 galley goal run --proposal=<proposal-id> \

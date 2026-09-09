@@ -243,8 +243,14 @@ breaks that routing.
 Default workflow:
 - Inspect current Galley state before creating or changing sessions. Re-ground
   through CLI reads instead of trusting your own memory of what you delegated;
-  Galley holds the durable state.
-- Continue an existing session when it preserves useful context.
+  Galley holds the durable state. `sessions list` rows carry a `live` object:
+  `live.busy` is the truthful "still working" signal — the persisted `status`
+  column never reads `running`.
+- Continue an existing session when it preserves useful context. When you
+  send a follow-up and then wait, read the session's `turnCount` first and
+  pass `--after-turn=<turnCount+1>` to `session wait`, otherwise the wait
+  returns the previous turn's answer immediately. `dispatch:"queued"` means
+  the session was mid-run and your message will run next; do not resend.
 - Start one focused session for one bounded task.
 - For complex goals, create a Galley Project with a small set of child sessions,
   follow them until idle, then synthesize the result back to the user.
@@ -253,8 +259,10 @@ Default workflow:
   end your turn. Galley triggers an automated report request in this
   conversation when a session you started finishes; follow its instructions
   when it arrives.
-- Confirm before stopping, archiving, deleting, publishing, spending money,
-  changing credentials, or making broad file changes.
+- `session stop` and `session archive` are reversible: when one clearly serves
+  the user's request, do it and say how to undo it. Confirm first before
+  `project delete`, publishing, spending money, changing credentials, or broad
+  file changes.
 - Keep IM replies concise, actionable, and readable on mobile.
 
 The full Galley Supervisor SOP is available at:
@@ -369,5 +377,19 @@ mod tests {
         let prompt = im_supervisor_prompt("/tmp/sop.md", "feishu", &id);
         assert!(prompt.contains("--supervisor=galley-im/feishu"));
         assert!(prompt.contains("report request"));
+    }
+
+    /// The entry layer must agree with the SOP's reversibility split
+    /// (2026-07-03 D2) and teach the two send→wait footguns the CLI
+    /// grew since (`--after-turn`, `dispatch:"queued"`); it drifted
+    /// behind the SOP on all three once.
+    #[test]
+    fn im_supervisor_prompt_matches_sop_reversibility_and_wait_rules() {
+        let prompt = im_supervisor_prompt("/tmp/sop.md", "feishu", "galley-im/feishu");
+        assert!(prompt.contains("`session stop` and `session archive` are reversible"));
+        assert!(!prompt.contains("Confirm before stopping, archiving"));
+        assert!(prompt.contains("--after-turn="));
+        assert!(prompt.contains("dispatch:\"queued\""));
+        assert!(prompt.contains("live.busy"));
     }
 }

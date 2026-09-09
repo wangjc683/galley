@@ -4,8 +4,9 @@
 > When the user asks you to inspect, create, continue, split, wait for, or
 > manage Galley work, you are acting as a **Galley Supervisor**.
 >
-> Target: Agent API schema 1 (the Galley `v0.2.x` line).
-> Last reviewed: 2026-07-03.
+> Target: Agent API `schemaVersion: 1` (frozen since `v0.2`, additive-only;
+> this text reflects the CLI surface on `main` as of the review date).
+> Last reviewed: 2026-09-09.
 
 ## Trigger
 
@@ -33,7 +34,9 @@ Your job is to coordinate work, not to hide work:
 1. **Resolve CLI first.** Read Galley's discovery file; do not assume `galley`
    is on PATH.
 2. **Inspect before action.** Run `status`, `sessions list`, or
-   `sessions search` before creating or changing sessions.
+   `sessions search` before creating or changing sessions. "Is it running?"
+   is answered by the `live.busy` field on a row, never by `status`
+   (persisted status does not read `running`).
 3. **Preserve intent.** Do not expand the user's scope, invent requirements, or
    hide assumptions in child-session prompts.
 4. **Ask before irreversible or outward-facing actions.** External sending /
@@ -106,8 +109,15 @@ needs a runtime. Otherwise omit it so Galley follows the GUI's current runtime.
 "$GALLEY" sessions list
 ```
 
-Summarize titles, statuses, last activity, and likely next steps. Do not dump
-raw JSON unless asked.
+Each row carries a `live` object when Galley is running:
+`{"busy":true,"openRun":true,"queuedCount":0,...}`. `live.busy` is the
+truthful "still working" signal; `status` only tells you the persisted state
+(`idle`, `archived`, `error`, …). If `live` is absent, Galley Core was not
+reachable and no run-state claim can be made. `status` likewise reports
+`live.busy` / `live.queued` totals.
+
+Summarize titles, whether each is busy, last activity, and likely next steps.
+Do not dump raw JSON unless asked.
 
 ### Start One Session
 
@@ -130,18 +140,34 @@ On `status:"completed"`, summarize the final payload. On
 your host environment delivers Galley completion reports to you (Galley's
 managed IM channels do), tell the user you will notify them when it
 finishes. Otherwise include the session id and offer to check later.
+`status:"session_error"` / `status:"session_cancelled"` mean the session
+itself died or was cancelled before answering; report that and inspect with
+`session show --tail=20` before deciding anything.
 
 ### Continue A Session
 
 ```bash
-"$GALLEY" session brief <id>
+"$GALLEY" session brief <id>            # note turnCount and live.busy
 "$GALLEY" session send <id> "<follow-up instruction>" \
   --supervisor=my-agent/v1 \
   --reason="user follow-up"
+"$GALLEY" session wait <id> --after-turn=<turnCount+1> --timeout=600 --poll=5 --tail=20
 ```
 
-If `dispatch:"persisted_only"`, the message was saved but no live runner
-consumed it. Report that distinction; do not resend blindly.
+**Always pass `--after-turn` when waiting on a session that already has
+turns.** Without it, `session wait` returns immediately on the previous
+turn's answer and you will report stale output as the result. `turnCount`
+comes from `session brief`; the new turn is `turnCount + 1`.
+
+Read `dispatch` on the send:
+
+- `dispatched` — the runner received it now.
+- `queued` — the session was mid-run; Galley holds the message and runs it
+  automatically when the current task finishes (`queue.position` tells you
+  where). Do not resend. Add `--jump` only when the user explicitly wants to
+  interrupt the current task and run this message first.
+- `persisted_only` — saved, but no live runner consumed it. Report that
+  distinction; do not resend blindly.
 
 ### Watch Or Wait
 
@@ -195,12 +221,19 @@ can start. Do not propose blindly; `goal run` rejects the second start with an
 
 ```bash
 "$GALLEY" goal propose "<objective>" \
+  --mode=solo \
   --supervisor=my-agent/v1 \
   --reason="prepare Goal for user confirmation"
 ```
 
-Show the objective, Project, worker count, time budget, write mode, and safety
-boundary. Do not show `internalConfirmToken`. Starting a Goal always requires
+Pass `--mode=solo` (one agent working to the time budget) unless the user
+explicitly wants parallel workers; then use `--mode=hive` (master plus
+cross-verified workers). The CLI's built-in default is `hive` for
+compatibility, while the desktop defaults to `solo` — state the mode
+explicitly so the two surfaces behave the same.
+
+Show the objective, Project, mode, worker count, time budget, write mode, and
+safety boundary. Do not show `internalConfirmToken`. Starting a Goal always requires
 the user's explicit confirmation of this proposal: an unambiguous affirmative
 reply, in their own language, that refers to this Goal (offer the response's
 `confirmationPhrase` as a ready-made reply). Casual acknowledgements ("ok",
@@ -270,8 +303,10 @@ CLI errors are JSON on stdout.
 | `5 runner_error` | Runner could not start or receive command | Inspect session; ask before retrying |
 | `1 internal` | Galley internal error | Report; do not loop |
 
-Never blindly retry. Distinguish `dispatched`, `persisted_only`,
-`already_stopped`, `completed`, and `timed_out`.
+Never blindly retry. Exit `0` with `dispatch:"queued"`, `"persisted_only"`,
+or `"already_stopped"` is not an error. Distinguish `dispatched`, `queued`,
+`persisted_only`, `already_stopped`, `completed`, `timed_out`,
+`session_error`, and `session_cancelled`.
 
 ## Boundaries
 
@@ -290,6 +325,7 @@ Before acting:
 - Did I choose the lightest mode?
 - Does this need confirmation?
 - Did I include origin fields where supported?
+- Did I pass `--after-turn` when waiting on a session with prior turns?
 - If waiting timed out, did I avoid calling the task failed?
 
 ## References
@@ -298,8 +334,8 @@ This SOP travels as a copy, so the references are full URLs rather than
 repository-relative paths:
 
 - Full reference: <https://github.com/wangjc683/galley/blob/main/docs/integrations/galley-supervisor-reference.md>
-- Agent API: <https://github.com/wangjc683/galley/blob/main/docs/agent-api.md>
+- Agent API: <https://github.com/wangjc683/galley/blob/main/docs/agent-api/README.md>
 - Galley constitution: <https://github.com/wangjc683/galley/blob/main/AGENTS.md>
 
-If this SOP conflicts with `agent-api.md`, follow `agent-api.md`; the API schema
-is the contract.
+If this SOP conflicts with the Agent API docs, follow the Agent API; the
+schema is the contract.

@@ -6,7 +6,7 @@ command and workflow details.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-reference.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-07-03 (header recalibration: schema target line + URL references).
+Last synced: 2026-09-09 (live run-state field, --after-turn / queued guidance, Goal --mode, reversibility copy, agent-api directory links).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings.
@@ -18,8 +18,9 @@ This is the detailed reference for people maintaining or auditing the
 [Galley Supervisor SOP](./galley-supervisor-sop.md). The SOP is the copy-first
 document shown in Settings and should stay short. This reference can be longer.
 
-Target: Agent API schema 1 (the Galley `v0.2.x` line). Last reviewed:
-2026-07-03.
+Target: Agent API `schemaVersion: 1` (frozen since `v0.2`, additive-only; this text
+reflects the CLI surface on `main` as of the review date). Last reviewed:
+2026-09-09.
 
 ## Operating Model
 
@@ -94,22 +95,21 @@ needs an update before continuing.
 
 ## Command Cheatsheet
 
-Full schema: [agent-api](../agent-api.md). Commands support `--help`.
+Full schema: [agent-api](../agent-api/README.md). Commands support `--help`.
 
 Read commands:
 
 | Command | Use |
 |---|---|
-| `"$GALLEY" status` | Global counts and health summary |
-| `"$GALLEY" sessions list` | Recent active sessions in the current runtime |
+| `"$GALLEY" status` | Persisted counts plus `live.busy` / `live.queued` totals when Core is reachable |
+| `"$GALLEY" sessions list` | Recent active sessions in the current runtime; each row carries `live` when Core is reachable |
 | `"$GALLEY" sessions list --all` | Include archived sessions in the current runtime |
 | `"$GALLEY" sessions list --runtime all` | Cross-runtime listing when explicitly needed |
-| `"$GALLEY" sessions list --status=running` | Active agent work |
 | `"$GALLEY" sessions search "<kw>"` | Find related conversations in the current runtime |
 | `"$GALLEY" sessions search "<kw>" --runtime all` | Cross-runtime search when explicitly needed |
-| `"$GALLEY" session brief <id>` | One-session summary |
+| `"$GALLEY" session brief <id>` | One-session summary with `turnCount` and `live` |
 | `"$GALLEY" session show <id> --tail=20` | Recent visible messages |
-| `"$GALLEY" session wait <id> --timeout=300 --poll=5 --tail=20 --final-show` | Bounded result retrieval |
+| `"$GALLEY" session wait <id> --after-turn=<N> --timeout=600 --poll=5 --tail=20 --final-show` | Bounded result retrieval; `N` = the turn you just sent |
 | `"$GALLEY" session follow <id> --tail=20` | Snapshot, live events if available, final snapshot |
 | `"$GALLEY" session watch <id>` | Raw live runner events; no backlog |
 | `"$GALLEY" project list` | Available Projects |
@@ -126,7 +126,8 @@ Write commands:
 | Command | Use |
 |---|---|
 | `"$GALLEY" session new "<task>" --supervisor=<id> --reason=<why>` | Create a session and send the first task |
-| `"$GALLEY" session send <id> "<text>" --supervisor=<id> --reason=<why>` | Send follow-up to a session |
+| `"$GALLEY" session send <id> "<text>" --supervisor=<id> --reason=<why>` | Send follow-up to a session; mid-run sends return `dispatch:"queued"` and run next |
+| `"$GALLEY" session send <id> "<text>" --jump --supervisor=<id> --reason=<why>` | Interrupt the current task and run this message first; only on explicit user intent |
 | `"$GALLEY" session btw <id> "<question>" --supervisor=<id> --reason=<why>` | Ask a temporary side question; not persisted |
 | `"$GALLEY" session stop <id> --supervisor=<id> --reason=<why>` | Interrupt current turn |
 | `"$GALLEY" session archive <id> --supervisor=<id> --reason=<why>` | Hide a session; reversible |
@@ -135,19 +136,50 @@ Write commands:
 | `"$GALLEY" project create "<name>" --supervisor=<id> --reason=<why>` | Create a Project |
 | `"$GALLEY" project delete <id> --supervisor=<id> --reason=<why>` | Delete Project; sessions survive but become unassigned |
 | `"$GALLEY" goal active` | List active (running/wrapping) goals; empty = none. Check before proposing (one Goal at a time) |
-| `"$GALLEY" goal propose "<objective>" --supervisor=<id> --reason=<why>` | Prepare pending Goal; does not start work |
+| `"$GALLEY" goal propose "<objective>" --mode=solo --supervisor=<id> --reason=<why>` | Prepare pending Goal; does not start work. `--mode=hive` only when the user wants parallel workers |
 | `"$GALLEY" goal run --proposal=<id> --confirm-token=<token> --supervisor=<id> --reason=<why>` | Start blocking Goal controller after exact user confirmation |
 | `"$GALLEY" goal stop <id> --supervisor=<id> --reason=<why>` | Request graceful Goal stop |
 | `"$GALLEY" goal deliverable set <id> "<content>" --note="<summary>" --author-session=<session-id>` | Append current-best Goal deliverable |
 | `"$GALLEY" llm set <session-id> "<llm-name>"` | Switch a session's LLM |
+
+## Live State
+
+Persisted `status` never reads `running`: Galley Core keeps transient run
+state in memory, so SQLite only ever shows `idle`, `archived`, `error`, and
+the like. The read commands therefore attach a `live` object whenever Galley
+Core is reachable:
+
+```json
+{"id":"s-abc","status":"idle","turnCount":4,…,"live":{"runnerAlive":true,"agentRunning":true,"openRun":true,"queuedCount":0,"busy":true}}
+```
+
+- `busy` — `openRun || agentRunning || queuedCount > 0`; the one field to
+  read for "is this session still working".
+- `openRun` — a dispatched run has not completed yet (survives the gaps
+  between multi-step turns; `agentRunning` flickers there).
+- `queuedCount` — messages Galley is holding for this session.
+- Absent `live` — Core unreachable (app closed, or the probe timed out); say
+  so rather than guessing. An explicit idle `live` (all false / 0) is a real
+  answer.
+
+`status` carries `live.busy` (sessions currently busy) and `live.queued`
+(messages waiting) totals under the same rule.
 
 ## Result Retrieval
 
 Use `session wait` for Supervisor/IM result retrieval:
 
 ```bash
-"$GALLEY" session wait <id> --timeout=300 --poll=5 --tail=20 --final-show
+"$GALLEY" session brief <id>                       # read turnCount
+"$GALLEY" session send <id> "<follow-up>" --supervisor=<id> --reason=<why>
+"$GALLEY" session wait <id> --after-turn=<turnCount+1> --timeout=600 --poll=5 --tail=20 --final-show
 ```
+
+`--after-turn=N` only counts agent messages with `turnIndex >= N`. On a
+session that already has turns, a bare `send` → `wait` returns immediately
+with the **previous** turn's answer, which is the single most common
+Supervisor mistake. A freshly created session (`session new`) has no prior
+answer, so `--after-turn` is optional there.
 
 Output is NDJSON:
 
@@ -167,6 +199,16 @@ or:
 `timed_out` is the waiter's deadline, not task failure. If the tail contains
 only the user's message, tell the user the session started but no agent result
 has been retrieved yet. Include the session id so they can ask again.
+
+Two more terminal statuses end the wait early: `session_error` and
+`session_cancelled` (the `end` frame's `reason` carries the same value). The
+session itself entered `error` / `cancelled` and cannot produce the awaited
+answer. Report that plainly, read `session show --tail=20` for the cause,
+and ask before re-dispatching.
+
+Keep `--timeout` at or below ~600 seconds. Longer blocking waits deafen an
+IM Supervisor to new messages; past that window rely on the host's completion
+reports (managed IM channels) or invite the user to ask again.
 
 Use `session follow` and `project follow` for live observation. They may run
 longer than the calling tool's timeout and should not be the final verdict for
@@ -222,7 +264,9 @@ file paths. Existing runners do not hot-swap Workspace, and external GA may
 skip Workspace if safe state-root support is unavailable.
 
 Do not delete the Project after finishing. Users can inspect group history in
-Galley. Archiving sessions or deleting Projects requires confirmation.
+Galley. Deleting a Project requires confirmation; archiving child sessions is
+reversible and may proceed when it clearly serves the request (report the
+undo path).
 
 ## Implementation Splits
 
@@ -263,12 +307,21 @@ start with `invalid_args`. Proposal:
 
 ```bash
 "$GALLEY" goal propose "<objective>" \
+  --mode=solo \
   --supervisor=my-agent/v1 \
   --reason="prepare Goal for user confirmation"
 ```
 
+`--mode` picks the engine: `solo` runs one agent against the time budget
+(the desktop default, and the right choice for most IM-delegated
+objectives); `hive` runs a master plus up to `--workers` cross-verified
+workers and is only worth its cost when the user explicitly wants parallel
+angles. The CLI's own default is `hive` for backward compatibility, so pass
+`--mode` explicitly every time. `--budget-minutes`, `--workers`, and
+`--write-mode=read-only` are the other knobs to surface in the summary.
+
 Show the user a short confirmation summary: objective, Project, runtime,
-workers, time budget, write mode, and safety boundary. Do not show
+mode, workers, time budget, write mode, and safety boundary. Do not show
 `internalConfirmToken`.
 
 Run only after the user's explicit confirmation of this proposal — an
@@ -303,13 +356,13 @@ self-evolution, but not transient Goal protocol state.
 When the user is new to Galley or arrives through IM, explain briefly:
 
 ```text
-你可以把我当成 Galley 的调度员。你告诉我要查、继续、开新任务、拆任务或盯进度，我会通过你本机的 Galley 去操作。停止、归档、删除、批量改文件这类高风险动作，我会先说明影响再等你确认。
+你可以把我当成 Galley 的调度员。你告诉我要查、继续、开新任务、拆任务或盯进度，我会通过你本机的 Galley 去操作。停止、归档这类可撤销的操作我会直接执行并告诉你怎么撤销；删除、外发、批量改文件这类不可逆动作，我会先说明影响再等你确认。
 ```
 
 English:
 
 ```text
-You can treat me as your Galley dispatcher. Tell me what to inspect, continue, start, split, or monitor, and I will use Galley on your machine to manage the local Agent sessions. I will ask before risky actions such as stopping, archiving, deleting, or broad file changes.
+You can treat me as your Galley dispatcher. Tell me what to inspect, continue, start, split, or monitor, and I will use Galley on your machine to manage the local Agent sessions. Reversible actions such as stopping or archiving a session I will do and tell you how to undo; before irreversible ones — deleting, publishing, broad file changes — I will explain the impact and wait for your go-ahead.
 ```
 
 Good prompts users can say:
@@ -329,8 +382,11 @@ user-friendly language for this Supervisor workflow.
 Use a stable supervisor id:
 
 - Generic agent: `my-agent/v1`
-- IM bot: `ga-wechat-bot` / `ga-feishu-bot`
-- Claude Skill: `claude-skill-galley-supervisor/v1`
+- Galley's managed IM channels: `galley-im/<platform>` (`galley-im/feishu`,
+  `galley-im/discord/ch:<channel-id>`, …) — injected by Galley; the
+  completion reporter filters on it, so never improvise a different one
+- Claude Skill: `claude-skill-galley-supervisor/v1`; Codex Skill:
+  `codex-skill-galley-supervisor/v1`
 
 Use a short reason in the user's words or an honest paraphrase:
 
@@ -360,13 +416,23 @@ CLI errors are JSON on stdout:
 
 Never blindly retry.
 
+`session send` can return `dispatch:"queued"` with `message: null` and a
+`queue` object: the session was mid-run, Galley holds the message in memory
+and runs it in order once the current task completes. This is success — do
+not resend. The queue does not survive a Galley restart; if the app was
+restarted before the message ran, the user must re-issue it.
+
 `session send` and `llm set` can return `dispatch:"persisted_only"`: the DB
 write succeeded but no live runner consumed the command.
 
 `session stop` can return `dispatch:"already_stopped"`: this is success.
 
 `session wait` can return `status:"timed_out"`: the waiter timed out; the task
-may still finish later.
+may still finish later. `status:"session_error"` / `"session_cancelled"`
+mean the session died or was cancelled; see Result Retrieval.
+
+`goal run` rejects a second concurrent Goal with `invalid_args` naming the
+active one; check `goal active` first.
 
 ## Boundaries
 
@@ -379,6 +445,8 @@ Do not:
 - create many sessions without a clear split
 - create multiple writer sessions for the same files
 - launch GA native Goal/Hive/BBS or another runtime workflow engine
+- ask a child session to notify the user itself (IM, email, push): sessions
+  do the work; reporting belongs to the Supervisor and to Galley
 - expand the user's request beyond what they asked
 - manage another machine's Galley
 
@@ -397,5 +465,15 @@ Keep [galley-supervisor-sop.md](./galley-supervisor-sop.md) short enough to copy
 into an IM/GA/Claude-style agent without drowning the live turn in reference
 material. Put long command examples and rationale here.
 
-If this reference or SOP conflicts with [agent-api](../agent-api.md), follow
-`agent-api.md`; the API schema is the contract.
+The SOP text lives in five places that must agree: this repo's canonical
+file, the Galley binary (embedded at build time for Settings → Agent "Copy
+SOP" and the managed IM reference copy), and the two skill directories'
+`references/` copies. `scripts/check-supervisor-sop-drift.mjs` fails CI when
+a `references/` copy or the two `SKILL.md` variants drift; the binary embed
+cannot drift. The managed IM entry-layer prompt
+(`core/src/managed_prompt.rs`) restates the hard rules in its own words and
+is guarded by unit tests for the rules that drifted once (reversibility
+split, `--after-turn`, `queued`).
+
+If this reference or SOP conflicts with [agent-api](../agent-api/README.md),
+follow the Agent API; the schema is the contract.

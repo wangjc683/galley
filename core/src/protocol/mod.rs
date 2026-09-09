@@ -33,7 +33,8 @@ pub use commands::{
     SessionBtwArgs, SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
     SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
     SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
-    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SocketCommand,
+    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
+    SocketCommand,
 };
 pub use envelope::{SocketRequest, SocketResponse, StreamEnvelope, WatchFrame, SCHEMA_VERSION};
 pub use error_tag::ErrorTag;

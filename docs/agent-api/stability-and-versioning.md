@@ -128,7 +128,13 @@ they read keep their names + semantics inside `schemaVersion: 1`.
 ## 7 · Versioning
 
 `schemaVersion: 1` is **frozen** — introduced in v0.2, unchanged
-through every release since (v0.3.x included). The rules in §1 apply.
+through every release since (v0.3.x and v0.4.x included). The rules in
+§1 apply. Additions landed under the frozen schema so far: `session wait`
+(with `--after-turn` and the `session_error` / `session_cancelled`
+statuses), `session follow`, `project brief / show / follow`, the whole
+`goal` surface, `dispatch: "queued"` + `--jump` on `session send`, and the
+CLI-attached `live` run-state field on `sessions list` / `session brief` /
+`status`.
 
 Inside `schemaVersion: 1`:
 

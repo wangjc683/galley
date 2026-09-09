@@ -143,7 +143,7 @@ GUI 启动后进 **Settings → Agent**：
 Galley 运行时，Supervisor Agent 可以在同一台机器上调用 `galley` 派任务：
 
 ```bash
-# 看现在跑啥
+# 看现在跑啥（每行的 `live.busy` 才是真实的忙闲信号）
 galley status
 galley sessions list
 
@@ -165,7 +165,7 @@ galley session new "只读检查 packaging、release workflow、bundled resource
 galley project follow proj_from_create --tail=80 --until-idle --final-show
 
 # 长目标：先 proposal，等用户明确确认后再启动 Goal controller
-galley goal propose "发布下一个 patch 版本" \
+galley goal propose "发布下一个 patch 版本" --mode=solo \
   --supervisor=ga-claude-1 --reason="准备 Goal 计划等待用户确认"
 
 galley goal run --proposal=<proposal-id> \

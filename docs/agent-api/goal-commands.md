@@ -14,10 +14,17 @@ Goal commands are additive inside `schemaVersion: 1`. V1 intentionally has no
 full task-board UI; the CLI and the TopBar Goal indicator are the control
 surface.
 
-#### `galley goal propose "<objective>" [--project=<id>] [--budget-minutes=30] [--workers=3] [--runtime=current|managed|external] [--write-mode=autonomous|read-only] [--expires-minutes=10] [--supervisor=<x>] [--reason=<y>]`
+#### `galley goal propose "<objective>" [--mode=hive|solo] [--project=<id>] [--budget-minutes=30] [--workers=3] [--runtime=current|managed|external] [--write-mode=autonomous|read-only] [--expires-minutes=10] [--supervisor=<x>] [--reason=<y>]`
 
 Creates a pending conversational-confirmation proposal. It does **not** start
 work.
+
+`--mode` selects the engine (additive since v0.3.x): `hive` runs a master
+plus up to `--workers` cross-verified worker sessions; `solo` runs one agent
+against the time budget. **The CLI default is `hive` for backward
+compatibility while the desktop GUI defaults to `solo`** — Supervisors
+should pass `--mode` explicitly (the SOP recommends `solo` unless the user
+asks for parallel workers). The proposal echoes the chosen value as `mode`.
 
 ```bash
 $ galley goal propose "review and fix flaky release checks" \
@@ -136,8 +143,13 @@ generated prompt. The wait itself polls the internal `session.run_state`
 command (`{sessionId}` → `{runnerAlive, agentRunning, openRun, queuedCount}`,
 additive in schemaVersion 1), which reads the live RunnerManager state —
 `sessions.status` in the DB persists transient statuses as `idle` and must
-not be used as a busy signal. All of these are internal socket commands used
-by the Goal controller; they are not part of the documented CLI surface.
+not be used as a busy signal. The three dispatch commands are internal socket
+commands used by the Goal controller and are not part of the documented CLI
+surface. The run-state probe, by contrast, is public since 2026-09-09: its
+bulk form `sessions.run_state` (`{sessionIds?}` → `{sessions: [...]}`, each
+entry adding a derived `busy`) feeds the `live` field on `sessions list`,
+`session brief`, and `status` (see
+[session-commands §5.2](./session-commands.md)).
 
 `goal run` emits NDJSON frames:
 

@@ -68,6 +68,19 @@ $ galley sessions list --project=proj_demo
 | `gaRuntimeKind`   | string enum     | `managed` / `external`; runtime ownership captured at session creation             |
 | `gaRuntimeId`     | string?         | stable runtime id for future multi-runtime support                                 |
 | `promptProfile`   | string?         | managed prompt profile id, when applied                                            |
+| `live`            | `LiveRunState`? | **CLI-attached, additive (2026-09-09).** Present on `sessions list` / `session brief` rows when the CLI could reach Galley Core; absent when Core is unreachable or the probe exceeded 3s. Never absent to mean "idle": an idle session under a reachable Core carries an explicit all-false `live`. |
+
+`LiveRunState` fields (from the `sessions.run_state` socket command; the
+persisted `status` column never reads `running`, so this is the only
+truthful busy signal an agent can read):
+
+| Field          | Type | Notes                                                                                  |
+| -------------- | ---- | -------------------------------------------------------------------------------------- |
+| `busy`         | bool | `openRun || agentRunning || queuedCount > 0` — the one field to branch on             |
+| `openRun`      | bool | a dispatched run has not seen its `run_complete` yet; stable across multi-step turns   |
+| `agentRunning` | bool | the bridge is mid-turn right now (flickers false between steps; prefer `openRun`)      |
+| `runnerAlive`  | bool | a runner subprocess is registered for the session                                      |
+| `queuedCount`  | int  | messages held in Galley Core's outbound queue for this session                          |
 
 ### 5.3 · `galley sessions search <query> [--runtime current|managed|external|all] [--all]`
 
@@ -100,14 +113,15 @@ $ galley sessions search "ndjson"
 
 ### 5.4 · `galley session brief <id>`
 
-One `SessionBrief` for the given id, or exit `3 not_found`.
+One `SessionBrief` for the given id (with the `live` object from §5.2
+when Galley Core is reachable), or exit `3 not_found`.
 
 ```bash
 $ galley session brief s-abc
-{"id":"s-abc","title":"…","status":"idle", …}
+{"id":"s-abc","title":"…","status":"idle","turnCount":4, …,"live":{"runnerAlive":true,"agentRunning":false,"openRun":false,"queuedCount":0,"busy":false}}
 
 $ galley session brief sess_missing ; echo "exit: $?"
-{"error":"not_found","detail":{"message":"session sess_missing not found"}}
+{"error":"not_found","message":"session sess_missing not found"}
 exit: 3
 ```
 
@@ -343,9 +357,15 @@ $ galley status
 | Field           | Type | Notes                                                                                              |
 | --------------- | ---- | -------------------------------------------------------------------------------------------------- |
 | `total`         | int  | non-archived sessions                                                                              |
-| `running`       | int  | persisted sessions in `running` status. `galley status` is a direct SQLite rollup, not a live RunnerManager dashboard; GUI transient statuses usually persist as `idle`, so this often reads as 0. Use `session follow/watch`, `project follow`, or the GUI for live work. |
+| `running`       | int  | persisted sessions in `running` status. Direct SQLite rollup; transient statuses persist as `idle`, so this reads 0 in practice. Read `live.busy` instead. |
 | `waitingInput`  | int  | persisted sessions with `waiting_approval` status (same persistence caveat)                        |
 | `errored`       | int  | persisted sessions in `error` status (same persistence caveat)                                     |
+| `live`          | object? | **CLI-attached, additive (2026-09-09).** `{"busy": <sessions currently busy>, "queued": <messages held in outbound queues>}` from the unscoped `sessions.run_state` probe. Absent when Galley Core is unreachable. |
+
+```bash
+$ galley status        # Galley running, one session mid-turn with a queued follow-up
+{"total":7,"running":0,"waitingInput":0,"errored":0,"live":{"busy":1,"queued":1}}
+```
 
 ### 5.7 · `galley health`
 

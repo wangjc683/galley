@@ -31,8 +31,14 @@ path in §2). **No daemon required.** Useful when:
 - Galley GUI isn't running but the agent wants to inspect history
 - A CI / cron job wants to scrape session state from a snapshot DB
 
-These commands return the same JSON whether or not Galley Core is
-running — they don't talk to it.
+These commands return the same persisted JSON whether or not Galley Core
+is running. Since 2026-09-09 three of them (`sessions list`,
+`session brief`, `status`) additionally make one best-effort socket call
+(`sessions.run_state`, bounded to 3s) and attach the answer as the
+additive `live` field; when Core is unreachable the field is simply
+omitted and the command still succeeds from SQLite alone. This is the
+one place a read command touches the socket — it never fails because of
+it.
 
 ### Write commands → local socket
 

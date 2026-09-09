@@ -94,6 +94,11 @@ pub trait RunnerPort: Send + Sync {
             queued_count: 0,
         }
     }
+    /// Session ids with any live state (`sessions.run_state` with no
+    /// explicit ids). Default: none, matching the idle fakes.
+    async fn known_session_ids(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 #[async_trait]
@@ -157,6 +162,9 @@ impl RunnerPort for RunnerManager {
     }
     async fn run_state(&self, session_id: &str) -> RunState {
         RunnerManager::run_state(self, session_id).await
+    }
+    async fn known_session_ids(&self) -> Vec<String> {
+        RunnerManager::known_session_ids(self).await
     }
 }
 

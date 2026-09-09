@@ -2,7 +2,7 @@
 name = "galley-cli"
 version = "0.4.12"
 edition = "2021"
-description = "Galley CLI — agent-first interface to Galley Core (B1 M4+: 6 read commands)"
+description = "Galley CLI — agent-first interface to Galley Core"
 # Workspace root lives at ../core (not in an ancestor of this crate),
 # so cargo needs an explicit hint to find it. Without this, invoking
 # `cargo build` from cli/ would treat the crate as standalone and use a
@@ -35,7 +35,10 @@ tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 # switch to a table formatter; B1 ships JSON-only and adds the
 # pretty path in M4 polish if time permits.
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# `preserve_order`: the `live` field is spliced into row output through a
+# `serde_json::Value` round-trip; without it every object came back with
+# keys sorted alphabetically (`createdAt` first, `id` buried mid-line).
+serde_json = { version = "1", features = ["preserve_order"] }
 
 # Advisory file lock for the per-goal controller lock: prevents two
 # controller processes (e.g. startup auto-resume racing a manual

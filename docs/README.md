@@ -88,7 +88,7 @@ the doc on the right is part of your change, not a follow-up:
 | Add a top-level module or cross-tier seam | [architecture](./architecture.md) + [architecture demo](./architecture-demo.md) (file + symbol refs, never line numbers) |
 | Write a devlog entry | add its row to [devlog README](./devlog/README.md) in the same change |
 | Change UI copy rules or visual specs | [copy guidelines](./copy-language-guidelines.md) / [design](./design/README.md) |
-| Update the Supervisor SOP | re-sync the verbatim copy in `.claude/skills/galley-supervisor/references/` |
+| Update the Supervisor SOP | re-sync both `references/` copies (`.claude/skills/…` and `.agents/skills/…`, bump their "Last synced" header), check `core/src/managed_prompt.rs` still agrees, then run `node scripts/check-supervisor-sop-drift.mjs` |
 
 ## Keep Docs Lean
 

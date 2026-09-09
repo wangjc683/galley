@@ -594,6 +594,17 @@ impl RunnerManager {
         }
     }
 
+    /// Every session id the manager holds state for: a registered runner
+    /// process or a queue entry (open run gate / queued messages). This is
+    /// the scope of the bulk `sessions.run_state` probe when the caller
+    /// passes no ids — anything not listed here is idle by construction.
+    pub async fn known_session_ids(&self) -> Vec<String> {
+        let mut ids: std::collections::BTreeSet<String> =
+            self.processes.read().await.keys().cloned().collect();
+        ids.extend(self.queues.lock().await.keys().cloned());
+        ids.into_iter().collect()
+    }
+
     /// Walk the LRU front-to-back evicting candidates until alive count
     /// is at or under [`cap`](Self::cap). Protected: active session +
     /// any session currently mid-turn (`agent_running == true`).

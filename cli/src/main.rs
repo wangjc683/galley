@@ -1,8 +1,9 @@
 //! Galley CLI — agent-first interface to Galley Core.
 //!
-//! B1 M4 ships six **read-only** commands that all open the local
-//! SQLite database directly (no daemon yet; B4 introduces the
-//! socket-backed transport per refactor invariant B1-I5).
+//! Read commands open the local SQLite database directly; write and
+//! streaming commands talk to Galley Core over the per-user local socket.
+//! Three read commands (`sessions list`, `session brief`, `status`) also
+//! make one best-effort socket probe for the additive `live` field.
 //!
 //! Output discipline:
 //!   - Success → JSON on stdout. List-returning commands emit
@@ -30,7 +31,7 @@ use std::process::ExitCode;
 
 use args::{Cli, Command, GoalCmd, LlmCmd, ProjectCmd, SessionCmd, SessionsCmd};
 use clap::Parser;
-use common::{exit_code_for, SCHEMA_VERSION};
+use common::{emit_line, exit_code_for, SCHEMA_VERSION};
 use galley_core_lib::error::GalleyError;
 
 #[tokio::main]
@@ -56,15 +57,12 @@ async fn main() -> ExitCode {
             let invalid = GalleyError::InvalidArgs {
                 message: err.to_string(),
             };
-            println!(
-                "{}",
-                serde_json::to_string(&invalid).expect("serialize GalleyError")
-            );
+            emit_line(&serde_json::to_string(&invalid).expect("serialize GalleyError"));
             return ExitCode::from(exit_code_for(&invalid));
         }
     };
     // §1.2 schema pin: if the caller pinned --schema=N, verify the binary
-    // speaks that schema. v0.2 only knows SCHEMA_VERSION (1); future
+    // speaks that schema. Current binaries only know SCHEMA_VERSION (1); future
     // multi-schema binaries widen this check to a set.
     if let Some(pinned) = cli.schema {
         if pinned != SCHEMA_VERSION {
@@ -73,10 +71,7 @@ async fn main() -> ExitCode {
                     "schema_mismatch: client requested schema {pinned}, server speaks {SCHEMA_VERSION}"
                 ),
             };
-            println!(
-                "{}",
-                serde_json::to_string(&err).expect("serialize GalleyError")
-            );
+            emit_line(&serde_json::to_string(&err).expect("serialize GalleyError"));
             return ExitCode::from(exit_code_for(&err));
         }
     }
@@ -88,7 +83,7 @@ async fn main() -> ExitCode {
                 let escaped = e.to_string().replace('\\', "\\\\").replace('"', "\\\"");
                 format!("{{\"error\":\"internal\",\"message\":\"{escaped}\"}}")
             });
-            println!("{json}");
+            emit_line(&json);
             ExitCode::from(exit_code_for(&e))
         }
     }

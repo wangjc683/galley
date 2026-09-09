@@ -121,6 +121,20 @@ pub struct SessionRunStateArgs {
 }
 socket_command!(SessionRunStateArgs, "session.run_state");
 
+/// Bulk live busy probe (additive since v0.4.13). `sessionIds` scopes the
+/// answer; omit it to get every session the RunnerManager currently knows
+/// about (live runner or non-empty queue). The CLI attaches the result to
+/// `sessions list` / `session brief` / `status` as the `live` field so a
+/// Supervisor can see which sessions are actually running — the persisted
+/// `status` column never says `running`.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionsRunStateArgs {
+    #[serde(default)]
+    pub session_ids: Option<Vec<String>>,
+}
+socket_command!(SessionsRunStateArgs, "sessions.run_state");
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionNewArgs {

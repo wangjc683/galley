@@ -1,9 +1,11 @@
 # galley-supervisor — Claude Skill
 
-A Claude Code skill that lets Claude remote-manage your local Galley
-desktop orchestrator through the `galley` CLI: list / open / send /
-archive / move sessions, switch LLMs, inspect status — all from a
-Claude conversation.
+A Claude Code skill that lets Claude manage your local Galley desktop
+orchestrator through the `galley` CLI: inspect what is running, start or
+continue sessions, split work into a Project-backed group, wait for
+results, archive / restore / move sessions, switch a session's model, or
+run a Galley Goal after your confirmation — all from a Claude
+conversation.
 
 > **Need Galley first.** This skill assumes you have Galley installed and
 > have launched it at least once (so the CLI discovery file at
@@ -49,34 +51,36 @@ Once installed, trigger phrases like these load the skill automatically:
 - "spin up a Galley session that does X"
 - "switch the LLM on session sess_xxx to claude-sonnet-4-6"
 
-The skill resolves the CLI path from the discovery file, runs the
-appropriate `galley` subcommand, classifies any error by exit code, and
-asks for confirmation before destructive operations (archive / stop /
-project delete).
+The skill resolves the CLI path from the discovery file, follows the
+bundled Supervisor SOP, runs the appropriate `galley` subcommand, and
+classifies any error by exit code. Reversible actions (stopping or
+archiving a session) are done directly with the undo path reported;
+irreversible or outward-facing ones (`project delete`, publishing,
+credentials, payment, commit/push, broad file edits) get an impact summary
+and wait for your approval first.
 
 ## Files
 
 | Path | What |
 |---|---|
-| `SKILL.md` | The skill body Claude reads on trigger. |
-| `references/galley-supervisor-sop.md` | Copy-first Lite Supervisor SOP (verbatim copy of `docs/integrations/galley-supervisor-sop.md`). |
-| `references/galley-supervisor-reference.md` | Detailed command and advanced workflow reference (verbatim copy of `docs/integrations/galley-supervisor-reference.md`). |
+| `SKILL.md` | The thin skill body Claude reads on trigger: identity, host-specific notes, and a pointer to the SOP. The procedure itself is not restated here. |
+| `references/galley-supervisor-sop.md` | The operating procedure (verbatim copy of `docs/integrations/galley-supervisor-sop.md`, CI-checked). |
+| `references/galley-supervisor-reference.md` | Detailed commands, Goal V1, origin fields, boundaries (verbatim copy of `docs/integrations/galley-supervisor-reference.md`, CI-checked). |
 
 ## Schema + stability
 
-This skill targets **Galley CLI schema_version=1** (frozen for the v0.2.x line).
-Schema is additive-only inside v1; breaking changes bump to v2 and will
-ship as a new skill version.
+This skill targets **Galley CLI `schemaVersion: 1`**, frozen since `v0.2`
+and additive-only since. Breaking changes bump to v2 and will ship as a
+new skill version.
 
 ## Updates
 
 The canonical SOP lives in [`docs/integrations/galley-supervisor-sop.md`](https://github.com/wangjc683/galley/blob/main/docs/integrations/galley-supervisor-sop.md)
 and the full reference lives in [`docs/integrations/galley-supervisor-reference.md`](https://github.com/wangjc683/galley/blob/main/docs/integrations/galley-supervisor-reference.md).
-When either updates, the `references/` copies in this skill are re-synced —
-pull the latest skill version.
+When either updates, the `references/` copies in this skill are re-synced
+(CI fails otherwise) — pull the latest skill version.
 
 ## See also
 
-- [Galley CLI agent-api](https://github.com/wangjc683/galley/blob/main/docs/agent-api.md) — full command schema
-- [Galley PRD §11](https://github.com/wangjc683/galley/blob/main/docs/PRD.md) — CLI surface
+- [Galley Agent API](https://github.com/wangjc683/galley/blob/main/docs/agent-api/README.md) — full command schema
 - [Galley architecture principles](https://github.com/wangjc683/galley/blob/main/AGENTS.md) — why Galley is localhost-only and your data never leaves your machine

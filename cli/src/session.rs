@@ -1,8 +1,8 @@
 use crate::args::RuntimeArg;
 use crate::client::{call_print, call_value, client, next_watch_frame_strict};
 use crate::common::{
-    emit_json, parse_status_arg, runtime_arg_for_session_new, runtime_filter, StreamEndPayload,
-    SCHEMA_VERSION,
+    emit_json, emit_line, parse_status_arg, probe_live_states, runtime_arg_for_session_new,
+    runtime_filter, with_live, StreamEndPayload, SCHEMA_VERSION,
 };
 use galley_core_lib::api::{
     GalleyApi, MessageBrief, MessageRole, SearchScope, SessionBrief, SessionFilter, SessionId,
@@ -74,8 +74,14 @@ pub(crate) async fn sessions_list(
         runtime_kind: runtime_filter(&galley, runtime).await?,
     };
     let rows = galley.list_sessions(filter).await?;
+    // One bulk probe for the whole page: `live` tells the Supervisor
+    // which rows are actually mid-run, which the persisted `status`
+    // column cannot (it never reads `running`).
+    let ids: Vec<String> = rows.iter().map(|row| row.id.0.clone()).collect();
+    let live = probe_live_states(Some(ids)).await;
     for row in rows {
-        emit_json(&row)?;
+        let live_row = live.as_ref().and_then(|map| map.get(&row.id.0));
+        emit_json(&with_live(&row, live_row)?)?;
     }
     Ok(())
 }
@@ -101,8 +107,10 @@ pub(crate) async fn sessions_search(
 
 pub(crate) async fn session_brief(id: String) -> Result<(), GalleyError> {
     let galley = SqliteGalley::open().await?;
-    let brief = galley.session_brief(SessionId(id)).await?;
-    emit_json(&brief)?;
+    let brief = galley.session_brief(SessionId(id.clone())).await?;
+    let live = probe_live_states(Some(vec![id.clone()])).await;
+    let live_row = live.as_ref().and_then(|map| map.get(&id));
+    emit_json(&with_live(&brief, live_row)?)?;
     Ok(())
 }
 
@@ -195,7 +203,7 @@ pub(crate) async fn session_send(
     jump: bool,
 ) -> Result<(), GalleyError> {
     let result = session_send_value(id, content, supervisor, reason, jump).await?;
-    println!("{result}");
+    emit_line(&result.to_string());
     Ok(())
 }
 
@@ -234,10 +242,10 @@ pub(crate) async fn session_watch(id: String) -> Result<(), GalleyError> {
                 return Err(crate::client::galley_error_for_tag(tag, message));
             }
             WatchFrame::End(_) => {
-                println!("{line}");
+                emit_line(&line);
                 break;
             }
-            WatchFrame::Event(_) | WatchFrame::Unparseable(_) => println!("{line}"),
+            WatchFrame::Event(_) | WatchFrame::Unparseable(_) => emit_line(&line),
         }
     }
     Ok(())

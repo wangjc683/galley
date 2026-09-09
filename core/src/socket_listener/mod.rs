@@ -70,7 +70,7 @@ use crate::protocol::{
     SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
     SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
     SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
-    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs,
+    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
 };
 use crate::runner_commands::{
     normalize_external_ga_path, prepare_managed_spawn_args, spawn_emit_task,
@@ -660,6 +660,9 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         }
         "session.run_state" => {
             DispatchResult::Unary(dispatch_session_run_state(request_id, req.args, ctx).await)
+        }
+        "sessions.run_state" => {
+            DispatchResult::Unary(dispatch_sessions_run_state(request_id, req.args, ctx).await)
         }
         "session.watch" => dispatch_session_watch(request_id, req.args, ctx).await,
         // ---- B4 M1 session write commands ----

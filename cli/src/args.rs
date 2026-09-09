@@ -11,10 +11,10 @@ use galley_core_lib::api::{
     about = "Agent-first interface to Galley (the local agent team orchestrator)."
 )]
 pub(crate) struct Cli {
-    /// Pin the schema version the supervisor expects. v0.2 only knows
-    /// `1`; mismatch exits 2 with `error: "schema_mismatch"`. Future
-    /// binaries that speak multiple schema versions will accept all of
-    /// them. Omit to let the binary use its default (currently `1`).
+    /// Pin the schema version this caller expects. Current binaries speak
+    /// only `1`; a mismatch exits 2 (`invalid_args`) with a message
+    /// prefixed `schema_mismatch:`. Omit to use the binary's default
+    /// (currently `1`).
     #[arg(long = "schema", value_name = "N", global = true)]
     pub(crate) schema: Option<u32>,
 
@@ -32,31 +32,31 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Session(SessionCmd),
 
-    /// Aggregate counts: total / running / waiting_input / errored.
+    /// Aggregate counts (total / running / waitingInput / errored) plus a
+    /// `live` busy/queued rollup when Galley Core is reachable.
     Status,
 
-    /// Run local health probes. Python-dependent rows currently surface
-    /// as the stable legacy value `deferred_b4`.
+    /// Run local health probes. Python-dependent rows report the legacy
+    /// value `deferred_b4`, meaning "not probed by this command".
     Health,
 
     /// Print the CLI + schema version.
     Version,
 
-    /// Project operations (create / list / brief / show / follow / delete). v0.2 has no
-    /// reversible "archive" surface — `delete` is destructive (FK SET
-    /// NULL detaches child sessions to ungrouped). A future v0.6+ ships
-    /// `archive` separately with reversible semantics (sub-plan O2).
+    /// Project operations (create / list / brief / show / follow /
+    /// delete). `delete` is destructive: child sessions detach to
+    /// ungrouped and survive; there is no reversible project archive.
     #[command(subcommand)]
     Project(ProjectCmd),
 
-    /// Headless autonomous Goal/Hive operations.
+    /// Autonomous Goal operations (propose / run / status / active / stop /
+    /// task / event / deliverable).
     #[command(subcommand)]
     Goal(GoalCmd),
 
-    /// LLM configuration commands. `llm list` reads the cached
-    /// `llm_list` pref that the GUI seeds after a bridge warmup —
-    /// requires Galley GUI to have been opened at least once. `llm set`
-    /// persists a per-session pick + best-effort tells any live runner.
+    /// LLM commands. `llm list` reads the model list the GUI cached
+    /// after a bridge warmup (open Galley once to populate). `llm set`
+    /// persists a per-session pick and tells any live runner.
     #[command(subcommand)]
     Llm(LlmCmd),
 }
@@ -67,8 +67,7 @@ pub(crate) enum ProjectCmd {
     Create {
         /// Project name (will be trimmed; empty → exit 2).
         name: String,
-        /// Optional filesystem root path. Historical — currently stored
-        /// on the row. It only affects GA when paired with
+        /// Optional Project folder. Metadata only unless paired with
         /// --enable-workspace.
         #[arg(long)]
         root_path: Option<String>,
@@ -137,14 +136,10 @@ pub(crate) enum ProjectCmd {
         #[arg(long)]
         final_show: bool,
     },
-    /// Permanently delete a project. Child sessions auto-detach to
-    /// ungrouped (FK SET NULL); the sessions themselves survive.
-    /// Response includes `detachedSessions` count + the list of
-    /// affected session ids so a supervisor agent can log the side
-    /// effect.
-    ///
-    /// v0.2: this is destructive. v0.6+ will ship a separate
-    /// `archive` command with reversible semantics (sub-plan O2).
+    /// Permanently delete a project. Destructive and not reversible.
+    /// Child sessions detach to ungrouped and survive; the response
+    /// carries `detachedSessions` plus the affected session ids so a
+    /// supervisor can log the side effect.
     Delete {
         /// Project id.
         project_id: String,
@@ -323,7 +318,10 @@ pub(crate) enum LlmCmd {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum SessionsCmd {
-    /// List sessions, ordered pinned first then by recency.
+    /// List sessions, ordered pinned first then by recency. Each row
+    /// carries a `live` run-state object when Galley Core is reachable —
+    /// the persisted `status` column never reads `running`, so check
+    /// `live.busy` to see which sessions are actually working.
     List {
         /// Runtime scope. Default follows the GUI's current runtime so
         /// agents see the same session set as the human operator.
@@ -359,7 +357,8 @@ pub(crate) enum SessionsCmd {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum SessionCmd {
-    /// One-row summary for a session id.
+    /// One-row summary for a session id, plus a `live` run-state object
+    /// (`busy` / `openRun` / `queuedCount` …) when Galley Core is reachable.
     Brief {
         /// Session id (e.g. `sess_abc…`).
         id: String,
@@ -373,10 +372,11 @@ pub(crate) enum SessionCmd {
         #[arg(long)]
         tail: Option<usize>,
     },
-    /// Send a user message into a session (B2 M4). Persists to the
-    /// `messages` table with the supplied origin triple + dispatches
-    /// to the live runner subprocess (if one is alive). Requires Galley
-    /// Core to be running (exit 4 if the socket isn't reachable).
+    /// Send a user message into a session. Persists the message with the
+    /// supplied origin and dispatches it to the live runner; a mid-run
+    /// send is held in Galley Core's queue (`dispatch: "queued"`) and
+    /// runs when the current task finishes. Requires Galley Core (exit 4
+    /// if the socket isn't reachable).
     Send {
         /// Session id.
         id: String,
@@ -396,10 +396,10 @@ pub(crate) enum SessionCmd {
         #[arg(long)]
         jump: bool,
     },
-    /// Stream live IPC events from a session's runner (B2 M4). NDJSON
-    /// on stdout — one event per line. Exits cleanly when the
-    /// subprocess terminates (`{"stream":"end",...}`) or the user
-    /// sends SIGINT.
+    /// Stream live runner events from a session. NDJSON on stdout, one
+    /// event per line, no backlog. Exits cleanly when the runner exits
+    /// (`{"stream":"end",...}`) or on SIGINT; exit 3 when the session
+    /// has no live runner — prefer `follow` unless you need raw events.
     Watch {
         /// Session id.
         id: String,
@@ -446,10 +446,10 @@ pub(crate) enum SessionCmd {
         #[arg(long)]
         after_turn: Option<u32>,
     },
-    /// Create a new session with a first user message (B4 M1). Atomic:
-    /// session row + first message commit together or roll back together.
-    /// Returns `{session, message, dispatch}` with `dispatch=dispatched`
-    /// after Galley Core starts a runner and sends the first task. Runner
+    /// Create a new session with a first user message. Atomic: session
+    /// row + first message commit together or roll back together. Returns
+    /// `{session, message, dispatch}` with `dispatch=dispatched` after
+    /// Galley Core starts a runner and sends the first task. Runner
     /// start/send failures exit 5 so callers know delegation did not begin.
     New {
         /// First user message. Doubles as the seed for title derivation
@@ -476,12 +476,10 @@ pub(crate) enum SessionCmd {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// Send a transient "by the way" side question into a running session
-    /// (B4 M1). The runner detects the `/btw` prefix and bypasses its
-    /// task queue — useful for asking the agent a quick question mid-run
-    /// without disturbing the main thread. Not persisted to the messages
-    /// table (v0.1 transient policy); requires an alive bridge (exit 5
-    /// otherwise).
+    /// Send a transient "by the way" side question into a running
+    /// session. The runner answers it inline without disturbing the main
+    /// task. Not persisted to the transcript; requires a live runner
+    /// (exit 5 otherwise).
     Btw {
         /// Session id.
         id: String,
@@ -492,12 +490,10 @@ pub(crate) enum SessionCmd {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// Stop the current turn in a session (B4 M1). Sends `Abort` to the
-    /// runner — the agent's loop exits and emits `run_complete` with the
-    /// `ABORTED` marker, but the bridge process stays alive so a
-    /// subsequent `session send` resumes without paying the respawn cost.
-    /// Idempotent: stopping an already-idle session returns
-    /// `{dispatch: "already_stopped"}` and exit 0.
+    /// Stop the current turn in a session. Aborts the running task but
+    /// keeps the runner alive, so a later `session send` resumes without
+    /// a respawn. Reversible in effect. Idempotent: stopping an idle
+    /// session returns `{dispatch: "already_stopped"}` and exit 0.
     Stop {
         /// Session id.
         id: String,
@@ -527,10 +523,8 @@ pub(crate) enum SessionCmd {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// Move a session into / out of a project (B4 M1). `--to=<project-id>`
-    /// attaches; omit `--to` to detach (move to ungrouped). The session is
-    /// the subject of the move — projects don't shuffle, sessions migrate
-    /// between them (sub-plan O3 noun-as-subject grammar).
+    /// Move a session into / out of a project. `--to=<project-id>`
+    /// attaches; omit `--to` to detach (move to ungrouped).
     Move {
         /// Session id.
         id: String,

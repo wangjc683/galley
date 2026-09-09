@@ -336,7 +336,16 @@ report before it is classified as an entry-point or a project-filing problem
 (triage notes in the
 [issue #27 devlog](./devlog/2026-09-08-issue-27-message-search-locate.md)).
 Real WeChat end-to-end acceptance of the supervisor-side fix is still owed
-from a machine with a paired WeChat account. The items below are standing
+from a machine with a paired WeChat account. Also unreleased: the
+**CLI / Supervisor SOP overhaul** (devlog
+[2026-09-09](./devlog/2026-09-09-cli-and-supervisor-sop-overhaul.md)) —
+additive under `schemaVersion: 1`: `sessions list` / `session brief` /
+`status` attach a `live` run-state object (the answer to `status.running`
+always reading 0), a new bulk `sessions.run_state` socket command behind
+it, broken-pipe-safe stdout, help text without internal codenames; the SOP,
+reference, both skill copies, and the managed IM entry-layer prompt now
+teach `--after-turn`, `dispatch:"queued"`, Goal `--mode=solo`, and the
+2026-07-03 reversibility split consistently. The items below are standing
 follow-ups.
 
 The GA baseline is fully current as of `v0.4.12` (`efb3bc6`, audited
