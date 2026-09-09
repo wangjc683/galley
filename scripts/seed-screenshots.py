@@ -16,7 +16,7 @@ What the seed produces (per language, see content_zh / content_en):
 
   - 3 projects: the Wittgenstein easter egg (knowledge work), a household
     move (life admin), and galley-site (dev; pairs with the demo repo)
-  - 16 sessions across knowledge / life / dev, with states: running
+  - 17 sessions across knowledge / life / dev, with states: running
     ("Thinking..."), completed, unread, pinned, supervisor-created,
     scheduler-created, one completed Goal with chapter markers
   - 3 scheduled tasks (daily / weekly / monthly, one disabled)
@@ -67,6 +67,33 @@ def iso(delta_minutes: float) -> str:
     """Timestamp `delta_minutes` before the seed run, ISO-8601 Zulu."""
     t = NOW - timedelta(minutes=delta_minutes)
     return t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}Z"
+
+
+def minutes_since_local(time_of_day: str, *, day_of_month: int | None = None) -> float:
+    """Minutes since the most recent local-clock occurrence of `time_of_day`
+    (today or yesterday; or the given day of this / last month). Scheduler
+    catch-up looks at last_fired_at: a seeded fire stamp older than today's
+    slot makes Core fire the task for real during the shoot (observed
+    2026-09-09 — the catch-up then failed and the row showed 上次触发失败).
+    Stamped 5 s after the slot so second-precision comparison sees it as
+    consumed."""
+    now = datetime.now().astimezone()
+    hh, mm = (int(x) for x in time_of_day.split(":"))
+    if day_of_month is None:
+        slot = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if slot > now:
+            slot -= timedelta(days=1)
+    else:
+        slot = now.replace(day=day_of_month, hour=hh, minute=mm, second=0, microsecond=0)
+        if slot > now:
+            first = now.replace(day=1)
+            slot = (first - timedelta(days=1)).replace(
+                day=day_of_month, hour=hh, minute=mm, second=0, microsecond=0
+            )
+    # Stamp 5 s after the slot: Core's due check reads last_fired_at at
+    # second precision and a millisecond-truncated stamp that lands before
+    # the slot re-fires the period (observed on the 2026-09-09 en shoot).
+    return (now - slot).total_seconds() / 60 - 5 / 60
 
 
 def tc(tool_name: str, args: dict, tool_use_id: str) -> dict:
@@ -131,7 +158,7 @@ def content_zh() -> dict:
                                 "summary": "已核对 §43 原文与前后语境",
                             },
                         ],
-                        "final": "对照表完成。核心并置：\n\n> Die Bedeutung eines Wortes ist sein Gebrauch in der Sprache.\n\n| 维特根斯坦 | 工具调用 | 例 |\n|---|---|---|\n| 词的意义是它在语言中的使用 | 工具的语义是它被调用的时机和方式 | 模型「懂」`web_scan`，不是会背 schema，而是在该看页面时看页面 |\n| 定义不能穷尽用法 | 工具描述不能穷尽调用场景 | 同一个 `code_run` 既能算账也能改名文件 |\n| 语言游戏有家族相似 | 任务之间有家族相似 | 「整理 Downloads」与「整理报销单」共用一套动作骨架 |\n| 遵守规则不是解释规则 | 正确调用不是复述文档 | 会背 API 文档的模型仍会在错误时机调用 |\n\n12 组例句按「描述 / 误用 / 恰当使用」三栏排好，已存到项目目录。",
+                        "final": "对照表完成。核心并置：\n\n> Die Bedeutung eines Wortes ist sein Gebrauch in der Sprache.\n\n| 维特根斯坦 | 工具调用 | 例 |\n|---|---|---|\n| 词的意义是它在语言中的使用 | 工具的语义是它被调用的时机和方式 | 该看页面时才看页面，而不是会背 schema |\n| 定义不能穷尽用法 | 工具描述不能穷尽调用场景 | 同一个 `code_run` 既算账也改文件名 |\n| 语言游戏有家族相似 | 任务之间有家族相似 | 整理下载与整理报销共用一套动作 |\n| 遵守规则不是解释规则 | 正确调用不是复述文档 | 会背文档的模型仍会在错误时机调用 |\n\n12 组例句按「描述 / 误用 / 恰当使用」三栏排好，已存到项目目录。",
                         "summary": "12 组语义对照例句整理完成",
                         "telemetry": tele(42, 8210, 1830, 3),
                     }
@@ -429,7 +456,7 @@ def content_zh() -> dict:
                 "title": "昨日支出汇总",
                 "status": "completed",
                 "summary": "昨日 6 笔共 ¥318，餐饮占六成",
-                "ago": 6 * 60,
+                "ago": minutes_since_local("08:30"),
                 "origin": ("supervisor", SCHEDULER_SUPERVISOR, "scheduled task sched_daily_spend"),
                 "turns": [
                     {
@@ -447,6 +474,24 @@ def content_zh() -> dict:
                         "final": "昨日支出 **¥318**，6 笔：\n\n- 餐饮 ¥192（3 笔）\n- 交通 ¥46（2 笔）\n- 日用 ¥80（1 笔）\n\n没有超过 ¥200 的单笔。",
                         "summary": "昨日 6 笔共 ¥318",
                         "telemetry": tele(22, 3900, 310, 2),
+                    }
+                ],
+            },
+            {
+                "id": "sess_monthly_invoice",
+                "project": None,
+                "title": "八月发票与报销单汇总",
+                "status": "completed",
+                "summary": "31 笔已入表，3 笔缺发票",
+                "ago": minutes_since_local("09:30", day_of_month=1),
+                "origin": ("supervisor", SCHEDULER_SUPERVISOR, "scheduled task sched_monthly_invoice"),
+                "turns": [
+                    {
+                        "user": "把上个月的发票和报销单整理成一张表，缺发票的单独列出来。",
+                        "thinking": "按报销单号对发票，缺的单独列。",
+                        "final": "八月共 **31 笔**，合计 ¥8,420，已入表。缺发票 **3 笔**（交通 ¥45、餐饮 ¥168、办公 ¥260），补齐后可一起提交。",
+                        "summary": "31 笔已入表，3 笔缺发票",
+                        "telemetry": tele(35, 6800, 540, 3),
                     }
                 ],
             },
@@ -519,7 +564,7 @@ def content_zh() -> dict:
                 "repeat_days": None,
                 "time_of_day": "08:30",
                 "enabled": 1,
-                "last_fired_ago": 6 * 60,
+                "last_fired_ago": minutes_since_local("08:30"),
                 "last_run_session": "sess_daily_spend",
                 "created_ago": 12 * 24 * 60,
             },
@@ -543,8 +588,8 @@ def content_zh() -> dict:
                 "repeat_days": "1",
                 "time_of_day": "09:30",
                 "enabled": 0,
-                "last_fired_ago": 9 * 24 * 60,
-                "last_run_session": None,
+                "last_fired_ago": minutes_since_local("09:30", day_of_month=1),
+                "last_run_session": "sess_monthly_invoice",
                 "created_ago": 40 * 24 * 60,
             },
         ],
@@ -580,7 +625,7 @@ def content_en() -> dict:
                                 "summary": "§43 and its context verified",
                             },
                         ],
-                        "final": "Done. The core parallel:\n\n> Die Bedeutung eines Wortes ist sein Gebrauch in der Sprache.\n\n| Wittgenstein | Tool calling | Example |\n|---|---|---|\n| A word's meaning is its use in the language | A tool's semantics is when and how it gets called | A model \"understands\" `web_scan` not by reciting its schema but by scanning at the right moment |\n| Definitions never exhaust use | Tool descriptions never exhaust call sites | The same `code_run` balances a ledger and renames files |\n| Language games share family resemblances | Tasks share family resemblances | \"Sort Downloads\" and \"sort expenses\" share one action skeleton |\n| Following a rule is not interpreting it | Calling correctly is not quoting the docs | A model that can recite the API still calls it at the wrong time |\n\n12 paired examples arranged in three columns — description / misuse / apt use — saved to the project folder.",
+                        "final": "Done. The core parallel:\n\n> Die Bedeutung eines Wortes ist sein Gebrauch in der Sprache.\n\n| Wittgenstein | Tool calling | Example |\n|---|---|---|\n| A word's meaning is its use in the language | A tool's semantics is when and how it gets called | Scan when a page is needed, not because the schema says so |\n| Definitions never exhaust use | Tool descriptions never exhaust call sites | One `code_run` balances a ledger and renames files |\n| Language games share family resemblances | Tasks share family resemblances | Sorting downloads and sorting expenses share one skeleton |\n| Following a rule is not interpreting it | Calling correctly is not quoting the docs | Reciting the API still means calling it at the wrong time |\n\n12 paired examples arranged in three columns — description / misuse / apt use — saved to the project folder.",
                         "summary": "12 paired examples written up",
                         "telemetry": tele(42, 8210, 1830, 3),
                     }
@@ -878,7 +923,7 @@ def content_en() -> dict:
                 "title": "Yesterday's spending summary",
                 "status": "completed",
                 "summary": "6 items, ¥318; food is 60%",
-                "ago": 6 * 60,
+                "ago": minutes_since_local("08:30"),
                 "origin": ("supervisor", SCHEDULER_SUPERVISOR, "scheduled task sched_daily_spend"),
                 "turns": [
                     {
@@ -896,6 +941,24 @@ def content_en() -> dict:
                         "final": "Yesterday: **¥318** across 6 items.\n\n- Food ¥192 (3)\n- Transport ¥46 (2)\n- Household ¥80 (1)\n\nNothing over ¥200.",
                         "summary": "6 items, ¥318",
                         "telemetry": tele(22, 3900, 310, 2),
+                    }
+                ],
+            },
+            {
+                "id": "sess_monthly_invoice",
+                "project": None,
+                "title": "August invoices and expense reports, totaled",
+                "status": "completed",
+                "summary": "31 items tabled, 3 missing receipts",
+                "ago": minutes_since_local("09:30", day_of_month=1),
+                "origin": ("supervisor", SCHEDULER_SUPERVISOR, "scheduled task sched_monthly_invoice"),
+                "turns": [
+                    {
+                        "user": "Sort last month's invoices and expense reports into one table, listing anything missing a receipt.",
+                        "thinking": "Match invoices to report numbers; list the gaps separately.",
+                        "final": "August: **31 items**, ¥8,420 total, tabled. **3 missing receipts** (transport ¥45, food ¥168, office ¥260) — submit together once those are in.",
+                        "summary": "31 items tabled, 3 missing receipts",
+                        "telemetry": tele(35, 6800, 540, 3),
                     }
                 ],
             },
@@ -968,7 +1031,7 @@ def content_en() -> dict:
                 "repeat_days": None,
                 "time_of_day": "08:30",
                 "enabled": 1,
-                "last_fired_ago": 6 * 60,
+                "last_fired_ago": minutes_since_local("08:30"),
                 "last_run_session": "sess_daily_spend",
                 "created_ago": 12 * 24 * 60,
             },
@@ -992,8 +1055,8 @@ def content_en() -> dict:
                 "repeat_days": "1",
                 "time_of_day": "09:30",
                 "enabled": 0,
-                "last_fired_ago": 9 * 24 * 60,
-                "last_run_session": None,
+                "last_fired_ago": minutes_since_local("09:30", day_of_month=1),
+                "last_run_session": "sess_monthly_invoice",
                 "created_ago": 40 * 24 * 60,
             },
         ],
@@ -1178,6 +1241,10 @@ def insert_scheduled(cur: sqlite3.Cursor, tasks: list) -> None:
 # ---------------------------------------------------------------------------
 
 DEMO_BASE_FILES = {
+    ".gitignore": """node_modules/
+dist/
+.DS_Store
+""",
     "README.md": """# galley-site
 
 The docs site for Galley. Static, no framework — one page per file under

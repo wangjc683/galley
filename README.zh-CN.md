@@ -15,7 +15,7 @@
   ·
   <a href="#快速开始">快速开始</a>
   ·
-  <a href="#截图">截图</a>
+  <a href="#走一圈">走一圈</a>
   ·
   <a href="./docs/README.md">文档</a>
   ·
@@ -31,8 +31,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/zh/05-hero-dark.png">
-    <img src="docs/screenshots/zh/01-hero.png" alt="Galley 主对话界面：agent 正在多步调用工具完成任务" width="800" />
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/zh/hero-dark.png">
+    <img src="docs/screenshots/zh/hero.png" alt="Galley 主对话界面：agent 正在多步调用工具完成任务" width="800" />
   </picture>
 </p>
 
@@ -75,12 +75,13 @@ Galley 的编排层。你在 GUI 操作，Supervisor Agent 走稳定的 `galley`
 
 ---
 
-## 截图
+## 走一圈
 
 | | |
 |---|---|
-| ![项目视图](docs/screenshots/zh/02-projects.png)<br/><sub>项目视图 · 多条会话围绕同一项目并行</sub> | ![全文搜索](docs/screenshots/zh/03-search.png)<br/><sub>⌘K · 历史会话全文可搜（中文子串也行）</sub> |
-| ![安静待命](docs/screenshots/zh/04-empty.png)<br/><sub>安静待命的工作区 · 后台任务照常推进</sub> | ![暗色主题](docs/screenshots/zh/05-hero-dark.png)<br/><sub>暗色主题 · 同一张夜间书桌</sub> |
+| ![工具时间线](docs/screenshots/zh/tools.png)<br/><sub>工具时间线 · 每次调用的参数、结果、耗时都在行内</sub> | ![阅读面板](docs/screenshots/zh/reading.png)<br/><sub>阅读面板 · 在对话旁边审阅工作区改动</sub> |
+| ![项目视图](docs/screenshots/zh/projects.png)<br/><sub>项目视图 · 多条会话围绕同一项目并行</sub> | ![Goal](docs/screenshots/zh/goal.png)<br/><sub>Goal · 长期目标带章节标记地推进</sub> |
+| ![定时任务](docs/screenshots/zh/scheduled.png)<br/><sub>定时任务 · 每天早上自己跑的一段提示词</sub> | ![全文搜索](docs/screenshots/zh/search.png)<br/><sub>⌘K · 历史会话全文可搜，直达命中的那一行</sub> |
 
 ---
 
@@ -270,6 +271,11 @@ Galley 也是这张桌子：human 在 GUI 推进工作，Supervisor Agent 通过
 
 > *Galley started as a workbench for [GenericAgent](https://github.com/lsdefine/GenericAgent). The first two letters of our name are a quiet bow to where we came from.*
 
+<p align="center">
+  <img src="docs/screenshots/zh/new.png" alt="新对话：带题词的空工作区" width="640" />
+  <br/>
+  <sub>每次新对话都从一句题词开始，这句出自《哲学研究》。</sub>
+</p>
 
 ## 贡献 / 从源码构建
 

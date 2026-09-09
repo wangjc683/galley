@@ -64,7 +64,7 @@ rm -rf ~/Documents/galley-refs/galley-site
 | 截图方式 | `⌘⇧4 + 空格` 带窗口阴影；全套一致 |
 | 文件组织 | `docs/screenshots/zh/` + `docs/screenshots/en/`，**按场景命名**：`hero.png` `hero-dark.png` `tools.png` `reading.png` `projects.png` `goal.png` `scheduled.png` `search.png`；两份 README 各自引用对应语言目录 |
 | 入镜纪律 | 无 dev 调试 chrome、无系统通知、无 tooltip；时间状态合理（种子时间戳相对拍摄日生成） |
-| 提交前 | 缩到 1600px 宽，PNG 无损压缩，单张 ≤ 600KB（见文末资产政策） |
+| 提交前 | 缩到 1600px 宽（系统 Python 的 Pillow：LANCZOS + `optimize=True`），单张 ≤ 600KB 上下（见文末资产政策） |
 
 ## 种子内容（--lang zh）
 
@@ -177,10 +177,25 @@ hero 保持 `<picture prefers-color-scheme>`；导览网格替换现有 Screensh
 - **参考资料（PDF、论文等）不进 repo**：放 `~/Documents/galley-refs/`，
   文档里用纯文本提名（先例见 2026-05-20 repo hygiene devlog）。
 
+## 与场景清单的偏差（2026-09-09 实拍，均已采纳为现行口径）
+
+1. **Hero 保留「跑到中段」**：owner 看过完成态的方案后决定两套都用进行中
+   的画面（zh 第 10 步、en 第 7 步），文字墙换来的是「工作中 + 秒数」的活感。
+   en 套的步骤摘要里有中文（glm 写摘要不看界面语言），owner 接受。
+2. **`tools.png` 未展开工具调用**：折叠态的 run 头 + 三步 + 结果表已足够，
+   展开态不再要求。
+3. **`reading.png` 用 `README.md` 而非 `src/styles.css`**：单行新增的 diff 更
+   易读；en 套文件列表里多出的 `.DS_Store` owner 接受（演示仓库随后加了
+   `.gitignore`，下次不会再出现）。
+4. **第九张 `new.png`**：owner 加拍的新对话空状态（题词入镜），放在 README
+   「为什么叫 Galley」节下方 640 宽，不进导览网格。
+5. **两处产品修复顺手落地**：Git 审阅面板（状态标签折行、行号列按位数定宽、
+   按词折行）和消息表格（从 max-content 横向滚动改为按词折行）——后者是
+   `projects.png` 的 Example 列被截断暴露出来的，见 devlog。
+
 ## 当前状态与待办
 
-- 2026-09-09：v2 场景清单与种子定稿（本文），种子脚本在当前 schema
-  （migrations 001–038）上离线验证通过，演示仓库生成验证通过。
-- [ ] 按 v2 实拍 zh / en 两套共 16 张（JC 真机）
-- [ ] 拍完后：README 中英换成上方版面，删旧编号文件，同一 commit
+- 2026-09-09：v2 实拍完成，zh / en 各 9 张已上 README，旧编号文件已删。
+  实拍偏差见上节；种子脚本在实拍中修了两处（定时任务时间戳、表格文案）。
+- [ ] 定时任务补跑失败的根因（见 deferred）
 - [ ] 演示 GIF（截图之后的独立资产任务）

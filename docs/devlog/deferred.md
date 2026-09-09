@@ -493,3 +493,20 @@
   `gui/src/components/screens/settings/SettingsAbout.tsx`；sidebar wordmark
   交互讨论（2026-08-14，未落 devlog——被 About 话题打断，结论止于「拖拽把手
   是硬约束、题词先例判死了开新 session、彩蛋是唯一误触无害的选项」）。
+
+## 定时任务当天补跑触发失败（scheduler catch-up fire 无会话产生）
+
+- **状态**：待查
+- **提出**：2026-09-09，README 截图 v2 实拍中两次观察到
+- **启动信号**：任何用户报告「上次触发失败」；或下次碰 `core/src/scheduler.rs`
+- **方案**：复现路径已知——种一条 `last_fired_at` 早于今天时段的每日任务，
+  启动 dev，Core 在一个 tick 内发起补跑，`last_fired_at` 被盖成触发时刻、
+  `last_run_session_id` 为 NULL。要看 `dispatch_line_with` 返回的错误：怀疑
+  方向是 dev 环境下 `session.new` 因 `llm_name` 为空 / 无默认模型被拒，或
+  runner 启动失败。
+- **实施要点**：先在 `scheduler.rs` 的失败分支把响应体打进日志，再决定是
+  修派发参数还是修错误提示（面板只说「失败」，用户无从下手）。
+- **待定**：是否只在 dev 复现（截图库是 onboarding 后立即种入，模型配置齐全，
+  倾向不是环境问题）。
+- **关联**：`docs/devlog/2026-09-09-screenshot-set-v2-plan.md`；
+  `scripts/seed-screenshots.py` 的 `minutes_since_local`。

@@ -15,7 +15,7 @@
   ·
   <a href="#quick-start">Quick Start</a>
   ·
-  <a href="#screenshots">Screenshots</a>
+  <a href="#a-quick-tour">Tour</a>
   ·
   <a href="./docs/README.md">Docs</a>
   ·
@@ -31,8 +31,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en/05-hero-dark.png">
-    <img src="docs/screenshots/en/01-hero.png" alt="Galley main conversation view: an agent working through a multi-step tool run" width="800" />
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en/hero-dark.png">
+    <img src="docs/screenshots/en/hero.png" alt="Galley main conversation view: an agent working through a multi-step browser run" width="800" />
   </picture>
 </p>
 
@@ -75,12 +75,13 @@ Galley's orchestration layer. You operate in the GUI; a Supervisor Agent goes th
 
 ---
 
-## Screenshots
+## A Quick Tour
 
 | | |
 |---|---|
-| ![Project view](docs/screenshots/en/02-projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Full-text search](docs/screenshots/en/03-search.png)<br/><sub>⌘K — every past conversation is full-text searchable</sub> |
-| ![At rest](docs/screenshots/en/04-empty.png)<br/><sub>The workspace at rest — background work keeps moving</sub> | ![Dark theme](docs/screenshots/en/05-hero-dark.png)<br/><sub>Dark theme — the same desk at night</sub> |
+| ![Tool timeline](docs/screenshots/en/tools.png)<br/><sub>Tool timeline — every call's arguments, result, and timing, inline</sub> | ![Reading panel](docs/screenshots/en/reading.png)<br/><sub>Reading panel — review worktree changes beside the conversation</sub> |
+| ![Project view](docs/screenshots/en/projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Goal](docs/screenshots/en/goal.png)<br/><sub>Goal — a long-running objective with chapter markers</sub> |
+| ![Scheduled tasks](docs/screenshots/en/scheduled.png)<br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub> | ![Search](docs/screenshots/en/search.png)<br/><sub>⌘K — every past conversation, straight to the matching line</sub> |
 
 ---
 
@@ -270,6 +271,11 @@ Galley is that shared table: humans drive work from the GUI, while Supervisor Ag
 
 > *Galley started as a workbench for [GenericAgent](https://github.com/lsdefine/GenericAgent). The first two letters of our name are a quiet bow to where we came from.*
 
+<p align="center">
+  <img src="docs/screenshots/en/new.png" alt="A new conversation: the empty workspace with its epigraph" width="640" />
+  <br/>
+  <sub>Every new conversation opens on an epigraph — this one from the <em>Investigations</em>.</sub>
+</p>
 
 ## Contributing / Building From Source
 
