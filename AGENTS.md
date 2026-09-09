@@ -9,8 +9,11 @@
 
 ## Product Shape
 
-Galley is a local agent team orchestrator. Human and agent are both first-class
-operators:
+Galley is a lightweight, general-purpose personal assistant that runs on the
+user's own computer, built on a deliberately thin harness that leans on the
+model itself (tagline since 2026-09-09: "Less harness. More model."). When one
+assistant is not enough it scales into a local agent team, and in that
+orchestration layer human and agent are both first-class operators:
 
 - Galley GUI is for the human operator at the desktop.
 - Galley CLI is for trusted Agent / Supervisor automation on the same machine.

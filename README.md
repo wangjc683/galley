@@ -5,15 +5,17 @@
 <h1 align="center">Galley</h1>
 
 <p align="center">
-  <strong>Orchestrate multiple AI agents as one team, on your own computer</strong>
+  <strong>Less harness. More model.</strong>
   <br/>
-  Watch progress, send instructions, and approve from the GUI; a Supervisor Agent orchestrates the whole team in the background — all your data stays on your machine
+  A lightweight, general-purpose assistant that lives on your computer: a thin harness that leans on the model itself, built to get better with every model release.
 </p>
 
 <p align="center">
   <a href="https://github.com/wangjc683/galley/releases"><strong>Download</strong></a>
   ·
   <a href="#quick-start">Quick Start</a>
+  ·
+  <a href="#screenshots">Screenshots</a>
   ·
   <a href="./docs/README.md">Docs</a>
   ·
@@ -36,24 +38,12 @@
 
 ---
 
-## Contents
-
-- [What Is Galley](#what-is-galley)
-- [Highlights](#highlights)
-- [Quick Start](#quick-start)
-- [Supervisor / Channels](#supervisor--channels)
-- [Architecture](#architecture)
-- [Under the Hood](#under-the-hood)
-- [Why "Galley"?](#why-galley)
-- [Screenshots](#screenshots)
-- [Contributing / Building From Source](#contributing--building-from-source)
-- [Acknowledgments](#acknowledgments)
-
----
 
 ## What Is Galley
 
-Galley runs a team of AI agents on your own computer. Each agent actually gets things done — driving your browser, terminal, and files, even your phone; multiple sessions advance in parallel, ready to switch, take over, and resume at any time. You watch progress, send instructions, and approve actions in the GUI; a Supervisor Agent orchestrates the same team through the CLI — two roles, one shared state.
+Galley is a personal AI assistant that runs on your own computer and actually gets things done — driving your browser, terminal, and files, even your phone. Its harness is deliberately thin: the engine keeps the tool set minimal and the context dense, so the model's own ability does the work, and every model upgrade lands as a Galley upgrade instead of a rewrite.
+
+When one assistant isn't enough, Galley becomes a team. Multiple sessions advance in parallel, ready to switch, take over, and resume at any time. You watch progress, send instructions, and approve actions in the GUI; a Supervisor Agent orchestrates the same team through the CLI — two roles, one shared state, all of it on your machine.
 
 | For Humans | For Agents | Ready By Default |
 |---|---|---|
@@ -70,23 +60,33 @@ Powered by the bundled engine — a derivative work of [GenericAgent](https://gi
 | | |
 |---|---|
 | 🖥️ **System-level execution**<br/>Terminal, filesystem, keyboard and mouse, screen vision, all the way to driving a phone over ADB — from looking things up to actually getting them done. | 🌐 **Your real browser**<br/>Connect Chrome / Edge and the agent works in the browser you are already signed into — accounts, memberships, and work consoles are all there. No re-login. |
-| 🧬 **Self-evolving skills**<br/>Every new task it solves is crystallized into a reusable skill; the longer you use it, the more capable it gets — and the skill tree lives on your machine. | 💰 **Token efficiency**<br/>The engine actively trims context by information density — less noise, fewer hallucinations, lower cost. Galley sets the default window at 90K tokens, leaving headroom for long tasks. |
+| 🧬 **Self-evolving skills**<br/>Every new task it solves is crystallized into a reusable skill; the longer you use it, the more capable it gets — and the skill tree lives on your machine. | 💰 **Token efficiency, measured**<br/>The engine keeps context dense instead of long. In the [GenericAgent paper](https://arxiv.org/abs/2604.17091) it completed Lifelong AgentBench at 100% accuracy on 3–6× fewer input tokens than leading agents. Galley sets the default window at 90K tokens, leaving headroom for long tasks. |
+| 🔌 **Any model, including local ones**<br/>Presets for Anthropic, OpenAI / ChatGPT, DeepSeek, Kimi, GLM, MiniMax, OpenRouter, SiliconFlow, and Xiaomi MiMo, plus any OpenAI-compatible endpoint. A local server such as Ollama connects with no API key at all. | 📖 **Reading panel**<br/>Reference local files from the composer and preview Markdown beside the conversation; point it at a Git repository and review uncommitted changes read-only, unified or split, without leaving Galley. |
 
 ### One team you can actually manage
 
-Galley's orchestration layer — a human in the GUI and a Supervisor Agent on the CLI, both first-class operators.
+Galley's orchestration layer. You operate in the GUI; a Supervisor Agent goes through the stable `galley` CLI. Both are first-class operators sharing the same sessions and history — not separate worlds.
 
 | | |
 |---|---|
 | 🧭 **Project workspace + multiple sessions**<br/>Point a folder — a code repo or a document directory — at a Project workspace; multiple sessions advance around the same project in parallel, then converge. | 🎯 **Galley Goal**<br/>Hand Galley a long-term goal, set the duration and Subagent budget, and it keeps working in the background until the goal is met or the budget runs out. |
-| 🔧 **Tool timeline + approvals**<br/>Every tool call's args, result, and timing are visible inline; risky actions support step approval, allowlists, or per-session auto-run. | ⚙️ **GUI + CLI dual-native**<br/>You operate in the GUI; a Supervisor Agent goes through the stable `galley` CLI. Both share the same sessions and history, not separate worlds. |
-| 💬 **IM Channels**<br/>Connect WeChat / Feishu, keep the conversation going through everyday chat apps, and dispatch Galley Desktop remotely. | 💾 **Persistence + search + background mode**<br/>Close the window without quitting, dispatch remotely while away, then come back and pick up the thread. Past sessions are fully searchable. |
+| 🔧 **Tool timeline + approvals**<br/>Every tool call's args, result, and timing are visible inline; risky actions support step approval, allowlists, or per-session auto-run. | ⏰ **Scheduled tasks**<br/>Give a prompt a time, daily or weekly; at that moment Galley opens a new session, runs it, and the result waits for you in the sidebar. Galley needs to be running. |
+| 💬 **IM Channels**<br/>Connect WeChat / Feishu / Telegram / Discord, keep the conversation going through everyday chat apps, and dispatch Galley Desktop remotely. | 💾 **Persistence + search + background mode**<br/>Close the window without quitting, dispatch remotely while away, then come back and pick up the thread. Past sessions are fully searchable. |
+
+---
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Project view](docs/screenshots/en/02-projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Full-text search](docs/screenshots/en/03-search.png)<br/><sub>⌘K — every past conversation is full-text searchable</sub> |
+| ![At rest](docs/screenshots/en/04-empty.png)<br/><sub>The workspace at rest — background work keeps moving</sub> | ![Dark theme](docs/screenshots/en/05-hero-dark.png)<br/><sub>Dark theme — the same desk at night</sub> |
 
 ---
 
 ## Quick Start
 
-Prepare an API Key for your LLM service first. Claude / ChatGPT / DeepSeek / Kimi / GLM / MiniMax presets are built in (endpoint and a recommended model prefilled), and any OpenAI-compatible endpoint works.
+Prepare an API Key for your LLM service first. Presets for Anthropic, OpenAI / ChatGPT, DeepSeek, Kimi, GLM, MiniMax, OpenRouter, SiliconFlow, and Xiaomi MiMo are built in (endpoint and a recommended model prefilled), and any OpenAI-compatible endpoint works. A local server such as Ollama needs no key.
 
 | 1. Download Galley | 2. Configure a model | 3. Start using it |
 |---|---|---|
@@ -132,7 +132,7 @@ Work scales to the right container instead of becoming one giant prompt:
 - **Project / folder work** — bind a workspace with Project Workspace and run sessions in parallel;
 - **Long-term goals** — use Goal to set duration and Subagent budget first, then let it run in the background.
 
-You can also connect WeChat / Feishu from **Settings → Channels** to assign work and dispatch Galley Desktop through chat apps.
+You can also connect WeChat / Feishu / Telegram / Discord from **Settings → Channels** to assign work and dispatch Galley Desktop through chat apps.
 
 <details>
 <summary>Show CLI examples</summary>
@@ -182,7 +182,7 @@ galley session archive <id> --supervisor=ga-claude-1 --reason="done"
 
 Every command carries an origin triple (`via=supervisor`, `supervisor=ga-claude-1`, `reason=...`). The GUI timeline annotates supervisor-issued work with "@ga-claude-1 · follow up on PR review · 2 min ago" so the human can see what happened at a glance.
 
-Full command reference, JSON schemas, and exit codes live in [`docs/agent-api.md`](./docs/agent-api.md).
+Full command reference, JSON schemas, and exit codes live in the [Agent API docs](./docs/agent-api/README.md).
 
 </details>
 
@@ -243,6 +243,9 @@ More docs:
 
 A few design choices that aren't in the feature list but shape Galley's engineering quality:
 
+<details>
+<summary>Show the six design choices</summary>
+
 - **Peer frontends, not a GUI wrapping a CLI.** The GUI and CLI each connect to the Rust Core independently. If either side exits, sessions and data are unaffected; a new frontend (an IM channel, a future Web client) only needs to speak the same Core protocol — no orchestration logic to rewrite.
 
 - **The Rust Core is the single authority.** The state machines for sessions / Projects / Goals, SQLite writes, and runner lifecycle all converge in one place. Frontends read projections and send intents; they hold no writable state, which removes multi-end state drift at the root.
@@ -255,6 +258,8 @@ A few design choices that aren't in the feature list but shape Galley's engineer
 
 - **A persistence layer built to evolve.** SQLite is the authoritative store, with ordered migrations that make upgrades replayable; past sessions are indexed with FTS5 trigram so even Chinese substrings are searchable, staying resident in the background and instantly searchable when you return.
 
+</details>
+
 ---
 
 ## Why "Galley"?
@@ -265,12 +270,6 @@ Galley is that shared table: humans drive work from the GUI, while Supervisor Ag
 
 > *Galley started as a workbench for [GenericAgent](https://github.com/lsdefine/GenericAgent). The first two letters of our name are a quiet bow to where we came from.*
 
-## Screenshots
-
-| | |
-|---|---|
-| ![Project view](docs/screenshots/en/02-projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Full-text search](docs/screenshots/en/03-search.png)<br/><sub>⌘K — every past conversation is full-text searchable</sub> |
-| ![At rest](docs/screenshots/en/04-empty.png)<br/><sub>The workspace at rest — background work keeps moving</sub> | ![Dark theme](docs/screenshots/en/05-hero-dark.png)<br/><sub>Dark theme — the same desk at night</sub> |
 
 ## Contributing / Building From Source
 

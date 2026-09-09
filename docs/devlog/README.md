@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-09-09
+- [定位调整：Less harness. More model.](./2026-09-09-positioning-less-harness-more-model.md) — 门面从「团队编排」切到「轻 harness 的本地个人全能助手」，团队降为第二层；中英 tagline 定稿、Token 数字引论文、宪法 / PRD / GitHub description 同步
+
 ### 2026-09-08
 - [v0.4.12 发布](./2026-09-08-v0.4.12-release.md) — 微信 conductor 修复、issue #26/#27、透明度 token、阅读面板（预览 + Git 审阅）+ 打磨；定级 patch
 - [阅读面板打磨](./2026-09-08-reading-panel-polish.md) — Markdown 预览 / Git 改动视图 UX 复审：原生 select 换 GitFileList、三层 header 合一（ReadingPanelHeader）、PanelNotice 状态、分栏阈值 880、hunk 头与计数

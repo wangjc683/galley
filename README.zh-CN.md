@@ -5,17 +5,19 @@
 <h1 align="center">Galley</h1>
 
 <p align="center">
-  <strong>把多个 AI Agent 当成一支团队，在自己的电脑上编排</strong>
+  <strong>Less harness. More model.</strong>
   <br/>
-  你在图形界面里看进度、发指令、做审批，Supervisor Agent 在后台编排整支团队——所有数据都留在本地
+  跑在你电脑上的全能助手。极简 harness，把舞台留给模型，在模型飞速进化的时代押注未来。
 </p>
 
 <p align="center">
-  <a href="https://github.com/wangjc683/galley/releases"><strong>Download</strong></a>
+  <a href="https://github.com/wangjc683/galley/releases"><strong>下载</strong></a>
   ·
-  <a href="#quick-start">Quick Start</a>
+  <a href="#快速开始">快速开始</a>
   ·
-  <a href="./docs/README.md">Docs</a>
+  <a href="#截图">截图</a>
+  ·
+  <a href="./docs/README.md">文档</a>
   ·
   <a href="./README.md">English</a>
 </p>
@@ -36,24 +38,12 @@
 
 ---
 
-## 目录
-
-- [Galley 是什么](#galley-是什么)
-- [Highlights](#highlights)
-- [Quick Start](#quick-start)
-- [Supervisor / Channels](#supervisor--channels)
-- [Architecture](#architecture)
-- [Under the Hood（工程笔记）](#under-the-hood工程笔记)
-- [Why "Galley"?](#why-galley)
-- [Screenshots](#screenshots)
-- [贡献 / 从源码构建](#贡献--从源码构建)
-- [致谢](#致谢)
-
----
 
 ## Galley 是什么
 
-Galley 在你自己的电脑上运行一支 AI agent 团队。每个 agent 都能真正做事——操作浏览器、终端和文件，甚至手机；多条会话并行推进，随时切换、接管、继续。你在 GUI 里看进度、发指令、做审批；Supervisor Agent 在 CLI 里编排同一支团队——两个角色，一份状态。
+Galley 是一个跑在你自己电脑上的个人 AI 助手，能真正做事——操作浏览器、终端和文件，甚至手机。它的 harness 刻意做薄：内核只保留最小工具集，把上下文保持在高密度，让模型本身的能力来干活；模型每升级一次，Galley 就跟着强一次，不需要重写。
+
+一个助手不够用时，Galley 就是一支团队。多条会话并行推进，随时切换、接管、继续。你在 GUI 里看进度、发指令、做审批；Supervisor Agent 在 CLI 里编排同一支团队——两个角色，一份状态，所有数据都留在本地。
 
 | 给人用 | 给 agent 用 | 默认开箱即用 |
 |---|---|---|
@@ -61,7 +51,7 @@ Galley 在你自己的电脑上运行一支 AI agent 团队。每个 agent 都�
 
 ---
 
-## Highlights
+## 亮点
 
 ### 单个 agent，能干活
 
@@ -70,23 +60,33 @@ Galley 在你自己的电脑上运行一支 AI agent 团队。每个 agent 都�
 | | |
 |---|---|
 | 🖥️ **系统级执行**<br/>终端、文件系统、键盘鼠标、屏幕视觉，直到通过 ADB 操作手机——从查资料到把事真正办完。 | 🌐 **真实浏览器**<br/>连上 Chrome / Edge，agent 用的就是你已登录的那个浏览器——账号、会员、工作后台都在，不必重新登录。 |
-| 🧬 **自进化技能**<br/>每解决一个新任务，就把做法沉淀成可复用的技能；越用越熟练，技能树长在你本地。 | 💰 **Token 效率**<br/>内核按信息密度主动裁剪上下文——更少噪声、更少幻觉、更低成本；Galley 默认把窗口设在 90K token，为长任务留足余量。 |
+| 🧬 **自进化技能**<br/>每解决一个新任务，就把做法沉淀成可复用的技能；越用越熟练，技能树长在你本地。 | 💰 **Token 效率，有数据**<br/>内核靠信息密度而不是窗口长度：在 [GenericAgent 论文](https://arxiv.org/abs/2604.17091)的 Lifelong AgentBench 上，它以 100% 准确率完成任务，输入 token 只有主流 Agent 的 1/3 到 1/6。Galley 默认把窗口设在 90K token，为长任务留足余量。 |
+| 🔌 **任意模型，包括本地的**<br/>Anthropic、OpenAI / ChatGPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、小米 MiMo 预设开箱可选，也支持任意 OpenAI 兼容端点；Ollama 这类本地服务不用填 API Key。 | 📖 **阅读面板**<br/>在输入框里引用本地文件，Markdown 在对话旁边直接预览；指向一个 Git 仓库，就能只读审阅未提交的改动，统一或分栏视图，不用离开 Galley。 |
 
 ### 一支团队，管得住
 
-Galley 的编排层——人在 GUI，Supervisor Agent 在 CLI，都是一等操作者。
+Galley 的编排层。你在 GUI 操作，Supervisor Agent 走稳定的 `galley` CLI；两边都是一等操作者，共享同一份会话与历史，不是各开各的。
 
 | | |
 |---|---|
 | 🧭 **项目工作区 + 多会话**<br/>把一个文件夹设为项目工作区——代码仓库或资料夹都行；多条会话围绕同一个项目并行推进，再统一汇总。 | 🎯 **Galley Goal**<br/>交给 Galley 一个长期目标，定好时长与 Subagent 预算，它便在后台持续推进，直到达成或预算用尽。 |
-| 🔧 **工具时间线 + 审批**<br/>每次工具调用的参数、结果、耗时都内联可见；高风险动作支持逐步审批、加白名单，或按会话切换自动执行。 | ⚙️ **GUI + CLI 双原生**<br/>你在 GUI 操作，Supervisor Agent 走稳定的 `galley` CLI；两端共享同一份会话与历史，不是各开各的。 |
-| 💬 **IM Channels**<br/>接入微信 / 飞书，用日常的聊天软件继续对话，也能远程调度桌面端的 Galley。 | 💾 **持久化 + 搜索 + 后台常驻**<br/>关窗不退出，离开也能远程调度；回来随时接着聊，历史会话全文可搜。 |
+| 🔧 **工具时间线 + 审批**<br/>每次工具调用的参数、结果、耗时都内联可见；高风险动作支持逐步审批、加白名单，或按会话切换自动执行。 | ⏰ **定时任务**<br/>给一段提示词定个时间，每天或每周；到点 Galley 自动开一条新会话跑完，结果在侧栏等你。需要 Galley 处于运行中。 |
+| 💬 **IM Channels**<br/>接入微信 / 飞书 / Telegram / Discord，用日常的聊天软件继续对话，也能远程调度桌面端的 Galley。 | 💾 **持久化 + 搜索 + 后台常驻**<br/>关窗不退出，离开也能远程调度；回来随时接着聊，历史会话全文可搜。 |
 
 ---
 
-## Quick Start
+## 截图
 
-先准备好 LLM 服务的 API Key。Claude / ChatGPT / DeepSeek / Kimi / GLM / MiniMax 等主流渠道开箱可选（端点和推荐模型已预填），也支持任意 OpenAI 兼容端点。
+| | |
+|---|---|
+| ![项目视图](docs/screenshots/zh/02-projects.png)<br/><sub>项目视图 · 多条会话围绕同一项目并行</sub> | ![全文搜索](docs/screenshots/zh/03-search.png)<br/><sub>⌘K · 历史会话全文可搜（中文子串也行）</sub> |
+| ![安静待命](docs/screenshots/zh/04-empty.png)<br/><sub>安静待命的工作区 · 后台任务照常推进</sub> | ![暗色主题](docs/screenshots/zh/05-hero-dark.png)<br/><sub>暗色主题 · 同一张夜间书桌</sub> |
+
+---
+
+## 快速开始
+
+先准备好 LLM 服务的 API Key。Anthropic、OpenAI / ChatGPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、小米 MiMo 预设开箱可选（端点和推荐模型已预填），也支持任意 OpenAI 兼容端点；Ollama 这类本地服务不用填 Key。
 
 | 1. 下载 Galley | 2. 配置模型 | 3. 开始使用 |
 |---|---|---|
@@ -115,7 +115,7 @@ Windows SmartScreen 提示「发布者未知」时，点「更多信息」→「
 
 ---
 
-## Supervisor / Channels
+## Supervisor 与 Channels
 
 GUI 启动后进 **Settings → Agent**：
 
@@ -132,7 +132,7 @@ GUI 启动后进 **Settings → Agent**：
 - **项目 / 资料夹任务**——用 Project Workspace 绑定工作区，多会话并行；
 - **长期目标**——用 Goal 先定时长与 Subagent 预算，再交给后台持续推进。
 
-也可以在 **Settings → Channels** 接入微信 / 飞书，用聊天软件远程给 Galley 派活、调度桌面端。
+也可以在 **Settings → Channels** 接入微信 / 飞书 / Telegram / Discord，用聊天软件远程给 Galley 派活、调度桌面端。
 
 <details>
 <summary>展开 CLI 示例</summary>
@@ -182,13 +182,13 @@ galley session archive <id> --supervisor=ga-claude-1 --reason="done"
 
 每条命令都自动携带 origin 三元组（`via=supervisor`、`supervisor=ga-claude-1`、`reason=...`），GUI 时间线上会标注「@ga-claude-1 · 跟进 PR review · 2 分钟前」，让 human 一眼看清 supervisor 做过什么。
 
-完整命令清单 + JSON schema + exit code 见 [`docs/agent-api.md`](./docs/agent-api.md)。
+完整命令清单、JSON schema 与 exit code 见 [Agent API 文档](./docs/agent-api/README.md)。
 
 </details>
 
 ---
 
-## Architecture
+## 架构
 
 GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**。Core 是唯一权威层，掌管 session / Project / Goal 状态、SQLite 写入与 runner 生命周期；默认运行内置内核，开箱即用。
 
@@ -239,9 +239,12 @@ GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自�
 
 ---
 
-## Under the Hood（工程笔记）
+## 工程笔记
 
 一些不在功能列表里、却决定了 Galley 工程质量的设计选择：
+
+<details>
+<summary>展开六条设计选择</summary>
 
 - **对等前端，不是 GUI 套壳 CLI。** GUI 和 CLI 各自直连 Rust Core，互不依赖。任何一端退出，session 与数据都不受影响；新前端（IM channel、未来的 Web）只要接同一套 Core 协议即可，不必重写编排逻辑。
 
@@ -255,9 +258,11 @@ GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自�
 
 - **可演进的持久层。** SQLite 作权威存储，有序 migration 保证升级可重放；历史会话用 FTS5 trigram 索引，中文也能子串搜索，关窗后台常驻、回来即搜。
 
+</details>
+
 ---
 
-## Why "Galley"?
+## 为什么叫 Galley
 
 船上的 galley 是厨房，也是工作台。每个人来这里都有自己的事，**但桌子是同一张**。
 
@@ -265,12 +270,6 @@ Galley 也是这张桌子：human 在 GUI 推进工作，Supervisor Agent 通过
 
 > *Galley started as a workbench for [GenericAgent](https://github.com/lsdefine/GenericAgent). The first two letters of our name are a quiet bow to where we came from.*
 
-## Screenshots
-
-| | |
-|---|---|
-| ![项目视图](docs/screenshots/zh/02-projects.png)<br/><sub>项目视图 · 多条会话围绕同一项目并行</sub> | ![全文搜索](docs/screenshots/zh/03-search.png)<br/><sub>⌘K · 历史会话全文可搜（中文子串也行）</sub> |
-| ![安静待命](docs/screenshots/zh/04-empty.png)<br/><sub>安静待命的工作区 · 后台任务照常推进</sub> | ![暗色主题](docs/screenshots/zh/05-hero-dark.png)<br/><sub>暗色主题 · 同一张夜间书桌</sub> |
 
 ## 贡献 / 从源码构建
 
@@ -303,6 +302,6 @@ Galley 的内核基于 [**lsdefine/GenericAgent**](https://github.com/lsdefine/G
 
 相关论文：[GenericAgent: A Token-Efficient Self-Evolving LLM Agent via Contextual Information Density Maximization (arXiv:2604.17091)](https://arxiv.org/abs/2604.17091)
 
-## License
+## 许可证
 
 [MIT](./LICENSE)

@@ -9,13 +9,15 @@
 >
 > **2026-07-03 定位更新**：Galley 定性为**独立产品，基于 GenericAgent 二次开发**——不是 GA 的 GUI，身份也不再是「wraps GA 的壳」。patch 过的内置 managed runtime 是产品引擎与开发重心；attach 外部 GA 保留为兼容模式。品牌表面遵循「GA 预算」与「内核 / engine」称谓规则（见 [copy-language-guidelines](./copy-language-guidelines.md)），气质定位见 [temperament](./temperament.md)。决策叙事见 2026-07-03 三篇 devlog。
 >
+> **2026-09-09 主叙事更新**：门面从「agent team 编排」切到「**轻量的本地个人全能助手，极简 harness，靠模型本身的能力，押注模型进化**」，英文 tagline「Less harness. More model.」。团队编排不删，降为第二层（一个助手不够用时它就是一支团队）；宪法、README、GitHub description 同步。决策叙事见 [2026-09-09 定位调整 devlog](./devlog/2026-09-09-positioning-less-harness-more-model.md)。
+>
 > **本文件与 DESIGN.md 的关系**：DESIGN.md 继续负责 GUI 视觉与交互设计规则。CLI 设计契约见独立的 [docs/agent-api.md](./agent-api.md)（v0.2 ship 时 publish）。
 
 ## 1. 一句话定位
 
-**Galley** is a **local agent team orchestrator, native for both human and agent**.
+**Less harness. More model.** Galley is a lightweight, general-purpose assistant on your own computer — a thin harness that leans on the model itself — and, when one assistant is not enough, a **local agent team orchestrator, native for both human and agent**.
 
-中文：**本地 agent team 编排器，人和 agent 都是一等公民**。
+中文：**跑在你电脑上的全能助手。极简 harness，把舞台留给模型，在模型飞速进化的时代押注未来。** 一个助手不够用时，它就是一支 agent 团队，人和 agent 都是一等公民。
 
 它有两个对等的前端：
 
