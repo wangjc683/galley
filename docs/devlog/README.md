@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-09
+- [README 截图 v2 规划](./2026-09-09-screenshot-set-v2-plan.md) — 从零重设：每图对一张 Highlights 卡、2×3 导览网格、按场景命名、生活类 hero 真跑到底、彩蛋挪到项目图；种子重写为 3 项目 / 16 会话 / 3 定时任务 + 演示仓库
 - [定位调整：Less harness. More model.](./2026-09-09-positioning-less-harness-more-model.md) — 门面从「团队编排」切到「轻 harness 的本地个人全能助手」，团队降为第二层；中英 tagline 定稿、Token 数字引论文、宪法 / PRD / GitHub description 同步
 
 ### 2026-09-08
