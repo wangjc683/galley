@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-09
+- [v0.4.13 发布](./2026-09-09-v0.4.13-release.md) — 阅读面板扩展、侧栏本月桶、CLI `live` + SOP 梳理、表格换行；定级 patch；runner / managed-ga 零改动故打包门禁不 mandatory
 - [侧栏时间桶加「本月」](./2026-09-09-sidebar-month-bucket.md) — 加桶不换名（今天 / 本周 / 本月 / 更早）、滚动 30 天不用日历月、项目视图跟随、整窗为空才回填且提 10 条；JC 库分布 8–30 天区间是 1–7 天的近三倍
 - [阅读面板扩展：可读文件预览 + Git 比较基线](./2026-09-09-reading-panel-files-and-git-baseline.md) — 右栏三候选裁决（做 1、2，挂 3）；`kind` 五值、脚本不给默认应用、CSV 表格 / JSON 重排 / 图片尺寸；Git `base` + `log`、只收十六进制 ID；Artifacts PRD「无右栏」前提标记已解
 - [CLI 与 Supervisor SOP 全面梳理](./2026-09-09-cli-and-supervisor-sop-overhaul.md) — 公开 run_state 为 `live` 字段（`status.running` 恒 0 的解法）、broken pipe 静默、SOP 补 `--after-turn` / queued / Goal `--mode=solo`、IM prompt 对齐可逆分档、SKILL.md 瘦身指向 SOP、PRD §11 命令表退役
