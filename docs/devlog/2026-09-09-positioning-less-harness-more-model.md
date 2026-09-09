@@ -37,7 +37,7 @@ README 自 2026-07-20（v0.3.4）起没有实质修改，中间发了 15 个版�
 - `README.md` / `README.zh-CN.md`：hero、What Is Galley 开篇两段、Token 效率卡
 - `AGENTS.md`：Product Shape 首句
 - `docs/PRD.md`：顶部加 2026-09-09 定位更新注、§1 一句话定位
-- GitHub repo description（`gh repo edit`）
+- GitHub repo description（`gh repo edit`）。同日二改：JC 嫌 230 字符在 About 栏占 9 行，砍到一句英文一句中文；并去掉 GenericAgent——About 是品牌门面，Galley 定位是基于 GA 的二次开发而非套壳，归属留给 README 致谢节（符合「GA 预算」规则）。定稿：`Less harness. More model. A lightweight local AI assistant. / 极简 harness 的本地全能 AI 助手。`
 
 ## 同日追加：事实修正与 Highlights 三张新卡
 
