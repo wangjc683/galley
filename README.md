@@ -34,6 +34,8 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en/hero-dark.png">
     <img src="docs/screenshots/en/hero.png" alt="Galley main conversation view: an agent working through a multi-step browser run" width="800" />
   </picture>
+  <br/>
+  <sub>Follows your system appearance — light or dark.</sub>
 </p>
 
 ---

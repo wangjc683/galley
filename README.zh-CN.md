@@ -34,6 +34,8 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/zh/hero-dark.png">
     <img src="docs/screenshots/zh/hero.png" alt="Galley 主对话界面：agent 正在多步调用工具完成任务" width="800" />
   </picture>
+  <br/>
+  <sub>跟随系统外观，浅色深色各一套。</sub>
 </p>
 
 ---
