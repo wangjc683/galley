@@ -15,7 +15,7 @@
   ·
   <a href="#快速开始">快速开始</a>
   ·
-  <a href="#走一圈">走一圈</a>
+  <a href="#截图">截图</a>
   ·
   <a href="./docs/README.md">文档</a>
   ·
@@ -75,7 +75,7 @@ Galley 的编排层。你在 GUI 操作，Supervisor Agent 走稳定的 `galley`
 
 ---
 
-## 走一圈
+## 截图
 
 | | |
 |---|---|

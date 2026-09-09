@@ -157,7 +157,7 @@ hero 保持 `<picture prefers-color-scheme>`；导览网格替换现有 Screensh
 | ![Scheduled tasks](docs/screenshots/en/scheduled.png)<br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub> | ![Search](docs/screenshots/en/search.png)<br/><sub>⌘K — every past conversation, straight to the matching line</sub> |
 ```
 
-中文版同构（`docs/screenshots/zh/`，标题「走一圈」）。旧的 `01-hero` …
+中文版同构（`docs/screenshots/zh/`，标题「截图」）。旧的 `01-hero` …
 `05-hero-dark` 十个文件在新图提交的同一个 commit 里删除。
 
 ## 二进制资产政策（全 docs 通用）
