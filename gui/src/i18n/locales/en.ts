@@ -12,7 +12,21 @@ export const enCopy: AppCopy = {
     fromFile: "Review changes in this repository",
     resizePanel: "Resize reading panel",
     baseline: (head: string) => `Compared with latest commit · ${head}`,
+    baselineCommit: (id: string, subject: string) =>
+      `Compared with ${id} · ${subject}`,
+    baselineShort: (id: string) => `Compared with ${id}`,
     unborn: "No commits yet · tracked files shown as additions",
+    chooseBaseline: "Choose comparison baseline",
+    baselineMenu: "Baseline",
+    baselineHead: "Latest commit",
+    baselineHeadHint: "Uncommitted changes in the worktree relative to HEAD",
+    recentCommits: "Earlier commits",
+    recentCommitsHint:
+      "Pick a commit as the baseline to see everything changed since it, including what the Agent already committed",
+    noCommits: "No commits to choose from.",
+    loadingCommits: "Reading commits…",
+    invalidBase:
+      "The chosen commit is no longer in this repository. Pick a baseline again.",
     files: (tracked: number, untracked: number) =>
       `${tracked} tracked · ${untracked} untracked files`,
     tracked: "Tracked file changes",
@@ -29,6 +43,7 @@ export const enCopy: AppCopy = {
     },
     untrackedContent: "Untracked file · current contents",
     netChanges: "Combined staged and unstaged changes",
+    sinceBaseline: "Everything changed since the chosen baseline, committed or not",
     unified: "Unified view",
     split: "Split view",
     previous: "Previous change",
@@ -64,10 +79,13 @@ export const enCopy: AppCopy = {
       "Unable to display this diff. Use an external tool to review it.",
   },
   localFiles: {
-    resizePreview: "Resize Markdown preview",
+    resizePreview: "Resize file preview",
     resizeHint: "Drag to resize; double-click to restore the default split",
     imageUnavailable: "Image preview unavailable",
     preview: "Preview Markdown",
+    previewText: "Preview file",
+    previewImage: "Preview image",
+    previewTitle: "File preview",
     locate: "Show in folder",
     copyPath: "Copy path",
     openDefault: "Open with default app",
@@ -76,13 +94,20 @@ export const enCopy: AppCopy = {
     missing: "File not found or moved. Copy the path to check its location.",
     permission: "Permission to read this file was denied.",
     tooLarge:
-      "This file exceeds 2 MiB. Show it in its folder to open it externally.",
+      "This file exceeds the preview limit (2 MiB for text, 10 MiB for images). Show it in its folder to open it externally.",
     encoding: "This file is not previewable UTF-8 text.",
-    unsupported:
-      "Cannot preview or open this path. Use a full local Markdown file path.",
+    unsupported: "Cannot preview or open this path. Use a full local file path.",
     failed: "The file operation failed. Check that the file is accessible.",
     loading: "Reading file…",
     empty: "This file is empty.",
+    lines: (count) => `${count} line${count === 1 ? "" : "s"}`,
+    tableRows: (rows, columns) => `${rows} rows × ${columns} columns`,
+    tableTruncated: (shown, total) =>
+      `Showing the first ${shown} of ${total} rows.`,
+    tableFallback:
+      "This file did not parse as a regular delimited table; shown as plain text.",
+    jsonPretty: "Formatted for reading; the file on disk is single-line JSON.",
+    imageSize: (width, height) => `${width} × ${height}`,
   },
   common: {
     close: "Close",

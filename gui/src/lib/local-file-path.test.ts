@@ -1,5 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { documentReference, localFilePath } from "./local-file-path";
+import {
+  documentReference,
+  isDelimitedPath,
+  isOpenableWithDefaultApp,
+  localFilePath,
+  previewKindByPath,
+} from "./local-file-path";
+
+describe("preview kind by name", () => {
+  it("classifies markdown, images, code and data as previewable and leaves opaque files to the OS", () => {
+    expect(previewKindByPath("/tmp/report.MD")).toBe("markdown");
+    expect(previewKindByPath("C:\\out\\chart.PNG")).toBe("image");
+    for (const path of [
+      "/tmp/analysis.py",
+      "/tmp/data.csv",
+      "/tmp/config.yaml",
+      "/tmp/run.log",
+      "/tmp/Makefile",
+      "/tmp/.gitignore",
+      "\\\\server\\share\\notes.txt",
+    ])
+      expect(previewKindByPath(path), path).toBe("text");
+    for (const path of ["/tmp/deck.pptx", "/tmp/archive.zip", "/tmp/blob", "/tmp/a.docx"])
+      expect(previewKindByPath(path), path).toBeNull();
+  });
+  it("only offers the default application for documents, never scripts", () => {
+    for (const path of ["/tmp/report.md", "/tmp/chart.png", "/tmp/data.csv", "/tmp/out.json"])
+      expect(isOpenableWithDefaultApp(path), path).toBe(true);
+    for (const path of ["/tmp/run.sh", "/tmp/tool.py", "/tmp/job.bat", "/tmp/task.ps1", "/tmp/Makefile"])
+      expect(isOpenableWithDefaultApp(path), path).toBe(false);
+  });
+  it("knows which data files may render as a table", () => {
+    expect(isDelimitedPath("/tmp/a.csv")).toBe(",");
+    expect(isDelimitedPath("/tmp/a.TSV")).toBe("\t");
+    expect(isDelimitedPath("/tmp/a.txt")).toBeNull();
+  });
+});
 
 describe("local file references", () => {
   it("recognizes native full paths without decoding literal filename characters", () => {

@@ -284,7 +284,10 @@ async fn git_review_uses_shared_api_and_existing_error_categories() {
     let output = std::process::Command::new("git").arg("init").arg(dir.path()).output().unwrap();
     assert!(output.status.success());
     std::fs::write(dir.path().join("report.md"), "# Report").unwrap();
-    let args = GitReviewRequest::List { path: dir.path().to_string_lossy().into() };
+    let args = GitReviewRequest::List {
+        path: dir.path().to_string_lossy().into(),
+        base: None,
+    };
     let response = h.dispatch(req(GitReviewRequest::NAME, serde_json::to_value(&args).unwrap())).await;
     assert!(response.ok, "{response:?}");
     assert_eq!(response.result.unwrap(), serde_json::to_value(h.galley.review_git(args).await.unwrap()).unwrap());

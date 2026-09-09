@@ -397,8 +397,9 @@
   （OpenWorker 在此有真实漏洞）；目录遍历先剪后走（engineering-workflow I12
   的 macOS TCC 教训）。
 - **待定**：scratch base 终值与目录布局；哪些会话显示面板；`artifact:` 契约
-  注入位置（倾向 Persona）；面板形态（无右栏是 2026-05-12 存档裁决，留了活口）；
-  API 命名与字段。
+  注入位置（倾向 Persona）；API 命名与字段。面板形态**不再是待定项**：
+  2026-09-08 起右侧阅读面板已存在（Markdown / 文件预览 + Git 审阅），
+  PRD 里「Galley 无右栏」的前提失效，重启时直接沿用该面板。
 - **关联**：PRD §6.3 的「Artifacts 一等公民」非目标仍然成立——本 feature 若启动
   需先改那条。已否：按扩展名过滤（`.md` 在 coding 仓库里绝大多数是源码，
   区分不了「仓库文档」和「交付物」）、在 Galley 内重造 app 选择器
@@ -510,3 +511,21 @@
   倾向不是环境问题）。
 - **关联**：`docs/devlog/2026-09-09-screenshot-set-v2-plan.md`；
   `scripts/seed-screenshots.py` 的 `minutes_since_local`。
+
+## 长工具输出在右侧阅读面板全文阅读
+
+- **状态**：暂缓（2026-09-09 JC 裁决：右侧面板三个候选中，可读文件预览与
+  Git 基线选择本轮做，本项先挂）
+- **提出**：2026-09-09，右侧面板「还能装什么」讨论的第三候选
+- **启动信号**：JC 真机复核 Agent 工作时遇到「过程区里一段 `code_run` 输出
+  或整页 fetch 结果只看得到头尾、想看全却看不到」；或用户报告同类抱怨。
+- **方案**：`ToolCallout` 加「在阅读面板打开」，把该次工具调用的完整输出
+  （已在内存的 turn 数据，零后端改动）送进右栏，用 `PlainFileLines` 同一
+  寄存器全文、可滚动、软换行显示；header 标题为工具名 + 步号，副标题为
+  会话标题。与文件预览同一宿主（`LocalFileWorkspace`），会话级生命周期。
+- **实施要点**：过程区现有折叠 + 尾部截断（#22 那轮定的）保持不动，本项
+  只加出口不改过程区密度；输出超大时沿用 2 MiB 上限的截断说明。
+- **待定**：入口放在 callout 的 hover 动作还是折叠头右侧；是否顺带支持
+  `file_read` 结果（与文件预览重叠，倾向不做）。
+- **关联**：[2026-09-09 阅读面板扩展 devlog](./2026-09-09-reading-panel-files-and-git-baseline.md)
+  （候选比较与裁决）；`gui/src/components/conversation/ToolCallout.tsx`。

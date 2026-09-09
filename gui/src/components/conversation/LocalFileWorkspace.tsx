@@ -28,14 +28,21 @@ import { IconButton } from "@/components/ui/button";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
+import { ImagePreview } from "@/components/conversation/reading/ImagePreview";
 import { PanelNotice } from "@/components/conversation/reading/PanelNotice";
 import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
+import { TextPreview } from "@/components/conversation/reading/TextPreview";
 import {
   conversationTypographyStyle,
   type ConversationFontSize,
 } from "@/lib/conversation-font-size";
 import { useCopy } from "@/lib/i18n";
-import { fileName, isMarkdownPath } from "@/lib/local-file-path";
+import {
+  fileName,
+  isOpenableWithDefaultApp,
+  previewKindByPath,
+  type PreviewKind,
+} from "@/lib/local-file-path";
 import { GitReviewContext } from "@/lib/git-review";
 import {
   LocalFilesContext,
@@ -43,13 +50,22 @@ import {
   fileOperation,
   localFileError,
   reportFileError,
+  type LocalFileResult,
 } from "@/lib/local-files";
 
 interface Preview {
   sessionId?: string;
   path: string;
+  /** Known once Core's `inspect` answered; the body renderer keys on it. */
+  kind: PreviewKind | null;
   content: string | null;
   error: unknown | null;
+}
+
+function previewKindOf(kind: LocalFileResult["kind"]): PreviewKind | null {
+  return kind === "markdown" || kind === "text" || kind === "image"
+    ? kind
+    : null;
 }
 
 const GitReviewPane = lazy(() =>
@@ -101,6 +117,10 @@ export function LocalFileWorkspace({
     id: number;
     selectedPath?: string;
     split: boolean;
+    /** Chosen comparison baseline (full commit id); undefined = HEAD.
+     * Window-owned like the repository, so a wide/dialog host swap and
+     * a session switch keep the review the reader set up. */
+    base?: string;
   } | null>(null);
   const repository = useRef<string | undefined>(undefined);
   const rememberRepository = useCallback((root: string) => {
@@ -112,6 +132,11 @@ export function LocalFileWorkspace({
   }, []);
   const changeDiffLayout = useCallback((split: boolean) => {
     setReview((current) => (current ? { ...current, split } : null));
+  }, []);
+  const rememberBase = useCallback((base: string | null) => {
+    setReview((current) =>
+      current ? { ...current, base: base ?? undefined } : null,
+    );
   }, []);
   const [wide, setWide] = useState(false);
   const panelOpen = preview !== null || review !== null;
@@ -231,43 +256,58 @@ export function LocalFileWorkspace({
         pane.current?.focus({ preventScroll: true });
         return;
       }
-      if (!isMarkdownPath(path)) {
+      // Folders and unknown kinds reveal without opening the pane. Core
+      // still decides: an extension-less file it sniffs as text opens
+      // the pane on the second leg below, and a `.txt` that turns out to
+      // be a directory reveals. Only names that cannot preview skip the
+      // pane entirely so a folder click never flashes an empty panel.
+      const expected = previewKindByPath(path);
+      if (expected === null) {
         // A folder click must not cancel an unrelated document's pending read.
         const lifetime = generation.current;
         try {
           const file = await accessLocalFile(path, "inspect");
-          if (lifetime === generation.current)
+          if (lifetime !== generation.current) return;
+          if (previewKindOf(file.kind) === null) {
             await fileOperation(file.path, "reveal", copy);
+            return;
+          }
+          // Core promoted it (sniffed text): fall through to a real open.
         } catch (error) {
           if (lifetime === generation.current) reportFileError(error, copy);
+          return;
         }
-        return;
       }
       const ticket = ++generation.current;
       if (source && !pane.current?.contains(source)) origin.current = source;
       currentPath.current = path;
       setReview(null);
       if (!refresh) scroll.current = 0;
-      setPreview({ sessionId, path, content: null, error: null });
+      setPreview({ sessionId, path, kind: expected, content: null, error: null });
       try {
         const file = await accessLocalFile(path, "inspect");
         if (ticket !== generation.current) return;
-        if (file.kind !== "markdown") {
+        const kind = previewKindOf(file.kind);
+        if (kind === null) {
           close();
           await fileOperation(file.path, "reveal", copy);
           return;
         }
-        const document = await accessLocalFile(file.path, "read");
+        const document = await accessLocalFile(
+          file.path,
+          kind === "image" ? "read_image" : "read",
+        );
         if (ticket !== generation.current) return;
         setPreview({
           sessionId,
           path: document.path,
+          kind,
           content: document.content,
           error: null,
         });
       } catch (error) {
         if (ticket !== generation.current) return;
-        setPreview({ sessionId, path, content: null, error });
+        setPreview({ sessionId, path, kind: expected, content: null, error });
       }
     },
     [close, copy, sessionId],
@@ -331,12 +371,20 @@ export function LocalFileWorkspace({
                   >
                     {copy.localFiles.copyPath}
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
-                    onSelect={() => void fileOperation(preview.path, "open", copy)}
-                  >
-                    {copy.localFiles.openDefault}
-                  </DropdownMenu.Item>
+                  {/* Scripts never get this item: on some desktops the
+                      default app for `.sh` / `.bat` runs them. Core
+                      enforces the same list; hiding it keeps the menu
+                      honest instead of surfacing an "unsupported" toast. */}
+                  {isOpenableWithDefaultApp(preview.path) && (
+                    <DropdownMenu.Item
+                      className="cursor-default rounded-sm px-2.5 py-1.5 outline-none data-[highlighted]:bg-hover"
+                      onSelect={() =>
+                        void fileOperation(preview.path, "open", copy)
+                      }
+                    >
+                      {copy.localFiles.openDefault}
+                    </DropdownMenu.Item>
+                  )}
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
@@ -360,6 +408,8 @@ export function LocalFileWorkspace({
           onSelectFile={rememberFile}
           split={review.split}
           onSplitChange={changeDiffLayout}
+          initialBase={review.base}
+          onBaseChange={rememberBase}
           close={close}
         />
       </Suspense>
@@ -384,8 +434,12 @@ export function LocalFileWorkspace({
               </PanelNotice>
             ) : preview.content === null ? (
               <PanelNotice kind="loading">{copy.localFiles.loading}</PanelNotice>
+            ) : preview.kind === "image" ? (
+              <ImagePreview src={preview.content} alt={fileName(preview.path)} />
             ) : preview.content === "" ? (
               <PanelNotice kind="info">{copy.localFiles.empty}</PanelNotice>
+            ) : preview.kind === "text" ? (
+              <TextPreview path={preview.path} content={preview.content} />
             ) : (
               <div className="px-6 py-5">
                 <MarkdownView
@@ -445,7 +499,9 @@ export function LocalFileWorkspace({
                     tabIndex={-1}
                     role="region"
                     aria-label={
-                      review ? copy.gitReview.title : copy.localFiles.preview
+                      review
+                        ? copy.gitReview.title
+                        : copy.localFiles.previewTitle
                     }
                     className="flex h-full min-w-0 flex-col bg-app outline-none"
                   >
@@ -478,7 +534,7 @@ export function LocalFileWorkspace({
                       <Dialog.Title className="sr-only">
                         {review
                           ? copy.gitReview.title
-                          : `${copy.localFiles.preview}: ${fileName(preview!.path)}`}
+                          : `${copy.localFiles.previewTitle}: ${fileName(preview!.path)}`}
                       </Dialog.Title>
                       {body(<DialogCloseButton />)}
                     </Dialog.Content>

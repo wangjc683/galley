@@ -25,24 +25,47 @@ const UNTRACKED_ARGS: &[&str] = &[
     "--exclude=System Volume Information/",
 ];
 
+/// Most recent commits returned by `log` — enough to pick a baseline
+/// from the agent's last few commits, not a history browser.
+const MAX_LOG_COMMITS: usize = 30;
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum GitReviewRequest {
     List {
         path: String,
+        /// Optional comparison baseline (a commit id from `log`). Absent
+        /// means the current HEAD, the original semantics.
+        #[serde(default)]
+        base: Option<String>,
     },
     Diff {
         path: String,
         #[serde(rename = "filePath")]
         file_path: String,
         head: Option<String>,
+        #[serde(default)]
+        base: Option<String>,
     },
+    /// Recent commits on the current branch, newest first, for choosing a
+    /// baseline. Additive (2026-09-09).
+    Log { path: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitReviewFile {
     pub path: String,
     pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommit {
+    pub id: String,
+    pub subject: String,
+    pub author: String,
+    /// Author date, ISO 8601 as Git prints it (`%aI`).
+    pub authored_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -53,6 +76,13 @@ pub struct GitReviewResult {
     pub patch: Option<String>,
     pub content: Option<String>,
     pub notice: Option<String>,
+    /// The resolved full id of an explicitly requested baseline; absent
+    /// when the comparison used HEAD.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    /// `log` only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commits: Option<Vec<GitCommit>>,
 }
 
 fn invalid(message: &str) -> GalleyError {
@@ -249,6 +279,54 @@ async fn head(root: &Path) -> Result<Option<String>> {
     }
 }
 
+/// Resolve a caller-supplied baseline to a full commit id. Only hex ids
+/// are accepted (never refspecs or revision expressions), so a chat-borne
+/// value cannot smuggle `--flags` or `:(...)` magic into Git.
+async fn resolve_base(root: &Path, value: &str) -> Result<String> {
+    let hex = value.len() >= 7 && value.len() <= 40 && value.bytes().all(|b| b.is_ascii_hexdigit());
+    if !hex {
+        return Err(invalid("git_review_invalid_base"));
+    }
+    let spec = format!("{value}^{{commit}}");
+    let (ok, bytes) = git(root, &["rev-parse", "--verify", "--quiet", &spec]).await?;
+    if ok != 0 {
+        return Err(invalid("git_review_invalid_base"));
+    }
+    Ok(text(bytes)?.trim().to_owned())
+}
+
+async fn log(root: &Path) -> Result<Vec<GitCommit>> {
+    let count = MAX_LOG_COMMITS.to_string();
+    let (ok, bytes) = git(
+        root,
+        &[
+            "log",
+            "-z",
+            "--no-decorate",
+            "--format=%H%x1f%s%x1f%an%x1f%aI",
+            "-n",
+            &count,
+        ],
+    )
+    .await?;
+    if ok != 0 {
+        return Err(failed("Git log did not complete"));
+    }
+    let output = text(bytes)?;
+    Ok(output
+        .split_terminator('\0')
+        .filter_map(|record| {
+            let mut fields = record.split('\x1f');
+            Some(GitCommit {
+                id: fields.next()?.to_owned(),
+                subject: fields.next()?.to_owned(),
+                author: fields.next()?.to_owned(),
+                authored_at: fields.next()?.to_owned(),
+            })
+        })
+        .collect())
+}
+
 fn file_path(value: &str) -> Result<()> {
     if value.is_empty()
         || value.contains('\0')
@@ -383,11 +461,21 @@ async fn read_untracked(root: &Path, relative: &str) -> Result<(Option<String>, 
 }
 
 pub async fn review(request: GitReviewRequest) -> Result<GitReviewResult> {
-    let path = match &request {
-        GitReviewRequest::List { path } | GitReviewRequest::Diff { path, .. } => path,
+    let (path, requested_base) = match &request {
+        GitReviewRequest::List { path, base } | GitReviewRequest::Diff { path, base, .. } => {
+            (path, base.as_deref())
+        }
+        GitReviewRequest::Log { path } => (path, None),
     };
     let root = discover(path).await?;
     let current_head = head(&root).await?;
+    // The comparison baseline: an explicit commit when the caller chose
+    // one, otherwise HEAD (which may be absent on an unborn branch).
+    let explicit_base = match requested_base {
+        Some(value) => Some(resolve_base(&root, value).await?),
+        None => None,
+    };
+    let comparison = explicit_base.clone().or_else(|| current_head.clone());
     let mut result = GitReviewResult {
         root: root.to_string_lossy().into_owned(),
         head: current_head.clone(),
@@ -395,10 +483,19 @@ pub async fn review(request: GitReviewRequest) -> Result<GitReviewResult> {
         patch: None,
         content: None,
         notice: None,
+        base: explicit_base,
+        commits: None,
     };
     match request {
+        GitReviewRequest::Log { .. } => {
+            result.commits = Some(if current_head.is_some() {
+                log(&root).await?
+            } else {
+                Vec::new()
+            });
+        }
         GitReviewRequest::List { .. } => {
-            result.files = files(&root, current_head.as_deref()).await?;
+            result.files = files(&root, comparison.as_deref()).await?;
         }
         GitReviewRequest::Diff {
             file_path: relative,
@@ -410,7 +507,7 @@ pub async fn review(request: GitReviewRequest) -> Result<GitReviewResult> {
                 return Err(invalid("git_review_changed"));
             }
             let index = checked(&root, &["ls-files", "--stage", "-z", "--", &relative]).await?;
-            let tree = if let Some(base) = &current_head {
+            let tree = if let Some(base) = &comparison {
                 checked(&root, &["ls-tree", "-z", base, "--", &relative]).await?
             } else {
                 String::new()
@@ -444,7 +541,7 @@ pub async fn review(request: GitReviewRequest) -> Result<GitReviewResult> {
             }) {
                 result.notice = Some("conflicted".into());
             } else {
-                let patch = if let Some(base) = &current_head {
+                let patch = if let Some(base) = &comparison {
                     checked(
                         &root,
                         &[
@@ -570,6 +667,7 @@ mod tests {
         async fn list(&self) -> GitReviewResult {
             review(GitReviewRequest::List {
                 path: self.path().to_string_lossy().into(),
+                base: None,
             })
             .await
             .unwrap()
@@ -579,10 +677,91 @@ mod tests {
                 path: list.root.clone(),
                 head: list.head.clone(),
                 file_path: file.into(),
+                base: list.base.clone(),
             })
             .await
             .unwrap()
         }
+    }
+
+    #[tokio::test]
+    async fn baseline_selection_reviews_against_an_older_commit() {
+        let repo = Repo::new();
+        repo.write("report.md", "v1\n");
+        repo.commit();
+        repo.write("report.md", "v2\n");
+        repo.write("second.txt", "added in v2\n");
+        repo.commit();
+        repo.write("report.md", "v3 uncommitted\n");
+
+        let commits = review(GitReviewRequest::Log {
+            path: repo.path().to_string_lossy().into(),
+        })
+        .await
+        .unwrap()
+        .commits
+        .unwrap();
+        assert_eq!(commits.len(), 2);
+        assert_eq!(commits[0].subject, "fixture");
+        assert_eq!(commits[0].author, "Galley Test");
+        assert!(commits[0].authored_at.contains('T'));
+        let first = &commits[1].id;
+
+        // Default: working tree vs HEAD — only the uncommitted edit.
+        let against_head = repo.list().await;
+        assert_eq!(against_head.base, None);
+        assert_eq!(against_head.files.len(), 1);
+
+        // Against the first commit: v2's addition shows up too, and the
+        // patch spans both commits plus the working tree.
+        let against_first = review(GitReviewRequest::List {
+            path: repo.path().to_string_lossy().into(),
+            base: Some(first[..10].into()),
+        })
+        .await
+        .unwrap();
+        assert_eq!(against_first.base.as_deref(), Some(first.as_str()));
+        assert_eq!(
+            against_first
+                .files
+                .iter()
+                .map(|f| (f.path.as_str(), f.status.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("report.md", "modified"), ("second.txt", "added")]
+        );
+        let patch = repo.diff(&against_first, "report.md").await.patch.unwrap();
+        assert!(patch.contains("-v1\n+v3 uncommitted\n"));
+        assert!(repo
+            .diff(&against_first, "second.txt")
+            .await
+            .patch
+            .unwrap()
+            .contains("+added in v2"));
+
+        // Only hex ids resolve; refspecs and expressions are rejected before Git sees them.
+        for base in ["HEAD~1", "main", "--output=/tmp/x", "0000000", "abc"] {
+            let result = review(GitReviewRequest::List {
+                path: repo.path().to_string_lossy().into(),
+                base: Some(base.into()),
+            })
+            .await;
+            assert!(
+                matches!(result, Err(GalleyError::InvalidArgs { ref message }) if message == "git_review_invalid_base"),
+                "{base}: {result:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn log_is_empty_on_an_unborn_branch() {
+        let repo = Repo::new();
+        let result = review(GitReviewRequest::Log {
+            path: repo.path().to_string_lossy().into(),
+        })
+        .await
+        .unwrap();
+        assert!(result.head.is_none());
+        assert_eq!(result.commits.unwrap().len(), 0);
     }
 
     #[tokio::test]
@@ -688,6 +867,7 @@ mod tests {
                 path: list.root.clone(),
                 head: list.head.clone(),
                 file_path: path.into(),
+                base: None,
             })
             .await;
             assert!(result.is_err(), "must reject or not find {path}");
@@ -697,6 +877,7 @@ mod tests {
             path: list.root,
             head: list.head,
             file_path: name.into(),
+            base: None,
         })
         .await;
         assert!(
@@ -723,6 +904,7 @@ mod tests {
                 .join("nested/missing.md")
                 .to_string_lossy()
                 .into(),
+            base: None,
         })
         .await
         .unwrap();
@@ -732,7 +914,8 @@ mod tests {
         );
         let outside = tempfile::tempdir().unwrap();
         assert!(review(GitReviewRequest::List {
-            path: outside.path().to_string_lossy().into()
+            path: outside.path().to_string_lossy().into(),
+            base: None,
         })
         .await
         .is_err());

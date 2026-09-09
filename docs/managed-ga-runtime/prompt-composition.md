@@ -48,6 +48,12 @@ layer — temperament lives in the shell, not in model instructions
   coherent way to say "I don't know" instead of extrapolating.
 - **Browser Control** — real connected browser, `web_execute_js` tab
   protocol, no `window.open`, connection status owned by Galley's setup check.
+- **Files You Create** — files the model creates, modifies, or hands over are
+  named by full path (absolute or `~/…`) in inline code or a link, once per
+  file, including inside tables and lists. The conversation only makes full
+  paths click-to-open (reading-panel preview / reveal); bare filenames and
+  relative paths stay text by design (no guessed base directory), so the
+  prompt is where the gap closes. Managed mode only, like every clause here.
 - **Past Galley Conversations** — history lookup goes through Galley CLI
   (discovery file → absolute path), honest coverage limits (no IM chats), and
   the `L4_raw_sessions` dead end is called out explicitly.
@@ -111,6 +117,7 @@ row.
 | About Galley: product-name casing | copy-language rule (no all-caps wordmark), promoted into the prompt 2026-07-07 as the only terminology-level rule worth prompt budget |
 | Browser Control: tab protocol / no `window.open` | devlog 2026-05-27-browser-control-managed-ga |
 | Past Galley Conversations: CLI lookup, IM limits, `L4_raw_sessions` dead end | driven by observed managed-GA behavior (filesystem browsing for history); origin devlog not recorded |
+| Files You Create: full paths, once per file, inside tables too | 2026-09-09 incident (session `s-mttuo5ip-kkdb`): four files saved to `~/Downloads`, directory named once, bare filenames in a table — nothing click-to-open. Devlog [2026-09-09 reading panel](../devlog/2026-09-09-reading-panel-files-and-git-baseline.md) §补 |
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 
 ## Dogfood Regression Checklist
@@ -130,3 +137,6 @@ in a real managed session after any prompt change:
 6. 「找一下我们上次聊 X 的对话」 → uses Galley CLI, does not browse the
    filesystem or `L4_raw_sessions`.
 7. Check any answer mentioning the product name → "Galley", not "GALLEY".
+8. 「写一段文字，用 .md .txt .csv .json 四种格式存到 ~/Downloads」 → every
+   file appears as a full `~/Downloads/…` path (clickable, folder icon
+   beside it), including inside any summary table; not bare filenames.

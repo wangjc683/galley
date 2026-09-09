@@ -146,15 +146,30 @@ There is no dedicated CLI subcommand in this increment.
 
 Paths must be native absolute paths or `~/…`; URL decoding belongs to the
 presenter. Relative paths are rejected. Result: `{path, kind, content}`,
-where `kind` is `directory`, `markdown`, or `file`, and `content` is null
-except for `read` / `read_image`. `read_image` accepts PNG, JPEG, GIF, WebP
-regular files up to 10 MiB and returns a data URL in `content` (kind remains
-`file`); this permits document images outside the WebView asset scope without
-widening global filesystem permissions. `read` accepts UTF-8 `.md` / `.markdown` regular files
-up to 2 MiB, with an optional UTF-8 BOM. `reveal` opens directories or
-selects files in the system file manager; `open` uses the default application
-for Markdown only (including validation of a symlink's target extension).
-No shell command supplied by the caller is executed.
+where `kind` is `directory`, `markdown`, `text`, `image`, or `file`
+(`text` and `image` are additive since 2026-09-09; older callers that only
+branch on `markdown` keep working), and `content` is null except for
+`read` / `read_image`.
+
+`kind` classification for regular files: `.md` / `.markdown` → `markdown`;
+PNG / JPEG / GIF / WebP → `image`; an extension allow-list of code and data
+files (`txt log csv tsv json jsonl yaml yml toml ini xml html css js ts py rs
+go java …`), conventional extension-less names (`Makefile`, `Dockerfile`,
+`LICENSE`, `README`, …), dotfiles (`.gitignore`, `.env`, …), and any other
+extension-less regular file whose first 8 KiB is NUL-free UTF-8 → `text`;
+everything else → `file`. Files with an unknown extension are never sniffed.
+
+`read` accepts `markdown` and `text` kinds up to 2 MiB of UTF-8 (optional
+BOM). `read_image` accepts `image` kinds up to 10 MiB and returns a data URL
+in `content`; this permits images outside the WebView asset scope without
+widening global filesystem permissions. `reveal` opens directories or
+selects files in the system file manager. `open` hands the file to the
+default application only for documents — `markdown`, `image`, and a data
+subset of `text` (`txt log csv tsv json jsonl ndjson yaml yml toml xml ini cfg
+conf rst tex srt vtt`) — never for scripts, since the default application
+for `.sh` / `.bat` / `.py` on some desktops executes them; the symlink's
+canonical target is validated by the same rule. No shell command supplied
+by the caller is executed.
 
 Existing error categories remain unchanged: missing paths are `not_found`,
 invalid paths/types/encoding/size are `invalid_args`, and I/O or OS opener
@@ -166,13 +181,25 @@ failures are `internal`. Message reason prefixes are `local_file_missing`,
 
 `git.review` and Tauri `review_git` share `GalleyApi::review_git`. Requests:
 
-- `{action: "list", path}` discovers the enclosing worktree from an absolute
-  directory/file path and lists net changes relative to its current HEAD.
-- `{action: "diff", path, filePath, head}` reads one repository-relative file.
-  `head` is the full commit ID returned by list, or null for an unborn branch.
-  If HEAD changed since listing, refresh is required instead of mixing bases.
+- `{action: "list", path, base?}` discovers the enclosing worktree from an
+  absolute directory/file path and lists net changes relative to its current
+  HEAD — or, with `base` (additive since 2026-09-09), relative to that
+  commit: everything changed in the worktree since it, committed or not.
+- `{action: "diff", path, filePath, head, base?}` reads one
+  repository-relative file. `head` is the full commit ID returned by list, or
+  null for an unborn branch. If HEAD changed since listing, refresh is
+  required instead of mixing bases. Pass the same `base` as the list.
+- `{action: "log", path}` (additive since 2026-09-09) returns the 30 most
+  recent commits on the current branch, newest first, as `commits:
+  [{id, subject, author, authoredAt}]` — the choices for `base`.
 
-Result: `{root, head, files, patch, content, notice}`. `files` contains
+`base` must be a 7–40 character hex commit id (resolved with `rev-parse
+--verify`); refspecs and revision expressions are rejected with
+`git_review_invalid_base`.
+
+Result: `{root, head, files, patch, content, notice, base?, commits?}`.
+`base` echoes the resolved full id of an explicit baseline and is absent
+when the comparison used HEAD; `commits` is present for `log` only. `files` contains
 `{path, status}` entries (`added`, `modified`, `deleted`, `type_changed`,
 `conflicted`, `untracked`). Renames appear as deletion/addition in this first
 increment. `patch` contains a unified Git patch for a tracked file; `content`
@@ -193,5 +220,6 @@ No dedicated CLI subcommand is added in this increment.
 
 Existing error categories are retained. Reason prefixes: `git_review_invalid_path`,
 `git_review_not_repository`, `git_review_unavailable`, `git_review_failed`,
-`git_review_timeout`, `git_review_too_large`, `git_review_encoding`, and
-`git_review_changed` (refresh required). Missing Git is not an empty change list.
+`git_review_timeout`, `git_review_too_large`, `git_review_encoding`,
+`git_review_changed` (refresh required), and `git_review_invalid_base`.
+Missing Git is not an empty change list.

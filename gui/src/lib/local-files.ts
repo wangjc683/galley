@@ -6,7 +6,9 @@ import { makeAppError } from "@/types/app-error";
 
 export interface LocalFileResult {
   path: string;
-  kind: "directory" | "markdown" | "file";
+  /** `text` and `image` are additive kinds (2026-09-09); `file` is
+   * anything the reading panel does not open and only reveals. */
+  kind: "directory" | "markdown" | "text" | "image" | "file";
   content: string | null;
 }
 export type FileAction = "inspect" | "read" | "reveal" | "open" | "read_image";

@@ -345,8 +345,15 @@ always reading 0), a new bulk `sessions.run_state` socket command behind
 it, broken-pipe-safe stdout, help text without internal codenames; the SOP,
 reference, both skill copies, and the managed IM entry-layer prompt now
 teach `--after-turn`, `dispatch:"queued"`, Goal `--mode=solo`, and the
-2026-07-03 reversibility split consistently. The items below are standing
-follow-ups.
+2026-07-03 reversibility split consistently. Also unreleased, same day: the
+**reading panel extension** (devlog
+[2026-09-09](./devlog/2026-09-09-reading-panel-files-and-git-baseline.md)) —
+chat references to code, data, log and image files now open in the right
+panel (CSV as a table, single-line JSON re-indented, images with pixel
+size), "open with default app" is withheld from scripts, and the Git review
+gains a baseline picker (recent commits via a new `log` action, `base` on
+list / diff) so a review survives the agent committing. Both additive under
+`schemaVersion: 1`. The items below are standing follow-ups.
 
 The GA baseline is fully current as of `v0.4.12` (`efb3bc6`, audited
 2026-08-31, shipped since `v0.4.11`); the next release audits upstream again

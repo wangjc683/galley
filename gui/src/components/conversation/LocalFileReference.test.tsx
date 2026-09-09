@@ -26,6 +26,18 @@ describe("Markdown file references", () => {
     expect(render("[报告](output/report.md)")).not.toContain("href=");
     expect(render("```\n/tmp/report.md\n```")).not.toContain("在文件夹中显示");
   });
+  it("offers a preview affordance for code, data and image references, and only reveal for opaque files", () => {
+    // Tooltips render on hover only; the folder button beside a
+    // previewable reference is the static evidence of the affordance.
+    for (const path of ["/tmp/analysis.py", "/tmp/chart.png", "/tmp/data.csv"]) {
+      const html = render(`\`${path}\``);
+      expect(html, path).toContain("在文件夹中显示");
+      expect(html.match(/<button /g), path).toHaveLength(2); // primary + folder
+    }
+    const opaque = render("`/tmp/deck.pptx`");
+    expect(opaque).not.toContain("在文件夹中显示");
+    expect(opaque.match(/<button /g)).toHaveLength(1); // the link itself reveals
+  });
   it("does not nest path buttons inside links with code labels", () => {
     const html = render("[`/tmp/report.md`](/tmp/report.md)");
     expect(html.match(/<button /g)).toHaveLength(2); // primary + folder

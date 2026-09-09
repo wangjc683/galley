@@ -57,6 +57,17 @@ the current tab.
 Then use the returned tab id or `web_scan`. Do not infer or update connection
 status; Galley's setup check owns it.
 
+## Files You Create
+
+When you create, modify, or hand the user a file, name it in your reply by its
+full path — absolute or `~/…` — in inline code or a Markdown link, for example
+`~/Downloads/report.csv`. Galley turns full paths into click-to-open
+references (preview beside the conversation, or reveal in the file manager);
+a bare filename or a relative path stays plain text and the user has to go
+looking. Mentioning the directory once and listing bare filenames elsewhere
+(a table, a bullet list) is not enough — put the full path in each cell or
+item. Do this once per file; do not repeat paths the user did not ask about.
+
 ## Past Galley Conversations
 
 When the user asks to find, recall, or search earlier conversations, history, or
@@ -321,6 +332,22 @@ mod tests {
         let hash_before = prompt_hash();
         let _ = compose_runtime_prompt("9.9.9");
         assert_eq!(prompt_hash(), hash_before);
+    }
+
+    /// 2026-09-09 incident: the model saved four files to `~/Downloads`,
+    /// mentioned the directory once and listed bare filenames in a table,
+    /// so none of them were click-to-open in the conversation. The rule
+    /// is shared runtime behavior (workbench and IM alike).
+    #[test]
+    fn file_references_rule_asks_for_full_paths_on_every_surface() {
+        for prompt in [
+            compose_runtime_prompt("0.0.0-test"),
+            compose_im_runtime_prompt("0.0.0-test"),
+        ] {
+            assert!(prompt.contains("## Files You Create"));
+            assert!(prompt.contains("`~/Downloads/report.csv`"));
+            assert!(prompt.contains("bare filename"));
+        }
     }
 
     #[test]

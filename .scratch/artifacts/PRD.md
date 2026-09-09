@@ -103,8 +103,12 @@ Rule 1 禁止注入。JC 裁决：本 feature 整体只面向 managed 用户，�
    会话显示」还是「绑定项目目录的会话也显示（接受信噪比）」？
 3. **`artifact:` 契约注入位置**：managed patch 栈 vs Galley Persona。倾向
    Persona（不动 GA 代码面），待对照 Persona 现状定。
-4. **GUI 呈现形态**：Galley 目前无右栏。面板放哪（右栏新建 / 会话头部抽屉 /
-   其他）属纯视觉分叉，按 JC 工作法做真机变体实测裁决。
+4. **GUI 呈现形态**：~~Galley 目前无右栏。面板放哪（右栏新建 / 会话头部抽屉 /
+   其他）属纯视觉分叉，按 JC 工作法做真机变体实测裁决。~~
+   **2026-09-09 更新：已解。** 右侧阅读面板自 2026-09-08 存在
+   （`LocalFileWorkspace`：Markdown / 文本 / 图片预览 + Git 审阅，按需唤出、
+   不常驻、宽窄两种宿主），Artifacts 面板重启时直接作为该面板的一个视图，
+   不再另议形态。
 5. **API 命名与字段形状**：命令名、kind 枚举值域、是否暴露 `truncated` 等。
    拆 issue 时随 agent-api 文档一起定。
 
@@ -133,6 +137,9 @@ Rule 1 禁止注入。JC 裁决：本 feature 整体只面向 managed 用户，�
   （`AppShell.tsx:48-56`：Inspector 各 tab 重复既有信息 + 「专注对话产品而
   非 IDE 克隆」），但留了活口——新功能可以 fresh design。Artifacts 是新
   信息，不触犯退役理由，但常驻右栏仍与产品气质相悖。
+  **2026-09-09 更新**：活口已被用掉——右侧阅读面板以「按需唤出、不常驻」
+  的形态落地（2026-09-08），与本条「常驻右栏相悖」的判断一致；下面裁决点
+  3 的「临时右栏」选项即现状，视为已裁。
 - 利好：core 已有工具级事件（`tool_call_start/end` 带 args，落库
   `tool_events`），写文件工具成功即可触发刷新；markdown 渲染有
   `markdownUrlTransform` 现成接缝且无 rehype-raw。

@@ -8,12 +8,14 @@ import { fileOperation } from "@/lib/local-files";
 import {
   gitReviewError,
   reviewGit,
+  type GitCommit,
   type GitReviewFile,
   type GitReviewResult,
 } from "@/lib/git-review";
 import { pickFolder } from "@/lib/pick-folder";
 import { PanelNotice } from "../reading/PanelNotice";
 import { ReadingPanelHeader } from "../reading/ReadingPanelHeader";
+import { GitBaselineMenu } from "./GitBaselineMenu";
 import { GitFileList } from "./GitFileList";
 import { GitPatchView } from "./GitPatchView";
 import { PlainFileLines } from "./PlainFileLines";
@@ -25,6 +27,8 @@ export function GitReviewPane({
   onSelectFile,
   split,
   onSplitChange,
+  initialBase,
+  onBaseChange,
   close,
 }: {
   initialPath?: string;
@@ -33,6 +37,9 @@ export function GitReviewPane({
   onSelectFile: (path: string) => void;
   split: boolean;
   onSplitChange: (split: boolean) => void;
+  /** Comparison baseline the owner remembered (full commit id); undefined = HEAD. */
+  initialBase?: string;
+  onBaseChange: (base: string | null) => void;
   /** Host-supplied close control (wide pane IconButton or the dialog's
    * close button) — the pane owns the header now, so it places it. */
   close?: ReactNode;
@@ -52,9 +59,20 @@ export function GitReviewPane({
   const [initial] = useState(() => ({
     path: initialPath,
     selected: initialSelectedPath,
+    base: initialBase ?? null,
   }));
+  const [base, setBase] = useState<string | null>(initial.base);
+  // The commit list is remembered together with the HEAD it was read at:
+  // when HEAD moves (the agent committed) the picker re-reads instead of
+  // offering a stale log.
+  const [commitLog, setCommitLog] = useState<{
+    head: string | null;
+    commits: GitCommit[];
+  } | null>(null);
+  const [loadingCommits, setLoadingCommits] = useState(false);
   const listGeneration = useRef(0);
   const fileGeneration = useRef(0);
+  const commitsGeneration = useRef(0);
   const selectedPath = useRef<string | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
 
@@ -74,6 +92,7 @@ export function GitReviewPane({
           path: repo.root,
           head: repo.head,
           filePath: file.path,
+          base: repo.base,
         });
         if (ticket === fileGeneration.current) setDetail(result);
       } catch (failure) {
@@ -86,9 +105,18 @@ export function GitReviewPane({
   );
 
   const fetchRepository = useCallback(
-    async (path: string, ticket: number, previous: string | null) => {
+    async (
+      path: string,
+      ticket: number,
+      previous: string | null,
+      against: string | null,
+    ) => {
       try {
-        const repo = await reviewGit({ action: "list", path });
+        const repo = await reviewGit({
+          action: "list",
+          path,
+          base: against ?? undefined,
+        });
         if (ticket !== listGeneration.current) return;
         setRepository(repo);
         onRepository(repo.root);
@@ -104,7 +132,7 @@ export function GitReviewPane({
     [onRepository, selectFile],
   );
 
-  const load = (path: string, refresh = false) => {
+  const load = (path: string, refresh = false, against: string | null = base) => {
     const ticket = ++listGeneration.current;
     fileGeneration.current += 1;
     const previous = refresh ? selectedPath.current : null;
@@ -116,7 +144,7 @@ export function GitReviewPane({
     setSelected(null);
     setLoadingFile(false);
     setRepository(null);
-    void fetchRepository(path, ticket, previous);
+    void fetchRepository(path, ticket, previous, against);
   };
 
   useEffect(() => {
@@ -125,17 +153,58 @@ export function GitReviewPane({
         initial.path,
         ++listGeneration.current,
         initial.selected ?? null,
+        initial.base,
       );
     return () => {
       listGeneration.current += 1;
       fileGeneration.current += 1;
+      commitsGeneration.current += 1;
     };
   }, [initial, fetchRepository]);
 
   const choose = async () => {
     const generation = listGeneration.current;
     const path = await pickFolder(labels.chooseRepository);
-    if (path && generation === listGeneration.current) void load(path);
+    // A different repository has different commits: the remembered
+    // baseline cannot apply, so the pick resets to HEAD.
+    if (path && generation === listGeneration.current) {
+      setBase(null);
+      onBaseChange(null);
+      setCommitLog(null);
+      void load(path, false, null);
+    }
+  };
+
+  // Commits are fetched when the picker opens, not with every list read:
+  // most reviews never change the baseline, and the log is one more Git
+  // process per refresh otherwise.
+  const commits =
+    commitLog && repository && commitLog.head === repository.head
+      ? commitLog.commits
+      : null;
+  const fetchCommits = () => {
+    if (!repository || commits !== null || loadingCommits) return;
+    const ticket = ++commitsGeneration.current;
+    const head = repository.head;
+    setLoadingCommits(true);
+    void reviewGit({ action: "log", path: repository.root })
+      .then((result) => {
+        if (ticket === commitsGeneration.current)
+          setCommitLog({ head, commits: result.commits ?? [] });
+      })
+      .catch(() => {
+        if (ticket === commitsGeneration.current)
+          setCommitLog({ head, commits: [] });
+      })
+      .finally(() => {
+        if (ticket === commitsGeneration.current) setLoadingCommits(false);
+      });
+  };
+  const changeBase = (next: string | null) => {
+    if (next === base) return;
+    setBase(next);
+    onBaseChange(next);
+    if (repository) load(repository.root, true, next);
   };
   const tracked =
     repository?.files.filter((file) => file.status !== "untracked") ?? [];
@@ -154,19 +223,40 @@ export function GitReviewPane({
   // Header: repository identity + baseline in the shared shell. The
   // former "工作区改动" title row carried the least information of the
   // three stacked headers; the repository name is the real title.
+  const baseCommit =
+    repository?.base && commits
+      ? commits.find((commit) => commit.id === repository.base)
+      : undefined;
   const header = (
     <ReadingPanelHeader
       title={repository ? fileName(repository.root) : labels.title}
       subtitle={
         repository
-          ? repository.head
-            ? labels.baseline(repository.head.slice(0, 8))
-            : labels.unborn
+          ? repository.base
+            ? baseCommit
+              ? labels.baselineCommit(
+                  repository.base.slice(0, 8),
+                  baseCommit.subject,
+                )
+              : labels.baselineShort(repository.base.slice(0, 8))
+            : repository.head
+              ? labels.baseline(repository.head.slice(0, 8))
+              : labels.unborn
           : labels.chooseHint
       }
       subtitleTooltip={repository?.root ?? requestedPath}
       actions={
         <>
+          {repository?.head && (
+            <GitBaselineMenu
+              commits={commits}
+              base={base}
+              loading={loadingCommits}
+              disabled={loading}
+              onOpen={fetchCommits}
+              onSelect={changeBase}
+            />
+          )}
           <Button variant="ghost" size="sm" onClick={() => void choose()}>
             {repository ? labels.changeRepository : labels.chooseRepository}
           </Button>
@@ -215,7 +305,9 @@ export function GitReviewPane({
           <span className="min-w-0 truncate text-ui-tertiary text-ink-muted">
             {selected?.status === "untracked"
               ? labels.untrackedContent
-              : labels.netChanges}
+              : repository.base
+                ? labels.sinceBaseline
+                : labels.netChanges}
           </span>
           <div className="flex shrink-0 items-center gap-1.5">
             {selected?.status !== "untracked" && (

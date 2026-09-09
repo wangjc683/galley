@@ -6,8 +6,8 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import {
   documentReference,
-  isMarkdownPath,
   localFilePath,
+  previewKindByPath,
 } from "@/lib/local-file-path";
 import {
   DocumentPathContext,
@@ -26,7 +26,17 @@ export function LocalFileReference({
   const activate = useContext(LocalFilesContext);
   const copy = useCopy();
   if (!activate) return <>{children}</>;
-  const markdown = isMarkdownPath(path);
+  // Judged by name for the affordance only; the click asks Core, which
+  // may still reveal (binary) or promote an extension-less file to text.
+  const kind = previewKindByPath(path);
+  const tooltip =
+    kind === "markdown"
+      ? copy.localFiles.preview
+      : kind === "image"
+        ? copy.localFiles.previewImage
+        : kind === "text"
+          ? copy.localFiles.previewText
+          : copy.localFiles.locate;
   return (
     <InsideLinkContext.Provider value={true}>
       <ContextMenu.Root>
@@ -35,9 +45,7 @@ export function LocalFileReference({
             data-galley-context-menu-trigger=""
             className="inline rounded-sm"
           >
-            <TooltipLabel
-              text={markdown ? copy.localFiles.preview : copy.localFiles.locate}
-            >
+            <TooltipLabel text={tooltip}>
               <button
                 type="button"
                 className="file-path-button break-words rounded-[4px] text-left text-brand-strong underline decoration-brand-strong/35 underline-offset-2 focus-visible:outline focus-visible:outline-2"
@@ -49,7 +57,7 @@ export function LocalFileReference({
             {/* Sized to the line, not the toolbar: a 24px control inside
                 a 15px prose line pushed the leading; 20px with the glyph
                 on the text baseline sits inside it. */}
-            {markdown && (
+            {kind !== null && (
               <IconButton
                 ariaLabel={copy.localFiles.locate}
                 size="xs"
