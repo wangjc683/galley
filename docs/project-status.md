@@ -9,20 +9,42 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.12`.
-- Git tag / GitHub Release: `v0.4.12` is the current published stable release
-  (tagged at `bc275549` on 2026-09-08, GitHub Latest).
+- Package version: `0.4.13`.
+- Git tag / GitHub Release: `v0.4.13` is the current published stable release
+  (tagged at `e000b489` on 2026-09-09, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.12`.
+- Release tier: stable patch; default update channel points at `v0.4.13`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `efb3bc6` (audited 2026-08-31, first shipped in
-  `v0.4.11`; unchanged in `v0.4.12`) — engine delta is Galley-positive abort
-  responsiveness + trim perf. See [GA baseline](./ga-baseline.md).
+  `v0.4.11`; unchanged through `v0.4.13`) — engine delta is Galley-positive
+  abort responsiveness + trim perf. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.4.13` (2026-09-09) shipped one day after `v0.4.12`, three design rounds
+each landing a block: the **reading panel extension** (chat references to
+code, data, log and image files open beside the conversation — CSV as a
+table, single-line JSON re-indented, images with pixel size; "open with
+default app" withheld from scripts; the Git review gains a baseline picker
+via a new `log` action and `base` on list / diff; the bundled runtime prompt
+now names created files by full path), the **sidebar month bucket** (今天 /
+本周 / 本月 / 更早 on rolling 7 / 30-day windows, Project Review's active
+window widened to match, never-empty backfill promotes 10), and the **CLI /
+Supervisor SOP overhaul** (`sessions list` / `session brief` / `status`
+attach a `live` run-state object backed by a bulk `sessions.run_state`
+socket command, broken-pipe-safe stdout, help text without codenames; SOP,
+reference, both skill copies and the IM entry-layer prompt teach
+`--after-turn`, `dispatch:"queued"`, Goal `--mode=solo` and the reversibility
+split consistently; the skill is a thin pointer to the SOP). Riding along:
+message tables wrap and the Git review gutter sizes to the patch. All Core
+changes additive under `schemaVersion: 1`; `runner/` and `managed-ga/`
+untouched, so the bundled-runtime gate was not mandatory. JC smoked the
+draft on the desktop before publish; stable channel promoted and verified
+the same session. Full narrative: devlog
+[2026-09-09-v0.4.13-release](./devlog/2026-09-09-v0.4.13-release.md).
 
 `v0.4.12` (2026-09-08) is a week's accumulation shipped as one patch: the
 **managed WeChat channel fix** (community PR #25 diagnosed that since
@@ -319,48 +341,22 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Unreleased on main since `v0.4.12` (as of 2026-09-09): two small GUI
-polish items surfaced by the README screenshot reshoot — message Markdown
-tables now fill the reading column and wrap cells (they used to be
-max-content wide and scroll sideways, clipping long-text columns at compact
-width), and the Git review pane's status chip / line-number gutter / code
-wrapping fixes (`a427ffff`). Docs-side, the README was repositioned around
-"Less harness. More model." with a fresh bilingual screenshot set
-(devlogs 2026-09-09). One new deferred item from the reshoot: a scheduled
-task's same-day catch-up fire produced no session twice in a row (root cause
-unknown, see [deferred](./devlog/deferred.md)). Community
-threads for `v0.4.12` are answered (issues #26 and #27 stay open by JC's
-ruling; PR #25's closing is the author's call). One thread is waiting on the
-reporter: the #27 commenter was asked to clarify their sidebar / project
-report before it is classified as an entry-point or a project-filing problem
-(triage notes in the
-[issue #27 devlog](./devlog/2026-09-08-issue-27-message-search-locate.md)).
-Real WeChat end-to-end acceptance of the supervisor-side fix is still owed
-from a machine with a paired WeChat account. Also unreleased: the
-**CLI / Supervisor SOP overhaul** (devlog
-[2026-09-09](./devlog/2026-09-09-cli-and-supervisor-sop-overhaul.md)) —
-additive under `schemaVersion: 1`: `sessions list` / `session brief` /
-`status` attach a `live` run-state object (the answer to `status.running`
-always reading 0), a new bulk `sessions.run_state` socket command behind
-it, broken-pipe-safe stdout, help text without internal codenames; the SOP,
-reference, both skill copies, and the managed IM entry-layer prompt now
-teach `--after-turn`, `dispatch:"queued"`, Goal `--mode=solo`, and the
-2026-07-03 reversibility split consistently. Also unreleased, same day: the
-**reading panel extension** (devlog
-[2026-09-09](./devlog/2026-09-09-reading-panel-files-and-git-baseline.md)) —
-chat references to code, data, log and image files now open in the right
-panel (CSV as a table, single-line JSON re-indented, images with pixel
-size), "open with default app" is withheld from scripts, and the Git review
-gains a baseline picker (recent commits via a new `log` action, `base` on
-list / diff) so a review survives the agent committing. Both additive under
-`schemaVersion: 1`. And the **sidebar month bucket** (devlog
-[2026-09-09](./devlog/2026-09-09-sidebar-month-bucket.md)): 今天 / 本周 /
-本月 / 更早 with rolling 7 / 30-day windows, Project Review's active window
-widened to 30 days to match, and the never-empty backfill now promotes 10
-sessions when the whole window is empty. The items below are standing
-follow-ups.
+Nothing unreleased on main since `v0.4.13` (as of 2026-09-09): the tag sits
+on the version-bump commit, and everything between `v0.4.12` and it shipped
+in that release. Standing follow-ups carried over from `v0.4.12`: one
+deferred item from the README reshoot (a scheduled task's same-day catch-up
+fire produced no session twice in a row, root cause unknown, see
+[deferred](./devlog/deferred.md)); community threads for `v0.4.12` are
+answered (issues #26 and #27 stay open by JC's ruling; PR #25's closing is
+the author's call), with the #27 commenter still owing a clarification of
+their sidebar / project report (triage notes in the
+[issue #27 devlog](./devlog/2026-09-08-issue-27-message-search-locate.md));
+real WeChat end-to-end acceptance of the supervisor-side fix is still owed
+from a machine with a paired WeChat account. The app-update hop
+`v0.4.12 → v0.4.13` on an installed build (SOP step 10) is the one release
+step not yet observed.
 
-The GA baseline is fully current as of `v0.4.12` (`efb3bc6`, audited
+The GA baseline is fully current as of `v0.4.13` (`efb3bc6`, audited
 2026-08-31, shipped since `v0.4.11`); the next release audits upstream again
 per the standard trigger. Upstream `7fa5fa4` (WeChat polling fix, 2026-08-30)
 is not in the baseline and is on that audit's list.
