@@ -47,7 +47,13 @@ export type RuntimeKind = "managed" | "external";
  * produced by `bucketSession`; it only exists as the backfill target of
  * `backfillRecentSessions()` when the active window is empty.
  */
-export type SessionBucket = "pinned" | "today" | "week" | "recent" | "earlier";
+export type SessionBucket =
+  | "pinned"
+  | "today"
+  | "week"
+  | "month"
+  | "recent"
+  | "earlier";
 
 export interface Session {
   id: string;

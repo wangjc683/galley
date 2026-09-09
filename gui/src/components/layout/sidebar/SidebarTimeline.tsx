@@ -134,6 +134,7 @@ function SidebarBucket({
     pinned: copy.sidebar.bucketPinned,
     today: copy.sidebar.bucketToday,
     week: copy.sidebar.bucketWeek,
+    month: copy.sidebar.bucketMonth,
     recent: copy.sidebar.bucketRecent,
     earlier: copy.sidebar.bucketEarlier,
   };
@@ -202,12 +203,12 @@ function SidebarEarlierEntry({
   onClick?: () => void;
 }) {
   const copy = useCopy();
-  // `更早` is the third time bucket but its contents live in a dialog
+  // `更早` is the last time bucket but its contents live in a dialog
   // (the sidebar is current-work, not infinite history). So instead of
   // a foreign button row, it stays in the SAME section-label family as
-  // 今天/本周 — identical 10px uppercase register + left inset — and
-  // just carries its overflow affordance inline: a right-aligned count
-  // + caret, the whole label clickable with a quiet hover. The three
+  // 今天/本周/本月 — identical 10px uppercase register + left inset —
+  // and just carries its overflow affordance inline: a right-aligned
+  // count + caret, the whole label clickable with a quiet hover. The
   // buckets read as one family; this one happens to be actionable.
   return (
     <button

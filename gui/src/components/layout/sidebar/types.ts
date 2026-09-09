@@ -17,9 +17,11 @@ export const GLOBAL_TIMELINE_EXIT_MS = 200;
 
 export const PROJECT_REVIEW_EXIT_MS = 200;
 
-export const PROJECT_ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+/** Mirrors the timeline's `month` bucket (`MONTH_WINDOW_DAYS`): a
+ * session shown under 本月 must not belong to an "older" project. */
+export const PROJECT_ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** Fallback "now" for the 7-day active window. A function, not a
+/** Fallback "now" for the 30-day active window. A function, not a
  * module-load constant: a desktop app left running for days would
  * otherwise classify against a stale clock. */
 export const projectReviewFallbackNowMs = () => Date.now();

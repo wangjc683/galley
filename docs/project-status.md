@@ -353,7 +353,12 @@ panel (CSV as a table, single-line JSON re-indented, images with pixel
 size), "open with default app" is withheld from scripts, and the Git review
 gains a baseline picker (recent commits via a new `log` action, `base` on
 list / diff) so a review survives the agent committing. Both additive under
-`schemaVersion: 1`. The items below are standing follow-ups.
+`schemaVersion: 1`. And the **sidebar month bucket** (devlog
+[2026-09-09](./devlog/2026-09-09-sidebar-month-bucket.md)): 今天 / 本周 /
+本月 / 更早 with rolling 7 / 30-day windows, Project Review's active window
+widened to 30 days to match, and the never-empty backfill now promotes 10
+sessions when the whole window is empty. The items below are standing
+follow-ups.
 
 The GA baseline is fully current as of `v0.4.12` (`efb3bc6`, audited
 2026-08-31, shipped since `v0.4.11`); the next release audits upstream again

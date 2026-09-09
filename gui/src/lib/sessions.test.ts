@@ -84,39 +84,44 @@ describe("backfillRecentSessions", () => {
     }) as Session;
 
   it("promotes the most recent old sessions when the active window is empty", () => {
-    const old = [10, 12, 20, 30, 40, 50, 60].map((d, i) =>
-      session(`s${i}`, d),
+    const old = [31, 32, 40, 45, 50, 55, 60, 70, 80, 90, 120, 200].map(
+      (d, i) => session(`s${i}`, d),
     );
     const buckets = backfillRecentSessions(groupSessions(old, NOW));
-    expect(buckets.recent.map((s) => s.id)).toEqual([
-      "s0",
-      "s1",
-      "s2",
-      "s3",
-      "s4",
-    ]);
+    expect(buckets.recent.map((s) => s.id)).toEqual(
+      Array.from({ length: 10 }, (_, i) => `s${i}`),
+    );
     // Promoted rows leave `earlier` so the "更早 N" count and the
     // EarlierDialog list match what's inlined.
-    expect(buckets.earlier.map((s) => s.id)).toEqual(["s5", "s6"]);
+    expect(buckets.earlier.map((s) => s.id)).toEqual(["s10", "s11"]);
     expect(buckets.recent).toHaveLength(RECENT_BACKFILL_COUNT);
   });
 
   it("promotes everything when there are fewer old sessions than the cap", () => {
     const buckets = backfillRecentSessions(
-      groupSessions([session("a", 10), session("b", 20)], NOW),
+      groupSessions([session("a", 40), session("b", 60)], NOW),
     );
     expect(buckets.recent.map((s) => s.id)).toEqual(["a", "b"]);
     expect(buckets.earlier).toEqual([]);
   });
 
   it("does nothing when a session is active this week", () => {
-    const grouped = groupSessions([session("new", 2), session("old", 30)], NOW);
+    const grouped = groupSessions([session("new", 2), session("old", 40)], NOW);
     expect(backfillRecentSessions(grouped)).toBe(grouped);
+  });
+
+  it("does nothing when a session is active this month", () => {
+    // Days 8–30 are the `month` bucket: the window is not empty, so no
+    // backfill — the light user sees 本月, not a synthetic 最近.
+    const grouped = groupSessions([session("mid", 20), session("old", 40)], NOW);
+    expect(backfillRecentSessions(grouped)).toBe(grouped);
+    expect(grouped.month.map((s) => s.id)).toEqual(["mid"]);
+    expect(grouped.earlier.map((s) => s.id)).toEqual(["old"]);
   });
 
   it("does nothing when a pinned session keeps the sidebar populated", () => {
     const grouped = groupSessions(
-      [session("pin", 90, true), session("old", 30)],
+      [session("pin", 90, true), session("old", 40)],
       NOW,
     );
     expect(backfillRecentSessions(grouped)).toBe(grouped);

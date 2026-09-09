@@ -108,7 +108,7 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 │     ◐ Session A                  │
 │   FolderOpen Website       +     │
 │     + 新建项目对话               │  空项目 CTA，点击新建到该项目
-│ OLDER PROJECTS              12   │  默认折叠；点击展开 7 天前项目
+│ OLDER PROJECTS              12   │  默认折叠；点击展开 30 天前项目
 ├──────────────────────────────────┤
 │ PINNED                           │  仅有 pin session 时显示
 │   ◐ Session A                    │
@@ -116,7 +116,8 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 │ TODAY                            │
 │   ◐ Session 1                    │
 │   ◐ Session 2                    │
-│ THIS WEEK                        │
+│ THIS WEEK                        │  滚动 7 天
+│ THIS MONTH                       │  滚动 30 天（2026-09-09 新增）
 │ EARLIER                          │  单行 "查看全部 N"，打开 EarlierDialog
 ├──────────────────────────────────┤
 │ Archived                   N     │  底部
@@ -131,14 +132,16 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 - **Project row 不用 emoji**：用 Phosphor `Folder` / `FolderOpen` 表达层级与 filter，避免跨平台 emoji 造成的视觉重量和渲染差异。
 - **Project Review 由 Quick Action `项目` 切换**：开启后隐藏普通 timeline，展示完整 project list；项目 row 只负责展开/收起，允许多项目同时展开；再次点击 `项目` 退出 Project Review。入口用 selected tint 表示开启状态，不额外加说明文案；active 时 tooltip / aria-label 为「退出项目视图」。
 - **Project Review 进出动效**：模式切换不是硬替换。进入时 Project Review 从 0 高度轻展开并 fade in，普通 timeline 下沉 fade out；退出时 Project Review 保留约 150ms 完成上收 fade out，普通 timeline 从下方回到原位。项目内部 drawer 继续使用独立展开动画，避免两层动效互相抢戏。
-- **Project Review 按活跃度分组**：pinned 或 7 天内有非归档 session 活动的项目进入 `ACTIVE PROJECTS`；其余进入 `OLDER PROJECTS`，默认折叠。新建但 7 天内为空的项目视作 active，避免刚建完就被藏起来。
+- **Project Review 按活跃度分组**：pinned 或 30 天内有非归档 session 活动的项目进入 `ACTIVE PROJECTS`；其余进入 `OLDER PROJECTS`，默认折叠。新建但 30 天内为空的项目视作 active，避免刚建完就被藏起来。（2026-09-09 从 7 天改为 30 天，跟随时间线的「本月」桶：会话在「本月」里而它的项目在「更早项目」里是打架。）
 - **项目对话创建是独立动作**：项目 row 右侧轻量 `+` 和空项目 CTA `+ 新建项目对话` 才会把右侧切到 project-aware EmptyState（placeholder: `在 {Project} 里交代什么？`，第一句话 lazily create 到该 project）。展开/收起项目不改变右侧当前对话。
 - **零项目空态 CTA**：Project Review 开启但一个项目都没有时，展示显性 `+ 新建第一个项目` 按钮（brand 描边 + regular 加号——空态的主动作不得弱于常规入口）+ 一行 muted 说明。把"没有项目"从死路变成入口。
 - **去掉 ACTIVE / WAITING FOR YOU 区块**：普通 timeline 不做状态队列，也不按 failed / waiting / running / unread 重排；状态只在 row 内用 rail / icon / subline / tint 表达，Approval Dock 兜底审批处理。
 - **去掉 "UNFILED" 命名**：通用 Agent 工作台 80%+ 对话本就 free-floating，时间分组就是主体
 - **PINNED section** 仅在有 pin session 时显示，空时不占位
-- **时间桶 header 显示总数**：`PINNED 3` / `今天 5` / `本周 8` / `更早 24 ›`。数字只表示桶内 session 总数，不拆 running / waiting / failed 分项。
-- **EARLIER 折叠成单行入口**：sidebar 是当前工作面，不是无限历史列表；完整旧 session 浏览进入 `EarlierDialog`。Earlier 入口沿用同一 header + count 视觉族，只多一个 caret 表达可打开。
+- **时间桶是滚动窗口，四桶**：`今天`（自然日）/ `本周`（滚动 7 天）/ `本月`（滚动 30 天）/ `更早`。不用日历周 / 月：日历月在每月 1 号会把上月全部掉进「更早」，那天体验最差；「本周」叫日历名走滚动窗口从未被抱怨过，「本月」照此办理。`本月` 桶 2026-09-09 新增——一周对轻度用户偏短（JC 库里 8–30 天区间的会话数是 1–7 天的近三倍，正是「上次那个任务」最常落的区间），而一个月以上的确可以接受多两步去「更早」里找。加桶而不是把「本周」改名「本月」：重度用户一个月可能四五十条，保留「本周」这一段近的仍然近，一整块「本月」扫起来才有结构。
+- **时间桶 header 显示总数**：`PINNED 3` / `今天 5` / `本周 8` / `本月 14` / `更早 24 ›`。数字只表示桶内 session 总数，不拆 running / waiting / failed 分项。
+- **EARLIER 折叠成单行入口**：sidebar 是当前工作面，不是无限历史列表；完整旧 session 浏览进入 `EarlierDialog`（文案「N 个 30 天前的对话」）。Earlier 入口沿用同一 header + count 视觉族，只多一个 caret 表达可打开。
+- **永不空侧栏**：置顶 / 今天 / 本周 / 本月全空但有更早会话时，自动把最近 10 条提出来标为「最近」（2026-09-09 从 5 条提到 10 条，条件从「本周为空」扩到「整窗为空」——本月有内容时正常显示本月桶，不叠加回填）。提出来的行离开「更早」，计数与 dialog 保持一致。
 - **Archived 不叫 Trash**：archive 是保留数据；真正永久删除只在 Archived dialog 里出现。
 - Sidebar 不可折叠；可拖拽调整宽度。`⌘K` 全局 Command Palette。对象级低频操作由右键菜单和 row hover `⋯` 共同承载：session row 提供 rename / pin / move to project / archive，project row 提供 pin / edit / delete。右键是熟练用户快捷入口，`⋯` 是可发现入口；两者必须共享同一组动作、排序和 destructive 样式，菜单视觉与 MainHeader 会话菜单同语域（`galley-pop-in` / 200px / 13px）。row contextual actions 使用 overlay，不在非 hover 状态制造额外右侧 gutter；hover / menu open 时文字临时让位给操作按钮。重命名进行中右键菜单禁用（右击边距会 blur-commit 编辑，再叠一个菜单是双重歧义）。
 - **归档运行中的会话需确认**（2026-07-05 决策）：会话自身 running 或作为 goal master 时，归档前弹 alertdialog——归档不停止运行，但会把还在跑的工作从状态板上藏起来；对话框文案如实陈述这两点。已结算会话保持一键归档（可逆，无需确认）。

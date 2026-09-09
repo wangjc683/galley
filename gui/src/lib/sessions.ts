@@ -84,9 +84,16 @@ export function deriveSessionStatus(
  *   pinned   — pinned flag wins regardless of date
  *   today    — lastActivityAt is on the calendar day of `now`
  *   week     — within 7 days but not today
+ *   month    — within 30 days but not this week
  *   earlier  — older, including archived
  *
- * Bucket is purely a view concern; we don't store it on the entity.
+ * Both windows are rolling (7 / 30 days back from the start of today),
+ * not calendar periods: a calendar month would drop everything from the
+ * previous month into `earlier` on the 1st, the day the sidebar is
+ * least useful. `month` exists (2026-09-09) because a light user's "that
+ * task from the other week" lives in days 8–30, and one more section
+ * header is cheaper than a dialog round-trip. Bucket is purely a view
+ * concern; we don't store it on the entity.
  */
 export function bucketSession(
   s: Session,
@@ -98,15 +105,24 @@ export function bucketSession(
   startOfToday.setHours(0, 0, 0, 0);
   const todayMs = startOfToday.getTime();
   if (last >= todayMs) return "today";
-  const weekAgoMs = todayMs - 7 * 24 * 3600 * 1000;
+  const weekAgoMs = todayMs - WEEK_WINDOW_DAYS * DAY_MS;
   if (last >= weekAgoMs) return "week";
+  const monthAgoMs = todayMs - MONTH_WINDOW_DAYS * DAY_MS;
+  if (last >= monthAgoMs) return "month";
   return "earlier";
 }
+
+const DAY_MS = 24 * 3600 * 1000;
+export const WEEK_WINDOW_DAYS = 7;
+/** Also the boundary the EarlierDialog copy describes ("older than 30
+ * days") and the Project Review's active-project window mirrors. */
+export const MONTH_WINDOW_DAYS = 30;
 
 const BUCKET_ORDER: SessionBucket[] = [
   "pinned",
   "today",
   "week",
+  "month",
   "recent",
   "earlier",
 ];
@@ -129,6 +145,7 @@ export function groupSessions(
     pinned: [],
     today: [],
     week: [],
+    month: [],
     recent: [],
     earlier: [],
   };
@@ -141,22 +158,22 @@ export function groupSessions(
   return buckets;
 }
 
-export const RECENT_BACKFILL_COUNT = 5;
+export const RECENT_BACKFILL_COUNT = 10;
 
 /**
  * Never-empty invariant for the global timeline: a light user coming
- * back after >7 days away must not be greeted by a bare sidebar — that
+ * back after >30 days away must not be greeted by a bare sidebar — that
  * reads as "your history is gone" when it's merely bucketed away.
  *
- * When the active window is empty (no pinned / today / week sessions)
- * but older sessions exist, promote the most recent
+ * When the whole active window is empty (no pinned / today / week /
+ * month sessions) but older sessions exist, promote the most recent
  * `RECENT_BACKFILL_COUNT` of them out of `earlier` into `recent`. The
  * promoted rows leave `earlier` entirely, so the "更早 N" entry count
  * and the EarlierDialog list stay consistent with what's inlined.
  *
  * Applied only to the global timeline (and its EarlierDialog source) —
  * the Project Review drawers inline-list all buckets and need no
- * backfill. As soon as any session is pinned or active this week, the
+ * backfill. As soon as any session is pinned or active this month, the
  * grouping is returned untouched.
  */
 export function backfillRecentSessions(
@@ -165,7 +182,8 @@ export function backfillRecentSessions(
   const windowEmpty =
     buckets.pinned.length === 0 &&
     buckets.today.length === 0 &&
-    buckets.week.length === 0;
+    buckets.week.length === 0 &&
+    buckets.month.length === 0;
   if (!windowEmpty || buckets.earlier.length === 0) return buckets;
   return {
     ...buckets,
@@ -180,6 +198,7 @@ export const BUCKET_LABEL: Record<SessionBucket, string> = {
   pinned: "Pinned",
   today: "Today",
   week: "This week",
+  month: "This month",
   recent: "Recent",
   earlier: "Earlier",
 };

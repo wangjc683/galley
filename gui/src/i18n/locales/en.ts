@@ -207,6 +207,7 @@ export const enCopy: AppCopy = {
     bucketPinned: "Pinned",
     bucketToday: "Today",
     bucketWeek: "This week",
+    bucketMonth: "This month",
     bucketRecent: "Recent",
     bucketEarlier: "Earlier",
     stepSummary: (index, summary) => `Step ${index} · ${summary}`,
@@ -1849,9 +1850,9 @@ export const enCopy: AppCopy = {
     noMatches: "No matches",
     hits: (shown, total) => `${shown} / ${total} matches`,
     earlierCount: (count) =>
-      `${count} conversation${count === 1 ? "" : "s"} older than 7 days`,
+      `${count} conversation${count === 1 ? "" : "s"} older than 30 days`,
     noEarlier: "No earlier conversations",
-    noEarlierEmpty: "No conversations older than 7 days.",
+    noEarlierEmpty: "No conversations older than 30 days.",
     noMatchingConversations: "No matching conversations.",
     archivedCountLabel: (count) =>
       `${count} conversation${count === 1 ? "" : "s"}`,
