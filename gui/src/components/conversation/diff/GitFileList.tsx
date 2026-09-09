@@ -122,7 +122,7 @@ function StatusChip({ status }: { status: GitReviewFile["status"] }) {
   return (
     <span
       className={cn(
-        "inline-flex w-[3.5em] shrink-0 items-center justify-center rounded-sm border px-1 py-px text-ui-micro leading-4",
+        "inline-flex min-w-[3.5em] shrink-0 items-center justify-center whitespace-nowrap rounded-sm border px-1 py-px text-ui-micro leading-4",
         tone,
       )}
     >

@@ -1447,3 +1447,17 @@ code {
   cursor: default;
   color: var(--color-ink-muted);
 }
+/* The library reserves 7ch per line-number column regardless of the file.
+   GitPatchView sets --git-gutter-digits to the digit count of the patch's
+   largest line number (floor 2); one ch of air on each side keeps the
+   number from reading as part of the code. */
+.git-review-diff .diff-gutter-col {
+  width: calc(var(--git-gutter-digits, 4) * 1ch + 2ch);
+}
+/* Wrap at word boundaries; only a single token wider than the column may
+   break mid-word (the library default is break-all, which splits
+   "assistant" into "as / sistant"). */
+.git-review-diff .diff-code {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}

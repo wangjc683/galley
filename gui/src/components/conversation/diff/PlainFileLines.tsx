@@ -17,7 +17,7 @@ export function PlainFileLines({ content }: { content: string }) {
           >
             {index + 1}
           </span>
-          <span className="min-w-0 flex-1 whitespace-pre-wrap break-all pl-[0.5em]">
+          <span className="min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere] pl-[0.5em]">
             {line}
           </span>
         </div>

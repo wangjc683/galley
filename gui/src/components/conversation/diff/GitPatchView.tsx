@@ -64,8 +64,26 @@ export function GitPatchView({
       </p>
     );
   const hunkCount = parsed.reduce((sum, file) => sum + file.hunks.length, 0);
+  // Size the line-number columns to this patch's largest line number (the
+  // way GitHub and VS Code do) instead of the library's fixed 7ch: a
+  // 12-line README gets 2 digits, a 4,000-line module gets 4. Floor at 2
+  // so one-digit files don't collapse to a sliver.
+  const maxLine = parsed.reduce(
+    (max, file) =>
+      file.hunks.reduce(
+        (m, hunk) =>
+          Math.max(m, hunk.oldStart + hunk.oldLines, hunk.newStart + hunk.newLines),
+        max,
+      ),
+    0,
+  );
+  const gutterDigits = Math.max(2, String(maxLine).length);
   return (
-    <div ref={container} className="git-review-diff min-w-0 text-[12px]">
+    <div
+      ref={container}
+      className="git-review-diff min-w-0 text-[12px]"
+      style={{ "--git-gutter-digits": gutterDigits } as React.CSSProperties}
+    >
       {hunkCount > 0 ? (
         <div
           title={copy.contextHint}

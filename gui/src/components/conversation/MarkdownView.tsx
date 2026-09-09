@@ -242,9 +242,12 @@ const PROSE_BASE = cn(
   "[&_a]:text-ink [&_a]:underline [&_a]:underline-offset-[3px] [&_a]:decoration-ink-muted [&_a:hover]:text-brand-strong [&_a:hover]:decoration-brand-strong",
   // Tables — GFM extension. The table component wraps them in an
   // overflow container; cell styling stays here so the typography
-  // remains centralized.
+  // remains centralized. Cells wrap at word boundaries (2026-09-09):
+  // the table used to be max-content wide and scroll sideways, which
+  // clipped any long-text column at compact reading width — the way
+  // GitHub / Notion render, long prose cells grow taller, not wider.
   "[&_th]:border [&_th]:border-line [&_th]:bg-surface [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-medium [&_th]:text-ink",
-  "[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:text-ink",
+  "[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:text-ink [&_td]:[overflow-wrap:anywhere]",
   // hr inside markdown.
   "[&_hr]:[margin-block:calc(var(--conversation-block-gap)*1.6667)] [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-line",
   // Strong / em — keep weight in line with the prose body. Body is normal
@@ -300,7 +303,7 @@ const COMPONENTS: Components = {
       <div className="overflow-x-auto [margin-block:calc(var(--conversation-block-gap)*1.1667)]">
         <table
           className={cn(
-            "w-max min-w-full border-collapse [font-size:var(--conversation-table-size)]",
+            "w-full border-collapse [font-size:var(--conversation-table-size)]",
             className,
           )}
           {...props}
