@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-14
+- [option-desc PRD 取消](./2026-09-14-ask-user-option-desc-cancelled.md) — 本机四个月 55 条真实 ask_user 候选零次出现「短标签看不出后果」，模型自己把后果写进标签；PRD 与三票置 wontfix，启动信号进 deferred；顺带记下 PRD 过期点（GUI 重建读路径、tools_schema 补丁点、GA 表面 str() 风险、形状改并行参数）
 - [v0.4.14 发布](./2026-09-14-v0.4.14-release.md) — AskUser 一条线三个提交（可选中 / 候选三改 / 拆分合并）单独发 patch；runner 动了故打包门禁 mandatory；smoke 覆盖四处 AskUser 行为与 grok 拆分
 - [ask_user 拆分调用合并](./2026-09-14-ask-user-split-calls-merge.md) — grok-4.6 把一个问题拆成五个单候选 ask_user 调用、界面只见一个 chip；runner / GUI 读取侧按「同问题合并候选、异问题取首个」处理，协议与审计记录不动；折叠头按问题数计、字符串候选不再逐字拆
 - [ask_user 候选：填入慢路径、竖排列表、回显勾选](./2026-09-14-ask-user-chips-fill-list-echo.md) — 六条 UX 候选裁决做 1+3+4+6；右键 / ⌘ 点击填入不发送走 `prefillText`；`candidateLayout` 按内容切 chip / 竖排（阈值导出常量）；回显列候选勾所选，复用 replySet 定位回复；键盘可达与 quick-reply 条不做

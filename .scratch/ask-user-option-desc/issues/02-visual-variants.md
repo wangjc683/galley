@@ -1,6 +1,7 @@
 # 02 GUI 呈现变体实测：tooltip vs 选项下方小字
 
-Status: ready-for-agent
+Status: wontfix
+Closed: 2026-09-14：PRD 取消；若重启，D2 后有 desc 应直接归 list 排布 + 小字副行，tooltip 变体大概率可跳
 Blocked by: 01
 
 ## 流程

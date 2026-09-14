@@ -1,9 +1,30 @@
 # PRD: ask_user 快捷选项携带说明（tooltip / 小字）
 
-Status: ready-for-agent
+Status: wontfix
 Date: 2026-08-11
 关联: [galley#21](https://github.com/wangjc683/galley/issues/21)
 （Kinda2419）
+
+## 取消结论（2026-09-14，JC）
+
+**不做。** 本机 workbench.db 四个月、107 个会话的全部 ask_user 调用（16 条
+消息、21 次调用、13 组候选、55 条候选项）里，没有一条是「标签太短看不出
+后果」：模型自己把后果写进标签（「不是/不确定，先不要发送」「~/Downloads/
+_归档(留在原地,风险最小)」），6 字以内的短标签（编程 / 外语 / 结束任务）
+本身无需解释。13 组候选 10 次点选、1 次自由回复（否定前提，非看不懂）、
+2 次未答。报告人描述的痛点在本地零次出现，更像其特定模型 / 外部 GA 的
+产出习惯。
+
+同日 D2 的 row / list 自适应排布已解决候选侧真实出现过的问题（句子级候选
+横排成标签云）。数据依据与重启信号见
+[devlog](../../docs/devlog/2026-09-14-ask-user-option-desc-cancelled.md) 与
+[deferred.md](../../docs/devlog/deferred.md) 「ask_user 候选项携带说明」。
+
+下文为 8 月定案原稿，保留作历史。核对时另发现两处过期：01 漏了 GUI 侧
+`mergedAskUserArgs` 这条从持久化 tool_calls 重建的读路径；03 的真实补丁点
+是 `assets/tools_schema.json` / `_cn.json` 的 `candidates.items.type`，不是
+docstring；且对象形状会被 GA 其余表面（`_compact_tool_args`、tgapp、tui）
+`str()` 成 dict 字面量。若将来重启，先读这段。
 
 ## 背景与动机
 

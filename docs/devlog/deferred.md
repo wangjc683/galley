@@ -341,6 +341,25 @@
 
 ---
 
+## ask_user 候选项携带说明（option-desc，`{label, desc}` / tooltip）
+
+- **状态**：取消（2026-09-14 JC 裁决，数据依据见
+  [devlog](./2026-09-14-ask-user-option-desc-cancelled.md)；PRD 与三张票置
+  `wontfix` 留在 [.scratch/ask-user-option-desc](../../.scratch/ask-user-option-desc/PRD.md)）
+- **提出**：2026-08-11，社区 [galley#21](https://github.com/wangjc683/galley/issues/21)。
+- **为何不做**：本机四个月 55 条真实候选项里零次出现「标签短到看不出后果」；
+  模型自己把后果写进标签，短标签均为无需解释的词。同日 D2 的 row / list
+  排布已解决候选侧真实出现过的问题。
+- **启动信号**：dogfood 或社区再出现「裸短标签且用户因此追问一轮」的具体
+  实例（要有截图或会话记录，不是描述）；或上游 GA 自己给 candidates 加了
+  说明字段（那时只需 GUI 消费，无需补丁）。
+- **若重启**：先读 devlog 里的「PRD 过期点」——形状倾向并行参数
+  `candidate_descs` 而非对象；补丁点在 `assets/tools_schema*.json`；schema
+  先于视觉实测；有 desc 直接归 list + 小字副行。
+- **待定**：#21 的回帖（JC 2026-09-14 决定暂不回）。
+
+---
+
 ## Session Workspace（会话产出的落点与可达性）
 
 - **状态**：暂缓实现（2026-08-13 JC 裁决：设计定案，先不动手）

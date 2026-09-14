@@ -1,6 +1,7 @@
 # 01 数据面兼容扩展：`string | {label, desc}`
 
-Status: ready-for-agent
+Status: wontfix
+Closed: 2026-09-14：PRD 取消，见 PRD 顶部「取消结论」；若重启，范围需补 GUI `mergedAskUserArgs` 读路径
 
 ## 范围
 

@@ -1,6 +1,7 @@
 # 03 managed GA patch：ask_user 工具描述补「选项说明」约束
 
-Status: ready-for-agent
+Status: wontfix
+Closed: 2026-09-14：PRD 取消；若重启，补丁点是 `assets/tools_schema*.json` 的 candidates schema，且应先于 02 落地才有真实 desc 数据
 Blocked by: 01, 02
 
 ## 范围

@@ -365,10 +365,13 @@ Post-release follow-up:
 
 Nothing unreleased on main since `v0.4.14` (as of 2026-09-14): the tag sits
 on the version-bump commit, and everything between `v0.4.13` and it shipped
-in that release. Next line of work when picked up: the ask_user option
-description PRD (`.scratch/ask-user-option-desc`, data-shape extension +
-managed-patch tool description; the stacked candidate list now has room for
-a description line). Standing follow-ups carried over from `v0.4.12`: one
+in that release. The ask_user option description PRD (galley#21,
+`.scratch/ask-user-option-desc`) was **cancelled** on 2026-09-14 after four
+months of local ask_user data showed zero cases of the reported "short label,
+unclear consequence" pain (see
+[devlog](./devlog/2026-09-14-ask-user-option-desc-cancelled.md)); the #21
+thread has not yet been answered with that decision. No next line of work is
+queued. Standing follow-ups carried over from `v0.4.12`: one
 deferred item from the README reshoot (a scheduled task's same-day catch-up
 fire produced no session twice in a row, root cause unknown, see
 [deferred](./devlog/deferred.md)); community threads for `v0.4.12` are
