@@ -9,20 +9,37 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.13`.
-- Git tag / GitHub Release: `v0.4.13` is the current published stable release
-  (tagged at `e000b489` on 2026-09-09, GitHub Latest).
+- Package version: `0.4.14`.
+- Git tag / GitHub Release: `v0.4.14` is the current published stable release
+  (tagged at `10b78c8c` on 2026-09-14, GitHub Latest).
 - Agent API schema: `schemaVersion: 1`
-- Release tier: stable patch; default update channel points at `v0.4.13`.
+- Release tier: stable patch; default update channel points at `v0.4.14`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `efb3bc6` (audited 2026-08-31, first shipped in
-  `v0.4.11`; unchanged through `v0.4.13`) — engine delta is Galley-positive
+  `v0.4.11`; unchanged through `v0.4.14`) — engine delta is Galley-positive
   abort responsiveness + trim perf. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.4.14` (2026-09-14) is a single-surface patch grown from one community
+report ("AskUser text cannot be copied"): the **ask_user question is
+selectable and rendered as Markdown** (single newlines kept via an opt-in
+`softBreaks` on MarkdownView — the question string was never promised to be
+Markdown), the **candidate chips gain a fill-in slow path** (right-click /
+⌘-click puts the option in the composer without sending) and **stack as a
+list when sentence-length or numerous** (column sized to the longest
+option), the **answered echo lists the options and checks the pick**, the
+composer placeholder only says "choose an option above" when there are
+options, and **split same-question ask_user calls merge** (grok-4.6 emitted
+one call per candidate; runner and GUI read paths now merge, audit rows
+untouched). Core untouched; `runner/` changed one function, so the
+bundled-runtime gate was mandatory and passed on `mac-arm64`. JC smoked the
+draft on macOS and the Windows machine before publish; stable channel
+promoted and verified the same session. Full narrative: devlog
+[2026-09-14-v0.4.14-release](./devlog/2026-09-14-v0.4.14-release.md).
 
 `v0.4.13` (2026-09-09) shipped one day after `v0.4.12`, three design rounds
 each landing a block: the **reading panel extension** (chat references to
@@ -265,17 +282,23 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.12` is published and promoted as the live stable release (2026-09-08).
-The default `updates/stable/latest.json` channel points at `v0.4.12`, with the
+`v0.4.14` is published and promoted as the live stable release (2026-09-14).
+The default `updates/stable/latest.json` channel points at `v0.4.14`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
-installed builds. Both were verified with `--cache-bust` across all three
-platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). The release went
-through in one draft cut; JC smoked the draft build before publish. The
-mandatory bundled-runtime gate passed on `mac-x64` pre-flight (`runner/`
-changed; `managed-ga/` did not); `mac-arm64` and `win-x64` were covered by
+installed builds. The live verifier passed with `--cache-bust` across all three
+platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). One draft cut; JC
+smoked the draft on macOS and the Windows machine before publish. The
+mandatory bundled-runtime gate passed on `mac-arm64` pre-flight (`runner/`
+changed; `managed-ga/` did not); the other targets were covered by
 `release.yml`'s per-platform runners at tag time. `check.yml` was green on
 all three targets at the release commit's parent, and the two release-prep
 commits were docs and version files only.
+
+`v0.4.13` (2026-09-09) and `v0.4.12` (2026-09-08) went through the same
+path: one draft cut each, JC smoked the draft before publish, both channels
+verified with `--cache-bust`. `v0.4.12`'s bundled-runtime gate was mandatory
+(`runner/` changed) and passed on `mac-x64`; `v0.4.13` touched neither
+`runner/` nor `managed-ga/`.
 
 `v0.4.11` (2026-08-31) went through the same path: one draft cut, JC smoked
 the draft build (no-auth provider flows plus multi-step sessions on the new
@@ -310,10 +333,9 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): **`v0.4.11` → `v0.4.12` is pending** on
-   the dogfood machine (and the `v0.4.8` → `v0.4.9` → `v0.4.10` → `v0.4.11`
-   hops were never explicitly reported — confirm or write them off in the
-   same pass).
+1. App-update dogfood (SOP step 10): **`v0.4.13` → `v0.4.14` is pending** on
+   an installed build (and the `v0.4.8` → … → `v0.4.13` hops were never
+   explicitly reported — confirm or write them off in the same pass).
    All earlier hops through `v0.4.7` → `v0.4.8` passed
    (JC confirmed 2026-08-13 / 2026-08-14), except **`v0.4.6` → `v0.4.7`,
    never run and off the normal path**: a hop can only be tested from the
@@ -341,9 +363,12 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing unreleased on main since `v0.4.13` (as of 2026-09-09): the tag sits
-on the version-bump commit, and everything between `v0.4.12` and it shipped
-in that release. Standing follow-ups carried over from `v0.4.12`: one
+Nothing unreleased on main since `v0.4.14` (as of 2026-09-14): the tag sits
+on the version-bump commit, and everything between `v0.4.13` and it shipped
+in that release. Next line of work when picked up: the ask_user option
+description PRD (`.scratch/ask-user-option-desc`, data-shape extension +
+managed-patch tool description; the stacked candidate list now has room for
+a description line). Standing follow-ups carried over from `v0.4.12`: one
 deferred item from the README reshoot (a scheduled task's same-day catch-up
 fire produced no session twice in a row, root cause unknown, see
 [deferred](./devlog/deferred.md)); community threads for `v0.4.12` are
@@ -353,10 +378,10 @@ their sidebar / project report (triage notes in the
 [issue #27 devlog](./devlog/2026-09-08-issue-27-message-search-locate.md));
 real WeChat end-to-end acceptance of the supervisor-side fix is still owed
 from a machine with a paired WeChat account. The app-update hop
-`v0.4.12 → v0.4.13` on an installed build (SOP step 10) is the one release
+`v0.4.13 → v0.4.14` on an installed build (SOP step 10) is the one release
 step not yet observed.
 
-The GA baseline is fully current as of `v0.4.13` (`efb3bc6`, audited
+The GA baseline is fully current as of `v0.4.14` (`efb3bc6`, audited
 2026-08-31, shipped since `v0.4.11`); the next release audits upstream again
 per the standard trigger. Upstream `7fa5fa4` (WeChat polling fix, 2026-08-30)
 is not in the baseline and is on that audit's list.
@@ -403,7 +428,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.12 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.4.14 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `efb3bc6` (2026-08-31); released builds ship it since `v0.4.11` (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -429,7 +454,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.4.12`. For the next release, bump every
+- Current package metadata uses `0.4.14`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
