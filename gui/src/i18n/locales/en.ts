@@ -397,6 +397,7 @@ export const enCopy: AppCopy = {
     ghostSrDescription: (suggestion: string) =>
       `Suggested next step: ${suggestion}. Press right arrow to fill it in.`,
     replyToContinue: "Reply, or choose an option above",
+    replyOpen: "Reply to the question above",
     byTheWay: "/btw to ask alongside without interrupting the task…",
     send: "Send",
     sendWithEnter: "Send · Enter",

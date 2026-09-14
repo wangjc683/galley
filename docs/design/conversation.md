@@ -112,6 +112,16 @@ Galley 在 Goal master 线程里讲述 run 进展的旁白（system row）。它
 - **live 归外围**：实时倒计时 / worker 明细 / 停止仍只在 TopBar pill；章节框只在粗粒度状态转变时变（开始 → 进行中 → 终态），不做每秒 ticker（与 §2.7、sidebar/epigraph 的"live 归外围 chrome"一致）。
 - **数据与关联**：标记数据来自只读命令 `list_goals_for_session(masterSessionId)`（全状态，含已读终态）。`annotateGoalThread`（`lib/goal-thread.ts`）用 **objective 文本 + `startedAt ≈ createdAt`** 启发式把 goal 关联到对应的 objective user-turn（消息行不持久化 goalId，恢复后靠此重建）；未命中则优雅退化为无标记的（仍降权的）叙述。run 的收口标记落在其叙述簇之后、后续普通对话之前。
 
+#### ask_user 提问气泡（`AskUserBubble` / `AnsweredAskUser`）
+
+Agent 经 `ask_user` 停下来问人的那条：实时态是 warning 左条 + `PauseCircle` +「等你回复」+ 候选 chip；回答后（或重启恢复后）退成 `AnsweredAskUser` 回显——2px 30% warning 细规线、无底色、echo 字号 ink-soft、无 chip（交互已结束，再摆 chip 会暗示可重答）。
+
+- **问题正文走 `MarkdownView variant="agent"`，不再是裸 `<div>`**（2026-09-14）。直接原因是社区反馈「AskUser 界面不能复制文字」：`body` 全局 `user-select: none`（foundations.md §2.6），内容面靠 `select-text` 逐个开回来，用户消息 / agent 正文 / 工具输出 / 审批路径都开了，唯独 ask_user 问题漏了。顺带收益：GA 提问里常见的编号选项、路径、行内代码得到与正文相同的 markdown 排版（暖褐行内代码、列表缩进），字体寄存也与同一黄框里的 side_question 一致（CJK 衬线）。
+- **单换行保留为换行（`softBreaks`，remark-breaks）**。GA 的 `ask_user(question)` 只是透传字符串，TUI / Telegram 前端按纯文本打印，从没承诺过 markdown；LLM 写「第一行\n第二行」时若按 markdown 软换行合并，两个问句会并成一句、改变问题意思。remark-breaks 只碰段落内的软换行，列表 / 代码块 / 空行分段不受影响，所以 markdown 形状的问题仍得到完整处理。这是 `MarkdownView` 上的 opt-in prop，**只给 ask_user 用**——agent 回答是按 markdown 写的，软换行就该是折行。
+- **回显与实时态同一条渲染路径**：`AnsweredAskUser` 同样走 `MarkdownView` + `softBreaks`，用 `[&_p]/[&_li]` 覆盖到 echo 字号 + ink-soft（沿用 Goal 叙述 callout 的降权手法），同一段文字实时与回显只差大小和墨色。
+- **Composer 占位随候选数变**：有 chip 时「回复，或选择上方候选」，无 chip 时「回复上方提问」（`composer-register.ts` 的 `reply` / `replyOpen`）。`candidates` 是可选参数，模型对开放式问题常不给；无条件的「选择上方候选」会让人去找不存在的选项（2026-09-14 真机验收即如此）。
+- **不接的东西**：不开 `selectionCopyScope`（浮动复制工具栏语义是「复制回答」），不挂 `MessageActions` 的 Copy；候选 chip 仍是按钮、不可选中——复制 chip 文字是另一条需求，见 deferred。
+
 #### Markdown 渲染
 
 Final answer 跟 Thinking summary 都通过 `react-markdown` + `remark-gfm` + Shiki 渲染。LLM 输出的 markdown（标题 / 列表 / 表格 / 代码块 / 引用 / 链接 / 删除线）全部解析成对应 DOM，没解析的纯文本走默认段落。

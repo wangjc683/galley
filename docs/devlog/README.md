@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-09-14
+- [ask_user 提问改走 MarkdownView](./2026-09-14-ask-user-selectable-markdown.md) — 社区反馈问题文字不可复制：`body` 全局 `user-select: none` 而 AskUserBubble / AnsweredAskUser 漏开 `select-text`；改走 MarkdownView 与 side_question 对齐，加 remark-breaks `softBreaks` 保住单换行；Composer 占位按候选数分支（无 chip 不再说「选择上方候选」）；chip 文字复制进 deferred
+
 ### 2026-09-09
 - [v0.4.13 发布](./2026-09-09-v0.4.13-release.md) — 阅读面板扩展、侧栏本月桶、CLI `live` + SOP 梳理、表格换行；定级 patch；runner / managed-ga 零改动故打包门禁不 mandatory
 - [侧栏时间桶加「本月」](./2026-09-09-sidebar-month-bucket.md) — 加桶不换名（今天 / 本周 / 本月 / 更早）、滚动 30 天不用日历月、项目视图跟随、整窗为空才回填且提 10 条；JC 库分布 8–30 天区间是 1–7 天的近三倍

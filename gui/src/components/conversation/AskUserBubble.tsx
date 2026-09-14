@@ -1,5 +1,6 @@
 import { ChatCircleDots, PauseCircle } from "@phosphor-icons/react";
 
+import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
@@ -36,6 +37,18 @@ export interface AskUserBubbleProps {
  * fully open for free-form replies (the caller wires both paths into
  * the same `ask_user_response` IPC command).
  *
+ * Question rendering (2026-09-14): goes through `MarkdownView` like
+ * the sibling side-question bubble, for two reasons. ① Selectable
+ * text — `body` is `user-select: none` (foundations.md §2.6) and
+ * content surfaces opt back in via `select-text`, which MarkdownView
+ * carries; the previous bare `<div>` did not, so users could not copy
+ * a question (community report). ② GA questions routinely carry
+ * numbered options, paths and inline code, which read better as
+ * markdown. `softBreaks` keeps single newlines as line breaks because
+ * the question string was never promised to be markdown (see the prop
+ * doc). Candidate chips stay unselectable — they are buttons; copying
+ * chip text is a separate, deferred ask.
+ *
  * Persistence: NOT in turns[]; lives in transient runtime state. On
  * restart the live chips disappear, but the question stays visible as
  * a static `AnsweredAskUser` echo rendered from the assistant turn's
@@ -57,9 +70,12 @@ export function AskUserBubble({
         <PauseCircle size={12} weight="bold" />
         {copy.conversation.waitingForYou}
       </div>
-      <div className="mb-3 whitespace-pre-wrap [font-size:var(--conversation-body-size)] [line-height:var(--conversation-body-leading)] text-ink">
-        {pending.question}
-      </div>
+      <MarkdownView
+        source={pending.question}
+        variant="agent"
+        softBreaks
+        className="mb-3"
+      />
       {pending.candidates.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {pending.candidates.map((c, i) => (
@@ -173,10 +189,17 @@ export function AnsweredAskUser({ question }: { question: string }) {
       </div>
       {/* Echo register: quieter than body but still part of the reading
           flow, so it tracks the conversation font-size tiers via its own
-          var (13px at standard — the historical value). */}
-      <div className="whitespace-pre-wrap [font-size:var(--conversation-echo-size)] leading-[1.55] text-ink-soft">
-        {cleaned}
-      </div>
+          var (13px at standard — the historical value). Same MarkdownView
+          + softBreaks path as the live bubble so the echo is the same
+          text rendered the same way, just smaller and softer — the size
+          / colour overrides mirror the Goal narration pattern in
+          SystemMessageBubble. */}
+      <MarkdownView
+        source={cleaned}
+        variant="agent"
+        softBreaks
+        className="[&_li]:[font-size:var(--conversation-echo-size)] [&_li]:text-ink-soft [&_p]:[font-size:var(--conversation-echo-size)] [&_p]:leading-[1.55] [&_p]:text-ink-soft"
+      />
     </div>
   );
 }

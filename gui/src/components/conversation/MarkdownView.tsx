@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 
 import { CodeBlock } from "@/components/conversation/CodeBlock";
@@ -62,6 +63,18 @@ interface MarkdownViewProps {
   className?: string;
   selectionCopyScope?: boolean;
   documentPath?: string;
+  /**
+   * Treat a single newline inside a paragraph as a hard line break
+   * (remark-breaks). Off by default: LLM answers are authored as
+   * markdown, where a soft break is a wrap, not a break. On for text
+   * whose author never promised markdown — the GA `ask_user` question
+   * is a free string (TUI / Telegram frontends print it verbatim), so
+   * "第一行\n第二行" must stay two lines; collapsing it can merge two
+   * questions into one. Lists, code blocks and blank-line paragraphs
+   * are untouched by the plugin, so markdown-shaped questions still
+   * get the full treatment.
+   */
+  softBreaks?: boolean;
 }
 
 // Memoised: `source` (the markdown string) is the only prop that
@@ -77,6 +90,7 @@ export const MarkdownView = memo(function MarkdownView({
   className,
   selectionCopyScope = false,
   documentPath,
+  softBreaks = false,
 }: MarkdownViewProps) {
   const proseClass =
     variant === "agent"
@@ -129,15 +143,12 @@ export const MarkdownView = memo(function MarkdownView({
     >
       <DocumentPathContext.Provider value={documentPath ?? null}>
         <ReactMarkdown
-          remarkPlugins={
-            documentPath
-              ? [
-                  remarkGfm,
-                  remarkCjkAdjacentQuotedStrong,
-                  remarkDocumentHeadings,
-                ]
-              : [remarkGfm, remarkCjkAdjacentQuotedStrong]
-          }
+          remarkPlugins={[
+            remarkGfm,
+            remarkCjkAdjacentQuotedStrong,
+            ...(documentPath ? [remarkDocumentHeadings] : []),
+            ...(softBreaks ? [remarkBreaks] : []),
+          ]}
           components={COMPONENTS}
           urlTransform={markdownUrlTransform}
         >

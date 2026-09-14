@@ -18,6 +18,7 @@ export type ComposerRegister =
   | "commissioning"
   | "continuing"
   | "reply"
+  | "replyOpen"
   | "byTheWay";
 
 export interface ComposerRegisterState {
@@ -25,6 +26,14 @@ export interface ComposerRegisterState {
   isRunning: boolean;
   /** Agent is waiting on a user reply (ask_user pending). */
   pendingAskUser: boolean;
+  /**
+   * The pending ask_user carries candidate chips. `candidates` is an
+   * optional tool arg and models routinely omit it for open questions;
+   * the "or choose an option above" hint must only appear when there
+   * is something above to choose (2026-09-14: JC read the unconditional
+   * hint as "the options failed to render").
+   */
+  askUserHasCandidates: boolean;
 }
 
 /**
@@ -37,19 +46,21 @@ export function resolveComposerRegister(
   s: ComposerRegisterState,
 ): Exclude<ComposerRegister, "commissioning"> {
   if (s.isRunning) return "byTheWay";
-  if (s.pendingAskUser) return "reply";
+  if (s.pendingAskUser) return s.askUserHasCandidates ? "reply" : "replyOpen";
   return "continuing";
 }
 
 /** i18n `composer` key for a resolved in-session register. */
 export function composerRegisterCopyKey(
   register: Exclude<ComposerRegister, "commissioning">,
-): "byTheWay" | "replyToContinue" | "continueConversation" {
+): "byTheWay" | "replyToContinue" | "replyOpen" | "continueConversation" {
   switch (register) {
     case "byTheWay":
       return "byTheWay";
     case "reply":
       return "replyToContinue";
+    case "replyOpen":
+      return "replyOpen";
     case "continuing":
       return "continueConversation";
   }

@@ -666,6 +666,8 @@ function MainViewContent({
                   resolveComposerRegister({
                     isRunning,
                     pendingAskUser: Boolean(pendingAskUser),
+                    askUserHasCandidates:
+                      (pendingAskUser?.candidates.length ?? 0) > 0,
                   }),
                 )
               ]
