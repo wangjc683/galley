@@ -814,6 +814,9 @@ export const zhCopy = {
       restoreRecommended: "恢复推荐值",
       maxRetries: "重试次数",
       readTimeout: "读取超时",
+      maxRetryAfter: "重试等待上限",
+      maxRetryAfterInfo:
+        "服务商要求稍后重试时，最多等待这么久再自动重发；超过则直接报错。部分中转站会要求等待超过 60 秒，可按需调大。",
       secondsSuffix: "秒",
       trimKeepPrefix: "裁剪时保留开头",
       messagesSuffix: "条",

@@ -548,3 +548,16 @@
   `file_read` 结果（与文件预览重叠，倾向不做）。
 - **关联**：[2026-09-09 阅读面板扩展 devlog](./2026-09-09-reading-panel-files-and-git-baseline.md)
   （候选比较与裁决）；`gui/src/components/conversation/ToolCallout.tsx`。
+
+---
+
+## 重试等待期间的 GUI 反馈
+
+- **状态**：暂存（2026-09-14 开放 `max_retry_after` 时浮出，有意不并入）
+- **提出**：2026-09-14，[高级配置开放 max_retry_after](./2026-09-14-max-retry-after-advanced-option.md) 的余量项。
+- **启动信号**：有人把重试等待上限调大后抱怨「像卡死」；或无人值守（Goal / Supervisor）任务因可重试错误直接死掉的投诉——后者同时是「Retry-After 超上限时睡到上限再重试」这条语义改动的启动信号，两条一起做。
+- **背景**：内核 `_stream_with_retry` 退避期间只 `print` 一行 `[LLM Retry] HTTP 524, retry in 90.0s (1/4)`，core / runner / gui 无人消费，用户看到的是转圈。停止按钮能打断这段睡眠（`agentmain.py` 把 `should_stop` 接进了可中断 sleep），所以不是死锁，是静默等待。上限默认 60 秒时静默最长 60 秒；开放旋钮后用户可以把它调到几分钟，静默随之变长。
+- **方案**：runner 把 `[LLM Retry]` 行识别成结构化事件（或给内核加一个 emit-only 的 retry hook，走 0007 一类的补丁），经 IPC 以纯增量事件上报，GUI 在会话状态条 / 步序列里显示「服务商要求稍后重试，Ns 后重发（可停止）」。协议纯增量。
+- **实施要点**：只做 emit，不改重试决策；IM 端不必显示。
+- **待定**：靠解析 stdout 行还是加补丁 hook——前者零补丁但脆，后者多一个补丁。
+- **关联**：`managed-ga/code/llmcore.py` `_stream_with_retry` · `runner/workbench_bridge.py` · [高级配置开放 max_retry_after](./2026-09-14-max-retry-after-advanced-option.md)。

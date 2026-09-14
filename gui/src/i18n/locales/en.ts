@@ -858,6 +858,9 @@ export const enCopy: AppCopy = {
       restoreRecommended: "Restore recommended",
       maxRetries: "Retries",
       readTimeout: "Read timeout",
+      maxRetryAfter: "Max retry wait",
+      maxRetryAfterInfo:
+        "When the provider asks to retry later, wait at most this long before resending; longer waits fail immediately. Some relays ask for more than 60 seconds — raise as needed.",
       secondsSuffix: "sec",
       trimKeepPrefix: "Keep leading messages on trim",
       messagesSuffix: "msgs",

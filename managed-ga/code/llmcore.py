@@ -505,7 +505,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                     except: body = ""
                     if r.status_code == 429 and getattr(sess, 'codex_backend', False):
                         body = _codex_enrich_quota_error(sess, headers, body)
-                    err = f"!!!Error: HTTP {r.status_code}" + (f" (retry-after > {cap:.0f}s)" if d is None and r.status_code in _RETRYABLE and attempt < sess.max_retries else "") + (f": {body}" if body else "")
+                    err = f"!!!Error: HTTP {r.status_code}" + (f" (retry-after {(r.headers or {}).get('retry-after')}s > {cap:.0f}s cap)" if d is None and r.status_code in _RETRYABLE and attempt < sess.max_retries else "") + (f": {body}" if body else "")
                     yield err; return [{"type": "text", "text": err}]
                 gen = parse_fn(r)
                 try:

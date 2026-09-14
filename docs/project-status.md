@@ -363,9 +363,15 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing unreleased on main since `v0.4.14` (as of 2026-09-14): the tag sits
-on the version-bump commit, and everything between `v0.4.13` and it shipped
-in that release. The ask_user option description PRD (galley#21,
+Unreleased on main since `v0.4.14` (as of 2026-09-14): the `max_retry_after`
+advanced model option (Settings → Models, next to retries / read timeout;
+JC's ruling on a community 524 report whose relay sent a `Retry-After` above
+the engine's 60s cap) plus managed-ga patch `0021`, which puts the relay's
+actual `Retry-After` seconds into the give-up error text — a `managed-ga`
+change, so the next release rebuilds the sidecars (see
+[devlog](./devlog/2026-09-14-max-retry-after-advanced-option.md)). The tag
+sits on the version-bump commit, and everything between `v0.4.13` and it
+shipped in that release. The ask_user option description PRD (galley#21,
 `.scratch/ask-user-option-desc`) was **cancelled** on 2026-09-14 after four
 months of local ask_user data showed zero cases of the reported "short label,
 unclear consequence" pain (see

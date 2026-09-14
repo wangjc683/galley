@@ -11,6 +11,12 @@ import type {
 
 import { InfoTooltip } from "./ModelPrimitives";
 
+/** The engine's built-in `max_retry_after` cap (seconds): the longest it
+ * will sleep on a server-sent Retry-After before retrying; longer waits
+ * give up with `!!!Error: HTTP … (retry-after Ns > 60s cap)`. Unset in the
+ * model config means this value. */
+const ENGINE_MAX_RETRY_AFTER = 60;
+
 type AdvancedChoiceOption<TValue extends string> = {
   value: TValue;
   label: string;
@@ -140,6 +146,11 @@ export function AdvancedModelOptions({
     recommendedOptions.read_timeout,
     180,
   );
+  const maxRetryAfter = numberAdvancedOption(
+    effectiveOptions.max_retry_after,
+    recommendedOptions.max_retry_after,
+    ENGINE_MAX_RETRY_AFTER,
+  );
   const stream = booleanAdvancedOption(
     effectiveOptions.stream,
     recommendedOptions.stream,
@@ -210,6 +221,21 @@ export function AdvancedModelOptions({
               min={5}
               suffix={copy.secondsSuffix}
               onChange={(value) => setOption("read_timeout", value)}
+            />
+            <AdvancedNumberField
+              label={copy.maxRetryAfter}
+              value={maxRetryAfter}
+              min={0}
+              suffix={copy.secondsSuffix}
+              info={copy.maxRetryAfterInfo}
+              onChange={(value) =>
+                // 60 = the engine's own cap — drop the key so the generated
+                // model config stays minimal (same shape as trim_keep_prefix).
+                setOption(
+                  "max_retry_after",
+                  value === ENGINE_MAX_RETRY_AFTER ? null : value,
+                )
+              }
             />
             <AdvancedNumberField
               label={copy.trimKeepPrefix}
@@ -456,6 +482,7 @@ function advancedCustomCount(
       ? [
           "max_retries",
           "read_timeout",
+          "max_retry_after",
           "trim_keep_prefix",
           ...(authKind === "chatgpt_codex_oauth" ? [] : ["stream"]),
           "api_mode",
@@ -463,6 +490,7 @@ function advancedCustomCount(
       : [
           "max_retries",
           "read_timeout",
+          "max_retry_after",
           "trim_keep_prefix",
           "stream",
           "thinking_type",

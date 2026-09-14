@@ -29,7 +29,8 @@
       "0017-managed-compat-usage-accounting.patch",
       "0018-managed-discord-galley-integration.patch",
       "0019-managed-im-strip-next-suggestion.patch",
-      "0020-managed-windows-no-console-spawns.patch"
+      "0020-managed-windows-no-console-spawns.patch",
+      "0021-managed-retry-after-value-in-error.patch"
     ]
   },
   "stateSchemaVersion": 1

@@ -230,6 +230,56 @@ def test_non_codex_stream_final_429_is_unchanged(
     assert chunks == ["!!!Error: HTTP 429: plain rate limit"]
 
 
+def test_retry_after_over_cap_error_carries_server_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Patch 0021: when the relay's Retry-After exceeds max_retry_after, the
+    give-up message names the value so the user can size the cap."""
+
+    class FakePostResponse:
+        status_code = 524
+        headers: dict[str, str] = {"retry-after": "120"}
+        text = "<!DOCTYPE html>"
+
+        def __enter__(self) -> FakePostResponse:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        llmcore.requests,
+        "post",
+        lambda *_args, **_kwargs: FakePostResponse(),
+        raising=False,
+    )
+    sess = types.SimpleNamespace(
+        name="relay-test",
+        max_retries=3,
+        max_retry_after=60.0,
+        stream=True,
+        connect_timeout=1,
+        read_timeout=10,
+        proxies=None,
+        verify=True,
+        codex_backend=False,
+    )
+
+    chunks = list(
+        llmcore._stream_with_retry(
+            sess,
+            "https://example.test",
+            {},
+            {},
+            lambda _r: iter(()),
+        )
+    )
+
+    assert chunks == [
+        "!!!Error: HTTP 524 (retry-after 120s > 60s cap): <!DOCTYPE html>"
+    ]
+
+
 def _exhaust(gen: Any) -> Any:
     try:
         while True:

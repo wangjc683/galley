@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-14
+- [高级配置开放 max_retry_after](./2026-09-14-max-retry-after-advanced-option.md) — 社区 524 报错对表：Cloudflare 源站超时 + 中转站 Retry-After 超 60 秒上限，不是 Galley bug；JC 裁决开放 `max_retry_after` 进模型高级配置（端点级、策展字段、准入条款命中），未设置不写键；补丁 `0021` 让报错带实际秒数形成闭环；「睡到上限再重试」与重试期间 GUI 反馈进 deferred
 - [option-desc PRD 取消](./2026-09-14-ask-user-option-desc-cancelled.md) — 本机四个月 55 条真实 ask_user 候选零次出现「短标签看不出后果」，模型自己把后果写进标签；PRD 与三票置 wontfix，启动信号进 deferred；顺带记下 PRD 过期点（GUI 重建读路径、tools_schema 补丁点、GA 表面 str() 风险、形状改并行参数）
 - [v0.4.14 发布](./2026-09-14-v0.4.14-release.md) — AskUser 一条线三个提交（可选中 / 候选三改 / 拆分合并）单独发 patch；runner 动了故打包门禁 mandatory；smoke 覆盖四处 AskUser 行为与 grok 拆分
 - [ask_user 拆分调用合并](./2026-09-14-ask-user-split-calls-merge.md) — grok-4.6 把一个问题拆成五个单候选 ask_user 调用、界面只见一个 chip；runner / GUI 读取侧按「同问题合并候选、异问题取首个」处理，协议与审计记录不动；折叠头按问题数计、字符串候选不再逐字拆
