@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  askUserQuestionCount,
   askUserReplyContent,
   candidateLayout,
   chosenCandidateIndex,
+  mergedAskUserArgs,
 } from "./ask-user-candidates";
-import type { Turn } from "@/types/conversation";
+import type { ConversationToolEvent, Turn } from "@/types/conversation";
 
 describe("candidateLayout", () => {
   it("keeps short label sets in a row", () => {
@@ -61,5 +63,54 @@ describe("askUserReplyContent", () => {
     expect(
       askUserReplyContent([user("q"), agent(true), user("new run")], 1, new Set()),
     ).toBeUndefined();
+  });
+});
+
+describe("mergedAskUserArgs", () => {
+  const ask = (
+    question: unknown,
+    candidates?: unknown,
+  ): ConversationToolEvent => ({
+    id: "t",
+    name: "ask_user",
+    status: "success-historical",
+    args: { question, candidates },
+  });
+  const q = "如果只能选一种，你更希望我长期怎么帮你？";
+
+  it("merges split same-question calls in order, deduplicated", () => {
+    expect(
+      mergedAskUserArgs([
+        ask(q, ["自动化"]),
+        ask(q + " ", ["参谋"]),
+        ask(q, ["自动化", "探索"]),
+      ]),
+    ).toEqual({ question: q, candidates: ["自动化", "参谋", "探索"] });
+  });
+  it("ignores a different question and coerces odd candidate shapes", () => {
+    expect(mergedAskUserArgs([ask("A?", ["a1"]), ask("B?", ["b1"])])).toEqual({
+      question: "A?",
+      candidates: ["a1"],
+    });
+    expect(mergedAskUserArgs([ask("Go?", "yes")])).toEqual({
+      question: "Go?",
+      candidates: ["yes"],
+    });
+    expect(mergedAskUserArgs([ask("N?", [1, "two"])])).toEqual({
+      question: "N?",
+      candidates: ["1", "two"],
+    });
+    expect(mergedAskUserArgs([ask("Open?")])).toEqual({
+      question: "Open?",
+      candidates: [],
+    });
+  });
+  it("returns null without an ask_user or with a non-string question", () => {
+    expect(mergedAskUserArgs([])).toBeNull();
+    expect(mergedAskUserArgs([ask(42)])).toBeNull();
+  });
+  it("counts distinct questions for the fold header", () => {
+    expect(askUserQuestionCount([ask(q, ["a"]), ask(q, ["b"]), ask("B?")])).toBe(2);
+    expect(askUserQuestionCount([])).toBe(0);
   });
 });

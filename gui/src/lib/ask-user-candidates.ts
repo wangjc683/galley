@@ -1,4 +1,4 @@
-import type { Turn } from "@/types/conversation";
+import type { ConversationToolEvent, Turn } from "@/types/conversation";
 
 /**
  * ask_user candidate helpers — pure, shared by the live `AskUserBubble`
@@ -72,4 +72,69 @@ export function askUserReplyContent(
     return undefined;
   }
   return undefined;
+}
+
+export interface AskUserArgs {
+  question: string;
+  candidates: string[];
+}
+
+/**
+ * Coerce a persisted `candidates` arg to strings. A bare string is one
+ * candidate (never spread into characters); non-strings go through
+ * String() — the same defensive coercion the bridge applies to GA args.
+ */
+function candidateList(raw: unknown): string[] {
+  if (raw == null) return [];
+  if (typeof raw === "string") return raw ? [raw] : [];
+  if (Array.isArray(raw)) return raw.map((c) => String(c));
+  return [String(raw)];
+}
+
+/**
+ * The one question a turn asks, with every candidate offered — raw
+ * (callers strip GA tags). Mirrors the bridge's `_extract_ask_user` for
+ * the read-side paths that rebuild from persisted tool_calls (restore,
+ * the answered echo): some models split one ask_user into N parallel
+ * calls with one candidate each (grok-4.6, 2026-09-14). Same-question
+ * calls merge candidates in order, deduplicated; a different question
+ * is a separate ask GA never served and is ignored. Returns null when
+ * the turn has no ask_user (or its question is not a string).
+ */
+export function mergedAskUserArgs(
+  tools: readonly ConversationToolEvent[],
+): AskUserArgs | null {
+  let question: string | null = null;
+  const candidates: string[] = [];
+  for (const t of tools) {
+    if (t.name !== "ask_user") continue;
+    const q = t.args?.question;
+    if (typeof q !== "string") {
+      if (question === null) return null;
+      continue;
+    }
+    if (question === null) question = q;
+    else if (q.trim() !== question.trim()) continue;
+    for (const c of candidateList(t.args?.candidates)) {
+      if (!candidates.includes(c)) candidates.push(c);
+    }
+  }
+  return question === null ? null : { question, candidates };
+}
+
+/**
+ * How many distinct questions a turn's ask_user calls pose — what the
+ * run fold header should count as "asked you N times". Split calls of
+ * the same question count once.
+ */
+export function askUserQuestionCount(
+  tools: readonly ConversationToolEvent[],
+): number {
+  const seen = new Set<string>();
+  for (const t of tools) {
+    if (t.name !== "ask_user") continue;
+    const q = t.args?.question;
+    seen.add(typeof q === "string" ? q.trim() : "");
+  }
+  return seen.size;
 }

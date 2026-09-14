@@ -5,6 +5,7 @@
 // no store dependency.
 
 import { buildAgentTurn, toolEventsFromRaw } from "@/lib/agent-turn";
+import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
 import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
 import { makeMessageStepper } from "@/lib/turn-index";
 import type {
@@ -126,21 +127,19 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
  * append a user turn before anything else); a later agent turn means
  * a newer run superseded the question (e.g. a Supervisor/CLI-driven
  * run); system turns (/btw exchanges, Goal narration) are bystanders
- * and skipped. Candidates are coerced through String() to mirror the
- * bridge's own defensive coercion of GA args.
+ * and skipped. Args come through `mergedAskUserArgs`, which mirrors the
+ * bridge's coercion and merges split same-question calls.
  */
 export function derivePendingAskUser(turns: Turn[]): PendingAskUser | null {
   for (let i = turns.length - 1; i >= 0; i--) {
     const turn = turns[i];
     if (turn.role === "system") continue;
     if (turn.role !== "agent") return null;
-    const args = turn.tools.find((t) => t.name === "ask_user")?.args;
-    if (!args || typeof args.question !== "string") return null;
+    const args = mergedAskUserArgs(turn.tools);
+    if (!args) return null;
     return {
       question: stripGATags(args.question),
-      candidates: Array.isArray(args.candidates)
-        ? args.candidates.map((c) => stripGATags(String(c)))
-        : [],
+      candidates: args.candidates.map(stripGATags),
     };
   }
   return null;

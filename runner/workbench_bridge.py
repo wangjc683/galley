@@ -559,6 +559,21 @@ class SessionState:
 # ---------------- Bridge runtime ----------------
 
 
+def _candidate_list(raw: object) -> list[str]:
+    """Coerce an ask_user `candidates` arg to a list of strings.
+
+    A bare string is one candidate, not a sequence of characters —
+    `[str(c) for c in "yes"]` would have produced ["y", "e", "s"].
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [raw] if raw else []
+    if isinstance(raw, (list, tuple)):
+        return [str(c) for c in raw]
+    return [str(raw)]
+
+
 class Bridge:
     """One bridge process's runtime state and main loop."""
 
@@ -1358,14 +1373,32 @@ class Bridge:
     def _extract_ask_user(
         tool_calls: list[dict[str, Any]],
     ) -> tuple[str, list[str]] | None:
+        """The one question this turn asks, with every candidate offered.
+
+        Some models (grok-4.6 observed 2026-09-14) split one ask_user
+        into N parallel calls — identical question, one candidate each.
+        GA serves only the first call (do_ask_user exits the loop), so
+        reading only the first would show the user a single chip out of
+        five. Same-question calls therefore merge their candidates in
+        order (deduplicated); a call with a *different* question is a
+        genuinely separate ask that GA never reaches, and stays ignored.
+        Read-side only: the persisted tool_calls are left as emitted.
+        """
+        question: str | None = None
+        candidates: list[str] = []
         for tc in tool_calls:
-            if tc.get("tool_name") == "ask_user":
-                args = tc.get("args") or {}
-                return (
-                    str(args.get("question", "")),
-                    [str(c) for c in (args.get("candidates") or [])],
-                )
-        return None
+            if tc.get("tool_name") != "ask_user":
+                continue
+            args = tc.get("args") or {}
+            q = str(args.get("question", ""))
+            if question is None:
+                question = q
+            elif q.strip() != question.strip():
+                continue
+            for c in _candidate_list(args.get("candidates")):
+                if c not in candidates:
+                    candidates.append(c)
+        return None if question is None else (question, candidates)
 
     # ---------------- Approval request (called from worker thread) ----------------
 

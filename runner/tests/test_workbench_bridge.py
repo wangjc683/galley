@@ -855,6 +855,38 @@ def test_extract_ask_user_coerces_non_string_candidates() -> None:
     assert result == ("Pick one", ["1", "two", "3.0"])
 
 
+def test_extract_ask_user_merges_split_same_question_calls() -> None:
+    """grok-4.6 (2026-09-14) emitted one ask_user per candidate — five
+    parallel calls, identical question. GA only serves the first, so
+    the bridge must merge same-question candidates (in order, deduped)
+    or the desktop shows a single chip out of five."""
+    q = "如果只能选一种，你更希望我长期怎么帮你？"
+    tool_calls = [
+        {"tool_name": "ask_user", "args": {"question": q, "candidates": ["自动化"]}},
+        {"tool_name": "ask_user", "args": {"question": q + " ", "candidates": ["参谋"]}},
+        {"tool_name": "ask_user", "args": {"question": q, "candidates": ["自动化", "探索"]}},
+    ]
+    assert Bridge._extract_ask_user(tool_calls) == (q, ["自动化", "参谋", "探索"])
+
+
+def test_extract_ask_user_ignores_a_different_question() -> None:
+    """A second ask_user with a different question is a separate ask GA
+    never reaches — its candidates must not leak into the first."""
+    tool_calls = [
+        {"tool_name": "ask_user", "args": {"question": "A?", "candidates": ["a1"]}},
+        {"tool_name": "ask_user", "args": {"question": "B?", "candidates": ["b1"]}},
+    ]
+    assert Bridge._extract_ask_user(tool_calls) == ("A?", ["a1"])
+
+
+def test_extract_ask_user_treats_string_candidates_as_one() -> None:
+    """A bare string is one candidate, not a char sequence."""
+    tool_calls = [
+        {"tool_name": "ask_user", "args": {"question": "Go?", "candidates": "yes"}},
+    ]
+    assert Bridge._extract_ask_user(tool_calls) == ("Go?", ["yes"])
+
+
 # ---------------- _FenceFilter ----------------
 #
 # Streaming filter that hides content between GA's 5-backtick fence

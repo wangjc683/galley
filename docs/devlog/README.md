@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-14
+- [ask_user 拆分调用合并](./2026-09-14-ask-user-split-calls-merge.md) — grok-4.6 把一个问题拆成五个单候选 ask_user 调用、界面只见一个 chip；runner / GUI 读取侧按「同问题合并候选、异问题取首个」处理，协议与审计记录不动；折叠头按问题数计、字符串候选不再逐字拆
 - [ask_user 候选：填入慢路径、竖排列表、回显勾选](./2026-09-14-ask-user-chips-fill-list-echo.md) — 六条 UX 候选裁决做 1+3+4+6；右键 / ⌘ 点击填入不发送走 `prefillText`；`candidateLayout` 按内容切 chip / 竖排（阈值导出常量）；回显列候选勾所选，复用 replySet 定位回复；键盘可达与 quick-reply 条不做
 - [ask_user 提问改走 MarkdownView](./2026-09-14-ask-user-selectable-markdown.md) — 社区反馈问题文字不可复制：`body` 全局 `user-select: none` 而 AskUserBubble / AnsweredAskUser 漏开 `select-text`；改走 MarkdownView 与 side_question 对齐，加 remark-breaks `softBreaks` 保住单换行；Composer 占位按候选数分支（无 chip 不再说「选择上方候选」）；chip 文字复制进 deferred
 

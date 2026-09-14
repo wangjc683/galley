@@ -20,6 +20,7 @@
 // question → that question is misgrouped as a reply. Its group has no
 // final answer so it never folds; the cost is one missing rail dot.
 
+import { askUserQuestionCount } from "@/lib/ask-user-candidates";
 import type { AgentTurn, Turn } from "@/types/conversation";
 
 export interface RunToolCount {
@@ -116,12 +117,12 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
     let deniedCount = 0;
     let askUserCount = 0;
     for (const turn of agentTurns) {
+      // Distinct questions, not ask_user tool entries: a model that
+      // splits one question into N single-candidate calls asked once.
+      askUserCount += askUserQuestionCount(turn.tools);
       for (const tool of turn.tools) {
         if (tool.status === "denied") deniedCount++;
-        if (tool.name === "ask_user") {
-          askUserCount++;
-          continue;
-        }
+        if (tool.name === "ask_user") continue;
         if (tool.name === "no_tool") continue;
         const entry = toolCounts.find((c) => c.name === tool.name);
         if (entry) entry.count++;

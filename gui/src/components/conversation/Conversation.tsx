@@ -20,7 +20,10 @@ import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
-import { askUserReplyContent } from "@/lib/ask-user-candidates";
+import {
+  askUserReplyContent,
+  mergedAskUserArgs,
+} from "@/lib/ask-user-candidates";
 import { buildRunGroups, replyUserIndices, type RunGroup } from "@/lib/run-groups";
 import { cn } from "@/lib/utils";
 import type { AgentTurn, Turn } from "@/types/conversation";
@@ -352,11 +355,9 @@ function AgentTurnView({
   // text from the filtered tool's args the user couldn't see what they
   // were asked after answering (or after restart). Rendered as a static
   // AnsweredAskUser echo below, in the same yellow register.
-  const askUserArgs = turn.tools.find((t) => t.name === "ask_user")?.args;
+  const askUserArgs = mergedAskUserArgs(turn.tools);
   const askUserQuestion = askUserArgs?.question;
-  const askUserCandidates = Array.isArray(askUserArgs?.candidates)
-    ? askUserArgs.candidates.map((c) => String(c))
-    : undefined;
+  const askUserCandidates = askUserArgs?.candidates;
   const isFinalTurn = visibleTools.every((t) => t.name === "no_tool");
   const answerBody = turn.finalAnswer ?? "";
   const answerText = answerBody.trim() !== "" ? answerBody : null;
