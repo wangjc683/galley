@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-14
+- [ask_user 候选：填入慢路径、竖排列表、回显勾选](./2026-09-14-ask-user-chips-fill-list-echo.md) — 六条 UX 候选裁决做 1+3+4+6；右键 / ⌘ 点击填入不发送走 `prefillText`；`candidateLayout` 按内容切 chip / 竖排（阈值导出常量）；回显列候选勾所选，复用 replySet 定位回复；键盘可达与 quick-reply 条不做
 - [ask_user 提问改走 MarkdownView](./2026-09-14-ask-user-selectable-markdown.md) — 社区反馈问题文字不可复制：`body` 全局 `user-select: none` 而 AskUserBubble / AnsweredAskUser 漏开 `select-text`；改走 MarkdownView 与 side_question 对齐，加 remark-breaks `softBreaks` 保住单换行；Composer 占位按候选数分支（无 chip 不再说「选择上方候选」）；chip 文字复制进 deferred
 
 ### 2026-09-09

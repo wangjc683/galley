@@ -1,18 +1,17 @@
-# 04 候选 chip 的文字复制（暂缓）
+# 04 候选 chip 的文字复制（已由「填入输入框」覆盖）
 
-Status: needs-info
+Status: wontfix
 Date: 2026-09-14
 
-## 背景
+## 结论
 
-排查社区反馈「AskUser 不能复制文字」时浮出：问题正文已改走
-MarkdownView 可选中（devlog 2026-09-14），chip 仍是按钮不可选，40 字
-截断只在 tooltip 展示全文；想复制某个选项改几个字再回做不到。
+2026-09-14 同日实现了 chip 的慢路径：右键「填入输入框」或 ⌘ / Ctrl + 点击
+把候选全文填进 Composer 不发送（devlog
+`2026-09-14-ask-user-chips-fill-list-echo.md`）。「选 B 但改两个字」的
+需求由此覆盖，单独的「复制 chip 文字」不再需要。
 
-## 为什么挂在本 PRD 下
+## 给 02 的约束
 
-与 02 的 tooltip / 小字变体争同一块 chip 面积，应一起裁，不单独开线。
-
-## 启动信号与方案
-
-见 `docs/devlog/deferred.md`「ask_user 候选 chip 的文字复制」。
+候选现在有行内 chip / 竖排列表两种排布（`lib/ask-user-candidates.ts`），
+02 的 tooltip / 小字变体要在两种排布下都成立；竖排列表天然能容纳
+desc 小字行，tooltip 在竖排下意义变弱。

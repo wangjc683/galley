@@ -1,5 +1,5 @@
 import { ArrowDown } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { ApprovalDock } from "@/components/conversation/ApprovalDock";
 import { AskUserBubble } from "@/components/conversation/AskUserBubble";
@@ -52,6 +52,7 @@ import type {
 } from "@/types/conversation";
 import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
 import type { ApprovalDecision } from "@/types/ipc";
+import type { ComposerHandle } from "@/components/conversation/composer-props";
 
 export interface MainViewProps {
   turns: Turn[];
@@ -247,6 +248,9 @@ function MainViewContent({
   // (empty textarea, no goal armed) at render time.
   const nextSuggestion = useActiveMessages((m) => m.nextSuggestion, null);
   const ghostSuggestion = !isRunning && !pendingAskUser ? nextSuggestion : null;
+  // Imperative Composer handle for the ask_user fill-in slow path
+  // (candidate text → textarea, not sent).
+  const composerRef = useRef<ComposerHandle>(null);
   const userSubmitTick = useMessagesStore((s) => s.userSubmitTick);
 
   // Stripped partial — empty when nothing renderable yet (e.g. only
@@ -522,6 +526,9 @@ function MainViewContent({
               <AskUserBubble
                 pending={pendingAskUser}
                 onPickCandidate={(text) => onSubmit?.(text, [])}
+                onFillCandidate={(text) =>
+                  composerRef.current?.prefillText(text)
+                }
               />
             )}
             {/* Live task board for a running Goal, pinned at the thread
@@ -653,6 +660,7 @@ function MainViewContent({
           />
 
           <Composer
+            ref={composerRef}
             key={activeSessionId ?? "main-composer"}
             // Draft parks per session (survives the keyed remount above);
             // the keyed remount also lands the caret in the textarea on

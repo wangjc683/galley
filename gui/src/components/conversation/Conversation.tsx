@@ -20,6 +20,7 @@ import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
+import { askUserReplyContent } from "@/lib/ask-user-candidates";
 import { buildRunGroups, replyUserIndices, type RunGroup } from "@/lib/run-groups";
 import { cn } from "@/lib/utils";
 import type { AgentTurn, Turn } from "@/types/conversation";
@@ -214,6 +215,11 @@ export function Conversation({
             projectName={projectName}
             hideMarker={turnIndex !== undefined && answerOnly.has(turnIndex)}
             suppressAskUserEcho={item.turn === pendingAskUserTurn}
+            askUserAnswer={
+              turnIndex !== undefined
+                ? askUserReplyContent(turns, turnIndex, replySet)
+                : undefined
+            }
           />
         )}
         {/* No divider between turns — the TurnMarker on each
@@ -283,6 +289,7 @@ function AgentTurnView({
   hideMarker = false,
   markerOnly = false,
   suppressAskUserEcho = false,
+  askUserAnswer,
 }: {
   turn: AgentTurn;
   approvalDecisions?: Record<string, ApprovalDecision>;
@@ -306,6 +313,10 @@ function AgentTurnView({
    * doesn't render twice. The echo takes over once the user answers
    * (pendingAskUser clears) or after a restart (pending is transient). */
   suppressAskUserEcho?: boolean;
+  /** Content of the user turn that answered this turn's ask_user, when
+   * it was answered — lets the AnsweredAskUser echo check the picked
+   * candidate. */
+  askUserAnswer?: string;
 }) {
   // `finalAnswer` is what's left of GA's responseContent after the
   // <thinking> / <tool_use> / <file_content> / <summary> tags have
@@ -341,8 +352,11 @@ function AgentTurnView({
   // text from the filtered tool's args the user couldn't see what they
   // were asked after answering (or after restart). Rendered as a static
   // AnsweredAskUser echo below, in the same yellow register.
-  const askUserQuestion = turn.tools.find((t) => t.name === "ask_user")
-    ?.args?.question;
+  const askUserArgs = turn.tools.find((t) => t.name === "ask_user")?.args;
+  const askUserQuestion = askUserArgs?.question;
+  const askUserCandidates = Array.isArray(askUserArgs?.candidates)
+    ? askUserArgs.candidates.map((c) => String(c))
+    : undefined;
   const isFinalTurn = visibleTools.every((t) => t.name === "no_tool");
   const answerBody = turn.finalAnswer ?? "";
   const answerText = answerBody.trim() !== "" ? answerBody : null;
@@ -450,7 +464,11 @@ function AgentTurnView({
       ))}
 
       {typeof askUserQuestion === "string" && !suppressAskUserEcho && (
-        <AnsweredAskUser question={askUserQuestion} />
+        <AnsweredAskUser
+          question={askUserQuestion}
+          candidates={askUserCandidates}
+          answer={askUserAnswer}
+        />
       )}
 
       {/* StrongHr's "action → conclusion" rhetoric needs a visible

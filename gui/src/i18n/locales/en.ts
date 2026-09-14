@@ -1654,6 +1654,8 @@ export const enCopy: AppCopy = {
     scrollLatest: "Scroll to latest",
     waitingForYou: "Waiting for your reply",
     askedYou: "Asked you",
+    fillCandidate: "Fill into the composer",
+    chosenOption: "Your pick",
     codeNoCommand: "(no command)",
     emptyContent: "(empty content)",
     fileWriteDeferred:

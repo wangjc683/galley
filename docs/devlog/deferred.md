@@ -8,18 +8,6 @@
 
 ---
 
-## ask_user 候选 chip 的文字复制
-
-- **状态**：暂存（2026-09-14 排查「AskUser 不能复制文字」时浮出，JC 裁决先不做）
-- **提出**：2026-09-14，[ask_user 提问改走 MarkdownView](./2026-09-14-ask-user-selectable-markdown.md) D4。问题正文已可选中，chip 仍是 `<Button>`，被全局 `.select-text button { user-select: none }` 压掉；40 字截断只在 tooltip 展示全文。
-- **启动信号**：再出现一次「想把某个选项改几个字再回、但复制不了」的反馈或 dogfood 实感；或做 [ask_user 快捷选项携带说明](../../.scratch/ask-user-option-desc/PRD.md) 的 chip 视觉变体时顺带（两者争同一块 chip 面积，应一起裁）。
-- **方案**：候选有二——① chip 右键菜单「复制选项」；② 修饰键点击 / 长按把候选全文填进 Composer 而不发送（用户改完再发）。②更贴需求本身（「改几个字再回」），①更廉价。
-- **实施要点**：不把 chip 改成可选中文本——chip 是动作，选中会与点击冲突，也违反 foundations §2.6 的 chrome 不可选原则。②要接 `MainView` 的 `onPickCandidate` 旁路，需一个「填入不发送」的 Composer 入口。
-- **待定**：①②取舍；是否与 option-desc 的 tooltip / 小字变体同一轮实测。
-- **关联**：[.scratch/ask-user-option-desc](../../.scratch/ask-user-option-desc/PRD.md) · [ask_user 提问改走 MarkdownView](./2026-09-14-ask-user-selectable-markdown.md)。
-
----
-
 ## 用户消息的「落笔」入场动效（质感方向一）
 
 - **状态**：暂存（2026-08-21 探讨成型，JC 当日裁决「先不改」）

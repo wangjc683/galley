@@ -120,7 +120,10 @@ Agent 经 `ask_user` 停下来问人的那条：实时态是 warning 左条 + `P
 - **单换行保留为换行（`softBreaks`，remark-breaks）**。GA 的 `ask_user(question)` 只是透传字符串，TUI / Telegram 前端按纯文本打印，从没承诺过 markdown；LLM 写「第一行\n第二行」时若按 markdown 软换行合并，两个问句会并成一句、改变问题意思。remark-breaks 只碰段落内的软换行，列表 / 代码块 / 空行分段不受影响，所以 markdown 形状的问题仍得到完整处理。这是 `MarkdownView` 上的 opt-in prop，**只给 ask_user 用**——agent 回答是按 markdown 写的，软换行就该是折行。
 - **回显与实时态同一条渲染路径**：`AnsweredAskUser` 同样走 `MarkdownView` + `softBreaks`，用 `[&_p]/[&_li]` 覆盖到 echo 字号 + ink-soft（沿用 Goal 叙述 callout 的降权手法），同一段文字实时与回显只差大小和墨色。
 - **Composer 占位随候选数变**：有 chip 时「回复，或选择上方候选」，无 chip 时「回复上方提问」（`composer-register.ts` 的 `reply` / `replyOpen`）。`candidates` 是可选参数，模型对开放式问题常不给；无条件的「选择上方候选」会让人去找不存在的选项（2026-09-14 真机验收即如此）。
-- **不接的东西**：不开 `selectionCopyScope`（浮动复制工具栏语义是「复制回答」），不挂 `MessageActions` 的 Copy；候选 chip 仍是按钮、不可选中——复制 chip 文字是另一条需求，见 deferred。
+- **候选两种排布，由 `candidateLayout` 按内容定**（2026-09-14）：短标签（是 / 否 / 方案 A）走行内 chip，句子级选项（单条超 20 字、合计超 60 字）或 5 条以上走**竖排列表**，每行全文不截断、左对齐；列宽取最长一条（容器 `inline-flex` 收缩、各行拉齐），不撑满对话列——撑满时短选项后面留一整片空白（2026-09-14 真机）。横排一行句子会折成标签云，丢掉模型写的 A / B / C 顺序。阈值是导出常量，dogfood 后可调。同一函数同时喂实时气泡和回显，两处永远做同一个判断。
+- **chip 两条路径**：点击 = 直接发送（快路径，保留）；右键「填入输入框」或 ⌘ / Ctrl + 点击 = 填进 Composer 不发送（慢路径），给「选 B 但改两个字」留出口。走 `ComposerHandle.prefillText`，不加新的 store 状态。chip 仍是按钮、不可选中（foundations §2.6 chrome 不可选）；复制 chip 文字的需求由填入路径覆盖。
+- **回显列出当时的候选并勾出所选**：`AnsweredAskUser` 用同一排布把候选以 ink-muted 列在问题下方，用户点选的那条 ink-soft + `Check`。判定是「回复用户消息全文 === 候选全文」（`chosenCandidateIndex`），自由回复或填入后改过的都不勾——用户消息就在下面。一个月后回看只见「B」不知 A、C 是什么，这是档案价值。回复消息由 `askUserReplyContent` 按 run-groups 的成员规则定位（ask_user 之后的下一条 user turn，跳过 system），与折叠 / 问题轨共用同一份 replySet。
+- **不接的东西**：不开 `selectionCopyScope`（浮动复制工具栏语义是「复制回答」），不挂 `MessageActions` 的 Copy；不给候选加数字键（暂不考虑键盘用户，2026-09-14 JC 裁决）。
 
 #### Markdown 渲染
 

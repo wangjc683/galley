@@ -1596,6 +1596,8 @@ export const zhCopy = {
     scrollLatest: "Scroll to latest",
     waitingForYou: "等你回复",
     askedYou: "曾向你提问",
+    fillCandidate: "填入输入框",
+    chosenOption: "你选的",
     codeNoCommand: "(no command)",
     emptyContent: "(empty content)",
     fileWriteDeferred:
