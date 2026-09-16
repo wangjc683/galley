@@ -65,11 +65,32 @@ live 区不再是清单，是一块**固定大小的状态面板**：
 - `RunFoldHeader` `live` prop；i18n `foldStepsLive`。
 - `MainView`：传 `agentRunning={isRunning}`；in-flight 与审批区 `inRunRail`。
 
+## 窗口滑动动效（2026-09-16 第二轮，JC 裁定）
+
+隐喻：窗口是两行高的视口，列表在它后面往上滚。步完成时四件事：
+
+1. **出场**：被顶掉的步留在窗口再多一次 sweep（`departing`，按步各自
+   300ms 计时），其 ExpandSection 关闭，从底部裁短渐隐，读作被头吸走。头的
+   计数（含首次出现）在 sweep 第一帧就到位。
+2. **入场**：新落定的步以 0fr 挂载展开（ExpandSection `animateMount`），
+   与出场同步；出场 53 入场 43，窗口底边净位移 10px，思考行被平滑推下。
+3. **头首次出现淡入**：`animate-fade-in`，同一元素到 settled 不再播。
+4. **思考行不重挂载**：去掉 `key={currentTurnIndex}`，时钟在 `index`
+   变化的那次渲染归零（`useElapsedDeciseconds` 的 guarded reset），shimmer
+   不断、`··` 行原地留着；仅 run 开始首次出现时淡入一次。
+
+展开态（opt-in 列表）不做出场：被顶掉的步是移进上方打开的折叠段，同位
+同内容，sweep 会出现重影。窗口内每步以 `pb-2.5` 自带步间距、region
+`-mb-2.5` 抵消最后一步的，出场步把自己的间距一起收走，入场步自带，
+sweep 起止都无跳变。
+
 ## 已知、待真机验
 
 - 完成瞬间的收合：窗口两行 240ms sweep 收进头，同时头换成「N 步 · 用时」；
   看头文案的瞬换与窗口的渐收是否读作一个动作。
-- 快步连发时窗口内容替换频率高，ExpandSection 可打断，但观感待看。
+- 步完成的双向 sweep：出场 + 入场 + 头计数三个变化源同时动，是否「忙」；
+  若忙，先砍入场 sweep 只留出场。
+- 快步连发：各步出场独立计时会叠加，观感待看。
 - 两步 run 的 live 头只在最后一刻出现即变 settled 头，是否闪。
 - 760 列宽下 live 头气味段截断与 tooltip。
 

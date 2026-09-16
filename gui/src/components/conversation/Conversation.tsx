@@ -206,6 +206,62 @@ export function Conversation({
         null)
       : null;
 
+  // Departing steps: when a new step lands, the step it displaces
+  // from the window stays there for one sweep, closing, while the
+  // new one grows in below it — the window reads as a viewport the
+  // list scrolls through, top item folding into the header, bottom
+  // item arriving. Each departure keeps its own 300ms timer so fast
+  // successive steps overlap instead of cutting each other off. Not
+  // used while the live header is expanded: there the displaced step
+  // simply moves into the open fold section above, same place, same
+  // content, and a sweep would show it twice. Guarded
+  // setState-in-render, as the settling detection above.
+  const liveLastAgent = (() => {
+    if (!liveGroup) return -1;
+    let last = -1;
+    for (const i of liveGroup.memberIndices) {
+      if (i === liveGroup.openerIndex || i === liveGroup.finalTurnIndex) continue;
+      if (turns[i].role === "agent") last = i;
+    }
+    return last;
+  })();
+  const [watchedStep, setWatchedStep] = useState<{
+    opener: number;
+    index: number;
+  } | null>(null);
+  const [departing, setDeparting] = useState<number[]>([]);
+  if (liveGroup && liveLastAgent !== -1) {
+    if (
+      watchedStep === null ||
+      watchedStep.opener !== liveGroup.openerIndex ||
+      watchedStep.index !== liveLastAgent
+    ) {
+      if (
+        watchedStep !== null &&
+        watchedStep.opener === liveGroup.openerIndex &&
+        watchedStep.index < liveLastAgent &&
+        foldOverrides[liveGroup.openerIndex] !== true &&
+        !departing.includes(watchedStep.index)
+      ) {
+        setDeparting([...departing, watchedStep.index]);
+      }
+      setWatchedStep({ opener: liveGroup.openerIndex, index: liveLastAgent });
+    }
+  } else if (watchedStep !== null) {
+    setWatchedStep(null);
+  }
+  useEffect(() => {
+    if (departing.length === 0) return;
+    const latest = departing[departing.length - 1];
+    const timer = window.setTimeout(() => {
+      setDeparting((prev) => prev.filter((i) => i !== latest));
+    }, SETTLE_SWEEP_MS);
+    return () => window.clearTimeout(timer);
+    // Each index schedules its own removal when it is appended; the
+    // cleanup only cancels a timer for an index that was already
+    // removed by an earlier effect run.
+  }, [departing]);
+
   // Per-render fold plan. headerFor: opener index → fold header data;
   // sectionOwner: turns indices that render inside the group's
   // RunFoldSection (every member except the opener — the final turn
@@ -249,8 +305,13 @@ export function Conversation({
       for (const i of g.memberIndices) {
         if (i === g.openerIndex || i === g.finalTurnIndex) continue;
         if (lastAgent !== -1 && i < lastAgent) {
-          sectionOwner.set(i, g.openerIndex);
+          // A departing step counts as folded already — the header
+          // it is sweeping into must exist from the first frame of
+          // that sweep — but stays a window member until its sweep
+          // ends.
           if (turns[i].role === "agent") foldedSteps++;
+          if (departing.includes(i)) windowOwner.set(i, g.openerIndex);
+          else sectionOwner.set(i, g.openerIndex);
         } else {
           windowOwner.set(i, g.openerIndex);
         }
@@ -416,9 +477,16 @@ export function Conversation({
           openClassName={!hasHeader ? "mt-6" : expanded ? "mt-0" : "-mt-2.5"}
           closedClassName="mt-0"
         >
+          {/* Each window step carries the in-run gap as its own
+              bottom padding (pb-2.5 on its wrapper), so a departing
+              step takes its gap with it as it sweeps closed and the
+              incoming step brings its own; the region cancels the
+              last step's padding (-mb-2.5, effective inside the
+              overflow box) so the gap down to MainView's in-flight
+              row stays the marker's mt-2.5 alone. */}
           <StepRegion
             className={cn(
-              "[&_[data-role=step-marker]]:mt-0",
+              "-mb-2.5 [&_[data-role=step-marker]]:mt-0",
               hasHeader && "pt-2.5",
             )}
           >
@@ -457,6 +525,20 @@ export function Conversation({
       flushSection();
     }
     if (!section) section = { opener: owner, kind, nodes: [] };
+    if (kind === "window" && turnIndex !== undefined) {
+      // Per-step sweep in the window: mounts growing from 0fr and
+      // closes when the step departs (see `departing`).
+      section.nodes.push(
+        <ExpandSection
+          key={`step-${turnIndex}`}
+          open={!departing.includes(turnIndex)}
+          animateMount
+        >
+          <div className="pb-2.5">{renderItem(item, i, turnIndex)}</div>
+        </ExpandSection>,
+      );
+      return;
+    }
     if (
       turnIndex !== undefined &&
       answerOnly.has(turnIndex) &&
@@ -818,7 +900,7 @@ export function TurnMarker({
   preamble?: string;
 }) {
   const copy = useCopy();
-  const elapsedDs = useElapsedDeciseconds(thinking);
+  const elapsedDs = useElapsedDeciseconds(thinking, index);
   const elapsedLabel = thinking
     ? formatElapsedDeciseconds(elapsedDs, copy)
     : null;
@@ -887,6 +969,11 @@ export function TurnMarker({
           // read as roomy and 8 as cramped; pill padding stays py-1,
           // the trimmed pill made single steps harder to read).
           "flex min-w-0 items-start leading-[1.6] [font-size:var(--conversation-step-size)] text-ink-soft",
+          // The in-flight row eases in once, when the run starts
+          // (it is one instance per run, so this never replays per
+          // step) — a from-nothing appearance, same hand as the
+          // streaming prose blocks.
+          thinking && "animate-fade-in",
           // Run boundary keeps the chapter gap; in-run steps tighten.
           // `index` unknown (pre-turn_start thinking gap) defaults to
           // the boundary gap — the common case for that window is the
@@ -1026,8 +1113,19 @@ function DetailPanel({
  * stale value between the false→true transition and the first
  * setInterval tick.
  */
-function useElapsedDeciseconds(active: boolean): number {
+function useElapsedDeciseconds(active: boolean, resetKey: unknown): number {
   const [ds, setDs] = useState(0);
+  // `resetKey` (the step index) restarts the clock without the row
+  // remounting (2026-09-16): the in-flight marker is one instance
+  // for the whole run, so the counter snaps back to 0.0 in place.
+  // The zero lands in the render that sees the new key (guarded
+  // setState-in-render); the interval below restarts from the same
+  // dependency and carries on from there.
+  const [seenKey, setSeenKey] = useState(resetKey);
+  if (seenKey !== resetKey) {
+    setSeenKey(resetKey);
+    setDs(0);
+  }
   useEffect(() => {
     if (!active) return;
     const start = Date.now();
@@ -1035,7 +1133,7 @@ function useElapsedDeciseconds(active: boolean): number {
       setDs(Math.floor((Date.now() - start) / 100));
     }, 100);
     return () => window.clearInterval(id);
-  }, [active]);
+  }, [active, resetKey]);
   return active ? ds : 0;
 }
 

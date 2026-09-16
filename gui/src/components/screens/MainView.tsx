@@ -472,16 +472,11 @@ function MainViewContent({
               line. Sharing visual register with TurnMarker collapses
               the before/after into one per-step rhythm. */}
             {isRunning && !stillWaiting && (
-              // `key` ties the TurnMarker instance to the current step
-              // (when known) so the elapsed clock inside resets when
-              // the step changes — step 1 took 30s; step 2's clock
-              // starts at 0 again. Falls back to "pending" while we
-              // wait for the bridge's first `turn_start` to land
-              // (synchronously-set `agentRunning` outruns it by a
-              // few hundred ms); when `currentTurnIndex` arrives the
-              // key flips, the placeholder remounts, and the clock
-              // resets there too — which is fine since the user just
-              // saw "思考中" for that brief window.
+              // The elapsed clock inside TurnMarker resets whenever
+              // `index` changes — step 1 took 30s; step 2's clock
+              // starts at 0 again — including the first `turn_start`
+              // landing a few hundred ms after the synchronously-set
+              // `agentRunning` mounted the row with no index yet.
               //
               // One slot for both the pre-stream placeholder and the
               // streaming header (they used to be two sibling
@@ -496,8 +491,14 @@ function MainViewContent({
                     streaming partial below it is the answer taking
                     shape and stays full width. */}
                 <StepRegion railFrom={inRunRail ? "header" : "content"}>
+                  {/* One instance for the whole run (2026-09-16): the
+                      step clock resets on `index` inside TurnMarker
+                      instead of remounting per step, so the row
+                      stays put — shimmer uninterrupted, the counter
+                      snapping back to 0.0 — while the settled step
+                      grows in above it. The former per-step `key`
+                      remount read as a blink beside that sweep. */}
                   <TurnMarker
-                    key={currentTurnIndex ?? "pending"}
                     index={currentTurnIndex ?? undefined}
                     thinking
                     liveStatus={liveStepStatus}

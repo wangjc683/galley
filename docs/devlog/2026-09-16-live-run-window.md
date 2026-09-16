@@ -44,6 +44,14 @@ margin 穿透，否则展开 / 收起时头到窗口的间距会抖 10px。
 窗口的 ExpandSection 顺带接管了头到窗口的间距编排（折叠头下 `-mt-2.5` +
 `pt-2.5`，padding 在 overflow 盒内让 rail 穿过间隙）。
 
+窗口滑动（JC 真机整体满意后唯一追加的打磨）：步完成时原本是三次瞬切
+（旧步消失、新步插入、思考行重挂载归零）。改为「视口后面的列表往上滚」：
+被顶掉的步留一次 sweep 关闭（出场），新步 0fr 展开（入场，ExpandSection
+新增 `animateMount`），头首次出现淡入，思考行不再按步 `key` 重挂载、时钟在
+`index` 变化时原地归零。agent 曾提议给思考行重挂载加淡入，自己收回：那会把
+一次本不存在的「消失」演出来，比瞬间归零更像闪烁；只在 run 开始首次出现
+时淡入一次。展开态不做出场（同位同内容会重影）。
+
 `.scratch/conversation-run-fold/PRD.md` §2 再修订；deferred「live 状态升为
 顶部 live header」被本设计吸收后删除。
 

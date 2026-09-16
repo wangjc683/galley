@@ -35,14 +35,24 @@ export function ExpandSection({
   children,
   openClassName,
   closedClassName,
+  animateMount = false,
 }: {
   open: boolean;
   children: ReactNode;
   openClassName?: string;
   closedClassName?: string;
+  /**
+   * Sweep open on first mount instead of appearing at full height.
+   * The live window's incoming step uses it (2026-09-16): a step that
+   * lands grows out from 0fr below the departing one, so the window
+   * reads as a viewport the list scrolls through. Default off — a
+   * section mounted open (RunFoldSection, the window wrapper) must
+   * not play an entrance.
+   */
+  animateMount?: boolean;
 }) {
   const [mounted, setMounted] = useState(open);
-  const [expanded, setExpanded] = useState(open);
+  const [expanded, setExpanded] = useState(open && !animateMount);
 
   // Render-phase adjusts (React's sanctioned guarded setState-in-
   // render, same pattern as Conversation's keepOpener): opening must

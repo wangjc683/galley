@@ -143,6 +143,11 @@ export function RunFoldHeader({
       className={cn(
         "-mx-2 mb-2.5 mt-6 flex min-w-0 cursor-default items-center gap-2 rounded-sm px-2 py-1 [font-size:var(--conversation-step-size)] text-ink-muted outline-none",
         "hover:bg-hover hover:text-ink focus-visible:bg-hover focus-visible:text-ink",
+        // The live header's first appearance (the first step folding
+        // into it) eases in while that row sweeps up — the row is
+        // absorbed into a header taking shape, not one that popped.
+        // Same element through to settled, so it plays once.
+        live && "animate-fade-in",
       )}
     >
       <CaretRight
