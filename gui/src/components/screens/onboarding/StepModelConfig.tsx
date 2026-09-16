@@ -11,11 +11,11 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
 import { ManagedModelProviderCardGrid } from "@/components/managed-models/ManagedModelProviderCardGrid";
-import { ManagedModelOptionPicker } from "@/components/managed-models/ManagedModelOptionPicker";
+import { ModelCombobox } from "@/components/managed-models/ModelCombobox";
 import { useProviderSetupController } from "@/components/managed-models/use-provider-setup-controller";
 import { Button, IconButton } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
@@ -295,14 +295,16 @@ export function StepModelConfig({
                 {modelCopy.noAuthKeyHint}
               </div>
             )}
-            <SetupInput
-              label={modelCopy.model}
+            <ModelCombobox
               value={model}
-              onChange={(value) => updateProviderForm({ model: value })}
+              options={modelOptions}
               placeholder={modelPlaceholderForManagedModelProviderPreset(
                 selectedPreset,
               )}
-            />
+              onChange={(value) => updateProviderForm({ model: value })}
+            >
+              {(field) => <SetupInput label={modelCopy.model} {...field} />}
+            </ModelCombobox>
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -325,15 +327,6 @@ export function StepModelConfig({
               <InlineSetupStatus state={state} action="model-list" />
             </div>
             <SetupErrorLine state={state} action="model-list" />
-
-            {modelOptions.length > 0 && (
-              <ManagedModelOptionPicker
-                value={modelOptions.includes(model) ? model : ""}
-                options={modelOptions}
-                placeholder={modelCopy.chooseDetectedModel}
-                onChange={(value) => updateProviderForm({ model: value })}
-              />
-            )}
 
             <div className="border-t border-line pt-3">
               <button
@@ -476,6 +469,7 @@ function SetupInput({
   type = "text",
   trailing,
   reserveTrailing = false,
+  onKeyDown,
 }: {
   label: string;
   labelTrailing?: ReactNode;
@@ -485,6 +479,7 @@ function SetupInput({
   type?: "text" | "password";
   trailing?: ReactNode;
   reserveTrailing?: boolean;
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
   return (
     <div>
@@ -499,6 +494,7 @@ function SetupInput({
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
           placeholder={placeholder}
           spellCheck={false}
           className={cn(

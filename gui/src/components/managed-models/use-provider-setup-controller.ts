@@ -83,7 +83,7 @@ export function useProviderSetupController({
   /** Debounced auto connection test + verified-fingerprint tracking
    * (onboarding). Off = manual test button only (settings). */
   autoConnectionTest?: boolean;
-  /** Debounce for the auto test AND the silent model-list fetch. */
+  /** Debounce for the auto test AND the model-list auto-fetch. */
   autoProbeDelayMs?: number;
   /** Gate `canCommit` on a connection test that passed for the current
    * fingerprint (onboarding Start CTA). */
@@ -106,11 +106,7 @@ export function useProviderSetupController({
   /** Settings-only: expand a provider card when editing starts. */
   expandProvider?: (id: string) => void;
   /** Settings-only: park fetched model options on the created provider. */
-  rememberProviderModelOptions?: (
-    providerId: string,
-    options: string[],
-    filter: string,
-  ) => void;
+  rememberProviderModelOptions?: (providerId: string, options: string[]) => void;
 }) {
   const copy = useCopy();
   const modelCopy = copy.settings.models;
@@ -122,7 +118,6 @@ export function useProviderSetupController({
   const [providerFormModelOptions, setProviderFormModelOptions] = useState<
     string[]
   >([]);
-  const [providerFormModelFilter, setProviderFormModelFilter] = useState("");
   const [codexLoginStart, setCodexLoginStart] =
     useState<CodexDeviceLoginStart | null>(null);
   const [codexPolling, setCodexPolling] = useState(false);
@@ -302,11 +297,13 @@ export function useProviderSetupController({
     testedFingerprint,
   ]);
 
-  // Silent model-list auto-fetch for the provider-creation flow: once
-  // key + endpoint are usable, pull the model list in the background
-  // and pre-select the preset's recommended model when the field is
-  // still empty. Failure degrades silently — the explicit fetch button
-  // stays the loud path.
+  // Model-list auto-fetch for the provider-creation flow: once key +
+  // endpoint are usable, pull the model list after a quiet gap and
+  // pre-select the preset's recommended model when the field is still
+  // empty. The fetch announces itself through the model-list probe
+  // state (button spinner → "找到 N 个模型") so the candidates don't
+  // materialise out of nowhere; failure still degrades silently (back
+  // to idle) — the explicit fetch button stays the loud error path.
   const autoFetchFingerprint =
     visibleProviderForm && isCreatingProvider && !isCodexProviderForm
       ? providerListFingerprint(visibleProviderForm)
@@ -334,6 +331,7 @@ export function useProviderSetupController({
       const protocol = form?.protocol;
       if (!form || !protocol) return;
       autoFetchAttemptedRef.current = fingerprint;
+      setProviderFormProbeState({ kind: "loading", action: "model-list" });
       void listManagedModelOptions({
         protocol,
         // Create-only path: blank key resolves to a no-auth fetch.
@@ -344,6 +342,11 @@ export function useProviderSetupController({
         .then((result) => {
           if (autoFetchFingerprintRef.current !== fingerprint) return;
           setProviderFormModelOptions(result.models);
+          setProviderFormProbeState({
+            kind: "success",
+            action: "model-list",
+            message: listModelsMessage(result, modelCopy),
+          });
           const current = visibleProviderFormRef.current;
           if (!current) return;
           const preset = current.providerPresetId
@@ -369,6 +372,12 @@ export function useProviderSetupController({
         })
         .catch((e: unknown) => {
           console.warn("[provider-setup] model list auto-fetch failed.", e);
+          if (autoFetchFingerprintRef.current !== fingerprint) return;
+          setProviderFormProbeState((current) =>
+            current.kind === "loading" && current.action === "model-list"
+              ? { kind: "idle" }
+              : current,
+          );
         });
     }, autoProbeDelayMs);
 
@@ -378,13 +387,13 @@ export function useProviderSetupController({
     autoFetchFingerprint,
     autoProbeDelayMs,
     canFetchProviderFormModels,
+    modelCopy,
     resetConnectionTest,
   ]);
 
   const resetProviderForm = () => {
     setProviderForm(null);
     setProviderFormModelOptions([]);
-    setProviderFormModelFilter("");
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
     setNoAuthConfirmOpen(false);
@@ -405,7 +414,6 @@ export function useProviderSetupController({
       "apiBase" in patch
     ) {
       setProviderFormModelOptions([]);
-      setProviderFormModelFilter("");
     }
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
@@ -434,7 +442,6 @@ export function useProviderSetupController({
       });
     });
     setProviderFormModelOptions([]);
-    setProviderFormModelFilter("");
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
     resetConnectionTest();
@@ -443,7 +450,6 @@ export function useProviderSetupController({
   const startNewProvider = () => {
     setProviderForm(newProviderForm());
     setProviderFormModelOptions([]);
-    setProviderFormModelFilter("");
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
     resetConnectionTest();
@@ -625,7 +631,6 @@ export function useProviderSetupController({
         rememberProviderModelOptions?.(
           result.providerId,
           providerFormModelOptions,
-          providerFormModelFilter,
         );
       }
       if (postSaveForm === "reset") {
@@ -835,7 +840,6 @@ export function useProviderSetupController({
     handleProviderSave,
     isCodexProviderForm,
     providerFormIsInlineEdit,
-    providerFormModelFilter,
     providerFormModelOptions,
     providerFormProbeState,
     providerHasSavedKey,
@@ -843,7 +847,6 @@ export function useProviderSetupController({
     runConnectionTest,
     selectProviderPreset,
     setProviderDisplayName,
-    setProviderFormModelFilter,
     startEditProvider,
     startNewProvider,
     updateProviderForm,

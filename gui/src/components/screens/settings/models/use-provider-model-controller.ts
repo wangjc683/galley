@@ -71,15 +71,10 @@ export function useProviderModelController({
   const rememberProviderModelOptions = (
     providerId: string,
     options: string[],
-    filter: string,
   ) => {
     setModelOptionsByProvider((current) => ({
       ...current,
       [providerId]: options,
-    }));
-    setModelFilterByProvider((current) => ({
-      ...current,
-      [providerId]: filter,
     }));
   };
 

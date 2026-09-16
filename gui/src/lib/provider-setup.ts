@@ -152,7 +152,7 @@ export function providerConnectionFingerprint(form: ProviderFormState): string {
   });
 }
 
-/** Model-independent fingerprint for the silent model-list auto-fetch:
+/** Model-independent fingerprint for the model-list auto-fetch:
  * the list only depends on credentials + endpoint, so typing a model
  * name must not re-trigger it. */
 export function providerListFingerprint(form: ProviderFormState): string {
@@ -202,7 +202,7 @@ export function canCommitProviderSetup(args: {
 }
 
 /**
- * Auto-pick decision after a silent model-list fetch: fill an empty
+ * Auto-pick decision after a model-list auto-fetch: fill an empty
  * model field with the preset's recommended model when the list has
  * it, or the single option when unambiguous. Null = leave the field
  * alone.

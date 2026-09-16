@@ -185,13 +185,11 @@ export function SettingsModels({
     handleProviderFormTest,
     handleProviderSave,
     providerFormIsInlineEdit,
-    providerFormModelFilter,
     providerFormModelOptions,
     providerFormProbeState,
     providerHasSavedKey,
     resetProviderForm,
     selectProviderPreset,
-    setProviderFormModelFilter,
     startEditProvider,
     startNewProvider,
     updateProviderForm,
@@ -309,11 +307,9 @@ export function SettingsModels({
               onClearKey={handleProviderClearKey}
               probeState={providerFormProbeState}
               modelOptions={providerFormModelOptions}
-              modelFilter={providerFormModelFilter}
               codexLoginStart={codexLoginStart}
               codexPolling={codexPolling}
               onChange={updateProviderForm}
-              onSetModelFilter={setProviderFormModelFilter}
               onSelectProviderPreset={selectProviderPreset}
               onTest={() => void handleProviderFormTest()}
               onFetchModels={() => void handleProviderFormFetchModels()}
@@ -388,11 +384,9 @@ export function SettingsModels({
                       onClearKey={handleProviderClearKey}
                       probeState={providerFormProbeState}
                       modelOptions={providerFormModelOptions}
-                      modelFilter={providerFormModelFilter}
                       codexLoginStart={codexLoginStart}
                       codexPolling={codexPolling}
                       onChange={updateProviderForm}
-                      onSetModelFilter={setProviderFormModelFilter}
                       onSelectProviderPreset={selectProviderPreset}
                       onTest={() => void handleProviderFormTest()}
                       onFetchModels={() => void handleProviderFormFetchModels()}

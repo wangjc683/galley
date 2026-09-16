@@ -750,7 +750,9 @@ export const enCopy: AppCopy = {
       model: "Model",
       fetchList: "Read model list",
       fetchModelList: "Read model list",
-      chooseDetectedModel: "Choose a model to enable",
+      modelsFoundPickHint: (count) =>
+        `Found ${count} models, pick one on the right`,
+      browseDetectedModels: "Browse detected models",
       modelListManualFallback:
         "You can keep going without a returned model list: enter the model name manually and save.",
       selectedModelOutsideList: (model) =>

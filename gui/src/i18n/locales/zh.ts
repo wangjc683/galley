@@ -715,7 +715,9 @@ export const zhCopy = {
       model: "模型",
       fetchList: "读取模型列表",
       fetchModelList: "读取模型列表",
-      chooseDetectedModel: "选择要启用的模型",
+      modelsFoundPickHint: (count: number) =>
+        `已找到 ${count} 个模型，可从右侧选择`,
+      browseDetectedModels: "浏览读到的模型",
       modelListManualFallback:
         "没有读到模型列表也可以继续，手动填写模型名后保存即可。",
       selectedModelOutsideList: (model: string) =>

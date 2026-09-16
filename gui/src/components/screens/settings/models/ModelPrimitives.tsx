@@ -1,13 +1,7 @@
-import {
-  CheckCircle,
-  Info,
-  MagnifyingGlass,
-  WarningCircle,
-} from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import { CheckCircle, Info, WarningCircle } from "@phosphor-icons/react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { ScrollFade } from "@/components/ui/scroll-fade";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -15,94 +9,6 @@ import type { ManagedModelProtocol } from "@/types/managed-models";
 
 import { protocolLabel } from "./model-settings-utils";
 import type { ProbeAction, ProbeState } from "./types";
-
-export function ModelSelectionList({
-  title,
-  value,
-  options,
-  filter,
-  onFilterChange,
-  onChange,
-}: {
-  title: string;
-  value: string;
-  options: string[];
-  filter: string;
-  onFilterChange: (value: string) => void;
-  onChange: (value: string) => void;
-}) {
-  const copy = useCopy().settings.models;
-  const normalizedFilter = filter.trim().toLowerCase();
-  const selectedValue = value.trim();
-  const filteredOptions = options.filter((option) =>
-    option.toLowerCase().includes(normalizedFilter),
-  );
-  const visibleOptions = filteredOptions.slice(0, 80);
-
-  return (
-    <div className="space-y-2 border-t border-line pt-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-ui-secondary font-medium text-ink">{title}</div>
-        <div className="relative w-full max-w-[260px]">
-          <MagnifyingGlass
-            size={12}
-            weight="thin"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted"
-          />
-          <input
-            value={filter}
-            onChange={(e) => onFilterChange(e.target.value)}
-            placeholder={copy.filterModels}
-            spellCheck={false}
-            className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-ui-meta text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
-          />
-        </div>
-      </div>
-      <ScrollFade maxHeightClass="max-h-[220px]">
-        <div className="divide-y divide-line">
-          {visibleOptions.length === 0 && (
-            <EmptyRow text={copy.noMatchingModels} />
-          )}
-          {visibleOptions.map((option) => {
-            const selected = option === selectedValue;
-            return (
-              <button
-                key={option}
-                type="button"
-                title={option}
-                aria-pressed={selected}
-                onClick={() => onChange(option)}
-                className={cn(
-                  "flex w-full min-w-0 items-center gap-3 px-3 py-2 text-left",
-                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20",
-                  selected ? "bg-brand-soft text-ink" : "text-ink hover:bg-hover",
-                )}
-              >
-                <span className="flex w-4 shrink-0 items-center justify-center">
-                  {selected && (
-                    <CheckCircle
-                      size={12}
-                      weight="fill"
-                      className="text-brand-strong"
-                    />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-ui-meta">
-                  {option}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </ScrollFade>
-      {filteredOptions.length > visibleOptions.length && (
-        <div className="text-ui-tertiary text-ink-muted">
-          {copy.visibleOptionsHint(visibleOptions.length)}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function SettingsInput({
   label,
@@ -113,6 +19,7 @@ export function SettingsInput({
   type = "text",
   trailing,
   reserveTrailing = false,
+  onKeyDown,
 }: {
   label: string;
   labelTrailing?: ReactNode;
@@ -122,6 +29,7 @@ export function SettingsInput({
   type?: "text" | "password";
   trailing?: ReactNode;
   reserveTrailing?: boolean;
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
   return (
     <div>
@@ -139,6 +47,7 @@ export function SettingsInput({
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
           placeholder={placeholder}
           spellCheck={false}
           className={cn(

@@ -16,6 +16,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
 import { ManagedModelProviderPicker } from "@/components/managed-models/ManagedModelProviderPicker";
+import { ModelCombobox } from "@/components/managed-models/ModelCombobox";
 import { Button, IconButton } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import {
@@ -31,7 +32,6 @@ import { ReasoningEffortField } from "./AdvancedModelOptions";
 import {
   InfoLine,
   InlineProbeStatus,
-  ModelSelectionList,
   ProbeErrorLine,
   SettingsInput,
 } from "./ModelPrimitives";
@@ -50,11 +50,9 @@ export function ProviderEditor({
   onClearKey,
   probeState,
   modelOptions,
-  modelFilter,
   codexLoginStart,
   codexPolling = false,
   onChange,
-  onSetModelFilter,
   onSelectProviderPreset,
   onTest,
   onFetchModels,
@@ -81,11 +79,9 @@ export function ProviderEditor({
   onClearKey?: () => void;
   probeState: ProbeState;
   modelOptions: string[];
-  modelFilter: string;
   codexLoginStart?: CodexDeviceLoginStart | null;
   codexPolling?: boolean;
   onChange: (patch: Partial<ProviderFormState>) => void;
-  onSetModelFilter: (value: string) => void;
   onSelectProviderPreset: (
     providerPresetId: ManagedModelProviderPresetId,
   ) => void;
@@ -376,14 +372,18 @@ export function ProviderEditor({
               <div className="space-y-2">
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="min-w-[240px] flex-1">
-                    <SettingsInput
-                      label={copy.model}
+                    <ModelCombobox
                       value={form.model}
-                      onChange={(model) => onChange({ model })}
+                      options={modelOptions}
                       placeholder={modelPlaceholderForManagedModelProviderPreset(
                         selectedPreset,
                       )}
-                    />
+                      onChange={(model) => onChange({ model })}
+                    >
+                      {(field) => (
+                        <SettingsInput label={copy.model} {...field} />
+                      )}
+                    </ModelCombobox>
                   </div>
                   <Button
                     variant="accent-secondary"
@@ -408,16 +408,6 @@ export function ProviderEditor({
                 <ProbeErrorLine state={probeState} action="model-list" />
                 {shouldShowManualModelHint && (
                   <InfoLine message={copy.modelListManualFallback} />
-                )}
-                {modelOptions.length > 0 && (
-                  <ModelSelectionList
-                    title={copy.chooseDetectedModel}
-                    value={form.model}
-                    options={modelOptions}
-                    filter={modelFilter}
-                    onFilterChange={onSetModelFilter}
-                    onChange={(model) => onChange({ model })}
-                  />
                 )}
                 {selectedModelOutsideFetchedList && (
                   <InfoLine

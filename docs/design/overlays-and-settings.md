@@ -288,6 +288,7 @@ Runtime tab 的任何问题）。
   - Provider / Model 的局部编辑表单关闭入口统一用右上角 `X` icon button；不要混用右上角文字「取消」。
   - Provider 展开后才显示模型维护操作；展开时自动读取一次模型列表（有 Key 且无缓存时；Codex 跳过；失败静默降级），`读取模型列表` 按钮保留为手动刷新入口，零模型 Provider 的卡片 header 不再重复放同名按钮。
   - 获取模型列表后的模型选择必须使用 Galley 自定义 popover dropdown，不使用浏览器原生 `select`。
+  - 新建 provider 表单里，拉到的模型列表是**模型输入框的候选项**（`ModelCombobox`，与 Onboarding 同一组件）：输入框尾部亮起 caret，点开 / ↓ 展开全表、输入即筛选、选中即填入；不再在表单里另起一段带筛选框的内联列表。自动拉取走 model-list probe 状态（按钮转圈 → 「找到 N 个模型」），失败静默回空闲。已有 provider 卡片展开后的 `可添加模型` 列表是多选管理面，不在此规则内。
   - `可添加模型` 列表里的模型行操作使用低权重 `+ 添加`；已加入配置的模型在同一位置显示 `✓ 已添加`，两者高度和占位保持一致，避免形成一列重按钮。
   - 编辑模型里可以折叠显示 `高级配置`，默认关闭。第一版只开放排障/适配项：`max_retries`、`read_timeout`、`max_retry_after`（2026-09-14 起；服务商 Retry-After 超过它就直接报错而不是干等，未设置 = 内核默认 60 秒、不写键；中转站适配项，报错文案会带服务商要求的实际秒数供对表）、`stream`、OpenAI-compatible 的 `api_mode`，以及 Anthropic-compatible 的 `thinking_type`、`Claude Code 兼容透传`。`reasoning_effort` 自 2026-09-08 起是编辑器的**一级字段**（显示名之后、`高级配置` 之前，`ReasoningEffortField`；新增服务商表单的创建步骤在模型选择之后、服务商名称之前放同一个字段，值随 `form.advancedOptions` 写进首个模型；Onboarding 有自己的界面，不带这个字段）：存储仍是 `advancedOptions.reasoning_effort`，只是不再藏在折叠面板里——issue #26 的用户因为「点铅笔 → 展开高级配置」两层折叠而去手改 JSON。面板的「N 项已自定义」计数不含它，「恢复推荐值」也不动它。`thinking_budget_tokens` 不开放，因此 `thinking_type` 暂不提供 `enabled`，避免用户选了实际会被 GA 忽略的配置。
   - `reasoning_effort` 的默认语义（2026-08-07）：未设置 = 不发送该参数、由服务商决定，选项文案写作「默认（跟随服务商）」并带 info 说明。三个第一方预设（Codex / OpenAI / Anthropic）显式写 `high`（支持性确定的端点上采质量优先默认）；第三方兼容 / 任意端点预设一律不写——该字段是第一方 API 契约，兼容层实现无保证。存量模型记录不迁移：运行时始终以创建时快照为准，下次编辑保存时自然吸收新推荐值。

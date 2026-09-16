@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-09-16
+- [模型列表改为模型输入框的候选项](./2026-09-16-model-list-combobox.md) — 自动拉取静默导致列表凭空出现、UI 跳动；A 自动路径走 probe 状态（转圈 → 找到 N 个）+ C `ModelCombobox` 并进输入框（caret / 输入即筛选 / 焦点不离开），JC 裁「列表是字段候选项不是独立区块」，B 折叠摘要与合并刷新按钮进 caret 均否
+
 ### 2026-09-14
 - [v0.4.15 发布](./2026-09-14-v0.4.15-release.md) — 单提交 patch：开放 `max_retry_after` + 补丁 `0021`；`managed-ga` 动了故打包门禁 mandatory，本机 Intel 误用 `mac-arm64` 撞 Bad CPU type 后改 `mac-x64` 通过
 - [高级配置开放 max_retry_after](./2026-09-14-max-retry-after-advanced-option.md) — 社区 524 报错对表：Cloudflare 源站超时 + 中转站 Retry-After 超 60 秒上限，不是 Galley bug；JC 裁决开放 `max_retry_after` 进模型高级配置（端点级、策展字段、准入条款命中），未设置不写键；补丁 `0021` 让报错带实际秒数形成闭环；「睡到上限再重试」与重试期间 GUI 反馈进 deferred
