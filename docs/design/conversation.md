@@ -384,7 +384,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 - 用户提交瞬间 store 设 `agentRunning = true`（不等 `turn_start` IPC，避免一次往返延迟）
 - conversation 末尾立即渲染 `TurnMarker` 的 thinking 态：单行直立 12px ink-soft，内容「序号栏 `··` + 思考中」（2026-09-16 前是「第 N 步 │ 思考中」；同日先试过空 gutter，真机看是个洞）+ 状态文字 shimmer（2026-08-12 前是三点 `LiveDots`）；不再用逐字 opacity 波浪
 - 触发条件：`agentRunning && pendingApprovals.length === 0 && !visiblePartial`
-- `turn_end` 到达时占位消失，真正的 AgentTurn（含同一个 step number 的 TurnMarker + tools + final answer）一次性渲染替换。**before/after 视觉一致**——同一个 TurnMarker 组件的两态，用户感受到的是一个步骤的进展，不是两个独立的 UI
+- `turn_end` 到达时，落定的 AgentTurn（同一 step number 的 TurnMarker + tools）在占位行**上方**以 0fr 展开长出，占位行本身不重挂载、留在原地等下一步的 `turn_start` 原地归零时钟（2026-09-16 live 窗口）。**before/after 视觉一致**——同一个 TurnMarker 组件的两态，用户感受到的是一个步骤的进展，不是两个独立的 UI
 - **等待 ≥ 3 秒时显示 elapsed 计数，≥ 60 秒后追加仍在运行**——立即显示读秒会
   太机械，但 5 秒空等又明显让人产生等待感；3 秒是当前 dogfood 后的中点。
   `仍在运行` 是更强的长等待确认，只在 60 秒后出现，避免前一分钟显得啰嗦。

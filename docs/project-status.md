@@ -396,9 +396,17 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing unreleased on main since `v0.4.16` (as of 2026-09-16): the tag sits
-on the version-bump commit, and everything between `v0.4.15` and it shipped
-in that release. The community 524 thread that prompted `v0.4.15` has not yet been
+Unreleased since `v0.4.16` (as of 2026-09-16 evening, `69a5ce6e..f442b38b`,
+GUI only): the process-area batch — verbose tool-dispatch marker no longer
+leaks into the live step status; the in-flight step's ordinal slot holds `··`;
+step rhythm settled at pill `py-1` / in-run `mt-2.5`; settled runs fold on
+completion; the live run renders as a two-row window behind a live
+"已完成 N 步" header with departing / arriving sweeps, and follow-mode now
+re-pins through CSS transitions. Two density cuts were tried and reverted
+(see [live-run-window devlog](./devlog/2026-09-16-live-run-window.md)). JC
+dogfooded the window on the live app and accepted it; the ticket
+`.scratch/live-run-window/PRD.md` stays until a few more live runs pass. The
+community 524 thread that prompted `v0.4.15` has not yet been
 answered (reply draft agreed in session, awaiting JC's per-item confirmation). The ask_user option description PRD (galley#21,
 `.scratch/ask-user-option-desc`) was **cancelled** on 2026-09-14 after four
 months of local ask_user data showed zero cases of the reported "short label,
