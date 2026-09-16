@@ -90,6 +90,10 @@
   折叠进 TurnMarker 行的 DetailPanel——点 marker 行尾的 caret 展开,
   无独立容器 chrome。理由：独立 callout 让每步多一块常驻框,而
   thinking 是"想看才看"的过程材料,渐进式展示。
+- 展开 / 收起走 `ExpandSection`（2026-09-16）：与 RunFoldSection 同一套
+  grid-rows 0fr ↔ 1fr 过渡、同一 `--motion-slow`，过程区只有一种「展开」
+  手感；此前是硬挂载 + fade-in keyframe。RunFoldSection 自 2026-09-16
+  起也是 ExpandSection 的薄包装，只保留自己的 margin 编排。
 - 内容 = GA 真实 emit 的 `<thinking>`（无则 caret 不出现）+ 中间轮
   preamble（当其未作为旁白单独渲染时）
 - 展开后 Newsreader italic、`--conversation-thinking-size` 走三档字号
@@ -345,7 +349,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 
 | 时机 | 显示 |
 |---|---|
-| User 提交 → bridge spawn → LLM TTFT | `第 N 步 · 思考中` TurnMarker（thinking 态） |
+| User 提交 → bridge spawn → LLM TTFT | `NN 思考中 · 12.3 秒` TurnMarker（thinking 态，序号 gutter） |
 | 第一批 chunk 到 | placeholder 消失，partial markdown 开始流出 |
 | 流式过程中 | partial 持续增长，Markdown re-render（行内 / 列表 / 代码块都跟着出现） |
 | `turn_end` 到 | partial 被 finalized AgentTurn **替换**（store `appendAgentTurn` clear inFlightContent） |
@@ -378,7 +382,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 用户提交消息后到 `turn_end` 到达之间存在显著延迟（LLM TTFT 可达几秒到十几秒）。如果不显示状态指示，用户会觉得 UI 卡住。
 
 - 用户提交瞬间 store 设 `agentRunning = true`（不等 `turn_start` IPC，避免一次往返延迟）
-- conversation 末尾立即渲染 `TurnMarker` 的 thinking 态：单行直立 12px ink-soft，内容 "第 N 步 │ 思考中" + 三点 working 指示（`LiveDots`）；不再用逐字 opacity 波浪
+- conversation 末尾立即渲染 `TurnMarker` 的 thinking 态：单行直立 12px ink-soft，内容「序号 gutter + 思考中」（2026-09-16 前是「第 N 步 │ 思考中」）+ 状态文字 shimmer（2026-08-12 前是三点 `LiveDots`）；不再用逐字 opacity 波浪
 - 触发条件：`agentRunning && pendingApprovals.length === 0 && !visiblePartial`
 - `turn_end` 到达时占位消失，真正的 AgentTurn（含同一个 step number 的 TurnMarker + tools + final answer）一次性渲染替换。**before/after 视觉一致**——同一个 TurnMarker 组件的两态，用户感受到的是一个步骤的进展，不是两个独立的 UI
 - **等待 ≥ 3 秒时显示 elapsed 计数，≥ 60 秒后追加仍在运行**——立即显示读秒会
@@ -399,10 +403,17 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 
 - 数据来源：每个 IPC `turn_start` / `turn_end` event 都带 `turnIndex` 字段
 - AgentTurn type 持有 `turnIndex`（一个 user message 在 conversation 里可能产生多个 AgentTurn）
-- 渲染：每个 AgentTurn 的 thinking summary 之上一行，`第 N 步`（`copy.conversation.step`）12px 直立 sans `text-ink-soft`，`tabular-nums` 数字作结构锚点；与 summary 之间用一条 `w-px bg-line-strong` 竖向 hairline 分隔（瑞士结构感，取代旧的 ` · ` 中点）。**不用 italic、不用 serif、不用 uppercase tracking**——结构 metadata 冷静直立，与下方 Newsreader 衬线正文形成对比张力
-- 上方间距**两档**（2026-08-23 密度 pass）：run 边界（第 1 步）`mt-6`（24px）承担章节分隔；run 内第 2 步起 `mt-3`（12px）。判据直接用 `index === 1`——GA 每次 `put_task` 步号从 1 重数，步号即 run 边界，无需穿 run-group 数据。marker 下方 `mb-1`（4px）
-- **裸步合并**（同一 pass）：GA 未产出 summary 的步，marker 行只剩纯数字——此时若该步恰好只有一个 settled-success 的 inline 工具、且无 DetailPanel 内容 / 无 narration，则 marker 整行取消，由 InlineToolPill 自渲染「第 N 步 │」前缀（`Conversation.tsx` `mergedStepTool` → `ToolCallout` `stepIndex`）。前缀在 button 之外，保住步号左列对齐、hover 目标仍是工具区。任一条件不满足（有 summary / 有 detail / 多工具 / block 态）都维持两行——两行形态仍是常态
-- in-flight 状态：`currentTurnIndex` 从 `turn_start` 读取；thinking placeholder 顶部也显示 `Turn N` 标记让用户感知 agent 当前跑到第几迭代
+- 渲染（2026-09-16 序号栏形态）：每个 AgentTurn 的 thinking summary 之上一行，左侧是**两位补零序号**（`01`…，`lib/step-numeral.ts`）占一格固定宽度的 **`--step-gutter`（24px）**，**JetBrains Mono、`--conversation-tool-mono-size`（标准档 11px，与行右端的工具名同一寄存器）**、regular、`text-ink-muted`，行高钉到 summary 的行框（`calc(step-size * 1.6)`）让两者基线同高；summary（ink-soft，12px 档，**行高 1.6、自动换行不截断**）从 gutter 右缘起笔。序号与 summary 之间**没有分隔符**——固定列宽本身就是分隔。DetailPanel 的 caret **紧跟 summary 文字末尾**（inline-block，随末行换行；裸数字步则单独立在 gutter 右侧），不停在列右缘——披露 caret 贴着它所属的文字，与 pill 行、折叠头同一条规则（2026-09-16）。**不用 italic、不用 serif、不用 uppercase tracking**——结构 metadata 冷静直立，与下方 Newsreader 衬线正文形成对比张力
+  - **过程区 = StepRegion（缩进 + rail）**（2026-09-16 第二轮）：一个 run 的整个过程体（marker、narration、inline pill、block 卡片、ask_user 回显与用户回复、DetailPanel 原文）包在 `StepRegion` 里，整体缩进一格 `--step-gutter`，左侧 x=5（折叠头 caret 中心）有一条 1px `bg-line` 竖向 rail 贯穿全高。于是序号落在 24–48、内容从 48 起笔，和折叠头文字（起于 19）形成「把手在左、列表在右」——与参考 trace 组件的 24 / 47 同比例。**live 与 settled 同构**：未完成的 run（以及 Goal run、/btw 等不可折 run）走 flat 的 StepRegion，rail 从第一步顶起；settled 可折 run 的 StepRegion 在 RunFoldSection 内，rail 从折叠头下缘（`-top-2.5`）挂下来。run 完成被重新包进折叠段时 x 不动。MainView 的 in-flight marker 与待审批卡片也各自包一层 StepRegion（两段 rail 之间有一小段断口，已知）。
+  - **最终回答满宽**：StrongHr 之后的回答不在 StepRegion 里。为此 `answerOnly` 拆分扩展到**所有**有收口 turn 的 group（原只对可折 group）：收口 turn 的 marker 以 `markerOnly` 进区域，回答 flat 渲染。StrongHr 自己 `-ml-(--step-gutter)` 从缩进里破出来铺满列宽——「行动 → 结论」的横线属于回答的宽度。
+  - **内容列 x 的两处细节**：pill 按钮保留 `px-2` hover 外溢，外层 `-ml-2.5` 拉回 8px 外溢 + 2px Phosphor 字形内留白，图标可见笔画正好落在 summary 首字的 x；裸步合并的 pill 行自画 gutter。
+  - **锚点靠对齐，不靠墨量，层级为 头 → summary → 序号**：summary 是这一行的句子，序号是页边序号栏，是这一步里最轻的元素（第一轮曾保留 medium 以保 Windows 可扫性，真机看后层级比可扫性重要，改 regular 并降 1px）。RunFoldHeader 的「N 步」是计数、sidebar 的「第 N 步 · summary」是独立语境需要单位，均不跟随；「第 N 步」文案（`copy.conversation.step`）保留为序号旁的 sr-only 文本，屏幕阅读器仍念完整语义。序号在 `index` 未知的 pre-turn_start 窗口也占位（空 gutter），步号落地时状态文字不右跳。
+  - **真机 A/B 裁决（2026-09-16，临时切换器已拆）**：序号字体 **mono 胜** Inter tabular——行的左右两端都是机器元数据说得通，mono 序号读作页边序号而非数量；折叠头计数段**保持 ink-muted regular**，ink-soft medium 的「把手比列表深」方案被否，08-06「安静眉头」定案维持。
+  - **before/after 一致的新口径**（2026-09-16 二改）：thinking 态是「空 gutter + 思考中 · 12.3 秒」，落定后是「03 summary」——同一组件、同一位置、同一寄存器，序号是落定时才出现的唯一差异（盖章）。这与外部 ReasoningTrace 参考组件（thinking 态无号、只给 settled 列表编号）同构；第一版曾让 thinking 态也带号，真机看 in-flight 的「01 正在处理」像提前盖章而改。
+  - **裁决史**：2026-06-09 瑞士化定「第 N 步 │ summary」（hairline 取代中点）；2026-08-23 裁「裸数字永久否决」；2026-09-16 JC 真机看过淡一档版本仍嫌繁琐，翻案为补零序号 + 去 hairline + gutter 对齐（见 [devlog](../devlog/2026-09-16-step-marker-recede-and-reference-audit.md)：08-23 的「读者只扫数字」论据其实在替裸数字辩护；「3 │ 思考中 · 12.3s 两个数字打架」由补零 + 计数器带单位化解）。明知代价：run 边界处第 1 步的 chapter-break 分隔力略弱，靠 `mt-6` 与 settled run 折叠兜住；ink-muted 约 3.4:1 低于 AA，是既有的元数据档位。
+- 上方间距**两档**（2026-08-23 密度 pass）：run 边界（第 1 步）`mt-6`（24px）承担章节分隔；run 内第 2 步起 `mt-3`（12px）。判据直接用 `index === 1`——GA 每次 `put_task` 步号从 1 重数，步号即 run 边界，无需穿 run-group 数据。**marker 下方 0、pill 无外边距**（2026-09-16 节奏 pass）：真机量得步内 marker→pill 行心距 25.5、步间 34，比例 1.3 分组不成立，四步七行看着像七行；步内收到 0 后步内约 22、步间约 34，比例 1.5+，每步净减 6px。**折叠头→第一步 12px**（原 24）：头是列表的把手要贴住列表，24px 属于头上方的 run 边界（RunFoldSection `-mt-5.5` 编排）。
+- **裸步合并**（同一 pass）：GA 未产出 summary 的步，marker 行只剩纯数字——此时若该步恰好只有一个 settled-success 的 inline 工具、且无 DetailPanel 内容 / 无 narration，则 marker 整行取消，由 InlineToolPill 自渲染序号 gutter 前缀（`Conversation.tsx` `mergedStepTool` → `ToolCallout` `stepIndex`）。前缀在 button 之外，保住序号栏对齐、hover 目标仍是工具区。任一条件不满足（有 summary / 有 detail / 多工具 / block 态）都维持两行——两行形态仍是常态
+- in-flight 状态：`currentTurnIndex` 从 `turn_start` 读取，用于给 thinking 占位 `key`（每步时钟归零）与 `mt-*` 档位；**thinking 行不显序号**（2026-09-16）——序号是落定的盖章，in-flight 行挂「01」等于宣告一个项目还不存在的单项列表；用户感知跑到第几迭代由上方已落定的 01、02 承担，turn_end 替换时序号在原位出现。此前「占位顶部显示 Turn N」的要求废止
 - `run_complete` / `error` 时清空 currentTurnIndex
 - **没有 turn 之间的 SoftHr**——TurnMarker 自带 chapter-break 视觉重量，水平横线已删除
 

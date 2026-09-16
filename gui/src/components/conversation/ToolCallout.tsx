@@ -21,6 +21,7 @@ import { ApprovalForm } from "@/components/conversation/ApprovalForm";
 import { LiveDots } from "@/components/conversation/LiveIndicators";
 import { PatchView } from "@/components/conversation/diff/PatchView";
 import { useCopy } from "@/lib/i18n";
+import { formatStepNumeral } from "@/lib/step-numeral";
 import { cn } from "@/lib/utils";
 import type {
   ConversationToolEvent,
@@ -562,83 +563,106 @@ function InlineToolPill({
   // against the hairline so the icon lands the usual gap-2 after it.
   const stepLabel =
     stepIndex != null ? copy.conversation.step(stepIndex) : null;
+  const stepNumeral = stepIndex != null ? formatStepNumeral(stepIndex) : null;
 
   const row = (
     <button
       type="button"
       onClick={() => setOpen((v) => !v)}
       className={cn(
-        "group flex items-center gap-2 rounded-sm px-2 py-1 text-left",
-        "text-ink-soft hover:bg-hover hover:text-ink",
-        stepLabel ? "-ml-2 min-w-0 flex-1" : "w-full",
+        "flex items-center gap-1.5 rounded-sm px-2 py-1 text-left",
+        // One level under the step summary (2026-09-16): the summary
+        // is the step's sentence (12px ink-soft), the pill is the
+        // evidence beneath it — label at the mono tier and ink-muted,
+        // icon riding the same color. Before this the two rows shared
+        // size and ink while the pill carried more elements, so it
+        // out-weighed the sentence it was meant to support. Hover
+        // still lifts the whole row to ink.
+        "text-ink-muted hover:bg-hover hover:text-ink",
+        stepLabel ? "-ml-2.5 min-w-0 flex-1" : "w-full",
       )}
     >
-        {/* Left zone — friendly prose register. */}
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          {ToolIcon && (
-            <ToolIcon
-              size={14}
-              weight="thin"
-              className="shrink-0 text-ink-soft"
-            />
-          )}
-          <span className="truncate [font-size:var(--conversation-tool-label-size)]">
-            {toolLabel ?? (
-              // Unknown tool: surface the GA name itself as the
-              // primary label (mono) so the pill still has a usable
-              // identity — better than a blank chip.
-              <span className="font-mono">{tool.name}</span>
-            )}
-            {preview && (
-              <span className="ml-1.5 text-ink-muted">· {preview}</span>
-            )}
-          </span>
-        </span>
-        {/* Right zone — audit metadata. Hidden for the unknown-tool
-            fallback above, since the GA name already took the
-            primary label slot. */}
-        <span className="flex shrink-0 items-center gap-1.5">
-          {meta && (
-            <span className="font-mono [font-size:var(--conversation-tool-mono-size)] text-ink-muted">
-              {tool.name}
-            </span>
-          )}
-          <CaretDown
-            size={10}
-            weight="thin"
-            className={cn(
-              "text-ink-muted transition-transform duration-(--motion-fast)",
-              open && "rotate-180",
-            )}
-          />
-        </span>
+      {/* One left cluster: icon · label · preview · caret. The row
+          used to split into a prose zone on the left and an audit
+          zone (mono GA name + caret) on the right; once the name
+          moved into the expanded body the caret was left stranded at
+          the column's far edge, a column-width away from the label
+          it discloses. A disclosure caret hugs the text it belongs
+          to — the same rule the RunFoldHeader and TurnMarker follow
+          (2026-09-16). The button still spans the row for hover. */}
+      {ToolIcon && <ToolIcon size={13} weight="thin" className="shrink-0" />}
+      <span className="min-w-0 truncate [font-size:var(--conversation-tool-label-size)]">
+        {toolLabel ?? (
+          // Unknown tool: surface the GA name itself as the
+          // primary label (mono) so the pill still has a usable
+          // identity — better than a blank chip.
+          <span className="font-mono">{tool.name}</span>
+        )}
+        {preview && (
+          <span className="ml-1.5 text-ink-muted">· {preview}</span>
+        )}
+      </span>
+      <CaretDown
+        size={10}
+        weight="thin"
+        className={cn(
+          "shrink-0 text-ink-muted transition-transform duration-(--motion-fast)",
+          open && "rotate-180",
+        )}
+      />
     </button>
   );
 
+  // Offsets are measured from the content column (where the pill's
+  // icon sits): the body's left rule lands 4px right of the icon in
+  // both layouts below. The mono GA name opens the body: it is audit
+  // metadata, so it lives where the audit happens rather than on the
+  // resting row (first as a far-right column, then hover-revealed —
+  // both rejected 2026-09-16: the column was the most repeated
+  // element in a long run, the hover-reveal left the caret orphaned
+  // and hid the name from touchpad / keyboard users). Skipped for
+  // the unknown-tool fallback, whose label already is the name.
   const expandedBody = open && (
-    <div className="ml-3 mt-1 animate-fade-in border-l border-line/60 pl-3">
+    <div className="ml-1 mt-1 animate-fade-in border-l border-line/60 pl-3">
+      {meta && (
+        <div className="mb-1.5 font-mono [font-size:var(--conversation-tool-mono-size)] text-ink-muted">
+          {tool.name}
+        </div>
+      )}
       <SettledToolBody tool={tool} />
     </div>
   );
 
   if (stepLabel) {
     return (
-      <div className={cn("mb-0.5", stepIndex === 1 ? "mt-6" : "mt-3")}>
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 font-medium tabular-nums tracking-[0.01em] [font-size:var(--conversation-step-size)] text-ink-soft">
-            {stepLabel}
+      <div className={stepIndex === 1 ? "mt-6" : "mt-3"}>
+        <div className="flex min-w-0 items-center">
+          <span
+            className="w-(--step-gutter) shrink-0 font-mono tabular-nums text-ink-muted [font-size:var(--conversation-tool-mono-size)] [line-height:calc(var(--conversation-step-size)*1.6)]"
+            aria-hidden
+          >
+            {stepNumeral}
           </span>
-          <span className="h-2.5 w-px shrink-0 bg-line-strong" aria-hidden />
+          <span className="sr-only">{stepLabel}</span>
           {row}
         </div>
-        {expandedBody}
+        {expandedBody && (
+          <div className="pl-(--step-gutter)">{expandedBody}</div>
+        )}
       </div>
     );
   }
 
+  // Un-merged pill lives inside the step's indented process body; the
+  // -ml-2.5 pulls the button's px-2 hover bleed back over the gutter
+  // edge plus 2px for the glyph's own inset, so the icon's visible
+  // stroke lands on the content column where the summary's first
+  // glyph starts. No vertical margin: the pill hugs its marker
+  // (within-step gap 0) and successive pills are spaced by their own
+  // py-1.
   return (
-    <div className="my-0.5">
-      {row}
+    <div>
+      <div className="-ml-2.5">{row}</div>
       {expandedBody}
     </div>
   );

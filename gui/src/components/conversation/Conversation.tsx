@@ -14,11 +14,14 @@ import {
 } from "@/components/conversation/MessageAgent";
 import { MessageUser } from "@/components/conversation/MessageUser";
 import { RunFoldHeader } from "@/components/conversation/RunFoldHeader";
+import { ExpandSection } from "@/components/conversation/ExpandSection";
 import { RunFoldSection } from "@/components/conversation/RunFoldSection";
+import { StepRegion } from "@/components/conversation/StepRegion";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
+import { formatStepNumeral } from "@/lib/step-numeral";
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
 import {
   askUserReplyContent,
@@ -146,11 +149,26 @@ export function Conversation({
   // answerOnly: closing turns whose flat render is the answer body
   // alone, expanded or not — the fold toggle is then purely the
   // section's height sweep, with nothing popping in or out beside it.
+  // regionOwner is the flat counterpart of sectionOwner: members of a
+  // non-foldable group (live run, Goal run, /btw exchange) gather into
+  // a plain StepRegion instead of an animated RunFoldSection, so the
+  // process inset + rail apply to every run and nothing shifts when
+  // a live run completes and moves to a fold (2026-09-16). answerOnly
+  // covers every group with a closing turn for the same reason: the
+  // final answer must render outside the region at full width.
   const headerFor = new Map<number, { group: RunGroup; folded: boolean }>();
   const sectionOwner = new Map<number, number>();
+  const regionOwner = new Map<number, number>();
   const answerOnly = new Set<number>();
   for (const g of groups) {
-    if (!g.foldable) continue;
+    if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
+    if (!g.foldable) {
+      for (const i of g.memberIndices) {
+        if (i === g.openerIndex) continue;
+        regionOwner.set(i, g.openerIndex);
+      }
+      continue;
+    }
     const override = foldOverrides[g.openerIndex];
     const folded =
       override !== undefined ? !override : g.openerIndex !== keepOpener;
@@ -159,7 +177,6 @@ export function Conversation({
       if (i === g.openerIndex) continue;
       sectionOwner.set(i, g.openerIndex);
     }
-    if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
   }
 
   const toggleFold = (openerIndex: number, currentlyFolded: boolean) => {
@@ -241,29 +258,42 @@ export function Conversation({
   // close the section (markerOnly), its answer body renders flat
   // right after, so collapsing never removes the visible answer.
   const rendered: ReactNode[] = [];
-  let section: { opener: number; nodes: ReactNode[] } | null = null;
+  let section: { opener: number; flat: boolean; nodes: ReactNode[] } | null =
+    null;
   const flushSection = () => {
     if (!section) return;
-    const h = headerFor.get(section.opener);
-    rendered.push(
-      <RunFoldSection key={`fold-${section.opener}`} open={h ? !h.folded : true}>
-        {section.nodes}
-      </RunFoldSection>,
-    );
+    if (section.flat) {
+      rendered.push(
+        <StepRegion key={`region-${section.opener}`}>{section.nodes}</StepRegion>,
+      );
+    } else {
+      const h = headerFor.get(section.opener);
+      rendered.push(
+        <RunFoldSection key={`fold-${section.opener}`} open={h ? !h.folded : true}>
+          {section.nodes}
+        </RunFoldSection>,
+      );
+    }
     section = null;
   };
   items.forEach((item, i) => {
     const turnIndex =
       item.kind === "turn" ? turnIndexOf.get(item.turn) : undefined;
-    const owner =
+    const foldOwner =
       turnIndex !== undefined ? sectionOwner.get(turnIndex) : undefined;
+    const flatOwner =
+      turnIndex !== undefined ? regionOwner.get(turnIndex) : undefined;
+    const owner = foldOwner ?? flatOwner;
     if (owner === undefined) {
       flushSection();
       rendered.push(renderItem(item, i, turnIndex));
       return;
     }
-    if (section && section.opener !== owner) flushSection();
-    if (!section) section = { opener: owner, nodes: [] };
+    const flat = foldOwner === undefined;
+    if (section && (section.opener !== owner || section.flat !== flat)) {
+      flushSection();
+    }
+    if (!section) section = { opener: owner, flat, nodes: [] };
     if (
       turnIndex !== undefined &&
       answerOnly.has(turnIndex) &&
@@ -430,9 +460,12 @@ function AgentTurnView({
     );
   }
 
+  const showMarker =
+    turn.turnIndex !== undefined && !hideMarker && !mergedStepTool;
+
   return (
     <div>
-      {turn.turnIndex !== undefined && !hideMarker && !mergedStepTool && (
+      {showMarker && (
         <TurnMarker
           index={turn.turnIndex}
           summary={markerSummary}
@@ -441,36 +474,46 @@ function AgentTurnView({
         />
       )}
 
-      {/* Intermediate-turn narration renders BEFORE the turn's tools:
-          the LLM wrote that prose ("好的，我先看一下 X") before
-          dispatching them, so rendering it after read as "tools ran →
-          then it announced the plan" — time-inverted on re-read. The
-          final answer stays after the sequence (a final turn carries
-          no real tools). */}
-      {answerText && !isFinalTurn && (
-        <MessageAgentNarration>{answerText}</MessageAgentNarration>
-      )}
+      {/* Process body sits in the content column to the right of the
+          step's ordinal gutter (2026-09-16): narration, tool rows and
+          cards, ask_user echo all start where the marker's summary
+          starts, so the gutter holds nothing but numerals. Indented
+          exactly when a marker was rendered above (a merged step row
+          draws its own gutter; a folded final turn has no marker, and
+          nothing here to indent). The final answer below stays
+          full-width — it is the conclusion, not process. */}
+      <div className={cn(showMarker && "pl-(--step-gutter)")}>
+        {/* Intermediate-turn narration renders BEFORE the turn's tools:
+            the LLM wrote that prose ("好的，我先看一下 X") before
+            dispatching them, so rendering it after read as "tools ran →
+            then it announced the plan" — time-inverted on re-read. The
+            final answer stays after the sequence (a final turn carries
+            no real tools). */}
+        {answerText && !isFinalTurn && (
+          <MessageAgentNarration>{answerText}</MessageAgentNarration>
+        )}
 
-      {visibleTools.map((tool) => (
-        <ToolCallout
-          key={tool.id}
-          tool={tool}
-          stepIndex={tool === mergedStepTool ? turn.turnIndex : undefined}
-          approvalDecision={
-            tool.approvalId ? approvalDecisions?.[tool.approvalId] : undefined
-          }
-          onApprove={onApprove}
-          projectName={projectName}
-        />
-      ))}
+        {visibleTools.map((tool) => (
+          <ToolCallout
+            key={tool.id}
+            tool={tool}
+            stepIndex={tool === mergedStepTool ? turn.turnIndex : undefined}
+            approvalDecision={
+              tool.approvalId ? approvalDecisions?.[tool.approvalId] : undefined
+            }
+            onApprove={onApprove}
+            projectName={projectName}
+          />
+        ))}
 
-      {typeof askUserQuestion === "string" && !suppressAskUserEcho && (
-        <AnsweredAskUser
-          question={askUserQuestion}
-          candidates={askUserCandidates}
-          answer={askUserAnswer}
-        />
-      )}
+        {typeof askUserQuestion === "string" && !suppressAskUserEcho && (
+          <AnsweredAskUser
+            question={askUserQuestion}
+            candidates={askUserCandidates}
+            answer={askUserAnswer}
+          />
+        )}
+      </div>
 
       {/* StrongHr's "action → conclusion" rhetoric needs a visible
           action column as its referent. Folded (hideMarker), the run's
@@ -619,20 +662,57 @@ export function TurnMarker({
   const [open, setOpen] = useState(false);
 
   const stepLabel = index != null ? copy.conversation.step(index) : null;
+  // The ordinal belongs to settled steps only (2026-09-16): a numeral
+  // is a stamp on a finished step, and an in-flight row wearing "01"
+  // announces a list of one whose one item does not exist yet. The
+  // thinking row keeps its empty gutter so the status text sits in
+  // the content column; when turn_end swaps in the settled marker the
+  // numeral appears in place — the "stamp" beat. Steps above are
+  // already numbered, so which iteration is running stays legible
+  // without a number on the live row. Same for the sr-only label.
+  const stepNumeral =
+    index != null && !thinking ? formatStepNumeral(index) : null;
+  // The DetailPanel caret rides the end of the summary text (or
+  // stands alone when a bare-number step still has thinking to
+  // show) instead of parking at the column's far edge — a disclosure
+  // caret hugs the text it belongs to, same as the pill row and the
+  // RunFoldHeader (2026-09-16). Inline-block so it wraps with the
+  // sentence's last line.
+  const detailCaret = hasDetail ? (
+    <CaretDown
+      size={11}
+      weight="thin"
+      className={cn(
+        "ml-1 inline-block shrink-0 align-[-1px] text-ink-muted transition-transform duration-(--motion-fast)",
+        open && "rotate-180",
+      )}
+    />
+  ) : null;
   const trailing = thinking ? (
     <ThinkingStatus status={liveStatus} elapsedLabel={elapsedLabel} />
   ) : summary ? (
-    <span className="min-w-0 flex-1 truncate select-text text-ink-soft">
+    // Wraps rather than truncates (2026-09-16): the summary is the
+    // step's sentence and a clipped sentence loses the step. GA
+    // summaries run one to two sentences, so this is rarely more
+    // than two lines.
+    <span className="min-w-0 flex-1 select-text text-ink-soft">
       {summary}
+      {detailCaret}
     </span>
-  ) : null;
+  ) : (
+    detailCaret
+  );
 
   return (
     <div>
       <div
         onClick={hasDetail ? () => setOpen((v) => !v) : undefined}
         className={cn(
-          "mb-1 flex min-w-0 items-center gap-2 [font-size:var(--conversation-step-size)] text-ink-soft",
+          // No bottom margin: the step's process body must hug its
+          // marker so marker + tool rows read as one step, and the
+          // between-step mt-3 stays the only gap (2026-09-16 rhythm:
+          // within-step 0, between-step 12).
+          "flex min-w-0 items-start leading-[1.6] [font-size:var(--conversation-step-size)] text-ink-soft",
           // Run boundary keeps the chapter gap; in-run steps tighten.
           // `index` unknown (pre-turn_start thinking gap) defaults to
           // the boundary gap — the common case for that window is the
@@ -641,28 +721,42 @@ export function TurnMarker({
           hasDetail && "cursor-default hover:text-ink",
         )}
       >
-        {stepLabel && (
-          <span className="shrink-0 font-medium tabular-nums tracking-[0.01em] text-ink-soft">
-            {stepLabel}
-          </span>
-        )}
-        {stepLabel && trailing && (
-          <span className="h-2.5 w-px shrink-0 bg-line-strong" aria-hidden />
+        {/* Ordinal gutter (2026-09-16): a zero-padded numeral in a
+            fixed --step-gutter column — JetBrains Mono at the tool
+            mono size (11px at the standard tier, the same register as
+            the GA tool names in a pill's expanded body), regular, ink-muted
+            — the lightest element of the step so the hierarchy reads
+            header → summary → numeral. Mono won the live A/B over
+            Inter tabular: the row's two edges both carry machine
+            metadata, and the mono numeral reads as a margin ordinal
+            rather than a quantity. The number is the ordinal, the
+            summary is the sentence; alignment (fixed column + mono
+            figures) carries the anchor role, not ink or weight.
+            Line-height is pinned to the summary's line box so the two
+            baselines sit together despite the size step. The gutter
+            renders even before `index` is known (pre-turn_start
+            thinking gap) so the status text does not jump right when
+            the step number lands. Mirrored by ToolCallout's
+            merged-step prefix; the localized "第 N 步" survives as
+            sr-only text (and in the sidebar, where the number needs
+            its unit). */}
+        <span
+          className="w-(--step-gutter) shrink-0 font-mono tabular-nums text-ink-muted [font-size:var(--conversation-tool-mono-size)] [line-height:calc(var(--conversation-step-size)*1.6)]"
+          aria-hidden
+        >
+          {stepNumeral}
+        </span>
+        {stepLabel && !thinking && (
+          <span className="sr-only">{stepLabel}</span>
         )}
         {trailing}
-        {hasDetail && (
-          <CaretDown
-            size={11}
-            weight="thin"
-            className={cn(
-              "ml-auto shrink-0 text-ink-muted transition-transform duration-(--motion-fast)",
-              open && "rotate-180",
-            )}
-          />
-        )}
       </div>
-      {hasDetail && open && (
-        <DetailPanel thinking={thinkingContent} preamble={preamble} />
+      {hasDetail && (
+        <ExpandSection open={open}>
+          <div className="pl-(--step-gutter)">
+            <DetailPanel thinking={thinkingContent} preamble={preamble} />
+          </div>
+        </ExpandSection>
       )}
     </div>
   );
@@ -718,6 +812,8 @@ function ThinkingStatus({
  * sans of the TurnMarker row above (structure vs prose). No border,
  * no background, no leading
  * icon — keeps the chrome out of the way so the prose stays the focus.
+ * Reveal motion comes from the ExpandSection wrapper in TurnMarker
+ * (same grid-rows sweep as RunFoldSection), not from this component.
  *
  * Source order: thinking → preamble. Mirrors how the LLM actually
  * writes them inside `response.content` (thinking is the internal
@@ -734,7 +830,7 @@ function DetailPanel({
   preamble?: string;
 }) {
   return (
-    <div className="mb-3 animate-fade-in space-y-2">
+    <div className="mb-3 space-y-2">
       {thinking && <MarkdownView source={thinking} variant="thinking" />}
       {preamble && <MarkdownView source={preamble} variant="thinking" />}
     </div>
@@ -794,9 +890,16 @@ function formatElapsedDeciseconds(
   return copy.conversation.minutesSeconds(minutes, remainder);
 }
 
+/** Rendered inside a StepRegion (every closing turn's marker lives
+ * there, foldable or not), so it pulls itself back out of the region's
+ * inset to span the full column — the action→conclusion rule belongs
+ * to the answer's width, not the process's. */
 function StrongHr() {
   return (
-    <hr className="my-4 border-0 border-t border-line-strong" aria-hidden />
+    <hr
+      className="my-4 -ml-(--step-gutter) border-0 border-t border-line-strong"
+      aria-hidden
+    />
   );
 }
 

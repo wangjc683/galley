@@ -179,6 +179,15 @@
   --leading-notice: 1.5; /* 提示 / error 块 */
   --leading-dense: 1.45; /* 密集 settings 行 / 三级信息 */
 
+  /* Step ordinal gutter (conversation.md TurnMarker). Used twice, on
+     purpose: StepRegion insets the whole process area by one gutter
+     (numerals land right of the RunFoldHeader text), and inside it the
+     zero-padded numeral owns one more gutter before the content column
+     — numerals at 24, content at 48, the reference trace component's
+     proportions. "01" in JetBrains Mono at the 11px tool-mono tier is
+     ~13px, so 24px leaves ~11px of air. */
+  --step-gutter: 24px;
+
   /* --- radii (overrides Tailwind defaults; semantic, limited set) --- */
   --radius-sm: 6px;
   --radius-callout: 8px;

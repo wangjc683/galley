@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-16
+- [步号改序号栏 + 过程区 StepRegion + DetailPanel 展开过渡](./2026-09-16-step-marker-recede-and-reference-audit.md) — JC 二提「只显数字」并贴外部 ReasoningTrace 参考组件；第一轮只淡一档，真机仍繁琐后翻 08-23「裸数字永久否决」：两位补零序号、去 hairline、「第 N 步」退为 sr-only；第二轮对表参考渲染图量出层级倒置与步内步间 1.3 的分组比例，加 `StepRegion`（过程区再缩一格 + x=5 rail，live/settled 同构，序号 24 内容 48）、序号 regular 降 1px、summary 换行、步内 0 步间 12 头到首步 12；真机 A/B 定序号 JetBrains Mono、折叠头保持 muted（翻深否）；in-flight 行不显序号（序号是落定的盖章，「占位显示 Turn N」废止）；pill 行退到 summary 之下一级（标签降到 mono 档 + ink-muted、图标 13）；mono 名先 hover 显示后因 caret 孤立改进展开体首行，pill 与 TurnMarker 的 caret 都改贴文字末尾；抽 `ExpandSection` 让 DetailPanel 与 RunFoldSection 同一套 grid-rows 过渡
 - [Windows 图标 / 文字发虚](./2026-09-16-windows-low-dpr-icons-and-font-stack.md) — Phosphor thin 实为 0.5px（文档 1.25px 是笔误），1x 屏半像素糊成灰线；`max-resolution: 1.5dppx` 下给 256 viewBox path 加 8 单位 stroke 升到 regular 粗细，按 dppx 不按平台；`--font-sans` 显式加雅黑；字重 / 字号变体进 deferred
 - [Settings 侧栏中文改为主标签](./2026-09-16-settings-sidebar-chinese-primary.md) — 社区反馈中文太小太淡：10.5px `text-ui-micro` 排汉字 + ink-muted 75% 浅色只有 2.5:1，层级倒置被证伪；JC 裁 B 主次翻转（中文 14px 主、英文 11.5px ink-muted 副），只动侧栏不翻页头，A 抬字号与 C 去英文均否
 - [模型列表改为模型输入框的候选项](./2026-09-16-model-list-combobox.md) — 自动拉取静默导致列表凭空出现、UI 跳动；A 自动路径走 probe 状态（转圈 → 找到 N 个）+ C `ModelCombobox` 并进输入框（caret / 输入即筛选 / 焦点不离开），JC 裁「列表是字段候选项不是独立区块」，B 折叠摘要与合并刷新按钮进 caret 均否

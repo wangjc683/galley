@@ -10,11 +10,22 @@
 "审计价值" 保留 block，结果 settled turn 里 pill 与 block 混排、视觉
 跳动，已否）：
 
-- **inline pill**（`InlineToolPill`）：所有已结算成功的工具。单行：
-  Phosphor 图标 + 中文友好名（主标签）+ 右侧 mono GA 工具名 + 单行
-  arg 预览（路径类从头部截断、保留文件名尾部）。点击展开完整
-  args / result。字号走 `--conversation-tool-label-size` /
-  `-tool-mono-size`，随三档字号缩放。
+- **inline pill**（`InlineToolPill`）：所有已结算成功的工具。单行、
+  **一个左簇**：Phosphor 图标（13px）+ 中文友好名（主标签）+ 单行 arg
+  预览（路径类从头部截断、保留文件名尾部）+ caret 紧跟其后。点击展开
+  完整 args / result，**展开体首行是 mono GA 工具名**。字号走
+  `--conversation-tool-label-size` / `-tool-mono-size`，随三档字号缩放。
+  - **比 step summary 低一级**（2026-09-16）：summary 是一步的叙述
+    （step-size 档、ink-soft），pill 是叙述下的证据——标签降到与 mono
+    同档（标准档 11px）、整行 ink-muted，hover 升 ink。此前两行同字号
+    同墨量而 pill 元素更多，八步 live run 里证据压过叙述。
+  - **mono 工具名进展开体、caret 贴标签**（同日，两步走）：原「左散文区 /
+    右审计区」布局里 mono 名常驻右缘，多步 run 中是重复度最高的元素、
+    形成第二列抢眼；先改 hover 显示（JC 裁），结果 caret 孤零零停在列
+    右缘、与它披露的标签隔着整列，且 hover 才出现的元素对触控板 / 键盘
+    不可靠。终裁：审计元数据放在审计发生的地方（展开体首行），静止行
+    没有任何时隐时现的元素；**披露 caret 贴着它所属的文字**，与
+    RunFoldHeader、TurnMarker 同一条规则。
 - **block callout**（`BlockToolCallout`）：一切需要注意力的状态
   （waiting_approval / failed / running / denied）。左 3px 状态竖条 +
   1px 边框 + 8px 圆角（`rounded-callout`）；waiting / failed 额外带

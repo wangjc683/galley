@@ -20,6 +20,7 @@ import { GoalWorkerContextBar } from "@/components/conversation/GoalWorkerContex
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
+import { StepRegion } from "@/components/conversation/StepRegion";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
@@ -422,7 +423,7 @@ function MainViewContent({
               // No wrapper margin — TurnMarker provides its own
               // mt-7, and ToolCallout's my-3 spaces successive cards.
               // space-y-2 stays for the multi-pending case.
-              <div className="space-y-2">
+              <StepRegion className="space-y-2">
                 {currentTurnIndex != null && (
                   <TurnMarker index={currentTurnIndex} />
                 )}
@@ -441,7 +442,7 @@ function MainViewContent({
                     />
                   </div>
                 ))}
-              </div>
+              </StepRegion>
             )}
 
             {/* In-flight placeholder. User sent a message; the bridge
@@ -481,12 +482,18 @@ function MainViewContent({
               // instance survives the placeholder→streaming swap and
               // the clock reads continuously as the step's total time.
               <div>
-                <TurnMarker
-                  key={currentTurnIndex ?? "pending"}
-                  index={currentTurnIndex ?? undefined}
-                  thinking
-                  liveStatus={liveStepStatus}
-                />
+                {/* The in-flight marker sits in the live run's process
+                    region (inset + rail) like every settled step; the
+                    streaming partial below it is the answer taking
+                    shape and stays full width. */}
+                <StepRegion>
+                  <TurnMarker
+                    key={currentTurnIndex ?? "pending"}
+                    index={currentTurnIndex ?? undefined}
+                    thinking
+                    liveStatus={liveStepStatus}
+                  />
+                </StepRegion>
                 {/* In-flight streaming partial (DESIGN.md §4.3
                   streaming generation). Renders accumulated
                   display_queue chunks from turn_progress IPC events.

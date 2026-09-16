@@ -143,6 +143,10 @@ export function RunFoldHeader({
           open && "rotate-90",
         )}
       />
+      {/* Stays ink-muted regular by live A/B (2026-09-16): a darker
+          ink-soft medium handle was offered against the reference
+          trace component's "header out-inks its list" hierarchy and
+          rejected — the quiet-eyebrow call of 2026-08-06 holds. */}
       <span className="shrink-0 tabular-nums tracking-[0.01em]">
         {copy.conversation.foldSteps(stats.stepCount)}
         {duration && ` · ${duration}`}

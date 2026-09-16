@@ -59,7 +59,8 @@
 - **方案**：settled 且 run 已完成的收尾回答轮、显示步号为 1 → 收掉「第 1 步 │」前缀，保留 summary + chevron（DetailPanel 入口挂在此行）。**按编号段判而非按 run 判**：ask_user 回复也是一次 `put_task`、步号重新从 1 数（`workbench_bridge.py:1474`），收尾孤步段同样收；run 中段孤步（第 1 步即发 ask_user 暂停）不收——那里序列被暂停而非结束。
 - **实施要点**：TurnMarker 已支持 `index` undefined 的无前缀形态（`Conversation.tsx:569`），复用即可；aborted run 不收（无 settle 语义，序列被打断是事实）；en（`Step 1`）结构性同款，零文案改动；sidebar `第 N 步 · {summary}` 不跟随（独立语境需要单位）；`conversation.md` 需注明这是「before/after 视觉一致」的有意例外；判定条件补单测。
 - **待定**：若启动时仍嫌残留孤行冗余，「删整行」要作为对两条既有约束的重审来做（DetailPanel 入口；StrongHr 的 action→conclusion 修辞需上方 action 列，`Conversation.tsx:433`）。
-- **关联**：`conversation.md` TurnMarker 节（步号即结构锚点）；`Conversation.tsx:474`（「步 vs 轮」选词理由）；`layout-and-chrome.md` sidebar 角标「·1 是噪音」条款（规范近亲，非同物）。
+- **2026-09-16 第二次提出并翻案**：JC 再问「只显数字是否可行」并贴外部 ReasoningTrace 参考组件（`01` 补零等宽序号）。第一轮复核维持否决、只改编号淡一档；JC 真机看过后仍嫌繁琐，第二轮翻案：**多步改为补零序号 + 去 hairline + 24px 序号栏、过程体整体缩进**（08-23「永久否决」的依据被真机实感推翻，详见 [devlog](./2026-09-16-step-marker-recede-and-reference-audit.md)）。**本节的单步问题不受影响**：单步 run 现在显示「01 summary」，JC 说「都行」= 启动信号未触发，维持暂存；若将来启动，方案改为「收尾孤步收掉序号 gutter、summary 顶到列左」，其余判据不变。
+- **关联**：`conversation.md` TurnMarker 节（锚点靠对齐不靠墨量）；`Conversation.tsx:474`（「步 vs 轮」选词理由）；`layout-and-chrome.md` sidebar 角标「·1 是噪音」条款（规范近亲，非同物）。
 
 ---
 

@@ -299,8 +299,8 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 |---|---|---|---|---|
 | `--conversation-body-size` / `-leading` | 13.5 / 1.65 | **15 / 1.7** | 16.5 / 1.75 | agent + 用户消息 + goal 委派正文 |
 | `--conversation-thinking-size` / `-leading` | 13 / 1.5 | **14 / 1.55** | 15.5 / 1.6 | italic thinking summary |
-| `--conversation-step-size` | 11.5 | **12** | 12.5 | TurnMarker「第 N 步」 |
-| `--conversation-tool-label-size` | 11.5 | **12** | 12.5 | tool callout head 标签 |
+| `--conversation-step-size` | 11.5 | **12** | 12.5 | TurnMarker 行（summary 字号；序号走 mono 档） |
+| `--conversation-tool-label-size` | 10.5 | **11** | 11.5 | inline pill 主标签（2026-09-16 降一档与 mono 同档，退到 step summary 之下） |
 | `--conversation-tool-mono-size` | 10.5 | **11** | 11.5 | tool callout 次级 mono |
 | `--conversation-code-size` | 12 | **13** | 14.5 | markdown 块代码（leading 固定 1.45，2026-07-05 新增） |
 | `--conversation-echo-size` | 12.5 | **13** | 14.5 | 已答复 ask_user 的问题回显（降权阅读态，2026-07-05 新增） |
