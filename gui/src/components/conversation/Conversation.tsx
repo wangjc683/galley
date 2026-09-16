@@ -21,7 +21,7 @@ import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubb
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
-import { formatStepNumeral } from "@/lib/step-numeral";
+import { PENDING_STEP_NUMERAL, formatStepNumeral } from "@/lib/step-numeral";
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
 import {
   askUserReplyContent,
@@ -665,13 +665,17 @@ export function TurnMarker({
   // The ordinal belongs to settled steps only (2026-09-16): a numeral
   // is a stamp on a finished step, and an in-flight row wearing "01"
   // announces a list of one whose one item does not exist yet. The
-  // thinking row keeps its empty gutter so the status text sits in
-  // the content column; when turn_end swaps in the settled marker the
-  // numeral appears in place — the "stamp" beat. Steps above are
-  // already numbered, so which iteration is running stays legible
-  // without a number on the live row. Same for the sr-only label.
-  const stepNumeral =
-    index != null && !thinking ? formatStepNumeral(index) : null;
+  // thinking row carries `··` in the gutter instead — an empty slot
+  // read as a hole on JC's live check (same day, postscript six), and
+  // the two dots keep the column while saying "next item, not yet
+  // stamped". Steps above are already numbered, so which iteration is
+  // running stays legible without a number on the live row. Same for
+  // the sr-only label.
+  const stepNumeral = thinking
+    ? PENDING_STEP_NUMERAL
+    : index != null
+      ? formatStepNumeral(index)
+      : null;
   // The DetailPanel caret rides the end of the summary text (or
   // stands alone when a bare-number step still has thinking to
   // show) instead of parking at the column's far edge — a disclosure
@@ -736,10 +740,11 @@ export function TurnMarker({
             baselines sit together despite the size step. The gutter
             renders even before `index` is known (pre-turn_start
             thinking gap) so the status text does not jump right when
-            the step number lands. Mirrored by ToolCallout's
+            the step lands. Mirrored by ToolCallout's
             merged-step prefix; the localized "第 N 步" survives as
             sr-only text (and in the sidebar, where the number needs
-            its unit). */}
+            its unit). In flight the column holds `··` (see
+            stepNumeral above). */}
         <span
           className="w-(--step-gutter) shrink-0 font-mono tabular-nums text-ink-muted [font-size:var(--conversation-tool-mono-size)] [line-height:calc(var(--conversation-step-size)*1.6)]"
           aria-hidden

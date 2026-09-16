@@ -8,3 +8,12 @@
 export function formatStepNumeral(index: number): string {
   return String(index).padStart(2, "0");
 }
+
+/**
+ * Gutter placeholder for the in-flight step (2026-09-16): two middle
+ * dots, the width of a two-digit ordinal in the same mono column, so
+ * the live row reads as "next item, not yet stamped" instead of an
+ * empty slot. Chosen over an empty gutter and over a gutter-less
+ * flush row in a live A/B (devlog postscript six).
+ */
+export const PENDING_STEP_NUMERAL = "\u00b7\u00b7";

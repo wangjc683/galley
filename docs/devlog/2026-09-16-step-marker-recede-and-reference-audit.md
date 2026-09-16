@@ -204,3 +204,31 @@ thinking 内容）。
    随末行换行；裸数字步单独立在 gutter 右侧），三处披露 caret 一条规则。
 
 被否：B 右簇整体 hover 显示（静止态可点性只剩 hover 底色）；C 去 caret。
+
+## 后记六（同日）：thinking 行序号位放 `··`
+
+后记三定「thinking 行空 gutter」后，JC 真机截图指出：因为没有序号，
+思考行前面空了一段，刚提交、尚无落定步时尤其像个洞。
+
+诊断：只学了参考组件的一半。它 thinking 态确实无号，但序号位放的是
+Sparkles 脉冲，格子没空；Galley 按 §2.7 否了图标又去了序号，格子成了
+真空。更根本的差异是参考组件的 live 状态在**顶部 header 槽**，Galley 的
+是**底部一行无号的步行**——序号栏形态下天然缺一块。另外后记三「序号在原位
+出现」的盖章理由比当时想的弱：in-flight 行在 MainView、settled 步在
+Conversation，turn_end 是整行替换，不是同一行加上数字。
+
+三条路：①序号位放静态占位 `··`（守网格，不加动效源）；②thinking 行不吃
+gutter、文字从序号列起笔（承认「状态行不是步」，破一行网格）；③live 状态
+升为顶部 live header（参考组件的真实结构，长 run 时活跃信号会滚出视野，
+改动大）。③进 [deferred](./deferred.md)「过程区的 live 状态升为顶部 live
+header」。①②做临时三态切换器（空档 / `··` / 无 gutter）进 tauri dev。
+
+裁决：JC「明显喜欢 dots」。`PENDING_STEP_NUMERAL = "··"`（`step-numeral.ts`）
+同列同 mono 同 muted，两位序号宽；切换器已拆。agent 押的也是①，理由是
+这套寄存器是 Swiss 网格。②的「差 5px 对不齐折叠头」顾虑在讨论中已收回
+（live run 无折叠头），它输在整行要靠寄存器差异撑而不是位置。
+
+顺带修的真 bug（单独 commit `69a5ce6e`）：`extractPreamble` 只剥紧凑形态的
+`🛠️ tool(...)` 标记，verbose 形态的 `🛠️ Tool: \`x\` 📥 args:` 块漏进 live 状态，
+真机见「Tool: web execute js args: · 14.5 秒」。补齐整块剥除与截断，与
+`cleanPartialContent` 对齐。

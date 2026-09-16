@@ -585,3 +585,15 @@
 - **启动信号**：JC 开始实际使用置顶（DB `pinned=1` 出现且持续）且仍觉得两次点击是摩擦；或社区反馈找不到置顶。
 - **方案**：若启动，先加 ⌘K 命令「置顶 / 取消置顶当前会话」（零视觉成本）；再议行内按钮。行内按钮若做，借参考组件三处写法：`[@media(hover:hover)]` 下才隐藏、`aria-pressed`、已置顶态不随 hover 消失；位置需与 ⋯ 协调（并排或折进 ⋯ 左侧），标题让位量随之调整。
 - **关联**：`layout-and-chrome.md` Sidebar 行动作条款（line ~146）与 Session Row 三通道清单；`SidebarSessionMenuItems.tsx`。
+
+---
+
+## 过程区的 live 状态升为顶部 live header
+
+- **状态**：暂存（2026-09-16 思考行空 gutter 讨论中提出，JC 裁「先在底部行内解决」）
+- **提出**：2026-09-16，JC 真机指出 thinking 行因无序号在 gutter 处空一段（[步号淡一档 devlog](./2026-09-16-step-marker-recede-and-reference-audit.md) 后记三的直接代价）。诊断时发现结构性差异：参考 ReasoningTrace 组件的 live 状态在**顶部 header 槽**（"Thinking…" shimmer → "Thought for 4.4s"），Galley 的 live 状态是**底部一行没有步号的步行**，序号栏形态下天然缺一块。
+- **启动信号**：长 run 里出现「看不到当前在干什么」的实感或反馈；或折叠头改为 sticky 使顶部 header 在长 run 中仍可见。两者之一成立，顶部 live header 才有底盘。
+- **方案**：live run 顶部渲染一个与 RunFoldHeader 同位（caret x=5、文字 x=19）的 live header，内容「思考中 · 32 秒」（或 sendPhase / preamble 压缩状态 / 「正在回答」）+ shimmer，计时改为 run 总时长；run 完成后原位换成「N 步 · 用时 32 秒」的折叠头，before/after 收成 header ↔ header。底部的 in-flight TurnMarker 行删除，rail 从 header 挂下（与 settled 同构，两段 rail 断口问题一并消失）。
+- **实施要点**：MainView 的 in-flight 区与 Conversation 的 live 区要合并成一个 StepRegion；per-step 时钟（每步归零）改为 run 时钟，若仍要每步节奏，header 可写「第 5 步 · 32 秒」但这会把「提前盖章」问题搬到 header 上，需重审。§2.7 动效源计数不变（shimmer + 计时器）。
+- **待定**：长 run 顶部 header 滚出视野后底部只剩 rail 与流式 caret，是否够；sticky 折叠头是否与 08-06「安静眉头」冲突。
+- **关联**：[步号淡一档 devlog](./2026-09-16-step-marker-recede-and-reference-audit.md) 后记三、后记六；`StepRegion.tsx`、`RunFoldHeader.tsx`、`MainView.tsx` in-flight 槽。
