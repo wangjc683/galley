@@ -561,3 +561,14 @@
 - **实施要点**：只做 emit，不改重试决策；IM 端不必显示。
 - **待定**：靠解析 stdout 行还是加补丁 hook——前者零补丁但脆，后者多一个补丁。
 - **关联**：`managed-ga/code/llmcore.py` `_stream_with_retry` · `runner/workbench_bridge.py` · [高级配置开放 max_retry_after](./2026-09-14-max-retry-after-advanced-option.md)。
+
+---
+
+## Windows 低 DPR 下 chrome 文字字重 / 字号变体
+
+- **状态**：暂存（2026-09-16，JC 裁「先只做图标加粗与字体栈」）
+- **提出**：2026-09-16，Windows 社区截图反馈「图标和文字发虚」。图标归因 Phosphor thin 0.5px 在 1x 屏半像素（已修：`@media (max-resolution: 1.5dppx)` 加 stroke，见 foundations §2.3）；字体栈显式加 Microsoft YaHei。文字部分：chrome 13px / 400 的雅黑在 Windows 灰度抗锯齿下笔画细边缘发灰，`-webkit-font-smoothing` 在 Windows 无效，现有「苹方 auto 补偿」机制在 Windows 不存在。
+- **启动信号**：图标修复发版后社区仍反馈文字发虚；或 JC 在 Windows 真机 100% / 125% 下自己觉得侧栏标签比对照软件轻一档。
+- **方案**：`html[data-platform="windows"]` 作用域内做变体实测：A 字重 400 → 500；B 13 → 14px；C 两者。连同 chrome 最小档（10–11.5px）在雅黑 1x 下的可读性一起看。临时变体切换器进 tauri dev（Windows 机）。
+- **待定**：是否按 dppx 而非平台挂钩（与图标修法同构，但字重的成因是雅黑不是 DPR，平台更准）。
+- **关联**：foundations §2.3（图标低 DPR 兜底）、§2.2 字重表；`globals.css` Windows 作用域块。

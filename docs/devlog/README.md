@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-16
+- [Windows 图标 / 文字发虚](./2026-09-16-windows-low-dpr-icons-and-font-stack.md) — Phosphor thin 实为 0.5px（文档 1.25px 是笔误），1x 屏半像素糊成灰线；`max-resolution: 1.5dppx` 下给 256 viewBox path 加 8 单位 stroke 升到 regular 粗细，按 dppx 不按平台；`--font-sans` 显式加雅黑；字重 / 字号变体进 deferred
 - [Settings 侧栏中文改为主标签](./2026-09-16-settings-sidebar-chinese-primary.md) — 社区反馈中文太小太淡：10.5px `text-ui-micro` 排汉字 + ink-muted 75% 浅色只有 2.5:1，层级倒置被证伪；JC 裁 B 主次翻转（中文 14px 主、英文 11.5px ink-muted 副），只动侧栏不翻页头，A 抬字号与 C 去英文均否
 - [模型列表改为模型输入框的候选项](./2026-09-16-model-list-combobox.md) — 自动拉取静默导致列表凭空出现、UI 跳动；A 自动路径走 probe 状态（转圈 → 找到 N 个）+ C `ModelCombobox` 并进输入框（caret / 输入即筛选 / 焦点不离开），JC 裁「列表是字段候选项不是独立区块」，B 折叠摘要与合并刷新按钮进 caret 均否
 

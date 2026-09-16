@@ -468,7 +468,16 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
 
 **Phosphor Thin** 全局唯一 icon set。
 
-- 默认 16px stroke 1.25px
+- 默认 16px，thin 笔画 **0.5px**（256 网格上 8 单位；regular 1px、bold 1.5px）。
+  旧文写「1.25px」是笔误，2026-09-16 核 Phosphor 路径数据后更正。
+- **低 DPR 兜底（2026-09-16）**：0.5px 在 Retina 2x 上正好一物理像素，
+  在 Windows 100% / 125% / 150% 上只有半个像素，抗锯齿糊成灰线（社区
+  Windows 截图反馈「图标发虚」）。globals.css 在
+  `@media (max-resolution: 1.5dppx)` 下给 Phosphor svg path 加 8 单位
+  `stroke: currentColor`，thin 升到 regular 粗细，其余 weight 同增
+  0.5px。按 dppx 而非平台挂钩：Mac 外接非 Retina 屏同病，Windows
+  200% 无病。这不改「Phosphor Thin 唯一」的契约，只承认 thin 的前提
+  是 2x 屏。
 - 状态色随上下文（参考 §2.1 状态色）
 - **不用 emoji 做状态指示**（跨平台渲染不一致 + 视觉太重）
 - **Phosphor-only，产品无 emoji 锚**（2026-05-14 收回了原本 ThinkingSummary 的 💭 例外——bg-surface callout chrome + italic serif 已经足以标识 callout 块，不需要图标装饰）

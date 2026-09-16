@@ -140,8 +140,8 @@
     "Newsreader", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC",
     Georgia, serif;
   --font-sans:
-    "Inter", "PingFang SC", "Source Han Sans SC", -apple-system,
-    BlinkMacSystemFont, sans-serif;
+    "Inter", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC",
+    -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
 
   /*
@@ -705,6 +705,30 @@ html[data-platform="windows"] ::-webkit-scrollbar-corner {
    No-op on macOS overlay scrollbars (gutter is zero there). */
 html[data-platform="windows"] .scrollbar-stable {
   scrollbar-gutter: stable;
+}
+
+/* Phosphor icon hairlines on low-DPR screens (docs/design/foundations.md
+   §2.3). Phosphor `thin` is an 8-unit stroke on the 256 grid = 0.5 CSS px
+   at 16px. On a 2x Retina panel that is exactly one device pixel and
+   reads crisp; at Windows 100% / 125% / 150% it is 0.5–0.75 device px
+   and anti-aliasing smears it into a grey ghost (2026-09 community
+   report: sidebar + topbar icons "发虚" next to other apps).
+
+   Keyed on device pixel ratio rather than `data-platform` because the
+   cause is physical: a Mac driving a non-Retina external display has
+   the same problem, and a Windows 200% panel does not. Adding an 8-unit
+   `stroke` in viewBox units grows every edge by 0.25px per side —
+   thin becomes regular-weight (1px @16), and it scales with `size` the
+   same way Phosphor's own weights do. `bold` / `fill` pick up the same
+   +0.5px; Phosphor emits no weight attribute to exclude them by, and a
+   heavier bold on a 1x screen is not a defect. Scoped to Phosphor's
+   256 viewBox so the IM Glyphs (24 viewBox, stroke-based) stay put. */
+@media (max-resolution: 1.5dppx) {
+  svg[viewBox="0 0 256 256"] path {
+    stroke: currentColor;
+    stroke-width: 8;
+    stroke-linejoin: round;
+  }
 }
 
 @keyframes theme-fade {

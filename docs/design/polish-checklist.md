@@ -29,7 +29,7 @@ active / loading / empty 全部状态——10% 速度下觉得不对的，就是
 | P7 | 禁 `transition: all` | 一律写明属性（`transition-[opacity]` 等）。现状已合规，audit 时守住 |
 | P8 | `will-change` 克制 | 只在实测到首帧卡顿时加，且只用于 transform / opacity / filter |
 | P9 | 交互态动效用 CSS transition（可中途打断、可反向），keyframe 只给一次性序列 | 与 §2.7 A 类动效的「有始有终」一致；toggle / 展开类交互禁 keyframe |
-| P10 | 图标 stroke 随旁边文字字重 | Phosphor Thin（1.25px）配常规文字为基线；semibold 文字或主 CTA 旁可升 weight（先例：新建项目 Plus 用 regular）。一个面内不混 icon set |
+| P10 | 图标 stroke 随旁边文字字重 | Phosphor Thin（0.5px @16，低 DPR 屏由 globals.css 自动加粗到 1px，见 foundations §2.3）配常规文字为基线；semibold 文字或主 CTA 旁可升 weight（先例：新建项目 Plus 用 regular）。一个面内不混 icon set |
 | P11 | 图标状态用 `currentColor` + CSS 变色，不换资源文件 | 现状已合规；outline 为默认态，fill 表激活 / unread（先例：StatusIcon unread 实心圆） |
 
 ## 已否决条目
