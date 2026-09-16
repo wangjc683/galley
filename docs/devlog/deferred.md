@@ -573,3 +573,15 @@
 - **方案**：`html[data-platform="windows"]` 作用域内做变体实测：A 字重 400 → 500；B 13 → 14px；C 两者。连同 chrome 最小档（10–11.5px）在雅黑 1x 下的可读性一起看。临时变体切换器进 tauri dev（Windows 机）。
 - **待定**：是否按 dppx 而非平台挂钩（与图标修法同构，但字重的成因是雅黑不是 DPR，平台更准）。
 - **关联**：foundations §2.3（图标低 DPR 兜底）、§2.2 字重表；`globals.css` Windows 作用域块。
+
+---
+
+## session 行 hover 置顶按钮
+
+- **状态**：暂存（2026-09-16 探讨，JC 裁「先把置顶提到 ⋯ 菜单第一项」）
+- **提出**：2026-09-16，JC 贴外部 ConversationList 参考组件（行右侧 hover 出现图钉、已置顶常驻实心图钉、`[@media(hover:hover)]` 下才隐藏、`aria-pressed`）问是否引入。
+- **不做的理由**：①ground truth：JC 本机 111 个 session 置顶 0 个，功能尚未挣到提升位；②置顶是每 session 一生一两次的动作，正是 ⋯ / 右键菜单为之设计的「对象级低频操作」；③行右侧 hover 位已被 ⋯ 占用，两个精密目标并排、标题 hover 让位 56px，行的 hover 态变吵；④已置顶行常驻图钉与 PINNED 桶头重复（「·1 是噪音」同款）。参考组件的模式成立是因为它的行只有 pin 一个动作。
+- **已做的廉价提升**：置顶提到 ⋯ / 右键菜单首项（两入口共享同一组件，排序一致）。
+- **启动信号**：JC 开始实际使用置顶（DB `pinned=1` 出现且持续）且仍觉得两次点击是摩擦；或社区反馈找不到置顶。
+- **方案**：若启动，先加 ⌘K 命令「置顶 / 取消置顶当前会话」（零视觉成本）；再议行内按钮。行内按钮若做，借参考组件三处写法：`[@media(hover:hover)]` 下才隐藏、`aria-pressed`、已置顶态不随 hover 消失；位置需与 ⋯ 协调（并排或折进 ⋯ 左侧），标题让位量随之调整。
+- **关联**：`layout-and-chrome.md` Sidebar 行动作条款（line ~146）与 Session Row 三通道清单；`SidebarSessionMenuItems.tsx`。

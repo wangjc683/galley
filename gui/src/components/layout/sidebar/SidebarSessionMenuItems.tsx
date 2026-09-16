@@ -27,8 +27,16 @@ import {
  * Shared menu body for a session row — rendered inside both the
  * right-click ContextMenu and the ⋯ DropdownMenu (the `kind` prop
  * routes each item to the matching Radix primitive via SidebarRowMenu).
- * Rename / Pin / Move-to-project / Archive; each entry is gated on its
+ * Pin / Rename / Move-to-project / Archive; each entry is gated on its
  * handler so a caller that doesn't wire an action simply omits it.
+ *
+ * Pin leads (2026-09-16): JC's own database had 0 of 111 sessions
+ * pinned, read as a discoverability gap rather than no demand. A
+ * dedicated hover pin button on the row (the reference conversation
+ * list pattern) was weighed and declined — the row's hover slot is
+ * the ⋯ target and pinning is a once-per-session action — so the
+ * promotion is the cheapest one: first item in the menu both entry
+ * points share.
  */
 export function SidebarSessionMenuItems({
   kind,
@@ -57,16 +65,6 @@ export function SidebarSessionMenuItems({
 
   return (
     <>
-      {onRequestRename && (
-        <SidebarRowMenuItem
-          kind={kind}
-          onSelect={onRequestRename}
-          className={itemClass}
-        >
-          <Pencil size={13} weight="thin" />
-          {copy.sidebar.rename}
-        </SidebarRowMenuItem>
-      )}
       {onTogglePin && (
         <SidebarRowMenuItem
           kind={kind}
@@ -84,6 +82,16 @@ export function SidebarSessionMenuItems({
               {copy.sidebar.pin}
             </>
           )}
+        </SidebarRowMenuItem>
+      )}
+      {onRequestRename && (
+        <SidebarRowMenuItem
+          kind={kind}
+          onSelect={onRequestRename}
+          className={itemClass}
+        >
+          <Pencil size={13} weight="thin" />
+          {copy.sidebar.rename}
         </SidebarRowMenuItem>
       )}
       {onAssignToProject && (
