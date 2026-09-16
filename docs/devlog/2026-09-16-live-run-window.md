@@ -36,6 +36,14 @@ agent 认可并修正为**两行窗口**：step 的 summary 在 turn_end 才产�
 （marker `mt-*` 经 `data-role` 归零），因为挂着的 0fr fold section 会阻断
 margin 穿透，否则展开 / 收起时头到窗口的间距会抖 10px。
 
+完成瞬间的收合（JC 当场追加）：live 与 settled 结构在窗口上没有共同 key，
+同一次渲染切换会让两行瞬时消失。解法是把结构切换延后一次 sweep——run
+完成的那次渲染用 guarded setState-in-render 标记 `settlingOpener`，保持 live
+结构但窗口的 ExpandSection 关闭、头当场换 settled 文案、closing turn 不进
+窗口而平铺在下；300ms 后切到 settled 结构，此时折叠段本就关着，画面不再动。
+窗口的 ExpandSection 顺带接管了头到窗口的间距编排（折叠头下 `-mt-2.5` +
+`pt-2.5`，padding 在 overflow 盒内让 rail 穿过间隙）。
+
 `.scratch/conversation-run-fold/PRD.md` §2 再修订；deferred「live 状态升为
 顶部 live header」被本设计吸收后删除。
 
@@ -47,5 +55,5 @@ margin 穿透，否则展开 / 收起时头到窗口的间距会抖 10px。
 
 ## 待真机验
 
-完成瞬间窗口的瞬时消失（约 63px）；快步连发的替换观感；两步 run 的头闪现；
-760 列宽气味段截断。
+完成瞬间「头瞬换文案 + 窗口渐收」是否读作一个动作；快步连发的替换观感；
+两步 run 的头闪现；760 列宽气味段截断。

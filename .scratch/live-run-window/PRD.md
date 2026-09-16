@@ -51,17 +51,24 @@ live 区不再是清单，是一块**固定大小的状态面板**：
   `regionOwner`（不可折 run 平铺）。装配段三种 kind：fold / flat / window。
   keep-expanded 指针与 rAF 释放已删（完成即折由 `folded = override ?? true`
   直接得到）。
-- 窗口 region 的间距归属：marker 的 `mt-*` 经 `data-role="step-marker"` 归零，
-  region 自己按「无头 mt-6 / 折叠头 mt-0（吃头的 mb-2.5）/ 展开头 mt-2.5」
-  给，避免 0fr 的 fold section 挂着时 margin 不能穿透造成的 10px 抖动。
+- 窗口包在 ExpandSection 里（key `window-<opener>`），间距归属由它承担：
+  marker 的 `mt-*` 经 `data-role="step-marker"` 归零；无头 `mt-6`、折叠头
+  `-mt-2.5` + region `pt-2.5`（头的 mb-2.5 抵消后以 padding 在 overflow 盒
+  内重发，rail 才能穿过间隙不被裁）、展开头 `mt-0` + `pt-2.5`；关闭态
+  `mt-0`。与 RunFoldSection 的 `-mt-5.5` 同一套编排。
+- **完成瞬间的收合**（settling）：run 完成的那一次渲染里，Conversation 用
+  guarded setState-in-render 把 `settlingOpener` 指向它，保持 live 结构一次
+  sweep（窗口 ExpandSection `open=false` 收合、头当场换 settled 文案、最终
+  答案平铺在下、closing turn 不进窗口），300ms 后清掉切换到 settled 结构——
+  此时折叠段本就是关的，画面不再动。用户 live 展开过（override）或 run 未
+  完成（中止）不走 settling。
 - `RunFoldHeader` `live` prop；i18n `foldStepsLive`。
 - `MainView`：传 `agentRunning={isRunning}`；in-flight 与审批区 `inRunRail`。
 
 ## 已知、待真机验
 
-- **完成瞬间窗口是瞬时消失**（两行约 63px），不是收合动画：live 结构与
-  settled 结构 key 不同，无免费连续性。若真机觉得突兀，下一步把窗口 region
-  包进 ExpandSection、结构切换延后一次 sweep。
+- 完成瞬间的收合：窗口两行 240ms sweep 收进头，同时头换成「N 步 · 用时」；
+  看头文案的瞬换与窗口的渐收是否读作一个动作。
 - 快步连发时窗口内容替换频率高，ExpandSection 可打断，但观感待看。
 - 两步 run 的 live 头只在最后一刻出现即变 settled 头，是否闪。
 - 760 列宽下 live 头气味段截断与 tooltip。
@@ -70,4 +77,3 @@ live 区不再是清单，是一块**固定大小的状态面板**：
 
 - 进行中行显示工具级状态（需 bridge 工具级 live 事件，Phase 2 协议）。
 - Goal run 进面板。
-- 完成瞬间的收合动画。

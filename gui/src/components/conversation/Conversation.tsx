@@ -86,6 +86,10 @@ export interface ConversationProps {
  * color. (DESIGN.md says "稍深 1px 全宽 vs 极淡 1px 60% 居中"; opacity
  * 60% on the soft one approximates the prototype.)
  */
+/** Length of the live→settled sweep: ExpandSection's --motion-slow
+ * (240ms) plus its unmount margin, the same 300ms it uses itself. */
+const SETTLE_SWEEP_MS = 300;
+
 export function Conversation({
   turns,
   approvalDecisions,
@@ -162,6 +166,46 @@ export function Conversation({
       ? lastGroup
       : null;
 
+  // Settling: the sweep between live and settled. The two structures
+  // share no keys for the window, so switching in the render where
+  // the run completes would drop the window's two rows instantly.
+  // Instead the just-completed run keeps its live shape for one
+  // sweep — window wrapped in an ExpandSection now closing, header
+  // already in settled voice, the final answer flat below — and the
+  // switch to the settled structure happens after the sweep, when
+  // the fold section behind the header is closed either way and
+  // nothing visible moves. Skipped when the reader had opened the
+  // live header (the run settles open, no window to sweep) and when
+  // the run did not complete (aborts unfold in full). Guarded
+  // setState-in-render: the decision has to land in THIS render, an
+  // effect would commit the settled structure first.
+  const liveOpenerNow = liveGroup?.openerIndex ?? null;
+  const [watchedOpener, setWatchedOpener] = useState<number | null>(null);
+  const [settlingOpener, setSettlingOpener] = useState<number | null>(null);
+  if (liveOpenerNow !== null && liveOpenerNow !== watchedOpener) {
+    setWatchedOpener(liveOpenerNow);
+  }
+  if (liveOpenerNow === null && watchedOpener !== null) {
+    const watched = groups.find((g) => g.openerIndex === watchedOpener);
+    if (watched?.complete && foldOverrides[watchedOpener] !== true) {
+      setSettlingOpener(watchedOpener);
+    }
+    setWatchedOpener(null);
+  }
+  useEffect(() => {
+    if (settlingOpener === null) return;
+    const timer = window.setTimeout(
+      () => setSettlingOpener(null),
+      SETTLE_SWEEP_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [settlingOpener]);
+  const settlingGroup =
+    settlingOpener !== null
+      ? (groups.find((g) => g.openerIndex === settlingOpener && g.complete) ??
+        null)
+      : null;
+
   // Per-render fold plan. headerFor: opener index → fold header data;
   // sectionOwner: turns indices that render inside the group's
   // RunFoldSection (every member except the opener — the final turn
@@ -191,14 +235,19 @@ export function Conversation({
   const answerOnly = new Set<number>();
   for (const g of groups) {
     if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
-    if (g === liveGroup) {
+    if (g === liveGroup || g === settlingGroup) {
+      // While settling, the closing turn is not a window candidate:
+      // its answer body renders flat below (answerOnly) and its
+      // marker would only ever live inside the closed fold section,
+      // so it gets no owner at all.
       let lastAgent = -1;
       for (const i of g.memberIndices) {
-        if (i !== g.openerIndex && turns[i].role === "agent") lastAgent = i;
+        if (i === g.openerIndex || i === g.finalTurnIndex) continue;
+        if (turns[i].role === "agent") lastAgent = i;
       }
       let foldedSteps = 0;
       for (const i of g.memberIndices) {
-        if (i === g.openerIndex) continue;
+        if (i === g.openerIndex || i === g.finalTurnIndex) continue;
         if (lastAgent !== -1 && i < lastAgent) {
           sectionOwner.set(i, g.openerIndex);
           if (turns[i].role === "agent") foldedSteps++;
@@ -209,7 +258,7 @@ export function Conversation({
       headerFor.set(g.openerIndex, {
         group: g,
         folded: foldOverrides[g.openerIndex] !== true,
-        live: true,
+        live: g === liveGroup,
         foldedSteps,
       });
       continue;
@@ -273,7 +322,7 @@ export function Conversation({
             {/* The live header appears once a step has folded behind
                 it (the third step landing, for a two-row window);
                 before that the run is its own short list. */}
-            {header && header.foldedSteps > 0 && (
+            {header && (!header.live || header.foldedSteps > 0) && (
               <RunFoldHeader
                 stats={header.group.stats}
                 open={!header.folded}
@@ -334,32 +383,48 @@ export function Conversation({
         <StepRegion key={`region-${section.opener}`}>{section.nodes}</StepRegion>,
       );
     } else if (section.kind === "window") {
-      // The live window's open tail. Its marker's own top margin is
-      // zeroed (data-role hook) so the gap above is owned here: with
-      // no header yet the region carries the run-boundary mt-6; under
-      // a collapsed header the header's mb-2.5 hug is the whole gap;
-      // under an expanded header the region restores the in-run
-      // mt-2.5. Owning it here is what keeps the gap steady while
-      // the fold section between header and window sweeps — a
-      // mounted 0fr section stops margins collapsing through it, so
-      // any margin on the window would add to the header's during
-      // the sweep and snap back at unmount. The margin animates on
-      // the same token as the sweep for the expand direction.
+      // The live window's open tail, in an ExpandSection so it can
+      // sweep closed when the run settles. Gap choreography (the
+      // marker's own top margin is zeroed through the data-role
+      // hook, so the gap above the window is owned here):
+      //
+      //   no header yet      mt-6 on the section — the run-boundary
+      //                      gap after the user message, collapsing
+      //                      with its my-5 as a plain marker would.
+      //   header, collapsed  -mt-2.5 + pt-2.5: the header's mb-2.5
+      //                      hug is cancelled and re-issued as
+      //                      padding INSIDE the overflow box, so the
+      //                      rail (top-0 of the region) runs through
+      //                      the gap up to the header — a negative
+      //                      rail offset would be clipped. Same
+      //                      pattern as RunFoldSection's -mt-5.5.
+      //   header, expanded   mt-0 + pt-2.5: the open fold section
+      //                      above ends flush; the padding is the
+      //                      in-run gap, rail continuous.
+      //
+      // Closed, the margin goes to 0 like RunFoldSection's, so the
+      // header's hug to the answer holds while the rows sweep. The
+      // margins collapse across a mounted 0fr fold section (0 and
+      // -10 → -10), so toggling the live header does not jitter.
       const h = headerFor.get(section.opener);
       const hasHeader = h !== undefined && h.foldedSteps > 0;
       const expanded = hasHeader && !h.folded;
       rendered.push(
-        <StepRegion
+        <ExpandSection
           key={`window-${section.opener}`}
-          railFrom={hasHeader ? "header" : "content"}
-          className={cn(
-            "[&_[data-role=step-marker]]:mt-0",
-            "transition-[margin-top] duration-(--motion-slow) ease-firm motion-reduce:transition-none",
-            !hasHeader ? "mt-6" : expanded ? "mt-2.5" : "mt-0",
-          )}
+          open={section.opener !== settlingOpener}
+          openClassName={!hasHeader ? "mt-6" : expanded ? "mt-0" : "-mt-2.5"}
+          closedClassName="mt-0"
         >
-          {section.nodes}
-        </StepRegion>,
+          <StepRegion
+            className={cn(
+              "[&_[data-role=step-marker]]:mt-0",
+              hasHeader && "pt-2.5",
+            )}
+          >
+            {section.nodes}
+          </StepRegion>
+        </ExpandSection>,
       );
     } else {
       const h = headerFor.get(section.opener);
