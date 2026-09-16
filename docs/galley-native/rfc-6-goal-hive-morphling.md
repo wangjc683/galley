@@ -1,6 +1,14 @@
 # Galley Native RFC 6: Goal Hive And Morphling
 
-> Status: draft decision document.
+> **Superseded 2026-09-16.** The hive / solo Goal engines this RFC
+> describes were retired by Goal v2 (`.scratch/goal-simplify/PRD.md`,
+> [agent-api §5.19](../agent-api/goal-commands.md)): one persistent
+> objective per session, Core-driven continuation, model-declared
+> completion, time budget as a ceiling. Kept as history; the Morphling
+> and memory-absorption sections are unaffected by that decision but
+> remain unimplemented.
+>
+> Status: draft decision document (historical).
 >
 > Scope: native Goal Hive semantics, master/worker behavior, Core task-board
 > ownership, deliverables, workspaces, Morphling mode, and memory/capability

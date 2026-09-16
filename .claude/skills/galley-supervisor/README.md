@@ -65,7 +65,7 @@ and wait for your approval first.
 |---|---|
 | `SKILL.md` | The thin skill body Claude reads on trigger: identity, host-specific notes, and a pointer to the SOP. The procedure itself is not restated here. |
 | `references/galley-supervisor-sop.md` | The operating procedure (verbatim copy of `docs/integrations/galley-supervisor-sop.md`, CI-checked). |
-| `references/galley-supervisor-reference.md` | Detailed commands, Goal V1, origin fields, boundaries (verbatim copy of `docs/integrations/galley-supervisor-reference.md`, CI-checked). |
+| `references/galley-supervisor-reference.md` | Detailed commands, Goal (v2), origin fields, boundaries (verbatim copy of `docs/integrations/galley-supervisor-reference.md`, CI-checked). |
 
 ## Schema + stability
 

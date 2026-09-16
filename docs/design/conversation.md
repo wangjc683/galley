@@ -98,23 +98,19 @@
   preamble（当其未作为旁白单独渲染时）
 - 展开后 Newsreader italic、`--conversation-thinking-size` 走三档字号
 
-#### Goal 叙述 callout（SystemMessageBubble `variant="goal"`）
+#### Goal 叙述 callout（SystemMessageBubble `variant="goal"`，legacy）
 
-Galley 在 Goal master 线程里讲述 run 进展的旁白（system row）。它是**次要的进行旁白，不是要读的答案**，层级应低于 agent answer。
-
-- 早期设计是"满底 `bg-brand-soft` + 3px brand-strong 实条 + 大写加粗 brand 标签 + bold 图标"，使它成了整个对话区最重的块，反倒压过用户消息和 agent 正文（层级倒挂），多条堆叠还会连成一堵 brand 墙。
-- **2026-06 降权**：去掉满底色与横幅化标签，只留**一条细 brand 左规线**（`border-l-[3px] border-brand-strong/30` + `pl-4`，无底色无右圆角）+ **一个无字的小 `Target` 图标**（thin 11px）作 register 标记，正文经 `MarkdownView variant="agent"` 但 `[&_p]/[&_li]` 降到 `text-ink-soft`。读作页边批注，而非横幅。
-- **「Galley」不再逐条显示**：每条都重复这个词是零信息的 chrome；归属改挂到 Target 图标的 `aria-label`（沿用 `goalNarration` 文案），读屏仍可念出，视觉不啰嗦。保留图标而非裸到只剩左规线，是为了和 agent 正文里的 markdown blockquote（同为 brand 左条 + 斜体 ink-soft 衬线）区分开。
-- **身份由 run 两端的章节框承担**：Goal 委派标记（开场）+ 收口标记（终态）扛起"这是一个 Goal"的 brand 身份，中间的叙述因此可以退回安静旁白。连续叙述簇只在**首条**显示 Target 图标（`SystemMessageBubble` 的 `showGlyph`，由 `annotateGoalThread` 的 `narrationLeading` 驱动），多 beat 的 run 不再每行重复标记。
+Goal v1 时 Galley 在 master 线程里讲述 run 进展的旁白（system row）。**goal v2（2026-09-16）不再写叙述行**——续跑提示是 internal 行，线程里只有目标行、普通 agent 步和两端的标记；此变体只为渲染升级前的历史线程保留。当年的降权决策仍是它的形态：一条细 brand 左规线（`border-l-[3px] border-brand-strong/30` + `pl-4`，无底色）+ 一个无字的小 `Target` 图标（thin 11px），正文 `[&_p]/[&_li]` 降到 `text-ink-soft`；「Galley」不逐条显示，归属挂在图标的 `aria-label`；连续叙述簇只在首条显示图标（`annotateGoalThread` 的 `narrationLeading`）。
 
 #### Goal run = 线程内插曲（章节框）
 
-一条 master session 的线程可先后承载**多个 Goal run**（session 复用自身 id 作每个 goal 的 master），中间还会夹普通对话。所以不做"会话级 Header"，而是把每个 run 括成一段**插曲**：开场 = 委派标记，结尾 = 收口标记，中间是该 run 的叙述。单 goal 就是一段干净的头尾，多 goal 自动分段，同一套规则。
+一条 session 的线程可先后承载**多个 Goal run**（同一时间至多一个 open），中间还会夹普通对话。所以不做"会话级 Header"，而是把每个 run 括成一段**插曲**：开场 = 委派标记，结尾 = 收口标记，中间是该 run 的普通 agent 步（v2 起不再有旁白行）。单 goal 就是一段干净的头尾，多 goal 自动分段，同一套规则。
 
-- **委派标记（`GoalCommissionMarker`）= objective user message 的加冠版**：它本就是用户在 Goal 模式下发送的第一条消息，穿着**加冠正装**（4px brand 竖条 + `bg-brand-tint` 色板 + 硬右边 + Inter medium——2026-08-06 前的 user register，普通消息改高亮笔触后被委派标记专属保留），头上加一行 eyebrow：`Target + Goal`（brand 大写字距）+ 右侧直立 tabular 参数（`N 个 Agent · 预算 Xm · 写入模式`）+ 一个粗粒度状态徽标。这同时解决了"objective 被当普通气泡"和"Composer 两种寄存器结果不可辨"——普通发送=高亮笔触，Goal 发送=委派标记的色板正装。
-- **收口标记（`GoalTerminalMarker`）= run 终态留痕**：`✓ 已完成 / ✕ 失败 / ⏸ 已停止` + `用时 Xm` + 一条 hairline + 操作（`查看结果`/`查看详情` 走 `onOpenGoal`；`产出文件夹` 在有 `workspacePath` 时直接 `revealItemInDir`）。让结果沉淀在对话里，而非划过即逝的 toast；goal 即使已 `result_seen` 从 active 列表移除，回看仍在。
-- **live 归外围**：实时倒计时 / worker 明细 / 停止仍只在 TopBar pill；章节框只在粗粒度状态转变时变（开始 → 进行中 → 终态），不做每秒 ticker（与 §2.7、sidebar/epigraph 的"live 归外围 chrome"一致）。
-- **数据与关联**：标记数据来自只读命令 `list_goals_for_session(masterSessionId)`（全状态，含已读终态）。`annotateGoalThread`（`lib/goal-thread.ts`）用 **objective 文本 + `startedAt ≈ createdAt`** 启发式把 goal 关联到对应的 objective user-turn（消息行不持久化 goalId，恢复后靠此重建）；未命中则优雅退化为无标记的（仍降权的）叙述。run 的收口标记落在其叙述簇之后、后续普通对话之前。
+- **委派标记（`GoalCommissionMarker`）= objective user message 的加冠版**：它本就是用户在 Goal 模式下发送的第一条消息，穿着**加冠正装**（4px brand 竖条 + `bg-brand-tint` 色板 + 硬右边 + Inter medium——2026-08-06 前的 user register，普通消息改高亮笔触后被委派标记专属保留），头上加一行 eyebrow：`Target + Goal`（brand 大写字距）+ 右侧直立 tabular 参数（v2：`上限 N 分钟` 或 `无上限`）+ 一个粗粒度状态徽标。这同时解决了"objective 被当普通气泡"和"Composer 两种寄存器结果不可辨"——普通发送=高亮笔触，Goal 发送=委派标记的色板正装。
+- **收口标记（`GoalTerminalMarker`）= run 终态留痕**：`✓ 已完成 / ⏱ 到达上限 / ⏸ 已停止 / ✕ 失败` + `用时 Xm · 续跑 N 轮` + 一条 hairline；`失败` 与 `到达上限` 下方带 `latestSummary`。`到达上限` 用中性墨（与已停止同），它是上限不是失败。让结果沉淀在对话里，而非划过即逝的 toast；goal 即使已 `result_seen` 从活跃列表移除，回看仍在。
+- **可恢复态不出收口标记**：goal `paused` / `blocked` 时线程尾挂 `GoalPausedTail`（「Goal 已暂停 · 发消息继续」/「Goal 受阻」+ `latestSummary` + 停止），用户发一条消息即恢复；它只在会话空闲时出现。
+- **live 归外围**：状态、耗时、停止在 TopBar pill；章节框只在粗粒度状态转变时变，不做每秒 ticker（与 §2.7、sidebar/epigraph 的"live 归外围 chrome"一致）。
+- **数据与关联**：标记数据来自只读命令 `list_goals_for_session(sessionId)`（全状态，含已读终态）。`annotateGoalThread`（`lib/goal-thread.ts`）按目标行的 `goalId`（`messages.goal_id`，迁移 031）精确匹配，无 id 的老行退回 objective 文本 + `startedAt ≈ createdAt` 启发式。**goal 段的结束**（2026-09-16 修正）：到下一个委派、或 `createdAt` 晚于 `goal.endedAt` 的非回复 user turn 之前——run 中用户发的引导消息留在括号内；v1 的「第一条非叙述 turn 即结束」在单线程 run 里会把收口标记插到工作之前，是本次修掉的 bug。
 
 #### ask_user 提问气泡（`AskUserBubble` / `AnsweredAskUser`）
 
@@ -414,7 +410,7 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 - 上方间距**两档**（2026-08-23 密度 pass）：run 边界（第 1 步）`mt-6`（24px）承担章节分隔；run 内第 2 步起 `mt-2.5`（10px；2026-09-16 前是 `mt-3` 12px）。判据直接用 `index === 1`——GA 每次 `put_task` 步号从 1 重数，步号即 run 边界，无需穿 run-group 数据。**marker 下方 0、pill 无外边距**（2026-09-16 节奏 pass）：真机量得步内 marker→pill 行心距 25.5、步间 34，比例 1.3 分组不成立，四步七行看着像七行；步内收到 0 后步内约 22、步间约 34，比例 1.5+，每步净减 6px。**同日第二刀（数值微调）**：JC 看十步 run 截图仍嫌占地，量得一步行心距 55（summary 19 + pill 24 + 步间 12），留白约 58%，与 08-23 改前几乎持平——结构没动所以天花板还在。试了两刀都撤回：数值刀（pill `py-0.5` + 步间 `mt-2`，55→47）「太密集不舒服」；结构刀（pill 上 summary 行、放不下才折，一行步 31）「单个步骤的阅读体验变差」。结论：密度与阅读体验在同一套静态排版里无解，**按状态分**——两行 55px 附近是「阅读形态」，给 live 与主动展开排查的人；空间问题靠折叠解决（完成即折，见 [run fold PRD](../../.scratch/conversation-run-fold/PRD.md) §2 修订），不靠挤压。最终数值：pill `py-1`、步间 `mt-2.5`，一步 53px。**折叠头→第一步 12px**（原 24）：头是列表的把手要贴住列表，24px 属于头上方的 run 边界（RunFoldSection `-mt-5.5` 编排）。
 - **裸步合并**（同一 pass）：GA 未产出 summary 的步，marker 行只剩纯数字——此时若该步恰好只有一个 settled-success 的 inline 工具、且无 DetailPanel 内容 / 无 narration，则 marker 整行取消，由 InlineToolPill 自渲染序号 gutter 前缀（`Conversation.tsx` `mergedStepTool` → `ToolCallout` `stepIndex`）。前缀在 button 之外，保住序号栏对齐、hover 目标仍是工具区。任一条件不满足（有 summary / 有 detail / 多工具 / block 态）都维持两行——两行形态仍是常态
 - in-flight 状态：`currentTurnIndex` 从 `turn_start` 读取，用于给 thinking 占位 `key`（每步时钟归零）与 `mt-*` 档位；**thinking 行不显序号，序号位放 `··`**（2026-09-16）——序号是落定的盖章，in-flight 行挂「01」等于宣告一个项目还不存在的单项列表；用户感知跑到第几迭代由上方已落定的 01、02 承担，turn_end 替换时序号在原位出现。此前「占位顶部显示 Turn N」的要求废止
-- **live 两行窗口**（2026-09-16，[PRD](../../.scratch/live-run-window/PRD.md)）：正在进行的 run 不是越长越长的清单，而是固定大小的状态面板——最后一个落定的步以阅读形态留在 MainView 思考行之上，之前的步折进 `RunFoldHeader` 的 live 变体「已完成 N 步 · 气味段」（不带用时，步时钟与 HUD 已够两只表；第一步折进去时才出现，单步 run 不受影响）。点头展开是 opt-in，之后落定的步继续追加，完成时保持展开；中止（既不 running 也不 askUserPending）则窗口撤掉、整个 run 平铺。rail 从头 caret 中心贯到思考行（MainView in-flight 区从第 2 步起 `railFrom="header"`）。窗口包在自己的 ExpandSection 里并承担头到窗口的间距（marker `mt-*` 经 `data-role="step-marker"` 归零；折叠头下 `-mt-2.5` + `pt-2.5`，padding 在 overflow 盒内让 rail 穿过间隙），因为挂着的 0fr 折叠段会阻断 margin 穿透。**完成瞬间**：run 完成的那次渲染保持 live 结构一次 sweep（窗口收合、头换 settled 文案、答案平铺），300ms 后切到 settled 结构。**步完成的窗口滑动**：被顶掉的步留一次 sweep 关闭（出场）、新步 0fr 展开（入场）、头首次出现淡入、思考行不重挂载只原地归零时钟（run 开始首次出现淡入一次）；展开态不做出场。每步 `pb-2.5` 自带步间距，region `-mb-2.5` 抵消末步。只对可折 run（`foldEligible`）生效，Goal run 留第二步。
+- **live 两行窗口**（2026-09-16，[PRD](../../.scratch/live-run-window/PRD.md)）：正在进行的 run 不是越长越长的清单，而是固定大小的状态面板——最后一个落定的步以阅读形态留在 MainView 思考行之上，之前的步折进 `RunFoldHeader` 的 live 变体「已完成 N 步 · 气味段」（不带用时，步时钟与 HUD 已够两只表；第一步折进去时才出现，单步 run 不受影响）。点头展开是 opt-in，之后落定的步继续追加，完成时保持展开；中止（既不 running 也不 askUserPending）则窗口撤掉、整个 run 平铺。rail 从头 caret 中心贯到思考行（MainView in-flight 区从第 2 步起 `railFrom="header"`）。窗口包在自己的 ExpandSection 里并承担头到窗口的间距（marker `mt-*` 经 `data-role="step-marker"` 归零；折叠头下 `-mt-2.5` + `pt-2.5`，padding 在 overflow 盒内让 rail 穿过间隙），因为挂着的 0fr 折叠段会阻断 margin 穿透。**完成瞬间**：run 完成的那次渲染保持 live 结构一次 sweep（窗口收合、头换 settled 文案、答案平铺），300ms 后切到 settled 结构。**步完成的窗口滑动**：被顶掉的步留一次 sweep 关闭（出场）、新步 0fr 展开（入场）、头首次出现淡入、思考行不重挂载只原地归零时钟（run 开始首次出现淡入一次）；展开态不做出场。每步 `pb-2.5` 自带步间距，region `-mb-2.5` 抵消末步。普通 run 只对可折 run（`foldEligible`）生效；**Goal run 自 2026-09-16 起也进窗口**（`lib/goal-run-groups.ts` 在形状分组之上盖 goal 规则：goal `active` 且是最后一组即 live，不看 `agentRunning`，续跑边界不拆窗口；paused / blocked / 终态与引导消息前的旧段一律折叠；只有 `completed / budget_limited` 的最后一组把 deliverable 平铺在头下；续跑轮的进展说明降为叙述体留在窗口里当步；步号按组内位置连续编号；goal 组的折叠头不显示用时，用时归收口标记）。
 - `run_complete` / `error` 时清空 currentTurnIndex
 - **没有 turn 之间的 SoftHr**——TurnMarker 自带 chapter-break 视觉重量，水平横线已删除
 

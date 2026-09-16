@@ -23,15 +23,27 @@
 
 ---
 
-## Goal 停止立即 abort 当前轮（stop 响应性）
+## Goal「用满时间」模式（use_budget）
 
-- **状态**：暂存（2026-08-23 Goal 派发修复时浮出，有意不并入该次修复）
-- **提出**：2026-08-23，[Goal 派发装门](./2026-08-23-goal-dispatch-gate-and-run-state.md) 的余量项。
-- **启动信号**：dogfood 或用户反馈里出现「点了停止还要等好几分钟才开始收尾」的实感——solo 循环只在 loop top 检查 `stop_requested`，正在跑的多步 turn 会先跑完；`confirmStopGoal` 文案承诺的「简短收尾（约 1–2 分钟）」在长 turn 下兑现不了。
-- **方案**：停止路径先对 master 会话发 `IpcCommand::Abort`（bridge 会合成 run_complete、Core 队列门随之关闭），再走现有 busy 重试的 synthesis 派发——机制上与队列 `QueueJump::AbortThenDrain` 同族，基建都在。
-- **实施要点**：abort 丢弃当前轮已产出的中间工作（工具副作用已落世界、不回滚，同消息级 Retry 那条的口径）；aborted turn 在主对话区的形态要过一遍（残缺步序列 + 立刻接收尾轮）；hive 模式 master 通常空闲，基本只影响 solo。
-- **待定**：是否给「温和停止（跑完本轮）/立即停止」两档，还是一刀切 abort；GUI stop 确认弹窗文案是否随之改。
-- **关联**：[Goal 派发装门](./2026-08-23-goal-dispatch-gate-and-run-state.md)；`cli/src/goal/solo.rs` loop-top 检查；`core/src/runner_manager/manager.rs` `queue_jump` 的 AbortThenDrain 先例。
+- **状态**：暂存（2026-09-16 goal v2 真机后讨论，JC 裁决先按 Codex「干完为止」用法）
+- **提出**：2026-09-16，[goal v2 devlog](./2026-09-16-goal-v2-codex-shape.md) 后记四。
+- **启动信号**：JC 实际用 goal 的主场景是「离开桌面扔一个长任务」或「quota
+  快重置、把余量用掉」——即想让 agent 把时间用满；若真机里反复出现「10 分钟
+  上限、2 分钟就自判完成」的落差，或出现明确想烧 quota 的场景，启动。
+- **方案**：同一引擎加 `goals.mode`（`until_done` / `use_budget`）。`use_budget`
+  必须有上限；续跑提示换一版——预算是计划不是上限，每轮必须是有据的改进
+  （审计当前最佳的缺口 → 沿目标扩展 → 验证，维护「当前最佳」，不复述不翻工不
+  越界）；完成收紧为「连续两轮审计无改进才可打 complete」；到点走现有收尾轮，
+  `budget_limited` 文案改「时间用满」。
+- **实施要点**：039 未发版可直接加列；`CreateGoalInput.mode`；`goal_prompts.rs`
+  一份续跑变体；确认框两档开关；CLI flag；文档。引擎与状态机不动。
+- **待定**：默认模式（讨论时倾向 `use_budget`）；`use_budget` 下是否完全禁止
+  提前完成；预算按「截止时刻」输入（quota 重置时间）作为自定义框的第二种写法。
+- **与 v1 的区别**（防止被当成回退）：v1 solo 的 nudge 只说「不能宣告完成、继续
+  提高质量」，没有定义有效改进；这里靠 Codex 式的上一轮分类与审计协议约束，
+  且允许在真正做到头时停。
+- **关联**：[goal v2 devlog](./2026-09-16-goal-v2-codex-shape.md)、
+  `.scratch/goal-simplify/PRD.md` §6 裁决 2。
 
 ---
 
@@ -293,12 +305,12 @@
 
 ---
 
-## 架构审查第二轮剩余候选(hive Origin carrier / useComposerGoal / GaSession gate / quick wins)
+## 架构审查第二轮剩余候选(useComposerGoal / GaSession gate / quick wins)
 
 - **状态**:暂存
 - **提出**:2026-07-28(架构审查第二轮收尾,见 [审查 devlog](./2026-07-28-architecture-review-deepening-round.md);四个 Strong 候选已落地,以下为 Worth exploring 档)
 - **启动信号**:下次动到对应模块时顺手做,或再跑一轮架构审查时按新鲜度重估。
-- **候选 5 · hive Goal controller helpers 收窄**:`cli/src/goal/hive.rs` 的 phase helpers 接口宽(`resume_ready_worker_slots` 11 参,双 `&mut` 集合 + 返回值双向携带状态);`supervisor`/`reason` 裸对出现在 12 个签名、~53 次 clone,而 `core/src/api/origin.rs:49` 已有 `Origin` 概念可复用。先捆 carrier 再收 controller-state struct,最后重看双向 mutate。**已核对与 ADR-0002 不冲突**(这些 helper 全 `Result + ?` 传播,无分歧 failure contract)。
+- **候选 5**（hive Goal controller helpers 收窄）随 2026-09-16 goal v2 退役 `cli/src/goal/` 一并消失。
 - **候选 6 · useComposerGoal 13 出参收成 goalView**:26 成员 interface 罩 ~90 行逻辑,3 个入参是回调回 caller,10 个返回值原样穿过 Composer 进 ComposerGoalControls。改返回 `goalView` 对象 + 4 action。
 - **候选 7 · GaSession seam grep gate**:seam 本身干净(bridge 11 处调用零 reach-in),但"re-audit 面 = 一个文件"的承诺无 CI 强制,且 `managed_im_supervisor.py:346` 的 `_galley_im_prompt_installed` 写入是结构性旁路(该路径无 Bridge)。做法:grep gate(同 `check-supervisor-sop-drift.mjs` 文风)+ docstring 补旁路,或让 supervisor 路径也构造 `GaSession(agent)`。
 - **Quick wins**:`hasRunningSessions` 收成 messages store selector(三处重推导:App.tsx / MainHeaderHost / app-update.ts);`lib/ipc/ga-output-cleaning.ts` 补测试(纯函数、流式热路径、零覆盖);`socket_listener/` 的 `use super::*` 互 glob 改具名 re-export(照 `codex_oauth/mod.rs`);`spawn_args_for_session_new` 7 参改 `&SessionBrief`+2;runtime store 补 slice-merge shape 守卫(照 `sessions.shape.test.ts`)。
@@ -436,14 +448,13 @@
   站点因别的原因重做时顺带评估。
 - **方案**：thinking 行已改状态文字扫光（§2.7 唯一豁免），RunElapsedHud
   已改「计数器即活性」的无动效形态，LiveDots 仍服役于 ToolCallout
-  （运行中工具）、GoalRunMarkers（goal 运行尾标）。暂不统一的论证：两处
-  语义是工具 / goal 级忙碌，不是「LLM 正在思考」，三点作为通用 working
-  指示语义成立；且 §2.7 豁免边界写明「一视图至多一处 shimmer」，全量迁移
-  会直接违反刚立的边界。
+  （运行中工具）；goal 运行尾标随 2026-09-16 goal v2 退役（v2 的暂停 /
+  受阻尾标是静态的，无活性信号）。暂不统一的论证：工具级忙碌不是「LLM
+  正在思考」，三点作为通用 working 指示语义成立；且 §2.7 豁免边界写明
+  「一视图至多一处 shimmer」，全量迁移会直接违反刚立的边界。
 - **实施要点**：若启动，方向不是「都改 shimmer」而是逐站点问「这里的
   liveness 是否已有别的承担者」——RunElapsedHud 的先例是删除而非替换
-  （ToolCallout 行内已有 spinner + 计数器，三点同样可能直接删）；
-  GoalRunMarkers 无计数器，是唯一删掉三点就没有活性信号的站点。
+  （ToolCallout 行内已有 spinner + 计数器，三点同样可能直接删）。
 - **待定**：「一视图至多一处」边界与多站点迁移的相容方案。
 - **关联**：[foundations.md §2.7](../design/foundations.md) 豁免条款；
   `LiveIndicators.tsx`。

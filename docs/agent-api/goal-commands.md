@@ -1,260 +1,220 @@
 # Agent API — Goal Commands
 
-> Part of the [Galley Agent API](./README.md) contract. Command reference §5.19: the `galley goal` surface (Goal V1).
+> Part of the [Galley Agent API](./README.md) contract. Command reference §5.19: the `galley goal` surface (Goal v2, **schemaVersion 2 only**).
 
 ### 5.19 · `galley goal ...`
 
-**Goal V1** is Galley's headless autonomous Hive surface. Galley Core owns the
-Goal state, Project binding, task board, and event stream. Managed and external
-GenericAgent runtimes participate only as ordinary Galley child sessions; this
-surface does **not** call GA native `/hive`, start GA BBS, or write external GA
-`memory/`, SOP, config, or `temp/goal_state.json`.
+A **Goal** is one persistent objective on one session. Once set, Galley
+Core re-prompts that session to keep working every time it goes idle,
+until the model declares the objective complete (or blocked), the time
+ceiling is reached, or the operator stops it. There are no workers, no
+Project binding, no task board, no proposal / confirm-token handshake and
+no synthesis turn: the goal's session is the whole engine, and the final
+answer of the completing run is the deliverable.
 
-Goal commands are additive inside `schemaVersion: 1`. V1 intentionally has no
-full task-board UI; the CLI and the TopBar Goal indicator are the control
-surface.
+This replaced the v1 hive / solo surface on 2026-09-16
+(`.scratch/goal-simplify`, devlog entry pending). Everything below exists
+only under `schemaVersion: 2`; a v1 caller sees the family as
+`unknown_command` (see [stability §7](./stability-and-versioning.md)).
+The v1 commands (`goal propose / run / task / event / deliverable`, the
+internal `session.goal_*` and `session.new_goal_worker`) are gone under
+every version.
 
-#### `galley goal propose "<objective>" [--mode=hive|solo] [--project=<id>] [--budget-minutes=30] [--workers=3] [--runtime=current|managed|external] [--write-mode=autonomous|read-only] [--expires-minutes=10] [--supervisor=<x>] [--reason=<y>]`
+#### How a goal runs
 
-Creates a pending conversational-confirmation proposal. It does **not** start
-work.
+1. `goal start` persists the goal (`active`), writes the objective as an
+   ordinary **visible user row** on the session (stamped with the goal
+   id, so the GUI brackets the episode by exact id), and dispatches the
+   opening turn — the objective wrapped in Galley's goal rules.
+2. Every time the session's run settles with nothing else claiming the
+   idle slot (no queued user message, no pending `ask_user`), Core judges
+   the settled run in this order and acts:
+   - the run was aborted (operator pressed stop on the session, or
+     `session stop`) → `paused`;
+   - the run ended in a fatal bridge / runtime error → `blocked`
+     (`latestSummary` carries the error);
+   - the final answer ended with `<goal-status>complete</goal-status>` →
+     `completed`; with `<goal-status>blocked</goal-status>` → `blocked`;
+   - the time ceiling is reached → one wrap-up continuation, then
+     `budget_limited` when that settles;
+   - otherwise → the next continuation (an `internal` user row, invisible
+     in the thread, plus the visible agent turns it produces).
+3. A **user message on the session** always wins over a continuation and
+   is the way to steer a running goal. On a `paused` or `blocked` goal it
+   is also the resume: the goal is `active` again from that run's first
+   turn, and once the run settles the loop continues (a completion tag in
+   that same run counts too).
+4. `goal stop` is terminal `stopped` and aborts the session's in-flight
+   run. No wrap-up.
+   `goal extend` gives a goal more time: a `budget_limited` goal reopens
+   as `active` and Core dispatches its next continuation immediately; an
+   `active` goal just gets a higher ceiling.
+5. A Core restart parks every `active` goal as `paused` — nothing is
+   driving it any more; the operator's next message resumes it. A bridge
+   process dying mid-goal does the same.
 
-`--mode` selects the engine (additive since v0.3.x): `hive` runs a master
-plus up to `--workers` cross-verified worker sessions; `solo` runs one agent
-against the time budget. **The CLI default is `hive` for backward
-compatibility while the desktop GUI defaults to `solo`** — Supervisors
-should pass `--mode` explicitly (the SOP recommends `solo` unless the user
-asks for parallel workers). The proposal echoes the chosen value as `mode`.
+Status machine:
+
+```
+active ──(model tags complete)────────▶ completed
+active ──(model tags blocked / run errors)─▶ blocked
+active ──(ceiling reached, wrap-up settled)─▶ budget_limited
+budget_limited ──(goal extend)─────────▶ active
+active ──(goal stop)──────────────────▶ stopped
+active ──(run aborted / Core restart)──▶ paused
+paused / blocked ──(user-initiated run starts)───▶ active
+paused / blocked ──(goal stop)──────────▶ stopped
+any ──(dispatch failed)───────────────▶ failed
+```
+
+`active` / `paused` / `blocked` are **open** (a session holds at most one
+open goal); `completed` / `budget_limited` / `stopped` / `failed` are
+terminal. `blocked` is recoverable and deliberately not terminal: the model
+is told to use it only after the same blocking condition has recurred for
+three consecutive goal turns, and to say what it needs.
+
+#### `galley goal start <session-id> "<objective>" [--budget-minutes=N | --no-budget] [--supervisor=<x>] [--reason=<y>]`
+
+Sets the goal and dispatches the opening turn.
+
+- `--budget-minutes=N` sets the time ceiling (any whole number of
+  minutes ≥ 1; the desktop offers 15 / 30 / 60 / 120 / 240 / no ceiling
+  plus a custom value); `--no-budget` removes it; neither →
+  **60 minutes**. Both together → exit `2` (`invalid_args`).
+  The ceiling is an upper bound, not a target: a goal that finishes early
+  ends early. When it is reached the model gets one wrap-up turn and the
+  goal lands in `budget_limited` (a distinct terminal status, not a
+  failure) — from which `goal extend` can reopen it.
+- The session must be idle. A session that is mid-run → exit `2`
+  (`invalid_args`) with no side effects — wait with
+  `galley session wait <id>` and start again. (The desktop Composer
+  disables the Goal entry while a run is open, so only CLI callers see
+  this.)
+- The session must have no open goal. A second `goal start` on a session
+  with an `active` / `paused` / `blocked` goal → exit `2` naming the open
+  goal's id. Different sessions may each carry their own goal; there is
+  no global single-goal lock any more.
+- Session missing → `3` (`not_found`); archived → `2`.
+- If the opening turn cannot reach a runner (spawn or dispatch failure)
+  the command exits `5` (`runner_error`) and the goal row is recorded
+  `failed` with the reason in `latestSummary` — never a half-started goal.
 
 ```bash
-$ galley goal propose "review and fix flaky release checks" \
-  --supervisor=ga-wechat-bot \
-  --reason="user asked to start a Goal"
-{"id":"gprop_...","objective":"review and fix flaky release checks",
- "budgetSeconds":1800,"workerLimit":3,"runtimeKind":"managed",
- "writeMode":"autonomous","status":"awaiting_confirmation",
- "internalConfirmToken":"gtok_...","confirmationPhrase":"确认启动 Goal",
- "expiresAt":"2026-06-04T12:34:56Z",...}
+$ galley goal start s-k7x2-9f "Rename the three markdown titles under docs/ to sentence case and verify each" \
+  --budget-minutes=30 --supervisor=ga-wechat-bot --reason="user asked for a goal"
+{"goal":{"id":"goal_5c1e…","sessionId":"s-k7x2-9f","objective":"Rename the three …",
+ "status":"active","budgetSeconds":1800,"startedAt":"2026-09-16T08:00:00+00:00",
+ "continuationCount":0,"wrapUpDispatched":false,"elapsedSeconds":0,
+ "createdAt":"…","updatedAt":"…","origin":{"via":"supervisor","supervisor":"ga-wechat-bot","reason":"user asked for a goal"}},
+ "message":{"id":"msg_…","sessionId":"s-k7x2-9f","role":"user","content":"Rename the three …",
+ "turnIndex":4,"visibility":"visible","goalId":"goal_5c1e…",…},
+ "dispatch":"dispatched"}
 ```
 
-The `internalConfirmToken` is for the trusted local Supervisor only. Do not show
-it to the user. `confirmationPhrase` is a ready-made reply the Supervisor may
-offer the user; behaviorally, any unambiguous affirmative user reply that
-refers to this proposal counts as confirmation (see the Supervisor SOP).
-
-`--workers` defaults to `3`. Desktop presents `2`, `3`, `4`, and `5` to match
-the official GA Hive guidance that ordinary Hive work usually fits in `2-4`
-workers and should not exceed `5`. Core keeps the lower-level CLI/API value
-within `1-5` so supervisors can still request a single-agent Goal when needed
-without allowing oversized hives.
-
-#### `galley goal run --proposal <proposal-id> --confirm-token <internal-token>` / `galley goal run <goal-id> --resume`
-
-Starts or resumes the blocking Goal controller. Starting from a proposal
-validates the proposal status, internal token, and expiry. If the proposal did
-not specify a Project, Core creates one and binds the Goal to it.
-
-**Single active Goal.** Galley runs at most one Goal (status `running` or
-`wrapping`) at a time. Starting a second one fails with exit `2`
-(`invalid_args`) and a message naming the active Goal; the constraint is
-enforced in Core (a DB unique index), independent of any client check. Use
-`galley goal active` to check before proposing. A `--resume` of an
-already-running Goal is idempotent: the controller takes a per-goal file lock,
-so a duplicate resume exits without double-dispatching. Goals left active after
-a Core restart are auto-resumed on the next launch.
-
-For desktop Goals with a master session, the controller first dispatches an
-internal Goal Master planning turn to that master session. The Master acts as a
-scheduler/editor, not a production worker: it must read
-`galley goal status <goalId>`, then write executable work only through
-`galley goal task ...` and `galley goal event ...`. It must not call GA native
-`/hive`, start GA BBS, write external GA state, or write the Goal state outside
-Galley Core. Managed GA may use its normal memory/SOP self-evolution mechanism
-for durable, reusable learnings, but Goal protocol state must not become
-memory/SOP: Goal ids, task ids, worker session ids, rounds/waves, temporary
-coordination logs, and transient task-board state stay in Galley Core. Master
-planning user/assistant/tool turns are persisted as `visibility: "internal"` for
-audit and context, but ordinary session reads, GUI rendering, and search exclude
-them by default.
-
-`workerLimit` is a maximum concurrency limit, not "start this many sessions
-immediately." Worker sessions are created lazily only when the Core task board
-contains an open task assigned to that slot, with a scope such as
-`goal-worker-2:master-round-1:fact-check`. The Master may create fewer tasks
-than `workerLimit` when the work does not need full parallelism, but it must not
-create more executable worker-slot tasks than the configured limit. If Master
-planning fails, times out, or repeatedly creates no executable task, the
-controller falls back to a conservative deterministic task round so the Goal does
-not empty-spin.
-
-The controller then wakes only the worker sessions that have concrete assigned
-tasks, injects the Goal worker protocol, follows the Project with
-`project follow --until-idle --final-show`, then evaluates the task board,
-events, and worker output. Goal run time is a sustained work budget: while the
-deadline has not passed, Galley asks the Master to create concrete follow-up
-tasks when prior results reveal something to verify, refine, structure, or
-challenge. Worker identity is Galley-bound: Core mints the child session id
-before the first worker prompt is persisted and injects that exact id into the
-prompt. Workers must use that id for `ownerSessionId` / `authorSessionId`; they
-must not infer their identity from Project session titles, `goal status`, or
-another worker's events.
-
-Worker wake is task-board driven, not a generic continuation prompt. A worker
-slot must complete/block/cancel an owned task or post a result event before the
-controller can assign that same slot another concrete task. The slot must also
-be idle; terminal task/result signals from a still-live worker are not enough to
-wake it again. Other unfinished slots do not block a slot that already produced
-its terminal signal. Claimed/running tasks, worker progress events, and worker
-output count as in-progress material, so the controller keeps waiting inside
-that slot instead of failing before the deadline. If a worker becomes idle
-without any progress signal, the controller waits through a grace window, sends
-one protocol reminder for that slot, then continues waiting without stacking
-more prompts.
-
-Once the deadline is reached, the controller stops creating new tasks and stops
-waking workers. If the current worker wave is still live, the controller waits
-for it to finish naturally up to a bounded drain window. Before master synthesis
-starts, Galley shuts down worker runners so queued work cannot keep running
-after the result is delivered. Worker sessions remain in the Project as audit
-history. The Goal then enters `wrapping`, runs master synthesis when a desktop
-master session exists, waits for a non-empty master `finalAnswer`, and only then
-ends as `completed`, `stopped`, or `failed`. `latestSummary` is derived from that
-final answer rather than the master's intermediate step summaries.
-
-For desktop Goals, the master session is the user-visible control and delivery
-location. The controller may persist short Galley-owned checkpoints there
-(`agents started`, `initial progress`, `run time reached`) through an internal
-socket write path that does not dispatch those checkpoint messages to the
-master runner. Since v0.3.x the internal `session.checkpoint` socket command
-accepts an optional additive `goalId` arg; when present the persisted message
-row is stamped with it (`messages.goal_id`, migration 031) so frontends can
-bracket Goal episodes by exact id instead of matching objective text. Worker
-prompts, Goal ids, task ids, and protocol logs remain in worker sessions and
-the Goal audit stream.
-
-Since 2026-08-23 the three internal Goal-turn dispatch commands
-(`session.goal_solo_turn`, `session.goal_synthesize`,
-`session.goal_master_plan`) are gated on the session being idle: when the
-target session has an open run or queued messages, they return
-`{"dispatch": "busy"}` with no side effects (nothing persisted, nothing sent
-to the bridge) instead of racing the running turn into the bridge's
-run-in-progress rejection. The controller waits and re-dispatches a freshly
-generated prompt. The wait itself polls the internal `session.run_state`
-command (`{sessionId}` → `{runnerAlive, agentRunning, openRun, queuedCount}`,
-additive in schemaVersion 1), which reads the live RunnerManager state —
-`sessions.status` in the DB persists transient statuses as `idle` and must
-not be used as a busy signal. The three dispatch commands are internal socket
-commands used by the Goal controller and are not part of the documented CLI
-surface. The run-state probe, by contrast, is public since 2026-09-09: its
-bulk form `sessions.run_state` (`{sessionIds?}` → `{sessions: [...]}`, each
-entry adding a derived `busy`) feeds the `live` field on `sessions list`,
-`session brief`, and `status` (see
-[session-commands §5.2](./session-commands.md)).
-
-`goal run` emits NDJSON frames:
-
-```json
-{"schemaVersion":1,"stream":"goal","phase":"started","goal":{...}}
-{"schemaVersion":1,"stream":"goal","phase":"worker_started","sessionId":"sess_...","goal":{...}}
-{"schemaVersion":1,"stream":"goal","phase":"waiting","goal":{...}}
-{"schemaVersion":1,"stream":"goal","phase":"continuing","goal":{...}}
-{"schemaVersion":1,"stream":"goal","phase":"wrapping","goal":{...}}
-{"schemaVersion":1,"stream":"goal","phase":"finished","goal":{...}}
-```
-
-Known `phase` values: `started`, `worker_started`, `waiting`, `continuing`,
-`wrapping`, `failed`, `stopped`, `finished`.
+`dispatch` is always `dispatched` on the success envelope; failures are
+error envelopes.
 
 #### `galley goal status <goal-id>`
 
-Returns a snapshot containing the Goal, its Project if still present, current
-task board, recent events, and non-archived Project sessions:
-
 ```json
-{"goal":{...},"project":{...},"tasks":[...],"events":[...],"sessions":[...]}
+{"goal":{...}}
 ```
 
-Additive since v0.3.x: `GoalBrief` MAY carry three optional counters —
-`taskCount` (task-board rows), `completedTaskCount` (rows with
-`status=completed`), and `deliverableVersion` (highest deliverable anchor
-version). They are computed by the queries feeding live surfaces (`goal
-status`, `goal active`, desktop lists) and omitted elsewhere. Consumers must
-treat an absent counter as unknown, not zero.
+`3` (`not_found`) for an unknown id. See `GoalBrief` below.
 
 #### `galley goal active`
 
-Lists active (`running` / `wrapping`) goals as NDJSON — empty output when none.
-Read-only. Since Galley runs at most one Goal at a time, a Supervisor uses this
-to check before proposing a new one.
+Lists **open** goals (`active` / `paused` / `blocked`) as a JSON array,
+oldest first — `[]` when none. Read-only. Terminal goals are not listed;
+use `goal status` for those.
 
 #### `galley goal stop <goal-id> [--supervisor=<x>] [--reason=<y>]`
 
-Requests a graceful stop. Core sets `stopRequested=true` and moves a running
-Goal into `wrapping`; the controller observes that flag and finalizes as
-`stopped`.
-
-Behavior since v0.3.x: when the run holds any material worth accounting for
-(claimed/completed tasks, worker results), the controller dispatches a brief
-master wrap-up before parking — a short "what finished / what remains /
-where partial results live" summary in the master session, capped at ~2
-minutes on top of the normal stop path. A stop before workers produced
-anything keeps the historical instant termination. Supervisors polling for
-`stopped` must tolerate this wrap-up window; the terminal status, exit codes,
-`goal run` phase values, and the `request stop` response shape are unchanged
-(the wrap-up emits the existing `wrapping` → `finished` frames).
-
-#### `galley goal task create|claim|update|complete ...`
-
-Task-board commands are the worker coordination primitive. `claim` is atomic in
-Core: it succeeds only when the task is still `open` and has no owner.
-
-```bash
-galley goal task create <goal-id> "Audit release docs" \
-  --description="Check update-channel docs" \
-  --owner-session=sess_a \
-  --scope="docs/"
-
-galley goal task claim <task-id> \
-  --owner-session=sess_b \
-  --scope="cli/tests/"
-
-galley goal task update <task-id> --status=running
-galley goal task complete <task-id> --result-summary="No blocker found."
-```
-
-Task statuses: `open`, `claimed`, `running`, `completed`, `blocked`,
-`cancelled`.
-
-#### `galley goal event post <goal-id> --event-type=<type> "<body>" [--task=<task-id>] [--author-session=<session-id>]`
-
-Appends to the Goal audit stream. Event types: `plan`, `claim`, `progress`,
-`result`, `conflict`, `synthesis`, `system`.
-
-Goal task/event/deliverable commands use `ownerSessionId` /
-`authorSessionId` as their worker authorship. They do not write the ordinary
-`Origin` record used by human/Supervisor session and project commands.
-
-#### `galley goal deliverable get <goal-id>` / `galley goal deliverable set <goal-id> "<content>" [--note=<text>] [--author-session=<session-id>]`
-
-Goal deliverables are the append-only "current best result" anchor for a Goal.
-The controller and Master use this anchor so a long Goal does not rely on
-scrollback archaeology to find the latest synthesized result.
-
-`get` prints the highest-version `GoalDeliverable` as JSON. If no anchor exists
-yet, stdout is empty and the command exits 0.
-
-`set` appends a new version and returns it:
+Terminal `stopped`, then `Abort` to the session's in-flight run (best
+effort — a dead runner means nothing is running anyway). Idempotent on an
+already-terminal goal (returns it unchanged). There is no wrap-up turn:
+the thread keeps whatever the last settled run produced.
 
 ```json
-{"id":"gdel_...","goalId":"goal_...","version":3,
- "content":"...","note":"folded reviewer fixes",
- "authorSessionId":"sess_master","createdAt":"2026-06-16T...Z"}
+{"goal":{...,"status":"stopped","endedAt":"…"}}
 ```
 
-Fields: `id`, `goalId`, `version`, `content`, `note?`,
-`authorSessionId?`, `createdAt`. Core caps stored `content` at 256 KiB and
-adds a truncation marker to `note` if the cap is hit.
+#### `galley goal extend <goal-id> [--minutes=30] [--supervisor=<x>] [--reason=<y>]`
 
-Exit codes: `0` success / `2 invalid_args` (empty objective/title/body, token
-mismatch, expired proposal, unclaimable task) / `3 not_found` / `4
-db_unavailable` / `5 runner_error` (controller child-session dispatch failed).
+Gives the goal `--minutes` (default 30) more. On a `budget_limited` goal
+this reopens it — status back to `active`, `endedAt` / `resultSeenAt`
+cleared, the wrap-up flag reset so the new ceiling gets its own wrap-up —
+and Core dispatches the next continuation right away (the session is
+idle after the wrap-up). The extra counts **from now** once the old
+ceiling has passed (new ceiling = elapsed + extra), so a goal that sat
+budget-limited for an hour really gets 30 more minutes of work. On an
+`active` goal below its ceiling it simply adds to the ceiling.
+Refused with `2` (`invalid_args`) for a goal with no ceiling, for any
+other status, and when the session meanwhile got a newer open goal.
+
+```json
+{"goal":{...,"status":"active","budgetSeconds":5400,"wrapUpDispatched":false}}
+```
+
+#### Waiting for a goal
+
+There is no `goal wait`. `galley session wait <session-id>` and
+`galley session follow <session-id>` observe the goal's session like any
+other; poll `goal status` for the status transition. Between
+continuations the session is idle for well under a second, so a
+`session wait` that returns `completed` is usually one continuation
+boundary, not the goal's end — check `goal.status` before concluding.
+
+#### `GoalBrief` (schemaVersion 2)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | `goal_<hex>` |
+| `sessionId` | string | The session the goal drives |
+| `objective` | string | Trimmed operator text |
+| `status` | enum | `active` / `paused` / `blocked` / `completed` / `budget_limited` / `stopped` / `failed` |
+| `budgetSeconds?` | u32 | Time ceiling; absent = no ceiling |
+| `startedAt` | ISO 8601 | |
+| `endedAt?` | ISO 8601 | Stamped once on the first terminal transition |
+| `pausedAt?` | ISO 8601 | Set while `paused` / `blocked`; cleared on resume |
+| `latestSummary?` | string | Final-turn summary on `completed` / `blocked` / `budget_limited`; the error on a run-error `blocked`; the dispatch reason on `failed` |
+| `resultSeenAt?` | ISO 8601 | Set by the GUI when the operator viewed a terminal result |
+| `continuationCount` | u32 | Continuations dispatched so far (wrap-up included) |
+| `wrapUpDispatched` | bool | The ceiling wrap-up turn went out; the next settle lands `budget_limited` |
+| `elapsedSeconds` | u64 | `startedAt` → `endedAt` (terminal) or → now (open). Computed on read; paused time is not subtracted |
+| `createdAt` / `updatedAt` | ISO 8601 | |
+| `origin?` | `Origin` | Who set the goal ([§6A](./errors-and-exit-codes.md)); absent for GUI-set goals, like `SessionBrief.origin` |
+
+`MessageBrief` gained the additive field `goalId?` at the same time: the
+objective row (and the `user-message-persisted` GUI event that announces
+it) carries the goal it opened.
+
+#### The completion tag
+
+The goal rules Core dispatches ask the model to end its final answer with
+exactly one of `<goal-status>complete</goal-status>` /
+`<goal-status>blocked</goal-status>` once its completion audit (or blocked
+audit) passes, and with no tag otherwise. The runner extracts the tag into
+the `turn_end` event and strips it from display, so it is never visible
+in a thread or an IM reply. Core, not the model, owns every other
+transition (`paused`, `stopped`, `budget_limited`, `failed`).
+
+#### Socket commands
+
+| Command | Args | Result |
+|---|---|---|
+| `goal.start` | `{sessionId, objective, budgetSeconds?, supervisor?, reason?}` — `budgetSeconds` absent = no ceiling (the CLI resolves its 60-minute default before sending) | `{goal, message, dispatch}` |
+| `goal.status` | `{goalId}` | `{goal}` |
+| `goal.active` | `{}` | `[goal, …]` |
+| `goal.stop` | `{goalId, supervisor?, reason?}` | `{goal}` |
+| `goal.extend` | `{goalId, extraSeconds, supervisor?, reason?}` | `{goal}` |
+
+All five require `"schemaVersion": 2` on the request. The GUI additionally
+receives a `goal-updated` Tauri event (`{goal}`) on every transition; the
+socket has no goal event stream — poll `goal.status`.
+
+Exit codes: `0` success / `2 invalid_args` (blank objective, session busy
+or archived, open goal already on the session, contradictory budget
+flags, extending a goal with no ceiling or in a status other than
+`active` / `budget_limited`) / `3 not_found` / `4 db_unavailable` / `5 runner_error` (opening
+turn could not be dispatched; goal recorded `failed`).

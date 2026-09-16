@@ -81,11 +81,10 @@ rename existing ones.
 
 ### `Origin`
 
-Records the source of ordinary human/Supervisor writes. Goal task/event writes
-are the current protocol exception: they use `ownerSessionId` /
-`authorSessionId` because the actor is a child session on a Goal board, not a
-human-facing command origin. Older rows from before migration 006 may also omit
-Origin on read responses.
+Records the source of ordinary human/Supervisor writes, `goal start` /
+`goal stop` included. Older rows from before migration 006 may omit Origin on
+read responses. (The v1 Goal task / event writes that used `ownerSessionId` /
+`authorSessionId` instead were retired with schemaVersion 2.)
 
 | Field         | Type            | Notes                                                                  |
 | ------------- | --------------- | ---------------------------------------------------------------------- |

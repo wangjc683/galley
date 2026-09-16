@@ -45,7 +45,7 @@ procedure: hard rules, CLI discovery, mode choice, hot paths (inspect / start
 / continue / split / Goal), error handling, and the self-check. This file
 adds only what is specific to running the SOP from this host.
 
-For command details, Goal V1, origin-field conventions, and the canonical
+For command details, Goal, origin-field conventions, and the canonical
 Do-not / You-may boundary list, read
 [`references/galley-supervisor-reference.md`](references/galley-supervisor-reference.md).
 
@@ -106,6 +106,6 @@ explanations and example prompts.
 ## See also
 
 - [`references/galley-supervisor-sop.md`](references/galley-supervisor-sop.md) — the operating procedure (verbatim copy, CI-checked)
-- [`references/galley-supervisor-reference.md`](references/galley-supervisor-reference.md) — detailed commands, Goal V1, boundaries
+- [`references/galley-supervisor-reference.md`](references/galley-supervisor-reference.md) — detailed commands, Goal, boundaries
 - [Agent API](https://github.com/wangjc683/galley/blob/main/docs/agent-api/README.md) — full schema
 - [AGENTS.md](https://github.com/wangjc683/galley/blob/main/AGENTS.md) — localhost-only, CLI contract, and data boundaries

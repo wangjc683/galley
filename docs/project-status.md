@@ -12,7 +12,10 @@ live in [refactor](./archive/refactor/README.md).
 - Package version: `0.4.16`.
 - Git tag / GitHub Release: `v0.4.16` is the current published stable release
   (tagged at `393dbe7b` on 2026-09-16, GitHub Latest).
-- Agent API schema: `schemaVersion: 1`
+- Agent API schema: `schemaVersion: 2` on `main` since the Goal v2 rework
+  (2026-09-16, unreleased; `v0.4.16` binaries still speak `1`). The server
+  keeps answering `1` for every command that did not change; only the
+  `goal` family is `2`-only.
 - Release tier: stable patch; default update channel points at `v0.4.16`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `efb3bc6` (audited 2026-08-31, first shipped in
@@ -395,6 +398,23 @@ Post-release follow-up:
    support `aarch64-pc-windows-msvc`.
 
 ## Unreleased On Main
+
+**Goal v2 (2026-09-16, branch `goal-v2`, all eight tickets under
+`.scratch/goal-simplify/` except dogfood and the live-window follow-up):**
+the hive / solo Goal engines and their detached CLI controller are gone;
+a Goal is now one persistent objective on one session, driven by a
+continuation loop inside Core's queue drain task, ended by the model's
+`<goal-status>` tag, a time ceiling (one wrap-up turn, then
+`budget_limited`), a stop, or a pause / block the user's next message
+resumes. Migration 039 rebuilds `goals` and drops the four hive tables;
+the Agent API bumps to `schemaVersion: 2` with `1` still served for
+unchanged commands (`goal.*` is `2`-only, the v1 goal family is
+`unknown_command`); the runner extracts the tag; managed patch `0022`
+strips it on IM surfaces; the GUI keeps the Composer entry, a
+budget-only confirm dialog, the top-bar pill, commission / terminal
+markers and a paused / blocked tail. About 9k lines removed, ~2.5k added.
+Awaiting JC's real-app dogfood (ticket 07) before merge and release; the
+release will be a minor, not a patch.
 
 Unreleased since `v0.4.16` (as of 2026-09-16 evening, `69a5ce6e..f442b38b`,
 GUI only): the process-area batch — verbose tool-dispatch marker no longer

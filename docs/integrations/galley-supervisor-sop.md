@@ -83,7 +83,7 @@ $GALLEY = Get-Content $Discovery | Select-Object -First 1
 ```
 
 Use `"$GALLEY"` on macOS / Linux and `& $GALLEY` in PowerShell. If you need a
-schema guard, add `--schema=1`.
+schema guard, add `--schema=2` (the `goal` family exists only under `2`).
 
 ## Choose Mode
 
@@ -93,7 +93,7 @@ schema guard, add `--schema=1`.
 | "Continue that session" | Existing-session follow-up |
 | One clear bounded task | Single new session |
 | Several independent angles, review, or synthesis | Project-backed session group |
-| "Keep working while I leave", "Goal", sustained autonomous objective | Galley Goal |
+| "Keep working until it's done", "Goal", one objective the agent should keep pushing on its own | Galley Goal (one session, keeps continuing by itself) |
 | Implementation/fix across multiple concerns | One writer session plus read-only reviewers |
 | Ambiguous split, irreversible or external action, credentials, payment | Ask first |
 
@@ -207,50 +207,52 @@ verification sessions. Never create multiple writers for the same files.
 
 ### Start A Goal
 
-Only use Goal for a long autonomous objective. **Galley runs at most one Goal
-at a time.** Before proposing, check for an active one:
+A Goal is one persistent objective on one session: Galley re-prompts that
+session to keep working every time it goes idle, until the model declares
+the objective complete (or blocked), the time ceiling is reached, or the
+user stops it. There are no workers or proposals. Use it only when the
+user wants sustained autonomous work toward a verifiable end state; a task
+with two obvious steps is a normal session.
+
+Start it on the session that holds the context (an existing thread, or a
+fresh `session new` if none fits — then wait for that first run to settle):
 
 ```bash
+"$GALLEY" goal start <session-id> "<objective>" \
+  --budget-minutes=60 \
+  --supervisor=my-agent/v1 \
+  --reason="user asked Galley to keep working on this until done"
+```
+
+`--budget-minutes` is a ceiling, not a target (default 60; `--no-budget`
+removes it). Starting a Goal still requires the user's explicit, unambiguous
+ask for autonomous work in their own language; do not infer it from a big
+task. The command fails with `invalid_args` if the session is mid-run (wait
+with `session wait`, then retry) or already carries an open Goal (the message
+names it). Different sessions may each run their own Goal.
+
+Tell the user the objective, the ceiling, and how to steer: any message they
+send to that session is picked up as guidance, and a stopped run pauses the
+Goal until their next message resumes it.
+
+During a Goal:
+
+```bash
+"$GALLEY" goal status <goal-id>
 "$GALLEY" goal active
+"$GALLEY" goal stop <goal-id> --supervisor=<id> --reason=<why>
+"$GALLEY" goal extend <goal-id> --minutes=30 --supervisor=<id> --reason=<why>
 ```
 
-Empty output means none is active. If a Goal is already running or wrapping,
-tell the user — they must stop it or wait for it to finish before a new Goal
-can start. Do not propose blindly; `goal run` rejects the second start with an
-`invalid_args` error naming the active Goal.
-
-```bash
-"$GALLEY" goal propose "<objective>" \
-  --mode=solo \
-  --supervisor=my-agent/v1 \
-  --reason="prepare Goal for user confirmation"
-```
-
-Pass `--mode=solo` (one agent working to the time budget) unless the user
-explicitly wants parallel workers; then use `--mode=hive` (master plus
-cross-verified workers). The CLI's built-in default is `hive` for
-compatibility, while the desktop defaults to `solo` — state the mode
-explicitly so the two surfaces behave the same.
-
-Show the objective, Project, mode, worker count, time budget, write mode, and
-safety boundary. Do not show `internalConfirmToken`. Starting a Goal always requires
-the user's explicit confirmation of this proposal: an unambiguous affirmative
-reply, in their own language, that refers to this Goal (offer the response's
-`confirmationPhrase` as a ready-made reply). Casual acknowledgements ("ok",
-"嗯") or approval buried in an unrelated message do not count. Then:
-
-```bash
-"$GALLEY" goal run --proposal=<proposal-id> \
-  --confirm-token=<internalConfirmToken> \
-  --supervisor=my-agent/v1 \
-  --reason="user explicitly confirmed this Goal proposal"
-```
-
-Use `goal status <goal-id>` for progress and `goal stop <goal-id>` only after
-the user asks to stop. A stop is not instant: when the run already holds
-results, Galley writes a brief wrap-up summary into the master session first
-(up to ~2 minutes) and only then parks the Goal as `stopped` — keep polling
-`goal status` instead of treating the delay as a failure.
+`status.status` is one of `active`, `paused`, `blocked` (open) or
+`completed`, `budget_limited`, `stopped`, `failed` (terminal). `blocked`
+means the model reported the same blocker for several turns and needs
+something from the user — relay `latestSummary` and send their answer to
+the session; that resumes the Goal. `budget_limited` is the ceiling, not a
+failure: the last turn wrapped up and `latestSummary` says what remains —
+if the user wants it to keep going, `goal extend <goal-id> --minutes=30`
+reopens it with that much time from now and Galley continues at once. `goal stop` is immediate (it
+aborts the current turn; no wrap-up). Only stop when the user asks.
 
 ### Risky Actions
 
