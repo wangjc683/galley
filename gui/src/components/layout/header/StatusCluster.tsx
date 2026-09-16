@@ -25,9 +25,9 @@ import { updateIndicatorVisible } from "./update-indicator-status";
  */
 export function TopBarStatusCluster({
   activeGoals,
-  onOpenGoalProject,
   onOpenGoal,
   onStopGoal,
+  onExtendGoal,
   browserControlStatus,
   onOpenBrowserControl,
   channelsState,
@@ -38,9 +38,9 @@ export function TopBarStatusCluster({
   onRestartAppUpdate,
 }: {
   activeGoals: GoalBrief[];
-  onOpenGoalProject?: (projectId: string) => void;
   onOpenGoal?: (goalId: string) => void;
   onStopGoal?: (goalId: string) => void;
+  onExtendGoal?: (goalId: string) => void;
   browserControlStatus: BrowserControlStatus | null;
   onOpenBrowserControl?: () => void;
   channelsState: ImSupervisorState | null;
@@ -61,9 +61,9 @@ export function TopBarStatusCluster({
       {activeGoals.length > 0 && (
         <GoalIndicator
           goals={activeGoals}
-          onOpenProject={onOpenGoalProject}
           onOpenGoal={onOpenGoal}
           onStopGoal={onStopGoal}
+          onExtendGoal={onExtendGoal}
         />
       )}
       {browserControlStatus && (

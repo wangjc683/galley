@@ -26,9 +26,9 @@ export function MainHeaderHost({
   activeGoals,
   channelsState,
   channelsLoadError,
-  onOpenGoalProject,
   onOpenGoal,
   onStopGoal,
+  onExtendGoal,
   openSettings,
   onOpenSettings,
   resolvedTheme,
@@ -37,9 +37,9 @@ export function MainHeaderHost({
   activeGoals: GoalBrief[];
   channelsState: ImSupervisorState | null;
   channelsLoadError: string | null;
-  onOpenGoalProject: (projectId: string) => void;
   onOpenGoal: (goalId: string) => void;
   onStopGoal: (goalId: string) => void;
+  onExtendGoal: (goalId: string) => void;
   /** Open Settings on a specific tab (browser-control / channels entries). */
   openSettings: (tab: SettingsTab) => void;
   /** Open Settings on whatever tab it last showed (the gear entry). */
@@ -87,9 +87,9 @@ export function MainHeaderHost({
         activeRuntimeKind === "managed" ? () => openSettings("im") : undefined
       }
       activeGoals={activeGoals}
-      onOpenGoalProject={onOpenGoalProject}
       onOpenGoal={onOpenGoal}
       onStopGoal={onStopGoal}
+      onExtendGoal={onExtendGoal}
       appUpdateStatus={appUpdateStatus}
       hasRunningSessions={hasRunningSessions}
       onRestartAppUpdate={() => {

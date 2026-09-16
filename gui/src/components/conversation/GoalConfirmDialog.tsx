@@ -4,129 +4,81 @@ import { useState } from "react";
 
 import { Button, DialogActionRow } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  DEFAULT_GOAL_BUDGET_PRESET,
+  GOAL_BUDGET_PRESET_MINUTES,
+  GOAL_CUSTOM_BUDGET_MIN_MINUTES,
+  resolveGoalBudgetSeconds,
+  type GoalBudgetPreset,
+} from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { GoalLaunchConfig, GoalMode } from "@/types/goal";
-
-const DEFAULT_GOAL_BUDGET_MINUTES = 30;
-const MIN_CUSTOM_GOAL_BUDGET_MINUTES = 5;
-const MAX_CUSTOM_GOAL_BUDGET_MINUTES = 120;
-const DEFAULT_GOAL_AGENT_COUNT = 3;
-// Below this budget, the hive engine spends most of its time on spin-up and
-// coordination rather than the work — so the multi-viewpoint option is gated
-// off and the run falls back to solo. See .scratch/goal-solo-hive/PRD.md D2.
-const HIVE_MIN_BUDGET_MINUTES = 10;
-type GoalBudgetPreset = "15" | "30" | "60" | "custom";
-type GoalAgentCountPreset = "2" | "3" | "4" | "5";
+import type { GoalLaunchConfig } from "@/types/goal";
 
 /**
  * Goal launch confirmation — the modal that turns the composer draft
- * into a Goal. Owns the budget (duration) + agent-count presets and the
- * custom-minutes validation; the composer only opens it with the
- * objective text and receives the resolved `GoalLaunchConfig` back via
- * `onConfirm`. Keyed per-objective by the caller so it resets cleanly
- * between launches.
+ * into a Goal. Two things only: the objective it read back, and the
+ * time ceiling. The body copy carries the new-user briefing the deleted
+ * launch-narration row used to (PRD §6 裁决 6): Galley advances on its
+ * own until it judges the objective done or the ceiling arrives, and
+ * you can steer or stop at any point.
+ *
+ * The ceiling row is bare numerals with the unit hoisted into the
+ * section label: seven segments with "15 分钟 … 240 分钟" spelled out
+ * overflow a 440px dialog, and the full phrasing survives as each
+ * segment's tooltip (which is also where "推荐" lives).
+ *
+ * Keyed per-objective by the caller so it resets cleanly between
+ * launches.
  */
 export function GoalConfirmDialog({
   open,
   objective,
-  projectName,
   submitting,
   onOpenChange,
   onConfirm,
 }: {
   open: boolean;
   objective: string;
-  /** Project the Goal will run in; undefined = the backend creates a
-   * fresh project for the run. Rendered as a one-line consequence so
-   * where the run lands is never a silent decision. */
-  projectName?: string;
   submitting: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (config: GoalLaunchConfig) => void;
 }) {
   const copy = useCopy();
   const [budgetPreset, setBudgetPreset] = useState<GoalBudgetPreset>(
-    String(DEFAULT_GOAL_BUDGET_MINUTES) as GoalBudgetPreset,
+    DEFAULT_GOAL_BUDGET_PRESET,
   );
-  const [agentCountPreset, setAgentCountPreset] =
-    useState<GoalAgentCountPreset>(
-      String(DEFAULT_GOAL_AGENT_COUNT) as GoalAgentCountPreset,
-    );
-  const [customBudgetMinutes, setCustomBudgetMinutes] = useState(
-    String(DEFAULT_GOAL_BUDGET_MINUTES),
-  );
-  // Solo is the product default; hive is a deliberate opt-in (a secondary,
-  // outcome-labeled control), not a peer choice presented up front.
-  const [mode, setMode] = useState<GoalMode>("solo");
+  const [customMinutes, setCustomMinutes] = useState("");
 
-  const customBudgetNumber = Number.parseInt(customBudgetMinutes, 10);
-  const customBudgetValid =
-    budgetPreset !== "custom" ||
-    (Number.isInteger(customBudgetNumber) &&
-      customBudgetNumber >= MIN_CUSTOM_GOAL_BUDGET_MINUTES &&
-      customBudgetNumber <= MAX_CUSTOM_GOAL_BUDGET_MINUTES);
-  const budgetMinutes =
-    budgetPreset === "custom"
-      ? customBudgetValid
-        ? customBudgetNumber
-        : DEFAULT_GOAL_BUDGET_MINUTES
-      : Number.parseInt(budgetPreset, 10);
-  const workerLimit = Number.parseInt(agentCountPreset, 10);
-  const hiveAllowed = budgetMinutes >= HIVE_MIN_BUDGET_MINUTES;
-  // A budget too small for hive silently falls back to solo so the run never
-  // burns its whole budget on coordination — see HIVE_MIN_BUDGET_MINUTES.
-  const effectiveMode: GoalMode =
-    mode === "hive" && hiveAllowed ? "hive" : "solo";
-  const disabledDurationOptions: {
+  // `null` = no ceiling; Core reads the absent budget as "run until the
+  // model says done or the user stops". `undefined` = the custom field
+  // is empty / below the floor, which is what disables Send.
+  const budgetSeconds = resolveGoalBudgetSeconds(budgetPreset, customMinutes);
+  const budgetReady = budgetSeconds !== undefined;
+
+  const durationOptions: {
     value: GoalBudgetPreset;
     label: string;
+    title?: string;
     disabled: boolean;
   }[] = [
-    {
-      value: "15",
-      label: copy.composer.goalDurationFast,
+    ...GOAL_BUDGET_PRESET_MINUTES.map((minutes) => ({
+      value: `${minutes}` as GoalBudgetPreset,
+      label: `${minutes}`,
+      title:
+        `${minutes}` === DEFAULT_GOAL_BUDGET_PRESET
+          ? copy.composer.goalDurationRecommendedTip(minutes)
+          : copy.composer.goalDurationOption(minutes),
       disabled: submitting,
-    },
+    })),
     {
-      value: "30",
-      label: copy.composer.goalDurationRecommended,
-      disabled: submitting,
-    },
-    {
-      value: "60",
-      label: copy.composer.goalDurationDeep,
+      value: "none",
+      label: copy.composer.goalDurationNoCeiling,
       disabled: submitting,
     },
     {
       value: "custom",
       label: copy.composer.goalDurationCustom,
-      disabled: submitting,
-    },
-  ];
-  const disabledAgentCountOptions: {
-    value: GoalAgentCountPreset;
-    label: string;
-    disabled: boolean;
-  }[] = [
-    {
-      value: "2",
-      label: "2",
-      disabled: submitting,
-    },
-    {
-      value: "3",
-      label: "3",
-      disabled: submitting,
-    },
-    {
-      value: "4",
-      label: "4",
-      disabled: submitting,
-    },
-    {
-      value: "5",
-      label: "5",
       disabled: submitting,
     },
   ];
@@ -156,116 +108,59 @@ export function GoalConfirmDialog({
               <div className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[13px] font-medium leading-relaxed text-ink">
                 {objective}
               </div>
-              <div className="mt-1.5 text-[11.5px] text-ink-muted">
-                {projectName
-                  ? copy.composer.goalRunInProject(projectName)
-                  : effectiveMode === "hive"
-                    ? copy.composer.goalRunNewProject
-                    : copy.composer.goalRunHere}
-              </div>
             </section>
 
             <section className="space-y-2">
               <div className="text-[12px] font-medium text-ink-soft">
-                {copy.composer.goalConfirmDuration}
+                {copy.composer.goalConfirmCeiling}
               </div>
               <SegmentedControl<GoalBudgetPreset>
                 value={budgetPreset}
                 onValueChange={setBudgetPreset}
-                options={disabledDurationOptions}
-                ariaLabel={copy.composer.goalConfirmDuration}
+                options={durationOptions}
+                ariaLabel={copy.composer.goalConfirmCeiling}
                 size="md"
-                className="max-w-full"
+                className="flex max-w-full flex-wrap"
               />
               {budgetPreset === "custom" && (
-                <label className="flex items-center gap-2 text-[12.5px] text-ink-soft">
+                <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    min={MIN_CUSTOM_GOAL_BUDGET_MINUTES}
-                    max={MAX_CUSTOM_GOAL_BUDGET_MINUTES}
+                    min={GOAL_CUSTOM_BUDGET_MIN_MINUTES}
                     step={1}
-                    value={customBudgetMinutes}
-                    onChange={(e) =>
-                      setCustomBudgetMinutes(
-                        e.target.value.replace(/[^\d]/g, "").slice(0, 3),
-                      )
-                    }
+                    autoFocus
                     disabled={submitting}
-                    aria-label={copy.composer.goalDurationCustomInput}
+                    value={customMinutes}
+                    placeholder={copy.composer.goalCustomMinutesPlaceholder}
+                    aria-label={copy.composer.goalCustomMinutesLabel}
+                    onChange={(event) =>
+                      setCustomMinutes(event.currentTarget.value)
+                    }
                     className={cn(
-                      "h-8 w-20 rounded-sm border bg-app px-2 text-[12.5px] font-medium text-ink outline-none transition-colors duration-(--motion-fast) focus:border-brand focus:ring-2 focus:ring-brand/20",
-                      customBudgetValid ? "border-line" : "border-error/40",
+                      "w-24 rounded-sm border border-line bg-surface px-2.5 py-1.5 text-[12.5px] tabular-nums text-ink outline-none",
+                      "transition-colors duration-(--motion-fast) ease-firm",
+                      "placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20",
+                      "disabled:cursor-not-allowed disabled:opacity-40",
                     )}
                   />
-                  <span>{copy.composer.goalDurationMinutes}</span>
-                  {!customBudgetValid && (
-                    <span className="text-[11px] text-error">
-                      {copy.composer.goalDurationRange}
-                    </span>
-                  )}
-                </label>
+                  <span
+                    className={cn(
+                      "text-[11px] leading-snug",
+                      budgetReady ? "text-ink-muted" : "text-ink-soft",
+                    )}
+                  >
+                    {copy.composer.goalCustomMinutesHint(
+                      GOAL_CUSTOM_BUDGET_MIN_MINUTES,
+                    )}
+                  </span>
+                </div>
+              )}
+              {budgetPreset === "none" && (
+                <div className="text-[11px] leading-snug text-ink-muted">
+                  {copy.composer.goalNoCeilingHint}
+                </div>
               )}
             </section>
-
-            {effectiveMode === "solo" ? (
-              <div className="flex flex-col gap-1">
-                <button
-                  type="button"
-                  onClick={() => setMode("hive")}
-                  disabled={submitting || !hiveAllowed}
-                  className={cn(
-                    "self-start text-[12px] font-medium underline-offset-2",
-                    hiveAllowed
-                      ? "text-ink-muted hover:text-brand hover:underline"
-                      : "cursor-not-allowed text-ink-muted/50",
-                  )}
-                >
-                  {copy.composer.goalHiveToggle}
-                </button>
-                {!hiveAllowed && (
-                  <span className="text-[11px] text-ink-muted">
-                    {/* The user had opted into hive and the budget change
-                        overrode that choice — say so explicitly instead of
-                        the generic "toggle disabled" hint. */}
-                    {mode === "hive"
-                      ? copy.composer.goalHiveFallbackNotice(
-                          HIVE_MIN_BUDGET_MINUTES,
-                        )
-                      : copy.composer.goalHiveBudgetHint(
-                          HIVE_MIN_BUDGET_MINUTES,
-                        )}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <section className="flex flex-col gap-2 rounded-md border border-line bg-app px-3 py-2.5">
-                <div className="text-[12px] font-medium text-ink">
-                  {copy.composer.goalHiveTitle}
-                </div>
-                <div className="text-[11.5px] leading-relaxed text-ink-muted">
-                  {copy.composer.goalHiveDescription}
-                </div>
-                <div className="pt-1 text-[12px] font-medium text-ink-soft">
-                  {copy.composer.goalHiveAgentCount}
-                </div>
-                <SegmentedControl<GoalAgentCountPreset>
-                  value={agentCountPreset}
-                  onValueChange={setAgentCountPreset}
-                  options={disabledAgentCountOptions}
-                  ariaLabel={copy.composer.goalHiveAgentCount}
-                  size="md"
-                  className="max-w-full"
-                />
-                <button
-                  type="button"
-                  onClick={() => setMode("solo")}
-                  disabled={submitting}
-                  className="self-start text-[11.5px] text-ink-muted underline-offset-2 hover:text-ink-soft hover:underline"
-                >
-                  {copy.composer.goalHiveBackToSolo}
-                </button>
-              </section>
-            )}
           </div>
 
           <DialogActionRow>
@@ -278,14 +173,11 @@ export function GoalConfirmDialog({
             </Button>
             <Button
               variant="primary"
-              onClick={() =>
-                onConfirm({
-                  workerLimit,
-                  budgetSeconds: budgetMinutes * 60,
-                  mode: effectiveMode,
-                })
-              }
-              disabled={submitting || !objective || !customBudgetValid}
+              onClick={() => {
+                if (budgetSeconds === undefined) return;
+                onConfirm({ budgetSeconds });
+              }}
+              disabled={submitting || !objective || !budgetReady}
               leadingIcon={<Target size={13} weight="fill" />}
             >
               {submitting

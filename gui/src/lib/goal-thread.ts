@@ -1,45 +1,54 @@
+import { buildRunGroups, replyUserIndices } from "@/lib/run-groups";
 import type { Origin, Turn } from "@/types/conversation";
-import type { GoalBrief } from "@/types/goal";
+import { isTerminalGoalStatus, type GoalBrief } from "@/types/goal";
 
 /**
- * A master session's conversation thread can contain multiple Goal runs
- * over time (a session reuses its id as the master for each goal it
- * commissions), interleaved with normal chat. This module turns the
- * flat `Turn[]` + the session's goals into a render list that brackets
- * each run as an in-thread episode:
+ * A session's conversation thread can carry several Goal runs over its
+ * life (at most one open at a time), interleaved with normal chat. This
+ * module turns the flat `Turn[]` + the session's goals into a render
+ * list that brackets each run as an in-thread episode:
  *
  *   - `commission` — the objective the operator sent in Goal mode,
  *     rendered as the run's opening marker (it IS the first user turn,
  *     just crowned; see GoalCommissionMarker). Opens the episode.
- *   - the run's Galley narration callouts sit between.
- *   - `terminal` — the run's outcome (done / failed / stopped), placed
- *     right after the run's narration block. Closes the episode.
+ *   - the run's own agent steps and continuations sit between — in
+ *     goal v2 they are ordinary turns, not narration.
+ *   - `terminal` — the run's outcome (done / budget-limited / stopped /
+ *     failed). Closes the episode.
+ *
+ * Where the episode ends (PRD §3.7): at the next commission, or just
+ * before the first non-reply user turn the operator sent AFTER the goal
+ * ended. Everything in between — agent steps, continuations, and the
+ * mid-run messages the operator sent to steer the run — stays inside
+ * the bracket. The v1 rule ("first non-narration turn closes it") put
+ * the terminal marker above the work in a single-threaded run; that was
+ * the bug this rewrite fixes.
  *
  * Association is exact-first: objective user turns written since
  * migration 031 carry `goalId`, so those match by id. Rows written
  * before 031 have no goalId and fall back to the original heuristic —
  * the user turn whose normalized content equals the objective and whose
  * `createdAt` is closest to the goal's `startedAt`. Either way an
- * unmatched goal degrades gracefully: it simply renders no markers and
- * its narration stays as plain (still lightened) callouts.
+ * unmatched goal degrades gracefully: it simply renders no markers.
  *
  * `narrationLeading` lets the renderer show the Galley register glyph
- * only on the first of a consecutive narration cluster, so a run with
- * many beats doesn't repeat the marker on every line.
+ * only on the first of a consecutive narration cluster (legacy goal v1
+ * threads still hold those rows), so a run with many beats doesn't
+ * repeat the marker on every line.
  */
 export type GoalThreadItem =
   | { kind: "turn"; turn: Turn; narrationLeading: boolean }
   | {
       kind: "commission";
       goal: GoalBrief;
+      /** The objective user turn itself — the run opener, so the
+       * conversation can key its fold / live header on it. */
+      turn: Turn;
       content: string;
       origin?: Origin;
       createdAt?: string;
     }
-  | { kind: "task-board"; goal: GoalBrief }
   | { kind: "terminal"; goal: GoalBrief };
-
-const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped"]);
 
 function norm(s: string): string {
   return s.replace(/\s+/g, " ").trim();
@@ -108,6 +117,34 @@ function matchCommissions(
   return byTurnIndex;
 }
 
+/**
+ * Does this user turn end the goal's in-thread segment? Only a turn the
+ * operator sent AFTER the goal reached its end does — a message sent
+ * mid-run is an intervention and belongs inside the bracket, and an
+ * ask_user reply is not a new topic at all.
+ *
+ * A user turn with no `createdAt` (a legacy row, or one appended
+ * optimistically before the row came back) counts as after the goal: an
+ * undated turn at the tail is far likelier to be new chat than a
+ * replayed mid-run message, and the alternative swallows the rest of
+ * the thread into the episode.
+ */
+function endsGoalSegment(
+  turn: Turn,
+  index: number,
+  goal: GoalBrief,
+  replies: Set<number>,
+): boolean {
+  if (turn.role !== "user") return false;
+  if (replies.has(index)) return false;
+  if (!goal.endedAt) return false;
+  if (!turn.createdAt) return true;
+  const turnTs = Date.parse(turn.createdAt);
+  const endedTs = Date.parse(goal.endedAt);
+  if (Number.isNaN(turnTs) || Number.isNaN(endedTs)) return true;
+  return turnTs > endedTs;
+}
+
 export function annotateGoalThread(
   turns: Turn[],
   goals: GoalBrief[],
@@ -116,17 +153,19 @@ export function annotateGoalThread(
     ? matchCommissions(turns, goals)
     : new Map<number, GoalBrief>();
 
+  // An ask_user reply is an answer inside the run, not a new topic, so
+  // it never closes the episode. Same definition the conversation uses
+  // to switch MessageUser into its reply register (`run-groups.ts`).
+  const replies = replyUserIndices(buildRunGroups(turns), turns);
+
   const items: GoalThreadItem[] = [];
   let currentRunGoal: GoalBrief | null = null;
   let prevWasNarration = false;
 
   const closeRun = () => {
-    if (currentRunGoal && TERMINAL_STATUSES.has(currentRunGoal.status)) {
-      // Frozen task board above the terminal marker: what ran, what
-      // completed, result summaries. For failed goals this is the
-      // legacy accounting. (The LIVE board for a still-running goal is
-      // pinned at the thread tail by MainView, not emitted here.)
-      items.push({ kind: "task-board", goal: currentRunGoal });
+    // `paused` / `blocked` are recoverable, not terminal — no closing
+    // marker; the thread tail carries them instead (GoalPausedTail).
+    if (currentRunGoal && isTerminalGoalStatus(currentRunGoal.status)) {
       items.push({ kind: "terminal", goal: currentRunGoal });
     }
     currentRunGoal = null;
@@ -140,6 +179,7 @@ export function annotateGoalThread(
       items.push({
         kind: "commission",
         goal: commissionGoal,
+        turn: t,
         content: t.role === "user" ? t.content : "",
         origin: t.role === "user" ? t.origin : undefined,
         createdAt: t.role === "user" ? t.createdAt : undefined,
@@ -149,14 +189,10 @@ export function annotateGoalThread(
       return;
     }
 
-    const narration = isGoalNarrationTurn(t);
-    // The run's in-thread segment is its commission + the consecutive
-    // narration block. The first non-narration turn after it ends the
-    // run, so the terminal marker lands right after the narration,
-    // before any subsequent normal chat.
-    if (currentRunGoal && !narration) {
+    if (currentRunGoal && endsGoalSegment(t, idx, currentRunGoal, replies)) {
       closeRun();
     }
+    const narration = isGoalNarrationTurn(t);
     items.push({
       kind: "turn",
       turn: t,

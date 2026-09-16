@@ -2,57 +2,50 @@ import type { Dispatch, SetStateAction } from "react";
 
 import type { AppCopy } from "@/lib/i18n";
 import {
-  getGoalStatus,
-  goalMasterSessionTitle,
+  GOAL_EXTEND_SECONDS,
+  extendGoal,
+  getGoal,
+  goalSessionTitle,
   markGoalResultSeen,
-  startDesktopGoal,
+  startSessionGoal,
   stopGoal,
 } from "@/lib/goals";
-import { useSessionsStore } from "@/stores/sessions";
 import { makeAppError } from "@/types/app-error";
-import type { Origin, SystemTurn } from "@/types/conversation";
-import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
-import type { RuntimeKind, Session } from "@/types/session";
+import {
+  isTerminalGoalStatus,
+  type GoalBrief,
+  type GoalLaunchConfig,
+} from "@/types/goal";
+import type { Session } from "@/types/session";
 
 /**
- * Goal command layer: launch a Goal from the composer, open a Goal's
- * master session (or its project), and stop a running Goal from the
- * topbar. These are the imperative counterparts to `useGoalEffects`
- * (which owns the polling / activeGoals state); this hook only issues
- * commands and folds their results back through `setActiveGoals`.
+ * Goal command layer: start a Goal from the composer, open a Goal's
+ * session, and stop a Goal from the topbar / thread. These are the
+ * imperative counterparts to `useGoalEffects` (which owns the goal
+ * lists, the `goal-updated` subscription, and the poll); this hook only
+ * issues commands and folds their results back through `setActiveGoals`.
  *
- * Depends on outputs of `useGoalEffects` (`setActiveGoals`, `activeGoals`)
- * and `useProjectNavigation` (`openGoalProject`), so call it after both.
- * All other deps are App-level store actions / derived values passed in,
- * matching the `useProjectNavigation` convention.
+ * A goal v2 run has no project container and no worker sessions: it
+ * lives on one ordinary session, so "open the goal" is "activate its
+ * session" and nothing else.
  */
 export function useGoalActions({
   activeGoals,
   activeSession,
   activeProjectFilter,
-  activeRuntimeKind,
-  llmDisplayName,
-  resolvedLanguage,
   requiresManagedModelConfig,
   copy,
   createSessionPersisted,
   setScreen,
   setActiveProjectFilter,
   activateSession,
-  appendUserTurnExternal,
-  appendSystemTurn,
-  assignSessionToProject,
   setActiveGoals,
-  openGoalProject,
   pushToast,
   openModelsForMissingConfig,
 }: {
   activeGoals: GoalBrief[];
   activeSession: Session | undefined;
   activeProjectFilter: string | undefined;
-  activeRuntimeKind: RuntimeKind;
-  llmDisplayName: string;
-  resolvedLanguage: string;
   requiresManagedModelConfig: boolean;
   copy: AppCopy;
   createSessionPersisted: (
@@ -62,22 +55,7 @@ export function useGoalActions({
   setScreen: (s: "empty" | "main" | "onboarding") => void;
   setActiveProjectFilter: (id: string | undefined) => void;
   activateSession: (id: string) => Promise<void>;
-  appendUserTurnExternal: (
-    sid: string,
-    text: string,
-    origin?: Origin,
-    createdAt?: string,
-    dispatched?: boolean,
-    turnIndex?: number | null,
-    goalId?: string,
-  ) => void;
-  appendSystemTurn: (sid: string, turn: SystemTurn) => void;
-  assignSessionToProject: (
-    sessionId: string,
-    projectId: string | null,
-  ) => Promise<void>;
   setActiveGoals: Dispatch<SetStateAction<GoalBrief[]>>;
-  openGoalProject: (projectId: string) => void;
   pushToast: (error: ReturnType<typeof makeAppError>) => void;
   openModelsForMissingConfig: () => void;
 }) {
@@ -90,80 +68,40 @@ export function useGoalActions({
       return;
     }
     try {
-      let masterSessionId = activeSession?.id;
-      const createdMasterSession = masterSessionId === undefined;
-      if (!masterSessionId) {
+      let sessionId = activeSession?.id;
+      const createdSession = sessionId === undefined;
+      if (!sessionId) {
         // No setScreen here: flipping to "main" now would unmount the
         // empty-state Composer mid-submit — the confirm dialog (and its
-        // "启动中…" spinner) vanishes while startDesktopGoal is still
+        // "启动中…" spinner) vanishes while the start call is still
         // running, leaving the user staring at a blank new session that
-        // looks hung. The screen flips at the end, once the launch rows
-        // exist; on failure the user stays in the empty state with the
-        // dialog and draft intact.
-        masterSessionId = await createSessionPersisted(
+        // looks hung. The screen flips at the end, once the goal exists;
+        // on failure the user stays in the empty state with the dialog
+        // and draft intact.
+        sessionId = await createSessionPersisted(
           activeProjectFilter,
-          goalMasterSessionTitle(objective),
+          goalSessionTitle(objective),
         );
       }
-      const projectId = activeSession?.projectId ?? activeProjectFilter;
-      const shouldMirrorMasterProject =
-        masterSessionId && (!activeSession || !activeSession.projectId);
-      const result = await startDesktopGoal({
+      const { goal } = await startSessionGoal({
+        sessionId,
         objective,
-        projectId: projectId ?? undefined,
-        masterSessionId,
-        runtimeKind: activeRuntimeKind,
-        workerLimit: config.workerLimit,
         budgetSeconds: config.budgetSeconds,
-        mode: config.mode,
-        llmName: llmDisplayName,
-        locale: resolvedLanguage,
       });
-      const { goal, objectiveMessage, masterMessage } = result;
-      appendUserTurnExternal(
-        masterSessionId,
-        objectiveMessage.content,
-        objectiveMessage.origin,
-        objectiveMessage.createdAt,
-        false,
-        objectiveMessage.turnIndex,
-        goal.id,
-      );
-      appendSystemTurn(masterSessionId, {
-        role: "system",
-        content: masterMessage.content,
-        variant: "goal",
-      });
+      // The objective row is NOT appended here: Core broadcasts it
+      // through `user-message-persisted` (stamped with `goalId`), which
+      // is the single mirror path for both the Composer and CLI starts.
+      // Appending it here too would render the commission twice.
       setActiveGoals((goals) => {
         const withoutCurrent = goals.filter(
           (candidate) => candidate.id !== goal.id,
         );
-        return [...withoutCurrent, goal].sort(
-          (a, b) => Date.parse(a.deadlineAt) - Date.parse(b.deadlineAt),
+        return [...withoutCurrent, goal].sort((a, b) =>
+          a.startedAt.localeCompare(b.startedAt),
         );
       });
-      if (shouldMirrorMasterProject && goal.projectId) {
-        void assignSessionToProject(masterSessionId, goal.projectId);
-      }
-      void getGoalStatus(goal.id)
-        .then((snapshot) => {
-          if (snapshot.project) {
-            useSessionsStore
-              .getState()
-              .applyExternalProjectCreated(snapshot.project);
-          }
-          const master = snapshot.sessions.find(
-            (session) => session.id === masterSessionId,
-          );
-          if (master) {
-            useSessionsStore.getState().applyExternalSessionUpdated(master);
-          }
-        })
-        .catch((e) => {
-          console.debug("[goals] hydrate started goal project failed.", e);
-        });
-      setActiveProjectFilter(undefined);
-      if (createdMasterSession) {
+      if (createdSession) {
+        setActiveProjectFilter(undefined);
         setScreen("main");
       }
       pushToast(
@@ -171,30 +109,16 @@ export function useGoalActions({
           category: "business",
           severity: "info",
           title: copy.toasts.goalStarted,
-          // Solo runs one agent regardless of workerLimit — naming a count
-          // would contradict the dialog's single-agent framing.
           message:
-            goal.mode === "solo"
-              ? copy.toasts.goalStartedMessageSolo(
+            goal.budgetSeconds != null
+              ? copy.toasts.goalStartedMessage(
                   Math.round(goal.budgetSeconds / 60),
                 )
-              : copy.toasts.goalStartedMessage(
-                  goal.workerLimit,
-                  Math.round(goal.budgetSeconds / 60),
-                ),
+              : copy.toasts.goalStartedMessageNoBudget,
           hint: null,
           retryable: false,
-          context: "start_desktop_goal",
+          context: "start_session_goal",
           traceback: null,
-          // A project-less solo goal has nowhere to "view" — the run is
-          // already the active session.
-          action: goal.projectId
-            ? {
-                kind: "view_project",
-                label: copy.toasts.viewProject,
-                projectId: goal.projectId,
-              }
-            : undefined,
           autoDismissMs: 4200,
         }),
       );
@@ -208,7 +132,7 @@ export function useGoalActions({
           message,
           hint: null,
           retryable: true,
-          context: "start_desktop_goal",
+          context: "start_session_goal",
           traceback: null,
         }),
       );
@@ -216,38 +140,31 @@ export function useGoalActions({
     }
   };
 
+  /** Jump to the goal's session. A terminal result is marked seen on
+   * the way in, which is what retires it from the pill. */
   const openGoal = async (goalId: string) => {
-    try {
-      const snapshot = await getGoalStatus(goalId);
-      const masterSessionId = snapshot.goal.masterSessionId;
-      if (masterSessionId) {
-        setActiveProjectFilter(undefined);
-        void activateSession(masterSessionId);
-        setScreen("main");
-        if (
-          snapshot.goal.status === "completed" ||
-          snapshot.goal.status === "failed" ||
-          snapshot.goal.status === "stopped"
-        ) {
-          void markGoalResultSeen(snapshot.goal.id)
-            .then((next) => {
-              setActiveGoals((goals) =>
-                goals
-                  .map((goal) => (goal.id === next.id ? next : goal))
-                  .filter((goal) => goal.id !== next.id),
-              );
-            })
-            .catch((e) => {
-              console.debug("[goals] mark result seen failed.", e);
-            });
-        }
+    let goal = activeGoals.find((candidate) => candidate.id === goalId);
+    if (!goal) {
+      try {
+        goal = await getGoal(goalId);
+      } catch (e) {
+        console.warn("[goals] open goal failed.", e);
         return;
       }
-      if (snapshot.goal.projectId) openGoalProject(snapshot.goal.projectId);
-    } catch (e) {
-      console.warn("[goals] open goal failed.", e);
-      const goal = activeGoals.find((candidate) => candidate.id === goalId);
-      if (goal?.projectId) openGoalProject(goal.projectId);
+    }
+    setActiveProjectFilter(undefined);
+    void activateSession(goal.sessionId);
+    setScreen("main");
+    if (isTerminalGoalStatus(goal.status)) {
+      void markGoalResultSeen(goal.id)
+        .then((next) => {
+          setActiveGoals((goals) =>
+            goals.filter((candidate) => candidate.id !== next.id),
+          );
+        })
+        .catch((e) => {
+          console.debug("[goals] mark result seen failed.", e);
+        });
     }
   };
 
@@ -262,5 +179,62 @@ export function useGoalActions({
     }
   };
 
-  return { startGoalFromComposer, openGoal, stopGoalFromTopbar };
+  /**
+   * Give a goal more time. The only way back out of `budget_limited`:
+   * Core raises the ceiling, flips the goal to `active`, and dispatches
+   * the next continuation itself, so the GUI just folds the returned
+   * brief in (upsert, not map — a budget-limited goal whose result was
+   * already marked seen has left `activeGoals`, and extending it puts
+   * it back in the pill).
+   */
+  const extendGoalFromTopbar = async (
+    goalId: string,
+    extraSeconds: number = GOAL_EXTEND_SECONDS,
+  ) => {
+    try {
+      const next = await extendGoal(goalId, extraSeconds);
+      setActiveGoals((goals) => {
+        const without = goals.filter((goal) => goal.id !== next.id);
+        return [...without, next].sort((a, b) =>
+          a.startedAt.localeCompare(b.startedAt),
+        );
+      });
+      pushToast(
+        makeAppError({
+          category: "business",
+          severity: "info",
+          title: copy.toasts.goalExtended,
+          message: copy.toasts.goalExtendedMessage(
+            Math.round(extraSeconds / 60),
+          ),
+          hint: null,
+          retryable: false,
+          context: "extend_goal",
+          traceback: null,
+          autoDismissMs: 4200,
+        }),
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      pushToast(
+        makeAppError({
+          category: "business",
+          severity: "error",
+          title: copy.toasts.goalExtendFailed,
+          message,
+          hint: null,
+          retryable: true,
+          context: "extend_goal",
+          traceback: null,
+        }),
+      );
+    }
+  };
+
+  return {
+    startGoalFromComposer,
+    openGoal,
+    stopGoalFromTopbar,
+    extendGoalFromTopbar,
+  };
 }

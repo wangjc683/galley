@@ -35,7 +35,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   session,
   active,
   petAttached = false,
-  goalMaster,
+  sessionGoal,
   projects,
   onClick,
   onArchive,
@@ -52,12 +52,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * Cat icon next to the title — status only, not clickable (the
    * row itself is the click target for switching sessions). */
   petAttached?: boolean;
-  /** Running/wrapping goal this session is the master of, if any. The
-   * master session itself stays idle while workers run, so without this
-   * its row would read as idle on a busy board. When present (and the
-   * session isn't in its own running/blocking state) the row shows a
-   * goal-running state: brand breathing rail + spinner + a goal subline. */
-  goalMaster?: GoalBrief;
+  /** This session's open goal (active / paused / blocked), if any.
+   * Between continuations an `active` goal leaves the session briefly
+   * idle, and `paused` / `blocked` leave it idle indefinitely — without
+   * this the row would read as a finished conversation. When present
+   * (and the session isn't in its own running / blocking state) the row
+   * shows a goal state: breathing brand rail for `active`, a static
+   * rail for the two parked states, plus a goal subline. */
+  sessionGoal?: GoalBrief;
   /** Full project list — used to populate the "Move to project"
    * submenu. Caller passes navigation-sorted projects so the menu
    * matches the Projects section order. */
@@ -111,16 +113,21 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   const hasPendingApproval =
     status === "waiting_approval" || pendingApprovalCount > 0;
   const hasBlockingError = status === "error";
-  // Master session of a running/wrapping goal: the work happens in
-  // worker sessions, so this session's own status is idle. Surface the
-  // goal-running state on its row so the board doesn't read it as idle.
-  // Yields to the session's own running / blocking states if any.
-  const goalRunning =
-    !!goalMaster &&
+  // A session carrying an open goal: its own bridge status can be idle
+  // between continuations (or indefinitely, when the goal is parked).
+  // Surface the goal state on the row so the board doesn't read it as a
+  // finished conversation. Yields to the session's own running /
+  // blocking states if any.
+  const goalOwned =
+    !!sessionGoal &&
     !isRunning &&
     !hasPendingAsk &&
     !hasPendingApproval &&
     !hasBlockingError;
+  // `active` breathes like a run in progress; `paused` / `blocked` are
+  // waiting on the user and must not pretend to be working.
+  const goalRunning = goalOwned && sessionGoal?.status === "active";
+  const goalParked = goalOwned && sessionGoal?.status !== "active";
   const showRunningActivity =
     isRunning && !hasPendingAsk && !hasPendingApproval && !hasBlockingError;
   // Unread renders as the left icon's filled-brand form, and only for
@@ -132,7 +139,8 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     !hasPendingApproval &&
     !hasBlockingError &&
     !isRunning &&
-    !goalRunning;
+    !goalRunning &&
+    !goalParked;
   // Scheduler-created sessions carry via=supervisor on the wire but
   // must not read as "Supervisor 创建" — the user configured a
   // scheduled task, not a supervisor; explain provenance in their own
@@ -150,7 +158,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       ? "waiting"
       : showRunningActivity || goalRunning
         ? "running"
-        : null;
+        : // A parked goal (paused / blocked) is waiting on the user —
+          // the static "needs you" rail, not the breathing one.
+          goalParked
+          ? "waiting"
+          : null;
   // Subline composition:
   //
   //   running + last completed step known → "第 N 步 · {summary}"
@@ -185,14 +197,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     : null;
   const approvalCount = pendingApprovalCount;
   const errorCount = session.errorCount || 0;
-  // Goal-master running subline, e.g. "运行中 · 2 个 Agent" — reuses the
-  // TopBar stage + worker-count copy so the row reads the same language
-  // as the goal pill. Null unless this session masters a goal. Solo is a
-  // single agent, so the hive-only "N agents" count is dropped for it.
-  const goalSubline = goalMaster
-    ? goalMaster.mode === "solo"
-      ? goalStageLabel(goalMaster.status, copy.topbar)
-      : `${goalStageLabel(goalMaster.status, copy.topbar)} · ${copy.topbar.goalWorkerCount(goalMaster.workerLimit)}`
+  // Goal subline — the same stage word the TopBar pill uses, prefixed
+  // so the row says WHICH kind of work is open ("Goal · 已暂停"). Null
+  // unless this session carries a goal.
+  const goalSubline = sessionGoal
+    ? `Goal · ${goalStageLabel(sessionGoal.status, copy.topbar)}`
     : null;
   // Subline doubles as the status line — always state-colored, upright
   // (no italic), text-explicit for the blocking states so a glance
@@ -211,7 +220,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           ? session.lastStepIndex != null && cleanSummary
             ? copy.sidebar.stepSummary(session.lastStepIndex, cleanSummary)
             : copy.sidebar.thinking
-          : goalRunning
+          : goalRunning || goalParked
             ? goalSubline
             : cleanSummary
               ? // A user-aborted session must not claim completion —
@@ -223,7 +232,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   const sublineTone: "running" | "warning" | "error" | "muted" =
     hasBlockingError
       ? "error"
-      : hasPendingAsk || hasPendingApproval
+      : hasPendingAsk || hasPendingApproval || goalParked
         ? "warning"
         : showRunningActivity || goalRunning
           ? "running"
@@ -240,7 +249,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           ? "unread"
           : isRunning || goalRunning
             ? "running"
-            : "idle";
+            : goalParked
+              ? "goal-parked"
+              : "idle";
   const shouldPopIcon =
     hasBlockingError || hasPendingAsk || hasPendingApproval || showUnread;
   // Suppress the pop for the state the row MOUNTED in: app launch and
@@ -322,7 +333,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // (2026-07-05 decision). Archive does NOT stop the run — the dialog
   // copy says exactly that. Settled sessions keep the one-click,
   // reversible archive.
-  const archiveNeedsConfirm = isRunning || goalRunning;
+  const archiveNeedsConfirm = isRunning || goalRunning || goalParked;
   const handleArchiveSelect = () => {
     if (!onArchive) return;
     if (archiveNeedsConfirm) {
@@ -430,6 +441,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 active ? "text-ink" : "text-ink-soft",
                 isRunning ||
                   goalRunning ||
+                  goalParked ||
                   showUnread ||
                   hasPendingAsk ||
                   hasPendingApproval ||

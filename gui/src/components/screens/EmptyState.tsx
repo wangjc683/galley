@@ -35,8 +35,10 @@ export interface EmptyStateProps {
     text: string,
     config: GoalLaunchConfig,
   ) => void | Promise<void>;
-  /** True when a Goal is active anywhere — gates the Goal entry under the
-   * single-active-Goal rule. */
+  /** Gate for the Goal entry. The empty state has no session yet, so
+   * there is no open Goal to collide with and this is always false —
+   * the prop stays only because the Composer's gating is per-session
+   * (MainView is where it can be true). */
   hasActiveGoal?: boolean;
   /** LLM list for the Composer's inline picker. Drives the popover
    * under the model pill — see Composer's LLMPill. */
@@ -183,7 +185,6 @@ export function EmptyState({
           onSubmit={onSubmit}
           onGoalSubmit={onGoalSubmit}
           hasActiveGoal={hasActiveGoal}
-          goalProjectName={projectName}
           // One shared new-conversation draft: typing here, glancing at a
           // session, and coming back must not lose the text. Submit hands
           // the text to the new session and drops the parked copy.

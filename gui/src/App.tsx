@@ -64,7 +64,7 @@ import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
-import type { GoalBrief } from "@/types/goal";
+import { isOpenGoalStatus, type GoalBrief } from "@/types/goal";
 
 /**
  * V0.1 Stage 2 #8 — App entry.
@@ -133,10 +133,6 @@ function App() {
     (s) => s.deleteSessionPermanently,
   );
   const emptyArchive = useSessionsStore((s) => s.emptyArchive);
-  const appendUserTurnExternal = useMessagesStore(
-    (s) => s.appendUserTurnExternal,
-  );
-  const appendSystemTurn = useMessagesStore((s) => s.appendSystemTurn);
   const pendingApprovalMode = useRuntimeStore((s) => s.pendingApprovalMode);
   const selectLLMForNewSession = useRuntimeStore(
     (s) => s.selectLLMForNewSession,
@@ -297,18 +293,13 @@ function App() {
         : "quiet";
   const effectiveActiveId = screen === "main" ? activeSessionId : undefined;
   const activeSession = visibleSessions.find((s) => s.id === effectiveActiveId);
-  // Map of master-session-id -> running/wrapping goal, so the Sidebar can
-  // show a goal-running state on a master session row (the master itself
-  // stays idle while its workers run).
-  const goalMasterStatus = useMemo(() => {
+  // Map of session-id -> that session's OPEN goal, so the Sidebar can
+  // show the goal state on the row (a goal-carrying session sits idle
+  // between continuations, and indefinitely while parked).
+  const sessionGoalStatus = useMemo(() => {
     const map = new Map<string, GoalBrief>();
     for (const goal of activeGoals) {
-      if (
-        goal.masterSessionId &&
-        (goal.status === "running" || goal.status === "wrapping")
-      ) {
-        map.set(goal.masterSessionId, goal);
-      }
+      if (isOpenGoalStatus(goal.status)) map.set(goal.sessionId, goal);
     }
     return map;
   }, [activeGoals]);
@@ -335,20 +326,20 @@ function App() {
           mode === (yoloMode ? "auto" : "approval") ? undefined : mode,
       }),
   };
+  // This session's OPEN goal, if any — the Composer's context badge and
+  // the thread's parked tail both key off it.
   const activeSessionGoal = activeSession
-    ? (activeGoals.find((goal) => goal.masterSessionId === activeSession.id) ??
-      (activeSession.projectId
-        ? activeGoals.find((goal) => goal.projectId === activeSession.projectId)
-        : undefined))
+    ? activeGoals.find(
+        (goal) =>
+          goal.sessionId === activeSession.id && isOpenGoalStatus(goal.status),
+      )
     : undefined;
-  // Gate for launching a NEW Goal. `activeGoals` also carries terminal
-  // goals whose result hasn't been seen (they keep the pill's "view
-  // result" entry alive), but only running/wrapping actually occupies the
-  // single-active-Goal slot (the DB's goals_single_active index) — a
-  // finished-but-unseen goal must not dead-button the Composer.
-  const goalSlotOccupied = activeGoals.some(
-    (goal) => goal.status === "running" || goal.status === "wrapping",
-  );
+  // Gate for starting a NEW Goal: per-session now (PRD §6 裁决 3), and
+  // only an OPEN goal occupies the slot. `activeGoals` also carries
+  // terminal goals whose result hasn't been seen (they keep the pill's
+  // "view result" entry alive) — one of those must not dead-button the
+  // Composer.
+  const goalSlotOccupied = Boolean(activeSessionGoal);
   const activeSessionBusy =
     screen === "main" &&
     (isRunning || pendingApprovals.length > 0 || pendingAskUser !== null);
@@ -366,7 +357,6 @@ function App() {
     openModelsForMissingConfig,
   });
   const {
-    activeGoalProjectIds,
     activeProject,
     assignSessionToProjectWithToast,
     createProjectOpen,
@@ -383,7 +373,6 @@ function App() {
     toggleProjectExpanded,
     toggleProjectView,
   } = useProjectNavigation({
-    activeGoals,
     activeProjectFilter,
     activeSessionBusy,
     assignSessionToProject,
@@ -396,29 +385,25 @@ function App() {
     setScreen,
     visibleSessions,
   });
-  const openGoalProject = openProjectInSidebar;
-  const { startGoalFromComposer, openGoal, stopGoalFromTopbar } =
-    useGoalActions({
-      activeGoals,
-      activeSession,
-      activeProjectFilter,
-      activeRuntimeKind,
-      llmDisplayName,
-      resolvedLanguage,
-      requiresManagedModelConfig,
-      copy,
-      createSessionPersisted,
-      setScreen,
-      setActiveProjectFilter,
-      activateSession,
-      appendUserTurnExternal,
-      appendSystemTurn,
-      assignSessionToProject,
-      setActiveGoals,
-      openGoalProject,
-      pushToast,
-      openModelsForMissingConfig,
-    });
+  const {
+    startGoalFromComposer,
+    openGoal,
+    stopGoalFromTopbar,
+    extendGoalFromTopbar,
+  } = useGoalActions({
+    activeGoals,
+    activeSession,
+    activeProjectFilter,
+    requiresManagedModelConfig,
+    copy,
+    createSessionPersisted,
+    setScreen,
+    setActiveProjectFilter,
+    activateSession,
+    setActiveGoals,
+    pushToast,
+    openModelsForMissingConfig,
+  });
 
   // Archived dialog open state — local UI state, no need to live in
   // the global store. Persisting across reloads would be confusing
@@ -538,7 +523,6 @@ function App() {
             activeProjectFilter={activeProjectFilter}
             projectViewOpen={projectViewOpen}
             expandedProjectIds={expandedProjectIds}
-            activeGoalProjectIds={activeGoalProjectIds}
             projectReviewNowMs={projectReviewNowMs || undefined}
             onNewProject={() => setCreateProjectOpen(true)}
             onToggleProjectView={toggleProjectView}
@@ -552,7 +536,7 @@ function App() {
             onEditProject={(id) => setEditingProjectId(id)}
             onDeleteProject={(id) => setDeletingProjectId(id)}
             petAttachedSessionId={petAttachedSessionId}
-            goalMasterStatus={goalMasterStatus}
+            sessionGoalStatus={sessionGoalStatus}
           />
         }
         main={
@@ -573,12 +557,14 @@ function App() {
                   activeGoals={activeGoals}
                   channelsState={channelsState}
                   channelsLoadError={channelsLoadError}
-                  onOpenGoalProject={openGoalProject}
                   onOpenGoal={(goalId) => {
                     void openGoal(goalId);
                   }}
                   onStopGoal={(goalId) => {
                     void stopGoalFromTopbar(goalId);
+                  }}
+                  onExtendGoal={(goalId) => {
+                    void extendGoalFromTopbar(goalId);
                   }}
                   openSettings={openSettings}
                   onOpenSettings={() => openSettings()}
@@ -661,8 +647,8 @@ function App() {
                     goal={activeSessionGoal}
                     hasActiveGoal={goalSlotOccupied}
                     sessionGoals={sessionGoals}
-                    onOpenSession={(sid) => void activateSession(sid)}
                     onStopGoal={(goalId) => void stopGoalFromTopbar(goalId)}
+                    onExtendGoal={(goalId) => void extendGoalFromTopbar(goalId)}
                     onGoalSubmit={startGoalFromComposer}
                     imagesEnabled={activeSession?.gaRuntimeKind === "managed"}
                     onImageBlocked={handleImageBlocked}

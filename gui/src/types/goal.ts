@@ -1,71 +1,81 @@
-import type { Project, RuntimeKind, SessionStatus } from "@/types/session";
+import type { Origin } from "@/types/conversation";
 
+/**
+ * Goal v2 state machine (.scratch/goal-simplify/PRD.md §3.2), mirroring
+ * Rust `api::GoalStatus`.
+ *
+ *   - `active`   — Core re-dispatches a continuation on every idle.
+ *   - `paused`   — user aborted the run, or Core restarted. Recoverable:
+ *                  the session's next user message resumes it.
+ *   - `blocked`  — the model declared a blocker, or the run errored.
+ *                  Recoverable the same way; the difference is who judged.
+ *   - `completed` / `budget_limited` / `stopped` / `failed` — terminal.
+ */
 export type GoalStatus =
-  | "running"
-  | "wrapping"
+  | "active"
+  | "paused"
+  | "blocked"
   | "completed"
+  | "budget_limited"
   | "stopped"
   | "failed";
 
-export type GoalWriteMode = "autonomous" | "read_only";
+/** Open = still owns the session's idle time, or can get it back with
+ * one user message. The set the per-session uniqueness index guards. */
+export const OPEN_GOAL_STATUSES: readonly GoalStatus[] = [
+  "active",
+  "paused",
+  "blocked",
+];
 
+export function isOpenGoalStatus(status: GoalStatus): boolean {
+  return OPEN_GOAL_STATUSES.includes(status);
+}
+
+export function isTerminalGoalStatus(status: GoalStatus): boolean {
+  return !isOpenGoalStatus(status);
+}
+
+/** Wire twin of Rust `api::GoalBrief` (camelCase JSON). */
 export interface GoalBrief {
   id: string;
-  proposalId?: string;
-  /** Absent for a solo Goal launched outside any project — it stays
-   * project-less, like a plain session. Hive goals always have one. */
-  projectId?: string;
-  masterSessionId?: string;
+  /** The session this goal drives — exactly one, for its whole life. */
+  sessionId: string;
   objective: string;
   status: GoalStatus;
-  budgetSeconds: number;
-  workerLimit: number;
-  runtimeKind: RuntimeKind;
-  writeMode: GoalWriteMode;
-  /** Engine: `solo` (single agent) or `hive` (master + workers). Drives
-   * mode-specific UI (e.g. solo hides the hive-only "N agents" chip). */
-  mode: GoalMode;
+  /** Time ceiling in seconds. Absent = no ceiling. */
+  budgetSeconds?: number;
   startedAt: string;
-  deadlineAt: string;
   endedAt?: string;
+  pausedAt?: string;
   latestSummary?: string;
   resultSeenAt?: string;
-  stopRequested: boolean;
-  workspacePath?: string;
-  /** Task-board counters + deliverable anchor version. Present on the
-   * live-surface queries (visible list / status / per-session list);
-   * absent = unknown, not zero — hide the affordance, don't show 0/0. */
-  taskCount?: number;
-  completedTaskCount?: number;
-  deliverableVersion?: number;
+  /** Continuations Core has dispatched so far (the wrap-up one included). */
+  continuationCount: number;
+  /** True once the budget-limit wrap-up continuation went out. */
+  wrapUpDispatched: boolean;
+  /** Wall-clock seconds from `startedAt` to `endedAt` (terminal) or to
+   * the read (open). Computed by Core, never stored — the GUI reads it
+   * straight instead of running its own clock. */
+  elapsedSeconds: number;
   createdAt: string;
   updatedAt: string;
+  /** Who set the goal. Absent for GUI-set goals. */
+  origin?: Origin;
 }
 
-export interface StartDesktopGoalInput {
+/** Input for the `start_session_goal` command. `budgetSeconds: null` is
+ * the explicit "no ceiling" choice; the GUI always sends the field. */
+export interface StartSessionGoalInput {
+  sessionId: string;
   objective: string;
-  projectId?: string;
-  masterSessionId: string;
-  runtimeKind?: RuntimeKind;
-  budgetSeconds?: number;
-  workerLimit?: number;
-  /** Goal engine. Omitted → `hive` (backward-compat default resolved in
-   * Core). The GUI sends `solo` as the product default. */
-  mode?: GoalMode;
-  /** Display name of the model the operator picked in the Composer at
-   * launch. Best-effort applied to the master session (and inherited by
-   * worker sessions) by the backend; a miss falls back to the GA
-   * default and never blocks the launch. */
-  llmName?: string;
-  /** Operator's resolved UI locale (`zh-CN` / `en-US`) at launch. Selects
-   * the language of the Galley-authored system narration that Core (launch
-   * ack) and the CLI controller (lifecycle checkpoints) persist into the
-   * master session — Rust can't read GUI i18n, so the resolved locale is
-   * handed down here. Omitted → Chinese (the surface's original behavior). */
-  locale?: string;
+  budgetSeconds?: number | null;
 }
 
-export interface GoalMasterMessage {
+/** Persisted message row echoed back by `start_session_goal`. The GUI
+ * does NOT render it from here — the same row arrives through
+ * `user-message-persisted`, which is the single mirror path. */
+export interface GoalObjectiveMessage {
   id: string;
   sessionId: string;
   role: "user" | "agent" | "system";
@@ -73,111 +83,20 @@ export interface GoalMasterMessage {
   createdAt: string;
   summary?: string;
   turnIndex?: number;
-  origin?: {
-    via: "gui" | "cli" | "supervisor" | "system";
-    supervisor?: string;
-    reason?: string;
-  };
+  goalId?: string;
+  origin?: Origin;
 }
 
-export interface StartDesktopGoalResult {
+export interface StartSessionGoalResult {
   goal: GoalBrief;
-  objectiveMessage: GoalMasterMessage;
-  masterMessage: GoalMasterMessage;
+  message: GoalObjectiveMessage;
+  /** Always `"dispatched"` — a dispatch failure is an error, never a
+   * half-started goal. */
+  dispatch: string;
 }
 
-/** Which Goal engine to run. `solo` = one agent to budget (product
- * default); `hive` = master + parallel workers, cross-verified. */
-export type GoalMode = "solo" | "hive";
-
+/** What the confirm dialog resolves to. `budgetSeconds: null` = no
+ * ceiling (an explicit user choice, never a default). */
 export interface GoalLaunchConfig {
-  workerLimit: number;
-  budgetSeconds: number;
-  mode: GoalMode;
-}
-
-export interface GoalTaskBrief {
-  id: string;
-  goalId: string;
-  title: string;
-  description?: string;
-  status:
-    | "open"
-    | "claimed"
-    | "running"
-    | "completed"
-    | "blocked"
-    | "cancelled";
-  ownerSessionId?: string;
-  scope?: string;
-  resultSummary?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface GoalEventBrief {
-  id: number;
-  goalId: string;
-  taskId?: string;
-  authorSessionId?: string;
-  eventType:
-    | "plan"
-    | "claim"
-    | "progress"
-    | "result"
-    | "conflict"
-    | "synthesis"
-    | "system";
-  body: string;
-  createdAt: string;
-}
-
-export interface GoalSessionBrief {
-  id: string;
-  projectId?: string;
-  title: string;
-  status: SessionStatus;
-  summary?: string;
-  turnCount?: number;
-  lastActivityAt: string;
-  createdAt: string;
-  updatedAt: string;
-  pinned?: boolean;
-  hasUnread?: boolean;
-  selectedLlmIndex?: number;
-  selectedLlmKey?: string;
-  selectedLlmDisplayName?: string;
-  runtimeKind: RuntimeKind;
-  runtimeLabel: string;
-  gaRuntimeKind: RuntimeKind;
-  gaRuntimeId?: string;
-  promptProfile?: string;
-}
-
-export interface GoalDeliverable {
-  id: string;
-  goalId: string;
-  version: number;
-  content: string;
-  note?: string;
-  authorSessionId?: string;
-  createdAt: string;
-}
-
-export interface GoalStatusSnapshot {
-  goal: GoalBrief;
-  project?: Project;
-  tasks: GoalTaskBrief[];
-  events: GoalEventBrief[];
-  sessions: GoalSessionBrief[];
-  deliverable?: GoalDeliverable;
-}
-
-/** Worker-session orientation from `goal_context_for_session`: which
- * Goal the session works for and its latest owned task. Null for
- * sessions that never claimed a goal task (normal sessions, masters).
- * Drives the worker context bar at the top of the conversation. */
-export interface GoalWorkerContext {
-  goal: GoalBrief;
-  task: GoalTaskBrief;
+  budgetSeconds: number | null;
 }

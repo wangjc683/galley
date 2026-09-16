@@ -14,7 +14,7 @@ export function SidebarTimelineBuckets({
   activeId,
   projects,
   petAttachedSessionId,
-  goalMasterStatus,
+  sessionGoalStatus,
   collapseEarlier = true,
   onSelectSession,
   onArchiveSession,
@@ -30,9 +30,9 @@ export function SidebarTimelineBuckets({
   activeId?: string;
   projects: Project[];
   petAttachedSessionId?: string | null;
-  /** Map of master-session-id -> running/wrapping goal, so a master
-   * session row shows a goal-running state instead of reading as idle. */
-  goalMasterStatus?: Map<string, GoalBrief>;
+  /** Map of session-id -> that session's open goal, so a row carrying
+   * a goal shows its state instead of reading as a finished chat. */
+  sessionGoalStatus?: Map<string, GoalBrief>;
   collapseEarlier?: boolean;
   onSelectSession?: (id: string) => void;
   onArchiveSession?: (id: string) => void;
@@ -72,7 +72,7 @@ export function SidebarTimelineBuckets({
             activeId={activeId}
             projects={projects}
             petAttachedSessionId={petAttachedSessionId}
-            goalMasterStatus={goalMasterStatus}
+            sessionGoalStatus={sessionGoalStatus}
             onSelectSession={onSelectSession}
             onArchiveSession={onArchiveSession}
             onTogglePinSession={onTogglePinSession}
@@ -95,7 +95,7 @@ function SidebarBucket({
   activeId,
   projects,
   petAttachedSessionId,
-  goalMasterStatus,
+  sessionGoalStatus,
   onSelectSession,
   onArchiveSession,
   onTogglePinSession,
@@ -110,7 +110,7 @@ function SidebarBucket({
   activeId?: string;
   projects: Project[];
   petAttachedSessionId?: string | null;
-  goalMasterStatus?: Map<string, GoalBrief>;
+  sessionGoalStatus?: Map<string, GoalBrief>;
   onSelectSession?: (id: string) => void;
   onArchiveSession?: (id: string) => void;
   onTogglePinSession?: (id: string) => void;
@@ -149,7 +149,7 @@ function SidebarBucket({
           session={s}
           active={s.id === activeId}
           petAttached={s.id === petAttachedSessionId}
-          goalMaster={goalMasterStatus?.get(s.id)}
+          sessionGoal={sessionGoalStatus?.get(s.id)}
           projects={projects}
           onClick={() => onSelectSession?.(s.id)}
           onArchive={

@@ -53,8 +53,8 @@ export function useComposerGoal({
   const [showGoalBlockedHint, setShowGoalBlockedHint] = useState(false);
 
   const canShowGoalEntry = Boolean(onGoalSubmit) && !goal;
-  // Single active Goal: another Goal is already running elsewhere (this
-  // Composer isn't the one showing it, since canShowGoalEntry requires !goal).
+  // One open Goal per session (PRD §6 裁决 3 dropped the global lock):
+  // this conversation already has an active / paused / blocked Goal.
   const goalBlockedByActive = canShowGoalEntry && hasActiveGoal;
   const goalModeBlocked = disabled || stopMode || goalBlockedByActive;
   const goalEntryDisabled = goalModeBlocked || goalSubmitting;
@@ -80,9 +80,10 @@ export function useComposerGoal({
       onConfigureModels?.();
       return;
     }
-    // A second Goal is blocked while one is running. Don't fail silently
-    // on a disabled-looking button — surface the reason inline. The hover
-    // tooltip alone left "why is this greyed out?" unanswered on click.
+    // A second Goal on the same conversation is blocked. Don't fail
+    // silently on a disabled-looking button — surface the reason inline.
+    // The hover tooltip alone left "why is this greyed out?" unanswered
+    // on click.
     if (goalBlockedByActive) {
       setShowGoalBlockedHint(true);
       return;

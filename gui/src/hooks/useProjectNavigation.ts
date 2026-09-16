@@ -3,12 +3,10 @@ import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { AppCopy } from "@/lib/i18n";
 import { sortProjectsForNavigation } from "@/lib/projects";
 import { makeAppError, type AppError } from "@/types/app-error";
-import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 import type { Screen } from "@/stores/ui";
 
 export function useProjectNavigation({
-  activeGoals,
   activeProjectFilter,
   activeSessionBusy,
   assignSessionToProject,
@@ -21,7 +19,6 @@ export function useProjectNavigation({
   setScreen,
   visibleSessions,
 }: {
-  activeGoals: GoalBrief[];
   activeProjectFilter: string | undefined;
   activeSessionBusy: boolean;
   assignSessionToProject: (
@@ -56,15 +53,6 @@ export function useProjectNavigation({
   const activeProject = activeProjectFilter
     ? projects.find((p) => p.id === activeProjectFilter)
     : undefined;
-  const activeGoalProjectIds = useMemo(
-    () =>
-      new Set(
-        activeGoals
-          .map((goal) => goal.projectId)
-          .filter((projectId): projectId is string => projectId != null),
-      ),
-    [activeGoals],
-  );
   const editingProject = useMemo(
     () => projects.find((p) => p.id === editingProjectId) ?? null,
     [projects, editingProjectId],
@@ -196,7 +184,6 @@ export function useProjectNavigation({
   };
 
   return {
-    activeGoalProjectIds,
     activeProject,
     assignSessionToProjectWithToast,
     createProjectOpen,
