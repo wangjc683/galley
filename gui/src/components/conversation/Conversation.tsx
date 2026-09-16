@@ -120,14 +120,14 @@ export function Conversation({
     return m;
   }, [turns]);
 
-  // Keep-expanded pointer: the run that most recently went live while
-  // this component was mounted. Its completion leaves it expanded (the
-  // "review what it just did" moment); the next run going live moves
-  // the pointer and folds it. A fresh mount starts at null — reopened
-  // sessions fold everything (Conversation is keyed per session in
-  // MainView). Guarded setState-in-render is React's sanctioned
-  // adjust-state-on-render pattern — an effect here would be the
-  // cascade-prone prop→state sync Composer.tsx already avoids.
+  // Keep-expanded pointer: the run currently live while this
+  // component is mounted. It exists so the live→settled handover
+  // renders one frame with the section open (see the effect below);
+  // it no longer survives completion. A fresh mount starts at null —
+  // reopened sessions fold everything (Conversation is keyed per
+  // session in MainView). Guarded setState-in-render is React's
+  // sanctioned adjust-state-on-render pattern — an effect here would
+  // be the cascade-prone prop→state sync Composer.tsx already avoids.
   const lastGroup: RunGroup | undefined = groups[groups.length - 1];
   const liveOpener =
     lastGroup && !lastGroup.complete ? lastGroup.openerIndex : null;
@@ -135,6 +135,19 @@ export function Conversation({
   if (liveOpener !== null && liveOpener !== keepOpener) {
     setKeepOpener(liveOpener);
   }
+  // Fold on completion (2026-09-16, reversing the 08-06 "review what
+  // it just did" window): the pointer is released one frame after the
+  // run settles, not in the same render. That frame is what makes the
+  // fold a sweep — the RunFoldSection mounts open (ExpandSection seeds
+  // its state from `open`, so no expand animation plays) and then
+  // closes through the grid-rows transition, instead of the process
+  // popping out of the viewport. What the run did stays one click
+  // away behind the header's step / duration / tool-count digest.
+  useEffect(() => {
+    if (liveOpener !== null || keepOpener === null) return;
+    const raf = requestAnimationFrame(() => setKeepOpener(null));
+    return () => cancelAnimationFrame(raf);
+  }, [liveOpener, keepOpener]);
   // Manual toggles, keyed by opener index: true = user expanded,
   // false = user collapsed, absent = default. Ephemeral per mount.
   const [foldOverrides, setFoldOverrides] = useState<Record<number, boolean>>(
@@ -548,7 +561,7 @@ function normalizedInlineText(value?: string | null): string {
  *   - Two-tier top margin (2026-08-23 density pass): mt-6 (24px) at
  *     the run boundary (step 1 — GA renumbers from 1 per put_task,
  *     so `index === 1` IS the boundary test, no run-group threading
- *     needed), mt-2 (8px, 2026-09-16 trim from 12) between steps
+ *     needed), mt-2.5 (10px; 12 until 2026-09-16) between steps
  *     inside a run. The original
  *     mt-6-everywhere verdict was calibrated for chapters that had
  *     body content; in a multi-step tool run each "chapter" is two
@@ -715,15 +728,16 @@ export function TurnMarker({
         className={cn(
           // No bottom margin: the step's process body must hug its
           // marker so marker + tool rows read as one step, and the
-          // between-step mt-2 stays the only gap (2026-09-16 rhythm:
-          // within-step 0, between-step 8 — trimmed from 12 the same
-          // day after a ten-step run still read as mostly whitespace).
+          // between-step mt-2.5 stays the only gap (2026-09-16 rhythm:
+          // within-step 0, between-step 10 — JC's live pick after 12
+          // read as roomy and 8 as cramped; pill padding stays py-1,
+          // the trimmed pill made single steps harder to read).
           "flex min-w-0 items-start leading-[1.6] [font-size:var(--conversation-step-size)] text-ink-soft",
           // Run boundary keeps the chapter gap; in-run steps tighten.
           // `index` unknown (pre-turn_start thinking gap) defaults to
           // the boundary gap — the common case for that window is the
           // first step right after the user submits.
-          index != null && index > 1 ? "mt-2" : "mt-6",
+          index != null && index > 1 ? "mt-2.5" : "mt-6",
           hasDetail && "cursor-default hover:text-ink",
         )}
       >

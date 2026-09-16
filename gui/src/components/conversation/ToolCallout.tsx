@@ -556,7 +556,7 @@ function InlineToolPill({
   // Merged step row (see ToolCalloutProps.stepIndex): the pill takes
   // over the TurnMarker's identity — prefix + hairline in the marker's
   // exact register, and the step's two-tier top margin (run boundary
-  // mt-6, in-run mt-2; same test as TurnMarker's `index > 1`). The
+  // mt-6, in-run mt-2.5; same test as TurnMarker's `index > 1`). The
   // prefix sits OUTSIDE the button so the step number keeps the
   // markers' left column alignment while the hover target stays the
   // tool zone; the button's -ml-2 tucks its px-2 hover bleed up
@@ -570,10 +570,10 @@ function InlineToolPill({
       type="button"
       onClick={() => setOpen((v) => !v)}
       className={cn(
-        // py-0.5 (2026-09-16 trim, was py-1): the row is one line of
-        // 11px text; 4px of padding each side made it taller than the
-        // summary line it supports.
-        "flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-left",
+        // py-1 stays (a py-0.5 trial on 2026-09-16 made single steps
+        // harder to read; the between-step gap is where the density
+        // came from).
+        "flex items-center gap-1.5 rounded-sm px-2 py-1 text-left",
         // One level under the step summary (2026-09-16): the summary
         // is the step's sentence (12px ink-soft), the pill is the
         // evidence beneath it — label at the mono tier and ink-muted,
@@ -638,7 +638,7 @@ function InlineToolPill({
 
   if (stepLabel) {
     return (
-      <div className={stepIndex === 1 ? "mt-6" : "mt-2"}>
+      <div className={stepIndex === 1 ? "mt-6" : "mt-2.5"}>
         <div className="flex min-w-0 items-center">
           <span
             className="w-(--step-gutter) shrink-0 font-mono tabular-nums text-ink-muted [font-size:var(--conversation-tool-mono-size)] [line-height:calc(var(--conversation-step-size)*1.6)]"
@@ -662,7 +662,7 @@ function InlineToolPill({
   // stroke lands on the content column where the summary's first
   // glyph starts. No vertical margin: the pill hugs its marker
   // (within-step gap 0) and successive pills are spaced by their own
-  // py-0.5.
+  // py-1.
   return (
     <div>
       <div className="-ml-2.5">{row}</div>
