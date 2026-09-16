@@ -29,6 +29,8 @@
 //! unsent draft.
 
 use crate::api::QueuedMessage;
+#[cfg(doc)]
+use crate::runner_manager::RunSignal;
 use std::collections::VecDeque;
 
 /// Queue + run-gate state for one session.
@@ -37,6 +39,57 @@ pub(super) struct SessionQueueState {
     pub(super) open_run: bool,
     pub(super) ask_pending: bool,
     pub(super) items: VecDeque<QueuedMessage>,
+    /// Who opened the current run: a user-initiated turn (any
+    /// `send_command` that opens the gate) or a Goal v2 continuation the
+    /// engine stamped right after dispatching. Read back through
+    /// [`RunOutcome::continuation`] when the run settles.
+    pub(super) run_kind: RunKind,
+    /// Facts the per-spawn forwarder collects while the run is open —
+    /// the final turn's `<goal-status>` tag, a fatal error — and folds
+    /// into the [`RunOutcome`] it stores on `RunComplete`.
+    pub(super) draft: RunOutcomeDraft,
+    /// Outcome of the most recently settled run, taken (and cleared) by
+    /// the drain task's goal evaluation.
+    pub(super) last_outcome: Option<RunOutcome>,
+    /// The forwarder already announced this run's first `TurnStart`
+    /// ([`RunSignal::UserRunStarted`]); reset when the run settles.
+    pub(super) started_notified: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RunKind {
+    #[default]
+    UserTurn,
+    GoalContinuation,
+}
+
+#[derive(Debug, Default, Clone)]
+pub(super) struct RunOutcomeDraft {
+    pub(super) goal_tag: Option<String>,
+    pub(super) summary: Option<String>,
+    pub(super) errored: Option<String>,
+}
+
+/// How the last run on a session ended, as far as the Goal v2 engine
+/// cares (.scratch/goal-simplify/PRD.md §3.3). Assembled by the
+/// forwarder from the event stream and handed to the drain task with
+/// the `RunComplete` signal.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RunOutcome {
+    /// The run was cut short by `IpcCommand::Abort` (the bridge marks
+    /// its synthesized run_complete with `ABORTED`).
+    pub aborted: bool,
+    /// A fatal (non-business, error-severity) bridge / runtime error
+    /// was reported during the run — its message.
+    pub errored: Option<String>,
+    /// `<goal-status>` tag on the final turn: `"complete"` / `"blocked"`.
+    pub goal_tag: Option<String>,
+    /// GA's one-line summary of the final turn — what a completed or
+    /// blocked goal records as its `latest_summary`.
+    pub summary: Option<String>,
+    /// The run was a Goal continuation the engine dispatched, not a
+    /// user-initiated turn.
+    pub continuation: bool,
 }
 
 /// Outcome of [`RunnerManager::queue_offer`].

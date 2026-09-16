@@ -1,5 +1,53 @@
 use super::*;
+use crate::goal_engine::{GoalEngine, GoalStartResult};
+use crate::notify::TauriNotifier;
+use crate::runner_manager::RunnerManager;
+use crate::socket_listener::{DbSource, HandlerCtx};
+use tauri::AppHandle;
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StartSessionGoalInput {
+    session_id: SessionId,
+    objective: String,
+    /// `None` = no time ceiling. The GUI passes its preset explicitly.
+    #[serde(default)]
+    budget_seconds: Option<u32>,
+}
+
+/// Set a goal on a session and dispatch its opening turn (goal v2,
+/// `crate::goal_engine`). The persisted objective row is also announced
+/// through `user-message-persisted`, so the GUI mirrors it the same way
+/// it mirrors a CLI send.
+#[tauri::command]
+pub(crate) async fn start_session_goal(
+    galley: State<'_, SqliteGalley>,
+    manager: State<'_, std::sync::Arc<RunnerManager>>,
+    app: AppHandle,
+    input: StartSessionGoalInput,
+) -> std::result::Result<GoalStartResult, String> {
+    let db = DbSource::Pool(galley.inner().clone());
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: manager.inner().as_ref(),
+        notifier: TauriNotifier::new(app.clone()),
+        app: Some(&app),
+    };
+    GoalEngine {
+        galley: galley.inner(),
+        ctx: &ctx,
+    }
+    .start(
+        input.session_id,
+        input.objective,
+        input.budget_seconds,
+        Origin::gui(),
+    )
+    .await
+    .map_err(stringify_error)
+}
+
+/// Open goals (active / paused / blocked), oldest first.
 #[tauri::command]
 pub(crate) async fn list_active_goals(
     galley: State<'_, SqliteGalley>,
@@ -7,6 +55,7 @@ pub(crate) async fn list_active_goals(
     galley.list_active_goals().await.map_err(stringify_error)
 }
 
+/// Open goals plus unseen terminal results — the pill / sidebar list.
 #[tauri::command]
 pub(crate) async fn list_visible_goals(
     galley: State<'_, SqliteGalley>,
@@ -14,6 +63,8 @@ pub(crate) async fn list_visible_goals(
     galley.list_visible_goals().await.map_err(stringify_error)
 }
 
+/// Every goal ever set on the session (any status) — powers the
+/// in-thread commission / terminal markers.
 #[tauri::command]
 pub(crate) async fn list_goals_for_session(
     galley: State<'_, SqliteGalley>,
@@ -25,61 +76,12 @@ pub(crate) async fn list_goals_for_session(
         .map_err(stringify_error)
 }
 
-/// Worker-session orientation: which Goal this session works for and
-/// its latest owned task. `None` for sessions that never claimed a goal
-/// task (normal sessions and masters). Drives the worker context bar.
-#[tauri::command]
-pub(crate) async fn goal_context_for_session(
-    galley: State<'_, SqliteGalley>,
-    session_id: SessionId,
-) -> std::result::Result<Option<GoalWorkerContext>, String> {
-    galley
-        .goal_worker_context(&session_id)
-        .await
-        .map_err(stringify_error)
-}
-
 #[tauri::command]
 pub(crate) async fn goal_status(
     galley: State<'_, SqliteGalley>,
     id: GoalId,
-) -> std::result::Result<GoalStatusSnapshot, String> {
-    galley.goal_status(id).await.map_err(stringify_error)
-}
-
-/// True when the goal's scratch workspace exists and holds at least one
-/// file (P3). Drives the TopBar "open output folder" affordance so it is
-/// hidden for purely textual goals whose workspace was never written to.
-#[tauri::command]
-pub(crate) async fn goal_workspace_has_files(
-    galley: State<'_, SqliteGalley>,
-    id: GoalId,
-) -> std::result::Result<bool, String> {
-    let goal = galley.goal_status(id).await.map_err(stringify_error)?.goal;
-    let Some(path) = goal.workspace_path else {
-        return Ok(false);
-    };
-    Ok(dir_has_any_file(std::path::Path::new(&path)))
-}
-
-/// Shallow-recursive check for at least one regular file under `root`.
-/// Returns false on a missing dir or any read error (best-effort gate).
-fn dir_has_any_file(root: &std::path::Path) -> bool {
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else {
-                return true;
-            }
-        }
-    }
-    false
+) -> std::result::Result<GoalBrief, String> {
+    galley.get_goal(id).await.map_err(stringify_error)
 }
 
 #[tauri::command]
@@ -93,13 +95,54 @@ pub(crate) async fn mark_goal_result_seen(
         .map_err(stringify_error)
 }
 
+/// Give a goal more time (goal v2 budget policy, 2026-09-16): reopens a
+/// `budget_limited` goal and dispatches its next continuation, or raises
+/// an `active` goal's ceiling.
+#[tauri::command]
+pub(crate) async fn extend_goal(
+    galley: State<'_, SqliteGalley>,
+    manager: State<'_, std::sync::Arc<RunnerManager>>,
+    app: AppHandle,
+    id: GoalId,
+    extra_seconds: u32,
+) -> std::result::Result<GoalBrief, String> {
+    let db = DbSource::Pool(galley.inner().clone());
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: manager.inner().as_ref(),
+        notifier: TauriNotifier::new(app.clone()),
+        app: Some(&app),
+    };
+    GoalEngine {
+        galley: galley.inner(),
+        ctx: &ctx,
+    }
+    .extend(id, extra_seconds)
+    .await
+    .map_err(stringify_error)
+}
+
+/// Stop a goal: terminal `stopped`, then abort the session's in-flight
+/// run. No wrap-up turn.
 #[tauri::command]
 pub(crate) async fn request_goal_stop(
     galley: State<'_, SqliteGalley>,
+    manager: State<'_, std::sync::Arc<RunnerManager>>,
+    app: AppHandle,
     id: GoalId,
 ) -> std::result::Result<GoalBrief, String> {
-    galley
-        .request_goal_stop(id, Origin::gui())
-        .await
-        .map_err(stringify_error)
+    let db = DbSource::Pool(galley.inner().clone());
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: manager.inner().as_ref(),
+        notifier: TauriNotifier::new(app.clone()),
+        app: Some(&app),
+    };
+    GoalEngine {
+        galley: galley.inner(),
+        ctx: &ctx,
+    }
+    .stop(id)
+    .await
+    .map_err(stringify_error)
 }

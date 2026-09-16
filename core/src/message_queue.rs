@@ -23,11 +23,14 @@ use crate::api::{
     SESSION_QUEUE_CHANGED_EVENT,
 };
 use crate::db::SqliteGalley;
+use crate::goal_engine::GoalEngine;
 use crate::ipc::{IpcCommand, UserMessageCommand};
 use crate::notify::Notifier;
 use crate::runner_manager::{RunSignal, RunnerManager};
+use crate::socket_listener::{DbSource, HandlerCtx};
 use serde::Serialize;
 use std::sync::Arc;
+use tauri::AppHandle;
 use tokio::sync::mpsc;
 
 /// Wire twin of the socket layer's `user-message-persisted` payload
@@ -130,6 +133,14 @@ pub async fn dispatch_queued_message(
 /// per signal, so two RunCompletes can never double-dispatch a
 /// session's queue.
 ///
+/// Goal v2 hangs off the same signal (goal-simplify PRD §3.3): when a
+/// `RunComplete` pops nothing — no queued user message, no ask_user
+/// hold — the session is truly idle and the [`GoalEngine`] judges the
+/// settled run and dispatches the next continuation. A queued user
+/// message always wins: the goal is evaluated again when that run
+/// settles. `Closed` parks an active goal as paused (nothing is
+/// driving it any more).
+///
 /// `tauri::async_runtime::spawn`, NOT `tokio::spawn`: the caller is
 /// the synchronous setup hook, where no ambient tokio runtime exists —
 /// a raw `tokio::spawn` panics the app at startup (broke `tauri dev`
@@ -139,17 +150,35 @@ pub fn spawn_queue_drain_task(
     galley: SqliteGalley,
     manager: Arc<RunnerManager>,
     notifier: Arc<dyn Notifier>,
+    app: Option<AppHandle>,
     mut rx: mpsc::UnboundedReceiver<RunSignal>,
 ) {
     tauri::async_runtime::spawn(async move {
+        let db = DbSource::Pool(galley.clone());
         while let Some(signal) = rx.recv().await {
             let session_id = match &signal {
-                RunSignal::RunComplete { session_id } | RunSignal::Closed { session_id } => {
-                    session_id.clone()
-                }
+                RunSignal::RunComplete { session_id }
+                | RunSignal::Closed { session_id }
+                | RunSignal::UserRunStarted { session_id } => session_id.clone(),
             };
             if let Some(item) = manager.queue_take_next(&signal).await {
                 dispatch_queued_message(&galley, &manager, &notifier, &session_id, item).await;
+                continue;
+            }
+            let ctx = HandlerCtx {
+                db: &db,
+                runner: manager.as_ref(),
+                notifier: notifier.clone(),
+                app: app.as_ref(),
+            };
+            let engine = GoalEngine {
+                galley: &galley,
+                ctx: &ctx,
+            };
+            match &signal {
+                RunSignal::RunComplete { .. } => engine.on_run_settled(&session_id).await,
+                RunSignal::Closed { .. } => engine.on_runner_closed(&session_id).await,
+                RunSignal::UserRunStarted { .. } => engine.on_user_run_started(&session_id).await,
             }
         }
     });
