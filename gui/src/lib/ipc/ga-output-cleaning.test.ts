@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   cleanPartialContent,
+  extractPreamble,
   isLeakedToolCallMarkup,
   summaryEchoesAnswer,
 } from "@/lib/ipc/ga-output-cleaning";
@@ -146,5 +147,25 @@ describe("leaked tool-call markup (#22)", () => {
 
   it("truncates a chunk boundary inside '<invoke' instead of flashing it", () => {
     expect(cleanPartialContent("正文结束。\n<invo")).toBe("正文结束。\n");
+  });
+});
+
+describe("extractPreamble", () => {
+  const VERBOSE_MARKER =
+    "🛠️ Tool: `web_execute_js` 📥 args:\n````text\n{\n  \"tab_id\": 1\n}\n````\n";
+
+  it("strips a complete verbose-mode dispatch marker", () => {
+    expect(
+      extractPreamble(`当前阶段：先联网搜索。\n${VERBOSE_MARKER}`),
+    ).toBe("当前阶段：先联网搜索。");
+  });
+
+  it("truncates a partial verbose marker instead of leaking it", () => {
+    expect(extractPreamble("先联网搜索。\n🛠️ Tool: `web_exe")).toBe(
+      "先联网搜索。",
+    );
+    // Marker-only buffer → no preamble, so the status falls back to
+    // the generic copy rather than "Tool: … args:".
+    expect(extractPreamble(VERBOSE_MARKER)).toBeUndefined();
   });
 });

@@ -471,6 +471,13 @@ export function extractPreamble(text: string): string | undefined {
   // care about the ones that produce text noise).
   segment = segment.replace(LLM_RUNNING_MARKER, "");
   segment = segment.replace(TOOL_DISPATCH_MARKER_LINE, "");
+  // Verbose-mode dispatch marker (the shape Galley's bridge actually
+  // produces): complete blocks stripped, a partial one truncated at
+  // its leading 🛠 — otherwise "Tool: `web_execute_js` 📥 args:"
+  // surfaces as the live step status (2026-09-16).
+  segment = segment.replace(TOOL_DISPATCH_VERBOSE_BLOCK, "");
+  const partialVerboseIdx = segment.search(TOOL_DISPATCH_VERBOSE_PARTIAL);
+  if (partialVerboseIdx !== -1) segment = segment.slice(0, partialVerboseIdx);
   segment = segment.replace(TOOL_ACTION_LINE, "");
   segment = segment.replace(FILE_REF_PATTERN, "");
   // Streaming-partial case: an open tag without a matching close
