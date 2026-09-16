@@ -71,14 +71,27 @@ export function RunFoldHeader({
   stats,
   open,
   onToggle,
+  live = false,
 }: {
   stats: RunStats;
   open: boolean;
   onToggle: () => void;
+  /**
+   * Live variant (live-run-window PRD, 2026-09-16): the same row
+   * standing in for the completed steps of a run that is still
+   * going. Two differences only — the structure segment reads
+   * "已完成 N 步", and there is no duration: the thinking row already
+   * ticks a tenth-second step clock and the RunElapsedHud a
+   * one-second run clock, and a third moving counter on the same
+   * screen is the instrument-panel feel §2.7 exists to avoid. The
+   * duration arrives when the run settles and the row becomes the
+   * settled header in place.
+   */
+  live?: boolean;
 }) {
   const copy = useCopy();
 
-  const duration = formatDuration(stats.elapsedMs, copy);
+  const duration = live ? null : formatDuration(stats.elapsedMs, copy);
   const toolLabels = copy.tools as Record<string, string>;
   const scentText = [...stats.toolCounts]
     .sort((a, b) => b.count - a.count)
@@ -148,7 +161,9 @@ export function RunFoldHeader({
           trace component's "header out-inks its list" hierarchy and
           rejected — the quiet-eyebrow call of 2026-08-06 holds. */}
       <span className="shrink-0 tabular-nums tracking-[0.01em]">
-        {copy.conversation.foldSteps(stats.stepCount)}
+        {live
+          ? copy.conversation.foldStepsLive(stats.stepCount)
+          : copy.conversation.foldSteps(stats.stepCount)}
         {duration && ` · ${duration}`}
       </span>
       {(scentText !== "" ||

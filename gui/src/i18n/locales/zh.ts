@@ -1530,6 +1530,7 @@ export const zhCopy = {
      *  数字+单字量词韵律模板，扫一眼会读成「2 分 16 秒」；插入标签词
      *  打断模板（zh 特有问题，en 的 "steps" 一词天然打断）。 */
     foldSteps: (n: number) => `${n} 步`,
+    foldStepsLive: (n: number) => `已完成 ${n} 步`,
     foldDurationSeconds: (sec: number) => `用时 ${sec} 秒`,
     foldDurationMinutes: (minutes: number, sec: number) =>
       `用时 ${minutes} 分 ${sec} 秒`,

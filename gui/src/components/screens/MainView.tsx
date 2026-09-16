@@ -239,6 +239,11 @@ function MainViewContent({
   // of a blank column that would misread as an empty session.
   const restoring = useActiveMessages((m) => m.restoring, false);
   const currentTurnIndex = useActiveMessages((m) => m.currentTurnIndex, null);
+  // The in-flight region sits one in-run gap (mt-2.5) below the
+  // conversation's live window; from the second step on its rail
+  // reaches up through that gap so header → window → thinking row
+  // read as one line (live-run-window PRD, 2026-09-16).
+  const inRunRail = currentTurnIndex != null && currentTurnIndex > 1;
   const currentRunStartedAtMs = useActiveMessages(
     (m) => m.currentRunStartedAtMs,
     null,
@@ -408,6 +413,7 @@ function MainViewContent({
                 goals={sessionGoals}
                 onOpenWorkerSession={onOpenSession}
                 askUserPending={Boolean(pendingAskUser)}
+                agentRunning={isRunning}
               />
             )}
             {/* In-flight pending approvals — rendered after the
@@ -423,7 +429,10 @@ function MainViewContent({
               // No wrapper margin — TurnMarker provides its own
               // mt-7, and ToolCallout's my-3 spaces successive cards.
               // space-y-2 stays for the multi-pending case.
-              <StepRegion className="space-y-2">
+              <StepRegion
+                className="space-y-2"
+                railFrom={inRunRail ? "header" : "content"}
+              >
                 {currentTurnIndex != null && (
                   <TurnMarker index={currentTurnIndex} />
                 )}
@@ -486,7 +495,7 @@ function MainViewContent({
                     region (inset + rail) like every settled step; the
                     streaming partial below it is the answer taking
                     shape and stays full width. */}
-                <StepRegion>
+                <StepRegion railFrom={inRunRail ? "header" : "content"}>
                   <TurnMarker
                     key={currentTurnIndex ?? "pending"}
                     index={currentTurnIndex ?? undefined}

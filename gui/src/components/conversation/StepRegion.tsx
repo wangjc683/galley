@@ -25,10 +25,14 @@ import { cn } from "@/lib/utils";
  * horizontally when a run completes and gets rewrapped into its
  * RunFoldSection.
  *
- * `railFrom="header"` pulls the rail top up into the header→first-step
- * gap (the region's top edge is the first marker's border edge, its
- * mt-* having collapsed through); "content" starts the rail at that
- * edge.
+ * `railFrom="header"` pulls the rail top up 10px into the gap above
+ * the region (the region's top edge is the first marker's border
+ * edge, its mt-* having collapsed through); "content" starts the rail
+ * at that edge. The 10px covers both gaps a region can follow: the
+ * fold header's hug (mb-2.5) and the in-run step gap (mt-2.5), so the
+ * live window region and MainView's in-flight region use it too and
+ * the rail reads as one line from the header down to the thinking
+ * row (live-run-window PRD, 2026-09-16).
  */
 export function StepRegion({
   children,

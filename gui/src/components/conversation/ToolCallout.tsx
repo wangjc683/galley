@@ -638,7 +638,10 @@ function InlineToolPill({
 
   if (stepLabel) {
     return (
-      <div className={stepIndex === 1 ? "mt-6" : "mt-2.5"}>
+      <div
+        data-role="step-marker"
+        className={stepIndex === 1 ? "mt-6" : "mt-2.5"}
+      >
         <div className="flex min-w-0 items-center">
           <span
             className="w-(--step-gutter) shrink-0 font-mono tabular-nums text-ink-muted [font-size:var(--conversation-tool-mono-size)] [line-height:calc(var(--conversation-step-size)*1.6)]"

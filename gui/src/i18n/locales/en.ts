@@ -1595,6 +1595,7 @@ export const enCopy: AppCopy = {
     stepCalledTools: (names) =>
       names.length === 1 ? `Called ${names[0]}` : `Called ${names.length} tools`,
     foldSteps: (n) => (n === 1 ? "1 step" : `${n} steps`),
+    foldStepsLive: (n) => (n === 1 ? "1 step done" : `${n} steps done`),
     foldDurationSeconds: (sec) => `${sec}s`,
     foldDurationMinutes: (minutes, sec) => `${minutes}m ${sec}s`,
     foldAskUser: (n) => (n === 1 ? "1 question" : `${n} questions`),

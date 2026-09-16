@@ -67,6 +67,13 @@ export interface RunGroup {
    * marker + rule + answer, so the fold pays even with nothing to
    * hide. */
   foldable: boolean;
+  /** The run-shape half of `foldable` (user-opened, not a Goal run,
+   * no system turns). While the run is still live this is what lets
+   * the conversation render it as the live window — completed steps
+   * folded behind a live header, the last one plus the in-flight row
+   * left open (live-run-window PRD, 2026-09-16). `foldable` is
+   * `complete && foldEligible`. */
+  foldEligible: boolean;
   stats: RunStats;
 }
 
@@ -133,14 +140,15 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
     const opener = g.openerIndex >= 0 ? turns[g.openerIndex] : null;
     const isGoalRun =
       opener?.role === "user" && typeof opener.goalId === "string";
+    const foldEligible = g.openerIndex >= 0 && !isGoalRun && !g.hasSystem;
 
     groups.push({
       openerIndex: g.openerIndex,
       memberIndices: g.memberIndices,
       finalTurnIndex,
       complete,
-      foldable:
-        complete && g.openerIndex >= 0 && !isGoalRun && !g.hasSystem,
+      foldable: complete && foldEligible,
+      foldEligible,
       stats: {
         stepCount: agentTurns.length,
         elapsedMs:

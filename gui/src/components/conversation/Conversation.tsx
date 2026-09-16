@@ -60,6 +60,16 @@ export interface ConversationProps {
    * otherwise the identical question prints twice, stacked right
    * above the live bubble. */
   askUserPending?: boolean;
+  /**
+   * True while the agent is mid-run on this session. With
+   * `askUserPending` it gates the live window (live-run-window PRD,
+   * 2026-09-16): the last run, while it is being worked on, shows
+   * only its latest completed step; the ones before fold behind a
+   * live header. An incomplete run that is neither running nor
+   * waiting on the user (aborted, or a restored tail) renders flat in
+   * full — a run without an answer is never hidden.
+   */
+  agentRunning?: boolean;
 }
 
 /**
@@ -84,6 +94,7 @@ export function Conversation({
   goals,
   onOpenWorkerSession,
   askUserPending = false,
+  agentRunning = false,
 }: ConversationProps) {
   const items = annotateGoalThread(turns, goals ?? []);
 
@@ -120,39 +131,36 @@ export function Conversation({
     return m;
   }, [turns]);
 
-  // Keep-expanded pointer: the run currently live while this
-  // component is mounted. It exists so the live→settled handover
-  // renders one frame with the section open (see the effect below);
-  // it no longer survives completion. A fresh mount starts at null —
-  // reopened sessions fold everything (Conversation is keyed per
-  // session in MainView). Guarded setState-in-render is React's
-  // sanctioned adjust-state-on-render pattern — an effect here would
-  // be the cascade-prone prop→state sync Composer.tsx already avoids.
-  const lastGroup: RunGroup | undefined = groups[groups.length - 1];
-  const liveOpener =
-    lastGroup && !lastGroup.complete ? lastGroup.openerIndex : null;
-  const [keepOpener, setKeepOpener] = useState<number | null>(null);
-  if (liveOpener !== null && liveOpener !== keepOpener) {
-    setKeepOpener(liveOpener);
-  }
-  // Fold on completion (2026-09-16, reversing the 08-06 "review what
-  // it just did" window): the pointer is released one frame after the
-  // run settles, not in the same render. That frame is what makes the
-  // fold a sweep — the RunFoldSection mounts open (ExpandSection seeds
-  // its state from `open`, so no expand animation plays) and then
-  // closes through the grid-rows transition, instead of the process
-  // popping out of the viewport. What the run did stays one click
-  // away behind the header's step / duration / tool-count digest.
-  useEffect(() => {
-    if (liveOpener !== null || keepOpener === null) return;
-    const raf = requestAnimationFrame(() => setKeepOpener(null));
-    return () => cancelAnimationFrame(raf);
-  }, [liveOpener, keepOpener]);
   // Manual toggles, keyed by opener index: true = user expanded,
-  // false = user collapsed, absent = default. Ephemeral per mount.
+  // false = user collapsed, absent = default. Ephemeral per mount —
+  // a reopened session folds everything (Conversation is keyed per
+  // session in MainView). The same map serves the live window's
+  // header, so a run the user opened while it was live stays open
+  // when it settles (live-run-window PRD: the reader asked for the
+  // list; completion is not a reason to take it away).
   const [foldOverrides, setFoldOverrides] = useState<Record<number, boolean>>(
     {},
   );
+
+  // Live window (live-run-window PRD, 2026-09-16). The run being
+  // worked on is not a growing list but a fixed-height panel: its
+  // latest completed step (summary + pills, reading form) stays open
+  // above MainView's in-flight row, and every step before it folds
+  // behind a live RunFoldHeader ("已完成 N 步"). The window is two
+  // rows because a step's summary arrives at turn_end — showing only
+  // the in-flight row would mean no sentence is ever read. Gated on
+  // running / awaiting the user so an aborted run (never foldable —
+  // no answer, nothing to stand in for the process) unfolds in full
+  // for inspection, and the ask_user pause does not flicker the
+  // window away and back.
+  const lastGroup: RunGroup | undefined = groups[groups.length - 1];
+  const liveGroup =
+    lastGroup &&
+    !lastGroup.complete &&
+    lastGroup.foldEligible &&
+    (agentRunning || askUserPending)
+      ? lastGroup
+      : null;
 
   // Per-render fold plan. headerFor: opener index → fold header data;
   // sectionOwner: turns indices that render inside the group's
@@ -163,18 +171,49 @@ export function Conversation({
   // alone, expanded or not — the fold toggle is then purely the
   // section's height sweep, with nothing popping in or out beside it.
   // regionOwner is the flat counterpart of sectionOwner: members of a
-  // non-foldable group (live run, Goal run, /btw exchange) gather into
-  // a plain StepRegion instead of an animated RunFoldSection, so the
-  // process inset + rail apply to every run and nothing shifts when
-  // a live run completes and moves to a fold (2026-09-16). answerOnly
-  // covers every group with a closing turn for the same reason: the
-  // final answer must render outside the region at full width.
-  const headerFor = new Map<number, { group: RunGroup; folded: boolean }>();
+  // non-foldable group (Goal run, /btw exchange, aborted run) gather
+  // into a plain StepRegion instead of an animated RunFoldSection, so
+  // the process inset + rail apply to every run and nothing shifts
+  // when a live run completes and moves to a fold (2026-09-16).
+  // windowOwner marks the live group's open tail (its last completed
+  // agent turn and anything after it, e.g. an ask_user reply); the
+  // members before that tail go to sectionOwner and fold behind the
+  // live header. answerOnly covers every group with a closing turn
+  // for the same reason: the final answer must render outside the
+  // region at full width.
+  const headerFor = new Map<
+    number,
+    { group: RunGroup; folded: boolean; live: boolean; foldedSteps: number }
+  >();
   const sectionOwner = new Map<number, number>();
   const regionOwner = new Map<number, number>();
+  const windowOwner = new Map<number, number>();
   const answerOnly = new Set<number>();
   for (const g of groups) {
     if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
+    if (g === liveGroup) {
+      let lastAgent = -1;
+      for (const i of g.memberIndices) {
+        if (i !== g.openerIndex && turns[i].role === "agent") lastAgent = i;
+      }
+      let foldedSteps = 0;
+      for (const i of g.memberIndices) {
+        if (i === g.openerIndex) continue;
+        if (lastAgent !== -1 && i < lastAgent) {
+          sectionOwner.set(i, g.openerIndex);
+          if (turns[i].role === "agent") foldedSteps++;
+        } else {
+          windowOwner.set(i, g.openerIndex);
+        }
+      }
+      headerFor.set(g.openerIndex, {
+        group: g,
+        folded: foldOverrides[g.openerIndex] !== true,
+        live: true,
+        foldedSteps,
+      });
+      continue;
+    }
     if (!g.foldable) {
       for (const i of g.memberIndices) {
         if (i === g.openerIndex) continue;
@@ -182,10 +221,17 @@ export function Conversation({
       }
       continue;
     }
+    // Settled runs fold on completion (2026-09-16, reversing the
+    // 08-06 keep-expanded window): the header's step / duration /
+    // tool-count digest stands in for the process, one click away.
     const override = foldOverrides[g.openerIndex];
-    const folded =
-      override !== undefined ? !override : g.openerIndex !== keepOpener;
-    headerFor.set(g.openerIndex, { group: g, folded });
+    const folded = override !== undefined ? !override : true;
+    headerFor.set(g.openerIndex, {
+      group: g,
+      folded,
+      live: false,
+      foldedSteps: g.stats.stepCount,
+    });
     for (const i of g.memberIndices) {
       if (i === g.openerIndex) continue;
       sectionOwner.set(i, g.openerIndex);
@@ -224,10 +270,14 @@ export function Conversation({
               askUserReply={turnIndex !== undefined && replySet.has(turnIndex)}
               messageId={item.turn.messageId}
             />
-            {header && (
+            {/* The live header appears once a step has folded behind
+                it (the third step landing, for a two-row window);
+                before that the run is its own short list. */}
+            {header && header.foldedSteps > 0 && (
               <RunFoldHeader
                 stats={header.group.stats}
                 open={!header.folded}
+                live={header.live}
                 onToggle={() =>
                   toggleFold(header.group.openerIndex, header.folded)
                 }
@@ -270,14 +320,46 @@ export function Conversation({
   // A foldable final turn contributes twice — its marker + StrongHr
   // close the section (markerOnly), its answer body renders flat
   // right after, so collapsing never removes the visible answer.
+  type SectionKind = "fold" | "flat" | "window";
   const rendered: ReactNode[] = [];
-  let section: { opener: number; flat: boolean; nodes: ReactNode[] } | null =
-    null;
+  let section: {
+    opener: number;
+    kind: SectionKind;
+    nodes: ReactNode[];
+  } | null = null;
   const flushSection = () => {
     if (!section) return;
-    if (section.flat) {
+    if (section.kind === "flat") {
       rendered.push(
         <StepRegion key={`region-${section.opener}`}>{section.nodes}</StepRegion>,
+      );
+    } else if (section.kind === "window") {
+      // The live window's open tail. Its marker's own top margin is
+      // zeroed (data-role hook) so the gap above is owned here: with
+      // no header yet the region carries the run-boundary mt-6; under
+      // a collapsed header the header's mb-2.5 hug is the whole gap;
+      // under an expanded header the region restores the in-run
+      // mt-2.5. Owning it here is what keeps the gap steady while
+      // the fold section between header and window sweeps — a
+      // mounted 0fr section stops margins collapsing through it, so
+      // any margin on the window would add to the header's during
+      // the sweep and snap back at unmount. The margin animates on
+      // the same token as the sweep for the expand direction.
+      const h = headerFor.get(section.opener);
+      const hasHeader = h !== undefined && h.foldedSteps > 0;
+      const expanded = hasHeader && !h.folded;
+      rendered.push(
+        <StepRegion
+          key={`window-${section.opener}`}
+          railFrom={hasHeader ? "header" : "content"}
+          className={cn(
+            "[&_[data-role=step-marker]]:mt-0",
+            "transition-[margin-top] duration-(--motion-slow) ease-firm motion-reduce:transition-none",
+            !hasHeader ? "mt-6" : expanded ? "mt-2.5" : "mt-0",
+          )}
+        >
+          {section.nodes}
+        </StepRegion>,
       );
     } else {
       const h = headerFor.get(section.opener);
@@ -296,17 +378,20 @@ export function Conversation({
       turnIndex !== undefined ? sectionOwner.get(turnIndex) : undefined;
     const flatOwner =
       turnIndex !== undefined ? regionOwner.get(turnIndex) : undefined;
-    const owner = foldOwner ?? flatOwner;
+    const windowOf =
+      turnIndex !== undefined ? windowOwner.get(turnIndex) : undefined;
+    const owner = foldOwner ?? flatOwner ?? windowOf;
     if (owner === undefined) {
       flushSection();
       rendered.push(renderItem(item, i, turnIndex));
       return;
     }
-    const flat = foldOwner === undefined;
-    if (section && (section.opener !== owner || section.flat !== flat)) {
+    const kind: SectionKind =
+      foldOwner !== undefined ? "fold" : flatOwner !== undefined ? "flat" : "window";
+    if (section && (section.opener !== owner || section.kind !== kind)) {
       flushSection();
     }
-    if (!section) section = { opener: owner, flat, nodes: [] };
+    if (!section) section = { opener: owner, kind, nodes: [] };
     if (
       turnIndex !== undefined &&
       answerOnly.has(turnIndex) &&
@@ -725,6 +810,10 @@ export function TurnMarker({
     <div>
       <div
         onClick={hasDetail ? () => setOpen((v) => !v) : undefined}
+        // The live window region zeroes this row's top margin through
+        // the attribute (see Conversation's window StepRegion) so the
+        // gap above the window is owned by the header / region.
+        data-role="step-marker"
         className={cn(
           // No bottom margin: the step's process body must hug its
           // marker so marker + tool rows read as one step, and the

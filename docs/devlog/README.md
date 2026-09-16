@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-16
+- [live run 两行窗口](./2026-09-16-live-run-window.md) — 同日三刀挤密度皆被真机否决后，密度按状态分流：先「完成即折」（重审 08-06 keep-expanded），再把 live 区改成固定两行的状态面板（上一步阅读形态 + 进行中行，之前的步折进「已完成 N 步」live 头，展开 opt-in、完成保持、中止全展）；本机 348 个 run 中 57% 单步不受影响
 - [v0.4.16 发布](./2026-09-16-v0.4.16-release.md) — 五个 GUI 提交的 patch（两条社区反馈 + 过程区序号栏 + 模型 combobox + 置顶提位）；`managed-ga` / `runner` 未动故打包门禁不 mandatory；smoke 重点是序号栏的动态场景与 Windows 1x 屏图标
 - [步号改序号栏 + 过程区 StepRegion + DetailPanel 展开过渡](./2026-09-16-step-marker-recede-and-reference-audit.md) — JC 二提「只显数字」并贴外部 ReasoningTrace 参考组件；第一轮只淡一档，真机仍繁琐后翻 08-23「裸数字永久否决」：两位补零序号、去 hairline、「第 N 步」退为 sr-only；第二轮对表参考渲染图量出层级倒置与步内步间 1.3 的分组比例，加 `StepRegion`（过程区再缩一格 + x=5 rail，live/settled 同构，序号 24 内容 48）、序号 regular 降 1px、summary 换行、步内 0 步间 12 头到首步 12；真机 A/B 定序号 JetBrains Mono、折叠头保持 muted（翻深否）；in-flight 行不显序号（序号是落定的盖章，「占位显示 Turn N」废止）；pill 行退到 summary 之下一级（标签降到 mono 档 + ink-muted、图标 13）；mono 名先 hover 显示后因 caret 孤立改进展开体首行，pill 与 TurnMarker 的 caret 都改贴文字末尾；抽 `ExpandSection` 让 DetailPanel 与 RunFoldSection 同一套 grid-rows 过渡
 - [Windows 图标 / 文字发虚](./2026-09-16-windows-low-dpr-icons-and-font-stack.md) — Phosphor thin 实为 0.5px（文档 1.25px 是笔误），1x 屏半像素糊成灰线；`max-resolution: 1.5dppx` 下给 256 viewBox path 加 8 单位 stroke 升到 regular 粗细，按 dppx 不按平台；`--font-sans` 显式加雅黑；字重 / 字号变体进 deferred

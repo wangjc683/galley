@@ -116,6 +116,22 @@ describe("buildRunGroups", () => {
     expect(buildRunGroups(turns)[0].foldable).toBe(false);
   });
 
+  it("marks a live run foldEligible so the conversation can window it", () => {
+    // live-run-window (2026-09-16): an incomplete user-opened run is
+    // not foldable (no answer to stand in for the process) but IS
+    // eligible — that is what lets its completed steps fold behind
+    // the live header while it runs. Goal runs and /btw runs stay
+    // out, live or settled.
+    const live = buildRunGroups([user("q"), step(tool("web_fetch")), step(tool("web_fetch"))])[0];
+    expect(live.complete).toBe(false);
+    expect(live.foldable).toBe(false);
+    expect(live.foldEligible).toBe(true);
+    expect(live.stats.stepCount).toBe(2);
+
+    const goal = buildRunGroups([user("q", "g1"), step(tool("web_fetch"))])[0];
+    expect(goal.foldEligible).toBe(false);
+  });
+
   it("folds single-step runs (the header is the run's only settled duration surface)", () => {
     // Reversed 2026-08-06: launch shipped stepCount >= 2 ("nothing to
     // hide"), but the footer-⏱ removal made the fold header the sole
