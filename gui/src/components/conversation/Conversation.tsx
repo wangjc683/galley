@@ -28,8 +28,13 @@ import {
   mergedAskUserArgs,
 } from "@/lib/ask-user-candidates";
 import { buildRunGroups, replyUserIndices, type RunGroup } from "@/lib/run-groups";
+import { isInlineTool } from "@/lib/tool-tier";
 import { cn } from "@/lib/utils";
-import type { AgentTurn, Turn } from "@/types/conversation";
+import type {
+  AgentTurn,
+  ConversationToolEvent,
+  Turn,
+} from "@/types/conversation";
 import type { GoalBrief } from "@/types/goal";
 import type { ApprovalDecision } from "@/types/ipc";
 
@@ -463,6 +468,30 @@ function AgentTurnView({
   const showMarker =
     turn.turnIndex !== undefined && !hideMarker && !mergedStepTool;
 
+  // Settled pills ride the marker's summary line when they fit,
+  // wrapping under it when they do not (2026-09-16, the density
+  // pass's "B" cut): a step whose sentence is short becomes one
+  // line, a long one keeps today's two. Not lifted when the step has
+  // narration — that prose was written before the tools ran and
+  // renders between marker and tools, so lifting them would
+  // time-invert the step. Block-tier tools (running / failed /
+  // awaiting approval) always stay in the body.
+  const liftPills = showMarker && !(answerText && !isFinalTurn);
+  const liftedTools = liftPills ? visibleTools.filter(isInlineTool) : [];
+  const bodyTools = visibleTools.filter((t) => !liftedTools.includes(t));
+  const renderTool = (tool: ConversationToolEvent) => (
+    <ToolCallout
+      key={tool.id}
+      tool={tool}
+      stepIndex={tool === mergedStepTool ? turn.turnIndex : undefined}
+      approvalDecision={
+        tool.approvalId ? approvalDecisions?.[tool.approvalId] : undefined
+      }
+      onApprove={onApprove}
+      projectName={projectName}
+    />
+  );
+
   return (
     <div>
       {showMarker && (
@@ -471,6 +500,7 @@ function AgentTurnView({
           summary={markerSummary}
           thinkingContent={turn.thinking}
           preamble={detailPreamble}
+          tools={liftedTools.length > 0 ? liftedTools.map(renderTool) : undefined}
         />
       )}
 
@@ -493,18 +523,7 @@ function AgentTurnView({
           <MessageAgentNarration>{answerText}</MessageAgentNarration>
         )}
 
-        {visibleTools.map((tool) => (
-          <ToolCallout
-            key={tool.id}
-            tool={tool}
-            stepIndex={tool === mergedStepTool ? turn.turnIndex : undefined}
-            approvalDecision={
-              tool.approvalId ? approvalDecisions?.[tool.approvalId] : undefined
-            }
-            onApprove={onApprove}
-            projectName={projectName}
-          />
-        ))}
+        {bodyTools.map(renderTool)}
 
         {typeof askUserQuestion === "string" && !suppressAskUserEcho && (
           <AnsweredAskUser
@@ -548,8 +567,7 @@ function normalizedInlineText(value?: string | null): string {
  *   - Two-tier top margin (2026-08-23 density pass): mt-6 (24px) at
  *     the run boundary (step 1 — GA renumbers from 1 per put_task,
  *     so `index === 1` IS the boundary test, no run-group threading
- *     needed), mt-2 (8px, 2026-09-16 trim from 12) between steps
- *     inside a run. The original
+ *     needed), mt-3 (12px) between steps inside a run. The original
  *     mt-6-everywhere verdict was calibrated for chapters that had
  *     body content; in a multi-step tool run each "chapter" is two
  *     thin lines, and 24px between them made whitespace the majority
@@ -598,6 +616,7 @@ export function TurnMarker({
   liveStatus,
   thinkingContent,
   preamble,
+  tools,
 }: {
   /**
    * GA-side step number. Optional because the thinking placeholder
@@ -653,6 +672,16 @@ export function TurnMarker({
    * Ignored when `thinking` (placeholder) is true.
    */
   preamble?: string;
+  /**
+   * Settled inline tool pills lifted onto the summary line
+   * (2026-09-16). Rendered after the summary inside a flex-wrap
+   * container: the summary keeps its natural single-line width as
+   * its flex basis, so a pill follows the sentence when the two fit
+   * together and drops to the next line (at the content column) when
+   * they do not. Each pill's expanded body is a basis-full item and
+   * always gets its own line. Ignored when `thinking` is true.
+   */
+  tools?: ReactNode;
 }) {
   const copy = useCopy();
   const elapsedDs = useElapsedDeciseconds(thinking);
@@ -695,17 +724,37 @@ export function TurnMarker({
   ) : null;
   const trailing = thinking ? (
     <ThinkingStatus status={liveStatus} elapsedLabel={elapsedLabel} />
-  ) : summary ? (
-    // Wraps rather than truncates (2026-09-16): the summary is the
-    // step's sentence and a clipped sentence loses the step. GA
-    // summaries run one to two sentences, so this is rarely more
-    // than two lines.
-    <span className="min-w-0 flex-1 select-text text-ink-soft">
-      {summary}
-      {detailCaret}
-    </span>
   ) : (
-    detailCaret
+    // Summary line as a flex-wrap container (2026-09-16): the
+    // sentence is a flex-auto item — its basis is its natural
+    // single-line width, which is what makes a lifted pill follow
+    // it when the two fit and wrap under it when they do not
+    // (flex-1's 0% basis would instead squeeze the sentence into a
+    // narrow column beside the pill). min-w-0 lets a sentence longer
+    // than the column shrink and wrap its text: it wraps rather than
+    // truncates because the summary is the step's sentence and a
+    // clipped sentence loses the step. gap-x-3 is the visual gap
+    // before a same-line pill (net of the pill's -ml-2.5); row gap 0
+    // keeps a wrapped pill hugging the sentence.
+    <span className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3">
+      {summary ? (
+        <span className="min-w-0 flex-auto select-text text-ink-soft">
+          {summary}
+          {detailCaret}
+        </span>
+      ) : (
+        detailCaret
+      )}
+      {tools && (
+        // display: contents — the pills (and their basis-full
+        // expanded bodies) become items of the wrap container. The
+        // click stop keeps a pill toggle from also toggling the
+        // row's DetailPanel.
+        <span className="contents" onClick={(e) => e.stopPropagation()}>
+          {tools}
+        </span>
+      )}
+    </span>
   );
 
   return (
@@ -715,15 +764,15 @@ export function TurnMarker({
         className={cn(
           // No bottom margin: the step's process body must hug its
           // marker so marker + tool rows read as one step, and the
-          // between-step mt-2 stays the only gap (2026-09-16 rhythm:
-          // within-step 0, between-step 8 — trimmed from 12 the same
-          // day after a ten-step run still read as mostly whitespace).
+          // between-step mt-3 stays the only gap (2026-09-16 rhythm:
+          // within-step 0, between-step 12; an 8px trial the same day
+          // read as cramped and was reverted for the lifted pill row).
           "flex min-w-0 items-start leading-[1.6] [font-size:var(--conversation-step-size)] text-ink-soft",
           // Run boundary keeps the chapter gap; in-run steps tighten.
           // `index` unknown (pre-turn_start thinking gap) defaults to
           // the boundary gap — the common case for that window is the
           // first step right after the user submits.
-          index != null && index > 1 ? "mt-2" : "mt-6",
+          index != null && index > 1 ? "mt-3" : "mt-6",
           hasDetail && "cursor-default hover:text-ink",
         )}
       >

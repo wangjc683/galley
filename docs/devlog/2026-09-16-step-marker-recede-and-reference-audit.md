@@ -247,3 +247,26 @@ summary 19 + pill 24（`py-1`）+ 步间 12，留白约 58%，与 08-23 改前�
 裁决：JC「先只做刀 1」。落地①，`ToolCallout` 裸步合并前缀的两档间距同步
 改 `mt-2`。②的实现路径与 caret 同行的疑点写回 deferred B 项，启动信号
 标记「已触发一次」。
+
+## 后记八（同日）：刀 1 撤回，上刀 2
+
+JC 真机看刀 1（pill `py-0.5` + 步间 `mt-2`）：「感觉一般，有点太密集了
+不舒服」，转试刀 2。这与 08-23 的判断一致：收益大头在结构不在 4px 手感票，
+纯挤间距只会换来「密而不省」。
+
+刀 2 落地形态：settled inline pill 由 AgentTurn 传进 TurnMarker，渲染在
+summary 之后的 `flex-wrap` 容器。关键是 summary 用 `flex-auto` 而不是
+`flex-1`——basis 取句子的单行自然宽度，flex-wrap 才会按「句子 + pill
+装不装得下」决定折行；`flex-1` 的 0% basis 会让 pill 永远同行、把句子挤成
+窄列。pill 盒 `py-0`、行框钉到 summary 行框，否则同行时会把 summary 行
+撑高 2px；展开体改成 `basis-full` 兄弟节点独占一行。步间回到 `mt-3`：
+一行步的行心距 19 + 12 = 31，正是参考组件的数值。
+
+不上提的两类：有 narration 的步（散文写在派工具之前，上提会时序倒置）；
+block 态工具。`mergedStepTool` 裸步合并暂留——它与刀 2 在裸步上视觉
+等价，可在刀 2 验收后合并成一条路径（TurnMarker 空 summary + tools）。
+`pickToolTier` 挪到 `lib/tool-tier.ts` 供两处共用（react-refresh 不许组件
+文件导出函数）。
+
+待真机验的疑点：①同一行两个披露 caret（有 thinking 内容的步）；②760 默认
+列宽下上提比例（估计约半数）；③hover 底色只有 19px 高。

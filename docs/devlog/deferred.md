@@ -39,10 +39,7 @@
 
 - **状态**：暂存（2026-08-23 密度 pass 探讨中裁决：A 刀落地，B/C/横向案暂缓——见 [密度 pass](./2026-08-23-step-density-pass.md)）
 - **提出**：2026-08-23，JC 指多步 run 过程区空间利用率低、层级应低于 final answer。当日已落的 A 刀：run 内 `mt-3` 两档间距 + 裸步合并（详见 devlog）。以下是当时评估过、刻意没动的三把更大的刀。
-- **B. 全面单行合并**（每步 marker+pill 合一行）：
-  - 启动信号：A 刀落地后 dogfood 仍觉得两行一步啰嗦，且实感集中在「有 summary 的步」上（裸步已被 A 的子案合并）。**2026-09-16 已触发一次**：JC 看十步 run 截图说还是占地；当日裁「先只做数值微调」（pill `py-0.5`、步间 `mt-2`，一步 55→47），B 继续挂起。
-  - 难点当时已知：summary 与 arg-preview 抢一行；DetailPanel 与工具展开两个入口挤同一行；且贴近「第 1 步前缀收敛」案（下一节）封存的边界——启动时两案要一起重审。
-  - 2026-09-16 补的廉价实现路径：marker 行改 `flex-wrap`，summary 撑满、inline pill `shrink-0`——summary 一行装得下时 pill 跟在句尾，装不下时自动折到下一行退化成现状；block 卡片仍独占一行。一步 55→31，与参考 ReasoningTrace 组件的步间行心距 31 一致；宽模式下截图十步约 −40%，760 默认列宽约一半的步能并行。两个披露 caret 同行（有 thinking 内容的步）是否吵，需真机看。
+- **B. 全面单行合并**：2026-09-16 已开工（`flex-wrap` 放不下才折的变体），从本台账拎出，见 [步号淡一档 devlog](./2026-09-16-step-marker-recede-and-reference-audit.md) 后记八。
 - **C. timeline / rail 重塑**（左侧竖轨连接步骤的日志形态）：
   - 启动信号：过程区的角色从「瞬态过程日志」变成「需要长期回看的执行轨迹」（例如 Goal 场景要求跨 run 审计）。在 settled run 会折进 RunFoldHeader 的现状下，为瞬态区域做重皮肤不值。
 - **横向利用率 / 列宽**：inline pill 右对齐 mono 工具名在宽窗口下拉出大片死区；conversation 列没有 max-width，是否该有 measure 是独立且更大的排印题（会牵动正文行长）。
