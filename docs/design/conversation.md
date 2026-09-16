@@ -367,7 +367,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 
 #### Sticky-bottom + Scroll-to-bottom 浮动按钮
 
-- 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 把 `scrollTop = scrollHeight`——依赖覆盖**所有底部锚定增长源**（streaming partial、turn_end 落定、审批卡、AskUserBubble），不只 streaming buffer：tool-heavy 多步 run 的 partial 长期为空，只看 buffer 会让每步落定悄悄沉到折叠线下
+- 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 把 `scrollTop = scrollHeight`——依赖覆盖**所有底部锚定增长源**（streaming partial、turn_end 落定、审批卡、AskUserBubble），不只 streaming buffer；**提交之间的增长**（2026-09-16：live 窗口的入场 / 出场 / 完成收合 sweep、DetailPanel 与 pill 展开、Shiki 回流）由内容列上的常驻 ResizeObserver 接住，仍在底部时每次尺寸变化重新钉底，否则新步比被顶掉的步高时底部会被作曲区盖住：tool-heavy 多步 run 的 partial 长期为空，只看 buffer 会让每步落定悄悄沉到折叠线下
 - **用户向上滚 → 不跟随**：`atBottom = false`，stream 继续但视图不动
 - **浮动按钮**：`atBottom = false` 时出现 32px 圆形 ghost 按钮（⬇ ArrowDown thin），**水平居中、贴对话列底部 16px**——实现时从"右下角"改为居中（代码注释记录了理由：右下角与 Composer 动作簇视觉打架），2026-07-05 回写
 - **双态信号**（2026-08-07，[devlog](../devlog/2026-08-07-scroll-button-two-state-signal.md)）：箭头永不变（永远回答"点了去哪"），按钮上叠加状态信号，两种视觉语法各自自解释——

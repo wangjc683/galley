@@ -285,6 +285,34 @@ export function useStickyScroll({
     atBottomRef.current = atBottom;
   }, [atBottom]);
 
+  // Follow-the-bottom for growth that happens BETWEEN commits: the
+  // live window's sweeps (a landing step growing from 0fr, the
+  // departing one closing, the settling collapse), DetailPanel / pill
+  // expansions, Shiki reflow — all CSS transitions or async layout
+  // that move the bottom after the layout effect above has already
+  // snapped. With the 2026-09-16 window a step that lands taller
+  // than the one it displaces grew the document by the difference
+  // over 240ms with nothing re-pinning it, and the thinking row
+  // ended up under the composer (JC's live report). A permanent
+  // ResizeObserver on the inner column re-pins on every size change
+  // while the user is at the bottom; callbacks run after layout and
+  // before paint, so each transition frame lands pinned. Gated on
+  // atBottomRef like the session-switch window below, so a reader
+  // who scrolled up is never yanked. Writes to an unchanged
+  // scrollTop are free.
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const inner = el.firstElementChild;
+    if (!(inner instanceof HTMLElement)) return;
+    const observer = new ResizeObserver(() => {
+      if (!atBottomRef.current) return;
+      el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
+
   // Scroll-to-bottom on session switch. Three compounding races make
   // a single scrollTop assignment unreliable:
   //
