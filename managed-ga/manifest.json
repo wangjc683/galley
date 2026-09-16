@@ -30,7 +30,8 @@
       "0018-managed-discord-galley-integration.patch",
       "0019-managed-im-strip-next-suggestion.patch",
       "0020-managed-windows-no-console-spawns.patch",
-      "0021-managed-retry-after-value-in-error.patch"
+      "0021-managed-retry-after-value-in-error.patch",
+      "0022-managed-strip-goal-status.patch"
     ]
   },
   "stateSchemaVersion": 1

@@ -205,6 +205,12 @@ pub struct TurnEndEvent {
     /// run, and only when the model chose to emit one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_suggestion: Option<String>,
+    /// Goal v2 completion tag extracted from the final answer's
+    /// `<goal-status>` element: `"complete"` or `"blocked"`. Only present
+    /// on the final turn_end of a run, and only when the model emitted
+    /// one (.scratch/goal-simplify/PRD.md §3.4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_status: Option<String>,
     pub timestamp: String,
 }
 
@@ -644,8 +650,33 @@ mod tests {
     }
 
     #[test]
+    fn parse_turn_end_goal_status_optional() {
+        // Old bridge without the field → None; new bridge carries it.
+        let old = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(old).unwrap();
+        if let IpcEvent::TurnEnd(t) = event {
+            assert!(t.goal_status.is_none());
+            let out = serde_json::to_string(&t).unwrap();
+            assert!(
+                !out.contains("goalStatus"),
+                "None must be omitted, not null: {out}"
+            );
+        } else {
+            panic!("wrong variant");
+        }
+        let new = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","goalStatus":"complete","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(new).unwrap();
+        if let IpcEvent::TurnEnd(t) = event {
+            assert_eq!(t.goal_status.as_deref(), Some("complete"));
+        } else {
+            panic!("wrong variant");
+        }
+    }
+
+    #[test]
     fn parse_title_generated_event() {
-        let line = r#"{"kind":"title_generated","sessionId":"s1","title":"登录超时排查","timestamp":"t"}"#;
+        let line =
+            r#"{"kind":"title_generated","sessionId":"s1","title":"登录超时排查","timestamp":"t"}"#;
         let event: IpcEvent = serde_json::from_str(line).unwrap();
         match event {
             IpcEvent::TitleGenerated(e) => {

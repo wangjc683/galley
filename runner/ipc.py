@@ -123,6 +123,11 @@ class TurnEndEvent:
     # non-None on the final turn_end (exitReason != None); None when the
     # model emitted no tag — the desktop then simply shows no ghost text.
     nextSuggestion: str | None = None
+    # Goal completion signal extracted from the final answer's
+    # <goal-status> tag: "complete" or "blocked", None when the model
+    # emitted no (or an unrecognized) tag. Only ever non-None on the
+    # final turn_end; Core decides whether the session has a goal.
+    goalStatus: str | None = None
     timestamp: str = field(default_factory=_now_iso)
     kind: str = "turn_end"
 

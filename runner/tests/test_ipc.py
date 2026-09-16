@@ -568,6 +568,30 @@ def test_turn_end_next_suggestion_round_trip() -> None:
     assert legacy.nextSuggestion is None
 
 
+def test_turn_end_goal_status_round_trip() -> None:
+    ev = TurnEndEvent(
+        sessionId="s1",
+        turnIndex=3,
+        summary="done",
+        toolCalls=[],
+        toolResults=[],
+        responseContent="ok",
+        exitReason={"result": "CURRENT_TASK_DONE", "data": None},
+        goalStatus="complete",
+    )
+    decoded = decode_event(encode(ev))
+    assert isinstance(decoded, TurnEndEvent)
+    assert decoded.goalStatus == "complete"
+    # Old-style payload without the field still decodes (None default).
+    legacy = decode_event(
+        '{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"",'
+        '"toolCalls":[],"toolResults":[],"responseContent":"x",'
+        '"timestamp":"t"}'
+    )
+    assert isinstance(legacy, TurnEndEvent)
+    assert legacy.goalStatus is None
+
+
 def test_title_generated_event_round_trip() -> None:
     from runner.ipc import TitleGeneratedEvent
 

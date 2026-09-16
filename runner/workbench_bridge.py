@@ -101,7 +101,14 @@ def _silence_python_stdout() -> None:
 
 _TAG_PATS = [
     r"<" + t + r">.*?</" + t + r">"
-    for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")
+    for t in (
+        "thinking",
+        "summary",
+        "tool_use",
+        "file_content",
+        "next-suggestion",
+        "goal-status",
+    )
 ]
 _FILE_REF_RE = re.compile(r"\[FILE:[^\]]+\]")
 
@@ -126,6 +133,37 @@ def _extract_next_suggestion(text: str) -> str | None:
     if not suggestion:
         return None
     return suggestion[:_NEXT_SUGGESTION_MAX_CHARS]
+
+
+# <goal-status> — the Goal dispatch prompt asks the model to close its
+# final answer with `<goal-status>complete</goal-status>` (or `blocked`)
+# when the goal is done. Extracted into TurnEndEvent.goalStatus (and
+# stripped from display via _TAG_PATS above); Core decides whether the
+# session has a goal that cares. Any other value is the model
+# improvising, so it degrades to "no status" instead of guessing.
+_GOAL_STATUS_RE = re.compile(
+    r"<goal-status>\s*(complete|blocked)\s*</goal-status>", re.I | re.DOTALL
+)
+# Permissive twin, used only to notice a tag we deliberately ignored.
+_GOAL_STATUS_TAG_RE = re.compile(
+    r"<goal-status>\s*(.*?)\s*</goal-status>", re.I | re.DOTALL
+)
+
+
+def _extract_goal_status(text: str) -> str | None:
+    if not text:
+        return None
+    m = _GOAL_STATUS_RE.search(text)
+    if m is not None:
+        return m.group(1).lower()
+    other = _GOAL_STATUS_TAG_RE.search(text)
+    if other is not None:
+        print(
+            "[goal-status] ignoring unknown value "
+            f"{' '.join(other.group(1).split())[:80]!r}",
+            file=sys.stderr,
+        )
+    return None
 
 
 def _clean_response_for_display(text: str) -> str:
@@ -1281,6 +1319,9 @@ class Bridge:
             next_suggestion = (
                 _extract_next_suggestion(response_content) if exit_reason else None
             )
+            goal_status = (
+                _extract_goal_status(response_content) if exit_reason else None
+            )
 
             self._emit(
                 TurnEndEvent(
@@ -1301,6 +1342,7 @@ class Bridge:
                     visibility=self._current_message_visibility,
                     absoluteTurnIndex=self._current_absolute_turn_index(turn),
                     nextSuggestion=next_suggestion,
+                    goalStatus=goal_status,
                 )
             )
 

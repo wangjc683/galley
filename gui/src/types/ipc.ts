@@ -165,6 +165,12 @@ export interface TurnEndEvent {
    * Rendered as composer ghost text — never as answer prose.
    */
   nextSuggestion?: string | null;
+  /**
+   * Goal completion signal from the final answer's `<goal-status>` tag.
+   * Present only on the final turn_end of a run, and only when the model
+   * emitted a recognized value. Consumed by Core, not by the GUI.
+   */
+  goalStatus?: "complete" | "blocked";
   timestamp: string;
 }
 

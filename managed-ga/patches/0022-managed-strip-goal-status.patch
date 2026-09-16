@@ -1,0 +1,16 @@
+diff --git a/frontends/chatapp_common.py b/frontends/chatapp_common.py
+--- a/frontends/chatapp_common.py
++++ b/frontends/chatapp_common.py
+@@ -43 +43,4 @@ FILE_HINT = "If you need to show files to user, use [FILE:filepath] in your resp
+-TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")]
++# goal-status is Galley's Goal completion tag; the Goal dispatch prompt asks
++# for it on the final answer and Galley's own bridge consumes it, so it is
++# never reply prose on an IM surface.
++TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion", "goal-status")]
+diff --git a/frontends/fsapp.py b/frontends/fsapp.py
+--- a/frontends/fsapp.py
++++ b/frontends/fsapp.py
+@@ -86 +86,2 @@ # see the same note in chatapp_common.TAG_PATS.
+-_TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")]
++# goal-status: Galley Goal completion tag — see chatapp_common.TAG_PATS.
++_TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion", "goal-status")]
