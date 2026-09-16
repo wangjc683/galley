@@ -36,6 +36,10 @@ export function useExternalCoreEvents(): void {
           createdAt?: string;
           turnIndex?: number;
           role?: "user" | "agent" | "system";
+          /** Set on a Goal's objective row (goal v2). Passed through so
+           * the in-thread commission marker matches by id instead of
+           * falling back to objective-text equality. */
+          goalId?: string;
           origin?: {
             via: "gui" | "cli" | "supervisor" | "system";
             supervisor?: string;
@@ -59,6 +63,7 @@ export function useExternalCoreEvents(): void {
           message.createdAt,
           dispatch === undefined ? true : dispatch === "dispatched",
           message.turnIndex,
+          message.goalId,
         );
       });
       if (cancelled) {

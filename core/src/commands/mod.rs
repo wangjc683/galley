@@ -1,10 +1,10 @@
 use crate::api::CreateScheduledTaskInput;
 use crate::api::{
-    self, CreateProjectInput, CreateSessionInput, GalleyApi, GoalBrief, GoalId, GoalStatusSnapshot,
-    GoalWorkerContext, ManagedModelAuthKind, ManagedModelProbeInput, MessageTelemetry,
-    MessageVisibility, Origin, ProjectBrief, ProjectId, ProjectPatch, ReorderManagedModelsInput,
-    RuntimeKind, SaveManagedModelInput, SaveManagedProviderInput, ScheduledTaskBrief,
-    ScheduledTaskId, ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId,
+    self, CreateProjectInput, CreateSessionInput, GalleyApi, GoalBrief, GoalId,
+    ManagedModelAuthKind, ManagedModelProbeInput, MessageTelemetry, MessageVisibility, Origin,
+    ProjectBrief, ProjectId, ProjectPatch, ReorderManagedModelsInput, RuntimeKind,
+    SaveManagedModelInput, SaveManagedProviderInput, ScheduledTaskBrief, ScheduledTaskId,
+    ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId,
 };
 use crate::db::{
     MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage, PersistToolEventPending,

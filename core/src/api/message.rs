@@ -92,6 +92,11 @@ pub struct MessageBrief {
     pub turn_index: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility: Option<MessageVisibility>,
+    /// Goal this row belongs to (`messages.goal_id`, migration 031): the
+    /// objective turn that opened a goal carries its id, so frontends
+    /// bracket the goal episode by exact id. Additive (v0.4.17+).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<MessageAttachmentBrief>,
     /// Where this message came from (B2 M5+). Optional on read APIs to

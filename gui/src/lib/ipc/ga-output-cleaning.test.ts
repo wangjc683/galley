@@ -115,6 +115,42 @@ describe("next-suggestion tag stripping", () => {
   });
 });
 
+describe("goal-status tag stripping", () => {
+  it("strips the tag from final answers and partials", async () => {
+    const { cleanFinalAnswer, cleanPartialContent, stripGATags } = await import(
+      "@/lib/ipc/ga-output-cleaning"
+    );
+    const raw = "目标已达成。\n\n<goal-status>complete</goal-status>";
+    for (const clean of [cleanFinalAnswer, cleanPartialContent, stripGATags]) {
+      const out = clean(raw);
+      expect(out).toContain("目标已达成。");
+      expect(out).not.toContain("goal-status");
+      expect(out).not.toContain("complete");
+    }
+  });
+
+  it("truncates an unclosed goal-status tag mid-stream", async () => {
+    const { cleanPartialContent } = await import(
+      "@/lib/ipc/ga-output-cleaning"
+    );
+    // Chunk boundary fell inside the tag body.
+    expect(cleanPartialContent("正文结束。\n<goal-status>comp")).toBe(
+      "正文结束。\n",
+    );
+    // Chunk ended inside the tag NAME ("<goal-sta").
+    expect(cleanPartialContent("正文结束。\n<goal-sta")).toBe("正文结束。\n");
+  });
+
+  it("keeps the tag out of the extracted preamble", async () => {
+    const { extractPreamble } = await import("@/lib/ipc/ga-output-cleaning");
+    expect(extractPreamble("先查一遍。<goal-status>blocked</goal-status>")).toBe(
+      "先查一遍。",
+    );
+    // Unclosed opener mid-stream: nothing after it may leak.
+    expect(extractPreamble("先查一遍。<goal-status>block")).toBe("先查一遍。");
+  });
+});
+
 // #22 sample 2 (redacted): a proxied model emitted its tool call as
 // plain text — the whole reply body is `<invoke …>` markup and must
 // never render as prose.

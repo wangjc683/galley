@@ -31,7 +31,7 @@ use std::process::ExitCode;
 
 use args::{Cli, Command, GoalCmd, LlmCmd, ProjectCmd, SessionCmd, SessionsCmd};
 use clap::Parser;
-use common::{emit_line, exit_code_for, SCHEMA_VERSION};
+use common::{emit_line, exit_code_for, ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION};
 use galley_core_lib::error::GalleyError;
 
 #[tokio::main]
@@ -61,16 +61,25 @@ async fn main() -> ExitCode {
             return ExitCode::from(exit_code_for(&invalid));
         }
     };
-    // §1.2 schema pin: if the caller pinned --schema=N, verify the binary
-    // speaks that schema. Current binaries only know SCHEMA_VERSION (1); future
-    // multi-schema binaries widen this check to a set.
+    // §1.2 schema pin: if the caller pinned --schema=N, verify this binary
+    // answers that schema. v1 is still accepted for every command that
+    // survived unchanged; the goal family is v2-only (stability §1, v2
+    // policy). Mismatch exits 2 (`invalid_args`) with the stable
+    // `schema_mismatch:` prefix.
     if let Some(pinned) = cli.schema {
-        if pinned != SCHEMA_VERSION {
-            let err = GalleyError::InvalidArgs {
-                message: format!(
-                    "schema_mismatch: client requested schema {pinned}, server speaks {SCHEMA_VERSION}"
-                ),
-            };
+        let mismatch = if !ACCEPTED_SCHEMA_VERSIONS.contains(&pinned) {
+            Some(format!(
+                "schema_mismatch: client requested schema {pinned}, server speaks {SCHEMA_VERSION} (accepts {ACCEPTED_SCHEMA_VERSIONS:?})"
+            ))
+        } else if pinned < SCHEMA_VERSION && matches!(cli.command, Command::Goal(_)) {
+            Some(format!(
+                "schema_mismatch: `goal` commands exist only under schema {SCHEMA_VERSION}; the caller pinned {pinned}"
+            ))
+        } else {
+            None
+        };
+        if let Some(message) = mismatch {
+            let err = GalleyError::InvalidArgs { message };
             emit_line(&serde_json::to_string(&err).expect("serialize GalleyError"));
             return ExitCode::from(exit_code_for(&err));
         }
@@ -203,47 +212,19 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             supervisor,
             reason,
         }) => project::project_delete(project_id, supervisor, reason).await,
-        Command::Goal(GoalCmd::Propose {
+        Command::Goal(GoalCmd::Start {
+            session_id,
             objective,
-            project,
             budget_minutes,
-            workers,
-            runtime,
-            write_mode,
-            mode,
-            expires_minutes,
+            no_budget,
             supervisor,
             reason,
         }) => {
-            goal::goal_propose(
+            goal::goal_start(
+                session_id,
                 objective,
-                project,
                 budget_minutes,
-                workers,
-                runtime,
-                write_mode,
-                mode,
-                expires_minutes,
-                supervisor,
-                reason,
-            )
-            .await
-        }
-        Command::Goal(GoalCmd::Run {
-            goal_id,
-            proposal,
-            confirm_token,
-            resume,
-            locale,
-            supervisor,
-            reason,
-        }) => {
-            goal::goal_run(
-                goal_id,
-                proposal,
-                confirm_token,
-                resume,
-                locale,
+                no_budget,
                 supervisor,
                 reason,
             )
@@ -256,9 +237,12 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             supervisor,
             reason,
         }) => goal::goal_stop(goal_id, supervisor, reason).await,
-        Command::Goal(GoalCmd::Task(cmd)) => goal::goal_task(cmd).await,
-        Command::Goal(GoalCmd::Event(cmd)) => goal::goal_event(cmd).await,
-        Command::Goal(GoalCmd::Deliverable(cmd)) => goal::goal_deliverable(cmd).await,
+        Command::Goal(GoalCmd::Extend {
+            goal_id,
+            minutes,
+            supervisor,
+            reason,
+        }) => goal::goal_extend(goal_id, minutes, supervisor, reason).await,
         Command::Llm(LlmCmd::List) => llm::llm_list().await,
         Command::Llm(LlmCmd::Set {
             session_id,

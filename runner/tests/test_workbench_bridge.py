@@ -1185,6 +1185,84 @@ def test_clean_response_strips_next_suggestion_tag() -> None:
     assert "答案正文。" in cleaned
 
 
+def test_extract_goal_status_recognized_values() -> None:
+    from runner.workbench_bridge import _extract_goal_status
+
+    raw = "目标已经做完了。\n\n<goal-status>complete</goal-status>"
+    assert _extract_goal_status(raw) == "complete"
+    assert (
+        _extract_goal_status("缺少凭据，走不下去。<goal-status>blocked</goal-status>")
+        == "blocked"
+    )
+    # Case and surrounding whitespace are normalized.
+    assert (
+        _extract_goal_status("done\n<goal-status>\n  COMPLETE\n</goal-status>")
+        == "complete"
+    )
+    # The tag does not have to be the last thing in the answer.
+    assert (
+        _extract_goal_status("<goal-status>complete</goal-status>\n收尾说明。")
+        == "complete"
+    )
+    assert _extract_goal_status("no tag here") is None
+    assert _extract_goal_status("") is None
+
+
+def test_extract_goal_status_unknown_value_warns_and_returns_none(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from runner.workbench_bridge import _extract_goal_status
+
+    assert _extract_goal_status("<goal-status>in-progress</goal-status>") is None
+    assert _extract_goal_status("<goal-status></goal-status>") is None
+    err = capsys.readouterr().err
+    assert "goal-status" in err
+    assert "in-progress" in err
+
+
+def test_clean_response_strips_goal_status_tag() -> None:
+    from runner.workbench_bridge import _clean_response_for_display
+
+    raw = "答案正文。\n\n<goal-status>complete</goal-status>"
+    cleaned = _clean_response_for_display(raw)
+    assert "goal-status" not in cleaned
+    assert cleaned == "答案正文。"
+    # An unrecognized value is still not display prose.
+    assert "goal-status" not in _clean_response_for_display(
+        "正文。<goal-status>in-progress</goal-status>"
+    )
+
+
+def test_turn_end_extracts_goal_status_only_on_the_final_turn() -> None:
+    class FakeResponse:
+        content = "阶段结果。<goal-status>complete</goal-status>"
+
+    bridge = _new_test_bridge()
+
+    def _turn_end_events() -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        while not bridge.event_queue.empty():
+            event = _next_bridge_event(bridge)
+            if event["kind"] == "turn_end":
+                out.append(event)
+        return out
+
+    # Mid-run turn: the tag is prose the model emitted early, not a signal.
+    bridge._on_turn_end({"response": FakeResponse(), "turn": 1, "exit_reason": None})
+    (mid,) = _turn_end_events()
+    assert mid.get("goalStatus") is None
+
+    bridge._on_turn_end(
+        {
+            "response": FakeResponse(),
+            "turn": 2,
+            "exit_reason": {"result": "CURRENT_TASK_DONE", "data": None},
+        }
+    )
+    (final,) = _turn_end_events()
+    assert final["goalStatus"] == "complete"
+
+
 def test_build_title_prompt_truncates_and_orders_context() -> None:
     from runner.workbench_bridge import _build_title_prompt
 

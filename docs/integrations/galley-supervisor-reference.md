@@ -24,7 +24,7 @@ the user's intent:
 | Add one requirement to one known thread | Existing-session follow-up |
 | One bounded task with one obvious owner | Single new session |
 | Independent angles, evidence gathering, review, or synthesis | Project-backed session group |
-| Sustained autonomous objective | Galley Goal |
+| One objective the agent should keep pushing on its own until done | Galley Goal (one session, auto-continues) |
 | Implementation or fixes with multiple concerns | Single writer plus read-only reviewers |
 | Destructive, external, credential, payment, or ambiguous work | Ask or narrow first |
 
@@ -102,8 +102,8 @@ Read commands:
 | `"$GALLEY" project brief <id>` | Project status counts and running sessions |
 | `"$GALLEY" project show <id> --tail=20` | Project sessions plus transcript tails |
 | `"$GALLEY" project follow <id> --tail=10 --until-idle --final-show` | Follow Project group until child sessions are idle |
-| `"$GALLEY" goal status <id>` | Goal task board, events, Project sessions |
-| `"$GALLEY" goal deliverable get <id>` | Current-best Goal deliverable anchor |
+| `"$GALLEY" goal status <id>` | One Goal: status, ceiling, elapsed, latest summary |
+| `"$GALLEY" goal active` | Open Goals (active / paused / blocked); `[]` = none |
 | `"$GALLEY" llm list` | Available LLM display names |
 | `"$GALLEY" health` | Troubleshooting |
 
@@ -121,11 +121,9 @@ Write commands:
 | `"$GALLEY" session move <id> --to=<project-id> --supervisor=<id> --reason=<why>` | Move session to Project; omit `--to` to unassign |
 | `"$GALLEY" project create "<name>" --supervisor=<id> --reason=<why>` | Create a Project |
 | `"$GALLEY" project delete <id> --supervisor=<id> --reason=<why>` | Delete Project; sessions survive but become unassigned |
-| `"$GALLEY" goal active` | List active (running/wrapping) goals; empty = none. Check before proposing (one Goal at a time) |
-| `"$GALLEY" goal propose "<objective>" --mode=solo --supervisor=<id> --reason=<why>` | Prepare pending Goal; does not start work. `--mode=hive` only when the user wants parallel workers |
-| `"$GALLEY" goal run --proposal=<id> --confirm-token=<token> --supervisor=<id> --reason=<why>` | Start blocking Goal controller after exact user confirmation |
-| `"$GALLEY" goal stop <id> --supervisor=<id> --reason=<why>` | Request graceful Goal stop |
-| `"$GALLEY" goal deliverable set <id> "<content>" --note="<summary>" --author-session=<session-id>` | Append current-best Goal deliverable |
+| `"$GALLEY" goal start <session-id> "<objective>" --budget-minutes=60 --supervisor=<id> --reason=<why>` | Set a Goal on a session and dispatch its opening turn; `--no-budget` removes the ceiling |
+| `"$GALLEY" goal stop <id> --supervisor=<id> --reason=<why>` | Stop a Goal now (aborts the current turn; no wrap-up) |
+| `"$GALLEY" goal extend <id> --minutes=30 --supervisor=<id> --reason=<why>` | Give a Goal more time; reopens a `budget_limited` Goal and continues it |
 | `"$GALLEY" llm set <session-id> "<llm-name>"` | Switch a session's LLM |
 
 ## Live State
@@ -277,65 +275,55 @@ For implementation or fix requests, prefer single writer, multiple reviewers:
 Create multiple writer sessions only when ownership is non-overlapping and
 explicit in every child prompt.
 
-## Goal V1
+## Goal
 
-Galley Goal is for longer autonomous runs. Do not use Goal just because a task
-has two obvious subtasks.
+A Galley Goal is one persistent objective on one session (schemaVersion 2).
+Once set, Galley Core re-prompts that session to keep working whenever it
+goes idle, until the model declares the objective complete or blocked, the
+time ceiling is reached, or the user stops it. There are no workers,
+proposals, confirm tokens, task boards or deliverable anchors; the session's
+thread is the record and the completing run's final answer is the result.
 
-Galley runs at most one Goal at a time. Check first (empty output = none):
+Do not use Goal just because a task has two obvious subtasks. Use it when
+the user explicitly wants sustained autonomous work toward a verifiable end
+state.
 
 ```bash
-"$GALLEY" goal active
-```
-
-If one is active, tell the user to stop it or wait; `goal run` rejects a second
-start with `invalid_args`. Proposal:
-
-```bash
-"$GALLEY" goal propose "<objective>" \
-  --mode=solo \
+"$GALLEY" goal start <session-id> "<objective>" \
+  --budget-minutes=60 \
   --supervisor=my-agent/v1 \
-  --reason="prepare Goal for user confirmation"
+  --reason="user asked Galley to keep working on this until done"
 ```
 
-`--mode` picks the engine: `solo` runs one agent against the time budget
-(the desktop default, and the right choice for most IM-delegated
-objectives); `hive` runs a master plus up to `--workers` cross-verified
-workers and is only worth its cost when the user explicitly wants parallel
-angles. The CLI's own default is `hive` for backward compatibility, so pass
-`--mode` explicitly every time. `--budget-minutes`, `--workers`, and
-`--write-mode=read-only` are the other knobs to surface in the summary.
-
-Show the user a short confirmation summary: objective, Project, runtime,
-mode, workers, time budget, write mode, and safety boundary. Do not show
-`internalConfirmToken`.
-
-Run only after the user's explicit confirmation of this proposal — an
-unambiguous affirmative reply, in their own language, that refers to this
-Goal (offer `confirmationPhrase` as a ready-made reply):
-
-```bash
-"$GALLEY" goal run --proposal=<proposal-id> \
-  --confirm-token=<internalConfirmToken> \
-  --supervisor=my-agent/v1 \
-  --reason="user explicitly confirmed this Goal proposal"
-```
+- The session must be idle and carry no open Goal; otherwise
+  `invalid_args` (wait with `session wait` / stop the open Goal). Sessions
+  may each run their own Goal.
+- `--budget-minutes` is a ceiling (default 60); `--no-budget` removes it.
+  When it is reached the model gets one wrap-up turn and the Goal ends as
+  `budget_limited` — distinct from failure.
+- Summarize for the user: objective, session, ceiling, and that any message
+  they send to the session steers the Goal.
 
 During a Goal:
 
 ```bash
 "$GALLEY" goal status <goal-id>
+"$GALLEY" goal active
 "$GALLEY" goal stop <goal-id> --supervisor=<id> --reason=<why>
-"$GALLEY" goal deliverable get <goal-id>
+"$GALLEY" goal extend <goal-id> --minutes=30 --supervisor=<id> --reason=<why>
 ```
 
-Goal worker protocol is Core-owned. Do not store Goal ids, task ids, worker
-session ids, rounds, waves, or transient coordination logs in GA memory/SOP.
+Statuses: `active` / `paused` / `blocked` are open; `completed` /
+`budget_limited` / `stopped` / `failed` are terminal (`budget_limited` can
+be reopened with `goal extend` when the user wants more). `paused` follows a
+stopped turn or a Galley restart; `blocked` follows a repeated blocker the
+model reported (or a runtime error) — read `latestSummary`, get what it
+needs from the user, and send that to the session: the next user-initiated
+run resumes the Goal. `goal stop` is immediate.
 
-Attach/external GA safety is strict: external GA only participates through
-ordinary Galley child-session prompts and the Galley Goal CLI protocol. Managed
-GA may keep durable reusable learnings through normal managed memory/SOP
-self-evolution, but not transient Goal protocol state.
+Attach/external GA safety is unchanged: external GA only participates
+through ordinary Galley session prompts. Goal state lives in Galley Core;
+nothing about it is written to GA memory/SOP.
 
 ## User-Facing Copy
 
@@ -417,15 +405,16 @@ write succeeded but no live runner consumed the command.
 may still finish later. `status:"session_error"` / `"session_cancelled"`
 mean the session died or was cancelled; see Result Retrieval.
 
-`goal run` rejects a second concurrent Goal with `invalid_args` naming the
-active one; check `goal active` first.
+`goal start` rejects a session that is mid-run or already has an open Goal
+with `invalid_args` (the message names the open Goal); check `goal active`
+or `session brief` first.
 
 ## Boundaries
 
 Do not:
 
 - modify external GA memory, SOP, skills, config, venv, or runtime state
-- store Goal protocol state in memory/SOP
+- store Goal state in GA memory/SOP (Galley Core owns it)
 - auto-approve Galley approval prompts
 - pretend to inspect a session without a read command
 - create many sessions without a clear split
@@ -441,7 +430,7 @@ You may:
 - write clear task prompts for Galley sessions
 - split work into parallel sessions
 - create small Project-backed groups and synthesize their results
-- create and run Galley Goal after exact confirmation
+- start a Galley Goal after the user explicitly asks for autonomous work
 - ask clarifying questions when the split is uncertain
 - summarize and merge results for the user
 

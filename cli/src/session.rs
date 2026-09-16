@@ -11,10 +11,8 @@ use galley_core_lib::api::{
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
 use galley_core_lib::protocol::{
-    SessionArchiveArgs, SessionBtwArgs, SessionCheckpointArgs, SessionGoalMasterPlanArgs,
-    SessionGoalSoloTurnArgs, SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs,
-    SessionNewGoalWorkerArgs, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
-    SessionShutdownRunnerArgs, SessionStopArgs, WatchFrame,
+    SessionArchiveArgs, SessionBtwArgs, SessionMoveArgs, SessionNewArgs, SessionRestoreArgs,
+    SessionSendArgs, SessionStopArgs, WatchFrame,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -423,100 +421,6 @@ pub(crate) async fn session_new(
     .await
 }
 
-pub(crate) async fn session_new_goal_worker_value(
-    task_template: String,
-    project: Option<String>,
-    llm: Option<String>,
-    runtime: RuntimeArg,
-    supervisor: Option<String>,
-    reason: Option<String>,
-) -> Result<serde_json::Value, GalleyError> {
-    let runtime_kind = runtime_arg_for_session_new(runtime)?;
-    call_value(SessionNewGoalWorkerArgs {
-        task_template,
-        project_id: project,
-        llm_name: llm,
-        runtime_kind,
-        supervisor,
-        reason,
-    })
-    .await
-}
-
-pub(crate) async fn session_goal_synthesize_value(
-    id: String,
-    visible_content: String,
-    dispatch_content: String,
-    supervisor: Option<String>,
-    reason: Option<String>,
-) -> Result<serde_json::Value, GalleyError> {
-    call_value(SessionGoalSynthesizeArgs {
-        session_id: id,
-        visible_content,
-        dispatch_content,
-        supervisor,
-        reason,
-    })
-    .await
-}
-
-pub(crate) async fn session_goal_master_plan_value(
-    id: String,
-    dispatch_content: String,
-    supervisor: Option<String>,
-    reason: Option<String>,
-) -> Result<serde_json::Value, GalleyError> {
-    call_value(SessionGoalMasterPlanArgs {
-        session_id: id,
-        dispatch_content,
-        supervisor,
-        reason,
-    })
-    .await
-}
-
-/// Live busy probe (`session.run_state`) — the truthful "is a run still
-/// open" signal. `session_brief().status` reads the DB column, which
-/// persists transient statuses as `idle`, so it must never be used to
-/// decide whether a Goal working turn has finished.
-pub(crate) async fn session_run_state_value(id: String) -> Result<serde_json::Value, GalleyError> {
-    call_value(SessionRunStateArgs { session_id: id }).await
-}
-
-/// Dispatch a visible solo-Goal working turn, spawning the session's runner
-/// if it isn't alive. See `dispatch_session_goal_solo_turn` in Core.
-pub(crate) async fn session_goal_solo_turn_value(
-    id: String,
-    dispatch_content: String,
-    supervisor: Option<String>,
-    reason: Option<String>,
-) -> Result<serde_json::Value, GalleyError> {
-    call_value(SessionGoalSoloTurnArgs {
-        session_id: id,
-        dispatch_content,
-        supervisor,
-        reason,
-    })
-    .await
-}
-
-pub(crate) async fn session_checkpoint_value(
-    id: String,
-    content: String,
-    goal_id: Option<String>,
-    supervisor: Option<String>,
-    reason: Option<String>,
-) -> Result<serde_json::Value, GalleyError> {
-    call_value(SessionCheckpointArgs {
-        session_id: id,
-        content,
-        goal_id,
-        supervisor,
-        reason,
-    })
-    .await
-}
-
 pub(crate) async fn session_btw(
     id: String,
     question: String,
@@ -538,19 +442,6 @@ pub(crate) async fn session_stop(
     reason: Option<String>,
 ) -> Result<(), GalleyError> {
     call_print(SessionStopArgs {
-        session_id: id,
-        supervisor,
-        reason,
-    })
-    .await
-}
-
-pub(crate) async fn session_shutdown_runner_value(
-    id: String,
-    supervisor: Option<String>,
-    reason: Option<String>,
-) -> Result<serde_json::Value, GalleyError> {
-    call_value(SessionShutdownRunnerArgs {
         session_id: id,
         supervisor,
         reason,
@@ -614,6 +505,7 @@ mod tests {
             final_answer: None,
             created_at: "2026-07-03T00:00:00Z".into(),
             visibility: None,
+            goal_id: None,
             attachments: Vec::new(),
             origin: None,
         }

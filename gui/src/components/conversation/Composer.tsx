@@ -95,7 +95,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       approvalMode,
       goal,
       hasActiveGoal = false,
-      goalProjectName,
       onGoalSubmit,
       showFooterHint = false,
       staticHint,
@@ -595,7 +594,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 requiresModelConfig={requiresModelConfig}
                 stopMode={stopMode}
                 goalConfirmationObjective={goalConfirmationObjective}
-                goalProjectName={goalProjectName}
                 onArmToggle={handleGoalArmToggle}
                 onDialogOpenChange={handleGoalDialogOpenChange}
                 onConfirm={handleConfirmGoal}

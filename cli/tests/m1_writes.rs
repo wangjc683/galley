@@ -56,6 +56,7 @@ const MIG_023: &str = include_str!("../../core/migrations/023_native_goal_runtim
 const MIG_024: &str = include_str!("../../core/migrations/024_native_default_runtime.sql");
 const MIG_025: &str = include_str!("../../core/migrations/025_restore_managed_runtime_default.sql");
 const MIG_026: &str = include_str!("../../core/migrations/026_project_workspace.sql");
+const MIG_031: &str = include_str!("../../core/migrations/031_message_goal_id.sql");
 // 032 only ADD COLUMN mode to goal_proposals/goals (both exist since 015), so
 // it applies cleanly on top of this harness's 026 baseline; 027–031 touch
 // unrelated tables and stay out of this fixture.
@@ -72,7 +73,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_032, MIG_034,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_031, MIG_032, MIG_034,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)
@@ -431,7 +432,7 @@ async fn project_brief_counts_active_sessions_and_running_subset() {
     let (stdout, code) = run_galley_isolated(&db, td.path(), &["project", "brief", "proj_batch"]);
     assert_eq!(code, Some(0), "stdout: {stdout}");
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(payload["schemaVersion"], 1);
+    assert_eq!(payload["schemaVersion"], 2);
     assert_eq!(payload["project"]["id"], "proj_batch");
     assert_eq!(payload["sessionCount"], 2);
     assert_eq!(payload["statusCounts"]["running"], 1);
@@ -467,7 +468,7 @@ async fn project_show_includes_tail_messages_per_session() {
     );
     assert_eq!(code, Some(0), "stdout: {stdout}");
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(payload["schemaVersion"], 1);
+    assert_eq!(payload["schemaVersion"], 2);
     assert_eq!(payload["sessionCount"], 1);
     assert_eq!(payload["sessions"].as_array().unwrap().len(), 1);
     assert_eq!(payload["sessions"][0]["session"]["id"], "s_review");
@@ -635,152 +636,6 @@ async fn project_follow_running_session_without_core_marks_session_end() {
     assert_eq!(final_snapshot["phase"], "final");
     let end: serde_json::Value = serde_json::from_str(lines[3]).expect("end json");
     assert_eq!(end["reason"], "all_live_sessions_ended");
-}
-
-// ---------------- goal.* (direct SQLite + socket-backed controller) ----------------
-
-#[tokio::test]
-async fn goal_propose_defaults_to_3_workers_30_minutes() {
-    let td = tempdir();
-    let db = td.path().join("test.db");
-    drop(seeded_db_at(&db).await);
-
-    let (stdout, code) = run_galley_isolated(
-        &db,
-        td.path(),
-        &[
-            "goal",
-            "propose",
-            "Improve Galley Goal V1",
-            "--runtime",
-            "managed",
-        ],
-    );
-    assert_eq!(code, Some(0), "stdout: {stdout}");
-    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(parsed["objective"], "Improve Galley Goal V1");
-    assert_eq!(parsed["budgetSeconds"], 1800);
-    assert_eq!(parsed["workerLimit"], 3);
-    assert_eq!(parsed["runtimeKind"], "managed");
-    assert_eq!(parsed["writeMode"], "autonomous");
-    assert_eq!(parsed["confirmationPhrase"], "确认启动 Goal");
-    assert!(parsed["internalConfirmToken"].as_str().is_some());
-}
-
-#[tokio::test]
-async fn goal_propose_caps_workers_to_official_hive_max() {
-    let td = tempdir();
-    let db = td.path().join("test.db");
-    drop(seeded_db_at(&db).await);
-
-    let (stdout, code) = run_galley_isolated(
-        &db,
-        td.path(),
-        &[
-            "goal",
-            "propose",
-            "Scale Galley Goal safely",
-            "--workers",
-            "9",
-        ],
-    );
-    assert_eq!(code, Some(0), "stdout: {stdout}");
-    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(parsed["workerLimit"], 5);
-}
-
-#[tokio::test]
-async fn goal_task_claim_is_atomic_at_cli_surface() {
-    let td = tempdir();
-    let db = td.path().join("test.db");
-    let pool = seeded_db_at(&db).await;
-    seed_project(
-        &pool,
-        "proj_goal",
-        "Goal Project",
-        "2026-06-04T00:00:00+00:00",
-    )
-    .await;
-    seed_project_session(
-        &pool,
-        "s_worker",
-        "proj_goal",
-        "Worker",
-        "idle",
-        "2026-06-04T00:00:00+00:00",
-    )
-    .await;
-    seed_project_session(
-        &pool,
-        "s_other",
-        "proj_goal",
-        "Other",
-        "idle",
-        "2026-06-04T00:00:00+00:00",
-    )
-    .await;
-    sqlx::query(
-        "INSERT INTO goals (
-            id, proposal_id, project_id, master_session_id, objective, status, budget_seconds,
-            worker_limit, runtime_kind, write_mode, started_at, deadline_at,
-            result_seen_at, stop_requested, created_at, updated_at
-         ) VALUES (
-            'goal_test', NULL, 'proj_goal', NULL, 'Test atomic claim', 'running', 1800,
-            3, 'managed', 'autonomous', '2026-06-04T00:00:00+00:00',
-            '2026-06-04T00:30:00+00:00', NULL, 0, '2026-06-04T00:00:00+00:00',
-            '2026-06-04T00:00:00+00:00'
-         )",
-    )
-    .execute(&pool)
-    .await
-    .expect("seed goal");
-    sqlx::query(
-        "INSERT INTO goal_tasks (
-            id, goal_id, title, status, created_at, updated_at
-         ) VALUES (
-            'gtask_test', 'goal_test', 'Atomic task', 'open',
-            '2026-06-04T00:00:00+00:00', '2026-06-04T00:00:00+00:00'
-         )",
-    )
-    .execute(&pool)
-    .await
-    .expect("seed task");
-    drop(pool);
-
-    let (stdout, code) = run_galley_isolated(
-        &db,
-        td.path(),
-        &[
-            "goal",
-            "task",
-            "claim",
-            "gtask_test",
-            "--owner-session",
-            "s_worker",
-            "--scope",
-            "core",
-        ],
-    );
-    assert_eq!(code, Some(0), "stdout: {stdout}");
-    let claimed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(claimed["status"], "claimed");
-    assert_eq!(claimed["ownerSessionId"], "s_worker");
-
-    let (stdout, code) = run_galley_isolated(
-        &db,
-        td.path(),
-        &[
-            "goal",
-            "task",
-            "claim",
-            "gtask_test",
-            "--owner-session",
-            "s_other",
-        ],
-    );
-    assert_eq!(code, Some(2), "stdout: {stdout}");
-    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(parsed["error"], "invalid_args");
 }
 
 // ---------------- llm.* (mixed: SQLite reads + socket writes) ----------------

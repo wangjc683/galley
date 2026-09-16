@@ -1,15 +1,13 @@
-import { Check, Prohibit, Target, Warning } from "@phosphor-icons/react";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { useEffect, useState } from "react";
+import { Check, Pause, Target, Timer, Warning, X } from "@phosphor-icons/react";
+import { useState } from "react";
 
-import { LiveDots } from "@/components/conversation/LiveIndicators";
-import { goalStageLabel, goalWorkspaceHasFiles } from "@/lib/goals";
+import { GOAL_EXTEND_SECONDS, goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { GoalBrief, GoalStatus } from "@/types/goal";
 
 /**
- * In-thread markers that bracket a Goal run inside its master session
+ * In-thread markers that bracket a Goal run inside its session
  * (DESIGN.md §4.3 "Goal run = in-thread episode").
  *
  *   - GoalCommissionMarker opens the run: it is the objective the
@@ -17,29 +15,41 @@ import type { GoalBrief, GoalStatus } from "@/types/goal";
  *     the formal bar + brand-tint slab (the pre-2026-08-06 user
  *     register, deliberately retained after plain user messages moved
  *     to highlighter strokes) and "crowned" with a Goal eyebrow, the
- *     run's fixed parameters, and a coarse status badge.
+ *     run's time ceiling, and a coarse status badge.
  *   - GoalTerminalMarker closes the run: the durable outcome (done /
- *     failed / stopped) + elapsed + result actions, so reopening a
- *     finished run is not amnesiac.
+ *     budget-limited / stopped / failed) + elapsed + continuations, so
+ *     reopening a finished run is not amnesiac.
+ *   - GoalPausedTail is the home of the two RECOVERABLE states
+ *     (`paused` / `blocked`): they get no closing marker, because the
+ *     run is not over — one message resumes it.
  *
- * Live progress (countdown, worker detail, stop) stays in the TopBar
- * pill — these markers are the durable record, refreshed only on coarse
+ * Live progress and the stop control also live in the TopBar pill —
+ * these markers are the durable record, refreshed only on coarse
  * status transitions, never a per-second ticker.
  */
 
+function goalBadgeTone(status: GoalStatus): string {
+  switch (status) {
+    case "failed":
+      return "text-error bg-error/[var(--opacity-subtle)]";
+    case "blocked":
+      return "text-warning bg-warning/[var(--opacity-subtle)]";
+    case "stopped":
+    case "paused":
+    case "budget_limited":
+      return "text-ink-muted bg-hover";
+    default:
+      return "text-brand-strong bg-brand-soft";
+  }
+}
+
 function GoalStatusBadge({ status }: { status: GoalStatus }) {
   const tb = useCopy().topbar;
-  const tone =
-    status === "failed"
-      ? "text-error bg-error/[var(--opacity-subtle)]"
-      : status === "stopped"
-        ? "text-ink-muted bg-hover"
-        : "text-brand-strong bg-brand-soft";
   return (
     <span
       className={cn(
         "inline-flex shrink-0 items-center rounded-sm px-1.5 py-px text-[10.5px] font-medium tabular-nums",
-        tone,
+        goalBadgeTone(status),
       )}
     >
       {goalStageLabel(status, tb)}
@@ -56,37 +66,28 @@ export function GoalCommissionMarker({
 }) {
   const copy = useCopy();
   const conv = copy.conversation;
-  const tb = copy.topbar;
-  const budgetMinutes = Math.max(1, Math.round(goal.budgetSeconds / 60));
+  const budgetMinutes =
+    goal.budgetSeconds != null
+      ? Math.max(1, Math.round(goal.budgetSeconds / 60))
+      : null;
 
   return (
     <div className="my-5">
-      {/* Eyebrow: Goal identity (left) + run parameters & coarse status
-          (right). Upright tabular metadata — cool structure above the
-          warm user-register objective below. */}
+      {/* Eyebrow: Goal identity (left) + the one parameter the operator
+          actually set (the ceiling) and the coarse status (right).
+          Upright tabular metadata — cool structure above the warm
+          user-register objective below. */}
       <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-brand-strong">
           <Target size={12} weight="bold" />
           {conv.goalEyebrow}
         </span>
         <span className="ml-auto flex items-center gap-1.5 text-[11px] tabular-nums text-ink-muted">
-          {/* Solo is a single agent — drop the hive-only "N agents". */}
-          {goal.mode !== "solo" && (
-            <>
-              <span>{tb.goalWorkerCount(goal.workerLimit)}</span>
-              <span aria-hidden>·</span>
-            </>
-          )}
-          <span>{conv.goalBudget(budgetMinutes)}</span>
-          {/* Write mode surfaces only when it deviates from the default:
-              the confirm dialog offers no write-mode knob, so labeling
-              every run "autonomous" is a parameter the user never set. */}
-          {goal.writeMode === "read_only" && (
-            <>
-              <span aria-hidden>·</span>
-              <span>{conv.goalWriteReadonly}</span>
-            </>
-          )}
+          <span>
+            {budgetMinutes != null
+              ? conv.goalBudgetCeiling(budgetMinutes)
+              : conv.goalNoBudget}
+          </span>
         </span>
         <GoalStatusBadge status={goal.status} />
       </div>
@@ -105,69 +106,56 @@ export function GoalCommissionMarker({
   );
 }
 
-function elapsedMinutes(startedAt: string, endedAt?: string): number | null {
-  if (!endedAt) return null;
-  const start = Date.parse(startedAt);
-  const end = Date.parse(endedAt);
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return null;
-  return Math.max(1, Math.round((end - start) / 60_000));
-}
-
-export function GoalTerminalMarker({ goal }: { goal: GoalBrief }) {
+export function GoalTerminalMarker({
+  goal,
+  onExtend,
+}: {
+  goal: GoalBrief;
+  onExtend?: () => void;
+}) {
   const copy = useCopy();
   const tb = copy.topbar;
   const conv = copy.conversation;
-  const minutes = elapsedMinutes(goal.startedAt, goal.endedAt);
-  // Gate the "open output folder" affordance on the workspace actually
-  // holding files — same check the TopBar popover uses. A purely textual
-  // goal gets a `workspacePath` (created lazily) but may never write to
-  // it, so keying off `workspacePath` alone would offer a button that
-  // opens an empty folder, and disagree with the popover. Checked once
-  // per terminal marker (rare) rather than on a poll.
-  const [workspaceHasFiles, setWorkspaceHasFiles] = useState(false);
-  useEffect(() => {
-    if (!goal.workspacePath) return;
-    let cancelled = false;
-    void goalWorkspaceHasFiles(goal.id)
-      .then((hasFiles) => {
-        if (!cancelled) setWorkspaceHasFiles(hasFiles);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [goal.id, goal.workspacePath]);
+  const minutes = Math.max(1, Math.round(goal.elapsedSeconds / 60));
   const Icon =
     goal.status === "completed"
       ? Check
-      : goal.status === "failed"
-        ? Warning
-        : Prohibit;
+      : goal.status === "budget_limited"
+        ? Timer
+        : goal.status === "stopped"
+          ? Pause
+          : goal.status === "failed"
+            ? X
+            : Warning;
+  // budget_limited is neutral, not a failure: the run did the work it
+  // was given time for (PRD §3.7).
   const tone =
     goal.status === "completed"
       ? "text-brand-strong"
       : goal.status === "failed"
         ? "text-error"
         : "text-ink-muted";
-
-  const actionClass = cn(
-    "inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 text-[11.5px] text-ink-muted",
-    "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
-    "hover:bg-hover hover:text-ink active:translate-y-px",
-  );
-
-  // Provenance line — the only visible evidence of the "keeps improving
-  // until the budget ends" promise: N/T tasks done, elapsed, and (when
-  // the anchor was actually revised) how many deliverable versions it
-  // went through. Fields absent on pre-counter goals just drop their
-  // segment; a version of 1 is "wrote it once", not an improvement, so
-  // the revisions chip starts at 2.
-  const showTasks =
-    goal.taskCount != null &&
-    goal.completedTaskCount != null &&
-    goal.taskCount > 0;
-  const showRevisions =
-    goal.deliverableVersion != null && goal.deliverableVersion >= 2;
+  // The whole provenance line in v2: how long it ran and how many
+  // continuations Core dispatched — the visible evidence of "it kept
+  // going by itself". A run that never continued drops the segment.
+  const showContinuations = goal.continuationCount > 0;
+  // A failure or a time-out without a reason is a dead-end
+  // ("反馈引导行动"): the engine records the cause / the state of play
+  // in latestSummary, so surface it right where the run ended.
+  const showSummary =
+    (goal.status === "failed" || goal.status === "budget_limited") &&
+    Boolean(goal.latestSummary);
+  // "Time's up" is the one terminal state with a way back: raising the
+  // ceiling flips the goal to `active` and Core dispatches the next
+  // continuation itself — at which point this marker stops being
+  // emitted at all (goal-thread only closes terminal runs), so the
+  // control removes itself. A goal with no ceiling can never land here,
+  // but the guard keeps the button honest with the command's contract.
+  const canExtend =
+    Boolean(onExtend) &&
+    goal.status === "budget_limited" &&
+    goal.budgetSeconds != null;
+  const extendMinutes = Math.round(GOAL_EXTEND_SECONDS / 60);
   return (
     <div className="my-5">
       <div className="flex items-center gap-2 text-[12px]">
@@ -175,42 +163,31 @@ export function GoalTerminalMarker({ goal }: { goal: GoalBrief }) {
         <span className={cn("shrink-0 font-medium", tone)}>
           {goalStageLabel(goal.status, tb)}
         </span>
-        {showTasks && (
+        <span className="shrink-0 tabular-nums text-ink-muted">
+          {`· ${conv.goalRunElapsed(minutes)}`}
+        </span>
+        {showContinuations && (
           <span className="shrink-0 tabular-nums text-ink-muted">
-            {`· ${conv.goalTasksCompleted(
-              goal.completedTaskCount ?? 0,
-              goal.taskCount ?? 0,
-            )}`}
-          </span>
-        )}
-        {minutes != null && (
-          <span className="shrink-0 tabular-nums text-ink-muted">
-            {`· ${conv.goalRunElapsed(minutes)}`}
-          </span>
-        )}
-        {showRevisions && (
-          <span className="shrink-0 tabular-nums text-ink-muted">
-            {`· ${conv.goalImprovedVersions(goal.deliverableVersion ?? 0)}`}
+            {`· ${conv.goalContinuations(goal.continuationCount)}`}
           </span>
         )}
         <span className="h-px min-w-4 flex-1 bg-line" aria-hidden />
-        {workspaceHasFiles && goal.workspacePath && (
+        {canExtend && (
           <button
             type="button"
-            className={actionClass}
-            onClick={() => {
-              const path = goal.workspacePath;
-              if (path) void revealItemInDir(path).catch(() => undefined);
-            }}
+            className={cn(
+              "inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 text-[11.5px] font-medium",
+              "text-brand-strong hover:bg-brand-soft",
+              "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
+              "active:translate-y-px",
+            )}
+            onClick={() => onExtend?.()}
           >
-            {tb.openGoalWorkspace}
+            {tb.extendGoalAtCeiling(extendMinutes)}
           </button>
         )}
       </div>
-      {/* A failure without a reason is a dead-end ("反馈引导行动") — the
-          controller records the cause in latestSummary on failure, so
-          surface it right where the run ended. */}
-      {goal.status === "failed" && goal.latestSummary && (
+      {showSummary && (
         <div className="mt-1 break-words pl-[21px] text-[11.5px] leading-snug text-ink-muted">
           {goal.latestSummary}
         </div>
@@ -220,29 +197,42 @@ export function GoalTerminalMarker({ goal }: { goal: GoalBrief }) {
 }
 
 /**
- * Ambient liveness tail for a running Goal master thread. The master
- * session does not itself run an agent loop (workers do the work), so
- * between controller checkpoints the thread sits silent for long
- * stretches. This quiet brand-tinted line + LiveDots reassures the
- * operator the run is still progressing without pretending to be a
- * per-step ticker (live detail stays in the TopBar pill). Rendered only
- * while a goal is running/wrapping and the master is not itself
- * mid-turn. Consistent with DESIGN.md §2.7: running = allowed liveness.
+ * Thread tail for a Goal in one of its two RECOVERABLE states. Rendered
+ * only when the session is idle — while the run works, the steps
+ * themselves are the liveness and Core bridges the gaps between
+ * continuations in-process, so `active` needs no tail at all.
  *
- * `onStop` adds an inline stop control so the reader of the thread can
- * cancel without hunting for the TopBar pill — same two-step confirm
- * (and consequence copy) as the pill popover.
+ *   - `paused`  — the user aborted the run, or Core restarted. "Send a
+ *     message to continue" is the whole instruction.
+ *   - `blocked` — the model (or a run error) says it cannot proceed;
+ *     `latestSummary` is its account of what it needs from the user.
+ *
+ * `onStop` keeps the stop control within reach of the reader of the
+ * thread — same two-step confirm (and consequence copy) as the pill.
  */
-export function GoalRunningTail({ onStop }: { onStop?: () => void }) {
+export function GoalPausedTail({
+  goal,
+  onStop,
+}: {
+  goal: GoalBrief;
+  onStop?: () => void;
+}) {
   const copy = useCopy();
   const tb = copy.topbar;
+  const conv = copy.conversation;
   const [confirmingStop, setConfirmingStop] = useState(false);
+  const blocked = goal.status === "blocked";
+  const Icon = blocked ? Warning : Pause;
   return (
     <div className="my-5 text-[12px]">
-      <div className="flex items-center gap-2 text-brand-strong/70">
-        <Target size={12} weight="thin" className="shrink-0" />
-        <span>{copy.conversation.goalWorking}</span>
-        <LiveDots className="pb-px text-brand-strong/50" />
+      <div
+        className={cn(
+          "flex items-center gap-2",
+          blocked ? "text-warning" : "text-ink-muted",
+        )}
+      >
+        <Icon size={12} weight="bold" className="shrink-0" />
+        <span>{blocked ? conv.goalBlockedTail : conv.goalPausedTail}</span>
         {onStop && (
           <button
             type="button"
@@ -267,6 +257,11 @@ export function GoalRunningTail({ onStop }: { onStop?: () => void }) {
           </button>
         )}
       </div>
+      {blocked && goal.latestSummary && (
+        <div className="mt-1 break-words pl-5 text-[11.5px] leading-snug text-ink-muted">
+          {goal.latestSummary}
+        </div>
+      )}
       {confirmingStop && (
         <div className="mt-1 pl-5 text-[11px] leading-snug text-error">
           {tb.stopGoalConsequence}

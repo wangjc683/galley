@@ -11,7 +11,7 @@ use tauri_plugin_sql::Migration;
 use crate::commands::stringify_error;
 use crate::db::SqliteGalley;
 use crate::db_migrations::DB_URL;
-use crate::{desktop_goal, im_supervisor, migration_backup, runner_manager, socket_listener, tray};
+use crate::{im_supervisor, migration_backup, runner_manager, socket_listener, tray};
 
 pub(crate) fn setup_app(
     app: &mut tauri::App,
@@ -360,10 +360,10 @@ fn write_cli_discovery_file() {
 }
 
 /// Fire-and-forget background services: IM supervisor autostart, and
-/// re-spawning controllers for goals left active after a Core restart.
-/// The goal controller is a detached process orphaned on restart;
-/// without the resume an interrupted Goal stays `running` in the DB
-/// and, under the single-active-Goal lock, blocks all new Goals.
+/// parking goals left `active` by the previous Core process. Goal v2's
+/// continuation loop lives in this process, so after a restart nothing
+/// is driving those goals; `paused` is the honest state and the user's
+/// next message on the session resumes them (goal-simplify PRD §3.3).
 fn start_background_services(app: &tauri::App) {
     let im_manager: std::sync::Arc<im_supervisor::ImSupervisorManager> = app
         .state::<std::sync::Arc<im_supervisor::ImSupervisorManager>>()
@@ -376,7 +376,12 @@ fn start_background_services(app: &tauri::App) {
 
     let galley_for_goals: SqliteGalley = app.state::<SqliteGalley>().inner().clone();
     tauri::async_runtime::spawn(async move {
-        desktop_goal::resume_active_goals(&galley_for_goals).await;
+        use crate::api::GalleyApi;
+        match galley_for_goals.pause_open_goals().await {
+            Ok(0) => {}
+            Ok(n) => eprintln!("[goal] startup: parked {n} active goal(s) as paused"),
+            Err(e) => eprintln!("[goal] startup: pausing active goals failed: {e:?}"),
+        }
     });
 
     // Outbound message-queue drain (galley#19/#20): wire the manager's
@@ -393,6 +398,7 @@ fn start_background_services(app: &tauri::App) {
             app.state::<SqliteGalley>().inner().clone(),
             manager,
             crate::notify::TauriNotifier::new(app.handle().clone()),
+            Some(app.handle().clone()),
             rx,
         );
     }

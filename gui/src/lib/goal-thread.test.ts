@@ -1,25 +1,26 @@
 import { describe, expect, it } from "vitest";
 
 import { annotateGoalThread } from "@/lib/goal-thread";
-import type { Turn, UserTurn } from "@/types/conversation";
+import type {
+  AgentTurn,
+  ConversationToolEvent,
+  Turn,
+  UserTurn,
+} from "@/types/conversation";
 import type { GoalBrief } from "@/types/goal";
 
 function goal(overrides: Partial<GoalBrief>): GoalBrief {
   return {
     id: "goal_a",
-    projectId: "proj_a",
-    masterSessionId: "sess_master",
+    sessionId: "sess_a",
     objective: "audit the docs",
     status: "completed",
-    budgetSeconds: 1800,
-    workerLimit: 3,
-    runtimeKind: "managed",
-    writeMode: "autonomous",
-    mode: "hive",
+    budgetSeconds: 3600,
     startedAt: "2026-07-01T10:00:00Z",
-    deadlineAt: "2026-07-01T10:30:00Z",
     endedAt: "2026-07-01T10:28:00Z",
-    stopRequested: false,
+    continuationCount: 3,
+    wrapUpDispatched: false,
+    elapsedSeconds: 1680,
     createdAt: "2026-07-01T10:00:00Z",
     updatedAt: "2026-07-01T10:28:00Z",
     ...overrides,
@@ -33,6 +34,21 @@ function userTurn(overrides: Partial<UserTurn>): UserTurn {
     createdAt: "2026-07-01T10:00:00Z",
     ...overrides,
   };
+}
+
+let toolSeq = 0;
+function tool(name: string): ConversationToolEvent {
+  return { id: `t-${toolSeq++}`, name, status: "success-historical", args: {} };
+}
+
+/** A worked step: tools ran, no conclusion yet. */
+function step(): AgentTurn {
+  return { role: "agent", tools: [tool("file_read")], finalAnswer: null };
+}
+
+/** A closing turn: no real tools, a real answer. */
+function answer(text = "结论"): AgentTurn {
+  return { role: "agent", tools: [tool("no_tool")], finalAnswer: text };
 }
 
 describe("annotateGoalThread commission matching", () => {
@@ -83,30 +99,125 @@ describe("annotateGoalThread commission matching", () => {
 });
 
 describe("annotateGoalThread episode brackets", () => {
-  it("emits a frozen task board directly above the terminal marker", () => {
-    const turns: Turn[] = [userTurn({ goalId: "goal_a" })];
+  it("closes a solo-shaped run after its steps, not before them", () => {
+    // The v2 shape: commission → agent steps (continuations included)
+    // → terminal marker at the very end. The v1 rule closed the run at
+    // the first non-narration turn, which put the marker above the work.
+    const turns: Turn[] = [
+      userTurn({ goalId: "goal_a" }),
+      step(),
+      step(),
+      answer(),
+    ];
     const items = annotateGoalThread(turns, [goal({})]);
     expect(items.map((item) => item.kind)).toEqual([
       "commission",
-      "task-board",
+      "turn",
+      "turn",
+      "turn",
       "terminal",
     ]);
   });
 
-  it("emits no board or terminal for a still-running goal (the live board is MainView's)", () => {
-    const turns: Turn[] = [userTurn({ goalId: "goal_a" })];
-    const items = annotateGoalThread(turns, [
-      goal({ status: "running", endedAt: undefined }),
-    ]);
-    expect(items.map((item) => item.kind)).toEqual(["commission"]);
-  });
-
-  it("closes a stopped run with board + terminal like other terminals", () => {
-    const turns: Turn[] = [userTurn({ goalId: "goal_a" })];
-    const items = annotateGoalThread(turns, [goal({ status: "stopped" })]);
+  it("keeps a mid-run steering message inside the bracket", () => {
+    const turns: Turn[] = [
+      userTurn({ goalId: "goal_a" }),
+      step(),
+      userTurn({ content: "顺便看看 en 版", createdAt: "2026-07-01T10:10:00Z" }),
+      answer(),
+    ];
+    const items = annotateGoalThread(turns, [goal({})]);
     expect(items.map((item) => item.kind)).toEqual([
       "commission",
-      "task-board",
+      "turn",
+      "turn",
+      "turn",
+      "terminal",
+    ]);
+  });
+
+  it("closes the run before normal chat that follows the goal", () => {
+    const turns: Turn[] = [
+      userTurn({ goalId: "goal_a" }),
+      step(),
+      answer(),
+      userTurn({ content: "谢谢，另外帮我订个票", createdAt: "2026-07-01T11:00:00Z" }),
+      answer("好的"),
+    ];
+    const items = annotateGoalThread(turns, [goal({})]);
+    expect(items.map((item) => item.kind)).toEqual([
+      "commission",
+      "turn",
+      "turn",
+      "terminal",
+      "turn",
+      "turn",
+    ]);
+  });
+
+  it("treats a user turn without createdAt as after the goal", () => {
+    const turns: Turn[] = [
+      userTurn({ goalId: "goal_a" }),
+      answer(),
+      { role: "user", content: "新话题" },
+    ];
+    const items = annotateGoalThread(turns, [goal({})]);
+    expect(items.map((item) => item.kind)).toEqual([
+      "commission",
+      "turn",
+      "terminal",
+      "turn",
+    ]);
+  });
+
+  it("emits no terminal marker for an open goal (active / paused / blocked)", () => {
+    for (const status of ["active", "paused", "blocked"] as const) {
+      const turns: Turn[] = [userTurn({ goalId: "goal_a" }), step()];
+      const items = annotateGoalThread(turns, [
+        goal({ status, endedAt: undefined }),
+      ]);
+      expect(items.map((item) => item.kind)).toEqual(["commission", "turn"]);
+    }
+  });
+
+  it("closes budget_limited / stopped / failed runs like completed ones", () => {
+    for (const status of ["budget_limited", "stopped", "failed"] as const) {
+      const turns: Turn[] = [userTurn({ goalId: "goal_a" }), answer()];
+      const items = annotateGoalThread(turns, [goal({ status })]);
+      expect(items.map((item) => item.kind)).toEqual([
+        "commission",
+        "turn",
+        "terminal",
+      ]);
+    }
+  });
+
+  it("a second commission closes the previous run's bracket", () => {
+    const turns: Turn[] = [
+      userTurn({ goalId: "goal_a" }),
+      answer(),
+      userTurn({
+        content: "再来一次",
+        goalId: "goal_b",
+        createdAt: "2026-07-01T12:00:00Z",
+      }),
+      answer(),
+    ];
+    const items = annotateGoalThread(turns, [
+      goal({}),
+      goal({
+        id: "goal_b",
+        objective: "再来一次",
+        startedAt: "2026-07-01T12:00:00Z",
+        endedAt: "2026-07-01T12:20:00Z",
+      }),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual([
+      "commission",
+      "turn",
+      "terminal",
+      "commission",
+      "turn",
       "terminal",
     ]);
   });

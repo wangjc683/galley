@@ -21,7 +21,6 @@ interface ComposerGoalControlsProps {
   requiresModelConfig: boolean;
   stopMode: boolean;
   goalConfirmationObjective: string;
-  goalProjectName?: string;
   onArmToggle: () => void;
   onDialogOpenChange: (open: boolean) => void;
   onConfirm: (config: GoalLaunchConfig) => Promise<void>;
@@ -43,7 +42,6 @@ export function ComposerGoalControls({
   requiresModelConfig,
   stopMode,
   goalConfirmationObjective,
-  goalProjectName,
   onArmToggle,
   onDialogOpenChange,
   onConfirm,
@@ -125,7 +123,6 @@ export function ComposerGoalControls({
         key={goalConfirmationObjective || "goal-confirm-closed"}
         open={effectiveGoalConfirmOpen}
         objective={goalConfirmationObjective}
-        projectName={goalProjectName}
         submitting={goalSubmitting}
         onOpenChange={onDialogOpenChange}
         onConfirm={(config) => {

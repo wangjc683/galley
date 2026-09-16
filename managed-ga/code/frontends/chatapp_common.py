@@ -40,7 +40,10 @@ FILE_HINT = "If you need to show files to user, use [FILE:filepath] in your resp
 # next-suggestion is Galley's workbench-composer tag; the managed prompt no
 # longer mandates it on IM surfaces, but a model can still imitate it from
 # pre-fix conversation history, so IM display strips it defensively.
-TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")]
+# goal-status is Galley's Goal completion tag; the Goal dispatch prompt asks
+# for it on the final answer and Galley's own bridge consumes it, so it is
+# never reply prose on an IM surface.
+TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion", "goal-status")]
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESTORE_GLOBS = (
     os.path.join(PROJECT_ROOT, "temp", "model_responses", "model_responses_*.txt"),

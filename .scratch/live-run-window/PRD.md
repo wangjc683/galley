@@ -97,4 +97,7 @@ sweep 起止都无跳变。
 ## 第二步（等本票验收）
 
 - 进行中行显示工具级状态（需 bridge 工具级 live 事件，Phase 2 协议）。
-- Goal run 进面板。
+- Goal run 进面板。**2026-09-16 已做**（goal-simplify 08 票）：Goal 重做后
+  以 `lib/goal-run-groups.ts` 在形状分组之上盖 goal 规则——liveness 看 goal
+  状态、非 live 的 goal 组一律折、deliverable 只认终态、进展说明降叙述体、
+  步号按位置。

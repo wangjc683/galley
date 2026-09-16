@@ -24,9 +24,8 @@ non-breaking inside `schemaVersion: 1` per §7.
 
 Future human/Supervisor-facing session and project write commands should accept
 `--supervisor=<x>` / `--reason=<y>` flags following the same Origin convention
-`session send` uses today (§5.5a). Goal-internal task/event/deliverable writes
-remain authored by `ownerSessionId` / `authorSessionId` instead. Read commands
-stay flag-light.
+`session send` uses today (§5.5a). `goal start` / `goal stop` already do.
+Read commands stay flag-light.
 
 ### 8A · `GalleyApi` trait surface (B3 M4a)
 
@@ -61,16 +60,16 @@ Trait signatures (Rust types):
 | `create_project` | `CreateProjectInput`, `Origin` | `ProjectBrief` |
 | `update_project` | `ProjectId`, `ProjectPatch`, `Origin` | `ProjectBrief` |
 | `delete_project` | `ProjectId`, `Origin` | `()` |
-| `create_goal_proposal` | `CreateGoalProposalInput`, `Origin` | `GoalProposalBrief` |
-| `start_goal_from_proposal` | `GoalProposalId`, `internalConfirmToken`, `Origin` | `GoalBrief` |
-| `goal_status` | `GoalId` | `GoalStatusSnapshot` |
-| `list_active_goals` | — | `Vec<GoalBrief>` |
-| `request_goal_stop` | `GoalId`, `Origin` | `GoalBrief` |
-| `update_goal_state` | `GoalId`, `GoalStatus`, `latestSummary?` | `GoalBrief` |
-| `create_goal_task` | `CreateGoalTaskInput` | `GoalTaskBrief` |
-| `claim_goal_task` | `ClaimGoalTaskInput` | `GoalTaskBrief` |
-| `update_goal_task` | `UpdateGoalTaskInput` | `GoalTaskBrief` |
-| `create_goal_event` | `CreateGoalEventInput` | `GoalEventBrief` |
+| `create_goal` | `CreateGoalInput`, `Origin` | `GoalBrief` |
+| `get_goal` | `GoalId` | `GoalBrief` |
+| `list_active_goals` | — | `Vec<GoalBrief>` (open: active / paused / blocked) |
+| `list_visible_goals` | — | `Vec<GoalBrief>` (open + unseen terminal) |
+| `list_goals_for_session` | `SessionId` | `Vec<GoalBrief>` |
+| `mark_goal_result_seen` | `GoalId`, `Origin` | `GoalBrief` |
+| `update_goal_status` | `GoalId`, `GoalStatus`, `latestSummary?` | `GoalBrief` |
+| `bump_goal_continuation` | `GoalId`, `wrapUp: bool` | `GoalBrief` |
+| `extend_goal_budget` | `GoalId`, `extraSeconds: u32` | `GoalBrief` |
+| `pause_open_goals` | — | `u64` (Core restart) |
 
 Input types (camelCase on the JSON wire):
 

@@ -92,47 +92,30 @@ pub(super) fn runtime_kind_sql(kind: RuntimeKind) -> &'static str {
     }
 }
 
-pub(super) fn parse_goal_proposal_status(s: &str) -> Result<GoalProposalStatus> {
-    Ok(match s {
-        "awaiting_confirmation" => GoalProposalStatus::AwaitingConfirmation,
-        "started" => GoalProposalStatus::Started,
-        "cancelled" => GoalProposalStatus::Cancelled,
-        other => {
-            return Err(GalleyError::Internal {
-                message: format!("unknown goal proposal status: {other}"),
-            });
-        }
-    })
-}
-
-pub(super) fn goal_proposal_status_sql(s: GoalProposalStatus) -> &'static str {
-    match s {
-        GoalProposalStatus::AwaitingConfirmation => "awaiting_confirmation",
-        GoalProposalStatus::Started => "started",
-        GoalProposalStatus::Cancelled => "cancelled",
-    }
-}
-
 pub(super) fn parse_goal_status(s: &str) -> Result<GoalStatus> {
     Ok(match s {
-        "running" => GoalStatus::Running,
-        "wrapping" => GoalStatus::Wrapping,
+        "active" => GoalStatus::Active,
+        "paused" => GoalStatus::Paused,
+        "blocked" => GoalStatus::Blocked,
         "completed" => GoalStatus::Completed,
+        "budget_limited" => GoalStatus::BudgetLimited,
         "stopped" => GoalStatus::Stopped,
         "failed" => GoalStatus::Failed,
         other => {
             return Err(GalleyError::Internal {
                 message: format!("unknown goal status: {other}"),
-            });
+            })
         }
     })
 }
 
 pub(super) fn goal_status_sql(s: GoalStatus) -> &'static str {
     match s {
-        GoalStatus::Running => "running",
-        GoalStatus::Wrapping => "wrapping",
+        GoalStatus::Active => "active",
+        GoalStatus::Paused => "paused",
+        GoalStatus::Blocked => "blocked",
         GoalStatus::Completed => "completed",
+        GoalStatus::BudgetLimited => "budget_limited",
         GoalStatus::Stopped => "stopped",
         GoalStatus::Failed => "failed",
     }
@@ -141,147 +124,6 @@ pub(super) fn goal_status_sql(s: GoalStatus) -> &'static str {
 /// Max stored deliverable content size in bytes. 256 KiB is far beyond
 /// any reasonable text deliverable; exceeding it signals runaway output,
 /// so we truncate on a char boundary rather than fail the master's write.
-const GOAL_DELIVERABLE_MAX_BYTES: usize = 256 * 1024;
-
-pub(super) fn cap_goal_deliverable_content(
-    content: String,
-    note: Option<String>,
-) -> (String, Option<String>) {
-    if content.len() <= GOAL_DELIVERABLE_MAX_BYTES {
-        return (content, note);
-    }
-    let mut end = GOAL_DELIVERABLE_MAX_BYTES;
-    while end > 0 && !content.is_char_boundary(end) {
-        end -= 1;
-    }
-    let truncated = content[..end].to_string();
-    let marker = "[galley: deliverable truncated at 256KB]";
-    let note = Some(match note {
-        Some(n) if !n.trim().is_empty() => format!("{n} · {marker}"),
-        _ => marker.to_string(),
-    });
-    (truncated, note)
-}
-
-#[derive(sqlx::FromRow)]
-pub(super) struct GoalDeliverableRow {
-    id: String,
-    goal_id: String,
-    version: i64,
-    content: String,
-    note: Option<String>,
-    author_session_id: Option<String>,
-    created_at: String,
-}
-
-impl GoalDeliverableRow {
-    pub(super) fn into_brief(self) -> GoalDeliverable {
-        GoalDeliverable {
-            id: self.id,
-            goal_id: GoalId(self.goal_id),
-            version: self.version.max(0) as u32,
-            content: self.content,
-            note: self.note,
-            author_session_id: self.author_session_id.map(SessionId),
-            created_at: self.created_at,
-        }
-    }
-}
-
-pub(super) fn parse_goal_write_mode(s: &str) -> Result<GoalWriteMode> {
-    Ok(match s {
-        "autonomous" => GoalWriteMode::Autonomous,
-        "read_only" => GoalWriteMode::ReadOnly,
-        other => {
-            return Err(GalleyError::Internal {
-                message: format!("unknown goal write mode: {other}"),
-            });
-        }
-    })
-}
-
-pub(super) fn goal_write_mode_sql(mode: GoalWriteMode) -> &'static str {
-    match mode {
-        GoalWriteMode::Autonomous => "autonomous",
-        GoalWriteMode::ReadOnly => "read_only",
-    }
-}
-
-pub(super) fn parse_goal_mode(s: &str) -> Result<GoalMode> {
-    Ok(match s {
-        "hive" => GoalMode::Hive,
-        "solo" => GoalMode::Solo,
-        other => {
-            return Err(GalleyError::Internal {
-                message: format!("unknown goal mode: {other}"),
-            });
-        }
-    })
-}
-
-pub(super) fn goal_mode_sql(mode: GoalMode) -> &'static str {
-    match mode {
-        GoalMode::Hive => "hive",
-        GoalMode::Solo => "solo",
-    }
-}
-
-pub(super) fn parse_goal_task_status(s: &str) -> Result<GoalTaskStatus> {
-    Ok(match s {
-        "open" => GoalTaskStatus::Open,
-        "claimed" => GoalTaskStatus::Claimed,
-        "running" => GoalTaskStatus::Running,
-        "completed" => GoalTaskStatus::Completed,
-        "blocked" => GoalTaskStatus::Blocked,
-        "cancelled" => GoalTaskStatus::Cancelled,
-        other => {
-            return Err(GalleyError::Internal {
-                message: format!("unknown goal task status: {other}"),
-            });
-        }
-    })
-}
-
-pub(super) fn goal_task_status_sql(s: GoalTaskStatus) -> &'static str {
-    match s {
-        GoalTaskStatus::Open => "open",
-        GoalTaskStatus::Claimed => "claimed",
-        GoalTaskStatus::Running => "running",
-        GoalTaskStatus::Completed => "completed",
-        GoalTaskStatus::Blocked => "blocked",
-        GoalTaskStatus::Cancelled => "cancelled",
-    }
-}
-
-pub(super) fn parse_goal_event_type(s: &str) -> Result<GoalEventType> {
-    Ok(match s {
-        "plan" => GoalEventType::Plan,
-        "claim" => GoalEventType::Claim,
-        "progress" => GoalEventType::Progress,
-        "result" => GoalEventType::Result,
-        "conflict" => GoalEventType::Conflict,
-        "synthesis" => GoalEventType::Synthesis,
-        "system" => GoalEventType::System,
-        other => {
-            return Err(GalleyError::Internal {
-                message: format!("unknown goal event type: {other}"),
-            });
-        }
-    })
-}
-
-pub(super) fn goal_event_type_sql(t: GoalEventType) -> &'static str {
-    match t {
-        GoalEventType::Plan => "plan",
-        GoalEventType::Claim => "claim",
-        GoalEventType::Progress => "progress",
-        GoalEventType::Result => "result",
-        GoalEventType::Conflict => "conflict",
-        GoalEventType::Synthesis => "synthesis",
-        GoalEventType::System => "system",
-    }
-}
-
 pub(super) fn parse_managed_model_protocol(s: &str) -> Result<ManagedModelProtocol> {
     Ok(match s {
         "anthropic" => ManagedModelProtocol::Anthropic,
@@ -674,6 +516,7 @@ pub(super) async fn insert_message_inner(
         summary: None,
         turn_index: Some(next_turn.max(0) as u32),
         visibility: Some(visibility),
+        goal_id: goal_id.map(str::to_string),
         attachments: Vec::new(),
         origin: Some(origin),
     })
@@ -719,18 +562,6 @@ pub(super) fn project_nullable_patch(field: &Option<Option<String>>) -> (bool, O
     }
 }
 
-pub(super) fn goal_project_name(objective: &str) -> String {
-    let trimmed = objective.trim();
-    let short: String = trimmed.chars().take(48).collect();
-    if short.is_empty() {
-        "Goal".to_string()
-    } else if trimmed.chars().count() > 48 {
-        format!("Goal · {short}…")
-    } else {
-        format!("Goal · {short}")
-    }
-}
-
 // ---------------- trait impl ----------------
 
 pub(super) const SESSIONS_SELECT_COLS: &str =
@@ -746,14 +577,6 @@ pub(super) fn chrono_now_iso() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     iso_from_unix_secs(dur.as_secs() as i64)
-}
-
-pub(super) fn chrono_after_seconds_iso(seconds: u32) -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let dur = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    iso_from_unix_secs(dur.as_secs() as i64 + i64::from(seconds))
 }
 
 pub(super) fn iso_from_unix_secs(total_secs: i64) -> String {

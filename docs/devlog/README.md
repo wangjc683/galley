@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-16
+- [Goal 重做为 Codex 形态](./2026-09-16-goal-v2-codex-shape.md) — JC 叫停「Goal run 进面板」并质疑 goal 模式过于复杂效果一般；本机三个月 0 条 goal、体量占仓库 8%，根源是 solo 把预算当目标；对照 Codex `/goal` 源码换成单线程持久目标（Core 空闲续跑、模型打 `<goal-status>` 宣告完成 / 受阻、预算改上限、abort→paused、发消息即恢复），退役 hive / solo 双引擎与 CLI controller，契约升 `schemaVersion: 2` 且 v1 未变命令仍服务；六条裁决点全按推荐；真机 dogfood 过后同日把 live 窗口接进 goal run（翻转 08-06 不折裁决，goal 组按 goal 状态定 live / 折）
 - [live run 两行窗口](./2026-09-16-live-run-window.md) — 同日三刀挤密度皆被真机否决后，密度按状态分流：先「完成即折」（重审 08-06 keep-expanded），再把 live 区改成固定两行的状态面板（上一步阅读形态 + 进行中行，之前的步折进「已完成 N 步」live 头，展开 opt-in、完成保持、中止全展）；本机 348 个 run 中 57% 单步不受影响
 - [v0.4.16 发布](./2026-09-16-v0.4.16-release.md) — 五个 GUI 提交的 patch（两条社区反馈 + 过程区序号栏 + 模型 combobox + 置顶提位）；`managed-ga` / `runner` 未动故打包门禁不 mandatory；smoke 重点是序号栏的动态场景与 Windows 1x 屏图标
 - [步号改序号栏 + 过程区 StepRegion + DetailPanel 展开过渡](./2026-09-16-step-marker-recede-and-reference-audit.md) — JC 二提「只显数字」并贴外部 ReasoningTrace 参考组件；第一轮只淡一档，真机仍繁琐后翻 08-23「裸数字永久否决」：两位补零序号、去 hairline、「第 N 步」退为 sr-only；第二轮对表参考渲染图量出层级倒置与步内步间 1.3 的分组比例，加 `StepRegion`（过程区再缩一格 + x=5 rail，live/settled 同构，序号 24 内容 48）、序号 regular 降 1px、summary 换行、步内 0 步间 12 头到首步 12；真机 A/B 定序号 JetBrains Mono、折叠头保持 muted（翻深否）；in-flight 行不显序号（序号是落定的盖章，「占位显示 Turn N」废止）；pill 行退到 summary 之下一级（标签降到 mono 档 + ink-muted、图标 13）；mono 名先 hover 显示后因 caret 孤立改进展开体首行，pill 与 TurnMarker 的 caret 都改贴文字末尾；抽 `ExpandSection` 让 DetailPanel 与 RunFoldSection 同一套 grid-rows 过渡；后记六至九：thinking 行序号位放 `··`（三态真机 A/B）、两把密度刀（步间 8px、pill 上 summary 行）真机皆否并 revert、步间定 `mt-2.5`、完成即折重审 08-06

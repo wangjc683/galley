@@ -9,13 +9,15 @@ Galley's public contract — supervisor agents and Skills depend on
 them. We commit to the rules in
 [AGENTS.md "CLI Surface Is Public Contract"](../../AGENTS.md).
 
-- **`schemaVersion: 1` is additive-only.** New optional fields can
+- **A schema version is additive-only.** New optional fields can
   arrive on requests and responses; existing field names and semantics
-  do not change inside this major version.
-- **Breaking change requires a bump.** A `schemaVersion: 2` introduces
-  the breaking change, and old SOPs can opt into the v1 view via
-  `--schema=1` on the CLI (or the request's `schemaVersion` field over
-  the socket).
+  do not change inside a major version. Current: `schemaVersion: 2`
+  (since 2026-09-16; see §7 for what changed and how `1` is still
+  served).
+- **Breaking change requires a bump.** A new major introduces the
+  breaking change; commands that did not change keep answering the old
+  pin (§7), so old SOPs keep working until they touch the changed
+  surface.
 - **Exit-code categories are stable.** The six exit codes in §3 do not
   get reassigned across `schemaVersion` bumps — agents can branch on
   them confidently without parsing JSON.
@@ -68,6 +70,7 @@ get a clean error path; the JSON envelope carries the original tag.
 | `MessageBrief.role`        | `user / agent / system` (DB `tool` rows normalize to `agent`)                         |
 | `HealthCheck.status`       | `ok / warn / fail / deferred_b4` (`deferred_b4` is a legacy stable value; new `deferred_<phase>` values are additive) |
 | `Origin.via`               | `gui / cli / supervisor / system`                                                     |
+| `GoalBrief.status`         | `active / paused / blocked / completed / budget_limited / stopped / failed` (schemaVersion 2; open = the first three) |
 
 #### `dispatch` values (per-command)
 
@@ -82,6 +85,7 @@ mislead. SOPs branch per command:
 | `session btw`                    | `dispatched` (only — exit 5 on no bridge)          |
 | `session stop`                   | `abort_sent` / `already_stopped`                   |
 | `llm set`                        | `dispatched` / `persisted_only`                    |
+| `goal start`                     | `dispatched` (only — failures are error envelopes; schemaVersion 2) |
 
 #### `stream.reason` values (streaming / wait commands)
 
@@ -104,39 +108,79 @@ For NDJSON stream-end frames on `session watch` (§5.5b),
 
 ### 1.2 Schema pinning
 
-SOPs that want to defend against future schema bumps can pin to
-`schemaVersion: 1` explicitly:
+SOPs that want to defend against schema bumps pin explicitly:
 
-- **CLI**: pass `--schema=1` on any command (global flag). Mismatch
-  with the binary's accepted set → exit 2 (`error: "invalid_args"`) +
-  message prefixed `schema_mismatch:`. v0.2 beta binaries only know `1`;
-  future binaries that speak multiple versions will accept any in
-  their supported set.
-- **Socket**: include `"schemaVersion": 1` in the request JSON.
-  Mismatch surfaces as the wire `schema_mismatch` discriminant (§2A);
-  CLI maps that to exit 1 (`internal`) since it's a server-side
-  negotiation failure rather than client input.
+- **CLI**: pass `--schema=N` on any command (global flag). `N` outside
+  the binary's accepted set (`1`, `2` today) → exit 2
+  (`error: "invalid_args"`) + message prefixed `schema_mismatch:`. The
+  same exit + prefix when `N` is `1` and the command exists only under
+  `2` (the `goal` family).
+- **Socket**: include `"schemaVersion": N` in the request JSON. `N`
+  outside the accepted set → the wire `schema_mismatch` discriminant
+  (§2A), which the CLI maps to exit 1 (`internal`). A `1` pin on a
+  v2-only command → `unknown_command`.
 
-Omitting the pin uses the server's default. Today that's `1`; a future
-multi-schema binary will document its default + the supported set on
-`galley version`.
+Omitting the pin uses the server's default, `2`. `galley version`
+prints the default (`schemaVersion`); the accepted set is documented
+here rather than exposed as a field.
 
 SOPs that want forward compatibility instead can omit the pin and
 rely on the additive-only promise: new fields appear, but the ones
-they read keep their names + semantics inside `schemaVersion: 1`.
+they read keep their names + semantics inside the current major.
 
 ## 7 · Versioning
 
-`schemaVersion: 1` is **frozen** — introduced in v0.2, unchanged
-through every release since (v0.3.x and v0.4.x included). The rules in
-§1 apply. Additions landed under the frozen schema so far: `session wait`
-(with `--after-turn` and the `session_error` / `session_cancelled`
-statuses), `session follow`, `project brief / show / follow`, the whole
-`goal` surface, `dispatch: "queued"` + `--jump` on `session send`, and the
-CLI-attached `live` run-state field on `sessions list` / `session brief` /
-`status`.
+### 7.1 `schemaVersion: 2` (current, since 2026-09-16)
 
-Inside `schemaVersion: 1`:
+The bump exists for one reason: the Goal surface was replaced
+(`.scratch/goal-simplify`, Goal v2). The v1 `goal propose / run / task /
+event / deliverable` commands, the internal `session.goal_synthesize` /
+`session.goal_master_plan` / `session.goal_solo_turn` /
+`session.new_goal_worker` socket commands, and the v1 `GoalBrief` /
+`GoalStatusSnapshot` shapes are **removed**. Their replacement is the
+four-command family in [goal-commands.md](./goal-commands.md). Nothing
+else changed; `2` carries every v1 command, field, enum value, exit code
+and error discriminant unchanged, plus these additive fields:
+`MessageBrief.goalId?`, and the new `GoalBrief.status` values listed in
+§1.1.
+
+**How `1` is still served.** The server accepts both `1` and `2`:
+
+- A request pinned `1` for any command that survived unchanged is
+  answered exactly as before. An old SOP that never used Goal keeps
+  running without edits.
+- A request pinned `1` for the new goal family (`goal.*`) gets
+  `unknown_command` — the family does not exist in the `1` view. The
+  CLI refuses the same combination locally (`--schema=1 goal …` → exit 2,
+  `schema_mismatch:`).
+- The retired v1 goal commands are `unknown_command` under every
+  version. There is no `1`-view that still runs hive / solo.
+
+This is not two contracts served side by side: no command has two
+meanings. It is "removed" spelled honestly as "not found", so the
+blast radius of the bump is exactly the callers that used the retired
+family.
+
+Migrating a v1 goal SOP: `goal propose` + `goal run` → `goal start
+<session-id> "<objective>" [--budget-minutes=N]`; `goal status` keeps
+its name but returns `{goal}` only; `goal active` lists open goals
+(there can be more than one, one per session); `goal stop` is immediate
+(no wrap-up). Task / event / deliverable commands have no successor —
+the goal's session thread is the record.
+
+### 7.2 `schemaVersion: 1` (frozen, served for unchanged commands)
+
+Introduced in v0.2, unchanged through v0.3.x and v0.4.x. Additions that
+landed under it: `session wait` (with `--after-turn` and the
+`session_error` / `session_cancelled` statuses), `session follow`,
+`project brief / show / follow`, `dispatch: "queued"` + `--jump` on
+`session send`, and the CLI-attached `live` run-state field on
+`sessions list` / `session brief` / `status`. The v1 `goal` surface also
+landed here and is the part `2` retired.
+
+### 7.3 Rules inside a major
+
+Inside the current major:
 
 - Adding a new command, flag, or output field is **non-breaking**.
 - Adding a new value to a string enum (status, error, health status,
@@ -151,14 +195,14 @@ Inside `schemaVersion: 1`:
 - Removing or renaming a command / flag / field / enum value is
   **breaking**. Don't.
 
-Inside a future `schemaVersion: 2`:
+At the next major (`3`):
 
 - A breaking change can ship.
-- Both the CLI (`--schema=1`) and the socket (`schemaVersion` in the
-  request) will support opting back into the v1 view; old SOPs keep
-  working until they choose to migrate.
+- The same policy applies: the previous pin keeps answering every
+  command that did not change; commands that did are `unknown_command`
+  under the old pin. No dual semantics.
 
-`galley version` returns the schema version the CLI binary is willing
-to speak. The socket `version` command returns the server's accepted
-schema version. Future binaries that speak multiple versions will
-expose this as an array.
+`galley version` returns the schema version the CLI binary speaks by
+default (`2`). The socket `version` command returns the server's
+default. The accepted set is `{1, 2}` on both ends and is documented
+here, not exposed as a field.

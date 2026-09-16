@@ -42,7 +42,6 @@ export interface SidebarProps {
   /** Project ids currently expanded inside Project Review. Multiple
    * ids are allowed so users can monitor work across projects. */
   expandedProjectIds?: string[];
-  activeGoalProjectIds?: Set<string>;
   /** Timestamp captured when Project Review opens. Passed from an
    * event handler so "recent within 7 days" stays React-render pure. */
   projectReviewNowMs?: number;
@@ -115,10 +114,9 @@ export interface SidebarProps {
    * row so users see "where the pet lives" at a glance — non-
    * interactive status, not a click target. */
   petAttachedSessionId?: string | null;
-  /** Map of master-session-id -> running/wrapping goal, so a master
-   * session row shows a goal-running state instead of reading as idle
-   * while its workers run. */
-  goalMasterStatus?: Map<string, GoalBrief>;
+  /** Map of session-id -> that session's open goal, so a row carrying
+   * a goal shows its state instead of reading as a finished chat. */
+  sessionGoalStatus?: Map<string, GoalBrief>;
 }
 
 /**
@@ -148,7 +146,6 @@ export function Sidebar({
   activeProjectFilter,
   projectViewOpen = false,
   expandedProjectIds = [],
-  activeGoalProjectIds = new Set<string>(),
   projectReviewNowMs = projectReviewFallbackNowMs(),
   runtimeIndicator = "hidden",
   onSelectSession,
@@ -174,7 +171,7 @@ export function Sidebar({
   onOpenModelsSettings,
   onOpenAgentSettings,
   petAttachedSessionId,
-  goalMasterStatus,
+  sessionGoalStatus,
 }: SidebarProps) {
   const copy = useCopy();
   // Project context belongs to the right-side empty composer. Sidebar
@@ -324,11 +321,10 @@ export function Sidebar({
               sessionsByProjectId={projectSessionsById}
               activeProjectFilter={activeProjectFilter}
               expandedProjectIds={expandedProjectIdSet}
-              activeGoalProjectIds={activeGoalProjectIds}
               reviewNowMs={projectReviewNowMs}
               activeId={activeId}
               petAttachedSessionId={petAttachedSessionId}
-              goalMasterStatus={goalMasterStatus}
+              sessionGoalStatus={sessionGoalStatus}
               onToggleProjectExpanded={onToggleProjectExpanded}
               onStartProjectConversation={onStartProjectConversation}
               onSelectSession={onSelectSession}
@@ -364,7 +360,7 @@ export function Sidebar({
                 activeId={activeId}
                 projects={navigationProjects}
                 petAttachedSessionId={petAttachedSessionId}
-                goalMasterStatus={goalMasterStatus}
+                sessionGoalStatus={sessionGoalStatus}
                 onSelectSession={onSelectSession}
                 onArchiveSession={onArchiveSession}
                 onTogglePinSession={onTogglePinSession}

@@ -32,9 +32,9 @@ export interface MainHeaderProps {
   channelsLoadError?: string | null;
   onOpenChannelsSettings?: () => void;
   activeGoals?: GoalBrief[];
-  onOpenGoalProject?: (projectId: string) => void;
   onOpenGoal?: (goalId: string) => void;
   onStopGoal?: (goalId: string) => void;
+  onExtendGoal?: (goalId: string) => void;
   /**
    * App-update awareness (`.scratch/topbar-update-indicator/PRD.md`).
    * available / downloading / ready render an UpdateIndicator badge at
@@ -149,9 +149,9 @@ export function MainHeader({
   channelsLoadError = null,
   onOpenChannelsSettings,
   activeGoals = [],
-  onOpenGoalProject,
   onOpenGoal,
   onStopGoal,
+  onExtendGoal,
   appUpdateStatus = { kind: "idle" },
   hasRunningSessions = false,
   onRestartAppUpdate,
@@ -256,9 +256,9 @@ export function MainHeader({
         {hasTopBarStatusItems && (
           <TopBarStatusCluster
             activeGoals={activeGoals}
-            onOpenGoalProject={onOpenGoalProject}
             onOpenGoal={onOpenGoal}
             onStopGoal={onStopGoal}
+            onExtendGoal={onExtendGoal}
             browserControlStatus={browserControlStatus}
             onOpenBrowserControl={onOpenBrowserControl}
             channelsState={channelsState}

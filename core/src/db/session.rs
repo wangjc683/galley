@@ -76,7 +76,7 @@ impl SqliteGalley {
             let limit = i64::try_from(n).unwrap_or(i64::MAX);
             let sql = format!(
                 "SELECT id, session_id, turn_index, role, content, final_answer, summary, \
-                        created_via, supervisor, origin_note, visibility, created_at \
+                        created_via, supervisor, origin_note, visibility, goal_id, created_at \
                  FROM messages \
                  WHERE session_id = ?{visibility_clause} \
                  ORDER BY turn_index DESC, sequence DESC \
@@ -93,7 +93,7 @@ impl SqliteGalley {
         } else {
             let sql = format!(
                 "SELECT id, session_id, turn_index, role, content, final_answer, summary, \
-                        created_via, supervisor, origin_note, visibility, created_at \
+                        created_via, supervisor, origin_note, visibility, goal_id, created_at \
                  FROM messages \
                  WHERE session_id = ?{visibility_clause} \
                  ORDER BY turn_index ASC, sequence ASC"

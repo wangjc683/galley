@@ -10,7 +10,6 @@ import {
   Plus,
   PushPin,
   PushPinSlash,
-  Target,
   Trash,
 } from "@phosphor-icons/react";
 
@@ -75,11 +74,10 @@ export function SidebarProjectReview({
   sessionsByProjectId,
   activeProjectFilter,
   expandedProjectIds,
-  activeGoalProjectIds,
   reviewNowMs,
   activeId,
   petAttachedSessionId,
-  goalMasterStatus,
+  sessionGoalStatus,
   onToggleProjectExpanded,
   onStartProjectConversation,
   onSelectSession,
@@ -99,11 +97,10 @@ export function SidebarProjectReview({
   sessionsByProjectId: Map<string, Session[]>;
   activeProjectFilter?: string;
   expandedProjectIds: Set<string>;
-  activeGoalProjectIds?: Set<string>;
   reviewNowMs: number;
   activeId?: string;
   petAttachedSessionId?: string | null;
-  goalMasterStatus?: Map<string, GoalBrief>;
+  sessionGoalStatus?: Map<string, GoalBrief>;
   onToggleProjectExpanded?: (id: string) => void;
   onStartProjectConversation?: (id: string) => void;
   onSelectSession?: (id: string) => void;
@@ -139,12 +136,7 @@ export function SidebarProjectReview({
     const activityMs = Date.parse(activityAt);
     const recentlyActive =
       Number.isFinite(activityMs) && activityMs >= cutoffMs;
-    if (
-      project.pinned ||
-      recentlyActive ||
-      activeGoalProjectIds?.has(project.id)
-    )
-      activeProjects.push(project);
+    if (project.pinned || recentlyActive) activeProjects.push(project);
     else olderProjects.push(project);
   }
 
@@ -156,7 +148,6 @@ export function SidebarProjectReview({
           project={project}
           active={project.id === activeProjectFilter || expanded}
           expanded={expanded}
-          activeGoal={activeGoalProjectIds?.has(project.id) ?? false}
           onClick={() => onToggleProjectExpanded?.(project.id)}
           onStartConversation={
             onStartProjectConversation
@@ -180,7 +171,7 @@ export function SidebarProjectReview({
           activeId={activeId}
           projects={projects}
           petAttachedSessionId={petAttachedSessionId}
-          goalMasterStatus={goalMasterStatus}
+          sessionGoalStatus={sessionGoalStatus}
           onSelectSession={onSelectSession}
           onArchiveSession={onArchiveSession}
           onTogglePinSession={onTogglePinSession}
@@ -327,7 +318,6 @@ function SidebarProjectRow({
   project,
   active,
   expanded,
-  activeGoal,
   onClick,
   onStartConversation,
   onTogglePin,
@@ -337,7 +327,6 @@ function SidebarProjectRow({
   project: Project;
   active: boolean;
   expanded?: boolean;
-  activeGoal?: boolean;
   onClick?: () => void;
   onStartConversation?: () => void;
   onTogglePin?: () => void;
@@ -389,16 +378,6 @@ function SidebarProjectRow({
           className="shrink-0 text-ink-muted"
           aria-label="pinned"
         />
-      )}
-      {activeGoal && (
-        <IconTooltip text={copy.sidebar.goalRunningInProject}>
-          <span
-            aria-label={copy.sidebar.goalRunningInProject}
-            className="inline-flex shrink-0 text-brand-strong"
-          >
-            <Target size={11} weight="thin" />
-          </span>
-        </IconTooltip>
       )}
       {(onStartConversation || hasRowActions) && (
         <div
@@ -590,7 +569,7 @@ function SidebarProjectDrawer({
   activeId,
   projects,
   petAttachedSessionId,
-  goalMasterStatus,
+  sessionGoalStatus,
   onSelectSession,
   onArchiveSession,
   onTogglePinSession,
@@ -607,7 +586,7 @@ function SidebarProjectDrawer({
   activeId?: string;
   projects: Project[];
   petAttachedSessionId?: string | null;
-  goalMasterStatus?: Map<string, GoalBrief>;
+  sessionGoalStatus?: Map<string, GoalBrief>;
   onSelectSession?: (id: string) => void;
   onArchiveSession?: (id: string) => void;
   onTogglePinSession?: (id: string) => void;
@@ -685,7 +664,7 @@ function SidebarProjectDrawer({
               activeId={activeId}
               projects={projects}
               petAttachedSessionId={petAttachedSessionId}
-              goalMasterStatus={goalMasterStatus}
+              sessionGoalStatus={sessionGoalStatus}
               onSelectSession={onSelectSession}
               onArchiveSession={onArchiveSession}
               onTogglePinSession={onTogglePinSession}

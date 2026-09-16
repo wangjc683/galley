@@ -65,6 +65,9 @@ SETTLED_DEAD = ("error", "cancelled")
 # (DiscordChannel renders via _strip_discord_transcript only) — so the
 # reporter strips it before any outbound push.
 NEXT_SUGGESTION_RE = re.compile(r"<next-suggestion>.*?</next-suggestion>", re.DOTALL)
+# goal-status is Galley's Goal v2 completion tag on a final answer; Core
+# consumes it from the turn_end event, so IM pushes strip it the same way.
+GOAL_STATUS_RE = re.compile(r"<goal-status>.*?</goal-status>", re.DOTALL)
 
 
 class ReporterCliError(RuntimeError):
@@ -726,7 +729,7 @@ class ImReporter:
         # catch-all — an uncounted crash here re-burned the synthetic
         # report turn on every tick, forever.
         try:
-            text = NEXT_SUGGESTION_RE.sub("", channel.render(raw)).strip()
+            text = GOAL_STATUS_RE.sub("", NEXT_SUGGESTION_RE.sub("", channel.render(raw))).strip()
             if not text or is_skip_reply(text):
                 return "delivered"
             channel.send(owner, text, raw)

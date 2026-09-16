@@ -23,19 +23,13 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 use sqlx::{FromRow, Sqlite, SqliteConnection, SqlitePool, Transaction};
 
 use crate::api::{
-    ClaimGoalTaskInput, CreateGoalEventInput, CreateGoalProposalInput, CreateGoalTaskInput,
-    CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi, GoalBrief,
-    GoalDeliverable, GoalEventBrief, GoalEventType, GoalId, GoalMode, GoalProposalBrief,
-    GoalProposalId, GoalProposalStatus, GoalStatus, GoalStatusSnapshot, GoalTaskBrief, GoalTaskId,
-    GoalTaskStatus, GoalWorkerContext, GoalWriteMode, HealthCheck, HealthReport, HealthStatus,
-    ManagedModelAuthKind, ManagedModelCredentialStatus, ManagedModelProtocol,
-    ManagedModelProviderRecord, ManagedModelRecord, MessageAttachmentBrief, MessageBrief,
-    MessageId, MessageRole, MessageTelemetry, MessageVisibility, Origin, OriginVia, ProjectBrief,
-    ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
-    ScheduledTaskRepeat, SearchHit, SearchScope, SessionBrief, SessionFilter, SessionId,
-    SessionStatus, StatusSummary, UpdateGoalTaskInput, DEFAULT_GOAL_BUDGET_SECONDS,
-    DEFAULT_GOAL_WORKER_LIMIT, GOAL_CONFIRMATION_PHRASE, MAX_GOAL_WORKER_LIMIT,
-    MIN_GOAL_WORKER_LIMIT,
+    CreateGoalInput, CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi,
+    GoalBrief, GoalId, GoalStatus, HealthCheck, HealthReport, HealthStatus, ManagedModelAuthKind,
+    ManagedModelCredentialStatus, ManagedModelProtocol, ManagedModelProviderRecord,
+    ManagedModelRecord, MessageAttachmentBrief, MessageBrief, MessageId, MessageRole,
+    MessageTelemetry, MessageVisibility, Origin, OriginVia, ProjectBrief, ProjectId, ProjectPatch,
+    RuntimeKind, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch, ScheduledTaskRepeat,
+    SearchHit, SearchScope, SessionBrief, SessionFilter, SessionId, SessionStatus, StatusSummary,
 };
 use crate::app_paths;
 use crate::error::{GalleyError, Result};
@@ -130,6 +124,13 @@ impl SqliteGalley {
     /// `tauri-plugin-sql`.
     pub fn from_pool(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+
+    /// Raw pool for in-crate tests that need to poke rows the API does
+    /// not expose (e.g. backdating a goal's `started_at`).
+    #[cfg(test)]
+    pub(crate) fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 }
 

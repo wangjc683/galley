@@ -39,7 +39,8 @@ export interface ComposerProps {
     text: string,
     attachments: PendingImageAttachment[],
   ) => boolean | void;
-  /** Start the current text as a desktop Goal instead of sending it to GA. */
+  /** Start the current text as a Goal on this session instead of
+   * sending it as an ordinary message. */
   onGoalSubmit?: (
     text: string,
     config: GoalLaunchConfig,
@@ -112,18 +113,13 @@ export interface ComposerProps {
   /** Approval-mode pill state (自动执行 / 逐步审批). Undefined hides
    * the pill (e.g. dev harness without session context). */
   approvalMode?: ComposerApprovalModeState;
-  /** Active Goal in this Composer's Project context, if any. */
+  /** This session's open Goal (active / paused / blocked), if any. */
   goal?: GoalBrief;
-  /** True when a Goal is active anywhere. Galley runs at most one Goal at a
-   * time, so the Goal entry is disabled here (with an explanatory tooltip)
-   * unless this Composer is the one already showing that Goal via `goal`. */
+  /** True when this session already has an open Goal. A session runs at
+   * most one Goal at a time, so the Goal entry is disabled here (with an
+   * explanatory tooltip) unless this Composer is the one already showing
+   * that Goal via `goal`. */
   hasActiveGoal?: boolean;
-  /** Name of the project a Goal launched here would run in — the
-   * session's project (MainView) or the active project filter
-   * (EmptyState). Undefined = no project context: the backend will
-   * create a fresh project to hold the run. Either way the confirm
-   * dialog says so, instead of deciding it silently. */
-  goalProjectName?: string;
   /** Show the compact keyboard/state hint below the Composer. */
   showFooterHint?: boolean;
   /** Caller-supplied content for the same footer slot, shown when the

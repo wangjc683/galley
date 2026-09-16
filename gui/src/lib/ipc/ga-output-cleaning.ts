@@ -9,6 +9,10 @@ const GA_TAG_PATTERNS: RegExp[] = [
   // user-voice next-step suggestion. Surfaced as composer ghost text
   // via turn_end.nextSuggestion — never as answer prose.
   /<next-suggestion>[\s\S]*?<\/next-suggestion>/g,
+  // Galley's own tag (goal v2, .scratch/goal-simplify/PRD.md §3.4): the
+  // model's completion verdict on a Goal turn. Consumed by Core through
+  // turn_end.goalStatus — never rendered as answer prose.
+  /<goal-status>[\s\S]*?<\/goal-status>/g,
 ];
 
 const FILE_REF_PATTERN = /\[FILE:[^\]]+\]/g;
@@ -189,6 +193,7 @@ const GA_TAG_NAMES = [
   "tool_use",
   "file_content",
   "next-suggestion",
+  "goal-status",
 ];
 
 // Superset used only for the trailing-partial-tag truncation in
@@ -466,6 +471,7 @@ export function extractPreamble(text: string): string | undefined {
   segment = segment.replace(/<tool_use>[\s\S]*?<\/tool_use>/g, "");
   segment = segment.replace(/<file_content[^>]*>[\s\S]*?<\/file_content>/g, "");
   segment = segment.replace(/<next-suggestion>[\s\S]*?<\/next-suggestion>/g, "");
+  segment = segment.replace(/<goal-status>[\s\S]*?<\/goal-status>/g, "");
   // Frontend / dispatch markers that occasionally leak into raw
   // response content (see cleanPartialContent for the full set; we
   // care about the ones that produce text noise).
@@ -484,7 +490,7 @@ export function extractPreamble(text: string): string | undefined {
   // means the chunk fell mid-block. Truncate at the open so we
   // don't leak partial tag content into the preamble display.
   segment = segment.replace(
-    /<(thinking|summary|tool_use|file_content|next-suggestion)(?:\s[^>]*)?>[\s\S]*$/,
+    /<(thinking|summary|tool_use|file_content|next-suggestion|goal-status)(?:\s[^>]*)?>[\s\S]*$/,
     "",
   );
   segment = segment.replace(/\n{3,}/g, "\n\n");

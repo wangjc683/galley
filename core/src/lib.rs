@@ -11,13 +11,14 @@ pub mod conversation_image;
 pub mod credential_store;
 pub mod db;
 mod db_migrations;
-mod desktop_goal;
 pub mod discovery;
 pub mod error;
 pub mod im_supervisor;
 pub mod ipc;
 pub mod local_file;
 pub mod git_review;
+pub mod goal_engine;
+pub mod goal_prompts;
 pub mod managed_model_config;
 pub mod managed_model_probe;
 mod managed_prompt;
@@ -36,8 +37,6 @@ pub mod sop_install;
 mod tray;
 
 use commands::*;
-
-pub use desktop_goal::{ensure_goal_master_duty_sop, goal_master_duty_sop_path};
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
@@ -207,12 +206,11 @@ pub fn run() {
             list_active_goals,
             list_visible_goals,
             list_goals_for_session,
-            goal_context_for_session,
             goal_status,
-            goal_workspace_has_files,
             mark_goal_result_seen,
             request_goal_stop,
-            desktop_goal::start_desktop_goal,
+            start_session_goal,
+            extend_goal,
             // B2 runner commands
             runner_commands::spawn_runner,
             runner_commands::send_to_runner,

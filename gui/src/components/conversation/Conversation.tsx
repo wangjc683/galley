@@ -6,7 +6,6 @@ import {
   GoalCommissionMarker,
   GoalTerminalMarker,
 } from "@/components/conversation/GoalRunMarkers";
-import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import {
   MessageAgent,
@@ -19,6 +18,7 @@ import { RunFoldSection } from "@/components/conversation/RunFoldSection";
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
+import { planGoalRuns } from "@/lib/goal-run-groups";
 import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
 import { PENDING_STEP_NUMERAL, formatStepNumeral } from "@/lib/step-numeral";
@@ -51,9 +51,12 @@ export interface ConversationProps {
    * terminal marker — bracketing each run as an in-thread episode.
    */
   goals?: GoalBrief[];
-  /** Drill-down from a frozen task board row into the owning worker
-   * session's raw log. */
-  onOpenWorkerSession?: (sessionId: string) => void;
+  /**
+   * Give a goal that ended `budget_limited` more time — surfaced on its
+   * terminal marker, which is the place the reader learns the run hit
+   * the ceiling. Same command the TopBar pill popover issues.
+   */
+  onExtendGoal?: (goalId: string) => void;
   /** True while the active session has a live `pendingAskUser`. The
    * tail AskUserBubble is already showing the question, so the turn
    * it came from must suppress its static AnsweredAskUser echo —
@@ -96,7 +99,7 @@ export function Conversation({
   onApprove,
   projectName,
   goals,
-  onOpenWorkerSession,
+  onExtendGoal,
   askUserPending = false,
   agentRunning = false,
 }: ConversationProps) {
@@ -124,8 +127,28 @@ export function Conversation({
   // run-groups pass — the same one the question rail builds its
   // exchanges from, so fold visibility can never desync the rail's
   // data↔DOM index contract.
-  const groups = useMemo(() => buildRunGroups(turns), [turns]);
-  const replySet = useMemo(() => replyUserIndices(groups, turns), [groups, turns]);
+  // Goal rules on top of the shape grouping (goal-simplify issue 08):
+  // a goal group is live while its goal is `active`, folds whenever it
+  // is not, shows a flat answer only for a terminal goal's deliverable,
+  // and numbers its steps by position. Ordinary runs pass through
+  // untouched.
+  const shapeGroups = useMemo(() => buildRunGroups(turns), [turns]);
+  const plan = useMemo(
+    () =>
+      planGoalRuns(
+        turns,
+        goals ?? [],
+        shapeGroups,
+        agentRunning,
+        askUserPending,
+      ),
+    [turns, goals, shapeGroups, agentRunning, askUserPending],
+  );
+  const groups = plan.groups;
+  const replySet = useMemo(
+    () => replyUserIndices(groups, turns),
+    [groups, turns],
+  );
   // Turn identity → turns index. annotateGoalThread reorders nothing
   // and each Turn object appears at most once, so object identity is
   // a safe join key between its items and the grouping's indices.
@@ -157,14 +180,7 @@ export function Conversation({
   // no answer, nothing to stand in for the process) unfolds in full
   // for inspection, and the ask_user pause does not flicker the
   // window away and back.
-  const lastGroup: RunGroup | undefined = groups[groups.length - 1];
-  const liveGroup =
-    lastGroup &&
-    !lastGroup.complete &&
-    lastGroup.foldEligible &&
-    (agentRunning || askUserPending)
-      ? lastGroup
-      : null;
+  const liveGroup = plan.liveGroup;
 
   // Settling: the sweep between live and settled. The two structures
   // share no keys for the window, so switching in the render where
@@ -348,6 +364,18 @@ export function Conversation({
     }
   }
 
+  // Agent turns inside goal groups other than the deliverable: a
+  // continuation's progress note is closing-shaped but is a step, so it
+  // renders in the narration register instead of as an answer.
+  const goalStepTurns = new Set<number>();
+  for (const g of groups) {
+    if (!plan.goalOfGroup.has(g.openerIndex)) continue;
+    for (const i of g.memberIndices) {
+      if (i !== g.finalTurnIndex && turns[i].role === "agent")
+        goalStepTurns.add(i);
+    }
+  }
+
   const toggleFold = (openerIndex: number, currentlyFolded: boolean) => {
     setFoldOverrides((prev) => ({ ...prev, [openerIndex]: currentlyFolded }));
   };
@@ -362,14 +390,28 @@ export function Conversation({
     return (
       <Fragment key={i}>
         {item.kind === "commission" ? (
-          <GoalCommissionMarker goal={item.goal} content={item.content} />
-        ) : item.kind === "task-board" ? (
-          <GoalTaskBoard
-            goal={item.goal}
-            onOpenWorkerSession={onOpenWorkerSession}
-          />
+          <>
+            <GoalCommissionMarker goal={item.goal} content={item.content} />
+            {/* The objective turn opens a run like any user turn; its
+                fold / live header sits right under the commission. */}
+            {header && (!header.live || header.foldedSteps > 0) && (
+              <RunFoldHeader
+                stats={header.group.stats}
+                open={!header.folded}
+                live={header.live}
+                onToggle={() =>
+                  toggleFold(header.group.openerIndex, header.folded)
+                }
+              />
+            )}
+          </>
         ) : item.kind === "terminal" ? (
-          <GoalTerminalMarker goal={item.goal} />
+          <GoalTerminalMarker
+            goal={item.goal}
+            onExtend={
+              onExtendGoal ? () => onExtendGoal(item.goal.id) : undefined
+            }
+          />
         ) : item.turn.role === "user" ? (
           <>
             <MessageUser
@@ -407,6 +449,14 @@ export function Conversation({
             onApprove={onApprove}
             projectName={projectName}
             hideMarker={turnIndex !== undefined && answerOnly.has(turnIndex)}
+            stepNumber={
+              turnIndex !== undefined
+                ? plan.stepNumberOf.get(turnIndex)
+                : undefined
+            }
+            intermediateAnswer={
+              turnIndex !== undefined && goalStepTurns.has(turnIndex)
+            }
             suppressAskUserEcho={item.turn === pendingAskUserTurn}
             askUserAnswer={
               turnIndex !== undefined
@@ -506,7 +556,9 @@ export function Conversation({
   };
   items.forEach((item, i) => {
     const turnIndex =
-      item.kind === "turn" ? turnIndexOf.get(item.turn) : undefined;
+      item.kind === "turn" || item.kind === "commission"
+        ? turnIndexOf.get(item.turn)
+        : undefined;
     const foldOwner =
       turnIndex !== undefined ? sectionOwner.get(turnIndex) : undefined;
     const flatOwner =
@@ -546,7 +598,16 @@ export function Conversation({
       item.turn.role === "agent"
     ) {
       section.nodes.push(
-        <AgentTurnView key={`marker-${i}`} turn={item.turn} markerOnly />,
+        <AgentTurnView
+          key={`marker-${i}`}
+          turn={item.turn}
+          markerOnly
+          stepNumber={
+            turnIndex !== undefined
+              ? plan.stepNumberOf.get(turnIndex)
+              : undefined
+          }
+        />,
       );
       flushSection();
       rendered.push(renderItem(item, i, turnIndex));
@@ -568,6 +629,8 @@ function AgentTurnView({
   markerOnly = false,
   suppressAskUserEcho = false,
   askUserAnswer,
+  stepNumber: stepNumberProp,
+  intermediateAnswer = false,
 }: {
   turn: AgentTurn;
   approvalDecisions?: Record<string, ApprovalDecision>;
@@ -595,7 +658,17 @@ function AgentTurnView({
    * it was answered — lets the AnsweredAskUser echo check the picked
    * candidate. */
   askUserAnswer?: string;
+  /** Display step number overriding GA's `turn.turnIndex`. Goal groups
+   * number by position (goal-run-groups), because GA restarts its
+   * counter at every continuation. */
+  stepNumber?: number;
+  /** True for a closing-shaped turn that is NOT the run's answer — a
+   * goal continuation's progress note. Its answer body renders in the
+   * narration register (no StrongHr, no answer footer), keeping the
+   * live window's "last settled step" a step. */
+  intermediateAnswer?: boolean;
 }) {
+  const stepNumber = stepNumberProp ?? turn.turnIndex;
   // `finalAnswer` is what's left of GA's responseContent after the
   // <thinking> / <tool_use> / <file_content> / <summary> tags have
   // been stripped. The earlier assumption — intermediate turns are
@@ -678,7 +751,7 @@ function AgentTurnView({
   // and exactly one settled-success tool (block-tier states keep the
   // marker so the in-flight/failed callout has a step heading).
   const mergedStepTool =
-    turn.turnIndex !== undefined &&
+    stepNumber !== undefined &&
     !markerSummary &&
     !turn.thinking &&
     !detailPreamble &&
@@ -692,9 +765,9 @@ function AgentTurnView({
   if (markerOnly) {
     return (
       <div>
-        {turn.turnIndex !== undefined && (
+        {stepNumber !== undefined && (
           <TurnMarker
-            index={turn.turnIndex}
+            index={stepNumber}
             summary={markerSummary}
             thinkingContent={turn.thinking}
             preamble={detailPreamble}
@@ -705,14 +778,13 @@ function AgentTurnView({
     );
   }
 
-  const showMarker =
-    turn.turnIndex !== undefined && !hideMarker && !mergedStepTool;
+  const showMarker = stepNumber !== undefined && !hideMarker && !mergedStepTool;
 
   return (
     <div>
       {showMarker && (
         <TurnMarker
-          index={turn.turnIndex}
+          index={stepNumber}
           summary={markerSummary}
           thinkingContent={turn.thinking}
           preamble={detailPreamble}
@@ -742,7 +814,7 @@ function AgentTurnView({
           <ToolCallout
             key={tool.id}
             tool={tool}
-            stepIndex={tool === mergedStepTool ? turn.turnIndex : undefined}
+            stepIndex={tool === mergedStepTool ? stepNumber : undefined}
             approvalDecision={
               tool.approvalId ? approvalDecisions?.[tool.approvalId] : undefined
             }
@@ -770,7 +842,12 @@ function AgentTurnView({
           header→answer distance (33px) past the question→header
           distance (24px) — proximity binding the process summary to
           the wrong neighbour (2026-08-06). */}
-      {answerText && isFinalTurn && (
+      {answerText && isFinalTurn && intermediateAnswer && (
+        <div className={cn(showMarker && "pl-(--step-gutter)")}>
+          <MessageAgentNarration>{answerText}</MessageAgentNarration>
+        </div>
+      )}
+      {answerText && isFinalTurn && !intermediateAnswer && (
         <>
           {!hideMarker && <StrongHr />}
           <MessageAgent telemetry={turn.telemetry} messageId={turn.messageId}>
@@ -1008,9 +1085,7 @@ export function TurnMarker({
         >
           {stepNumeral}
         </span>
-        {stepLabel && !thinking && (
-          <span className="sr-only">{stepLabel}</span>
-        )}
+        {stepLabel && !thinking && <span className="sr-only">{stepLabel}</span>}
         {trailing}
       </div>
       {hasDetail && (

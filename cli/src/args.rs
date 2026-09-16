@@ -1,8 +1,4 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use galley_core_lib::api::{
-    GoalEventType, GoalMode, GoalTaskStatus, GoalWriteMode, DEFAULT_GOAL_BUDGET_SECONDS,
-    DEFAULT_GOAL_WORKER_LIMIT,
-};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -12,9 +8,10 @@ use galley_core_lib::api::{
 )]
 pub(crate) struct Cli {
     /// Pin the schema version this caller expects. Current binaries speak
-    /// only `1`; a mismatch exits 2 (`invalid_args`) with a message
-    /// prefixed `schema_mismatch:`. Omit to use the binary's default
-    /// (currently `1`).
+    /// `2` and still accept `1` for every command that survived unchanged;
+    /// the `goal` family exists only under `2`. A mismatch exits 2
+    /// (`invalid_args`) with a message prefixed `schema_mismatch:`. Omit to
+    /// use the binary's default (currently `2`).
     #[arg(long = "schema", value_name = "N", global = true)]
     pub(crate) schema: Option<u32>,
 
@@ -49,8 +46,10 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Project(ProjectCmd),
 
-    /// Autonomous Goal operations (propose / run / status / active / stop /
-    /// task / event / deliverable).
+    /// Goal v2 (schemaVersion 2): one persistent objective on a session.
+    /// Galley keeps prompting the session to continue until the model
+    /// declares the goal complete (or blocked), the time ceiling is hit,
+    /// or you stop it.
     #[command(subcommand)]
     Goal(GoalCmd),
 
@@ -152,58 +151,30 @@ pub(crate) enum ProjectCmd {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum GoalCmd {
-    /// Create a pending conversational-confirmation proposal. Does not start work.
-    Propose {
+    /// Set a goal on a session and dispatch its opening turn. Fails with
+    /// `invalid_args` if the session already has an open goal or is
+    /// mid-run (wait with `session wait`, then retry).
+    Start {
+        session_id: String,
         objective: String,
+        /// Time ceiling in minutes. Default 60 when neither this nor
+        /// --no-budget is given.
         #[arg(long)]
-        project: Option<String>,
-        #[arg(long, default_value_t = DEFAULT_GOAL_BUDGET_SECONDS / 60)]
-        budget_minutes: u32,
-        #[arg(long, default_value_t = DEFAULT_GOAL_WORKER_LIMIT)]
-        workers: u32,
-        #[arg(long, value_enum, default_value = "current")]
-        runtime: RuntimeArg,
-        #[arg(long, value_enum, default_value = "autonomous")]
-        write_mode: GoalWriteModeArg,
-        /// Engine: `hive` (master + parallel workers, cross-verified) or
-        /// `solo` (single agent to budget). Defaults to `hive` for
-        /// backward compatibility; the desktop GUI defaults to `solo`.
-        #[arg(long, value_enum, default_value = "hive")]
-        mode: GoalModeArg,
-        #[arg(long, default_value_t = 10)]
-        expires_minutes: u32,
+        budget_minutes: Option<u32>,
+        /// No time ceiling: the goal runs until the model declares it
+        /// complete or blocked, or you stop it.
+        #[arg(long)]
+        no_budget: bool,
         #[arg(long)]
         supervisor: Option<String>,
         #[arg(long)]
         reason: Option<String>,
     },
-    /// Start or resume the blocking Goal controller.
-    Run {
-        /// Existing goal id when used with --resume.
-        goal_id: Option<String>,
-        #[arg(long)]
-        proposal: Option<String>,
-        #[arg(long)]
-        confirm_token: Option<String>,
-        #[arg(long)]
-        resume: bool,
-        /// Operator's resolved UI locale (`zh-CN` / `en-US`) for the
-        /// Galley-authored master-session narration this controller
-        /// writes. Optional; defaults to Chinese when omitted, matching
-        /// the surface's pre-localization behavior.
-        #[arg(long)]
-        locale: Option<String>,
-        #[arg(long)]
-        supervisor: Option<String>,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-    /// Return Goal status, task board, recent events, and project sessions.
+    /// Print one goal.
     Status { goal_id: String },
-    /// List active (running / wrapping) goals. Galley runs at most one Goal
-    /// at a time; empty output means none is active. Read-only.
+    /// List open goals (active / paused / blocked). Read-only.
     Active,
-    /// Request a graceful stop.
+    /// Stop a goal: terminal `stopped`, aborting the session's in-flight run.
     Stop {
         goal_id: String,
         #[arg(long)]
@@ -211,86 +182,17 @@ pub(crate) enum GoalCmd {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// Goal task board commands.
-    #[command(subcommand)]
-    Task(GoalTaskCmd),
-    /// Append-only Goal event stream commands.
-    #[command(subcommand)]
-    Event(GoalEventCmd),
-    /// Deliverable anchor commands (current best result, refined over rounds).
-    #[command(subcommand)]
-    Deliverable(GoalDeliverableCmd),
-}
-
-#[derive(Subcommand, Debug)]
-pub(crate) enum GoalDeliverableCmd {
-    /// Print the current deliverable anchor (highest version). Empty when none.
-    Get { goal_id: String },
-    /// Append a new deliverable anchor version (the current best result).
-    Set {
+    /// Give a goal more time: reopens a `budget_limited` goal (and
+    /// continues it), or raises an `active` goal's ceiling.
+    Extend {
         goal_id: String,
-        content: String,
+        /// Minutes to add. Default 30.
+        #[arg(long, default_value_t = 30)]
+        minutes: u32,
         #[arg(long)]
-        note: Option<String>,
+        supervisor: Option<String>,
         #[arg(long)]
-        author_session: Option<String>,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub(crate) enum GoalTaskCmd {
-    Create {
-        goal_id: String,
-        title: String,
-        #[arg(long)]
-        description: Option<String>,
-        #[arg(long)]
-        scope: Option<String>,
-        #[arg(long)]
-        owner_session: Option<String>,
-    },
-    Claim {
-        task_id: String,
-        #[arg(long)]
-        owner_session: String,
-        #[arg(long)]
-        scope: Option<String>,
-    },
-    Update {
-        task_id: String,
-        #[arg(long, value_enum)]
-        status: Option<GoalTaskStatusArg>,
-        #[arg(long)]
-        owner_session: Option<String>,
-        #[arg(long)]
-        clear_owner: bool,
-        #[arg(long)]
-        scope: Option<String>,
-        #[arg(long)]
-        clear_scope: bool,
-        #[arg(long)]
-        result_summary: Option<String>,
-        #[arg(long)]
-        clear_result: bool,
-    },
-    Complete {
-        task_id: String,
-        #[arg(long)]
-        result_summary: Option<String>,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub(crate) enum GoalEventCmd {
-    Post {
-        goal_id: String,
-        #[arg(long, value_enum)]
-        event_type: GoalEventTypeArg,
-        body: String,
-        #[arg(long)]
-        task: Option<String>,
-        #[arg(long)]
-        author_session: Option<String>,
+        reason: Option<String>,
     },
 }
 
@@ -544,82 +446,4 @@ pub(crate) enum RuntimeArg {
     Managed,
     External,
     All,
-}
-
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub(crate) enum GoalWriteModeArg {
-    Autonomous,
-    ReadOnly,
-}
-
-impl From<GoalWriteModeArg> for GoalWriteMode {
-    fn from(value: GoalWriteModeArg) -> Self {
-        match value {
-            GoalWriteModeArg::Autonomous => GoalWriteMode::Autonomous,
-            GoalWriteModeArg::ReadOnly => GoalWriteMode::ReadOnly,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub(crate) enum GoalModeArg {
-    Hive,
-    Solo,
-}
-
-impl From<GoalModeArg> for GoalMode {
-    fn from(value: GoalModeArg) -> Self {
-        match value {
-            GoalModeArg::Hive => GoalMode::Hive,
-            GoalModeArg::Solo => GoalMode::Solo,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub(crate) enum GoalTaskStatusArg {
-    Open,
-    Claimed,
-    Running,
-    Completed,
-    Blocked,
-    Cancelled,
-}
-
-impl From<GoalTaskStatusArg> for GoalTaskStatus {
-    fn from(value: GoalTaskStatusArg) -> Self {
-        match value {
-            GoalTaskStatusArg::Open => GoalTaskStatus::Open,
-            GoalTaskStatusArg::Claimed => GoalTaskStatus::Claimed,
-            GoalTaskStatusArg::Running => GoalTaskStatus::Running,
-            GoalTaskStatusArg::Completed => GoalTaskStatus::Completed,
-            GoalTaskStatusArg::Blocked => GoalTaskStatus::Blocked,
-            GoalTaskStatusArg::Cancelled => GoalTaskStatus::Cancelled,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub(crate) enum GoalEventTypeArg {
-    Plan,
-    Claim,
-    Progress,
-    Result,
-    Conflict,
-    Synthesis,
-    System,
-}
-
-impl From<GoalEventTypeArg> for GoalEventType {
-    fn from(value: GoalEventTypeArg) -> Self {
-        match value {
-            GoalEventTypeArg::Plan => GoalEventType::Plan,
-            GoalEventTypeArg::Claim => GoalEventType::Claim,
-            GoalEventTypeArg::Progress => GoalEventType::Progress,
-            GoalEventTypeArg::Result => GoalEventType::Result,
-            GoalEventTypeArg::Conflict => GoalEventType::Conflict,
-            GoalEventTypeArg::Synthesis => GoalEventType::Synthesis,
-            GoalEventTypeArg::System => GoalEventType::System,
-        }
-    }
 }

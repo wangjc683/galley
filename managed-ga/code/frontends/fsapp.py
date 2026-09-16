@@ -83,7 +83,8 @@ from frontends.chatapp_common import AgentChatMixin, FILE_HINT, split_text
 
 # next-suggestion: Galley workbench-composer tag, stripped defensively —
 # see the same note in chatapp_common.TAG_PATS.
-_TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion")]
+# goal-status: Galley Goal completion tag — see chatapp_common.TAG_PATS.
+_TAG_PATS = [r"<" + t + r">.*?</" + t + r">" for t in ("thinking", "summary", "tool_use", "file_content", "next-suggestion", "goal-status")]
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tiff", ".tif"}
 _AUDIO_EXTS = {".opus", ".mp3", ".wav", ".m4a", ".aac"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}

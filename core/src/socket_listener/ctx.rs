@@ -19,7 +19,7 @@ use crate::error::GalleyError;
 use crate::ipc::IpcCommand;
 use crate::notify::{notify, Notifier};
 use crate::runner_manager::{
-    BroadcastItem, QueueJump, QueueOffer, RunState, RunnerManager, RunnerSpawnError,
+    BroadcastItem, QueueJump, QueueOffer, RunOutcome, RunState, RunnerManager, RunnerSpawnError,
     SendCommandError, ShutdownError, SpawnArgs,
 };
 use async_trait::async_trait;
@@ -99,6 +99,14 @@ pub trait RunnerPort: Send + Sync {
     async fn known_session_ids(&self) -> Vec<String> {
         Vec::new()
     }
+    /// Goal v2: stamp the run just opened as an engine continuation.
+    /// Default no-op for queue-less fakes.
+    async fn mark_goal_continuation(&self, _session_id: &str) {}
+    /// Goal v2: outcome of the most recently settled run, cleared on
+    /// read. Default `None` for fakes that never observe a bridge.
+    async fn take_run_outcome(&self, _session_id: &str) -> Option<RunOutcome> {
+        None
+    }
 }
 
 #[async_trait]
@@ -165,6 +173,12 @@ impl RunnerPort for RunnerManager {
     }
     async fn known_session_ids(&self) -> Vec<String> {
         RunnerManager::known_session_ids(self).await
+    }
+    async fn mark_goal_continuation(&self, session_id: &str) {
+        RunnerManager::mark_goal_continuation(self, session_id).await
+    }
+    async fn take_run_outcome(&self, session_id: &str) -> Option<RunOutcome> {
+        RunnerManager::take_run_outcome(self, session_id).await
     }
 }
 

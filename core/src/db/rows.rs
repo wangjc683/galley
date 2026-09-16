@@ -85,6 +85,7 @@ pub(super) struct MessageRow {
     pub(super) supervisor: Option<String>,
     pub(super) origin_note: Option<String>,
     pub(super) visibility: String,
+    pub(super) goal_id: Option<String>,
     pub(super) created_at: String,
 }
 
@@ -100,6 +101,7 @@ impl MessageRow {
             summary: self.summary,
             turn_index: Some(self.turn_index.max(0) as u32),
             visibility: Some(parse_message_visibility(&self.visibility)?),
+            goal_id: self.goal_id,
             attachments: Vec::new(),
             origin: self
                 .created_via
@@ -458,159 +460,70 @@ impl ProjectRow {
 }
 
 #[derive(Debug, FromRow)]
-pub(super) struct GoalProposalRow {
-    pub(super) id: String,
-    pub(super) objective: String,
-    pub(super) project_id: Option<String>,
-    pub(super) master_session_id: Option<String>,
-    pub(super) budget_seconds: i64,
-    pub(super) worker_limit: i64,
-    pub(super) runtime_kind: String,
-    pub(super) write_mode: String,
-    pub(super) mode: String,
-    pub(super) status: String,
-    pub(super) internal_confirm_token: String,
-    pub(super) expires_at: String,
-    pub(super) created_at: String,
-    pub(super) updated_at: String,
-}
-
-impl GoalProposalRow {
-    pub(super) fn into_brief(self) -> Result<GoalProposalBrief> {
-        Ok(GoalProposalBrief {
-            id: GoalProposalId(self.id),
-            objective: self.objective,
-            project_id: self.project_id.map(ProjectId),
-            master_session_id: self.master_session_id.map(SessionId),
-            budget_seconds: self.budget_seconds.max(0) as u32,
-            worker_limit: self.worker_limit.max(0) as u32,
-            runtime_kind: parse_runtime_kind(&self.runtime_kind)?,
-            write_mode: parse_goal_write_mode(&self.write_mode)?,
-            mode: parse_goal_mode(&self.mode)?,
-            status: parse_goal_proposal_status(&self.status)?,
-            internal_confirm_token: self.internal_confirm_token,
-            confirmation_phrase: GOAL_CONFIRMATION_PHRASE.to_string(),
-            expires_at: self.expires_at,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        })
-    }
-}
-
-#[derive(Debug, FromRow)]
 pub(super) struct GoalRow {
     pub(super) id: String,
-    pub(super) proposal_id: Option<String>,
-    pub(super) project_id: Option<String>,
-    pub(super) master_session_id: Option<String>,
+    pub(super) session_id: String,
     pub(super) objective: String,
     pub(super) status: String,
-    pub(super) budget_seconds: i64,
-    pub(super) worker_limit: i64,
-    pub(super) runtime_kind: String,
-    pub(super) write_mode: String,
-    pub(super) mode: String,
+    pub(super) budget_seconds: Option<i64>,
     pub(super) started_at: String,
-    pub(super) deadline_at: String,
     pub(super) ended_at: Option<String>,
+    pub(super) paused_at: Option<String>,
     pub(super) latest_summary: Option<String>,
     pub(super) result_seen_at: Option<String>,
-    pub(super) stop_requested: i64,
-    pub(super) workspace_path: Option<String>,
-    /// Scalar-subquery counters. Only the queries feeding live surfaces
-    /// select them; everywhere else `#[sqlx(default)]` decodes None.
-    #[sqlx(default)]
-    pub(super) task_count: Option<i64>,
-    #[sqlx(default)]
-    pub(super) completed_task_count: Option<i64>,
-    #[sqlx(default)]
-    pub(super) deliverable_version: Option<i64>,
+    pub(super) continuation_count: i64,
+    pub(super) wrap_up_dispatched: i64,
+    pub(super) created_via: String,
+    pub(super) supervisor: Option<String>,
+    pub(super) origin_note: Option<String>,
     pub(super) created_at: String,
     pub(super) updated_at: String,
 }
 
 impl GoalRow {
     pub(super) fn into_brief(self) -> Result<GoalBrief> {
+        let elapsed_seconds = elapsed_seconds_between(&self.started_at, self.ended_at.as_deref());
+        let origin = Origin {
+            via: parse_origin_via(&self.created_via)?,
+            supervisor: self.supervisor,
+            reason: self.origin_note,
+        };
         Ok(GoalBrief {
             id: GoalId(self.id),
-            proposal_id: self.proposal_id.map(GoalProposalId),
-            project_id: self.project_id.map(ProjectId),
-            master_session_id: self.master_session_id.map(SessionId),
+            session_id: SessionId(self.session_id),
             objective: self.objective,
             status: parse_goal_status(&self.status)?,
-            budget_seconds: self.budget_seconds.max(0) as u32,
-            worker_limit: self.worker_limit.max(0) as u32,
-            runtime_kind: parse_runtime_kind(&self.runtime_kind)?,
-            write_mode: parse_goal_write_mode(&self.write_mode)?,
-            mode: parse_goal_mode(&self.mode)?,
+            budget_seconds: self.budget_seconds.map(|n| n.max(0) as u32),
             started_at: self.started_at,
-            deadline_at: self.deadline_at,
             ended_at: self.ended_at,
+            paused_at: self.paused_at,
             latest_summary: self.latest_summary,
             result_seen_at: self.result_seen_at,
-            stop_requested: self.stop_requested != 0,
-            workspace_path: self.workspace_path,
-            task_count: self.task_count.map(|n| n.max(0) as u32),
-            completed_task_count: self.completed_task_count.map(|n| n.max(0) as u32),
-            deliverable_version: self.deliverable_version.map(|n| n.max(0) as u32),
+            continuation_count: self.continuation_count.max(0) as u32,
+            wrap_up_dispatched: self.wrap_up_dispatched != 0,
+            elapsed_seconds,
             created_at: self.created_at,
             updated_at: self.updated_at,
+            origin: Some(origin).filter(|o| o.via != OriginVia::Gui),
         })
     }
 }
 
-#[derive(Debug, FromRow)]
-pub(super) struct GoalTaskRow {
-    pub(super) id: String,
-    pub(super) goal_id: String,
-    pub(super) title: String,
-    pub(super) description: Option<String>,
-    pub(super) status: String,
-    pub(super) owner_session_id: Option<String>,
-    pub(super) scope: Option<String>,
-    pub(super) result_summary: Option<String>,
-    pub(super) created_at: String,
-    pub(super) updated_at: String,
-}
-
-impl GoalTaskRow {
-    pub(super) fn into_brief(self) -> Result<GoalTaskBrief> {
-        Ok(GoalTaskBrief {
-            id: GoalTaskId(self.id),
-            goal_id: GoalId(self.goal_id),
-            title: self.title,
-            description: self.description,
-            status: parse_goal_task_status(&self.status)?,
-            owner_session_id: self.owner_session_id.map(SessionId),
-            scope: self.scope,
-            result_summary: self.result_summary,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        })
-    }
-}
-
-#[derive(Debug, FromRow)]
-pub(super) struct GoalEventRow {
-    pub(super) id: i64,
-    pub(super) goal_id: String,
-    pub(super) task_id: Option<String>,
-    pub(super) author_session_id: Option<String>,
-    pub(super) event_type: String,
-    pub(super) body: String,
-    pub(super) created_at: String,
-}
-
-impl GoalEventRow {
-    pub(super) fn into_brief(self) -> Result<GoalEventBrief> {
-        Ok(GoalEventBrief {
-            id: self.id,
-            goal_id: GoalId(self.goal_id),
-            task_id: self.task_id.map(GoalTaskId),
-            author_session_id: self.author_session_id.map(SessionId),
-            event_type: parse_goal_event_type(&self.event_type)?,
-            body: self.body,
-            created_at: self.created_at,
-        })
-    }
+/// Wall-clock seconds between two ISO-8601 stamps (`ended_at` defaults to
+/// now). Unparseable input degrades to 0 rather than failing the read:
+/// elapsed time is a display figure, not a state field.
+pub(super) fn elapsed_seconds_between(started_at: &str, ended_at: Option<&str>) -> u64 {
+    let Ok(start) = chrono::DateTime::parse_from_rfc3339(started_at) else {
+        return 0;
+    };
+    let end = match ended_at {
+        Some(e) => match chrono::DateTime::parse_from_rfc3339(e) {
+            Ok(t) => t.with_timezone(&chrono::Utc),
+            Err(_) => return 0,
+        },
+        None => chrono::Utc::now(),
+    };
+    (end - start.with_timezone(&chrono::Utc))
+        .num_seconds()
+        .max(0) as u64
 }

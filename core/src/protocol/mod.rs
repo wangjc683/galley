@@ -28,13 +28,14 @@ mod envelope;
 mod error_tag;
 
 pub use commands::{
-    GitReviewRequest,
+    GitReviewRequest, GoalActiveArgs, GoalExtendArgs, GoalStartArgs, GoalStatusArgs, GoalStopArgs,
     LlmSetArgs, LocalFileRequest, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs,
-    SessionBtwArgs, SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
-    SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
-    SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
-    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
-    SocketCommand,
+    SessionBtwArgs, SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult,
+    SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs, SessionShutdownRunnerArgs,
+    SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs, SocketCommand,
 };
-pub use envelope::{SocketRequest, SocketResponse, StreamEnvelope, WatchFrame, SCHEMA_VERSION};
+pub use envelope::{
+    goal_family_requires_v2, SocketRequest, SocketResponse, StreamEnvelope, WatchFrame,
+    ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION,
+};
 pub use error_tag::ErrorTag;

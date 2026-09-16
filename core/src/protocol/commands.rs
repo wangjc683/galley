@@ -10,8 +10,8 @@
 use crate::api::{MessageBrief, RuntimeKind, SessionBrief};
 use serde::{Deserialize, Serialize};
 
-pub use crate::local_file::LocalFileRequest;
 pub use crate::git_review::GitReviewRequest;
+pub use crate::local_file::LocalFileRequest;
 
 /// Binds a command's wire name to its argument shape at the type level.
 /// `SocketClient::call` takes the args struct alone — the command-name
@@ -68,43 +68,6 @@ socket_command!(SessionCheckpointArgs, "session.checkpoint");
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SessionGoalSynthesizeArgs {
-    pub session_id: String,
-    pub visible_content: String,
-    pub dispatch_content: String,
-    #[serde(default)]
-    pub supervisor: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-socket_command!(SessionGoalSynthesizeArgs, "session.goal_synthesize");
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionGoalMasterPlanArgs {
-    pub session_id: String,
-    pub dispatch_content: String,
-    #[serde(default)]
-    pub supervisor: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-socket_command!(SessionGoalMasterPlanArgs, "session.goal_master_plan");
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionGoalSoloTurnArgs {
-    pub session_id: String,
-    pub dispatch_content: String,
-    #[serde(default)]
-    pub supervisor: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-socket_command!(SessionGoalSoloTurnArgs, "session.goal_solo_turn");
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SessionWatchArgs {
     pub session_id: String,
 }
@@ -152,7 +115,7 @@ pub struct SessionNewArgs {
 }
 socket_command!(SessionNewArgs, "session.new");
 
-/// Result shape of a successful `session.new` / `session.new_goal_worker`
+/// Result shape of a successful `session.new`
 /// (schemaVersion 1; documented in agent-api/session-commands). Shared by
 /// the producing handler and the in-process scheduler consumer so a field
 /// rename is a compile error, not a silently dropped session id. Unlike
@@ -170,22 +133,60 @@ pub struct SessionNewResult {
     pub warning: Option<serde_json::Value>,
 }
 
+// ---- Goal v2 (schemaVersion 2) ----
+
+/// `goal.start`: set a goal on a session and dispatch its opening turn.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SessionNewGoalWorkerArgs {
-    pub task_template: String,
+pub struct GoalStartArgs {
+    pub session_id: String,
+    pub objective: String,
+    /// `None` = no time ceiling. The CLI resolves its own default before
+    /// sending, so the wire shape carries the caller's explicit choice.
     #[serde(default)]
-    pub project_id: Option<String>,
-    #[serde(default)]
-    pub llm_name: Option<String>,
-    #[serde(default)]
-    pub runtime_kind: Option<RuntimeKind>,
+    pub budget_seconds: Option<u32>,
     #[serde(default)]
     pub supervisor: Option<String>,
     #[serde(default)]
     pub reason: Option<String>,
 }
-socket_command!(SessionNewGoalWorkerArgs, "session.new_goal_worker");
+socket_command!(GoalStartArgs, "goal.start");
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalStatusArgs {
+    pub goal_id: String,
+}
+socket_command!(GoalStatusArgs, "goal.status");
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalActiveArgs {}
+socket_command!(GoalActiveArgs, "goal.active");
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalStopArgs {
+    pub goal_id: String,
+    #[serde(default)]
+    pub supervisor: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+socket_command!(GoalStopArgs, "goal.stop");
+
+/// `goal.extend`: more time for an `active` or `budget_limited` goal.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalExtendArgs {
+    pub goal_id: String,
+    pub extra_seconds: u32,
+    #[serde(default)]
+    pub supervisor: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+socket_command!(GoalExtendArgs, "goal.extend");
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -342,46 +343,6 @@ mod legacy_equivalence {
     }
 
     #[test]
-    fn session_goal_synthesize() {
-        assert_matches_legacy(
-            &SessionGoalSynthesizeArgs {
-                session_id: "s1".into(),
-                visible_content: "v".into(),
-                dispatch_content: "d".into(),
-                supervisor: None,
-                reason: None,
-            },
-            json!({"sessionId": "s1", "visibleContent": "v", "dispatchContent": "d", "supervisor": null, "reason": null}),
-        );
-    }
-
-    #[test]
-    fn session_goal_master_plan() {
-        assert_matches_legacy(
-            &SessionGoalMasterPlanArgs {
-                session_id: "s1".into(),
-                dispatch_content: "d".into(),
-                supervisor: None,
-                reason: None,
-            },
-            json!({"sessionId": "s1", "dispatchContent": "d", "supervisor": null, "reason": null}),
-        );
-    }
-
-    #[test]
-    fn session_goal_solo_turn() {
-        assert_matches_legacy(
-            &SessionGoalSoloTurnArgs {
-                session_id: "s1".into(),
-                dispatch_content: "d".into(),
-                supervisor: None,
-                reason: None,
-            },
-            json!({"sessionId": "s1", "dispatchContent": "d", "supervisor": null, "reason": null}),
-        );
-    }
-
-    #[test]
     fn session_watch() {
         assert_matches_legacy(
             &SessionWatchArgs {
@@ -403,21 +364,6 @@ mod legacy_equivalence {
                 reason: None,
             },
             json!({"task": "t", "projectId": "p1", "llmName": null, "runtimeKind": null, "supervisor": null, "reason": null}),
-        );
-    }
-
-    #[test]
-    fn session_new_goal_worker() {
-        assert_matches_legacy(
-            &SessionNewGoalWorkerArgs {
-                task_template: "tpl".into(),
-                project_id: None,
-                llm_name: None,
-                runtime_kind: None,
-                supervisor: None,
-                reason: None,
-            },
-            json!({"taskTemplate": "tpl", "projectId": null, "llmName": null, "runtimeKind": null, "supervisor": null, "reason": null}),
         );
     }
 
@@ -529,13 +475,14 @@ mod legacy_equivalence {
         // One place to eyeball the full name↔type table.
         assert_eq!(SessionSendArgs::NAME, "session.send");
         assert_eq!(SessionCheckpointArgs::NAME, "session.checkpoint");
-        assert_eq!(SessionGoalSynthesizeArgs::NAME, "session.goal_synthesize");
-        assert_eq!(SessionGoalMasterPlanArgs::NAME, "session.goal_master_plan");
-        assert_eq!(SessionGoalSoloTurnArgs::NAME, "session.goal_solo_turn");
         assert_eq!(SessionWatchArgs::NAME, "session.watch");
         assert_eq!(SessionNewArgs::NAME, "session.new");
-        assert_eq!(SessionNewGoalWorkerArgs::NAME, "session.new_goal_worker");
         assert_eq!(SessionBtwArgs::NAME, "session.btw");
+        assert_eq!(GoalStartArgs::NAME, "goal.start");
+        assert_eq!(GoalStatusArgs::NAME, "goal.status");
+        assert_eq!(GoalActiveArgs::NAME, "goal.active");
+        assert_eq!(GoalStopArgs::NAME, "goal.stop");
+        assert_eq!(GoalExtendArgs::NAME, "goal.extend");
         assert_eq!(SessionStopArgs::NAME, "session.stop");
         assert_eq!(SessionShutdownRunnerArgs::NAME, "session.shutdown_runner");
         assert_eq!(SessionArchiveArgs::NAME, "session.archive");
