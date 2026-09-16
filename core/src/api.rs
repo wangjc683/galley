@@ -23,17 +23,7 @@ pub mod search;
 pub mod session;
 pub mod status;
 
-pub use goal::{
-    goal_checkpoint_deadline_reached, goal_checkpoint_first_material,
-    goal_checkpoint_planning_started, goal_checkpoint_workers_started, goal_finished_no_master,
-    goal_launch_ack, goal_solo_wrap_timeout, goal_stopped_before_results, goal_synthesizing,
-    ClaimGoalTaskInput, CreateGoalEventInput, CreateGoalProposalInput, CreateGoalTaskInput,
-    GoalBrief, GoalDeliverable, GoalEventBrief, GoalEventType, GoalId, GoalLocale, GoalMode,
-    GoalProposalBrief, GoalProposalId, GoalProposalStatus, GoalStatus, GoalStatusSnapshot,
-    GoalTaskBrief, GoalTaskId, GoalTaskStatus, GoalWorkerContext, GoalWriteMode,
-    UpdateGoalTaskInput, DEFAULT_GOAL_BUDGET_SECONDS, DEFAULT_GOAL_WORKER_LIMIT,
-    GOAL_CONFIRMATION_PHRASE, MAX_GOAL_WORKER_LIMIT, MIN_GOAL_WORKER_LIMIT,
-};
+pub use goal::{CreateGoalInput, GoalBrief, GoalId, GoalStatus, DEFAULT_GOAL_BUDGET_SECONDS};
 pub use health::{HealthCheck, HealthReport, HealthStatus};
 pub use message::{
     MessageAttachmentBrief, MessageBrief, MessageId, MessageRole, MessageTelemetry,
@@ -409,77 +399,58 @@ pub trait GalleyApi: Send + Sync {
         session_id: Option<SessionId>,
     ) -> Result<ScheduledTaskBrief>;
 
-    // ---------------- goals ----------------
+    // ---------------- goals (v2) ----------------
+    //
+    // One persistent objective per session (.scratch/goal-simplify/PRD.md).
+    // The continuation loop lives in `message_queue`; these are its
+    // state reads / writes plus the surfaces the GUI and CLI list.
 
-    async fn create_goal_proposal(
-        &self,
-        input: CreateGoalProposalInput,
-        origin: Origin,
-    ) -> Result<GoalProposalBrief>;
+    /// Set a goal on a session. `invalid_args` when the session already
+    /// has an open (active / paused / blocked) goal; `not_found` when the
+    /// session does not exist. Persists only — dispatching the objective
+    /// turn is the caller's job.
+    async fn create_goal(&self, input: CreateGoalInput, origin: Origin) -> Result<GoalBrief>;
 
-    async fn start_goal_from_proposal(
-        &self,
-        proposal_id: GoalProposalId,
-        internal_confirm_token: String,
-        origin: Origin,
-    ) -> Result<GoalBrief>;
+    async fn get_goal(&self, id: GoalId) -> Result<GoalBrief>;
 
-    /// Goal snapshot with the most recent 50 events — the display view
-    /// (GUI, `galley goal status`). Event-derived conclusions from this
-    /// snapshot are approximations once a goal outgrows the window.
-    async fn goal_status(&self, id: GoalId) -> Result<GoalStatusSnapshot>;
-
-    /// Goal snapshot with the complete event history. The goal
-    /// controller's signal logic (result/material detection, checkpoint
-    /// and planning-round markers, per-worker baselines) counts and
-    /// dedups over events, so it must never run on a truncated window:
-    /// eviction makes results look absent, checkpoints repost, and
-    /// planning rounds collide.
-    async fn goal_status_full(&self, id: GoalId) -> Result<GoalStatusSnapshot>;
-
-    /// Append a new deliverable anchor version for a goal. `version` is
-    /// assigned as the current max + 1. Content over the size cap is
-    /// truncated on a char boundary with a marker note.
-    async fn set_goal_deliverable(
-        &self,
-        goal_id: GoalId,
-        content: String,
-        note: Option<String>,
-        author_session_id: Option<SessionId>,
-    ) -> Result<GoalDeliverable>;
-
-    /// Latest (highest-version) deliverable anchor for a goal, if any.
-    async fn latest_goal_deliverable(&self, goal_id: GoalId) -> Result<Option<GoalDeliverable>>;
-
+    /// Open goals (active / paused / blocked), oldest first.
     async fn list_active_goals(&self) -> Result<Vec<GoalBrief>>;
 
+    /// Open goals plus terminal ones whose result has not been seen —
+    /// what the top-bar pill and sidebar render.
     async fn list_visible_goals(&self) -> Result<Vec<GoalBrief>>;
 
-    /// All goals whose master session is `master_session_id`, any
-    /// status (including terminal + already-seen), oldest run first.
-    /// Read-only; powers the in-thread Goal commission / terminal
-    /// markers, which must persist after a goal leaves the active /
-    /// visible lists so reopening a finished run is not amnesiac.
-    async fn list_goals_for_session(&self, master_session_id: SessionId) -> Result<Vec<GoalBrief>>;
+    /// All goals ever set on `session_id`, any status, oldest first.
+    /// Read-only; powers the in-thread commission / terminal markers,
+    /// which must persist after a goal leaves the visible list so
+    /// reopening a finished run is not amnesiac.
+    async fn list_goals_for_session(&self, session_id: SessionId) -> Result<Vec<GoalBrief>>;
 
     async fn mark_goal_result_seen(&self, id: GoalId, origin: Origin) -> Result<GoalBrief>;
 
-    async fn request_goal_stop(&self, id: GoalId, origin: Origin) -> Result<GoalBrief>;
-
-    async fn update_goal_state(
+    /// Move a goal to `status`. Terminal statuses stamp `ended_at` once;
+    /// `Paused` / `Blocked` stamp `paused_at`; `Active` clears it. A blank
+    /// `latest_summary` keeps the stored one.
+    async fn update_goal_status(
         &self,
         id: GoalId,
         status: GoalStatus,
         latest_summary: Option<String>,
     ) -> Result<GoalBrief>;
 
-    async fn create_goal_task(&self, input: CreateGoalTaskInput) -> Result<GoalTaskBrief>;
+    /// Record one dispatched continuation; `wrap_up` marks the budget-limit
+    /// wrap-up so the next idle lands `BudgetLimited`.
+    async fn bump_goal_continuation(&self, id: GoalId, wrap_up: bool) -> Result<GoalBrief>;
 
-    async fn claim_goal_task(&self, input: ClaimGoalTaskInput) -> Result<GoalTaskBrief>;
+    /// Add `extra_seconds` to a goal's ceiling. An `active` goal keeps
+    /// running with more room; a `budget_limited` one reopens as
+    /// `active` (the caller then dispatches the next continuation).
+    /// `invalid_args` for a goal with no ceiling or in any other status.
+    async fn extend_goal_budget(&self, id: GoalId, extra_seconds: u32) -> Result<GoalBrief>;
 
-    async fn update_goal_task(&self, input: UpdateGoalTaskInput) -> Result<GoalTaskBrief>;
-
-    async fn create_goal_event(&self, input: CreateGoalEventInput) -> Result<GoalEventBrief>;
+    /// Core restart: every `active` goal becomes `paused` (nothing is
+    /// running any more). Returns the number of goals moved.
+    async fn pause_open_goals(&self) -> Result<u64>;
 
     // ---------------- B4 M1 · transaction-aware variants ----------------
     //

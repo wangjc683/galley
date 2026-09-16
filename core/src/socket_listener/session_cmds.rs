@@ -2,8 +2,7 @@
 //! watch / btw / stop / shutdown_runner / archive / restore / move /
 //! list, plus the Tauri event payloads and id minting shared with the
 //! sibling command modules. Session creation lives in
-//! `session_new_cmds`; goal-turn commands in `session_goal_cmds`; runner
-//! spawn-config resolution in `spawn_config`.
+//! `session_new_cmds`; runner spawn-config resolution in `spawn_config`.
 //!
 //! All write handlers share the same shape:
 //!   1. parse args (camelCase JSON from CLI / supervisor)
@@ -12,7 +11,7 @@
 //!   4. on side-effecting state changes, emit a Tauri event so the GUI
 //!      can mirror the row into its in-memory stores without polling
 
-use super::common::{map_galley_err, origin_from_args};
+use super::common::{map_galley_err, origin_from_args, SocketResponseLite};
 use super::*;
 use crate::runner_manager::{QueueJump, QueueOffer, RunState};
 // Args shapes live in `crate::protocol` (imported via super::*) — the
@@ -40,7 +39,7 @@ struct UserMessagePersistedPayload {
 }
 
 /// Tauri event payload broadcast when the socket transport starts a
-/// runner itself (`session.new` and the goal-turn ensure path). The GUI
+/// runner itself (`session.new` and [`ensure_session_runner`]). The GUI
 /// attaches listeners to this already-alive bridge so assistant events
 /// render/persist the same way as GUI-spawned bridges.
 #[derive(Debug, Serialize, Clone)]
@@ -795,4 +794,58 @@ fn radix36(mut n: u64) -> String {
     }
     out.reverse();
     String::from_utf8(out).expect("radix36 alphabet is ASCII")
+}
+
+/// Make sure `session_id` has a live runner, spawning one from the
+/// session's persisted config when it does not. A session that nobody
+/// has opened since Core started (or whose runner the LRU cap reclaimed)
+/// has no process to receive a dispatch; a bare `send_command` would
+/// only pile persisted rows onto a dead session.
+///
+/// Goal v2's continuation loop (`crate::goal_engine`) dispatches
+/// through this before every objective / continuation turn.
+pub(super) async fn ensure_session_runner(
+    galley: &SqliteGalley,
+    ctx: &HandlerCtx<'_>,
+    session_id: &str,
+    via: &'static str,
+) -> Result<(), SocketResponseLite> {
+    if ctx.runner.pid(session_id).await.is_some() {
+        return Ok(());
+    }
+
+    let session = galley
+        .session_brief(SessionId(session_id.to_string()))
+        .await
+        .map_err(SocketResponseLite::from_err)?;
+    let spawn_args = super::spawn_config::spawn_args_for_session_new(
+        galley,
+        ctx.app,
+        session_id,
+        session.project_id.as_ref().map(|id| id.as_str()),
+        session.selected_llm_index,
+        session.selected_llm_key.clone(),
+        session.ga_runtime_kind,
+    )
+    .await?;
+    let pid = ctx
+        .runner
+        .spawn(spawn_args, Some(session_id))
+        .await
+        .map_err(SocketResponseLite::runner_spawn_error)?;
+    let rx = ctx.runner.subscribe(session_id).await.ok_or_else(|| {
+        SocketResponseLite::runner_error(format!(
+            "{via}: runner subscribe failed after spawn"
+        ))
+    })?;
+    ctx.notify(
+        "runner-spawned-external",
+        &RunnerSpawnedExternalPayload {
+            session_id: session_id.to_string(),
+            pid,
+            via,
+        },
+    );
+    spawn_emit_task(ctx.notifier.clone(), session_id.to_string(), rx);
+    Ok(())
 }

@@ -1,6 +1,5 @@
-//! `session.new` and `session.new_goal_worker`: atomically create a
-//! session + persist its first user message, then spawn a runner and
-//! dispatch that first message. The DB writes commit together; runner
+//! `session.new`: atomically create a session + persist its first user
+//! message, then spawn a runner and dispatch that first message. The DB writes commit together; runner
 //! failures after commit surface as `runner_error` so callers know the
 //! delegated task did not actually start.
 
@@ -18,38 +17,8 @@ use super::*;
 /// sidebar. The bridge derives a better title after the first turn ends.
 const DEFAULT_NEW_SESSION_TITLE: &str = "新对话";
 
-#[derive(Debug)]
-enum SessionNewTaskSource {
-    Literal(String),
-    GoalWorkerTemplate(String),
-}
-
-impl SessionNewTaskSource {
-    fn render(self, session_id: &str) -> Result<String, String> {
-        match self {
-            SessionNewTaskSource::Literal(task) => Ok(task),
-            SessionNewTaskSource::GoalWorkerTemplate(template) => {
-                render_goal_worker_task_template(&template, session_id)
-            }
-        }
-    }
-}
-
-pub(super) fn render_goal_worker_task_template(
-    template: &str,
-    session_id: &str,
-) -> Result<String, String> {
-    let placeholder_count = template.matches(GOAL_WORKER_SESSION_ID_PLACEHOLDER).count();
-    if placeholder_count != 1 {
-        return Err(format!(
-            "session.new_goal_worker: taskTemplate must contain exactly one {GOAL_WORKER_SESSION_ID_PLACEHOLDER} placeholder"
-        ));
-    }
-    Ok(template.replace(GOAL_WORKER_SESSION_ID_PLACEHOLDER, session_id))
-}
-
 struct SessionNewRequest {
-    task_source: SessionNewTaskSource,
+    task: String,
     project_id: Option<String>,
     llm_name: Option<String>,
     runtime_kind: Option<RuntimeKind>,
@@ -84,7 +53,7 @@ pub(super) async fn dispatch_session_new(
     dispatch_session_new_inner(
         request_id,
         SessionNewRequest {
-            task_source: SessionNewTaskSource::Literal(task),
+            task,
             project_id: parsed.project_id,
             llm_name: parsed.llm_name,
             runtime_kind: parsed.runtime_kind,
@@ -97,55 +66,13 @@ pub(super) async fn dispatch_session_new(
     .await
 }
 
-pub(super) async fn dispatch_session_new_goal_worker(
-    request_id: Option<String>,
-    args: Value,
-    ctx: &HandlerCtx<'_>,
-) -> SocketResponse {
-    let parsed: SessionNewGoalWorkerArgs = match serde_json::from_value(args) {
-        Ok(a) => a,
-        Err(e) => {
-            return SocketResponse::err(
-                request_id,
-                ErrorTag::InvalidArgs,
-                format!("session.new_goal_worker args: {e}"),
-            );
-        }
-    };
-    let template = parsed.task_template.trim().to_string();
-    if template.is_empty() {
-        return SocketResponse::err(
-            request_id,
-            ErrorTag::InvalidArgs,
-            "session.new_goal_worker: taskTemplate is empty",
-        );
-    }
-    if let Err(message) = render_goal_worker_task_template(&template, "s-validation") {
-        return SocketResponse::err(request_id, ErrorTag::InvalidArgs, message);
-    }
-    dispatch_session_new_inner(
-        request_id,
-        SessionNewRequest {
-            task_source: SessionNewTaskSource::GoalWorkerTemplate(template),
-            project_id: parsed.project_id,
-            llm_name: parsed.llm_name,
-            runtime_kind: parsed.runtime_kind,
-            supervisor: parsed.supervisor,
-            reason: parsed.reason,
-            command_name: "session.new_goal_worker",
-        },
-        ctx,
-    )
-    .await
-}
-
 async fn dispatch_session_new_inner(
     request_id: Option<String>,
     request: SessionNewRequest,
     ctx: &HandlerCtx<'_>,
 ) -> SocketResponse {
     let SessionNewRequest {
-        task_source,
+        task,
         project_id,
         llm_name,
         runtime_kind,
@@ -185,17 +112,6 @@ async fn dispatch_session_new_inner(
     };
 
     let id = mint_session_id();
-    let task = match task_source.render(&id) {
-        Ok(task) => task.trim().to_string(),
-        Err(message) => return SocketResponse::err(request_id, ErrorTag::InvalidArgs, message),
-    };
-    if task.is_empty() {
-        return SocketResponse::err(
-            request_id,
-            ErrorTag::InvalidArgs,
-            format!("{command_name}: rendered task is empty"),
-        );
-    }
     let spawn_args = match spawn_args_for_session_new(
         &galley,
         ctx.app,

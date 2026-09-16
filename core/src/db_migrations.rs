@@ -245,5 +245,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/038_session_title_source.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 39,
+            description: "goal v2: one objective per session, retire hive tables",
+            sql: include_str!("../migrations/039_goal_v2.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

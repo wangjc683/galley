@@ -34,32 +34,6 @@ fn app_config_dir_from_base(base_config_dir: &Path) -> PathBuf {
     base_config_dir.join(APP_IDENTIFIER)
 }
 
-/// Per-goal Galley-owned scratch workspace directory (P3). Lives next to
-/// the DB so it follows the `GALLEY_DB_PATH` override in tests/dev and the
-/// real data dir in production. The directory is created lazily by the
-/// agents on first write; this only computes the path.
-pub(crate) fn goal_workspace_dir(goal_id: &str) -> Option<PathBuf> {
-    let db = db_path()?;
-    let base = db.parent()?;
-    Some(goal_workspace_dir_from_base(base, goal_id))
-}
-
-fn goal_workspace_dir_from_base(base: &Path, goal_id: &str) -> PathBuf {
-    base.join("goal-workspaces").join(goal_id)
-}
-
-/// Galley-owned runtime scratch dir (not per-goal) for materialized
-/// resources the agents read, e.g. the attach-mode master SOP copy (P3).
-pub(crate) fn goal_runtime_dir() -> Option<PathBuf> {
-    let db = db_path()?;
-    let base = db.parent()?;
-    Some(goal_runtime_dir_from_base(base))
-}
-
-fn goal_runtime_dir_from_base(base: &Path) -> PathBuf {
-    base.join("goal-runtime")
-}
-
 /// Galley-owned durable media directory for conversation attachments.
 /// Kept next to `workbench.db` so backups and `GALLEY_DB_PATH`-based test
 /// runs keep the database and attachment files together.
@@ -109,21 +83,6 @@ mod tests {
 
         assert_eq!(db, base.join(APP_IDENTIFIER).join(DB_FILENAME));
         assert!(!db.components().any(|c| c.as_os_str() == "data"));
-    }
-
-    #[test]
-    fn goal_workspace_dir_is_goal_scoped_next_to_db() {
-        let base = Path::new("/tmp/galley-config/app.galley");
-        assert_eq!(
-            goal_workspace_dir_from_base(base, "goal_abc"),
-            base.join("goal-workspaces").join("goal_abc"),
-        );
-    }
-
-    #[test]
-    fn goal_runtime_dir_sits_next_to_db() {
-        let base = Path::new("/tmp/galley-config/app.galley");
-        assert_eq!(goal_runtime_dir_from_base(base), base.join("goal-runtime"),);
     }
 
     #[test]

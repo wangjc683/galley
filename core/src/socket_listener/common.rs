@@ -53,6 +53,7 @@ pub(super) fn map_galley_err(
 /// the outer response by [`SocketResponseLite::with_request_id`]. Avoids
 /// threading `request_id` through every helper. The "lite" suffix is
 /// because the carrier doesn't include the request_id at construction.
+#[derive(Debug)]
 pub(super) enum SocketResponseLite {
     InvalidArgs(String),
     DbUnavailable(String),
