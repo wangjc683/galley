@@ -31,52 +31,56 @@ export function SettingsSidebar({
   showBrowserTab: boolean;
 }) {
   const copy = useCopy();
-  const showChineseHelpers = isChineseLanguage(resolvedLanguage);
+  // Chinese UI: the Chinese name is the primary label and the English
+  // tab name drops to a secondary term anchor (it stays the identifier
+  // that page headers and "Settings → Runtime" copy refer to). English
+  // UI shows the English name alone. Community feedback 2026-09-16:
+  // the previous English-primary / 10.5px-Chinese-annotation layout was
+  // unreadable for users who don't read English.
+  const chinesePrimary = isChineseLanguage(resolvedLanguage);
   const tabCopy = copy.settings.tabs;
+  const labelsFor = (entry: { label: string; helper: string }) =>
+    chinesePrimary
+      ? { label: entry.helper, subLabel: entry.label }
+      : { label: entry.label, subLabel: undefined };
   return (
     <nav className="flex w-[180px] shrink-0 flex-col border-r border-line bg-app py-3">
       <div>
         <SettingsTabButton
           active={tab === "general"}
           Icon={Gear}
-          label={tabCopy.general.label}
-          subLabel={showChineseHelpers ? tabCopy.general.helper : undefined}
+          {...labelsFor(tabCopy.general)}
           onClick={() => onChange("general")}
         />
         <SettingsTabButton
           active={tab === "runtime"}
           Icon={Cpu}
-          label={tabCopy.runtime.label}
-          subLabel={showChineseHelpers ? tabCopy.runtime.helper : undefined}
+          {...labelsFor(tabCopy.runtime)}
           onClick={() => onChange("runtime")}
         />
         <SettingsTabButton
           active={tab === "models"}
           Icon={Key}
-          label={tabCopy.models.label}
-          subLabel={showChineseHelpers ? tabCopy.models.helper : undefined}
+          {...labelsFor(tabCopy.models)}
           onClick={() => onChange("models")}
         />
         <SettingsTabButton
           active={tab === "approval"}
           Icon={ShieldCheck}
-          label={tabCopy.approval.label}
-          subLabel={showChineseHelpers ? tabCopy.approval.helper : undefined}
+          {...labelsFor(tabCopy.approval)}
           onClick={() => onChange("approval")}
         />
         <SettingsTabButton
           active={tab === "integration"}
           Icon={PlugsConnected}
-          label={tabCopy.agent.label}
-          subLabel={showChineseHelpers ? tabCopy.agent.helper : undefined}
+          {...labelsFor(tabCopy.agent)}
           onClick={() => onChange("integration")}
         />
         {showImTab && (
           <SettingsTabButton
             active={tab === "im"}
             Icon={ChatCircleText}
-            label={tabCopy.im.label}
-            subLabel={showChineseHelpers ? tabCopy.im.helper : undefined}
+            {...labelsFor(tabCopy.im)}
             onClick={() => onChange("im")}
           />
         )}
@@ -84,30 +88,26 @@ export function SettingsSidebar({
           <SettingsTabButton
             active={tab === "browser"}
             Icon={PuzzlePiece}
-            label={tabCopy.browser.label}
-            subLabel={showChineseHelpers ? tabCopy.browser.helper : undefined}
+            {...labelsFor(tabCopy.browser)}
             onClick={() => onChange("browser")}
           />
         )}
         <SettingsTabButton
           active={tab === "shortcuts"}
           Icon={Keyboard}
-          label={tabCopy.shortcuts.label}
-          subLabel={showChineseHelpers ? tabCopy.shortcuts.helper : undefined}
+          {...labelsFor(tabCopy.shortcuts)}
           onClick={() => onChange("shortcuts")}
         />
         <SettingsTabButton
           active={tab === "feedback"}
           Icon={Megaphone}
-          label={tabCopy.feedback.label}
-          subLabel={showChineseHelpers ? tabCopy.feedback.helper : undefined}
+          {...labelsFor(tabCopy.feedback)}
           onClick={() => onChange("feedback")}
         />
         <SettingsTabButton
           active={tab === "about"}
           Icon={Info}
-          label={tabCopy.about.label}
-          subLabel={showChineseHelpers ? tabCopy.about.helper : undefined}
+          {...labelsFor(tabCopy.about)}
           onClick={() => onChange("about")}
         />
       </div>
@@ -163,12 +163,7 @@ function SettingsTabButton({
           {label}
         </span>
         {subLabel && (
-          <span
-            className={cn(
-              "mt-1 block truncate text-[10.5px] font-normal leading-[11px]",
-              active ? "text-ink-muted" : "text-ink-muted/75",
-            )}
-          >
+          <span className="mt-0.5 block truncate text-ui-tertiary font-normal leading-[14px] text-ink-muted">
             {subLabel}
           </span>
         )}

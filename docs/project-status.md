@@ -379,9 +379,14 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing unreleased on main since `v0.4.15` (as of 2026-09-14): the tag sits
-on the version-bump commit, and everything between `v0.4.14` and it shipped
-in that release. The community 524 thread that prompted it has not yet been
+Two GUI-only changes sit on main after `v0.4.15` (as of 2026-09-16), both
+dogfooded by JC: the fetched model list folded into the model field as a
+combobox with the auto-fetch announcing itself (see
+[devlog](./devlog/2026-09-16-model-list-combobox.md)), and the Chinese
+Settings sidebar flipped to Chinese-primary labels after community feedback
+that the 10.5px helper was unreadable (see
+[devlog](./devlog/2026-09-16-settings-sidebar-chinese-primary.md)). Neither
+touches `runner/` or `managed-ga/`. The community 524 thread that prompted it has not yet been
 answered (reply draft agreed in session, awaiting JC's per-item confirmation). The ask_user option description PRD (galley#21,
 `.scratch/ask-user-option-desc`) was **cancelled** on 2026-09-14 after four
 months of local ask_user data showed zero cases of the reported "short label,

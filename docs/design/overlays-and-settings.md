@@ -163,26 +163,29 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
   `zh-*` 显示中文，其余显示 English。不要根据 IP、地区或时区判断。
 - 用户显式选择 `中文` 或 `English` 后持久化；之后不再跟随系统语言变化，
   除非用户切回 `Auto / 跟随系统`。
-- 中文 UI 的左侧 tab 使用英文主标签 + 小号中文辅助标签；英文 UI 只显示
-  英文标签。
+- 中文 UI 的左侧 tab 使用中文主标签 + 小号英文副标签（2026-09-16 翻转，
+  见 devlog）；英文 UI 只显示英文标签。
 
 ```text
-General          / 通用
-Runtime          / 运行环境
-Models           / 模型
-Approval         / 审批
-Agent            / 智能体接入
-Channels         / 聊天软件
-Browser Control  / 浏览器控制   （仅 managed 运行时显示）
-Shortcuts        / 快捷键
-About            / 关于
+通用          / General
+运行环境      / Runtime
+模型          / Models
+审批          / Approval
+智能体接入    / Agent
+聊天软件      / Channels
+浏览器控制    / Browser Control   （仅 managed 运行时显示）
+快捷键        / Shortcuts
+报告问题      / Feedback
+关于          / About
 ```
 
-视觉上不要真的使用斜杠；主标签和辅助标签上下两行显示。辅助标签
-只做注释，不与英文主标签同权重：英文约 14px medium，中文约 10.5px
-normal muted，两行之间保留明确间距。即使 tab 处于 active 状态，中文也
-不要抬到主标签权重。该双层标签只用于 Settings 左侧导航，正文不做大面积
-双语。
+视觉上不要真的使用斜杠；主标签和副标签上下两行显示。中文主标签
+14px medium ink-soft（active 为 ink）；英文副标签 `text-ui-tertiary`
+11.5px normal ink-muted，只做术语锚点，active 态也不抬权重。两行之间
+保留明确间距。该双层标签只用于 Settings 左侧导航，正文不做大面积
+双语；页头标题仍是英文 tab 名 + 中文副标题。汉字不得用 10.5px
+`text-ui-micro`（该 token 是拉丁大写 chip 的），此前的 10.5px + ink-muted
+75% 在浅色模式只有 2.5:1，社区反馈看不清。
 
 ### 当前 Tabs
 

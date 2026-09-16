@@ -83,34 +83,41 @@ English
 
 ## 中文版 Settings Tab
 
-中文版 Settings 左侧 tab 使用英文主标签 + 小号中文辅助标签。这样既保留产品 / 生态术语，又让完全不懂英文的中文用户能快速理解每个入口。
+中文版 Settings 左侧 tab 使用**中文主标签 + 小号英文副标签**（2026-09-16
+翻转；此前是英文主 + 中文小字注释）。中文是用户选定的界面语言，导航必须
+中文优先；英文保留为术语锚点——它仍是页头标题和「Settings → Runtime」
+这类文案所指的标识符，用户在侧栏能找到对应词。
 
 ```text
-Runtime
+通用
+General
+
 运行环境
+Runtime
 
-Models
 模型
+Models
 
-Approval
 审批
+Approval
 
-Agent
 智能体接入
+Agent
 
-Channels
 聊天软件
+Channels
 
-Shortcuts
 快捷键
+Shortcuts
 
-About
 关于
+About
 ```
 
 英文版只显示英文主标签：
 
 ```text
+General
 Runtime
 Models
 Approval
@@ -122,13 +129,17 @@ About
 
 视觉规则：
 
-- 英文主标签是视觉主信息：约 14px、medium weight、使用正常 tab 文本色。
-- 中文辅助标签只做注释：约 10.5px、normal weight、muted 色；即使 tab
-  处于 active 状态，也不要抬到主标签权重。
-- 英文和中文之间保留明确间距，避免像同一行信息的换行。
-- 中文版每个 tab 都要有辅助标签，不要只给 `Runtime` 这类难词补解释。
-- 不要写成 `Runtime / 运行环境`。斜杠会让 UI 像术语表。
-- 双层标签只用于 Settings 左侧导航，不扩散到正文。
+- 中文主标签是视觉主信息：14px、medium weight、正常 tab 文本色（ink-soft，
+  active 为 ink）。
+- 英文副标签只做术语锚点：`text-ui-tertiary`（11.5px）、normal weight、
+  ink-muted；active 态也不抬权重。
+- 两行之间保留明确间距，避免像同一行信息的换行。
+- 中文版每个 tab 都带英文副标签，不要只给部分 tab 补。
+- 不要写成 `运行环境 / Runtime`。斜杠会让 UI 像术语表。
+- 双层标签只用于 Settings 左侧导航，不扩散到正文；页头标题仍用英文
+  tab 名 + 中文副标题，本轮不动。
+- 汉字不用 `text-ui-micro`（10.5px）：该 token 是给拉丁大写 chip 的，
+  汉字在这个字号上会丢笔画，且此前的 ink-muted 75% 在浅色下只有 2.5:1。
 
 ## 中文版英文词边界
 
