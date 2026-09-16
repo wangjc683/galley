@@ -68,7 +68,9 @@ export interface RunGroup {
    * hide. */
   foldable: boolean;
   /** The run-shape half of `foldable` (user-opened, not a Goal run,
-   * no system turns). While the run is still live this is what lets
+   * no system turns). Goal runs are excluded HERE only: goal-run-groups
+   * re-derives their fold / live state from the goal's own status on
+   * top of this grouping (goal-simplify issue 08, 2026-09-16). While the run is still live this is what lets
    * the conversation render it as the live window — completed steps
    * folded behind a live header, the last one plus the in-flight row
    * left open (live-run-window PRD, 2026-09-16). `foldable` is

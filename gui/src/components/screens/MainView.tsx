@@ -14,9 +14,9 @@ import {
   TurnMarker,
 } from "@/components/conversation/Conversation";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
-import { GoalRunningTail } from "@/components/conversation/GoalRunMarkers";
-import { GoalTaskBoard } from "@/components/conversation/GoalTaskBoard";
-import { GoalWorkerContextBar } from "@/components/conversation/GoalWorkerContextBar";
+import { GoalPausedTail } from "@/components/conversation/GoalRunMarkers";
+import { liveWindowHasSettledStep, planGoalRuns } from "@/lib/goal-run-groups";
+import { buildRunGroups } from "@/lib/run-groups";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
@@ -113,28 +113,29 @@ export interface MainViewProps {
   onOpenLLMSwitcher?: () => void;
   /** Approval-mode pill state for this session's Composer. */
   approvalMode?: ComposerApprovalModeState;
-  /** Active Goal for this session's Project context, if any. */
+  /** This session's open Goal (active / paused / blocked), if any. */
   goal?: GoalBrief;
-  /** True when a Goal is active anywhere — gates the Composer's Goal entry
-   * under the single-active-Goal rule. */
+  /** True when this session already has an open Goal — gates the
+   * Composer's Goal entry (one open Goal per session). */
   hasActiveGoal?: boolean;
   /**
-   * All goals whose master session is this one (any status), powering
-   * the in-thread Goal commission / terminal markers. Forwarded to
+   * Every goal ever set on this session (any status), powering the
+   * in-thread Goal commission / terminal markers. Forwarded to
    * Conversation.
    */
   sessionGoals?: GoalBrief[];
   /**
-   * Session navigation for the Goal orientation surfaces: task-board
-   * rows drill into their worker session, and the worker context bar
-   * jumps back to the Goal's master session.
-   */
-  onOpenSession?: (sessionId: string) => void;
-  /**
-   * Stop the running Goal from inside the thread (the GoalRunningTail's
-   * inline control) — same command the TopBar pill popover issues.
+   * Stop this session's Goal from inside the thread (the
+   * GoalPausedTail's inline control) — same command the TopBar pill
+   * popover issues.
    */
   onStopGoal?: (goalId: string) => void;
+  /**
+   * Give this session's Goal more time after it hit its ceiling (the
+   * GoalTerminalMarker's inline control) — same command the TopBar pill
+   * popover issues.
+   */
+  onExtendGoal?: (goalId: string) => void;
   /**
    * GA-initiated question waiting for a user reply. When non-null,
    * the AskUserBubble renders at the conversation tail (with chip
@@ -208,8 +209,8 @@ function MainViewContent({
   goal,
   hasActiveGoal,
   sessionGoals,
-  onOpenSession,
   onStopGoal,
+  onExtendGoal,
   pendingAskUser,
   conversationWidth = "compact",
   conversationFontSize = "standard",
@@ -219,14 +220,17 @@ function MainViewContent({
 }: MainViewProps) {
   const copy = useCopy();
   const stillWaiting = pendingApprovals.length > 0;
-  // Ambient liveness for a running Goal master thread (see
-  // GoalRunningTail). Only when the master isn't itself mid-turn and
-  // nothing else already signals activity, so we never double up.
-  const runningGoal = sessionGoals?.find(
-    (g) => g.status === "running" || g.status === "wrapping",
+  // The two RECOVERABLE goal states get a thread tail (see
+  // GoalPausedTail): `paused` says how to resume, `blocked` says what
+  // the model needs. `active` gets nothing — Core bridges the gaps
+  // between continuations in-process, so the steps are the liveness.
+  // Only when the session isn't itself mid-turn and nothing else
+  // already signals activity, so we never double up.
+  const parkedGoal = sessionGoals?.find(
+    (g) => g.status === "paused" || g.status === "blocked",
   );
-  const goalRunningTailVisible =
-    !!runningGoal && !isRunning && !stillWaiting && !pendingAskUser;
+  const goalPausedTailVisible =
+    !!parkedGoal && !isRunning && !stillWaiting && !pendingAskUser;
 
   // Streaming state, subscribed locally so token churn stays inside
   // this subtree instead of re-rendering the whole app. These were
@@ -243,7 +247,22 @@ function MainViewContent({
   // conversation's live window; from the second step on its rail
   // reaches up through that gap so header → window → thinking row
   // read as one line (live-run-window PRD, 2026-09-16).
-  const inRunRail = currentTurnIndex != null && currentTurnIndex > 1;
+  // For a goal group GA's counter restarts at every continuation, so
+  // "step > 1" is wrong there; the goal-aware plan knows whether the
+  // window above already holds a settled step. Ordinary runs that are
+  // not window-eligible (a /btw exchange) keep the step-count rule so
+  // their flat region still connects.
+  const inRunRail = useMemo(() => {
+    const plan = planGoalRuns(
+      turns,
+      sessionGoals ?? [],
+      buildRunGroups(turns),
+      isRunning,
+      Boolean(pendingAskUser),
+    );
+    if (plan.liveGroup) return liveWindowHasSettledStep(plan, turns);
+    return currentTurnIndex != null && currentTurnIndex > 1;
+  }, [turns, sessionGoals, isRunning, pendingAskUser, currentTurnIndex]);
   const currentRunStartedAtMs = useActiveMessages(
     (m) => m.currentRunStartedAtMs,
     null,
@@ -367,14 +386,6 @@ function MainViewContent({
       className="relative flex min-h-0 flex-1 flex-col bg-app"
       style={conversationTypographyStyle(conversationFontSize)}
     >
-      {/* Worker-session orientation: renders only when this session is
-          a Goal worker (backend reverse lookup returns null otherwise).
-          Sits above the scroll area — orientation must be readable
-          before, and regardless of, scroll position. */}
-      <GoalWorkerContextBar
-        sessionId={activeSessionId}
-        onOpenMaster={onOpenSession}
-      />
       {/* Scrollable conversation column. Width follows the TopBar
           toggle: 760px (typography sweet spot) by default, 1200px
           in wide mode. Bottom stack matches — see MainViewProps doc
@@ -411,7 +422,7 @@ function MainViewContent({
                 onApprove={onApprove}
                 projectName={projectName}
                 goals={sessionGoals}
-                onOpenWorkerSession={onOpenSession}
+                onExtendGoal={onExtendGoal}
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
               />
@@ -548,26 +559,14 @@ function MainViewContent({
                 }
               />
             )}
-            {/* Live task board for a running Goal, pinned at the thread
-                tail: what the workers are doing right now, refreshed on
-                the board's own 5s poll. The frozen (terminal) board is
-                emitted in-thread by annotateGoalThread instead. */}
-            {runningGoal && (
-              <GoalTaskBoard
-                goal={runningGoal}
-                onOpenWorkerSession={onOpenSession}
-              />
-            )}
-            {/* Ambient liveness for a running Goal master thread: the
-                master itself isn't mid-turn, but its goal is still
-                progressing in worker sessions. Shown only when nothing
-                else already signals activity. */}
-            {goalRunningTailVisible && (
-              <GoalRunningTail
+            {/* A parked Goal (paused / blocked) waiting on the user:
+                the thread's own "what now" line, shown only when
+                nothing else already signals activity. */}
+            {goalPausedTailVisible && parkedGoal && (
+              <GoalPausedTail
+                goal={parkedGoal}
                 onStop={
-                  runningGoal && onStopGoal
-                    ? () => onStopGoal(runningGoal.id)
-                    : undefined
+                  onStopGoal ? () => onStopGoal(parkedGoal.id) : undefined
                 }
               />
             )}
@@ -714,7 +713,6 @@ function MainViewContent({
             approvalMode={approvalMode}
             goal={goal}
             hasActiveGoal={hasActiveGoal}
-            goalProjectName={projectName}
             showFooterHint
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}
