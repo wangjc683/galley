@@ -22,7 +22,6 @@ import { LiveDots } from "@/components/conversation/LiveIndicators";
 import { PatchView } from "@/components/conversation/diff/PatchView";
 import { useCopy } from "@/lib/i18n";
 import { formatStepNumeral } from "@/lib/step-numeral";
-import { pickToolTier } from "@/lib/tool-tier";
 import { cn } from "@/lib/utils";
 import type {
   ConversationToolEvent,
@@ -80,9 +79,14 @@ interface ToolCalloutProps {
  * violating visual consistency. Dropped: settled state is always
  * pill, full content lives one click away.
  */
-// `pickToolTier` lives in lib/tool-tier.ts so Conversation.tsx can
-// share the inline-tier test without this component file exporting a
-// non-component (react-refresh rule).
+function pickToolTier(
+  tool: ConversationToolEvent,
+): "hidden" | "inline" | "block" {
+  if (tool.name === "no_tool") return "hidden";
+  const isSettledSuccess =
+    tool.status === "success-current" || tool.status === "success-historical";
+  return isSettledSuccess ? "inline" : "block";
+}
 
 /**
  * Tool callout — dispatcher between the three visual tiers. See
@@ -552,7 +556,7 @@ function InlineToolPill({
   // Merged step row (see ToolCalloutProps.stepIndex): the pill takes
   // over the TurnMarker's identity — prefix + hairline in the marker's
   // exact register, and the step's two-tier top margin (run boundary
-  // mt-6, in-run mt-3; same test as TurnMarker's `index > 1`). The
+  // mt-6, in-run mt-2; same test as TurnMarker's `index > 1`). The
   // prefix sits OUTSIDE the button so the step number keeps the
   // markers' left column alignment while the hover target stays the
   // tool zone; the button's -ml-2 tucks its px-2 hover bleed up
@@ -566,12 +570,10 @@ function InlineToolPill({
       type="button"
       onClick={() => setOpen((v) => !v)}
       className={cn(
-        // No vertical padding; the line box is pinned to the summary's
-        // (step-size × 1.6) so the pill sits on the summary line as a
-        // peer element when the marker lifts it there (2026-09-16) —
-        // any taller and it would inflate that line. The hover wash is
-        // the line box itself.
-        "flex items-center gap-1.5 rounded-sm px-2 py-0 text-left [line-height:calc(var(--conversation-step-size)*1.6)]",
+        // py-0.5 (2026-09-16 trim, was py-1): the row is one line of
+        // 11px text; 4px of padding each side made it taller than the
+        // summary line it supports.
+        "flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-left",
         // One level under the step summary (2026-09-16): the summary
         // is the step's sentence (12px ink-soft), the pill is the
         // evidence beneath it — label at the mono tier and ink-muted,
@@ -636,7 +638,7 @@ function InlineToolPill({
 
   if (stepLabel) {
     return (
-      <div className={stepIndex === 1 ? "mt-6" : "mt-3"}>
+      <div className={stepIndex === 1 ? "mt-6" : "mt-2"}>
         <div className="flex min-w-0 items-center">
           <span
             className="w-(--step-gutter) shrink-0 font-mono tabular-nums text-ink-muted [font-size:var(--conversation-tool-mono-size)] [line-height:calc(var(--conversation-step-size)*1.6)]"
@@ -654,28 +656,18 @@ function InlineToolPill({
     );
   }
 
-  // Un-merged pill renders as a fragment of two siblings so it can
-  // live in either of two parents (2026-09-16):
-  //
-  //   - the marker's flex-wrap summary line: the row is a shrink-0
-  //     item that follows the summary when it fits and drops to the
-  //     next line when it does not; the expanded body is basis-full
-  //     so it always takes its own line below, whichever line the
-  //     row ended up on;
-  //   - the step's process body (block flow): the two just stack.
-  //
-  // The -ml-2.5 pulls the button's px-2 hover bleed back over the
-  // gutter edge plus 2px for the glyph's own inset, so a wrapped
-  // pill's icon stroke lands on the content column where the
-  // summary's first glyph starts; on the summary line the same
-  // margin nets the gap-x-3 down to ~10px of visible space after the
-  // sentence. No vertical margin: the pill hugs its marker
-  // (within-step gap 0).
+  // Un-merged pill lives inside the step's indented process body; the
+  // -ml-2.5 pulls the button's px-2 hover bleed back over the gutter
+  // edge plus 2px for the glyph's own inset, so the icon's visible
+  // stroke lands on the content column where the summary's first
+  // glyph starts. No vertical margin: the pill hugs its marker
+  // (within-step gap 0) and successive pills are spaced by their own
+  // py-0.5.
   return (
-    <>
-      <div className="-ml-2.5 shrink-0">{row}</div>
-      {expandedBody && <div className="basis-full">{expandedBody}</div>}
-    </>
+    <div>
+      <div className="-ml-2.5">{row}</div>
+      {expandedBody}
+    </div>
   );
 }
 

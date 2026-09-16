@@ -15,12 +15,6 @@
   预览（路径类从头部截断、保留文件名尾部）+ caret 紧跟其后。点击展开
   完整 args / result，**展开体首行是 mono GA 工具名**。字号走
   `--conversation-tool-label-size` / `-tool-mono-size`，随三档字号缩放。
-  - **可上 summary 行**（2026-09-16）：settled pill 由 TurnMarker 在
-    summary 之后的 flex-wrap 容器里渲染，装得下跟在句尾、装不下折到
-    下一行（见 conversation.md TurnMarker 节）。为此 pill 盒 `py-0`、
-    行框钉到 summary 行框（step-size × 1.6），hover 底色即行框；
-    非合并 pill 渲染为「行 + basis-full 展开体」两个兄弟节点的 fragment，
-    在过程体（块流）与 flex-wrap 容器里都成立。
   - **比 step summary 低一级**（2026-09-16）：summary 是一步的叙述
     （step-size 档、ink-soft），pill 是叙述下的证据——标签降到与 mono
     同档（标准档 11px）、整行 ink-muted，hover 升 ink。此前两行同字号
