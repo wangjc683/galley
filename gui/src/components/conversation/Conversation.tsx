@@ -548,7 +548,8 @@ function normalizedInlineText(value?: string | null): string {
  *   - Two-tier top margin (2026-08-23 density pass): mt-6 (24px) at
  *     the run boundary (step 1 — GA renumbers from 1 per put_task,
  *     so `index === 1` IS the boundary test, no run-group threading
- *     needed), mt-3 (12px) between steps inside a run. The original
+ *     needed), mt-2 (8px, 2026-09-16 trim from 12) between steps
+ *     inside a run. The original
  *     mt-6-everywhere verdict was calibrated for chapters that had
  *     body content; in a multi-step tool run each "chapter" is two
  *     thin lines, and 24px between them made whitespace the majority
@@ -714,14 +715,15 @@ export function TurnMarker({
         className={cn(
           // No bottom margin: the step's process body must hug its
           // marker so marker + tool rows read as one step, and the
-          // between-step mt-3 stays the only gap (2026-09-16 rhythm:
-          // within-step 0, between-step 12).
+          // between-step mt-2 stays the only gap (2026-09-16 rhythm:
+          // within-step 0, between-step 8 — trimmed from 12 the same
+          // day after a ten-step run still read as mostly whitespace).
           "flex min-w-0 items-start leading-[1.6] [font-size:var(--conversation-step-size)] text-ink-soft",
           // Run boundary keeps the chapter gap; in-run steps tighten.
           // `index` unknown (pre-turn_start thinking gap) defaults to
           // the boundary gap — the common case for that window is the
           // first step right after the user submits.
-          index != null && index > 1 ? "mt-3" : "mt-6",
+          index != null && index > 1 ? "mt-2" : "mt-6",
           hasDetail && "cursor-default hover:text-ink",
         )}
       >
