@@ -25,6 +25,10 @@ run」：**当前章节摊开，翻过的章节合上，结论永远可见，过
   永不折叠——折叠头没有东西能代表它，折了就是藏尸。
 - Goal run 排除（JC 裁决）：goal 线程有自己的 commission/terminal 括号
   叙事。判定：opener user turn 带 `goalId` 的 run 不折。
+  > 2026-09-16 翻转（goal v2，goal-simplify 08 票）：括号是过程摘要的外框
+  > 而非替代，v2 一个 goal 可上百步；goal 组改由 `lib/goal-run-groups.ts`
+  > 盖规则——live 看 goal 状态，非 live 一律折，deliverable 只认终态。
+  > `run-groups.ts` 的形状判定不变。
 - 含 system turn 的 run 不折（v1）：/btw 侧问、Goal 叙述都是 SystemTurn，
   夹在 run 中间时折叠会吞掉一段真实对话。v1 直接放弃折叠这类 run，
   不做分段折叠。
