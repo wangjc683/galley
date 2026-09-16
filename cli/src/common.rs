@@ -1,12 +1,12 @@
 use crate::args::RuntimeArg;
-use galley_core_lib::api::{Origin, RuntimeKind, SessionStatus};
+use galley_core_lib::api::{RuntimeKind, SessionStatus};
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
 use serde::Serialize;
 
 // Single source of truth for the wire schema version — the CLI speaks
 // exactly what `galley_core_lib::protocol` defines.
-pub(crate) use galley_core_lib::protocol::SCHEMA_VERSION;
+pub(crate) use galley_core_lib::protocol::{ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,24 +72,6 @@ pub(crate) fn runtime_arg_for_session_new(
             message: "session new: --runtime all is only valid for list commands".into(),
         }),
     }
-}
-
-pub(crate) async fn runtime_kind_for_goal(
-    galley: &SqliteGalley,
-    runtime: RuntimeArg,
-) -> Result<RuntimeKind, GalleyError> {
-    match runtime {
-        RuntimeArg::Current => galley.active_runtime_kind().await,
-        RuntimeArg::Managed => Ok(RuntimeKind::Managed),
-        RuntimeArg::External => Ok(RuntimeKind::External),
-        RuntimeArg::All => Err(GalleyError::InvalidArgs {
-            message: "goal: --runtime all is not valid".into(),
-        }),
-    }
-}
-
-pub(crate) fn cli_origin(supervisor: Option<String>, reason: Option<String>) -> Origin {
-    Origin::cli(supervisor, reason)
 }
 
 pub(crate) fn emit_json<T: serde::Serialize>(value: &T) -> Result<(), GalleyError> {
@@ -170,13 +152,6 @@ pub(crate) fn with_live<T: serde::Serialize>(
         obj.insert("live".to_string(), live.clone());
     }
     Ok(value)
-}
-
-pub(crate) fn runtime_arg_from_kind(kind: RuntimeKind) -> RuntimeArg {
-    match kind {
-        RuntimeKind::Managed => RuntimeArg::Managed,
-        RuntimeKind::External => RuntimeArg::External,
-    }
 }
 
 pub(crate) fn is_live_candidate(status: SessionStatus) -> bool {

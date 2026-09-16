@@ -45,6 +45,7 @@ const MIG_023: &str = include_str!("../../core/migrations/023_native_goal_runtim
 const MIG_024: &str = include_str!("../../core/migrations/024_native_default_runtime.sql");
 const MIG_025: &str = include_str!("../../core/migrations/025_restore_managed_runtime_default.sql");
 const MIG_026: &str = include_str!("../../core/migrations/026_project_workspace.sql");
+const MIG_031: &str = include_str!("../../core/migrations/031_message_goal_id.sql");
 // 034 only ADD COLUMN approval_mode to sessions; 027–033 touch unrelated
 // tables and stay out of this fixture.
 const MIG_034: &str = include_str!("../../core/migrations/034_session_approval_mode.sql");
@@ -61,7 +62,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_034,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_031, MIG_034,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)
@@ -218,7 +219,7 @@ fn parse_ndjson(stdout: &str) -> Vec<serde_json::Value> {
 }
 
 #[tokio::test]
-async fn version_subcommand_prints_schema_v1() {
+async fn version_subcommand_prints_schema_v2() {
     let td = tempdir();
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
@@ -226,21 +227,39 @@ async fn version_subcommand_prints_schema_v1() {
     assert_eq!(code, Some(0));
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
     // B4 M6 freeze: version output uses camelCase to align with the rest
-    // of the wire format (sessions/projects/etc all camelCase).
-    assert_eq!(payload["schemaVersion"], 1);
+    // of the wire format (sessions/projects/etc all camelCase). v2 since
+    // the Goal v2 rework (.scratch/goal-simplify).
+    assert_eq!(payload["schemaVersion"], 2);
     assert!(payload.get("galleyVersion").is_some());
 }
 
 #[tokio::test]
-async fn schema_pin_matching_v1_passes_through() {
+async fn schema_pin_v1_and_v2_pass_through_for_unchanged_commands() {
     let td = tempdir();
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
-    // B4 M6: --schema=1 against a v1 binary passes through to the command.
-    let (stdout, code) = run_galley(&db, &["--schema", "1", "version"]);
-    assert_eq!(code, Some(0), "stdout: {stdout}");
+    // v2 policy: an old SOP pinning `--schema=1` keeps working for every
+    // command that survived unchanged; `--schema=2` is the current pin.
+    for pin in ["1", "2"] {
+        let (stdout, code) = run_galley(&db, &["--schema", pin, "version"]);
+        assert_eq!(code, Some(0), "pin {pin}: stdout: {stdout}");
+        let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+        assert_eq!(payload["schemaVersion"], 2);
+    }
+}
+
+#[tokio::test]
+async fn schema_pin_v1_rejects_the_goal_family() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let _pool = seeded_db_at(&db).await;
+    // The goal family is v2-only: a v1 pin must not reach the socket.
+    let (stdout, code) = run_galley(&db, &["--schema", "1", "goal", "active"]);
+    assert_eq!(code, Some(2), "stdout: {stdout}");
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(payload["schemaVersion"], 1);
+    assert_eq!(payload["error"], "invalid_args");
+    let msg = payload["message"].as_str().expect("message string");
+    assert!(msg.starts_with("schema_mismatch:"), "got {msg}");
 }
 
 #[tokio::test]
@@ -432,7 +451,7 @@ async fn session_wait_completed_returns_final_payload() {
     assert_eq!(code, Some(0), "stdout was: {stdout}");
     let lines = parse_ndjson(&stdout);
     assert_eq!(lines.len(), 3, "stdout was: {stdout}");
-    assert_eq!(lines[0]["schemaVersion"], 1);
+    assert_eq!(lines[0]["schemaVersion"], 2);
     assert_eq!(lines[0]["stream"], "wait");
     assert_eq!(lines[0]["phase"], "initial");
     assert_eq!(lines[1]["stream"], "wait");

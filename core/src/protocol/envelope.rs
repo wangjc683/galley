@@ -3,9 +3,24 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Wire-level schema version. Stable across additive changes; bumped on
-/// breaking schema changes (and old-version clients use `?schema=1` to opt
-/// into legacy framing — same convention as [docs/agent-api.md]).
-pub const SCHEMA_VERSION: u32 = 1;
+/// breaking schema changes. `2` since Goal v2 (.scratch/goal-simplify):
+/// the v1 `goal` command family was removed and replaced.
+pub const SCHEMA_VERSION: u32 = 2;
+
+/// Schema versions the server still answers. v1 requests keep working for
+/// every command that survived unchanged; only the goal family is v2-only
+/// (a v1 request for it is `unknown_command`, see
+/// [`goal_family_requires_v2`]). This is not dual-serving — no command has
+/// two meanings — it is "removed" spelled honestly as "not found" so an
+/// old SOP that never used Goal keeps running.
+pub const ACCEPTED_SCHEMA_VERSIONS: [u32; 2] = [1, 2];
+
+/// True for command names that exist only under schemaVersion 2: the
+/// Goal v2 family (`goal.*`). Retired v1 goal commands (`session.goal_*`,
+/// `session.new_goal_worker`) are simply unknown under every version.
+pub fn goal_family_requires_v2(command: &str) -> bool {
+    command.starts_with("goal.")
+}
 
 /// One request line. The CLI serializes this; Core deserializes it.
 #[derive(Debug, Serialize, Deserialize)]
@@ -234,7 +249,7 @@ mod golden {
         };
         assert_eq!(
             serde_json::to_string(&req).unwrap(),
-            r#"{"command":"session.send","args":{"sessionId":"s1"},"schemaVersion":1}"#
+            r#"{"command":"session.send","args":{"sessionId":"s1"},"schemaVersion":2}"#
         );
     }
 }

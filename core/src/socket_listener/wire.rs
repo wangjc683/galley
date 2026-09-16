@@ -6,7 +6,8 @@ use std::time::Duration;
 // the server-side transport concerns (idle policy, line writer) and
 // re-exports the envelope types for the handler modules' `use super::*`.
 pub use crate::protocol::{
-    ErrorTag, SocketRequest, SocketResponse, StreamEnvelope, SCHEMA_VERSION,
+    ErrorTag, SocketRequest, SocketResponse, StreamEnvelope, ACCEPTED_SCHEMA_VERSIONS,
+    SCHEMA_VERSION,
 };
 
 /// Per-connection idle timeout. 90s gives interactive shell scripts enough

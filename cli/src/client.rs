@@ -244,7 +244,7 @@ mod tests {
         let sent = client.transport.sent.lock().unwrap();
         let req: serde_json::Value = serde_json::from_str(&sent[0]).unwrap();
         assert_eq!(req["command"], "session.send");
-        assert_eq!(req["schemaVersion"], 1);
+        assert_eq!(req["schemaVersion"], 2);
         assert_eq!(req["args"]["sessionId"], "s1");
     }
 

@@ -27,7 +27,7 @@
 //! the connection open and push event lines until SIGINT.
 //!
 //! Request shape:
-//!   `{"command":"sessions.list","args":{...},"schemaVersion":1,"requestId":"uuid"}`
+//!   `{"command":"sessions.list","args":{...},"schemaVersion":2,"requestId":"uuid"}`
 //!
 //! Response shape (success):
 //!   `{"ok":true,"requestId":"...","result":<command-specific>}`
@@ -55,7 +55,7 @@
 //! the residual narrow race window between try-connect and the next
 //! process's bind (~ms; OS-level atomic bind would close this fully).
 
-use crate::api::message::{MessageBrief, MessageVisibility};
+use crate::api::message::MessageBrief;
 use crate::api::project::{CreateProjectInput, ProjectBrief, ProjectId};
 use crate::api::session::{CreateSessionInput, SessionBrief};
 use crate::api::{
@@ -66,10 +66,10 @@ use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};
 use crate::managed_runtime;
 use crate::protocol::{
+    goal_family_requires_v2, GoalActiveArgs, GoalExtendArgs, GoalStartArgs, GoalStatusArgs,
+    GoalStopArgs,
     LlmSetArgs, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs, SessionBtwArgs,
-    SessionCheckpointArgs, SessionGoalMasterPlanArgs, SessionGoalSoloTurnArgs,
-    SessionGoalSynthesizeArgs, SessionMoveArgs, SessionNewArgs, SessionNewGoalWorkerArgs,
-    SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
+    SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
     SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
 };
 use crate::runner_commands::{
@@ -105,28 +105,42 @@ use tokio::time::timeout;
 
 mod common;
 mod ctx;
+mod goal_cmds;
 mod llm_cmds;
 mod project_cmds;
 mod session_cmds;
-mod session_goal_cmds;
 mod session_new_cmds;
 mod spawn_config;
 mod wire;
 
 use crate::notify::{NullNotifier, TauriNotifier};
 pub use ctx::{DbSource, HandlerCtx, RunnerPort};
+use goal_cmds::*;
 use llm_cmds::*;
 use project_cmds::*;
 use session_cmds::*;
-use session_goal_cmds::*;
 use session_new_cmds::*;
 use wire::{write_stream_line, StreamEnvelope, CONNECTION_IDLE_TIMEOUT};
-pub use wire::{ErrorTag, SocketRequest, SocketResponse, SCHEMA_VERSION};
+pub use wire::{ErrorTag, SocketRequest, SocketResponse, ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION};
 
 #[allow(unused_imports)]
 pub(crate) use llm_cmds::{resolve_llm_selection_for_runtime, ResolvedLlmSelection};
 
-const GOAL_WORKER_SESSION_ID_PLACEHOLDER: &str = "{{GALLEY_SESSION_ID}}";
+/// Crate-visible entry to [`session_cmds::ensure_session_runner`] for
+/// callers outside the socket layer (the Goal v2 engine dispatches its
+/// continuations through it). Errors are flattened to a message: the
+/// engine records them on the goal, it never answers a wire request.
+pub(crate) async fn ensure_runner_for_session(
+    ctx: &HandlerCtx<'_>,
+    galley: &SqliteGalley,
+    session_id: &str,
+    via: &'static str,
+) -> Result<(), String> {
+    session_cmds::ensure_session_runner(galley, ctx, session_id, via)
+        .await
+        .map_err(|e| format!("{e:?}"))
+}
+
 
 /// Resolve the per-user socket path.
 ///
@@ -558,13 +572,25 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
             ));
         }
     };
-    if req.schema_version != SCHEMA_VERSION {
+    if !ACCEPTED_SCHEMA_VERSIONS.contains(&req.schema_version) {
         return DispatchResult::Unary(SocketResponse::err(
             req.request_id,
             ErrorTag::SchemaMismatch,
             format!(
-                "client schema_version {} != server {}",
-                req.schema_version, SCHEMA_VERSION
+                "client schema_version {} not in server's accepted set {:?} (current {})",
+                req.schema_version, ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION
+            ),
+        ));
+    }
+    // v1 callers see the goal family as absent, not as a different
+    // contract (see `ACCEPTED_SCHEMA_VERSIONS`).
+    if req.schema_version < SCHEMA_VERSION && goal_family_requires_v2(&req.command) {
+        return DispatchResult::Unary(SocketResponse::err(
+            req.request_id,
+            ErrorTag::UnknownCommand,
+            format!(
+                "'{}' exists only under schemaVersion {SCHEMA_VERSION}; the caller pinned {}",
+                req.command, req.schema_version
             ),
         ));
     }
@@ -649,15 +675,6 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         "session.checkpoint" => {
             DispatchResult::Unary(dispatch_session_checkpoint(request_id, req.args, ctx).await)
         }
-        "session.goal_synthesize" => {
-            DispatchResult::Unary(dispatch_session_goal_synthesize(request_id, req.args, ctx).await)
-        }
-        "session.goal_master_plan" => DispatchResult::Unary(
-            dispatch_session_goal_master_plan(request_id, req.args, ctx).await,
-        ),
-        "session.goal_solo_turn" => {
-            DispatchResult::Unary(dispatch_session_goal_solo_turn(request_id, req.args, ctx).await)
-        }
         "session.run_state" => {
             DispatchResult::Unary(dispatch_session_run_state(request_id, req.args, ctx).await)
         }
@@ -668,9 +685,6 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         // ---- B4 M1 session write commands ----
         "session.new" => {
             DispatchResult::Unary(dispatch_session_new(request_id, req.args, ctx).await)
-        }
-        "session.new_goal_worker" => {
-            DispatchResult::Unary(dispatch_session_new_goal_worker(request_id, req.args, ctx).await)
         }
         "session.btw" => {
             DispatchResult::Unary(dispatch_session_btw(request_id, req.args, ctx).await)
@@ -698,6 +712,18 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
             DispatchResult::Unary(dispatch_project_delete(request_id, req.args, ctx).await)
         }
         "llm.set" => DispatchResult::Unary(dispatch_llm_set(request_id, req.args, ctx).await),
+        // ---- Goal v2 (schemaVersion 2) ----
+        "goal.start" => DispatchResult::Unary(dispatch_goal_start(request_id, req.args, ctx).await),
+        "goal.status" => {
+            DispatchResult::Unary(dispatch_goal_status(request_id, req.args, ctx).await)
+        }
+        "goal.active" => {
+            DispatchResult::Unary(dispatch_goal_active(request_id, req.args, ctx).await)
+        }
+        "goal.stop" => DispatchResult::Unary(dispatch_goal_stop(request_id, req.args, ctx).await),
+        "goal.extend" => {
+            DispatchResult::Unary(dispatch_goal_extend(request_id, req.args, ctx).await)
+        }
         other => DispatchResult::Unary(SocketResponse::err(
             request_id,
             ErrorTag::UnknownCommand,
@@ -824,26 +850,6 @@ mod tests {
         let unique: HashSet<String> = ids.iter().cloned().collect();
         assert_eq!(unique.len(), ids.len());
         assert!(ids.iter().all(|id| id.starts_with("s-")));
-    }
-
-    #[test]
-    fn goal_worker_task_template_requires_exactly_one_session_placeholder() {
-        let missing = render_goal_worker_task_template("hello", "s-real");
-        assert!(missing.is_err());
-
-        let multiple = render_goal_worker_task_template(
-            "{{GALLEY_SESSION_ID}} and {{GALLEY_SESSION_ID}}",
-            "s-real",
-        );
-        assert!(multiple.is_err());
-    }
-
-    #[test]
-    fn goal_worker_task_template_renders_real_session_id() {
-        let rendered =
-            render_goal_worker_task_template("Your session id: {{GALLEY_SESSION_ID}}", "s-real")
-                .unwrap();
-        assert_eq!(rendered, "Your session id: s-real");
     }
 
     #[test]

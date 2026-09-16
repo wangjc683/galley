@@ -64,6 +64,7 @@ const MIG_032: &str = include_str!("../migrations/032_goal_mode.sql");
 const MIG_033: &str = include_str!("../migrations/033_goal_optional_project.sql");
 const MIG_034: &str = include_str!("../migrations/034_session_approval_mode.sql");
 const MIG_038: &str = include_str!("../migrations/038_session_title_source.sql");
+const MIG_039: &str = include_str!("../migrations/039_goal_v2.sql");
 
 async fn fresh_galley() -> SqliteGalley {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -77,7 +78,7 @@ async fn fresh_galley() -> SqliteGalley {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
-        MIG_031, MIG_032, MIG_033, MIG_034, MIG_038,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_038, MIG_039,
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
     }
@@ -281,20 +282,48 @@ async fn git_review_uses_shared_api_and_existing_error_categories() {
     use galley_core_lib::protocol::{GitReviewRequest, SocketCommand};
     let h = Harness::new(FakeRunner::default()).await;
     let dir = tempfile::tempdir().unwrap();
-    let output = std::process::Command::new("git").arg("init").arg(dir.path()).output().unwrap();
+    let output = std::process::Command::new("git")
+        .arg("init")
+        .arg(dir.path())
+        .output()
+        .unwrap();
     assert!(output.status.success());
     std::fs::write(dir.path().join("report.md"), "# Report").unwrap();
     let args = GitReviewRequest::List {
         path: dir.path().to_string_lossy().into(),
         base: None,
     };
-    let response = h.dispatch(req(GitReviewRequest::NAME, serde_json::to_value(&args).unwrap())).await;
+    let response = h
+        .dispatch(req(
+            GitReviewRequest::NAME,
+            serde_json::to_value(&args).unwrap(),
+        ))
+        .await;
     assert!(response.ok, "{response:?}");
-    assert_eq!(response.result.unwrap(), serde_json::to_value(h.galley.review_git(args).await.unwrap()).unwrap());
-    let response = h.dispatch(req(GitReviewRequest::NAME, json!({"action": "list", "path": "relative"}))).await;
-    assert_eq!(serde_json::to_value(response).unwrap()["error"], "invalid_args");
-    let response = h.dispatch(req(GitReviewRequest::NAME, json!({"action": "checkout", "path": dir.path()}))).await;
-    assert_eq!(serde_json::to_value(response).unwrap()["error"], "invalid_args");
+    assert_eq!(
+        response.result.unwrap(),
+        serde_json::to_value(h.galley.review_git(args).await.unwrap()).unwrap()
+    );
+    let response = h
+        .dispatch(req(
+            GitReviewRequest::NAME,
+            json!({"action": "list", "path": "relative"}),
+        ))
+        .await;
+    assert_eq!(
+        serde_json::to_value(response).unwrap()["error"],
+        "invalid_args"
+    );
+    let response = h
+        .dispatch(req(
+            GitReviewRequest::NAME,
+            json!({"action": "checkout", "path": dir.path()}),
+        ))
+        .await;
+    assert_eq!(
+        serde_json::to_value(response).unwrap()["error"],
+        "invalid_args"
+    );
 }
 
 #[tokio::test]
@@ -690,97 +719,225 @@ async fn llm_set_process_gone_persists_and_emits_updated() {
     assert_eq!(payload["via"], "llm.set");
 }
 
-// ---------------- session.goal_solo_turn idle gate ----------------
+// ---------------- schemaVersion 2 policy + goal.* (Goal v2) ----------------
 
-#[tokio::test]
-async fn goal_solo_turn_busy_session_sends_and_persists_nothing() {
-    // The galley#19-family gate: a keep-going nudge against a mid-run
-    // session must come back `busy` with zero side effects — before the
-    // gate it went straight to the bridge, which rejected it as a
-    // user-visible error toast (once per step of a multi-step turn).
-    let h = Harness::new(FakeRunner::reserve_busy()).await;
-    h.seed_session("s-goal").await;
-
-    let resp = h
-        .dispatch(req(
-            "session.goal_solo_turn",
-            json!({"sessionId": "s-goal", "dispatchContent": "[keep going]"}),
-        ))
-        .await;
-
-    assert!(resp.ok, "busy is a normal outcome, not an error: {resp:?}");
-    assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "busy");
-    assert!(h.runner.sent_commands.lock().unwrap().is_empty());
-    let rows = h
-        .galley
-        .session_messages_including_internal(SessionId("s-goal".into()), None)
-        .await
-        .unwrap();
-    assert!(rows.is_empty(), "busy must not persist the nudge row");
+fn req_v2(command: &str, args: Value) -> Value {
+    json!({ "command": command, "args": args, "schemaVersion": 2, "requestId": "t2" })
 }
 
 #[tokio::test]
-async fn goal_solo_turn_idle_session_dispatches_visible_turn() {
+async fn schema_v1_still_serves_unchanged_commands() {
+    let h = Harness::new(FakeRunner::default()).await;
+    h.seed_session("s1").await;
+    let resp = h
+        .dispatch(req(
+            "session.send",
+            json!({"sessionId": "s1", "content": "hi"}),
+        ))
+        .await;
+    assert!(resp.ok, "v1 request on an unchanged command: {resp:?}");
+}
+
+#[tokio::test]
+async fn schema_v1_sees_the_goal_family_as_unknown() {
+    let h = Harness::new(FakeRunner::default()).await;
+    h.seed_session("s1").await;
+    for (command, args) in [
+        ("goal.start", json!({"sessionId": "s1", "objective": "o"})),
+        ("goal.active", json!({})),
+        // Retired v1 names are gone under every version.
+        (
+            "session.goal_solo_turn",
+            json!({"sessionId": "s1", "dispatchContent": "x"}),
+        ),
+        ("session.new_goal_worker", json!({"taskTemplate": "x"})),
+    ] {
+        let resp = h.dispatch(req(command, args)).await;
+        assert!(!resp.ok, "{command} under v1 must fail");
+        assert_eq!(
+            resp.error.as_deref(),
+            Some("unknown_command"),
+            "{command}: {resp:?}"
+        );
+    }
+    let resp = h
+        .dispatch(req_v2("session.goal_solo_turn", json!({"sessionId": "s1"})))
+        .await;
+    assert_eq!(
+        resp.error.as_deref(),
+        Some("unknown_command"),
+        "retired name under v2 too"
+    );
+}
+
+#[tokio::test]
+async fn schema_outside_the_accepted_set_is_a_mismatch() {
+    let h = Harness::new(FakeRunner::default()).await;
+    let resp = h
+        .dispatch(json!({ "command": "ping", "args": {}, "schemaVersion": 3, "requestId": "t3" }))
+        .await;
+    assert!(!resp.ok);
+    assert_eq!(resp.error.as_deref(), Some("schema_mismatch"));
+}
+
+#[tokio::test]
+async fn goal_start_status_active_stop_round_trip() {
     let h = Harness::new(FakeRunner::default()).await;
     h.seed_session("s-goal").await;
 
     let resp = h
-        .dispatch(req(
-            "session.goal_solo_turn",
-            json!({"sessionId": "s-goal", "dispatchContent": "[keep going]"}),
+        .dispatch(req_v2(
+            "goal.start",
+            json!({"sessionId": "s-goal", "objective": "Ship it", "budgetSeconds": 1800,
+                   "supervisor": "sup-1", "reason": "user asked"}),
         ))
         .await;
-
-    assert!(resp.ok, "expected ok, got {resp:?}");
-    assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "dispatched");
-    assert_eq!(h.runner.sent_commands.lock().unwrap().len(), 1);
-    assert!(h.runner.released.lock().unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn goal_solo_turn_send_failure_releases_run_gate() {
-    // The reservation must not outlive a failed dispatch: a stuck-open
-    // gate would queue every later message behind a RunComplete that
-    // will never come.
-    let h = Harness::new(FakeRunner::send_fails_process_gone()).await;
-    h.seed_session("s-goal").await;
+    assert!(resp.ok, "goal.start: {resp:?}");
+    let result = resp.result.clone().unwrap();
+    assert_eq!(result["dispatch"], "dispatched");
+    assert_eq!(result["goal"]["status"], "active");
+    assert_eq!(result["goal"]["sessionId"], "s-goal");
+    assert_eq!(result["goal"]["budgetSeconds"], 1800);
+    assert_eq!(result["goal"]["origin"]["supervisor"], "sup-1");
+    assert_eq!(result["message"]["content"], "Ship it");
+    assert_eq!(result["message"]["goalId"], result["goal"]["id"]);
+    let goal_id = result["goal"]["id"].as_str().unwrap().to_string();
+    // The opening turn went to the runner as the wrapped prompt, not the raw row.
+    let sent = h.runner.sent_commands.lock().unwrap();
+    assert_eq!(sent.len(), 1);
+    assert!(sent[0].1.contains("<objective>"), "{}", sent[0].1);
+    drop(sent);
+    // The objective row is announced to the GUI like a CLI send would be.
+    let persisted = h
+        .notifier
+        .payload_of("user-message-persisted")
+        .expect("user-message-persisted emitted");
+    assert_eq!(persisted["message"]["goalId"], goal_id);
+    assert!(h.notifier.names().iter().any(|n| n == "goal-updated"));
 
     let resp = h
-        .dispatch(req(
-            "session.goal_solo_turn",
-            json!({"sessionId": "s-goal", "dispatchContent": "[keep going]"}),
+        .dispatch(req_v2("goal.status", json!({"goalId": goal_id})))
+        .await;
+    assert!(resp.ok, "goal.status: {resp:?}");
+    assert_eq!(resp.result.unwrap()["goal"]["id"], goal_id);
+
+    let resp = h.dispatch(req_v2("goal.active", json!({}))).await;
+    assert!(resp.ok, "goal.active: {resp:?}");
+    let list = resp.result.unwrap();
+    assert_eq!(list.as_array().map(|a| a.len()), Some(1));
+    assert_eq!(list[0]["id"], goal_id);
+
+    // A second open goal on the same session is refused with the id of the first.
+    let resp = h
+        .dispatch(req_v2(
+            "goal.start",
+            json!({"sessionId": "s-goal", "objective": "Another"}),
         ))
         .await;
+    assert!(!resp.ok);
+    assert_eq!(resp.error.as_deref(), Some("invalid_args"));
+    assert!(resp.message.as_deref().unwrap_or("").contains(&goal_id));
 
-    assert!(!resp.ok, "runner dispatch failure is an error: {resp:?}");
-    assert_eq!(h.runner.released.lock().unwrap().as_slice(), ["s-goal"]);
+    let resp = h
+        .dispatch(req_v2(
+            "goal.stop",
+            json!({"goalId": goal_id, "reason": "enough"}),
+        ))
+        .await;
+    assert!(resp.ok, "goal.stop: {resp:?}");
+    assert_eq!(resp.result.unwrap()["goal"]["status"], "stopped");
+    let resp = h.dispatch(req_v2("goal.active", json!({}))).await;
+    assert_eq!(resp.result.unwrap().as_array().map(|a| a.len()), Some(0));
 }
 
 #[tokio::test]
-async fn goal_synthesize_busy_session_sends_and_persists_nothing() {
+async fn goal_extend_raises_the_ceiling_and_refuses_open_ended_goals() {
+    let h = Harness::new(FakeRunner::default()).await;
+    h.seed_session("s-ext").await;
+    let resp = h
+        .dispatch(req_v2(
+            "goal.start",
+            json!({"sessionId": "s-ext", "objective": "o", "budgetSeconds": 600}),
+        ))
+        .await;
+    let goal_id = resp.result.unwrap()["goal"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let resp = h
+        .dispatch(req_v2(
+            "goal.extend",
+            json!({"goalId": goal_id, "extraSeconds": 1800}),
+        ))
+        .await;
+    assert!(resp.ok, "goal.extend: {resp:?}");
+    let goal = resp.result.unwrap();
+    assert_eq!(goal["goal"]["budgetSeconds"], 2400);
+    assert_eq!(goal["goal"]["status"], "active");
+
+    h.seed_session("s-open").await;
+    let resp = h
+        .dispatch(req_v2(
+            "goal.start",
+            json!({"sessionId": "s-open", "objective": "o"}),
+        ))
+        .await;
+    let open_id = resp.result.unwrap()["goal"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let resp = h
+        .dispatch(req_v2(
+            "goal.extend",
+            json!({"goalId": open_id, "extraSeconds": 60}),
+        ))
+        .await;
+    assert_eq!(resp.error.as_deref(), Some("invalid_args"), "{resp:?}");
+    let resp = h
+        .dispatch(req_v2(
+            "goal.extend",
+            json!({"goalId": "goal_missing", "extraSeconds": 60}),
+        ))
+        .await;
+    assert_eq!(resp.error.as_deref(), Some("not_found"), "{resp:?}");
+}
+
+#[tokio::test]
+async fn goal_start_on_a_busy_session_is_invalid_args_with_no_side_effects() {
     let h = Harness::new(FakeRunner::reserve_busy()).await;
-    h.seed_session("s-wrap").await;
-
+    h.seed_session("s-busy").await;
     let resp = h
-        .dispatch(req(
-            "session.goal_synthesize",
-            json!({
-                "sessionId": "s-wrap",
-                "visibleContent": "正在整理最终结果…",
-                "dispatchContent": "[wrap up]"
-            }),
+        .dispatch(req_v2(
+            "goal.start",
+            json!({"sessionId": "s-busy", "objective": "o"}),
         ))
         .await;
-
-    assert!(resp.ok, "busy is a normal outcome, not an error: {resp:?}");
-    assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "busy");
+    assert!(!resp.ok);
+    assert_eq!(resp.error.as_deref(), Some("invalid_args"));
     assert!(h.runner.sent_commands.lock().unwrap().is_empty());
+    assert!(h.galley.list_active_goals().await.unwrap().is_empty());
     let rows = h
         .galley
-        .session_messages_including_internal(SessionId("s-wrap".into()), None)
+        .session_messages_including_internal(SessionId("s-busy".into()), None)
         .await
         .unwrap();
-    assert!(rows.is_empty(), "busy must not persist the narration row");
+    assert!(rows.is_empty(), "busy must persist nothing");
+}
+
+#[tokio::test]
+async fn goal_start_unknown_session_is_not_found_and_goal_status_unknown_id_too() {
+    let h = Harness::new(FakeRunner::default()).await;
+    let resp = h
+        .dispatch(req_v2(
+            "goal.start",
+            json!({"sessionId": "nope", "objective": "o"}),
+        ))
+        .await;
+    assert_eq!(resp.error.as_deref(), Some("not_found"), "{resp:?}");
+    let resp = h
+        .dispatch(req_v2("goal.status", json!({"goalId": "goal_missing"})))
+        .await;
+    assert_eq!(resp.error.as_deref(), Some("not_found"), "{resp:?}");
 }
 
 // ---------------- session.run_state ----------------
