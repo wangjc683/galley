@@ -399,8 +399,8 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-**Goal v2 (2026-09-16, branch `goal-v2`, all eight tickets under
-`.scratch/goal-simplify/` except dogfood and the live-window follow-up):**
+**Goal v2 (merged to `main` 2026-09-16 as `a3d9d54c`, eight commits
+from the tickets under `.scratch/goal-simplify/`, unreleased):**
 the hive / solo Goal engines and their detached CLI controller are gone;
 a Goal is now one persistent objective on one session, driven by a
 continuation loop inside Core's queue drain task, ended by the model's
@@ -412,9 +412,16 @@ unchanged commands (`goal.*` is `2`-only, the v1 goal family is
 `unknown_command`); the runner extracts the tag; managed patch `0022`
 strips it on IM surfaces; the GUI keeps the Composer entry, a
 budget-only confirm dialog, the top-bar pill, commission / terminal
-markers and a paused / blocked tail. About 9k lines removed, ~2.5k added.
-Awaiting JC's real-app dogfood (ticket 07) before merge and release; the
-release will be a minor, not a patch.
+markers and a paused / blocked tail; goal runs also get the live window
+and fold (goal-run-groups). The budget is a log-spaced six-preset picker
+plus a custom field, and a `budget_limited` goal can be given 30 more
+minutes counted from now (`goal extend`). About 11k lines removed, ~3k
+added. JC dogfooded three goal runs on the live app (complete-by-tag,
+stop + resume, a 10-minute ceiling) and ruled to keep the Codex
+"done-when-done" semantics; the "use the whole budget" mode is in
+[deferred](./devlog/deferred.md). The next release is a minor, not a
+patch, and its notes must call out `schemaVersion: 2` and the retired
+v1 goal commands; JC chose to accumulate more before cutting it.
 
 Unreleased since `v0.4.16` (as of 2026-09-16 evening, `69a5ce6e..f442b38b`,
 GUI only): the process-area batch — verbose tool-dispatch marker no longer

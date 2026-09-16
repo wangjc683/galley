@@ -1,6 +1,6 @@
 # 07: 真机 dogfood
 
-Status: ready-for-human
+Status: done
 PRD: ../PRD.md
 Blocked by: 01–06
 
@@ -34,3 +34,11 @@ Blocked by: 01–06
 ## 验收
 
 八条路径全部与预期一致或偏差已记录并裁决。
+
+## Comments
+
+**2026-09-16 JC 真机三轮**：① 汕尾旅游（1 小时上限）——中止后发「继续」恢复，
+最终打 complete 标签完成；暴露恢复时机与委派头两处 bug，已修（08 票 Comments）。
+② 东北旅游（30 分钟）——手动停止。③ 三星折叠屏（10 分钟）——10 步 2 分半自判
+完成，引出「最多还是至少」的讨论，裁决按 Codex 用法，`use_budget` 进 deferred。
+未跑：attach 模式、Core 重启、两 session 各一 goal、受阻路径；留给下次真机。
