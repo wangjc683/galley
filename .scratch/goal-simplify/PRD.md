@@ -1,6 +1,6 @@
 # PRD: Goal 重做——Codex 形态的单线程 Goal，退役 hive / solo 双引擎
 
-Status: ready-for-agent
+Status: done（2026-09-16 八票全部合入 main `a3d9d54c`，JC 真机跑过三种收尾；随 `v0.5.0` 发运，`use_budget` 进 deferred）
 Date: 2026-09-16
 来源: JC 提出「现在的 goal 模式过于复杂、效果一般，考虑去掉或改成更经典的
 形态（参照 Codex `/goal`）」；agent 出探讨稿后 JC 裁决：**换**，完成判定归

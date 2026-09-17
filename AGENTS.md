@@ -28,7 +28,8 @@ rule and the "GA budget" in
 
 Current target:
 
-- Agent API: `schemaVersion: 1` (frozen since `v0.2`; see Rule 3)
+- Agent API: `schemaVersion: 2` (since the Goal v2 rework, 2026-09-16; `1` is
+  still served for every command that did not change; see Rule 3)
 
 Read [project status](./docs/project-status.md) for the current version, release
 tag, release gates, update-channel state, and compact phase state. Those values
@@ -113,11 +114,14 @@ change this constitution.
 Galley CLI JSON is the stable contract for agents. Read
 [agent-api](./docs/agent-api/README.md) before changing it.
 
-- `schemaVersion: 1` is frozen (since `v0.2`; still current).
-- v1 changes are additive-only.
-- Breaking change requires `schemaVersion: 2`.
-- CLI callers pin with `--schema=1`.
-- Socket callers pin with `schemaVersion: 1`.
+- `schemaVersion: 2` is current (since 2026-09-16, first shipped in `v0.5.0`).
+  `1` was frozen at `v0.2` and is still served for every command that did not
+  change; only the `goal` family is `2`-only (the v1 goal commands answer
+  `unknown_command`).
+- Changes within a schema version are additive-only.
+- Breaking change requires the next `schemaVersion`.
+- CLI callers pin with `--schema=2` (or `--schema=1` for unchanged commands).
+- Socket callers pin with `schemaVersion: 2` (or `1`, same rule).
 - Exit code classes and error identifiers are stable.
 
 Changing the Agent API is riskier than changing GUI copy: a GUI change affects

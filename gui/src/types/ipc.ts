@@ -170,7 +170,7 @@ export interface TurnEndEvent {
    * Present only on the final turn_end of a run, and only when the model
    * emitted a recognized value. Consumed by Core, not by the GUI.
    */
-  goalStatus?: "complete" | "blocked";
+  goalStatus?: "complete" | "blocked" | null;
   timestamp: string;
 }
 
