@@ -36,8 +36,11 @@ export function ManagedModelProviderPicker({
         ? managedModelProtocolLabel(protocol)
         : null;
 
+  // `modal`: this picker lives inside the Settings Dialog, whose scroll
+  // lock swallows wheel events on portaled content. A modal Popover
+  // pushes its own lock on top so the list can scroll.
   return (
-    <Popover.Root>
+    <Popover.Root modal>
       <Popover.Trigger asChild>
         <button
           type="button"

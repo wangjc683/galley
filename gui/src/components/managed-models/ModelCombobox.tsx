@@ -190,6 +190,13 @@ export function ModelCombobox({
           sideOffset={6}
           onOpenAutoFocus={(event) => event.preventDefault()}
           onCloseAutoFocus={(event) => event.preventDefault()}
+          // The Settings Dialog's scroll lock cancels wheel / touchmove
+          // events that reach `document` from portaled content. Stop them
+          // here so the list scrolls. We cannot use `modal` on the Popover
+          // like ManagedModelProviderPicker does: modal traps focus inside
+          // the list and would steal it from the input while typing.
+          onWheel={(event) => event.stopPropagation()}
+          onTouchMove={(event) => event.stopPropagation()}
           onInteractOutside={(event) => {
             // Clicking back into the field is not "outside" — the
             // input keeps the list open while the user keeps typing.
