@@ -391,9 +391,10 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): **`v0.4.16` → `v0.5.0` is pending** on
-   an installed build (and the `v0.4.8` → … → `v0.4.16` hops were never
-   explicitly reported — confirm or write them off in the same pass).
+1. App-update dogfood (SOP step 10): **`v0.4.16` → `v0.5.0` passed** on an
+   installed build (JC confirmed 2026-09-17). The `v0.4.8` → … → `v0.4.16`
+   hops were never explicitly reported and can no longer be run (no older
+   build left installed) — write them off next pass unless JC recalls them.
    All earlier hops through `v0.4.7` → `v0.4.8` passed
    (JC confirmed 2026-08-13 / 2026-08-14), except **`v0.4.6` → `v0.4.7`,
    never run and off the normal path**: a hop can only be tested from the
@@ -440,8 +441,8 @@ session twice in a row, root cause unknown (see deferred); issues #26 and #27
 stay open by JC's ruling, with the #27 commenter still owing a clarification
 of their sidebar / project report; real WeChat end-to-end acceptance of the
 supervisor-side fix is still owed from a machine with a paired WeChat account.
-The app-update hop `v0.4.16 → v0.5.0` on an installed build (SOP step 10) is
-the one release step not yet observed.
+The app-update hop `v0.4.16 → v0.5.0` on an installed build (SOP step 10)
+passed (JC, 2026-09-17), so every step of the `v0.5.0` release is observed.
 
 The GA baseline is fully current as of `v0.5.0` (`efb3bc6`, audited
 2026-08-31, shipped since `v0.4.11`); the next release audits upstream again
