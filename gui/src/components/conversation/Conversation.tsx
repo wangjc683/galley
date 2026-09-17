@@ -18,6 +18,10 @@ import { RunFoldSection } from "@/components/conversation/RunFoldSection";
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
+import {
+  WrittenFilesContext,
+  buildWrittenFileResolver,
+} from "@/lib/written-files";
 import { planGoalRuns } from "@/lib/goal-run-groups";
 import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
@@ -617,7 +621,15 @@ export function Conversation({
   });
   flushSection();
 
-  return <div>{rendered}</div>;
+  // Names the model repeats for files this session wrote resolve to the
+  // bridge-recorded absolute path (lib/written-files.ts), so a delivery
+  // like `./汕尾旅游指南.md` opens even when the reply skipped the full path.
+  const writtenFiles = useMemo(() => buildWrittenFileResolver(turns), [turns]);
+  return (
+    <WrittenFilesContext.Provider value={writtenFiles}>
+      <div>{rendered}</div>
+    </WrittenFilesContext.Provider>
+  );
 }
 
 function AgentTurnView({

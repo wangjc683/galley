@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MarkdownView } from "./MarkdownView";
 import { LocalFilesContext } from "@/lib/local-files";
+import { WrittenFilesContext } from "@/lib/written-files";
 
 function render(source: string, documentPath?: string) {
   return renderToStaticMarkup(
@@ -62,5 +63,33 @@ describe("Markdown file references", () => {
     expect(html).toContain('id="summary"');
     expect(html).toContain('id="summary-1"');
     expect(render(source)).not.toContain('id="summary"');
+  });
+});
+
+describe("references to files the session wrote", () => {
+  const written = (ref: string) =>
+    ref === "./汕尾旅游指南.md" || ref === "汕尾旅游指南.md"
+      ? "/tmp/temp/汕尾旅游指南.md"
+      : null;
+  function renderWithWritten(source: string) {
+    return renderToStaticMarkup(
+      <Tooltip.Provider>
+        <LocalFilesContext.Provider value={() => undefined}>
+          <WrittenFilesContext.Provider value={written}>
+            <MarkdownView source={source} variant="agent" />
+          </WrittenFilesContext.Provider>
+        </LocalFilesContext.Provider>
+      </Tooltip.Provider>,
+    );
+  }
+  it("makes a relative name actionable only when it matches a written file", () => {
+    expect(renderWithWritten("`./汕尾旅游指南.md`")).toContain(
+      "在文件夹中显示",
+    );
+    expect(renderWithWritten("[指南](汕尾旅游指南.md)")).toContain(
+      "在文件夹中显示",
+    );
+    expect(renderWithWritten("`./other.md`")).not.toContain("<button");
+    expect(renderWithWritten("[x](other.md)")).not.toContain("href=");
   });
 });

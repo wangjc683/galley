@@ -47,6 +47,9 @@ authoritative; earlier conversation only helps you locate things. Inspect before
 memory. Improve, replace, or remove existing work as needed to satisfy the actual objective.
 - Answer in the language of the objective. End every turn with a few lines saying what you \
 checked and what changed — the user is watching live — not the full work in progress.
+- Name every file you deliver by its full absolute path in inline code (for example \
+`/Users/me/Documents/report.md`), not a bare filename or a relative path — Galley makes \
+full paths click-to-open; relative ones stay plain text.
 
 Completion audit — before claiming the goal is achieved, treat completion as unproven:
 - Derive concrete requirements from the objective and anything it references (files, \
@@ -127,8 +130,8 @@ pub fn budget_limit_prompt(objective: &str, elapsed: Duration) -> String {
         "The active Galley Goal has reached its time budget ({} elapsed).\n\n{}\n\n\
 Galley will mark the goal as budget-limited after this turn, so do not start new \
 substantive work. Wrap up now: summarize the useful progress, list what remains and any \
-blockers, and leave the user with one clear next step. Answer in the language of the \
-objective.\n\n\
+blockers, and leave the user with one clear next step. Name every file you deliver by \
+its full absolute path in inline code. Answer in the language of the objective.\n\n\
 If — and only if — the objective is in fact fully achieved and verified, end with \
 <goal-status>complete</goal-status>. Do not use any other tag.",
         human_minutes(elapsed),
@@ -166,6 +169,15 @@ mod tests {
             assert!(!text.contains("budget has run out"));
         }
         assert!(continuation_prompt("o", 4, None).contains("continuation #4"));
+        // Deliverables are named by absolute path so the GUI can open them
+        // (2026-09-17: a goal wrap-up wrote `./汕尾旅游指南.md`).
+        for text in [
+            objective_prompt("o", None),
+            continuation_prompt("o", 1, None),
+            budget_limit_prompt("o", Duration::from_secs(60)),
+        ] {
+            assert!(text.contains("full absolute path in inline code"));
+        }
         assert!(continuation_prompt("o", 4, None).contains("classify your previous goal turn"));
     }
 

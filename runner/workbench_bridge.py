@@ -289,6 +289,30 @@ def _clean_generated_title(raw: str) -> str:
     return first_line
 
 
+FILE_WRITING_TOOLS = frozenset({"file_write", "file_patch"})
+
+
+def _resolved_file_path(
+    tool_name: str, args: dict[str, Any], handler_cwd: str | None
+) -> str | None:
+    """Absolute path a file-writing tool actually touched.
+
+    Mirrors GA's `GenericAgentHandler._get_abs_path` (``abspath(join(cwd,
+    path))``) at the moment the turn settles, so the archive records where
+    the file went instead of the model's relative spelling. The GUI turns
+    it into a click-to-open reference and uses it to resolve the same
+    relative name when the reply repeats it (2026-09-17). Only the two
+    tools whose path GA resolves against `handler.cwd` qualify; `code_run`
+    output is not tracked here.
+    """
+    if tool_name not in FILE_WRITING_TOOLS or handler_cwd is None:
+        return None
+    path = args.get("path")
+    if not isinstance(path, str) or not path.strip():
+        return None
+    return os.path.abspath(os.path.join(handler_cwd, path))
+
+
 def _to_json_safe(obj: Any) -> Any:
     """Recursively coerce a value into JSON-serializable form.
 
@@ -1312,6 +1336,9 @@ class Bridge:
                 getattr(response, "content", "") if response is not None else ""
             )
             self.current_turn = turn
+            # The hook receives GA's loop locals; `self` there is the
+            # live GenericAgentHandler whose `cwd` anchors file tools.
+            handler_cwd = getattr(ctx.get("self"), "cwd", None)
             # GA may stash its internal response/outcome objects inside
             # exit_reason.data. Coerce to JSON-safe shape before emit.
             safe_exit = _to_json_safe(exit_reason) if exit_reason else None
@@ -1329,7 +1356,7 @@ class Bridge:
                     turnIndex=turn,
                     summary=summary,
                     toolCalls=[
-                        _to_json_safe(self._serialize_tool_call(tc))
+                        _to_json_safe(self._serialize_tool_call(tc, handler_cwd))
                         for tc in tool_calls
                     ],
                     toolResults=[
@@ -1403,9 +1430,15 @@ class Bridge:
             self._emit_error(f"turn_end_hook failed: {e}", traceback.format_exc())
 
     @staticmethod
-    def _serialize_tool_call(tc: dict[str, Any]) -> dict[str, Any]:
+    def _serialize_tool_call(
+        tc: dict[str, Any], handler_cwd: str | None = None
+    ) -> dict[str, Any]:
         args = {k: v for k, v in (tc.get("args") or {}).items() if not k.startswith("_")}
-        return {"toolName": tc.get("tool_name", ""), "args": args}
+        record: dict[str, Any] = {"toolName": tc.get("tool_name", ""), "args": args}
+        resolved = _resolved_file_path(tc.get("tool_name", ""), args, handler_cwd)
+        if resolved is not None:
+            record["resolvedPath"] = resolved
+        return record
 
     @staticmethod
     def _serialize_tool_result(tr: dict[str, Any]) -> dict[str, Any]:

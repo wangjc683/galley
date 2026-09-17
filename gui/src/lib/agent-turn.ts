@@ -31,6 +31,7 @@ export interface RawToolCall {
   toolName?: unknown;
   args?: unknown;
   toolUseId?: unknown;
+  resolvedPath?: unknown;
   [key: string]: unknown;
 }
 
@@ -77,6 +78,9 @@ export function toolEventsFromRaw(
       errorDetail: error?.detail,
       args: (tc.args as Record<string, unknown>) ?? {},
       resultPreview: previewFromContent(result?.content),
+      ...(typeof tc.resolvedPath === "string" && tc.resolvedPath
+        ? { resolvedPath: tc.resolvedPath }
+        : {}),
     };
   });
 }

@@ -7,6 +7,7 @@ import {
   CursorClick,
   FilePlus,
   FileText,
+  FolderOpen,
   GlobeSimple,
   type Icon,
   PauseCircle,
@@ -15,12 +16,16 @@ import {
   Terminal,
   XCircle,
 } from "@phosphor-icons/react";
-import { useEffect, memo, useState, type ReactNode } from "react";
+import { useContext, useEffect, memo, useState, type ReactNode } from "react";
 
 import { ApprovalForm } from "@/components/conversation/ApprovalForm";
 import { LiveDots } from "@/components/conversation/LiveIndicators";
+import { LocalFileReference } from "@/components/conversation/LocalFileReference";
 import { PatchView } from "@/components/conversation/diff/PatchView";
+import { IconButton } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
+import { previewKindByPath } from "@/lib/local-file-path";
+import { LocalFilesContext } from "@/lib/local-files";
 import { formatStepNumeral } from "@/lib/step-numeral";
 import { cn } from "@/lib/utils";
 import type {
@@ -548,11 +553,40 @@ function InlineToolPill({
 }) {
   const copy = useCopy();
   const [open, setOpen] = useState(false);
+  const activateFile = useContext(LocalFilesContext);
   const meta = TOOL_META[tool.name];
   const ToolIcon = meta?.icon;
   const toolLabel =
     (copy.tools as Record<string, string>)[tool.name] ?? meta?.zh;
   const preview = previewArgs(tool.name, tool.args);
+  // A settled file_write / file_patch knows where the file went (the
+  // bridge resolved it against GA's cwd, 2026-09-17). The step is then
+  // the one entrance that never depends on the model spelling the path
+  // out: an open button hugs the pill, and the expanded body names the
+  // full path as an ordinary file reference. Nested buttons are
+  // invalid HTML, so the affordance is a sibling of the toggle row.
+  const writtenPath = tool.resolvedPath;
+  const writtenKind = writtenPath ? previewKindByPath(writtenPath) : null;
+  const openLabel =
+    writtenKind === "markdown"
+      ? copy.localFiles.preview
+      : writtenKind === "image"
+        ? copy.localFiles.previewImage
+        : writtenKind === "text"
+          ? copy.localFiles.previewText
+          : copy.localFiles.locate;
+  const OpenIcon = writtenKind === null ? FolderOpen : FileText;
+  const fileAffordance = writtenPath && activateFile && (
+    <IconButton
+      ariaLabel={openLabel}
+      tooltip={`${openLabel} · ${writtenPath}`}
+      size="xs"
+      className="file-reveal-button ml-0.5 h-5 w-5 shrink-0"
+      onClick={(event) => activateFile(writtenPath, event.currentTarget)}
+    >
+      <OpenIcon size={13} weight="thin" />
+    </IconButton>
+  );
   // Merged step row (see ToolCalloutProps.stepIndex): the pill takes
   // over the TurnMarker's identity — prefix + hairline in the marker's
   // exact register, and the step's two-tier top margin (run boundary
@@ -582,7 +616,14 @@ function InlineToolPill({
         // out-weighed the sentence it was meant to support. Hover
         // still lifts the whole row to ink.
         "text-ink-muted hover:bg-hover hover:text-ink",
-        stepLabel ? "-ml-2.5 min-w-0 flex-1" : "w-full",
+        // With an open button beside it the row shrinks to its text so
+        // the button hugs the caret instead of drifting to the column's
+        // far edge (the stranded-control problem of 2026-09-16).
+        stepLabel
+          ? cn("-ml-2.5 min-w-0", !fileAffordance && "flex-1")
+          : fileAffordance
+            ? "min-w-0"
+            : "w-full",
       )}
     >
       {/* One left cluster: icon · label · preview · caret. The row
@@ -632,6 +673,13 @@ function InlineToolPill({
           {tool.name}
         </div>
       )}
+      {writtenPath && (
+        <div className="mb-1.5 break-all font-mono [font-size:var(--conversation-tool-mono-size)]">
+          <LocalFileReference path={writtenPath}>
+            <code>{writtenPath}</code>
+          </LocalFileReference>
+        </div>
+      )}
       <SettledToolBody tool={tool} />
     </div>
   );
@@ -651,6 +699,7 @@ function InlineToolPill({
           </span>
           <span className="sr-only">{stepLabel}</span>
           {row}
+          {fileAffordance}
         </div>
         {expandedBody && (
           <div className="pl-(--step-gutter)">{expandedBody}</div>
@@ -668,7 +717,10 @@ function InlineToolPill({
   // py-1.
   return (
     <div>
-      <div className="-ml-2.5">{row}</div>
+      <div className="-ml-2.5 flex min-w-0 items-center">
+        {row}
+        {fileAffordance}
+      </div>
       {expandedBody}
     </div>
   );

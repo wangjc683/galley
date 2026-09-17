@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-17
+- [写过的文件按名可点 + 写入步骤自带入口](./2026-09-17-written-file-references.md) — 汕尾旅游 Goal 收尾把交付物写成 `./汕尾旅游指南.md`，用户追问完整路径后才能预览；09-09 的「Files You Create」提示词条款在场仍失效，病根是 bridge 明知绝对路径却只回传 `writed_bytes`；三层方案（提示词加压 / bridge 现场解析进 tool_calls / Goal 收口列交付物）取 B 带 A：`toolCalls[].resolvedPath` 只覆盖 file_write / file_patch，正文相对路径与裸文件名严格精确匹配本会话已写文件（同名多文件不解析），settled 写入 pill 行尾加打开按钮、展开体列完整路径引用，Goal 三份模板加「交付物写绝对路径」；09-08「不猜基准目录」边界不动，C 等 Session Workspace
 - [用户消息改为杏沙气泡](./2026-09-17-user-message-bubble.md) — JC 三度嫌高亮笔「死板 / 硬 / 平」后倾向经典气泡；把「经典气泡」拆成容器 / 平涂 / 无投影 / 右对齐 / 尾巴五个零件，只有投影与纸墨寄存器硬冲突、右对齐是唯一破坏阅读左缘的零件；真机 A 高亮笔 / B 左气泡 / C 右气泡 × 12 / 16 圆角，推荐与裁决一致落 B 左气泡 12px；翻转 foundations「不借用 message 气泡」为「不借用双侧 / 右对齐气泡」；委派标记保留竖条硬角正装；落笔动效作废、排印微调独立进 deferred；后记：dark `brand-tint` 收响度 `#4d3b2b → #362d24`（旧值比画布亮 +16.5、彩度高于 light、亮过整个 elevation 阶梯，读作发光面板；现 +10 / C 0.020），了结 08-21 的 deferred 欠账
 - [Composer Goal 模式去确认框](./2026-09-17-composer-goal-mode-no-dialog.md) — JC 嫌启动 Goal 要点三次；确认框是 v1「3 worker」时代的保险，v2 单线程一键停后失去价值；两档方案 JC 直选拆框，armed 态 Composer 直接穿委派标记的正装（brand-tint + 4px 左条 + eyebrow 上限 pill）当作「你在 Goal 模式」的信号，Enter 直接启动；上限不记忆、砍自定义分钟框、说明文案进 popover 头行
 

@@ -378,6 +378,11 @@
   **「软链 + `handler.cwd`」而非改进程 cwd**，配一个 managed patch 改
   `get_global_memory()` 写死的两句提示词；attach 模式降级为「只建软链 + 提示词
   引导」。
+- **2026-09-17 部分落地**：「工具调用的绝对路径在 bridge 现场解析、存进
+  `messages.tool_calls`」这一条已单独实现（`toolCalls[].resolvedPath`，只覆盖
+  `file_write` / `file_patch`），并接了 GUI 的写入步骤入口与正文按名解析，见
+  [written-file references](./2026-09-17-written-file-references.md)。本项其余
+  部分（每 session 目录、软链 + `handler.cwd`、`code_run` 产物）仍暂缓。
 - **实施要点**：`workspace_path` 存 `sessions` 表首次定死（照抄
   `goals.workspace_path`），改设置只影响新 session；空目录 session 结束时回收，
   **不写标记文件**（会废掉回收）；工具调用的绝对路径**在 bridge 现场解析**

@@ -58,6 +58,10 @@ export interface ConversationToolEvent {
   /** Raw args dict (rendered as a fallback mono block when no tool-specific
    * renderer applies). file_patch / file_write specific renderers land in #6. */
   args?: Record<string, unknown>;
+  /** Absolute path a `file_write` / `file_patch` actually touched, resolved
+   * by the bridge against GA's handler cwd when the turn settled
+   * (2026-09-17). Present only on settled events of those two tools. */
+  resolvedPath?: string;
   /** ≤200 char preview when raw args is too large. */
   argsPreview?: string;
   /** ≤500 char tool result preview (when status is success / failed). */

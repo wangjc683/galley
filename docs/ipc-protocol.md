@@ -284,6 +284,7 @@ bridge 解析 GA yield 出来的 markdown 字符串得到的非结构化进度�
 字段说明：
 - `summary`：直接复用 GA 在 `turn_end_callback` 中提取的 `<summary>` 标签内容（GA 已 smart_format 截断到 100 字符）
 - `toolCalls / toolResults`：当 turn 中所有工具调用与结果
+- `toolCalls[].resolvedPath`：可选（增量字段，2026-09-17）。仅 `file_write` / `file_patch` 携带：bridge 在 turn 落定时按 GA `GenericAgentHandler._get_abs_path` 的规则（`abspath(join(handler.cwd, args.path))`）算出的**绝对路径**，即文件实际写到的位置；`args.path` 仍是模型原样的相对写法。Core 原样持久化进 `messages.tool_calls`。GUI 用它把过程区的写入步骤做成可打开的文件引用，并把回复正文里与之精确匹配的相对路径 / 裸文件名解析到该绝对路径（`gui/src/lib/written-files.ts`）。`code_run` 产出的文件不在此列。
 - `exitReason`：当且仅当 agent_runner_loop 决定退出时非 null（结构与 GA 内部 `exit_reason` 一致：`{"result": "CURRENT_TASK_DONE" | "EXITED" | "MAX_TURNS_EXCEEDED", "data": ...}`）
 - `responseContent`：完整 LLM 响应文本（含 thinking / summary 标签），用于 desktop 自行解析展示
 - `telemetry`：可选。只在带 `exitReason` 的 final `turn_end` 上发送，用于最终回答 footer。字段均可缺失：`elapsedMs`、`inputTokens`、`outputTokens`、`cacheCreateTokens`、`cacheReadTokens`、`requestCount`、`contextUsedChars`、`contextLimitChars`。Managed GA 可通过 Galley-owned runtime hook 统计 token；external GA 不安装 token hook，只做 elapsed 与只读 context snapshot 的 best-effort 降级。

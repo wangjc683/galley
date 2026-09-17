@@ -231,3 +231,22 @@ describe("live → persist → restore round trip", () => {
     expect(restored.tools[0].resultPreview).toBeUndefined();
   });
 });
+
+describe("resolvedPath hydration", () => {
+  it("keeps the bridge-resolved absolute path and omits the field otherwise", () => {
+    const [write, read] = toolEventsFromRaw(
+      [
+        {
+          toolName: "file_write",
+          args: { path: "指南.md" },
+          resolvedPath: "/tmp/temp/指南.md",
+        },
+        { toolName: "file_read", args: { path: "指南.md" } },
+      ],
+      [],
+      "t-",
+    );
+    expect(write.resolvedPath).toBe("/tmp/temp/指南.md");
+    expect("resolvedPath" in read).toBe(false);
+  });
+});

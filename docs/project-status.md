@@ -426,6 +426,15 @@ stop + resume, a 10-minute ceiling) and ruled to keep the Codex
 patch, and its notes must call out `schemaVersion: 2` and the retired
 v1 goal commands; JC chose to accumulate more before cutting it.
 
+Also unreleased (2026-09-17, runner + core + GUI): file-writing tool calls
+now carry the bridge-resolved absolute path (`toolCalls[].resolvedPath`,
+additive in `turn_end` / `messages.tool_calls`); the settled write step in the
+process area opens the file directly, and a relative path or bare filename in
+a reply resolves to a file this session wrote (exact match only). Goal prompts
+tell the model to name deliverables by absolute path. Triggered by a Goal
+wrap-up that delivered `./汕尾旅游指南.md` (see
+[devlog](./devlog/2026-09-17-written-file-references.md)).
+
 Also unreleased (2026-09-17, GUI only): the user message in the conversation
 column changed from per-line highlighter strokes to a flat, left-aligned
 apricot bubble (`rounded-md`, no border, no shadow) after a live three-variant

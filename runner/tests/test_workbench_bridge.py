@@ -1402,3 +1402,31 @@ def test_clean_turn_summary_replaces_markup_dominant_recap() -> None:
     # Prose that merely mentions the markup mid-sentence is NOT
     # markup-dominant — normal cleaning applies.
     assert "回合协议错误" not in _clean_turn_summary("检查了 invoke 调用的参数")
+
+
+# ---------------- resolved file paths on turn_end ----------------
+
+
+def test_serialize_tool_call_resolves_file_tools_against_handler_cwd(
+    tmp_path: Path,
+) -> None:
+    cwd = str(tmp_path / "temp")
+    write = {"tool_name": "file_write", "args": {"path": "汕尾旅游指南.md", "_index": 0}}
+    patch = {"tool_name": "file_patch", "args": {"path": "./notes/a.txt"}}
+    read = {"tool_name": "file_read", "args": {"path": "汕尾旅游指南.md"}}
+    absolute = {"tool_name": "file_write", "args": {"path": "/tmp/x.md"}}
+
+    out = Bridge._serialize_tool_call(write, cwd)
+    assert out["resolvedPath"] == os.path.join(cwd, "汕尾旅游指南.md")
+    assert "_index" not in out["args"]
+    assert Bridge._serialize_tool_call(patch, cwd)["resolvedPath"] == os.path.join(
+        cwd, "notes", "a.txt"
+    )
+    # Only file-writing tools carry the field; absolute input stays as is.
+    assert "resolvedPath" not in Bridge._serialize_tool_call(read, cwd)
+    assert Bridge._serialize_tool_call(absolute, cwd)["resolvedPath"] == "/tmp/x.md"
+    # Without a handler (no cwd known) the record is unchanged.
+    assert Bridge._serialize_tool_call(write) == {
+        "toolName": "file_write",
+        "args": {"path": "汕尾旅游指南.md"},
+    }

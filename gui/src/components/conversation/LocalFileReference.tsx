@@ -15,6 +15,7 @@ import {
   LocalFilesContext,
   fileOperation,
 } from "@/lib/local-files";
+import { WrittenFilesContext } from "@/lib/written-files";
 
 export function LocalFileReference({
   path,
@@ -92,9 +93,13 @@ export function FileInlineCode({
   children?: ReactNode;
 }) {
   const insideLink = useContext(InsideLinkContext);
+  const written = useContext(WrittenFilesContext);
+  // Full paths first; a relative name resolves only through the
+  // session's own written files (lib/written-files.ts) — never a
+  // guessed base directory.
   const path =
     !insideLink && typeof children === "string"
-      ? localFilePath(children)
+      ? (localFilePath(children) ?? written?.(children) ?? null)
       : null;
   const code = <code className={className}>{children}</code>;
   return path ? (
@@ -112,6 +117,7 @@ export function FileAnchor({
   children?: ReactNode;
 }) {
   const documentPath = useContext(DocumentPathContext);
+  const written = useContext(WrittenFilesContext);
   const resolved = href ? documentReference(href, documentPath) : undefined;
   if (documentPath && resolved?.startsWith("#")) {
     return (
@@ -143,7 +149,9 @@ export function FileAnchor({
       </InsideLinkContext.Provider>
     );
   }
-  const path = resolved ? localFilePath(resolved, true) : null;
+  const path =
+    (resolved ? localFilePath(resolved, true) : null) ??
+    (href && !documentPath ? writtenLinkTarget(href, written) : null);
   if (path)
     return <LocalFileReference path={path}>{children}</LocalFileReference>;
   // Relative chat references have no reliable base; don't navigate the WebView.
@@ -159,4 +167,20 @@ export function FileAnchor({
       )}
     </InsideLinkContext.Provider>
   );
+}
+
+/** A chat link whose target names a file this session wrote. Percent-
+ * decoded like any href; scheme-bearing or fragment-only hrefs never
+ * match a written file. */
+function writtenLinkTarget(
+  href: string,
+  written: ((reference: string) => string | null) | null,
+): string | null {
+  if (!written || href.startsWith("#")) return null;
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href)) return null;
+  try {
+    return written(decodeURIComponent(href));
+  } catch {
+    return null;
+  }
 }
