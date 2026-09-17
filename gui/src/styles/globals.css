@@ -438,8 +438,20 @@ html[data-theme="dark"] {
   --color-brand: #d6a083;
   --color-brand-soft: #3e3026;
   --color-brand-strong: #e2ae8d;
-  /* Dark-mode user-message band — provisional; revisit in the dark pass. */
-  --color-brand-tint: #4d3b2b;
+  /* Dark user-message fill, calibrated 2026-09-17 (the deferred "dark
+     brand-tint loudness" item). The provisional #4d3b2b sat OKLCH L +16.5
+     over app with C 0.036 — 2.3× light's lightness step (−7.1) at HIGHER
+     chroma than light (0.030), on a ground the 07-25 pass had de-warmed
+     to C 0.006 while explicitly leaving brand fills for a later
+     loudness check. It also outshone every chrome tier (elevated 25.9,
+     hover 27.2 vs 36.7), so a content-layer flat fill read as a lit
+     panel on black. Now L +10 / C 0.020 / hue 63 unchanged: 1.4× light's
+     step (fills read weaker on dark), chroma at two thirds of light's,
+     same logic as the de-warmed ground. Ink contrast 11:1. The Goal
+     commission slab and the armed Composer wear this token too and move
+     with it on purpose; the sidebar's selected override does not (see
+     the note on --color-selected below). */
+  --color-brand-tint: #362d24;
 
   --color-success: #8fbf8f;
   --color-warning: #d6a250;
@@ -599,9 +611,10 @@ html:not([data-theme="dark"]) .chrome-hover-scope {
    "row is selected" would be leaning on hue alone (the exact condition
    deferred.md tracks as a known weakness on the light side).
 
-   Its value happens to equal --color-brand-tint, the mainview's user-
-   message band. THAT IS A CALIBRATION COINCIDENCE, NOT A BINDING — do
-   not rewrite it as var(--color-brand-tint). The two mean different
+   Its value equalled --color-brand-tint (the mainview's user-message
+   fill) until 2026-09-17, when brand-tint was recalibrated down to
+   #362d24 and this stayed put — proof the two were never bound. Do not
+   rewrite it as var(--color-brand-tint). The two mean different
    things (brand-tint = "you wrote this", repeated many times per screen;
    selected = "you are here", globally unique) and must stay free to move
    independently; binding them would let a future retune of the mainview
@@ -611,8 +624,8 @@ html:not([data-theme="dark"]) .chrome-hover-scope {
    Why the coincidence exists at all is a direct consequence of the
    chrome flip: dark chrome is now *lighter* than app while these fills
    run lighter still, so a fill calibrated on app lands higher than one
-   calibrated on chrome, and brand-tint's absolute value happens to be
-   right where selected wants to sit. In light every sign is reversed, so
+   calibrated on chrome, and brand-tint's old absolute value happened to
+   be right where selected wants to sit. In light every sign is reversed, so
    the same value would land at ΔL* -0.73 from hover — indistinguishable.
    That is why light keeps its own value and this is not a cross-theme
    rule. Measured here: ΔL* +16.42 over chrome, +8.57 over hover, +6.22

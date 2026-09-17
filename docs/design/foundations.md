@@ -138,8 +138,8 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 | `--color-ink-muted` | `#92897D` | hint / timestamp |
 | `--color-hover` | `#2A2622` | 中性 hover |
 | `--color-selected` / `--color-brand-soft` | `#3E3026` | 杏沙 tint |
-| `--color-brand-tint` | `#4D3B2B` | 用户消息底（provisional，dark pass 再校） |
-| *(sidebar 内覆写)* | `--color-hover` `#2F2B27` / `--color-selected` `#4D3B2B` | `.chrome-hover-scope`，见下方；light 侧同名覆写 `--color-selected` `#E7D8C0`。dark 的 selected 与 `brand-tint` **同值但不绑定**（标定重合，见 [选中行三通道](../devlog/2026-08-21-sidebar-selected-row-three-channels.md)） |
+| `--color-brand-tint` | `#362D24` | 用户消息气泡底。2026-09-17 由 `#4D3B2B` 收响度：原值比画布亮 OKLCH +16.5、彩度 0.036 高于 light，且亮过 elevated / hover 整个阶梯，读作贴在黑底上的发光面板；现 +10 / C 0.020 / 色相 63 不变（light 步长的 1.4 倍、彩度的三分之二，与 07-25 去暖地面同一逻辑）。委派标记与 armed Composer 同穿此 token，一起变安静 |
+| *(sidebar 内覆写)* | `--color-hover` `#2F2B27` / `--color-selected` `#4D3B2B` | `.chrome-hover-scope`，见下方；light 侧同名覆写 `--color-selected` `#E7D8C0`。dark 的 selected 曾与 `brand-tint` 同值但**从不绑定**（标定重合，见 [选中行三通道](../devlog/2026-08-21-sidebar-selected-row-three-channels.md)）；2026-09-17 brand-tint 收响度后两者分开，selected 不动 |
 | `--color-brand` | `#D6A083` | 品牌主色 |
 | `--color-brand-strong` | `#E2AE8D` | 品牌 hover / link |
 | `--color-success` | `#8FBF8F` | 成功（较 light 提亮） |

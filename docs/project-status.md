@@ -430,7 +430,10 @@ Also unreleased (2026-09-17, GUI only): the user message in the conversation
 column changed from per-line highlighter strokes to a flat, left-aligned
 apricot bubble (`rounded-md`, no border, no shadow) after a live three-variant
 test; the Goal commission marker keeps its barred sharp-cornered slab as the
-formal dress (see [devlog](./devlog/2026-09-17-user-message-bubble.md)).
+formal dress; the dark `--color-brand-tint` was then recalibrated from
+`#4d3b2b` to `#362d24` (OKLCH +10 / C 0.020 over app instead of +16.5 /
+0.036), retiring the 08-21 deferred loudness item (see
+[devlog](./devlog/2026-09-17-user-message-bubble.md)).
 
 Unreleased since `v0.4.16` (as of 2026-09-16 evening, `69a5ce6e..f442b38b`,
 GUI only): the process-area batch — verbose tool-dispatch marker no longer
