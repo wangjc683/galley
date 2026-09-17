@@ -6,7 +6,7 @@ import {
   Copy,
   PlugsConnected,
 } from "@phosphor-icons/react";
-import { Fragment, useEffect, memo, useMemo, useRef, useState } from "react";
+import { useEffect, memo, useMemo, useRef, useState } from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
 import {
@@ -20,63 +20,68 @@ import { cn } from "@/lib/utils";
 import type { MessageAttachment, Origin } from "@/types/conversation";
 
 /**
- * User message — a highlighter-marked passage in the document, NOT a
- * chat bubble.
+ * User message — a flat apricot bubble in the document column.
  *
- * Per DESIGN.md §4.3 (highlighter redesign 2026-08-06; supersedes the
- * 2026-05-14 callout slab and its 2026-08-05 shrink-to-fit /
- * hard-corner iterations):
- *   - The user's words render as per-line apricot strokes
- *     (`bg-brand-tint` + `box-decoration-clone`), fused into one
- *     ragged-right block — a passage marked with a highlighter pen.
- *     The old solid slab read as UI machinery (heavier and
- *     harder-cornered than the rounded ToolCallout boxes — the human
- *     voice dressed as apparatus). The strokes keep the same color
- *     area, which live A/B testing (2026-08-06, vs typography-only
- *     variants) showed is the signal scroll-back scanning actually
- *     runs on, while the ragged right edge kills the slab register.
- *   - No brand bar: the highlight itself is the color anchor now, and
- *     a bar next to it would be a redundant double anchor.
+ * Per DESIGN.md §4.3 (bubble decision 2026-09-17; supersedes the
+ * 2026-08-06 highlighter strokes, which in turn replaced the
+ * 2026-05-14 callout slab):
+ *   - The user's words sit in a rounded (`rounded-md`, 12px), flat
+ *     `bg-brand-tint` container — the "user in a container, assistant
+ *     in prose" shape every chat product the user already knows uses.
+ *     Three rounds of "still feels stiff / hard / flat" (08-05, 08-06,
+ *     08-21) never settled the highlighter metaphor, and the bubble
+ *     form itself had never been A/B'd. 2026-09-17 live test:
+ *     highlighter vs left bubble vs right bubble, 12 vs 16px radius —
+ *     left bubble at 12 won.
+ *   - LEFT-aligned, flush with the column, `w-fit max-w-full`. The
+ *     conversation is one document with one reading edge; right
+ *     alignment is the one IM ingredient that breaks it (and would
+ *     crowd the Question Rail). Text indents by the padding like a
+ *     callout — the text edge no longer lines up with the agent prose
+ *     column (that was a highlighter-era property).
+ *   - NO border, NO shadow. Content is paper, chrome is material
+ *     (2026-08-21): elevation is control vocabulary in Galley. Flat
+ *     fill is what keeps this a callout, not a card.
+ *   - 12px, not 16: a one-line message is ~45px tall, so 16 turns
+ *     "好" / "继续" into a pill and slides into chip vocabulary. 12
+ *     matches ToolCallout — machine and human boxes equally rounded,
+ *     which retires the 08-06 "machine round, human square" inversion
+ *     the other way.
  *   - font-sans 15px medium — unchanged. The 2026-06-20 size/weight
- *     unification with the agent answer body still holds: color still
- *     carries the turn distinction, only its shape changed.
- *   - 2px stroke rounding. The 2026-08-05 anti-rounding argument
- *     (0.04% of a 17:1 slab's pixels, border-l wedge taper) was slab
- *     geometry and does not transfer: on a per-line stroke the radius
- *     is visible and reads as pen work.
- *   - `w-fit max-w-full` block + per-line strokes — fill weight
- *     tracks the text line by line, so the 2026-08-05 "short message
- *     as near-empty band" concern dissolves entirely.
+ *     unification with the agent answer body still holds: color
+ *     carries the turn distinction. Whether the container makes the
+ *     weight contrast redundant is a separate re-review, not bundled.
  *   - `whitespace-pre-wrap break-words` — preserves the `\n`s in
- *     pasted content (otherwise they'd collapse to spaces under
- *     CSS default whitespace:normal) and lets long Chinese / URL /
- *     token strings break inside words rather than overflowing.
+ *     pasted content and lets long Chinese / URL / token strings break
+ *     inside words rather than overflowing. Blank lines now stay
+ *     inside the container (the highlighter left them unpainted and
+ *     split a pasted message into pieces — one of the concrete gaps
+ *     the bubble closes).
  *
- * GoalCommissionMarker intentionally does NOT follow this redesign:
- * the crowned objective keeps the old bar + tint slab as its formal
- * dress. Plain strokes vs slab is now part of what marks a Goal
- * commission apart from an ordinary message (see GoalRunMarkers).
+ * GoalCommissionMarker does NOT follow: the crowned objective keeps
+ * the 4px bar + sharp-cornered tint slab as its formal dress. Plain
+ * rounded bubble vs barred sharp slab is what marks a Goal commission
+ * apart from an ordinary message (see GoalRunMarkers).
  *
  * Long-content collapse (≥7 lines or >500 chars):
  *   Collapsed by default to 6 lines via `line-clamp` — a clean
  *   line-boundary truncation, no fade-out gradient mask. Toggle
- *   button below the callout switches between "展开（共 N 行）"
+ *   button below the bubble switches between "展开（共 N 行）"
  *   and "收起". Saves screen real-estate in conversations where
  *   the user pasted a long prompt / stack trace / document.
  *
  * Message actions:
  *   Supervisor provenance renders as a small icon above the block.
  *   Copy is a transient chip that fades in on hover just outside the
- *   block's top-right corner — it sat inside the block until
+ *   bubble's top-right corner — it sat inside the block until
  *   2026-08-05, when shrink-to-fit made the `pr-10` it needed show up
  *   as dead fill on short messages. It never touches the inter-turn
  *   gap, and shares the block's hover region. The model: persistent
  *   actions live in the assistant reply bar; transient copy surfaces
  *   on a user action (hover / select). It wears the BARE chip skin,
- *   not the bordered one — see the render site for why the highlighter
- *   form makes armour wrong here. Mouse leave delays hiding briefly so
- *   the user can move from the message body to the action without
- *   chasing it.
+ *   not the bordered one — see the render site. Mouse leave delays
+ *   hiding briefly so the user can move from the message body to the
+ *   action without chasing it.
  *
  * `data-role="user-msg"` is a stable anchor that MainView's scroll
  * effect uses to find the just-submitted user message and snap its
@@ -90,49 +95,6 @@ const COLLAPSE_CHAR_THRESHOLD = 500;
 // visible tail hanging after the mouse had already moved on.
 const ACTION_HIDE_DELAY_MS = 600;
 const COPY_FEEDBACK_MS = 1500;
-
-/**
- * Per-line highlight strokes. Hard newlines split the content into
- * runs; each non-whitespace run gets its own stroke span, and
- * soft-wrapped long lines still stroke per visual line via
- * `box-decoration-clone`. Whitespace-only lines pass through
- * unhighlighted so pasted blank lines don't render as empty apricot
- * blobs. The 5px vertical padding overshoots the natural inter-line
- * gap at all three conversation font-size steps (leading 1.65–1.75),
- * fusing adjacent strokes into one ragged block — the fused texture
- * won over thin per-stroke gaps in the 2026-08-06 dev test.
- *
- * The 4px horizontal stroke overhang is painted with a pair of
- * offset box-shadows, NOT `px-1 -mx-1` padding/margin: WKWebView
- * leaves inline horizontal padding out of the `w-fit` block's
- * intrinsic width while still spending it at layout time, so the
- * padding version came up 8px short and `break-words` folded short
- * messages mid-word ("hey" → "he/y", dogfood 2026-08-06). The
- * shadows don't participate in layout at all — the line box is pure
- * text, which also keeps the text's left edge aligned with the agent
- * prose column — and they follow each cloned fragment with the
- * span's own radius, so the painted result is identical.
- */
-function HighlightedLines({ content }: { content: string }) {
-  const lines = content.split("\n");
-  return (
-    <>
-      {lines.map((line, i) => (
-        <Fragment key={i}>
-          {i > 0 && "\n"}
-          {line.trim().length > 0 ? (
-            <span className="box-decoration-clone rounded-[2px] bg-brand-tint py-[5px] shadow-[-4px_0_0_var(--color-brand-tint),4px_0_0_var(--color-brand-tint)]">
-              {line}
-            </span>
-          ) : (
-            line
-          )}
-        </Fragment>
-      ))}
-    </>
-  );
-}
-
 
 /**
  * Compose the supervisor provenance tooltip for the small icon pinned
@@ -317,7 +279,7 @@ export const MessageUser = memo(function MessageUser({
         data-role={askUserReply ? "user-msg-reply" : "user-msg"}
         data-message-id={messageId}
         className={cn(
-          "relative w-fit max-w-full py-0.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
+          "relative w-fit max-w-full rounded-md bg-brand-tint px-3.5 py-2.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",
         )}
       >
@@ -327,12 +289,12 @@ export const MessageUser = memo(function MessageUser({
             isLong && collapsed && "line-clamp-6",
           )}
         >
-          <HighlightedLines content={content} />
+          {content}
         </span>
         {attachments.length > 0 && (
           <UserImageAttachments attachments={attachments} />
         )}
-        {/* Transient copy — fades in on hover just outside the block's
+        {/* Transient copy — fades in on hover just outside the bubble's
             top-right corner.
             Sat *inside* the block until 2026-08-05, which is why the
             block reserved `pr-10`. Shrink-to-fit made that reservation
@@ -341,20 +303,17 @@ export const MessageUser = memo(function MessageUser({
             lets the box track its content exactly; it still rides the
             block's own hover region, so ownership survives.
 
-            `ml-3`, not `ml-1.5`: the highlighter draws its 4px horizontal
-            overhang with an offset box-shadow that does NOT participate in
-            layout (2026-08-06), so `left-full` lands on the TEXT edge while
-            the ink reaches 4px further right. The old 6px margin was a 2px
-            gap in practice. 12px here nets the intended ~8px.
+            `ml-1.5`: the bubble's painted edge IS its layout edge (the
+            highlighter era needed `ml-3` to clear a box-shadow overhang
+            that didn't take layout space), so 6px is a real 6px gap.
 
             `inline`, not `floating`: the bordered, solid-background chip
             exists so the selection toolbar can portal itself on top of
             arbitrary text. This one sits in clean canvas margin and needs
-            no such armour — and a bordered control box pressed against a
-            highlighter stroke inverts the register the 2026-08-06 redesign
-            set out to fix (machine parts crisp, the human voice drawn by
-            hand). */}
-        <div className="absolute left-full top-1.5 z-10 ml-3">{copyChip}</div>
+            no such armour — and a bordered control box pressed against
+            the user's own words inverts the register (machine parts
+            crisp, the human voice plain). */}
+        <div className="absolute left-full top-1.5 z-10 ml-1.5">{copyChip}</div>
       </div>
       {isLong && (
         <div className="mt-1">

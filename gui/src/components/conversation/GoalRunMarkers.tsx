@@ -12,10 +12,11 @@ import type { GoalBrief, GoalStatus } from "@/types/goal";
  *
  *   - GoalCommissionMarker opens the run: it is the objective the
  *     operator sent in Goal mode — still the user's words, dressed in
- *     the formal bar + brand-tint slab (the pre-2026-08-06 user
- *     register, deliberately retained after plain user messages moved
- *     to highlighter strokes) and "crowned" with a Goal eyebrow, the
- *     run's time ceiling, and a coarse status badge.
+ *     the formal bar + sharp-cornered brand-tint slab (the pre-2026-08-06
+ *     user register, deliberately retained while plain user messages
+ *     moved to highlighter strokes and then, 2026-09-17, to a flat
+ *     rounded bubble) and "crowned" with a Goal eyebrow, the run's time
+ *     ceiling, and a coarse status badge.
  *   - GoalTerminalMarker closes the run: the durable outcome (done /
  *     budget-limited / stopped / failed) + elapsed + continuations, so
  *     reopening a finished run is not amnesiac.
@@ -95,10 +96,11 @@ export function GoalCommissionMarker({
           formal dress: 4px brand bar + brand-tint slab + sharp right
           edge + Inter medium + shrink-to-fit. Until 2026-08-06 this
           was "same DNA as MessageUser" and kept in lockstep; plain
-          user messages now render as highlighter strokes and this
-          slab stays behind on purpose — the strokes-vs-slab contrast
-          is part of what marks a Goal commission apart from an
-          ordinary message (DESIGN.md §4.3). */}
+          user messages went to highlighter strokes and then (2026-09-17)
+          to a flat rounded bubble, and this barred, sharp-cornered slab
+          stays behind on purpose — the contrast is part of what marks
+          a Goal commission apart from an ordinary message
+          (DESIGN.md §4.3). */}
       <div className="relative w-fit max-w-full select-text border-l-4 border-brand-strong bg-brand-tint py-2.5 pl-4 pr-4 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink">
         <span className="block whitespace-pre-wrap break-words">{content}</span>
       </div>

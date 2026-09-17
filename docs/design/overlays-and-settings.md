@@ -118,7 +118,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
   用 CSS Custom Highlight API 注册 `galley-locate`——不改 DOM，react-markdown
   的树不受影响；样式是 brand `--opacity-strong` 填充（与面板行 mark 同一
   寄存器），取 strong 而非 soft/medium 是因为它要在用户消息的 brand-tint
-  笔触上也读得出。锚线停的是**第一个命中
+  气泡底上也读得出。锚线停的是**第一个命中
   所在行**而不是块顶（长回答里词可能在块顶几百像素之下），块级洗染照旧。
   生命周期：停留到下一次定位、切会话或 Esc（用户落地后要在附近上下读，
   1.4s 太短；它不改 DOM，留着零成本）。API 不可用时退回块级洗染。

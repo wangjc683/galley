@@ -10,7 +10,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 - **Claude 给**：暖色调、文学性可读性、对话感、克制
 - **二者结合 = 在文档工作区里跟一个温和但严肃的助手协作**
 
-不是「驾驶舱盯着野兽工作」，不是 IDE，不是 chat 气泡 IM，不是 dashboard。
+不是「驾驶舱盯着野兽工作」，不是 IDE，不是双侧气泡的 chat IM，不是 dashboard。（用户消息的单侧容器不算 IM——那是「用户在容器里、助手是散文」的文档形态，2026-09-17 起采纳，见 [conversation §4.3](./conversation.md)。）
 
 ### 1.1 三个统摄性约束（PRD §15.4 重申，DESIGN 落地）
 
@@ -23,7 +23,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | 源头 | 借用 | 不借用 |
 |---|---|---|
 | **Notion** | sidebar 树、文档留白、callout 块 | 数据库视图复杂度、cover image、emoji-heavy 页面装饰 |
-| **Claude.ai** | 暖底色、衬线正文、hero composer、对话节奏 | message 气泡、artifact 侧边栏（V0.1） |
+| **Claude.ai** | 暖底色、衬线正文、hero composer、对话节奏、用户消息的单侧平涂容器（2026-09-17 起） | 双侧 / 右对齐气泡、artifact 侧边栏（V0.1） |
 | **Linear** | 键盘优先、Command Palette、密度 | dark-first、cyan/emerald 信号、紧凑驾驶舱感 |
 | **Raycast** | overlay Command Palette 形态 | 顶部贴边、酷炫渐变 |
 

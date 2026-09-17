@@ -426,6 +426,12 @@ stop + resume, a 10-minute ceiling) and ruled to keep the Codex
 patch, and its notes must call out `schemaVersion: 2` and the retired
 v1 goal commands; JC chose to accumulate more before cutting it.
 
+Also unreleased (2026-09-17, GUI only): the user message in the conversation
+column changed from per-line highlighter strokes to a flat, left-aligned
+apricot bubble (`rounded-md`, no border, no shadow) after a live three-variant
+test; the Goal commission marker keeps its barred sharp-cornered slab as the
+formal dress (see [devlog](./devlog/2026-09-17-user-message-bubble.md)).
+
 Unreleased since `v0.4.16` (as of 2026-09-16 evening, `69a5ce6e..f442b38b`,
 GUI only): the process-area batch — verbose tool-dispatch marker no longer
 leaks into the live step status; the in-flight step's ordinal slot holds `··`;
