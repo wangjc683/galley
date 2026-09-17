@@ -3,14 +3,14 @@ import type { ReactNode } from "react";
 import { resolveComposerHint } from "@/lib/composer-hint";
 import { useCopy } from "@/lib/i18n";
 
-const COMPOSER_HINT_KBD = new Set(["Shift+Enter", "Enter", "/btw"]);
+const COMPOSER_HINT_KBD = new Set(["Shift+Enter", "Enter", "Esc", "/btw"]);
 
 /** Render a composer footer hint, styling known keyboard / command
- * tokens (Enter, Shift+Enter, /btw) in mono so they read as keys
+ * tokens (Enter, Shift+Enter, Esc, /btw) in mono so they read as keys
  * rather than prose. The tokens are language-invariant, so one
  * splitter works across zh / en copy. */
 function renderComposerHintWithKbd(text: string): ReactNode {
-  return text.split(/(Shift\+Enter|Enter|\/btw)/g).map((part, i) =>
+  return text.split(/(Shift\+Enter|Enter|Esc|\/btw)/g).map((part, i) =>
     COMPOSER_HINT_KBD.has(part) ? (
       <span key={i} className="font-mono text-ink-soft">
         {part}
@@ -29,6 +29,7 @@ interface ComposerFooterHintProps {
   hasText: boolean;
   isSideQuestion: boolean;
   effectiveGoalArmed: boolean;
+  goalSubmitting: boolean;
   goalBlockedHintVisible: boolean;
   staticHint?: ReactNode;
 }
@@ -49,6 +50,7 @@ export function ComposerFooterHint({
   hasText,
   isSideQuestion,
   effectiveGoalArmed,
+  goalSubmitting,
   goalBlockedHintVisible,
   staticHint,
 }: ComposerFooterHintProps) {
@@ -61,6 +63,7 @@ export function ComposerFooterHint({
     hasText,
     isSideQuestion,
     effectiveGoalArmed,
+    goalSubmitting,
   });
   const keyboardHint = hintKey ? copy.composer[hintKey] : null;
   // Keyboard hints get kbd-token styling; a caller-supplied staticHint

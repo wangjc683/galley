@@ -15,6 +15,7 @@ import { ComposerAttachButton } from "@/components/conversation/ComposerAttachBu
 import { ComposerDropOverlay } from "@/components/conversation/ComposerDropOverlay";
 import { ComposerFooterHint } from "@/components/conversation/ComposerFooterHint";
 import { ComposerGoalControls } from "@/components/conversation/ComposerGoalControls";
+import { ComposerGoalEyebrow } from "@/components/conversation/ComposerGoalEyebrow";
 import { ComposerImageStrip } from "@/components/conversation/ComposerImageStrip";
 import { ComposerQueueStrip } from "@/components/conversation/ComposerQueueStrip";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
@@ -347,13 +348,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       goalEntryDisabled,
       goalSubmitting,
       effectiveGoalArmed,
-      effectiveGoalConfirmOpen,
-      goalConfirmationObjective,
+      goalBudgetPreset,
       goalBlockedHintVisible,
+      setGoalBudgetPreset,
       handleGoalArmToggle,
-      openGoalConfirmation,
-      handleConfirmGoal,
-      handleGoalDialogOpenChange,
+      launchGoal,
       disarmGoal,
     } = useComposerGoal({
       onGoalSubmit,
@@ -405,11 +404,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // Core's queue. /btw keeps its immediate side-question path there
       // too; images are toast-blocked there and keep the draft.
       if (effectiveGoalArmed) {
-        if (hasPendingImages) {
-          onImageBlocked?.("goal");
-          return;
-        }
-        openGoalConfirmation();
+        void launchGoal();
         return;
       }
       const submittedText = trimmed || copy.composer.imageOnlyFallback;
@@ -423,7 +418,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // dismissing the candidate window) belongs to the IME — it must
       // not submit the draft or disarm Goal mode.
       if (isImeCompositionKeydown(e)) return;
-      if (e.key === "Escape" && effectiveGoalArmed && !effectiveGoalConfirmOpen) {
+      if (e.key === "Escape" && effectiveGoalArmed) {
         e.preventDefault();
         disarmGoal();
         return;
@@ -457,8 +452,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         <div
           ref={composerRootRef}
           className={cn(
-            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow] duration-(--motion-fast) ease-firm",
+            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow,background-color] duration-(--motion-fast) ease-firm",
             "focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/20",
+            // Armed = the Composer wears the commission marker's dress
+            // (GoalRunMarkers: 4px brand bar + brand-tint slab), so the
+            // draft already looks like the marker Enter will produce.
+            // That, not a confirm dialog, is the "you are in Goal mode"
+            // signal (ticket 09). The slab is 70% brand-tint over
+            // elevated, not full tint: on the live app full tint read a
+            // shade too heavy for a surface you type into (JC, three-way
+            // variant test 2026-09-17). Left bar stays brand-strong under
+            // focus: `border-l-*` outranks the shorthand `border-brand`.
+            effectiveGoalArmed &&
+              "border-l-4 border-l-brand-strong bg-[color-mix(in_oklab,var(--color-brand-tint)_70%,var(--color-elevated))] focus-within:border-l-brand-strong",
             disabled && "opacity-60",
           )}
           // No HTML5 drag handlers: with dragDropEnabled true, drops
@@ -466,6 +472,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           // useImageAttachments; `isDropActive` below is fed from there.
         >
           {isDropActive && <ComposerDropOverlay imagesEnabled={imagesEnabled} />}
+          {effectiveGoalArmed && (
+            <ComposerGoalEyebrow
+              budgetPreset={goalBudgetPreset}
+              disabled={goalSubmitting}
+              onBudgetPresetChange={setGoalBudgetPreset}
+            />
+          )}
           {ghostVisible && (
             <div
               aria-hidden
@@ -587,16 +600,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <ComposerGoalControls
                 canShowGoalEntry={canShowGoalEntry}
                 effectiveGoalArmed={effectiveGoalArmed}
-                effectiveGoalConfirmOpen={effectiveGoalConfirmOpen}
                 goalBlockedByActive={goalBlockedByActive}
                 goalEntryDisabled={goalEntryDisabled}
-                goalSubmitting={goalSubmitting}
                 requiresModelConfig={requiresModelConfig}
                 stopMode={stopMode}
-                goalConfirmationObjective={goalConfirmationObjective}
                 onArmToggle={handleGoalArmToggle}
-                onDialogOpenChange={handleGoalDialogOpenChange}
-                onConfirm={handleConfirmGoal}
               />
               <ComposerActionSlot
                 stopMode={stopMode}
@@ -623,6 +631,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           hasText={hasText}
           isSideQuestion={sideQuestionStaged}
           effectiveGoalArmed={effectiveGoalArmed}
+          goalSubmitting={goalSubmitting}
           goalBlockedHintVisible={goalBlockedHintVisible}
           staticHint={staticHint}
         />

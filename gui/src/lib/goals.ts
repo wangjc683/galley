@@ -11,58 +11,49 @@ import type {
 type TopbarCopy = ReturnType<typeof useCopy>["topbar"];
 
 /**
- * Time-ceiling choices in the launch dialog (JC, 2026-09-16): five
- * log-spaced minute presets, the explicit no-ceiling escape, and a
- * custom minutes field. Log spacing, not linear — the interesting jump
- * is "an errand" vs "an afternoon", and a linear 30/60/90/120 ladder
- * spends four slots inside one order of magnitude.
+ * Time-ceiling choices in the Composer's Goal eyebrow (JC, 2026-09-16;
+ * custom minutes dropped 2026-09-17, ticket 09): five log-spaced minute
+ * presets and the explicit no-ceiling escape. Log spacing, not linear —
+ * the interesting jump is "an errand" vs "an afternoon", and a linear
+ * 30/60/90/120 ladder spends four slots inside one order of magnitude.
  */
 export const GOAL_BUDGET_PRESET_MINUTES = [15, 30, 60, 120, 240] as const;
 
 export type GoalBudgetPreset =
   | `${(typeof GOAL_BUDGET_PRESET_MINUTES)[number]}`
-  | "none"
-  | "custom";
+  | "none";
+
+export const GOAL_BUDGET_PRESETS: readonly GoalBudgetPreset[] = [
+  ...GOAL_BUDGET_PRESET_MINUTES.map((m) => `${m}` as GoalBudgetPreset),
+  "none",
+];
 
 /** Recommended ceiling, matching Rust `DEFAULT_GOAL_BUDGET_SECONDS`.
  * No-ceiling is an explicit choice, never the default: a Goal spends
  * the user's own API money (PRD §6 裁决 2). */
 export const DEFAULT_GOAL_BUDGET_PRESET: GoalBudgetPreset = "60";
 
-/** Floor for the custom field. Under five minutes a Goal cannot finish
- * even its first continuation, so the ceiling would only ever produce a
- * `budget_limited` run with nothing in it. No upper bound — that is
- * what "no ceiling" is for, and a big number is the user's call. */
-export const GOAL_CUSTOM_BUDGET_MIN_MINUTES = 5;
-
 /** How much time one "give it more" hands a goal: 30 minutes. */
 export const GOAL_EXTEND_SECONDS = 1800;
 
 /**
- * Launch-dialog choice → the `budgetSeconds` Core wants.
- *
- *   - `number`    — a ceiling, in seconds.
- *   - `null`      — the explicit "no ceiling" choice.
- *   - `undefined` — not a usable choice yet (custom field empty, not a
- *     plain integer, or under the floor). The dialog disables Send on
- *     this, so `undefined` never reaches the command.
- *
- * Sub-minute precision is deliberately unavailable: the field is in
- * minutes and a fractional entry is rejected rather than rounded, so
- * what the user typed is always what the goal got.
+ * Eyebrow choice → the `budgetSeconds` Core wants: a ceiling in seconds,
+ * or `null` for the explicit "no ceiling" choice.
  */
 export function resolveGoalBudgetSeconds(
   preset: GoalBudgetPreset,
-  customMinutes: string,
-): number | null | undefined {
+): number | null {
   if (preset === "none") return null;
-  if (preset !== "custom") return Number.parseInt(preset, 10) * 60;
-  const raw = customMinutes.trim();
-  if (!/^\d+$/.test(raw)) return undefined;
-  const minutes = Number.parseInt(raw, 10);
-  if (!Number.isSafeInteger(minutes)) return undefined;
-  if (minutes < GOAL_CUSTOM_BUDGET_MIN_MINUTES) return undefined;
-  return minutes * 60;
+  return Number.parseInt(preset, 10) * 60;
+}
+
+/** Minutes behind a preset, `null` for no ceiling — what the eyebrow
+ * pill and the commission marker both print. */
+export function goalBudgetPresetMinutes(
+  preset: GoalBudgetPreset,
+): number | null {
+  if (preset === "none") return null;
+  return Number.parseInt(preset, 10);
 }
 
 /**

@@ -100,7 +100,7 @@ export function ComposerActionSlot({
             requiresModelConfig
               ? copy.composer.configureModelBeforeSending
               : effectiveGoalArmed
-                ? copy.composer.startGoalWithEnter
+                ? copy.composer.startGoalTooltip
                 : copy.composer.sendWithEnter
           }
         >

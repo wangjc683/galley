@@ -69,9 +69,11 @@ export const COMPOSER_GOAL_BUTTON = cn(
   "active:shadow-[var(--shadow-control-press)]",
 );
 
+// Elevated fill, not brand-soft: armed sits on the tinted Goal shell
+// (Composer.tsx), where a brand-soft circle sank into the background.
 export const COMPOSER_GOAL_BUTTON_ARMED = cn(
   COMPOSER_ACTION_BUTTON,
-  "border-brand/45 bg-brand-soft text-brand-strong",
+  "border-brand/45 bg-elevated text-brand-strong",
   "shadow-[var(--shadow-neutral-control)]",
   "hover:bg-brand/[var(--opacity-medium)] hover:shadow-[var(--shadow-neutral-control-hover)]",
   "active:shadow-[var(--shadow-control-press)]",

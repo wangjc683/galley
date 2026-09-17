@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-09-17
+- [Composer Goal 模式去确认框](./2026-09-17-composer-goal-mode-no-dialog.md) — JC 嫌启动 Goal 要点三次；确认框是 v1「3 worker」时代的保险，v2 单线程一键停后失去价值；两档方案 JC 直选拆框，armed 态 Composer 直接穿委派标记的正装（brand-tint + 4px 左条 + eyebrow 上限 pill）当作「你在 Goal 模式」的信号，Enter 直接启动；上限不记忆、砍自定义分钟框、说明文案进 popover 头行
+
 ### 2026-09-16
 - [Goal 重做为 Codex 形态](./2026-09-16-goal-v2-codex-shape.md) — JC 叫停「Goal run 进面板」并质疑 goal 模式过于复杂效果一般；本机三个月 0 条 goal、体量占仓库 8%，根源是 solo 把预算当目标；对照 Codex `/goal` 源码换成单线程持久目标（Core 空闲续跑、模型打 `<goal-status>` 宣告完成 / 受阻、预算改上限、abort→paused、发消息即恢复），退役 hive / solo 双引擎与 CLI controller，契约升 `schemaVersion: 2` 且 v1 未变命令仍服务；六条裁决点全按推荐；真机 dogfood 过后同日把 live 窗口接进 goal run（翻转 08-06 不折裁决，goal 组按 goal 状态定 live / 折）
 - [live run 两行窗口](./2026-09-16-live-run-window.md) — 同日三刀挤密度皆被真机否决后，密度按状态分流：先「完成即折」（重审 08-06 keep-expanded），再把 live 区改成固定两行的状态面板（上一步阅读形态 + 进行中行，之前的步折进「已完成 N 步」live 头，展开 opt-in、完成保持、中止全展）；本机 348 个 run 中 57% 单步不受影响

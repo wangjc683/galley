@@ -37,6 +37,7 @@ export type ComposerHintKey =
   | "newlineHint"
   | "enterHint"
   | "startGoalWithEnter"
+  | "goalStarting"
   | "dragToReferenceHint";
 
 export interface ComposerHintState {
@@ -52,8 +53,10 @@ export interface ComposerHintState {
   hasText: boolean;
   /** Draft is a staged `/btw` side question (`lib/side-question.ts`). */
   isSideQuestion: boolean;
-  /** Goal armed: Enter opens the Goal preview instead of sending. */
+  /** Goal armed: Enter launches the Goal instead of sending. */
   effectiveGoalArmed: boolean;
+  /** The launch is in flight (start_session_goal pending). */
+  goalSubmitting: boolean;
 }
 
 export function resolveComposerHint(s: ComposerHintState): ComposerHintKey | null {
@@ -65,10 +68,13 @@ export function resolveComposerHint(s: ComposerHintState): ComposerHintKey | nul
     if (s.isStopping && s.hasQueuedMessages) return "stoppingQueueHint";
     return s.hasText ? "queueEnterHint" : "newlineHint";
   }
-  // Armed changes what Enter does (opens the Goal preview, not send) —
-  // with the wide "启动 Goal" pill gone, this hint and the button
-  // tooltip carry that semantic.
-  if (s.effectiveGoalArmed) return "startGoalWithEnter";
+  // Armed changes what Enter does (launches the Goal, not send) —
+  // with no confirm dialog since ticket 09, this hint and the button
+  // tooltip carry that semantic, and the in-flight status that the
+  // dialog's "启动中…" button used to show lands here too.
+  if (s.effectiveGoalArmed) {
+    return s.goalSubmitting ? "goalStarting" : "startGoalWithEnter";
+  }
   // Idle hand-off on hasText: with an empty draft there is nothing to
   // send, so the Enter legend is at its least useful — that gap is where
   // the drag-to-reference capability gets stated instead. Like every

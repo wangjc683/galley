@@ -14,6 +14,7 @@ function state(patch: Partial<ComposerHintState>): ComposerHintState {
     hasText: false,
     isSideQuestion: false,
     effectiveGoalArmed: false,
+    goalSubmitting: false,
     ...patch,
   };
 }
@@ -75,7 +76,7 @@ describe("resolveComposerHint", () => {
     expect(resolveComposerHint(state({}))).toBe("dragToReferenceHint");
   });
 
-  it("idle + typing: Enter hint, or the Goal-preview semantic when armed", () => {
+  it("idle + typing: Enter hint, or the Goal-launch semantic when armed", () => {
     expect(resolveComposerHint(state({ hasText: true }))).toBe("enterHint");
     expect(resolveComposerHint(state({ effectiveGoalArmed: true }))).toBe(
       "startGoalWithEnter",
@@ -87,6 +88,16 @@ describe("resolveComposerHint", () => {
         state({ effectiveGoalArmed: true, hasText: true }),
       ),
     ).toBe("startGoalWithEnter");
+    // Launch in flight: the status line replaces the Enter legend.
+    expect(
+      resolveComposerHint(
+        state({
+          effectiveGoalArmed: true,
+          hasText: true,
+          goalSubmitting: true,
+        }),
+      ),
+    ).toBe("goalStarting");
     // While running, arming is irrelevant — the running legends win.
     expect(
       resolveComposerHint(state({ stopMode: true, effectiveGoalArmed: true })),

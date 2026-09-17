@@ -267,7 +267,9 @@ Supervisor 等待 goal 结束：`session wait` / `session follow` 已够用，�
 
 保留并简化：
 
-- **Composer Goal 入口**：arming 交互不变；确认框收成「目标 + 时间上限」，
+- **Composer Goal 入口**（**2026-09-17 修订，票 09**：确认框整个拆除，
+  armed 态 Composer 穿委派正装 + eyebrow 上限 pill，Enter 直接启动，自定义
+  分钟框砍掉；下文为 09-16 原文）：arming 交互不变；确认框收成「目标 + 时间上限」，
   上限预设 15 / 30 / 60 / 120 / 240 / 无上限（对数分布，默认 60）加一个自定义
   分钟框（≥ 5，无上限；2026-09-16 修订，见 §6 裁决 2）；删
   hive 开关、独立视角数量、项目承载选择（永远在当前 session 跑；空状态

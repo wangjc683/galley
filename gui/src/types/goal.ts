@@ -95,8 +95,9 @@ export interface StartSessionGoalResult {
   dispatch: string;
 }
 
-/** What the confirm dialog resolves to. `budgetSeconds: null` = no
- * ceiling (an explicit user choice, never a default). */
+/** What the Composer's Goal eyebrow resolves to at launch.
+ * `budgetSeconds: null` = no ceiling (an explicit user choice, never a
+ * default). */
 export interface GoalLaunchConfig {
   budgetSeconds: number | null;
 }

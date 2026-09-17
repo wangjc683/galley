@@ -437,6 +437,38 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 - 附件已落地：`Paperclip` 按钮 + 拖放 / 粘贴图片三路收口（旧文案「+ icon 占位（V0.2 接 attach）」作废）
 - 草稿按 session 驻留内存（切会话不丢半截消息）；进入会话自动聚焦
 
+#### Goal 模式（armed）= Composer 穿委派正装（2026-09-17，goal-simplify 票 09）
+
+点 Target 进入 armed 后，Composer **整框换成委派标记的正装**：brand-tint 底
+（**70% 混 elevated**——真机三档实测 tint / 70% mix / brand-soft，JC 裁 mix：
+全 tint 给打字面用重了一丢丢）+ 4px `brand-strong` 左条（`border-l-4`，外框
+仍 `rounded-md`），armed 的 × 切换钮改 `bg-elevated` 底（brand-soft 圆底会
+沉进色板）。顶部多一行
+eyebrow，与 `GoalCommissionMarker` 的 eyebrow 同构——左 `Target + GOAL`
+（11px 大写字距 brand-strong），右侧是**上限 pill**「上限 60 分钟 ▾」（armed
+才出现，退出即收）。所见即所发：输入框此刻长得就是 Enter 之后线程里那条委派
+标记。placeholder 换「写下要完成的目标…」，右下发送钮变实心 `Target`，切换钮
+变 ×；右侧不再有「Goal 模式」文字提示，右对齐行的几何在 armed 前后不动。
+
+- **无确认框**：armed + Enter 直接启动，footer hint「Enter 启动 Goal · Esc
+  取消」，启动中显示「启动中…」。v2 的 Goal 在当前对话里跑、顶栏一键停，
+  armed 正装就是全部的「你确定吗」。v1 的确认框（目标回显 + 上限 + 说明
+  正文）随之退役，tooltip「预览 Goal」一并消失。
+- **上限 pill popover**：按内容定宽（约 130px）的紧凑菜单，只有 15 / 30 /
+  60 / 120 / 240 / 无上限 六项，60 带「推荐」尾标，**不放任何说明行**——
+  任何一句话都会把 popover 撑宽（先放两句 43 字撑到 260px，缩成一句 16 字
+  仍要 200px，JC 两次嫌宽）；上限语义放 pill 的 tooltip「时间上限 · 到上限
+  前 Galley 会一直自己推进」，点之前必经悬停；**没有自定义分钟框**（推翻 09-16 §6 裁决 2
+  的自定义部分）。**不记忆**：每次 armed 回到 60，「无上限」永远是当次手选。
+  原确认框那段两句话的新用户说明**不再有家**：「随时可发消息引导或停止」是
+  运行态知识，顶栏停止钮与暂停 / 受阻尾标已在教，启动前预告是重复；曾考虑
+  塞进 placeholder，按 07-04 空状态 austerity 先例否掉（placeholder 是
+  affordance 不是阅读区，且首字符即消失）。
+- 空状态里 Composer 因 eyebrow 长高时重新居中，不固定底边。
+- Rejected：**方案 A**（有草稿时点 Target 直接弹确认框、空草稿才 armed）——
+  少一步但框还在，JC 直接选了拆框；**启动后 toast 带「停止」当兜底**——
+  与「不加任何确认」相悖，顶栏停止已够。
+
 #### Submit 按钮（杏沙 CTA 例外）
 
 - **Submit 是全局唯一用杏沙作为 CTA 填充的元素** —— 用户最高频元素，杏沙带来"亲和体温"

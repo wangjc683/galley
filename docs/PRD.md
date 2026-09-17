@@ -203,9 +203,9 @@ Goal 是**挂在一个 session 上的持久目标**：设了 goal 的 session �
 交给模型、循环放进 Core。
 
 **受众**：GUI 与 CLI 走同一条命令路径（`start_session_goal` /
-`goal.start` 都经 `GoalEngine`），不分先后。桌面侧保留 Composer 入口、
-确认框（目标 + 上限）、顶栏 pill、委派 / 收口标记、暂停 / 受阻尾标；不做
-专门 Goal 屏幕。
+`goal.start` 都经 `GoalEngine`），不分先后。桌面侧保留 Composer 入口（armed
+态即穿委派正装，eyebrow 行带上限 pill，Enter 直接启动；确认框 2026-09-17
+拆除）、顶栏 pill、委派 / 收口标记、暂停 / 受阻尾标；不做专门 Goal 屏幕。
 
 **Goal ↔ Project**：无关系。goal 在它的 session 里跑，session 属不属于
 project 与 goal 无关；每个 session 至多一个 open goal，不同 session 可各跑

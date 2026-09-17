@@ -410,12 +410,14 @@ resumes. Migration 039 rebuilds `goals` and drops the four hive tables;
 the Agent API bumps to `schemaVersion: 2` with `1` still served for
 unchanged commands (`goal.*` is `2`-only, the v1 goal family is
 `unknown_command`); the runner extracts the tag; managed patch `0022`
-strips it on IM surfaces; the GUI keeps the Composer entry, a
-budget-only confirm dialog, the top-bar pill, commission / terminal
-markers and a paused / blocked tail; goal runs also get the live window
-and fold (goal-run-groups). The budget is a log-spaced six-preset picker
-plus a custom field, and a `budget_limited` goal can be given 30 more
-minutes counted from now (`goal extend`). About 11k lines removed, ~3k
+strips it on IM surfaces; the GUI keeps the Composer entry, the top-bar
+pill, commission / terminal markers and a paused / blocked tail; goal
+runs also get the live window and fold (goal-run-groups). The budget is
+a log-spaced six-preset picker (the confirm dialog and its custom field
+were removed 2026-09-17: the armed Composer wears the commission
+marker's dress with a ceiling pill in its eyebrow, and Enter launches),
+and a `budget_limited` goal can be given 30 more minutes counted from
+now (`goal extend`). About 11k lines removed, ~3k
 added. JC dogfooded three goal runs on the live app (complete-by-tag,
 stop + resume, a 10-minute ceiling) and ruled to keep the Codex
 "done-when-done" semantics; the "use the whole budget" mode is in

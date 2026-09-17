@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_GOAL_BUDGET_PRESET,
   GOAL_BUDGET_PRESET_MINUTES,
-  GOAL_CUSTOM_BUDGET_MIN_MINUTES,
+  GOAL_BUDGET_PRESETS,
+  goalBudgetPresetMinutes,
   goalSessionTitle,
   resolveGoalBudgetSeconds,
 } from "@/lib/goals";
@@ -40,48 +41,32 @@ describe("goalSessionTitle", () => {
 describe("resolveGoalBudgetSeconds", () => {
   it("turns every minute preset into seconds", () => {
     for (const minutes of GOAL_BUDGET_PRESET_MINUTES) {
-      expect(resolveGoalBudgetSeconds(`${minutes}`, "")).toBe(minutes * 60);
+      expect(resolveGoalBudgetSeconds(`${minutes}`)).toBe(minutes * 60);
     }
   });
 
   it("defaults to the recommended 60-minute ceiling", () => {
-    expect(resolveGoalBudgetSeconds(DEFAULT_GOAL_BUDGET_PRESET, "")).toBe(3600);
+    expect(resolveGoalBudgetSeconds(DEFAULT_GOAL_BUDGET_PRESET)).toBe(3600);
   });
 
-  it("reads `none` as the explicit no-ceiling choice, not as unusable", () => {
-    expect(resolveGoalBudgetSeconds("none", "")).toBeNull();
-    // Even with a stale custom entry sitting in the field.
-    expect(resolveGoalBudgetSeconds("none", "90")).toBeNull();
+  it("reads `none` as the explicit no-ceiling choice", () => {
+    expect(resolveGoalBudgetSeconds("none")).toBeNull();
   });
 
-  it("resolves a custom entry at or above the floor", () => {
-    expect(
-      resolveGoalBudgetSeconds("custom", `${GOAL_CUSTOM_BUDGET_MIN_MINUTES}`),
-    ).toBe(GOAL_CUSTOM_BUDGET_MIN_MINUTES * 60);
-    expect(resolveGoalBudgetSeconds("custom", "90")).toBe(5400);
-    expect(resolveGoalBudgetSeconds("custom", " 480 ")).toBe(28800);
+  it("lists the presets in ascending order with `none` last", () => {
+    expect(GOAL_BUDGET_PRESETS).toEqual([
+      "15",
+      "30",
+      "60",
+      "120",
+      "240",
+      "none",
+    ]);
+    expect(GOAL_BUDGET_PRESETS).toContain(DEFAULT_GOAL_BUDGET_PRESET);
   });
 
-  it("has no upper bound — that is what `none` is NOT for", () => {
-    expect(resolveGoalBudgetSeconds("custom", "100000")).toBe(6_000_000);
-  });
-
-  it("refuses an empty, non-numeric, or sub-floor custom entry", () => {
-    expect(resolveGoalBudgetSeconds("custom", "")).toBeUndefined();
-    expect(resolveGoalBudgetSeconds("custom", "   ")).toBeUndefined();
-    expect(resolveGoalBudgetSeconds("custom", "abc")).toBeUndefined();
-    expect(resolveGoalBudgetSeconds("custom", "-30")).toBeUndefined();
-    expect(resolveGoalBudgetSeconds("custom", "0")).toBeUndefined();
-    expect(
-      resolveGoalBudgetSeconds(
-        "custom",
-        `${GOAL_CUSTOM_BUDGET_MIN_MINUTES - 1}`,
-      ),
-    ).toBeUndefined();
-  });
-
-  it("rejects rather than rounds a fractional entry (minutes only)", () => {
-    expect(resolveGoalBudgetSeconds("custom", "12.5")).toBeUndefined();
-    expect(resolveGoalBudgetSeconds("custom", "1e3")).toBeUndefined();
+  it("exposes the minutes behind a preset for the pill label", () => {
+    expect(goalBudgetPresetMinutes("120")).toBe(120);
+    expect(goalBudgetPresetMinutes("none")).toBeNull();
   });
 });
