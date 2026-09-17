@@ -9,23 +9,45 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.4.16`.
-- Git tag / GitHub Release: `v0.4.16` is the current published stable release
-  (tagged at `393dbe7b` on 2026-09-16, GitHub Latest).
-- Agent API schema: `schemaVersion: 2` on `main` since the Goal v2 rework
-  (2026-09-16, unreleased; `v0.4.16` binaries still speak `1`). The server
-  keeps answering `1` for every command that did not change; only the
-  `goal` family is `2`-only.
-- Release tier: stable patch; default update channel points at `v0.4.16`.
+- Package version: `0.5.0`.
+- Git tag / GitHub Release: `v0.5.0` is the current published stable release
+  (tagged at `6eb3d7a2` on 2026-09-17, GitHub Latest).
+- Agent API schema: `schemaVersion: 2` (since the Goal v2 rework on
+  2026-09-16, first shipped in `v0.5.0`). The server keeps answering `1` for
+  every command that did not change; only the `goal` family is `2`-only, and
+  the retired v1 goal commands are `unknown_command` under every version.
+- Release tier: stable minor; default update channel points at `v0.5.0`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `efb3bc6` (audited 2026-08-31, first shipped in
-  `v0.4.11`; unchanged through `v0.4.16`) — engine delta is Galley-positive
+  `v0.4.11`; unchanged through `v0.5.0`) — engine delta is Galley-positive
   abort responsiveness + trim perf. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.5.0` (2026-09-17) is the first minor since `v0.4.0`, one day after
+`v0.4.16`, aggregating 30 commits on three lines. **Goal v2**: the hive / solo
+engines and the CLI controller are retired; a Goal is one persistent objective
+per session, continued by Core while idle, ended by the model's
+`<goal-status>` tag, a time ceiling (one wrap-up turn, then `budget_limited`),
+a stop, or a pause the next message resumes; migration 039 rebuilds `goals`;
+the Agent API ships `schemaVersion: 2` (`1` still served for unchanged
+commands); the Composer arms into the commission dress with a 10-minute snap
+wheel for the ceiling and no confirm dialog. **Process area**: the live run is
+a two-row window under a "已完成 N 步" header, runs fold on completion.
+**Conversation and deliverables**: the user message becomes a flat apricot
+bubble (dark fill recalibrated), Settings lists scroll inside the dialog, and
+files a session writes open from the write step or by name in a reply
+(`toolCalls[].resolvedPath`). Graded minor for Goal v2 alone; `1.0` was
+declined because the same release breaks the goal contract. `managed-ga/` and
+`runner/` changed, so the bundled-runtime gate was mandatory and passed on
+`mac-x64`; pre-flight also fixed `check.yml`, red on `main` since the Goal v2
+merge (IPC drift: `turn_end.goalStatus` lacked `null` in TS). JC smoked the
+draft on macOS Intel and Windows before publish; stable channel promoted and
+verified the same session. Full narrative: devlog
+[2026-09-17-v0.5.0-release](./devlog/2026-09-17-v0.5.0-release.md).
 
 `v0.4.16` (2026-09-16) is a five-commit GUI-only patch, two days after
 `v0.4.15`: the **conversation step markers become an ordinal gutter**
@@ -318,17 +340,17 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.4.16` is published and promoted as the live stable release (2026-09-16).
-The default `updates/stable/latest.json` channel points at `v0.4.16`, with the
+`v0.5.0` is published and promoted as the live stable release (2026-09-17).
+The default `updates/stable/latest.json` channel points at `v0.5.0`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. The live verifier passed with `--cache-bust` across all three
 platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). One draft cut; JC
-smoked the draft before publish. The bundled-runtime gate was not mandatory
-(`managed-ga/`, `runner/` and the GA baseline unchanged); Rust was covered by
-`check.yml`'s three-platform Core jobs, green at the last feature commit, and
-the two release-prep commits were docs and version files only.
+smoked the draft on macOS Intel and Windows before publish. The bundled-runtime
+gate was mandatory (`managed-ga/` patch 0022 and `runner/` changed) and passed
+on `mac-x64`; `check.yml` was green on the release head after the pre-flight
+IPC drift fix.
 
-`v0.4.15` (2026-09-14), `v0.4.14` (2026-09-14), `v0.4.13` (2026-09-09) and
+`v0.4.16` (2026-09-16), `v0.4.15` (2026-09-14), `v0.4.14` (2026-09-14), `v0.4.13` (2026-09-09) and
 `v0.4.12` (2026-09-08) went through the same path: one draft cut each, JC
 smoked the draft before publish, both channels verified with `--cache-bust`.
 `v0.4.15`'s, `v0.4.14`'s and `v0.4.12`'s bundled-runtime gates were mandatory
@@ -369,8 +391,8 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): **`v0.4.15` → `v0.4.16` is pending** on
-   an installed build (and the `v0.4.8` → … → `v0.4.15` hops were never
+1. App-update dogfood (SOP step 10): **`v0.4.16` → `v0.5.0` is pending** on
+   an installed build (and the `v0.4.8` → … → `v0.4.16` hops were never
    explicitly reported — confirm or write them off in the same pass).
    All earlier hops through `v0.4.7` → `v0.4.8` passed
    (JC confirmed 2026-08-13 / 2026-08-14), except **`v0.4.6` → `v0.4.7`,
@@ -399,82 +421,29 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-**Goal v2 (merged to `main` 2026-09-16 as `a3d9d54c`, eight commits
-from the tickets under `.scratch/goal-simplify/`, unreleased):**
-the hive / solo Goal engines and their detached CLI controller are gone;
-a Goal is now one persistent objective on one session, driven by a
-continuation loop inside Core's queue drain task, ended by the model's
-`<goal-status>` tag, a time ceiling (one wrap-up turn, then
-`budget_limited`), a stop, or a pause / block the user's next message
-resumes. Migration 039 rebuilds `goals` and drops the four hive tables;
-the Agent API bumps to `schemaVersion: 2` with `1` still served for
-unchanged commands (`goal.*` is `2`-only, the v1 goal family is
-`unknown_command`); the runner extracts the tag; managed patch `0022`
-strips it on IM surfaces; the GUI keeps the Composer entry, the top-bar
-pill, commission / terminal markers and a paused / blocked tail; goal
-runs also get the live window and fold (goal-run-groups). The ceiling is
-picked on a timer-style snap wheel (10–240 minutes in 10-minute steps
-plus no ceiling; the confirm dialog, its log presets and its custom
-field were removed 2026-09-17: the armed Composer wears the commission
-marker's dress with the ceiling pill in its eyebrow, and Enter
-launches), and a `budget_limited` goal can be given 30 more minutes counted from
-now (`goal extend`). About 11k lines removed, ~3k
-added. JC dogfooded three goal runs on the live app (complete-by-tag,
-stop + resume, a 10-minute ceiling) and ruled to keep the Codex
-"done-when-done" semantics; the "use the whole budget" mode is in
-[deferred](./devlog/deferred.md). The next release is a minor, not a
-patch, and its notes must call out `schemaVersion: 2` and the retired
-v1 goal commands; JC chose to accumulate more before cutting it.
+Nothing feature-level: `v0.5.0` shipped everything that had accumulated since
+`v0.4.16` (Goal v2, the live-run window, the user-message bubble and dark
+recalibration, written-file references, Settings list scrolling). The only
+commit after the tag is this status sync.
 
-Also unreleased (2026-09-17, runner + core + GUI): file-writing tool calls
-now carry the bridge-resolved absolute path (`toolCalls[].resolvedPath`,
-additive in `turn_end` / `messages.tool_calls`); the settled write step in the
-process area opens the file directly, and a relative path or bare filename in
-a reply resolves to a file this session wrote (exact match only). Goal prompts
-tell the model to name deliverables by absolute path. Triggered by a Goal
-wrap-up that delivered `./汕尾旅游指南.md` (see
-[devlog](./devlog/2026-09-17-written-file-references.md)).
+Standing follow-ups: the ticket `.scratch/live-run-window/PRD.md` stays
+`ready-for-human` until a few more live runs pass; `.scratch/goal-simplify/`
+is `done`; the "use the whole budget" Goal mode and the user-message
+typography re-review are in [deferred](./devlog/deferred.md). The community
+524 thread that prompted `v0.4.15` has not yet been answered (reply draft
+agreed in session, awaiting JC's per-item confirmation); the #21 thread has
+not yet been told the ask_user option-description PRD was cancelled
+(2026-09-14, see
+[devlog](./devlog/2026-09-14-ask-user-option-desc-cancelled.md)). Carried
+over from `v0.4.12`: a scheduled task's same-day catch-up fire produced no
+session twice in a row, root cause unknown (see deferred); issues #26 and #27
+stay open by JC's ruling, with the #27 commenter still owing a clarification
+of their sidebar / project report; real WeChat end-to-end acceptance of the
+supervisor-side fix is still owed from a machine with a paired WeChat account.
+The app-update hop `v0.4.16 → v0.5.0` on an installed build (SOP step 10) is
+the one release step not yet observed.
 
-Also unreleased (2026-09-17, GUI only): the user message in the conversation
-column changed from per-line highlighter strokes to a flat, left-aligned
-apricot bubble (`rounded-md`, no border, no shadow) after a live three-variant
-test; the Goal commission marker keeps its barred sharp-cornered slab as the
-formal dress; the dark `--color-brand-tint` was then recalibrated from
-`#4d3b2b` to `#362d24` (OKLCH +10 / C 0.020 over app instead of +16.5 /
-0.036), retiring the 08-21 deferred loudness item (see
-[devlog](./devlog/2026-09-17-user-message-bubble.md)).
-
-Unreleased since `v0.4.16` (as of 2026-09-16 evening, `69a5ce6e..f442b38b`,
-GUI only): the process-area batch — verbose tool-dispatch marker no longer
-leaks into the live step status; the in-flight step's ordinal slot holds `··`;
-step rhythm settled at pill `py-1` / in-run `mt-2.5`; settled runs fold on
-completion; the live run renders as a two-row window behind a live
-"已完成 N 步" header with departing / arriving sweeps, and follow-mode now
-re-pins through CSS transitions. Two density cuts were tried and reverted
-(see [live-run-window devlog](./devlog/2026-09-16-live-run-window.md)). JC
-dogfooded the window on the live app and accepted it; the ticket
-`.scratch/live-run-window/PRD.md` stays until a few more live runs pass. The
-community 524 thread that prompted `v0.4.15` has not yet been
-answered (reply draft agreed in session, awaiting JC's per-item confirmation). The ask_user option description PRD (galley#21,
-`.scratch/ask-user-option-desc`) was **cancelled** on 2026-09-14 after four
-months of local ask_user data showed zero cases of the reported "short label,
-unclear consequence" pain (see
-[devlog](./devlog/2026-09-14-ask-user-option-desc-cancelled.md)); the #21
-thread has not yet been answered with that decision. No next line of work is
-queued. Standing follow-ups carried over from `v0.4.12`: one
-deferred item from the README reshoot (a scheduled task's same-day catch-up
-fire produced no session twice in a row, root cause unknown, see
-[deferred](./devlog/deferred.md)); community threads for `v0.4.12` are
-answered (issues #26 and #27 stay open by JC's ruling; PR #25's closing is
-the author's call), with the #27 commenter still owing a clarification of
-their sidebar / project report (triage notes in the
-[issue #27 devlog](./devlog/2026-09-08-issue-27-message-search-locate.md));
-real WeChat end-to-end acceptance of the supervisor-side fix is still owed
-from a machine with a paired WeChat account. The app-update hop
-`v0.4.15 → v0.4.16` on an installed build (SOP step 10) is the one release
-step not yet observed.
-
-The GA baseline is fully current as of `v0.4.16` (`efb3bc6`, audited
+The GA baseline is fully current as of `v0.5.0` (`efb3bc6`, audited
 2026-08-31, shipped since `v0.4.11`); the next release audits upstream again
 per the standard trigger. Upstream `7fa5fa4` (WeChat polling fix, 2026-08-30)
 is not in the baseline and is on that audit's list.
@@ -515,13 +484,13 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Area | Status | Read More |
 |---|---|---|
 | Core architecture | Rust Galley Core is authoritative | [architecture demo](./architecture-demo.md) |
-| CLI / Agent API | Feature-complete for v0.2; schema frozen | [agent-api](./agent-api.md) |
+| CLI / Agent API | `schemaVersion: 2` since v0.5.0 (Goal v2 family); `1` still served for unchanged commands | [agent-api](./agent-api.md) |
 | Agent surface | Settings -> Agent, copy-first SOP, Claude Skill | [Supervisor SOP](./integrations/galley-supervisor-sop.md) |
 | Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; audited upstream `b1e173dc` baseline shipped in v0.2.16; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime/README.md) |
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.4.16 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.5.0 stable minor is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `efb3bc6` (2026-08-31); released builds ship it since `v0.4.11` (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -547,7 +516,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.4.16`. For the next release, bump every
+- Current package metadata uses `0.5.0`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
@@ -559,6 +528,8 @@ Detailed phase narratives are intentionally not duplicated here. Use:
   patch-tier features stays patch (JC ruling, 2026-08-06, v0.4.3). When
   unsure, list the decision points and ask JC.
 - Use `vX.Y.Z` for Git tag and GitHub Release title.
-- Keep Agent API at `schemaVersion: 1`.
-- A breaking Agent API change requires `schemaVersion: 2`, with explicit
-  compatibility notes in [agent-api](./agent-api.md).
+- Agent API is at `schemaVersion: 2`; changes within a version are
+  additive-only.
+- A breaking Agent API change requires the next `schemaVersion`, with explicit
+  compatibility notes in [agent-api](./agent-api.md) (how `1` is still served
+  after the `2` bump is the template: stability §7).
