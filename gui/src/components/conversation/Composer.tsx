@@ -348,9 +348,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       goalEntryDisabled,
       goalSubmitting,
       effectiveGoalArmed,
-      goalBudgetPreset,
+      goalBudgetMinutes,
       goalBlockedHintVisible,
-      setGoalBudgetPreset,
+      setGoalBudgetMinutes,
       handleGoalArmToggle,
       launchGoal,
       disarmGoal,
@@ -474,9 +474,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           {isDropActive && <ComposerDropOverlay imagesEnabled={imagesEnabled} />}
           {effectiveGoalArmed && (
             <ComposerGoalEyebrow
-              budgetPreset={goalBudgetPreset}
+              budgetMinutes={goalBudgetMinutes}
               disabled={goalSubmitting}
-              onBudgetPresetChange={setGoalBudgetPreset}
+              onBudgetMinutesChange={setGoalBudgetMinutes}
             />
           )}
           {ghostVisible && (

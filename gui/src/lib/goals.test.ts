@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_GOAL_BUDGET_PRESET,
-  GOAL_BUDGET_PRESET_MINUTES,
-  GOAL_BUDGET_PRESETS,
-  goalBudgetPresetMinutes,
+  DEFAULT_GOAL_BUDGET_MINUTES,
+  GOAL_BUDGET_LADDER,
   goalSessionTitle,
   resolveGoalBudgetSeconds,
+  stepGoalBudget,
 } from "@/lib/goals";
 
 describe("goalSessionTitle", () => {
@@ -17,9 +16,7 @@ describe("goalSessionTitle", () => {
   });
 
   it("collapses internal whitespace and trims the ends", () => {
-    expect(goalSessionTitle("  fix\n\tthe   bug  ")).toBe(
-      "Goal · fix the bug",
-    );
+    expect(goalSessionTitle("  fix\n\tthe   bug  ")).toBe("Goal · fix the bug");
   });
 
   it("falls back to a bare `Goal` for an empty / whitespace objective", () => {
@@ -39,34 +36,35 @@ describe("goalSessionTitle", () => {
 });
 
 describe("resolveGoalBudgetSeconds", () => {
-  it("turns every minute preset into seconds", () => {
-    for (const minutes of GOAL_BUDGET_PRESET_MINUTES) {
-      expect(resolveGoalBudgetSeconds(`${minutes}`)).toBe(minutes * 60);
-    }
+  it("turns minutes into seconds and keeps no-ceiling as null", () => {
+    expect(resolveGoalBudgetSeconds(130)).toBe(7800);
+    expect(resolveGoalBudgetSeconds(DEFAULT_GOAL_BUDGET_MINUTES)).toBe(3600);
+    expect(resolveGoalBudgetSeconds(null)).toBeNull();
+  });
+});
+
+describe("GOAL_BUDGET_LADDER", () => {
+  it("runs 10..240 in 10-minute steps, then no ceiling", () => {
+    expect(GOAL_BUDGET_LADDER[0]).toBe(10);
+    expect(GOAL_BUDGET_LADDER[GOAL_BUDGET_LADDER.length - 2]).toBe(240);
+    expect(GOAL_BUDGET_LADDER[GOAL_BUDGET_LADDER.length - 1]).toBeNull();
+    expect(GOAL_BUDGET_LADDER).toHaveLength(25);
+    expect(GOAL_BUDGET_LADDER).toContain(130);
+    expect(GOAL_BUDGET_LADDER).toContain(DEFAULT_GOAL_BUDGET_MINUTES);
+  });
+});
+
+describe("stepGoalBudget", () => {
+  it("walks the ladder one notch at a time and clamps at both ends", () => {
+    expect(stepGoalBudget(60, 1)).toBe(70);
+    expect(stepGoalBudget(60, -1)).toBe(50);
+    expect(stepGoalBudget(240, 1)).toBeNull();
+    expect(stepGoalBudget(null, 1)).toBeNull();
+    expect(stepGoalBudget(null, -1)).toBe(240);
+    expect(stepGoalBudget(10, -1)).toBe(10);
   });
 
-  it("defaults to the recommended 60-minute ceiling", () => {
-    expect(resolveGoalBudgetSeconds(DEFAULT_GOAL_BUDGET_PRESET)).toBe(3600);
-  });
-
-  it("reads `none` as the explicit no-ceiling choice", () => {
-    expect(resolveGoalBudgetSeconds("none")).toBeNull();
-  });
-
-  it("lists the presets in ascending order with `none` last", () => {
-    expect(GOAL_BUDGET_PRESETS).toEqual([
-      "15",
-      "30",
-      "60",
-      "120",
-      "240",
-      "none",
-    ]);
-    expect(GOAL_BUDGET_PRESETS).toContain(DEFAULT_GOAL_BUDGET_PRESET);
-  });
-
-  it("exposes the minutes behind a preset for the pill label", () => {
-    expect(goalBudgetPresetMinutes("120")).toBe(120);
-    expect(goalBudgetPresetMinutes("none")).toBeNull();
+  it("starts from the default when the current value is off the ladder", () => {
+    expect(stepGoalBudget(15, 1)).toBe(70);
   });
 });

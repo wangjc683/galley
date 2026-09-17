@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 
 import type { ImageBlockReason } from "@/lib/composer-images";
 import {
-  DEFAULT_GOAL_BUDGET_PRESET,
+  DEFAULT_GOAL_BUDGET_MINUTES,
   resolveGoalBudgetSeconds,
-  type GoalBudgetPreset,
+  type GoalBudgetMinutes,
 } from "@/lib/goals";
 import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
 
@@ -57,9 +57,8 @@ export function useComposerGoal({
   // Not remembered across launches (ticket 09 裁决 3): every arm starts
   // from the recommended ceiling, so "no ceiling" is always a choice
   // made for this Goal, never inherited from the last one.
-  const [goalBudgetPreset, setGoalBudgetPreset] = useState<GoalBudgetPreset>(
-    DEFAULT_GOAL_BUDGET_PRESET,
-  );
+  const [goalBudgetMinutes, setGoalBudgetMinutes] =
+    useState<GoalBudgetMinutes>(DEFAULT_GOAL_BUDGET_MINUTES);
   const [goalSubmitting, setGoalSubmitting] = useState(false);
   const [showGoalBlockedHint, setShowGoalBlockedHint] = useState(false);
 
@@ -86,7 +85,7 @@ export function useComposerGoal({
 
   const disarmGoal = () => {
     setGoalArmed(false);
-    setGoalBudgetPreset(DEFAULT_GOAL_BUDGET_PRESET);
+    setGoalBudgetMinutes(DEFAULT_GOAL_BUDGET_MINUTES);
   };
 
   const handleGoalArmToggle = () => {
@@ -107,7 +106,7 @@ export function useComposerGoal({
     if (goalArmed) {
       disarmGoal();
     } else {
-      setGoalBudgetPreset(DEFAULT_GOAL_BUDGET_PRESET);
+      setGoalBudgetMinutes(DEFAULT_GOAL_BUDGET_MINUTES);
       setGoalArmed(true);
     }
     focusTextarea();
@@ -131,7 +130,7 @@ export function useComposerGoal({
     setGoalSubmitting(true);
     try {
       await onGoalSubmit(trimmed, {
-        budgetSeconds: resolveGoalBudgetSeconds(goalBudgetPreset),
+        budgetSeconds: resolveGoalBudgetSeconds(goalBudgetMinutes),
       });
       resetDraftAfterSubmit();
       disarmGoal();
@@ -149,9 +148,9 @@ export function useComposerGoal({
     goalEntryDisabled,
     goalSubmitting,
     effectiveGoalArmed,
-    goalBudgetPreset,
+    goalBudgetMinutes,
     goalBlockedHintVisible: showGoalBlockedHint && goalBlockedByActive,
-    setGoalBudgetPreset,
+    setGoalBudgetMinutes,
     handleGoalArmToggle,
     launchGoal,
     disarmGoal,

@@ -11,49 +11,64 @@ import type {
 type TopbarCopy = ReturnType<typeof useCopy>["topbar"];
 
 /**
- * Time-ceiling choices in the Composer's Goal eyebrow (JC, 2026-09-16;
- * custom minutes dropped 2026-09-17, ticket 09): five log-spaced minute
- * presets and the explicit no-ceiling escape. Log spacing, not linear —
- * the interesting jump is "an errand" vs "an afternoon", and a linear
- * 30/60/90/120 ladder spends four slots inside one order of magnitude.
+ * Time-ceiling choice for a Goal launch: minutes, or `null` for the
+ * explicit no-ceiling escape. Ticket 10 (2026-09-17) moved the scale
+ * from five log presets to a 10-minute ladder: the ceiling often maps
+ * to an external deadline (a quota window resetting in 135 minutes),
+ * which the log ladder could not express.
  */
-export const GOAL_BUDGET_PRESET_MINUTES = [15, 30, 60, 120, 240] as const;
+export type GoalBudgetMinutes = number | null;
 
-export type GoalBudgetPreset =
-  | `${(typeof GOAL_BUDGET_PRESET_MINUTES)[number]}`
-  | "none";
+export const GOAL_BUDGET_STEP_MINUTES = 10;
+export const GOAL_BUDGET_MIN_MINUTES = 10;
+export const GOAL_BUDGET_MAX_MINUTES = 240;
 
-export const GOAL_BUDGET_PRESETS: readonly GoalBudgetPreset[] = [
-  ...GOAL_BUDGET_PRESET_MINUTES.map((m) => `${m}` as GoalBudgetPreset),
-  "none",
+/** The 10-minute ladder, ascending, then no ceiling. */
+export const GOAL_BUDGET_LADDER: readonly GoalBudgetMinutes[] = [
+  ...Array.from(
+    {
+      length:
+        (GOAL_BUDGET_MAX_MINUTES - GOAL_BUDGET_MIN_MINUTES) /
+          GOAL_BUDGET_STEP_MINUTES +
+        1,
+    },
+    (_, i) => GOAL_BUDGET_MIN_MINUTES + i * GOAL_BUDGET_STEP_MINUTES,
+  ),
+  null,
 ];
 
 /** Recommended ceiling, matching Rust `DEFAULT_GOAL_BUDGET_SECONDS`.
  * No-ceiling is an explicit choice, never the default: a Goal spends
  * the user's own API money (PRD §6 裁决 2). */
-export const DEFAULT_GOAL_BUDGET_PRESET: GoalBudgetPreset = "60";
+export const DEFAULT_GOAL_BUDGET_MINUTES: GoalBudgetMinutes = 60;
+
+/** One step along the ladder; clamps at both ends. (Kept for keyboard
+ * / stepper use; the wheel itself snaps by scroll position.) */
+export function stepGoalBudget(
+  current: GoalBudgetMinutes,
+  direction: 1 | -1,
+): GoalBudgetMinutes {
+  const index = GOAL_BUDGET_LADDER.indexOf(current);
+  const from =
+    index === -1
+      ? GOAL_BUDGET_LADDER.indexOf(DEFAULT_GOAL_BUDGET_MINUTES)
+      : index;
+  const next = Math.min(
+    GOAL_BUDGET_LADDER.length - 1,
+    Math.max(0, from + direction),
+  );
+  return GOAL_BUDGET_LADDER[next];
+}
 
 /** How much time one "give it more" hands a goal: 30 minutes. */
 export const GOAL_EXTEND_SECONDS = 1800;
 
-/**
- * Eyebrow choice → the `budgetSeconds` Core wants: a ceiling in seconds,
- * or `null` for the explicit "no ceiling" choice.
- */
+/** Eyebrow choice → the `budgetSeconds` Core wants: seconds, or
+ * `null` for the explicit "no ceiling" choice. */
 export function resolveGoalBudgetSeconds(
-  preset: GoalBudgetPreset,
+  minutes: GoalBudgetMinutes,
 ): number | null {
-  if (preset === "none") return null;
-  return Number.parseInt(preset, 10) * 60;
-}
-
-/** Minutes behind a preset, `null` for no ceiling — what the eyebrow
- * pill and the commission marker both print. */
-export function goalBudgetPresetMinutes(
-  preset: GoalBudgetPreset,
-): number | null {
-  if (preset === "none") return null;
-  return Number.parseInt(preset, 10);
+  return minutes === null ? null : minutes * 60;
 }
 
 /**
