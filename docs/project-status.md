@@ -19,8 +19,10 @@ live in [refactor](./archive/refactor/README.md).
 - Release tier: stable minor; default update channel points at `v0.5.0`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `efb3bc6` (audited 2026-08-31, first shipped in
-  `v0.4.11`; unchanged through `v0.5.0`) — engine delta is Galley-positive
-  abort responsiveness + trim perf. See [GA baseline](./ga-baseline.md).
+  `v0.4.11`; unchanged through `v0.5.0`). Audited baseline on `main`:
+  `1b6442f` (2026-09-18, ships with the next release) — engine delta is
+  Galley-positive abort-before-headers plus an 8% tool-output-limit shrink
+  from the `context_win` default nudge. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
@@ -465,10 +467,20 @@ supervisor-side fix is still owed from a machine with a paired WeChat account.
 The app-update hop `v0.4.16 → v0.5.0` on an installed build (SOP step 10)
 passed (JC, 2026-09-17), so every step of the `v0.5.0` release is observed.
 
-The GA baseline is fully current as of `v0.5.0` (`efb3bc6`, audited
-2026-08-31, shipped since `v0.4.11`); the next release audits upstream again
-per the standard trigger. Upstream `7fa5fa4` (WeChat polling fix, 2026-08-30)
-is not in the baseline and is on that audit's list.
+Also unreleased from 2026-09-18: the GA baseline bump `efb3bc6` →
+`1b6442f` (10 upstream commits, 15 files), cashing in the "next release
+audits upstream" note left at `v0.5.0`. Engine delta: abort now closes a
+socket still waiting for response headers (`llmcore` hooks
+`urllib3.connection.HTTPConnection.request` process-wide), `context_win`
+default 35000 → 38000 (Galley pins 90000, so only `maxlen_multiplier` moves:
+tool-output limits shrink ~8%), `str()` coercion on browser tab ids, the UA
+bump, and the `7fa5fa4` WeChat polling fix (inert: Galley pins the WeChat
+channel to `agent` mode). Patch-stack rebase had two trivial one-line
+conflicts (`0006`, `0007`); bundled-runtime gate passed on `mac-x64`;
+runner compat matrix 260 passed after the `llmcore` test's `urllib3` stub
+grew the attribute the new hook needs. Devlog:
+`2026-09-18-ga-upstream-upgrade-efb3bc6-to-1b6442f`. Dogfood in both
+runtime modes (SOP step 8) is folded into the next release's draft smoke.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -515,7 +527,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Release path | v0.5.0 stable minor is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `efb3bc6` (2026-08-31); released builds ship it since `v0.4.11` (pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `1b6442f` (2026-09-18, on `main`, ships with the next release); released builds through `v0.5.0` ship `efb3bc6` (2026-08-31, since `v0.4.11`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 

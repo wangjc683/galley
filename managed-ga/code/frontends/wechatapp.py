@@ -341,7 +341,7 @@ def _cond_forward(bot, text, seq):
     seen = {mine['id']}
     while seq == _cond_seq:
         time.sleep(5)
-        try: items = requests.get(_COND, params={'last': 50}, timeout=10).json()['items']
+        try: items = requests.get(_COND, params={'last': 50, 'mark_read': 'false'}, timeout=10).json()['items']
         except Exception as e:
             print(f'[WX] conductor poll err: {e}', file=sys.__stdout__); continue
         for item in items:

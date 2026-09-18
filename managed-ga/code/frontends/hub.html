@@ -46,7 +46,8 @@ body{margin:0;height:100vh;display:flex;background:var(--bg);color:var(--fg);
 #tip{min-height:16px;margin-top:5px;font-size:12px;color:var(--dim)}
 #tip.err{color:#c0392b}
 #main>.hd{font-size:18px;margin-bottom:18px;padding-bottom:12px;
-          border-bottom:1px solid var(--line)}
+          border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+#main>.hd .ttl{flex:1} #main>.hd .llm{font-size:12px;max-width:180px}
 .msg{margin:0 0 14px}
 .msg.user{background:var(--user);border-radius:12px;padding:10px 14px;
           white-space:pre-wrap;max-width:70%;margin-left:auto}
@@ -116,7 +117,7 @@ async function loadPeers(){
     d.className = 'peer' + (p.name === cur ? ' on' : '');
     d.dataset.name = p.name;
     d.innerHTML = `<div class="t">${esc(p.title || p.name)}</div>
-                   <div class="m">${esc(p.name)} · ${p.n_msgs} 条</div>`;
+                   <div class="m">${esc(p.name)} · ${p.n_msgs} 条${p.llm ? ' · ' + esc(p.llm) : ''}</div>`;
     d.onclick = () => open_(p.name);
     el.appendChild(d);
   }
@@ -156,8 +157,9 @@ async function sync(first){
   if (!first && (olds.length > total || (olds.length && t0 && olds[0]._input !== t0.input)))
     return open_(name);
   const atEnd = m.scrollHeight - m.scrollTop - m.clientHeight < 80;
-  if (first || !m.querySelector('.hd')) m.innerHTML = '<div class="hd"></div>';
-  m.querySelector('.hd').textContent = r.title || name;
+  if (first || !m.querySelector('.hd')) m.innerHTML = '<div class="hd"><span class="ttl"></span><select class="llm" title="切换 LLM"></select></div>';
+  m.querySelector('.hd .ttl').textContent = r.title || name;
+  llmSel(m.querySelector('.hd .llm'), name, r.llm);
 
   for (const t of tasks){
     const el = m.querySelector(`.task[data-i="${t.i}"]`);
@@ -228,6 +230,23 @@ function segEl(name, i, s){
   return det;
 }
 
+// LLM channel switch: the <select> lists the host's channels on first click, POST llm {no} on change
+function llmSel(sel, name, llm){
+  if (sel._llm === llm) return; sel._llm = llm;
+  sel.innerHTML = `<option>${esc(llm || '?')}</option>`; sel.disabled = !llm;
+  sel.onmousedown = async () => {
+    if (sel.options.length > 1) return;
+    const r = await api(`/api/${encodeURIComponent(name)}/llms`);
+    if (r.error) return;
+    sel.innerHTML = r.items.map((n, i) => `<option value="${i}"${i === r.cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  };
+  sel.onchange = async () => {
+    const r = await post('llm', {no: +sel.value});
+    say(r.error || '已切换 ' + sel.options[sel.selectedIndex].text, !!r.error);
+    if (r.error) sel._llm = null;                   // next sync repaints the true state
+  };
+}
+
 // ---- composer: send a task / abort the running one (both are idempotent-safe) ----
 const box = $('#box'), tip = $('#tip');
 
@@ -235,11 +254,11 @@ function say(t, err){ tip.textContent = t || ''; tip.classList.toggle('err', !!e
 function enable(on){ for (const e of [box, $('#send'), $('#stop')]) e.disabled = !on;
                      box.placeholder = on ? 'Enter 发送 / Shift+Enter 换行' : '先选择一个会话…'; }
 
-async function post(path){                        // -> {ok} | {error, code}
+async function post(path, body){                  // -> {ok} | {error, code}
   try {
     const r = await fetch(`/api/${encodeURIComponent(cur)}/${path}`, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({text: box.value})});
+      body: JSON.stringify(body || {text: box.value})});
     return await r.json();
   } catch(e){ return {error: '网络错误'}; }
 }

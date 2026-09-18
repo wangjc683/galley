@@ -1,6 +1,7 @@
 """Optional P2P phone pairing plug-in for hub.py."""
 import asyncio
 import os
+import random
 from pathlib import Path
 
 from fastapi import Response
@@ -28,6 +29,7 @@ def install(app, *, web_port, token, here):
             await exporter.close()
 
     async def reconnect():
+        delay = 1
         while True:
             connected = False
             try:
@@ -42,7 +44,10 @@ def install(app, *, web_port, token, here):
                 raise
             except Exception as exc:
                 state["status"], state["error"] = "error", str(exc)
-            await asyncio.sleep(0.2 if connected else 5)
+            # 连上过就立刻重连(对端掉线/被顶号)；连不上则指数退避+抖动，
+            # 避免服务端重启时上千个 hub 同一秒齐涌。
+            delay = 1 if connected else min(delay * 2, 60)
+            await asyncio.sleep(0.2 if connected else delay * random.uniform(0.5, 1.5))
 
     async def new_pair():
         try:

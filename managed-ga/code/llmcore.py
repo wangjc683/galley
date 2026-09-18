@@ -1,6 +1,11 @@
 import os, json, re, time, requests, sys, threading, urllib3, base64, importlib, uuid, pathlib, copy, socket
 from datetime import datetime, timezone
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+_INFLIGHT = {}  # thread ident -> live socket; lets abort() close it even before response headers arrive
+_orig_conn_request = urllib3.connection.HTTPConnection.request
+def _conn_request_hook(self, *a, **k):  # after request() the socket is connected+sent; conn.sock may later be None'd by http.client
+    r = _orig_conn_request(self, *a, **k); _INFLIGHT[threading.get_ident()] = self.sock; return r
+urllib3.connection.HTTPConnection.request = _conn_request_hook
 _RESP_CACHE_KEY = str(uuid.uuid4()); _RESP_CODEX_KEY = str(uuid.uuid4())
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path: sys.path.append(_ROOT)
@@ -491,6 +496,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
         STATS.update(t_start=time.time(), t_ttft=None)
         if not sess.stream: STATS['t_ttft'] = STATS['t_start']
         try:
+            sess._tid = threading.get_ident()  # abort() looks up _INFLIGHT[_tid]
             with requests.post(url, headers=headers, json=payload, stream=sess.stream,
                                timeout=(sess.connect_timeout, sess.read_timeout), proxies=sess.proxies, verify=sess.verify) as r:
                 sess.active_response = r
@@ -507,6 +513,13 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                         body = _codex_enrich_quota_error(sess, headers, body)
                     err = f"!!!Error: HTTP {r.status_code}" + (f" (retry-after {(r.headers or {}).get('retry-after')}s > {cap:.0f}s cap)" if d is None and r.status_code in _RETRYABLE and attempt < sess.max_retries else "") + (f": {body}" if body else "")
                     yield err; return [{"type": "text", "text": err}]
+                if sess.stream:  # TTFT = first SSE event (prefill done), not first visible chunk; hidden thinking must count in decode window
+                    _il = r.iter_lines
+                    def _probe(*a, **k):
+                        for line in _il(*a, **k):
+                            if line and STATS.get('t_ttft') is None: STATS['t_ttft'] = time.time()
+                            yield line
+                    r.iter_lines = _probe
                 gen = parse_fn(r)
                 try:
                     while True:
@@ -828,7 +841,7 @@ class BaseSession:
         self.galley_api_key_ref = cfg.get('galley_api_key_ref') or ''
         ipc = cfg.get('galley_credential_ipc')
         self.galley_credential_ipc = ipc if isinstance(ipc, dict) else None
-        default_context_win = 35000; default_cut_msg_interval = 7
+        default_context_win = 38000; default_cut_msg_interval = 8
         if 'deepseek' in self.model.lower():
             default_context_win = 80000; default_cut_msg_interval = 25; self.trim_keep_rate = 0.3
         self.context_win = cfg.get('context_win', default_context_win)
@@ -863,7 +876,7 @@ class BaseSession:
         self.api_mode = 'responses' if mode in ('responses', 'response') else 'chat_completions'
         self.temperature = cfg.get('temperature', 1)
         self.max_tokens = cfg.get('max_tokens')
-        self.default_ua = "claude-cli/2.1.152 (external, cli)"
+        self.default_ua = "claude-cli/2.1.251 (external, cli)"
         self.user_agent = cfg.get("user_agent", self.default_ua)
     def _apply_claude_thinking(self, payload):
         if self.thinking_type:
@@ -975,7 +988,7 @@ def _fix_messages(messages):
     return merged
 
 class NativeClaudeSession(BaseSession):
-    native_ua = "claude-cli/2.1.152 (native, cli)"
+    native_ua = "claude-cli/2.1.251 (native, cli)"
     def __init__(self, cfg):
         super().__init__(cfg)
         self.fake_cc_system_prompt = cfg.get("fake_cc_system_prompt", False)

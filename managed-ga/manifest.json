@@ -3,10 +3,10 @@
   "upstream": {
     "source": "lsdefine/GenericAgent",
     "branch": "main",
-    "commit": "efb3bc6ad1db0d7a82dce9eb38aacdf954286513",
-    "commitDate": "2026-08-30T14:21:51+08:00",
-    "treeHash": "84e56c2297b6d1ad4d53ecc576fac1ffc6ed3656",
-    "auditedAt": "2026-08-31"
+    "commit": "1b6442fe4f97d87a3d9d52d76569f69d156af853",
+    "commitDate": "2026-09-14T11:42:59+08:00",
+    "treeHash": "d865e30e6a16197c30f254fbf601bbcd06c22eb3",
+    "auditedAt": "2026-09-18"
   },
   "patchStack": {
     "id": "galley-managed-ga-patches-v1",

@@ -193,7 +193,7 @@ def web_execute_js(script, switch_tab_id=None, no_monitor=False):
     try:
         if driver is None: first_init_driver()
         if len(driver.get_all_sessions()) == 0: return {"status": "error", "msg": browser_control_empty_msg()}
-        if switch_tab_id: driver.default_session_id = switch_tab_id
+        if switch_tab_id: driver.default_session_id = str(switch_tab_id)
         result = simphtml.execute_js_rich(script, driver, no_monitor=no_monitor)
         return result
     except Exception as e: return {"status": "error", "msg": format_error(e)}
@@ -550,7 +550,8 @@ class GenericAgentHandler(BaseHandler):
         '''Agent觉得当前任务完成后有重要信息需要记忆时调用此工具。'''
         prompt = '''### [总结提炼经验] 既然你觉得当前任务有重要信息需要记忆，请提取最近一次任务中【事实验证成功且长期有效】的环境事实、用户偏好、重要步骤，更新记忆。
 本工具是标记开启结算过程，若已在更新记忆过程或没有值得记忆的点，忽略本次调用。
-**如果没有经验证的，未来能用上的信息，忽略本次调用！**
+**如果没有经过验证的，未来能用上的信息，忽略本次调用！**
+**必须成功完成任务，或到达重要检查点才能进行记忆提炼，未成功完成则忽略本次调用！**
 **只能提取行动验证成功的信息**：
 - **环境事实**（路径/凭证/配置）→ `file_patch` 更新 L2，同步 L1
 - **复杂任务经验**（关键坑点/前置条件/重要步骤）→ L3 精简 SOP（只记你被坑得多次重试的核心要点）

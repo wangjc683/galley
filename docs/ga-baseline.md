@@ -15,40 +15,105 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `efb3bc6ad1db0d7a82dce9eb38aacdf954286513`
+Locked commit: `1b6442fe4f97d87a3d9d52d76569f69d156af853`
 
-- Tree hash: `84e56c2297b6d1ad4d53ecc576fac1ffc6ed3656`
+- Tree hash: `d865e30e6a16197c30f254fbf601bbcd06c22eb3`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-08-31
-- Shipped in: `v0.4.11` (2026-08-31)
+- Date audited: 2026-09-18
+- Shipped in: `v0.5.1` (planned; released builds through `v0.5.0` ship `efb3bc6`)
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `30b24ad31d679cde47a75f47fb6880df1dd96891`
-  (tree `0700767d75ff299258ac79c9e96810364724b4b7`)
-- Delta (`30b24ad..efb3bc6` = 19 commits): 168 files, ~17.1k insertions /
-  ~1.6k deletions — but the bulk is upstream's own Desktop 2.0 line
-  (compiled dist, `src-tauri/`, `desktop_bridge.py` +1411, release
-  qualification tooling, ~5k lines of upstream tests), all inert on
-  Galley's path. This range **includes and supersedes** the 10 commits to
-  `9e68c20` already ruled engine-irrelevant at `v0.4.10` release time.
-  Engine-core delta is `llmcore.py` (+28 / −8) and `agentmain.py` (+11);
-  `ga.py`, `agent_loop.py`, and root `pyproject.toml` had **zero diff**
-  (`[project.dependencies]` unchanged → `GA_DEPS` untouched).
-- Result: no bridge protocol or dependency break, and the engine delta is
-  Galley-positive (abort responsiveness + trim perf; details below).
-  Patch-stack rebase had **one real conflict** (`0017` /
-  `frontends/cost_tracker.py`, upstream's new per-call token ledger
-  rewrote the lines `0017` guards — composition kept both sides, see
-  [patch manifest](../managed-ga/patches/manifest.md)); six more patches
-  (`0001`, `0002`, `0004`, `0007`, `0008`, `0016`) drifted purely
-  positionally. `0007`'s `_stream_with_retry` insertions three-way-merged
-  cleanly past upstream's interruptible-backoff rewrite of the same
-  function.
+- Previous baseline: `efb3bc6ad1db0d7a82dce9eb38aacdf954286513`
+  (tree `84e56c2297b6d1ad4d53ecc576fac1ffc6ed3656`, audited 2026-08-31,
+  shipped `v0.4.11` … `v0.5.0`)
+- Delta (`efb3bc6..1b6442f` = 10 commits): 15 files, +119 / −76. Engine
+  core delta is `llmcore.py` (+16 / −3), `agentmain.py` (+3 / −5), `ga.py`
+  (+3 / −2), `TMWebDriver.py` (1 line); `agent_loop.py` and root
+  `pyproject.toml` had **zero diff** (`[project.dependencies]` unchanged →
+  `GA_DEPS` untouched). The rest is upstream's hub / p2p relay line
+  (`frontends/hub*.py`, `p2p_ws_client.py`, `conductor.py`) and three
+  `memory/` seed files — none on Galley's path.
+- Result: no bridge protocol or dependency break. Engine delta is
+  Galley-positive again (abort now wakes a `recv()` that is still waiting
+  for response headers) plus one default-constant nudge (`context_win`
+  35000 → 38000) whose only observable effect is a ~8% tool-output-limit
+  shrink, same inversion as last time (details below). Patch-stack rebase
+  had **two trivial conflicts** (`0006` / `ga.py` and `0007` /
+  `llmcore.py`, each an upstream one-line edit adjacent to a Galley
+  insertion — composed both sides, see
+  [patch manifest](../managed-ga/patches/manifest.md)); seven more patches
+  (`0001`, `0002`, `0003`, `0008`, `0016`, `0017`, `0021`, `0022`) drifted
+  purely positionally.
 - Standing guard re-run: `grep -rn "hub.connect" managed-ga/code/` still
-  shows only `agentmain.py --reflect` and `stapp.py` — neither on
-  Galley's path.
-- Devlog: [GA upstream upgrade 30b24ad -> efb3bc6](./devlog/2026-08-31-ga-upstream-upgrade-30b24ad-to-efb3bc6.md)
+  shows only `agentmain.py --reflect`, `hub.py` itself and `stapp.py` —
+  none on Galley's path.
+- Devlog: [GA upstream upgrade efb3bc6 -> 1b6442f](./devlog/2026-09-18-ga-upstream-upgrade-efb3bc6-to-1b6442f.md)
+
+New in the `efb3bc6` -> `1b6442f` range:
+
+- `llmcore.py` + `agentmain.py` — **abort wakes a `recv()` blocked on
+  response headers** (upstream `f07bfc5`): `llmcore` now monkey-patches
+  `urllib3.connection.HTTPConnection.request` **at import time,
+  process-wide**, recording `conn.sock` per thread ident in a module-level
+  `_INFLIGHT` dict; `_stream_with_retry` stamps `sess._tid`, and
+  `agentmain.abort()` looks the socket up there instead of walking
+  `active_response.raw` (which only exists once headers have arrived).
+  Still wrapped in the broad `try/except`, so a session with no in-flight
+  request is a no-op. **Galley-positive**: Force Stop during a slow
+  prefill / a relay that has not answered yet now tears the connection
+  down instead of waiting for the read timeout. Coupling notes: (a) the
+  hook is global to the runner child process — every `requests` call in
+  that process (the auto-title `side_ask`, IM frontends) goes through it;
+  it only stores a reference, so this is inert. (b) `_INFLIGHT` never
+  evicts; it holds one closed-socket reference per thread ident, and
+  idents are reused, so growth is bounded by live thread count. (c) The
+  runner unit test that imports `llmcore` against a stub `urllib3` had to
+  grow a `connection.HTTPConnection.request` attribute
+  (`runner/tests/test_managed_ga_llmcore.py`).
+- `llmcore.py` — **TTFT counts hidden thinking** (upstream `0fd024b`):
+  `r.iter_lines` is wrapped so `STATS['t_ttft']` is stamped on the first
+  SSE line rather than the first visible chunk. Upstream's own metric,
+  Galley does not read `STATS`. Inert.
+- `llmcore.py` — **context defaults nudged** (`0fd024b`):
+  `default_context_win` `35000 → 38000`, `default_cut_msg_interval`
+  `7 → 8`. This is the line `0007` conflicted on, again. Same analysis as
+  the `30000 → 35000` bump below: Galley pins `context_win = 90000`, so
+  the trim cap stays 270000 chars; what moves is `maxlen_multiplier`
+  (`90000/35000*0.75 = 1.93` → `90000/38000*0.75 = 1.78`, −8%), so the
+  tool-output limits shrink again: `code_run` 19285 → 17763, `file_read`
+  28928 → 26645, `web_execute_js` 15428 → 14211, `web_scan` 51250 →
+  48579 (all before the `/_tool_num` divisor); `cut_msg_interval`
+  `int(7*1.93)=13` → `int(8*1.78)=14`. Watch for `...[Truncated]...`
+  slightly sooner; nothing else changes.
+- `llmcore.py` — Claude-CLI `default_ua` / `native_ua` bumped `2.1.152 →
+  2.1.251` (`71cf559`). Galley's managed model config does not set
+  `user_agent`, so managed native-Claude sessions pick the new string up.
+- `ga.py` + `TMWebDriver.py` — `switch_tab_id` / `default_session_id`
+  coerced with `str()` (`71cf559`), fixing a numeric tab id from the
+  model failing the extension's session lookup. `0006`'s
+  `browser_control_empty_msg()` line sits directly above the `ga.py`
+  edit (the trivial conflict). Galley-positive for the browser-control
+  path.
+- `ga.py` — `remember` tool prompt now also says "only after the task
+  succeeded or reached a checkpoint" (`1b6442f`); `assets/insight_fixed_
+  structure*.txt` constitution rule 3 drops "3 failures → ask for help"
+  as duplicated in RULES. Prompt-only; Galley does not patch either.
+- `memory/` seed: `subagent.md` loses its 26-line "subagent 内部
+  plan_mode" section (`71cf559`); `vision_sop.md` flips the documented
+  default backend to `openai` (`96be945`); `ganet_pc_setup_sop.md` adds
+  macOS. All three ride `managed-ga/state-seed/memory/`, which is
+  missing-only seeded — existing managed state keeps the old files, new
+  installs get these.
+- `frontends/wechatapp.py` — conductor poll passes `mark_read=false`
+  (`7fa5fa4`, the WeChat polling fix flagged at `v0.5.0`). Only reachable
+  in upstream's `conductor` mode; Galley pins `WECHAT_MANAGED_MODE =
+  "agent"` (`runner/managed_im_supervisor.py`), so inert. `0004` did not
+  drift.
+- `frontends/hub.py` / `hub.html` / `hub_p2p.py` / `p2p_ws_client.py` /
+  `conductor.py` — relay LLM-switch op, reconnect backoff with jitter,
+  fast-fail ping. No new writes under `memory/`, `sop/`, `skills/`,
+  `temp/` or `model_responses/` (grepped). Not on Galley's path.
 
 New in the `30b24ad` -> `efb3bc6` range:
 

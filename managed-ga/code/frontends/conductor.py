@@ -809,11 +809,12 @@ def api_subagent_action(sid: str, body: SubagentActionIn):
     return JSONResponse({"error": f"unknown action: {body.action}"}, status_code=400)
 
 @app.get("/chat")
-def api_get_chat(last: int = 20):
+def api_get_chat(last: int = 20, mark_read: bool = True):
     items = [m.copy() for m in chat_messages[-last:]]
-    for m in chat_messages:
-        if m.get("role") == "user" and not m.get("read"): m["read"] = True
-    schedule_broadcast({"type": "chat_read"})
+    if mark_read:
+        for m in chat_messages:
+            if m.get("role") == "user" and not m.get("read"): m["read"] = True
+        schedule_broadcast({"type": "chat_read"})
     return {"items": items}
 
 @app.post("/chat")

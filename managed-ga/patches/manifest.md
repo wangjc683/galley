@@ -2,11 +2,24 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-08-31` against upstream
-`efb3bc6ad1db0d7a82dce9eb38aacdf954286513` (19-patch stack, through `0020`;
-`0021` landed `2026-09-14` and `0022` `2026-09-16` against the same
-baseline, each verified by `git apply --check` at its last-in-stack position
-plus `py_compile`).
+Last replay verified: `2026-09-18` against upstream
+`1b6442fe4f97d87a3d9d52d76569f69d156af853` (21-patch stack, through `0022`;
+`build-managed-ga.sh` applied all 21 clean from a fresh clone at the new
+baseline, its `py_compile` sweep passed, and `check-managed-ga-payload.mjs`
+matched the committed `managed-ga/code` byte-for-byte).
+The `efb3bc6` -> `1b6442f` commit-chain rebase had **two trivial
+conflicts**, both an upstream one-line edit adjacent to a Galley insertion:
+`0006` / `ga.py` (upstream `str(switch_tab_id)` on the line right below
+`browser_control_empty_msg()`) and `0007` / `llmcore.py` (upstream
+`default_context_win 35000 → 38000` on the line right below the codex /
+credential-IPC fields). Both resolved by keeping Galley's lines and
+upstream's new line — no semantic change to either patch. Eight more
+patches (`0001`, `0002`, `0003`, `0008`, `0016`, `0017`, `0021`, `0022`)
+re-exported with positional drift and identical bodies (verified with
+`git diff managed-ga/patches | grep -v '^[-+]@@'` showing no body lines).
+
+Previous replay (`2026-08-31`, `efb3bc6`, 19 patches through `0020`; `0021`
+and `0022` later verified against the same baseline):
 The `30b24ad` -> `efb3bc6` commit-chain rebase had **one real conflict**:
 `0017` / `frontends/cost_tracker.py` — upstream's new per-call token ledger
 (`token_ledger.jsonl`, for its own Desktop 2.0 bridge) rewrote the exact

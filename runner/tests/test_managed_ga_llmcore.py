@@ -22,6 +22,11 @@ urllib3_stub = types.ModuleType("urllib3")
 urllib3_typed = cast(Any, urllib3_stub)
 urllib3_typed.exceptions = types.SimpleNamespace(InsecureRequestWarning=Warning)
 urllib3_typed.disable_warnings = lambda *_args, **_kwargs: None
+# Upstream 1b6442f hooks urllib3.connection.HTTPConnection.request at import
+# time (abort() socket registry); the stub needs that attribute chain.
+urllib3_typed.connection = types.SimpleNamespace(
+    HTTPConnection=type("HTTPConnection", (), {"request": lambda self, *a, **k: None})
+)
 sys.modules.setdefault("urllib3", urllib3_stub)
 
 try:

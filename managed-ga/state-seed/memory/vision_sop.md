@@ -12,7 +12,9 @@
 from vision_api import ask_vision
 result = ask_vision(image, prompt="描述图片内容", timeout=60, max_pixels=1_440_000)
 # image: 文件路径(str/Path) 或 PIL Image
-# backend: 'claude'(默认) | 'openai' | 'modelscope'
+# backend: 'openai'(默认) | 'claude' | 'modelscope' | 'auto'
+# 默认配置: native_oai_config0 (xAI，使用配置内代理)；文件路径/PIL Image 均已实测
+# 旧配置 native_oai_config15 返回 HTTP 503；备用 native_oai_config_fr113 曾实测识图成功
 # 返回 str：成功为模型回复，失败为 'Error: ...'
 ```
 

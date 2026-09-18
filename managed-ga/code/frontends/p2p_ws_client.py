@@ -140,7 +140,10 @@ class Signal:
         return signed_url(self.url, "ws", self.room, self.access_key)
 
     async def start(self):
-        self._ws = await websockets.connect(self._signed_url(), max_size=1 << 21)
+        # 半开连接(切网/熄屏)靠 ping 在 ~25s 内暴露，默认 20+20s 太慢
+        self._ws = await websockets.connect(
+            self._signed_url(), max_size=1 << 21, ping_interval=15, ping_timeout=10,
+        )
         self._ready.set()
         self._task = asyncio.create_task(self._loop())
         return self
@@ -162,7 +165,21 @@ class Signal:
         return self._queues.setdefault(type_, asyncio.Queue())
 
     async def expect(self, type_: str, timeout: float = 15):
-        return await asyncio.wait_for(self.queue(type_).get(), timeout)
+        """等指定类型消息；连接关闭或服务端报错(如被顶号)时立即抛错，不傻等到超时。"""
+        want = asyncio.ensure_future(self.queue(type_).get())
+        fail = [asyncio.ensure_future(self.queue(t).get()) for t in ("closed", "error")]
+        try:
+            done, _ = await asyncio.wait(
+                [want, *fail], timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+            if want in done:
+                return want.result()
+            if not done:
+                raise asyncio.TimeoutError(f"no {type_!r} within {timeout}s")
+            raise ConnectionError(f"signal ended while waiting {type_!r}: {next(iter(done)).result()}")
+        finally:
+            for f in (want, *fail):
+                if not f.done():
+                    f.cancel()
 
     async def send(self, obj: dict, timeout: float = 15):
         """等连接就绪后发送；重连期间会阻塞而不是直接失败。"""
