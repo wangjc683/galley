@@ -41,8 +41,9 @@
 
 **SidebarHeader（Sidebar 栏顶，y=0）**
 - `Galley` 字标（左）+ runtime / Supervisor SOP 状态指示（右），单行。
-- macOS：traffic light 浮于窗口左上 = 本 header 左上，故左 padding 让出 **~78px**（红绿灯簇右缘约 68px + ~10px 间隙）。**不要**退回贴近 flush 70px，否则字标与红绿灯糊成一团。非 mac 用 16px 常规 gutter。
-- narrow（最小窗 960 × 14% sidebar ≈ 134px）：~78px reserve 吃掉大半，字标保留、runtime 指示靠 `truncate` / `max-w` 优雅截断。
+- macOS：traffic light 浮于窗口左上 = 本 header 左上，故左 padding 让出 **88px**（红绿灯簇右缘约 68px + ~20px 间隙；代码现状，2026-09-18 回写——早先记的 ~78px 已被实机否掉：10px 间隙让斜体衬线字标看起来挤着彩色圆点）。**不要**退回 78px 或更贴。非 mac 用 16px 常规 gutter。
+- narrow（最小窗 960 × 14% sidebar ≈ 134px）：88px reserve 吃掉大半，字标保留、runtime 指示靠 `truncate` / `max-w` 优雅截断。
+- **外置模式 Supervisor SOP 退成 icon-only**（2026-09-18）：外置模式这一行是字标 + 绿色「外部 GA」徽标 + Supervisor SOP，内容 ~239px 加 104px 预留要 343px sidebar，20% 默认比例下笔记本全放不下（295px 时两者等权截成「外..」/「Supervis…」）。徽标是字标的驻留状态（信息），SOP 按钮是快捷入口（动作），让的是动作的文字：外置模式下 SOP 渲染为共用的 28px icon-only 形态（`TopBarIconButton` + tooltip），需要 252px。**按运行时模式判断，不按容器宽度**——内置模式的行（字标 + 文字 pill，279px）默认宽度已放得下，不能被阈值误伤，所以内置模式零变化。
 
 **MainHeader（Main 栏顶）** —— `[ 标题 ▾  ··· drag ···  状态簇 │ 工具簇 │ (Win 窗口控制) ]`
 - session title 左对齐贴 main 栏左 gutter（**不对齐居中的对话列**——对话列宽随 compact/wide 变，对齐它会让标题左右跳）。title 属于「当前对话」，放在对话区上方、视线最先到达处。本栏左侧无 OS chrome 保留区。

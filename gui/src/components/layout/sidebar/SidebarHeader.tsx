@@ -1,6 +1,7 @@
 import { PlugsConnected } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useCopy, type AppCopy } from "@/lib/i18n";
 import { isMac, isWindowActionTarget } from "@/lib/platform";
@@ -71,6 +72,18 @@ export function SidebarHeader({
   const showSupervisorSop =
     (runtimeIndicator === "hidden" || runtimeIndicator === "external-ready") &&
     Boolean(onOpenAgentSettings);
+  // Attach mode (2026-09-18): the row is "Galley" + green "外部 GA" badge +
+  // Supervisor SOP, ~239px of content behind a 104px reserve — 343px of
+  // sidebar, which no laptop reaches at the 20% default (295px on a
+  // 1475px window; both min-w-0 children then truncate to "外.." /
+  // "Supervis…"). The badge is the wordmark's resident state
+  // (information); the SOP button is a shortcut (action), so the
+  // shortcut's label yields: in attach mode it renders as the shared
+  // 28px icon-only form with its tooltip (252px needed, fits 20% of any
+  // ≥1260px window). Keyed on the runtime mode, NOT a container width:
+  // managed mode's row ("Galley" + text pill, 279px) already fits at the
+  // default width and must not be caught by a threshold.
+  const supervisorSopIconOnly = externalRuntimeBadge !== null;
   return (
     <div
       data-tauri-drag-region
@@ -151,6 +164,16 @@ export function SidebarHeader({
             <RuntimeDot tone={indicator.tone} />
             <span className="min-w-0 truncate">{indicator.label}</span>
           </button>
+        </IconTooltip>
+      ) : showSupervisorSop && supervisorSopIconOnly ? (
+        <IconTooltip text={supervisorSopTooltip} side="bottom">
+          <TopBarIconButton
+            onClick={onOpenAgentSettings}
+            aria-label={copy.sidebar.openSupervisorSop}
+            className="shrink-0"
+          >
+            <PlugsConnected size={16} weight="thin" />
+          </TopBarIconButton>
         </IconTooltip>
       ) : showSupervisorSop ? (
         <IconTooltip text={supervisorSopTooltip} side="bottom">
