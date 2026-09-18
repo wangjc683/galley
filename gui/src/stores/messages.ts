@@ -6,6 +6,7 @@ import {
   persistUserMessage,
 } from "@/lib/db";
 import { logPerf, perfNow } from "@/lib/perf";
+import { pendingReplyStepBase } from "@/lib/run-groups";
 import { useSessionsStore } from "@/stores/sessions";
 import {
   derivePendingAskUser,
@@ -133,6 +134,18 @@ export interface PerSessionMessages {
    */
   restoring: boolean;
   turnIndexOffset: number;
+  /**
+   * Display-step base for the GA loop the latest user turn started:
+   * the steps the run already held when that turn was an ask_user
+   * reply, 0 when it opened a new run (run-groups
+   * `pendingReplyStepBase`, 2026-09-18). GA's per-loop step restarts
+   * at 1 on every `put_task`; the turn_start / turn_end handlers add
+   * this so the in-flight marker and the sidebar's "第 N 步" continue
+   * the run's numbering, matching how settled steps are numbered by
+   * position. Known gap: a reply the CLI sends into a session this
+   * app launch never loaded restarts at 1 (no turns to count).
+   */
+  runStepBase: number;
   lastUserPersistRequestId: number;
   /**
    * User-voice next-step suggestion from the latest final reply
@@ -157,6 +170,7 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   isStopping: false,
   restoring: false,
   turnIndexOffset: 0,
+  runStepBase: 0,
   lastUserPersistRequestId: 0,
   nextSuggestion: null,
 }) as PerSessionMessages;
@@ -177,6 +191,7 @@ function emptyMessages(): PerSessionMessages {
     isStopping: false,
     restoring: false,
     turnIndexOffset: 0,
+    runStepBase: 0,
     lastUserPersistRequestId: 0,
     nextSuggestion: null,
   };
@@ -522,6 +537,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       sendPhase: "saving",
       isStopping: false,
       turnIndexOffset: currentTurnCount,
+      runStepBase: pendingReplyStepBase(m.turns),
       lastUserPersistRequestId: persistRequestId,
     }));
     set({ byId, userSubmitTick: state.userSubmitTick + 1 });    // Derive a Sidebar title from the first user message — but only
@@ -623,6 +639,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       pendingAskUser: null,
       sendPhase: dispatched ? "waiting_agent" : null,
       turnIndexOffset: offset,
+      runStepBase: pendingReplyStepBase(m.turns),
       lastUserPersistRequestId: 0,
       nextSuggestion: null,
     }));

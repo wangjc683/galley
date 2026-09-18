@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-09-18
+- [ask_user 之后步号归一、用时只算最后一段](./2026-09-18-ask-user-run-continuity.md) — JC 发现 ask_user 回答后序号从 1 重数、折叠头「10 步 · 45 秒」步数全程而用时只算末段；根因是 GA 把每次 `put_task` 当一次运行而 GUI 的 run 跨越提问；编号扩 Goal 已有的 `stepNumberOf` 位置编号到所有 run，live 路径靠 messages `runStepBase` 让进行中标记与侧栏同源；计时在 JC 定「排除等待时间」后淘汰 runner 不重置方案，取 GUI 分段求和（B 撑不过 bridge 重启且让同一字段两种含义），答案脚注 token 数与运行中 HUD 一并按段合并；缺段 telemetry 时 settled 数字留空不显示部分和，HUD 例外
+
 ### 2026-09-17
 - [v0.5.0 发布](./2026-09-17-v0.5.0-release.md) — 聚合 `v0.4.16..HEAD` 30 提交打包 minor：Goal v2（schemaVersion 2、hive/solo 退役、迁移 039、补丁 0022）+ live 两行窗口 + 气泡 / dark 收响度 / 写过的文件可点；不升 1.0（刚破契约就宣布稳定是矛盾信号，PRD 从没定 1.0 门槛）；Pre-Flight 收拾三处：CLAUDE.md 仍写 schemaVersion 1、goal-simplify 票翻 done、check.yml 自 Goal v2 合并起连红三次的 IPC drift（`goalStatus` 缺 null）；打包门禁 mandatory（mac-x64）
 - [写过的文件按名可点 + 写入步骤自带入口](./2026-09-17-written-file-references.md) — 汕尾旅游 Goal 收尾把交付物写成 `./汕尾旅游指南.md`，用户追问完整路径后才能预览；09-09 的「Files You Create」提示词条款在场仍失效，病根是 bridge 明知绝对路径却只回传 `writed_bytes`；三层方案（提示词加压 / bridge 现场解析进 tool_calls / Goal 收口列交付物）取 B 带 A：`toolCalls[].resolvedPath` 只覆盖 file_write / file_patch，正文相对路径与裸文件名严格精确匹配本会话已写文件（同名多文件不解析），settled 写入 pill 行尾加打开按钮、展开体列完整路径引用，Goal 三份模板加「交付物写绝对路径」；09-08「不猜基准目录」边界不动，C 等 Session Workspace

@@ -33,7 +33,7 @@ import {
 } from "@/lib/ask-user-candidates";
 import { buildRunGroups, replyUserIndices, type RunGroup } from "@/lib/run-groups";
 import { cn } from "@/lib/utils";
-import type { AgentTurn, Turn } from "@/types/conversation";
+import type { AgentTurn, MessageTelemetry, Turn } from "@/types/conversation";
 import type { GoalBrief } from "@/types/goal";
 import type { ApprovalDecision } from "@/types/ipc";
 
@@ -153,6 +153,16 @@ export function Conversation({
     () => replyUserIndices(groups, turns),
     [groups, turns],
   );
+  // Closing turn index → the run's whole-run telemetry for its answer
+  // footer. The closing turn's own telemetry only covers the GA loop
+  // after the last ask_user reply (run-groups segments note).
+  const runTelemetryOf = useMemo(() => {
+    const m = new Map<number, MessageTelemetry | null>();
+    for (const g of groups) {
+      if (g.finalTurnIndex != null) m.set(g.finalTurnIndex, g.stats.telemetry);
+    }
+    return m;
+  }, [groups]);
   // Turn identity → turns index. annotateGoalThread reorders nothing
   // and each Turn object appears at most once, so object identity is
   // a safe join key between its items and the grouping's indices.
@@ -467,6 +477,11 @@ export function Conversation({
                 ? askUserReplyContent(turns, turnIndex, replySet)
                 : undefined
             }
+            runTelemetry={
+              turnIndex !== undefined
+                ? runTelemetryOf.get(turnIndex)
+                : undefined
+            }
           />
         )}
         {/* No divider between turns — the TurnMarker on each
@@ -643,6 +658,7 @@ function AgentTurnView({
   askUserAnswer,
   stepNumber: stepNumberProp,
   intermediateAnswer = false,
+  runTelemetry,
 }: {
   turn: AgentTurn;
   approvalDecisions?: Record<string, ApprovalDecision>;
@@ -670,10 +686,15 @@ function AgentTurnView({
    * it was answered — lets the AnsweredAskUser echo check the picked
    * candidate. */
   askUserAnswer?: string;
-  /** Display step number overriding GA's `turn.turnIndex`. Goal groups
-   * number by position (goal-run-groups), because GA restarts its
-   * counter at every continuation. */
+  /** Display step number overriding GA's `turn.turnIndex`: position
+   * within the run (goal-run-groups `stepNumberOf`), because GA
+   * restarts its counter at every put_task — each goal continuation
+   * and each ask_user reply. */
   stepNumber?: number;
+  /** Whole-run telemetry for a closing turn's answer footer (run-groups
+   * `RunStats.telemetry`). The turn's own telemetry only covers the
+   * last GA loop; undefined for turns that close no run. */
+  runTelemetry?: MessageTelemetry | null;
   /** True for a closing-shaped turn that is NOT the run's answer — a
    * goal continuation's progress note. Its answer body renders in the
    * narration register (no StrongHr, no answer footer), keeping the
@@ -862,7 +883,10 @@ function AgentTurnView({
       {answerText && isFinalTurn && !intermediateAnswer && (
         <>
           {!hideMarker && <StrongHr />}
-          <MessageAgent telemetry={turn.telemetry} messageId={turn.messageId}>
+          <MessageAgent
+            telemetry={runTelemetry ?? turn.telemetry}
+            messageId={turn.messageId}
+          >
             {answerText}
           </MessageAgent>
         </>

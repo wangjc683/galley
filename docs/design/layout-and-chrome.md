@@ -182,7 +182,7 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 
 第二行直接当状态行用，始终状态着色、**直立不斜体**，blocking 状态给显式文案，扫一眼即读懂、不靠解码图标：
 
-- running：`第 N 步 · {summary}`（brand-strong，N=最近完成步 `lastStepIndex`，故意比实时滞后一步）或首步未完成时 `思考中…`。
+- running：`第 N 步 · {summary}`（brand-strong，N=最近完成步 `lastStepIndex`，故意比实时滞后一步）或首步未完成时 `思考中…`。N 是 run 内按位置的连续序号（2026-09-18）：GA 每次 `put_task` 步号从 1 重数，ask_user 回复也是一次 `put_task`，侧栏把 GA 步号加上回复前已完成的步数（messages `runStepBase`），与主视图序号栏同源，不再在回答后跳回「第 1 步」。
 - goal 态（2026-09-16 起 goal v2）：会话自身在跑 goal 时就是普通 running；goal `paused` / `blocked` 而会话空闲时，行上挂静态（不呼吸）的 goal 副线 `Goal · 已暂停` / `Goal · 受阻`（复用 TopBar goal pill 语言）。让位于本会话自己的 running / 一切 blocking 状态。
 - ask_user：`等你回复`（warning，copy key `waitingForYou`）。
 - approval：`等待审批 · N`（warning，`waitingApproval`；N=1 时不显示计数，下同）。

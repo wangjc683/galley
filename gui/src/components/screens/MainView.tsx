@@ -16,7 +16,7 @@ import {
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { GoalPausedTail } from "@/components/conversation/GoalRunMarkers";
 import { liveWindowHasSettledStep, planGoalRuns } from "@/lib/goal-run-groups";
-import { buildRunGroups } from "@/lib/run-groups";
+import { buildRunGroups, liveRunElapsedBaseMs } from "@/lib/run-groups";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
@@ -267,6 +267,9 @@ function MainViewContent({
     (m) => m.currentRunStartedAtMs,
     null,
   );
+  // Segments an ask_user reply already closed keep their time on the
+  // HUD (see RunElapsedHud.baseMs).
+  const runElapsedBaseMs = useMemo(() => liveRunElapsedBaseMs(turns), [turns]);
   // Latest final reply's next-step suggestion (managed runtime). The
   // session-level half of the ghost predicate lives here: idle and not
   // waiting on an ask_user reply. The Composer derives the rest
@@ -600,7 +603,10 @@ function MainViewContent({
                   : "max-w-[760px]",
               )}
             >
-              <RunElapsedHud startedAtMs={currentRunStartedAtMs} />
+              <RunElapsedHud
+                startedAtMs={currentRunStartedAtMs}
+                baseMs={runElapsedBaseMs}
+              />
             </div>
           </div>
         )}

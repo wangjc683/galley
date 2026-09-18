@@ -19,9 +19,12 @@
 //      goal's LAST group when the goal ended `completed` or
 //      `budget_limited` renders flat as the deliverable. Every other
 //      closing-shaped turn (a continuation's progress note) is a step.
-//   4. Steps inside a goal group are numbered by position, so the
-//      per-continuation restart GA's turn counter does live and the
-//      internal-row gaps restore does never show.
+//   4. Steps are numbered by position within their group — every
+//      group, not only goal groups (2026-09-18): GA restarts its turn
+//      counter at every `put_task`, which is each goal continuation AND
+//      each ask_user reply, so an ordinary run's steps read 1 2 3 1 2
+//      around a question. Position numbering hides both restarts and
+//      the internal-row gaps restore would otherwise show.
 //   5. A goal group's settled header shows no duration — the terminal
 //      marker owns the goal's elapsed time.
 //
@@ -44,8 +47,10 @@ export interface GoalRunPlan {
   liveGroup: RunGroup | null;
   /** Opener index → the goal whose segment the group sits in. */
   goalOfGroup: Map<number, GoalBrief>;
-  /** Turn index → display step number for agent turns inside goal
-   * groups (1-based, by position within the group). */
+  /** Turn index → display step number for every agent turn in a
+   * user-opened group (1-based, by position within the group, so an
+   * ask_user reply does not restart the count). Headless leading
+   * groups are absent and fall back to GA's own step. */
   stepNumberOf: Map<number, number>;
 }
 
@@ -106,12 +111,14 @@ export function planGoalRuns(
   const lastOpener = groups.length ? groups[groups.length - 1].openerIndex : null;
   const stepNumberOf = new Map<number, number>();
   const planned = groups.map((g) => {
+    if (g.openerIndex >= 0) {
+      let step = 0;
+      for (const i of g.memberIndices) {
+        if (turns[i].role === "agent") stepNumberOf.set(i, ++step);
+      }
+    }
     const goal = goalOfGroup.get(g.openerIndex);
     if (!goal) return g;
-    let step = 0;
-    for (const i of g.memberIndices) {
-      if (turns[i].role === "agent") stepNumberOf.set(i, ++step);
-    }
     const isLast = g.openerIndex === lastOpener;
     const live = goalRunning(goal, agentRunning) && isLast;
     const finalTurnIndex =

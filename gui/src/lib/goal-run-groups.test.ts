@@ -205,13 +205,42 @@ describe("planGoalRuns", () => {
     ]);
   });
 
+  it("numbers an ordinary run's steps by position across an ask_user reply", () => {
+    // GA restarts its counter at the reply's put_task (turnIndex 1
+    // again on turns[4]); the display continues the run's count.
+    const turns: Turn[] = [
+      user("q"),
+      step(tool("a")),
+      step(tool("ask_user")),
+      user("选 A"),
+      step(tool("b")),
+      note("答"),
+    ];
+    const plan = planGoalRuns(turns, [], buildRunGroups(turns), false, false);
+    expect([...plan.stepNumberOf.entries()]).toEqual([
+      [1, 1],
+      [2, 2],
+      [4, 3],
+      [5, 4],
+    ]);
+  });
+
+  it("leaves a headless leading group on GA's own step", () => {
+    const turns: Turn[] = [step(tool("a")), user("q"), step(tool("b"))];
+    const plan = planGoalRuns(turns, [], buildRunGroups(turns), true, false);
+    expect([...plan.stepNumberOf.entries()]).toEqual([[2, 1]]);
+  });
+
   it("leaves ordinary runs on the shape rules", () => {
     const turns: Turn[] = [user("q"), step(tool("a")), note("答")];
     const shape = buildRunGroups(turns);
     const plan = planGoalRuns(turns, [], shape, true, false);
     expect(plan.groups[0]).toBe(shape[0]);
     expect(plan.liveGroup).toBeNull();
-    expect(plan.stepNumberOf.size).toBe(0);
+    expect([...plan.stepNumberOf.entries()]).toEqual([
+      [1, 1],
+      [2, 2],
+    ]);
     const live = planGoalRuns([user("q"), step(tool("a"))], [], buildRunGroups([user("q"), step(tool("a"))]), true, false);
     expect(live.liveGroup?.openerIndex).toBe(0);
     expect(liveWindowHasSettledStep(live, [user("q"), step(tool("a"))])).toBe(true);

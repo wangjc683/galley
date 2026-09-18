@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRunGroups, replyUserIndices } from "@/lib/run-groups";
+import {
+  buildRunGroups,
+  liveRunElapsedBaseMs,
+  pendingReplyStepBase,
+  replyUserIndices,
+} from "@/lib/run-groups";
 import type {
   AgentTurn,
   ConversationToolEvent,
+  MessageTelemetry,
   SystemTurn,
   Turn,
   UserTurn,
@@ -35,6 +41,26 @@ function closing(answer = "结论", elapsedMs?: number): AgentTurn {
     tools: [tool("no_tool")],
     finalAnswer: answer,
     telemetry: elapsedMs === undefined ? undefined : { elapsedMs },
+  };
+}
+
+/** An ask_user pause: the GA loop exits here, so like a closing turn
+ * it carries that loop's cumulative telemetry. */
+function askStep(telemetry?: MessageTelemetry): AgentTurn {
+  return {
+    role: "agent",
+    tools: [tool("ask_user")],
+    finalAnswer: null,
+    telemetry,
+  };
+}
+
+function closingWith(telemetry: MessageTelemetry, answer = "结论"): AgentTurn {
+  return {
+    role: "agent",
+    tools: [tool("no_tool")],
+    finalAnswer: answer,
+    telemetry,
   };
 }
 
@@ -185,5 +211,154 @@ describe("buildRunGroups", () => {
       { role: "agent", tools: [tool("no_tool")], finalAnswer: "  " },
     ];
     expect(buildRunGroups(turns)[0].complete).toBe(false);
+  });
+
+  describe("segments around ask_user (2026-09-18)", () => {
+    // Each ask_user pause ends one GA loop; the runner's clock and
+    // token baseline restart at the reply. Whole-run figures sum the
+    // segment closers so "10 步" and the duration describe the same
+    // span.
+    it("sums elapsed time across the segments an ask_user split", () => {
+      const turns: Turn[] = [
+        user("q"),
+        step(tool("web_scan")),
+        askStep({ elapsedMs: 80_000 }),
+        user("选 A"),
+        askStep({ elapsedMs: 5_000 }),
+        user("选 B"),
+        step(tool("file_patch")),
+        closing("done", 45_000),
+      ];
+      const g = buildRunGroups(turns)[0];
+      expect(g.complete).toBe(true);
+      expect(g.stats.stepCount).toBe(5);
+      expect(g.stats.askUserCount).toBe(2);
+      expect(g.stats.elapsedMs).toBe(130_000);
+    });
+
+    it("goes blank rather than partial when a segment lacks telemetry", () => {
+      const turns: Turn[] = [
+        user("q"),
+        askStep(),
+        user("选 A"),
+        closing("done", 45_000),
+      ];
+      const g = buildRunGroups(turns)[0];
+      expect(g.stats.elapsedMs).toBeNull();
+      expect(g.stats.telemetry?.elapsedMs).toBeNull();
+    });
+
+    it("merges the answer footer telemetry: additive fields summed, context from the last segment", () => {
+      const turns: Turn[] = [
+        user("q"),
+        askStep({
+          elapsedMs: 80_000,
+          inputTokens: 1000,
+          outputTokens: 200,
+          cacheReadTokens: 300,
+          requestCount: 2,
+          contextUsedChars: 50_000,
+          contextLimitChars: 300_000,
+        }),
+        user("选 A"),
+        closingWith({
+          elapsedMs: 45_000,
+          inputTokens: 500,
+          outputTokens: 100,
+          cacheReadTokens: 400,
+          requestCount: 1,
+          contextUsedChars: 70_000,
+          contextLimitChars: 300_000,
+        }),
+      ];
+      const g = buildRunGroups(turns)[0];
+      expect(g.stats.telemetry).toEqual({
+        elapsedMs: 125_000,
+        inputTokens: 1500,
+        outputTokens: 300,
+        cacheCreateTokens: null,
+        cacheReadTokens: 700,
+        requestCount: 3,
+        contextUsedChars: 70_000,
+        contextLimitChars: 300_000,
+      });
+    });
+
+    it("a single-segment run's telemetry is the closing turn's, unchanged", () => {
+      const closer = closingWith({
+        elapsedMs: 9_000,
+        inputTokens: 10,
+        contextUsedChars: 5,
+      });
+      const g = buildRunGroups([user("q"), step(tool("a")), closer])[0];
+      expect(g.stats.elapsedMs).toBe(9_000);
+      expect(g.stats.telemetry).toMatchObject({
+        elapsedMs: 9_000,
+        inputTokens: 10,
+        contextUsedChars: 5,
+      });
+    });
+
+    it("keeps whole-run telemetry null while the run is open", () => {
+      const g = buildRunGroups([user("q"), askStep({ elapsedMs: 80_000 })])[0];
+      expect(g.stats.telemetry).toBeNull();
+      expect(g.stats.elapsedMs).toBeNull();
+    });
+
+    it("pendingReplyStepBase: the run's step count when the next user turn answers ask_user", () => {
+      const waiting: Turn[] = [user("q"), step(tool("a")), askStep()];
+      expect(pendingReplyStepBase(waiting)).toBe(2);
+      // System bystanders (/btw) between the question and the reply
+      // do not hide it.
+      expect(pendingReplyStepBase([...waiting, system()])).toBe(2);
+      // Across an earlier answered question the count keeps growing.
+      expect(
+        pendingReplyStepBase([
+          ...waiting,
+          user("选 A"),
+          step(tool("b")),
+          askStep(),
+        ]),
+      ).toBe(4);
+    });
+
+    it("pendingReplyStepBase: 0 when the next user turn opens a new run", () => {
+      expect(pendingReplyStepBase([])).toBe(0);
+      expect(
+        pendingReplyStepBase([user("q"), step(tool("a")), closing()]),
+      ).toBe(0);
+      expect(pendingReplyStepBase([user("q"), step(tool("a"))])).toBe(0);
+      // The reply itself is already appended → the next turn is a new run.
+      expect(pendingReplyStepBase([user("q"), askStep(), user("选 A")])).toBe(
+        0,
+      );
+    });
+
+    it("liveRunElapsedBaseMs: banks answered segments, skips the current one and unknowns", () => {
+      const turns: Turn[] = [
+        user("q"),
+        askStep({ elapsedMs: 80_000 }),
+        user("选 A"),
+        askStep(),
+        user("选 B"),
+        step(tool("a")),
+      ];
+      expect(liveRunElapsedBaseMs(turns)).toBe(80_000);
+      // A pending (unanswered) pause is not banked — the run is not live.
+      expect(
+        liveRunElapsedBaseMs([user("q"), askStep({ elapsedMs: 80_000 })]),
+      ).toBe(0);
+      // A settled run has nothing live to add to.
+      expect(
+        liveRunElapsedBaseMs([
+          user("q"),
+          askStep({ elapsedMs: 80_000 }),
+          user("选 A"),
+          closing("done", 1_000),
+        ]),
+      ).toBe(0);
+      // A fresh run starts from zero.
+      expect(liveRunElapsedBaseMs([user("q")])).toBe(0);
+    });
   });
 });

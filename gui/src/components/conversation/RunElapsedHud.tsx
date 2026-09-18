@@ -27,8 +27,16 @@ import { useCopy } from "@/lib/i18n";
  */
 export function RunElapsedHud({
   startedAtMs,
+  baseMs = 0,
 }: {
   startedAtMs: number | null;
+  /** Run time the run's earlier segments already banked (each
+   * answered ask_user closes one; run-groups `liveRunElapsedBaseMs`).
+   * `startedAtMs` restarts at the reply because the bridge starts a
+   * fresh GA loop there; without the base the chip would snap back
+   * to zero and then disagree with the settled header's whole-run
+   * figure (2026-09-18). */
+  baseMs?: number;
 }) {
   const copy = useCopy();
   const [now, setNow] = useState(() => Date.now());
@@ -40,7 +48,7 @@ export function RunElapsedHud({
   }, [startedAtMs]);
 
   if (startedAtMs == null) return null;
-  const elapsed = formatRunElapsed(now - startedAtMs, copy);
+  const elapsed = formatRunElapsed(baseMs + (now - startedAtMs), copy);
 
   return (
     <div

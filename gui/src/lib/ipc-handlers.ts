@@ -241,10 +241,12 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         toolCallCount: event.toolCalls?.length ?? 0,
         hasFinalAnswer: !!event.responseContent,
       });
-      // UI: AgentTurn.turnIndex = per-message step (raw GA value).
-      // TurnMarker renders "第 N 步" against this — resetting to 1
-      // on every new user message is GA's native semantic and what
-      // the user expects. Built unconditionally: the persist below
+      // UI: AgentTurn.turnIndex = per-message step (raw GA value),
+      // kept raw so live and restored turns agree (rowsToTurns
+      // recovers the same number). What the user SEES is numbered by
+      // position within the run (goal-run-groups `stepNumberOf`), so
+      // an ask_user reply — a fresh GA loop, step 1 again — does not
+      // restart the count. Built unconditionally: the persist below
       // reuses the same turn's derived fields even when the turn is
       // `visibility: internal` (goal master-plan traffic).
       const turn = turnFromTurnEnd(event);
@@ -272,10 +274,12 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // which made the sidebar flip to "已完成" after step 1 of an
       // N-step run.)
       // Update the session row (turn_count + last_activity_at +
-      // summary). Sidebar `第 N 步 · {summary}` previews also use
-      // the per-message step (matches what the user sees in the
-      // main view). turn_count itself keeps incrementing in
-      // absolute terms — that's the offset's source of truth.
+      // summary). Sidebar `第 N 步 · {summary}` previews show the
+      // display step — GA's per-loop step plus the run's step base
+      // (messages `runStepBase`), so it matches the main view's
+      // position numbering across an ask_user reply. turn_count
+      // itself keeps incrementing in absolute terms — that's the
+      // offset's source of truth.
       //
       // Unread is a completed-reply signal, not an intermediate-step
       // signal. GA emits turn_end for every loop step; only the final
@@ -286,7 +290,8 @@ export function dispatchIPCEvent(event: IPCEvent): void {
           .bumpSessionAfterTurn(
             event.sessionId,
             event.summary,
-            event.turnIndex,
+            (messages.byId[event.sessionId]?.runStepBase ?? 0) +
+              event.turnIndex,
             event.exitReason != null,
           );
       }
@@ -404,10 +409,11 @@ export function dispatchIPCEvent(event: IPCEvent): void {
     case "turn_start": {
       // Reflects which GA-side iteration the agent is currently on.
       // The thinking placeholder reads this to render
-      // "第 N 步 · 思考中…". N is the per-message step (GA-native,
-      // resets to 1 on each new user message) — matches what
-      // completed TurnMarkers show, what the Sidebar preview
-      // shows. No offset applied; raw GA value is the display.
+      // "第 N 步 · 思考中…". N is the display step: GA's per-loop
+      // step (restarts at 1 on every put_task) plus the run's step
+      // base, so a loop started by an ask_user reply continues the
+      // run's numbering — matching the settled TurnMarkers and the
+      // Sidebar preview. No absolute offset applied.
       console.debug("[ipc] turn_start", event);
       if (eventVisibility(event) === "internal") {
         return;
@@ -422,7 +428,10 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       if (useMessagesStore.getState().byId[event.sessionId]?.pendingAskUser) {
         messages.setPendingAskUser(event.sessionId, null);
       }
-      messages.setCurrentTurnIndex(event.sessionId, event.turnIndex);
+      messages.setCurrentTurnIndex(
+        event.sessionId,
+        (messages.byId[event.sessionId]?.runStepBase ?? 0) + event.turnIndex,
+      );
       // Do not clear inFlightContent here. `turn_start` is a structural
       // clock signal, and on older/racing runners it can arrive after a
       // few `turn_progress` chunks from the same turn. Clearing here

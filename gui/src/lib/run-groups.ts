@@ -18,10 +18,26 @@
 // render) identically, the same consistency argument as agent-turn.ts.
 // Known limit: abort while an ask_user is pending, then send a fresh
 // question → that question is misgrouped as a reply. Its group has no
-// final answer so it never folds; the cost is one missing rail dot.
+// final answer so it never folds; the cost is one missing rail dot
+// (and, since 2026-09-18, its steps continue the earlier run's
+// numbering instead of restarting at 1).
+//
+// Segments (2026-09-18): every ask_user pause ends one GA
+// `agent_runner_loop` and the reply starts another, so a run with N
+// answered questions is N+1 GA loops. The runner's per-loop clock and
+// token baseline reset at each `put_task`, and its cumulative telemetry
+// rides on the last turn_end of each loop — the ask_user turn for a
+// paused segment, the closing turn for the final one. Whole-run
+// numbers are therefore the SUM over those segment closers, not the
+// closing turn's telemetry alone (which only covers the last segment,
+// while `stepCount` always spanned the whole run — the mismatch JC
+// reported as "10 步 · 45 秒" after a two-minute run). A segment whose
+// closer carries no telemetry (pre-telemetry rows) makes the
+// whole-run figure unknown: a partial sum is a plausible wrong number,
+// worse than none.
 
 import { askUserQuestionCount } from "@/lib/ask-user-candidates";
-import type { AgentTurn, Turn } from "@/types/conversation";
+import type { AgentTurn, MessageTelemetry, Turn } from "@/types/conversation";
 
 export interface RunToolCount {
   name: string;
@@ -31,9 +47,15 @@ export interface RunToolCount {
 export interface RunStats {
   /** Number of agent turns ("第 N 步" rows) in the run. */
   stepCount: number;
-  /** Whole-run elapsed time from the closing turn's telemetry (the
-   * runner's final-turn telemetry is cumulative). null when absent. */
+  /** Whole-run elapsed time: the sum of every segment closer's
+   * cumulative telemetry (see the segments note above). null while the
+   * run is open, or when any segment lacks it. */
   elapsedMs: number | null;
+  /** Whole-run telemetry for the answer footer: additive fields
+   * (elapsed, tokens, request count) summed across segments — a field
+   * any segment lacks is null — and the context snapshot taken from
+   * the last segment. null while the run is open. */
+  telemetry: MessageTelemetry | null;
   /** Per-tool dispatch counts, first-appearance order. Excludes
    * `no_tool` (null-op) and `ask_user` (surfaced as askUserCount). */
   toolCounts: RunToolCount[];
@@ -81,6 +103,77 @@ export interface RunGroup {
 
 function hasAskUserTool(turn: AgentTurn): boolean {
   return turn.tools.some((t) => t.name === "ask_user");
+}
+
+interface SegmentCloser {
+  /** The last agent turn of one GA loop inside the run — the turn that
+   * carries that loop's cumulative telemetry. */
+  turn: AgentTurn;
+  /** True when a user turn (an ask_user reply) follows the segment,
+   * i.e. the loop ended in a pause the user has already answered. */
+  answered: boolean;
+}
+
+/** Split a group's members into GA loops at its user turns (the
+ * opener excluded) and return each loop's last agent turn. A loop with
+ * no agent turn yet (a reply just sent) contributes nothing. */
+function segmentClosers(
+  memberIndices: number[],
+  openerIndex: number,
+  turns: Turn[],
+): SegmentCloser[] {
+  const closers: SegmentCloser[] = [];
+  let last: AgentTurn | null = null;
+  for (const i of memberIndices) {
+    if (i === openerIndex) continue;
+    const t = turns[i];
+    if (t.role === "user") {
+      if (last) closers.push({ turn: last, answered: true });
+      last = null;
+    } else if (t.role === "agent") {
+      last = t;
+    }
+  }
+  if (last) closers.push({ turn: last, answered: false });
+  return closers;
+}
+
+const ADDITIVE_TELEMETRY_FIELDS = [
+  "elapsedMs",
+  "inputTokens",
+  "outputTokens",
+  "cacheCreateTokens",
+  "cacheReadTokens",
+  "requestCount",
+] as const;
+const SNAPSHOT_TELEMETRY_FIELDS = [
+  "contextUsedChars",
+  "contextLimitChars",
+] as const;
+
+/** Whole-run telemetry from the segment closers, per the field rules on
+ * `RunStats.telemetry`. */
+function mergeRunTelemetry(closers: SegmentCloser[]): MessageTelemetry | null {
+  if (closers.length === 0) return null;
+  const merged: MessageTelemetry = {};
+  for (const field of ADDITIVE_TELEMETRY_FIELDS) {
+    let sum = 0;
+    let known = true;
+    for (const { turn } of closers) {
+      const value = turn.telemetry?.[field];
+      if (typeof value !== "number") {
+        known = false;
+        break;
+      }
+      sum += value;
+    }
+    merged[field] = known ? sum : null;
+  }
+  const last = closers[closers.length - 1].turn.telemetry;
+  for (const field of SNAPSHOT_TELEMETRY_FIELDS) {
+    merged[field] = last?.[field] ?? null;
+  }
+  return merged;
 }
 
 /** Closing-turn test, aligned with Conversation.tsx's `isFinalTurn`
@@ -143,6 +236,9 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
     const isGoalRun =
       opener?.role === "user" && typeof opener.goalId === "string";
     const foldEligible = g.openerIndex >= 0 && !isGoalRun && !g.hasSystem;
+    const telemetry = complete
+      ? mergeRunTelemetry(segmentClosers(g.memberIndices, g.openerIndex, turns))
+      : null;
 
     groups.push({
       openerIndex: g.openerIndex,
@@ -153,8 +249,8 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
       foldEligible,
       stats: {
         stepCount: agentTurns.length,
-        elapsedMs:
-          complete && lastAgent ? (lastAgent.telemetry?.elapsedMs ?? null) : null,
+        elapsedMs: telemetry?.elapsedMs ?? null,
+        telemetry,
         toolCounts,
         deniedCount,
         askUserCount,
@@ -196,6 +292,49 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
   if (current) finalize(current);
 
   return groups;
+}
+
+/**
+ * Display-step base for the GA loop the next user turn starts: the
+ * number of steps the trailing run already holds when that turn is an
+ * ask_user reply, 0 when it opens a new run. Call BEFORE appending the
+ * user turn. The live path adds this to GA's per-loop step (which
+ * restarts at 1 on every `put_task`) so the in-flight marker and the
+ * sidebar's "第 N 步" continue the run's numbering the way
+ * `planGoalRuns` numbers settled steps by position.
+ */
+export function pendingReplyStepBase(turns: Turn[]): number {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i];
+    if (turn.role === "system") continue;
+    if (turn.role !== "agent" || !hasAskUserTool(turn)) return 0;
+    const groups = buildRunGroups(turns);
+    return groups.length ? groups[groups.length - 1].stats.stepCount : 0;
+  }
+  return 0;
+}
+
+/**
+ * Run time the trailing run's answered segments already banked — the
+ * base the live elapsed HUD adds the current GA loop to, so its clock
+ * does not snap back to zero at an ask_user reply and then disagree
+ * with the settled header's whole-run figure. Unlike `RunStats`, a
+ * segment without telemetry contributes 0 here: the HUD is a liveness
+ * signal and must keep ticking; only the settled figure is allowed to
+ * go blank.
+ */
+export function liveRunElapsedBaseMs(turns: Turn[]): number {
+  const groups = buildRunGroups(turns);
+  const g = groups[groups.length - 1];
+  if (!g || g.complete) return 0;
+  let total = 0;
+  const closers = segmentClosers(g.memberIndices, g.openerIndex, turns);
+  for (const { turn, answered } of closers) {
+    if (!answered) continue;
+    const value = turn.telemetry?.elapsedMs;
+    if (typeof value === "number") total += value;
+  }
+  return total;
 }
 
 /** Convenience for consumers that only need "is this user turn an

@@ -317,6 +317,94 @@ describe("dispatchIPCEvent", () => {
     });
   });
 
+  it("continues the run's step numbering across an ask_user reply (2026-09-18)", () => {
+    // Two steps, the second an ask_user pause; the reply starts a fresh
+    // GA loop whose turn_start / turn_end arrive as step 1 again. The
+    // in-flight marker and the sidebar's "第 N 步" must read 3.
+    useMessagesStore
+      .getState()
+      .appendUserTurnExternal(
+        "s-test",
+        "Question",
+        undefined,
+        undefined,
+        true,
+        10,
+      );
+    const turnEnd = (
+      turnIndex: number,
+      extra: Partial<IPCEvent> = {},
+    ): IPCEvent =>
+      ({
+        kind: "turn_end",
+        sessionId: "s-test",
+        turnIndex,
+        summary: `step ${turnIndex}`,
+        toolCalls: [],
+        toolResults: [],
+        responseContent: "",
+        exitReason: null,
+        timestamp: "2026-06-18T08:05:00.000Z",
+        ...extra,
+      }) as IPCEvent;
+    dispatchIPCEvent(turnEnd(1));
+    dispatchIPCEvent(
+      turnEnd(2, {
+        toolCalls: [
+          { toolName: "ask_user", args: { question: "Q?", candidates: [] } },
+        ],
+        exitReason: { result: "EXITED", data: {} },
+      }),
+    );
+    expect(
+      useSessionsStore.getState().sessions.find((s) => s.id === "s-test")
+        ?.lastStepIndex,
+    ).toBe(2);
+
+    // The reply (composer or CLI) is a user turn appended before the
+    // new loop's first turn_start.
+    useMessagesStore
+      .getState()
+      .appendUserTurnExternal("s-test", "选 A", undefined, undefined, true, 13);
+    expect(useMessagesStore.getState().byId["s-test"].runStepBase).toBe(2);
+
+    dispatchIPCEvent({
+      kind: "turn_start",
+      sessionId: "s-test",
+      turnIndex: 1,
+      timestamp: "2026-06-18T08:06:00.000Z",
+    });
+    expect(useMessagesStore.getState().byId["s-test"].currentTurnIndex).toBe(
+      3,
+    );
+
+    dispatchIPCEvent(turnEnd(1, { summary: "after reply" }));
+    expect(
+      useSessionsStore.getState().sessions.find((s) => s.id === "s-test")
+        ?.lastStepIndex,
+    ).toBe(3);
+    // The stored turn keeps GA's raw step — restore recovers the same
+    // value; display numbering is by position (goal-run-groups).
+    const turns = useMessagesStore.getState().byId["s-test"].turns;
+    expect(turns[turns.length - 1]).toMatchObject({
+      role: "agent",
+      turnIndex: 1,
+    });
+
+    // A fresh question after the run settles starts from 1 again.
+    useMessagesStore
+      .getState()
+      .appendUserTurnExternal(
+        "s-test",
+        "New question",
+        undefined,
+        undefined,
+        true,
+        15,
+      );
+    expect(useMessagesStore.getState().byId["s-test"].runStepBase).toBe(0);
+  });
+
   it("routes the reply-notify flag past an ask_user turn_end to the ask_user handler", () => {
     // A GUI-started run that ends by asking a question must NOT fire
     // the replyDone notification at its final turn_end ("回复完成"
