@@ -73,10 +73,15 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  * Message actions:
  *   Supervisor provenance renders as a small icon above the block.
  *   Copy is a transient chip that fades in on hover just outside the
- *   bubble's top-right corner — it sat inside the block until
- *   2026-08-05, when shrink-to-fit made the `pr-10` it needed show up
- *   as dead fill on short messages. It never touches the inter-turn
- *   gap, and shares the block's hover region. The model: persistent
+ *   bubble's BOTTOM-right corner, centred on the last line of text
+ *   (2026-09-18; top-right until then) — the reading end of a
+ *   multi-line message, so the eye finishes the last line and the
+ *   chip is right there, on the same band as the expand / collapse
+ *   toggle. Anchored on the bubble's corner, not the last line's
+ *   text end, so it never jumps with content. It sat inside the
+ *   block until 2026-08-05, when shrink-to-fit made the `pr-10` it
+ *   needed show up as dead fill on short messages. It never touches
+ *   the inter-turn gap, and shares the block's hover region. The model: persistent
  *   actions live in the assistant reply bar; transient copy surfaces
  *   on a user action (hover / select). It wears the BARE chip skin,
  *   not the bordered one — see the render site. Mouse leave delays
@@ -295,7 +300,7 @@ export const MessageUser = memo(function MessageUser({
           <UserImageAttachments attachments={attachments} />
         )}
         {/* Transient copy — fades in on hover just outside the bubble's
-            top-right corner.
+            bottom-right corner, centred on the last line of text.
             Sat *inside* the block until 2026-08-05, which is why the
             block reserved `pr-10`. Shrink-to-fit made that reservation
             visible: a two-character message would have rendered as a
@@ -312,8 +317,17 @@ export const MessageUser = memo(function MessageUser({
             arbitrary text. This one sits in clean canvas margin and needs
             no such armour — and a bordered control box pressed against
             the user's own words inverts the register (machine parts
-            crisp, the human voice plain). */}
-        <div className="absolute left-full top-1.5 z-10 ml-1.5">{copyChip}</div>
+            crisp, the human voice plain).
+
+            Vertical anchor: the bubble's `py-2.5` (10px) plus half the
+            difference between one line box (body size × leading) and
+            the 24px chip puts the chip's centre on the last line's
+            centre at every font tier. The old `top-1.5` (6px) left
+            the chip ~5px above the first line's centre, riding high
+            (2026-09-18). */}
+        <div className="absolute left-full bottom-[calc(10px+(var(--conversation-body-size)*var(--conversation-body-leading)-24px)/2)] z-10 ml-1.5">
+          {copyChip}
+        </div>
       </div>
       {isLong && (
         <div className="mt-1">
