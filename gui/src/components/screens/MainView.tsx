@@ -536,12 +536,25 @@ function MainViewContent({
                   happens the instant GA's first chunk arrives, not
                   a frame later); the actual render uses markdownPartial
                   so content reveals smoothly without re-parsing the
-                  whole document on every rAF tick. */}
+                  whole document on every rAF tick.
+
+                  One paragraph gap below the thinking row
+                  (2026-09-18): the marker has no bottom margin by the
+                  step rhythm (its tool rows must hug it), but this is
+                  prose, not a tool row, and it hugged the 12px status
+                  line at zero gap while sitting full width under an
+                  indented marker. A block-gap margin reads as "the
+                  next paragraph after the status line" and stays
+                  neutral about what the partial settles into — a
+                  narration (6px, indented) or the final answer
+                  (StrongHr). Not the answer's rule: the partial may
+                  still turn out to be a step's narration, and a
+                  conclusion line on every step would lie. */}
                 {visiblePartial && (
                   <MarkdownView
                     source={markdownPartial}
                     variant="agent"
-                    className="streaming-prose"
+                    className="streaming-prose mt-(--conversation-block-gap)"
                     streaming
                   />
                 )}
