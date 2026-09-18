@@ -1718,7 +1718,7 @@ export const zhCopy = {
     imageBlockedQueue:
       "运行中暂不支持带图排队。等本轮结束后再发送图片，文字可先排队。",
     imageBlockedExternal:
-      "当前外部 GA 尚不支持图片输入，请移除图片后发送，或改用内置内核新建会话。",
+      "当前模型后端无法接收图片，请移除图片后发送，或切换到支持图片的模型。",
     imageTooLarge: "图片过大，单张上限 10 MB。",
     imageTooMany: "最多添加 4 张图片，移除一张再继续。",
     imageUnsupported: "不支持的图片格式，请粘贴或选择 PNG / JPEG / WebP。",

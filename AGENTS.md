@@ -75,6 +75,13 @@ Allowed attach-mode integration points:
 - Set Galley-namespaced in-memory attributes on the agent object (e.g.
   `_ga_project_mode_*`) as process-local coordination state. These live and
   die with the child process and must never be persisted into GA files.
+- Wrap `agent.llmclient.backend.ask` for exactly one LLM call per user
+  task to append the user's image attachments as content blocks (attach-mode
+  image input). The wrapper is process-local, installed right before
+  `put_task` and removed on its first call or when the run ends, adds
+  blocks only, and mirrors what upstream's own `frontends/desktop_bridge.py`
+  does (`_patch_chat_for_images`). It must not alter text, tools, or any
+  other request field.
 
 Reading GA internals is allowed only when read-only and documented as a coupling
 point. Anything that reads and then writes GA files counts as modification and

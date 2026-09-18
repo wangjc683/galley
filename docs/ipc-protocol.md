@@ -150,6 +150,7 @@ bridge 启动并完成 GA 初始化后**立刻**发的第一条事件。desktop 
     { "index": 1, "name": "ClaudeSession/claude-sonnet-4-6", "displayName": "ClaudeSession/claude-sonnet-4-6", "isCurrent": false },
     { "index": 2, "name": "NativeOAISession/gpt-4o", "displayName": "NativeOAISession/gpt-4o", "isCurrent": false }
   ],
+  "imagesSupported": true,
   "timestamp": "2026-05-07T13:51:00+08:00"
 }
 ```
@@ -160,6 +161,7 @@ bridge 启动并完成 GA 初始化后**立刻**发的第一条事件。desktop 
 - `llmName`：当前激活的 LLM raw name（GA 内部 `f"{ClassName}/{model}"` 格式）
 - `availableLLMs`：所有可用 LLM 的列表。`name` 是 raw 名字。`displayName` 是 UI 标签：external GA 保留完整 raw name；managed GA 使用 Galley 模型配置里的显示名，未设置时使用原始 model id。
 - session 持久化不要只存 `index`：external GA 使用 `name` 作为稳定身份；managed GA 使用 Galley `managed_models.id`，再在启动时解析到当前 index。
+- `imagesSupported`（2026-09-18 additive，缺省视为 `true`）：用户消息里的图片附件能否送达模型。managed GA 恒为 `true`（补丁 0008 让 `put_task(images=)` 变成 content block）；external GA 取决于当前 client——bridge 在 `put_task` 前给 `agent.llmclient.backend.ask` 套一层一次性 wrapper 把图片块追加到本任务第一条 user 消息（镜像上游 `frontends/desktop_bridge.py::_patch_chat_for_images`），只有上游 `NativeToolClient` 的 `backend.ask` 收到的是 block 列表，其余 client 报 `false`。desktop 用它决定 composer 是否开放图片 intake；为 `false` 时仍收到带图消息，bridge 照发文字并 emit 一条 `category: "business"`、`severity: "warning"`、`context: "user_message"` 的 `error` 说明图片未送达。
 
 desktop 必须验证 `protocolVersion` 与自身一致；不一致应主动 `shutdown`。
 
@@ -418,11 +420,14 @@ agent 主动调用 `ask_user` 工具时发出。bridge 此时 agent_runner_loop 
   "index": 1,
   "name": "ClaudeSession/claude-sonnet-4-6",
   "displayName": "ClaudeSession/claude-sonnet-4-6",
+  "imagesSupported": false,
   "timestamp": "..."
 }
 ```
 
 GA 在切换时会把 `backend.history` 从旧 client 复制到新 client，**对话上下文不丢**。desktop UI 应在收到此事件后更新 LLM 选择器显示并解除 dropdown 的 disabled 状态。
+
+`imagesSupported`（2026-09-18 additive，缺省 `true`）按切换后的 client 重新计算，语义同 §4.1；desktop 收到后同步刷新 composer 的图片 intake 开关。
 
 ### 4.13 `tools_reinjected`
 
@@ -819,7 +824,7 @@ bridge:   { kind: "turn_start", ... }
 
 - [x] **`load_history` messages 数据结构** — 已 e2e 验证：`NativeClaudeSession` 的 `backend.history` 是 `[{role, content: [{type:"text", text:str}, ...]}]`（Anthropic native messages 格式）。string content → native blocks 的适配自 2026-07-11 起住在 `runner/ga_session.py`（`set_history` / `message_to_content_blocks`，GA 集成缝的一部分）。**未验证**：`NativeOAISession` / `ClaudeSession` / `LLMSession` / `MixinSession` 的 history 形态可能不同，需要对应 adapter——对这些后端 `set_history` 会照写并发出响亮 warning（而非静默），见 PRD §10。当前只在 `NativeClaudeSession` 下保证恢复语义。
 - [ ] `tool_call_progress` 字符串解析规则（GA 当前 yield 的 emoji 前缀格式）需在 runner 实现时记录到 `runner/handlers.py` 注释，避免 GA 升级时格式变化无人知晓 — V0.1 暂不实现 progress 事件，turn_end 已含完整 toolCalls/toolResults
-- [ ] images 字段的传递路径（user_message → GA put_task）需在 bridge 验证可行 — bridge 已通过 `images=cmd.images` 透传到 `agent.put_task`，但实际多模态调用未 e2e 验证
+- [x] images 字段的传递路径（user_message → GA put_task）：managed GA 由补丁 0008 消费 `put_task(images=)`；external GA 上游 `run()` 不消费该参数，bridge 改在 `put_task` 前给 `backend.ask` 套一次性 wrapper 追加图片块（§4.1 `imagesSupported`，2026-09-18）
 - [x] **`abort` 路径** — GA 的 `abort()` 设 `stop_sig` 让 worker 跳出循环，但**不**触发 `turn_end_callback`。bridge 在 `dispatch_command` 收到 `AbortCommand` 时主动合成 `RunCompleteEvent` with `exitReason.result = "ABORTED"`。e2e 已验证。
 - [x] **`error` 事件结构化字段** — `category` / `severity` / `retryable` / `hint` 四字段在 v0.1 落地（见 §4.10）。runner 端 LLM 调用错误的 hint 推断逻辑见 `runner/workbench_bridge.py` 的 `_classify_error`。
 - [ ] **`file_patch` Approval Card diff 视图** — desktop 端用 `@pierre/diffs` 渲染。args 字典已含 `path` / `old_content` / `new_content` 三元组（GA 原生 signature），bridge 不需要额外处理；ToolCalled / tool_call_pending 事件结构无需扩展。Stage 2 desktop 实现时落地。

@@ -660,6 +660,7 @@ mod tests {
                 cwd: "/".into(),
                 pid: 1,
                 available_llms: vec![],
+                images_supported: true,
                 timestamp: "t".into(),
             }),
         };

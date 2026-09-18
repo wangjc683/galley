@@ -446,7 +446,14 @@ def test_ask_user_response_resets_visibility_to_visible() -> None:
     assert event["visibility"] == "visible"
 
 
-def test_user_message_emits_turn_start_before_progress_drain() -> None:
+def test_user_message_emits_turn_start_before_progress_drain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Images ride along on this command; the bundled runtime delivers
+    # them through patch 0008, so no attach-mode wrapper (and no
+    # "cannot deliver" warning) enters the event order under test.
+    monkeypatch.setattr(managed_runtime, "is_managed_runtime", lambda: True)
+
     class FakeAgent:
         def __init__(self) -> None:
             self.tasks: list[dict[str, Any]] = []
@@ -1430,3 +1437,141 @@ def test_serialize_tool_call_resolves_file_tools_against_handler_cwd(
         "toolName": "file_write",
         "args": {"path": "汕尾旅游指南.md"},
     }
+
+
+# ---------------- attach-mode image delivery (ticket external-ga-images/01) ----------------
+
+
+class _ImageBackend:
+    def __init__(self) -> None:
+        self.history: list[Any] = []
+
+    def ask(self, msg: dict[str, Any]) -> Any:
+        self.history.append(msg)
+        yield "chunk"
+        return "resp"
+
+
+class NativeToolClient(SimpleNamespace):
+    """Named to match GA's client; ga_session checks the class name."""
+
+
+class ToolClient(SimpleNamespace):
+    """GA's legacy text-protocol client — cannot receive image blocks."""
+
+
+def _image_bridge(client: Any) -> tuple[Bridge, list[dict[str, Any]]]:
+    tasks: list[dict[str, Any]] = []
+
+    class FakeAgent:
+        llmclient = client
+
+        def put_task(
+            self, text: str, source: str, images: list[str], **_k: Any
+        ) -> object:
+            tasks.append({"text": text, "source": source, "images": images})
+            return object()
+
+        def abort(self) -> None:
+            return None
+
+    bridge = _new_test_bridge()
+    bridge.agent = FakeAgent()
+    bridge._btw_handler = None
+    bridge._start_progress_drain = lambda _queue: None  # type: ignore[assignment]
+    return bridge, tasks
+
+
+def _events(bridge: Bridge) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    while not bridge.event_queue.empty():
+        out.append(_next_bridge_event(bridge))
+    return out
+
+
+def test_user_message_arms_image_wrapper_in_attach_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GALLEY_GA_STATE_ROOT", raising=False)
+    monkeypatch.setattr(managed_runtime, "is_managed_runtime", lambda: False)
+    backend = _ImageBackend()
+    bridge, tasks = _image_bridge(NativeToolClient(backend=backend))
+    png = tmp_path / "shot.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+
+    bridge.dispatch_command(UserMessageCommand(text="what is this", images=[str(png)]))
+
+    assert tasks == [{"text": "what is this", "source": "workbench", "images": [str(png)]}]
+    assert [e["kind"] for e in _events(bridge)] == ["turn_start"]
+    msg: dict[str, Any] = {"role": "user", "content": [{"type": "text", "text": "what is this"}]}
+    gen = backend.ask(msg)
+    list(iter(lambda: next(gen, None), None))
+    assert [b["type"] for b in msg["content"]] == ["text", "image"]
+    assert "ask" not in backend.__dict__
+
+
+def test_run_end_disarms_an_uncalled_image_wrapper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(managed_runtime, "is_managed_runtime", lambda: False)
+    backend = _ImageBackend()
+    bridge, _tasks = _image_bridge(NativeToolClient(backend=backend))
+    png = tmp_path / "shot.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    bridge.dispatch_command(UserMessageCommand(text="t", images=[str(png)]))
+    assert "ask" in backend.__dict__
+
+    bridge.dispatch_command(AbortCommand())
+
+    assert "ask" not in backend.__dict__
+    kinds = [e["kind"] for e in _events(bridge)]
+    assert kinds == ["turn_start", "run_complete"]
+
+
+def test_user_message_warns_when_images_cannot_be_delivered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(managed_runtime, "is_managed_runtime", lambda: False)
+    backend = _ImageBackend()
+    bridge, tasks = _image_bridge(ToolClient(backend=backend))
+    png = tmp_path / "shot.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+
+    bridge.dispatch_command(UserMessageCommand(text="t", images=[str(png)]))
+
+    assert len(tasks) == 1  # text still dispatched
+    assert "ask" not in backend.__dict__
+    events = _events(bridge)
+    assert [e["kind"] for e in events] == ["turn_start", "error"]
+    err = events[1]
+    assert err["category"] == "business"
+    assert err["severity"] == "warning"
+    assert err["context"] == "user_message"
+    assert "1 image attachment" in err["message"]
+
+
+def test_managed_mode_leaves_image_delivery_to_patch_0008(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(managed_runtime, "is_managed_runtime", lambda: True)
+    backend = _ImageBackend()
+    bridge, tasks = _image_bridge(NativeToolClient(backend=backend))
+    png = tmp_path / "shot.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+
+    bridge.dispatch_command(UserMessageCommand(text="t", images=[str(png)]))
+
+    assert len(tasks) == 1
+    assert "ask" not in backend.__dict__
+    assert [e["kind"] for e in _events(bridge)] == ["turn_start"]
+    assert bridge._images_supported() is True
+
+
+def test_images_supported_follows_client_in_attach_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(managed_runtime, "is_managed_runtime", lambda: False)
+    bridge, _ = _image_bridge(NativeToolClient(backend=_ImageBackend()))
+    assert bridge._images_supported() is True
+    bridge, _ = _image_bridge(ToolClient(backend=_ImageBackend()))
+    assert bridge._images_supported() is False

@@ -7,7 +7,6 @@ import { queueOrDispatchUserMessage } from "@/lib/session-queue";
 import { logPerf, perfNow } from "@/lib/perf";
 import { isSideQuestion } from "@/lib/side-question";
 import { useMessagesStore } from "@/stores/messages";
-import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
@@ -268,7 +267,13 @@ export function useMessageSend({
     // passed the gate as a side question must route
     // as one here.
     if (images.length > 0) {
-      if (activeSession?.gaRuntimeKind !== "managed") {
+      // Mirror of the Composer's `imagesEnabled` gate: managed always
+      // delivers images; an attached runtime is trusted unless its
+      // runner reported that the model backend cannot receive them.
+      if (
+        activeSession?.gaRuntimeKind !== "managed" &&
+        activeSession?.imagesSupported === false
+      ) {
         showImageBlockedToast(copy.toasts.imageBlockedExternal);
         return false;
       }
@@ -378,20 +383,17 @@ export function useMessageSend({
    * a real chat; a persisted row is created first so the user-message
    * write cannot race the async session create. The screen transition
    * and the user turn land before bridge startup, so a cold runner
-   * spawn doesn't look like a frozen UI. Same rejected-image `false`
-   * return as sendUserMessage.
+   * spawn doesn't look like a frozen UI.
+   *
+   * Images are accepted optimistically here: no bridge exists yet, so no
+   * runtime has reported whether its model backend can receive them. The
+   * runner surfaces a business error if they cannot be delivered, and
+   * the post-`ready` gate covers every later send.
    */
   const submitFromEmpty = (t: string, images: PendingImageAttachment[]) => {
     if (requiresManagedModelConfig) {
       openModelsForMissingConfig();
       return;
-    }
-    if (
-      images.length > 0 &&
-      usePrefsStore.getState().activeRuntimeKind !== "managed"
-    ) {
-      showImageBlockedToast(copy.toasts.imageBlockedExternal);
-      return false;
     }
     void (async () => {
       const submitStartedAt = perfNow();

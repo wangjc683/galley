@@ -118,6 +118,11 @@ pub struct ReadyEvent {
     /// (`availableLLMs: list[dict]`) and gui/src/types/ipc.ts.
     #[serde(default, rename = "availableLLMs")]
     pub available_llms: Vec<Value>,
+    /// Whether the active model backend can receive image content blocks.
+    /// Absent on older runners, which predate the capability report — those
+    /// default to `true` so the composer keeps accepting images.
+    #[serde(default = "default_true")]
+    pub images_supported: bool,
     pub timestamp: String,
 }
 
@@ -299,6 +304,10 @@ fn default_error_severity() -> String {
     "error".to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryLoadedEvent {
@@ -314,6 +323,10 @@ pub struct LlmChangedEvent {
     pub index: i64,
     pub name: String,
     pub display_name: String,
+    /// Same capability report as `ReadyEvent::images_supported`, re-sent
+    /// because switching the LLM can change what the backend accepts.
+    #[serde(default = "default_true")]
+    pub images_supported: bool,
     pub timestamp: String,
 }
 
@@ -478,8 +491,46 @@ mod tests {
                 assert_eq!(r.session_id, "s1");
                 assert_eq!(r.pid, 42);
                 assert_eq!(r.available_llms.len(), 0);
+                // Older runners do not report the capability; images stay on.
+                assert!(r.images_supported);
             }
             _ => panic!("expected Ready variant"),
+        }
+    }
+
+    #[test]
+    fn parse_ready_event_carries_images_supported() {
+        let line = r#"{"kind":"ready","sessionId":"s1","protocolVersion":"0.1","gaCommit":"abc","gaCommitDate":"d","gaPath":"/ga","llmName":"x","cwd":"/","pid":1,"imagesSupported":false,"timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(line).expect("parse ready");
+        if let IpcEvent::Ready(r) = event {
+            assert!(!r.images_supported);
+            let out = serde_json::to_string(&r).unwrap();
+            assert!(
+                out.contains("\"imagesSupported\":false"),
+                "expected imagesSupported in re-serialized output, got: {out}"
+            );
+        } else {
+            panic!("expected Ready");
+        }
+    }
+
+    #[test]
+    fn parse_llm_changed_images_supported_defaults_true() {
+        let without = r#"{"kind":"llm_changed","sessionId":"s1","index":1,"name":"llm-b","displayName":"LLM B","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(without).expect("parse llm_changed");
+        if let IpcEvent::LlmChanged(e) = event {
+            assert_eq!(e.display_name, "LLM B");
+            assert!(e.images_supported);
+        } else {
+            panic!("expected LlmChanged");
+        }
+
+        let with = r#"{"kind":"llm_changed","sessionId":"s1","index":1,"name":"llm-b","displayName":"LLM B","imagesSupported":false,"timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(with).expect("parse llm_changed");
+        if let IpcEvent::LlmChanged(e) = event {
+            assert!(!e.images_supported);
+        } else {
+            panic!("expected LlmChanged");
         }
     }
 

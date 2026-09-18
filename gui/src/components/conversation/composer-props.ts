@@ -131,9 +131,9 @@ export interface ComposerProps {
    * parallel to how keyboard hints self-identify via kbd tokens. */
   staticHint?: ReactNode;
   /** When false, all image intake (paste / drop / file picker) is
-   * disabled and the 📎 button is hidden — used for runtimes that
-   * cannot deliver images to the agent (external GA). Defaults to
-   * true so existing callers keep working. */
+   * disabled and the 📎 button is hidden — used for runtimes whose
+   * model backend cannot receive images. Defaults to true so existing
+   * callers keep working. */
   imagesEnabled?: boolean;
   /** Called when an image is rejected at intake or submit. `reason`
    * selects the toast copy:

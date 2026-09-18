@@ -128,6 +128,15 @@ export function dispatchIPCEvent(event: IPCEvent): void {
             })),
       );
       useRuntimeStore.getState().setBridgeStatus(event.sessionId, "connected");
+      // Image-input capability of the freshly-spawned runtime. Older
+      // runners omit the field; `?? true` keeps the composer open for
+      // them rather than silently disabling image intake.
+      useSessionsStore
+        .getState()
+        .setSessionImagesSupported(
+          event.sessionId,
+          event.imagesSupported ?? true,
+        );
       // Sync the user's actual GA HEAD into runtimeInfo so the
       // Settings → Runtime panel shows "GA 版本: cf65515 · 2026-05-11"
       // alongside the workbench-tested baseline. gaCommit/Date are
@@ -202,6 +211,14 @@ export function dispatchIPCEvent(event: IPCEvent): void {
           isCurrent: l.index === event.index,
         })),
       );
+      // Switching model can change what the backend accepts, so the
+      // runner re-reports image capability alongside the new LLM.
+      useSessionsStore
+        .getState()
+        .setSessionImagesSupported(
+          event.sessionId,
+          event.imagesSupported ?? true,
+        );
       return;
     }
 

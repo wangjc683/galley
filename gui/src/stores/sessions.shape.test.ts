@@ -30,6 +30,7 @@ describe("useSessionsStore shape", () => {
       "setSessionLlm",
       "maybeDeriveTitle",
       "setLastStepIndex",
+      "setSessionImagesSupported",
       "applyExternalSessionCreated",
       "applyExternalSessionUpdated",
       // archive / delete

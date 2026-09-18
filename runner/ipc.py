@@ -38,6 +38,11 @@ class ReadyEvent:
     cwd: str
     pid: int
     availableLLMs: list[dict[str, Any]] = field(default_factory=list)
+    # Whether user image attachments reach the model on this runtime:
+    # always true for the bundled runtime (patch 0008); in attach mode
+    # true when the current client is upstream's NativeToolClient (see
+    # ga_session.supports_image_input). Additive since 2026-09-18.
+    imagesSupported: bool = True
     timestamp: str = field(default_factory=_now_iso)
     kind: str = "ready"
 
@@ -210,6 +215,9 @@ class LLMChangedEvent:
     index: int
     name: str
     displayName: str
+    # Re-evaluated after the switch: the new client may not be able to
+    # receive images (see ReadyEvent.imagesSupported).
+    imagesSupported: bool = True
     timestamp: str = field(default_factory=_now_iso)
     kind: str = "llm_changed"
 

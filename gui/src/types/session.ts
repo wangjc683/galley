@@ -146,6 +146,14 @@ export interface Session {
   gaRuntimeKind: RuntimeKind;
   /** Stable runtime id for future multi-runtime support. */
   gaRuntimeId?: string;
+  /**
+   * Whether the session's live runtime can deliver image attachments to
+   * the model backend. Reported by the runner on `ready` / `llm_changed`;
+   * in-memory only, never persisted (it belongs to the running bridge, not
+   * the row). `undefined` — no report yet, or an older runner — reads as
+   * "supported" so the composer stays open.
+   */
+  imagesSupported?: boolean;
   /** Managed prompt profile applied at session creation, if any. */
   promptProfile?: string;
 }

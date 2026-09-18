@@ -876,6 +876,41 @@ class Bridge:
         self._current_run_started_at = None
         self._current_run_started_wall_at = None
         self._current_usage_baseline = None
+        # A task aborted before its first LLM call leaves the attach-mode
+        # image wrapper armed; drop it so the next task cannot inherit
+        # this task's images.
+        self.ga.disarm_image_delivery()
+
+    def _images_supported(self) -> bool:
+        """Wire value for `ready` / `llm_changed`. The bundled runtime
+        consumes `put_task(images=)` itself (patch 0008); attach mode
+        depends on the current client (see ga_session)."""
+        if managed_runtime.is_managed_runtime():
+            return True
+        return self.ga.supports_image_input()
+
+    def _arm_image_delivery(self, images: list[str]) -> None:
+        """Attach-mode image input: arm the one-shot `backend.ask`
+        wrapper before `put_task`. Managed mode needs nothing — patch
+        0008 turns `put_task(images=)` into content blocks. When the
+        wrapper cannot be installed the text still goes out; the user is
+        told the images did not."""
+        if not images or managed_runtime.is_managed_runtime():
+            return
+        delivered = self.ga.arm_image_delivery(images)
+        if delivered == len(images):
+            return
+        dropped = len(images) - delivered
+        self._emit_error(
+            f"{dropped} image attachment(s) were not delivered: the current "
+            "model backend cannot receive images (attach-mode image input "
+            "needs GenericAgent's NativeToolClient and a readable png/jpeg/"
+            "webp file). The text was sent without them.",
+            None,
+            category="business",
+            severity="warning",
+            context="user_message",
+        )
 
     def _usage_snapshot(self) -> dict[str, int] | None:
         tracker = self._cost_tracker
@@ -1132,6 +1167,7 @@ class Bridge:
                 cwd=os.getcwd(),
                 pid=os.getpid(),
                 availableLLMs=self._collect_available_llms(),
+                imagesSupported=self._images_supported(),
             )
         )
 
@@ -1555,6 +1591,7 @@ class Bridge:
             self._begin_run_tracking()
             self.run_in_progress.set()
             self._emit_turn_start(1)
+            self._arm_image_delivery(cmd.images)
             display_queue = self.agent.put_task(
                 cmd.text, source="workbench", images=cmd.images
             )
@@ -1719,6 +1756,7 @@ class Bridge:
                 index=cmd.llmIndex,
                 name=raw_name,
                 displayName=_llm_display_name(raw_name),
+                imagesSupported=self._images_supported(),
             )
         )
 
@@ -1808,7 +1846,12 @@ class Bridge:
 
     # ---------------- Auto title (generate_title) ----------------
 
-    TITLE_ASK_TIMEOUT_SECS = 30
+    # Generous on purpose: the ask runs on a daemon worker, the sidebar
+    # keeps its seed title meanwhile, and Core's CAS write ignores a late
+    # title once the user has renamed. Thinking models (glm-5.3-flash at
+    # reasoning_effort=high in attach mode) were observed spending more
+    # than 30 s before their first text chunk.
+    TITLE_ASK_TIMEOUT_SECS = 90
 
     def _handle_generate_title(self, cmd: GenerateTitleCommand) -> None:
         """One-shot title ask on a worker thread via GaSession.side_ask.

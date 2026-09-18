@@ -193,6 +193,13 @@ export interface SessionLifecycleSlice {
    * Session.lastStepIndex doc).
    */
   setLastStepIndex: (sessionId: string, step: number) => void;
+  /**
+   * Used by the IPC `ready` / `llm_changed` handlers to record whether
+   * the live runtime can deliver image attachments. In-memory only —
+   * the flag describes the running bridge, not the durable row (see
+   * Session.imagesSupported).
+   */
+  setSessionImagesSupported: (sessionId: string, supported: boolean) => void;
 
   // ---- B4 M1 · external mirror entry points ----
   //
@@ -776,6 +783,20 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
         (s) => {
           if (s.lastStepIndex === step) return s;
           return { ...s, lastStepIndex: step };
+        },
+      );
+      return changed ? { sessions } : {};
+    });
+  },
+
+  setSessionImagesSupported: (sessionId, supported) => {
+    set((state) => {
+      const { sessions, changed } = patchSessionInList(
+        state.sessions,
+        sessionId,
+        (s) => {
+          if (s.imagesSupported === supported) return s;
+          return { ...s, imagesSupported: supported };
         },
       );
       return changed ? { sessions } : {};

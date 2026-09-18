@@ -91,6 +91,10 @@ export interface ReadyEvent {
   cwd: string;
   pid: number;
   availableLLMs: LLMInfo[];
+  /** Whether the active model backend can receive image content blocks.
+   * Absent on older runners that predate the capability report — read it
+   * as `?? true` so the composer keeps accepting images. */
+  imagesSupported?: boolean;
   timestamp: string;
 }
 
@@ -251,6 +255,9 @@ export interface LLMChangedEvent {
   index: number;
   name: string;
   displayName: string;
+  /** Same capability report as {@link ReadyEvent.imagesSupported} —
+   * re-sent because switching the LLM can change what the backend takes. */
+  imagesSupported?: boolean;
   timestamp: string;
 }
 

@@ -8,6 +8,18 @@
 
 ---
 
+## 上游 PR：让 GA `run()` 消费 `put_task(images=)`（删 0008 + attach wrapper）
+
+- **状态**：暂存（2026-09-18 外置 GA 图片输入落地时拆出）
+- **提出**：2026-09-18，[外置 GA 图片输入 devlog](./2026-09-18-external-ga-image-input.md)。
+- **启动信号**：上游维护者对引擎层多模态表态；或上游 desktop_bridge 放弃 `_patch_chat_for_images` 改由 `run()` 处理；或 0008 / wrapper 在某次基线升级里 rebase 出真冲突。
+- **方案**：把补丁 0008 的消费端（`run()` 读 `task["images"]` → `image_content_blocks` → `agent_runner_loop(initial_user_content=)`，外加 `NativeToolClient.chat` 的空白过滤放过非文本块）作为上游 PR 提交。合入后按 Rule 1「上游有了就删补丁」同时删 0008 和 `GaSession.arm_image_delivery`。
+- **实施要点**：wrapper 已对「消息里已有图片块」跳过，所以上游先合、Galley 后删的过渡期不会双份；删除时同步收 `imagesSupported` 的判据（改为按上游能力探测或恒 `true`）。
+- **待定**：上游是否愿意在引擎层接多模态——它自家桌面前端选的是前端包 `ask`，暗示未必。
+- **关联**：[managed 补丁清单 0008](../../managed-ga/patches/manifest.md) · [GA baseline 契约面第 11 项](../ga-baseline.md#contract-surface)。
+
+---
+
 ## 用户消息排印微调（气泡之后的独立重审）
 
 - **状态**：暂存（2026-09-17 气泡定案时拆出，明确不与形态捆绑）

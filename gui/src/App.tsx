@@ -602,7 +602,11 @@ function App() {
                     approvalMode={emptyApprovalModeState}
                     onGoalSubmit={startGoalFromComposer}
                     hasActiveGoal={goalSlotOccupied}
-                    imagesEnabled={activeRuntimeKind === "managed"}
+                    // Optimistic: no bridge exists yet on the empty
+                    // screen, so no runtime has reported its image
+                    // capability. The runner reports on `ready`, and the
+                    // MainView gate below takes over from there.
+                    imagesEnabled
                     onImageBlocked={handleImageBlocked}
                     onTextDropBlocked={handleTextDropBlocked}
                     onSubmit={submitFromEmpty}
@@ -648,7 +652,10 @@ function App() {
                     onStopGoal={(goalId) => void stopGoalFromTopbar(goalId)}
                     onExtendGoal={(goalId) => void extendGoalFromTopbar(goalId)}
                     onGoalSubmit={startGoalFromComposer}
-                    imagesEnabled={activeSession?.gaRuntimeKind === "managed"}
+                    imagesEnabled={
+                      activeSession?.gaRuntimeKind === "managed" ||
+                      (activeSession?.imagesSupported ?? true)
+                    }
                     onImageBlocked={handleImageBlocked}
                     onTextDropBlocked={handleTextDropBlocked}
                     pendingApprovals={pendingApprovals}

@@ -20,6 +20,9 @@ upgrade can silently move:
 - ``agent._ga_project_mode_*``    → set_project_mode (Galley-namespaced,
                                     in-memory only per Rule 1)
 - ``agentmain.GenericAgentHandler`` module binding → install_handler
+- ``agent.llmclient.backend.ask`` one-shot wrapper → arm_image_delivery /
+                                    disarm_image_delivery (attach-mode
+                                    image input; Rule 1 lists this seam)
 
 GA's *public* API (``next_llm``, ``verbose``, ``inc_out``, ``put_task``,
 ``list_llms``) stays direct on ``bridge.agent`` — the constitution
@@ -190,6 +193,87 @@ class GaSession:
             )
         return None
 
+    # ---------------- attach-mode image input ----------------
+    # Upstream `GenericAgent.put_task(images=)` accepts image paths but
+    # upstream `run()` never consumes them, and `NativeToolClient.chat`
+    # drops every non-text block before calling `backend.ask`. The
+    # bundled runtime fixes both with patch 0008; attach mode may not
+    # patch the user's checkout, so the runner does what upstream's own
+    # `frontends/desktop_bridge.py::_patch_chat_for_images` does: wrap
+    # `backend.ask` for exactly one call and append the image blocks to
+    # the first user message of the task. AGENTS.md Rule 1 lists this
+    # seam explicitly. The wrapper is process-local, adds blocks only,
+    # removes itself on its first call, and the bridge disarms it at run
+    # end so an aborted-before-first-call task cannot leak images into
+    # the next one. Coupling points, re-audit on GA baseline upgrades:
+    # `llmcore.NativeToolClient.chat` calls `self.backend.ask(merged)`
+    # with `merged["content"]` a block list, and
+    # `NativeClaudeSession.ask(msg)` appends that same dict to
+    # `backend.history`, so an in-place append also lands in history.
+
+    def supports_image_input(self) -> bool:
+        """True when the current client is upstream's `NativeToolClient`
+        (the only client whose `backend.ask` receives a block-list
+        message). Class-name check, same style as
+        `_VALIDATED_HISTORY_BACKENDS`."""
+        client = getattr(self.agent, "llmclient", None)
+        backend = getattr(client, "backend", None)
+        return type(client).__name__ == "NativeToolClient" and callable(
+            getattr(backend, "ask", None)
+        )
+
+    def arm_image_delivery(self, image_paths: list[str]) -> int:
+        """Install the one-shot `backend.ask` wrapper carrying the
+        encodable images in `image_paths`. Returns how many images will
+        be delivered; 0 means nothing was installed (unsupported client
+        or no readable image), and the caller should tell the user."""
+        self.disarm_image_delivery()
+        if not self.supports_image_input():
+            return 0
+        blocks = [
+            block
+            for block in (_image_path_to_content_block(p) for p in image_paths)
+            if block is not None
+        ]
+        if not blocks:
+            return 0
+        backend = self.agent.llmclient.backend
+        # `ask` is normally a class method; an instance attribute means
+        # someone else already wrapped it. Either way `original_ask` is
+        # what we call through and what `restore` puts back.
+        prior_instance_ask = backend.__dict__.get("ask")
+        original_ask = backend.ask
+
+        def restore() -> None:
+            if backend.__dict__.get("ask") is not patched_ask:
+                return
+            if prior_instance_ask is None:
+                del backend.ask
+            else:
+                backend.ask = prior_instance_ask
+            if getattr(self.agent, "_galley_image_ask_restore", None) is restore:
+                self.agent._galley_image_ask_restore = None
+
+        def patched_ask(msg: Any) -> Any:
+            restore()
+            content = msg.get("content") if isinstance(msg, dict) else None
+            if isinstance(content, list) and not any(
+                isinstance(b, dict) and b.get("type") == "image" for b in content
+            ):
+                content.extend(blocks)
+            return (yield from original_ask(msg))
+
+        backend.ask = patched_ask
+        self.agent._galley_image_ask_restore = restore
+        return len(blocks)
+
+    def disarm_image_delivery(self) -> None:
+        """Remove an armed wrapper that was never called (task aborted or
+        finished before its first LLM call). Idempotent."""
+        restore = getattr(self.agent, "_galley_image_ask_restore", None)
+        if callable(restore):
+            restore()
+
     def side_ask(self, prompt: str, deadline: float) -> str:
         """One-shot out-of-band question to the session's current backend.
 
@@ -226,11 +310,41 @@ class GaSession:
             wire = backend.make_messages([user_msg])
         else:
             wire = [user_msg]
+        # Prefer the generator's *return value* over the streamed chunks.
+        # Every Native* `raw_ask` returns `list[content_block]` with typed
+        # `thinking` / `text` blocks, while the stream mixes native
+        # reasoning into the text (`_parse_claude_sse` yields
+        # `thinking_delta` raw; managed patch 0016 wraps it in
+        # `<thinking>` tags, attach mode has no such patch). Reading the
+        # blocks is what keeps a thinking model's reasoning ("The user
+        # wants a short conversation title...") out of the sidebar. The
+        # streamed text remains the fallback when the backend returns no
+        # block list. A deadline cut returns "" instead of the partial
+        # stream: on a thinking model the partial is the reasoning
+        # ("The" / "The user wants a short conversation title. The
+        # conversation"), and a half title is no better — the caller's
+        # silent-failure contract lets Core retry at the next run.
+        # Read-only coupling point, re-audit at GA baseline upgrades.
         text = ""
-        for chunk in backend.raw_ask(wire):
+        gen = backend.raw_ask(wire)
+        blocks: Any = None
+        while True:
+            try:
+                chunk = next(gen)
+            except StopIteration as stop:
+                blocks = stop.value
+                break
             text += chunk
             if time.time() > deadline:
-                break
+                return ""
+        if isinstance(blocks, list):
+            texts = [
+                b.get("text", "")
+                for b in blocks
+                if isinstance(b, dict) and b.get("type") == "text"
+            ]
+            if any(t.strip() for t in texts):
+                return "".join(texts)
         return text
 
     def clear_last_tools(self) -> None:

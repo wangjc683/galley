@@ -438,6 +438,16 @@ Devlog entries: `2026-09-18-ask-user-run-continuity`,
 indicator entry and the 09-17 bubble entry. Release-scope truth remains
 `git log v0.5.0..HEAD`.
 
+Also unreleased from 2026-09-18: attach-mode image input. The runner wraps
+`backend.ask` for one call per task (mirroring upstream's desktop bridge),
+`ready` / `llm_changed` carry an additive `imagesSupported`, the composer
+gate follows the runner's report instead of the runtime kind, and Rule 1
+lists the wrapper explicitly. The same dogfood surfaced and fixed an
+attach-mode auto-title bug (native reasoning leaked into the title;
+`side_ask` now reads the typed text blocks, deadline cut drops the title).
+Headless e2e against the external GA and JC's desktop dogfood both passed.
+Devlog: `2026-09-18-external-ga-image-input`.
+
 Standing follow-ups: the ticket `.scratch/live-run-window/PRD.md` stays
 `ready-for-human` until a few more live runs pass; `.scratch/goal-simplify/`
 is `done`; the "use the whole budget" Goal mode and the user-message

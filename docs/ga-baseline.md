@@ -646,6 +646,25 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
 9. `llmclient.last_tools` attribute (reinject-tools reset)
 10. `assets/tool_usable_history.json` path + block schema (mirrors
     `stapp.py`'s Reinject Tools)
+11. `backend.raw_ask` generator *return value* is `list[content_block]`
+    with typed `thinking` / `text` blocks on every Native* session
+    (`_parse_claude_sse` / `_parse_claude_json` / the OAI parsers), while
+    the streamed chunks carry native reasoning untagged in unpatched
+    upstream (`thinking_delta` is yielded raw; managed patch `0016` tags
+    it). `GaSession.side_ask` reads the return value so the auto-title
+    never contains reasoning (attach-mode bug seen 2026-09-18 with
+    glm-5.3-flash: sidebar title "The user wants a short conversation
+    title…").
+12. `llmcore.NativeToolClient.chat` → `self.backend.ask(merged)` with
+    `merged["content"]` a block list, and `NativeClaudeSession.ask(msg)`
+    appending that same dict to `backend.history` (attach-mode image
+    input: `GaSession.arm_image_delivery` wraps `backend.ask` for one
+    call and appends image blocks in place; mirrors upstream
+    `frontends/desktop_bridge.py::_patch_chat_for_images`, upstream
+    `f0d5bc7`, 2026-08-23). Also re-check that upstream `run()` still
+    ignores `task["images"]` — the day it consumes them, drop managed
+    patch `0008` and this wrapper together (the wrapper already skips a
+    message that carries an image block, so the transition is safe).
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -656,10 +675,10 @@ Since 2026-07-11 the agent-object couplings have a single code home —
 start the audit there instead of grepping the bridge:
 
 - **[`runner/ga_session.py`](../runner/ga_session.py)** — items 5, 6, 7,
-  9: every internal/underscore/backend touch (`_turn_end_hooks`,
+  9, 11, 12: every internal/underscore/backend touch (`_turn_end_hooks`,
   `backend.history` read/set/extend + context estimation, `last_tools`,
-  the `GenericAgentHandler` module rebinding). Read the file top to
-  bottom against the new baseline.
+  the `GenericAgentHandler` module rebinding, the one-shot `backend.ask`
+  image wrapper). Read the file top to bottom against the new baseline.
 - **[`runner/handlers.py`](../runner/handlers.py)** — items 1–4: the
   `WorkbenchHandler` subclass and its dispatch/approval assumptions.
 - **`runner/workbench_bridge.py::_handle_reinject_tools`** — item 10:

@@ -242,6 +242,195 @@ def test_side_ask_stops_at_deadline() -> None:
 
     backend = NativeClaudeSession(history=[], raw_ask=raw_ask)
     ga = GaSession(_agent_with_backend(backend))
-    # Deadline already passed: first chunk lands, loop breaks before the
-    # second.
-    assert ga.side_ask("q", deadline=0.0) == "partial"
+    # Deadline already passed: the loop stops after the first chunk and
+    # reports nothing — a truncated answer (on a thinking model, the
+    # reasoning) must never reach the sidebar.
+    assert ga.side_ask("q", deadline=0.0) == ""
+
+
+def test_side_ask_reads_text_blocks_not_streamed_thinking() -> None:
+    """Attach mode has no patch 0016: upstream streams native reasoning
+    as plain chunks. The return value keeps the block types, so the
+    title comes from `text` blocks only."""
+
+    def raw_ask(wire: Any) -> Any:
+        yield "The user wants a short conversation title. "
+        yield "登录超时排查"
+        return [
+            {"type": "thinking", "thinking": "The user wants a short conversation title. "},
+            {"type": "text", "text": "登录超时排查"},
+        ]
+
+    backend = NativeClaudeSession(history=[], raw_ask=raw_ask)
+    assert GaSession(_agent_with_backend(backend)).side_ask("q", deadline=9e12) == "登录超时排查"
+
+
+def test_side_ask_falls_back_to_stream_without_text_blocks() -> None:
+    def only_thinking(wire: Any) -> Any:
+        yield "hmm"
+        return [{"type": "thinking", "thinking": "hmm"}]
+
+    def not_a_list(wire: Any) -> Any:
+        yield "plain"
+        return "plain"
+
+    for raw_ask, expected in ((only_thinking, "hmm"), (not_a_list, "plain")):
+        backend = NativeClaudeSession(history=[], raw_ask=raw_ask)
+        assert GaSession(_agent_with_backend(backend)).side_ask("q", deadline=9e12) == expected
+
+
+# ---------------- attach-mode image delivery ----------------
+
+
+class NativeToolClient(SimpleNamespace):
+    """Named to match GA's tool-calling client (the only one whose
+    backend.ask receives a block-list message)."""
+
+
+class ToolClient(SimpleNamespace):
+    """Named to match GA's legacy text-protocol client."""
+
+
+class _AskBackend:
+    """Backend whose `ask` is a class-level generator method, like
+    GA's NativeClaudeSession.ask. Records what it received."""
+
+    def __init__(self) -> None:
+        self.seen: list[dict[str, Any]] = []
+        self.history: list[Any] = []
+
+    def ask(self, msg: dict[str, Any]) -> Any:
+        self.seen.append(msg)
+        self.history.append(msg)
+        yield "chunk"
+        return "resp"
+
+
+def _png(tmp_path: Path, name: str = "a.png") -> str:
+    p = tmp_path / name
+    p.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    return str(p)
+
+
+def _drain(gen: Any) -> Any:
+    out: list[Any] = []
+    try:
+        while True:
+            out.append(next(gen))
+    except StopIteration as e:
+        return out, e.value
+
+
+def test_supports_image_input_only_for_native_tool_client() -> None:
+    native = SimpleNamespace(llmclient=NativeToolClient(backend=_AskBackend()))
+    legacy = SimpleNamespace(llmclient=ToolClient(backend=_AskBackend()))
+    no_client = SimpleNamespace()
+    assert GaSession(native).supports_image_input() is True
+    assert GaSession(legacy).supports_image_input() is False
+    assert GaSession(no_client).supports_image_input() is False
+
+
+def test_arm_image_delivery_appends_once_then_restores(tmp_path: Path) -> None:
+    backend = _AskBackend()
+    agent = SimpleNamespace(llmclient=NativeToolClient(backend=backend))
+    ga = GaSession(agent)
+
+    assert ga.arm_image_delivery([_png(tmp_path)]) == 1
+    assert "ask" in backend.__dict__
+
+    first: dict[str, Any] = {"role": "user", "content": [{"type": "text", "text": "look"}]}
+    chunks, value = _drain(backend.ask(first))
+    assert chunks == ["chunk"] and value == "resp"
+    types = [b["type"] for b in first["content"]]
+    assert types == ["text", "image"]
+    assert first["content"][1]["source"]["media_type"] == "image/png"
+    # Same dict object reached the backend and its history.
+    assert backend.seen[0] is first and backend.history[0] is first
+    # Wrapper is gone after the first call: class method is back and a
+    # second call gets no image.
+    assert "ask" not in backend.__dict__
+    second: dict[str, Any] = {"role": "user", "content": [{"type": "text", "text": "again"}]}
+    _drain(backend.ask(second))
+    assert [b["type"] for b in second["content"]] == ["text"]
+
+
+def test_disarm_removes_an_uncalled_wrapper(tmp_path: Path) -> None:
+    backend = _AskBackend()
+    agent = SimpleNamespace(llmclient=NativeToolClient(backend=backend))
+    ga = GaSession(agent)
+    ga.arm_image_delivery([_png(tmp_path)])
+    ga.disarm_image_delivery()
+    assert "ask" not in backend.__dict__
+    assert agent._galley_image_ask_restore is None
+    msg: dict[str, Any] = {"role": "user", "content": [{"type": "text", "text": "next task"}]}
+    _drain(backend.ask(msg))
+    assert [b["type"] for b in msg["content"]] == ["text"]
+    ga.disarm_image_delivery()  # idempotent
+
+
+def test_arm_does_not_duplicate_when_an_image_block_is_present(
+    tmp_path: Path,
+) -> None:
+    """Future-proofing: if upstream run() ever consumes put_task(images=)
+    itself, the first message already carries the blocks."""
+    backend = _AskBackend()
+    agent = SimpleNamespace(llmclient=NativeToolClient(backend=backend))
+    GaSession(agent).arm_image_delivery([_png(tmp_path)])
+    already = {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": "x"},
+    }
+    msg: dict[str, Any] = {"role": "user", "content": [{"type": "text", "text": "t"}, already]}
+    _drain(backend.ask(msg))
+    assert msg["content"] == [{"type": "text", "text": "t"}, already]
+    assert "ask" not in backend.__dict__
+
+
+def test_arm_returns_zero_for_unsupported_client_or_unreadable_images(
+    tmp_path: Path,
+) -> None:
+    backend = _AskBackend()
+    legacy = SimpleNamespace(llmclient=ToolClient(backend=backend))
+    assert GaSession(legacy).arm_image_delivery([_png(tmp_path)]) == 0
+    assert "ask" not in backend.__dict__
+
+    native = SimpleNamespace(llmclient=NativeToolClient(backend=backend))
+    missing = str(tmp_path / "nope.png")
+    gif = tmp_path / "x.gif"
+    gif.write_bytes(b"GIF89a")
+    assert GaSession(native).arm_image_delivery([missing, str(gif)]) == 0
+    assert "ask" not in backend.__dict__
+
+
+def test_arm_counts_only_encodable_images(tmp_path: Path) -> None:
+    backend = _AskBackend()
+    native = SimpleNamespace(llmclient=NativeToolClient(backend=backend))
+    ok = _png(tmp_path)
+    assert GaSession(native).arm_image_delivery([ok, str(tmp_path / "no.png")]) == 1
+    msg: dict[str, Any] = {"role": "user", "content": [{"type": "text", "text": "t"}]}
+    _drain(backend.ask(msg))
+    assert len(msg["content"]) == 2
+
+
+def test_rearm_replaces_a_stale_wrapper_and_restore_respects_prior_instance_ask(
+    tmp_path: Path,
+) -> None:
+    backend = _AskBackend()
+
+    def someone_elses_ask(msg: dict[str, Any]) -> Any:
+        msg["content"].append({"type": "text", "text": "[other]"})
+        yield "o"
+        return "other"
+
+    backend.ask = someone_elses_ask  # type: ignore[method-assign]
+    native = SimpleNamespace(llmclient=NativeToolClient(backend=backend))
+    ga = GaSession(native)
+    ga.arm_image_delivery([_png(tmp_path)])
+    ga.arm_image_delivery([_png(tmp_path, "b.png")])  # re-arm: old one dropped
+    msg: dict[str, Any] = {"role": "user", "content": [{"type": "text", "text": "t"}]}
+    _drain(backend.ask(msg))
+    kinds = [b["type"] for b in msg["content"]]
+    assert kinds == ["text", "image", "text"]  # one image, then the other wrapper ran
+    assert msg["content"][1]["source"]["data"]
+    # The prior instance-level ask is back in place, not deleted.
+    assert backend.__dict__["ask"] is someone_elses_ask

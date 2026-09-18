@@ -1786,7 +1786,7 @@ export const enCopy: AppCopy = {
     imageBlockedQueue:
       "Queued messages are text-only while a run is in progress. Send images after this run finishes; text can queue now.",
     imageBlockedExternal:
-      "External GA does not support image input yet. Remove the image before sending, or start a new session with the bundled engine.",
+      "The current model backend cannot receive images. Remove the image before sending, or switch to a model that supports images.",
     imageTooLarge: "Image is too large. The limit is 10 MB per image.",
     imageTooMany: "You can attach up to 4 images. Remove one to add another.",
     imageUnsupported:
