@@ -1,19 +1,19 @@
 {
-  "version": "0.5.0",
-  "notes": "https://github.com/wangjc683/galley/releases/tag/v0.5.0",
-  "pub_date": "2026-09-17T05:17:04.105Z",
+  "version": "0.5.1",
+  "notes": "https://github.com/wangjc683/galley/releases/tag/v0.5.1",
+  "pub_date": "2026-09-18T05:49:03.014Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRnIzL2lQK0RKNlYxOHFDNkZzb2pNNnVTRUp5RmtXdXJDdTRMdnZrQkxsaFFBNDJ3U2taSURUZGNRVUZpVTQxOXlzR2JZZUFzUllxcnRvWjRPRUt2ZHdZNkdFVThjMndBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjIxODU2CWZpbGU6R2FsbGV5LmFwcC50YXIuZ3oKNkErcXZkZzdibTFJZlRXNHpwRTR2YjI3UDFoQlhRL25acFdlVytvOGd3T2hudk9VU1I0dHF2ZTQyU1JUK3BQQXQvb0RCeXZCSjVnTGMvcnlnc29aQnc9PQo=",
-      "url": "https://github.com/wangjc683/galley/releases/download/v0.5.0/Galley_0.5.0_macOS_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRnIzL2lQK0RKNmZ3SHlxU21rUWFyRnR1SzN4U0E4MVVtbUtnVjArVHB4SGdNdk0ySGllYUthV2pPdXRlcmRGM1ZxWDF4clVrRjcyc3I0a2JrVW5ObUtDenpkdWVYSmdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NzA5NDM4CWZpbGU6R2FsbGV5LmFwcC50YXIuZ3oKL1M5Njh3ZHplbHJ0R0EzSXh5eGhRcVJLUnUrdU55VWptSHJWSDNVZEVOMEYzMk9FQTBaRXZ3QythbEQ0R2Rnc0tJdG9iRWxiSmlkY3h3U2k5Q292QkE9PQo=",
+      "url": "https://github.com/wangjc683/galley/releases/download/v0.5.1/Galley_0.5.1_macOS_aarch64.app.tar.gz"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRnIzL2lQK0RKNmNLbTF1YkhDUDU5NERKVGZYVVRrWG1SaFhJcDY5bGtVZjNHZFFvaXlMMVZwc3ZpOXZyV3NtZGQ0dEJiNklvOHFxL2dHNU9VRlVWd3d0QVZqdzVuckFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjIxNjA0CWZpbGU6R2FsbGV5LmFwcC50YXIuZ3oKSHVKTWxKYldtbjNlYVhsdnVtNUlWM1crWkVNNE5TUVVTQVFiWXoyVVZyQUVZMjFNR1NtbmR4clNzMkpSVFcxZ0ZqaEJJSklQdEVjc2ljN042UmJ6QVE9PQo=",
-      "url": "https://github.com/wangjc683/galley/releases/download/v0.5.0/Galley_0.5.0_macOS_x64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRnIzL2lQK0RKNll4cGNsOWl2RjVRaWoyaUlXaVFyL3VVYzY2YWhDcmcraXJnRnViUUZOVmlyNFRtamRHRElDRTlvUWhkVDhEcUlJbUtUMndIeGxmV2ZEb1Y1Uy9PNEFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NzA5NDEyCWZpbGU6R2FsbGV5LmFwcC50YXIuZ3oKSlhXNks5Wk1JSVVnU0YzQjdnNVZRSW9JbTAvWUpSbnVIc2JES1J4d3E4RG83TFl4aklvTEpIUkpGMUNicjdkblJwOXk2MCtmWFpJekxmWnFoWFZzQ0E9PQo=",
+      "url": "https://github.com/wangjc683/galley/releases/download/v0.5.1/Galley_0.5.1_macOS_x64.app.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRnIzL2lQK0RKNlJ3OHE5bWU3STBsZEdOeVh5Nk5LbnZxOElyMmtEWWppZHBMbHFZVW54OVZ6M2FsOGlRd2V4SnFCOE42QVhWWGtNSDNsMFQxNGtYVWlER3N6R0NUTmc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjIxODc3CWZpbGU6R2FsbGV5XzAuNS4wX3g2NC1zZXR1cC5leGUKK2R4T3d3OXJxSG44eVpUc2JwZG5YSFJPUzBVcGJhWmxBMVk4MVZZZUViQXdLRmhoWXJXZ1NQMk05YmFkUjVsZHR3ZU9IMjQ1cXpsNkFjY1laNGsrQ1E9PQo=",
-      "url": "https://github.com/wangjc683/galley/releases/download/v0.5.0/Galley_0.5.0_Windows_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRnIzL2lQK0RKNlU5U3hGQVFnOXM4R050UCsyYk1qdTF0UkNSZFhidGJuZ21QSHczT09SZHRWZXhJL1hjS2k5eU9jM3RXcmw3V2hhN01tb2piV0UycGRlcVFIUCswNHdNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NzA5ODA4CWZpbGU6R2FsbGV5XzAuNS4xX3g2NC1zZXR1cC5leGUKOXhKOTJsQTRoTDBCZi9JUk5zN1FzbVl1TStFSU9XejI3UGtPakJkUWZIWURoVS9tVlFyQ2lEejRsbDZUWEw2M1JqcmRDeTArditwYzBWcW1TdHRCQ1E9PQo=",
+      "url": "https://github.com/wangjc683/galley/releases/download/v0.5.1/Galley_0.5.1_Windows_x64-setup.exe"
     }
   }
 }
