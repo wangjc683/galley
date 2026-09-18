@@ -59,10 +59,6 @@ export interface AppError {
         kind: "restart_channels";
         label: string;
       }
-    | {
-        kind: "restart_app_update";
-        label: string;
-      }
     | null;
   /** Per-toast override. Useful for short positive confirmations. */
   autoDismissMs?: number;

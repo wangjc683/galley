@@ -130,14 +130,6 @@ function ToastFrame({
               }
             : undefined
         }
-        onRestartAppUpdate={
-          actions.onRestartAppUpdate
-            ? () => {
-                onDismiss(toast.id);
-                actions.onRestartAppUpdate?.();
-              }
-            : undefined
-        }
       />
     </div>
   );

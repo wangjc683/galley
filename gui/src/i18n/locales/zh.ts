@@ -1704,8 +1704,6 @@ export const zhCopy = {
     modelSelectionChanged: "已切换到默认模型",
     modelSelectionChangedMessage:
       "此对话之前使用的模型已不可用，Galley 将改用默认模型。",
-    updateReady: "更新已准备好",
-    updateReadyMessage: "新版本已下载，重启 Galley 生效。",
     appUpdated: "Galley 已更新",
     appUpdatedMessage: "已更新到最新版本。",
     imageSaved: "图片已保存",

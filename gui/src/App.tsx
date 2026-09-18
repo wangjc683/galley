@@ -52,7 +52,6 @@ import { resolveLanguagePreference } from "@/lib/language";
 import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import type { EpigraphCondition } from "@/lib/epigraphs";
-import { useAppUpdateStore } from "@/stores/app-update";
 import { useBrowserControlStore } from "@/stores/browser-control";
 import {
   EMPTY_APPROVALS,
@@ -163,7 +162,6 @@ function App() {
   const toasts = useUiStore((s) => s.toasts);
   const pushToast = useUiStore((s) => s.pushToast);
   const dismissToast = useUiStore((s) => s.dismissToast);
-  const restartAppUpdate = useAppUpdateStore((s) => s.restart);
   const [emptyComposerFocusTick, setEmptyComposerFocusTick] = useState(0);
 
   const bridgeStatus = useActiveRuntime((r) => r.bridgeStatus, "idle");
@@ -840,9 +838,6 @@ function App() {
         onViewGoal={openGoal}
         onRestartChannels={() => {
           void restartChannels();
-        }}
-        onRestartAppUpdate={() => {
-          void restartAppUpdate();
         }}
       />
 

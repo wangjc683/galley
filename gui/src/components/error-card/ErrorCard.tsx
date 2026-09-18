@@ -35,8 +35,6 @@ export interface ErrorCardActions {
   onViewGoal?: (goalId: string) => void;
   /** Restart enabled Channels from an actionable toast. */
   onRestartChannels?: () => void;
-  /** Restart Galley after an app update has been prepared. */
-  onRestartAppUpdate?: () => void;
 }
 
 interface ErrorCardProps extends ErrorCardActions {
@@ -72,7 +70,6 @@ export function ErrorCard({
   onViewProject,
   onViewGoal,
   onRestartChannels,
-  onRestartAppUpdate,
 }: ErrorCardProps) {
   const copy = useCopy();
   const [open, setOpen] = useState(false);
@@ -100,7 +97,6 @@ export function ErrorCard({
         onViewProject,
         onViewGoal,
         onRestartChannels,
-        onRestartAppUpdate,
       }),
   );
 
@@ -152,7 +148,6 @@ export function ErrorCard({
                 onViewProject={onViewProject}
                 onViewGoal={onViewGoal}
                 onRestartChannels={onRestartChannels}
-                onRestartAppUpdate={onRestartAppUpdate}
                 onToggleDetails={() => setOpen((v) => !v)}
                 detailsOpen={open}
               />
@@ -205,7 +200,6 @@ export function ErrorCard({
               onViewProject={onViewProject}
               onViewGoal={onViewGoal}
               onRestartChannels={onRestartChannels}
-              onRestartAppUpdate={onRestartAppUpdate}
               onToggleDetails={() => setOpen((v) => !v)}
               detailsOpen={open}
             />
@@ -246,7 +240,6 @@ interface ActionDef {
     | "onViewProject"
     | "onViewGoal"
     | "onRestartChannels"
-    | "onRestartAppUpdate"
     | "copyDetails"
     | "toggleDetails";
 }
@@ -390,14 +383,6 @@ function defaultActions(error: AppError, copy: AppCopy): ActionDef[] {
       handler: "onRestartChannels",
     });
   }
-  if (error.action?.kind === "restart_app_update") {
-    actions.push({
-      id: "restart-app-update",
-      label: error.action.label,
-      kind: "primary",
-      handler: "onRestartAppUpdate",
-    });
-  }
   if (error.retryable) {
     actions.push({
       id: "retry",
@@ -429,7 +414,6 @@ function isActionAvailable(
     | "onViewProject"
     | "onViewGoal"
     | "onRestartChannels"
-    | "onRestartAppUpdate"
   >,
 ): boolean {
   switch (action.handler) {
@@ -451,11 +435,6 @@ function isActionAvailable(
       return (
         error.action?.kind === "restart_channels" &&
         Boolean(handlers.onRestartChannels)
-      );
-    case "onRestartAppUpdate":
-      return (
-        error.action?.kind === "restart_app_update" &&
-        Boolean(handlers.onRestartAppUpdate)
       );
     case "copyDetails":
       return hasDiagnosticDetails(error);
@@ -480,7 +459,6 @@ function ActionButton({
   onViewProject,
   onViewGoal,
   onRestartChannels,
-  onRestartAppUpdate,
   onToggleDetails,
   detailsOpen,
 }: {
@@ -493,7 +471,6 @@ function ActionButton({
   onViewProject?: (projectId: string) => void;
   onViewGoal?: (goalId: string) => void;
   onRestartChannels?: () => void;
-  onRestartAppUpdate?: () => void;
   onToggleDetails: () => void;
   detailsOpen: boolean;
 }) {
@@ -530,11 +507,6 @@ function ActionButton({
           return undefined;
         }
         return onRestartChannels;
-      case "onRestartAppUpdate":
-        if (error.action?.kind !== "restart_app_update") {
-          return undefined;
-        }
-        return onRestartAppUpdate;
       case "copyDetails":
         return () => {
           void copyTextToClipboard(formatErrorDetails(error)).then(() => {

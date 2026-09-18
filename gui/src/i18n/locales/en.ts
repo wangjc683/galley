@@ -1772,9 +1772,6 @@ export const enCopy: AppCopy = {
     modelSelectionChanged: "Switched to the default model",
     modelSelectionChangedMessage:
       "The model this conversation used is no longer available; Galley will switch to the default.",
-    updateReady: "Update ready",
-    updateReadyMessage:
-      "The new version has been downloaded. Restart Galley to apply it.",
     appUpdated: "Galley updated",
     appUpdatedMessage: "Galley is now on the latest version.",
     imageSaved: "Image saved",

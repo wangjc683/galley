@@ -85,3 +85,19 @@ for OAI-backend sessions.
   errors); JC visually accepted in `tauri dev`.
 - runner: 188 pytest / mypy / ruff after the validated-set change; new unit
   test locks OAI-no-warning, `LLMSession` keeps the loud-warning test.
+
+## Postscript (2026-09-18): the ready toast is gone
+
+The "revisit dropping the toast only if dogfood finds it noisy" clause
+above fired: JC reported the ready moment as noisy — TopBar badge and
+bottom-left toast saying the same thing at the same instant. The toast
+is removed; the badge (success tint, popover with the restart action)
+is the only ready-state surface besides Settings → About. Restarting
+is never urgent, so the one thing a toast had over the badge —
+immediacy — was not wanted. The `restart_app_update` toast action
+plumbing (AppError action kind, ErrorCard / ToastHost handlers, App
+wiring) went with it; the post-restart "Galley 已更新" toast stays,
+since the badge has vanished by then and nothing else confirms the
+restart applied the update. Rejected on the way: a toast without the
+restart button (interruption with no use), and toasting only while
+the TopBar is hidden (Settings already shows the state).

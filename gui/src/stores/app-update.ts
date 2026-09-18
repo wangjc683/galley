@@ -67,7 +67,9 @@ const APP_UPDATE_PROGRESS_EVENT = "app-update-progress";
 
 const PREF_LAST_SEEN_VERSION = "app_update_last_seen_version";
 const PREF_PREPARED_VERSION = "app_update_prepared_version";
-const PREF_READY_TOAST_VERSION = "app_update_ready_toast_version";
+// `app_update_ready_toast_version` was the once-per-version guard for the
+// ready toast, retired 2026-09-18 (see notePreparedVersion); stale rows
+// under that key are harmless.
 const PREF_COMPLETED_TOAST_VERSION = "app_update_completed_toast_version";
 const APP_UPDATE_MANUAL_DOWNLOAD_URL =
   "https://github.com/wangjc683/galley/releases/latest";
@@ -148,7 +150,7 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
           version: result.version,
         },
       });
-      await notifyUpdateReady(result.version);
+      await notePreparedVersion(result.version);
     } catch (error) {
       console.warn("[updates] download/install failed", error);
       set({
@@ -264,39 +266,24 @@ function ensureAutoPrepareOnIdleWatcher(): void {
   }
 }
 
-async function notifyUpdateReady(version: string): Promise<void> {
+/**
+ * Record which version was prepared so the post-restart "Galley 已更新"
+ * toast can tell an update apart from a plain relaunch.
+ *
+ * No toast at the ready moment (2026-09-18; the 2026-07-15 devlog left
+ * this exact revisit open "if dogfood finds it noisy", and it did): the
+ * TopBar badge turns success-tinted the same instant and carries the
+ * restart action in its popover, so the toast only added a second
+ * voice saying the same thing at the same moment. Restarting is never
+ * urgent — it tears down the IM supervisor and runner children — so
+ * immediacy, the one thing a toast has over a persistent badge, is
+ * not wanted here.
+ */
+async function notePreparedVersion(version: string): Promise<void> {
   try {
     await setPref(PREF_PREPARED_VERSION, version);
   } catch (error) {
     console.warn("[updates] prepared version persistence failed", error);
-  }
-
-  const alreadyShown = await safeGetPref<string>(PREF_READY_TOAST_VERSION);
-  if (alreadyShown === version) return;
-
-  const copy = updateCopy();
-  useUiStore.getState().pushToast(
-    makeAppError({
-      id: `app-update-ready-${version}`,
-      category: "business",
-      severity: "info",
-      title: copy.toasts.updateReady,
-      message: copy.toasts.updateReadyMessage,
-      hint: null,
-      retryable: false,
-      context: "app_update_ready",
-      traceback: null,
-      action: {
-        kind: "restart_app_update",
-        label: copy.updates.restart,
-      },
-    }),
-  );
-
-  try {
-    await setPref(PREF_READY_TOAST_VERSION, version);
-  } catch (error) {
-    console.warn("[updates] ready toast persistence failed", error);
   }
 }
 
