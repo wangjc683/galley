@@ -422,10 +422,21 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing feature-level: `v0.5.0` shipped everything that had accumulated since
-`v0.4.16` (Goal v2, the live-run window, the user-message bubble and dark
-recalibration, written-file references, Settings list scrolling). The only
-commit after the tag is this status sync.
+A conversation-polish batch from 2026-09-18, all GUI-only, each dogfooded by
+JC on the real app before commit (the update-toast removal was accepted
+without a live check — dev builds cannot reach the ready state without
+forcing the store): step numbering and run timing stay continuous across an
+ask_user reply (segment sums for duration / tokens, `runStepBase` for the
+sidebar and in-flight marker); the code block redesigned after a
+reference-component audit (header row with always-visible copy, 24-line
+fold, hairline / 8px / `leading-code`; JC picked github highlighting over a
+paper-ink theme on the switcher); a paragraph gap between the thinking row
+and the streaming partial; the user-message copy chip anchored to the last
+line; and the update-ready toast dropped in favour of the TopBar badge alone.
+Devlog entries: `2026-09-18-ask-user-run-continuity`,
+`2026-09-18-code-block-reference-audit`, plus postscripts on the 07-15
+indicator entry and the 09-17 bubble entry. Release-scope truth remains
+`git log v0.5.0..HEAD`.
 
 Standing follow-ups: the ticket `.scratch/live-run-window/PRD.md` stays
 `ready-for-human` until a few more live runs pass; `.scratch/goal-simplify/`
