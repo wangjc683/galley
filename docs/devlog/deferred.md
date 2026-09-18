@@ -588,3 +588,11 @@
 - **启动信号**：JC 开始实际使用置顶（DB `pinned=1` 出现且持续）且仍觉得两次点击是摩擦；或社区反馈找不到置顶。
 - **方案**：若启动，先加 ⌘K 命令「置顶 / 取消置顶当前会话」（零视觉成本）；再议行内按钮。行内按钮若做，借参考组件三处写法：`[@media(hover:hover)]` 下才隐藏、`aria-pressed`、已置顶态不随 hover 消失；位置需与 ⋯ 协调（并排或折进 ⋯ 左侧），标题让位量随之调整。
 - **关联**：`layout-and-chrome.md` Sidebar 行动作条款（line ~146）与 Session Row 三通道清单；`SidebarSessionMenuItems.tsx`。
+
+## 工具输出 / 审批面板的 `<pre>` 与正文代码块统一质感
+
+- **状态**：暂缓
+- **提出**：2026-09-18，[代码块参考件对表改版](./2026-09-18-code-block-reference-audit.md) 自查第 7 条
+- **启动信号**：JC 真机觉得工具结果面板与正文代码块「两种质感」刺眼；或字号档调大后工具面板不跟随被投诉
+- **方案**：`ToolCallout` / `approval-renderers` / `MessageAgent` 里的 `<pre>` 目前是 bg-app + `border-line` + 写死 12.5px / 1.6；正文代码块是 code-surface + hairline + `--conversation-code-size` / `leading-code`。要么把工具面板改挂同一组 token（保留其 200px 上限与 ink-soft 的「日志」寄存器），要么明确记录「日志 vs 代码」是有意的两种寄存器
+- **待定**：当初是否有意区分——07-05 审计没记

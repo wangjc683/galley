@@ -16,6 +16,7 @@ import {
   FileAnchor,
   FileInlineCode,
 } from "@/components/conversation/LocalFileReference";
+import { CodeBlockContext } from "@/lib/code-block-context";
 import { DocumentPathContext } from "@/lib/local-files";
 import { remarkDocumentHeadings } from "@/lib/remark-document-headings";
 import { markdownUrlTransform } from "@/lib/markdown-image-src";
@@ -75,7 +76,16 @@ interface MarkdownViewProps {
    * get the full treatment.
    */
   softBreaks?: boolean;
+  /**
+   * True for the in-flight streaming partial. Code blocks never fold
+   * while streaming (CodeBlockContext) — folding what is still being
+   * written would hide the newest lines.
+   */
+  streaming?: boolean;
 }
+
+const CODE_BLOCKS_SETTLED = { collapsible: true };
+const CODE_BLOCKS_STREAMING = { collapsible: false };
 
 // Memoised: `source` (the markdown string) is the only prop that
 // changes meaningfully; `variant`/`className` are stable per call site.
@@ -91,6 +101,7 @@ export const MarkdownView = memo(function MarkdownView({
   selectionCopyScope = false,
   documentPath,
   softBreaks = false,
+  streaming = false,
 }: MarkdownViewProps) {
   const proseClass =
     variant === "agent"
@@ -142,18 +153,22 @@ export const MarkdownView = memo(function MarkdownView({
       style={proseStyle}
     >
       <DocumentPathContext.Provider value={documentPath ?? null}>
-        <ReactMarkdown
-          remarkPlugins={[
-            remarkGfm,
-            remarkCjkAdjacentQuotedStrong,
-            ...(documentPath ? [remarkDocumentHeadings] : []),
-            ...(softBreaks ? [remarkBreaks] : []),
-          ]}
-          components={COMPONENTS}
-          urlTransform={markdownUrlTransform}
+        <CodeBlockContext.Provider
+          value={streaming ? CODE_BLOCKS_STREAMING : CODE_BLOCKS_SETTLED}
         >
-          {source}
-        </ReactMarkdown>
+          <ReactMarkdown
+            remarkPlugins={[
+              remarkGfm,
+              remarkCjkAdjacentQuotedStrong,
+              ...(documentPath ? [remarkDocumentHeadings] : []),
+              ...(softBreaks ? [remarkBreaks] : []),
+            ]}
+            components={COMPONENTS}
+            urlTransform={markdownUrlTransform}
+          >
+            {source}
+          </ReactMarkdown>
+        </CodeBlockContext.Provider>
       </DocumentPathContext.Provider>
     </div>
   );

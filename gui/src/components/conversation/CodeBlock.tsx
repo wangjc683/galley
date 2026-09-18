@@ -1,9 +1,10 @@
-import { Check, Copy } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { CaretDown, Check, Code, Copy } from "@phosphor-icons/react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { createHighlighterCore, type HighlighterCore } from "shiki/core";
 import { createOnigurumaEngine } from "shiki/engine/oniguruma";
 
 import { useResolvedTheme } from "@/components/theme/ThemeContext";
+import { CodeBlockContext } from "@/lib/code-block-context";
 import { useCopy } from "@/lib/i18n";
 import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
@@ -37,10 +38,27 @@ const SHIKI_LANGUAGES = [
 ] as const;
 type ShikiLang = (typeof SHIKI_LANGUAGES)[number];
 
+/**
+ * github-light / github-dark, colour-only (see the metric-identity
+ * note in the body classes). A paper-ink "two-ink" theme (ink /
+ * warm code-ink / muted comments) was built for the 2026-09-18 live
+ * A/B and lost to these on the real app — JC preferred the structure
+ * the full palette gives; see the devlog entry.
+ */
 const SHIKI_THEMES = {
   light: "github-light",
   dark: "github-dark",
 } as const;
+
+/**
+ * Blocks longer than this fold to their first lines with a "N more
+ * lines" footer (2026-09-18 verdict: 24, not the reference component's
+ * 8 — in a transcript the code IS the answer, and ~24% of real blocks
+ * are over 8 lines while ~5% are over 24). Streaming blocks never
+ * fold (see CodeBlockContext): folding what is still being written
+ * would hide the newest lines.
+ */
+export const CODE_COLLAPSE_LINES = 24;
 
 let _highlighterPromise: Promise<HighlighterCore> | null = null;
 
@@ -110,15 +128,28 @@ interface CodeBlockProps {
 /**
  * Language ids that carry no information as a label — a fenced block
  * tagged ```text``` / ```plaintext``` says nothing the mono register
- * doesn't already. We suppress the floating tag for these so plain
- * snippets show no label at all (the copy / wrap controls still float
- * in on hover), rather than stamping "TEXT" noise on every block.
+ * doesn't already. The label is suppressed for these (the header keeps
+ * its code glyph so the row is never empty), rather than stamping
+ * "TEXT" on every plain snippet — which is 46% of real blocks.
  */
-const UNINFORMATIVE_CODE_LABELS = new Set(["text", "txt", "plaintext", "plain"]);
+const UNINFORMATIVE_CODE_LABELS = new Set([
+  "text",
+  "txt",
+  "plaintext",
+  "plain",
+]);
 
 function displayCodeLabel(language: string | null): string {
   if (!language) return "";
-  return UNINFORMATIVE_CODE_LABELS.has(language.toLowerCase()) ? "" : language;
+  if (UNINFORMATIVE_CODE_LABELS.has(language.toLowerCase())) return "";
+  // Show the canonical name for aliases the highlighter resolves
+  // ("md" → markdown); unknown ids show as written.
+  return normalizeLanguage(language) ?? language;
+}
+
+function countLines(code: string): number {
+  if (code === "") return 1;
+  return code.split("\n").length;
 }
 
 /**
@@ -126,6 +157,19 @@ function displayCodeLabel(language: string | null): string {
  * unsupported language is supplied, falls back to the plain mono
  * block (same chrome, no colors). The plain fallback is rendered
  * synchronously so there's no flash of empty / placeholder content.
+ *
+ * Chrome (2026-09-18 reference audit, see devlog): 8px radius,
+ * hairline border, recessed code surface (the inset rule — never a
+ * raised white card), `leading-code` 1.6 (the foundations token the
+ * 06 density pass had overridden to 1.45), block margin on the
+ * conversation rhythm variable. The copy control is always visible as
+ * a bare icon; the wrap toggle appears only when a line actually
+ * overflows; blocks past CODE_COLLAPSE_LINES fold behind a footer.
+ * Controls live in a header row (Claude.ai form), reversing the 06
+ * verdict that removed it — the row is never dead now that the copy
+ * control is always in it, and it takes the controls off the code so
+ * a long first line is never covered. JC picked it over the corner
+ * form on the real app.
  */
 export function CodeBlock({ code, language }: CodeBlockProps) {
   const copy = useCopy();
@@ -161,12 +205,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
   const html =
     highlighted?.key === highlightKey
       ? highlighted.html
-      : (cachedHtml ??
-        (lang && highlighted ? highlighted.html : null));
-  const [wrapped, setWrapped] = useState(false);
-  const wrapLabel = wrapped
-    ? copy.conversation.scrollCode
-    : copy.conversation.wrapCode;
+      : (cachedHtml ?? (lang && highlighted ? highlighted.html : null));
 
   useEffect(() => {
     if (!lang) return;
@@ -215,56 +254,93 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
     };
   }, [code, highlightKey, lang, shikiTheme]);
 
+  // Wrap toggle: shown only when a line actually overflows the block
+  // (or while wrapped, so it can be turned back). Measured by the
+  // ResizeObserver callback — it fires once on observe with the
+  // initial size, so no synchronous setState in the effect body.
+  const [wrapped, setWrapped] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      setOverflows(el.scrollWidth > el.clientWidth + 1);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [code, wrapped, html]);
+  const showWrapToggle = wrapped || overflows;
+  const wrapLabel = wrapped
+    ? copy.conversation.scrollCode
+    : copy.conversation.wrapCode;
+
+  // Fold: long blocks show their first CODE_COLLAPSE_LINES lines.
+  const { collapsible } = useContext(CodeBlockContext);
+  const lineCount = countLines(code);
+  const foldable = collapsible && lineCount > CODE_COLLAPSE_LINES;
+  const [expanded, setExpanded] = useState(false);
+  const folded = foldable && !expanded;
+
   const label = displayCodeLabel(language);
 
+  const wrapToggle = showWrapToggle ? (
+    <button
+      type="button"
+      aria-pressed={wrapped}
+      tabIndex={-1}
+      onMouseDown={preventMouseFocus}
+      onClick={(event) => {
+        setWrapped((value) => !value);
+        blurAfterClick(event);
+      }}
+      className={cn(
+        "inline-flex h-6 items-center rounded-sm px-1.5 font-mono text-[10.5px] uppercase tracking-[0.08em]",
+        "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
+        "hover:bg-hover hover:text-ink-soft",
+        wrapped ? "text-ink-soft" : "text-ink-muted",
+      )}
+    >
+      {wrapLabel}
+    </button>
+  ) : null;
+
   return (
-    <div className="group/codeblock relative my-3 overflow-hidden rounded-md border border-line-strong bg-code-surface">
-      {/* No header bar: it wasted a full row (and read as a dead white
-          strip once the language label was suppressed). The language
-          tag + controls float in the top-right corner instead, so the
-          box is just the code. Top-right rather than top-left because
-          code starts flush-left — a left tag would sit on the first
-          line. The language tag is always shown (dim); wrap / copy
-          fade in on hover to its left. */}
-      <div className="absolute right-1.5 top-1.5 z-10 flex items-center gap-1">
-        <button
-          type="button"
-          aria-pressed={wrapped}
-          tabIndex={-1}
-          onMouseDown={preventMouseFocus}
-          onClick={(event) => {
-            setWrapped((value) => !value);
-            blurAfterClick(event);
-          }}
-          className={cn(
-            "inline-flex items-center rounded-sm bg-code-surface/85 px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.08em] backdrop-blur-sm",
-            "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
-            wrapped
-              ? "text-ink-soft opacity-100"
-              : "text-ink-muted opacity-0 hover:text-ink-soft group-hover/codeblock:opacity-100",
-            "hover:bg-hover",
-          )}
-        >
-          {wrapLabel}
-        </button>
-        <CodeCopyButton code={code} />
-        {label && (
-          <span className="pointer-events-none select-none font-mono text-[10px] uppercase tracking-[0.08em] text-ink-muted/70">
-            {label}
-          </span>
-        )}
+    <div
+      className={cn(
+        "overflow-hidden rounded-callout border border-line bg-code-surface",
+        // Block rhythm: the same 1.1667× of the conversation block gap
+        // MarkdownView gives tables — an embedded medium earns a
+        // little more air than a paragraph (was a hardcoded my-3).
+        "[margin-block:calc(var(--conversation-block-gap)*1.1667)]",
+      )}
+    >
+      {/* Header row: the label sits left with the code glyph — the
+          glyph keeps the row from reading as a dead strip when the
+          label is suppressed — and the controls sit right, off the
+          code entirely. */}
+      <div className="flex items-center justify-between gap-2 border-b border-line py-1 pr-1 pl-3">
+        <span className="flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-ink-muted">
+          <Code size={12} weight="regular" className="shrink-0 opacity-80" />
+          {label && <span className="truncate">{label}</span>}
+        </span>
+        <span className="flex shrink-0 items-center gap-0.5">
+          {wrapToggle}
+          <CodeCopyButton code={code} />
+        </span>
       </div>
       <div
+        ref={bodyRef}
         className={cn(
-          "px-3.5 py-1.5 font-mono [font-size:var(--conversation-code-size)] leading-[1.45] text-ink",
+          "px-3.5 py-2 font-mono [font-size:var(--conversation-code-size)] leading-code text-ink",
           wrapped
             ? "overflow-x-hidden break-words [&_code]:whitespace-pre-wrap [&_pre]:whitespace-pre-wrap"
             : "overflow-x-auto [&_code]:whitespace-pre [&_pre]:whitespace-pre",
           // Shiki's colored spans arrive via the innerHTML payload. Zero
           // out every box-model contribution from pre/code so the only
-          // vertical space is this wrapper's py-1.5 — no UA / Shiki
+          // vertical space is this wrapper's padding — no UA / Shiki
           // line-box padding leaking in and inflating the block.
-          "[&_pre]:m-0 [&_pre]:p-0 [&_pre]:bg-transparent [&_pre]:leading-[1.45]",
+          "[&_pre]:m-0 [&_pre]:p-0 [&_pre]:bg-transparent [&_pre]:leading-code",
           "[&_code]:m-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:[font-size:var(--conversation-code-size)]",
           // Metric identity: the plain fallback and the colored HTML
           // must wrap at exactly the same points, or the async swap
@@ -278,23 +354,64 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
           "[&_code_span]:font-normal! [&_code_span]:[font-style:normal]!",
         )}
       >
-        {html ? (
-          <div dangerouslySetInnerHTML={{ __html: html }} />
-        ) : (
-          <pre>
-            <code>{code}</code>
-          </pre>
-        )}
+        <div
+          className={cn(folded && "overflow-hidden")}
+          style={
+            folded
+              ? {
+                  maxHeight: `calc(${CODE_COLLAPSE_LINES} * var(--leading-code) * var(--conversation-code-size, 13px))`,
+                }
+              : undefined
+          }
+        >
+          {html ? (
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+          ) : (
+            <pre>
+              <code>{code}</code>
+            </pre>
+          )}
+        </div>
       </div>
+      {foldable && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          tabIndex={-1}
+          onMouseDown={preventMouseFocus}
+          onClick={(event) => {
+            setExpanded((value) => !value);
+            blurAfterClick(event);
+          }}
+          className={cn(
+            "flex w-full items-center justify-center gap-1 border-t border-line py-1 font-mono text-[10.5px] text-ink-muted",
+            "hover:bg-hover hover:text-ink-soft",
+            "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
+          )}
+        >
+          {expanded
+            ? copy.conversation.collapseCode
+            : copy.conversation.moreLines(lineCount - CODE_COLLAPSE_LINES)}
+          <CaretDown
+            size={11}
+            weight="bold"
+            className={cn(
+              "transition-transform duration-(--motion-base) ease-firm",
+              expanded && "rotate-180",
+            )}
+          />
+        </button>
+      )}
     </div>
   );
 }
 
 /**
- * Copy button on each code block. Hover-revealed (not always-on) so
- * resting code blocks feel uncluttered; Claude.ai / ChatGPT use the
- * same hover pattern. Uses the parent's `group/codeblock` for hover
- * scoping so nested code blocks don't trigger each other.
+ * Copy button on each code block. Always visible as a bare icon
+ * (2026-09-18, was hover-revealed with a "COPY" word): in a transcript
+ * where most blocks are commands, paths and error lines, copying is
+ * the primary action, not a secondary one. Copy → check crossfades
+ * with a touch of blur — user-triggered, one-shot, so §2.7 class A.
  */
 function CodeCopyButton({ code }: { code: string }) {
   const copy = useCopy();
@@ -312,7 +429,7 @@ function CodeCopyButton({ code }: { code: string }) {
       await navigator.clipboard.writeText(code);
       setCopied(true);
       if (timer.current) window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => setCopied(false), 1500);
+      timer.current = window.setTimeout(() => setCopied(false), 1600);
     } catch (e) {
       console.warn("[CodeCopyButton] copy failed", e);
     }
@@ -322,26 +439,37 @@ function CodeCopyButton({ code }: { code: string }) {
     <button
       type="button"
       tabIndex={-1}
+      aria-label={copied ? copy.conversation.copied : copy.conversation.copy}
+      title={copy.conversation.copy}
       onMouseDown={preventMouseFocus}
       onClick={(event) => {
         void onCopy();
         blurAfterClick(event);
       }}
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm bg-code-surface/85 px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.08em] backdrop-blur-sm",
+        "grid size-6 shrink-0 place-items-center rounded-sm text-ink-muted",
         "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
-        "opacity-0 group-hover/codeblock:opacity-100",
-        copied
-          ? "text-success"
-          : "text-ink-muted hover:bg-hover hover:text-ink-soft",
+        "hover:bg-hover hover:text-ink-soft",
       )}
     >
-      {copied ? (
-        <Check size={11} weight="bold" />
-      ) : (
-        <Copy size={11} weight="thin" />
-      )}
-      <span>{copied ? copy.conversation.copied : copy.conversation.copy}</span>
+      <span className="relative grid size-3.5 place-items-center">
+        <Copy
+          size={13}
+          weight="regular"
+          className={cn(
+            "absolute transition-[opacity,filter] duration-(--motion-base) ease-firm",
+            copied ? "opacity-0 blur-[2px]" : "opacity-100 blur-0",
+          )}
+        />
+        <Check
+          size={13}
+          weight="bold"
+          className={cn(
+            "absolute text-success transition-[opacity,filter] duration-(--motion-base) ease-firm",
+            copied ? "opacity-100 blur-0" : "opacity-0 blur-[2px]",
+          )}
+        />
+      </span>
     </button>
   );
 }
@@ -363,6 +491,7 @@ function normalizeLanguage(language: string | null): ShikiLang | null {
     rs: "rust",
     sh: "bash",
     yml: "yaml",
+    md: "markdown",
   };
   if (lower in alias) return alias[lower];
   if (SHIKI_LANGUAGES.includes(lower as ShikiLang)) {

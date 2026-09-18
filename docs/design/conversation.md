@@ -214,29 +214,37 @@ markdown 的每一个块间距都是 `--conversation-block-gap` 的倍数，该�
 参考来源与三变体实测过程见
 [devlog 2026-08-12](../devlog/2026-08-12-inline-code-warm-ink.md)。
 
-#### 代码块语法高亮（Shiki）
+#### 代码块（容器 + Shiki 高亮）
+
+**2026-09-18 参考件对表改版**（[devlog](../devlog/2026-09-18-code-block-reference-audit.md)，JC 真机裁决 header + github）：
+
+- **视觉容器**：圆角 `--radius-callout` 8px + hairline `border-line` + 底色 `--color-code-surface`（内凹暖灰，见下方「底色方向」——参考件的白底浮起卡片 + 阴影明确不抄，foundations 的 inset 规则赢）。块外边距挂 `--conversation-block-gap × 1.1667`（与表格同档，此前是写死的 `my-3`，是 08-12「阅读面间距不写死」的漏网之鱼）。代码行高 `leading-code` 1.6（foundations 的 token；06 月密度 pass 曾写死 1.45 越过它）。字号随三档字号走。
+- **header 行**（翻转 06 月「去掉 header 行」裁决）：左侧 `Code` 图标 + 语言名（mono 10.5px uppercase ink-muted；`text` / `plaintext` 等无信息语言名不显示，图标留着让行不空），右侧换行切换 + copy。理由：控件离开代码区，单行长命令的行尾不再被压；copy 常驻后这一行永远有内容，06 月「死白带」的前提不成立。代价：单行框约 33px → 65px，真实用量 46% 是单行，JC 真机看过接受。
+- **copy 常驻、纯图标**（此前 hover 才出现、带 "COPY" 字）：24px 命中区、13px `Copy` regular，复制后交叉淡入成 `text-success` 的 `Check`（opacity + 2px blur，`--motion-base` / `ease-firm`，§2.7 A 类）。理由：真实用量里 88% 的框是 text / bash / 无标注——命令、路径、报错行——复制是主要动作。复制内容是**纯代码**，不带围栏。
+- **换行切换只在内容真的横向溢出时出现**（ResizeObserver 量 scrollWidth），已换行时保持可见以便切回。真实用量里超过 120 字符的框不到 5%，多数框看不到它。
+- **超过 24 行折叠**：正文按 `24 × leading-code × code-size` 截高，脚部「还有 N 行 / 收起」+ `CaretDown`（10.5px mono，hover 提墨）。阈值 24 而非参考件的 8：对话里代码就是答案，8 行会折掉约 24% 的框，24 行约 5%。流式 partial 期间不折（`MarkdownView streaming` → `CodeBlockContext`）。
+- `md` 别名到 markdown；标签显示规范语言名。
+
+**Shiki 高亮**：
 
 - 引擎：[Shiki](https://shiki.style) v1+，TextMate grammar，跟 VS Code / Claude.ai web 同款
-- 主题：跟随 Galley 当前主题，light 用 `github-light`，dark 用 `github-dark`
+- 主题：跟随 Galley 当前主题，light 用 `github-light`，dark 用 `github-dark`。09-18 曾做纸墨调「双墨」主题（ink / 暖褐 / ink-muted 注释）进真机 A/B，输给 github：JC 要全调色板给出的结构感。
 - 注册语言（hand-picked）：`bash` / `css` / `diff` / `html` / `javascript` / `json` / `markdown` / `python` / `rust` / `shell` / `sql` / `tsx` / `typescript` / `yaml` —— 14 种 coding agent 用户高频
-- 别名：`js → javascript` / `ts → typescript` / `py → python` / `rs → rust` / `sh → bash` / `yml → yaml`
+- 别名：`js → javascript` / `ts → typescript` / `py → python` / `rs → rust` / `sh → bash` / `yml → yaml` / `md → markdown`
 - 未注册的语言：fallback 到无色 mono code block（同样的 chrome，仅没 token color），不报错
 - async render：第一次 highlighter 加载时显示 plain mono fallback，加载完替换；同 highlighter 实例 cache，跨 code block 共享
-- 视觉容器：**无顶部 header 行**。圆角 6px + `border-line-strong` + 底色 `--color-code-surface`（内凹暖灰，见下方决策）。语言名 + copy/wrap 控件浮在**右上角**：语言名常驻（dim 10px mono uppercase，`text`/`plaintext` 等无信息语言名不显示），copy/wrap 在 hover 时 fade-in，三者都带 `bg-code-surface/85` backdrop 以压住底下的代码。
-- 默认横向 overflow scrollable；hover 显出 wrap 切换，便于读日志、错误栈、长命令（对话区操作当前为 pointer-first，无键盘焦点路径——键盘故事整体待议）
 - 流式期间保留上一帧高亮 HTML 直到新高亮完成（2026-07-05）：否则每个 chunk 都闪一次"无色→上色"；换主题同理。代价是内容滞后一次高亮周期（Shiki 热启动后仅数毫秒）
 - **高亮结果缓存 + 度量恒等（2026-07-15，勿回退）**：高亮 HTML 按 `theme:lang:code` 进模块级 LRU（300 条）。转录在会话切换时整体重挂载，命中缓存的代码块**首帧即彩色**，plain→彩色交换不再发生。首次高亮的异步换入则靠度量恒等保证零回流：字体 / 字号 / 行高已由容器钉死，剩余变量是主题对 markdown/diff token 发出的 bold/italic——字形宽度不同会移动折行点、改变块高。用 `!important` 中和（Shiki 是内联样式），高亮从此 **color-only**，这是有意取舍：牺牲主题的字重表达，换"什么时候高亮到达都不影响布局"
 
-**Copy 按钮**：hover-revealed（11px Phosphor `Copy` thin + uppercase "Copy"，复制后变 ✓ + "Copied" 1.5s），复制内容是**纯代码**——不带 ` ``` ` fence、不带 markdown chrome。Claude.ai / ChatGPT / Cursor 的肌肉记忆位置。
+**2026-06 密度与分离 pass（决策留痕；header 行一条已于 09-18 翻转，其余勿回退）**：
 
-**2026-06 密度与分离 pass（决策留痕，勿回退）**：
-
-- **去掉顶部 header 行**：它占一整行；当语言名被抑制（`text` 等）时只剩一条死白带。改为右上角浮动控件后，框身就是代码本身。语言名挪到右上角而非左上角，是因为代码顶格起排，左上角标签会压在第一行字上。
-- **紧凑间距**：正文 `py-1.5` + 代码 `leading-[1.45]`，并**显式归零** `pre`/`code` 的 margin/padding（`[&_pre]:m-0 [&_pre]:p-0` 等），堵住 Shiki / UA 行盒漏进来撑高单行块的纵向空白。
+- ~~去掉顶部 header 行~~：当时的理由是语言名被抑制时只剩一条死白带。09-18 翻转，见上——copy 常驻让行不再死，控件离开代码区是主收益。
+- **紧凑间距**：显式归零 `pre`/`code` 的 margin/padding（`[&_pre]:m-0 [&_pre]:p-0` 等），堵住 Shiki / UA 行盒漏进来撑高单行块的纵向空白。正文 padding 09-18 从 `py-1.5` 放到 `py-2`，行高 1.45 → 1.6。
 - **首尾空行裁剪**：按行剥掉围栏内容的首尾空白行（兼容 `\r\n`），LLM 常带的前导空行不再渲染成框内浪费空间（`trimCodeBlankEdges`）。
-- **底色方向（关键，别再"优化"回去）**：代码要读作"嵌进纸里的另一种介质"，所以 `--color-code-surface` 必须**与页面 `--color-app` 拉开、且与行内代码 `--color-hover` 同族**（浅色 `#F2F1F0`，比纸暗；深色 `#24201C`，比近黑的纸略亮——深色下"下沉"靠微微抬亮表达，与 `--color-hover` 的关系一致）。曾经用过的比纸更白的 `bg-surface` 会让代码框糊进对话流、几乎不可辨——这是被明确否掉的方向。
+- **底色方向（关键，别再"优化"回去）**：代码要读作"嵌进纸里的另一种介质"，所以 `--color-code-surface` 必须**与页面 `--color-app` 拉开、且与行内代码 `--color-hover` 同族**（浅色 `#F2F1F0`，比纸暗；深色 `#24201C`，比近黑的纸略亮——深色下"下沉"靠微微抬亮表达，与 `--color-hover` 的关系一致）。曾经用过的比纸更白的 `bg-surface` 会让代码框糊进对话流、几乎不可辨——这是被明确否掉的方向；09-18 参考件的白底 + 阴影浮起卡片同理不抄。
 
-V0.1 不做：代码块行号 / Edit 在行内（V0.2 候选）。
+不做：代码块行号（聊天里没有文件上下文，行号没有引用对象；参考件的 Numbered 变体否决）/ Edit 在行内（V0.2 候选）/ 代码区键盘聚焦滚动（对话区 pointer-first，键盘故事整体待议）。
+
 
 #### Message Actions（reply 级行动条）
 

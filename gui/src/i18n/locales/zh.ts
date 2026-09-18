@@ -1545,6 +1545,9 @@ export const zhCopy = {
     telemetryContextNote: "不含系统提示与工具定义",
     wrapCode: "自动换行",
     scrollCode: "横向滚动",
+    // Long-block fold footer (CodeBlock, 24+ lines).
+    moreLines: (count: number) => `还有 ${count} 行`,
+    collapseCode: "收起",
     image: "图片",
     imageLink: "图片链接",
     previewImage: "预览图片",

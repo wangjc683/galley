@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-18
+- [代码块参考件对表改版](./2026-09-18-code-block-reference-audit.md) — JC 贴了一个 header + 常驻 copy + 8 行折叠的参考件求「简洁」；先量 workbench.db：157 个框里 46% 单行、88% 是 text / bash / 无标注、真正编程语言 8%，代码框多数不是代码；拆十个零件对表：白底浮起卡 + 阴影撞 inset 规则不抄、header 行翻转 06 月裁决（copy 常驻后行不死、控件离开代码区）、8 行折叠否决改 24 行、行号否决、hairline / 8px 圆角 / leading-code 1.6 / 块间距挂 block-gap 直接进；临时切换器真机两轴（header vs corner × github / 双墨 / 单色），JC 裁 header + github，纸墨双墨主题输给全调色板的结构感
 - [ask_user 之后步号归一、用时只算最后一段](./2026-09-18-ask-user-run-continuity.md) — JC 发现 ask_user 回答后序号从 1 重数、折叠头「10 步 · 45 秒」步数全程而用时只算末段；根因是 GA 把每次 `put_task` 当一次运行而 GUI 的 run 跨越提问；编号扩 Goal 已有的 `stepNumberOf` 位置编号到所有 run，live 路径靠 messages `runStepBase` 让进行中标记与侧栏同源；计时在 JC 定「排除等待时间」后淘汰 runner 不重置方案，取 GUI 分段求和（B 撑不过 bridge 重启且让同一字段两种含义），答案脚注 token 数与运行中 HUD 一并按段合并；缺段 telemetry 时 settled 数字留空不显示部分和，HUD 例外
 
 ### 2026-09-17

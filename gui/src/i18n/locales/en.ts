@@ -1602,6 +1602,8 @@ export const enCopy: AppCopy = {
     telemetryContextNote: "Excludes system prompt and tools",
     wrapCode: "Wrap",
     scrollCode: "Scroll",
+    moreLines: (count: number) => `${count} more lines`,
+    collapseCode: "Collapse",
     image: "Image",
     imageLink: "Image link",
     previewImage: "Preview image",

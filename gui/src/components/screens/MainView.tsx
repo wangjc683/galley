@@ -542,6 +542,7 @@ function MainViewContent({
                     source={markdownPartial}
                     variant="agent"
                     className="streaming-prose"
+                    streaming
                   />
                 )}
               </div>
