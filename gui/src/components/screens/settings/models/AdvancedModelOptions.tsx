@@ -1,8 +1,21 @@
 import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useCopy } from "@/lib/i18n";
+import {
+  DEFAULTS_REASONING_TIERS,
+  FACTORY_MODEL_DEFAULTS,
+  defaultsCustomCount,
+  effectiveAdvancedOptions,
+  hasPromotableOverrides,
+  modelLayerBaseline,
+  overrideCount,
+  promoteOverridesToDefaults,
+  withDefaultsOption,
+  withLayeredOverride,
+} from "@/lib/managed-model-layers";
 import { cn } from "@/lib/utils";
 import type {
   ManagedModelAuthKind,
@@ -11,177 +24,364 @@ import type {
 
 import { InfoTooltip } from "./ModelPrimitives";
 
-/** The engine's built-in `max_retry_after` cap (seconds): the longest it
- * will sleep on a server-sent Retry-After before retrying; longer waits
- * give up with `!!!Error: HTTP … (retry-after Ns > 60s cap)`. Unset in the
- * model config means this value. */
-const ENGINE_MAX_RETRY_AFTER = 60;
+/** The five layered keys that render as ordinary fields (reasoning
+ * effort has its own row set above them). */
+const LAYERED_FIELD_KEYS = [
+  "max_retries",
+  "read_timeout",
+  "max_retry_after",
+  "trim_keep_prefix",
+  "stream",
+] as const;
+
+/** Reasoning-effort row sentinels. Neither is a stored value: FOLLOW
+ * means "no key in advancedOverrides", UNSET means the `null`
+ * tombstone. */
+const FOLLOW_ROW = "__follow__";
+const UNSET_ROW = "__unset__";
 
 type AdvancedChoiceOption<TValue extends string> = {
   value: TValue;
   label: string;
 };
 
-type ReasoningEffortValue =
-  | ""
-  | "none"
-  | "minimal"
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh"
-  | "max";
-
-/** Merge one key into the effective option set the way the advanced
- * panel does: null / "" drops the key so the generated config stays
- * minimal (unset = "follow the provider"). */
-function withAdvancedOption(
-  options: Record<string, unknown>,
-  recommendedOptions: Record<string, unknown>,
-  key: string,
-  value: string | number | boolean | null,
-): Record<string, unknown> {
-  const next: Record<string, unknown> = { ...recommendedOptions, ...options };
-  if (value === null || value === "") {
-    delete next[key];
-  } else {
-    next[key] = value;
-  }
-  return next;
-}
+type SettingsModelsCopy = ReturnType<typeof useCopy>["settings"]["models"];
 
 /**
- * First-level reasoning effort field for the model editor. It still
- * reads and writes `advancedOptions.reasoning_effort` — the storage
- * contract is unchanged — it just no longer hides behind the collapsed
- * 高级配置 panel (issue #26: users went to hand-edit JSON because two
- * folds stood between them and this one dropdown). The option list is
- * protocol-aware: OpenAI passes every tier through, the Claude mapping
- * stops at xhigh, Codex OAuth has no minimal tier and runs medium.
+ * Model-layer advanced configuration (the model editor's fold).
+ *
+ * Every control shows the EFFECTIVE value
+ * (`presetOptions` ⊕ `defaults` ⊕ `advancedOverrides`); whether that
+ * value is inherited or this model's own is carried by ink — a control
+ * whose key is absent from the overrides renders one step lighter,
+ * the same following / override grammar the composer effort pill uses.
  */
-export function ReasoningEffortField({
-  protocol,
-  authKind = "api_key",
-  options,
-  recommendedOptions,
-  onChange,
-}: {
-  protocol: ManagedModelProtocol;
-  authKind?: ManagedModelAuthKind;
-  options: Record<string, unknown>;
-  recommendedOptions: Record<string, unknown>;
-  onChange: (options: Record<string, unknown>) => void;
-}) {
-  const copy = useCopy().settings.models;
-  const effectiveOptions = { ...recommendedOptions, ...options };
-  const isCodexOauth = authKind === "chatgpt_codex_oauth";
-  const raw = stringAdvancedOption(
-    effectiveOptions.reasoning_effort,
-    null,
-    "",
-  ) as ReasoningEffortValue;
-  const value: ReasoningEffortValue =
-    isCodexOauth && raw === "minimal" ? "medium" : raw;
-  const choices =
-    protocol === "openai"
-      ? openaiReasoningOptions(copy, isCodexOauth)
-      : claudeReasoningOptions(copy);
-  return (
-    <AdvancedChoiceField
-      label={copy.reasoningEffort}
-      value={value}
-      options={choices}
-      info={copy.reasoningEffortInfo}
-      onChange={(next) =>
-        onChange(
-          withAdvancedOption(
-            options,
-            recommendedOptions,
-            "reasoning_effort",
-            next || null,
-          ),
-        )
-      }
-    />
-  );
-}
-
-export function AdvancedModelOptions({
+export function ModelAdvancedOptionsPanel({
   open,
   onOpenChange,
   protocol,
   authKind = "api_key",
-  options,
-  recommendedOptions,
+  presetOptions,
+  defaults,
+  overrides,
   onChange,
+  onPromoteToDefaults,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   protocol: ManagedModelProtocol;
   authKind?: ManagedModelAuthKind;
-  options: Record<string, unknown>;
-  recommendedOptions: Record<string, unknown>;
-  onChange: (options: Record<string, unknown>) => void;
+  presetOptions: Record<string, unknown>;
+  defaults: Record<string, unknown>;
+  overrides: Record<string, unknown>;
+  onChange: (overrides: Record<string, unknown>) => void;
+  onPromoteToDefaults: (
+    defaults: Record<string, unknown>,
+    overrides: Record<string, unknown>,
+  ) => void;
 }) {
   const copy = useCopy().settings.models;
-  const effectiveOptions = { ...recommendedOptions, ...options };
-  const customCount = advancedCustomCount(
-    effectiveOptions,
-    recommendedOptions,
-    protocol,
-    authKind,
+  const isCodexOauth = authKind === "chatgpt_codex_oauth";
+  const baseline = modelLayerBaseline(presetOptions, defaults);
+  const effective = effectiveAdvancedOptions(
+    presetOptions,
+    defaults,
+    overrides,
   );
+  const uiKeys = modelPanelKeys(protocol, isCodexOauth);
+  const overridden = overrideCount(overrides, uiKeys);
 
   const setOption = (key: string, value: string | number | boolean | null) => {
-    onChange(withAdvancedOption(options, recommendedOptions, key, value));
+    onChange(withLayeredOverride(overrides, baseline, key, value));
+  };
+  const followBaseline = (key: string) => {
+    const next = { ...overrides };
+    delete next[key];
+    onChange(next);
+  };
+  const isOwn = (key: string) => key in overrides;
+
+  const baselineTier =
+    typeof baseline.reasoning_effort === "string"
+      ? baseline.reasoning_effort
+      : null;
+  const reasoningRow = !isOwn("reasoning_effort")
+    ? FOLLOW_ROW
+    : overrides.reasoning_effort === null
+      ? UNSET_ROW
+      : String(overrides.reasoning_effort);
+  const reasoningRows: AdvancedChoiceOption<string>[] = [
+    { value: FOLLOW_ROW, label: copy.reasoningFollowDefaults(baselineTier) },
+    ...(baselineTier
+      ? [{ value: UNSET_ROW, label: copy.reasoningProviderDecides }]
+      : []),
+    ...reasoningTierOptions(copy, protocol, isCodexOauth),
+  ];
+
+  return (
+    <OptionsFold
+      open={open}
+      onOpenChange={onOpenChange}
+      title={copy.advancedConfig}
+      rightText={
+        overridden > 0 ? copy.overrideCount(overridden) : copy.followDefaults
+      }
+    >
+      <AdvancedChoiceField
+        label={copy.reasoningEffort}
+        value={reasoningRow}
+        options={reasoningRows}
+        info={copy.reasoningEffortInfo}
+        inherited={!isOwn("reasoning_effort")}
+        onChange={(next) => {
+          if (next === FOLLOW_ROW) {
+            followBaseline("reasoning_effort");
+          } else {
+            setOption("reasoning_effort", next === UNSET_ROW ? null : next);
+          }
+        }}
+      />
+
+      <LayeredNumberGrid
+        copy={copy}
+        options={effective}
+        isOwn={isOwn}
+        onChange={setOption}
+      />
+
+      {!isCodexOauth && (
+        <AdvancedSwitchRow
+          label={copy.streamResponse}
+          checked={booleanAdvancedOption(effective.stream, true)}
+          onCheckedChange={(checked) => setOption("stream", checked)}
+        />
+      )}
+
+      {protocol === "openai" ? (
+        <AdvancedChoiceField
+          label={copy.apiMode}
+          value={apiModeOption(effective.api_mode)}
+          options={[
+            { value: "chat_completions", label: copy.apiModeChat },
+            { value: "responses", label: copy.apiModeResponses },
+          ]}
+          inherited={!isOwn("api_mode")}
+          onChange={(value) => setOption("api_mode", value)}
+        />
+      ) : (
+        <>
+          <AdvancedChoiceField
+            label={copy.thinkingType}
+            value={thinkingTypeOption(effective.thinking_type)}
+            options={[
+              { value: "adaptive", label: copy.thinkingAdaptive },
+              { value: "disabled", label: copy.thinkingDisabled },
+            ]}
+            inherited={!isOwn("thinking_type")}
+            onChange={(value) => setOption("thinking_type", value)}
+          />
+          <AdvancedSwitchRow
+            label={copy.claudeCodePassthrough}
+            checked={booleanAdvancedOption(
+              effective.fake_cc_system_prompt,
+              false,
+            )}
+            onCheckedChange={(checked) =>
+              setOption("fake_cc_system_prompt", checked)
+            }
+            info={copy.claudeCodePassthroughInfo}
+          />
+        </>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="px-0 text-ink-muted"
+          disabled={Object.keys(overrides).length === 0}
+          onClick={() => onChange({})}
+        >
+          {copy.followDefaultsAll}
+        </Button>
+        <span className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="px-0 text-ink-muted"
+            disabled={!hasPromotableOverrides(overrides)}
+            onClick={() => {
+              const next = promoteOverridesToDefaults(overrides, defaults);
+              onPromoteToDefaults(next.defaults, next.overrides);
+            }}
+          >
+            {copy.promoteToDefaults}
+          </Button>
+          <InfoTooltip
+            label={copy.promoteToDefaults}
+            text={copy.promoteToDefaultsInfo}
+          />
+        </span>
+      </div>
+    </OptionsFold>
+  );
+}
+
+/**
+ * The global defaults layer (Settings → 模型 → 默认高级配置). No
+ * effective-value ink split here: there is nothing below this layer
+ * but the factory recommendation, and the header counter already says
+ * how much of it the user moved.
+ *
+ * Saves on every interaction like the rest of a settings page — which
+ * is why the number fields commit on blur / Enter rather than per
+ * keystroke.
+ */
+export function ModelDefaultsPanel({
+  defaults,
+  onChange,
+}: {
+  defaults: Record<string, unknown>;
+  onChange: (defaults: Record<string, unknown>) => void;
+}) {
+  const copy = useCopy().settings.models;
+  const [open, setOpen] = useState(false);
+  const values = { ...FACTORY_MODEL_DEFAULTS, ...defaults };
+  const customCount = defaultsCustomCount(defaults);
+  const setOption = (key: string, value: string | number | boolean | null) => {
+    onChange(withDefaultsOption(defaults, key, value));
   };
 
-  const maxRetries = numberAdvancedOption(
-    effectiveOptions.max_retries,
-    recommendedOptions.max_retries,
-    3,
-  );
-  const readTimeout = numberAdvancedOption(
-    effectiveOptions.read_timeout,
-    recommendedOptions.read_timeout,
-    180,
-  );
-  const maxRetryAfter = numberAdvancedOption(
-    effectiveOptions.max_retry_after,
-    recommendedOptions.max_retry_after,
-    ENGINE_MAX_RETRY_AFTER,
-  );
-  const stream = booleanAdvancedOption(
-    effectiveOptions.stream,
-    recommendedOptions.stream,
-    true,
-  );
-  const rawApiMode = stringAdvancedOption(
-    effectiveOptions.api_mode,
-    recommendedOptions.api_mode,
-    "chat_completions",
-  );
-  const apiMode: "chat_completions" | "responses" =
-    rawApiMode === "responses" ? "responses" : "chat_completions";
-  const trimKeepPrefix = numberAdvancedOption(
-    effectiveOptions.trim_keep_prefix,
-    recommendedOptions.trim_keep_prefix,
-    0,
-  );
-  const isCodexOauth = authKind === "chatgpt_codex_oauth";
-  const rawThinkingType = stringAdvancedOption(
-    effectiveOptions.thinking_type,
-    recommendedOptions.thinking_type,
-    "adaptive",
-  );
-  const thinkingType: "adaptive" | "disabled" =
-    rawThinkingType === "disabled" ? "disabled" : "adaptive";
-  const claudeCodePassthrough = booleanAdvancedOption(
-    effectiveOptions.fake_cc_system_prompt,
-    recommendedOptions.fake_cc_system_prompt,
-    false,
-  );
+  return (
+    <OptionsFold
+      open={open}
+      onOpenChange={setOpen}
+      title={copy.advancedConfig}
+      rightText={
+        customCount > 0
+          ? copy.advancedConfigSetCount(customCount)
+          : copy.advancedConfigUsingRecommended
+      }
+    >
+      <AdvancedChoiceField
+        label={copy.reasoningEffort}
+        value={
+          typeof values.reasoning_effort === "string"
+            ? values.reasoning_effort
+            : ""
+        }
+        options={[
+          { value: "", label: copy.reasoningDefault },
+          ...DEFAULTS_REASONING_TIERS.map((tier) => ({
+            value: tier as string,
+            label: reasoningTierLabel(copy, tier),
+          })),
+        ]}
+        info={copy.reasoningEffortInfo}
+        onChange={(value) => setOption("reasoning_effort", value || null)}
+      />
 
+      <LayeredNumberGrid
+        copy={copy}
+        options={values}
+        commitOnBlur
+        onChange={setOption}
+      />
+
+      <AdvancedSwitchRow
+        label={copy.streamResponse}
+        checked={booleanAdvancedOption(values.stream, true)}
+        onCheckedChange={(checked) => setOption("stream", checked)}
+      />
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="px-0 text-ink-muted"
+        disabled={customCount === 0}
+        onClick={() => onChange({})}
+      >
+        {copy.restoreRecommended}
+      </Button>
+    </OptionsFold>
+  );
+}
+
+/** The four layered number fields, shared by both panels. */
+function LayeredNumberGrid({
+  copy,
+  options,
+  isOwn,
+  commitOnBlur = false,
+  onChange,
+}: {
+  copy: SettingsModelsCopy;
+  options: Record<string, unknown>;
+  /** Model layer only: which keys this model overrides itself. */
+  isOwn?: (key: string) => boolean;
+  commitOnBlur?: boolean;
+  onChange: (key: string, value: number) => void;
+}) {
+  const inherited = (key: string) => (isOwn ? !isOwn(key) : false);
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <AdvancedNumberField
+        label={copy.maxRetries}
+        value={numberAdvancedOption(options.max_retries, 3)}
+        min={0}
+        inherited={inherited("max_retries")}
+        commitOnBlur={commitOnBlur}
+        onChange={(value) => onChange("max_retries", value)}
+      />
+      <AdvancedNumberField
+        label={copy.readTimeout}
+        value={numberAdvancedOption(options.read_timeout, 180)}
+        min={5}
+        suffix={copy.secondsSuffix}
+        inherited={inherited("read_timeout")}
+        commitOnBlur={commitOnBlur}
+        onChange={(value) => onChange("read_timeout", value)}
+      />
+      <AdvancedNumberField
+        label={copy.maxRetryAfter}
+        value={numberAdvancedOption(
+          options.max_retry_after,
+          FACTORY_MODEL_DEFAULTS.max_retry_after as number,
+        )}
+        min={0}
+        suffix={copy.secondsSuffix}
+        info={copy.maxRetryAfterInfo}
+        inherited={inherited("max_retry_after")}
+        commitOnBlur={commitOnBlur}
+        onChange={(value) => onChange("max_retry_after", value)}
+      />
+      <AdvancedNumberField
+        label={copy.trimKeepPrefix}
+        value={numberAdvancedOption(options.trim_keep_prefix, 0)}
+        min={0}
+        suffix={copy.messagesSuffix}
+        info={copy.trimKeepPrefixInfo}
+        inherited={inherited("trim_keep_prefix")}
+        commitOnBlur={commitOnBlur}
+        onChange={(value) => onChange("trim_keep_prefix", value)}
+      />
+    </div>
+  );
+}
+
+function OptionsFold({
+  open,
+  onOpenChange,
+  title,
+  rightText,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  rightText: string;
+  children: ReactNode;
+}) {
   return (
     <div className="rounded-sm border border-line/70 bg-elevated/35">
       <button
@@ -197,137 +397,45 @@ export function AdvancedModelOptions({
             <CaretRight size={12} weight="bold" className="text-ink-muted" />
           )}
           <span className="text-ui-secondary font-medium text-ink">
-            {copy.advancedConfig}
+            {title}
           </span>
         </span>
         <span className="shrink-0 text-ui-tertiary tabular-nums text-ink-muted">
-          {customCount > 0
-            ? copy.advancedConfigSetCount(customCount)
-            : copy.advancedConfigUsingRecommended}
+          {rightText}
         </span>
       </button>
       {open && (
         <div className="space-y-3 border-t border-line px-3 py-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <AdvancedNumberField
-              label={copy.maxRetries}
-              value={maxRetries}
-              min={0}
-              onChange={(value) => setOption("max_retries", value)}
-            />
-            <AdvancedNumberField
-              label={copy.readTimeout}
-              value={readTimeout}
-              min={5}
-              suffix={copy.secondsSuffix}
-              onChange={(value) => setOption("read_timeout", value)}
-            />
-            <AdvancedNumberField
-              label={copy.maxRetryAfter}
-              value={maxRetryAfter}
-              min={0}
-              suffix={copy.secondsSuffix}
-              info={copy.maxRetryAfterInfo}
-              onChange={(value) =>
-                // 60 = the engine's own cap — drop the key so the generated
-                // model config stays minimal (same shape as trim_keep_prefix).
-                setOption(
-                  "max_retry_after",
-                  value === ENGINE_MAX_RETRY_AFTER ? null : value,
-                )
-              }
-            />
-            <AdvancedNumberField
-              label={copy.trimKeepPrefix}
-              value={trimKeepPrefix}
-              min={0}
-              suffix={copy.messagesSuffix}
-              info={copy.trimKeepPrefixInfo}
-              onChange={(value) =>
-                // 0 = GA's own default (keep nothing) — drop the key so the
-                // generated model config stays minimal.
-                setOption("trim_keep_prefix", value === 0 ? null : value)
-              }
-            />
-          </div>
-
-          {!isCodexOauth && (
-            <AdvancedSwitchRow
-              label={copy.streamResponse}
-              checked={stream}
-              onCheckedChange={(checked) => setOption("stream", checked)}
-            />
-          )}
-
-          {protocol === "openai" ? (
-            <>
-              <AdvancedChoiceField
-                label={copy.apiMode}
-                value={apiMode}
-                options={[
-                  { value: "chat_completions", label: copy.apiModeChat },
-                  { value: "responses", label: copy.apiModeResponses },
-                ]}
-                onChange={(value) => setOption("api_mode", value)}
-              />
-            </>
-          ) : (
-            <>
-              <AdvancedChoiceField
-                label={copy.thinkingType}
-                value={thinkingType}
-                options={[
-                  { value: "adaptive", label: copy.thinkingAdaptive },
-                  { value: "disabled", label: copy.thinkingDisabled },
-                ]}
-                onChange={(value) => setOption("thinking_type", value)}
-              />
-              <AdvancedSwitchRow
-                label={copy.claudeCodePassthrough}
-                checked={claudeCodePassthrough}
-                onCheckedChange={(checked) =>
-                  setOption("fake_cc_system_prompt", checked)
-                }
-                info={copy.claudeCodePassthroughInfo}
-              />
-            </>
-          )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="px-0 text-ink-muted"
-            onClick={() =>
-              // Reasoning effort lives outside this panel now, so the
-              // panel's restore leaves the user's tier choice alone.
-              onChange(
-                effectiveOptions.reasoning_effort === undefined
-                  ? recommendedOptions
-                  : {
-                      ...recommendedOptions,
-                      reasoning_effort: effectiveOptions.reasoning_effort,
-                    },
-              )
-            }
-          >
-            {copy.restoreRecommended}
-          </Button>
+          {children}
         </div>
       )}
     </div>
   );
 }
 
-function openaiReasoningOptions(
-  copy: ReturnType<typeof useCopy>["settings"]["models"],
+/**
+ * Protocol-aware tier list. `max` is valid on BOTH protocols: the
+ * engine's Claude mapping (managed-ga `llmcore.py`) sends
+ * `low→low, medium→medium, high→high, xhigh→max, max→max` and only
+ * warns-and-ignores `none` / `minimal` — so those two are the
+ * OpenAI-only pair, not `max`. Codex OAuth backends have no `minimal`
+ * (the engine coerces it to medium), so the row is dropped there.
+ */
+function reasoningTierOptions(
+  copy: SettingsModelsCopy,
+  protocol: ManagedModelProtocol,
   codexOauth: boolean,
-): AdvancedChoiceOption<ReasoningEffortValue>[] {
-  // "max" is OpenAI-protocol only: GA passes it through both api modes,
-  // while the Claude path's output_config mapping warns and ignores it
-  // (llmcore.py `_apply_claude_thinking`) — so the Claude list below
-  // intentionally stops at xhigh.
-  const options: AdvancedChoiceOption<ReasoningEffortValue>[] = [
-    { value: "", label: copy.reasoningDefault },
+): AdvancedChoiceOption<string>[] {
+  if (protocol !== "openai") {
+    return [
+      { value: "low", label: copy.reasoningLow },
+      { value: "medium", label: copy.reasoningMedium },
+      { value: "high", label: copy.reasoningHigh },
+      { value: "xhigh", label: copy.reasoningXHigh },
+      { value: "max", label: copy.reasoningMax },
+    ];
+  }
+  const options: AdvancedChoiceOption<string>[] = [
     { value: "none", label: copy.reasoningNone },
     { value: "low", label: copy.reasoningLow },
     { value: "medium", label: copy.reasoningMedium },
@@ -336,20 +444,41 @@ function openaiReasoningOptions(
     { value: "max", label: copy.reasoningMax },
   ];
   if (!codexOauth) {
-    options.splice(2, 0, { value: "minimal", label: copy.reasoningMinimal });
+    options.splice(1, 0, { value: "minimal", label: copy.reasoningMinimal });
   }
   return options;
 }
 
-function claudeReasoningOptions(
-  copy: ReturnType<typeof useCopy>["settings"]["models"],
-): AdvancedChoiceOption<ReasoningEffortValue>[] {
+function reasoningTierLabel(copy: SettingsModelsCopy, tier: string): string {
+  switch (tier) {
+    case "low":
+      return copy.reasoningLow;
+    case "medium":
+      return copy.reasoningMedium;
+    case "high":
+      return copy.reasoningHigh;
+    case "xhigh":
+      return copy.reasoningXHigh;
+    default:
+      return copy.reasoningMax;
+  }
+}
+
+/** The keys the model panel actually renders — what its header counter
+ * reports as overridden. */
+function modelPanelKeys(
+  protocol: ManagedModelProtocol,
+  codexOauth: boolean,
+): string[] {
+  const layered = LAYERED_FIELD_KEYS.filter(
+    (key) => !(key === "stream" && codexOauth),
+  );
   return [
-    { value: "", label: copy.reasoningDefault },
-    { value: "low", label: copy.reasoningLow },
-    { value: "medium", label: copy.reasoningMedium },
-    { value: "high", label: copy.reasoningHigh },
-    { value: "xhigh", label: copy.reasoningXHigh },
+    "reasoning_effort",
+    ...layered,
+    ...(protocol === "openai"
+      ? ["api_mode"]
+      : ["thinking_type", "fake_cc_system_prompt"]),
   ];
 }
 
@@ -359,6 +488,8 @@ function AdvancedNumberField({
   min,
   suffix,
   info,
+  inherited = false,
+  commitOnBlur = false,
   onChange,
 }: {
   label: string;
@@ -366,8 +497,23 @@ function AdvancedNumberField({
   min: number;
   suffix?: string;
   info?: string;
+  /** Model layer: the value comes from a lower layer — one ink step
+   * lighter. */
+  inherited?: boolean;
+  /** Autosaving surfaces (the defaults panel) must not fire a write
+   * per keystroke: keep the text local until blur / Enter. */
+  commitOnBlur?: boolean;
   onChange: (value: number) => void;
 }) {
+  // null = "showing the committed value"; a string = the user is
+  // typing. Never synced from props in an effect — there is nothing to
+  // sync, the draft simply wins while it exists.
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = (raw: string) => {
+    setDraft(null);
+    const next = Number.parseInt(raw, 10);
+    if (Number.isFinite(next) && next !== value) onChange(Math.max(min, next));
+  };
   return (
     <label className="block">
       <span className="mb-1.5 flex items-center gap-1.5 text-ui-meta font-medium text-ink-soft">
@@ -378,14 +524,29 @@ function AdvancedNumberField({
         <input
           type="number"
           min={min}
-          value={value}
+          value={commitOnBlur ? (draft ?? String(value)) : value}
           onChange={(event) => {
-            const next = Number.parseInt(event.currentTarget.value, 10);
+            const raw = event.currentTarget.value;
+            if (commitOnBlur) {
+              setDraft(raw);
+              return;
+            }
+            const next = Number.parseInt(raw, 10);
             if (Number.isFinite(next)) onChange(Math.max(min, next));
           }}
+          onBlur={(event) => {
+            if (commitOnBlur) commit(event.currentTarget.value);
+          }}
+          onKeyDown={(event) => {
+            if (commitOnBlur && event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+          }}
           className={cn(
-            "w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors duration-(--motion-fast) ease-firm",
+            "w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary outline-none transition-colors duration-(--motion-fast) ease-firm",
             "placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20",
+            inherited ? "text-ink-muted" : "text-ink",
             suffix && "pr-12",
           )}
         />
@@ -405,12 +566,14 @@ function AdvancedChoiceField<TValue extends string>({
   options,
   onChange,
   info,
+  inherited = false,
 }: {
   label: string;
   value: TValue;
   options: AdvancedChoiceOption<TValue>[];
   onChange: (value: TValue) => void;
   info?: string;
+  inherited?: boolean;
 }) {
   return (
     <div>
@@ -431,7 +594,10 @@ function AdvancedChoiceField<TValue extends string>({
                 "inline-flex min-h-7 items-center rounded-sm border px-2 text-ui-meta",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
                 active
-                  ? "border-line bg-elevated text-ink shadow-card"
+                  ? cn(
+                      "border-line bg-elevated shadow-card",
+                      inherited ? "text-ink-muted" : "text-ink",
+                    )
                   : "border-transparent text-ink-muted hover:bg-hover hover:text-ink",
               )}
             >
@@ -471,69 +637,23 @@ function AdvancedSwitchRow({
   );
 }
 
-function advancedCustomCount(
-  options: Record<string, unknown>,
-  recommended: Record<string, unknown>,
-  protocol: ManagedModelProtocol,
-  authKind?: ManagedModelAuthKind,
-): number {
-  const keys =
-    protocol === "openai"
-      ? [
-          "max_retries",
-          "read_timeout",
-          "max_retry_after",
-          "trim_keep_prefix",
-          ...(authKind === "chatgpt_codex_oauth" ? [] : ["stream"]),
-          "api_mode",
-        ]
-      : [
-          "max_retries",
-          "read_timeout",
-          "max_retry_after",
-          "trim_keep_prefix",
-          "stream",
-          "thinking_type",
-          "fake_cc_system_prompt",
-        ];
-  // `reasoning_effort` is deliberately absent: it renders as a
-  // first-level field (ReasoningEffortField), so counting it here would
-  // report "1 custom setting" for something the user can already see.
-  return keys.filter((key) => {
-    const current = options[key] ?? null;
-    const baseline = recommended[key] ?? null;
-    return current !== baseline;
-  }).length;
+function apiModeOption(value: unknown): "chat_completions" | "responses" {
+  return value === "responses" ? "responses" : "chat_completions";
 }
 
-function numberAdvancedOption(
-  value: unknown,
-  recommended: unknown,
-  fallback: number,
-): number {
-  const raw = value ?? recommended;
-  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  if (typeof raw === "string") {
-    const parsed = Number.parseInt(raw, 10);
+function thinkingTypeOption(value: unknown): "adaptive" | "disabled" {
+  return value === "disabled" ? "disabled" : "adaptive";
+}
+
+function numberAdvancedOption(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
     if (Number.isFinite(parsed)) return parsed;
   }
   return fallback;
 }
 
-function booleanAdvancedOption(
-  value: unknown,
-  recommended: unknown,
-  fallback: boolean,
-): boolean {
-  const raw = value ?? recommended;
-  return typeof raw === "boolean" ? raw : fallback;
-}
-
-function stringAdvancedOption(
-  value: unknown,
-  recommended: unknown,
-  fallback: string,
-): string {
-  const raw = value ?? recommended;
-  return typeof raw === "string" ? raw : fallback;
+function booleanAdvancedOption(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }

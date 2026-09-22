@@ -59,6 +59,26 @@ export async function saveManagedModel(
   return invoke<ManagedModelRecord>("save_managed_model", { input });
 }
 
+/** The global defaults layer — only the user's deviations from the
+ * factory recommended values, filtered by Core to the six layered
+ * keys. An empty object means "all recommended". */
+export async function getManagedModelDefaults(): Promise<
+  Record<string, unknown>
+> {
+  return invoke<Record<string, unknown>>("get_managed_model_defaults");
+}
+
+/** Store the defaults layer and return Core's normalised version of it.
+ * Every model's effective `advancedOptions` changes with it, so the
+ * caller must re-list models afterwards. */
+export async function setManagedModelDefaults(
+  defaults: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return invoke<Record<string, unknown>>("set_managed_model_defaults", {
+    input: { defaults },
+  });
+}
+
 export async function deleteManagedModel(id: string): Promise<void> {
   await invoke("delete_managed_model", { id });
 }

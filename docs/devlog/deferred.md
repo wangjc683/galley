@@ -554,3 +554,27 @@
 - **启动信号**：JC 真机觉得工具结果面板与正文代码块「两种质感」刺眼；或字号档调大后工具面板不跟随被投诉
 - **方案**：`ToolCallout` / `approval-renderers` / `MessageAgent` 里的 `<pre>` 目前是 bg-app + `border-line` + 写死 12.5px / 1.6；正文代码块是 code-surface + hairline + `--conversation-code-size` / `leading-code`。要么把工具面板改挂同一组 token（保留其 200px 上限与 ink-soft 的「日志」寄存器），要么明确记录「日志 vs 代码」是有意的两种寄存器
 - **待定**：当初是否有意区分——07-05 审计没记
+
+---
+
+## 模型高级配置的页签变体（「默认 | 仅此模型」在模型编辑器内切换）
+
+- **状态**：暂存（2026-09-22 JC 裁先做「链接 + 设为所有模型的默认」）
+- **提出**：2026-09-22，JC 提「每个模型的高级配置里一个开关：开=调全局、关=只调这一个模型」，讨论中判为表单模式开关而改形。
+- **启动信号**：JC 或用户真机用下来觉得从模型编辑器跳到页尾「默认高级配置」太重；或「设为所有模型的默认」被投诉「改完才能设、不能先选范围」。
+- **背景**：无状态版本已落地：模型面板折叠头「跟随默认 / N 项覆盖」+ 底部「全部跟随默认」「设为所有模型的默认」。页签版在同一折叠头放「默认 | 仅此模型」两个页签，各显示各自记录的值，字段所属一目了然、不会跳变；比开关安全（页签是可见的框不是隐藏状态）。
+- **方案**：折叠头分段控件；「默认」页签渲染 `ModelDefaultsPanel` 的字段集（点击即存），「仅此模型」页签渲染现有 `ModelAdvancedOptionsPanel` 内容（随编辑器保存）。代价是一个折叠里两种保存语义，要在页签上写清。
+- **待定**：一个折叠两种保存节奏是否可接受；否则要把默认页签也改成随编辑器保存并追踪两条记录的脏状态。
+- **关联**：[模型高级配置分层](./2026-09-22-layered-model-advanced-config.md) · `gui/src/components/screens/settings/models/AdvancedModelOptions.tsx`
+
+---
+
+## 预设升级刷新模型的 preset 层
+
+- **状态**：暂存（2026-09-22 分层落地时有意不做）
+- **提出**：2026-09-22，[模型高级配置分层](./2026-09-22-layered-model-advanced-config.md) 给 `managed_models.preset_options` 留了缝。
+- **启动信号**：下一次改动任何预设的 `advancedOptions`（比如再调 `DEFAULT_CONTEXT_WIN` 或给某中转加 `api_key_header`），或有用户把服务商 URL 改到不再匹配预设后投诉行为不对。
+- **背景**：preset 层在创建时由 GUI 从预设写入，之后不动；预设更新只惠及新建的模型，老模型仍是冻结副本（027 / 029 两次 SQL 回填就是这个问题的历史形态）。分层后用户覆盖已单独存放，刷新 preset 层不会再碰用户的值，安全性比以前高得多。
+- **方案**：GUI 加载模型列表时按 `managedModelProviderPresetForRecord` 匹配预设，与记录的 `presetOptions` 不同则通过 `save_managed_model` 只带 `presetOptions` 重写（Core「省略即保留」已支持只改这一层）；或 Core 起动时做，但预设知识在 GUI，需要先搬一份 JSON 给两边共读。
+- **待定**：服务商 URL 改到自定义端点后 preset 层该保留旧预设还是退回协议默认；同时运行中会话不热更（默认配置同样如此，要新会话或重启才生效，推理强度例外，pill 实时可改）。
+- **关联**：`gui/src/lib/managed-model-presets.ts` · `core/src/managed_model_layers.rs`

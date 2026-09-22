@@ -80,21 +80,20 @@ export function EffortPill({
     effective,
     configured,
   });
-  // Tier labels are the Models settings' words (`Low` / `Medium` /
-  // `High` / `XHigh`) set in lowercase: a capital first letter gave the
-  // tier the cap height and stroke mass of a word, so next to an
+  // Tier labels are the raw lowercase tokens (`low` / `high` / …), the
+  // same strings the Models settings show: a capital first letter gave
+  // the tier the cap height and stroke mass of a word, so next to an
   // all-lowercase model name (「grok-4.7」) it read heavier than the
-  // model — the hierarchy depended on which model was picked. Lowercase
-  // keeps the tier an x-height word under any model name (fifth live
-  // round, 2026-09-22). The settings editor keeps its capitalized
-  // labels; this is the composer's own register. A tier outside the
-  // composer's four (set in the model configuration) falls back to its
-  // raw value, which is lowercase already.
+  // model (fifth live round, 2026-09-22); the same day the whole app
+  // settled on the lowercase token everywhere. A tier outside the
+  // composer's five (set in the model configuration) falls back to its
+  // raw value.
   const tierLabels: Record<string, string> = {
-    low: tierCopy.reasoningLow.toLowerCase(),
-    medium: tierCopy.reasoningMedium.toLowerCase(),
-    high: tierCopy.reasoningHigh.toLowerCase(),
-    xhigh: tierCopy.reasoningXHigh.toLowerCase(),
+    low: tierCopy.reasoningLow,
+    medium: tierCopy.reasoningMedium,
+    high: tierCopy.reasoningHigh,
+    xhigh: tierCopy.reasoningXHigh,
+    max: tierCopy.reasoningMax,
   };
   const triggerLabel =
     effective === null

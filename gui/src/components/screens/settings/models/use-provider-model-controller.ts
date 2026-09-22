@@ -7,6 +7,7 @@ import {
   testManagedModelConnectionWithLatency,
 } from "@/lib/managed-models";
 import { useCopy } from "@/lib/i18n";
+import { effectiveAdvancedOptions } from "@/lib/managed-model-layers";
 import { recommendedAdvancedOptionsForManagedModelProvider } from "@/lib/managed-model-presets";
 import type { ManagedModelsStore } from "@/stores/managed-models";
 import type {
@@ -34,12 +35,16 @@ type ModelDraftActivationResult =
 export function useProviderModelController({
   providers,
   models,
+  defaults,
   saveModel,
   expandProvider,
   showModelConfigSavedToast,
 }: {
   providers: ManagedModelProviderRecord[];
   models: ManagedModelRecord[];
+  /** The global defaults layer — needed to compute a draft's effective
+   * options for the connection test. */
+  defaults: Record<string, unknown>;
   saveModel: ManagedModelsStore["saveModel"];
   expandProvider: (id: string) => void;
   showModelConfigSavedToast: (message?: string) => void;
@@ -78,35 +83,31 @@ export function useProviderModelController({
     }));
   };
 
+  // New model: seed the preset layer from the provider preset and
+  // override nothing — the defaults layer supplies the rest.
   const createDraftForProvider = (
     provider: ManagedModelProviderRecord,
-  ): ModelDraftState => {
-    const recommendedAdvancedOptions =
-      recommendedAdvancedOptionsForManagedModelProvider(provider);
-    return {
-      providerId: provider.id,
-      model: "",
-      displayName: "",
-      advancedOptions: recommendedAdvancedOptions,
-      recommendedAdvancedOptions,
-    };
-  };
+  ): ModelDraftState => ({
+    providerId: provider.id,
+    model: "",
+    displayName: "",
+    presetOptions: recommendedAdvancedOptionsForManagedModelProvider(provider),
+    advancedOverrides: {},
+  });
 
+  // Existing model: both layers come off the record; the preset layer
+  // is read-only here and is not sent back on save.
   const createDraftForModel = (
     provider: ManagedModelProviderRecord,
     model: ManagedModelRecord,
-  ): ModelDraftState => {
-    const recommendedAdvancedOptions =
-      recommendedAdvancedOptionsForManagedModelProvider(provider);
-    return {
-      providerId: provider.id,
-      id: model.id,
-      model: model.model,
-      displayName: editableDisplayNameForModel(model),
-      advancedOptions: model.advancedOptions,
-      recommendedAdvancedOptions,
-    };
-  };
+  ): ModelDraftState => ({
+    providerId: provider.id,
+    id: model.id,
+    model: model.model,
+    displayName: editableDisplayNameForModel(model),
+    presetOptions: model.presetOptions,
+    advancedOverrides: model.advancedOverrides,
+  });
 
   const isModelDraftDirty = (draft: ModelDraftState | null = modelDraft) => {
     if (!draft) return false;
@@ -114,18 +115,20 @@ export function useProviderModelController({
       ? models.find((item) => item.id === draft.id)
       : undefined;
     if (!existingModel) {
+      // A fresh draft starts with no overrides at all, so any key in
+      // the bag is a deliberate edit (the preset layer is seeded, not
+      // editable).
       return (
         draft.model.trim() !== "" ||
         draft.displayName.trim() !== "" ||
-        stableStringify(draft.advancedOptions) !==
-          stableStringify(draft.recommendedAdvancedOptions)
+        Object.keys(draft.advancedOverrides).length > 0
       );
     }
     return (
       draft.model.trim() !== existingModel.model.trim() ||
       draft.displayName.trim() !== editableDisplayNameForModel(existingModel) ||
-      stableStringify(draft.advancedOptions) !==
-        stableStringify(existingModel.advancedOptions)
+      stableStringify(draft.advancedOverrides) !==
+        stableStringify(existingModel.advancedOverrides)
     );
   };
 
@@ -244,7 +247,12 @@ export function useProviderModelController({
         authKind: provider.authKind,
         apiBase: provider.apiBase,
         model: draft.model,
-        advancedOptions: draft.advancedOptions,
+        // The probe wants what the runtime would actually use.
+        advancedOptions: effectiveAdvancedOptions(
+          draft.presetOptions,
+          defaults,
+          draft.advancedOverrides,
+        ),
       });
       setModelProbeStates((current) =>
         withProbeState(current, provider.id, {
@@ -275,7 +283,10 @@ export function useProviderModelController({
         providerId: draft.providerId,
         model: draft.model,
         displayName: normalizedModelDisplayName(draft),
-        advancedOptions: draft.advancedOptions,
+        // Preset layer only on create — Core keeps the stored one on
+        // an edit; overrides always replace the stored set wholesale.
+        ...(draft.id ? {} : { presetOptions: draft.presetOptions }),
+        advancedOverrides: draft.advancedOverrides,
         makeDefault: draft.id
           ? (existingModel?.isDefault ?? false)
           : models.length === 0,
@@ -305,8 +316,9 @@ export function useProviderModelController({
         providerId: provider.id,
         model: modelName,
         displayName: "",
-        advancedOptions:
+        presetOptions:
           recommendedAdvancedOptionsForManagedModelProvider(provider),
+        advancedOverrides: {},
         makeDefault: models.length === 0,
       });
       showModelConfigSavedToast();

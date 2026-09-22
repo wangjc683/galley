@@ -3,16 +3,14 @@ import { useState } from "react";
 
 import { Button, IconButton } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
+import { useManagedModelsStore } from "@/stores/managed-models";
 import { cn } from "@/lib/utils";
 import type {
   ManagedModelAuthKind,
   ManagedModelProtocol,
 } from "@/types/managed-models";
 
-import {
-  AdvancedModelOptions,
-  ReasoningEffortField,
-} from "./AdvancedModelOptions";
+import { ModelAdvancedOptionsPanel } from "./AdvancedModelOptions";
 import {
   InlineProbeStatus,
   ProbeErrorLine,
@@ -49,6 +47,8 @@ export function ModelDraftEditor({
 }) {
   const appCopy = useCopy();
   const copy = appCopy.settings.models;
+  const defaults = useManagedModelsStore((s) => s.defaults);
+  const saveDefaults = useManagedModelsStore((s) => s.saveDefaults);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const canTest =
     !keyMissing &&
@@ -99,21 +99,24 @@ export function ModelDraftEditor({
         onChange={(displayName) => onChange({ displayName })}
         placeholder={copy.displayNamePlaceholder}
       />
-      <ReasoningEffortField
-        protocol={protocol}
-        authKind={authKind}
-        options={draft.advancedOptions}
-        recommendedOptions={draft.recommendedAdvancedOptions}
-        onChange={(advancedOptions) => onChange({ advancedOptions })}
-      />
-      <AdvancedModelOptions
+      <ModelAdvancedOptionsPanel
         open={advancedOpen}
         onOpenChange={setAdvancedOpen}
         protocol={protocol}
         authKind={authKind}
-        options={draft.advancedOptions}
-        recommendedOptions={draft.recommendedAdvancedOptions}
-        onChange={(advancedOptions) => onChange({ advancedOptions })}
+        presetOptions={draft.presetOptions}
+        defaults={defaults}
+        overrides={draft.advancedOverrides}
+        onChange={(advancedOverrides) => onChange({ advancedOverrides })}
+        // 「设为所有模型的默认」 writes the DEFAULTS layer straight
+        // through — defaults autosave like any settings page, and they
+        // are global, not part of this draft. The model's own side of
+        // the move (the promoted keys leaving its overrides) is just a
+        // draft patch and still rides the editor's Save button.
+        onPromoteToDefaults={(nextDefaults, nextOverrides) => {
+          void saveDefaults(nextDefaults).catch(() => undefined);
+          onChange({ advancedOverrides: nextOverrides });
+        }}
       />
       <div className="flex flex-wrap items-center gap-2">
         <Button

@@ -35,6 +35,28 @@ export interface ManagedModelRecord {
   apiBase: string;
   model: string;
   apiKeyRef: string;
+  /**
+   * The preset-layer snapshot written at creation from the provider
+   * preset. Holds the protocol-dialect keys (`api_mode`,
+   * `thinking_type`, `fake_cc_system_prompt`, `codex_backend`), the
+   * non-UI keys (`context_win`, `temperature`, `connect_timeout`) and
+   * the preset's own values for the layered keys. The user never edits
+   * it directly.
+   */
+  presetOptions: Record<string, unknown>;
+  /**
+   * Only the keys where this model deviates from its baseline
+   * (`presetOptions` ⊕ the global defaults). A JSON `null` value is a
+   * tombstone: "unset this key entirely (do not send it)".
+   */
+  advancedOverrides: Record<string, unknown>;
+  /**
+   * The EFFECTIVE merged object Core computed
+   * (`presetOptions` ⊕ defaults ⊕ `advancedOverrides`) — what the
+   * runtime actually uses. Everything that asks "what does this model
+   * really do?" (composer effort pill, saved-model connection tests)
+   * reads this.
+   */
   advancedOptions: Record<string, unknown>;
   isDefault: boolean;
   sortOrder: number;
@@ -49,7 +71,11 @@ export interface SaveManagedModelInput {
   providerId: string;
   displayName?: string;
   model: string;
-  advancedOptions?: Record<string, unknown>;
+  /** Preset-layer seed. Pass when creating a model; omit on an edit
+   * and Core keeps the stored one. */
+  presetOptions?: Record<string, unknown>;
+  /** Replaces the stored overrides wholesale — `{}` clears them. */
+  advancedOverrides?: Record<string, unknown>;
   makeDefault?: boolean;
 }
 

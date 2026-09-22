@@ -5,10 +5,12 @@ import { applyManagedRuntimeDiagnostics } from "@/lib/managed-runtime-diagnostic
 import {
   deleteManagedModelProvider,
   deleteManagedModel,
+  getManagedModelDefaults,
   listManagedModelProviders,
   listManagedModels,
   saveManagedModelProvider,
   saveManagedModel,
+  setManagedModelDefaults,
   reorderManagedModels,
 } from "@/lib/managed-models";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
@@ -22,6 +24,10 @@ import type {
 interface ManagedModelsState {
   providers: ManagedModelProviderRecord[];
   models: ManagedModelRecord[];
+  /** The global defaults layer (`settings.models` → 默认高级配置).
+   * Only the user's deviations from the factory recommended values;
+   * `{}` means "all recommended". */
+  defaults: Record<string, unknown>;
   loading: boolean;
   saving: boolean;
   error: string | null;
@@ -31,6 +37,7 @@ interface ManagedModelsActions {
   load: () => Promise<{
     providers: ManagedModelProviderRecord[];
     models: ManagedModelRecord[];
+    defaults: Record<string, unknown>;
     /** Set when the load itself failed — the (empty) lists then say
      * NOTHING about what is configured. Callers deciding "does the
      * user have models?" must branch on this, not on length. */
@@ -39,6 +46,7 @@ interface ManagedModelsActions {
   saveProvider: (input: SaveManagedProviderInput) => Promise<ManagedModelProviderRecord>;
   deleteProvider: (id: string) => Promise<void>;
   saveModel: (input: SaveManagedModelInput) => Promise<void>;
+  saveDefaults: (defaults: Record<string, unknown>) => Promise<void>;
   reorderModels: (modelIds: string[]) => Promise<void>;
   deleteModel: (id: string) => Promise<void>;
   clearError: () => void;
@@ -49,6 +57,7 @@ export type ManagedModelsStore = ManagedModelsState & ManagedModelsActions;
 export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
   providers: [],
   models: [],
+  defaults: {},
   loading: false,
   saving: false,
   error: null,
@@ -56,16 +65,17 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
   load: async () => {
     set({ loading: true, error: null });
     try {
-      const [providers, models] = await Promise.all([
+      const [providers, models, defaults] = await Promise.all([
         listManagedModelProviders(),
         listManagedModels(),
+        getManagedModelDefaults(),
       ]);
-      set({ providers, models, loading: false });
-      return { providers, models, loadError: null };
+      set({ providers, models, defaults, loading: false });
+      return { providers, models, defaults, loadError: null };
     } catch (e) {
       const loadError = errorMessage(e);
       set({ loading: false, error: loadError });
-      return { providers: [], models: [], loadError };
+      return { providers: [], models: [], defaults: {}, loadError };
     }
   },
 
@@ -108,6 +118,22 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
       await saveManagedModel(input);
       const models = await listManagedModels();
       set({ models, saving: false });
+      void refreshManagedRuntimeDiagnostics();
+    } catch (e) {
+      set({ saving: false, error: errorMessage(e) });
+      throw e;
+    }
+  },
+
+  // The defaults layer feeds every model's effective advancedOptions,
+  // so a successful write has to be followed by a re-list — Core
+  // recomputed them all.
+  saveDefaults: async (defaults) => {
+    set({ saving: true, error: null });
+    try {
+      const stored = await setManagedModelDefaults(defaults);
+      const models = await listManagedModels();
+      set({ defaults: stored, models, saving: false });
       void refreshManagedRuntimeDiagnostics();
     } catch (e) {
       set({ saving: false, error: errorMessage(e) });

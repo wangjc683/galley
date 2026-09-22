@@ -67,6 +67,7 @@ const MIG_034: &str = include_str!("../../core/migrations/034_session_approval_m
 // 040 only ADD COLUMN reasoning_effort to sessions — required since
 // SESSIONS_SELECT_COLS reads it.
 const MIG_040: &str = include_str!("../../core/migrations/040_session_reasoning_effort.sql");
+const MIG_042: &str = include_str!("../../core/migrations/042_managed_model_advanced_layers.sql");
 
 async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     let opts = SqliteConnectOptions::new()
@@ -76,7 +77,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_031, MIG_032, MIG_034, MIG_040,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_031, MIG_032, MIG_034, MIG_040, MIG_042,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)

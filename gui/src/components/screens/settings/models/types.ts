@@ -18,8 +18,12 @@ export type ModelDraftState = {
   id?: string;
   model: string;
   displayName: string;
-  advancedOptions: Record<string, unknown>;
-  recommendedAdvancedOptions: Record<string, unknown>;
+  /** Preset-layer seed. Sent to Core only when creating the model;
+   * an edit draft carries the stored one for baseline maths. */
+  presetOptions: Record<string, unknown>;
+  /** Only this model's deviations from `presetOptions` ⊕ the global
+   * defaults. `null` values are "unset this key" tombstones. */
+  advancedOverrides: Record<string, unknown>;
 };
 
 export type ModelMoveDirection = "up" | "down";

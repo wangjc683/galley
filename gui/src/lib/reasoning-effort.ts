@@ -26,9 +26,11 @@
  *      until `ready` corrects it. See {@link resolveConfiguredEffort}.
  *
  * The composer deliberately offers a narrower value set than the DB
- * accepts: `none` / `minimal` / `max` stay reachable through the model
- * configuration only (both protocols understand the four below, which
- * is what makes the override survive a model switch).
+ * accepts: `none` / `minimal` stay reachable through the model
+ * configuration only (both protocols understand the five below —
+ * the engine's Claude mapping sends `xhigh` and `max` to the same top
+ * tier and only warns-and-ignores `none` / `minimal` — which is what
+ * makes the override survive a model switch).
  */
 
 export const COMPOSER_EFFORT_TIERS = [
@@ -36,6 +38,7 @@ export const COMPOSER_EFFORT_TIERS = [
   "medium",
   "high",
   "xhigh",
+  "max",
 ] as const;
 
 export type ComposerEffortTier = (typeof COMPOSER_EFFORT_TIERS)[number];
@@ -62,14 +65,6 @@ const EFFORT_VALUES = [
 export const EFFORT_DEFAULT_ROW = "default";
 
 /**
- * Chip label for a tier. `medium` abbreviates to `MED` (the Models
- * settings badge glyph), and the stored value is still `medium`.
- */
-export function effortChipLabel(value: string): string {
-  return value === "medium" ? "MED" : value.toUpperCase();
-}
-
-/**
  * Deviation normalisation — see rule 1 above. `null` (the `默认` row)
  * stays `null`: it *is* "follow the configuration".
  */
@@ -86,9 +81,9 @@ export interface EffortPillState {
   showDefaultRow: boolean;
   /**
    * Which row reads as current: a tier value, {@link EFFORT_DEFAULT_ROW},
-   * or null when the effective tier is outside the composer's four (a
-   * `none` / `minimal` / `max` set in the model configuration) and no
-   * row can claim it.
+   * or null when the effective tier is outside the composer's five (a
+   * `none` / `minimal` set in the model configuration) and no row can
+   * claim it.
    */
   currentRow: string | null;
   /**
@@ -96,12 +91,6 @@ export interface EffortPillState {
    * override) — the trigger chip then renders in the quiet ink.
    */
   following: boolean;
-  /**
-   * Trigger chip label, or null when nothing is set anywhere and the
-   * pill reads `默认` (the caller supplies the localized word — this
-   * module stays i18n-free).
-   */
-  chipLabel: string | null;
 }
 
 export function effortPillState({
@@ -124,7 +113,6 @@ export function effortPillState({
     showDefaultRow,
     currentRow,
     following: override === null,
-    chipLabel: effective === null ? null : effortChipLabel(effective),
   };
 }
 
@@ -139,11 +127,9 @@ export interface EffortConfiguredModel {
  * leaves the field empty (provider decides) or holds something outside
  * the accepted value set.
  *
- * Deliberately *not* the Models-settings badge helper
- * (`modelReasoningEffortTier`): that one coerces `minimal` to `medium`
- * for Codex-backend models. Here the runner's own report is the
- * authority on what the engine really does, and it arrives moments
- * later — guessing a coercion would only make the pill flip.
+ * No Codex `minimal → medium` coercion here: the runner's own report
+ * is the authority on what the engine really does, and it arrives
+ * moments later — guessing a coercion would only make the pill flip.
  */
 export function modelConfiguredEffort(
   model: EffortConfiguredModel | undefined,

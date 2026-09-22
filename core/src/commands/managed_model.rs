@@ -116,13 +116,14 @@ pub(crate) async fn save_managed_model(
     app: tauri::AppHandle,
     input: SaveManagedModelInput,
 ) -> std::result::Result<api::ManagedModelRecord, String> {
-    let id = input
+    let explicit_id = input
         .id
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(new_managed_model_id);
+        .map(ToOwned::to_owned);
+    let is_create = explicit_id.is_none();
+    let id = explicit_id.unwrap_or_else(new_managed_model_id);
     let providers = galley
         .list_managed_model_providers()
         .await
@@ -142,22 +143,73 @@ pub(crate) async fn save_managed_model(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| input.model.trim())
         .to_string();
+    // The preset layer is seeded once: a create always gets the protocol
+    // defaults (⊕ whatever seed the GUI sent); an edit only replaces the
+    // stored baseline when the caller sends one.
+    let preset_options = match (is_create, input.preset_options) {
+        (true, seed) => Some(normalize_managed_model_preset_options(
+            provider.protocol,
+            seed,
+        )),
+        (false, Some(seed)) => Some(normalize_managed_model_preset_options(
+            provider.protocol,
+            Some(seed),
+        )),
+        (false, None) => None,
+    };
+    // Same rule as the preset layer: a create stores `{}` when nothing is
+    // sent, an edit that omits the field keeps the stored overrides.
+    let advanced_overrides = match (is_create, input.advanced_overrides) {
+        (true, overrides) => {
+            Some(managed_model_layers::normalize_overrides(overrides).map_err(stringify_error)?)
+        }
+        (false, Some(overrides)) => Some(
+            managed_model_layers::normalize_overrides(Some(overrides)).map_err(stringify_error)?,
+        ),
+        (false, None) => None,
+    };
     let saved = galley
         .upsert_managed_model_metadata(UpsertManagedModelMetadata {
             id,
             provider_id: input.provider_id,
             display_name,
             model: input.model,
-            advanced_options: normalize_managed_model_advanced_options(
-                provider.protocol,
-                input.advanced_options,
-            ),
+            preset_options,
+            advanced_overrides,
             make_default: input.make_default.unwrap_or(false),
         })
         .await
         .map_err(stringify_error)?;
     sync_managed_model_config(&app, &galley).await?;
     Ok(saved)
+}
+
+#[tauri::command]
+pub(crate) async fn get_managed_model_defaults(
+    galley: State<'_, SqliteGalley>,
+) -> std::result::Result<serde_json::Value, String> {
+    galley
+        .managed_model_defaults()
+        .await
+        .map_err(stringify_error)
+}
+
+/// Store the defaults layer. Every model's effective options change with
+/// it, so the generated runtime config is rewritten like any model save.
+#[tauri::command]
+pub(crate) async fn set_managed_model_defaults(
+    galley: State<'_, SqliteGalley>,
+    app: tauri::AppHandle,
+    input: SetManagedModelDefaultsInput,
+) -> std::result::Result<serde_json::Value, String> {
+    let defaults =
+        managed_model_layers::normalize_defaults(&input.defaults).map_err(stringify_error)?;
+    galley
+        .set_managed_model_defaults(defaults.clone())
+        .await
+        .map_err(stringify_error)?;
+    sync_managed_model_config(&app, &galley).await?;
+    Ok(defaults)
 }
 
 #[tauri::command]
@@ -299,7 +351,7 @@ fn new_managed_provider_id() -> String {
 
 pub(crate) const MANAGED_MODEL_DEFAULT_CONTEXT_WIN: i64 = 90_000;
 
-fn normalize_managed_model_advanced_options(
+fn normalize_managed_model_preset_options(
     protocol: api::ManagedModelProtocol,
     advanced_options: Option<serde_json::Value>,
 ) -> serde_json::Value {
@@ -345,17 +397,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalize_managed_model_advanced_options_adds_openai_defaults_when_absent() {
+    fn normalize_managed_model_preset_options_adds_openai_defaults_when_absent() {
         let options =
-            normalize_managed_model_advanced_options(api::ManagedModelProtocol::Openai, None);
+            normalize_managed_model_preset_options(api::ManagedModelProtocol::Openai, None);
 
         assert_eq!(options["context_win"], serde_json::json!(90_000));
         assert_eq!(options["api_mode"], serde_json::json!("chat_completions"));
     }
 
     #[test]
-    fn normalize_managed_model_advanced_options_adds_defaults_for_empty_object() {
-        let options = normalize_managed_model_advanced_options(
+    fn normalize_managed_model_preset_options_adds_defaults_for_empty_object() {
+        let options = normalize_managed_model_preset_options(
             api::ManagedModelProtocol::Anthropic,
             Some(serde_json::json!({})),
         );
@@ -365,8 +417,8 @@ mod tests {
     }
 
     #[test]
-    fn normalize_managed_model_advanced_options_preserves_explicit_context_win() {
-        let options = normalize_managed_model_advanced_options(
+    fn normalize_managed_model_preset_options_preserves_explicit_context_win() {
+        let options = normalize_managed_model_preset_options(
             api::ManagedModelProtocol::Openai,
             Some(serde_json::json!({
                 "context_win": 16_000,

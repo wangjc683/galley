@@ -20,6 +20,7 @@ impl SqliteGalley {
     }
 
     pub async fn list_managed_models(&self) -> Result<Vec<ManagedModelRecord>> {
+        let defaults = self.managed_model_defaults().await?;
         let sql = managed_model_select_sql(
             "ORDER BY m.sort_order ASC, m.is_default DESC, m.updated_at DESC",
         );
@@ -28,7 +29,26 @@ impl SqliteGalley {
             .await
             .map_err(map_sqlx_err)?;
 
-        rows.into_iter().map(ManagedModelRow::into_record).collect()
+        rows.into_iter()
+            .map(|row| row.into_record(&defaults))
+            .collect()
+    }
+
+    /// The defaults layer (`prefs.managed_model_defaults`); `{}` when unset
+    /// or not an object. See `managed_model_layers`.
+    pub async fn managed_model_defaults(&self) -> Result<serde_json::Value> {
+        Ok(self
+            .get_pref_json_db(crate::managed_model_layers::DEFAULTS_PREF_KEY)
+            .await?
+            .filter(serde_json::Value::is_object)
+            .unwrap_or_else(|| serde_json::Value::Object(Default::default())))
+    }
+
+    /// Store an already-normalised defaults object (see
+    /// `managed_model_layers::normalize_defaults`).
+    pub async fn set_managed_model_defaults(&self, defaults: serde_json::Value) -> Result<()> {
+        self.set_pref_json(crate::managed_model_layers::DEFAULTS_PREF_KEY, defaults)
+            .await
     }
 
     pub async fn managed_model_secret_key(&self, key_id: &str) -> Result<Option<Vec<u8>>> {
@@ -262,17 +282,19 @@ impl SqliteGalley {
             .fetch_one(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
-        let existing_row: Option<(i64, i64)> =
-            sqlx::query_as("SELECT is_default, sort_order FROM managed_models WHERE id = ?")
-                .bind(id)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(map_sqlx_err)?;
+        let existing_row: Option<(i64, i64, String, String)> = sqlx::query_as(
+            "SELECT is_default, sort_order, preset_options, advanced_options \
+             FROM managed_models WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         let make_default = record.make_default || existing_count == 0;
         let target_sort_order = if make_default {
             0_i64
-        } else if let Some((_, sort_order)) = existing_row {
-            sort_order
+        } else if let Some((_, sort_order, _, _)) = &existing_row {
+            *sort_order
         } else {
             let max_order: Option<i64> =
                 sqlx::query_scalar("SELECT MAX(sort_order) FROM managed_models")
@@ -282,7 +304,20 @@ impl SqliteGalley {
             max_order.unwrap_or(-1) + 1
         };
         let now = chrono_now_iso();
-        let advanced_options = record.advanced_options.to_string();
+        // `None` keeps the stored layer on an update; a fresh row with no
+        // seed gets `{}` (the protocol defaults are the command layer's job).
+        let preset_options = match (&record.preset_options, &existing_row) {
+            (Some(preset), _) => preset.to_string(),
+            (None, Some((_, _, stored, _))) => stored.clone(),
+            (None, None) => "{}".to_string(),
+        };
+        let advanced_options = match (&record.advanced_overrides, &existing_row) {
+            (Some(overrides), _) => overrides.to_string(),
+            (None, Some((_, _, _, stored))) => stored.clone(),
+            (None, None) => "{}".to_string(),
+        };
+        let existing_row =
+            existing_row.map(|(was_default, old_order, _, _)| (was_default, old_order));
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         if make_default {
@@ -312,13 +347,14 @@ impl SqliteGalley {
         }
         sqlx::query(
             "INSERT INTO managed_models (
-               id, provider_id, display_name, model, advanced_options,
+               id, provider_id, display_name, model, preset_options, advanced_options,
                is_default, sort_order, last_validated_at, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                provider_id = excluded.provider_id,
                display_name = excluded.display_name,
                model = excluded.model,
+               preset_options = excluded.preset_options,
                advanced_options = excluded.advanced_options,
                is_default = excluded.is_default,
                sort_order = excluded.sort_order,
@@ -328,6 +364,7 @@ impl SqliteGalley {
         .bind(provider_id)
         .bind(display_name)
         .bind(model)
+        .bind(&preset_options)
         .bind(&advanced_options)
         .bind(if make_default { 1_i64 } else { 0_i64 })
         .bind(target_sort_order)
@@ -431,6 +468,7 @@ impl SqliteGalley {
     }
 
     async fn managed_model_by_id(&self, id: &str) -> Result<ManagedModelRecord> {
+        let defaults = self.managed_model_defaults().await?;
         let sql = format!("{} WHERE m.id = ? LIMIT 1", managed_model_select_sql(""));
         let row = sqlx::query_as::<_, ManagedModelRow>(&sql)
             .bind(id)
@@ -440,7 +478,7 @@ impl SqliteGalley {
             .ok_or_else(|| GalleyError::NotFound {
                 message: format!("managed model {id} not found"),
             })?;
-        row.into_record()
+        row.into_record(&defaults)
     }
 
     async fn managed_model_provider_by_id(&self, id: &str) -> Result<ManagedModelProviderRecord> {

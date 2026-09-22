@@ -125,7 +125,8 @@ async fn persist_probe_and_return(secret: CodexOAuthSecret) -> Result<CodexAuthS
             provider_id: CODEX_PROVIDER_ID.into(),
             display_name: CODEX_DEFAULT_MODEL.into(),
             model: CODEX_DEFAULT_MODEL.into(),
-            advanced_options: codex_default_advanced_options(),
+            preset_options: Some(codex_default_advanced_options()),
+            advanced_overrides: Some(serde_json::json!({})),
             make_default: false,
         })
         .await?;

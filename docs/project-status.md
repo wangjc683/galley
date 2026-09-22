@@ -453,7 +453,14 @@ and the composer per-session reasoning effort (independent EffortPill right
 of the LLM pill, migration 040, IPC `set_reasoning_effort` /
 `reasoning_effort_changed`, additive `SessionBrief.reasoningEffort`; JC's
 second desktop dogfood of the reworked pill is still owed; see
-[devlog](./devlog/2026-09-22-composer-reasoning-effort.md)).
+[devlog](./devlog/2026-09-22-composer-reasoning-effort.md)), and the
+layered model advanced configuration (community "set it once for every
+model": `preset_options` ⊕ `prefs.managed_model_defaults` ⊕ per-model
+overrides, migration 042, new `默认高级配置` section at the bottom of
+Settings → 模型, reasoning effort back inside the fold and into the
+defaults, `max` on both protocols; JC's desktop acceptance is owed; see
+[devlog](./devlog/2026-09-22-layered-model-advanced-config.md)). The next
+release is a **minor** (new migration).
 Release-scope truth remains `git log v0.5.1..HEAD`.
 
 Standing follow-ups: the app-update hop `v0.5.0` → `v0.5.1` on an installed

@@ -33,7 +33,7 @@ pub use model::{
     ManagedModelAuthKind, ManagedModelConnectionResult, ManagedModelCredentialStatus,
     ManagedModelListResult, ManagedModelProbeInput, ManagedModelProtocol,
     ManagedModelProviderRecord, ManagedModelRecord, ReorderManagedModelsInput,
-    SaveManagedModelInput, SaveManagedProviderInput,
+    SaveManagedModelInput, SaveManagedProviderInput, SetManagedModelDefaultsInput,
 };
 pub use origin::{Origin, OriginVia};
 pub use project::{CreateProjectInput, ProjectBrief, ProjectId, ProjectPatch};

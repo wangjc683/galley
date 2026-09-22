@@ -64,7 +64,10 @@ export function useModelOrderingController({
         providerId: model.providerId,
         model: model.model,
         displayName: model.displayName,
-        advancedOptions: model.advancedOptions,
+        // Re-send the stored layers verbatim: this save only flips the
+        // default flag, and `advancedOverrides` replaces the stored set
+        // wholesale (omitting it would be ambiguous).
+        advancedOverrides: model.advancedOverrides,
         makeDefault: true,
       });
       setOptimisticModelIds(null);

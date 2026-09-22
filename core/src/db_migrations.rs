@@ -257,5 +257,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/040_session_reasoning_effort.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 42,
+            description: "layered managed model advanced options (preset ⊕ defaults ⊕ overrides)",
+            sql: include_str!("../migrations/042_managed_model_advanced_layers.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

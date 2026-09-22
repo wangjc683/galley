@@ -19,6 +19,7 @@ import {
   ConfirmDeleteProviderDialog,
   type ProviderDeleteCandidate,
 } from "./models/DeleteProviderConfirmDialog";
+import { ModelDefaultsPanel } from "./models/AdvancedModelOptions";
 import { EmptyRow, ErrorLine, LoadingRow } from "./models/ModelPrimitives";
 import { ConfiguredModelsPanel } from "./models/ConfiguredModelsPanel";
 import { ProviderEditor } from "./models/ProviderEditor";
@@ -38,6 +39,7 @@ export function SettingsModels({
   const modelCopy = copy.settings.models;
   const providers = useManagedModelsStore((s) => s.providers);
   const models = useManagedModelsStore((s) => s.models);
+  const defaults = useManagedModelsStore((s) => s.defaults);
   const loading = useManagedModelsStore((s) => s.loading);
   const saving = useManagedModelsStore((s) => s.saving);
   const error = useManagedModelsStore((s) => s.error);
@@ -45,6 +47,7 @@ export function SettingsModels({
   const saveProvider = useManagedModelsStore((s) => s.saveProvider);
   const deleteProvider = useManagedModelsStore((s) => s.deleteProvider);
   const saveModel = useManagedModelsStore((s) => s.saveModel);
+  const saveDefaults = useManagedModelsStore((s) => s.saveDefaults);
   const reorderModels = useManagedModelsStore((s) => s.reorderModels);
   const deleteModel = useManagedModelsStore((s) => s.deleteModel);
   const modelRowRefs = useRef<Record<string, HTMLButtonElement>>({});
@@ -102,6 +105,7 @@ export function SettingsModels({
   const providerModelController = useProviderModelController({
     providers,
     models: orderedModels,
+    defaults,
     saveModel,
     expandProvider,
     showModelConfigSavedToast,
@@ -111,6 +115,7 @@ export function SettingsModels({
     loading,
     providers,
     models: orderedModels,
+    defaults,
     saving,
     saveProvider,
     saveModel,
@@ -457,6 +462,21 @@ export function SettingsModels({
                 onRemoveDetectedModel={handleDeleteModel}
               />
             ))}
+        </div>
+      </div>
+
+      <div>
+        <SettingsSectionLabel>
+          {modelCopy.defaultsSectionTitle}
+        </SettingsSectionLabel>
+        <div className="mt-1 text-ui-meta text-ink-muted">
+          {modelCopy.defaultsSectionHint}
+        </div>
+        <div className="mt-2">
+          <ModelDefaultsPanel
+            defaults={defaults}
+            onChange={(next) => void saveDefaults(next).catch(() => undefined)}
+          />
         </div>
       </div>
 

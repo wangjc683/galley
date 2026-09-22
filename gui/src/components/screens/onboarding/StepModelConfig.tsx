@@ -51,6 +51,7 @@ export function StepModelConfig({
   const loading = useManagedModelsStore((s) => s.loading);
   const providers = useManagedModelsStore((s) => s.providers);
   const models = useManagedModelsStore((s) => s.models);
+  const defaults = useManagedModelsStore((s) => s.defaults);
   const saving = useManagedModelsStore((s) => s.saving);
   const saveProvider = useManagedModelsStore((s) => s.saveProvider);
   const saveModel = useManagedModelsStore((s) => s.saveModel);
@@ -85,6 +86,7 @@ export function StepModelConfig({
     loading,
     providers,
     models,
+    defaults,
     saving,
     saveProvider,
     saveModel,

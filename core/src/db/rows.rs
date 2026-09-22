@@ -277,7 +277,14 @@ pub struct UpsertManagedModelMetadata {
     pub provider_id: String,
     pub display_name: String,
     pub model: String,
-    pub advanced_options: serde_json::Value,
+    /// Preset-layer baseline. `None` on an update keeps the stored one;
+    /// `None` on an insert stores `{}` (callers normally pass the
+    /// protocol defaults ⊕ preset seed).
+    pub preset_options: Option<serde_json::Value>,
+    /// The model's own overrides (object; `null` values are tombstones).
+    /// `None` on an update keeps the stored set — a flag-only save (set
+    /// default, reorder) must not wipe a model's overrides.
+    pub advanced_overrides: Option<serde_json::Value>,
     pub make_default: bool,
 }
 
@@ -344,6 +351,7 @@ pub(super) struct ManagedModelRow {
     pub(super) api_base: String,
     pub(super) model: String,
     pub(super) api_key_ref: String,
+    pub(super) preset_options: String,
     pub(super) advanced_options: String,
     pub(super) is_default: i64,
     pub(super) sort_order: i64,
@@ -354,11 +362,22 @@ pub(super) struct ManagedModelRow {
 }
 
 impl ManagedModelRow {
-    pub(super) fn into_record(self) -> Result<ManagedModelRecord> {
-        let advanced_options = serde_json::from_str::<serde_json::Value>(&self.advanced_options)
+    /// `defaults` is the defaults layer (`prefs.managed_model_defaults`),
+    /// read once per listing by the caller.
+    pub(super) fn into_record(self, defaults: &serde_json::Value) -> Result<ManagedModelRecord> {
+        let preset_options = serde_json::from_str::<serde_json::Value>(&self.preset_options)
+            .map_err(|e| GalleyError::Internal {
+                message: format!("managed model preset_options JSON invalid: {e}"),
+            })?;
+        let advanced_overrides = serde_json::from_str::<serde_json::Value>(&self.advanced_options)
             .map_err(|e| GalleyError::Internal {
                 message: format!("managed model advanced_options JSON invalid: {e}"),
             })?;
+        let advanced_options = crate::managed_model_layers::effective_advanced_options(
+            &preset_options,
+            defaults,
+            &advanced_overrides,
+        );
         let auth_kind = parse_managed_model_auth_kind(&self.auth_kind)?;
         Ok(ManagedModelRecord {
             id: self.id,
@@ -370,6 +389,8 @@ impl ManagedModelRow {
             api_base: self.api_base,
             model: self.model,
             api_key_ref: self.api_key_ref,
+            preset_options,
+            advanced_overrides,
             advanced_options,
             is_default: self.is_default != 0,
             sort_order: self.sort_order,

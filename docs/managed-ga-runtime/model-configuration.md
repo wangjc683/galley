@@ -42,9 +42,21 @@ id
 providerId
 displayName
 model
-advancedOptions
+presetOptions       # preset-layer baseline written at creation
+advancedOverrides   # this model's deviations; JSON null = tombstone
+advancedOptions     # effective = presetOptions ⊕ defaults ⊕ advancedOverrides
 isDefault
 ```
+
+Advanced options are layered (since 2026-09-22, migration 042; authority:
+`core/src/managed_model_layers.rs`). A single user-owned defaults object
+lives in `prefs.managed_model_defaults` and may only hold the six
+protocol-agnostic keys (`max_retries`, `read_timeout`, `max_retry_after`,
+`trim_keep_prefix`, `stream`, `reasoning_effort`); protocol-dialect keys
+(`api_mode`, `thinking_type`, `fake_cc_system_prompt`, `codex_backend`) stay
+in the preset layer or a model's overrides. The runtime, the connection
+probe and the composer effort pill only ever read the effective
+`advancedOptions`.
 
 First-run Provider preset dropdown:
 
@@ -142,8 +154,12 @@ managed_models
 - providerId
 - displayName
 - model
-- advancedOptions
+- presetOptions      # column preset_options
+- advancedOverrides  # column advanced_options (overrides since 042)
 - isDefault
+
+prefs
+- managed_model_defaults   # JSON object, the defaults layer
 ```
 
 Recommended secret flow:

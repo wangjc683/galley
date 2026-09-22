@@ -20,6 +20,7 @@ pub mod git_review;
 pub mod goal_engine;
 pub mod goal_prompts;
 pub mod managed_model_config;
+pub mod managed_model_layers;
 pub mod managed_model_probe;
 mod managed_prompt;
 pub mod managed_runtime;
@@ -151,6 +152,8 @@ pub fn run() {
             save_managed_model,
             delete_managed_model,
             reorder_managed_models,
+            get_managed_model_defaults,
+            set_managed_model_defaults,
             list_managed_model_options,
             test_managed_model_connection,
             start_chatgpt_codex_login,

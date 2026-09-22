@@ -69,6 +69,12 @@ pub struct ManagedModelRecord {
     pub api_base: String,
     pub model: String,
     pub api_key_ref: String,
+    /// The preset-layer baseline written at creation (never user-edited).
+    pub preset_options: serde_json::Value,
+    /// The model's own deviations from `preset ⊕ defaults`; `null` values
+    /// are tombstones. See `managed_model_layers`.
+    pub advanced_overrides: serde_json::Value,
+    /// Effective `preset ⊕ defaults ⊕ overrides` — what the runtime uses.
     pub advanced_options: serde_json::Value,
     pub is_default: bool,
     pub sort_order: i64,
@@ -85,8 +91,20 @@ pub struct SaveManagedModelInput {
     pub provider_id: String,
     pub display_name: Option<String>,
     pub model: String,
-    pub advanced_options: Option<serde_json::Value>,
+    /// Preset-layer seed. Required semantics: on create it is merged over
+    /// the protocol defaults; on edit `None` keeps the stored baseline.
+    #[serde(default)]
+    pub preset_options: Option<serde_json::Value>,
+    /// Replaces the stored overrides wholesale; `None` / `{}` clears them.
+    #[serde(default)]
+    pub advanced_overrides: Option<serde_json::Value>,
     pub make_default: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetManagedModelDefaultsInput {
+    pub defaults: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]

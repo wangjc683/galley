@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   COMPOSER_EFFORT_TIERS,
   EFFORT_DEFAULT_ROW,
-  effortChipLabel,
   effortPillState,
   modelConfiguredEffort,
   normalizeEffortOverride,
@@ -11,23 +10,17 @@ import {
 } from "@/lib/reasoning-effort";
 
 describe("COMPOSER_EFFORT_TIERS", () => {
-  it("offers exactly the four tiers both protocols understand", () => {
-    expect(COMPOSER_EFFORT_TIERS).toEqual(["low", "medium", "high", "xhigh"]);
-  });
-});
-
-describe("effortChipLabel", () => {
-  it("abbreviates medium to the settings-badge glyph", () => {
-    expect(effortChipLabel("medium")).toBe("MED");
-  });
-
-  it("uppercases every other tier", () => {
-    expect(effortChipLabel("low")).toBe("LOW");
-    expect(effortChipLabel("high")).toBe("HIGH");
-    expect(effortChipLabel("xhigh")).toBe("XHIGH");
-    // Tiers only reachable through the model configuration still get a
-    // label — the trigger chip must render whatever is in effect.
-    expect(effortChipLabel("max")).toBe("MAX");
+  it("offers exactly the five tiers both protocols understand", () => {
+    // `max` included: the engine maps it to the Claude top tier
+    // (same as xhigh) rather than ignoring it. Only `none` /
+    // `minimal` stay configuration-only.
+    expect(COMPOSER_EFFORT_TIERS).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
   });
 });
 
@@ -55,7 +48,6 @@ describe("effortPillState", () => {
       showDefaultRow: true,
       currentRow: EFFORT_DEFAULT_ROW,
       following: true,
-      chipLabel: null,
     });
   });
 
@@ -70,7 +62,6 @@ describe("effortPillState", () => {
       showDefaultRow: false,
       currentRow: "medium",
       following: true,
-      chipLabel: "MED",
     });
   });
 
@@ -85,7 +76,6 @@ describe("effortPillState", () => {
       showDefaultRow: false,
       currentRow: "xhigh",
       following: false,
-      chipLabel: "XHIGH",
     });
   });
 
@@ -96,28 +86,33 @@ describe("effortPillState", () => {
       showDefaultRow: true,
       currentRow: "low",
       following: false,
-      chipLabel: "LOW",
     });
   });
 
-  it("marks no row current for a configured tier outside the four", () => {
+  it("marks no row current for a configured tier outside the five", () => {
     expect(
-      effortPillState({ override: null, effective: "max", configured: "max" }),
+      effortPillState({
+        override: null,
+        effective: "minimal",
+        configured: "minimal",
+      }),
     ).toEqual({
       showDefaultRow: false,
-      currentRow: "max",
+      currentRow: "minimal",
       following: true,
-      chipLabel: "MAX",
     });
     // ... and falls back to no current row when there is no effective
     // tier although the configuration has one (inconsistent report).
     expect(
-      effortPillState({ override: null, effective: null, configured: "max" }),
+      effortPillState({
+        override: null,
+        effective: null,
+        configured: "minimal",
+      }),
     ).toEqual({
       showDefaultRow: false,
       currentRow: null,
       following: true,
-      chipLabel: null,
     });
   });
 });

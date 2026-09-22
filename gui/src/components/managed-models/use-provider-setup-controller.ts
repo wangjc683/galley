@@ -25,6 +25,7 @@ import {
   connectionSuccessMessage,
   effectiveProviderAuthKind,
   formToProbeInput,
+  freshModelEffectiveOptions,
   newProviderForm,
   planAutoPick,
   providerConnectionFingerprint,
@@ -57,6 +58,7 @@ export function useProviderSetupController({
   loading,
   providers,
   models,
+  defaults,
   saving,
   saveProvider,
   saveModel,
@@ -76,6 +78,9 @@ export function useProviderSetupController({
   loading: boolean;
   providers: ManagedModelProviderRecord[];
   models: ManagedModelRecord[];
+  /** The global defaults layer, for the probes' effective options.
+   * `{}` before the store has loaded. */
+  defaults: Record<string, unknown>;
   saving: boolean;
   saveProvider: ManagedModelsStore["saveProvider"];
   saveModel: ManagedModelsStore["saveModel"];
@@ -221,7 +226,7 @@ export function useProviderSetupController({
   const runConnectionTest = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
       const form = visibleProviderForm;
-      const input = form ? formToProbeInput(form) : null;
+      const input = form ? formToProbeInput(form, defaults) : null;
       if (!connectionInputComplete || !input) return;
 
       const fingerprint = connectionFingerprint;
@@ -263,6 +268,7 @@ export function useProviderSetupController({
     [
       connectionFingerprint,
       connectionInputComplete,
+      defaults,
       modelCopy,
       testedFingerprint,
       visibleProviderForm,
@@ -508,7 +514,10 @@ export function useProviderSetupController({
               apiKey: visibleProviderForm.apiKey || undefined,
               apiBase: visibleProviderForm.apiBase,
               model: testModel,
-              advancedOptions: visibleProviderForm.advancedOptions,
+              advancedOptions: freshModelEffectiveOptions(
+                visibleProviderForm,
+                defaults,
+              ),
             }),
             "setup-model",
             modelCopy,

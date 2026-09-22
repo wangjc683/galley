@@ -44,9 +44,7 @@ import { ModelDraftEditor } from "./ModelDraftEditor";
 import { InlineProbeStatus, ProbeErrorLine } from "./ModelPrimitives";
 import {
   modelDisplayParts,
-  modelReasoningEffortTier,
   modelSwapAnimationClass,
-  type ReasoningEffortTier,
 } from "./model-settings-utils";
 import type {
   ModelDraftState,
@@ -314,16 +312,6 @@ function ConfiguredModelRow({
   const copy = appCopy.settings.models;
   const swapClass = modelSwapAnimationClass(model.id, moveFeedback);
   const display = modelDisplayParts(model);
-  const reasoningTier = modelReasoningEffortTier(model);
-  const reasoningTierLabels: Record<ReasoningEffortTier, string> = {
-    none: copy.reasoningNone,
-    minimal: copy.reasoningMinimal,
-    low: copy.reasoningLow,
-    medium: copy.reasoningMedium,
-    high: copy.reasoningHigh,
-    xhigh: copy.reasoningXHigh,
-    max: copy.reasoningMax,
-  };
   const keyMissing = provider?.credentialStatus === "missing";
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const testing =
@@ -421,22 +409,11 @@ function ConfiguredModelRow({
             >
               {model.providerDisplayName}
             </span>
-            {/* Reasoning tier, only when explicitly set on the stored
-                snapshot — this is what tells apart effort-variant
-                entries of the same model at a glance. Same container as
-                the provider chip (one grey chip grammar per row), but
-                set as an uppercase mono enum value: provider = identity
-                in natural language, effort = a parameter value. A 10px
-                icon prefix was the old differentiator and read as a
-                grey dot (2026-09-08). */}
-            {reasoningTier && (
-              <span
-                className="inline-flex shrink-0 items-center rounded-sm bg-ink-muted/10 px-1.5 py-px font-mono text-ui-micro uppercase leading-4 tracking-[0.04em] text-ink-muted/80"
-                title={`${copy.reasoningEffort}: ${reasoningTierLabels[reasoningTier]}`}
-              >
-                {reasoningTierLabels[reasoningTier]}
-              </span>
-            )}
+            {/* No reasoning-effort chip on the row (2026-09-22): the
+                composer pill is where the effective tier is read and
+                changed, and a row badge could only show the model
+                layer's own value — two truths for one setting. The
+                editor's fold header reports 「N 项覆盖」 instead. */}
           </div>
           {display.subtitle && (
             <div className="mt-0.5 truncate font-mono text-ui-label text-ink-muted/85">

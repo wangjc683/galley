@@ -67,6 +67,7 @@ const MIG_037: &str = include_str!("../migrations/037_scheduled_tasks_llm.sql");
 const MIG_038: &str = include_str!("../migrations/038_session_title_source.sql");
 const MIG_039: &str = include_str!("../migrations/039_goal_v2.sql");
 const MIG_040: &str = include_str!("../migrations/040_session_reasoning_effort.sql");
+const MIG_042: &str = include_str!("../migrations/042_managed_model_advanced_layers.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -107,7 +108,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
-        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040, MIG_042,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -664,6 +665,314 @@ async fn migration_039_carries_v1_goals_onto_their_sessions() {
     }
 }
 
+// ---------------- managed model advanced layers (042) ----------------
+
+async fn run_migrations_through_040(pool: &SqlitePool) {
+    for sql in [
+        MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
+        MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
+    ] {
+        sqlx::raw_sql(sql)
+            .execute(pool)
+            .await
+            .expect("run migration through 040");
+    }
+}
+
+async fn seed_pre_042_provider(pool: &SqlitePool, id: &str, protocol: &str, api_base: &str) {
+    sqlx::query(
+        "INSERT INTO managed_model_providers (
+           id, display_name, protocol, auth_kind, api_base, api_key_ref, created_at, updated_at
+         ) VALUES (?, ?, ?, 'api_key', ?, ?, '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')",
+    )
+    .bind(id)
+    .bind(id)
+    .bind(protocol)
+    .bind(api_base)
+    .bind(format!("managed-provider:{id}"))
+    .execute(pool)
+    .await
+    .expect("seed provider");
+}
+
+async fn seed_pre_042_model(
+    pool: &SqlitePool,
+    id: &str,
+    provider_id: &str,
+    sort_order: i64,
+    snapshot: &str,
+) {
+    sqlx::query(
+        "INSERT INTO managed_models (
+           id, provider_id, display_name, model, advanced_options, is_default,
+           last_validated_at, sort_order, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 0, NULL, ?, '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')",
+    )
+    .bind(id)
+    .bind(provider_id)
+    .bind(id)
+    .bind(id)
+    .bind(snapshot)
+    .bind(sort_order)
+    .execute(pool)
+    .await
+    .expect("seed model");
+}
+
+async fn managed_model_column_json(pool: &SqlitePool, id: &str, column: &str) -> serde_json::Value {
+    let raw: String = sqlx::query_scalar(&format!(
+        "SELECT {column} FROM managed_models WHERE id = ?"
+    ))
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .expect("read managed model column");
+    serde_json::from_str(&raw).expect("column is JSON")
+}
+
+async fn managed_model_defaults_pref(pool: &SqlitePool) -> Option<serde_json::Value> {
+    let raw: Option<String> =
+        sqlx::query_scalar("SELECT value FROM prefs WHERE key = 'managed_model_defaults'")
+            .fetch_optional(pool)
+            .await
+            .expect("read defaults pref");
+    raw.map(|raw| serde_json::from_str(&raw).expect("pref is JSON"))
+}
+
+const SNAP_OPENAI_DIRECT: &str = r#"{"context_win":90000,"api_mode":"chat_completions","temperature":1,"max_retries":3,"connect_timeout":10,"read_timeout":300,"stream":true,"reasoning_effort":"high"}"#;
+const SNAP_RELAY_A: &str = r#"{"context_win":90000,"thinking_type":"adaptive","fake_cc_system_prompt":true,"max_retries":3,"read_timeout":300,"stream":false,"reasoning_effort":"high","trim_keep_prefix":4}"#;
+const SNAP_RELAY_B: &str = r#"{"context_win":90000,"thinking_type":"adaptive","fake_cc_system_prompt":true,"max_retries":5,"read_timeout":300,"stream":false,"reasoning_effort":"high"}"#;
+const SNAP_CODEX: &str = r#"{"context_win":90000,"api_mode":"responses","reasoning_effort":"medium","temperature":1,"max_retries":3,"connect_timeout":10,"read_timeout":300,"stream":true,"codex_backend":true}"#;
+
+/// The 042 invariant: every row's effective object (`preset ⊕ defaults ⊕
+/// overrides`, as `list_managed_models` computes it) equals its pre-042
+/// snapshot, while the split itself follows the documented rules.
+#[tokio::test]
+async fn migration_042_splits_snapshots_into_layers_without_changing_effective_options() {
+    let pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    run_migrations_through_040(&pool).await;
+    seed_pre_042_provider(&pool, "mp_openai", "openai", "https://api.openai.com/v1/").await;
+    seed_pre_042_provider(&pool, "mp_relay", "anthropic", "https://relay.example/anthropic").await;
+    seed_pre_042_provider(&pool, "mp_codex", "openai", "https://chatgpt.com/backend-api/codex").await;
+    seed_pre_042_model(&pool, "mm_openai", "mp_openai", 0, SNAP_OPENAI_DIRECT).await;
+    seed_pre_042_model(&pool, "mm_relay_a", "mp_relay", 1, SNAP_RELAY_A).await;
+    seed_pre_042_model(&pool, "mm_relay_b", "mp_relay", 2, SNAP_RELAY_B).await;
+    seed_pre_042_model(&pool, "mm_codex", "mp_codex", 3, SNAP_CODEX).await;
+    seed_pre_042_model(&pool, "mm_array", "mp_relay", 4, "[]").await;
+
+    sqlx::raw_sql(MIG_042)
+        .execute(&pool)
+        .await
+        .expect("run 042 migration");
+
+    // Rule 1: the preset layer is the whole old snapshot.
+    for (id, snapshot) in [
+        ("mm_openai", SNAP_OPENAI_DIRECT),
+        ("mm_relay_a", SNAP_RELAY_A),
+        ("mm_relay_b", SNAP_RELAY_B),
+        ("mm_codex", SNAP_CODEX),
+    ] {
+        assert_eq!(
+            managed_model_column_json(&pool, id, "preset_options").await,
+            serde_json::from_str::<serde_json::Value>(snapshot).unwrap(),
+            "{id} preset layer"
+        );
+    }
+
+    // Rule 3: read_timeout 300 is on every object row → lifted. stream and
+    // reasoning_effort were pruned on the first-party rows (factory true /
+    // seed high+medium), so they stay per-row on the relay models.
+    assert_eq!(
+        managed_model_defaults_pref(&pool).await,
+        Some(serde_json::json!({"read_timeout": 300}))
+    );
+
+    // Rules 2 + 4: what remains on each row.
+    assert_eq!(
+        managed_model_column_json(&pool, "mm_openai", "advanced_options").await,
+        serde_json::json!({})
+    );
+    assert_eq!(
+        managed_model_column_json(&pool, "mm_codex", "advanced_options").await,
+        serde_json::json!({})
+    );
+    assert_eq!(
+        managed_model_column_json(&pool, "mm_relay_a", "advanced_options").await,
+        serde_json::json!({"stream": false, "reasoning_effort": "high", "trim_keep_prefix": 4})
+    );
+    assert_eq!(
+        managed_model_column_json(&pool, "mm_relay_b", "advanced_options").await,
+        serde_json::json!({"max_retries": 5, "stream": false, "reasoning_effort": "high"})
+    );
+
+    // Non-object rows are untouched.
+    let raw_array: String =
+        sqlx::query_scalar("SELECT advanced_options FROM managed_models WHERE id = 'mm_array'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(raw_array, "[]");
+    let raw_array_preset: String =
+        sqlx::query_scalar("SELECT preset_options FROM managed_models WHERE id = 'mm_array'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(raw_array_preset, "{}");
+
+    // The invariant, through the real read path.
+    sqlx::query("DELETE FROM managed_models WHERE id = 'mm_array'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let galley = SqliteGalley::from_pool(pool.clone());
+    let models = galley.list_managed_models().await.expect("list models");
+    for (id, snapshot) in [
+        ("mm_openai", SNAP_OPENAI_DIRECT),
+        ("mm_relay_a", SNAP_RELAY_A),
+        ("mm_relay_b", SNAP_RELAY_B),
+        ("mm_codex", SNAP_CODEX),
+    ] {
+        let model = models.iter().find(|m| m.id == id).expect(id);
+        assert_eq!(
+            model.advanced_options,
+            serde_json::from_str::<serde_json::Value>(snapshot).unwrap(),
+            "{id} effective options must survive 042 unchanged"
+        );
+    }
+}
+
+#[tokio::test]
+async fn migration_042_lifts_a_shared_tier_and_keeps_an_existing_defaults_pref() {
+    // Two relay models that agree on everything non-factory → all of it
+    // lifts, rows end up empty.
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    run_migrations_through_040(&pool).await;
+    seed_pre_042_provider(&pool, "mp_relay", "anthropic", "https://relay.example").await;
+    seed_pre_042_model(&pool, "mm_a", "mp_relay", 0, SNAP_RELAY_B).await;
+    seed_pre_042_model(&pool, "mm_b", "mp_relay", 1, SNAP_RELAY_B).await;
+    sqlx::raw_sql(MIG_042).execute(&pool).await.unwrap();
+    assert_eq!(
+        managed_model_defaults_pref(&pool).await,
+        Some(serde_json::json!({
+            "max_retries": 5, "read_timeout": 300, "stream": false, "reasoning_effort": "high"
+        }))
+    );
+    assert_eq!(
+        managed_model_column_json(&pool, "mm_a", "advanced_options").await,
+        serde_json::json!({})
+    );
+
+    // A pre-existing defaults pref blocks the lift entirely.
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    run_migrations_through_040(&pool).await;
+    sqlx::query(
+        "INSERT INTO prefs (key, value, updated_at) VALUES ('managed_model_defaults', '{\"read_timeout\":9}', 'x')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    seed_pre_042_provider(&pool, "mp_relay", "anthropic", "https://relay.example").await;
+    seed_pre_042_model(&pool, "mm_a", "mp_relay", 0, SNAP_RELAY_B).await;
+    sqlx::raw_sql(MIG_042).execute(&pool).await.unwrap();
+    assert_eq!(
+        managed_model_defaults_pref(&pool).await,
+        Some(serde_json::json!({"read_timeout": 9}))
+    );
+    assert_eq!(
+        managed_model_column_json(&pool, "mm_a", "advanced_options").await,
+        serde_json::json!({"max_retries": 5, "read_timeout": 300, "stream": false, "reasoning_effort": "high"})
+    );
+}
+
+#[tokio::test]
+async fn managed_model_layers_merge_through_the_write_and_read_path() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    galley
+        .upsert_managed_model_provider_metadata(UpsertManagedModelProviderMetadata {
+            id: "mp_test".into(),
+            display_name: "OpenAI".into(),
+            protocol: ManagedModelProtocol::Openai,
+            auth_kind: ManagedModelAuthKind::ApiKey,
+            api_base: "https://api.openai.com/v1".into(),
+            api_key_ref: "managed-provider:mp_test".into(),
+        })
+        .await
+        .unwrap();
+    let saved = galley
+        .upsert_managed_model_metadata(UpsertManagedModelMetadata {
+            id: "mm_test".into(),
+            provider_id: "mp_test".into(),
+            display_name: "GPT".into(),
+            model: "gpt-5.6-sol".into(),
+            preset_options: Some(serde_json::json!({
+                "api_mode": "chat_completions", "read_timeout": 180, "reasoning_effort": "high"
+            })),
+            advanced_overrides: Some(serde_json::json!({"read_timeout": 42})),
+            make_default: true,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        saved.advanced_options,
+        serde_json::json!({"api_mode": "chat_completions", "read_timeout": 42, "reasoning_effort": "high"})
+    );
+
+    galley
+        .set_managed_model_defaults(serde_json::json!({"read_timeout": 300, "reasoning_effort": "max", "stream": false}))
+        .await
+        .unwrap();
+    let listed = galley.list_managed_models().await.unwrap();
+    assert_eq!(
+        listed[0].advanced_options,
+        serde_json::json!({"api_mode": "chat_completions", "read_timeout": 42, "reasoning_effort": "max", "stream": false})
+    );
+    assert_eq!(listed[0].advanced_overrides, serde_json::json!({"read_timeout": 42}));
+
+    // An edit without a preset keeps the stored baseline; a null override
+    // is a tombstone.
+    let edited = galley
+        .upsert_managed_model_metadata(UpsertManagedModelMetadata {
+            id: "mm_test".into(),
+            provider_id: "mp_test".into(),
+            display_name: "GPT".into(),
+            model: "gpt-5.6-sol".into(),
+            preset_options: None,
+            advanced_overrides: Some(serde_json::json!({"reasoning_effort": null})),
+            make_default: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        edited.preset_options,
+        serde_json::json!({"api_mode": "chat_completions", "read_timeout": 180, "reasoning_effort": "high"})
+    );
+    assert_eq!(
+        edited.advanced_options,
+        serde_json::json!({"api_mode": "chat_completions", "read_timeout": 300, "stream": false})
+    );
+
+    // A flag-only save (None for both layers) keeps everything stored.
+    let flagged = galley
+        .upsert_managed_model_metadata(UpsertManagedModelMetadata {
+            id: "mm_test".into(),
+            provider_id: "mp_test".into(),
+            display_name: "GPT".into(),
+            model: "gpt-5.6-sol".into(),
+            preset_options: None,
+            advanced_overrides: None,
+            make_default: true,
+        })
+        .await
+        .unwrap();
+    assert_eq!(flagged.advanced_overrides, serde_json::json!({"reasoning_effort": null}));
+    assert_eq!(flagged.advanced_options, edited.advanced_options);
+}
+
 // ---------------- managed model metadata ----------------
 
 #[tokio::test]
@@ -770,10 +1079,11 @@ async fn managed_model_metadata_never_requires_plaintext_key_in_db() {
             provider_id: "mp_test".into(),
             display_name: "Claude".into(),
             model: "claude-sonnet-4-6".into(),
-            advanced_options: serde_json::json!({
+            preset_options: Some(serde_json::json!({
                 "thinking_type": "adaptive",
                 "read_timeout": 180
-            }),
+            })),
+            advanced_overrides: Some(serde_json::json!({})),
             make_default: true,
         })
         .await
@@ -867,7 +1177,8 @@ async fn managed_model_order_drives_default_model() {
                 provider_id: "mp_test".into(),
                 display_name: format!("Model {idx}"),
                 model: format!("model-{idx}"),
-                advanced_options: serde_json::json!({}),
+                preset_options: None,
+                advanced_overrides: Some(serde_json::json!({})),
                 make_default: idx == 0,
             })
             .await
@@ -900,7 +1211,8 @@ async fn managed_model_order_drives_default_model() {
             provider_id: "mp_test".into(),
             display_name: "Model 2".into(),
             model: "model-2".into(),
-            advanced_options: serde_json::json!({}),
+            preset_options: None,
+            advanced_overrides: Some(serde_json::json!({})),
             make_default: true,
         })
         .await

@@ -1,4 +1,5 @@
 import type { useCopy } from "@/lib/i18n";
+import { effectiveAdvancedOptions } from "@/lib/managed-model-layers";
 import {
   managedModelProviderPresetDraft,
   type ManagedModelProviderPresetId,
@@ -53,6 +54,10 @@ export type ProviderFormState = {
   apiBase: string;
   model: string;
   displayName: string;
+  /** The preset layer for the first model this form creates — the
+   * preset's own option bag, seeded by `providerFormFromPreset`. The
+   * form never edits it (the layered fields live in the model
+   * editor); it rides into `save_managed_model` as `presetOptions`. */
   advancedOptions?: Record<string, unknown>;
 };
 
@@ -116,8 +121,13 @@ export function effectiveProviderAuthKind(
 }
 
 /** Trimmed probe input for the auto connection test. Null until a
- * protocol is chosen. */
-export function formToProbeInput(form: ProviderFormState): {
+ * protocol is chosen. The probe wants the EFFECTIVE options a freshly
+ * created model would get — preset layer ⊕ the global defaults, with
+ * no overrides yet. */
+export function formToProbeInput(
+  form: ProviderFormState,
+  defaults: Record<string, unknown> = {},
+): {
   protocol: ManagedModelProtocol;
   authKind: ManagedModelAuthKind;
   apiKey: string;
@@ -134,8 +144,18 @@ export function formToProbeInput(form: ProviderFormState): {
     apiKey: form.apiKey.trim(),
     apiBase: form.apiBase.trim(),
     model: form.model.trim(),
-    advancedOptions: form.advancedOptions,
+    advancedOptions: freshModelEffectiveOptions(form, defaults),
   };
+}
+
+/** What a model created from this form right now would actually run
+ * with: its preset layer under the global defaults layer, overriding
+ * nothing. */
+export function freshModelEffectiveOptions(
+  form: Pick<ProviderFormState, "advancedOptions">,
+  defaults: Record<string, unknown>,
+): Record<string, unknown> {
+  return effectiveAdvancedOptions(form.advancedOptions ?? {}, defaults, {});
 }
 
 /** Identity of one credential+endpoint+model combination — a passing
@@ -278,7 +298,11 @@ export async function runProviderCommit(
       providerId: saved.id,
       model: form.model.trim(),
       displayName: "",
-      advancedOptions: form.advancedOptions,
+      // The preset's option bag IS the new model's preset layer; the
+      // model starts out overriding nothing and following the global
+      // defaults.
+      presetOptions: form.advancedOptions,
+      advancedOverrides: {},
       makeDefault:
         args.makeDefault === "always" ? true : args.modelsCount === 0,
     });

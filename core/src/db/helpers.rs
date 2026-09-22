@@ -12,6 +12,7 @@ pub(super) fn managed_model_select_sql(suffix: &str) -> String {
            p.api_base, \
            m.model, \
            p.api_key_ref, \
+           m.preset_options, \
            m.advanced_options, \
            m.is_default, \
            m.sort_order, \
