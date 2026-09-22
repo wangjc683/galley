@@ -123,8 +123,8 @@ JC 看真机截图：Provider chip 与强度 chip 同一灰盒、每行都挂、
 值，留着就是两个真相。代价是没法扫列表看哪个模型单独改过，兜底是编辑
 器折叠头「N 项覆盖」，与上午「行上不加覆盖标记」裁决一致。删掉行徽标、
 `modelReasoningEffortTier` / `modelLayerReasoningEffort` 及测试；上一节
-为徽标做的小写改动随之只剩 locale 与 pill 部分。Provider chip 要不要改
-淡墨文字，等 JC 看过「一行一个盒子」再说。
+为徽标做的小写改动随之只剩 locale 与 pill 部分。Provider chip 真机看过后 JC 裁改
+成淡墨文字：紧跟模型名、「·」相连、无容器，盒子只留给「默认」。
 
 ## 被否 / 搁置
 

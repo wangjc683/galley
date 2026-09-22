@@ -397,18 +397,25 @@ function ConfiguredModelRow({
             >
               {display.title}
             </div>
+            {/* Provider is identity, so it reads as words right after the
+                name in quiet ink — no container (2026-09-22: the grey
+                chip made it a peer of the state badges). Boxes are for
+                state: only 默认 keeps one. */}
+            <span
+              className="max-w-[180px] shrink-0 truncate text-ui-meta text-ink-muted/80"
+              title={model.providerDisplayName}
+            >
+              <span aria-hidden className="mr-2">
+                ·
+              </span>
+              {model.providerDisplayName}
+            </span>
             {isDefault && (
               <span className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-brand/15 bg-brand-soft px-1.5 py-px text-ui-micro leading-4 text-brand-strong">
                 <CheckCircle size={10} weight="fill" />
                 {copy.defaultModel}
               </span>
             )}
-            <span
-              className="inline-flex max-w-[180px] shrink-0 truncate rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-micro leading-4 text-ink-muted/80"
-              title={model.providerDisplayName}
-            >
-              {model.providerDisplayName}
-            </span>
             {/* No reasoning-effort chip on the row (2026-09-22): the
                 composer pill is where the effective tier is read and
                 changed, and a row badge could only show the model
