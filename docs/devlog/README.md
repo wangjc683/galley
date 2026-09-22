@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-09-22
+- [磁盘占用：备份跳过引擎 scratch、LLM 日志加保留期](./2026-09-22-disk-footprint-backup-exclusion-and-log-retention.md) — Windows 用户反馈「备份和缓存」撑爆 C 盘；根因是上游 `llmcore._write_llm_log` 每次调用都把完整 prompt 追加进 `temp/model_responses/`（长会话平方级增长、上游从不删）+ B4 M8 迁移备份整目录抄三份；JC 裁两项都做：备份排除 `managed-ga-state/temp/`（`BACKUP_EXCLUDED_DIRS`）、启动时 `model_responses_prune` 先删 30 天以上再按最旧删到 500 MB 以内（只碰 `model_responses_*.txt`，在 spawn 任何 bridge 之前跑）；顺手修 layout 里从没人写的 `managed-ga-state/model_responses/` 死目录；否掉「数据跟随安装目录」（默认安装目录也在 C 盘、更新会重写）和「数据位置设置」（碰 tauri-plugin-sql 绑死的 app_config_dir，Rule 6 同级风险，JC 裁不进 deferred）；外置零变化
+
 ### 2026-09-18
 - [v0.5.1 发布](./2026-09-18-v0.5.1-release.md) — v0.5.0 后一天，`v0.5.0..HEAD` 12 提交打包 patch：外置 GA 图片输入 + 自动标题修复、对话打磨五条（ask_user 后步号连续 / 代码块改版 / 思考行段距 / 复制 chip / 去 toast）、GA baseline `efb3bc6` → `1b6442f`（JC 裁不拆版、当场审完一起发）、外置模式 Sidebar SOP icon-only（按运行时模式不按容器宽度，内置零变化）；打包门禁 mandatory mac-x64；先 push main 等 check.yml 绿再打 tag；JC 双平台 smoke 后 publish + promote，stable / beta 别名都验到 0.5.1
 - [GA 上游升级 efb3bc6 -> 1b6442f](./2026-09-18-ga-upstream-upgrade-efb3bc6-to-1b6442f.md) — 兑现 v0.5.0 留下的「下次发版再审」，JC 裁决不拆版、和当日 9 提交一起发；10 提交 15 文件 +119/−76，引擎核心只有 `llmcore` / `agentmain` / `ga` / `TMWebDriver` 共 ~30 行：**abort 改查 `_INFLIGHT` 表**（`llmcore` 导入时进程级 hook `urllib3.connection.HTTPConnection.request`，响应头没到也能拆连接，Galley 正收益直接继承）+ `default_context_win` 35000→38000（Galley 钉 90000，只有作分母的 `maxlen_multiplier` 动，工具输出上限再缩 8%）+ tab id `str()` + UA bump + 微信轮询修复（惰性：Galley 钉 agent 模式）；rebase 两处平凡冲突（`0006` × `str(switch_tab_id)`、`0007` × 默认值——和上次同一条线，上游再调默认值还会撞）、8 补丁只漂行号；唯一 Galley 侧代码改动是 `test_managed_ga_llmcore` 的 urllib3 桩补 `connection.HTTPConnection.request`；兼容矩阵 260 passed、bundle mac-x64 162M、drift gate 四面 OK；SOP 第 8 步两模式真任务并入 v0.5.1 draft 烟测

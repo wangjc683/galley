@@ -445,8 +445,11 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing user-facing is unreleased: `v0.5.1` shipped every commit on `main`
-up to its tag. Release-scope truth remains `git log v0.5.1..HEAD`.
+Unreleased since `v0.5.1`: the disk-footprint fix (pre-migration backup skips
+`managed-ga-state/temp/`; `model_responses_*.txt` logs pruned at startup, 30
+days / 500 MB; see
+[devlog](./devlog/2026-09-22-disk-footprint-backup-exclusion-and-log-retention.md)).
+Release-scope truth remains `git log v0.5.1..HEAD`.
 
 Standing follow-ups: the app-update hop `v0.5.0` → `v0.5.1` on an installed
 build (SOP step 10) is owed; the ticket `.scratch/live-run-window/PRD.md`

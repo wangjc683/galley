@@ -277,6 +277,15 @@ Backups of Application Support are expected to restore sessions, managed GA
 state, non-secret model metadata, and encrypted managed model credentials for
 unsigned release builds.
 
+Galley's own pre-migration backup (`app.galley.backup.<utc-timestamp>/`, up to
+three retained) copies the data directory except `managed-ga-state/temp/`, the
+bundled engine's scratch space. That subtree is also the only user-state
+directory Galley prunes: `temp/model_responses/model_responses_*.txt` logs are
+deleted at startup once older than 30 days or beyond a 500 MB total (see
+[code, state, and patches](./managed-ga-runtime/code-state-and-patches.md)).
+On Windows all of this lives under `%APPDATA%\app.galley`; the install
+directory is not involved (2026-09-22 community report about a full C: drive).
+
 The managed-runtime product and upgrade rules live in
 [managed GA runtime](./managed-ga-runtime.md).
 

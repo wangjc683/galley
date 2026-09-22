@@ -14,7 +14,11 @@
 //!   (user downgraded; log + let the plugin no-op).
 //! - On-disk version < latest known → copy data dir to
 //!   `app.galley.backup.<utc-timestamp>/` sibling, then return
-//!   [`BackupOutcome::Backed`].
+//!   [`BackupOutcome::Backed`]. The copy skips
+//!   [`BACKUP_EXCLUDED_DIRS`] (engine scratch such as
+//!   `managed-ga-state/temp/`): the backup exists to roll back a botched
+//!   schema migration, and those directories hold nothing a migration
+//!   can touch.
 //!
 //! Backup failures are surfaced as [`BackupError`]. The Tauri setup
 //! hook in [`crate::run`](crate) turns those into a blocking error
@@ -43,9 +47,19 @@ use crate::app_paths::{self, DB_FILENAME};
 /// next to `app.galley/`).
 const BACKUP_DIR_PREFIX: &str = "app.galley.backup.";
 /// Newest migration backups kept after a successful new backup. Each is
-/// a full data-dir copy (attachments included); unbounded retention
-/// grows by the whole data dir on every schema bump.
+/// a data-dir copy (attachments included, [`BACKUP_EXCLUDED_DIRS`]
+/// skipped); unbounded retention grows by the whole data dir on every
+/// schema bump.
 const BACKUP_RETENTION_COUNT: usize = 3;
+/// Data-dir subtrees the migration backup does not copy, as path
+/// components relative to the data dir. `managed-ga-state/temp/` is the
+/// bundled engine's scratch space: `model_responses_*.txt` LLM logs
+/// (every call appends the full prompt, so long sessions grow it
+/// quadratically), code_run cwd, reflect logs. Nothing in it is read or
+/// written by a schema migration, and on a Windows user's C: drive three
+/// retained copies of it were the largest Galley-owned footprint
+/// (2026-09-22 community report).
+const BACKUP_EXCLUDED_DIRS: &[&[&str]] = &[&["managed-ga-state", "temp"]];
 /// Marker in the data dir recording that the one-shot v0.2.9 cascade
 /// recovery pass has completed; its presence skips backup scanning at
 /// startup.
@@ -579,8 +593,8 @@ pub fn ensure_backup_before_migrate_in(
     // 5. on_disk < latest_version → migration pending → backup.
     let parent = data_dir.parent().ok_or(BackupError::DataDirUnavailable)?;
     let backup_path = parent.join(format!("{BACKUP_DIR_PREFIX}{}", timestamp_now()));
-    let skipped_symlinks =
-        copy_dir_all(data_dir, &backup_path).map_err(|err| BackupError::CopyFailed {
+    let skipped_symlinks = copy_dir_all_excluding(data_dir, &backup_path, BACKUP_EXCLUDED_DIRS)
+        .map_err(|err| BackupError::CopyFailed {
             src: data_dir.to_path_buf(),
             dst: backup_path.clone(),
             message: err.to_string(),
@@ -1027,19 +1041,27 @@ async fn import_goal_rows(conn: &mut sqlx::SqliteConnection) -> Result<u64, sqlx
 /// backup dir name is longer than the data dir's, so deep attachment
 /// paths that fit fine in the data dir would otherwise fail to copy —
 /// and the backup gate then refuses to start Galley (exit 2).
-fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<u64> {
+/// `excluded` names subtrees to leave out, as path components relative
+/// to `src`. An excluded directory is not created on the destination
+/// side either, so a restore from the backup starts with a clean scratch
+/// space instead of a stale partial one.
+fn copy_dir_all_excluding(src: &Path, dst: &Path, excluded: &[&[&str]]) -> io::Result<u64> {
     fs::create_dir_all(dst)?;
+    let excluded: Vec<PathBuf> = excluded
+        .iter()
+        .map(|components| components.iter().collect())
+        .collect();
     #[cfg(windows)]
     {
         let src = fs::canonicalize(src)?;
         let dst = fs::canonicalize(dst)?;
-        copy_dir_all_inner(&src, &dst)
+        copy_dir_all_inner(&src, &dst, Path::new(""), &excluded)
     }
     #[cfg(not(windows))]
-    copy_dir_all_inner(src, dst)
+    copy_dir_all_inner(src, dst, Path::new(""), &excluded)
 }
 
-fn copy_dir_all_inner(src: &Path, dst: &Path) -> io::Result<u64> {
+fn copy_dir_all_inner(src: &Path, dst: &Path, rel: &Path, excluded: &[PathBuf]) -> io::Result<u64> {
     fs::create_dir_all(dst)?;
     let mut skipped_symlinks = 0_u64;
     for entry in fs::read_dir(src)? {
@@ -1047,8 +1069,13 @@ fn copy_dir_all_inner(src: &Path, dst: &Path) -> io::Result<u64> {
         let ty = entry.file_type()?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
+        let entry_rel = rel.join(entry.file_name());
         if ty.is_dir() {
-            skipped_symlinks += copy_dir_all_inner(&from, &to)?;
+            if excluded.iter().any(|ex| ex == &entry_rel) {
+                eprintln!("[backup] skipping excluded dir {}", from.display());
+                continue;
+            }
+            skipped_symlinks += copy_dir_all_inner(&from, &to, &entry_rel, excluded)?;
         } else if ty.is_file() {
             fs::copy(&from, &to)?;
         } else {
@@ -1135,7 +1162,7 @@ mod tests {
         fs::write(src.join("a.txt"), b"hello").unwrap();
         fs::write(src.join("b.txt"), b"world").unwrap();
 
-        copy_dir_all(&src, &dst).unwrap();
+        copy_dir_all_excluding(&src, &dst, &[]).unwrap();
         assert_eq!(fs::read(dst.join("a.txt")).unwrap(), b"hello");
         assert_eq!(fs::read(dst.join("b.txt")).unwrap(), b"world");
     }
@@ -1150,7 +1177,7 @@ mod tests {
         fs::write(src.join("inner/mid.txt"), b"mid").unwrap();
         fs::write(src.join("inner/deep/bottom.txt"), b"bottom").unwrap();
 
-        copy_dir_all(&src, &dst).unwrap();
+        copy_dir_all_excluding(&src, &dst, &[]).unwrap();
         assert_eq!(fs::read(dst.join("top.txt")).unwrap(), b"top");
         assert_eq!(fs::read(dst.join("inner/mid.txt")).unwrap(), b"mid");
         assert_eq!(
@@ -1165,7 +1192,7 @@ mod tests {
         let src = tmp.path().join("src");
         let dst = tmp.path().join("dst");
         fs::create_dir(&src).unwrap();
-        copy_dir_all(&src, &dst).unwrap();
+        copy_dir_all_excluding(&src, &dst, &[]).unwrap();
         assert!(dst.is_dir());
         assert_eq!(fs::read_dir(&dst).unwrap().count(), 0);
     }
@@ -1182,7 +1209,7 @@ mod tests {
                 .unwrap();
 
             let dst = tmp.path().join("dst");
-            let skipped = copy_dir_all(&src, &dst).unwrap();
+            let skipped = copy_dir_all_excluding(&src, &dst, &[]).unwrap();
             // The symlink is deliberately not copied, but the skip must
             // be visible to the caller — a "Backed" report that silently
             // dropped entries would overstate what the backup contains.
@@ -1197,7 +1224,66 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let src = tmp.path().join("nope");
         let dst = tmp.path().join("dst");
-        assert!(copy_dir_all(&src, &dst).is_err());
+        assert!(copy_dir_all_excluding(&src, &dst, &[]).is_err());
+    }
+
+    #[test]
+    fn copy_dir_all_excluding_skips_named_subtree_only() {
+        let tmp = TempDir::new().unwrap();
+        let src = tmp.path().join("src");
+        let dst = tmp.path().join("dst");
+        fs::create_dir_all(src.join("managed-ga-state/temp/model_responses")).unwrap();
+        fs::create_dir_all(src.join("managed-ga-state/memory")).unwrap();
+        fs::create_dir_all(src.join("other/temp")).unwrap();
+        fs::write(
+            src.join("managed-ga-state/temp/model_responses/model_responses_1.txt"),
+            b"log",
+        )
+        .unwrap();
+        fs::write(src.join("managed-ga-state/memory/user.md"), b"memory").unwrap();
+        fs::write(src.join("other/temp/keep.txt"), b"keep").unwrap();
+
+        copy_dir_all_excluding(&src, &dst, BACKUP_EXCLUDED_DIRS).unwrap();
+        assert_eq!(
+            fs::read(dst.join("managed-ga-state/memory/user.md")).unwrap(),
+            b"memory"
+        );
+        // Only the exact `managed-ga-state/temp` path is excluded; a
+        // `temp` dir elsewhere is still copied.
+        assert_eq!(fs::read(dst.join("other/temp/keep.txt")).unwrap(), b"keep");
+        assert!(!dst.join("managed-ga-state/temp").exists());
+    }
+
+    #[test]
+    fn backup_leaves_engine_scratch_out() {
+        let tmp = TempDir::new().unwrap();
+        let data = make_parent_with_data_dir(&tmp);
+        init_db_with_version(&data.join(DB_FILENAME), 5);
+        fs::create_dir_all(data.join("managed-ga-state/temp/model_responses")).unwrap();
+        fs::create_dir_all(data.join("conversation-attachments/s1/m1")).unwrap();
+        fs::write(
+            data.join("managed-ga-state/temp/model_responses/model_responses_1.txt"),
+            b"log",
+        )
+        .unwrap();
+        fs::write(data.join("conversation-attachments/s1/m1/a.png"), b"png").unwrap();
+
+        let out = ensure_backup_before_migrate_in(&data, 9).unwrap();
+        let backup = match out {
+            BackupOutcome::Backed { backup_path, .. } => backup_path,
+            other => panic!("expected Backed, got {other:?}"),
+        };
+        assert!(backup.join(DB_FILENAME).is_file());
+        assert_eq!(
+            fs::read(backup.join("conversation-attachments/s1/m1/a.png")).unwrap(),
+            b"png"
+        );
+        assert!(backup.join("managed-ga-state").is_dir());
+        assert!(!backup.join("managed-ga-state/temp").exists());
+        // The live data dir is untouched.
+        assert!(data
+            .join("managed-ga-state/temp/model_responses/model_responses_1.txt")
+            .is_file());
     }
 
     /// Helper — create a parent + nested data dir layout that mirrors

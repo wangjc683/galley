@@ -51,8 +51,8 @@ Application Support/app.galley/
     memory/                   # the ONLY dir GA reads SOPs from
     sop/                      # vestigial: created but GA never reads it
     skills/                   # vestigial: created but GA never reads it
-    temp/
-    model_responses/
+    temp/                     # engine scratch: code_run cwd, reflect logs
+      model_responses/        # LLM call logs; pruned at startup (30 d / 500 MB)
   managed-model-config/
     generated-mykey.py          # or model-config.json
 ```
@@ -66,6 +66,17 @@ Application Support/app.galley/
 > into `managed-ga-state/memory/`. The empty `sop/` and `skills/` entries above
 > are vestigial layout shells and may be removed; do not treat them as a target
 > for SOP content.
+
+> **`temp/` is not backed up and is the only state Galley deletes.** Upstream
+> `llmcore._write_llm_log` appends the full prompt and raw response of every
+> LLM call to `temp/model_responses/model_responses_<pid>.txt`, and upstream
+> never deletes those files. Galley Core's startup step
+> `model_responses_prune` removes logs older than 30 days, then the oldest
+> until the rest fit in 500 MB (`model_responses_*.txt` only; the
+> `session_names.json` sidecar and anything else in the dir stay). The
+> pre-migration backup (`app.galley.backup.*`) skips `managed-ga-state/temp/`
+> for the same reason: a schema rollback never needs engine scratch. Both
+> are managed-runtime only; attach mode never touches a user-owned `temp/`.
 
 Initial setup may seed default state only when the target file or directory is
 missing. Existing state must not be overwritten:

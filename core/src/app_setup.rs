@@ -31,6 +31,7 @@ pub(crate) fn setup_app(
         return Ok(());
     }
     write_cli_discovery_file();
+    prune_engine_logs(app);
     start_background_services(app);
     #[cfg(target_os = "windows")]
     apply_windows_custom_chrome(app);
@@ -142,7 +143,8 @@ fn fit_window_to_monitor(app: &tauri::App) {
 /// migration with no safety net.
 fn migration_safety_gates(app: &tauri::App, latest_migration_version: i64) {
     // If the on-disk schema is older than the latest we know about, we
-    // copy the entire data dir to a sibling
+    // copy the data dir (minus the bundled engine's scratch space, see
+    // `migration_backup::BACKUP_EXCLUDED_DIRS`) to a sibling
     // `app.galley.backup.<utc-timestamp>/` first.
     match migration_backup::ensure_backup_before_migrate(latest_migration_version) {
         Ok(outcome) => {
@@ -356,6 +358,25 @@ fn write_cli_discovery_file() {
         DiscoveryOutcome::WriteFailed { path, reason } => {
             eprintln!("[discovery] write {} failed: {reason}", path.display());
         }
+    }
+}
+
+/// Retention for the bundled engine's `model_responses_*.txt` LLM logs
+/// (30 days / 500 MB, see `model_responses_prune`). Runs after the
+/// duplicate-instance check and before `start_background_services`,
+/// which is the first thing that can spawn a bridge process: with no
+/// writer alive there is no live log to race. Non-fatal.
+fn prune_engine_logs(app: &tauri::App) {
+    use crate::managed_runtime;
+    match managed_runtime::prune_model_responses_for_app(app.handle()) {
+        Ok(outcome) if outcome.removed_by_age + outcome.removed_by_size + outcome.failed == 0 => {
+            eprintln!(
+                "[model-responses] {} log(s), {} bytes, nothing to prune",
+                outcome.scanned, outcome.remaining_bytes
+            );
+        }
+        Ok(outcome) => eprintln!("[model-responses] {outcome:?}"),
+        Err(e) => eprintln!("[model-responses] prune skipped: {e}"),
     }
 }
 

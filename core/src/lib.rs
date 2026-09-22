@@ -25,6 +25,7 @@ mod managed_prompt;
 pub mod managed_runtime;
 pub mod message_queue;
 pub mod migration_backup;
+pub mod model_responses_prune;
 pub mod notify;
 pub mod path_install;
 mod process_command;

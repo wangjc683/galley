@@ -39,7 +39,7 @@ describe("applyManagedRuntimeDiagnostics", () => {
         sopDir: "/app/managed-ga-state/sop",
         skillsDir: "/app/managed-ga-state/skills",
         tempDir: "/app/managed-ga-state/temp",
-        modelResponsesDir: "/app/managed-ga-state/model_responses",
+        modelResponsesDir: "/app/managed-ga-state/temp/model_responses",
         modelConfigDir: "/app/managed-model-config",
         modelConfigPath: "/app/managed-model-config/mykey.py",
       },

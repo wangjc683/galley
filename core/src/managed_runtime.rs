@@ -129,6 +129,24 @@ pub fn ensure_for_app(app: &AppHandle) -> std::io::Result<ManagedRuntimeDiagnost
     ensure_layout(resolve_resource_root(&resource_dir), app_data_dir)
 }
 
+/// Apply [`crate::model_responses_prune`] retention to the managed
+/// runtime's LLM log directory. Startup-only; see that module for why it
+/// must run before any bridge is spawned.
+pub fn prune_model_responses_for_app(
+    app: &AppHandle,
+) -> std::io::Result<crate::model_responses_prune::PruneOutcome> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))?;
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))?;
+    let paths = layout_paths(resolve_resource_root(&resource_dir), app_data_dir);
+    crate::model_responses_prune::prune_model_responses(&paths.model_responses_dir)
+}
+
 pub fn bridge_cwd_for_app(app: &AppHandle) -> std::io::Result<PathBuf> {
     if cfg!(debug_assertions) {
         Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -328,6 +346,10 @@ struct ManagedLayoutPaths {
 fn layout_paths(resource_root: PathBuf, app_data_dir: PathBuf) -> ManagedLayoutPaths {
     let code_root = resource_root.join("code");
     let state_root = app_data_dir.join("managed-ga-state");
+    // Upstream GA writes its LLM logs under `temp/` (`state_path('temp',
+    // 'model_responses', ...)` in agentmain.py); until 2026-09-22 Galley
+    // created and reported a sibling `managed-ga-state/model_responses/`
+    // that nothing wrote to.
     let model_config_dir = app_data_dir.join("managed-model-config");
     let model_config_path = model_config_dir.join(managed_model_config::GENERATED_CONFIG_FILENAME);
     ManagedLayoutPaths {
@@ -340,7 +362,7 @@ fn layout_paths(resource_root: PathBuf, app_data_dir: PathBuf) -> ManagedLayoutP
         sop_dir: state_root.join("sop"),
         skills_dir: state_root.join("skills"),
         temp_dir: state_root.join("temp"),
-        model_responses_dir: state_root.join("model_responses"),
+        model_responses_dir: state_root.join("temp").join("model_responses"),
         model_config_dir,
         model_config_path,
         state_root,
@@ -416,7 +438,10 @@ mod tests {
             (state_root.join("skills").join("tool.md"), b"skill"),
             (state_root.join("temp").join("scratch.txt"), b"temp"),
             (
-                state_root.join("model_responses").join("trace.jsonl"),
+                state_root
+                    .join("temp")
+                    .join("model_responses")
+                    .join("trace.jsonl"),
                 b"response",
             ),
             (
@@ -450,7 +475,13 @@ mod tests {
             b"temp"
         );
         assert_eq!(
-            fs::read(state_root.join("model_responses").join("trace.jsonl")).expect("response"),
+            fs::read(
+                state_root
+                    .join("temp")
+                    .join("model_responses")
+                    .join("trace.jsonl")
+            )
+            .expect("response"),
             b"response"
         );
     }
