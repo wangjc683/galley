@@ -440,6 +440,19 @@ export interface SetLLMCommand {
   llmIndex: number;
 }
 
+/**
+ * Set or clear this session's reasoning-effort override. Sent by
+ * Galley Core only (the GUI calls the Tauri command
+ * `set_session_reasoning_effort`, Core persists and forwards) —
+ * mirrored here because this file is the ts surface of the full wire
+ * protocol. `value` is a tier or `null` (= follow the model
+ * configuration); the bridge answers with `reasoning_effort_changed`.
+ */
+export interface SetReasoningEffortCommand {
+  kind: "set_reasoning_effort";
+  value: string | null;
+}
+
 export interface ShutdownCommand {
   kind: "shutdown";
 }
@@ -495,6 +508,7 @@ export type IPCCommand =
   | SetApprovalRulesCommand
   | SetYoloModeCommand
   | SetLLMCommand
+  | SetReasoningEffortCommand
   | ShutdownCommand
   | ReinjectToolsCommand
   | AttachPetCommand
