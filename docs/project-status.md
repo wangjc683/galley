@@ -9,14 +9,14 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.5.1`.
-- Git tag / GitHub Release: `v0.5.1` is the current published stable release
-  (tagged at `c4a92531` on 2026-09-18, GitHub Latest).
+- Package version: `0.5.2`.
+- Git tag / GitHub Release: `v0.5.2` is the current published stable release
+  (tagged at `33e5b753` on 2026-09-22, GitHub Latest).
 - Agent API schema: `schemaVersion: 2` (since the Goal v2 rework on
   2026-09-16, first shipped in `v0.5.0`). The server keeps answering `1` for
   every command that did not change; only the `goal` family is `2`-only, and
   the retired v1 goal commands are `unknown_command` under every version.
-- Release tier: stable patch; default update channel points at `v0.5.1`.
+- Release tier: stable patch; default update channel points at `v0.5.2`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `1b6442f` (audited 2026-09-18, first shipped in
   `v0.5.1`) — engine delta is Galley-positive abort-before-headers plus an
@@ -28,6 +28,27 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.5.2` (2026-09-22) is a patch four days after `v0.5.1`, six commits on
+three lines. **Reasoning effort**: a per-session pill right of the model
+pill in the composer (migration 040, IPC `set_reasoning_effort` /
+`reasoning_effort_changed`, additive `SessionBrief.reasoningEffort`).
+**Layered model advanced configuration** (community "set it once for every
+model"): `preset_options` ⊕ `prefs.managed_model_defaults` ⊕ per-model
+overrides merged by Core into the effective `advancedOptions`, migration 042
+with a per-row effective-object invariant, a new `默认高级配置` section at
+the bottom of Settings → 模型, reasoning effort back inside the fold and into
+the defaults, `max` on both protocols, lowercase tier names everywhere, the
+row effort badge removed and the provider name rendered as quiet text.
+**Disk footprint**: pre-migration backups skip `managed-ga-state/temp/`,
+`model_responses_*.txt` pruned at startup (30 days / 500 MB). Graded patch by
+the feature-magnitude rule (a migration alone does not make a minor).
+Neither `runner/` nor `managed-ga/` changed, so the bundled-runtime gate was
+not required. `check.yml` on main had gone red at the pill commit (IPC drift
+gate: the Core-only command lacked its ts mirror); fixed in pre-flight, then
+green on all three targets before the tag. JC smoked the draft; stable
+channel promoted and verified the same session (run 35709073937). Full
+narrative: devlog [2026-09-22-v0.5.2-release](./devlog/2026-09-22-v0.5.2-release.md).
 
 `v0.5.1` (2026-09-18) is a same-day-plus-one patch after `v0.5.0`, twelve
 commits on three lines. **Attach mode**: image input (the runner wraps
@@ -362,15 +383,20 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.5.1` is published and promoted as the live stable release (2026-09-18).
-The default `updates/stable/latest.json` channel points at `v0.5.1`, with the
+`v0.5.2` is published and promoted as the live stable release (2026-09-22).
+The default `updates/stable/latest.json` channel points at `v0.5.2`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. The live verifier passed with `--cache-bust` across all three
 platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). One draft cut; JC
-smoked the draft on macOS Intel and Windows before publish. The bundled-runtime
-gate was mandatory (`managed-ga/` baseline bump and `runner/` changed) and passed
-on `mac-x64`; `check.yml` was green on the release head after the pre-flight
-IPC drift fix.
+smoked the draft before publish. The bundled-runtime gate was not required
+(neither `managed-ga/` nor `runner/` changed); `check.yml` was green on the
+release head after the pre-flight IPC drift fix (ts mirror of
+`set_reasoning_effort`).
+
+`v0.5.1` (2026-09-18) went through the same path: one draft cut, JC smoked
+the draft on macOS Intel and Windows, both channels verified with
+`--cache-bust`. Its bundled-runtime gate was mandatory (`managed-ga/`
+baseline bump and `runner/` changed) and passed on `mac-x64`.
 
 `v0.4.16` (2026-09-16), `v0.4.15` (2026-09-14), `v0.4.14` (2026-09-14), `v0.4.13` (2026-09-09) and
 `v0.4.12` (2026-09-08) went through the same path: one draft cut each, JC
@@ -413,8 +439,9 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): **`v0.5.0` → `v0.5.1` is owed** on an
-   installed build; `v0.4.16` → `v0.5.0` passed (JC confirmed 2026-09-17).
+1. App-update dogfood (SOP step 10): **`v0.5.1` → `v0.5.2` is owed** on an
+   installed build (`v0.5.0` → `v0.5.1` was never reported and is written
+   off); `v0.4.16` → `v0.5.0` passed (JC confirmed 2026-09-17).
    The `v0.4.8` → … → `v0.4.16`
    hops were never explicitly reported and can no longer be run (no older
    build left installed) — write them off next pass unless JC recalls them.
@@ -445,26 +472,12 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Unreleased since `v0.5.1`: the disk-footprint fix (pre-migration backup skips
-`managed-ga-state/temp/`; `model_responses_*.txt` logs pruned at startup, 30
-days / 500 MB; see
-[devlog](./devlog/2026-09-22-disk-footprint-backup-exclusion-and-log-retention.md))
-and the composer per-session reasoning effort (independent EffortPill right
-of the LLM pill, migration 040, IPC `set_reasoning_effort` /
-`reasoning_effort_changed`, additive `SessionBrief.reasoningEffort`; JC's
-second desktop dogfood of the reworked pill is still owed; see
-[devlog](./devlog/2026-09-22-composer-reasoning-effort.md)), and the
-layered model advanced configuration (community "set it once for every
-model": `preset_options` ⊕ `prefs.managed_model_defaults` ⊕ per-model
-overrides, migration 042, new `默认高级配置` section at the bottom of
-Settings → 模型, reasoning effort back inside the fold and into the
-defaults, `max` on both protocols; JC's desktop acceptance is owed; see
-[devlog](./devlog/2026-09-22-layered-model-advanced-config.md)). The next
-release is a **minor** (new migration).
-Release-scope truth remains `git log v0.5.1..HEAD`.
+Nothing unreleased since `v0.5.2` beyond this status sync.
+Release-scope truth remains `git log v0.5.2..HEAD`.
 
-Standing follow-ups: the app-update hop `v0.5.0` → `v0.5.1` on an installed
-build (SOP step 10) is owed; the ticket `.scratch/live-run-window/PRD.md`
+Standing follow-ups: the app-update hop `v0.5.1` → `v0.5.2` on an installed
+build (SOP step 10) is owed, and JC's look at the real-database result of
+migration 042 (Settings → 模型 after the upgrade) with it; the ticket `.scratch/live-run-window/PRD.md`
 stays `ready-for-human` until a few more live runs pass;
 `.scratch/goal-simplify/` is `done`; the "use the whole budget" Goal mode
 and the user-message typography re-review are in
@@ -479,7 +492,7 @@ stay open by JC's ruling, with the #27 commenter still owing a clarification
 of their sidebar / project report; real WeChat end-to-end acceptance of the
 supervisor-side fix is still owed from a machine with a paired WeChat account.
 
-The GA baseline is fully current as of `v0.5.1` (`1b6442f`, audited
+The GA baseline is fully current as of `v0.5.2` (`1b6442f`, audited
 2026-09-18); the next release audits upstream again per the standard
 trigger. Upstream's default-constant line (`default_context_win`) has now
 collided with patch `0007` twice in a row — expect it again.
@@ -526,7 +539,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.5.1 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.5.2 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `1b6442f` (2026-09-18); released builds ship it since `v0.5.1` (`efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -552,7 +565,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.5.1`. For the next release, bump every
+- Current package metadata uses `0.5.2`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
