@@ -219,6 +219,11 @@ function _bridgeFieldsUpdate(
         : (rt?.bridgeError ?? null),
     bridgePid:
       patch.bridgePid !== undefined ? patch.bridgePid : (rt?.bridgePid ?? null),
+    // Reported by the runner, not by the bridge lifecycle — carried
+    // over untouched (a reconnect re-reports on `ready`).
+    reasoningEffort: rt?.reasoningEffort ?? null,
+    configuredReasoningEffort: rt?.configuredReasoningEffort ?? null,
+    reasoningEffortKnown: rt?.reasoningEffortKnown ?? false,
   };
 }
 

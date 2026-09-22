@@ -117,6 +117,40 @@ pub(crate) async fn set_session_approval_mode(
         .map_err(stringify_error)
 }
 
+/// Persist the per-session reasoning-effort override, then push it to
+/// the session's live runner if one exists. Galley Core owns both halves
+/// (Rule 5): the GUI never talks to the bridge for this. A missing runner
+/// is not an error — the next spawn reads the column
+/// (`SpawnArgs::reasoning_effort`). A forward failure is logged, not
+/// rolled back: the DB is authoritative and the runner catches up on
+/// its next spawn.
+#[tauri::command]
+pub(crate) async fn set_session_reasoning_effort(
+    galley: State<'_, SqliteGalley>,
+    manager: State<'_, std::sync::Arc<crate::runner_manager::RunnerManager>>,
+    id: SessionId,
+    value: Option<String>,
+    origin: Origin,
+) -> std::result::Result<SessionBrief, String> {
+    let brief = galley
+        .set_session_reasoning_effort(id.clone(), value, origin)
+        .await
+        .map_err(stringify_error)?;
+    if manager.pid(id.as_str()).await.is_some() {
+        let cmd =
+            crate::ipc::IpcCommand::SetReasoningEffort(crate::ipc::SetReasoningEffortCommand {
+                value: brief.reasoning_effort.clone(),
+            });
+        if let Err(e) = manager.send_command(id.as_str(), &cmd).await {
+            eprintln!(
+                "[reasoning-effort] forward to runner {} failed (DB kept): {e}",
+                id.as_str()
+            );
+        }
+    }
+    Ok(brief)
+}
+
 #[tauri::command]
 pub(crate) async fn delete_session(
     galley: State<'_, SqliteGalley>,

@@ -90,6 +90,12 @@ pub struct SpawnArgs {
     /// forwarded as `--llm-name`; managed GA resolves its model id before
     /// process spawn and clears this field.
     pub llm_key: Option<String>,
+    /// Persisted per-session reasoning-effort override (forwarded as
+    /// `--reasoning-effort`). None = follow the model configuration.
+    /// Galley Core fills it from `sessions.reasoning_effort` so a
+    /// restored or re-spawned session keeps its tier without the GUI
+    /// having to replay anything.
+    pub reasoning_effort: Option<String>,
     /// Extra environment variables passed to the child.
     pub env: Vec<(String, String)>,
 }
@@ -173,6 +179,9 @@ impl RunnerProcess {
         }
         if let Some(ref key) = args.llm_key {
             cmd.args(["--llm-name", key]);
+        }
+        if let Some(ref effort) = args.reasoning_effort {
+            cmd.args(["--reasoning-effort", effort]);
         }
         for (k, v) in &args.env {
             cmd.env(k, v);
@@ -523,6 +532,7 @@ mod tests {
             bridge_cwd: PathBuf::from("/no/such/dir/anywhere"),
             llm_index: None,
             llm_key: None,
+            reasoning_effort: None,
             env: vec![],
         };
         match RunnerProcess::spawn(args).await {
@@ -545,6 +555,7 @@ mod tests {
             bridge_cwd: env::temp_dir(),
             llm_index: None,
             llm_key: None,
+            reasoning_effort: None,
             env: vec![],
         };
         match RunnerProcess::spawn(args).await {

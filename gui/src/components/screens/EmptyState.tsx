@@ -6,6 +6,7 @@ import {
   type ComposerApprovalModeState,
   type ComposerHandle,
   type ComposerLLMOption,
+  type ComposerReasoningEffortState,
   type ImageBlockReason,
 } from "@/components/conversation/Composer";
 import { Epigraph } from "@/components/screens/Epigraph";
@@ -56,6 +57,10 @@ export interface EmptyStateProps {
   /** Approval-mode pill state — EmptyState configures the NEXT new
    * session (pendingApprovalMode), same lifecycle as the LLM pre-pick. */
   approvalMode?: ComposerApprovalModeState;
+  /** Reasoning-effort pill state — same story: it configures the NEXT
+   * new session (pendingReasoningEffort, consumed and always cleared by
+   * createSession). */
+  reasoningEffort?: ComposerReasoningEffortState;
   /**
    * Width mode from the TopBar toggle. EmptyState's hero block tracks
    * the same setting so the toggle has a visible effect even when no
@@ -117,6 +122,7 @@ export function EmptyState({
   requiresModelConfig = false,
   onOpenLLMSwitcher,
   approvalMode,
+  reasoningEffort,
   conversationWidth = "compact",
   conversationFontSize = "standard",
   projectName,
@@ -196,6 +202,7 @@ export function EmptyState({
           requiresModelConfig={requiresModelConfig}
           onOpenLLMSwitcher={onOpenLLMSwitcher}
           approvalMode={approvalMode}
+          reasoningEffort={reasoningEffort}
           imagesEnabled={imagesEnabled}
           onImageBlocked={onImageBlocked}
           onTextDropBlocked={onTextDropBlocked}

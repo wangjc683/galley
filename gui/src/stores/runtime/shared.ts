@@ -51,6 +51,27 @@ export interface PerSessionRuntime {
   bridgeStatus: BridgeStatus;
   bridgeError: string | null;
   bridgePid: number | null;
+  /**
+   * Reasoning effort in force on the live backend, as last reported by
+   * the runner (`ready` / `llm_changed` / `reasoning_effort_changed`).
+   * null = no parameter is sent and the provider decides.
+   */
+  reasoningEffort: string | null;
+  /**
+   * The tier the selected model's configuration carries, read by the
+   * runner before it replayed the session override. This is what the
+   * composer row compares against to tell deviation from following.
+   */
+  configuredReasoningEffort: string | null;
+  /**
+   * True once any runner event reported the pair above. Both values are
+   * legitimately null (nothing set anywhere), and Core drops nulls off
+   * the wire, so presence can't be read off the payload — the flag is
+   * set by the event arriving at all. The composer pill does NOT wait
+   * for it (`resolveConfiguredEffort`): the flag only says whether the
+   * report outranks what the managed model configuration shows.
+   */
+  reasoningEffortKnown: boolean;
 }
 
 /**

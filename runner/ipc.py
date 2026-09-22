@@ -16,6 +16,21 @@ from typing import Any, cast
 
 PROTOCOL_VERSION = "0.1"
 
+# Accepted reasoning-effort tiers on the wire (`set_reasoning_effort`,
+# `--reasoning-effort`). Mirrors upstream GA's own enum; None / absent
+# means "follow the model configuration". The GUI only offers a subset —
+# the wire domain stays the full set so a Settings-level value can be
+# reported back unchanged.
+REASONING_EFFORT_TIERS = (
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+)
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -43,6 +58,13 @@ class ReadyEvent:
     # true when the current client is upstream's NativeToolClient (see
     # ga_session.supports_image_input). Additive since 2026-09-18.
     imagesSupported: bool = True
+    # Session-scoped reasoning effort (additive since 2026-09-22).
+    # `reasoningEffort` is the value in force on the active backend
+    # after the session override was replayed; `configuredReasoningEffort`
+    # is what the backend carried *before* the replay, i.e. what the
+    # model configuration set (None = follow the provider default).
+    reasoningEffort: str | None = None
+    configuredReasoningEffort: str | None = None
     timestamp: str = field(default_factory=_now_iso)
     kind: str = "ready"
 
@@ -218,8 +240,32 @@ class LLMChangedEvent:
     # Re-evaluated after the switch: the new client may not be able to
     # receive images (see ReadyEvent.imagesSupported).
     imagesSupported: bool = True
+    # Re-read after the switch: GA's next_llm() rebuilds the client, so
+    # the override is replayed onto the new backend and the model-level
+    # value belongs to the new model (see ReadyEvent for the semantics).
+    reasoningEffort: str | None = None
+    configuredReasoningEffort: str | None = None
     timestamp: str = field(default_factory=_now_iso)
     kind: str = "llm_changed"
+
+
+@dataclass
+class ReasoningEffortChangedEvent:
+    """Bridge confirmation that a `set_reasoning_effort` command was
+    applied to the session's active backend.
+
+    `reasoningEffort` is the value in force after the write (override,
+    or the memorized model-level value when the override was cleared);
+    `configuredReasoningEffort` is the model-level value the backend
+    carried before any Galley override touched it. Both may be None —
+    None means "send no parameter, follow the provider default".
+    """
+
+    sessionId: str
+    reasoningEffort: str | None = None
+    configuredReasoningEffort: str | None = None
+    timestamp: str = field(default_factory=_now_iso)
+    kind: str = "reasoning_effort_changed"
 
 
 @dataclass
@@ -317,6 +363,7 @@ Event = (
     | ErrorEvent
     | HistoryLoadedEvent
     | LLMChangedEvent
+    | ReasoningEffortChangedEvent
     | ToolsReinjectedEvent
     | PetAttachedEvent
     | PetDetachedEvent
@@ -393,6 +440,21 @@ class SetLLMCommand:
 
 
 @dataclass
+class SetReasoningEffortCommand:
+    """Set (or clear) this session's reasoning-effort override.
+
+    `value` is one of REASONING_EFFORT_TIERS, or None to fall back to
+    whatever the model configuration set. Galley Core owns the stored
+    value and forwards it here; the bridge replays it onto the active
+    backend — the same in-process, never-persisted write upstream's
+    `/session.reasoning_effort=<tier>` slash command performs.
+    """
+
+    value: str | None = None
+    kind: str = "set_reasoning_effort"
+
+
+@dataclass
 class ShutdownCommand:
     kind: str = "shutdown"
 
@@ -458,6 +520,7 @@ Command = (
     | SetApprovalRulesCommand
     | SetYoloModeCommand
     | SetLLMCommand
+    | SetReasoningEffortCommand
     | ShutdownCommand
     | ReinjectToolsCommand
     | AttachPetCommand
@@ -483,6 +546,7 @@ EVENT_KINDS: dict[str, type] = {
     "error": ErrorEvent,
     "history_loaded": HistoryLoadedEvent,
     "llm_changed": LLMChangedEvent,
+    "reasoning_effort_changed": ReasoningEffortChangedEvent,
     "tools_reinjected": ToolsReinjectedEvent,
     "pet_attached": PetAttachedEvent,
     "pet_detached": PetDetachedEvent,
@@ -499,6 +563,7 @@ COMMAND_KINDS: dict[str, type] = {
     "set_approval_rules": SetApprovalRulesCommand,
     "set_yolo_mode": SetYoloModeCommand,
     "set_llm": SetLLMCommand,
+    "set_reasoning_effort": SetReasoningEffortCommand,
     "shutdown": ShutdownCommand,
     "reinject_tools": ReinjectToolsCommand,
     "attach_pet": AttachPetCommand,

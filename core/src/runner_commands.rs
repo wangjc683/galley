@@ -45,7 +45,7 @@
 //! parse and pattern-match on the `error` discriminant — same convention
 //! as B1's [`list_sessions`].
 
-use crate::api::{ManagedModelAuthKind, ManagedModelProtocol, RuntimeKind};
+use crate::api::{GalleyApi, ManagedModelAuthKind, ManagedModelProtocol, RuntimeKind};
 use crate::db::SqliteGalley;
 use crate::ipc::IpcCommand;
 use crate::runner_manager::{
@@ -113,6 +113,9 @@ impl From<SpawnRunnerArgs> for SpawnArgs {
             bridge_cwd: PathBuf::from(args.bridge_cwd),
             llm_index: args.llm_index,
             llm_key: args.llm_key,
+            // Filled by `spawn_runner` from the session row; the GUI
+            // payload never carries it (Core-owned state).
+            reasoning_effort: None,
             env: args.env,
         }
     }
@@ -377,6 +380,16 @@ pub async fn spawn_runner(
     let session_id = args.session_id.clone();
     let runtime_kind = args.runtime_kind.unwrap_or(RuntimeKind::External);
     let mut spawn_args: SpawnArgs = args.into();
+    // Per-session reasoning-effort override lives in the DB; the runner
+    // gets it as a spawn argument so restore / re-spawn keep the tier.
+    // A missing row (e.g. dev tooling spawning without a session) is
+    // simply "no override".
+    spawn_args.reasoning_effort = app
+        .state::<SqliteGalley>()
+        .session_brief(crate::api::SessionId(session_id.clone()))
+        .await
+        .ok()
+        .and_then(|brief| brief.reasoning_effort);
     let prepare_started_at = Instant::now();
     if runtime_kind == RuntimeKind::Managed {
         spawn_args = prepare_managed_spawn_args(spawn_args, &app)
@@ -661,6 +674,8 @@ mod tests {
                 pid: 1,
                 available_llms: vec![],
                 images_supported: true,
+                reasoning_effort: None,
+                configured_reasoning_effort: None,
                 timestamp: "t".into(),
             }),
         };

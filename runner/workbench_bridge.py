@@ -35,6 +35,7 @@ from runner import _watchdog, managed_runtime, process_command
 from runner.ga_session import GaSession
 from runner.ipc import (
     PROTOCOL_VERSION,
+    REASONING_EFFORT_TIERS,
     AbortCommand,
     ApprovalResponseCommand,
     AskUserEvent,
@@ -51,10 +52,12 @@ from runner.ipc import (
     PetAttachedEvent,
     PetDetachedEvent,
     ReadyEvent,
+    ReasoningEffortChangedEvent,
     ReinjectToolsCommand,
     RunCompleteEvent,
     SetApprovalRulesCommand,
     SetLLMCommand,
+    SetReasoningEffortCommand,
     SetYoloModeCommand,
     ShutdownCommand,
     SystemMessageEvent,
@@ -636,6 +639,24 @@ def _candidate_list(raw: object) -> list[str]:
     return [str(raw)]
 
 
+def _validate_reasoning_effort(value: str | None) -> str | None:
+    """Coerce a startup reasoning-effort value to a known tier.
+
+    An out-of-domain `--reasoning-effort` must not take the session
+    down: warn on stderr and fall back to "follow the model config".
+    The command path validates separately so a bad value there can be
+    reported to the user as a business error.
+    """
+    if value is None or value in REASONING_EFFORT_TIERS:
+        return value
+    print(
+        f"Ignoring unknown --reasoning-effort {value!r}; "
+        f"expected one of {', '.join(REASONING_EFFORT_TIERS)}",
+        file=sys.stderr,
+    )
+    return None
+
+
 class Bridge:
     """One bridge process's runtime state and main loop."""
 
@@ -658,6 +679,7 @@ class Bridge:
         stdout: IO[str],
         stdin: IO[str],
         workspace_root: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.ga_path = ga_path
         self.session_id = session_id
@@ -665,6 +687,16 @@ class Bridge:
         self.workspace_root = workspace_root
         self.llm_no = llm_no
         self.llm_name = llm_name
+        # Session-scoped reasoning-effort override (None = follow the
+        # model configuration). Core owns the stored value: it arrives
+        # as --reasoning-effort at spawn and via set_reasoning_effort
+        # while the session lives.
+        self._reasoning_effort_override = _validate_reasoning_effort(reasoning_effort)
+        # Model-level value read off each backend *before* Galley wrote
+        # its override, keyed by `id(backend)`. GA rebuilds client
+        # objects on next_llm / list_llms, so a new object id means the
+        # configured value is re-read rather than inherited.
+        self._configured_reasoning_effort: dict[int, str | None] = {}
         self._stdout = stdout
         self._stdin = stdin
         self.state = SessionState()
@@ -772,6 +804,10 @@ class Bridge:
         self.agentmain = agentmain
         self.agent = agentmain.GeneraticAgent()
         self.agent.next_llm(self._initial_llm_index())
+        # next_llm may have rebuilt the LLM clients; replay the session
+        # override onto whichever backend is live now. `ready` reports
+        # the outcome (see _emit_ready).
+        self._apply_reasoning_effort()
         if managed_runtime.is_managed_runtime():
             self._install_managed_prompt_profile()
         self._activate_project_workspace()
@@ -836,7 +872,11 @@ class Bridge:
             return self.llm_no
         wanted = self._normalize_llm_name(self.llm_name)
         try:
-            for index, name, _ in self.agent.list_llms():
+            llms = self.agent.list_llms()
+            # list_llms() goes through load_llm_sessions() and can
+            # rebuild every client object, dropping the override.
+            self._apply_reasoning_effort()
+            for index, name, _ in llms:
                 if self._normalize_llm_name(name) == wanted:
                     return int(index)
         except Exception as e:
@@ -880,6 +920,52 @@ class Bridge:
         # image wrapper armed; drop it so the next task cannot inherit
         # this task's images.
         self.ga.disarm_image_delivery()
+
+    def _apply_reasoning_effort(self) -> tuple[str | None, str | None]:
+        """Replay this session's reasoning-effort override onto the
+        active backend and report `(effective, configured)`.
+
+        `configured` is the model-level value the backend carried before
+        Galley wrote anything — memorized per backend object, because a
+        second read after the write would just hand back the override.
+        `effective` is what the backend carries after the write: the
+        override when set, otherwise the memorized model-level value
+        (so clearing the override restores the model's own setting).
+
+        Never raises: a missing backend or a backend that refuses the
+        attribute is reported as a business error and the session
+        continues with whatever the model configuration says.
+        """
+        # `id(backend)` keys the memo: GA rebuilds client objects in
+        # __init__ / next_llm / list_llms, and a fresh object carries
+        # the model config's own value again. Entries are kept for
+        # every backend seen (switching back to an earlier LLM must
+        # not re-read a value Galley has already overwritten).
+        backend_id = self.ga.active_backend_id()
+        if backend_id is None:
+            if self._reasoning_effort_override is not None:
+                self._emit_error(
+                    "No active LLM backend to apply the reasoning effort to",
+                    None,
+                    category="business",
+                    context="set_reasoning_effort",
+                )
+            return None, None
+        if backend_id not in self._configured_reasoning_effort:
+            self._configured_reasoning_effort[backend_id] = self.ga.reasoning_effort()
+        configured = self._configured_reasoning_effort[backend_id]
+        override = self._reasoning_effort_override
+        target = override if override is not None else configured
+        try:
+            self.ga.set_reasoning_effort(target)
+        except Exception as e:
+            self._emit_error(
+                f"Could not apply reasoning effort {target!r}: {e}",
+                traceback.format_exc(),
+                category="business",
+                context="set_reasoning_effort",
+            )
+        return self.ga.reasoning_effort(), configured
 
     def _images_supported(self) -> bool:
         """Wire value for `ready` / `llm_changed`. The bundled runtime
@@ -1156,6 +1242,11 @@ class Bridge:
 
     def _emit_ready(self) -> None:
         ga_commit, ga_commit_date = _resolve_ga_commit(self.ga_path)
+        # _collect_available_llms() calls list_llms() and re-applies the
+        # override itself; read the resulting values after it so `ready`
+        # reports the backend that is actually live.
+        available_llms = self._collect_available_llms()
+        effort, configured_effort = self._apply_reasoning_effort()
         self._emit(
             ReadyEvent(
                 sessionId=self.session_id,
@@ -1166,8 +1257,10 @@ class Bridge:
                 llmName=self.agent.get_llm_name(),
                 cwd=os.getcwd(),
                 pid=os.getpid(),
-                availableLLMs=self._collect_available_llms(),
+                availableLLMs=available_llms,
                 imagesSupported=self._images_supported(),
+                reasoningEffort=effort,
+                configuredReasoningEffort=configured_effort,
             )
         )
 
@@ -1175,7 +1268,12 @@ class Bridge:
         """Snapshot the agent's LLM list for the Composer LLM switcher."""
         out: list[dict[str, Any]] = []
         try:
-            for index, name, is_current in self.agent.list_llms():
+            llms = self.agent.list_llms()
+            # Same rebuild hazard as _initial_llm_index: replay first,
+            # so a caller reading the effort right after us sees the
+            # override, not the rebuilt backend's config value.
+            self._apply_reasoning_effort()
+            for index, name, is_current in llms:
                 out.append(
                     {
                         "index": index,
@@ -1691,6 +1789,8 @@ class Bridge:
             self.state.yolo_mode = cmd.enabled
         elif isinstance(cmd, SetLLMCommand):
             self._handle_set_llm(cmd)
+        elif isinstance(cmd, SetReasoningEffortCommand):
+            self._handle_set_reasoning_effort(cmd)
         elif isinstance(cmd, ReinjectToolsCommand):
             self._handle_reinject_tools()
         elif isinstance(cmd, AttachPetCommand):
@@ -1749,6 +1849,9 @@ class Bridge:
                 context="set_llm",
             )
             return
+        # The override survives a model switch (PRD §2.7): replay it on
+        # the new backend before reporting the switch.
+        effort, configured_effort = self._apply_reasoning_effort()
         raw_name = self.agent.get_llm_name()
         self._emit(
             LLMChangedEvent(
@@ -1757,6 +1860,36 @@ class Bridge:
                 name=raw_name,
                 displayName=_llm_display_name(raw_name),
                 imagesSupported=self._images_supported(),
+                reasoningEffort=effort,
+                configuredReasoningEffort=configured_effort,
+            )
+        )
+
+    # ---------------- Reasoning effort ----------------
+
+    def _handle_set_reasoning_effort(self, cmd: SetReasoningEffortCommand) -> None:
+        """Set or clear the session's reasoning-effort override.
+
+        Allowed mid-run on purpose (PRD §2.6): the backend reads the
+        attribute when it builds the next request, so a dial turned
+        during a long run takes effect on the engine's next LLM call.
+        """
+        if cmd.value is not None and cmd.value not in REASONING_EFFORT_TIERS:
+            self._emit_error(
+                f"Unknown reasoning effort {cmd.value!r}; expected one of "
+                f"{', '.join(REASONING_EFFORT_TIERS)} or null",
+                None,
+                category="business",
+                context="set_reasoning_effort",
+            )
+            return
+        self._reasoning_effort_override = cmd.value
+        effort, configured_effort = self._apply_reasoning_effort()
+        self._emit(
+            ReasoningEffortChangedEvent(
+                sessionId=self.session_id,
+                reasoningEffort=effort,
+                configuredReasoningEffort=configured_effort,
             )
         )
 
@@ -2169,6 +2302,9 @@ def main() -> int:
     parser.add_argument("--workspace-root", default=None)
     parser.add_argument("--llm-no", type=int, default=0)
     parser.add_argument("--llm-name", default=None)
+    # Session-scoped reasoning effort from the session row (Core owns
+    # it). Omitted / absent means "follow the model configuration".
+    parser.add_argument("--reasoning-effort", default=None)
     args = parser.parse_args()
     _watchdog.start_parent_watchdog(
         _watchdog.parse_core_pid(),
@@ -2195,6 +2331,7 @@ def main() -> int:
         stdout=real_stdout,
         stdin=real_stdin,
         workspace_root=args.workspace_root,
+        reasoning_effort=args.reasoning_effort,
     )
     try:
         bridge.start()

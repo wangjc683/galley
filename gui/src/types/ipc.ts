@@ -95,6 +95,14 @@ export interface ReadyEvent {
    * Absent on older runners that predate the capability report — read it
    * as `?? true` so the composer keeps accepting images. */
   imagesSupported?: boolean;
+  /** Reasoning effort actually in force on the active backend after the
+   * runner replayed the session override. Absent / null = no parameter
+   * is sent and the provider decides. */
+  reasoningEffort?: string | null;
+  /** The tier the model configuration itself carries, read before the
+   * override was replayed — lets the composer tell "deviating from the
+   * model" from "following it". Absent / null = the model sets none. */
+  configuredReasoningEffort?: string | null;
   timestamp: string;
 }
 
@@ -258,6 +266,24 @@ export interface LLMChangedEvent {
   /** Same capability report as {@link ReadyEvent.imagesSupported} —
    * re-sent because switching the LLM can change what the backend takes. */
   imagesSupported?: boolean;
+  /** Same pair as on {@link ReadyEvent} — re-sent because the override
+   * was replayed onto the new backend and its configured tier may
+   * differ from the previous model's. */
+  reasoningEffort?: string | null;
+  configuredReasoningEffort?: string | null;
+  timestamp: string;
+}
+
+/**
+ * Runner confirmation that a `set_reasoning_effort` command landed on
+ * the active backend. Carries the same pair as {@link ReadyEvent} so the
+ * composer row can re-derive its highlight from one shape.
+ */
+export interface ReasoningEffortChangedEvent {
+  kind: "reasoning_effort_changed";
+  sessionId: string;
+  reasoningEffort?: string | null;
+  configuredReasoningEffort?: string | null;
   timestamp: string;
 }
 
@@ -345,6 +371,7 @@ export type IPCEvent =
   | ErrorEvent
   | HistoryLoadedEvent
   | LLMChangedEvent
+  | ReasoningEffortChangedEvent
   | ToolsReinjectedEvent
   | PetAttachedEvent
   | PetDetachedEvent

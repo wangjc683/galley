@@ -242,6 +242,20 @@ pub trait GalleyApi: Send + Sync {
         origin: Origin,
     ) -> Result<SessionBrief>;
 
+    /// Set or clear the per-session reasoning-effort override. `value` is
+    /// one of GA's effort tiers (`none` / `minimal` / `low` / `medium` /
+    /// `high` / `xhigh` / `max`) or None (= follow the model
+    /// configuration). Persists only; pushing the value to a live runner
+    /// is the Tauri command's job. Archived sessions are rejected.
+    ///
+    /// **Errors**: `not_found`, `invalid_args` (archived / bad tier).
+    async fn set_session_reasoning_effort(
+        &self,
+        id: SessionId,
+        value: Option<String>,
+        origin: Origin,
+    ) -> Result<SessionBrief>;
+
     /// Permanently delete the session row. FK CASCADE removes the
     /// associated `messages` / `tool_events` rows in the same statement.
     ///

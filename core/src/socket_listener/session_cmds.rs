@@ -818,7 +818,7 @@ pub(super) async fn ensure_session_runner(
         .session_brief(SessionId(session_id.to_string()))
         .await
         .map_err(SocketResponseLite::from_err)?;
-    let spawn_args = super::spawn_config::spawn_args_for_session_new(
+    let mut spawn_args = super::spawn_config::spawn_args_for_session_new(
         galley,
         ctx.app,
         session_id,
@@ -828,6 +828,9 @@ pub(super) async fn ensure_session_runner(
         session.ga_runtime_kind,
     )
     .await?;
+    // Existing session: carry its persisted reasoning-effort override
+    // into the fresh runner (a brand-new session has none).
+    spawn_args.reasoning_effort = session.reasoning_effort.clone();
     let pid = ctx
         .runner
         .spawn(spawn_args, Some(session_id))

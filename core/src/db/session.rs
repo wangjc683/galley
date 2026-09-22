@@ -1,4 +1,12 @@
 use super::*;
+
+/// Accepted `sessions.reasoning_effort` values. Mirrors GA's
+/// `_enum('reasoning_effort', {...})` in `llmcore.py`; the composer only
+/// offers low / medium / high / xhigh, the rest are reachable through
+/// the model configuration and kept here so a persisted value never
+/// has to be rejected on replay.
+pub(crate) const REASONING_EFFORT_TIERS: &[&str] =
+    &["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -850,6 +858,47 @@ impl SqliteGalley {
         let now = chrono_now_iso();
         sqlx::query("UPDATE sessions SET approval_mode = ?, updated_at = ? WHERE id = ?")
             .bind(&mode)
+            .bind(&now)
+            .bind(id.as_str())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        self.session_brief(id).await
+    }
+
+    pub(super) async fn set_session_reasoning_effort_db(
+        &self,
+        id: SessionId,
+        value: Option<String>,
+        _origin: Origin,
+    ) -> Result<SessionBrief> {
+        if let Some(v) = value.as_deref() {
+            if !REASONING_EFFORT_TIERS.contains(&v) {
+                return Err(GalleyError::InvalidArgs {
+                    message: format!(
+                        "reasoning_effort must be one of {} or null; got {v:?}",
+                        REASONING_EFFORT_TIERS.join(" / ")
+                    ),
+                });
+            }
+        }
+        let current_status: Option<String> =
+            sqlx::query_scalar("SELECT status FROM sessions WHERE id = ?")
+                .bind(id.as_str())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+        let status = current_status.ok_or_else(|| GalleyError::NotFound {
+            message: format!("session {id} not found"),
+        })?;
+        if status == "archived" {
+            return Err(GalleyError::InvalidArgs {
+                message: format!("session {id} is archived; cannot change reasoning effort"),
+            });
+        }
+        let now = chrono_now_iso();
+        sqlx::query("UPDATE sessions SET reasoning_effort = ?, updated_at = ? WHERE id = ?")
+            .bind(&value)
             .bind(&now)
             .bind(id.as_str())
             .execute(&self.pool)

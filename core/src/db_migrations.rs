@@ -251,5 +251,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/039_goal_v2.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 40,
+            description: "add sessions.reasoning_effort (per-session override)",
+            sql: include_str!("../migrations/040_session_reasoning_effort.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

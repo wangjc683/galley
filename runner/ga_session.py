@@ -16,6 +16,12 @@ upgrade can silently move:
                                         extend_history / context_usage
 - ``agent.llmclient.backend.raw_ask`` → side_ask (read-only one-shot,
                                         no history write)
+- ``agent.llmclient.backend.reasoning_effort`` → active_backend_id /
+                                        reasoning_effort /
+                                        set_reasoning_effort (session
+                                        override, same in-process write
+                                        as upstream's
+                                        ``/session.reasoning_effort=``)
 - ``agent.llmclient.last_tools``  → clear_last_tools
 - ``agent._ga_project_mode_*``    → set_project_mode (Galley-namespaced,
                                     in-memory only per Rule 1)
@@ -131,6 +137,9 @@ class GaSession:
 
     def __init__(self, agent: Any) -> None:
         self.agent = agent
+        # Backend objects whose id() has been handed out (see
+        # active_backend_id); retained so the id stays unique.
+        self._pinned_backends: dict[int, Any] = {}
 
     # ---------------- turn-end hooks ----------------
     # GA's agent_runner_loop calls each registered hook after every
@@ -379,6 +388,65 @@ class GaSession:
         if limit > 0:
             out["contextLimitChars"] = limit
         return out
+
+    # ---------------- session request options ----------------
+
+    def active_backend_id(self) -> int | None:
+        """Identity of the live backend object, or None when the agent
+        has no client yet.
+
+        GA rebuilds its client objects in three places
+        (``GenericAgent.__init__``, ``next_llm``, ``list_llms`` — all via
+        ``load_llm_sessions``, and only when the model config's mtime
+        moved), so a caller that memorizes per-backend state keys it on
+        this id and re-reads after a rebuild.
+
+        The object is pinned for the life of this session: CPython reuses
+        ``id()`` values once an object is collected, and a rebuilt backend
+        that landed on a freed id would otherwise inherit the memo of the
+        backend Galley had already written to. A handful of retained
+        client objects per session is negligible.
+        """
+        backend = getattr(getattr(self.agent, "llmclient", None), "backend", None)
+        if backend is None:
+            return None
+        self._pinned_backends.setdefault(id(backend), backend)
+        return id(backend)
+
+    def reasoning_effort(self) -> str | None:
+        """The reasoning-effort value the active backend currently
+        carries. None when unset (no parameter is sent) or when there is
+        no live backend — a backend that never had the attribute simply
+        lacks it, so read defensively."""
+        backend = getattr(getattr(self.agent, "llmclient", None), "backend", None)
+        if backend is None:
+            return None
+        value = getattr(backend, "reasoning_effort", None)
+        return None if value is None else str(value)
+
+    def set_reasoning_effort(self, value: str | None) -> bool:
+        """Write the session's reasoning effort onto the active backend.
+
+        This is exactly what upstream's public slash command
+        ``/session.reasoning_effort=high`` does
+        (``agentmain._handle_slash_cmd`` → ``setattr(self.llmclient
+        .backend, k, v)``): process-local, read by the backend at
+        request time, never persisted — so it stays inside Rule 1 for a
+        user-owned GA. ``MixinSession.__setattr__`` forwards it to the
+        routed sessions.
+
+        Returns False when there is no live backend to write to.
+        Exceptions from the backend's own ``__setattr__`` propagate; the
+        caller reports them.
+        """
+        backend = getattr(getattr(self.agent, "llmclient", None), "backend", None)
+        if backend is None:
+            return False
+        # Plain assignment, not setattr(): upstream's slash command uses
+        # setattr only because its key is dynamic. Same write either way,
+        # and MixinSession.__setattr__ still fans it out.
+        backend.reasoning_effort = value
+        return True
 
     # ---------------- Galley-namespaced session state ----------------
 

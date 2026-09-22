@@ -66,6 +66,7 @@ const MIG_036: &str = include_str!("../migrations/036_scheduled_tasks_monthly.sq
 const MIG_037: &str = include_str!("../migrations/037_scheduled_tasks_llm.sql");
 const MIG_038: &str = include_str!("../migrations/038_session_title_source.sql");
 const MIG_039: &str = include_str!("../migrations/039_goal_v2.sql");
+const MIG_040: &str = include_str!("../migrations/040_session_reasoning_effort.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -106,7 +107,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
-        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -617,6 +618,10 @@ async fn migration_039_carries_v1_goals_onto_their_sessions() {
         .execute(&pool)
         .await
         .expect("apply 039");
+    sqlx::raw_sql(MIG_040)
+        .execute(&pool)
+        .await
+        .expect("apply 040");
 
     let galley = SqliteGalley::from_pool(pool.clone());
     let done = galley
@@ -1213,6 +1218,64 @@ async fn set_session_pinned_toggles_flag() {
         .await
         .expect("unpin");
     assert_eq!(unpinned.pinned, Some(false));
+}
+
+// ---------------- reasoning effort ----------------
+
+#[tokio::test]
+async fn set_session_reasoning_effort_round_trip() {
+    let pool = fresh_pool().await;
+    seed_session_idle(&pool, "s1").await;
+    let galley = SqliteGalley::from_pool(pool);
+    // Fresh row: no override, and the field stays out of the JSON.
+    let before = galley.session_brief(sid("s1")).await.expect("brief");
+    assert_eq!(before.reasoning_effort, None);
+    let json = serde_json::to_value(&before).expect("serialize");
+    assert!(json.get("reasoningEffort").is_none());
+
+    let set = galley
+        .set_session_reasoning_effort(sid("s1"), Some("high".into()), Origin::gui())
+        .await
+        .expect("set");
+    assert_eq!(set.reasoning_effort.as_deref(), Some("high"));
+    let json = serde_json::to_value(&set).expect("serialize");
+    assert_eq!(json["reasoningEffort"], "high");
+
+    let cleared = galley
+        .set_session_reasoning_effort(sid("s1"), None, Origin::gui())
+        .await
+        .expect("clear");
+    assert_eq!(cleared.reasoning_effort, None);
+}
+
+#[tokio::test]
+async fn set_session_reasoning_effort_rejects_bad_tier_and_archived() {
+    let pool = fresh_pool().await;
+    seed_session_idle(&pool, "s1").await;
+    let galley = SqliteGalley::from_pool(pool);
+    let err = galley
+        .set_session_reasoning_effort(sid("s1"), Some("ultra".into()), Origin::gui())
+        .await
+        .expect_err("bad tier");
+    assert!(matches!(err, GalleyError::InvalidArgs { .. }));
+    let untouched = galley.session_brief(sid("s1")).await.expect("brief");
+    assert_eq!(untouched.reasoning_effort, None);
+
+    galley
+        .archive_session(sid("s1"), Origin::gui())
+        .await
+        .expect("archive");
+    let err = galley
+        .set_session_reasoning_effort(sid("s1"), Some("low".into()), Origin::gui())
+        .await
+        .expect_err("archived");
+    assert!(matches!(err, GalleyError::InvalidArgs { .. }));
+
+    let err = galley
+        .set_session_reasoning_effort(sid("nope"), Some("low".into()), Origin::gui())
+        .await
+        .expect_err("missing");
+    assert!(matches!(err, GalleyError::NotFound { .. }));
 }
 
 #[tokio::test]

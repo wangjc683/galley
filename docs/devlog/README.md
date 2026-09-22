@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-22
+- [Composer 会话级推理强度](./2026-09-22-composer-reasoning-effort.md) — 社区第二次提「推理强度放输入框」，deferred 启动信号触发；08-07 三条否决理由复盘（作用域错位被 session 级方案推翻、「开工前决策」被用户实际用法推翻、「第三方时灵时不灵」JC 裁一律显示）；v1「LLMPill 弹层里一行四格 + trigger 后缀」真机被否（位置像挂在最后一个模型下、新对话看不到），同日改成 LLMPill 右侧**独立 EffortPill**（chip 永远在、跟随/覆盖靠墨色、竖列弹层、EmptyState 走 pending）；状态与重放归 Core（Tauri 命令写库 + 转发 `set_reasoning_effort`，spawn 传 `--reasoning-effort`，不照抄审批模式的 GUI 侧重放）；内核只在 `__init__` / `next_llm` / `list_llms` 重建 client，runner 在这三处后重放；`configuredReasoningEffort` 由 runner 套用前读取上报，外置零特判；`id()` 复用防护；字形真机裁 A；删 deferred「effort pill」「变体条目引导」两节
 - [磁盘占用：备份跳过引擎 scratch、LLM 日志加保留期](./2026-09-22-disk-footprint-backup-exclusion-and-log-retention.md) — Windows 用户反馈「备份和缓存」撑爆 C 盘；根因是上游 `llmcore._write_llm_log` 每次调用都把完整 prompt 追加进 `temp/model_responses/`（长会话平方级增长、上游从不删）+ B4 M8 迁移备份整目录抄三份；JC 裁两项都做：备份排除 `managed-ga-state/temp/`（`BACKUP_EXCLUDED_DIRS`）、启动时 `model_responses_prune` 先删 30 天以上再按最旧删到 500 MB 以内（只碰 `model_responses_*.txt`，在 spawn 任何 bridge 之前跑）；顺手修 layout 里从没人写的 `managed-ga-state/model_responses/` 死目录；否掉「数据跟随安装目录」（默认安装目录也在 C 盘、更新会重写）和「数据位置设置」（碰 tauri-plugin-sql 绑死的 app_config_dir，Rule 6 同级风险，JC 裁不进 deferred）；外置零变化
 
 ### 2026-09-18

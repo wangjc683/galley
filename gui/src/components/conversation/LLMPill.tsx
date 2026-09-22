@@ -70,6 +70,7 @@ export function LLMPill({
   approvalMode,
   disabled,
   stopMode,
+  phraseLead = false,
 }: {
   llmDisplayName: string;
   llms?: ComposerLLMOption[];
@@ -80,6 +81,15 @@ export function LLMPill({
   approvalMode?: ComposerApprovalModeState;
   disabled: boolean;
   stopMode: boolean;
+  /**
+   * The pill leads a phrase whose next word is the EffortPill
+   * (「⚡ grok-4.7 High ^」, 2026-09-22): drop this pill's own caret —
+   * the phrase carries ONE caret at its end, Codex-style — and tighten
+   * the right padding to a word space (4px) so the two read as one label.
+   * The effort pill mirrors the tight side, so hover boxes stay
+   * disjoint and each half still reveals itself as its own target.
+   */
+  phraseLead?: boolean;
 }) {
   const copy = useCopy();
   const modeCopy = copy.composer.approvalMode;
@@ -89,9 +99,12 @@ export function LLMPill({
       ? modeCopy.autoName
       : modeCopy.approvalName
     : null;
+  // Verb only (2026-09-22): the model name is already on the pill, so
+  // the tooltip no longer repeats it. It survives as the pill's last
+  // affordance signal now that the caret moved to the phrase end.
   const title = stopMode
     ? copy.composer.cannotSwitchRunning
-    : copy.composer.switchCurrent(llmDisplayName);
+    : copy.composer.switchLlm;
   const ariaLabel = currentModeName
     ? `${title} · ${modeCopy.switchTooltip(currentModeName)}`
     : title;
@@ -112,7 +125,8 @@ export function LLMPill({
     "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
     "hover:bg-hover hover:text-ink",
     "outline-none",
-    "rounded-sm px-2.5",
+    "rounded-sm",
+    phraseLead ? "pl-2.5 pr-0.5" : "px-2.5",
     blockOpen &&
       "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-ink-soft active:translate-y-0",
   );
@@ -139,7 +153,9 @@ export function LLMPill({
         >
           {modeIcon}
           <span className="min-w-0 truncate">{llmDisplayName}</span>
-          <CaretUp size={10} weight="thin" className="text-ink-muted" />
+          {!phraseLead && (
+            <CaretUp size={10} weight="thin" className="text-ink-muted" />
+          )}
         </button>
       </TooltipLabel>
     );
@@ -192,7 +208,9 @@ export function LLMPill({
           >
             {modeIcon}
             <span className="min-w-0 truncate">{llmDisplayName}</span>
-            <CaretUp size={10} weight="thin" className="text-ink-muted" />
+            {!phraseLead && (
+              <CaretUp size={10} weight="thin" className="text-ink-muted" />
+            )}
           </button>
         </Popover.Trigger>
       </TooltipLabel>
@@ -215,7 +233,10 @@ export function LLMPill({
           className={cn(
             // Long model lists scroll instead of outgrowing the
             // viewport (conversation.md §4.4).
-            "galley-pop-in z-50 min-w-[200px] max-w-[320px] rounded-md border border-line bg-elevated p-1 shadow-elevated",
+            // No min-width (2026-09-22): the longest model name sets
+            // the width, the action rows are the floor (~110px); a
+            // 160px floor left a 60px blank column beside short names.
+            "galley-pop-in z-50 max-w-[320px] rounded-md border border-line bg-elevated p-1 shadow-elevated",
             "max-h-[min(60vh,360px)] overflow-y-auto outline-none",
           )}
         >
@@ -245,15 +266,13 @@ export function LLMPill({
                     disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
                   )}
                 >
-                  <span className="flex w-3.5 shrink-0 items-center justify-center">
-                    {llm.isCurrent && (
-                      <Check
-                        size={12}
-                        weight="bold"
-                        className="text-brand-strong"
-                      />
-                    )}
-                  </span>
+                  {/* Text flush left, check TRAILING (2026-09-22): a
+                      leading check column reserved 22px on every row
+                      for a glyph only one row draws, and pushed the
+                      text 36px in from the popover edge. Trailing is the
+                      web model-picker convention (ChatGPT / Claude /
+                      Codex / Cursor); the provider label stays before
+                      the check so the check always hugs the right edge. */}
                   <span className="min-w-0 flex-1 truncate">
                     {llm.displayName}
                   </span>
@@ -268,6 +287,13 @@ export function LLMPill({
                     >
                       {providerLabel}
                     </span>
+                  )}
+                  {llm.isCurrent && (
+                    <Check
+                      size={12}
+                      weight="bold"
+                      className="shrink-0 text-brand-strong"
+                    />
                   )}
                 </button>
               </Popover.Close>

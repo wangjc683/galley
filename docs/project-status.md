@@ -448,7 +448,12 @@ Post-release follow-up:
 Unreleased since `v0.5.1`: the disk-footprint fix (pre-migration backup skips
 `managed-ga-state/temp/`; `model_responses_*.txt` logs pruned at startup, 30
 days / 500 MB; see
-[devlog](./devlog/2026-09-22-disk-footprint-backup-exclusion-and-log-retention.md)).
+[devlog](./devlog/2026-09-22-disk-footprint-backup-exclusion-and-log-retention.md))
+and the composer per-session reasoning effort (independent EffortPill right
+of the LLM pill, migration 040, IPC `set_reasoning_effort` /
+`reasoning_effort_changed`, additive `SessionBrief.reasoningEffort`; JC's
+second desktop dogfood of the reworked pill is still owed; see
+[devlog](./devlog/2026-09-22-composer-reasoning-effort.md)).
 Release-scope truth remains `git log v0.5.1..HEAD`.
 
 Standing follow-ups: the app-update hop `v0.5.0` → `v0.5.1` on an installed

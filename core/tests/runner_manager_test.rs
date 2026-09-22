@@ -291,6 +291,7 @@ fn make_args(session_id: &str, bridge_cwd: PathBuf) -> SpawnArgs {
         bridge_cwd,
         llm_index: None,
         llm_key: None,
+        reasoning_effort: None,
         env: vec![],
     }
 }

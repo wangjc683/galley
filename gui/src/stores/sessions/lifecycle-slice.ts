@@ -6,6 +6,7 @@ import {
 } from "@/lib/managed-model-options";
 import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { logPerf, perfNow } from "@/lib/perf";
+import { normalizeEffortOverride } from "@/lib/reasoning-effort";
 import { toDurableStatus } from "@/lib/sessions";
 import { useManagedModelsStore } from "@/stores/managed-models";
 import { useMessagesStore } from "@/stores/messages";
@@ -159,6 +160,17 @@ export interface SessionLifecycleSlice {
     sessionId: string,
     mode: "auto" | "approval" | null,
   ) => void;
+  /**
+   * Set or clear (null) the per-session reasoning-effort override and
+   * persist it. Unlike the approval mode this sends NO bridge command:
+   * Galley Core owns both the write and the push to a live runner
+   * (Rule 5 / PRD 裁决 3), and the next spawn reads the column, so
+   * there is nothing to replay on `ready` either.
+   *
+   * `picked` is what the user clicked — normalised against the model's
+   * configured tier so picking the configured value clears the override.
+   */
+  setSessionReasoningEffort: (sessionId: string, picked: string | null) => void;
   /** Server-side bump on turn_end. Optimistic in-memory update +
    * fire-and-forget invoke. Callers decide whether this turn is user-visible
    * enough to mark unread; intermediate agent-loop steps should only update
@@ -447,6 +459,15 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     if (pendingApprovalMode !== undefined) {
       useRuntimeStore.setState({ pendingApprovalMode: undefined });
     }
+    // Same story for the effort pill's pre-pick (`undefined` =
+    // untouched, `null` = follow the model configuration, a tier =
+    // override). Core forwards the value to the runner / next spawn —
+    // the GUI never talks to the bridge for this.
+    const pendingReasoningEffort =
+      useRuntimeStore.getState().pendingReasoningEffort;
+    if (pendingReasoningEffort !== undefined) {
+      useRuntimeStore.setState({ pendingReasoningEffort: undefined });
+    }
     const newSession: Session = {
       id,
       title: DEFAULT_NEW_SESSION_TITLE,
@@ -461,6 +482,7 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       gaRuntimeKind,
       promptProfile,
       approvalMode: pendingApprovalMode ?? null,
+      reasoningEffort: pendingReasoningEffort ?? null,
       selectedLlmIndex: llmSelection?.index,
       selectedLlmKey: llmSelection?.key,
       selectedLlmDisplayName: llmSelection?.displayName,
@@ -490,6 +512,16 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
         return invoke("set_session_approval_mode", {
           id,
           mode: pendingApprovalMode,
+          origin: GUI_ORIGIN,
+        });
+      })
+      .then(() => {
+        // Only a real tier needs persisting: `null` / `undefined` is
+        // exactly what the freshly created row already holds.
+        if (!pendingReasoningEffort) return;
+        return invoke("set_session_reasoning_effort", {
+          id,
+          value: pendingReasoningEffort,
           origin: GUI_ORIGIN,
         });
       })
@@ -660,6 +692,44 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       .catch((e) =>
         console.debug("[sessions] approval mode bridge sync failed.", e),
       );
+  },
+
+  setSessionReasoningEffort: (sessionId, picked) => {
+    // Override = DEVIATION (same rule as the approval mode): picking
+    // the tier the model configuration already carries writes NULL, so
+    // switching away and back leaves no pinned residue. The configured
+    // tier is whatever the live runner last reported for this session.
+    const configured =
+      useRuntimeStore.getState().byId[sessionId]?.configuredReasoningEffort ??
+      null;
+    const normalized = normalizeEffortOverride(picked, configured);
+    const now = new Date().toISOString();
+    let applied = false;
+    set((state) => {
+      const { sessions, changed } = patchSessionInList(
+        state.sessions,
+        sessionId,
+        (s) => {
+          if (s.status === "archived") return s;
+          applied = true;
+          return { ...s, reasoningEffort: normalized, updatedAt: now };
+        },
+      );
+      return changed ? { sessions } : {};
+    });
+    if (!applied) return;
+    // Core persists and forwards to the live runner in one command —
+    // the GUI must not talk to the bridge for this.
+    void invoke("set_session_reasoning_effort", {
+      id: sessionId,
+      value: normalized,
+      origin: GUI_ORIGIN,
+    }).catch((e) =>
+      console.debug(
+        "[sessions] set_session_reasoning_effort invoke failed.",
+        e,
+      ),
+    );
   },
 
   bumpSessionAfterTurn: (sessionId, summary, stepNumber, markUnread = true) => {
@@ -863,6 +933,10 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
           // Absent (serde skips None) keeps the local value — the GUI
           // is the only writer and patches optimistically on change.
           approvalMode: brief.approvalMode ?? s.approvalMode,
+          // Same absent-keeps-local rule as approvalMode above: Core
+          // drops None off the wire, and the GUI already patched
+          // optimistically when the user picked a tier.
+          reasoningEffort: brief.reasoningEffort ?? s.reasoningEffort,
           // M1.3 llm.set rides the session-updated channel — patch the
           // persisted LLM fields so the Composer pill / Inspector pick
           // up CLI-driven changes immediately.

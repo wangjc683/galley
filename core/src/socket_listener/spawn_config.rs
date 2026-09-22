@@ -45,6 +45,7 @@ pub(super) async fn spawn_args_for_session_new(
             bridge_cwd: PathBuf::new(),
             llm_index: llm_index.map(i64::from),
             llm_key,
+            reasoning_effort: None,
             env: Vec::new(),
         };
         return prepare_managed_spawn_args(args, app)
@@ -82,6 +83,7 @@ pub(super) async fn spawn_args_for_session_new(
         bridge_cwd,
         llm_index: llm_index.map(i64::from),
         llm_key,
+        reasoning_effort: None,
         env: Vec::new(),
     })
 }

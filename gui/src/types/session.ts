@@ -122,6 +122,15 @@ export interface Session {
   approvalMode?: "auto" | "approval" | null;
 
   /**
+   * Per-session reasoning-effort override (`none` / `minimal` / `low` /
+   * `medium` / `high` / `xhigh` / `max`; the composer only offers the
+   * middle four). null / undefined = follow the selected model's
+   * configured tier. Persisted by Core, which also replays it to the
+   * runner — see lib/reasoning-effort.ts for the deviation rule.
+   */
+  reasoningEffort?: string | null;
+
+  /**
    * Last LLM index reported by the runtime. Kept for bridge command
    * compatibility and old rows; restore logic prefers `selectedLlmKey`
    * because indexes drift when model order changes.

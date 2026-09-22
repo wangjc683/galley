@@ -110,17 +110,6 @@
 
 ---
 
-## Composer 里的会话级推理强度切换（effort pill）
-
-- **状态**：暂存（2026-09-08 探讨成型，JC 裁决「不进 Composer」）
-- **提出**：2026-09-08，issue #26 第三步「输入框旁一排切换控件：模型 / 推理强度 / fast」。模型切换已有（LLMPill + 命令面板，`set_llm` 本就 per-session）；差的是推理强度。
-- **启动信号**：JC 自己在对话里频繁想临时调强度；或再有用户提这条。
-- **背景（已查明，别重查）**：内核本来就有运行时覆盖——`/session.reasoning_effort=high` 写在 mykey 模板注释里，`agentmain._handle_slash_cmd` 一行 `setattr(self.llmclient.backend, k, v)`；请求时才读，OpenAI 进 payload `reasoning_effort`，Claude 映射 `output_config.effort`（xhigh → max），`MixinSession.__setattr__` 转发到所有路由节点。Galley Composer 文本直通 `put_task`，bridge 还处理 slash 命令的 `done` 回显，所以**今天在 Galley 里打这条命令就生效**。
-- **方案**：runner 加 IPC 命令做同一行 setattr，回 `session_option_changed`（协议纯增量）；Core session 表加 `reasoning_effort` 列，restore 带回；Composer 在 LLMPill 旁加强度 pill，选项复用 `AdvancedModelOptions` 的协议分档表，初始值取模型配置的推理强度，「默认」= 不发参数。只作用当前 session。
-- **实施要点**：覆盖挂在当前 llmclient 上、不在 agent 上——`set_llm` 切模型不跟随、模型配置保存后 Core 改 marker → GA 重建全部 session 覆盖全丢、GA 不发事件。**状态必须 Galley 持有**，在 `llm_changed` / 重建 / bridge 重连 / restore 后重放；管线抄 `llmIndex`（DB 列、restore、pending 值）。attach 模式改的是 GA session 属性，靠上游公开 slash 命令背书，文档记耦合点。
-- **待定**：Thinking 开关要不要一起上；被否的替代「同模型不同强度存两条模型条目、用现成切换器切」——JC 觉得把配置层的事推给了用户，太复杂。三层都要动，不适合 hotfix。
-- **关联**：[issue #26 model config UX](./2026-09-08-issue-26-model-config-ux.md) · `runner/workbench_bridge.py` `_handle_set_llm` · `managed-ga/code/agentmain.py` `_handle_slash_cmd`
-
 ## OpenAI `service_tier`（fast / priority 档）进高级面板
 
 - **状态**：暂存（2026-09-08 JC 裁决「fast 先不做」）
@@ -198,26 +187,6 @@
   挂）；v1 不进 CLI/Agent API。
 - **待定**：错误气泡入口形态；CLI/Supervisor 发起的轮次是否允许 GUI 重试。
 - **关联**：不撤销已执行工具的世界副作用，文案交代即可。
-
----
-
-## 推理强度 effort 变体条目引导（per-session 档位切换的承接方案）
-
-- **状态**：暂存
-- **提出**：2026-08-07（Composer 快捷切换入口被否后的替代路线，见
-  [reasoning effort](./2026-08-07-reasoning-effort-default-and-badge.md)）
-- **启动信号**：dogfood 中确实高频出现「这个会话想换档」，且手动配变体
-  条目被抱怨绕。
-- **方案**：同一模型配多个 provider/model 条目、仅 `reasoning_effort`
-  不同（如 `gpt-5.6-sol` high / medium 各一条），复用现有 per-session
-  LLM 切换（⌘K → Switch LLM）。产品化方向是在 Models 里提供「添加
-  effort 变体」一键入口，自动复制条目并置档位；行内档位徽章（已落地）
-  负责区分。
-- **待定**：变体条目是否共享凭据引用；显示名自动后缀格式。
-- **关联**：被否的重方案是 per-session transport override（Core →
-  runner IPC → GA session facade `_TRANSPORT_OVERRIDES`），作用域正确
-  但需整条新管道 + Agent API 波及——只有变体条目路线被实测否掉后才
-  值得重启。
 
 ---
 

@@ -137,6 +137,16 @@ export function dispatchIPCEvent(event: IPCEvent): void {
           event.sessionId,
           event.imagesSupported ?? true,
         );
+      // Reasoning effort as the fresh runtime sees it: the effective
+      // tier on the backend plus the tier the model configuration
+      // carries. Record only — the session override was already handed
+      // to the runner as a spawn argument by Core, so there is nothing
+      // to replay from here (PRD 裁决 3). Must run after replaceLLMs,
+      // which is what creates the session's runtime slot.
+      useRuntimeStore.getState().setReasoningEffortReport(event.sessionId, {
+        reasoningEffort: event.reasoningEffort ?? null,
+        configuredReasoningEffort: event.configuredReasoningEffort ?? null,
+      });
       // Sync the user's actual GA HEAD into runtimeInfo so the
       // Settings → Runtime panel shows "GA 版本: cf65515 · 2026-05-11"
       // alongside the workbench-tested baseline. gaCommit/Date are
@@ -219,6 +229,30 @@ export function dispatchIPCEvent(event: IPCEvent): void {
           event.sessionId,
           event.imagesSupported ?? true,
         );
+      // The new model carries its own configured tier, and the runner
+      // replayed the session override onto the new backend — both
+      // halves of the composer row's state can change here.
+      rtStore.setReasoningEffortReport(event.sessionId, {
+        reasoningEffort: event.reasoningEffort ?? null,
+        configuredReasoningEffort: event.configuredReasoningEffort ?? null,
+      });
+      return;
+    }
+
+    case "reasoning_effort_changed": {
+      console.info("[ipc] reasoning_effort_changed", {
+        sessionId: event.sessionId,
+        reasoningEffort: event.reasoningEffort ?? null,
+        configuredReasoningEffort: event.configuredReasoningEffort ?? null,
+      });
+      // Confirmation of a `set_reasoning_effort` Core forwarded. The
+      // composer row already moved (the session override is patched
+      // optimistically); this refreshes the runner's own view, which is
+      // what tells deviation from following after a model switch.
+      useRuntimeStore.getState().setReasoningEffortReport(event.sessionId, {
+        reasoningEffort: event.reasoningEffort ?? null,
+        configuredReasoningEffort: event.configuredReasoningEffort ?? null,
+      });
       return;
     }
 

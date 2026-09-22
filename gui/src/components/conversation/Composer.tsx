@@ -20,6 +20,10 @@ import { ComposerImageStrip } from "@/components/conversation/ComposerImageStrip
 import { ComposerQueueStrip } from "@/components/conversation/ComposerQueueStrip";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
 import {
+  EffortPill,
+  type ComposerReasoningEffortState,
+} from "@/components/conversation/EffortPill";
+import {
   LLMPill,
   type ComposerApprovalModeState,
   type ComposerLLMOption,
@@ -54,6 +58,7 @@ import type {
 
 export type { ComposerLLMOption };
 export type { ComposerApprovalModeState };
+export type { ComposerReasoningEffortState };
 
 // Re-exported so callers wiring `onImageBlocked` keep importing the
 // block-reason contract from the Composer; the type itself now lives with
@@ -94,6 +99,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       requiresModelConfig = false,
       onOpenLLMSwitcher,
       approvalMode,
+      reasoningEffort,
       goal,
       hasActiveGoal = false,
       onGoalSubmit,
@@ -565,17 +571,28 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           )}
 
           <div className="mt-2 flex items-center gap-2">
-            <LLMPill
-              llmDisplayName={llmDisplayName}
-              llms={llms}
-              onSelectLLM={onSelectLLM}
-              llmConfigHint={llmConfigHint}
-              onConfigureModels={onConfigureModels}
-              onOpenLLMSwitcher={onOpenLLMSwitcher}
-              approvalMode={approvalMode}
-              disabled={disabled || stopMode}
-              stopMode={stopMode}
-            />
+            {/* Model + effort form ONE phrase (「⚡ grok-4.7 High ^」):
+                no row gap between them, the model pill drops its caret
+                in `phraseLead` mode and the effort pill carries the
+                phrase's single caret. The effort pill is deliberately
+                NOT gated on `stopMode` / `disabled`: the engine reads
+                the tier per request, so dialing it mid-run is
+                legitimate and lands on the next call. */}
+            <div className="flex min-w-0 items-center">
+              <LLMPill
+                llmDisplayName={llmDisplayName}
+                llms={llms}
+                onSelectLLM={onSelectLLM}
+                llmConfigHint={llmConfigHint}
+                onConfigureModels={onConfigureModels}
+                onOpenLLMSwitcher={onOpenLLMSwitcher}
+                approvalMode={approvalMode}
+                disabled={disabled || stopMode}
+                stopMode={stopMode}
+                phraseLead={reasoningEffort !== undefined}
+              />
+              {reasoningEffort && <EffortPill {...reasoningEffort} />}
+            </div>
             {goal && <GoalContextBadge goal={goal} />}
 
             <div className="ml-auto flex shrink-0 items-center gap-1.5">

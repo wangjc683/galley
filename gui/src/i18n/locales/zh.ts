@@ -417,7 +417,7 @@ export const zhCopy = {
     goalDurationRecommended: "推荐",
     goalDurationNoCeiling: "无上限",
     cannotSwitchRunning: "运行中无法切换 LLM",
-    switchCurrent: (name: string) => `切换 LLM · 当前 ${name}`,
+    switchLlm: "切换 LLM",
     approvalMode: {
       autoName: "自动执行",
       approvalName: "逐步审批",
@@ -425,6 +425,12 @@ export const zhCopy = {
       approvalDescription: "高风险操作先问你",
       switchTo: (name: string) => `改为${name}`,
       switchTooltip: (name: string) => `审批模式 · 当前 ${name}`,
+    },
+    reasoningEffort: {
+      tooltip: "调整推理强度",
+      ariaFollowing: "调整推理强度 · 跟随模型配置",
+      ariaOverride: "调整推理强度 · 本会话覆盖",
+      default: "默认",
     },
     configureModels: "配置模型",
     configureModelBeforeSending: "先配置模型",

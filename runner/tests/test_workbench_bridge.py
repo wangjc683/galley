@@ -22,6 +22,8 @@ from runner.ga_session import message_to_content_blocks as _message_to_content_b
 from runner.ipc import (
     AbortCommand,
     AskUserResponseCommand,
+    SetLLMCommand,
+    SetReasoningEffortCommand,
     ShutdownCommand,
     TurnProgressEvent,
     UserMessageCommand,
@@ -1575,3 +1577,212 @@ def test_images_supported_follows_client_in_attach_mode(
     assert bridge._images_supported() is True
     bridge, _ = _image_bridge(ToolClient(backend=_ImageBackend()))
     assert bridge._images_supported() is False
+
+
+# ---------------- reasoning effort ----------------
+
+
+class _FakeBackend:
+    """Stand-in for a GA session backend.
+
+    `reasoning_effort` stays *absent* until something sets it — a
+    backend whose model config never declared one looks exactly like
+    this, which is why the bridge reads it with getattr.
+    """
+
+    def __init__(self, configured: str | None = None) -> None:
+        if configured is not None:
+            self.reasoning_effort: str | None = configured
+
+
+def _bridge_with_backend(
+    configured: str | None = None,
+    reasoning_effort: str | None = None,
+) -> tuple[Bridge, _FakeBackend]:
+    backend = _FakeBackend(configured)
+    bridge = Bridge(
+        ga_path="/tmp/ga",
+        session_id="s1",
+        cwd=None,
+        llm_no=0,
+        llm_name=None,
+        stdout=StringIO(),
+        stdin=StringIO(),
+        reasoning_effort=reasoning_effort,
+    )
+    client = SimpleNamespace(backend=backend)
+    bridge.agent = SimpleNamespace(
+        llmclient=client,
+        llmclients=[client],
+        get_llm_name=lambda: "NativeClaudeSession/glm-5.1",
+        list_llms=lambda: [(0, "NativeClaudeSession/glm-5.1", True)],
+    )
+    return bridge, backend
+
+
+def test_set_reasoning_effort_writes_backend_and_emits_event() -> None:
+    bridge, backend = _bridge_with_backend()
+
+    bridge.dispatch_command(SetReasoningEffortCommand(value="high"))
+
+    assert backend.reasoning_effort == "high"
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "reasoning_effort_changed"
+    assert event["sessionId"] == "s1"
+    assert event["reasoningEffort"] == "high"
+    # Backend never carried a model-level value.
+    assert event["configuredReasoningEffort"] is None
+
+
+def test_set_reasoning_effort_null_restores_configured_value() -> None:
+    """Clearing the override falls back to the value the model config
+    put on the backend, not to "unset"."""
+    bridge, backend = _bridge_with_backend(configured="medium")
+
+    bridge.dispatch_command(SetReasoningEffortCommand(value="high"))
+    assert backend.reasoning_effort == "high"
+    assert _next_bridge_event(bridge)["reasoningEffort"] == "high"
+
+    # A replay in between must not mistake the override for the
+    # memorized model-level value.
+    assert bridge._apply_reasoning_effort() == ("high", "medium")
+
+    bridge.dispatch_command(SetReasoningEffortCommand(value=None))
+
+    assert backend.reasoning_effort == "medium"
+    event = _next_bridge_event(bridge)
+    assert event["reasoningEffort"] == "medium"
+    assert event["configuredReasoningEffort"] == "medium"
+
+
+def test_set_llm_replays_override_on_the_new_backend() -> None:
+    """GA's next_llm() hands the session a different backend object; the
+    session override rides along and llm_changed reports both values."""
+    first = _FakeBackend()
+    second = _FakeBackend(configured="low")
+    clients = [SimpleNamespace(backend=first), SimpleNamespace(backend=second)]
+    bridge = Bridge(
+        ga_path="/tmp/ga",
+        session_id="s1",
+        cwd=None,
+        llm_no=0,
+        llm_name=None,
+        stdout=StringIO(),
+        stdin=StringIO(),
+        reasoning_effort="high",
+    )
+    agent = SimpleNamespace(
+        llmclient=clients[0],
+        llmclients=clients,
+        get_llm_name=lambda: "NativeOAISession/gpt-5",
+    )
+
+    def _next_llm(index: int) -> None:
+        agent.llmclient = clients[index]
+
+    agent.next_llm = _next_llm
+    bridge.agent = agent
+
+    # Startup replay (stands in for the one right after next_llm in
+    # _setup_ga).
+    assert bridge._apply_reasoning_effort() == ("high", None)
+    assert first.reasoning_effort == "high"
+
+    bridge.dispatch_command(SetLLMCommand(llmIndex=1))
+
+    assert second.reasoning_effort == "high"
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "llm_changed"
+    assert event["reasoningEffort"] == "high"
+    assert event["configuredReasoningEffort"] == "low"
+
+
+def test_set_reasoning_effort_rejects_unknown_tier() -> None:
+    bridge, backend = _bridge_with_backend(configured="medium")
+
+    bridge.dispatch_command(SetReasoningEffortCommand(value="turbo"))
+
+    assert backend.reasoning_effort == "medium"
+    assert bridge._reasoning_effort_override is None
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "error"
+    assert event["category"] == "business"
+    assert event["context"] == "set_reasoning_effort"
+    # No reasoning_effort_changed after a rejected value.
+    assert bridge.event_queue.empty()
+
+
+def test_set_reasoning_effort_allowed_while_run_in_progress() -> None:
+    """PRD §2.6: the dial stays live mid-run — the backend reads the
+    attribute when it builds the next request."""
+    bridge, backend = _bridge_with_backend()
+    bridge.run_in_progress.set()
+
+    bridge.dispatch_command(SetReasoningEffortCommand(value="low"))
+
+    assert backend.reasoning_effort == "low"
+    assert _next_bridge_event(bridge)["kind"] == "reasoning_effort_changed"
+
+
+def test_cli_reasoning_effort_is_applied_and_reported_by_ready() -> None:
+    bridge, backend = _bridge_with_backend(
+        configured="medium", reasoning_effort="xhigh"
+    )
+
+    bridge._emit_ready()
+
+    assert backend.reasoning_effort == "xhigh"
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "ready"
+    assert event["reasoningEffort"] == "xhigh"
+    assert event["configuredReasoningEffort"] == "medium"
+
+
+def test_invalid_cli_reasoning_effort_falls_back_to_model_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bad --reasoning-effort warns and behaves like "not passed"; it
+    must not take the session down at startup."""
+    bridge, backend = _bridge_with_backend(
+        configured="medium", reasoning_effort="turbo"
+    )
+
+    assert bridge._reasoning_effort_override is None
+    assert "turbo" in capsys.readouterr().err
+    assert bridge._apply_reasoning_effort() == ("medium", "medium")
+    assert backend.reasoning_effort == "medium"
+
+
+def test_apply_reasoning_effort_without_backend_stays_quiet_when_unset() -> None:
+    bridge = _new_test_bridge()  # agent is None until start()
+
+    assert bridge._apply_reasoning_effort() == (None, None)
+    assert bridge.event_queue.empty()
+
+
+def test_apply_reasoning_effort_without_backend_reports_a_pending_override() -> None:
+    bridge = _new_test_bridge()
+    bridge._reasoning_effort_override = "high"
+
+    assert bridge._apply_reasoning_effort() == (None, None)
+
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "error"
+    assert event["category"] == "business"
+    assert event["context"] == "set_reasoning_effort"
+
+
+def test_backend_refusing_the_write_reports_a_business_error() -> None:
+    class _StubbornBackend:
+        def __setattr__(self, name: str, value: Any) -> None:
+            raise RuntimeError("read-only session")
+
+    bridge, _ = _bridge_with_backend()
+    bridge.agent.llmclient = SimpleNamespace(backend=_StubbornBackend())
+
+    assert bridge._apply_reasoning_effort() == (None, None)
+
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "error"
+    assert event["category"] == "business"
+    assert event["context"] == "set_reasoning_effort"

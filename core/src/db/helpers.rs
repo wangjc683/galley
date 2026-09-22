@@ -343,6 +343,7 @@ pub(super) async fn insert_session_row_inner(
         ga_runtime_id: input.ga_runtime_id.clone(),
         prompt_profile,
         approval_mode: None,
+        reasoning_effort: None,
     })
 }
 
@@ -569,7 +570,7 @@ pub(super) const SESSIONS_SELECT_COLS: &str =
     pinned, has_unread, last_activity_at, created_at, updated_at, \
     created_via, created_by_supervisor, created_origin_note, \
     llm_index, llm_key, llm_display_name, ga_runtime_kind, ga_runtime_id, prompt_profile, \
-    approval_mode";
+    approval_mode, reasoning_effort";
 
 pub(super) fn chrono_now_iso() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};

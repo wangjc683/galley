@@ -50,9 +50,14 @@ import {
 } from "@/hooks/useActiveSession";
 import { resolveLanguagePreference } from "@/lib/language";
 import { effectiveApprovalMode } from "@/lib/approval-mode";
+import {
+  normalizeEffortOverride,
+  resolveConfiguredEffort,
+} from "@/lib/reasoning-effort";
 import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useBrowserControlStore } from "@/stores/browser-control";
+import { useManagedModelsStore } from "@/stores/managed-models";
 import {
   EMPTY_APPROVALS,
   EMPTY_DECISIONS,
@@ -110,6 +115,9 @@ function App() {
   const setSessionApprovalMode = useSessionsStore(
     (s) => s.setSessionApprovalMode,
   );
+  const setSessionReasoningEffort = useSessionsStore(
+    (s) => s.setSessionReasoningEffort,
+  );
   const projects = useSessionsStore((s) => s.projects);
   const activeProjectFilter = useSessionsStore((s) => s.activeProjectFilter);
   const createProject = useSessionsStore((s) => s.createProject);
@@ -133,6 +141,9 @@ function App() {
   );
   const emptyArchive = useSessionsStore((s) => s.emptyArchive);
   const pendingApprovalMode = useRuntimeStore((s) => s.pendingApprovalMode);
+  const pendingReasoningEffort = useRuntimeStore(
+    (s) => s.pendingReasoningEffort,
+  );
   const selectLLMForNewSession = useRuntimeStore(
     (s) => s.selectLLMForNewSession,
   );
@@ -165,6 +176,20 @@ function App() {
   const [emptyComposerFocusTick, setEmptyComposerFocusTick] = useState(0);
 
   const bridgeStatus = useActiveRuntime((r) => r.bridgeStatus, "idle");
+  // Reasoning effort: the model's configured tier (and whether any
+  // runner has reported it yet) is live runtime state; the override
+  // itself is a persisted session field. The pill does NOT wait for the
+  // report — `resolveConfiguredEffort` falls back to the managed model
+  // configuration so a fresh session shows the right tier from t=0.
+  const reportedReasoningEffort = useActiveRuntime(
+    (r) => r.configuredReasoningEffort,
+    null,
+  );
+  const reasoningEffortKnown = useActiveRuntime(
+    (r) => r.reasoningEffortKnown,
+    false,
+  );
+  const managedModels = useManagedModelsStore((s) => s.models);
   const sendIPCCommand = useRuntimeStore((s) => s.sendIPCCommand);
   const setGAConfig = usePrefsStore((s) => s.setGAConfig);
   const setActiveRuntimeKind = usePrefsStore((s) => s.setActiveRuntimeKind);
@@ -316,6 +341,35 @@ function App() {
           setSessionApprovalMode(activeSessionId, mode),
       }
     : undefined;
+  // Effort pill state (conversation.md §4.4). The "model configuration
+  // value" resolves without waiting for the bridge; the effective tier
+  // is derived from the override + configured pair rather than the
+  // runner's own effective report, so the chip moves on click instead
+  // of waiting for `reasoning_effort_changed` to come back.
+  const selectedModelKey =
+    llms.find((llm) => llm.isCurrent)?.key ?? activeSession?.selectedLlmKey;
+  const configuredReasoningEffort = resolveConfiguredEffort({
+    known: reasoningEffortKnown,
+    reported: reportedReasoningEffort,
+    runtimeKind: activeRuntimeKind,
+    selectedModelKey,
+    managedModels,
+  });
+  // The pill is always there once a model is selected — no flicker in /
+  // out. Without one (managed runtime before any model is configured)
+  // there is nothing to set an effort for.
+  const hasSelectedModel = llms.some((llm) => llm.isCurrent);
+  const mainReasoningEffortState =
+    activeSessionId && hasSelectedModel
+      ? {
+          override: activeSession?.reasoningEffort ?? null,
+          configured: configuredReasoningEffort,
+          effective:
+            activeSession?.reasoningEffort ?? configuredReasoningEffort,
+          onSelect: (value: string | null) =>
+            setSessionReasoningEffort(activeSessionId, value),
+        }
+      : undefined;
   const emptyApprovalModeState = {
     mode: effectiveApprovalMode(pendingApprovalMode, yoloMode),
     onSelectMode: (mode: "auto" | "approval") =>
@@ -324,6 +378,25 @@ function App() {
           mode === (yoloMode ? "auto" : "approval") ? undefined : mode,
       }),
   };
+  // EmptyState's effort pill configures the NEXT session, same
+  // lifecycle as the LLM / approval-mode pre-picks (createSession
+  // consumes and always clears it). Deviation is normalized here
+  // because there is no session row yet for the store action to
+  // normalize against.
+  const emptyReasoningEffortState = hasSelectedModel
+    ? {
+        override: pendingReasoningEffort ?? null,
+        configured: configuredReasoningEffort,
+        effective: pendingReasoningEffort ?? configuredReasoningEffort,
+        onSelect: (value: string | null) =>
+          useRuntimeStore.setState({
+            pendingReasoningEffort: normalizeEffortOverride(
+              value,
+              configuredReasoningEffort,
+            ),
+          }),
+      }
+    : undefined;
   // This session's OPEN goal, if any — the Composer's context badge and
   // the thread's parked tail both key off it.
   const activeSessionGoal = activeSession
@@ -600,6 +673,7 @@ function App() {
                     }}
                     onOpenLLMSwitcher={openLLMSwitcherFallback}
                     approvalMode={emptyApprovalModeState}
+                    reasoningEffort={emptyReasoningEffortState}
                     onGoalSubmit={startGoalFromComposer}
                     hasActiveGoal={goalSlotOccupied}
                     // Optimistic: no bridge exists yet on the empty
@@ -646,6 +720,7 @@ function App() {
                     }}
                     onOpenLLMSwitcher={openLLMSwitcherFallback}
                     approvalMode={mainApprovalModeState}
+                    reasoningEffort={mainReasoningEffortState}
                     goal={activeSessionGoal}
                     hasActiveGoal={goalSlotOccupied}
                     sessionGoals={sessionGoals}

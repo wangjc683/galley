@@ -73,6 +73,7 @@ export interface SessionBriefWire {
   hasUnread?: boolean;
   origin?: Origin;
   approvalMode?: "auto" | "approval" | null;
+  reasoningEffort?: string | null;
   selectedLlmIndex?: number;
   selectedLlmKey?: string;
   selectedLlmDisplayName?: string;
@@ -157,6 +158,7 @@ export function sessionFromBrief(b: SessionBriefWire): Session {
     hasUnread: b.hasUnread ?? false,
     origin: b.origin,
     approvalMode: b.approvalMode ?? null,
+    reasoningEffort: b.reasoningEffort ?? null,
     lastActivityAt: b.lastActivityAt,
     createdAt: b.createdAt,
     updatedAt: b.updatedAt,

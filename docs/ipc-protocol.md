@@ -96,6 +96,7 @@ Bridge 子进程通过 CLI 参数初始化：
 | `--cwd` | 可选 | Legacy escape hatch for explicit runner cwd. Project folders are **not** passed here. Normal Galley spawns omit it so GA can keep using its own runtime/state root. |
 | `--workspace-root` | 可选 | Project Workspace root. When set, bridge asks GA `frontends/workspace_cmd.py` to prepare a Workspace link, sets per-agent Project Mode attributes, and leaves process cwd unchanged. |
 | `--llm-no` | 可选 | 初始 LLM 索引（默认 0） |
+| `--reasoning-effort` | 可选 | 会话级推理强度覆盖的初值（`none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`）。Core 从 `sessions.reasoning_effort` 填入，restore / 重新 spawn 都靠它带回；缺省 = 跟随模型配置。见 §5.14。 |
 
 ```
 desktop                             bridge subprocess
@@ -162,6 +163,8 @@ bridge 启动并完成 GA 初始化后**立刻**发的第一条事件。desktop 
 - `availableLLMs`：所有可用 LLM 的列表。`name` 是 raw 名字。`displayName` 是 UI 标签：external GA 保留完整 raw name；managed GA 使用 Galley 模型配置里的显示名，未设置时使用原始 model id。
 - session 持久化不要只存 `index`：external GA 使用 `name` 作为稳定身份；managed GA 使用 Galley `managed_models.id`，再在启动时解析到当前 index。
 - `imagesSupported`（2026-09-18 additive，缺省视为 `true`）：用户消息里的图片附件能否送达模型。managed GA 恒为 `true`（补丁 0008 让 `put_task(images=)` 变成 content block）；external GA 取决于当前 client——bridge 在 `put_task` 前给 `agent.llmclient.backend.ask` 套一层一次性 wrapper 把图片块追加到本任务第一条 user 消息（镜像上游 `frontends/desktop_bridge.py::_patch_chat_for_images`），只有上游 `NativeToolClient` 的 `backend.ask` 收到的是 block 列表，其余 client 报 `false`。desktop 用它决定 composer 是否开放图片 intake；为 `false` 时仍收到带图消息，bridge 照发文字并 emit 一条 `category: "business"`、`severity: "warning"`、`context: "user_message"` 的 `error` 说明图片未送达。
+
+- `reasoningEffort` / `configuredReasoningEffort`（2026-09-22 additive，缺省 `null`）：当前激活 backend 上生效的推理强度，以及模型配置本身带的档位（bridge 在套用会话覆盖**之前**从 backend 读到的值）。两者相同或都为 `null` 表示会话在跟随模型配置；`null` = 不发该参数、由服务商决定。语义见 §5.14。
 
 desktop 必须验证 `protocolVersion` 与自身一致；不一致应主动 `shutdown`。
 
@@ -429,6 +432,8 @@ GA 在切换时会把 `backend.history` 从旧 client 复制到新 client，**�
 
 `imagesSupported`（2026-09-18 additive，缺省 `true`）按切换后的 client 重新计算，语义同 §4.1；desktop 收到后同步刷新 composer 的图片 intake 开关。
 
+`reasoningEffort` / `configuredReasoningEffort`（2026-09-22 additive，缺省 `null`）：bridge 在 `next_llm` 之后把会话覆盖重放到新 backend 上再上报，语义同 §4.1——切模型不会丢覆盖，但「模型配置值」会随新模型变化。
+
 ### 4.13 `tools_reinjected`
 
 `reinject_tools` 命令完成后发出。bridge 已读取 GA `assets/tool_usable_history.json` 并把其中的工具定义 blocks append 到 `backend.history`。
@@ -514,6 +519,27 @@ bridge 已终止 pet 子进程 + 解除 `_turn_end_hooks` 中对应 entry。
 条件写入（仅当 `title_source` 仍为 seed / derived，CAS 防用户改名竞态），成功后
 经 `session-updated-external` 镜像给 GUI。GUI 的 runner-event 分发器对本事件
 有意 no-op。
+
+### 4.18 `reasoning_effort_changed`
+
+`set_reasoning_effort` 命令（见 5.14）套用到当前 backend 之后发出。
+
+```json
+{
+  "kind": "reasoning_effort_changed",
+  "sessionId": "sess_abc123",
+  "reasoningEffort": "high",
+  "configuredReasoningEffort": "medium",
+  "timestamp": "..."
+}
+```
+
+- `reasoningEffort`：套用后 backend 上生效的档位；`null` = 不发该参数。
+- `configuredReasoningEffort`：该 backend 在任何覆盖之前带的档位（模型配置值），
+  bridge 按 backend 对象身份记忆一次，client 重建后重新读取。
+
+desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / 覆盖」墨色；持久化的
+覆盖值本身由 Core 持有（`sessions.reasoning_effort`），本事件只是运行时回执。
 
 ## 5. Commands (workbench → bridge)
 
@@ -752,6 +778,31 @@ self.system`，所以系统提示的常驻输出要求依然生效——`assets/
   "finalAnswer": "已定位到空指针，修复在 auth.py:42"
 }
 ```
+
+### 5.14 `set_reasoning_effort`
+
+设置或清除**当前会话**的推理强度覆盖。只有 Core 发这条命令（GUI 调 Tauri 命令
+`set_session_reasoning_effort`，Core 写库后转发；runner 不在线则等下次 spawn 用
+`--reasoning-effort` 带上）。bridge 套用后 emit `reasoning_effort_changed`（§4.18）。
+
+```json
+{
+  "kind": "set_reasoning_effort",
+  "value": "high"
+}
+```
+
+- `value`：`none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` 之一，或
+  `null` = 清除覆盖、恢复该 backend 记忆的模型配置值。越界值 emit
+  `category: "business"`、`context: "set_reasoning_effort"` 的 `error`，属性不变。
+- **运行中也接受**：内核在每次请求时才读该属性，本次 run 的下一次 LLM 调用即生效
+  （与 `set_llm` 不同，后者仍只允许 idle 时切换）。
+- 实现 = 上游 slash 命令 `/session.reasoning_effort=<v>` 的同一行语义：
+  `setattr(agent.llmclient.backend, "reasoning_effort", v)`，进程内、不落盘。内核只在
+  `GenericAgent.__init__` / `next_llm` / `list_llms` 三处重建 client（`load_llm_sessions`，
+  仅当模型配置文件 mtime 变了才真重建），bridge 在这三处之后重放覆盖，所以 `set_llm`
+  和保存模型配置都不会把覆盖丢掉。attach / managed 两模式行为一致；attach 模式的
+  依据见 [GA baseline 契约面第 13 项](./ga-baseline.md#contract-surface)。
 
 - `firstUserMessage`：会话首条可见用户消息（Core 端截断 ≤500 字符）
 - `finalAnswer`：可选，本次 run 的 `finalContent` 截断；缺失时 Python 默认 `""`

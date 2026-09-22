@@ -69,6 +69,7 @@ pub enum IpcEvent {
     PetDetached(PetDetachedEvent),
     TitleGenerated(TitleGeneratedEvent),
     SystemMessage(SystemMessageEvent),
+    ReasoningEffortChanged(ReasoningEffortChangedEvent),
 }
 
 impl IpcEvent {
@@ -94,6 +95,7 @@ impl IpcEvent {
             IpcEvent::PetDetached(e) => &e.session_id,
             IpcEvent::TitleGenerated(e) => &e.session_id,
             IpcEvent::SystemMessage(e) => &e.session_id,
+            IpcEvent::ReasoningEffortChanged(e) => &e.session_id,
         }
     }
 }
@@ -123,6 +125,16 @@ pub struct ReadyEvent {
     /// default to `true` so the composer keeps accepting images.
     #[serde(default = "default_true")]
     pub images_supported: bool,
+    /// Effective reasoning effort on the active backend after the runner
+    /// applied the session override (None = provider default, no
+    /// parameter sent). Absent on older runners.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    /// The tier the model configuration itself carries, read before the
+    /// override was applied. Lets the GUI tell "deviating" from
+    /// "following the model".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configured_reasoning_effort: Option<String>,
     pub timestamp: String,
 }
 
@@ -327,6 +339,24 @@ pub struct LlmChangedEvent {
     /// because switching the LLM can change what the backend accepts.
     #[serde(default = "default_true")]
     pub images_supported: bool,
+    /// Same pair as on `ReadyEvent`, re-sent because the override was
+    /// replayed onto the new backend and its configured tier may differ.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configured_reasoning_effort: Option<String>,
+    pub timestamp: String,
+}
+
+/// Emitted after `set_reasoning_effort` was applied to the active backend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasoningEffortChangedEvent {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configured_reasoning_effort: Option<String>,
     pub timestamp: String,
 }
 
@@ -388,6 +418,7 @@ pub enum IpcCommand {
     SetApprovalRules(SetApprovalRulesCommand),
     SetYoloMode(SetYoloModeCommand),
     SetLlm(SetLlmCommand),
+    SetReasoningEffort(SetReasoningEffortCommand),
     Shutdown,
     ReinjectTools,
     AttachPet(AttachPetCommand),
@@ -448,6 +479,16 @@ pub struct SetYoloModeCommand {
 #[serde(rename_all = "camelCase")]
 pub struct SetLlmCommand {
     pub llm_index: i64,
+}
+
+/// Per-session reasoning-effort override. `None` clears the override so
+/// the runner restores the backend's configured tier. Allowed mid-run:
+/// GA reads the attribute at request time, so the next LLM call picks
+/// it up.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetReasoningEffortCommand {
+    pub value: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -512,6 +553,37 @@ mod tests {
         } else {
             panic!("expected Ready");
         }
+    }
+
+    #[test]
+    fn reasoning_effort_fields_round_trip() {
+        let ready = r#"{"kind":"ready","sessionId":"s1","protocolVersion":"0.1","gaCommit":"c","gaCommitDate":"d","gaPath":"/ga","llmName":"l","cwd":"/","pid":1,"availableLLMs":[],"reasoningEffort":"high","configuredReasoningEffort":"medium","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(ready).expect("parse ready");
+        let IpcEvent::Ready(r) = event else {
+            panic!("expected Ready");
+        };
+        assert_eq!(r.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(r.configured_reasoning_effort.as_deref(), Some("medium"));
+
+        let changed = r#"{"kind":"reasoning_effort_changed","sessionId":"s1","reasoningEffort":null,"timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(changed).expect("parse changed");
+        assert_eq!(event.session_id(), "s1");
+        let IpcEvent::ReasoningEffortChanged(e) = event else {
+            panic!("expected ReasoningEffortChanged");
+        };
+        assert!(e.reasoning_effort.is_none());
+        assert!(e.configured_reasoning_effort.is_none());
+
+        let cmd = IpcCommand::SetReasoningEffort(SetReasoningEffortCommand {
+            value: Some("xhigh".into()),
+        });
+        let out = serde_json::to_string(&cmd).unwrap();
+        assert_eq!(out, r#"{"kind":"set_reasoning_effort","value":"xhigh"}"#);
+        let cleared = IpcCommand::SetReasoningEffort(SetReasoningEffortCommand { value: None });
+        assert_eq!(
+            serde_json::to_string(&cleared).unwrap(),
+            r#"{"kind":"set_reasoning_effort","value":null}"#
+        );
     }
 
     #[test]

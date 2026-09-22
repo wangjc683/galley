@@ -730,6 +730,20 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     ignores `task["images"]` — the day it consumes them, drop managed
     patch `0008` and this wrapper together (the wrapper already skips a
     message that carries an image block, so the transition is safe).
+13. `llmclient.backend.reasoning_effort` as a runtime-settable attribute
+    (per-session reasoning effort, 2026-09-22): `GaSession.set_reasoning_effort`
+    assigns `agent.llmclient.backend.reasoning_effort = v`, which is
+    the exact write upstream's slash command `/session.<k>=<v>` runs in
+    `agentmain._handle_slash_cmd`, and `llmcore` reads the attribute at
+    request time (`payload["reasoning_effort"]` / `reasoning.effort` on
+    OpenAI, `output_config.effort` on Claude, `MixinSession.__setattr__`
+    fan-out). The bridge memoizes the pre-override value per backend
+    object and re-applies after every client rebuild point:
+    `GenericAgent.__init__`, `next_llm`, `list_llms` (all via
+    `load_llm_sessions`). Re-check on upgrade that (a) the slash command
+    still sets the attribute the same way, (b) `_enum('reasoning_effort',
+    …)` still accepts `none / minimal / low / medium / high / xhigh / max`,
+    (c) no new rebuild point appeared outside those three.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.

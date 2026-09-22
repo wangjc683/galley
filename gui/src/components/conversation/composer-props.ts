@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { ComposerReasoningEffortState } from "@/components/conversation/EffortPill";
 import type {
   ComposerApprovalModeState,
   ComposerLLMOption,
@@ -113,6 +114,10 @@ export interface ComposerProps {
   /** Approval-mode pill state (自动执行 / 逐步审批). Undefined hides
    * the pill (e.g. dev harness without session context). */
   approvalMode?: ComposerApprovalModeState;
+  /** Reasoning-effort pill state (the independent pill right of the
+   * model picker). Undefined hides the pill — e.g. a dev harness with
+   * no session context, or before any model is selected. */
+  reasoningEffort?: ComposerReasoningEffortState;
   /** This session's open Goal (active / paused / blocked), if any. */
   goal?: GoalBrief;
   /** True when this session already has an open Goal. A session runs at

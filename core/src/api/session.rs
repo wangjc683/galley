@@ -117,6 +117,14 @@ pub struct SessionBrief {
     /// field — agents may ignore it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_mode: Option<String>,
+    /// Per-session reasoning-effort override (`none` / `minimal` / `low` /
+    /// `medium` / `high` / `xhigh` / `max`). Absent / None = the session
+    /// follows the selected model's configured effort. Set from the
+    /// composer LLM pill; Galley Core replays it to the runner on spawn
+    /// and forwards changes to a live runner. Additive read-only field
+    /// for agents (2026-09-22).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
 }
 
 /// Filter / scope for `list_sessions`. All fields optional — None means

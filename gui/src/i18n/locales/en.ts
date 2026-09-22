@@ -443,7 +443,7 @@ export const enCopy: AppCopy = {
     goalDurationRecommended: "Recommended",
     goalDurationNoCeiling: "No ceiling",
     cannotSwitchRunning: "Can't switch LLMs while running",
-    switchCurrent: (name) => `Switch LLM · Current: ${name}`,
+    switchLlm: "Switch LLM",
     approvalMode: {
       autoName: "Auto-run",
       approvalName: "Step approval",
@@ -451,6 +451,12 @@ export const enCopy: AppCopy = {
       approvalDescription: "High-risk actions ask you first",
       switchTo: (name) => `Switch to ${name}`,
       switchTooltip: (name) => `Approval mode · currently ${name}`,
+    },
+    reasoningEffort: {
+      tooltip: "Adjust reasoning effort",
+      ariaFollowing: "Adjust reasoning effort · following the model",
+      ariaOverride: "Adjust reasoning effort · session override",
+      default: "Default",
     },
     configureModels: "Configure models",
     configureModelBeforeSending: "Set up a model first",

@@ -26,6 +26,7 @@ describe("useSessionsStore shape", () => {
       "renameSession",
       "togglePinSession",
       "setSessionApprovalMode",
+      "setSessionReasoningEffort",
       "bumpSessionAfterTurn",
       "setSessionLlm",
       "maybeDeriveTitle",

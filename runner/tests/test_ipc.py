@@ -616,3 +616,109 @@ def test_generate_title_command_round_trip() -> None:
     cmd2 = decode_command('{"kind":"generate_title","firstUserMessage":"hi"}')
     assert isinstance(cmd2, GenerateTitleCommand)
     assert cmd2.finalAnswer == ""
+
+
+# ---------------- reasoning effort ----------------
+
+
+def test_set_reasoning_effort_command_round_trip() -> None:
+    from runner.ipc import SetReasoningEffortCommand
+
+    cmd = SetReasoningEffortCommand(value="high")
+    decoded = decode_command(encode(cmd))
+    assert decoded == cmd
+    assert isinstance(decoded, SetReasoningEffortCommand)
+    assert decoded.value == "high"
+    assert decoded.kind == "set_reasoning_effort"
+
+
+def test_set_reasoning_effort_command_null_and_omitted() -> None:
+    """Core sends an explicit null to clear the override; an omitted
+    `value` must land on the same None default."""
+    from runner.ipc import SetReasoningEffortCommand
+
+    explicit = decode_command('{"kind":"set_reasoning_effort","value":null}')
+    assert isinstance(explicit, SetReasoningEffortCommand)
+    assert explicit.value is None
+
+    omitted = decode_command('{"kind":"set_reasoning_effort"}')
+    assert isinstance(omitted, SetReasoningEffortCommand)
+    assert omitted.value is None
+
+
+def test_reasoning_effort_changed_event_round_trip() -> None:
+    from runner.ipc import ReasoningEffortChangedEvent
+
+    ev = ReasoningEffortChangedEvent(
+        sessionId="s1",
+        reasoningEffort="xhigh",
+        configuredReasoningEffort="medium",
+    )
+    decoded = decode_event(encode(ev))
+    assert decoded == ev
+    assert isinstance(decoded, ReasoningEffortChangedEvent)
+    assert decoded.kind == "reasoning_effort_changed"
+    payload = json.loads(encode(ev))
+    assert payload["reasoningEffort"] == "xhigh"
+    assert payload["configuredReasoningEffort"] == "medium"
+
+
+def test_reasoning_effort_changed_event_nulls_round_trip() -> None:
+    from runner.ipc import ReasoningEffortChangedEvent
+
+    ev = ReasoningEffortChangedEvent(sessionId="s1")
+    decoded = decode_event(encode(ev))
+    assert decoded == ev
+    assert isinstance(decoded, ReasoningEffortChangedEvent)
+    assert decoded.reasoningEffort is None
+    assert decoded.configuredReasoningEffort is None
+
+
+def test_ready_carries_reasoning_effort_fields() -> None:
+    ev = ReadyEvent(
+        sessionId="s1",
+        protocolVersion=PROTOCOL_VERSION,
+        gaCommit="6a3eecc",
+        gaCommitDate="2026-04-29T10:00:00+08:00",
+        gaPath="/tmp/ga",
+        llmName="NativeClaudeSession/glm-5.1",
+        cwd="/tmp/ga/temp",
+        pid=42,
+        reasoningEffort="high",
+        configuredReasoningEffort=None,
+    )
+    decoded = decode_event(encode(ev))
+    assert decoded == ev
+    assert isinstance(decoded, ReadyEvent)
+    assert decoded.reasoningEffort == "high"
+    # Additive fields: a payload without them still decodes.
+    legacy = decode_event(
+        '{"kind":"ready","sessionId":"s1","protocolVersion":"0.1",'
+        '"gaCommit":"6a3eecc","gaCommitDate":"unknown","gaPath":"/tmp/ga",'
+        '"llmName":"x","cwd":"/tmp","pid":1,"timestamp":"t"}'
+    )
+    assert isinstance(legacy, ReadyEvent)
+    assert legacy.reasoningEffort is None
+    assert legacy.configuredReasoningEffort is None
+
+
+def test_llm_changed_carries_reasoning_effort_fields() -> None:
+    ev = LLMChangedEvent(
+        sessionId="s1",
+        index=2,
+        name="NativeOAISession/gpt-4o",
+        displayName="GPT 4o",
+        reasoningEffort="low",
+        configuredReasoningEffort="medium",
+    )
+    decoded = decode_event(encode(ev))
+    assert decoded == ev
+    assert isinstance(decoded, LLMChangedEvent)
+    assert decoded.reasoningEffort == "low"
+    assert decoded.configuredReasoningEffort == "medium"
+    legacy = decode_event(
+        '{"kind":"llm_changed","sessionId":"s1","index":0,"name":"x",'
+        '"displayName":"x","timestamp":"t"}'
+    )
+    assert isinstance(legacy, LLMChangedEvent)
+    assert legacy.reasoningEffort is None

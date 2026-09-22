@@ -165,6 +165,7 @@ pub fn run() {
             rename_session,
             set_session_pinned,
             set_session_approval_mode,
+            set_session_reasoning_effort,
             delete_session,
             assign_session_to_project,
             set_session_llm,

@@ -131,6 +131,16 @@ impl GalleyApi for SqliteGalley {
         self.set_session_approval_mode_db(id, mode, _origin).await
     }
 
+    async fn set_session_reasoning_effort(
+        &self,
+        id: SessionId,
+        value: Option<String>,
+        _origin: Origin,
+    ) -> Result<SessionBrief> {
+        self.set_session_reasoning_effort_db(id, value, _origin)
+            .await
+    }
+
     async fn delete_session(&self, id: SessionId, _origin: Origin) -> Result<()> {
         self.delete_session_db(id, _origin).await
     }

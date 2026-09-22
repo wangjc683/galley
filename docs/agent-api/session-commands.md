@@ -68,6 +68,7 @@ $ galley sessions list --project=proj_demo
 | `gaRuntimeKind`   | string enum     | `managed` / `external`; runtime ownership captured at session creation             |
 | `gaRuntimeId`     | string?         | stable runtime id for future multi-runtime support                                 |
 | `promptProfile`   | string?         | managed prompt profile id, when applied                                            |
+| `reasoningEffort` | string?         | **Additive (2026-09-22).** Per-session reasoning-effort override (`none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`); absent = the session follows the selected model's configured effort. Read-only for agents in this version: set from the composer LLM pill; Galley Core replays it to the runner on spawn and forwards changes to a live runner. An agent that wants a different tier for a session it drives can still type GA's own `/session.reasoning_effort=<tier>` as a message, but that runtime-only change is not reflected here. |
 | `live`            | `LiveRunState`? | **CLI-attached, additive (2026-09-09).** Present on `sessions list` / `session brief` rows when the CLI could reach Galley Core; absent when Core is unreachable or the probe exceeded 3s. Never absent to mean "idle": an idle session under a reachable Core carries an explicit all-false `live`. |
 
 `LiveRunState` fields (from the `sessions.run_state` socket command; the

@@ -59,6 +59,14 @@ export interface LlmSlice {
    */
   pendingApprovalMode: "auto" | "approval" | undefined;
   /**
+   * EmptyState reasoning-effort pre-pick — same lifecycle as
+   * `pendingApprovalMode`: `undefined` = untouched, `null` = explicitly
+   * follow the model configuration, a tier = override the next session.
+   * Consumed (and always cleared) by `sessionsStore.createSession`,
+   * which seeds the new session's override and lets Core forward it.
+   */
+  pendingReasoningEffort: string | null | undefined;
+  /**
    * Idempotence flag for `warmupLLMList` (one-shot bridge spawn at
    * launch to capture the GA mykey.py list before the first user
    * session). Reset by `prefsStore.setGAConfig` cross-store so
@@ -81,6 +89,23 @@ export interface LlmSlice {
    * restart.
    */
   replaceLLMs: (sid: string, llms: LLMOption[]) => void;
+  /**
+   * Record the runner's reasoning-effort report (`ready` /
+   * `llm_changed` / `reasoning_effort_changed`) on the session's slot
+   * and mark it known, so the composer pill can correct what it read
+   * off the model configuration. No-op when the slot doesn't exist yet — every reporting event runs `replaceLLMs`
+   * first (which creates it), and a slot-less session has no pill.
+   *
+   * Read-only mirror: the override itself lives on the session row and
+   * is written through `sessionsStore.setSessionReasoningEffort`.
+   */
+  setReasoningEffortReport: (
+    sid: string,
+    report: {
+      reasoningEffort: string | null;
+      configuredReasoningEffort: string | null;
+    },
+  ) => void;
   /**
    * EmptyState picker stash: pre-bridge LLM choice for the next new
    * session. Bumps `pendingLLMIndex` so activateSession can pass it
@@ -136,6 +161,12 @@ function buildSeedRuntime(seed: RuntimeSeedHints): PerSessionRuntime {
     bridgeStatus: "idle" as BridgeStatus,
     bridgeError: null,
     bridgePid: null,
+    // Effort is a live-backend report: nothing is known until a runner
+    // says so. Meanwhile the composer pill reads the managed model
+    // configuration instead of waiting (`resolveConfiguredEffort`).
+    reasoningEffort: null,
+    configuredReasoningEffort: null,
+    reasoningEffortKnown: false,
   };
   if (cached.length === 0) {
     return {
@@ -261,6 +292,7 @@ export const createLlmSlice: RuntimeSliceCreator<LlmSlice> = (set, get) => ({
   cachedLLMDisplayName: "",
   pendingLLMIndex: undefined,
   pendingApprovalMode: undefined,
+  pendingReasoningEffort: undefined,
   _warmupComplete: false,
 
   ensureRuntime: (sid, seed) =>
@@ -284,6 +316,9 @@ export const createLlmSlice: RuntimeSliceCreator<LlmSlice> = (set, get) => ({
         bridgeStatus: existing?.bridgeStatus ?? "idle",
         bridgeError: existing?.bridgeError ?? null,
         bridgePid: existing?.bridgePid ?? null,
+        reasoningEffort: existing?.reasoningEffort ?? null,
+        configuredReasoningEffort: existing?.configuredReasoningEffort ?? null,
+        reasoningEffortKnown: existing?.reasoningEffortKnown ?? false,
       };
       // Refresh the cross-session cache too — the freshly arrived
       // list is also a valid snapshot for any future un-seeded
@@ -317,6 +352,30 @@ export const createLlmSlice: RuntimeSliceCreator<LlmSlice> = (set, get) => ({
       });
     }
   },
+
+  setReasoningEffortReport: (sid, report) =>
+    set((state) => {
+      const existing = state.byId[sid];
+      if (!existing) return {};
+      if (
+        existing.reasoningEffortKnown &&
+        existing.reasoningEffort === report.reasoningEffort &&
+        existing.configuredReasoningEffort === report.configuredReasoningEffort
+      ) {
+        return {};
+      }
+      return {
+        byId: {
+          ...state.byId,
+          [sid]: {
+            ...existing,
+            reasoningEffort: report.reasoningEffort,
+            configuredReasoningEffort: report.configuredReasoningEffort,
+            reasoningEffortKnown: true,
+          },
+        },
+      };
+    }),
 
   selectLLMForNewSession: (index) =>
     set((state) => {
@@ -360,6 +419,11 @@ export const createLlmSlice: RuntimeSliceCreator<LlmSlice> = (set, get) => ({
         bridgeStatus: existing?.bridgeStatus ?? "idle",
         bridgeError: existing?.bridgeError ?? null,
         bridgePid: existing?.bridgePid ?? null,
+        // An optimistic model switch tells us nothing new about effort;
+        // the runner re-reports the pair on `llm_changed`.
+        reasoningEffort: existing?.reasoningEffort ?? null,
+        configuredReasoningEffort: existing?.configuredReasoningEffort ?? null,
+        reasoningEffortKnown: existing?.reasoningEffortKnown ?? false,
       };
       return {
         byId: { ...state.byId, [sid]: next },

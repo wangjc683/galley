@@ -7,6 +7,7 @@ import {
   Composer,
   type ComposerApprovalModeState,
   type ComposerLLMOption,
+  type ComposerReasoningEffortState,
   type ImageBlockReason,
 } from "@/components/conversation/Composer";
 import {
@@ -113,6 +114,9 @@ export interface MainViewProps {
   onOpenLLMSwitcher?: () => void;
   /** Approval-mode pill state for this session's Composer. */
   approvalMode?: ComposerApprovalModeState;
+  /** Reasoning-effort pill state for this session's Composer (the
+   * independent pill right of the model picker). */
+  reasoningEffort?: ComposerReasoningEffortState;
   /** This session's open Goal (active / paused / blocked), if any. */
   goal?: GoalBrief;
   /** True when this session already has an open Goal — gates the
@@ -206,6 +210,7 @@ function MainViewContent({
   requiresModelConfig = false,
   onOpenLLMSwitcher,
   approvalMode,
+  reasoningEffort,
   goal,
   hasActiveGoal,
   sessionGoals,
@@ -731,6 +736,7 @@ function MainViewContent({
             requiresModelConfig={requiresModelConfig}
             onOpenLLMSwitcher={onOpenLLMSwitcher}
             approvalMode={approvalMode}
+            reasoningEffort={reasoningEffort}
             goal={goal}
             hasActiveGoal={hasActiveGoal}
             showFooterHint
