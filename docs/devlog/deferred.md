@@ -576,5 +576,22 @@
 - **启动信号**：下一次改动任何预设的 `advancedOptions`（比如再调 `DEFAULT_CONTEXT_WIN` 或给某中转加 `api_key_header`），或有用户把服务商 URL 改到不再匹配预设后投诉行为不对。
 - **背景**：preset 层在创建时由 GUI 从预设写入，之后不动；预设更新只惠及新建的模型，老模型仍是冻结副本（027 / 029 两次 SQL 回填就是这个问题的历史形态）。分层后用户覆盖已单独存放，刷新 preset 层不会再碰用户的值，安全性比以前高得多。
 - **方案**：GUI 加载模型列表时按 `managedModelProviderPresetForRecord` 匹配预设，与记录的 `presetOptions` 不同则通过 `save_managed_model` 只带 `presetOptions` 重写（Core「省略即保留」已支持只改这一层）；或 Core 起动时做，但预设知识在 GUI，需要先搬一份 JSON 给两边共读。
-- **待定**：服务商 URL 改到自定义端点后 preset 层该保留旧预设还是退回协议默认；同时运行中会话不热更（默认配置同样如此，要新会话或重启才生效，推理强度例外，pill 实时可改）。
+- **待定**：服务商 URL 改到自定义端点后 preset 层该保留旧预设还是退回协议默认。
 - **关联**：`gui/src/lib/managed-model-presets.ts` · `core/src/managed_model_layers.rs`
+
+---
+
+## 运行中会话热更模型配置（默认配置改动下一轮生效）
+
+- **状态**：暂存（2026-09-22 JC 裁 A「保持简洁」：只在默认配置节提示「改动对新对话生效」）
+- **提出**：2026-09-22，[模型高级配置分层](./2026-09-22-layered-model-advanced-config.md) 落地后 JC 提出讨论。
+- **启动信号**：有用户改了默认配置后在旧会话里继续聊、发现没生效来问；或 JC 自己在真机上被「设一次全局却要新开会话」绊到。
+- **背景**（已核实，别重查）：
+  - 「运行中」= 活着的 bridge 集合：每个打开过的会话保留一个 bridge，走 LRU 上限回收（`bridge-slice.ts` `_enforceLRUCap`），归档 / 删除 / 挤出 / 退出才关，多数闲着。
+  - 内核自带热更：`llmcore` 在 `load_llm_sessions`（`__init__` / `next_llm` / `list_llms` 调用）检查 `_mykey_path` 的 mtime，变了就用 `_load_mykeys()` 重建全部 client、保留当前历史、按名字重选。内置模式的 marker 路径就是 `managed-models.json`，Core 每次保存都重写（`sync_managed_model_config`），mtime 确实变、内核确实重建，但 `runner/managed_runtime.py` `install_managed_mykey_loader` 装的加载器读的是 spawn 时的环境变量 `GALLEY_MANAGED_MODEL_CONFIG`，重建出来仍是旧配置。**差的是配置源，不是机制。**
+  - 五个网络键与 `reasoning_effort` 都是内核每次请求才读的实例属性（`self.read_timeout` 等），可以像 `set_reasoning_effort` 那样直接写活的 backend；方言键与新增模型必须重建。
+  - 现有口径：模型保存后 toast「新对话立即使用最新配置」，Channels 有「重启 Channels」CTA。
+- **方案**（B，下一轮生效）：Core 每次重写配置时向所有活着的 bridge 发一条新 IPC 命令（纯增量，载荷 = spawn 时那份模型 JSON 去掉凭证；不在凭证白名单里的模型 runner 过滤掉），runner 换配置源、把 `llmcore._mykey_mtime` 清零，在下一次空闲回合边界（与 `set_llm` 同一 idle 门）调 `agent.load_llm_sessions()` 重建、然后走现成的 `_apply_reasoning_effort` 重放会话覆盖，emit 一条事件让 GUI 刷 pill 的 configured 值。正在跑的 run 不打扰。Core 扇出与 `set_reasoning_effort` 转发同构。
+- **边界**：只热更已有模型的生效配置；新增 / 删除模型、换 Key 仍需新会话（凭证白名单 spawn 时定死）。Channels 先不动。
+- **被否**：C「本 run 内立即生效」（直接写属性 + 仍要重建，两套机制换一个小收益）。
+- **关联**：`runner/managed_runtime.py` `install_managed_mykey_loader` · `runner/workbench_bridge.py` `_apply_reasoning_effort` · `core/src/commands/managed_model.rs` `sync_managed_model_config` · [IPC §5.14](../ipc-protocol.md)

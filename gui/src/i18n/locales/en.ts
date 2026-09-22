@@ -875,7 +875,7 @@ export const enCopy: AppCopy = {
         "Writes this model’s network settings and reasoning effort into the default advanced settings, so every model without its own value follows them. Other models’ existing overrides are untouched.",
       defaultsSectionTitle: "Default advanced settings",
       defaultsSectionHint:
-        "Models without their own value follow these defaults; each model can override them in its editor.",
+        "Models without their own value follow these defaults; each model can override them in its editor. Changes apply to new conversations.",
       reasoningNone: "none",
       reasoningMinimal: "minimal",
       reasoningLow: "low",

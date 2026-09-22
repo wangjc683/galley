@@ -833,7 +833,7 @@ export const zhCopy = {
         "把这个模型的网络设置和推理强度写进「默认高级配置」，之后所有没单独设置的模型都会跟随；其他模型已有的单独覆盖不受影响。",
       defaultsSectionTitle: "默认高级配置",
       defaultsSectionHint:
-        "未单独设置的模型跟随此默认；每个模型可在编辑器里单独覆盖。",
+        "未单独设置的模型跟随此默认；每个模型可在编辑器里单独覆盖。改动对新对话生效。",
       reasoningNone: "none",
       reasoningMinimal: "minimal",
       reasoningLow: "low",
