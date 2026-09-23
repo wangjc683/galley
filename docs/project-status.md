@@ -496,9 +496,7 @@ Since `v0.5.3`: the promote workflow downloads release assets by release id
 instead of by tag (`d42c727f`, fixed during the `v0.5.3` promotion; no
 installer change). Release-scope truth remains `git log v0.5.3..HEAD`.
 
-Standing follow-ups: JC's look at the real-database result of migration 042
-(Settings → 模型 after the `v0.5.2` upgrade) is not separately reported; the
-ticket `.scratch/live-run-window/PRD.md`
+Standing follow-ups: the ticket `.scratch/live-run-window/PRD.md`
 stays `ready-for-human` until a few more live runs pass;
 `.scratch/goal-simplify/` is `done`; the "use the whole budget" Goal mode
 and the user-message typography re-review are in
