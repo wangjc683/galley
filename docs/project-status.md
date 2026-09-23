@@ -9,14 +9,14 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.5.2`.
-- Git tag / GitHub Release: `v0.5.2` is the current published stable release
-  (tagged at `33e5b753` on 2026-09-22, GitHub Latest).
+- Package version: `0.5.3`.
+- Git tag / GitHub Release: `v0.5.3` is the current published stable release
+  (tagged at `70042c5e` on 2026-09-23, GitHub Latest).
 - Agent API schema: `schemaVersion: 2` (since the Goal v2 rework on
   2026-09-16, first shipped in `v0.5.0`). The server keeps answering `1` for
   every command that did not change; only the `goal` family is `2`-only, and
   the retired v1 goal commands are `unknown_command` under every version.
-- Release tier: stable patch; default update channel points at `v0.5.2`.
+- Release tier: stable patch; default update channel points at `v0.5.3`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `1b6442f` (audited 2026-09-18, first shipped in
   `v0.5.1`) — engine delta is Galley-positive abort-before-headers plus an
@@ -28,6 +28,23 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.5.3` (2026-09-23) is a patch one day after `v0.5.2`, five product
+commits. **Live thinking preview**: bundled GA streams the model's reasoning
+into a three-line preview under the thinking row instead of the reply
+(managed patch `0016` rewritten to stream reasoning in-band on both channels),
+and every step keeps its reasoning behind its caret in both runtime modes
+(additive `turn_end.responseThinking`). **Conversation polish**: echo-narration
+steps use the narration as their heading, expandable step markers answer hover
+and the keyboard, CJK bold labels such as `**早餐：**` render as bold
+(`remark-cjk-friendly`), and the run fold header gains an in-row hierarchy.
+`managed-ga/` and `runner/` changed, so the bundled-runtime gate was mandatory
+and passed on `mac-x64`; `check.yml` was green on the release head before the
+tag. JC smoked the draft. Promotion first failed: GitHub's by-tag release
+lookup kept serving the just-published release without assets, so the promote
+workflow now downloads assets by release id (`d42c727f`); stable promoted and
+verified the same session (run 35845300315). Full narrative: devlog
+[2026-09-23-v0.5.3-release](./devlog/2026-09-23-v0.5.3-release.md).
 
 `v0.5.2` (2026-09-22) is a patch four days after `v0.5.1`, six commits on
 three lines. **Reasoning effort**: a per-session pill right of the model
@@ -383,15 +400,16 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.5.2` is published and promoted as the live stable release (2026-09-22).
-The default `updates/stable/latest.json` channel points at `v0.5.2`, with the
+`v0.5.3` is published and promoted as the live stable release (2026-09-23).
+The default `updates/stable/latest.json` channel points at `v0.5.3`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
-installed builds. The live verifier passed with `--cache-bust` across all three
-platforms (darwin-aarch64, darwin-x86_64, windows-x86_64). One draft cut; JC
-smoked the draft before publish. The bundled-runtime gate was not required
-(neither `managed-ga/` nor `runner/` changed); `check.yml` was green on the
-release head after the pre-flight IPC drift fix (ts mirror of
-`set_reasoning_effort`).
+installed builds. The live verifier passed with `--cache-bust` for both
+channels across all three platforms (darwin-aarch64, darwin-x86_64,
+windows-x86_64). One draft cut; JC smoked the draft before publish. The
+bundled-runtime gate was mandatory (`managed-ga/` and `runner/` changed) and
+passed on `mac-x64`; `check.yml` was green on the release head. The first
+promote run failed on GitHub's stale by-tag release lookup; the workflow fix
+(`d42c727f`, download by release id) promoted on the second run.
 
 `v0.5.1` (2026-09-18) went through the same path: one draft cut, JC smoked
 the draft on macOS Intel and Windows, both channels verified with
@@ -439,9 +457,10 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): **`v0.5.1` → `v0.5.2` is owed** on an
-   installed build (`v0.5.0` → `v0.5.1` was never reported and is written
-   off); `v0.4.16` → `v0.5.0` passed (JC confirmed 2026-09-17).
+1. App-update dogfood (SOP step 10): **`v0.5.2` → `v0.5.3` is owed** on an
+   installed build; `v0.5.1` → `v0.5.2` passed (JC reported 2026-09-23);
+   `v0.5.0` → `v0.5.1` was never reported and is written off;
+   `v0.4.16` → `v0.5.0` passed (JC confirmed 2026-09-17).
    The `v0.4.8` → … → `v0.4.16`
    hops were never explicitly reported and can no longer be run (no older
    build left installed) — write them off next pass unless JC recalls them.
@@ -472,28 +491,13 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.5.2`: live thinking preview + reasoning persisted behind the step
-caret (managed patch `0016` rewritten to stream reasoning in-band, additive
-`turn_end.responseThinking`; see
-[devlog](./devlog/2026-09-23-live-thinking-preview.md)) — touches the managed
-runtime, so the bundle gate applies at the next release. Echo-narration
-steps show their narration as the step marker's text instead of 「调用了 X」
-([devlog](./devlog/2026-09-23-step-heading-narration-echo.md)). Expandable
-step markers answer hover and the keyboard like the other disclosures
-([devlog](./devlog/2026-09-23-step-marker-hover-affordance.md)). Bold
-labels glued to full-width punctuation (`**早餐：**肠粉`) render as bold
-instead of leaking `**` — `remark-cjk-friendly` replaces the home-grown
-quoted-strong plugin
-([devlog](./devlog/2026-09-23-cjk-friendly-emphasis.md)). The run fold
-header gains an in-row hierarchy: ink-soft digits, the tool mix one size
-down, file-changing tools first
-([devlog](./devlog/2026-09-23-run-fold-header-hierarchy.md)).
-Release-scope truth remains `git log v0.5.2..HEAD`.
+Since `v0.5.3`: the promote workflow downloads release assets by release id
+instead of by tag (`d42c727f`, fixed during the `v0.5.3` promotion; no
+installer change). Release-scope truth remains `git log v0.5.3..HEAD`.
 
-Standing follow-ups: the app-update hop `v0.5.1` → `v0.5.2` passed on JC's
-installed build (reported 2026-09-23); JC's look at the real-database result
-of migration 042 (Settings → 模型 after the upgrade) is not separately
-reported; the ticket `.scratch/live-run-window/PRD.md`
+Standing follow-ups: JC's look at the real-database result of migration 042
+(Settings → 模型 after the `v0.5.2` upgrade) is not separately reported; the
+ticket `.scratch/live-run-window/PRD.md`
 stays `ready-for-human` until a few more live runs pass;
 `.scratch/goal-simplify/` is `done`; the "use the whole budget" Goal mode
 and the user-message typography re-review are in
@@ -508,9 +512,12 @@ stay open by JC's ruling, with the #27 commenter still owing a clarification
 of their sidebar / project report; real WeChat end-to-end acceptance of the
 supervisor-side fix is still owed from a machine with a paired WeChat account.
 
-The GA baseline is fully current as of `v0.5.2` (`1b6442f`, audited
-2026-09-18); the next release audits upstream again per the standard
-trigger. Upstream's default-constant line (`default_context_win`) has now
+The GA baseline `1b6442f` (audited 2026-09-18) shipped again in `v0.5.2`
+and `v0.5.3` without a re-audit — the pre-release audit was missed both times
+(now a pre-flight item in the release SOP). At `v0.5.3`, upstream `main` was
+two commits ahead (`e86ca72`: a WeChat QR docs update and upstream TUI
+polish, neither of which Galley uses), so the shipped engine code is
+current; the next release audits upstream per the standard trigger. Upstream's default-constant line (`default_context_win`) has now
 collided with patch `0007` twice in a row — expect it again.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
@@ -555,7 +562,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.5.2 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.5.3 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `1b6442f` (2026-09-18); released builds ship it since `v0.5.1` (`efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -581,7 +588,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.5.2`. For the next release, bump every
+- Current package metadata uses `0.5.3`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.

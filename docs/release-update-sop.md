@@ -68,6 +68,12 @@ Replace the example value before every release.
       dependencies, the bundled runtime gate passed:
   - `./scripts/bundle-python.sh <target-arch>`
   - `./scripts/check-bundled-python-managed-ga.sh`
+- [ ] GA baseline audit is decided: compare upstream `main` with the recorded
+      baseline (`git ls-remote https://github.com/lsdefine/GenericAgent.git
+      refs/heads/main`, then the GitHub compare view) and either audit and bump
+      per [GA baseline Upgrade Triggers](./ga-baseline.md#upgrade-triggers) or
+      record in the release devlog why this release skips it. (`v0.5.2` and
+      `v0.5.3` both shipped without this check being raised.)
 - [ ] `docs/devlog/` has the durable release narrative if this is more than a
       tiny hotfix.
 - [ ] Version is bumped consistently — run
