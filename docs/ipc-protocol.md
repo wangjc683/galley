@@ -294,6 +294,7 @@ bridge 解析 GA yield 出来的 markdown 字符串得到的非结构化进度�
 - `responseContent`：完整 LLM 响应文本（含 thinking / summary 标签），用于 desktop 自行解析展示
 - `telemetry`：可选。只在带 `exitReason` 的 final `turn_end` 上发送，用于最终回答 footer。字段均可缺失：`elapsedMs`、`inputTokens`、`outputTokens`、`cacheCreateTokens`、`cacheReadTokens`、`requestCount`、`contextUsedChars`、`contextLimitChars`。Managed GA 可通过 Galley-owned runtime hook 统计 token；external GA 不安装 token hook，只做 elapsed 与只读 context snapshot 的 best-effort 降级。
 - `nextSuggestion`：可选（增量字段）。用户口吻的下一步建议，bridge 从最终回答的 `<next-suggestion>` 标签正则提取（标签指令来自 managed runtime prompt profile，`core/src/managed_prompt.rs`）。只在带 `exitReason` 的 final `turn_end` 上非 null；模型未输出标签则缺失。External GA 不会输出该标签——attach 模式自然无此字段。Desktop 渲染为 composer ghost text（`.scratch/composer-next-suggestion/`），并在所有展示路径 strip 该标签（同 `<summary>` 处理）。
+- `responseThinking`：可选（增量字段，2026-09-23）。该 turn 的推理文本，bridge 在 turn-end hook 里只读取 GA 的 `response.thinking`：原生推理（thinking content block / `reasoning_content`），或 GA 从 `content` 中移出的提示式 `<thinking>` 块。**每个** turn_end 都可能携带（不限 final）；strip 后为空则为 null/缺失；不截断。两种运行时模式都发送（只读属性，符合 attach 边界）。`responseContent` 不含原生推理，推理的落定版本只在这里。
 
 ### 4.7a `turn_progress`
 
@@ -316,6 +317,7 @@ LLM 流式 partial output。Bridge 启动时设 `agent.inc_out = True`，订阅 
 注意：
 
 - `delta` 是 **GA-raw**——含 `<thinking>` / `<summary>` / `<tool_use>` / `<file_content>` 等 GA 内部 tag。Desktop 在渲染时 strip（且要 robust 处理 partial 状态下的不完整 tag）
+- Managed runtime（patch `0016`）把原生推理**带内**流式送出：`<thinking>` 在第一段非空白推理文本到达时打开，各 delta 原样实时跟进，`</thinking>` 在推理结束时关闭（Anthropic：该 thinking block 的 `content_block_stop`；chat_completions：首个非空 `content` 之前或首个 `tool_calls` delta 时；两者都在流正常结束时兜底关闭）。推理内的字面 `</thinking>` 改写为 `</ thinking>`（跨 delta 也成立），所以第一个 `</thinking>` 必是真闭合。纯空白推理不输出任何东西。Stop / 传输异常中断时标签可能不闭合，GUI 须把尾部未闭合的 `<thinking>` 视为推理。Attach 模式（上游 GA）仍输出无标签的原生推理。
 - `turn_progress` 跨多个 GA turn（一个 task 一个 LLM stream），不带 `turnIndex`——GUI 通过最近的 `turn_start` 关联当前步骤；第一步的 `turn_start(1)` 应先于普通 user task 的首个可见 `turn_progress`
 - 一个 task 完成后 GA push `{'done': full_text}` 到 display_queue，bridge **不**转此为 IPC（`turn_end` 已经覆盖 finalized state，`done` 转 IPC 会产生重复信号）
 - 拉队列 thread 是 daemon，每 task 一次。`shutdown_event` 触发时退出

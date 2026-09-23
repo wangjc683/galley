@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-09-23
+- [思考显示：三行实时预览 + 落定进 caret](./2026-09-23-live-thinking-preview.md) — JC 常见大段思考按回答样式霸屏、落定一帧消失；核查一半是 bug：OpenAI 兼容通道 `reasoning_content` 不带标签流进回答 partial（08-03 的 `0016` 只修了 Anthropic），状态行还写「正在回答…」，bridge 只发 `content` 使原生推理从不落库（1351 行 thinking 列 0 条，更正 08-03「思考面板已能填上」）；四条全按推荐：先修 bug、流式三行滚动预览（思考寄存器、DetailPanel 同列）、推理一闭合即收、预览不可展开；路线取带内流式标签（`0016` 改边到边吐、两通道同构）否掉 hook 旁路；`turn_end.responseThinking` 三端增量、两模式都发；`/btw` 剥带内推理；IM 入口逐个核查无回归、飞书顺带修好；行数 × 收合时机临时切换器真机实测，JC 定 3 行 + 思考结束；外置流式期照旧、Responses 模式只落定
+
 ### 2026-09-22
 - [v0.5.2 发布](./2026-09-22-v0.5.2-release.md) — v0.5.1 后四天，`v0.5.1..HEAD` 8 提交打包 patch（我先前「带迁移走 minor」说错，按最大功能量级规则裁 patch）：磁盘占用修复、会话级推理强度 pill、高级配置分层三线；不碰内核故打包门禁免；push 后发现 main 早在 pill 提交就撞红 IPC drift gate（Core-only 命令也要 ts 镜像），修完本地跑全六门禁再 push；Core 平台 job 只在前置门禁绿后才起跑；JC 真机 smoke 后 publish + promote，stable / beta 都验到 0.5.2
 - [模型高级配置分层：默认 ⊕ 预设 ⊕ 模型覆盖](./2026-09-22-layered-model-advanced-config.md) — 社区反馈「每个模型设置一遍太费时间」；现状是每模型整份快照（端点属性逐模型重填、预设升级冻结）；四轮讨论：服务商层方案被 JC 裁「全局可跨服务商」推翻，面板内「开=调全局」开关判为表单模式错误改成链接 + 「设为所有模型的默认」，推理强度撤回折叠并进全局（09-08 否的是全局唯一值不是全局默认值），`max` 查内核后三处一致加上（Claude 路径 xhigh = max，旧注释错了）；落地 `preset_options ⊕ prefs.managed_model_defaults ⊕ advanced_overrides`、`null` 墓碑、迁移 042 纯 SQL 上提一致键并保「逐行生效值不变」不变量、六处手写列表；`save_managed_model` 两层「省略即保留」；外置零变化；服务商层与开关不进 deferred，页签变体与预设刷新进；同日追加裁决档位名全软件统一原始小写；再追加裁决删掉「我的模型」行的推理强度徽标（pill 是唯一真相，行上只剩默认徽标 + Provider chip）

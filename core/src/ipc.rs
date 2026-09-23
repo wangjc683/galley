@@ -228,6 +228,12 @@ pub struct TurnEndEvent {
     /// one (.scratch/goal-simplify/PRD.md §3.4).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal_status: Option<String>,
+    /// The turn's reasoning, read from GA's `response.thinking`: native
+    /// model reasoning (thinking blocks), or a prompted `<thinking>` block
+    /// GA moved out of `content`. Present on any turn_end (not only the
+    /// final one) whose reasoning is non-empty; never truncated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_thinking: Option<String>,
     pub timestamp: String,
 }
 
@@ -791,6 +797,43 @@ mod tests {
         let event: IpcEvent = serde_json::from_str(new).unwrap();
         if let IpcEvent::TurnEnd(t) = event {
             assert_eq!(t.goal_status.as_deref(), Some("complete"));
+        } else {
+            panic!("wrong variant");
+        }
+    }
+
+    #[test]
+    fn parse_turn_end_response_thinking_optional() {
+        // Old bridge without the field → None; new bridge carries it, and
+        // Python's `None` default arrives as an explicit null.
+        let old = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(old).unwrap();
+        if let IpcEvent::TurnEnd(t) = event {
+            assert!(t.response_thinking.is_none());
+            let out = serde_json::to_string(&t).unwrap();
+            assert!(
+                !out.contains("responseThinking"),
+                "None must be omitted, not null: {out}"
+            );
+        } else {
+            panic!("wrong variant");
+        }
+        let null = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","responseThinking":null,"timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(null).unwrap();
+        if let IpcEvent::TurnEnd(t) = event {
+            assert!(t.response_thinking.is_none());
+        } else {
+            panic!("wrong variant");
+        }
+        let new = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","responseThinking":"先读 llmcore.py","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(new).unwrap();
+        if let IpcEvent::TurnEnd(t) = event {
+            assert_eq!(t.response_thinking.as_deref(), Some("先读 llmcore.py"));
+            let out = serde_json::to_string(&t).unwrap();
+            assert!(
+                out.contains(r#""responseThinking":"先读 llmcore.py""#),
+                "Some must round-trip under the camelCase key: {out}"
+            );
         } else {
             panic!("wrong variant");
         }

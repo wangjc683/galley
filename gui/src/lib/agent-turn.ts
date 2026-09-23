@@ -13,8 +13,9 @@
 //   - empty-final-answer → null normalization
 //   - field presence normalization (undefined vs omitted)
 //
-// NOT shared, by design: deriving thinking/preamble out of raw
-// responseContent (live-only — restore reads the persisted columns),
+// NOT shared, by design: deriving thinking/preamble out of the raw
+// turn_end fields (responseThinking / responseContent; live-only —
+// restore reads the persisted columns),
 // and legacy-row repairs (they are history fixes, not shape rules —
 // they stay in rowsToTurns).
 //
@@ -125,7 +126,8 @@ export function normalizeFinalAnswer(
 }
 
 export interface AgentTurnFields {
-  /** Live: extractThinking(responseContent). Restore: row.thinking. */
+  /** Live: turn_end's responseThinking, else
+   * extractThinking(responseContent). Restore: row.thinking. */
   thinking?: string | null;
   /** Live: extractPreamble(responseContent), already gated by
    * `isFinalAnswerTurn` at the derivation site. Restore: row.preamble

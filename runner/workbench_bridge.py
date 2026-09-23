@@ -180,6 +180,25 @@ def _clean_response_for_display(text: str) -> str:
     return cleaned.strip()
 
 
+# `/btw` replies come from GA's btw_cmd, which joins the raw `raw_ask`
+# stream — so the managed runtime's in-band `<thinking>` blocks (patch
+# 0016) land in the reply body, and the side-question bubble has no
+# reasoning slot to put them in. Complete blocks go; an unclosed one is
+# reasoning cut off by btw_cmd's deadline, dropped up to the timeout
+# notice / elapsed footer that btw_cmd appends after the partial stream.
+_THINKING_BLOCK_RE = re.compile(r"<thinking>.*?</thinking>\s*", re.DOTALL)
+_BTW_TAIL_RE = re.compile(r"\n\n(?:⚠️ /btw|\*\(\d)")
+
+
+def _strip_side_question_thinking(text: str) -> str:
+    cleaned = _THINKING_BLOCK_RE.sub("", text)
+    open_idx = cleaned.find("<thinking>")
+    if open_idx != -1:
+        tail = _BTW_TAIL_RE.search(cleaned, open_idx)
+        cleaned = cleaned[:open_idx] + (cleaned[tail.start() :] if tail else "")
+    return cleaned
+
+
 # Fixed replacement for a recap that is really leaked tool-call markup.
 # When a provider passes the model's tool call through as plain text
 # (no structured tool_use block — seen with third-party proxies), GA
@@ -1357,6 +1376,10 @@ class Bridge:
                                     if content.lstrip().startswith("> 🟡 /btw")
                                     else "system"
                                 )
+                                if variant == "side_question":
+                                    content = _strip_side_question_thinking(
+                                        content
+                                    )
                                 self._emit(
                                     SystemMessageEvent(
                                         sessionId=self.session_id,
@@ -1483,6 +1506,15 @@ class Bridge:
             goal_status = (
                 _extract_goal_status(response_content) if exit_reason else None
             )
+            # Read-only attribute on the response GA hands its turn-end
+            # hooks (allowed in attach mode too). Native sessions fill it
+            # from thinking blocks, or from a prompted <thinking> block
+            # moved out of `content`; nothing else carries it to Core.
+            response_thinking = (
+                str(getattr(response, "thinking", "") or "").strip()
+                if response is not None
+                else ""
+            ) or None
 
             self._emit(
                 TurnEndEvent(
@@ -1504,6 +1536,7 @@ class Bridge:
                     absoluteTurnIndex=self._current_absolute_turn_index(turn),
                     nextSuggestion=next_suggestion,
                     goalStatus=goal_status,
+                    responseThinking=response_thinking,
                 )
             )
 
@@ -2051,7 +2084,7 @@ class Bridge:
             self._emit(
                 SystemMessageEvent(
                     sessionId=self.session_id,
-                    content=body,
+                    content=_strip_side_question_thinking(body),
                     variant="side_question",
                 )
             )

@@ -435,6 +435,103 @@ export function extractThinking(text: string): string | undefined {
   return inner || undefined;
 }
 
+export interface LiveThinking {
+  /** Inner text of every `<thinking>` block in the buffer, the
+   * trailing unclosed one included, joined with a blank line. "" when
+   * the buffer holds no reasoning (yet). */
+  text: string;
+  /** True while a `<thinking>` block is open — the model is reasoning
+   * right now. */
+  open: boolean;
+}
+
+const NO_LIVE_THINKING: LiveThinking = Object.freeze({ text: "", open: false });
+
+const THINKING_OPEN = "<thinking>";
+const THINKING_CLOSE = "</thinking>";
+/** How the runner escapes a literal `</thinking>` inside native
+ * reasoning so it cannot close the in-band block early. */
+const THINKING_CLOSE_ESCAPED = /<\/ thinking>/g;
+
+/**
+ * The model's reasoning as it streams (turn_progress), for the live
+ * thinking preview under the in-flight step row (2026-09-23).
+ *
+ * Reasoning reaches the in-flight buffer in-band as
+ * `<thinking>…</thinking>`: native reasoning (OpenAI-compatible
+ * `reasoning_content`) is wrapped by the runner / managed runtime, and
+ * prompted models write the tag into their content themselves. The
+ * open tag lands when reasoning starts and the close tag when it ends,
+ * before answer text or a tool call — so `open` is the "reasoning
+ * right now" signal and `text` is what the preview renders.
+ *
+ * Only the model's own reply counts: in GA's verbose display stream a
+ * step's tool dispatch (`🛠️ Tool: …` marker + the 5-backtick output
+ * fence) follows the reply in the same buffer, and a tool that reads
+ * source code can print a `<thinking>` of its own. The scan stops at
+ * the first dispatch marker / fence, and a block still open there is
+ * reported closed — the reply is over by then, whatever the model left
+ * unterminated.
+ *
+ * A trailing partial close tag (`</thin` — the chunk boundary fell
+ * inside it) is dropped so it never flashes as text; a partial OPEN tag
+ * at the tail is simply not a block yet. The runner's `</ thinking>`
+ * escape is undone so the live text reads the same as the settled
+ * `turn.thinking` behind the step caret.
+ */
+export function extractLiveThinking(buffer: string): LiveThinking {
+  if (!buffer || !buffer.includes(THINKING_OPEN)) return NO_LIVE_THINKING;
+  const replyEnd = modelReplyEnd(buffer);
+  const reply = replyEnd === -1 ? buffer : buffer.slice(0, replyEnd);
+
+  const parts: string[] = [];
+  let open = false;
+  let cursor = 0;
+  for (;;) {
+    const start = reply.indexOf(THINKING_OPEN, cursor);
+    if (start === -1) break;
+    const bodyStart = start + THINKING_OPEN.length;
+    const end = reply.indexOf(THINKING_CLOSE, bodyStart);
+    if (end === -1) {
+      open = replyEnd === -1;
+      parts.push(dropPartialCloseTag(reply.slice(bodyStart)));
+      break;
+    }
+    parts.push(reply.slice(bodyStart, end));
+    cursor = end + THINKING_CLOSE.length;
+  }
+
+  const text = parts
+    .map((p) => p.replace(THINKING_CLOSE_ESCAPED, THINKING_CLOSE).trim())
+    .filter(Boolean)
+    .join("\n\n");
+  if (!text && !open) return NO_LIVE_THINKING;
+  return { text, open };
+}
+
+/** Index where the model's reply ends and GA's tool dispatch begins in
+ * a verbose display buffer, or -1 when no dispatch has started. */
+function modelReplyEnd(buffer: string): number {
+  let end = -1;
+  for (const re of [
+    TOOL_DISPATCH_VERBOSE_PARTIAL,
+    TOOL_DISPATCH_MARKER_PARTIAL,
+    /`{5}/,
+  ]) {
+    const i = buffer.search(re);
+    if (i !== -1 && (end === -1 || i < end)) end = i;
+  }
+  return end;
+}
+
+/** Drop a trailing fragment of `</thinking>` ("<", "</", "</thin", …). */
+function dropPartialCloseTag(body: string): string {
+  const lastLt = body.lastIndexOf("<");
+  if (lastLt === -1) return body;
+  const tail = body.slice(lastLt);
+  return THINKING_CLOSE.startsWith(tail) ? body.slice(0, lastLt) : body;
+}
+
 /**
  * Pull the LLM's natural-language pre-tool reasoning prose out of a
  * raw response.content. GA's sys_prompt asks the LLM to "推演：当前阶

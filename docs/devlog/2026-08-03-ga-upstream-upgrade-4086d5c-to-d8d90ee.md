@@ -190,6 +190,14 @@ the native one and the narration is stripped without being displayed. Both are
 correctly kept out of the answer, so this is a presentation choice, not a
 correctness issue — flagged for JC rather than changed unilaterally.
 
+> **Correction (2026-09-23).** On the native session paths the managed
+> runtime actually uses, `response.content` is assembled from text blocks
+> only, so the tagged block never reached `extractThinking` and the pane
+> stayed empty (0 of 1351 assistant rows carried `thinking`). `0016` now
+> streams reasoning in-band live, the OpenAI-compatible `reasoning_content`
+> channel included, and the pane is filled from `turn_end.responseThinking`
+> — see [live thinking preview](./2026-09-23-live-thinking-preview.md).
+
 ## Other things to watch
 
 - `agentmain.all_outputs` accumulates every turn's input + outputs (capped at

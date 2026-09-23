@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   cleanPartialContent,
+  extractLiveThinking,
   extractPreamble,
   isLeakedToolCallMarkup,
   summaryEchoesAnswer,
@@ -203,5 +204,92 @@ describe("extractPreamble", () => {
     // Marker-only buffer → no preamble, so the status falls back to
     // the generic copy rather than "Tool: … args:".
     expect(extractPreamble(VERBOSE_MARKER)).toBeUndefined();
+  });
+});
+
+describe("extractLiveThinking", () => {
+  it("reports nothing for a buffer without reasoning", () => {
+    expect(extractLiveThinking("")).toEqual({ text: "", open: false });
+    expect(extractLiveThinking("Plain answer text.")).toEqual({
+      text: "",
+      open: false,
+    });
+  });
+
+  it("does not treat a partial open tag at the tail as a block yet", () => {
+    expect(extractLiveThinking("<thin")).toEqual({ text: "", open: false });
+    expect(extractLiveThinking("Intro.\n<thinki")).toEqual({
+      text: "",
+      open: false,
+    });
+  });
+
+  it("reports an open block, empty or with text so far", () => {
+    expect(extractLiveThinking("<thinking>")).toEqual({
+      text: "",
+      open: true,
+    });
+    expect(extractLiveThinking("<thinking>\nLet me check the config")).toEqual({
+      text: "Let me check the config",
+      open: true,
+    });
+  });
+
+  it("closes the block once the close tag lands, answer text after it", () => {
+    expect(
+      extractLiveThinking(
+        "<thinking>Plan the fix.</thinking>\nHere is the fix",
+      ),
+    ).toEqual({ text: "Plan the fix.", open: false });
+    // The answer partial never carries the reasoning (existing contract).
+    expect(
+      cleanPartialContent(
+        "<thinking>Plan the fix.</thinking>\nHere is the fix",
+      ),
+    ).toBe("\nHere is the fix");
+  });
+
+  it("joins two blocks with a blank line, the second possibly still open", () => {
+    expect(
+      extractLiveThinking(
+        "<thinking>first</thinking>mid<thinking>second</thinking>",
+      ),
+    ).toEqual({ text: "first\n\nsecond", open: false });
+    expect(
+      extractLiveThinking("<thinking>first</thinking><thinking>second"),
+    ).toEqual({ text: "first\n\nsecond", open: true });
+  });
+
+  it("drops a close tag split across chunks instead of flashing it", () => {
+    for (const fragment of ["<", "</", "</thin", "</thinking"]) {
+      expect(extractLiveThinking(`<thinking>almost done${fragment}`)).toEqual({
+        text: "almost done",
+        open: true,
+      });
+    }
+    // Not a close-tag prefix: content, kept.
+    expect(extractLiveThinking("<thinking>if a <b").text).toBe("if a <b");
+  });
+
+  it("undoes the runner's escape of a literal close tag", () => {
+    expect(
+      extractLiveThinking("<thinking>the </ thinking> tag ends a block"),
+    ).toEqual({ text: "the </thinking> tag ends a block", open: true });
+  });
+
+  it("ignores tags in GA's tool dispatch output after the reply", () => {
+    const dispatch =
+      "🛠️ Tool: `file_read` 📥 args:\n````text\n{}\n````\n`````\n";
+    // A tool printing source code with its own <thinking> must not
+    // reopen the preview or leak into the text.
+    expect(
+      extractLiveThinking(
+        `<thinking>Read the parser.</thinking>\n${dispatch}<thinking>from a file`,
+      ),
+    ).toEqual({ text: "Read the parser.", open: false });
+    // A block the model never closed is over once dispatch starts.
+    expect(
+      extractLiveThinking(`<thinking>unterminated\n${dispatch}output`),
+    ).toEqual({ text: "unterminated", open: false });
   });
 });

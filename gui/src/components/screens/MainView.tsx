@@ -22,6 +22,7 @@ import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { StepRegion } from "@/components/conversation/StepRegion";
+import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
@@ -39,6 +40,7 @@ import {
 import { useCopy } from "@/lib/i18n";
 import {
   cleanPartialContent,
+  extractLiveThinking,
   extractPreamble,
 } from "@/lib/ipc/ga-output-cleaning";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
@@ -310,12 +312,34 @@ function MainViewContent({
     () => (inFlightContent ? extractPreamble(inFlightContent) : undefined),
     [inFlightContent],
   );
+  // Live reasoning (2026-09-23): native reasoning streams in-band as
+  // `<thinking>…</thinking>` (prompted models write the tag
+  // themselves), which cleanPartialContent already keeps out of the
+  // answer partial. `open` = the model is reasoning right now; `text`
+  // feeds the ThinkingPreview under the in-flight step row.
+  const liveThinking = useMemo(
+    () => extractLiveThinking(inFlightContent),
+    [inFlightContent],
+  );
   const sendPhaseStatus = sendPhase
     ? sendPhaseToStatus(sendPhase, copy)
     : undefined;
-  const liveStepStatus = visiblePartial
-    ? copy.conversation.answering
-    : (sendPhaseStatus ?? compactLiveStepStatus(livePreamble));
+  // An open reasoning block outranks every other status: it is the
+  // freshest fact about the step, and the other sources go stale while
+  // the model reasons — a send phase that landed after the first
+  // tokens ("正在处理"), or a narration line written before the block
+  // opened. 「正在回答…」 stays tied to real answer text streaming, so
+  // it only appears once the reasoning has closed.
+  const liveStepStatus = liveThinking.open
+    ? copy.conversation.thinking
+    : visiblePartial
+      ? copy.conversation.answering
+      : (sendPhaseStatus ?? compactLiveStepStatus(livePreamble));
+  // The preview lives exactly as long as the reasoning block: it
+  // collapses the moment the block closes (JC's pick after comparing
+  // in the real app, 2026-09-23). The text is still in the buffer at
+  // that point, so the collapse sweep shows it rather than an empty box.
+  const thinkingPreviewVisible = liveThinking.text !== "" && liveThinking.open;
   // Fake-typewriter pass to smooth over GA's ~50-char chunked
   // delta pushes. See useTypewriter docs for the mitigation
   // rationale. If the GA-side throttle is eventually reduced enough,
@@ -521,6 +545,20 @@ function MainViewContent({
                     index={currentTurnIndex ?? undefined}
                     thinking
                     liveStatus={liveStepStatus}
+                  />
+                  {/* Live reasoning (2026-09-23): process material, so
+                      it sits inside the step's region, in the settled
+                      DetailPanel's column and register, above the
+                      answer partial — not as answer prose. Hugs the
+                      row the way the DetailPanel does (no gap); the
+                      answer's own block-gap margin spaces what follows.
+                      Keyed by session: the in-flight row is not, so a
+                      switch mid-reasoning would otherwise sweep the
+                      previous session's reasoning closed in this one. */}
+                  <ThinkingPreview
+                    key={activeSessionId}
+                    text={liveThinking.text}
+                    visible={thinkingPreviewVisible}
                   />
                 </StepRegion>
                 {/* In-flight streaming partial (DESIGN.md §4.3

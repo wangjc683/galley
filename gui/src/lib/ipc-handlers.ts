@@ -707,11 +707,17 @@ function turnFromTurnEnd(event: {
   toolCalls: IPCToolCall[];
   toolResults: IPCToolResult[];
   responseContent: string;
+  responseThinking?: string | null;
   telemetry?: TurnTelemetry | null;
 }): AgentTurn {
   const tools = toolEventsFromRaw(event.toolCalls, event.toolResults, "t-");
   return buildAgentTurn({
-    thinking: extractThinking(event.responseContent),
+    // GA's `response.thinking` first (2026-09-23): native reasoning
+    // never appears in `responseContent`, and a prompted block GA
+    // lifted out of it would be lost to the tag scan. The scan stays
+    // as the fallback for runtimes that don't send the field yet.
+    thinking:
+      event.responseThinking?.trim() || extractThinking(event.responseContent),
     // Final-answer turn's narrator IS the final answer — keeping it as
     // preamble too would double-render the same prose under TurnMarker.
     preamble: isFinalAnswerTurn(tools)

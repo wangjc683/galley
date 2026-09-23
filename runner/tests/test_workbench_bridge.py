@@ -1194,6 +1194,34 @@ def test_clean_response_strips_next_suggestion_tag() -> None:
     assert "答案正文。" in cleaned
 
 
+def test_strip_side_question_thinking_drops_complete_blocks() -> None:
+    from runner.workbench_bridge import _strip_side_question_thinking
+
+    raw = "> 🟡 /btw 问题\n\n<thinking>先想想。</thinking>\n回答正文。\n\n*(2.1s)*"
+    assert _strip_side_question_thinking(raw) == (
+        "> 🟡 /btw 问题\n\n回答正文。\n\n*(2.1s)*"
+    )
+
+
+def test_strip_side_question_thinking_keeps_timeout_tail_of_cut_block() -> None:
+    from runner.workbench_bridge import _strip_side_question_thinking
+
+    raw = (
+        "> 🟡 /btw 问题\n\n<thinking>想到一半"
+        "\n\n⚠️ /btw 超时，仅返回部分回复。\n\n*(30.0s)*"
+    )
+    assert _strip_side_question_thinking(raw) == (
+        "> 🟡 /btw 问题\n\n\n\n⚠️ /btw 超时，仅返回部分回复。\n\n*(30.0s)*"
+    )
+
+
+def test_strip_side_question_thinking_leaves_plain_reply_alone() -> None:
+    from runner.workbench_bridge import _strip_side_question_thinking
+
+    raw = "> 🟡 /btw 问题\n\n回答正文。\n\n*(1.0s)*"
+    assert _strip_side_question_thinking(raw) == raw
+
+
 def test_extract_goal_status_recognized_values() -> None:
     from runner.workbench_bridge import _extract_goal_status
 
@@ -1270,6 +1298,57 @@ def test_turn_end_extracts_goal_status_only_on_the_final_turn() -> None:
     )
     (final,) = _turn_end_events()
     assert final["goalStatus"] == "complete"
+
+
+def _turn_end_thinking(bridge: Bridge, response: Any, **ctx: Any) -> Any:
+    bridge._on_turn_end({"response": response, "turn": 1, "exit_reason": None, **ctx})
+    events: list[dict[str, Any]] = []
+    while not bridge.event_queue.empty():
+        event = _next_bridge_event(bridge)
+        if event["kind"] == "turn_end":
+            events.append(event)
+    (turn_end,) = events
+    return turn_end["responseThinking"]
+
+
+def test_turn_end_carries_response_thinking_stripped_on_any_turn() -> None:
+    class FakeResponse:
+        content = "答案。"
+        thinking = "\n  先读 llmcore.py，再看 bridge。\n\n"
+
+    bridge = _new_test_bridge()
+    expected = "先读 llmcore.py，再看 bridge。"
+    # Mid-run turn: reasoning belongs to every step, not only the final one.
+    assert _turn_end_thinking(bridge, FakeResponse()) == expected
+    final = _turn_end_thinking(
+        bridge,
+        FakeResponse(),
+        exit_reason={"result": "CURRENT_TASK_DONE", "data": None},
+    )
+    assert final == expected
+
+
+def test_turn_end_response_thinking_not_truncated() -> None:
+    class FakeResponse:
+        content = "ok"
+        thinking = "想" * 20_000
+
+    assert _turn_end_thinking(_new_test_bridge(), FakeResponse()) == "想" * 20_000
+
+
+@pytest.mark.parametrize("thinking", ["", "  \n\t ", None])
+def test_turn_end_response_thinking_none_when_empty(thinking: Any) -> None:
+    response = SimpleNamespace(content="ok", thinking=thinking)
+    assert _turn_end_thinking(_new_test_bridge(), response) is None
+
+
+def test_turn_end_response_thinking_none_when_attribute_absent() -> None:
+    class FakeResponse:
+        content = "ok"
+
+    bridge = _new_test_bridge()
+    assert _turn_end_thinking(bridge, FakeResponse()) is None
+    assert _turn_end_thinking(bridge, None) is None
 
 
 def test_build_title_prompt_truncates_and_orders_context() -> None:

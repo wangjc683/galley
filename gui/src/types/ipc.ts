@@ -166,6 +166,18 @@ export interface TurnEndEvent {
   toolCalls: ToolCall[];
   toolResults: ToolResult[];
   responseContent: string;
+  /**
+   * GA's `response.thinking` for this step: the model's native
+   * reasoning (OpenAI-compatible `reasoning_content` and the like), or
+   * a prompted `<thinking>` block GA moved out of `responseContent`.
+   * Absent when the step had no reasoning. The settled turn's
+   * `thinking` (the DetailPanel behind the step caret, persisted to the
+   * `thinking` column) prefers it over the `<thinking>` tag still
+   * extracted from `responseContent` for older runtimes. While the step
+   * streams the same reasoning arrives in-band on `turn_progress`,
+   * wrapped in `<thinking>…</thinking>`.
+   */
+  responseThinking?: string | null;
   exitReason: ExitReason | null;
   telemetry?: TurnTelemetry | null;
   visibility?: MessageVisibility;
@@ -194,6 +206,9 @@ export interface TurnEndEvent {
  * `delta` is GA-raw — still contains <thinking>/<summary>/
  * <tool_use>/<file_content> tags. Desktop strips them at render
  * time, with robust handling of unclosed tags at the partial's tail.
+ * Native reasoning streams in-band as `<thinking>…</thinking>` (managed
+ * runtime; a literal close tag inside it arrives as `</ thinking>`) —
+ * MainView renders it as the live thinking preview, not answer prose.
  */
 export interface TurnProgressEvent {
   kind: "turn_progress";

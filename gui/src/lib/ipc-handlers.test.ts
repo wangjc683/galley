@@ -208,6 +208,57 @@ describe("dispatchIPCEvent", () => {
     });
   });
 
+  it("settles native reasoning from turn_end's responseThinking and persists it (2026-09-23)", async () => {
+    dispatchIPCEvent({
+      kind: "turn_end",
+      sessionId: "s-test",
+      turnIndex: 1,
+      summary: "Answered",
+      toolCalls: [],
+      toolResults: [],
+      // An in-content tag loses to GA's response.thinking.
+      responseContent: "<thinking>tag reasoning</thinking>Final answer",
+      responseThinking: "\n  Native reasoning first.  \n",
+      exitReason: null,
+      timestamp: "2026-09-23T08:00:00.000Z",
+    });
+
+    const turns = useMessagesStore.getState().byId["s-test"].turns;
+    const agent = turns[turns.length - 1];
+    if (agent.role !== "agent") throw new Error("expected agent turn");
+    expect(agent.thinking).toBe("Native reasoning first.");
+    expect(agent.finalAnswer).toBe("Final answer");
+
+    await flushPromises();
+    expect(tauriMocks.invoke).toHaveBeenCalledWith(
+      "persist_assistant_message",
+      expect.objectContaining({
+        input: expect.objectContaining({ thinking: "Native reasoning first." }),
+      }),
+    );
+  });
+
+  it("falls back to the <thinking> tag when responseThinking is absent or blank", () => {
+    for (const responseThinking of [undefined, null, "  \n "]) {
+      dispatchIPCEvent({
+        kind: "turn_end",
+        sessionId: "s-test",
+        turnIndex: 1,
+        summary: "Answered",
+        toolCalls: [],
+        toolResults: [],
+        responseContent: "<thinking> tag reasoning </thinking>Final answer",
+        responseThinking,
+        exitReason: null,
+        timestamp: "2026-09-23T08:00:00.000Z",
+      });
+      const turns = useMessagesStore.getState().byId["s-test"].turns;
+      const agent = turns[turns.length - 1];
+      if (agent.role !== "agent") throw new Error("expected agent turn");
+      expect(agent.thinking).toBe("tag reasoning");
+    }
+  });
+
   it("keeps same-turn streaming content when turn_start arrives late", () => {
     dispatchIPCEvent({
       kind: "turn_progress",

@@ -1,6 +1,6 @@
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -514 +514 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
+@@ -535 +535 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
 -                    err = f"!!!Error: HTTP {r.status_code}" + (f" (retry-after > {cap:.0f}s)" if d is None and r.status_code in _RETRYABLE and attempt < sess.max_retries else "") + (f": {body}" if body else "")
 +                    err = f"!!!Error: HTTP {r.status_code}" + (f" (retry-after {(r.headers or {}).get('retry-after')}s > {cap:.0f}s cap)" if d is None and r.status_code in _RETRYABLE and attempt < sess.max_retries else "") + (f": {body}" if body else "")

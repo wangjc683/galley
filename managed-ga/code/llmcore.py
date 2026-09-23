@@ -153,9 +153,34 @@ def _raise_if_retryable_overload(emsg):
     if emsg and re.search(r'concurrency|retry later|overloaded|rate.?limit', emsg, re.I):
         raise requests.ConnectionError(emsg)
 
+# Galley: native reasoning arrives on its own channel (Anthropic thinking_delta,
+# OpenAI-compatible reasoning_content / reasoning), but upstream yields it UNTAGGED
+# into the display stream, where frontends can only tell reasoning from answer by
+# the <thinking> tag convention. Stream it in-band instead: <thinking> opens at the
+# first non-whitespace text (a whitespace-only block emits nothing), each delta
+# passes through live, close() ends it. A literal '</thinking>' in the reasoning is
+# yielded as '</ thinking>' even when split across deltas: a tail that could still
+# grow into one is held back until the next feed() or close(). Display only; the
+# returned content blocks keep the raw reasoning.
+class _GalleyThinkTag:
+    END = "</thinking>"
+    def __init__(self): self.open = False; self.hold = ""
+    def feed(self, s):
+        s = self.hold + s; self.hold = ""
+        if not self.open and not s.strip(): self.hold = s; return ""
+        pre = "" if self.open else "<thinking>"; self.open = True
+        s = s.replace(self.END, "</ thinking>")
+        k = next((i for i in range(len(self.END) - 1, 0, -1) if s.endswith(self.END[:i])), 0)
+        if k: s, self.hold = s[:-k], s[-k:]
+        return pre + s
+    def close(self):
+        s = self.hold + self.END if self.open else ""
+        self.open = False; self.hold = ""; return s
+
 def _parse_claude_sse(resp_lines):
     """Parse Anthropic SSE stream. Yields text chunks, returns list[content_block]."""
     content_blocks = []; current_block = None; tool_json_buf = ""
+    think = _GalleyThinkTag()  # Galley: in-band <thinking> for native reasoning
     stop_reason = None; got_message_stop = False; warn = None
     # Galley: whether the input side of usage has been recorded for this
     # stream. Real Anthropic reports input_tokens at message_start;
@@ -196,30 +221,19 @@ def _parse_claude_sse(resp_lines):
                 if current_block and current_block.get("type") == "text": current_block["text"] += text
                 if text: yield text
             elif delta.get("type") == "thinking_delta":
-                # Galley: accumulate only. Upstream yields each delta raw, which puts
-                # UNTAGGED native reasoning into the same character stream as the answer.
-                # Frontends here separate reasoning from answer by the <thinking> tag
-                # convention the system prompt asks the model to follow, so untagged
-                # deltas are indistinguishable from the answer and render as body text.
-                # Emitted as one tagged block at content_block_stop instead.
                 thinking = delta.get("thinking", "")
                 if current_block and current_block.get("type") == "thinking": current_block["thinking"] += thinking
+                if (s := think.feed(thinking)): yield s  # Galley: tagged, live
             elif delta.get("type") == "signature_delta":
                 if current_block and current_block.get("type") == "thinking":
                     current_block["signature"] = current_block.get("signature", "") + delta.get("signature", "")
             elif delta.get("type") == "input_json_delta": tool_json_buf += delta.get("partial_json", "")
         elif evt_type == "content_block_stop":
+            if (s := think.close()): yield s  # Galley: a thinking block ends here
             if current_block:
                 if current_block["type"] == "tool_use":
                     try: current_block["input"] = json.loads(tool_json_buf) if tool_json_buf else {}
                     except: current_block["input"] = {"_raw": tool_json_buf}
-                # Galley: normalize native thinking onto the <thinking> tag convention, so
-                # the existing strip/extract path treats both reasoning channels alike.
-                # Whole block at once (not per-delta) so a literal '</thinking>' inside the
-                # reasoning can be neutralized; it cannot straddle a chunk boundary here.
-                if current_block["type"] == "thinking":
-                    _think = current_block.get("thinking", "")
-                    if _think.strip(): yield f"<thinking>{_think.replace('</thinking>', '</ thinking>')}</thinking>"
                 content_blocks.append(current_block)
                 current_block = None
         elif evt_type == "message_delta":
@@ -241,8 +255,10 @@ def _parse_claude_sse(resp_lines):
         elif evt_type == "error":
             err = evt.get("error", {})
             emsg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            if (s := think.close()): yield s  # Galley: close before a retry or warn exit
             _raise_if_retryable_overload(emsg)  # 走 _stream_with_retry，避免落到 ga 应用层
             warn = f"\n\n!!!Error: SSE {emsg}"; break
+    if (s := think.close()): yield s  # Galley: never leave the tag open on a normal exit
     if not warn:
         if not got_message_stop and not stop_reason: warn = "\n\n[!!! 流异常中断，未收到完整响应 !!!]"
         elif stop_reason == "max_tokens": warn = "\n\n[!!! Response truncated: max_tokens !!!]"
@@ -356,6 +372,7 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
     else:
         tc_buf = {}  # index -> {id, name, args}
         reasoning_text = ""
+        think = _GalleyThinkTag()  # Galley: in-band <thinking> for native reasoning
         for line in resp_lines:
             if not line: continue
             line = line.decode('utf-8', errors='replace') if isinstance(line, bytes) else line
@@ -367,9 +384,12 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
             ch = (evt.get("choices") or [{}])[0]
             delta = ch.get("delta") or {}
             if rc := delta.get("reasoning_content") or delta.get("reasoning", ""):
-                reasoning_text += rc; yield rc
+                reasoning_text += rc
+                if (s := think.feed(rc)): yield s  # Galley: tagged, live
             if delta.get("content"):
+                if (s := think.close()): yield s  # Galley: reasoning ends before the answer
                 text = delta["content"]; content_text += text; yield text
+            if delta.get("tool_calls") and (s := think.close()): yield s  # Galley: ...or before tool calls
             for tc in (delta.get("tool_calls") or []):
                 idx = tc.get("index", 0)
                 has_name = bool(tc.get("function", {}).get("name"))
@@ -381,6 +401,7 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
                 if tc.get("id") and not tc_buf[idx]["id"]: tc_buf[idx]["id"] = tc["id"]
             usage = evt.get("usage")
             if usage: _record_usage(usage, api_mode)
+        if (s := think.close()): yield s  # Galley: [DONE] or stream end
         blocks = []
         if reasoning_text: blocks.append({"type": "thinking", "thinking": reasoning_text})
         if content_text: blocks.append({"type": "text", "text": content_text})

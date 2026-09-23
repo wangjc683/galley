@@ -90,9 +90,16 @@
   grid-rows 0fr ↔ 1fr 过渡、同一 `--motion-slow`，过程区只有一种「展开」
   手感；此前是硬挂载 + fade-in keyframe。RunFoldSection 自 2026-09-16
   起也是 ExpandSection 的薄包装，只保留自己的 margin 编排。
-- 内容 = GA 真实 emit 的 `<thinking>`（无则 caret 不出现）+ 中间轮
-  preamble（当其未作为旁白单独渲染时）
+- 内容 = 该步的推理（无则 caret 不出现）+ 中间轮 preamble（当其未作为旁白
+  单独渲染时）。推理来源（2026-09-23）：`turn_end.responseThinking`，即
+  GA 的 `response.thinking`——原生推理（thinking block / `reasoning_content`），
+  或模型按提示词写、被 GA 从 `content` 挪出去的 `<thinking>`；为空才回退
+  `extractThinking(responseContent)`。此前 bridge 只发 `content`，原生会话
+  路径上推理从未进过这里（1351 条 assistant 行 thinking 列 0 条），见
+  [devlog](../devlog/2026-09-23-live-thinking-preview.md)
 - 展开后 Newsreader italic、`--conversation-thinking-size` 走三档字号
+- 与流式期的 [Live Thinking Preview](#live-thinking-preview实时思考预览)
+  同寄存器、同一列：实时看过的文字，落定后在 caret 后面以同一样式找回
 
 #### Goal 叙述 callout（SystemMessageBubble `variant="goal"`，legacy）
 
@@ -356,7 +363,9 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 | 时机 | 显示 |
 |---|---|
 | User 提交 → bridge spawn → LLM TTFT | `NN 思考中 · 12.3 秒` TurnMarker（thinking 态，序号 gutter） |
-| 第一批 chunk 到 | placeholder 消失，partial markdown 开始流出 |
+| 推理流出（`<thinking>` 未闭合） | 思考行保持「思考中」，其下三行滚动预览（见 [Live Thinking Preview](#live-thinking-preview实时思考预览)）；回答 partial 为空 |
+| 推理结束（`</thinking>` 到达） | 预览 0fr 收合；有回答正文流出时思考行换「正在回答…」 |
+| 第一批回答 chunk 到 | partial markdown 开始流出 |
 | 流式过程中 | partial 持续增长，Markdown re-render（行内 / 列表 / 代码块都跟着出现） |
 | `turn_end` 到 | partial 被 finalized AgentTurn **替换**（store `appendAgentTurn` clear inFlightContent） |
 | Tool call 触发 | partial 暂停，Approval Card 出现 |
@@ -400,6 +409,20 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
   - `60s+` → `思考中` + 三点 · `已 1 分 23 秒` · `仍在运行`
 
 历史设计（已废弃）：原本占位走 ThinkingSummary callout（bg-surface + 左竖条 + 💭 emoji），跟正式 ThinkingSummary 块视觉同款。问题是 callout chrome 是给"GA 真实 emit `<thinking>` 多段内容"设计的容器，套在 10 字占位上视觉权重严重失衡。2026-05-14 改成 TurnMarker thinking 态。
+
+- **状态行优先级**（2026-09-23）：in-flight buffer 里有未闭合的 `<thinking>` 时，状态固定为「思考中」，压过 send phase 与 preamble 压缩行（推理是这一步最新的事实，那两者在推理期间都已过时）；「正在回答…」只绑回答 partial 非空，因此只会在推理闭合之后出现。此前原生推理不带标签、被当成回答 partial，状态行在模型思考时写着「正在回答…」
+
+#### Live Thinking Preview（实时思考预览）
+
+2026-09-23 起（[devlog](../devlog/2026-09-23-live-thinking-preview.md)）。推理是过程材料，不是交付物：流式期给看，但永远不用回答的寄存器、永远不无上限地占高度，落定后必须有去处。
+
+- **数据**：内置运行时的补丁 `0016` 把原生推理（Anthropic `thinking_delta`、OpenAI 兼容 `reasoning_content` / `reasoning`）边到边包成带内 `<thinking>…</thinking>` 流出，推理开始时开标签、回答或工具调用开始前闭合；推理里的字面 `</thinking>` 转成 `</ thinking>`（跨 chunk 也成立）。模型按提示词自己写的 `<thinking>` 本来就这样流。`extractLiveThinking(inFlightContent)` 取出所有块的内文 + 末尾未闭合块，给出 `{ text, open }`；扫到工具派发标记 / 5 反引号围栏即停（工具输出里读到的源码可能含 `<thinking>`）
+- **形态**：in-flight 思考行正下方、同一 `StepRegion` 内、`pl-(--step-gutter)` 对齐 DetailPanel 那一列；`MarkdownView variant="thinking"`（Newsreader italic、ink-soft）。固定三行高的窗口：短推理从顶部读起，溢出后底部锚定、旧行从顶部滚出，顶边 mask 渐隐锚在文字底边往上 2.25–3 行。行盒 = 思考字号 × **正文**行高（段落继承 `PROSE_BASE` 的 body leading，thinking leading 只落在根元素上），标准档一行 23.8px。不可展开、不可交互、`aria-hidden`——全文在落定步的 caret 后面
+- **收合**：推理块闭合即 `ExpandSection` 0fr 收合（`--motion-slow`），腾出的位置给回答正文；不等 `turn_end`——最后一步的回答可能流几十秒，等落定才收会让读到一半的正文整体上移
+- **管线**：打字机（每帧 8 字，比回答的 3 字快：快速推理会把 3 字打字机甩在后面）→ 只渲染尾部约 1500–2000 字（切点优先段落边界、每 500 字才前移一次防止逐 token 重排）→ `useMarkdownStream` 节流 → `mendStreamingMarkdown`。不加 `streaming-prose` 的光标与块淡入：状态行的 shimmer 与滚动的行已经说明「在动」，过程区保持两路流里更安静的那一路
+- **裁决**：行数 1 / 3 / 全文 × 收合时机 思考结束 / 落定，临时切换器真机实测后 JC 定 3 行 + 思考结束（即推荐项）
+- **外置 GA**：上游仍把原生推理不带标签地流出，前端分不出，流式期照旧按回答正文流出；落定后的 `responseThinking` 两种模式都有，推理进 caret。按「内置优先」不追平
+- **Responses 模式**（Codex 后端等）：推理累积不流出，只有落定后进 caret
 
 Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模式，LLM dropdown disable。
 

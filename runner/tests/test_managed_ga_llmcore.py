@@ -320,56 +320,200 @@ def _thinking_stream(*thinking_deltas: str) -> list[str]:
     )
 
 
-def test_native_thinking_is_emitted_as_one_tagged_block() -> None:
-    """Patch 0016: upstream yields each thinking_delta raw, which puts untagged
-    reasoning into the same stream as the answer. Galley emits it once, wrapped
-    in <thinking>, so the frontends' existing tag-strip path catches it."""
-    gen = llmcore._parse_claude_sse(_thinking_stream("Let me ", "consider X."))
+def _collect(gen: Any) -> tuple[list[str], Any]:
     chunks: list[str] = []
     try:
         while True:
             chunks.append(next(gen))
-    except StopIteration:
-        pass
+    except StopIteration as e:
+        return chunks, e.value
 
-    assert chunks == ["<thinking>Let me consider X.</thinking>", "The answer."]
+
+def test_native_thinking_streams_in_band_tagged() -> None:
+    """Patch 0016: upstream yields each thinking_delta raw, which puts untagged
+    reasoning into the same stream as the answer. Galley streams it live inside
+    <thinking>: the tag opens with the first reasoning text and closes at the
+    thinking block's content_block_stop, before the answer."""
+    chunks, _ = _collect(llmcore._parse_claude_sse(_thinking_stream("Let me ", "consider X.")))
+
+    assert chunks == ["<thinking>Let me ", "consider X.", "</thinking>", "The answer."]
 
 
 def test_native_thinking_still_reaches_returned_content_blocks() -> None:
-    """Display-side change only: the thinking block must still be returned so
-    session history and signature handling are untouched."""
-    blocks = _exhaust(llmcore._parse_claude_sse(_thinking_stream("inner")))
+    """Display-side change only: the returned blocks are exactly what upstream
+    returns, so session history and signature handling are untouched."""
+    _, blocks = _collect(llmcore._parse_claude_sse(_thinking_stream("use </thin", "king> tags")))
 
-    thinking = [b for b in blocks if b.get("type") == "thinking"]
-    assert len(thinking) == 1
-    assert thinking[0]["thinking"] == "inner"
+    assert blocks == [
+        {"type": "thinking", "thinking": "use </thinking> tags", "signature": ""},
+        {"type": "text", "text": "The answer."},
+    ]
 
 
 def test_native_thinking_neutralizes_literal_closing_tag() -> None:
     """GA's system prompt tells the model to use <thinking> tags, so its native
     reasoning can quote one. A literal '</thinking>' must not close the wrapper
     early and leak the remainder as body text."""
-    gen = llmcore._parse_claude_sse(
-        _thinking_stream("I should use </thinking> tags. Now the real reasoning.")
+    chunks, _ = _collect(
+        llmcore._parse_claude_sse(
+            _thinking_stream("I should use </thinking> tags. Now the real reasoning.")
+        )
     )
-    first = next(gen)
+    stream = "".join(chunks)
 
-    assert first.startswith("<thinking>")
-    assert first.endswith("</thinking>")
-    assert first.count("</thinking>") == 1
-    assert "Now the real reasoning." in first
+    assert stream == (
+        "<thinking>I should use </ thinking> tags. Now the real reasoning.</thinking>The answer."
+    )
+
+
+def test_native_thinking_neutralizes_closing_tag_split_across_deltas() -> None:
+    """The carry buffer holds back a tail that could still grow into
+    '</thinking>' until the next delta decides it."""
+    chunks, _ = _collect(llmcore._parse_claude_sse(_thinking_stream("a </thin", "king> b")))
+
+    assert chunks == ["<thinking>a ", "</ thinking> b", "</thinking>", "The answer."]
+
+
+def test_native_thinking_flushes_held_fragment_at_close() -> None:
+    chunks, _ = _collect(llmcore._parse_claude_sse(_thinking_stream("ends in </think")))
+
+    assert chunks == ["<thinking>ends in ", "</think</thinking>", "The answer."]
 
 
 def test_whitespace_only_thinking_emits_nothing() -> None:
-    gen = llmcore._parse_claude_sse(_thinking_stream("   \n  "))
-    chunks: list[str] = []
-    try:
-        while True:
-            chunks.append(next(gen))
-    except StopIteration:
-        pass
+    chunks, _ = _collect(llmcore._parse_claude_sse(_thinking_stream("   \n  ")))
 
     assert chunks == ["The answer."]
+
+
+def test_native_thinking_leading_whitespace_waits_for_text() -> None:
+    chunks, _ = _collect(llmcore._parse_claude_sse(_thinking_stream("  \n", "Hmm")))
+
+    assert chunks == ["<thinking>  \nHmm", "</thinking>", "The answer."]
+
+
+def test_native_thinking_closes_before_truncation_warning() -> None:
+    """A stream cut mid-thinking (no content_block_stop) still closes the tag,
+    and the warning lands after it as answer text."""
+    lines = _sse(
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking"}},
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "thinking_delta", "thinking": "partial"},
+        },
+    )
+    chunks, _ = _collect(llmcore._parse_claude_sse(lines))
+
+    assert chunks[:2] == ["<thinking>partial", "</thinking>"]
+    assert len(chunks) == 3 and "</thinking>" not in chunks[2]
+
+
+def test_native_thinking_closes_before_sse_error_warning() -> None:
+    lines = _sse(
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking"}},
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "thinking_delta", "thinking": "partial"},
+        },
+        {"type": "error", "error": {"message": "invalid request"}},
+    )
+    chunks, _ = _collect(llmcore._parse_claude_sse(lines))
+
+    assert chunks == [
+        "<thinking>partial",
+        "</thinking>",
+        "\n\n!!!Error: SSE invalid request",
+    ]
+
+
+def _oai_stream(*deltas: dict[str, Any], done: bool = True) -> list[str]:
+    lines = [f"data: {json.dumps({'choices': [{'delta': d}]})}" for d in deltas]
+    return lines + (["data: [DONE]"] if done else [])
+
+
+def _parse_oai(lines: Any) -> tuple[list[str], Any]:
+    return _collect(llmcore._parse_openai_sse(lines, "chat_completions"))
+
+
+def test_chat_completions_reasoning_closes_before_first_content() -> None:
+    chunks, blocks = _parse_oai(
+        _oai_stream(
+            {"reasoning_content": "Think "},
+            {"reasoning": "more."},
+            {"content": "Answer"},
+            {"content": " done"},
+        )
+    )
+
+    assert chunks == ["<thinking>Think ", "more.", "</thinking>", "Answer", " done"]
+    assert blocks == [
+        {"type": "thinking", "thinking": "Think more."},
+        {"type": "text", "text": "Answer done"},
+    ]
+
+
+def test_chat_completions_reasoning_closes_at_first_tool_call_delta() -> None:
+    call = {"index": 0, "id": "c1", "function": {"name": "f", "arguments": ""}}
+    args = {"index": 0, "function": {"arguments": '{"a": 1}'}}
+    raw = _oai_stream(
+        {"reasoning_content": "Plan."}, {"tool_calls": [call]}, {"tool_calls": [args]}
+    )
+    consumed: list[int] = []
+
+    def lines() -> Any:
+        for i, line in enumerate(raw):
+            consumed.append(i)
+            yield line
+
+    gen = llmcore._parse_openai_sse(lines(), "chat_completions")
+    assert next(gen) == "<thinking>Plan."
+    assert next(gen) == "</thinking>"
+    # Closed while handling the first tool_calls line, not at stream end.
+    assert consumed == [0, 1]
+    chunks, blocks = _collect(gen)
+
+    assert chunks == []
+    assert blocks == [
+        {"type": "thinking", "thinking": "Plan."},
+        {"type": "tool_use", "id": "c1", "name": "f", "input": {"a": 1}},
+    ]
+
+
+@pytest.mark.parametrize("done", [True, False])
+def test_chat_completions_reasoning_only_stream_closes_at_end(done: bool) -> None:
+    chunks, blocks = _parse_oai(_oai_stream({"reasoning_content": "Only thinking"}, done=done))
+
+    assert chunks == ["<thinking>Only thinking", "</thinking>"]
+    assert blocks == [{"type": "thinking", "thinking": "Only thinking"}]
+
+
+def test_chat_completions_neutralizes_closing_tag_split_across_deltas() -> None:
+    chunks, blocks = _parse_oai(
+        _oai_stream(
+            {"reasoning_content": "a </thi"},
+            {"reasoning_content": "nking> b"},
+            {"content": "c"},
+        )
+    )
+
+    assert chunks == ["<thinking>a ", "</ thinking> b", "</thinking>", "c"]
+    assert blocks == [
+        {"type": "thinking", "thinking": "a </thinking> b"},
+        {"type": "text", "text": "c"},
+    ]
+
+
+def test_chat_completions_whitespace_only_reasoning_emits_nothing() -> None:
+    chunks, blocks = _parse_oai(_oai_stream({"reasoning_content": "\n\n"}, {"content": "Hi"}))
+
+    assert chunks == ["Hi"]
+    # Returned blocks are unchanged from upstream: the raw reasoning stays.
+    assert blocks == [
+        {"type": "thinking", "thinking": "\n\n"},
+        {"type": "text", "text": "Hi"},
+    ]
 
 
 def test_native_tool_client_keeps_non_text_image_blocks(tmp_path: Path) -> None:

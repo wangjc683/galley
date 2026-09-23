@@ -482,8 +482,10 @@ Detail for that range:
 - `llmcore.py` — **`thinking_delta` now yields into the output stream**
   (`_parse_claude_sse`), emitting *untagged* reasoning text. This was a
   coupling break, **default-on for managed Anthropic models**, closed in this
-  same upgrade by patch `0016-managed-native-thinking-tags.patch` (accumulate
-  the block, emit it once wrapped in `<thinking>` at `content_block_stop`). See
+  same upgrade by patch `0016-managed-native-thinking-tags.patch` (then:
+  accumulate the block, emit it once wrapped in `<thinking>` at
+  `content_block_stop`; since 2026-09-23 it streams the reasoning live inside
+  the tag and also tags chat_completions `reasoning_content`). See
   [the devlog](./devlog/2026-08-03-ga-upstream-upgrade-4086d5c-to-d8d90ee.md)
   for the full chain. Short version: the `<thinking>` tags Galley strips are a
   *prompted convention* (GA's system prompt at `llmcore.py:894` asks the model
@@ -744,6 +746,13 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     still sets the attribute the same way, (b) `_enum('reasoning_effort',
     …)` still accepts `none / minimal / low / medium / high / xhigh / max`,
     (c) no new rebuild point appeared outside those three.
+14. `response.thinking` on the `response` object GA hands its turn-end hooks
+    (2026-09-23): `runner/workbench_bridge.py::_on_turn_end` reads it
+    read-only (both runtime modes, next to the existing `response.content`
+    read) into `TurnEndEvent.responseThinking`. Re-check on upgrade that
+    Native* `ask` still fills it from thinking blocks, falling back to a
+    prompted `<think(ing)>` block it moves out of `content`, and that
+    `ToolClient._parse_mixed_response` still sets it.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -762,6 +771,8 @@ start the audit there instead of grepping the bridge:
   `WorkbenchHandler` subclass and its dispatch/approval assumptions.
 - **`runner/workbench_bridge.py::_handle_reinject_tools`** — item 10:
   the GA asset file read (path + schema noted in its docstring).
+- **`runner/workbench_bridge.py::_on_turn_end`** — item 14: the
+  `response.thinking` read.
 - **`runner/managed_runtime.py::install_managed_prompt_profile`** — the
   one backend write outside GaSession (`extra_sys_prompt`); shared with
   the Bridge-less `managed_im_supervisor` path.
