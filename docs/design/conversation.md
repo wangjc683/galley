@@ -7,16 +7,16 @@
 #### Turn 结构
 
 ```
-第 1 步                                          ← 直立 12px sans · tabular 数字 · hairline 分隔（结构 metadata）
-[Thinking summary callout]                       ← 序列最前（仅在 GA 真实 emit <thinking> 时出现）
-[Tool callout 1]                                 ← 行动序列
-[Tool callout 2]
+▸ 3 步 · 用时 42 秒 · …                          ← RunFoldHeader（settled run 完成即折；live 时是「已完成 N 步」）
+│ 01 summary ›                                   ← 序号栏（mono 补零）+ 12px ink-soft summary；› = DetailPanel（推理 / preamble）
+│    旁白                                         ← 模型另写了 summary 时才单独成行；回声步的旁白就是 summary 行
+│    [Tool pill / callout]                       ← 行动序列
+│ 02 …                                           ← run 内步间 mt-2.5
 ─────────────────                                ← 稍深 1px 全宽 hr（行动 → 结论）
-[Final answer，浮在文档里]                       ← 不放 callout
-第 2 步                                          ← 自带 mt-6 (24px) 的 chapter-mark，承担 turn 间分隔
-[Thinking summary callout]
-...
+[Final answer，浮在文档里]                       ← 满宽，不放 callout
 ```
+
+2026-09-23 按现状重画（此前的示意仍是「第 N 步 │」+ 独立 Thinking callout 的旧形态）。过程区的缩进、rail、live 两行窗口、裸步合并、旁白回声步见下文 TurnMarker 与 Thinking Summary 各节。
 
 **没有 turn 之间的 SoftHr** —— TurnMarker 自带视觉重量 + 上方间距，承担 turn-to-turn 的章节分隔。不再有水平横线。
 
