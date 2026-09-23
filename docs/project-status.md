@@ -484,7 +484,10 @@ step markers answer hover and the keyboard like the other disclosures
 labels glued to full-width punctuation (`**早餐：**肠粉`) render as bold
 instead of leaking `**` — `remark-cjk-friendly` replaces the home-grown
 quoted-strong plugin
-([devlog](./devlog/2026-09-23-cjk-friendly-emphasis.md)).
+([devlog](./devlog/2026-09-23-cjk-friendly-emphasis.md)). The run fold
+header gains an in-row hierarchy: ink-soft digits, the tool mix one size
+down, file-changing tools first
+([devlog](./devlog/2026-09-23-run-fold-header-hierarchy.md)).
 Release-scope truth remains `git log v0.5.2..HEAD`.
 
 Standing follow-ups: the app-update hop `v0.5.1` → `v0.5.2` on an installed

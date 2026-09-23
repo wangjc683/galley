@@ -6,18 +6,26 @@ import { useCopy } from "@/lib/i18n";
 import type { RunStats } from "@/lib/run-groups";
 import { cn } from "@/lib/utils";
 
+/** Tools that change files on disk — they lead the scent (see the
+ * truncation policy below). */
+const FILE_TOOLS = new Set(["file_write", "file_patch"]);
+
 /**
  * Fold header for a settled run — the one-line stand-in for the run's
  * whole process section (conversation-run-fold PRD 定案 3/4).
  *
- * TurnMarker's Swiss family on purpose: same size var, same ink-soft
- * register, same thin vertical rule between segments — the fold row is
- * a structural sibling of "第 N 步", not a new visual species. Two
- * segments:
+ * TurnMarker's Swiss family on purpose: same size var (for the
+ * structure segment), same thin vertical rule between segments — the
+ * fold row is a structural sibling of "第 N 步", not a new visual
+ * species. Its ink is NOT TurnMarker's: the row has rested one rung
+ * lower, at ink-muted, since 2026-08-06 (dogfood round 3; see Ink
+ * altitude below). Two segments:
  *
- *   structure  — "10 步 · 2 分 14 秒", tabular figures. Always shown.
+ *   structure  — "10 步 · 用时 2 分 14 秒", tabular figures, digit
+ *                runs one ink rung up (2026-09-23). Always shown.
  *   scent      — tool mix ("修改文件 ×2"), ask_user count, denied
- *                badge. Muted, truncates first (min-w-0). Answers
+ *                badge. Muted, one size step down (the tool-label
+ *                size, 2026-09-23), truncates first (min-w-0). Answers
  *                "what parts of the world did this run touch" without
  *                expanding. Tool names go through `copy.tools` — the
  *                same localized labels the InlineToolPill leads with;
@@ -29,7 +37,14 @@ import { cn } from "@/lib/utils";
  * composition, not chronology — so tools render in count-desc order
  * (stable sort; first-appearance breaks ties), and what the ellipsis
  * eats is always the low-frequency tail, never the run's main
- * activity. RunStats.toolCounts itself stays first-appearance —
+ * activity. One exception since 2026-09-23: the file-changing tools
+ * (`file_write` / `file_patch`) lead the scent. A run that changed
+ * files on disk is the scent's one item about the user's own stuff,
+ * and it is rare (about 11% of multi-step runs) and usually
+ * low-count, so count-desc parked it at the tail, the first thing
+ * the ellipsis ate. The rest keep count-desc (and file tools among
+ * themselves too), so the ellipsis still eats only the low-frequency
+ * generic tail. RunStats.toolCounts itself stays first-appearance —
  * ordering is a render concern. The ask_user count sits OUTSIDE the
  * truncating span, beside the denied badge: both are 留疤-class
  * signals ("a human was pulled in mid-run") that must survive any
@@ -51,13 +66,15 @@ import { cn } from "@/lib/utils";
  * `-mx-2 px-2` lets the hover pill extend into the gutter while the
  * text column stays aligned with the markers above and below.
  *
- * Ink altitude (dogfood round 3): the whole row rests at ink-muted —
- * one rung BELOW TurnMarker's ink-soft, on the scale's own logic:
- * a marker titles structure the reader can see; this row is metadata
- * about structure that is hidden. Affordance survives the demotion
- * because it lives in shape (leading triangle) and hover response
- * (background + ink lift), not in resting weight. The denied badge
- * keeps its warning color — the one scar an all-grey row must show.
+ * Ink altitude (dogfood round 3, 2026-08-06): the row rests at
+ * ink-muted — one rung BELOW TurnMarker's ink-soft, on the scale's own
+ * logic: a marker titles structure the reader can see; this row is
+ * metadata about structure that is hidden. Affordance survives the
+ * demotion because it lives in shape (leading triangle) and hover
+ * response (background + ink lift), not in resting weight. The one
+ * lift since: the structure segment's digit runs sit at ink-soft
+ * (2026-09-23; see the note at that span). The denied badge keeps its
+ * warning color — the one scar an all-grey row must show.
  *
  * Duration lives HERE, after the step count, not in the answer
  * footer: steps × duration are the two axes of the run's lived size
@@ -92,9 +109,19 @@ export function RunFoldHeader({
   const copy = useCopy();
 
   const duration = live ? null : formatDuration(stats.elapsedMs, copy);
+  const steps = live
+    ? copy.conversation.foldStepsLive(stats.stepCount)
+    : copy.conversation.foldSteps(stats.stepCount);
+  const structureText = duration ? `${steps} · ${duration}` : steps;
   const toolLabels = copy.tools as Record<string, string>;
+  // File tools first, then count-desc; the sort is stable, so
+  // first-appearance still breaks ties (truncation policy above).
   const scentText = [...stats.toolCounts]
-    .sort((a, b) => b.count - a.count)
+    .sort(
+      (a, b) =>
+        Number(FILE_TOOLS.has(b.name)) - Number(FILE_TOOLS.has(a.name)) ||
+        b.count - a.count,
+    )
     .map((t) => {
       const label = toolLabels[t.name] ?? t.name;
       return t.count === 1 ? label : `${label} ×${t.count}`;
@@ -121,7 +148,10 @@ export function RunFoldHeader({
   }, [scentText]);
 
   const scentSpan = scentText !== "" && (
-    <span ref={scentRef} className="min-w-0 truncate">
+    <span
+      ref={scentRef}
+      className="min-w-0 truncate tabular-nums [font-size:var(--conversation-tool-label-size)]"
+    >
       {scentText}
     </span>
   );
@@ -141,7 +171,7 @@ export function RunFoldHeader({
       }}
       data-role="run-fold"
       className={cn(
-        "-mx-2 mb-2.5 mt-6 flex min-w-0 cursor-default items-center gap-2 rounded-sm px-2 py-1 [font-size:var(--conversation-step-size)] text-ink-muted outline-none",
+        "group/fold -mx-2 mb-2.5 mt-6 flex min-w-0 cursor-default items-baseline gap-2 rounded-sm px-2 py-1 [font-size:var(--conversation-step-size)] text-ink-muted outline-none",
         "hover:bg-hover hover:text-ink focus-visible:bg-hover focus-visible:text-ink",
         // The live header's first appearance (the first step folding
         // into it) eases in while that row sweeps up — the row is
@@ -157,24 +187,36 @@ export function RunFoldHeader({
           // Rotation duration matches the RunFoldSection sweep
           // (--motion-slow) so the triangle and the panel read as one
           // gesture, not a fast flick beside a slow unfurl.
-          "shrink-0 transition-transform duration-(--motion-slow)",
+          "shrink-0 self-center transition-transform duration-(--motion-slow)",
           open && "rotate-90",
         )}
       />
-      {/* Stays ink-muted regular by live A/B (2026-09-16): a darker
-          ink-soft medium handle was offered against the reference
-          trace component's "header out-inks its list" hierarchy and
-          rejected — the quiet-eyebrow call of 2026-08-06 holds. */}
+      {/* Structure-segment ink, two live A/Bs. 2026-09-16 rejected
+          darkening the whole segment (ink-soft + medium, offered
+          against the reference trace component's hierarchy — a
+          handle that out-inks its list); the quiet-eyebrow call of
+          2026-08-06 held. 2026-09-23 picked inking only the digit
+          runs: the words stay ink-muted regular and no weight
+          changes, so the row stays a quiet eyebrow while the eye has
+          a landing point on the numbers. JC's stated use: read the
+          duration, glance at the step count, and normally skip the
+          tool mix. */}
       <span className="shrink-0 tabular-nums tracking-[0.01em]">
-        {live
-          ? copy.conversation.foldStepsLive(stats.stepCount)
-          : copy.conversation.foldSteps(stats.stepCount)}
-        {duration && ` · ${duration}`}
+        {inkDigitRuns(structureText)}
       </span>
+      {/* The scent drops to the tool-label size (the register of the
+          pill labels it summarizes) and the rule gets 12px each side
+          (mx-1 + the row's gap-2), so the row reads as two groups,
+          structure | scent, instead of one run-on line. The row's
+          baseline alignment keeps the 12px and 11px text (default
+          size) on one baseline; caret and rule re-centre themselves. */}
       {(scentText !== "" ||
         stats.askUserCount > 0 ||
         stats.deniedCount > 0) && (
-        <span className="h-2.5 w-px shrink-0 bg-line" aria-hidden />
+        <span
+          className="mx-1 h-2.5 w-px shrink-0 self-center bg-line"
+          aria-hidden
+        />
       )}
       {scentOverflows && scentSpan ? (
         <TooltipLabel
@@ -188,12 +230,12 @@ export function RunFoldHeader({
         scentSpan
       )}
       {stats.askUserCount > 0 && (
-        <span className="shrink-0">
+        <span className="shrink-0 [font-size:var(--conversation-tool-label-size)]">
           {copy.conversation.foldAskUser(stats.askUserCount)}
         </span>
       )}
       {stats.deniedCount > 0 && (
-        <span className="shrink-0 text-warning">
+        <span className="shrink-0 text-warning [font-size:var(--conversation-tool-label-size)]">
           {copy.conversation.foldDenied(stats.deniedCount)}
         </span>
       )}
@@ -212,5 +254,25 @@ function formatDuration(
   return copy.conversation.foldDurationMinutes(
     Math.floor(sec / 60),
     sec % 60,
+  );
+}
+
+/** Split the formatted structure string on its digit runs and ink only
+ * the numbers; the words between them stay text nodes in the row's
+ * ink-muted. The digit spans set their own ink, so they can't inherit
+ * the row's `hover:text-ink` — they follow the hover / focus lift
+ * through the row's named `group/fold` instead. */
+function inkDigitRuns(text: string) {
+  return text.split(/(\d+)/).map((part, i) =>
+    i % 2 === 1 ? (
+      <span
+        key={i}
+        className="text-ink-soft group-hover/fold:text-ink group-focus-visible/fold:text-ink"
+      >
+        {part}
+      </span>
+    ) : (
+      part
+    ),
   );
 }
