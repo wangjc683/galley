@@ -490,9 +490,10 @@ down, file-changing tools first
 ([devlog](./devlog/2026-09-23-run-fold-header-hierarchy.md)).
 Release-scope truth remains `git log v0.5.2..HEAD`.
 
-Standing follow-ups: the app-update hop `v0.5.1` → `v0.5.2` on an installed
-build (SOP step 10) is owed, and JC's look at the real-database result of
-migration 042 (Settings → 模型 after the upgrade) with it; the ticket `.scratch/live-run-window/PRD.md`
+Standing follow-ups: the app-update hop `v0.5.1` → `v0.5.2` passed on JC's
+installed build (reported 2026-09-23); JC's look at the real-database result
+of migration 042 (Settings → 模型 after the upgrade) is not separately
+reported; the ticket `.scratch/live-run-window/PRD.md`
 stays `ready-for-human` until a few more live runs pass;
 `.scratch/goal-simplify/` is `done`; the "use the whole budget" Goal mode
 and the user-message typography re-review are in
