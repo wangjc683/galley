@@ -27,6 +27,8 @@ import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy } from "@/lib/i18n";
 import { PENDING_STEP_NUMERAL, formatStepNumeral } from "@/lib/step-numeral";
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
+import { cleanSessionSummary } from "@/lib/session-summary";
+import { isEchoNarrationStep } from "@/lib/step-heading";
 import {
   askUserReplyContent,
   mergedAskUserArgs,
@@ -762,8 +764,10 @@ function AgentTurnView({
   // summary (686/686 rows carry one), so that bare shape would be ours
   // alone; both branches need words. Wording follows GA's own two-way
   // fallback at ga.py:599 — the direct-answer line for a turn with no
-  // real tools, the tool name otherwise, which stays true even though
-  // the callouts below repeat it in their own register.
+  // real tools, the tool name otherwise. On a tool step the echo is of
+  // its narration, and a marked step shows that narration as its
+  // marker line instead (`narrationIsHeading` below); the tool name is
+  // left for narration that cleans to nothing.
   const summaryIsEcho = summaryEchoesAnswer(turn.summary, answerText);
   const realTools = visibleTools.filter((t) => t.name !== "no_tool");
   const markerSummary = !summaryIsEcho
@@ -813,12 +817,36 @@ function AgentTurnView({
 
   const showMarker = stepNumber !== undefined && !hideMarker && !mergedStepTool;
 
+  // A tool step whose summary is only GA's echo of its narration has
+  // no heading sentence of its own (lib/step-heading.ts), so the
+  // narration becomes the marker line and gets no row of its own
+  // (2026-09-23). JC picked this form after a live A/B/C comparison.
+  // The other candidate kept the narration as a body-size heading row
+  // over the tools; its known cost was a heavier process region next
+  // to the final answer. The old form's 「调用了 X」 marker only
+  // repeated the tool pill below it. The line is the narration run
+  // through the sidebar's recap cleaner (markdown markers out,
+  // whitespace collapsed), not GA's summary, which may be
+  // middle-elided past 80 characters. While the step streams, the
+  // narration reads in the body register; at turn_end it settles into
+  // this 12px line, a restyle on purpose.
+  const narrationIsHeading = isEchoNarrationStep({
+    hasMarker: showMarker,
+    closingShaped: isFinalTurn,
+    narration: answerText,
+    summary: turn.summary,
+  });
+  const markerLine =
+    narrationIsHeading && answerText
+      ? cleanSessionSummary(answerText) || markerSummary
+      : markerSummary;
+
   return (
     <div>
       {showMarker && (
         <TurnMarker
           index={stepNumber}
-          summary={markerSummary}
+          summary={markerLine}
           thinkingContent={turn.thinking}
           preamble={detailPreamble}
         />
@@ -838,8 +866,9 @@ function AgentTurnView({
             dispatching them, so rendering it after read as "tools ran →
             then it announced the plan" — time-inverted on re-read. The
             final answer stays after the sequence (a final turn carries
-            no real tools). */}
-        {answerText && !isFinalTurn && (
+            no real tools). An echo-narration step's narration is its
+            marker line instead (`narrationIsHeading`). */}
+        {answerText && !isFinalTurn && !narrationIsHeading && (
           <MessageAgentNarration>{answerText}</MessageAgentNarration>
         )}
 
@@ -970,7 +999,9 @@ export function TurnMarker({
    * GA-side third-person turn summary (from turn_end event's
    * `summary` field). When present, rendered on the same line after
    * a separator — mirrors the Sidebar two-liner format so the user
-   * sees the same recap there and in the conversation document.
+   * sees the same recap there and in the conversation document. On
+   * an echo step (GA's summary is only the narration again) the caller
+   * passes the cleaned narration itself instead (2026-09-23).
    * Omitted: marker shows just the step number, which is the right
    * minimum when GA didn't produce a summary.
    */

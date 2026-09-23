@@ -589,7 +589,9 @@ function MainViewContent({
                   indented marker. A block-gap margin reads as "the
                   next paragraph after the status line" and stays
                   neutral about what the partial settles into — a
-                  narration (6px, indented) or the final answer
+                  narration (6px, indented), the step marker's own
+                  line when the narration is the step's only sentence
+                  (echo steps, 2026-09-23), or the final answer
                   (StrongHr). Not the answer's rule: the partial may
                   still turn out to be a step's narration, and a
                   conclusion line on every step would lie. */}

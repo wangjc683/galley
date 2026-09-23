@@ -1507,7 +1507,9 @@ export const zhCopy = {
     /** GA 的兜底口径（ga.py:599）。模型漏写 <summary> 时 GA 会把整段
      *  回答当摘要，Galley 抑制该回声后用这两句占位，避免步号后空一片。
      *  GA 从不产出空 summary，所以裸步号是 Galley 自己造出来的形态，
-     *  两个分支都必须有词可填。 */
+     *  两个分支都必须有词可填。工具步的回声就是它的旁白：自 2026-09-23
+     *  起旁白本身做步骤行文字，stepCalledTools 只在旁白清洗后为空时
+     *  兜底。 */
     stepDirectAnswer: "直接回答了用户问题",
     stepCalledTools: (names: string[]) =>
       names.length === 1 ? `调用了 ${names[0]}` : `调用了 ${names.length} 个工具`,

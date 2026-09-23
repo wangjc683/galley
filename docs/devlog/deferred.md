@@ -595,3 +595,37 @@
 - **边界**：只热更已有模型的生效配置；新增 / 删除模型、换 Key 仍需新会话（凭证白名单 spawn 时定死）。Channels 先不动。
 - **被否**：C「本 run 内立即生效」（直接写属性 + 仍要重建，两套机制换一个小收益）。
 - **关联**：`runner/managed_runtime.py` `install_managed_mykey_loader` · `runner/workbench_bridge.py` `_apply_reasoning_effort` · `core/src/commands/managed_model.rs` `sync_managed_model_config` · [IPC §5.14](../ipc-protocol.md)
+
+---
+
+## 思考寄存器排印：中文伪斜体 + 段落 / 列表行高不一致
+
+- **状态**：暂存（2026-09-23 JC：「思考不是正文、不是回答，用斜体没什么问题」）
+- **提出**：2026-09-23，[步骤标题：旁白回声步](./2026-09-23-step-heading-narration-echo.md) 那轮的第 2 候选。
+- **启动信号**：JC 看到中文思考（GLM / DeepSeek 在中文对话里常用中文推理）的预览或 caret 全文后觉得字「歪」；或社区反馈同类。
+- **背景**（已核实，别重查）：thinking 变体是 `italic` + `--font-serif`（Newsreader → PingFang SC / 雅黑）。苹方、雅黑没有斜体字面，WebKit 默认 `font-synthesis` 把直立汉字几何倾斜；英文走 Newsreader 真斜体没问题。回答里的中文引用块（`[&_blockquote]:italic`）早就是同一种伪斜体。第二件是真 bug：`PROSE_BASE` 的 `[&_p]` 给段落 body leading，`--conversation-thinking-leading` 只落在根元素和列表项，思考寄存器里段落与列表行高不一样（DetailPanel 与实时预览都受影响；预览行盒因此按「思考字号 × 正文行高」算）。
+- **方案**：思考寄存器加 `font-synthesis-style: none`——中文直立、英文仍斜体，寄存器靠浅色 + 小一号撑；行高统一到 thinking leading 并同步 `ThinkingPreview` 的 `LINE_BOX`。
+- **待定**：中文直立后思考与正文的区分度够不够（真机看一眼即可，不必切换器）；引用块是否同改。
+- **关联**：`gui/src/components/conversation/MarkdownView.tsx` `PROSE_THINKING` · `gui/src/components/conversation/ThinkingPreview.tsx` `LINE_BOX` · [思考实时预览](./2026-09-23-live-thinking-preview.md)
+
+---
+
+## 短推理的预览一闪而过
+
+- **状态**：观察中（2026-09-23）
+- **提出**：2026-09-23，[步骤标题：旁白回声步](./2026-09-23-step-heading-narration-echo.md) 那轮的观察项。
+- **启动信号**：JC 在多步 run 里觉得思考预览「一闪一闪」、过程区太忙。
+- **背景**：首轮真机落库的 8 条推理平均 175 字、最长 312 字；快模型不到一秒吐完，预览展开即收合。每步另有上一步出场 sweep、新步入场、时钟归零。
+- **方案**：推理持续超过约 1 秒才展开预览（与 thinking 计时器「≥ 3 秒才显示读秒」同理）；不满门槛的推理只进 caret。
+- **关联**：`gui/src/components/screens/MainView.tsx` `thinkingPreviewVisible` · [思考实时预览](./2026-09-23-live-thinking-preview.md)
+
+---
+
+## GA 拿推理首行合成的 summary
+
+- **状态**：观察中（2026-09-23）
+- **提出**：2026-09-23，[步骤标题：旁白回声步](./2026-09-23-step-heading-narration-echo.md) 查数据时发现。
+- **启动信号**：推理模型成为常用后这类步明显变多（2026-09-01 起 18 步），或 JC 嫌 marker 上那句截断的英文推理别扭。
+- **背景**（已核实）：模型只回推理 + 工具调用、一个正文字都没写时，上游 `llmcore._ensure_text_block` 取推理首行前 60 字拼 `<summary>…...</summary>` 塞进 content，于是 marker 显示「The user wants to know if this weekend is suitable for going …」（中文对话里也常是英文），点开 caret 的推理第一句就是它。不是 81b8cc75 引入的（最早 09-09），但推理进 caret 后重复才露出来。
+- **方案候选**：识别「summary = 推理首行截断」的步，marker 改用 `stepCalledTools` 兜底或只留序号 + caret；不改内核（上游行为，且只影响显示）。
+- **关联**：`managed-ga/code/llmcore.py` `_ensure_text_block` · `gui/src/components/conversation/Conversation.tsx` `markerSummary`
