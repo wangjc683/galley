@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-23
+- [步骤 marker：可展开行补回 hover 应答与键盘可达](./2026-09-23-step-marker-hover-affordance.md) — JC 真机发现带推理的步 hover 无反应、看不出能点；查实是死样式：行级 `hover:text-ink` 够不到自带墨色的子元素（06-09 起失效），07-16 按 §2.6 禁小手后信号清零，且行不可键盘达；三条全按推荐不开切换器：对齐 pill / 折叠头（`role=button` + 内容列 `bg-hover` 提墨）、序号不进框、拖选不触发；否掉只修提墨、恢复小手、放大静止态 caret
 - [步骤标题：旁白回声步用旁白当 marker 小字](./2026-09-23-step-heading-narration-echo.md) — 思考预览后 JC 问对话区还能怎么优化；先查 deferred 与数据：三候选（marker 复述 pill / 中文伪斜体 / 短推理一闪）+ 不重提清单；数据：09 月起带旁白的步 80% 的 summary 是 GA 拿旁白回填的回声，marker 退回「调用了 X」只复述下方 pill；A 现状 / B 旁白兼任正文标题行 / C 旁白降为 marker 小字切换器真机，我推荐 B、JC 裁 C（统一标题寄存器、过程区保持轻，代价是落定缩字）；伪斜体 JC 判斜体无碍、连同行高 bug 进 deferred；短推理一闪、GA 用推理首行合成 summary 两项观察进 deferred
 - [思考显示：三行实时预览 + 落定进 caret](./2026-09-23-live-thinking-preview.md) — JC 常见大段思考按回答样式霸屏、落定一帧消失；核查一半是 bug：OpenAI 兼容通道 `reasoning_content` 不带标签流进回答 partial（08-03 的 `0016` 只修了 Anthropic），状态行还写「正在回答…」，bridge 只发 `content` 使原生推理从不落库（1351 行 thinking 列 0 条，更正 08-03「思考面板已能填上」）；四条全按推荐：先修 bug、流式三行滚动预览（思考寄存器、DetailPanel 同列）、推理一闭合即收、预览不可展开；路线取带内流式标签（`0016` 改边到边吐、两通道同构）否掉 hook 旁路；`turn_end.responseThinking` 三端增量、两模式都发；`/btw` 剥带内推理；IM 入口逐个核查无回归、飞书顺带修好；行数 × 收合时机临时切换器真机实测，JC 定 3 行 + 思考结束；外置流式期照旧、Responses 模式只落定
 

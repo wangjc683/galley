@@ -478,7 +478,9 @@ caret (managed patch `0016` rewritten to stream reasoning in-band, additive
 [devlog](./devlog/2026-09-23-live-thinking-preview.md)) — touches the managed
 runtime, so the bundle gate applies at the next release. Echo-narration
 steps show their narration as the step marker's text instead of 「调用了 X」
-([devlog](./devlog/2026-09-23-step-heading-narration-echo.md)).
+([devlog](./devlog/2026-09-23-step-heading-narration-echo.md)). Expandable
+step markers answer hover and the keyboard like the other disclosures
+([devlog](./devlog/2026-09-23-step-marker-hover-affordance.md)).
 Release-scope truth remains `git log v0.5.2..HEAD`.
 
 Standing follow-ups: the app-update hop `v0.5.1` → `v0.5.2` on an installed

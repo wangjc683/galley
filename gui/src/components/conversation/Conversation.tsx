@@ -971,12 +971,26 @@ function normalizedInlineText(value?: string | null): string {
  *     Plain `第 N 步 · {summary}` line. No interaction.
  *
  *   settled, expandable (`thinking={false}` + thinkingContent or preamble):
- *     Same line + trailing chevron. Whole row is clickable: click
- *     toggles an inline DetailPanel that renders the LLM's thinking
- *     and "当前阶段：..." preamble below the step row, in the same
- *     italic ink-soft register as TurnMarker itself. Reveals the
- *     reasoning the LLM wrote before dispatching the tool, on demand
- *     — without forcing it onto users who don't care.
+ *     Same line + trailing caret. The whole row is a disclosure
+ *     (2026-09-23): role="button", a tab stop, Enter / Space toggle,
+ *     aria-expanded, and no aria-label — its name is its own content
+ *     (the sr-only 「第 N 步」 plus the summary). Toggling reveals an
+ *     inline DetailPanel with the LLM's thinking and "当前阶段：..."
+ *     preamble below the step row, in the italic thinking register.
+ *     Reveals the reasoning the LLM wrote before dispatching the
+ *     tool, on demand — without forcing it onto users who don't care.
+ *     Hover or keyboard focus anywhere on the row paints bg-hover and
+ *     lifts summary + caret to ink, the same answer the RunFoldHeader
+ *     and the tool pill give. The box covers the content column only
+ *     — the numeral gutter stays outside it — and its left edge sits
+ *     10px left of the content x, the tool pill's hover-box edge, so
+ *     marker and pill boxes stack flush. A drag-select inside the
+ *     summary (select-text: an echo step's marker line is the model's
+ *     narration, worth copying) does not toggle. Before this the row
+ *     gave no hover signal: its row-level ink lift went dead when the
+ *     summary took its own ink (2026-06-09), and the pointer cursor
+ *     that still marked it clickable left with the native-feel round
+ *     (2026-07-16, foundations §2.6: native arrow on chrome).
  */
 export function TurnMarker({
   index,
@@ -1077,11 +1091,26 @@ export function TurnMarker({
       size={11}
       weight="thin"
       className={cn(
-        "ml-1 inline-block shrink-0 align-[-1px] text-ink-muted transition-transform duration-(--motion-fast)",
+        // Resting ink-muted, lifted with the summary by the row's
+        // hover / focus (see contentBox).
+        "ml-1 inline-block shrink-0 align-[-1px] text-ink-muted transition-transform duration-(--motion-fast) group-hover:text-ink group-focus-visible:text-ink",
         open && "rotate-180",
       )}
     />
   ) : null;
+  // The disclosure's hover / focus box (2026-09-23), on the content
+  // column only: the numeral gutter stays outside, as the merged pill
+  // row keeps its prefix outside its button. -ml-2.5 pl-2.5 bleeds the
+  // box 10px left while the text x stays put — the tool pill's hover
+  // box starts there too (its wrapper's -ml-2.5), so the two stack on
+  // one left edge. No vertical bleed: the box is the line box itself.
+  // A 2px -my/py bleed was cut flat at the top in the live run window,
+  // whose ExpandSection clips flush with a marker row that has its
+  // top margin zeroed. No transition: hover is instant here, as on
+  // the pill and the RunFoldHeader.
+  const contentBox = hasDetail
+    ? "-ml-2.5 rounded-sm pl-2.5 pr-2 group-hover:bg-hover group-hover:text-ink group-focus-visible:bg-hover group-focus-visible:text-ink"
+    : undefined;
   const trailing = thinking ? (
     <ThinkingStatus status={liveStatus} elapsedLabel={elapsedLabel} />
   ) : summary ? (
@@ -1089,18 +1118,54 @@ export function TurnMarker({
     // step's sentence and a clipped sentence loses the step. GA
     // summaries run one to two sentences, so this is rarely more
     // than two lines.
-    <span className="min-w-0 flex-1 select-text text-ink-soft">
+    <span
+      className={cn("min-w-0 flex-1 select-text text-ink-soft", contentBox)}
+    >
       {summary}
       {detailCaret}
     </span>
-  ) : (
-    detailCaret
-  );
+  ) : hasDetail ? (
+    // Bare-number step with detail: the lone caret still gets the
+    // full-width content box, not a small square around itself.
+    <span className={cn("min-w-0 flex-1", contentBox)}>{detailCaret}</span>
+  ) : null;
 
   return (
     <div>
       <div
-        onClick={hasDetail ? () => setOpen((v) => !v) : undefined}
+        role={hasDetail ? "button" : undefined}
+        tabIndex={hasDetail ? 0 : undefined}
+        aria-expanded={hasDetail ? open : undefined}
+        onClick={
+          hasDetail
+            ? (e) => {
+                // A drag-select that starts and ends inside the row
+                // still fires click; finishing a copy must not toggle
+                // the panel. A plain click collapses any selection on
+                // mousedown, so it passes.
+                const selection = window.getSelection();
+                if (
+                  selection &&
+                  !selection.isCollapsed &&
+                  selection.anchorNode &&
+                  e.currentTarget.contains(selection.anchorNode)
+                ) {
+                  return;
+                }
+                setOpen((v) => !v);
+              }
+            : undefined
+        }
+        onKeyDown={
+          hasDetail
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setOpen((v) => !v);
+                }
+              }
+            : undefined
+        }
         // The live window region zeroes this row's top margin through
         // the attribute (see Conversation's window StepRegion) so the
         // gap above the window is owned by the header / region.
@@ -1123,7 +1188,14 @@ export function TurnMarker({
           // the boundary gap — the common case for that window is the
           // first step right after the user submits.
           index != null && index > 1 ? "mt-2.5" : "mt-6",
-          hasDetail && "cursor-default hover:text-ink",
+          // The row is only the `group`: the hover / focus paint lives
+          // on the children (contentBox, caret) via group-hover. A
+          // row-level hover:text-ink cannot reach children that set
+          // their own ink — summary, numeral and caret all do — which
+          // is how the old lift went dead. outline-none because the
+          // focus-visible paint is the focus indicator, as on the
+          // RunFoldHeader.
+          hasDetail && "group cursor-default outline-none",
         )}
       >
         {/* Ordinal gutter (2026-09-16): a zero-padded numeral in a
