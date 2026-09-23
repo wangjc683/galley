@@ -423,9 +423,12 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
     上当年没做的主题条件。
   - **不要退化成"删掉这条覆盖"**：那个方案 2026-06-20 试过并被否（浅色下
     agent 正文太薄太虚）。浅色行为一字未改。
-- 相邻问题：CommonMark 把 `名叫**"下一个字"**` 这类"`**` 紧贴 CJK + 引号"判为
-  字面量；`MarkdownView` 的 `remarkCjkAdjacentQuotedStrong` 插件把这种 LLM 高频
-  写法还原成 strong。
+- 相邻问题：CommonMark 的 flanking 规则按西文空格设计，`**` 紧贴全角标点、
+  另一侧又是汉字时（`**早餐：**肠粉`、`名叫**"下一个字"**`）判为字面量，星号
+  原样漏出。`MarkdownView` 用 `remark-cjk-friendly`（CommonMark CJK 修正提案的
+  实现）把这类 LLM 高频写法还原成 strong；2026-09-23 取代只修引号一种形态的
+  自写插件 `remarkCjkAdjacentQuotedStrong`，见
+  [devlog](../devlog/2026-09-23-cjk-friendly-emphasis.md)。
 
 **2026-06-20 CJK 去 serif，全 app 中文统一到 sans:**
 

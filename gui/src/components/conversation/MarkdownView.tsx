@@ -8,6 +8,7 @@ import {
 } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
+import remarkCjkFriendly from "remark-cjk-friendly/parseOnly";
 import remarkGfm from "remark-gfm";
 
 import { CodeBlock } from "@/components/conversation/CodeBlock";
@@ -20,7 +21,6 @@ import { CodeBlockContext } from "@/lib/code-block-context";
 import { DocumentPathContext } from "@/lib/local-files";
 import { remarkDocumentHeadings } from "@/lib/remark-document-headings";
 import { markdownUrlTransform } from "@/lib/markdown-image-src";
-import { remarkCjkAdjacentQuotedStrong } from "@/lib/remark-cjk-strong";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,6 +32,10 @@ import { cn } from "@/lib/utils";
  *     dangerouslySetInnerHTML; sanitised by virtue of the schema)
  *   - remark-gfm for GitHub-flavoured extensions (tables, task
  *     lists, autolink, strikethrough)
+ *   - remark-cjk-friendly for CJK-adjacent `**` that CommonMark keeps
+ *     literal (`**标签：**正文`, commonmark-spec#650); after remark-gfm,
+ *     per its README. The parseOnly entry: react-markdown never
+ *     serializes back to markdown, so the stringify half is dead weight
  *   - shiki for code-block syntax highlighting (see `CodeBlock.tsx`),
  *     with a hand-picked language set so we don't ship every TextMate
  *     grammar known to mankind. Languages outside the list fall back
@@ -159,7 +163,7 @@ export const MarkdownView = memo(function MarkdownView({
           <ReactMarkdown
             remarkPlugins={[
               remarkGfm,
-              remarkCjkAdjacentQuotedStrong,
+              remarkCjkFriendly,
               ...(documentPath ? [remarkDocumentHeadings] : []),
               ...(softBreaks ? [remarkBreaks] : []),
             ]}

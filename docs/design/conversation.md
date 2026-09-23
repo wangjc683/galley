@@ -132,7 +132,7 @@ Agent 经 `ask_user` 停下来问人的那条：实时态是 warning 左条 + `P
 
 #### Markdown 渲染
 
-Final answer 跟 Thinking summary 都通过 `react-markdown` + `remark-gfm` + Shiki 渲染。LLM 输出的 markdown（标题 / 列表 / 表格 / 代码块 / 引用 / 链接 / 删除线）全部解析成对应 DOM，没解析的纯文本走默认段落。
+Final answer 跟 Thinking summary 都通过 `react-markdown` + `remark-gfm` + `remark-cjk-friendly`（`**标签：**正文` 这类紧贴全角标点的加粗，CommonMark 会原样漏星号）+ Shiki 渲染。LLM 输出的 markdown（标题 / 列表 / 表格 / 代码块 / 引用 / 链接 / 删除线）全部解析成对应 DOM，没解析的纯文本走默认段落。
 
 **typography 映射**（每个元素 pull 现有 token，不引入新字号）。下表
 px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由

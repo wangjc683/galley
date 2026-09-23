@@ -21,7 +21,7 @@ Galley 是文库，不是编辑。所有排印干预（间距、悬挂、标点�
 
 - 复制出来的文字必须与模型原文逐字一致。
 - code block 逐字呈现，不参与任何混排美化（见下）。
-- markdown 修复插件（如 `remarkCjkAdjacentQuotedStrong`）的准入标准是
+- markdown 修复插件（如 `remark-cjk-friendly`）的准入标准是
   **还原模型的明确意图**（LLM 高频写法被 CommonMark 判为字面量），不是
   「改得更好看」。任何会改变语义或字符内容的"修复"都不收。
 

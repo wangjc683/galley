@@ -480,7 +480,11 @@ runtime, so the bundle gate applies at the next release. Echo-narration
 steps show their narration as the step marker's text instead of 「调用了 X」
 ([devlog](./devlog/2026-09-23-step-heading-narration-echo.md)). Expandable
 step markers answer hover and the keyboard like the other disclosures
-([devlog](./devlog/2026-09-23-step-marker-hover-affordance.md)).
+([devlog](./devlog/2026-09-23-step-marker-hover-affordance.md)). Bold
+labels glued to full-width punctuation (`**早餐：**肠粉`) render as bold
+instead of leaking `**` — `remark-cjk-friendly` replaces the home-grown
+quoted-strong plugin
+([devlog](./devlog/2026-09-23-cjk-friendly-emphasis.md)).
 Release-scope truth remains `git log v0.5.2..HEAD`.
 
 Standing follow-ups: the app-update hop `v0.5.1` → `v0.5.2` on an installed
