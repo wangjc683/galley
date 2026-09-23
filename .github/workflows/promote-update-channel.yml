@@ -50,7 +50,25 @@ jobs:
           fi
 
           mkdir -p artifacts
-          gh release download "$TAG" --dir artifacts --clobber
+          # Download by release id, not by tag. Right after a draft is
+          # published, GitHub's by-tag release lookup (what
+          # `gh release download <tag>` reads) can keep serving an
+          # asset-less object for many minutes while the by-id assets
+          # endpoint is already current (v0.5.3, 2026-09-23).
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.id')"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets" \
+            --jq '.[] | "\(.id)\t\(.name)"' |
+            while IFS=$'\t' read -r asset_id asset_name; do
+              gh api -H "Accept: application/octet-stream" \
+                "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" > "artifacts/${asset_name}"
+            done
+
+          asset_count="$(find artifacts -type f | wc -l | tr -d ' ')"
+          if [[ "$asset_count" -eq 0 ]]; then
+            echo "Release $TAG has no downloadable assets." >&2
+            exit 1
+          fi
+          echo "Downloaded $asset_count assets for $TAG (release id $release_id)."
 
       - name: Generate updater manifest
         run: |
