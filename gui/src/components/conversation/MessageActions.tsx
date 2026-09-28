@@ -27,6 +27,7 @@ import {
   telemetryCachedInput,
   telemetryInputTotal,
 } from "@/lib/telemetry";
+import { cn } from "@/lib/utils";
 import type { MessageTelemetry } from "@/types/conversation";
 
 /**
@@ -44,9 +45,21 @@ import type { MessageTelemetry } from "@/types/conversation";
  *              to disk. Default filename `galley-{timestamp}.md` so
  *              successive saves don't fight each other.
  *
- * Always-visible (not hover-only): per dogfood feedback, hover-only
- * affordances make users hunt around. The buttons are muted enough
- * that they recede during reading and surface on intent.
+ * Shown while its answer is hovered (2026-09-28): MessageAgent's
+ * `group/answer` — the answer body plus this bar — is the hover
+ * region. Until then the bar was always visible, per V0.1 dogfood
+ * feedback that hover-only affordances make users hunt around. JC
+ * found it noisy at times but fine under long answers: about 27% of
+ * final answers are one or two lines, where the bar is as big as the
+ * answer. Live-tested against the bar as it was, B (latest answer
+ * always visible, older ones on hover) and C (always visible but
+ * icon-only, numbers in the gauge's tooltip); JC picked hover as the
+ * most comfortable. See devlog 2026-09-28-answer-action-bar-on-hover.
+ * Hidden keeps its box (opacity, not unmount), so hovering never
+ * shifts the layout; a copied / saved flash stays visible through its
+ * 1.5s. No focus reveal: hover-only actions stay out of the Tab order
+ * (2026-06-29 pointer-first focus rule), and the chips are
+ * `tabIndex={-1}`.
  *
  * Icon-only (no "Copy" / "Save" text labels): text labels at the left
  * edge of the reading column visually competed with the next
@@ -123,7 +136,14 @@ export function MessageActions({ source, telemetry }: MessageActionsProps) {
   };
 
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+    <div
+      className={cn(
+        "mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1",
+        !copied &&
+          !saved &&
+          "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100",
+      )}
+    >
       <div className="flex items-center gap-0.5">
         <ActionChip
           active={copied}

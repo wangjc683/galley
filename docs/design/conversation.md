@@ -266,18 +266,18 @@ markdown 的每一个块间距都是 `--conversation-block-gap` 的倍数，该�
 
 #### Message Actions（reply 级行动条）
 
-每段 agent final answer 下方常驻一行 muted 行动条（DESIGN.md §4.3 dogfood 反馈：用户经常想保留 reply 内容）：
+每段 agent final answer 下方一行 muted 行动条（DESIGN.md §4.3 dogfood 反馈：用户经常想保留 reply 内容），**悬停该回答时才显示**（2026-09-28 起；此前常驻，见下方「视觉」）：
 
 | 按钮 | 行为 |
 |---|---|
 | `Copy` | 复制原始 markdown source（带 `**bold**` `## headers`），不是渲染后纯文本——用户粘贴目的地（Notion / Obsidian / Slack / 邮件）多数能 re-render markdown |
 | `Save` | Tauri save dialog → `.md` 文件。默认文件名 `galley-{YYYYMMDD-HHmmss}.md`（产品名前缀；`ga` 保留给内核，与图片保存的 `galley-image-` 同族），用户可改 |
 
-**复制入口统一（`ActionChip`）** —— 按"常驻 vs 触发浮现"两类组织，全部共用一个
+**复制入口统一（`ActionChip`）** —— 按"行动条 vs 触发浮现"两类组织，全部共用一个
 `ActionChip`（Copy thin 14px → Check success，1.5s 回落，quiet 1px press）：
 
-- **常驻**：assistant 回答末尾的 reply 行动条（`Copy` + `Save`），bare chip、贴答案
-  下方左对齐、一直可见。
+- **行动条**：assistant 回答末尾的 reply 行动条（`Copy` + `Save`），bare chip、贴答案
+  下方左对齐、悬停该回答时显示（2026-09-28 前一直可见）。
 - **触发浮现**：用户做动作才出现的复制，贴相关内容浮出：
   - assistant 里**选中**文字 → 浮在选区旁（gutter），`floating` 变体
   - user 消息上 **hover** → 浮在气泡**右下角外侧**、中心对准末行文字的行盒中心，
@@ -294,7 +294,7 @@ markdown 的每一个块间距都是 `--conversation-block-gap` 的倍数，该�
 两条正交的规则（2026-08-10 拆开；此前误绑成「常驻=bare／触发=floating」的等式，
 导致 user hover chip 长期穿错皮）：
 
-1. **何时出现**：常驻操作在回答末尾的 bar 里；触发式复制贴着触发它的内容浮出。
+1. **何时出现**：回答级操作在回答末尾的 bar 里（悬停回答时显示）；触发式复制贴着触发它的内容浮出。
 2. **穿哪身皮**——只看**背后是什么**，与生命周期无关：
    - `floating`（实底 `bg-elevated` + `border-line` + token 投影，非
      glassmorphism）**仅**用于会压在任意内容之上、必须把自己从中切出来的场合。
@@ -314,7 +314,8 @@ markdown 的每一个块间距都是 `--conversation-block-gap` 的倍数，该�
 - 位置：reply markdown 渲染**正下方**，gap 6px (`mt-1.5`)
 - icon-only chip（14px Phosphor thin），无文字标签；标签在 Radix
   tooltip / aria-label 里
-- **常驻可见**（不 hover-only），text-ink-muted；hover 升 ink-soft + bg-hover
+- **悬停回答时显示**（2026-09-28 起，此前常驻可见）：悬停区是 `MessageAgent` 外层 `group/answer`（答案正文 + 行动条）。隐藏时保留占位（`opacity-0` + `pointer-events-none`，不卸载），悬停不引起位移；「已复制 / 已保存」反馈的 1.5s 内保持可见；不做键盘聚焦显形（06-29 指针优先规则，chip 本就 `tabIndex={-1}`）。内容不变：复制、保存 | token 与上下文。V0.1 常驻的理由是「只在悬停出现，用户得到处找」；JC 嫌它时常吵、长答案下还好（约 27% 的回答只有一两行，栏和回答一样大），真机比过现状 / 最新一条常显 / 常显只留图标后选悬停，见 [devlog](../devlog/2026-09-28-answer-action-bar-on-hover.md)
+- chip 静息 text-ink-muted；hover 升 ink-soft + bg-hover
 - 点击后 icon 变 Check（`text-success`）1.5s 后回 idle；tooltip 随状态
   切换（悬停绿勾时读到「已复制」而非「复制」）
 

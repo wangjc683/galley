@@ -8,12 +8,13 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  * Shared copy / save action chip for the conversation. One visual
  * vocabulary across the places a copy affordance appears.
  *
- * WHEN it shows (persistent vs transient) and WHICH SKIN it wears are
+ * WHEN it shows (bar vs transient) and WHICH SKIN it wears are
  * two independent questions — conflating them is what put a bordered
  * box against a highlighter stroke until 2026-08-10.
  *
- *   - persistent: always visible in the reply action bar under an
- *     assistant answer (MessageActions).
+ *   - bar: in the reply action bar under an assistant answer
+ *     (MessageActions), shown while that answer is hovered
+ *     (2026-09-28; always visible until then).
  *   - transient: fades in on a user action — hovering a user message
  *     (MessageUser) or selecting assistant text (SelectionCopyToolbar).
  *

@@ -52,8 +52,10 @@ export const MessageAgent = memo(function MessageAgent({
     if (isLeakedToolCallMarkup(children)) {
       return <ProtocolFailureNotice markup={children} />;
     }
+    // `group/answer`: the hover region that reveals MessageActions —
+    // the answer body plus its bar (2026-09-28).
     return (
-      <div data-message-id={messageId}>
+      <div data-message-id={messageId} className="group/answer">
         <MarkdownView source={children} variant="agent" selectionCopyScope />
         {showActions && <MessageActions source={children} telemetry={telemetry} />}
       </div>

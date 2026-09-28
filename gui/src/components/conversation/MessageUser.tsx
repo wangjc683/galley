@@ -92,9 +92,10 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   「有点吵，也没有必要」.
  *   Only user messages carry a time, not answers: the same rule
  *   applied to answers fires 0 times in 409 runs; the answer action
- *   bar is always visible, so a time there would mean a time on every
- *   answer; and the gaps all come from the user leaving and coming
- *   back. The completion time of long unattended runs (overnight
+ *   bar was always visible when this was decided, so a time there
+ *   would have meant a time on every answer (the bar went hover-only
+ *   later the same day); and the gaps all come from the user leaving
+ *   and coming back. The completion time of long unattended runs (overnight
  *   Goal, scheduled tasks) is deferred.
  *
  * Message actions:
@@ -110,9 +111,10 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   text end, so it never jumps with content. It sat inside the
  *   block until 2026-08-05, when shrink-to-fit made the `pr-10` it
  *   needed show up as dead fill on short messages. It never touches
- *   the inter-turn gap, and shares the block's hover region. The model: persistent
- *   actions live in the assistant reply bar; transient copy surfaces
- *   on a user action (hover / select). It wears the BARE chip skin,
+ *   the inter-turn gap, and shares the block's hover region. The model: bar
+ *   actions live in the assistant reply bar (shown while its answer
+ *   is hovered, 2026-09-28); transient copy surfaces on a user action
+ *   (hover / select). It wears the BARE chip skin,
  *   not the bordered one — see the render site. Mouse leave delays
  *   hiding briefly so the user can move from the message body to the
  *   action without chasing it.
