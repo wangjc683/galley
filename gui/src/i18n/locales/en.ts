@@ -1596,10 +1596,10 @@ export const enCopy: AppCopy = {
     sendWorking: "Working on it",
     seconds: (sec) => `${sec}s`,
     minutesSeconds: (minutes, sec) => `${minutes}m ${sec}s`,
-    justNow: "Just now",
-    minutesAgo: (minutes) => `${minutes}m ago`,
-    hoursAgo: (hours) => `${hours}h ago`,
-    daysAgo: (days) => `${days}d ago`,
+    // User message send time (2026-09-28). `time` is the formatted clock
+    // time ("9:10 AM"); older dates come whole from lib/message-time.ts.
+    messageTimeToday: (time) => `Today ${time}`,
+    messageTimeYesterday: (time) => `Yesterday ${time}`,
     copy: "Copy",
     copySelection: "Copy selection",
     copied: "Copied",

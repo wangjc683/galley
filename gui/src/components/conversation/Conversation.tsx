@@ -18,13 +18,19 @@ import { RunFoldSection } from "@/components/conversation/RunFoldSection";
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
+import { useDayStamp } from "@/hooks/useDayStamp";
 import {
   WrittenFilesContext,
   buildWrittenFileResolver,
 } from "@/lib/written-files";
 import { planGoalRuns } from "@/lib/goal-run-groups";
 import { annotateGoalThread } from "@/lib/goal-thread";
-import { useCopy } from "@/lib/i18n";
+import { useCopy, useLanguage } from "@/lib/i18n";
+import {
+  formatMessageTime,
+  formatMessageTimeFull,
+  userTimeMarks,
+} from "@/lib/message-time";
 import { PENDING_STEP_NUMERAL, formatStepNumeral } from "@/lib/step-numeral";
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
 import { cleanSessionSummary } from "@/lib/session-summary";
@@ -173,6 +179,40 @@ export function Conversation({
     turns.forEach((t, i) => m.set(t, i));
     return m;
   }, [turns]);
+
+  // User message send time (message-timestamps PRD, 2026-09-28): which
+  // user turns sit at a break, and their label text, computed once here
+  // so MessageUser (a memo component) and GoalCommissionMarker only
+  // receive strings. Only a break shows a time, so only those turns
+  // are formatted. `dayStamp` is local midnight and moves at the day
+  // rollover, so 「今天 / 昨天」 re-label without a data change; no
+  // Date.now() in render.
+  const copy = useCopy();
+  const language = useLanguage();
+  const dayStamp = useDayStamp();
+  const timeMarks = useMemo(() => userTimeMarks(turns), [turns]);
+  const pinnedTimes = useMemo(() => {
+    const words = {
+      today: copy.conversation.messageTimeToday,
+      yesterday: copy.conversation.messageTimeYesterday,
+    };
+    const labels = new Map<number, { label: string; full?: string }>();
+    for (const [index, mark] of timeMarks) {
+      if (!mark.pinned) continue;
+      const turn = turns[index];
+      if (turn.role !== "user" || !turn.createdAt) continue;
+      const label = formatMessageTime(turn.createdAt, dayStamp, language, {
+        withTodayWord: mark.withTodayWord,
+        words,
+      });
+      if (!label) continue;
+      labels.set(index, {
+        label,
+        full: formatMessageTimeFull(turn.createdAt, language) ?? undefined,
+      });
+    }
+    return labels;
+  }, [timeMarks, turns, dayStamp, language, copy]);
 
   // Manual toggles, keyed by opener index: true = user expanded,
   // false = user collapsed, absent = default. Ephemeral per mount —
@@ -403,11 +443,21 @@ export function Conversation({
   ) => {
     const header =
       turnIndex !== undefined ? headerFor.get(turnIndex) : undefined;
+    const pinned =
+      turnIndex !== undefined ? pinnedTimes.get(turnIndex) : undefined;
     return (
       <Fragment key={i}>
         {item.kind === "commission" ? (
           <>
-            <GoalCommissionMarker goal={item.goal} content={item.content} />
+            {/* A commission takes part in the break sequence and shows
+                the time at a break, like any user message. */}
+            <GoalCommissionMarker
+              goal={item.goal}
+              content={item.content}
+              createdAt={item.createdAt}
+              pinnedTime={pinned?.label}
+              pinnedTimeFull={pinned?.full}
+            />
             {/* The objective turn opens a run like any user turn; its
                 fold / live header sits right under the commission. */}
             {header && (!header.live || header.foldedSteps > 0) && (
@@ -435,6 +485,8 @@ export function Conversation({
               attachments={item.turn.attachments}
               origin={item.turn.origin}
               createdAt={item.turn.createdAt}
+              pinnedTime={pinned?.label}
+              pinnedTimeFull={pinned?.full}
               askUserReply={turnIndex !== undefined && replySet.has(turnIndex)}
               messageId={item.turn.messageId}
             />

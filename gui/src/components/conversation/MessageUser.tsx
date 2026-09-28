@@ -13,8 +13,8 @@ import {
   ImagePreviewDialog,
   type ImagePreviewItem,
 } from "@/components/conversation/ImagePreviewDialog";
-import { IconTooltip } from "@/components/ui/tooltip";
-import { useCopy, type AppCopy } from "@/lib/i18n";
+import { IconTooltip, TooltipLabel } from "@/components/ui/tooltip";
+import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
 import type { MessageAttachment, Origin } from "@/types/conversation";
@@ -70,8 +70,37 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   and "收起". Saves screen real-estate in conversations where
  *   the user pasted a long prompt / stack trace / document.
  *
+ * Send time (2026-09-28, message-timestamps PRD):
+ *   Always visible, and only at a break. A break is the session's
+ *   first user message; more than 60 minutes since the previous user
+ *   message (ask_user replies count as user messages); a change of
+ *   local day (a backstop, so 「今天 / 昨天」 never goes missing — 0
+ *   cases in the data); or a Supervisor-originated message, whose
+ *   provenance row is there anyway. Dogfood data
+ *   (workbench.db, 2026-05-15 → 09-23): 95% of sessions asked every
+ *   question on one day, and 21 of 285 gaps between questions ran past
+ *   an hour. Rules and label format live in lib/message-time.ts;
+ *   Conversation computes them once and hands down plain strings.
+ *   The time takes its own row above the bubble, left-aligned, with
+ *   real layout height — the row the Supervisor icon already used, so
+ *   a Supervisor message reads icon + time. The tooltip gives the full
+ *   date with the weekday. Type is the quietest step the spec allows
+ *   (see MESSAGE_TIME_TEXT): round one's 11.5px ink-muted was
+ *   「稍微有点吵」, and round two picked 10.5px at 70% ink.
+ *   A time on hover for every other message, riding the copy chip,
+ *   was cut in the first live test (2026-09-28) — JC:
+ *   「有点吵，也没有必要」.
+ *   Only user messages carry a time, not answers: the same rule
+ *   applied to answers fires 0 times in 409 runs; the answer action
+ *   bar is always visible, so a time there would mean a time on every
+ *   answer; and the gaps all come from the user leaving and coming
+ *   back. The completion time of long unattended runs (overnight
+ *   Goal, scheduled tasks) is deferred.
+ *
  * Message actions:
- *   Supervisor provenance renders as a small icon above the block.
+ *   Supervisor provenance renders as a small icon in the row above the
+ *   block; its tooltip names the source only (the relative time it
+ *   used to carry retired with the pinned send time, 2026-09-28).
  *   Copy is a transient chip that fades in on hover just outside the
  *   bubble's BOTTOM-right corner, centred on the last line of text
  *   (2026-09-18; top-right until then) — the reading end of a
@@ -101,48 +130,37 @@ const COLLAPSE_CHAR_THRESHOLD = 500;
 const ACTION_HIDE_DELAY_MS = 600;
 const COPY_FEEDBACK_MS = 1500;
 
-/**
- * Compose the supervisor provenance tooltip for the small icon pinned
- * beside supervisor-originated user messages. We intentionally omit the
- * declared supervisor id and reason here: the icon is a lightweight
- * provenance marker, not a full audit panel.
- */
-function formatSupervisorTooltip(
-  createdAt: string | undefined,
-  copy: AppCopy,
-): string {
-  const relative = formatRelativeTime(createdAt, copy);
-  return relative ? `Supervisor · ${relative}` : "Supervisor";
-}
+// Send-time type (second live test, 2026-09-28): text-ui-micro
+// (10.5px, the spec's timestamp tier) at 70% of ink-muted, one step
+// below every ink token — JC found round one's 11.5px ink-muted
+// 「稍微有点吵」, and picked this over 10.5px at full ink-muted. At 70%
+// the label sits at ~2.3:1 on the light canvas (~3.2:1 dark), under
+// AA; acceptable only because the time is auxiliary and its tooltip
+// carries the full date. Size class before `leading-none`:
+// tailwind-merge drops a `leading-*` that precedes a font-size class.
+const MESSAGE_TIME_TEXT =
+  "text-ui-micro text-ink-muted/70 select-none leading-none [font-variant-numeric:tabular-nums]";
 
 /**
- * Lightweight Chinese-leaning relative-time formatter for the
- * supervisor tooltip. Sufficient precision for "this annotation is
- * recent / a while ago" — falls through to YYYY-MM-DD for old rows.
- * Inlined here (rather than a /lib helper) because this is the only
- * caller; if a second site needs relative time, extract it.
+ * Always-visible send time at a break (see the header note). Shared
+ * with GoalCommissionMarker, whose objective shows the same row when
+ * it sits at a break. The tooltip carries the full date + weekday.
  */
-function formatRelativeTime(
-  iso: string | undefined,
-  copy: AppCopy,
-): string | undefined {
-  if (!iso) return undefined;
-  const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return undefined;
-  const delta = Math.max(0, Date.now() - ts);
-  const minutes = Math.floor(delta / 60_000);
-  if (minutes < 1) return copy.conversation.justNow;
-  if (minutes < 60) return copy.conversation.minutesAgo(minutes);
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return copy.conversation.hoursAgo(hours);
-  const days = Math.floor(hours / 24);
-  if (days < 7) return copy.conversation.daysAgo(days);
-  // Older: show absolute date so audit reads cleanly.
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+export function PinnedMessageTime({
+  label,
+  full,
+  iso,
+}: {
+  label: string;
+  full?: string;
+  iso?: string;
+}) {
+  const time = (
+    <time dateTime={iso} className={MESSAGE_TIME_TEXT}>
+      {label}
+    </time>
+  );
+  return full ? <TooltipLabel text={full}>{time}</TooltipLabel> : time;
 }
 
 export interface MessageUserProps {
@@ -157,11 +175,20 @@ export interface MessageUserProps {
    */
   origin?: Origin;
   /**
-   * ISO timestamp from `messages.created_at`. Drives the relative-time
-   * tail of the supervisor tooltip. Optional so tests / demo
-   * data don't have to plumb it; the tooltip omits time when absent.
+   * ISO timestamp from `messages.created_at` — the `dateTime` of the
+   * send-time label. Optional so tests / demo data don't have to plumb
+   * it.
    */
   createdAt?: string;
+  /**
+   * Send time when this message sits at a break (lib/message-time
+   * `userTimeMarks`): rendered always-visible above the bubble.
+   * Formatted by Conversation so this memo component only ever sees
+   * strings.
+   */
+  pinnedTime?: string;
+  /** Full date + weekday for the pinned time's tooltip. */
+  pinnedTimeFull?: string;
   /**
    * True for a mid-run reply to an agent ask_user question
    * (conversation-run-fold). Switches the DOM anchor to
@@ -181,6 +208,8 @@ export const MessageUser = memo(function MessageUser({
   attachments = [],
   origin,
   createdAt,
+  pinnedTime,
+  pinnedTimeFull,
   askUserReply = false,
   messageId,
 }: MessageUserProps) {
@@ -199,10 +228,7 @@ export const MessageUser = memo(function MessageUser({
   const hideTimer = useRef<number | null>(null);
   const copyTimer = useRef<number | null>(null);
 
-  const supervisorTooltip =
-    origin?.via === "supervisor"
-      ? formatSupervisorTooltip(createdAt, copy)
-      : null;
+  const isSupervisor = origin?.via === "supervisor";
 
   useEffect(() => {
     return () => {
@@ -263,21 +289,33 @@ export const MessageUser = memo(function MessageUser({
       onMouseEnter={showActions}
       onMouseLeave={scheduleHideActions}
     >
-      {supervisorTooltip && (
-        <div className="mb-1 flex items-center">
-          <IconTooltip text={supervisorTooltip} side="top">
-            <span
-              role="img"
-              tabIndex={-1}
-              aria-label={copy.conversation.supervisorMessage}
-              className={cn(
-                "inline-flex items-center rounded-sm text-ink-muted",
-                "hover:text-ink-soft",
-              )}
-            >
-              <PlugsConnected size={12} weight="thin" />
-            </span>
-          </IconTooltip>
+      {/* Meta row above the bubble: Supervisor provenance and / or the
+          pinned send time, whichever applies. In flow — it takes its
+          real height, like the icon-only row it grew out of. */}
+      {(isSupervisor || pinnedTime) && (
+        <div className="mb-1 flex items-center gap-1.5">
+          {isSupervisor && (
+            <IconTooltip text="Supervisor" side="top">
+              <span
+                role="img"
+                tabIndex={-1}
+                aria-label={copy.conversation.supervisorMessage}
+                className={cn(
+                  "inline-flex items-center rounded-sm text-ink-muted",
+                  "hover:text-ink-soft",
+                )}
+              >
+                <PlugsConnected size={12} weight="thin" />
+              </span>
+            </IconTooltip>
+          )}
+          {pinnedTime && (
+            <PinnedMessageTime
+              label={pinnedTime}
+              full={pinnedTimeFull}
+              iso={createdAt}
+            />
+          )}
         </div>
       )}
       <div

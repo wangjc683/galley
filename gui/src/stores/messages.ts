@@ -514,6 +514,9 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
           role: "user",
           content: text,
           attachments: optimisticAttachments,
+          // Send time for the message time label (lib/message-time)
+          // until a restore reads the row's own created_at.
+          createdAt: new Date().toISOString(),
         } as UserTurn,
       ],
       // The agent will start running on the bridge shortly. Set
@@ -661,7 +664,16 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const state = get();
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
-      turns: [...m.turns, { role: "user", content: text } as UserTurn],
+      turns: [
+        ...m.turns,
+        // Dated like any user turn so it gets a send time; never
+        // persisted, so this client time is its only one.
+        {
+          role: "user",
+          content: text,
+          createdAt: new Date().toISOString(),
+        } as UserTurn,
+      ],
       // Deliberately NOT touching agentRunning / inFlightContent /
       // currentTurnIndex / pendingAskUser — /btw is a side worker
       // path that doesn't interfere with the main agent loop.

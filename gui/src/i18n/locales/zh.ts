@@ -1541,10 +1541,10 @@ export const zhCopy = {
     seconds: (sec: string) => `${sec} 秒`,
     minutesSeconds: (minutes: number, sec: number) =>
       `${minutes} 分 ${sec} 秒`,
-    justNow: "刚刚",
-    minutesAgo: (minutes: number) => `${minutes} 分钟前`,
-    hoursAgo: (hours: number) => `${hours} 小时前`,
-    daysAgo: (days: number) => `${days} 天前`,
+    // 用户消息发送时间（2026-09-28）。time 是已格式化的时刻（「09:10」）；
+    // 更早的日期由 lib/message-time.ts 直接拼出，不走这里。
+    messageTimeToday: (time: string) => `今天 ${time}`,
+    messageTimeYesterday: (time: string) => `昨天 ${time}`,
     copy: "复制",
     copySelection: "复制选中",
     copied: "已复制",

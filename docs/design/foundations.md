@@ -325,7 +325,7 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 | `text-ui-meta` | 12px | metadata / hint / list item | `TopBar` hint、`PatchView` diff、list item |
 | `text-ui-tertiary` | 11.5px | 三级 hint / tooltip / subline | `SidebarSessionRow` subline、tooltip、approval hint |
 | `text-ui-label` | 11px | **eyebrow / section header**（uppercase，见下方配方） | sidebar 桶 header、`ConfiguredModelsPanel` eyebrow |
-| `text-ui-micro` | 10.5px | uppercase chip / status badge / mono timestamp | code block 控件、`UserQuestionRail` 时间戳 |
+| `text-ui-micro` | 10.5px | uppercase chip / status badge / timestamp | code block 控件、用户消息发送时间（`MessageUser`） |
 | `text-ui-kbd` | 10px | 键盘提示 / 极小 eyebrow | `CommandPalette` kbd、`SidebarTimeline` header |
 
 > **未来收敛候选**（不在本次范围）：`text-ui-kbd`/`-micro`/`-label`（10/10.5/11px）与

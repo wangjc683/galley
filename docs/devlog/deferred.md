@@ -629,3 +629,15 @@
 - **背景**（已核实）：模型只回推理 + 工具调用、一个正文字都没写时，上游 `llmcore._ensure_text_block` 取推理首行前 60 字拼 `<summary>…...</summary>` 塞进 content，于是 marker 显示「The user wants to know if this weekend is suitable for going …」（中文对话里也常是英文），点开 caret 的推理第一句就是它。不是 81b8cc75 引入的（最早 09-09），但推理进 caret 后重复才露出来。
 - **方案候选**：识别「summary = 推理首行截断」的步，marker 改用 `stepCalledTools` 兜底或只留序号 + caret；不改内核（上游行为，且只影响显示）。
 - **关联**：`managed-ga/code/llmcore.py` `_ensure_text_block` · `gui/src/components/conversation/Conversation.tsx` `markerSummary`
+
+---
+
+## 长时间运行的完成时刻（助手侧时间）
+
+- **状态**：暂存（2026-09-28 用户消息时间 A + B 定案时拆出）
+- **提出**：2026-09-28，[用户消息发送时间](./2026-09-28-user-message-send-time.md)讨论。
+- **启动信号**：JC 或社区第一次问「这个几点跑完的」；或出现超过 1 小时的运行（过夜 Goal、定时任务）。
+- **背景**（已核实，别重查）：v1 只给用户消息显示时间。截至 2026-09-23 的 409 轮运行（提问 → 最后一条助手行）里 281 轮不到 1 分钟、115 轮 1–5 分钟、13 轮 5–30 分钟，最长 28.9 分钟，同一套「超过 1 小时」规则套到回答上 0 处触发；回答操作栏是常显的，放进去就等于每条回答都有时间。折叠头的「用时」不含 ask_user 等待，不能拿「提问时刻 + 用时」推完成时刻。新 Goal（09-16 合入）的长运行还没进数据。
+- **方案**：折叠头悬停提示显示「14:32 开始 · 02:14 结束」，对话流不加元素（run-fold PRD 当初给时间戳留的位置）。完成时刻取 run 最后一条助手行的 `created_at`，需要给 `AgentTurn` 补时间字段（`rowsToTurns` 与 live `turn_end` 两条路径）。
+- **待定**：运行超过 1 小时是否在折叠头常显完成时刻，而不只是悬停。
+- **关联**：`gui/src/components/conversation/RunFoldHeader.tsx` · `gui/src/stores/messages/rowsToTurns.ts` · [用户消息发送时间](./2026-09-28-user-message-send-time.md)

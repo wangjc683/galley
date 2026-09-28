@@ -1,6 +1,7 @@
 import { Check, Pause, Target, Timer, Warning, X } from "@phosphor-icons/react";
 import { useState } from "react";
 
+import { PinnedMessageTime } from "@/components/conversation/MessageUser";
 import { GOAL_EXTEND_SECONDS, goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -61,9 +62,20 @@ function GoalStatusBadge({ status }: { status: GoalStatus }) {
 export function GoalCommissionMarker({
   goal,
   content,
+  createdAt,
+  pinnedTime,
+  pinnedTimeFull,
 }: {
   goal: GoalBrief;
   content: string;
+  /** ISO send time of the objective turn — the label's `dateTime`. */
+  createdAt?: string;
+  /** Send time when the objective sits at a break (message-timestamps,
+   * 2026-09-28): the same always-visible row MessageUser draws above
+   * its bubble. */
+  pinnedTime?: string;
+  /** Full date + weekday for the pinned time's tooltip. */
+  pinnedTimeFull?: string;
 }) {
   const copy = useCopy();
   const conv = copy.conversation;
@@ -74,6 +86,15 @@ export function GoalCommissionMarker({
 
   return (
     <div className="my-5">
+      {pinnedTime && (
+        <div className="mb-1 flex items-center">
+          <PinnedMessageTime
+            label={pinnedTime}
+            full={pinnedTimeFull}
+            iso={createdAt}
+          />
+        </div>
+      )}
       {/* Eyebrow: Goal identity (left) + the one parameter the operator
           actually set (the ceiling) and the coarse status (right).
           Upright tabular metadata — cool structure above the warm

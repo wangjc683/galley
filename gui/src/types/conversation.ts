@@ -151,9 +151,12 @@ export interface UserTurn {
    * "supervisor"`, MessageUser renders a small provenance icon (B4 M7).
    * Absent / `gui` means the local user typed it directly. */
   origin?: Origin;
-  /** ISO timestamp from `messages.created_at` — only consumed for the
-   * supervisor provenance tooltip timestamp (M7). Optional so existing
-   * UserTurn constructions in tests / demo data don't need to change. */
+  /** ISO send time: `messages.created_at` on a persisted row, the
+   * client clock on an optimistic / transient turn. Drives the user
+   * message time label (lib/message-time, 2026-09-28) and goal-thread's
+   * commission and segment matching. Optional so existing UserTurn
+   * constructions in tests / demo data don't need to change; an undated
+   * turn gets no label. */
   createdAt?: string;
   /** Goal this turn commissioned (`messages.goal_id`, migration 031).
    * When present, goal-thread.ts matches the commission marker by exact
