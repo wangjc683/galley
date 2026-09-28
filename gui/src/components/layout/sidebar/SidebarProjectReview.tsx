@@ -119,7 +119,8 @@ export function SidebarProjectReview({
   onDeleteProject?: (id: string) => void;
   /** 空状态 CTA:点开 CreateProjectDialog。新用户第一次进项目视图
    * 时,projects 为空——原来的斜体灰字 noProjects 是死路,这里
-   * 换成可点按钮,把死路变入口。 */
+   * 换成可点按钮,把死路变入口。有项目时它是第一个分组标题右侧的
+   * 「+」（见 `groupHeaderNewProject`）。 */
   onNewProject?: () => void;
 }) {
   const copy = useCopy();
@@ -139,6 +140,14 @@ export function SidebarProjectReview({
     if (project.pinned || recentlyActive) activeProjects.push(project);
     else olderProjects.push(project);
   }
+
+  // 新建项目 "+" on the first group header (活跃项目, or 更早项目 when
+  // nothing is active): the one-row quick actions have no 新建项目 "+"
+  // of their own since 2026-09-28. The zero-project CTA is unchanged;
+  // the command palette also has 新建项目.
+  const groupHeaderNewProject = onNewProject ? (
+    <SidebarProjectGroupNewProject onNewProject={onNewProject} />
+  ) : undefined;
 
   const renderProject = (project: Project) => {
     const expanded = expandedProjectIds.has(project.id);
@@ -198,9 +207,24 @@ export function SidebarProjectReview({
         <>
           {activeProjects.length > 0 && (
             <>
-              <SidebarSectionLabel>
-                {copy.sidebar.activeProjects}
-              </SidebarSectionLabel>
+              {groupHeaderNewProject ? (
+                // The label is pt-3.5 + a 15px line + pb-1.5 = 35px,
+                // text centred 13.5px up from the bottom; items-end +
+                // 1.5px lifts the 24px "+" onto that line, so the
+                // header keeps its height.
+                <div className="flex items-end pr-2.5">
+                  <div className="min-w-0 flex-1">
+                    <SidebarSectionLabel>
+                      {copy.sidebar.activeProjects}
+                    </SidebarSectionLabel>
+                  </div>
+                  <div className="mb-[1.5px]">{groupHeaderNewProject}</div>
+                </div>
+              ) : (
+                <SidebarSectionLabel>
+                  {copy.sidebar.activeProjects}
+                </SidebarSectionLabel>
+              )}
               {activeProjects.map(renderProject)}
             </>
           )}
@@ -211,6 +235,11 @@ export function SidebarProjectReview({
                 count={olderProjects.length}
                 open={olderProjectsOpen}
                 onToggle={() => setOlderProjectsOpen((open) => !open)}
+                action={
+                  activeProjects.length === 0
+                    ? groupHeaderNewProject
+                    : undefined
+                }
               />
               {olderProjectsOpen && olderProjects.map(renderProject)}
             </>
@@ -276,13 +305,17 @@ function SidebarProjectGroupToggle({
   count,
   open,
   onToggle,
+  action,
 }: {
   label: string;
   count: number;
   open: boolean;
   onToggle: () => void;
+  /** Trailing header action (新建项目 "+") beside, not inside, the
+   * toggle button. */
+  action?: React.ReactNode;
 }) {
-  return (
+  const toggle = (
     <button
       type="button"
       tabIndex={-1}
@@ -291,6 +324,7 @@ function SidebarProjectGroupToggle({
       aria-expanded={open}
       className={cn(
         "mx-1.5 mt-3 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
+        action && "mx-0 mt-0 w-auto min-w-0 flex-1",
         "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
         "active:translate-y-px",
         "outline-none",
@@ -311,6 +345,47 @@ function SidebarProjectGroupToggle({
         {count}
       </span>
     </button>
+  );
+  if (!action) return toggle;
+  // mr-1: the "+" lines up with the 活跃项目 header's (pr-2.5 there).
+  return (
+    <div className="mx-1.5 mt-3 flex items-center gap-0.5">
+      {toggle}
+      <div className="mr-1 flex shrink-0">{action}</div>
+    </div>
+  );
+}
+
+/**
+ * 新建项目 "+" on a Project Review group header. Same light-button
+ * rules as the project row's "+" (muted, instant hover fill, translate-y
+ * key travel), sized down to 24px / 12px glyph so the 10px header keeps
+ * its height. Always visible, like the quick-action "+" it replaced.
+ */
+function SidebarProjectGroupNewProject({
+  onNewProject,
+}: {
+  onNewProject: () => void;
+}) {
+  const copy = useCopy();
+  return (
+    <IconTooltip text={copy.sidebar.newProject}>
+      <button
+        type="button"
+        tabIndex={-1}
+        onMouseDown={preventMouseFocus}
+        onClick={onNewProject}
+        aria-label={copy.sidebar.newProject}
+        className={cn(
+          "inline-flex size-6 shrink-0 items-center justify-center rounded-sm",
+          "text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60",
+          "outline-none",
+        )}
+      >
+        <Plus size={12} weight="regular" />
+      </button>
+    </IconTooltip>
   );
 }
 

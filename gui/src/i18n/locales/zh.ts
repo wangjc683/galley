@@ -169,7 +169,6 @@ export const zhCopy = {
       `新对话 · ${projectName}`,
     search: "搜索",
     projects: "项目",
-    showProjects: "进入项目视图",
     exitProjects: "退出项目视图",
     newProject: "新建项目",
     scheduled: "定时",

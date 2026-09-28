@@ -306,7 +306,6 @@ export function Sidebar({
         scheduledActionCount={scheduledActionCount}
         projectViewOpen={projectViewOpen}
         onToggleProjectView={onToggleProjectView}
-        onNewProject={onNewProject}
         activeProjectName={activeProject?.name}
       />
 

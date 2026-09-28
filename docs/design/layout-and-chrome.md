@@ -100,11 +100,9 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 ┌──────────────────────────────────┐
 │ Galley                    ● GA 就绪 │  product name + runtime dot
 ├──────────────────────────────────┤
-│ + 新对话                   ⌘N    │  Quick action
-│ 搜索                       ⌘K    │  打开 Command Palette
-│ 项目                       [+]    │  进入/退出 Project Review；+ 新建项目
-│                                  │
-│ ACTIVE PROJECTS                  │  Project Review: 点击项目行展开/收起
+│ + 新对话            ⌕   ◷   ▭    │  一行：新对话带字；搜索 / 定时 / 项目是图标
+│                                  │  （2026-09-28 起；此前四行）
+│ ACTIVE PROJECTS              +   │  Project Review: 点击项目行展开/收起；+ 新建项目
 │   FolderOpen Galley        +     │  行点击展开/收起；+ 新建项目对话
 │     ◐ Session A                  │
 │   FolderOpen Website       +     │
@@ -128,10 +126,11 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 #### 关键决策
 
 - **单行 Header**：`Galley` product name + runtime 状态同行。产品名使用 sentence case，不使用全大写 wordmark，避免读成 acronym。位置（2026-07-05 回写实现现状）：external-ready 的绿色徽标贴在字标右侧同组（它是字标的"驻留状态"），可点动作类 indicator（配置模型 / 连接外部 GA）与 Supervisor SOP 按钮居行尾右侧。字标与非按钮徽标都自带 `data-tauri-drag-region`（该属性不冒泡）。
-- **Quick Actions 靠顶部**：New Chat / Search / Project Review 是最高频入口。Project Review 入口在同一组里，避免旧方案里「PROJECTS 标题行」和项目 row 叠在一起。右侧轻量 `+` 只负责新建项目；创建后进入 Project Review 并展开新项目。
+- **Quick Actions 一行**（2026-09-28，此前四行各占一行，约 152px、合三条会话高）：左边「新对话」带字（品牌色粗加号 + medium），右边搜索 / 定时 / 项目三个 32px 图标，名称与快捷键在悬停提示里。JC 的用法：只有新对话高频，搜索次之（主要点这里、不按 ⌘K），项目与定时本机 0 使用；社区用法未知，所以是**降级不藏**。定时徽标缩到时钟图标右上角（只在有待处理事项时出现、增加时 pop，规则不变）；项目按钮开启时是按下态（`bg-selected/85` + `shadow-inner` + `FolderOpen`）。新建项目的 `+` 移到 Project Review 第一个分组标题右侧（命令面板也有「新建项目」，零项目 CTA 不变）。真机比过现状 / 一行·搜索带字 / 两行 / 底栏，再比过「新对话也去字」的纯图标与描边两档，JC 定一行带字。见 [devlog](../devlog/2026-09-28-sidebar-quick-actions-one-row.md)。
+- **新对话文字不截断**：动作文字要么完整显示，要么只剩加号（悬停提示给完整标签 + ⌘N）。门槛按语言：中文 198px、英文 220px（「New chat」Inter 500 13px 实测 58.8px）。项目版「新对话 · 项目名」只截项目名。
 - **普通 sidebar 不再显示项目列表**：普通视图只保留时间线，减少重复层级；需要看项目时显式进入 Project Review。
 - **Project row 不用 emoji**：用 Phosphor `Folder` / `FolderOpen` 表达层级与 filter，避免跨平台 emoji 造成的视觉重量和渲染差异。
-- **Project Review 由 Quick Action `项目` 切换**：开启后隐藏普通 timeline，展示完整 project list；项目 row 只负责展开/收起，允许多项目同时展开；再次点击 `项目` 退出 Project Review。入口用 selected tint 表示开启状态，不额外加说明文案；active 时 tooltip / aria-label 为「退出项目视图」。
+- **Project Review 由 Quick Action `项目` 图标切换**：开启后隐藏普通 timeline，展示完整 project list；项目 row 只负责展开/收起，允许多项目同时展开；再次点击 `项目` 退出 Project Review。入口用 selected tint 表示开启状态，不额外加说明文案；tooltip / aria-label 未开启时为「项目」，开启时为「退出项目视图」。
 - **Project Review 进出动效**：模式切换不是硬替换。进入时 Project Review 从 0 高度轻展开并 fade in，普通 timeline 下沉 fade out；退出时 Project Review 保留约 150ms 完成上收 fade out，普通 timeline 从下方回到原位。项目内部 drawer 继续使用独立展开动画，避免两层动效互相抢戏。
 - **Project Review 按活跃度分组**：pinned 或 30 天内有非归档 session 活动的项目进入 `ACTIVE PROJECTS`；其余进入 `OLDER PROJECTS`，默认折叠。新建但 30 天内为空的项目视作 active，避免刚建完就被藏起来。（2026-09-09 从 7 天改为 30 天，跟随时间线的「本月」桶：会话在「本月」里而它的项目在「更早项目」里是打架。）
 - **项目对话创建是独立动作**：项目 row 右侧轻量 `+` 和空项目 CTA `+ 新建项目对话` 才会把右侧切到 project-aware EmptyState（placeholder: `在 {Project} 里交代什么？`，第一句话 lazily create 到该 project）。展开/收起项目不改变右侧当前对话。

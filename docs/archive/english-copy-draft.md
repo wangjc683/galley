@@ -17,7 +17,8 @@ but sentence shape and tone are adjusted for English.
 - Keep product and ecosystem terms as-is: Galley, GenericAgent, GA, Agent,
   Supervisor, SOP, Runtime, Health Check, CLI, API, MCP, Socket, Python, API
   Key, YOLO, LLM.
-- Use "conversation" for user-facing chats/sessions.
+- Use "conversation" for user-facing chats/sessions, except the create
+  action, which is "New chat" (2026-09-28).
 - Use "project" for project grouping.
 - Use "tool call" for agent tool execution.
 - Use "allowlist" for approval bypass rules.
@@ -57,8 +58,8 @@ Notes:
 
 | Chinese intent | English copy |
 |---|---|
-| 新对话 | New conversation |
-| 新对话 · {projectName} | New conversation · {projectName} |
+| 新对话 | New chat |
+| 新对话 · {projectName} | New chat · {projectName} |
 | 搜索 | Search |
 | 项目 | Projects |
 | 进入项目视图 | Show projects |
@@ -83,14 +84,17 @@ Recommendation:
 
 - Keep the visual section anchor `PROJECTS` if it is used as a dense sidebar
   anchor.
-- Do not introduce "chat" unless a specific OS/browser convention requires it.
-  "Conversation" is the Galley term.
+- "Conversation" is the Galley noun. The one exception is the create action,
+  labelled "New chat" everywhere it appears (sidebar, empty title, command
+  palette, shortcuts, project rows) — shorter, and the label people already
+  know (2026-09-28, sidebar one-row quick actions: "New conversation" is
+  112.8px at 13px and truncated). Do not spread "chat" beyond that action.
 
 ## Top Bar
 
 | Chinese intent | English copy |
 |---|---|
-| 新对话 | New conversation |
+| 新对话 | New chat |
 | 设置 · {shortcut} | Settings · {shortcut} |
 | 打开设置 | Open Settings |
 | 切到紧凑阅读宽度 | Switch to compact width |
@@ -152,7 +156,7 @@ Paste-fold placeholder:
 | 命令面板 | Command palette |
 | 搜索对话或输入命令… | Search conversations or type a command... |
 | 搜索 LLM… | Search LLMs... |
-| 新对话 | New conversation |
+| 新对话 | New chat |
 | 新建项目 | New project |
 | 在对话内容中 | In conversation content |
 | 切换 LLM | Switch LLM |
@@ -344,7 +348,7 @@ Approval prompt:
 | Shortcuts subtitle | Keyboard shortcuts |
 | Navigation | Navigation |
 | 打开命令面板 | Open command palette |
-| 新建对话 | New conversation |
+| 新建对话 | New chat |
 | 打开设置 | Open Settings |
 | Composer | Composer |
 | 发送消息 | Send message |
