@@ -157,8 +157,9 @@ JC 真机发现：点「重启 Channels」后在已激活频道直接说话没�
 
 验证：主会话用干净克隆（`1b6442f`）独立重放 25 个补丁，重建后 `managed-ga/code` 与 `state-seed` 全部文件哈希不变；pytest 422 passed
 （dcapp 新增 11 条、reporter 新增 2 条；新测试跑在 `0026` 之前的 dcapp 上 13 条失败，逐项去掉关键改动各有测试失败），mypy strict、ruff、
-`git diff --check`、payload、baseline-drift、gui typecheck / lint 绿。**真机待验**：重启 Channels 后不 @ 直接说话能接上之前的话；30 秒内
-连续重启两次仍能接上；重启前派出的任务在重启后跑完，报告自己投到频道；`/new` 之后重启不会把旧对话接回来；新的激活提示与退出回执。
+`git diff --check`、payload、baseline-drift、gui typecheck / lint 绿。**真机：JC 验收通过（2026-09-30）**——重启 Channels 后不 @ 直接说话
+能接上之前的话；30 秒内连续重启两次仍能接上；重启前派出的任务在重启后跑完，报告自己投到频道；`/new` 之后重启不会把旧对话接回来；
+新的激活提示与退出回执。
 
 另立题：Telegram / 飞书启动时各新建空白 agent，重启后上下文同样会丢，只是没有激活门槛不显眼——进 `.scratch/im-restart-continuity/` 与
 [deferred](./deferred.md)，等 Discord 真机跑顺再推广。
