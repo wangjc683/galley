@@ -25,8 +25,9 @@ use super::platform_config::{
 use super::{
     im_state_dir, latest_wechat_qr_path, managed_python_for_app, materialize_sop_reference,
     model_config_stale, normalize_platform, now_iso, read_model_config_revision, read_pref,
-    remove_wechat_qr_files, write_pref, ImSupervisorPref, ImSupervisorState, ImSupervisorStatus,
-    DISCORD, EVENT_NAME, FEISHU, GALLEY_CORE_PID_ENV, PLATFORMS, TELEGRAM, WECHAT,
+    remove_conversation_state, remove_wechat_qr_files, write_pref, ImSupervisorPref,
+    ImSupervisorState, ImSupervisorStatus, DISCORD, EVENT_NAME, FEISHU, GALLEY_CORE_PID_ENV,
+    PLATFORMS, TELEGRAM, WECHAT,
 };
 
 struct ProcessSlot {
@@ -368,6 +369,9 @@ impl ImSupervisorManager {
             },
         )
         .await?;
+        if let Ok(state_dir) = im_state_dir(&app, platform) {
+            remove_conversation_state(&state_dir, platform);
+        }
         if platform == WECHAT {
             if let Ok(state_dir) = im_state_dir(&app, WECHAT) {
                 let _ = std::fs::remove_file(state_dir.join("token.json"));

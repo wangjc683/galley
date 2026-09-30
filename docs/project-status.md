@@ -528,7 +528,13 @@ stopped the supervisor's turn, not the sessions it delegated); `/btw` and
 Channels restart and picks its conversation back up from the engine's own
 log (it used to need a re-@, and its re-@ notice could be lost); a report
 for a task that settled while Channels restarted reaches the channel
-without anyone speaking; the activation notice is one line plus subtext. JC passed the real-device
+without anyone speaking; the activation notice is one line plus subtext.
+Feishu, Telegram and WeChat got the same restart continuity the same day,
+Galley-side only (`runner/im_resume.py`, no new managed patch; see
+[devlog](./devlog/2026-09-30-im-restart-continuity.md)): each resumes its
+conversation from its engine log after a restart (they used to restart
+blank without a word), WeChat gains `/new`, and a Disconnect now clears the
+continuity state (Core `logout`), so a reconnect starts clean. JC passed the real-device
 dogfood the same day; the three open judgment calls (subtext on one-step
 answers, narration kept in the answered-question echo, the typing indicator
 lingering up to ~10 s) stay as built. Because `managed-ga/` and `runner/` changed, the

@@ -807,6 +807,52 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     passes them; only the restart check in Step 8 catches it. The
     completion reporter (`runner/im_reporter.py` `_deliver`) also reads
     `done` off `put_task`'s queue.
+16. The single-agent IM channels' restart continuity (Feishu, Telegram,
+    WeChat; 2026-09-30, `.scratch/im-restart-continuity/`): Galley-owned
+    code in `runner/im_resume.py`, wired by
+    `runner/managed_im_supervisor.py`, no managed patch. It rests on the
+    same engine-log contract as 15 (f) (`agent.log_path` and its
+    `model_responses_<logid>.txt` naming, `_write_llm_log`'s framing and
+    the native bodies, `continue_cmd`'s `continue_inplace` / `continue_copy`
+    with `restore_wm` / `begin_fresh_session` / `session_occupant` /
+    `restore` / `list_sessions` / `reset_conversation` and the private
+    `_lock_path`); the channel's state dir keeps the log's basename in
+    `context_log.json`, and a fresh lock carrying the channel's
+    `galley-<platform>` agent_id with another pid is taken over. Re-check
+    on upgrade: (a) the module-level agent each frontend exposes:
+    `tgapp.agent` and `wechatapp.agent` built at import (picked back up
+    before the reporter, `tgapp.main()` and `wechatapp.agent.run` start),
+    and fsapp's lazily built one behind the module global `get_agent`
+    (picked back up inside the launcher's `_managed_get_agent` on the
+    first call, before any caller gets it; `get_app` and the reporter's
+    `FeishuChannel.agent()` both go through it); (b) `agent._turn_end_hooks`
+    (key `galley_im_resume`) firing after the turn is on disk:
+    `agent_loop.py` runs `client.chat` (llmcore writes the Prompt and
+    Response to `client.log_path`) before `turn_end_callback`, whose last
+    step calls the hooks (`ga.py`); the mapping is written from there; (c)
+    the frontend module globals replaced at startup, which the frontends
+    look up at call time: tgapp's `reset_conversation` and
+    `handle_frontend_command` (imported from `continue_cmd`; the second is
+    also what `_call_noting_abort` receives) and `0024`'s `_send_answer` /
+    `_post_ask` (answer and question) and `_reply_markdown` / `_reply`
+    (their sends; the notice goes on the first); fsapp's `_TaskCard`
+    (subclassed: `done(text)` carries the answer or question, `fail` the
+    stop / error / timeout) and `_reset_conversation` /
+    `_handle_continue_frontend` on the module that defines
+    `AgentChatMixin` (`frontends.chatapp_common`, looked up by
+    `AgentChatMixin.handle_command`; dcapp binds the same names at import
+    from the top-level `chatapp_common`, so Discord is unaffected); and
+    wechatapp's `on_message(bot, msg)` answering through the `bot` it is
+    handed (`_handle` sends the task's messages with `bot.send_text` from
+    its own thread, the last one ending in `[已停止]` when stopped), plus
+    `_task_aborted` and `agent.is_running` for the added `/new`. A renamed
+    global is logged as `missing; not wrapped` and the channel runs
+    without that piece, so nothing but the restart checks in Step 8 catch
+    it; (d) upstream's IM `/new` (`reset_conversation`) and `/continue N`
+    (`handle_frontend_command`) still not retargeting `agent.log_path`:
+    Galley moves the log after them (`begin_fresh_session` /
+    `continue_copy`, as `0026` does); drop those two wrappers once
+    upstream retargets.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -848,6 +894,16 @@ start the audit there instead of grepping the bridge:
   `final_step_text` (the `done` / `outputs` relation), and
   `strip_transcript` / `step_summary` (the Turn marker and the 🛠️ echo
   format of `agent_loop.py`).
+- **[`runner/im_resume.py`](../runner/im_resume.py)** — item 16:
+  `ChannelResume.resume` / `record` / `fresh` / `continue_session`
+  (`continue_cmd`'s loader and locks, `agent.log_path`,
+  `_turn_end_hooks`; one to one with `0026`'s `_resume_channel` /
+  `_record_channel_log` / `/new` branch / `_continue_session`), and the
+  per-frontend seams: `install_feishu`, `install_telegram`,
+  `WechatNoticeBot`, `wechat_new_conversation`. The call sites (the
+  module-level agents, fsapp's `get_agent` wrapper, the WeChat
+  `on_message` wrapper) are in `_run_feishu` / `_run_telegram` /
+  `_run_wechat` of `runner/managed_im_supervisor.py`.
 
 GA *public* API usage (items 8, plus `next_llm` / `verbose` / `inc_out`
 / `put_task`) is deliberately not wrapped — verify against upstream
@@ -996,7 +1052,15 @@ already-generated bundle without rebuilding it. The smoke must verify
   message edits in place, then only the answer remains, under its fold
   header), an ask_user question answered by a button, and `/stop` during a
   long step (the status message freezes into `⏹ 已停止 · …`, and no other
-  message follows).
+  message follows). Then restart Channels (「重启 Channels」) and ask about
+  what was said before: the answer picks it up (item 16).
+- Managed Feishu channel (item 16): say something to remember, restart
+  Channels (「重启 Channels」), then ask about it: the answer picks it up.
+- Managed WeChat channel (item 16): say something to remember, restart
+  Channels (「重启 Channels」), then ask about it: the answer picks it up.
+  Then send `/new`: the reply is `🆕 已开启新对话，当前上下文已清空`, the
+  next answer no longer knows it, and neither does one after another
+  restart.
 
 9. Sync the baseline metadata. `managed-ga/manifest.json`'s `upstream`
    block is the single source of truth — update all four fields there:

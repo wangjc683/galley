@@ -116,6 +116,19 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
     }
 }
 
+/// Disconnect ends the channel's conversation: drop what carries it across
+/// restarts, so reconnecting (possibly as another account or bot) starts
+/// clean. `context_log.json` maps a single-agent channel to its engine log
+/// (`runner/im_resume.py`); Discord keeps its activated channels, each with
+/// its log, in `discord_active_channels.json` (managed patch `0026`). The
+/// engine logs themselves stay: they are GA runtime state.
+fn remove_conversation_state(state_dir: &Path, platform: &str) {
+    let _ = std::fs::remove_file(state_dir.join("context_log.json"));
+    if platform == DISCORD {
+        let _ = std::fs::remove_file(state_dir.join("discord_active_channels.json"));
+    }
+}
+
 fn remove_wechat_qr_files(state_dir: &Path) {
     let Ok(entries) = std::fs::read_dir(state_dir) else {
         return;
@@ -267,6 +280,32 @@ mod tests {
                 "platform {platform} is missing a pref key"
             );
         }
+    }
+
+    #[test]
+    fn remove_conversation_state_drops_resume_state_only() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = tmp.path();
+        for name in [
+            "context_log.json",
+            "discord_active_channels.json",
+            "token.json",
+            "reporter_state.json",
+        ] {
+            std::fs::write(dir.join(name), "{}").expect("seed");
+        }
+        remove_conversation_state(dir, TELEGRAM);
+        assert!(!dir.join("context_log.json").exists());
+        // Only Discord owns an activated-channel file.
+        assert!(dir.join("discord_active_channels.json").exists());
+        assert!(dir.join("token.json").exists());
+        assert!(dir.join("reporter_state.json").exists());
+
+        remove_conversation_state(dir, DISCORD);
+        assert!(!dir.join("discord_active_channels.json").exists());
+        assert!(dir.join("reporter_state.json").exists());
+        // Nothing left to remove is not an error.
+        remove_conversation_state(dir, WECHAT);
     }
 
     #[test]

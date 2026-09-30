@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Any
 
-from runner import _watchdog, managed_runtime
+from runner import _watchdog, im_resume, managed_runtime
 
 IM_SUPERVISOR_PROMPT_ENV = "GALLEY_IM_SUPERVISOR_PROMPT_TEXT"
 # Same prompt body with the supervisor id left unresolved. Core injects it
@@ -191,18 +191,41 @@ def _flush_and_release_lock(logf: IO[str], lock: _SupervisorLock) -> None:
     lock.close()
 
 
-def _managed_wechat_on_message(wechatapp: Any) -> Callable[[Any, Any], None]:
-    """Wrap upstream ``on_message`` so ``/switch`` cannot leave the managed agent mode."""
+def _start_resume(platform: str, state_dir: Path) -> im_resume.ChannelResume | None:
+    """The single-agent channel's restart continuity. Failure to set it up
+    must never take the channel down: the channel then runs as before,
+    with a fresh context after every restart."""
+    try:
+        return im_resume.load(platform, state_dir)
+    except Exception as e:
+        print(f"{im_resume.LOG_PREFIX} disabled: {e}")
+        return None
+
+
+def _managed_wechat_on_message(
+    wechatapp: Any, resume: im_resume.ChannelResume | None = None
+) -> Callable[[Any, Any], None]:
+    """Wrap upstream ``on_message``: ``/switch`` cannot leave the managed
+    agent mode, ``/new`` (which upstream lacks) starts a new conversation,
+    and a context that could not be picked back up after a restart says so
+    on the next answer."""
 
     def on_message(bot: Any, msg: Any) -> None:
-        if bot.extract_text(msg).strip() == "/switch":
+        text = bot.extract_text(msg).strip()
+        if text == "/switch":
             bot.send_text(
                 msg.get("from_user_id", ""),
                 WECHAT_SWITCH_BLOCKED_REPLY,
                 context_token=msg.get("context_token", ""),
             )
             return
-        wechatapp.on_message(bot, msg)
+        if resume is None:
+            wechatapp.on_message(bot, msg)
+            return
+        if text == "/new":
+            im_resume.wechat_new_conversation(wechatapp, resume, bot, msg)
+            return
+        wechatapp.on_message(im_resume.WechatNoticeBot(bot, resume), msg)
 
     return on_message
 
@@ -252,6 +275,11 @@ def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
         wechatapp.agent,
         extra_env_names=(IM_SUPERVISOR_PROMPT_ENV,),
     )
+    # Before the agent's run thread starts: the first message runs in the
+    # conversation picked back up from before the restart.
+    resume = _start_resume("wechat", state_dir)
+    if resume is not None:
+        resume.attach(wechatapp.agent)
 
     _emit(
         out,
@@ -313,7 +341,7 @@ def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
     )
 
     try:
-        bot.run_loop(_managed_wechat_on_message(wechatapp))
+        bot.run_loop(_managed_wechat_on_message(wechatapp, resume))
     except wechatapp.AuthExpired:
         _emit(out, platform="wechat", state="expired", lastError="WeChat login expired")
         return 2
@@ -362,17 +390,30 @@ def _run_feishu(args: argparse.Namespace, out: IO[str]) -> int:
         return 1
 
     os.chdir(state_dir)
+    resume = _start_resume("feishu", state_dir)
+    if resume is not None:
+        im_resume.install_feishu(fsapp, resume)
     original_get_agent = fsapp.get_agent
+    agent_setup_lock = threading.Lock()
 
     def _managed_get_agent() -> Any:
         agent = original_get_agent()
-        if not getattr(agent, "_galley_im_prompt_installed", False):
-            agent.verbose = False
-            managed_runtime.install_managed_prompt_profile(
-                agent,
-                extra_env_names=(IM_SUPERVISOR_PROMPT_ENV,),
-            )
-            agent._galley_im_prompt_installed = True
+        if getattr(agent, "_galley_im_prompt_installed", False):
+            return agent
+        # fsapp builds its agent lazily, on the first message or the first
+        # report turn. The conversation from before the restart is picked
+        # back up here, before that caller gets the agent (nothing is queued
+        # yet); a concurrent first caller waits for it.
+        with agent_setup_lock:
+            if not getattr(agent, "_galley_im_prompt_installed", False):
+                agent.verbose = False
+                managed_runtime.install_managed_prompt_profile(
+                    agent,
+                    extra_env_names=(IM_SUPERVISOR_PROMPT_ENV,),
+                )
+                if resume is not None:
+                    resume.attach(agent)
+                agent._galley_im_prompt_installed = True
         return agent
 
     fsapp.get_agent = _managed_get_agent
@@ -477,6 +518,12 @@ def _run_telegram(args: argparse.Namespace, out: IO[str]) -> int:
         tgapp.agent,
         extra_env_names=(IM_SUPERVISOR_PROMPT_ENV,),
     )
+    # Before the reporter and main(): the first message and the first
+    # report turn both run in the conversation picked back up.
+    resume = _start_resume("telegram", state_dir)
+    if resume is not None:
+        resume.attach(tgapp.agent)
+        im_resume.install_telegram(tgapp, resume)
     # Extra keyword fields (botId on connect, ownerOpenId on owner binding)
     # pass through to the JSON status line for Galley Core to persist.
     tgapp.GALLEY_STATUS_HOOK = lambda state, last_error=None, **extra: _emit(
