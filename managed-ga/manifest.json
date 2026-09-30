@@ -33,7 +33,8 @@
       "0021-managed-retry-after-value-in-error.patch",
       "0022-managed-strip-goal-status.patch",
       "0023-managed-discord-conversation-ux.patch",
-      "0024-managed-telegram-conversation-ux.patch"
+      "0024-managed-telegram-conversation-ux.patch",
+      "0025-managed-abort-wakes-on-macos.patch"
     ]
   },
   "stateSchemaVersion": 1

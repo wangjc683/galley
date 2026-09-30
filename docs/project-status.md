@@ -546,7 +546,13 @@ ask_user matches Discord, `/stop` and `/new` no longer leave a queued task
 running unseen, and reports carry a bold title and an italic status footer.
 JC passed the second real-device round the same day (the push-up gap is
 gone; minute line, stop freeze, ask_user, queue, reports and push count all
-as built).
+as built). Found right after: on macOS a Stop could not interrupt an LLM
+request still waiting for response headers (upstream `abort()` force-closes
+the socket right after the shutdown, racing its wake-up), so the next
+message queued for up to the 180 s read timeout — new managed patch `0025`
+keeps the close on Windows only (desktop Stop and every IM `/stop` benefit;
+external GA waits for an upstream PR drafted in deferred; see
+[devlog](./devlog/2026-09-30-macos-abort-wake.md)).
 Release-scope truth remains `git log v0.5.4..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time

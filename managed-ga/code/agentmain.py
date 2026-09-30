@@ -151,8 +151,11 @@ class GenericAgent:
                 sock = sys.modules['llmcore']._INFLIGHT[sess._tid]  # socket registered at urllib3 request() time, before headers
                 try: sock.shutdown(_socket.SHUT_RDWR)  # for non-Windows semantics
                 except OSError: pass
-                try: sock._real_close()  # CPython internal; bypasses refcount -> actual closesocket
-                except AttributeError: sock.close()
+                # Galley 0025: Windows only. On macOS the shutdown above is the wake-up, and closing the fd right after
+                # it races that wake-up: a recv() still waiting for response headers then stays blocked until read_timeout.
+                if os.name == 'nt':
+                    try: sock._real_close()  # CPython internal; bypasses refcount -> actual closesocket
+                    except AttributeError: sock.close()
             except Exception: pass
             try: sess.active_response.close()
             except Exception: pass

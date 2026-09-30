@@ -62,7 +62,13 @@ New in the `efb3bc6` -> `1b6442f` range:
   Still wrapped in the broad `try/except`, so a session with no in-flight
   request is a no-op. **Galley-positive**: Force Stop during a slow
   prefill / a relay that has not answered yet now tears the connection
-  down instead of waiting for the read timeout. Coupling notes: (a) the
+  down instead of waiting for the read timeout. **Correction
+  (2026-09-30)**: on macOS that held only some of the time — the
+  `_real_close()` right after `shutdown()` (upstream `3d62523`, below)
+  races the shutdown's wake-up, and a `recv()` still waiting for headers
+  then stays blocked until `read_timeout` (repro: 6 of 13 trials hung);
+  managed patch `0025` keeps the close on Windows only (22 of 22 woke).
+  External GA keeps upstream's behavior. Coupling notes: (a) the
   hook is global to the runner child process — every `requests` call in
   that process (the auto-title `side_ask`, IM frontends) goes through it;
   it only stores a reference, so this is inert. (b) `_INFLIGHT` never

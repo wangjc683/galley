@@ -8,6 +8,27 @@
 
 ---
 
+## 上游 PR：`abort()` 只在 Windows 上 `_real_close`（删 0025）
+
+- **状态**：草稿待 JC 过目后提交（2026-09-30）
+- **提出**：2026-09-30，[macOS 停止打不断等响应头的请求](./2026-09-30-macos-abort-wake.md)。
+- **启动信号**：JC 过目同意即提交；或上游自己改了 `abort()` 的 socket 段（升级审计时对照 `0025` 台账行）。
+- **方案**：向 `lsdefine/GenericAgent` 提 PR，只改 `agentmain.py` `abort()` 的两行（同 `0025`）。合入后按宪法第 1 条删 `0025`
+  与 `runner/tests/test_managed_ga_abort.py`，外置 GA 用户随上游一起受益。
+- **PR 草稿**：
+  - 标题：`fix(abort): only force-close the in-flight socket on Windows`
+  - 正文：
+
+    > On macOS, `abort()` often fails to wake a request that is still waiting for response headers: the `_real_close()`
+    > right after `shutdown(SHUT_RDWR)` races the shutdown's wake-up, and the blocked `recv()` stays in `poll()` until
+    > `read_timeout`. Repro: a local HTTPS server that accepts the request and never answers, abort at 2 s — the current
+    > code hung until the read timeout in 6 of 13 trials; shutdown alone woke 22 of 22 at once. Mid-stream stalls wake
+    > either way. `3d62523` notes that on Windows only `_real_close()` wakes the recv, so this keeps it there:
+    > `if os.name == 'nt':` around the `_real_close()` / `close()` fallback.
+- **关联**：`managed-ga/patches/0025-managed-abort-wakes-on-macos.patch`；[GA baseline](../ga-baseline.md) `1b6442f` 审计节的更正。
+
+---
+
 ## 上游 PR：让 GA `run()` 消费 `put_task(images=)`（删 0008 + attach wrapper）
 
 - **状态**：暂存（2026-09-18 外置 GA 图片输入落地时拆出）
