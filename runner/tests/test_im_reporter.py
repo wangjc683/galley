@@ -1013,6 +1013,66 @@ def test_start_discord_reporter_restores_active_channels(
         assert app.embeds == [_embed("restored report", chat_id="ch:7")]
 
 
+def test_discord_reporter_restores_channels_once_the_app_is_up(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """The launcher starts the reporter before dcapp.main() builds the app
+    (managed_im_supervisor): restore happens on the first tick that finds
+    it, so a session delegated before a restart reports into its channel
+    without the owner saying a word."""
+    monkeypatch.setenv("GALLEY_SUPERVISOR_ID", "galley-im/discord")
+    monkeypatch.setattr(im_reporter, "_start_reporter", lambda reporter: reporter)
+    _fake_cli(monkeypatch, _discord_payloads("ch:7"))
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        app.active_ids = ["ch:7", "ch:8"]
+        app.agents["ch:7"] = _StubAgent(["重启前派出的任务跑完了。"])
+        hooked = _StubAgent([])
+        built: list[_StubDiscordApp] = []
+        dcapp = _stub_dcapp(None)
+        dcapp.get_app = lambda: built[0] if built else None
+        reporter = im_reporter.start_discord_reporter(dcapp, tmp_path)
+        assert reporter is not None
+        reporter.cli = "/stub/galley"
+        assert reporter.tick() == []  # no app yet: nothing to restore
+        assert reporter.channels() == {}
+
+        built.append(app)
+        # dcapp's agent hook already attached ch:8: restore keeps that one.
+        reporter.attach_channel("ch:8", hooked)
+        attached = reporter.channels()["galley-im/discord/ch:8"]
+        assert len(reporter.tick()) == 1
+        assert app.embeds == [_embed("重启前派出的任务跑完了。", chat_id="ch:7")]
+        assert reporter.channels()["galley-im/discord/ch:8"] is attached
+        assert set(reporter.channels()) == {
+            "galley-im/discord/ch:7",
+            "galley-im/discord/ch:8",
+        }
+        # Once: later activations register through dcapp's agent hook.
+        app.active_ids.append("ch:9")
+        reporter.tick()
+        assert "galley-im/discord/ch:9" not in reporter.channels()
+
+
+def test_discord_channel_never_reports_through_a_closed_agent(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """dcapp evicts a channel's agent and marks it closed (patch 0026); the
+    channel stays active, so the report turn goes to the agent dcapp builds
+    next, through its per-channel accessor."""
+    _fake_cli(monkeypatch, _discord_payloads())
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        live = app.agents.setdefault("ch:1", _StubAgent(["接上了。"]))
+        reporter, closed = _discord_reporter(tmp_path, app, ["never sent"])
+        closed._galley_closed = True  # type: ignore[attr-defined]
+        assert len(reporter.tick()) == 1
+        assert closed.prompts == []
+        assert len(live.prompts) == 1
+        assert app.embeds == [_embed("接上了。")]
+
+
 def test_start_discord_reporter_disabled_without_supervisor_id(
     monkeypatch: Any, tmp_path: Path
 ) -> None:
@@ -1364,11 +1424,11 @@ def test_run_cli_json_lines_parses_ndjson(monkeypatch: Any) -> None:
 def test_owned_prefix_report_is_held_until_channel_reactivates(
     monkeypatch: Any, tmp_path: Path
 ) -> None:
-    """A managed restart deactivates every Discord channel (patch
-    semantics), so a session delegated from ch:9 that settles before the
-    owner re-mentions the bot has no registered route. The base-id
-    prefix marks it OURS: it must be held — not marked seen as foreign —
-    and delivered once the channel re-activates."""
+    """A channel the owner exited is unregistered, so a session delegated
+    from ch:9 that settles before the owner re-mentions the bot has no
+    registered route. The base-id prefix marks it OURS: it must be held —
+    not marked seen as foreign — and delivered once the channel
+    re-activates."""
     (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
     _fake_cli(monkeypatch, _discord_payloads("ch:9"))
     with _loop_thread() as loop:

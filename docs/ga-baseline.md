@@ -760,8 +760,8 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     prompted `<think(ing)>` block it moves out of `content`, and that
     `ToolClient._parse_mixed_response` still sets it.
 15. The display queue and ask_user payload the managed Discord and
-    Telegram frontends read (Discord: patch `0023`; Telegram: patch
-    `0024`; both 2026-09-30; see their rows in the
+    Telegram frontends read (Discord: patches `0023` and `0026`; Telegram:
+    patch `0024`; all 2026-09-30; see their rows in the
     [patch ledger](../managed-ga/patches/manifest.md)). A drift here still
     applies cleanly and compiles, and the dcapp / tgapp tests run on
     hand-written fake agents, so nothing but a real run catches it.
@@ -787,9 +787,26 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     prompt or putting a `done` itself (tgapp calls it directly); (e)
     `continue_cmd.reset_conversation` still aborting through
     `agent.abort()`, which tgapp's `/continue n` wraps for one call to learn
-    whether the running task was aborted. The completion reporter
-    (`runner/im_reporter.py` `_deliver`) also reads `done` off
-    `put_task`'s queue.
+    whether the running task was aborted. (f) the engine log a Discord
+    channel is picked back up from after a restart or an eviction (`0026`):
+    `agent.log_path` minted in `GenericAgent.__init__` as
+    `temp/model_responses/model_responses_<logid>.txt` and pushed onto
+    `llmclient.log_path` at every task start in `run()` (dcapp maps a
+    channel to that basename); `llmcore._write_llm_log`'s
+    `=== Prompt === <ts>` / `=== Response === <ts> model=…` framing and the
+    native clients' bodies (Prompt: one JSON user message; Response: the
+    repr'd content blocks), which `continue_cmd` parses back into
+    `backend.history`; `continue_cmd.continue_inplace` / `continue_copy`
+    (with `restore_wm`) / `begin_fresh_session` / `session_occupant` /
+    `restore` / `list_sessions`, and the lock files under
+    `model_responses/.locks/` (the private `_lock_path`, JSON `pid` /
+    `agent_id`, fresh while the mtime is under `_STALE_AFTER` = 30 s),
+    which dcapp takes over when they carry its `galley-discord:` agent_id
+    and another pid. The dcapp tests run the real `continue_cmd` against
+    hand-written native-format logs, so an upstream log-format change still
+    passes them; only the restart check in Step 8 catches it. The
+    completion reporter (`runner/im_reporter.py` `_deliver`) also reads
+    `done` off `put_task`'s queue.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -813,10 +830,14 @@ start the audit there instead of grepping the bridge:
 - **`runner/managed_runtime.py::install_managed_prompt_profile`** — the
   one backend write outside GaSession (`extra_sys_prompt`); shared with
   the Bridge-less `managed_im_supervisor` path.
-- **`managed-ga/code/frontends/dcapp.py`** (patch `0023`) — item 15:
-  `_DiscordRun.observe` (item shape), `_extract_ask_user_event` and
-  `_install_ask_hook` (ask payload, `_current_queue`), and the `/review`
-  branch of `handle_command`.
+- **`managed-ga/code/frontends/dcapp.py`** (patches `0023`, `0026`) —
+  item 15: `_DiscordRun.observe` (item shape), `_extract_ask_user_event`
+  and `_install_ask_hook` (ask payload, `_current_queue`), and the
+  `/review` branch of `handle_command`; for (f), `_resume_channel`
+  (`continue_cmd`'s loader and locks), `_record_channel_log` (the
+  `agent.log_path` file), and the `/new` and `/continue` branches of
+  `handle_command` (`begin_fresh_session`; `list_sessions` / `restore` /
+  `continue_copy`).
 - **`managed-ga/code/frontends/tgapp.py`** (patch `0024`) — item 15:
   `_TgRun.observe` (item shape), `_register_ask_user_hook` and
   `_take_ask_event` (ask payload, `_current_queue`), `_is_waiting` and
@@ -967,7 +988,9 @@ already-generated bundle without rebuilding it. The smoke must verify
   edits in place, then only the answer remains under its `-# N 步 · 用时 X`
   line), an ask_user question answered by a button, and `/stop` during a
   long run (the status message freezes into `⏹ 已停止 · …`, and no other
-  message follows).
+  message follows). Then restart Channels (「重启 Channels」) and talk in
+  the already-active channel without `@`: it answers with no activation
+  notice and picks up what was said before the restart (item 15 (f)).
 - Managed Telegram channel (item 15; same caveat about an installed
   Galley): a multi-step request in the private chat (the silent status
   message edits in place, then only the answer remains, under its fold

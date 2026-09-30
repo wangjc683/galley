@@ -667,9 +667,13 @@ class DiscordChannel(ChannelAdapter):
     def agent(self) -> Any:
         """The channel's agent — normally handed over by dcapp's agent
         hook at creation time. Channels restored at startup have no agent
-        yet, so fall back to dcapp's per-channel agent accessor (coupling
-        point: same call path an inbound message takes)."""
-        if self._agent is not None:
+        yet, and dcapp closes a channel's agent when it evicts it (patch
+        0026: the channel stays active and the next agent picks the
+        conversation back up), marking it ``_galley_closed``. Both resolve
+        through dcapp's per-channel agent accessor (coupling point: same
+        call path an inbound message takes), which builds the next agent
+        when needed; a closed agent never gets a report turn."""
+        if self._agent is not None and not getattr(self._agent, "_galley_closed", False):
             return self._agent
         app = self._app()
         if app is None:
@@ -770,10 +774,11 @@ class ImReporter:
         self.cli: str | None = None
         # Supervisor-id prefixes this PROCESS owns beyond the currently
         # registered channels. A report routed to an owned-but-
-        # unregistered id (a Discord channel deactivated by a restart)
-        # is HELD — entry untouched, retried next tick — instead of
-        # being marked seen as foreign, so re-activating the channel
-        # still delivers results that settled in between.
+        # unregistered id (a Discord channel the owner exited, or one not
+        # re-registered yet after a restart) is HELD — entry untouched,
+        # retried next tick — instead of being marked seen as foreign, so
+        # re-activating the channel still delivers results that settled
+        # in between.
         self.owned_prefixes = owned_prefixes
 
     # -- channel registry --
@@ -857,9 +862,10 @@ class ImReporter:
             if target is None:
                 # Ours, but not deliverable right now: a registered
                 # channel that is disconnected/unbound, or an owned-
-                # prefix channel that is not activated (Discord after a
-                # restart). Leave the entry untouched so the report is
-                # held until the channel comes back or is re-activated.
+                # prefix channel that is not registered (Discord: exited,
+                # or not restored yet). Leave the entry untouched so the
+                # report is held until the channel comes back or is
+                # re-activated.
                 continue
             channel, owner = target
             outcome = self._deliver(channel, report, owner)
@@ -1007,8 +1013,8 @@ class DiscordReporter(ImReporter):
         poll_interval: float = POLL_INTERVAL_SEC,
     ) -> None:
         # The base-id prefix claims every ch:<id> for this process, so
-        # reports for channels deactivated by a restart are held until
-        # the owner re-activates them instead of dropped as foreign.
+        # reports for channels that are not registered (exited, or not
+        # restored yet) are held instead of dropped as foreign.
         super().__init__(
             {},
             state_path,
@@ -1017,6 +1023,7 @@ class DiscordReporter(ImReporter):
         )
         self.dcapp = dcapp
         self.supervisor_id = supervisor_id
+        self._restored = False
 
     def supervisor_id_for(self, chat_id: str) -> str:
         return f"{self.supervisor_id}/{chat_id}"
@@ -1033,14 +1040,29 @@ class DiscordReporter(ImReporter):
         """Re-register the already-active channels so routing is restored
         at process start instead of waiting for each channel's next
         message (a report that landed while the process was down would
-        otherwise have nowhere to go). No-op before dcapp's app exists."""
+        otherwise have nowhere to go). No-op before dcapp's app exists;
+        runs once after it does. A channel whose agent the hook already
+        attached keeps that registration."""
         app = self.dcapp.get_app()
         if app is None:
             return []
+        self._restored = True
+        registered = self.channels()
         chat_ids = [str(chat_id) for chat_id in (app.active_channel_ids() or [])]
         for chat_id in chat_ids:
-            self.attach_channel(chat_id)
+            if self.supervisor_id_for(chat_id) not in registered:
+                self.attach_channel(chat_id)
         return chat_ids
+
+    def tick(self) -> list[Report]:
+        # The launcher starts the reporter before dcapp.main() builds the
+        # app, so the startup restore is a no-op there: restore on the
+        # first tick that finds the app.
+        if not self._restored:
+            restored = self.restore_active_channels()
+            if restored:
+                print(f"[galley-im-reporter] restored {len(restored)} Discord channel(s)")
+        return super().tick()
 
 
 def _start_reporter(reporter: ImReporter) -> ImReporter:

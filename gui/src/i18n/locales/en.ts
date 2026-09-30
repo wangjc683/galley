@@ -1455,8 +1455,8 @@ export const enCopy: AppCopy = {
       discordTextCommands: [
         { command: "@bot", description: "Activate this channel or thread" },
         {
-          command: "退出该频道",
-          description: "Leave the channel (in a thread: 退出该子区)",
+          command: "退出频道",
+          description: "Leave the current channel or thread",
         },
         { command: "/llm", description: "List and switch models" },
         { command: "/stop", description: "Stop the current task" },
@@ -1472,7 +1472,7 @@ export const enCopy: AppCopy = {
       discordChannelVisibilityNote:
         "In a channel, the bot's replies, generated files and completion reports are visible to every member who can see that channel — keep private work in a channel only you can see.",
       discordChannelScopeNote:
-        "Once a channel is activated, everything you say there goes to Galley; send 退出该频道 (in a thread: 退出该子区) to leave.",
+        "Once a channel is activated, everything you say there goes to Galley, across restarts too; send 退出频道 to leave (it works in threads as well).",
       discordBoundLabel: "Paired owner",
       discordBoundAt: "Paired at",
       discordUnbind: "Unpair",

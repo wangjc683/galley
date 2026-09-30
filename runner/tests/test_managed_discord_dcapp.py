@@ -1,7 +1,9 @@
-"""Managed-GA patch 0023: Discord conversation UX in ``frontends/dcapp.py``.
+"""Managed-GA patches 0023 (Discord conversation UX) and 0026 (channels
+picked back up across restarts and evictions) in ``frontends/dcapp.py``.
 
 Loads the shipped payload with ``discord`` and the heavy GA modules stubbed
-(the real ``chatapp_common`` is used, over stubbed command modules), then
+(the real ``chatapp_common`` and ``continue_cmd`` are used, over stubbed
+command modules), then
 drives ``DiscordApp`` with a fake agent whose display queue replays the item
 shapes the managed runtime produces for a ``verbose=False`` channel agent,
 and a fake channel that records send / edit / delete. Time is an injected
@@ -15,7 +17,9 @@ import asyncio
 import importlib.util
 import itertools
 import json
+import os
 import queue
+import subprocess
 import sys
 import time
 import types
@@ -62,10 +66,30 @@ class ScriptQueue:
         return item
 
 
+class FakeBackend:
+    def __init__(self) -> None:
+        self.history: list[dict[str, Any]] = []
+
+
+class FakeClient:
+    def __init__(self) -> None:
+        self.backend = FakeBackend()
+        self.log_path: str | None = None
+        self.last_tools = ""
+
+
 class FakeAgent:
     clock = FakeClock()
+    log_dir = Path(".")  # the managed state root's temp/model_responses
+    _logids = itertools.count(100001)
 
     def __init__(self) -> None:
+        # What continue_cmd reads and writes on a GA agent.
+        self.log_path = str(FakeAgent.log_dir / f"model_responses_{next(FakeAgent._logids)}.txt")
+        self.llmclient = FakeClient()
+        self.llmclients = [self.llmclient]
+        self.history: list[str] = []
+        self.handler: Any = None
         self.verbose = True
         self.is_running = False
         self.aborted = 0
@@ -283,11 +307,13 @@ def _install_stubs(monkeypatch: Any) -> None:
     llmcore.mykeys = {}  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "llmcore", llmcore)
 
-    continue_cmd = types.ModuleType("continue_cmd")
-    continue_cmd.handle_frontend_command = lambda _agent, cmd: f"continue: {cmd}"  # type: ignore[attr-defined]
-    continue_cmd.install = lambda _cls: None  # type: ignore[attr-defined]
-    continue_cmd.reset_conversation = lambda _agent: "✅ 已开启新对话"  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "continue_cmd", continue_cmd)
+    # The real continue_cmd (0026 picks channels back up with its loader and
+    # its session locks), rooted at GALLEY_GA_STATE_ROOT, minus the GA class
+    # patch chatapp_common would install.
+    continue_cmd = _exec_module(
+        monkeypatch, "continue_cmd", _CODE_ROOT / "frontends" / "continue_cmd.py"
+    )
+    monkeypatch.setattr(continue_cmd, "install", lambda _cls: None)
 
     btw_cmd = types.ModuleType("btw_cmd")
     btw_cmd.handle_frontend_command = lambda _agent, cmd: f"btw: {cmd}"  # type: ignore[attr-defined]
@@ -331,6 +357,36 @@ class Env:
         assert isinstance(agent, FakeAgent)
         return agent
 
+    def restart(self) -> Any:
+        """A new dcapp process over the same state: a fresh DiscordApp
+        loading what the old one persisted."""
+        self.app = self.dcapp.DiscordApp()
+        self.app._clock = self.clock
+        self.app._remember_channel(CHAT, self.channel)
+        return self.app
+
+    def ready_agent(self, chat_id: str = CHAT) -> FakeAgent:
+        """The channel's agent once its prepare step (the resume) is done."""
+        handle = self.app._get_agent(chat_id)
+        assert handle.ready.wait(5)
+        assert isinstance(handle.agent, FakeAgent)
+        return handle.agent
+
+    def active_entry(self, chat_id: str = CHAT) -> dict[str, Any]:
+        data = json.loads(Path(self.dcapp.ACTIVE_FILE).read_text(encoding="utf-8"))
+        entry = data.get(chat_id)
+        assert isinstance(entry, dict)
+        return entry
+
+    def guild_message(self, content: str, *, mentioned: bool = False) -> FakeMessage:
+        """An owner's message in the guild channel, @-mentioning the bot or not."""
+        self.app.client.user.mentioned_in = lambda _message: mentioned
+        message = self.trigger(content)
+        message.author = types.SimpleNamespace(id=int(OWNER), bot=False)  # type: ignore[attr-defined]
+        message.guild = object()  # type: ignore[attr-defined]
+        message.attachments = []  # type: ignore[attr-defined]
+        return message
+
     def trigger(self, content: str = "hi") -> FakeMessage:
         """A user's message in the channel (not a bot send)."""
         message = FakeMessage(self.channel, content)
@@ -351,6 +407,10 @@ class Env:
 
 @pytest.fixture
 def env(monkeypatch: Any, tmp_path: Path) -> Env:
+    # Before the stubs: continue_cmd resolves its log dir at import.
+    monkeypatch.setenv("GALLEY_GA_STATE_ROOT", str(tmp_path / "ga"))
+    FakeAgent.log_dir = tmp_path / "ga" / "temp" / "model_responses"
+    FakeAgent.log_dir.mkdir(parents=True)
     _install_stubs(monkeypatch)
     monkeypatch.setenv(
         "GALLEY_DISCORD_CONFIG_JSON",
@@ -988,7 +1048,7 @@ def test_new_command_drops_pending_question(env: Env) -> None:
         await drain(env.app)
         assert question.edits[-1] == {"view": None}
         assert CHAT not in env.app._pending_asks
-        assert env.channel.sent[-1].content == "✅ 已开启新对话"
+        assert env.channel.sent[-1].content == "🆕 已开启新对话，当前上下文已清空"
 
         c1 = turn_text(1, "新话题")
         env.agent.scripts.append([nxt([c1]), done([c1])])
@@ -1020,7 +1080,7 @@ def test_help_btw_review_commands(env: Env) -> None:
         help_text = env.channel.sent[-1].content
         assert help_text == env.dcapp.DISCORD_HELP_TEXT
         assert "/btw <q>" in help_text and "/review [scope]" in help_text
-        assert help_text.endswith("退出该频道 / 退出该子区 - 停止在本频道响应")
+        assert help_text.endswith("\n退出频道 - 停止在本频道或子区响应")
 
         trigger = env.trigger("/btw 进展？")
         await env.app.handle_command(CHAT, "/btw 进展？", message=trigger)
@@ -1050,7 +1110,10 @@ def test_message_handler_replies_under_the_trigger(env: Env) -> None:
         await env.app._handle_message(message)
         await drain(env.app)
         activated, status, answer = env.channel.sent
-        assert activated.content == env.dcapp.ACTIVATED_TEXT
+        assert activated.content == env.dcapp.ACTIVATED_TEXT == (
+            "✅ 已激活，本频道的发言都会交给 Galley\n"
+            "-# 频道成员都能看到回复 · 发「退出频道」可退出"
+        )
         assert status.kwargs == reply_to(message)
         assert env.agent.tasks[-1][0].endswith("\n\n你好")
         assert answer.content == "-# 1 步\n你好"
@@ -1061,6 +1124,319 @@ def test_message_handler_replies_under_the_trigger(env: Env) -> None:
 def test_channel_agent_gets_ask_hook(env: Env) -> None:
     hooks = env.agent._turn_end_hooks  # type: ignore[attr-defined]
     assert callable(hooks["discord_ask_user"])
+
+
+# ── 0026: channels picked back up across restarts and evictions ───────
+
+
+LOG_NAME = "model_responses_424242.txt"
+CONTEXT_LOST = "-# 之前的对话没接上，这是新的上下文"
+HINTED = "If you need to show files to user, use [FILE:filepath] in your response.\n\n"
+Blocks = list[dict[str, Any]]
+
+SAMPLE_TURNS: list[tuple[Blocks, Blocks]] = [
+    (
+        [{"type": "text", "text": HINTED + "暗号是蓝鲸，记住"}],
+        [
+            {"type": "text", "text": "<summary>记下暗号</summary>"},
+            {
+                "type": "tool_use", "id": "toolu_01", "name": "update_working_checkpoint",
+                "input": {"key_info": "暗号：蓝鲸"},
+            },
+        ],
+    ),
+    (
+        [
+            {"type": "tool_result", "tool_use_id": "toolu_01", "content": "ok"},
+            {"type": "text", "text": "\n### [WORKING MEMORY]\n<history>\n[USER]: 暗号是蓝鲸，记住"
+                                     "\n</history>\nCurrent turn: 2\n"},
+        ],
+        [{"type": "text", "text": "<summary>确认</summary>记住了，暗号是蓝鲸。"}],
+    ),
+]
+SAMPLE_HISTORY = [
+    message
+    for user, assistant in SAMPLE_TURNS
+    for message in ({"role": "user", "content": user}, {"role": "assistant", "content": assistant})
+]
+OTHER_TURNS: list[tuple[Blocks, Blocks]] = [
+    ([{"type": "text", "text": HINTED + "换个话题"}], [{"type": "text", "text": "好的。"}]),
+]
+
+
+def native_log(turns: list[tuple[Blocks, Blocks]]) -> str:
+    """A model_responses log as GA writes it for a native client: llmcore's
+    _write_llm_log framing, NativeToolClient's prompt (one JSON block per
+    line), and the session's repr'd content blocks as the response."""
+    parts = []
+    for user, assistant in turns:
+        prompt = '{"role": "user", "content": [\n' + ",\n".join(
+            json.dumps(block, ensure_ascii=False) for block in user
+        ) + "]}"
+        raw = "[" + ",\n".join(repr(block) for block in assistant) + "]"
+        parts.append(f"=== Prompt === 2026-09-30 10:00:00\n{prompt}\n\n")
+        parts.append(f"=== Response === 2026-09-30 10:00:04 model=claude-sonnet-4-5\n{raw}\n\n")
+    return "".join(parts)
+
+
+def seed_active(env: Env, **entry: Any) -> None:
+    """The active-channel file a previous dcapp process left behind."""
+    path = Path(env.dcapp.ACTIVE_FILE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({CHAT: {"last_seen": time.time(), **entry}}), encoding="utf-8")
+
+
+def seed_log(name: str = LOG_NAME, text: str | None = None) -> Path:
+    path = FakeAgent.log_dir / name
+    path.write_text(native_log(SAMPLE_TURNS) if text is None else text, encoding="utf-8")
+    return path
+
+
+def answer_script(agent: FakeAgent, text: str, log: str | None = None) -> None:
+    """One single-step run; with log, GA appends that log text to the
+    agent's current log file while it runs."""
+    t1 = turn_text(1, text)
+
+    def ga_writes_log() -> None:
+        if log is not None:
+            with open(agent.log_path, "a", encoding="utf-8") as f:
+                f.write(log)
+
+    agent.scripts.append([nxt([t1]), done([t1], 1.0, _effect=ga_writes_log)])
+
+
+def test_restart_picks_the_channel_back_up_without_a_mention(env: Env) -> None:
+    async def body() -> None:
+        old = env.agent
+        answer_script(old, "记住了，暗号是蓝鲸。", log=native_log(SAMPLE_TURNS))
+        await env.app._handle_message(env.guild_message("<@999> 暗号是蓝鲸，记住", mentioned=True))
+        await drain(env.app)
+        # The run's end mapped the channel to its log: the basename only.
+        assert env.active_entry() == {
+            "last_seen": env.active_entry()["last_seen"], "log": Path(old.log_path).name,
+        }
+
+        app = env.restart()
+        sent = len(env.channel.sent)
+        agent = env.ready_agent()
+        assert agent is not old
+        assert agent.log_path == old.log_path  # picked up in place
+        assert agent.llmclient.backend.history == SAMPLE_HISTORY
+        # Working memory comes back from the same log (restore_wm).
+        assert agent.history[0] == "[USER]: " + HINTED + "暗号是蓝鲸，记住"
+        assert agent.history[1:] == ["[Agent] 记下暗号", "[Agent] 确认"]
+        holder = env.dcapp.continue_cmd.session_occupant(agent.log_path)
+        assert holder["pid"] == os.getpid() and holder["agent_id"] == "galley-discord:ch:1"
+
+        # Mid-run (a restart could land here) the mapping is still there.
+        mid_run: list[Any] = []
+        t1 = turn_text(1, "蓝鲸。")
+        agent.scripts.append([
+            nxt([t1], _effect=lambda: mid_run.append(env.active_entry().get("log"))),
+            done([t1], 1.0),
+        ])
+        await app._handle_message(env.guild_message("暗号是什么？"))  # no @
+        await drain(app)
+        assert mid_run == [Path(old.log_path).name]
+        status, answer = env.channel.sent[sent:]  # no activation notice
+        assert status.deleted
+        assert answer.content == "-# 1 步 · 用时 1 秒\n蓝鲸。"
+        assert agent.tasks[-1][0] == f"{env.dcapp.FILE_HINT}\n\n暗号是什么？"
+
+    env.run(body)
+
+
+def test_pre_mapping_entry_stays_active_without_resume_or_notice(env: Env) -> None:
+    async def body() -> None:
+        seed_active(env)  # upstream / pre-0026 entry: no log field
+        app = env.restart()
+        agent = env.ready_agent()
+        assert agent.llmclient.backend.history == [] and agent.history == []
+        answer_script(agent, "你好。")
+        await app._handle_message(env.guild_message("在吗"))
+        await drain(app)
+        status, answer = env.channel.sent
+        assert answer.content == "-# 1 步 · 用时 1 秒\n你好。"
+
+    env.run(body)
+
+
+@pytest.mark.parametrize(
+    "log_text",
+    [
+        None,  # missing (pruned after 30 days, deleted)
+        "",  # empty
+        "=== Prompt === 2026-09-30 10:00:00\nnot json\n\n"
+        "=== Response === 2026-09-30 10:00:04\n[{'type': 'text'\n\n",  # unparseable
+    ],
+    ids=["missing", "empty", "corrupt"],
+)
+def test_unrecoverable_log_is_a_fresh_context_said_once(env: Env, log_text: str | None) -> None:
+    async def body() -> None:
+        if log_text is not None:
+            seed_log(text=log_text)
+        seed_active(env, log=LOG_NAME)
+        app = env.restart()
+        agent = env.ready_agent()
+        assert agent.llmclient.backend.history == [] and agent.history == []
+        assert Path(agent.log_path).name != LOG_NAME  # a fresh log
+
+        answer_script(agent, "好的。", log=native_log(OTHER_TURNS))
+        await app._handle_message(env.guild_message("换个话题"))
+        await drain(app)
+        assert env.channel.sent[-1].content == f"{CONTEXT_LOST}\n-# 1 步 · 用时 1 秒\n好的。"
+        assert env.active_entry()["log"] == Path(agent.log_path).name
+
+        answer_script(agent, "嗯。")
+        await app._handle_message(env.guild_message("继续"))
+        await drain(app)
+        assert env.channel.sent[-1].content == "-# 1 步 · 用时 1 秒\n嗯。"  # once
+
+    env.run(body)
+
+
+def test_context_lost_notice_leads_a_question_too(env: Env) -> None:
+    async def body() -> None:
+        seed_active(env, log=LOG_NAME)
+        env.restart()
+        agent = env.ready_agent()
+        question = await ask_once(env, "选哪个？", ["甲", "乙"])
+        assert question.content == f"{CONTEXT_LOST}\n-# ⏸ 等你回复 · 已完成 1 步\n选哪个？"
+        assert not getattr(agent, "_galley_context_lost", False)
+
+    env.run(body)
+
+
+def test_fresh_lock_left_by_the_dead_process_is_taken_over(env: Env) -> None:
+    cc = env.dcapp.continue_cmd
+    log = seed_log()
+    dead = subprocess.run(
+        [sys.executable, "-c", "import os; print(os.getpid())"],
+        capture_output=True, text=True, check=True,
+    )
+    lock = Path(cc._lock_path(str(log)))
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(json.dumps({
+        "pid": int(dead.stdout), "agent_id": "galley-discord:ch:1", "log": LOG_NAME,
+        "started": time.time() - 5,
+    }), encoding="utf-8")
+    # Heartbeat 2 s ago: upstream alone refuses it for another 28 s.
+    os.utime(lock, (time.time() - 2, time.time() - 2))
+    assert cc.session_occupant(str(log)) is not None
+
+    seed_active(env, log=LOG_NAME)
+    env.restart()
+    agent = env.ready_agent()
+    assert agent.log_path == str(log)
+    assert agent.llmclient.backend.history == SAMPLE_HISTORY
+    assert cc.session_occupant(str(log))["pid"] == os.getpid()
+
+
+def test_log_held_by_another_live_process_goes_on_in_a_copy(env: Env) -> None:
+    cc = env.dcapp.continue_cmd
+    log = seed_log()
+    lock = Path(cc._lock_path(str(log)))
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    foreign = {"pid": os.getppid(), "agent_id": "tui-1", "log": LOG_NAME, "started": time.time()}
+    lock.write_text(json.dumps(foreign), encoding="utf-8")
+
+    seed_active(env, log=LOG_NAME)
+    env.restart()
+    agent = env.ready_agent()
+    assert agent.log_path != str(log)
+    assert Path(agent.log_path).read_text(encoding="utf-8") == log.read_text(encoding="utf-8")
+    assert agent.llmclient.backend.history == SAMPLE_HISTORY
+    assert env.active_entry()["log"] == Path(agent.log_path).name
+    assert json.loads(lock.read_text(encoding="utf-8")) == foreign  # untouched
+
+
+def test_new_maps_the_channel_to_a_new_log(env: Env) -> None:
+    async def body() -> None:
+        seed_log()
+        seed_active(env, log=LOG_NAME)
+        app = env.restart()
+        agent = env.ready_agent()
+        assert agent.llmclient.backend.history == SAMPLE_HISTORY
+
+        await app.handle_command(CHAT, "/new")
+        assert env.channel.sent[-1].content == "🆕 已开启新对话，当前上下文已清空"
+        assert agent.llmclient.backend.history == [] and agent.history == []
+        assert Path(agent.log_path).name != LOG_NAME
+        # Nothing said since /new: nothing to pick up, nothing to announce.
+        assert "log" not in env.active_entry()
+
+        answer_script(agent, "好的。", log=native_log(OTHER_TURNS))
+        await app._handle_message(env.guild_message("换个话题"))
+        await drain(app)
+        assert env.active_entry()["log"] == Path(agent.log_path).name
+
+        env.restart()
+        resumed = env.ready_agent()
+        assert resumed.log_path == agent.log_path
+        assert resumed.llmclient.backend.history == [
+            {"role": "user", "content": OTHER_TURNS[0][0]},
+            {"role": "assistant", "content": OTHER_TURNS[0][1]},
+        ]
+
+    env.run(body)
+
+
+def test_eviction_keeps_the_channel_and_never_reports_through_the_closed_agent(
+    env: Env, monkeypatch: Any
+) -> None:
+    from runner import im_reporter
+
+    monkeypatch.setattr(env.dcapp, "AGENT_CACHE_LIMIT", 1)
+    monkeypatch.setattr(env.dcapp, "_APP", env.app)
+    released: list[str] = []
+    monkeypatch.setattr(env.dcapp, "GALLEY_CHANNEL_RELEASED_HOOK", released.append, raising=False)
+
+    async def body() -> None:
+        old = env.agent
+        answer_script(old, "记住了。", log=native_log(SAMPLE_TURNS))
+        await env.app._handle_message(env.guild_message("<@999> 暗号是蓝鲸，记住", mentioned=True))
+        await drain(env.app)
+        # What the launcher's agent hook hands the completion reporter.
+        channel = im_reporter.DiscordChannel(env.dcapp, CHAT, old)
+        sent = len(env.channel.sent)
+
+        env.app._get_agent("ch:2")  # one channel too many: ch:1 is evicted
+        assert getattr(old, "_galley_closed", False)
+        assert env.app._is_active_channel(CHAT)
+        assert released == []
+        assert len(env.channel.sent) == sent  # no notice
+        assert env.active_entry()["log"] == Path(old.log_path).name
+
+        # A report turn resolves the channel's next agent, never the closed one.
+        agent = channel.agent()
+        assert agent is not old
+        assert env.app._get_agent(CHAT).ready.wait(5)
+        assert agent.log_path == old.log_path
+        assert agent.llmclient.backend.history == SAMPLE_HISTORY
+
+        # The next message lands on that agent: no mention, no notice.
+        answer_script(agent, "蓝鲸。")
+        await env.app._handle_message(env.guild_message("暗号是什么？"))
+        await drain(env.app)
+        assert env.channel.sent[-1].content == "-# 1 步 · 用时 1 秒\n蓝鲸。"
+        assert old.tasks[-1][0].endswith("暗号是蓝鲸，记住")  # nothing new on the closed one
+
+    env.run(body)
+
+
+def test_exit_words_share_one_receipt(env: Env) -> None:
+    async def body() -> None:
+        for word in ("退出频道", "退出该子区"):
+            await env.app._handle_message(env.guild_message(f"<@999> {word}", mentioned=True))
+            assert env.channel.sent[-1].content == "✅ 已退出，重新 @ 我即可激活"
+            assert not env.app._is_active_channel(CHAT)
+        sent = len(env.channel.sent)
+        await env.app._handle_message(env.guild_message("还在吗"))
+        assert len(env.channel.sent) == sent  # exited: ignored until re-@
+        assert not hasattr(env.dcapp, "RESTARTED_TEXT")
+        assert not hasattr(env.dcapp, "RETIRED_TEXT")
+
+    env.run(body)
 
 
 # ── reporter seam: runner/im_reporter.py against the real dcapp ─────────

@@ -117,3 +117,48 @@ JC 继续打磨时提出：状态消息上的「停止」按钮有点没必要�
 验证：主会话用干净克隆（`1b6442f`）独立重放 24 个补丁，重建后 `managed-ga/code` 与 `state-seed` 全部文件哈希不变；pytest
 409 passed，mypy strict、ruff、`git diff --check`、payload、baseline-drift 绿。**真机：JC 验收通过（2026-09-30）**——新 run 的
 状态消息没有按钮、长任务中 `/stop` 定格。
+
+## 真机后追加：重启后无缝续接 + 激活文案收短（JC，2026-09-30）
+
+JC 真机发现：点「重启 Channels」后在已激活频道直接说话没有任何回复，@ 之后才正常；并嫌激活提示啰嗦。
+
+- **根因**：`0018` 在 managed 模式启动时释放全部持久化的激活频道（理由是频道历史只活在进程里，重启后仍激活等于悄悄给一个
+  空白 agent，见 [Discord 渠道落地](./2026-08-13-discord-channel-shipped.md)「集成缝隙」节）。释放后的「请重新 @」提示只记在内存
+  集合里，连续重启几次就丢了，消息被静默忽略——这是缺陷，不只是摩擦。
+- **前提被推翻**：每个频道 agent 本来就把完整对话写进自己的 GA 日志（`agentmain.py` `log_path`），上游 `continue_cmd` 有按日志
+  原地续接的 `continue_inplace`（`/continue` 用的就是它）。历史并不只活在进程里。
+- **三案**：R1 只修提示（仍要 @）；R2 保留激活、上下文清空并用小字告知；R3 保留激活并接回上下文。**JC 按推荐裁 R3**。宪法第 4 条：
+  不新增对话存储，对话本来就在引擎自己的 `model_responses` 里（2026-08-13 解释），新增的只是「频道 → 日志文件名」映射。
+- **加项（主会话补裁）**：重启前派出的任务在重启后跑完时，报告是否主动投递——讨论时没给推荐，JC 回「按建议推进」后由我定：做。
+  读码发现 reporter 早有启动时恢复激活频道路由的 `restore_active_channels`，一直是 no-op（调用时 dcapp 的 app 还没建，加上启动释放），
+  补一个调用时机即可，几乎零成本。
+- **文案**：激活提示三案（一行 / 一行加小字 / 只留 ✅），**JC 按推荐裁一行加小字**——可见性声明在激活那一刻最有用，降成小字几乎不占
+  分量。读码顺带发现「（子区发「退出该子区」）」是冗余的：退出分支对两组退出词一视同仁，都退出当前所在的频道或子区；于是 Discord
+  消息、`/help` 与 Settings 卡片（中英）统一只写一个「退出频道」，卡片的范围声明补「重启后依然生效」（激活从此跨重启保留）。
+  退出回执同口径收短（讨论时同样没给推荐，由我定）。
+
+实施：新补丁 `0026-managed-discord-restart-continuity.patch` + reporter（`.scratch/discord-ux/issues/06`，Opus 子代理），主会话写 GUI 卡片与
+文档。要点与子代理自行裁量（主会话审过接受，细节在票面 Comments）：
+
+- 续接在频道 agent 自己的线程里、处理第一个任务之前做，期间到来的任务排队；事件循环与 reporter 线程都不读文件。
+- **锁**：上游锁 30 秒无心跳才过期，重启常快于此。锁的 `agent_id` 带 `galley-discord:` 前缀且 pid 不是本进程，就是上一个 dcapp 留下的
+  （`supervisor.lock` 保证同一 state 目录只有一个 dcapp），直接接管；被别的活进程占着时退到 `continue_copy`。不用 pid 探活：Windows 上
+  `os.kill(pid, 0)` 会杀掉那个进程。
+- **`restore_wm=True`**：backend history 变长会被裁剪，早期上下文只靠工作记忆里的摘要带着；取 False 的话续上的频道一裁剪就丢早期上下文，
+  比不重启还差。上游 worldline TUI 续接也传 True。代价：续接后工作记忆比不重启时大（从日志推导的用户行不截断）。
+- **`/new` 其实不换日志**（票面以为会）：IM 前端的 `reset_conversation` 不改 `log_path`，只靠 run 结束回写的话，`/new` 之后重启会把清掉的
+  对话接回来。改为 `/new` 显式换新日志并清掉映射；`/continue N` 恢复后挪到该日志的副本上。
+- **驱逐**（同时活跃超过 12 个频道）：频道保持激活、不发通知，下一条消息或报告轮重建 agent 并续接；被关的 agent 打 `_galley_closed`
+  标记，reporter 遇到就改经 `app._get_agent` 取新的。
+- 接不上（日志缺失 / 为空 / 解析失败）时，下一条回答或提问最前面一行 `-# 之前的对话没接上，这是新的上下文`，只一次。
+- 不限 managed 模式：上游文件配置模式本来就跨重启保留激活，只是给空白 agent，续上只会更好。
+- 已知小缝：续接失败后，若新上下文里第一件事是报告轮而不是用户 run，映射要等下一个 run 结束才更新；在那之前再重启一次会再提示一次。
+  续接过的日志在 `model_responses/.locks/` 留一个小锁文件，与上游 TUI 相同。
+
+验证：主会话用干净克隆（`1b6442f`）独立重放 25 个补丁，重建后 `managed-ga/code` 与 `state-seed` 全部文件哈希不变；pytest 422 passed
+（dcapp 新增 11 条、reporter 新增 2 条；新测试跑在 `0026` 之前的 dcapp 上 13 条失败，逐项去掉关键改动各有测试失败），mypy strict、ruff、
+`git diff --check`、payload、baseline-drift、gui typecheck / lint 绿。**真机待验**：重启 Channels 后不 @ 直接说话能接上之前的话；30 秒内
+连续重启两次仍能接上；重启前派出的任务在重启后跑完，报告自己投到频道；`/new` 之后重启不会把旧对话接回来；新的激活提示与退出回执。
+
+另立题：Telegram / 飞书启动时各新建空白 agent，重启后上下文同样会丢，只是没有激活门槛不显眼——进 `.scratch/im-restart-continuity/` 与
+[deferred](./deferred.md)，等 Discord 真机跑顺再推广。

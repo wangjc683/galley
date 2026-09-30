@@ -246,6 +246,18 @@
 
 ---
 
+## IM 渠道重启后接回上下文（Telegram / 飞书）
+
+- **状态**：暂缓（2026-09-30：Discord 先做，补丁 `0026`）
+- **提出**：2026-09-30，Discord 重启后要重新 @ 的讨论；读码确认 Telegram / 飞书启动时各新建空白 agent（`tgapp.py:46`、
+  `fsapp.py:562`），重启后上下文同样会丢，只是没有激活门槛所以不显眼。
+- **启动信号**：Discord `0026` 真机跑顺；或 JC 在 Telegram / 飞书里遇到「重启后它不记得刚才的事」。
+- **方案**：照 `0026`——持久化「聊天 → 当前 GA 日志文件名」，启动后用上游 `continue_cmd.continue_inplace` 续上；只存文件名，
+  不存对话内容。
+- **关联**：`.scratch/im-restart-continuity/PRD.md`；`.scratch/discord-ux/issues/06-restart-continuity.md`。
+
+---
+
 ## IM 渠道的图片输入：相册合并与视觉输入
 
 - **状态**：暂缓（2026-09-30 Telegram 对话体验对齐桌面端时裁决不做，范围 D）

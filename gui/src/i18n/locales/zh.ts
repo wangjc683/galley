@@ -1386,7 +1386,7 @@ export const zhCopy = {
         "@ 提及用于激活频道；其余命令在已激活的频道里直接发送。",
       discordTextCommands: [
         { command: "@机器人", description: "激活该频道或子区" },
-        { command: "退出该频道", description: "退出该频道（子区发「退出该子区」）" },
+        { command: "退出频道", description: "退出当前频道或子区" },
         { command: "/llm", description: "查看并切换模型" },
         { command: "/stop", description: "停止当前任务" },
         { command: "/new", description: "开始新对话" },
@@ -1401,7 +1401,7 @@ export const zhCopy = {
       discordChannelVisibilityNote:
         "机器人在频道里的回复、生成的文件与完成报告，对该频道所有可见成员公开；私密内容请放在只有你可见的频道。",
       discordChannelScopeNote:
-        "频道一旦激活，你在该频道的全部发言都会交给 Galley；发送「退出该频道」（子区发「退出该子区」）即可退出。",
+        "频道一旦激活，你在该频道的全部发言都会交给 Galley，重启后依然生效；发送「退出频道」即可退出，子区同样适用。",
       discordBoundLabel: "已绑定使用者",
       discordBoundAt: "绑定于",
       discordUnbind: "解绑",

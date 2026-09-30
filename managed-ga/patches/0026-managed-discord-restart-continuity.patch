@@ -1,0 +1,250 @@
+diff --git a/frontends/dcapp.py b/frontends/dcapp.py
+--- a/frontends/dcapp.py
++++ b/frontends/dcapp.py
+@@ -16,0 +17 @@ from chatapp_common import (
++import continue_cmd
+@@ -95,10 +96,2 @@ ACTIVATED_TEXT = (
+-    "✅ 已在本频道激活。此后你在本频道的发言都会交给 Agent 处理，"
+-    "回复、生成的文件与完成报告对本频道所有可见成员公开。\n"
+-    "退出：发送「退出该频道」（子区发「退出该子区」）。"
+-)
+-RETIRED_TEXT = (
+-    "ℹ️ 本频道的上下文已释放（同时活跃的频道过多）。"
+-    "重新 @ 我即可开启新的上下文；之前的对话历史不会带回来。"
+-)
+-RESTARTED_TEXT = (
+-    "ℹ️ 服务已重启，本频道的上下文已释放。请重新 @ 我激活本频道。"
++    "✅ 已激活，本频道的发言都会交给 Galley\n"
++    "-# 频道成员都能看到回复 · 发「退出频道」可退出"
+@@ -105,0 +99,9 @@ RESTARTED_TEXT = (
++EXITED_TEXT = "✅ 已退出，重新 @ 我即可激活"
++# An active channel stays active across restarts and agent evictions: it
++# maps to the engine log its agent writes (model_responses_*.txt, the
++# basename only, never conversation content), and a new agent picks the
++# conversation back up from that log. When a mapped log cannot be picked
++# back up, the next answer or question says so, once.
++CONTEXT_LOST_TEXT = "-# 之前的对话没接上，这是新的上下文"
++_LOG_NAME_RE = re.compile(r"model_responses_[0-9A-Za-z_]+\.txt")
++_LOG_LOCK_OWNER = "galley-discord:"  # continue_cmd lock agent_id prefix
+@@ -114 +116 @@ OWNER_BOUND_TEXT = (
+-DISCORD_HELP_TEXT = HELP_TEXT + "\n退出该频道 / 退出该子区 - 停止在本频道响应"
++DISCORD_HELP_TEXT = HELP_TEXT + "\n退出频道 - 停止在本频道或子区响应"
+@@ -235 +237,5 @@ class _ChannelAgent:
+-    """One GA agent plus its worker thread, with a real close protocol."""
++    """One GA agent plus its worker thread, with a real close protocol.
++    prepare(handle) runs on the worker thread before it serves any task:
++    a conversation picked back up from its log is in place before the first
++    task (queued meanwhile) runs, and no caller (the event loop, the
++    completion reporter) waits on the file read. ready is set after it."""
+@@ -237 +243 @@ class _ChannelAgent:
+-    def __init__(self, chat_id):
++    def __init__(self, chat_id, prepare=None):
+@@ -241,0 +248 @@ class _ChannelAgent:
++        self.ready = threading.Event()
+@@ -243 +250 @@ class _ChannelAgent:
+-            target=self.agent.run, daemon=True, name=f"discord-agent-{chat_id}"
++            target=self._work, args=(prepare,), daemon=True, name=f"discord-agent-{chat_id}"
+@@ -246,0 +254,10 @@ class _ChannelAgent:
++    def _work(self, prepare):
++        try:
++            if prepare is not None:
++                prepare(self)
++        except Exception as e:
++            print(f"[Discord] agent prepare failed for {self.chat_id}: {e}")
++        finally:
++            self.ready.set()
++        self.agent.run()
++
+@@ -720,9 +736,0 @@ class DiscordApp(AgentChatMixin):
+-        # Channel history only lives inside this process, but the active set is
+-        # persisted: after a restart an "active" channel would silently hand the
+-        # user a blank agent. Drop the flag and say so on the next message.
+-        # Managed mode only — file-based use keeps upstream's persistence.
+-        self._stale_channels = set(self._active_channels) if _GALLEY_MANAGED else set()
+-        if self._stale_channels:
+-            self._active_channels = {}
+-            self._save_active_channels()
+-            print(f"[Discord] released {len(self._stale_channels)} channel(s) after restart")
+@@ -787,0 +796,3 @@ class DiscordApp(AgentChatMixin):
++                    log = item.get("log")  # absent in upstream / pre-0026 entries
++                    if isinstance(log, str) and _LOG_NAME_RE.fullmatch(log):
++                        active[str(chat_id)]["log"] = log
+@@ -829 +840 @@ class DiscordApp(AgentChatMixin):
+-            self._active_channels[chat_id] = {"last_seen": float(now or time.time())}
++            self._active_channels.setdefault(chat_id, {})["last_seen"] = float(now or time.time())
+@@ -832,0 +844,72 @@ class DiscordApp(AgentChatMixin):
++    def _channel_log_name(self, chat_id):
++        with self._active_lock:
++            return (self._active_channels.get(chat_id) or {}).get("log")
++
++    def _set_channel_log(self, chat_id, name):
++        """Map an active channel to its engine log (basename), or drop the
++        mapping (None). A channel that is not active is left alone."""
++        with self._active_lock:
++            item = self._active_channels.get(chat_id)
++            if item is None or item.get("log") == name:
++                return
++            if name:
++                item["log"] = name
++            else:
++                item.pop("log", None)
++            self._save_active_channels()
++
++    def _record_channel_log(self, chat_id, ga):
++        """After each run and before an eviction: map the channel to the log
++        its agent writes, once that log exists (a context nothing was said
++        in has nothing to pick back up)."""
++        path = getattr(ga, "log_path", None)
++        if isinstance(path, str) and os.path.isfile(path):
++            self._set_channel_log(chat_id, os.path.basename(path))
++
++    def _resume_channel(self, handle):
++        """Pick the channel's conversation back up from the log it maps to
++        (after a restart or an eviction), with upstream's /continue loader.
++        Runs as the channel agent's prepare step, on its worker thread. No
++        mapping (never talked, or an entry older than the mapping) is a
++        fresh context; a mapping that cannot be picked back up is a fresh
++        context plus CONTEXT_LOST_TEXT on the next answer or question."""
++        chat_id, ga = handle.chat_id, handle.agent
++        name = self._channel_log_name(chat_id)
++        if not name:
++            return
++        path = os.path.join(os.path.dirname(ga.log_path), name)
++        owner = _LOG_LOCK_OWNER + chat_id
++        try:
++            holder = continue_cmd.session_occupant(path)
++            if (holder and str(holder.get("agent_id") or "").startswith(_LOG_LOCK_OWNER)
++                    and holder.get("pid") != os.getpid()):
++                # Still fresh (< 30 s) but left by the previous dcapp process,
++                # which is gone: supervisor.lock runs one dcapp per state dir.
++                try:
++                    os.remove(continue_cmd._lock_path(path))
++                except FileNotFoundError:
++                    pass
++            msg, ok = continue_cmd.continue_inplace(ga, path, owner, restore_wm=True)
++            if not ok and os.path.basename(ga.log_path) != name:
++                # Held by another live process: go on in a copy of the log.
++                msg, ok = continue_cmd.continue_copy(ga, path, owner, restore_wm=True)
++        except Exception as e:
++            msg, ok = f"{type(e).__name__}: {e}", False
++        if ok:
++            self._set_channel_log(chat_id, os.path.basename(ga.log_path))
++            print(f"[Discord] resumed {chat_id} from {os.path.basename(ga.log_path)}")
++            return
++        # Missing, empty or unparseable: start clean on a fresh log.
++        try:
++            continue_cmd.begin_fresh_session(ga, owner)
++        except Exception as e:
++            print(f"[Discord] fresh session failed for {chat_id}: {e}")
++        ga._galley_context_lost = True
++        print(f"[Discord] could not resume {chat_id} from {name}: {msg}")
++
++    def _take_context_lost_notice(self, ga):
++        if not getattr(ga, "_galley_context_lost", False):
++            return ""
++        ga._galley_context_lost = False
++        return CONTEXT_LOST_TEXT
++
+@@ -852,0 +936,3 @@ class DiscordApp(AgentChatMixin):
++        # The completion reporter may still hold this agent (handed over at
++        # creation); marked closed, it resolves the channel's live agent.
++        handle.agent._galley_closed = True
+@@ -875 +961 @@ class DiscordApp(AgentChatMixin):
+-        (exit command, TTL expiry, or agent eviction), so the launcher can
++        (exit command or TTL expiry), so the launcher can
+@@ -891 +977 @@ class DiscordApp(AgentChatMixin):
+-                handle = _ChannelAgent(chat_id)
++                handle = _ChannelAgent(chat_id, prepare=self._resume_channel)
+@@ -905,3 +991,3 @@ class DiscordApp(AgentChatMixin):
+-        # The channel's history dies with its agent, so drop the active flag
+-        # too: the user must re-@ instead of silently getting a blank context.
+-        self._forget_active_channel(chat_id)
++        # The channel stays active: its conversation is in the engine log, and
++        # the next message (or report turn) builds an agent that picks it up.
++        self._record_channel_log(chat_id, handle.agent)
+@@ -911,10 +996,0 @@ class DiscordApp(AgentChatMixin):
+-        self._notify_threadsafe(chat_id, RETIRED_TEXT)
+-
+-    def _notify_threadsafe(self, chat_id, text):
+-        loop = self.loop  # set once start() owns a running loop
+-        if loop is None or loop.is_closed():
+-            return
+-        try:
+-            asyncio.run_coroutine_threadsafe(self.send_text(chat_id, text), loop)
+-        except Exception as e:
+-            print(f"[Discord] failed to schedule notice for {chat_id}: {e}")
+@@ -1111 +1187,4 @@ class DiscordApp(AgentChatMixin):
+-        ga = self._get_agent(chat_id).agent
++        handle = self._get_agent(chat_id)
++        if not handle.ready.is_set():  # /new, /continue must not race a resume
++            await asyncio.to_thread(handle.ready.wait, AGENT_CLOSE_TIMEOUT_SECONDS)
++        ga = handle.agent
+@@ -1151 +1230 @@ class DiscordApp(AgentChatMixin):
+-            return await self.send_text(chat_id, _handle_continue_frontend(ga, cmd), **ctx)
++            return await self.send_text(chat_id, self._continue_session(chat_id, ga, cmd), **ctx)
+@@ -1154 +1233,7 @@ class DiscordApp(AgentChatMixin):
+-            return await self.send_text(chat_id, _reset_conversation(ga), **ctx)
++            notice = _reset_conversation(ga)
++            # A new log, mapped once something is said in it: a restart
++            # never brings back what /new cleared.
++            continue_cmd.begin_fresh_session(ga, _LOG_LOCK_OWNER + chat_id)
++            ga._galley_context_lost = False
++            self._set_channel_log(chat_id, None)
++            return await self.send_text(chat_id, notice, **ctx)
+@@ -1163,0 +1249,17 @@ class DiscordApp(AgentChatMixin):
++    def _continue_session(self, chat_id, ga, cmd):
++        """/continue N the way chatapp_common's frontends run it (same list,
++        same reply), then the channel moves onto a copy of that log, so the
++        log it maps to holds exactly the conversation it now has."""
++        m = re.match(r"/continue\s+(\d+)\s*$", (cmd or "").strip())
++        sessions = continue_cmd.list_sessions(exclude_pid=os.getpid()) if m else []
++        idx = int(m.group(1)) - 1 if m else -1
++        if not 0 <= idx < len(sessions):
++            return _handle_continue_frontend(ga, cmd)
++        _reset_conversation(ga, message=None)
++        msg, full = continue_cmd.restore(ga, sessions[idx][0])
++        if full:
++            continue_cmd.continue_copy(ga, sessions[idx][0], _LOG_LOCK_OWNER + chat_id)
++            ga._galley_context_lost = False
++            self._record_channel_log(chat_id, ga)
++        return msg
++
+@@ -1213,0 +1316 @@ class DiscordApp(AgentChatMixin):
++            self._record_channel_log(chat_id, ga)
+@@ -1362,0 +1466 @@ class DiscordApp(AgentChatMixin):
++        notice = self._take_context_lost_notice(run.ga)
+@@ -1367 +1471 @@ class DiscordApp(AgentChatMixin):
+-            await self._post_ask(run, event, _visible_text(step_text), run.carry(now), reply)
++            await self._post_ask(run, event, _visible_text(step_text), run.carry(now), reply, notice)
+@@ -1371 +1475 @@ class DiscordApp(AgentChatMixin):
+-        await self._send_answer(run, raw, _answer_body(step_text, raw), steps, elapsed)
++        await self._send_answer(run, raw, _answer_body(step_text, raw), steps, elapsed, notice)
+@@ -1374 +1478 @@ class DiscordApp(AgentChatMixin):
+-    async def _send_answer(self, run, raw, body, steps, elapsed):
++    async def _send_answer(self, run, raw, body, steps, elapsed, notice=""):
+@@ -1377 +1481 @@ class DiscordApp(AgentChatMixin):
+-        still come from the whole transcript."""
++        still come from the whole transcript. notice goes above it all."""
+@@ -1379 +1483 @@ class DiscordApp(AgentChatMixin):
+-        text = "\n".join(part for part in (f"-# {label}" if label else "", body) if part)
++        text = "\n".join(part for part in (notice, f"-# {label}" if label else "", body) if part)
+@@ -1398 +1502 @@ class DiscordApp(AgentChatMixin):
+-    async def _post_ask(self, run, event, narration, carry, reply):
++    async def _post_ask(self, run, event, narration, carry, reply, notice=""):
+@@ -1405 +1509,2 @@ class DiscordApp(AgentChatMixin):
+-        text = _ask_prompt_text(event, layout, steps, narration)
++        head = f"{notice}\n" if notice else ""  # on the first message posted
++        text = head + _ask_prompt_text(event, layout, steps, narration)
+@@ -1409 +1514 @@ class DiscordApp(AgentChatMixin):
+-            for part in _split_discord_text(narration, self.split_limit):
++            for part in _split_discord_text(head + narration, self.split_limit):
+@@ -1550,3 +1654,0 @@ class DiscordApp(AgentChatMixin):
+-                if chat_id in self._stale_channels:
+-                    self._stale_channels.discard(chat_id)
+-                    await self.send_text(chat_id, RESTARTED_TEXT)
+@@ -1554 +1655,0 @@ class DiscordApp(AgentChatMixin):
+-            self._stale_channels.discard(chat_id)
+@@ -1568,2 +1669 @@ class DiscordApp(AgentChatMixin):
+-            label = "子区" if normalized in EXIT_THREAD_TEXTS else "频道"
+-            await self.send_text(chat_id, f"✅ 已退出该{label}，之后除非重新 @ 我，否则不会主动响应。")
++            await self.send_text(chat_id, EXITED_TEXT)
