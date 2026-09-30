@@ -82,9 +82,9 @@ agent 正在跑 reporter 报告轮时用户消息也显示「排队中」；排�
 - 补丁栈：干净克隆（`~/Documents/GenericAgent` 的只读克隆，checkout `1b6442f`）+ `build-managed-ga.sh` 重放 22 个补丁全部
   clean，重建出的 `dcapp.py` 与工作区逐字节一致（主会话独立复核一次）；`check-managed-ga-payload.mjs` 绿。
 - runner：pytest 343 passed（新增 `test_managed_discord_dcapp.py` 34 条、`test_im_reporter.py` 新增 14 条），mypy strict、ruff 绿。
-- **真机 dogfood 未做**：清单在 `.scratch/discord-ux/issues/04-integration-and-dogfood.md`，JC 用 `tauri dev` 验收
-  （debug 构建直接读仓库 `managed-ga/code`；先退出 /Applications 里的 Galley，否则同 token 双回复）。待验的判断点：
-  1 步回答带不带小字、回显里的旁白是否多余、停止 / 暂停后 typing 残留（Discord 无「停止输入」API，最长约 10 秒）。
+- **真机 dogfood：JC 验收通过（2026-09-30）**，`tauri dev` 下走完 04 的清单（debug 构建直接读仓库 `managed-ga/code`；
+  先退出 /Applications 里的 Galley，否则同 token 双回复）。三个留给真机的判断点按现状保留：1 步回答也带小字、
+  回显保留该步旁白、停止 / 暂停后 typing 最长约 10 秒的残留（Discord 无「停止输入」API）。
 
 ## 同批发现、另立题
 

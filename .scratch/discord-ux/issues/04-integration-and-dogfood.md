@@ -1,6 +1,6 @@
 # 04 集成验收 + 真机 dogfood
 
-Status: ready-for-human
+Status: done
 Blocked by: 01, 02, 03
 
 ## 主会话集成验收（票与票之间的组合地带）
@@ -41,3 +41,7 @@ Blocked by: 01, 02, 03
 - 台账 0023 行把 `.scratch/discord-ux` 引用改为 devlog（`.scratch` 发版后删）。
 
 剩余：上面「真机（JC）」清单。
+
+### 2026-09-30 · 真机验收（JC）
+
+通过。三个判断点（1 步回答带小字、回显保留旁白、typing 残留）按现状保留。`.scratch/discord-ux/` 随下个版本发布后删除（durable 内容已在 devlog）。

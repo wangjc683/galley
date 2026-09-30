@@ -1,6 +1,6 @@
 # PRD: Discord 对话体验对齐桌面端
 
-Status: ready-for-human
+Status: done
 Date: 2026-09-30
 来源：JC 提议优化 Discord 里与 Galley 对话的体验；范围与形态两轮讨论后 JC「按建议推进」
 关联：[Discord 渠道落地 devlog](../../docs/devlog/2026-08-13-discord-channel-shipped.md) ·

@@ -521,9 +521,10 @@ Since `v0.5.4`: the **Discord conversation UX** aligned with the desktop
 per run, edited in place and deleted when the answer lands under a
 `-# N 步 · 用时 X` subtext line; ask_user questions become visible with
 buttons (they were silently swallowed before); a stop button; `/btw` and
-`/review` work; completion reports are embed cards. Real-device dogfood is
-still owed (`.scratch/discord-ux/issues/04-integration-and-dogfood.md`,
-`ready-for-human`). Because `managed-ga/` and `runner/` changed, the
+`/review` work; completion reports are embed cards. JC passed the real-device
+dogfood the same day; the three open judgment calls (subtext on one-step
+answers, narration kept in the answered-question echo, the typing indicator
+lingering up to ~10 s) stay as built. Because `managed-ga/` and `runner/` changed, the
 bundled-runtime gate is mandatory next release. Filed alongside:
 `.scratch/im-supervisor-context-bloat/` (needs-triage). Release-scope truth
 remains `git log v0.5.4..HEAD`.
