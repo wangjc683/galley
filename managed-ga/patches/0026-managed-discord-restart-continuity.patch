@@ -55,7 +55,7 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +            self.ready.set()
 +        self.agent.run()
 +
-@@ -720,9 +736,0 @@ class DiscordApp(AgentChatMixin):
+@@ -718,9 +734,0 @@ class DiscordApp(AgentChatMixin):
 -        # Channel history only lives inside this process, but the active set is
 -        # persisted: after a restart an "active" channel would silently hand the
 -        # user a blank agent. Drop the flag and say so on the next message.
@@ -65,14 +65,14 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 -            self._active_channels = {}
 -            self._save_active_channels()
 -            print(f"[Discord] released {len(self._stale_channels)} channel(s) after restart")
-@@ -787,0 +796,3 @@ class DiscordApp(AgentChatMixin):
+@@ -785,0 +794,3 @@ class DiscordApp(AgentChatMixin):
 +                    log = item.get("log")  # absent in upstream / pre-0026 entries
 +                    if isinstance(log, str) and _LOG_NAME_RE.fullmatch(log):
 +                        active[str(chat_id)]["log"] = log
-@@ -829 +840 @@ class DiscordApp(AgentChatMixin):
+@@ -827 +838 @@ class DiscordApp(AgentChatMixin):
 -            self._active_channels[chat_id] = {"last_seen": float(now or time.time())}
 +            self._active_channels.setdefault(chat_id, {})["last_seen"] = float(now or time.time())
-@@ -832,0 +844,72 @@ class DiscordApp(AgentChatMixin):
+@@ -830,0 +842,72 @@ class DiscordApp(AgentChatMixin):
 +    def _channel_log_name(self, chat_id):
 +        with self._active_lock:
 +            return (self._active_channels.get(chat_id) or {}).get("log")
@@ -145,24 +145,24 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +        ga._galley_context_lost = False
 +        return CONTEXT_LOST_TEXT
 +
-@@ -852,0 +936,3 @@ class DiscordApp(AgentChatMixin):
+@@ -850,0 +934,3 @@ class DiscordApp(AgentChatMixin):
 +        # The completion reporter may still hold this agent (handed over at
 +        # creation); marked closed, it resolves the channel's live agent.
 +        handle.agent._galley_closed = True
-@@ -875 +961 @@ class DiscordApp(AgentChatMixin):
+@@ -873 +959 @@ class DiscordApp(AgentChatMixin):
 -        (exit command, TTL expiry, or agent eviction), so the launcher can
 +        (exit command or TTL expiry), so the launcher can
-@@ -891 +977 @@ class DiscordApp(AgentChatMixin):
+@@ -889 +975 @@ class DiscordApp(AgentChatMixin):
 -                handle = _ChannelAgent(chat_id)
 +                handle = _ChannelAgent(chat_id, prepare=self._resume_channel)
-@@ -905,3 +991,3 @@ class DiscordApp(AgentChatMixin):
+@@ -903,3 +989,3 @@ class DiscordApp(AgentChatMixin):
 -        # The channel's history dies with its agent, so drop the active flag
 -        # too: the user must re-@ instead of silently getting a blank context.
 -        self._forget_active_channel(chat_id)
 +        # The channel stays active: its conversation is in the engine log, and
 +        # the next message (or report turn) builds an agent that picks it up.
 +        self._record_channel_log(chat_id, handle.agent)
-@@ -911,10 +996,0 @@ class DiscordApp(AgentChatMixin):
+@@ -909,10 +994,0 @@ class DiscordApp(AgentChatMixin):
 -        self._notify_threadsafe(chat_id, RETIRED_TEXT)
 -
 -    def _notify_threadsafe(self, chat_id, text):
@@ -173,16 +173,16 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 -            asyncio.run_coroutine_threadsafe(self.send_text(chat_id, text), loop)
 -        except Exception as e:
 -            print(f"[Discord] failed to schedule notice for {chat_id}: {e}")
-@@ -1111 +1187,4 @@ class DiscordApp(AgentChatMixin):
+@@ -1109 +1185,4 @@ class DiscordApp(AgentChatMixin):
 -        ga = self._get_agent(chat_id).agent
 +        handle = self._get_agent(chat_id)
 +        if not handle.ready.is_set():  # /new, /continue must not race a resume
 +            await asyncio.to_thread(handle.ready.wait, AGENT_CLOSE_TIMEOUT_SECONDS)
 +        ga = handle.agent
-@@ -1151 +1230 @@ class DiscordApp(AgentChatMixin):
+@@ -1149 +1228 @@ class DiscordApp(AgentChatMixin):
 -            return await self.send_text(chat_id, _handle_continue_frontend(ga, cmd), **ctx)
 +            return await self.send_text(chat_id, self._continue_session(chat_id, ga, cmd), **ctx)
-@@ -1154 +1233,7 @@ class DiscordApp(AgentChatMixin):
+@@ -1152 +1231,7 @@ class DiscordApp(AgentChatMixin):
 -            return await self.send_text(chat_id, _reset_conversation(ga), **ctx)
 +            notice = _reset_conversation(ga)
 +            # A new log, mapped once something is said in it: a restart
@@ -191,7 +191,7 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +            ga._galley_context_lost = False
 +            self._set_channel_log(chat_id, None)
 +            return await self.send_text(chat_id, notice, **ctx)
-@@ -1163,0 +1249,17 @@ class DiscordApp(AgentChatMixin):
+@@ -1161,0 +1247,17 @@ class DiscordApp(AgentChatMixin):
 +    def _continue_session(self, chat_id, ga, cmd):
 +        """/continue N the way chatapp_common's frontends run it (same list,
 +        same reply), then the channel moves onto a copy of that log, so the
@@ -209,42 +209,42 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +            self._record_channel_log(chat_id, ga)
 +        return msg
 +
-@@ -1213,0 +1316 @@ class DiscordApp(AgentChatMixin):
+@@ -1211,0 +1314 @@ class DiscordApp(AgentChatMixin):
 +            self._record_channel_log(chat_id, ga)
-@@ -1362,0 +1466 @@ class DiscordApp(AgentChatMixin):
+@@ -1360,0 +1464 @@ class DiscordApp(AgentChatMixin):
 +        notice = self._take_context_lost_notice(run.ga)
-@@ -1367 +1471 @@ class DiscordApp(AgentChatMixin):
+@@ -1365 +1469 @@ class DiscordApp(AgentChatMixin):
 -            await self._post_ask(run, event, _visible_text(step_text), run.carry(now), reply)
 +            await self._post_ask(run, event, _visible_text(step_text), run.carry(now), reply, notice)
-@@ -1371 +1475 @@ class DiscordApp(AgentChatMixin):
+@@ -1369 +1473 @@ class DiscordApp(AgentChatMixin):
 -        await self._send_answer(run, raw, _answer_body(step_text, raw), steps, elapsed)
 +        await self._send_answer(run, raw, _answer_body(step_text, raw), steps, elapsed, notice)
-@@ -1374 +1478 @@ class DiscordApp(AgentChatMixin):
+@@ -1372 +1476 @@ class DiscordApp(AgentChatMixin):
 -    async def _send_answer(self, run, raw, body, steps, elapsed):
 +    async def _send_answer(self, run, raw, body, steps, elapsed, notice=""):
-@@ -1377 +1481 @@ class DiscordApp(AgentChatMixin):
+@@ -1375 +1479 @@ class DiscordApp(AgentChatMixin):
 -        still come from the whole transcript."""
 +        still come from the whole transcript. notice goes above it all."""
-@@ -1379 +1483 @@ class DiscordApp(AgentChatMixin):
+@@ -1377 +1481 @@ class DiscordApp(AgentChatMixin):
 -        text = "\n".join(part for part in (f"-# {label}" if label else "", body) if part)
 +        text = "\n".join(part for part in (notice, f"-# {label}" if label else "", body) if part)
-@@ -1398 +1502 @@ class DiscordApp(AgentChatMixin):
+@@ -1396 +1500 @@ class DiscordApp(AgentChatMixin):
 -    async def _post_ask(self, run, event, narration, carry, reply):
 +    async def _post_ask(self, run, event, narration, carry, reply, notice=""):
-@@ -1405 +1509,2 @@ class DiscordApp(AgentChatMixin):
+@@ -1403 +1507,2 @@ class DiscordApp(AgentChatMixin):
 -        text = _ask_prompt_text(event, layout, steps, narration)
 +        head = f"{notice}\n" if notice else ""  # on the first message posted
 +        text = head + _ask_prompt_text(event, layout, steps, narration)
-@@ -1409 +1514 @@ class DiscordApp(AgentChatMixin):
+@@ -1407 +1512 @@ class DiscordApp(AgentChatMixin):
 -            for part in _split_discord_text(narration, self.split_limit):
 +            for part in _split_discord_text(head + narration, self.split_limit):
-@@ -1550,3 +1654,0 @@ class DiscordApp(AgentChatMixin):
+@@ -1548,3 +1652,0 @@ class DiscordApp(AgentChatMixin):
 -                if chat_id in self._stale_channels:
 -                    self._stale_channels.discard(chat_id)
 -                    await self.send_text(chat_id, RESTARTED_TEXT)
-@@ -1554 +1655,0 @@ class DiscordApp(AgentChatMixin):
+@@ -1552 +1653,0 @@ class DiscordApp(AgentChatMixin):
 -            self._stale_channels.discard(chat_id)
-@@ -1568,2 +1669 @@ class DiscordApp(AgentChatMixin):
+@@ -1566,2 +1667 @@ class DiscordApp(AgentChatMixin):
 -            label = "子区" if normalized in EXIT_THREAD_TEXTS else "频道"
 -            await self.send_text(chat_id, f"✅ 已退出该{label}，之后除非重新 @ 我，否则不会主动响应。")
 +            await self.send_text(chat_id, EXITED_TEXT)

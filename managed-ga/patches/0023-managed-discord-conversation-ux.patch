@@ -30,7 +30,7 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +    "code_run": "运行代码", "file_read": "读取文件", "file_write": "写入文件",
 +    "file_patch": "修改文件", "web_scan": "读取网页", "web_execute_js": "执行网页脚本",
 +}
-@@ -385,0 +411,289 @@ def _display_done_text(text):
+@@ -385,0 +411,287 @@ def _display_done_text(text):
 +def _visible_text(text):
 +    body = _strip_discord_transcript(text)
 +    return "" if body == "..." else body
@@ -297,15 +297,13 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +        return "·· 排队中"
 +    lines = []
 +    settled = run.settled_steps()
-+    if settled >= 2:
-+        lines.append(f"已完成 {settled} 步")
 +    if settled >= 1:
 +        lines.append(f"{settled:02d} {run.last_summary}".rstrip())
 +    thinking = "·· 思考中"
 +    if run.step_started_at is not None:
 +        minutes = int((now - run.step_started_at) // 60)
 +        if minutes >= 1:
-+            thinking += f" · 已 {minutes} 分钟 · 仍在运行"
++            thinking += f" · 已 {minutes} 分钟"
 +    lines.append(thinking)
 +    return "\n".join(lines)
 +
@@ -320,30 +318,30 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +        self.message = None
 +
 +
-@@ -400,0 +715,5 @@ class DiscordApp(AgentChatMixin):
+@@ -400,0 +713,5 @@ class DiscordApp(AgentChatMixin):
 +        self._clock = time.monotonic  # run timing + edit throttle; injectable for tests
 +        self._ask_lock = threading.Lock()  # ask_user events arrive on GA worker threads
 +        self._ask_events = {}  # chat_id -> (display queue of the asking task, event)
 +        self._pending_asks = {}  # chat_id -> _PendingAsk waiting for an answer
 +        self._pending_by_token = {}  # button token -> _PendingAsk
-@@ -438,0 +758,4 @@ class DiscordApp(AgentChatMixin):
+@@ -438,0 +756,4 @@ class DiscordApp(AgentChatMixin):
 +        @self.client.event
 +        async def on_interaction(interaction):
 +            await self._handle_interaction(interaction)
 +
-@@ -520,3 +843 @@ class DiscordApp(AgentChatMixin):
+@@ -520,3 +841 @@ class DiscordApp(AgentChatMixin):
 -        state = self.user_tasks.get(chat_id)
 -        if state:
 -            state["running"] = False
 +        self._on_loop(self._release_channel_ui, chat_id)
-@@ -571,0 +893 @@ class DiscordApp(AgentChatMixin):
+@@ -571,0 +891 @@ class DiscordApp(AgentChatMixin):
 +                self._install_ask_hook(handle.agent, chat_id)
-@@ -586,3 +908 @@ class DiscordApp(AgentChatMixin):
+@@ -586,3 +906 @@ class DiscordApp(AgentChatMixin):
 -        state = self.user_tasks.get(chat_id)
 -        if state:
 -            state["running"] = False
 +        self._on_loop(self._release_channel_ui, chat_id)
-@@ -601,0 +922,81 @@ class DiscordApp(AgentChatMixin):
+@@ -601,0 +920,81 @@ class DiscordApp(AgentChatMixin):
 +    def _on_loop(self, fn, *args):
 +        """Run fn on the event loop thread. _retire_agent is also reached from
 +        the completion reporter's thread (via _get_agent), and run / question
@@ -425,19 +423,19 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +        except Exception as e:
 +            print(f"[Discord] failed to remove buttons: {e}")
 +
-@@ -636,2 +1037,3 @@ class DiscordApp(AgentChatMixin):
+@@ -636,2 +1035,3 @@ class DiscordApp(AgentChatMixin):
 -    async def send_text(self, chat_id, content, **ctx):
 -        """Send text to a chat_id (best effort, upstream semantics)."""
 +    async def send_text(self, chat_id, content, reply_to=None, **ctx):
 +        """Send text to a chat_id (best effort, upstream semantics). reply_to
 +        quotes that message on the first part."""
-@@ -643 +1045 @@ class DiscordApp(AgentChatMixin):
+@@ -643 +1043 @@ class DiscordApp(AgentChatMixin):
 -        for part in _split_discord_text(content, self.split_limit):
 +        for i, part in enumerate(_split_discord_text(content, self.split_limit)):
-@@ -645 +1047 @@ class DiscordApp(AgentChatMixin):
+@@ -645 +1045 @@ class DiscordApp(AgentChatMixin):
 -                await channel.send(part)
 +                await channel.send(part, **(_reply_kwargs(reply_to) if i == 0 else {}))
-@@ -656,0 +1059,20 @@ class DiscordApp(AgentChatMixin):
+@@ -656,0 +1057,20 @@ class DiscordApp(AgentChatMixin):
 +    async def deliver_embed(self, chat_id, *, title, description, color=None, footer=None):
 +        """Strict send of one embed for programmatic callers (the completion reporter):
 +        raises on resolve/send failure like deliver_text. Truncates title to 256 and
@@ -458,10 +456,10 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +            embed.set_footer(text=footer)
 +        await channel.send(embed=embed)
 +
-@@ -659 +1081 @@ class DiscordApp(AgentChatMixin):
+@@ -659 +1079 @@ class DiscordApp(AgentChatMixin):
 -        files = [p for p in extract_files(raw_text) if os.path.exists(p)]
 +        files = _existing_files(raw_text)
-@@ -666,14 +1088 @@ class DiscordApp(AgentChatMixin):
+@@ -666,14 +1086 @@ class DiscordApp(AgentChatMixin):
 -        # Send files as Discord attachments
 -        if files:
 -            try:
@@ -477,7 +475,7 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 -                        print(f"[Discord] failed to send file {fpath}: {e}")
 -                        await self.send_text(chat_id, f"⚠️ 文件发送失败: {os.path.basename(fpath)}", **ctx)
 +        await self._send_files(chat_id, files)
-@@ -684 +1093,17 @@ class DiscordApp(AgentChatMixin):
+@@ -684 +1091,17 @@ class DiscordApp(AgentChatMixin):
 -    async def handle_command(self, chat_id, cmd, **ctx):
 +    async def _send_files(self, chat_id, files):
 +        """Send files as Discord attachments."""
@@ -496,10 +494,10 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +                await self.send_text(chat_id, f"⚠️ 文件发送失败: {os.path.basename(fpath)}")
 +
 +    async def handle_command(self, chat_id, cmd, message=None, **ctx):
-@@ -690 +1115 @@ class DiscordApp(AgentChatMixin):
+@@ -690 +1113 @@ class DiscordApp(AgentChatMixin):
 -            return await self.send_text(chat_id, HELP_TEXT, **ctx)
 +            return await self.send_text(chat_id, DISCORD_HELP_TEXT, **ctx)
-@@ -692,5 +1117,8 @@ class DiscordApp(AgentChatMixin):
+@@ -692,5 +1115,8 @@ class DiscordApp(AgentChatMixin):
 -            state = self.user_tasks.get(chat_id)
 -            if state:
 -                state["running"] = False
@@ -513,9 +511,9 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +            self._request_stop(run)
 +            print(f"[Discord] run stopped by command: chat={chat_id}")
 +            return await self._write_stopped(run)
-@@ -724,0 +1153 @@ class DiscordApp(AgentChatMixin):
+@@ -724,0 +1151 @@ class DiscordApp(AgentChatMixin):
 +            self._drop_pending_ask(chat_id)
-@@ -726,4 +1155,17 @@ class DiscordApp(AgentChatMixin):
+@@ -726,4 +1153,17 @@ class DiscordApp(AgentChatMixin):
 -        return await self.send_text(chat_id, HELP_TEXT, **ctx)
 -
 -    async def run_agent(self, chat_id, text, turn_dir=None, **ctx):
@@ -537,13 +535,13 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +        frozen as the receipt when stopped. carry continues an ask_user-paused
 +        run (button answers); with answers_ask a run answers a question still
 +        pending in the channel (typed answers)."""
-@@ -732,2 +1174,3 @@ class DiscordApp(AgentChatMixin):
+@@ -732,2 +1172,3 @@ class DiscordApp(AgentChatMixin):
 -        state = {"running": True}
 -        self.user_tasks[chat_id] = state
 +        run = _DiscordRun(chat_id, ga, reply_to, carry)
 +        runs = self.user_tasks.setdefault(chat_id, [])
 +        runs.append(run)
-@@ -735,6 +1178,10 @@ class DiscordApp(AgentChatMixin):
+@@ -735,6 +1176,10 @@ class DiscordApp(AgentChatMixin):
 -            await self.send_text(chat_id, "思考中...", **ctx)
 -            dq = ga.put_task(f"{FILE_HINT}\n\n{text}", source=self.source)
 -            last_ping = time.time()
@@ -560,10 +558,10 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +            if answers_ask and not run.adopted and run.running:
 +                await self._adopt_pending_ask(run)
 +            while run.running and not handle.stop_event.is_set():
-@@ -742 +1189 @@ class DiscordApp(AgentChatMixin):
+@@ -742 +1187 @@ class DiscordApp(AgentChatMixin):
 -                    item = await asyncio.to_thread(dq.get, True, 3)
 +                    item = await asyncio.to_thread(dq.get, True, self._status_poll_timeout(run))
-@@ -744,11 +1191 @@ class DiscordApp(AgentChatMixin):
+@@ -744,11 +1189 @@ class DiscordApp(AgentChatMixin):
 -                    if ga.is_running and time.time() - last_ping > self.ping_interval:
 -                        await self.send_text(chat_id, "⏳ 还在处理中，请稍等...", **ctx)
 -                        last_ping = time.time()
@@ -576,17 +574,17 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 -                        last_step = step
 -                        last_ping = time.time()
 +                    await self._flush_status(run)
-@@ -755,0 +1193,6 @@ class DiscordApp(AgentChatMixin):
+@@ -755,0 +1191,6 @@ class DiscordApp(AgentChatMixin):
 +                if not run.running:
 +                    break
 +                now = self._clock()
 +                if run.started_at is None:
 +                    self._start_run(run, now, typing="done" not in item)
 +                outputs = run.observe(item, now)
-@@ -757 +1200 @@ class DiscordApp(AgentChatMixin):
+@@ -757 +1198 @@ class DiscordApp(AgentChatMixin):
 -                    await self.send_done(chat_id, item.get("done", ""), **ctx)
 +                    await self._finish_run(run, str(item.get("done") or ""), outputs, dq)
-@@ -759,2 +1202,5 @@ class DiscordApp(AgentChatMixin):
+@@ -759,2 +1200,5 @@ class DiscordApp(AgentChatMixin):
 -            if not state["running"] or handle.stop_event.is_set():
 -                await self.send_text(chat_id, "⏹️ 已停止", **ctx)
 +                await self._flush_status(run)
@@ -594,10 +592,10 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +                self._request_stop(run, abort=False)
 +            if run.outcome == "stopped":
 +                await self._write_stopped(run)
-@@ -765 +1211 @@ class DiscordApp(AgentChatMixin):
+@@ -765 +1209 @@ class DiscordApp(AgentChatMixin):
 -            await self.send_text(chat_id, f"❌ 错误: {e}", **ctx)
 +            await self._fail_run(run, e)
-@@ -767 +1213,7 @@ class DiscordApp(AgentChatMixin):
+@@ -767 +1211,7 @@ class DiscordApp(AgentChatMixin):
 -            self.user_tasks.pop(chat_id, None)
 +            self._stop_typing(run)
 +            if run in runs:
@@ -606,7 +604,7 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +                runs[0].wake.set()
 +            elif self.user_tasks.get(chat_id) is runs:
 +                self.user_tasks.pop(chat_id, None)
-@@ -769,0 +1222,297 @@ class DiscordApp(AgentChatMixin):
+@@ -769,0 +1220,297 @@ class DiscordApp(AgentChatMixin):
 +    def _running_run(self, chat_id):
 +        runs = self.user_tasks.get(chat_id) or []
 +        run = runs[0] if runs else None
@@ -904,13 +902,13 @@ diff --git a/frontends/dcapp.py b/frontends/dcapp.py
 +            reply_to=getattr(interaction, "message", None) or pending.message, carry=pending.carry,
 +        ))
 +
-@@ -847 +1596 @@ class DiscordApp(AgentChatMixin):
+@@ -847 +1594 @@ class DiscordApp(AgentChatMixin):
 -                return await self.handle_command(chat_id, content)
 +                return await self.handle_command(chat_id, content, message=message)
-@@ -851 +1600 @@ class DiscordApp(AgentChatMixin):
+@@ -851 +1598 @@ class DiscordApp(AgentChatMixin):
 -        task = asyncio.create_task(self.run_agent(chat_id, content, turn_dir=turn_dir))
 +        task = asyncio.create_task(self.run_agent(chat_id, content, turn_dir=turn_dir, reply_to=message))
-@@ -936,2 +1685,3 @@ def get_app():
+@@ -936,2 +1683,3 @@ def get_app():
 -    needs it to push into a channel: `app.deliver_text(chat_id, text)` scheduled
 -    on `app.loop` via asyncio.run_coroutine_threadsafe(...).result(timeout)."""
 +    needs it to push into a channel: `app.deliver_text(chat_id, text)` (or

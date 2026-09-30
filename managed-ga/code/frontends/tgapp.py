@@ -606,8 +606,6 @@ def _is_waiting(run):
 def _live_text(run, now):
     lines = []
     settled = run.settled_steps()
-    if settled >= 2:
-        lines.append(f"已完成 {settled} 步")
     if settled >= 1:
         lines.append(f"{settled:02d} {run.summaries.get(settled, '')}".rstrip())
     if _is_waiting(run):

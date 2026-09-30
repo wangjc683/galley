@@ -691,15 +691,13 @@ def _status_content(run, now):
         return "·· 排队中"
     lines = []
     settled = run.settled_steps()
-    if settled >= 2:
-        lines.append(f"已完成 {settled} 步")
     if settled >= 1:
         lines.append(f"{settled:02d} {run.last_summary}".rstrip())
     thinking = "·· 思考中"
     if run.step_started_at is not None:
         minutes = int((now - run.step_started_at) // 60)
         if minutes >= 1:
-            thinking += f" · 已 {minutes} 分钟 · 仍在运行"
+            thinking += f" · 已 {minutes} 分钟"
     lines.append(thinking)
     return "\n".join(lines)
 

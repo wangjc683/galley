@@ -598,8 +598,10 @@ def test_multi_step_status_lines_and_answer_is_last_step_only(env: Env) -> None:
         assert status.shown() == [
             "·· 思考中",
             "01 读取会话列表\n·· 思考中",
-            "已完成 2 步\n02 整理结果\n·· 思考中",
+            "02 整理结果\n·· 思考中",
         ]
+        # The step number already says how many settled: no "已完成 N 步" line.
+        assert not any("已完成" in (text or "") for text in status.shown())
         assert [kwargs for _text, kwargs in status.edits] == [{}, {}]  # plain text, in place
         assert status.deleted
         assert answer.text == (
@@ -626,20 +628,20 @@ def test_minute_line_and_reset_when_a_step_settles(env: Env) -> None:
         await asyncio.sleep(0.05)
         assert status.shown() == ["·· 思考中"]
         env.clock.now += 1
-        await wait_until(lambda: status.text == "·· 思考中 · 已 1 分钟 · 仍在运行")
+        await wait_until(lambda: status.text == "·· 思考中 · 已 1 分钟")
         env.clock.now += 59  # still 1 minute: the same text is not edited again
         await asyncio.sleep(0.05)
         assert len(status.edits) == 1
         env.clock.now += 1
-        await wait_until(lambda: status.text == "·· 思考中 · 已 2 分钟 · 仍在运行")
+        await wait_until(lambda: status.text == "·· 思考中 · 已 2 分钟")
         dq.put(*nxt([t1, t2], 2.0))  # a settled step starts the count over
         await wait_until(lambda: status.text == "01 跑测试\n·· 思考中")
         dq.put(*done([t1, t2, turn_text(3, "好了")]))
         await env.settle()
         assert status.shown() == [
             "·· 思考中",
-            "·· 思考中 · 已 1 分钟 · 仍在运行",
-            "·· 思考中 · 已 2 分钟 · 仍在运行",
+            "·· 思考中 · 已 1 分钟",
+            "·· 思考中 · 已 2 分钟",
             "01 跑测试\n·· 思考中",
         ]
         assert status.deleted
@@ -983,9 +985,9 @@ def test_shared_elapsed_and_labels(display: Any) -> None:
     assert display.stopped_text(0, 0) == "⏹ 已停止"
     # dcapp's `_status_content` wording: whole minutes from 60 s, no seconds.
     assert display.still_running_suffix(59.9) == ""
-    assert display.still_running_suffix(60) == " · 已 1 分钟 · 仍在运行"
-    assert display.still_running_suffix(119.9) == " · 已 1 分钟 · 仍在运行"
-    assert display.still_running_suffix(3725) == " · 已 62 分钟 · 仍在运行"
+    assert display.still_running_suffix(60) == " · 已 1 分钟"
+    assert display.still_running_suffix(119.9) == " · 已 1 分钟"
+    assert display.still_running_suffix(3725) == " · 已 62 分钟"
     assert display.still_running_suffix(-5) == ""
     assert not hasattr(display, "live_elapsed")
     assert display.one_line(" a \n b ") == "a b"
@@ -1080,7 +1082,7 @@ def test_ask_row_click_continues_run_with_carried_counts(env: Env) -> None:
         assert answer.kwargs["do_quote"] is False  # right below the question it continues
         _first, second_status = env.bot.statuses()
         assert second_status.shown() == [
-            "已完成 2 步\n02 确认方向\n·· 思考中", "已完成 3 步\n03 改好了\n·· 思考中",
+            "02 确认方向\n·· 思考中", "03 改好了\n·· 思考中",
         ]
         assert second_status.deleted
         # The answered button again: silent, buttons dropped, nothing runs.

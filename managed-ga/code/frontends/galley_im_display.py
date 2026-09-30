@@ -71,12 +71,12 @@ def stopped_text(steps, seconds):
 
 def still_running_suffix(seconds):
     """Tail of a live status line once the current step has run a full
-    minute: ` · 已 M 分钟 · 仍在运行` (M whole minutes, floored), nothing
+    minute: ` · 已 M 分钟` (M whole minutes, floored), nothing
     before that. No seconds readout: the text changes once a minute at
     most. Same wording and threshold as dcapp's `_status_content` (patch
     0023)."""
     minutes = int(max(0.0, float(seconds or 0)) // 60)
-    return f" · 已 {minutes} 分钟 · 仍在运行" if minutes >= 1 else ""
+    return f" · 已 {minutes} 分钟" if minutes >= 1 else ""
 
 
 def strip_transcript(text):

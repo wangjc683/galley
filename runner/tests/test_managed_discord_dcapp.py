@@ -551,8 +551,10 @@ def test_multi_step_status_edits_and_answer_is_last_step_only(env: Env) -> None:
         contents = [edit["content"] for edit in status.edits]
         assert contents == [
             "01 读取会话列表\n·· 思考中",
-            "已完成 2 步\n02 整理结果\n·· 思考中",
+            "02 整理结果\n·· 思考中",
         ]
+        # The step number already says how many settled: no "已完成 N 步" line.
+        assert not any("已完成" in content for content in contents)
         # No button, ever: stopping is the text /stop.
         assert status.kwargs.get("view") is None
         assert all(edit.get("view") is None for edit in status.edits)
@@ -577,7 +579,7 @@ def test_status_edits_are_throttled(env: Env) -> None:
         ])
         await env.app.run_agent(CHAT, "跑", reply_to=env.trigger())
         status = env.channel.sent[0]
-        assert [edit["content"] for edit in status.edits] == ["已完成 3 步\n03 第 3 步\n·· 思考中"]
+        assert [edit["content"] for edit in status.edits] == ["03 第 3 步\n·· 思考中"]
 
     env.run(body)
 
@@ -593,7 +595,7 @@ def test_long_step_shows_minutes_still_running(env: Env) -> None:
         env.clock.now += 125
         status = env.channel.sent[0]
         await wait_until(lambda: "已 2 分钟" in (status.content or ""))
-        assert status.content == "·· 思考中 · 已 2 分钟 · 仍在运行"
+        assert status.content == "·· 思考中 · 已 2 分钟"
         dq.put(done([t1, turn_text(2, "完成")])[1])
         await run_task
 
@@ -610,11 +612,11 @@ def test_status_content_rendering(env: Env) -> None:
     run.started_at = run.step_started_at = 0.0
     run.task_turn = 1
     assert render(run, 59.0) == "·· 思考中"
-    assert render(run, 60.0) == "·· 思考中 · 已 1 分钟 · 仍在运行"
+    assert render(run, 60.0) == "·· 思考中 · 已 1 分钟"
     run.task_turn, run.last_summary, run.step_started_at = 3, "读取会话列表", 50.0
-    assert render(run, 60.0) == "已完成 2 步\n02 读取会话列表\n·· 思考中"
+    assert render(run, 60.0) == "02 读取会话列表\n·· 思考中"
     run.adopt({"steps": 9, "elapsed": 1.0, "summary": ""})
-    assert render(run, 60.0) == "已完成 11 步\n11\n·· 思考中"
+    assert render(run, 60.0) == "11\n·· 思考中"
 
 
 def test_summary_fallbacks(env: Env) -> None:
@@ -936,7 +938,7 @@ def test_ask_row_click_continues_run_with_carried_counts(env: Env) -> None:
 
         assert env.agent.tasks[-1][0] == f"{env.dcapp.FILE_HINT}\n\n方案 B"
         status2, answer = env.channel.sent[-2:]
-        assert status2.content == "已完成 2 步\n02 确认方向\n·· 思考中"
+        assert status2.content == "02 确认方向\n·· 思考中"
         assert status2.kwargs == reply_to(question)
         assert status2.deleted
         # Steps and time add up across the pause; the wait (110 -> 200) is not counted.
@@ -981,7 +983,7 @@ def test_ask_typed_answer_echoes_without_tick(env: Env) -> None:
         }
         status2, answer = env.channel.sent[-2:]
         assert status2.kwargs == reply_to(trigger)
-        assert status2.content == "已完成 2 步\n02 确认方向\n·· 思考中"
+        assert status2.content == "02 确认方向\n·· 思考中"
         assert answer.content == "-# 3 步 · 用时 12 秒\n好的，用 A。"
         assert CHAT not in env.app._pending_asks
 

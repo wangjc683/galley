@@ -78,6 +78,7 @@ rebase 风险低）。reporter 改动在 `runner/`，经 dcapp 新增的严格�
 - [04 集成验收 + 真机](./issues/04-integration-and-dogfood.md) — 主会话 + JC
 - [05 去掉状态消息上的停止按钮](./issues/05-drop-stop-button.md) — dcapp，补丁 0023 重导出（真机验收后追加）
 - [06 重启后无缝续接 + 激活文案收短](./issues/06-restart-continuity.md) — dcapp 新补丁 0026 + reporter（真机验收后追加）
+- 试用后追加：状态消息去掉「已完成 N 步」头、分钟后缀收成 `· 已 N 分钟`，与 Telegram 同改（票在 [telegram-ux 06](../telegram-ux/issues/06-quieter-status-message.md)，上图示意因此过时）
 
 ## 运行时影响
 

@@ -534,7 +534,10 @@ Galley-side only (`runner/im_resume.py`, no new managed patch; see
 [devlog](./devlog/2026-09-30-im-restart-continuity.md)): each resumes its
 conversation from its engine log after a restart (they used to restart
 blank without a word), WeChat gains `/new`, and a Disconnect now clears the
-continuity state (Core `logout`), so a reconnect starts clean. JC passed the real-device
+continuity state (Core `logout`), so a reconnect starts clean. After a
+Telegram trial, the Telegram and Discord status messages dropped their
+`已完成 N 步` line (the step number below already says it) and the
+` · 仍在运行` tail of the minute line. JC passed the real-device
 dogfood the same day; the three open judgment calls (subtext on one-step
 answers, narration kept in the answered-question echo, the typing indicator
 lingering up to ~10 s) stay as built. Because `managed-ga/` and `runner/` changed, the
