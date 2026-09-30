@@ -34,6 +34,16 @@ impl SqliteGalley {
             .collect()
     }
 
+    /// The managed models an agent can pick by name, in runtime order:
+    /// what `galley llm list --runtime=managed` prints and what the
+    /// `llm.set` / `session.new --llm` resolver matches against. See
+    /// [`crate::api::managed_llm_choices`].
+    pub async fn list_managed_llm_choices(&self) -> Result<Vec<crate::api::ManagedLlmChoice>> {
+        Ok(crate::api::managed_llm_choices(
+            self.list_managed_models().await?,
+        ))
+    }
+
     /// The defaults layer (`prefs.managed_model_defaults`); `{}` when unset
     /// or not an object. See `managed_model_layers`.
     pub async fn managed_model_defaults(&self) -> Result<serde_json::Value> {

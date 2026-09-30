@@ -18,9 +18,10 @@ non-breaking inside `schemaVersion: 1` per §7.
   changing the existing `delete` semantics — sub-plan O2).
 - `galley session watch <id> --from=<event-index>` — backlog/resume
   support for supervisors reconnecting after a network blip (B2 N35).
-- `galley llm warmup <id>` — explicit "spawn a bridge so `llm list`
-  cache fills" command, for SOPs that don't want to rely on the GUI
-  having been opened.
+- `galley llm warmup <id>` — explicit "spawn a bridge so the external
+  `llm list` cache fills" command, for SOPs that don't want to rely on the
+  GUI having been opened. (Managed `llm list` reads the model store and
+  needs no warmup.)
 
 Future human/Supervisor-facing session and project write commands should accept
 `--supervisor=<x>` / `--reason=<y>` flags following the same Origin convention

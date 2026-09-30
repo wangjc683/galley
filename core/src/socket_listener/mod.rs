@@ -58,10 +58,7 @@
 use crate::api::message::MessageBrief;
 use crate::api::project::{CreateProjectInput, ProjectBrief, ProjectId};
 use crate::api::session::{CreateSessionInput, SessionBrief};
-use crate::api::{
-    GalleyApi, GoalId, ManagedModelCredentialStatus, Origin, OriginVia, RuntimeKind, SessionFilter,
-    SessionId,
-};
+use crate::api::{GalleyApi, GoalId, Origin, OriginVia, RuntimeKind, SessionFilter, SessionId};
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};
 use crate::managed_runtime;

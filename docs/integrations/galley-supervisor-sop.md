@@ -277,8 +277,20 @@ sessions; it does not delete them.
 "$GALLEY" llm set <session-id> "<llm-name>"
 ```
 
-If `llm list` is empty, ask the user to open a Galley session once so the LLM
-cache can warm up.
+`llm list` follows the GUI's current runtime; its `name` values are what
+`llm set` accepts. If the session runs in the other runtime, list with
+`--runtime=<its runtimeKind>` from `session brief`.
+
+If `llm list` is empty:
+
+- managed (Galley runtime): no model has a usable credential; ask the user to
+  add or re-enter one in Settings > Models.
+- external (attached GenericAgent): the model cache is unwarmed; ask the user
+  to open an attached-GenericAgent session once.
+
+In the managed list, `isCurrent` marks the model a session starts with when
+none was picked, not a session's own choice: read that from
+`selectedLlmDisplayName` in `session brief`.
 
 ## Child Prompt Shape
 

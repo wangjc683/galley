@@ -643,6 +643,10 @@ async fn project_follow_running_session_without_core_marks_session_end() {
 }
 
 // ---------------- llm.* (mixed: SQLite reads + socket writes) ----------------
+//
+// The three `llm_list_*` cache tests below pin `--runtime external`: the
+// seeded DB's `active_runtime_kind` is `managed` (migration 008 default),
+// so the default `current` scope would read the Galley model store.
 
 #[tokio::test]
 async fn llm_list_happy_path_ndjson() {
@@ -658,7 +662,8 @@ async fn llm_list_happy_path_ndjson() {
     .await;
     drop(pool);
 
-    let (stdout, code) = run_galley_isolated(&db, td.path(), &["llm", "list"]);
+    let (stdout, code) =
+        run_galley_isolated(&db, td.path(), &["llm", "list", "--runtime", "external"]);
     assert_eq!(code, Some(0), "stdout: {stdout}");
     let lines: Vec<&str> = stdout.trim().lines().collect();
     assert_eq!(lines.len(), 2);
@@ -674,7 +679,8 @@ async fn llm_list_empty_cache_returns_empty_stdout_exit_0() {
     let td = tempdir();
     let db = td.path().join("test.db");
     drop(seeded_db_at(&db).await);
-    let (stdout, code) = run_galley_isolated(&db, td.path(), &["llm", "list"]);
+    let (stdout, code) =
+        run_galley_isolated(&db, td.path(), &["llm", "list", "--runtime", "external"]);
     assert_eq!(code, Some(0), "stdout: {stdout}");
     assert!(
         stdout.trim().is_empty(),
@@ -694,10 +700,255 @@ async fn llm_list_corrupt_cache_shape_exits_2() {
     seed_pref(&pool, "llm_list", r#"{"oops":"not an array"}"#).await;
     drop(pool);
 
-    let (stdout, code) = run_galley_isolated(&db, td.path(), &["llm", "list"]);
+    let (stdout, code) =
+        run_galley_isolated(&db, td.path(), &["llm", "list", "--runtime", "external"]);
     assert_eq!(code, Some(2), "stdout: {stdout}");
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
     assert_eq!(parsed["error"], "invalid_args");
+}
+
+async fn set_active_runtime(pool: &SqlitePool, kind: &str) {
+    sqlx::query(
+        "INSERT INTO prefs (key, value, updated_at) VALUES ('active_runtime_kind', ?, ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+    )
+    .bind(format!("\"{kind}\""))
+    .bind("2026-09-30T00:00:00Z")
+    .execute(pool)
+    .await
+    .expect("set active runtime");
+}
+
+/// Seed one managed provider. `with_secret` stores a (dummy) encrypted
+/// secret row, which is all `credential_status` looks at.
+async fn seed_managed_provider(pool: &SqlitePool, id: &str, with_secret: bool) {
+    let ts = "2026-09-30T00:00:00Z";
+    let api_key_ref = format!("managed-provider:{id}");
+    sqlx::query(
+        "INSERT INTO managed_model_providers \
+           (id, display_name, protocol, auth_kind, api_base, api_key_ref, created_at, updated_at) \
+         VALUES (?, ?, 'openai', 'api_key', 'https://example.test/v1', ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(id)
+    .bind(&api_key_ref)
+    .bind(ts)
+    .bind(ts)
+    .execute(pool)
+    .await
+    .expect("seed managed provider");
+    if with_secret {
+        sqlx::query(
+            "INSERT OR IGNORE INTO managed_model_secret_keys (key_id, key_material, created_at) \
+             VALUES ('test-key', zeroblob(32), ?)",
+        )
+        .bind(ts)
+        .execute(pool)
+        .await
+        .expect("seed secret key");
+        sqlx::query(
+            "INSERT INTO managed_model_secrets \
+               (api_key_ref, key_id, algorithm, nonce, ciphertext, created_at, updated_at) \
+             VALUES (?, 'test-key', 'test', zeroblob(12), x'00', ?, ?)",
+        )
+        .bind(&api_key_ref)
+        .bind(ts)
+        .bind(ts)
+        .execute(pool)
+        .await
+        .expect("seed secret");
+    }
+}
+
+async fn seed_managed_model(
+    pool: &SqlitePool,
+    id: &str,
+    provider_id: &str,
+    display_name: &str,
+    model: &str,
+    sort_order: i64,
+    is_default: bool,
+) {
+    let ts = "2026-09-30T00:00:00Z";
+    sqlx::query(
+        "INSERT INTO managed_models \
+           (id, provider_id, display_name, model, is_default, sort_order, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(provider_id)
+    .bind(display_name)
+    .bind(model)
+    .bind(i64::from(is_default))
+    .bind(sort_order)
+    .bind(ts)
+    .bind(ts)
+    .execute(pool)
+    .await
+    .expect("seed managed model");
+}
+
+fn ndjson(stdout: &str) -> Vec<serde_json::Value> {
+    stdout
+        .trim()
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("ndjson line"))
+        .collect()
+}
+
+/// A managed model store plus a stale external cache — the shape of the
+/// bug: the external cache must not leak into the managed answer.
+async fn seed_managed_store_and_stale_external_cache(pool: &SqlitePool) {
+    seed_managed_provider(pool, "mp_key", true).await;
+    seed_managed_provider(pool, "mp_nokey", false).await;
+    seed_managed_model(
+        pool,
+        "mm_sol",
+        "mp_key",
+        "GPT 6.1 Sol",
+        "gpt-6.1-sol",
+        0,
+        true,
+    )
+    .await;
+    seed_managed_model(pool, "mm_nokey", "mp_nokey", "No Key", "nokey-1", 1, false).await;
+    seed_managed_model(pool, "mm_blank", "mp_key", "  ", "glm-5.3-flash", 2, false).await;
+    seed_pref(
+        pool,
+        "llm_list",
+        r#"[{"index":0,"name":"gpt-6-astra"},{"index":1,"name":"glm-5.3-flash","isCurrent":true}]"#,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn llm_list_managed_reads_model_store_with_llm_set_rules() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_managed_store_and_stale_external_cache(&pool).await;
+    drop(pool);
+
+    let expected = vec![
+        serde_json::json!({
+            "index": 0, "name": "GPT 6.1 Sol", "key": "mm_sol",
+            "displayName": "GPT 6.1 Sol", "isCurrent": true,
+        }),
+        // Missing-credential model skipped without consuming an index;
+        // blank display name falls back to the model id.
+        serde_json::json!({
+            "index": 1, "name": "glm-5.3-flash", "key": "mm_blank",
+            "displayName": "glm-5.3-flash", "isCurrent": false,
+        }),
+    ];
+    for args in [
+        &["llm", "list", "--runtime", "managed"][..],
+        // Seeded DB's active runtime is managed, so the default follows it.
+        &["llm", "list"][..],
+    ] {
+        let (stdout, code) = run_galley_isolated(&db, td.path(), args);
+        assert_eq!(code, Some(0), "{args:?} stdout: {stdout}");
+        assert_eq!(ndjson(&stdout), expected, "{args:?}");
+        // Managed rows have a fixed key order.
+        assert!(
+            stdout.starts_with(r#"{"index":0,"name":"GPT 6.1 Sol","key":"mm_sol","displayName":"GPT 6.1 Sol","isCurrent":true}"#),
+            "{args:?} stdout: {stdout}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn llm_list_managed_current_falls_back_when_default_lacks_credential() {
+    // The default model has no credential: the runtime skips it, so the
+    // first usable model is what an unpicked runtime starts with.
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_managed_provider(&pool, "mp_key", true).await;
+    seed_managed_provider(&pool, "mp_nokey", false).await;
+    seed_managed_model(
+        &pool,
+        "mm_default",
+        "mp_nokey",
+        "Default",
+        "default-1",
+        0,
+        true,
+    )
+    .await;
+    seed_managed_model(&pool, "mm_next", "mp_key", "Next", "next-1", 1, false).await;
+    drop(pool);
+
+    let (stdout, code) =
+        run_galley_isolated(&db, td.path(), &["llm", "list", "--runtime", "managed"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let rows = ndjson(&stdout);
+    assert_eq!(rows.len(), 1, "stdout: {stdout}");
+    assert_eq!(rows[0]["key"], "mm_next");
+    assert_eq!(rows[0]["index"], 0);
+    assert_eq!(rows[0]["isCurrent"], true);
+}
+
+#[tokio::test]
+async fn llm_list_managed_empty_store_returns_empty_stdout_exit_0() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    // A warm external cache must not stand in for the empty managed store.
+    seed_pref(&pool, "llm_list", r#"[{"index":0,"name":"glm-4.5-x"}]"#).await;
+    drop(pool);
+    let (stdout, code) =
+        run_galley_isolated(&db, td.path(), &["llm", "list", "--runtime", "managed"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    assert!(
+        stdout.trim().is_empty(),
+        "expected empty stdout, got: {stdout}"
+    );
+}
+
+#[tokio::test]
+async fn llm_list_current_follows_active_runtime_kind() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_managed_store_and_stale_external_cache(&pool).await;
+
+    set_active_runtime(&pool, "external").await;
+    let (stdout, code) = run_galley_isolated(&db, td.path(), &["llm", "list"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    // External scope prints the cache as stored.
+    assert_eq!(
+        stdout,
+        "{\"index\":0,\"name\":\"gpt-6-astra\"}\n{\"index\":1,\"name\":\"glm-5.3-flash\",\"isCurrent\":true}\n"
+    );
+
+    set_active_runtime(&pool, "managed").await;
+    drop(pool);
+    let (stdout, code) = run_galley_isolated(&db, td.path(), &["llm", "list"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let keys: Vec<serde_json::Value> = ndjson(&stdout)
+        .iter()
+        .map(|row| row["key"].clone())
+        .collect();
+    assert_eq!(keys, vec!["mm_sol", "mm_blank"]);
+}
+
+#[tokio::test]
+async fn llm_list_rejects_runtime_all() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    drop(seeded_db_at(&db).await);
+    let (stdout, code) = run_galley_isolated(&db, td.path(), &["llm", "list", "--runtime", "all"]);
+    assert_eq!(code, Some(2), "stdout: {stdout}");
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(parsed["error"], "invalid_args");
+    assert!(
+        parsed["message"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("llm list: --runtime all"),
+        "stdout: {stdout}"
+    );
 }
 
 #[tokio::test]

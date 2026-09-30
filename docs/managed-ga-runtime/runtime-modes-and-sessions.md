@@ -118,9 +118,10 @@ Explicit read scopes:
 --runtime=all
 ```
 
-`sessions search` and `llm list` should become runtime-aware before release if
-we expose them prominently to supervisors. They are not part of the first
-invisible-session prevention slice because they do not create work.
+`sessions search` and `llm list` take the same `--runtime` flag (default
+`current`). `llm list` accepts one runtime only (`all` is refused): managed
+lists the Galley model store `llm set` resolves against, external lists the
+GUI's attached-GA warmup cache.
 
 `session new` also defaults to the current runtime:
 

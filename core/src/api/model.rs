@@ -143,3 +143,125 @@ pub struct ManagedModelConnectionResult {
     pub model_found: Option<bool>,
     pub message: String,
 }
+
+/// One selectable model of the managed (Galley-owned) runtime, as every
+/// by-name LLM surface sees it: `galley llm list` in managed scope, and
+/// the `llm.set` / `session.new --llm` resolver. Built only by
+/// [`managed_llm_choices`], so the names the list prints are exactly the
+/// names the resolver accepts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagedLlmChoice {
+    /// Position among the selectable models, from 0 — the model index the
+    /// managed runtime is spawned / `SetLlm`-switched with. Index 0 is the
+    /// model a runtime started without a model pick uses (the Galley
+    /// default, or the next usable model when the default lacks a
+    /// credential).
+    pub index: u32,
+    /// Managed model record id — the stable `selectedLlmKey`.
+    pub key: String,
+    /// Display name; falls back to the provider model id when blank.
+    pub display_name: String,
+    /// Provider model id. The resolver accepts it as an alias.
+    pub model: String,
+}
+
+/// Enumerate the selectable managed models in runtime order. `models`
+/// must come from `SqliteGalley::list_managed_models` (sort order, then
+/// default first). Models whose credential is `Missing` are skipped and do
+/// not consume an index, mirroring the credential filter the runtime
+/// applies at spawn.
+pub fn managed_llm_choices(models: Vec<ManagedModelRecord>) -> Vec<ManagedLlmChoice> {
+    models
+        .into_iter()
+        .filter(|model| model.credential_status != ManagedModelCredentialStatus::Missing)
+        .enumerate()
+        .map(|(index, model)| ManagedLlmChoice {
+            index: index as u32,
+            display_name: managed_model_display_name(&model.display_name, &model.model),
+            key: model.id,
+            model: model.model,
+        })
+        .collect()
+}
+
+/// The name a managed model is shown and matched by: the trimmed display
+/// name, or the provider model id when the display name is blank.
+pub fn managed_model_display_name(display_name: &str, model: &str) -> String {
+    let trimmed = display_name.trim();
+    if trimmed.is_empty() {
+        model.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record(
+        id: &str,
+        display_name: &str,
+        model: &str,
+        credential: ManagedModelCredentialStatus,
+    ) -> ManagedModelRecord {
+        ManagedModelRecord {
+            id: id.into(),
+            provider_id: "mp".into(),
+            provider_display_name: "Provider".into(),
+            display_name: display_name.into(),
+            protocol: ManagedModelProtocol::Openai,
+            auth_kind: ManagedModelAuthKind::ApiKey,
+            api_base: "https://example.test/v1".into(),
+            model: model.into(),
+            api_key_ref: "managed-provider:mp".into(),
+            preset_options: serde_json::json!({}),
+            advanced_overrides: serde_json::json!({}),
+            advanced_options: serde_json::json!({}),
+            is_default: false,
+            sort_order: 0,
+            credential_status: credential,
+            last_validated_at: None,
+            created_at: "2026-09-30T00:00:00Z".into(),
+            updated_at: "2026-09-30T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn managed_llm_choices_skip_missing_credentials_without_consuming_an_index() {
+        use ManagedModelCredentialStatus::{Missing, Present, Unknown};
+        let choices = managed_llm_choices(vec![
+            record("mm_gone", "Gone", "gone-1", Missing),
+            record("mm_a", "  Alpha  ", "alpha-1", Present),
+            record("mm_b", "   ", "beta-1", Unknown),
+            record("mm_gone2", "Gone 2", "gone-2", Missing),
+            record("mm_c", "Gamma", "gamma-1", Present),
+        ]);
+        let expected = vec![
+            ManagedLlmChoice {
+                index: 0,
+                key: "mm_a".into(),
+                display_name: "Alpha".into(),
+                model: "alpha-1".into(),
+            },
+            ManagedLlmChoice {
+                index: 1,
+                key: "mm_b".into(),
+                display_name: "beta-1".into(),
+                model: "beta-1".into(),
+            },
+            ManagedLlmChoice {
+                index: 2,
+                key: "mm_c".into(),
+                display_name: "Gamma".into(),
+                model: "gamma-1".into(),
+            },
+        ];
+        assert_eq!(choices, expected);
+    }
+
+    #[test]
+    fn managed_llm_choices_empty_library_is_empty() {
+        assert!(managed_llm_choices(Vec::new()).is_empty());
+    }
+}

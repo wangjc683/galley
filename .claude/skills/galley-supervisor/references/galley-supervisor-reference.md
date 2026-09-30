@@ -6,7 +6,7 @@ workflow details.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-reference.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-09-16 (Goal v2: `goal start / status / active / stop / extend`, schemaVersion 2, `--schema=2` guard, open / terminal goal statuses).
+Last synced: 2026-09-30 (`llm list` follows the runtime: `--runtime=current|managed|external`, managed lists the Galley model store).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins.
@@ -118,7 +118,7 @@ Read commands:
 | `"$GALLEY" project follow <id> --tail=10 --until-idle --final-show` | Follow Project group until child sessions are idle |
 | `"$GALLEY" goal status <id>` | One Goal: status, ceiling, elapsed, latest summary |
 | `"$GALLEY" goal active` | Open Goals (active / paused / blocked); `[]` = none |
-| `"$GALLEY" llm list` | Available LLM display names |
+| `"$GALLEY" llm list` | LLM names `llm set` accepts, for the current runtime (`--runtime=managed` / `--runtime=external` to pick one) |
 | `"$GALLEY" health` | Troubleshooting |
 
 Write commands:

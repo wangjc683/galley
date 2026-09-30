@@ -30,10 +30,11 @@ pub use message::{
     MessageVisibility,
 };
 pub use model::{
-    ManagedModelAuthKind, ManagedModelConnectionResult, ManagedModelCredentialStatus,
-    ManagedModelListResult, ManagedModelProbeInput, ManagedModelProtocol,
-    ManagedModelProviderRecord, ManagedModelRecord, ReorderManagedModelsInput,
-    SaveManagedModelInput, SaveManagedProviderInput, SetManagedModelDefaultsInput,
+    managed_llm_choices, managed_model_display_name, ManagedLlmChoice, ManagedModelAuthKind,
+    ManagedModelConnectionResult, ManagedModelCredentialStatus, ManagedModelListResult,
+    ManagedModelProbeInput, ManagedModelProtocol, ManagedModelProviderRecord, ManagedModelRecord,
+    ReorderManagedModelsInput, SaveManagedModelInput, SaveManagedProviderInput,
+    SetManagedModelDefaultsInput,
 };
 pub use origin::{Origin, OriginVia};
 pub use project::{CreateProjectInput, ProjectBrief, ProjectId, ProjectPatch};
@@ -511,8 +512,10 @@ pub trait GalleyApi: Send + Sync {
 
     // ---------------- B4 M1 · generic prefs read ----------------
     //
-    // The CLI's `llm list` (M1.3) reads the `llm_list` pref cache that
-    // GUI writes after warmup. Generic read keeps the SQL in one place
+    // The CLI's `llm list --runtime=external` (M1.3) reads the `llm_list`
+    // pref cache that the GUI writes after an external-GA warmup; the
+    // managed scope reads the Galley model store instead
+    // (`managed_llm_choices`). Generic read keeps the SQL in one place
     // and lets future prefs reads (B4 M3 supervisor discovery, etc.)
     // reuse the same path without per-key trait methods.
 

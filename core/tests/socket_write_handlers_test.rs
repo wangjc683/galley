@@ -13,9 +13,13 @@
 
 use async_trait::async_trait;
 use galley_core_lib::api::{
-    CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionBrief, SessionId,
+    CreateSessionInput, GalleyApi, ManagedModelAuthKind, ManagedModelProtocol, Origin, OriginVia,
+    RuntimeKind, SessionBrief, SessionId,
 };
-use galley_core_lib::db::SqliteGalley;
+use galley_core_lib::credential_store;
+use galley_core_lib::db::{
+    SqliteGalley, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
+};
 use galley_core_lib::ipc::IpcCommand;
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
@@ -719,6 +723,128 @@ async fn llm_set_process_gone_persists_and_emits_updated() {
     assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "persisted_only");
     let payload = h.notifier.payload_of("session-updated-external").unwrap();
     assert_eq!(payload["via"], "llm.set");
+}
+
+async fn seed_managed_provider(galley: &SqliteGalley, id: &str, with_secret: bool) {
+    let api_key_ref = format!("managed-provider:{id}");
+    galley
+        .upsert_managed_model_provider_metadata(UpsertManagedModelProviderMetadata {
+            id: id.into(),
+            display_name: id.into(),
+            protocol: ManagedModelProtocol::Openai,
+            auth_kind: ManagedModelAuthKind::ApiKey,
+            api_base: "https://example.test/v1".into(),
+            api_key_ref: api_key_ref.clone(),
+        })
+        .await
+        .unwrap();
+    if with_secret {
+        credential_store::set_secret(galley, &api_key_ref, "sk-test")
+            .await
+            .unwrap();
+    }
+}
+
+async fn seed_managed_model(
+    galley: &SqliteGalley,
+    id: &str,
+    provider_id: &str,
+    display_name: &str,
+    model: &str,
+) {
+    galley
+        .upsert_managed_model_metadata(UpsertManagedModelMetadata {
+            id: id.into(),
+            provider_id: provider_id.into(),
+            display_name: display_name.into(),
+            model: model.into(),
+            preset_options: None,
+            advanced_overrides: None,
+            make_default: false,
+        })
+        .await
+        .unwrap();
+}
+
+/// `galley llm list --runtime=managed` prints `list_managed_llm_choices`;
+/// every name it prints must resolve through `llm.set` to the same
+/// key / index, and a model the list skips must not resolve.
+#[tokio::test]
+async fn llm_set_resolves_every_managed_llm_list_name() {
+    let h = Harness::new(FakeRunner::default()).await;
+    seed_managed_provider(&h.galley, "mp_key", true).await;
+    seed_managed_provider(&h.galley, "mp_nokey", false).await;
+    // The first model saved becomes the default (sort order 0).
+    seed_managed_model(&h.galley, "mm_sol", "mp_key", "GPT 6.1 Sol", "gpt-6.1-sol").await;
+    seed_managed_model(&h.galley, "mm_nokey", "mp_nokey", "No Key", "nokey-1").await;
+    seed_managed_model(
+        &h.galley,
+        "mm_flash",
+        "mp_key",
+        "GLM Flash",
+        "glm-5.3-flash",
+    )
+    .await;
+    h.galley
+        .create_session(
+            CreateSessionInput {
+                id: "s-managed".into(),
+                title: "seed".into(),
+                project_id: None,
+                selected_llm_index: None,
+                selected_llm_key: None,
+                selected_llm_display_name: None,
+                ga_runtime_kind: Some(RuntimeKind::Managed),
+                ga_runtime_id: None,
+                prompt_profile: None,
+            },
+            Origin {
+                via: OriginVia::Cli,
+                supervisor: None,
+                reason: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let choices = h.galley.list_managed_llm_choices().await.unwrap();
+    let listed: Vec<(u32, &str, &str)> = choices
+        .iter()
+        .map(|c| (c.index, c.key.as_str(), c.display_name.as_str()))
+        .collect();
+    assert_eq!(
+        listed,
+        vec![(0, "mm_sol", "GPT 6.1 Sol"), (1, "mm_flash", "GLM Flash")]
+    );
+
+    for choice in &choices {
+        let resp = h
+            .dispatch(req(
+                "llm.set",
+                json!({"sessionId": "s-managed", "llmName": choice.display_name.to_uppercase()}),
+            ))
+            .await;
+        assert!(resp.ok, "{} must resolve: {resp:?}", choice.display_name);
+        let session = &resp.result.as_ref().unwrap()["session"];
+        assert_eq!(session["selectedLlmKey"], choice.key);
+        assert_eq!(session["selectedLlmIndex"], choice.index);
+        assert_eq!(session["selectedLlmDisplayName"], choice.display_name);
+        let sent = h.runner.sent_commands.lock().unwrap();
+        let (_, last) = sent.last().expect("SetLlm dispatched");
+        assert!(
+            last.contains(&format!("llm_index: {}", choice.index)),
+            "runner index must match the listed index: {last}"
+        );
+    }
+
+    let resp = h
+        .dispatch(req(
+            "llm.set",
+            json!({"sessionId": "s-managed", "llmName": "No Key"}),
+        ))
+        .await;
+    assert!(!resp.ok, "a model llm list skips must not resolve");
+    assert_eq!(resp.error.as_deref(), Some("invalid_args"));
 }
 
 // ---------------- schemaVersion 2 policy + goal.* (Goal v2) ----------------

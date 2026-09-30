@@ -168,6 +168,16 @@ its name but returns `{goal}` only; `goal active` lists open goals
 (no wrap-up). Task / event / deliverable commands have no successor —
 the goal's session thread is the record.
 
+**Changes inside `2`** (additive flags and behavior fixes; fields, exit
+codes and error discriminants unchanged):
+
+- 2026-09-30 — `llm list` gained `--runtime=current|managed|external`
+  (default `current`; `all` → `invalid_args`). Behavior fix: in managed
+  mode it now prints the Galley model store that `llm set` resolves
+  against, instead of the external-GA cache it used to print in every
+  mode. `--runtime=external` keeps the old output. See §5.17 in
+  [project-and-llm-commands.md](./project-and-llm-commands.md).
+
 ### 7.2 `schemaVersion: 1` (frozen, served for unchanged commands)
 
 Introduced in v0.2, unchanged through v0.3.x and v0.4.x. Additions that

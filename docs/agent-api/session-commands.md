@@ -431,7 +431,7 @@ runtime's own state root.
 | Flag           | Default                              | Notes                                                                                          |
 | -------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | `--project`    | (none → ungrouped)                   | Project id. Invalid id → `invalid_args`.                                                       |
-| `--llm`        | (none → bridge default at spawn)     | LLM display name (case-insensitive). Resolved against the cached `llm_list` pref.              |
+| `--llm`        | (none → bridge default at spawn)     | LLM display name (case-insensitive), as `llm list --runtime=<runtime>` prints it (§5.17).     |
 | `--runtime`    | `current`                            | Follows GUI active runtime by default. `managed` / `external` are explicit cross-runtime writes. |
 | `--supervisor` | (none → `origin.via = cli`)          | Supervisor label. Sets `origin.via = supervisor` on the session row + the first message.       |
 | `--reason`     | (none)                               | Free-text rationale on `origin.reason`.                                                        |

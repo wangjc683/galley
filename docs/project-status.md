@@ -526,8 +526,15 @@ dogfood the same day; the three open judgment calls (subtext on one-step
 answers, narration kept in the answered-question echo, the typing indicator
 lingering up to ~10 s) stay as built. Because `managed-ga/` and `runner/` changed, the
 bundled-runtime gate is mandatory next release. Filed alongside:
-`.scratch/im-supervisor-context-bloat/` (needs-triage). Release-scope truth
-remains `git log v0.5.4..HEAD`.
+`.scratch/im-supervisor-context-bloat/` (needs-triage). Found during that
+dogfood and fixed the same day: `galley llm list` now takes `--runtime`
+(default `current`) and in managed mode prints the Galley model store instead
+of the external-GA cache it used to print everywhere — an Agent API behavior
+fix recorded in §7.1 "Changes inside `2`" (see
+[devlog](./devlog/2026-09-30-llm-list-runtime-aware.md)); the pre-existing
+external `llm set` failure it surfaced is filed as
+`.scratch/llm-list-runtime/issues/02-external-llm-set-duplicate-field.md`
+(needs-triage). Release-scope truth remains `git log v0.5.4..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
 row stacked above the commission marker's eyebrow) reads cluttered has not

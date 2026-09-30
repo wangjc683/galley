@@ -243,7 +243,7 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             supervisor,
             reason,
         }) => goal::goal_extend(goal_id, minutes, supervisor, reason).await,
-        Command::Llm(LlmCmd::List) => llm::llm_list().await,
+        Command::Llm(LlmCmd::List { runtime }) => llm::llm_list(runtime).await,
         Command::Llm(LlmCmd::Set {
             session_id,
             llm_name,

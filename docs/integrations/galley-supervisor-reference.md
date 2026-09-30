@@ -104,7 +104,7 @@ Read commands:
 | `"$GALLEY" project follow <id> --tail=10 --until-idle --final-show` | Follow Project group until child sessions are idle |
 | `"$GALLEY" goal status <id>` | One Goal: status, ceiling, elapsed, latest summary |
 | `"$GALLEY" goal active` | Open Goals (active / paused / blocked); `[]` = none |
-| `"$GALLEY" llm list` | Available LLM display names |
+| `"$GALLEY" llm list` | LLM names `llm set` accepts, for the current runtime (`--runtime=managed` / `--runtime=external` to pick one) |
 | `"$GALLEY" health` | Troubleshooting |
 
 Write commands:

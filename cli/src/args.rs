@@ -53,9 +53,10 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Goal(GoalCmd),
 
-    /// LLM commands. `llm list` reads the model list the GUI cached
-    /// after a bridge warmup (open Galley once to populate). `llm set`
-    /// persists a per-session pick and tells any live runner.
+    /// LLM commands. `llm list` prints the model list of the current
+    /// runtime (Galley model store for managed, the GUI's warmup cache for
+    /// external GA). `llm set` persists a per-session pick and tells any
+    /// live runner.
     #[command(subcommand)]
     Llm(LlmCmd),
 }
@@ -198,11 +199,27 @@ pub(crate) enum GoalCmd {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum LlmCmd {
-    /// List LLMs configured in the user's `mykey.py`. Read-only — opens
-    /// SQLite directly. Returns the same cached shape the GUI stores after
-    /// a bridge warmup. Empty NDJSON when the cache is unwarmed (open the
-    /// GUI once to populate).
-    List,
+    /// List the LLMs a runtime can pick by name (`llm set` accepts every
+    /// printed `name`).
+    ///
+    /// Read-only — opens SQLite directly. NDJSON rows
+    /// `{index, name, key, displayName, isCurrent}`. `managed` reads the
+    /// Galley model store (Settings > Models) with the same rules
+    /// `llm set` resolves against: models without a credential are
+    /// skipped, `index` counts usable models from 0, `key` is the model
+    /// id, and `isCurrent` marks index 0 — the model a session or IM
+    /// channel started without a model pick uses (not a per-session
+    /// choice; see `sessions list` `selectedLlmDisplayName`). `external`
+    /// prints the model list the GUI cached after an external-GA bridge
+    /// warmup, where `isCurrent` is that bridge's pick; empty output when
+    /// the cache is unwarmed (open an external session once to populate).
+    List {
+        /// Runtime whose model list to print. Default follows the GUI's
+        /// current runtime. `all` is refused (exit 2): each runtime has
+        /// its own model list.
+        #[arg(long, value_enum, default_value = "current")]
+        runtime: RuntimeArg,
+    },
     /// Pick the LLM for a session by display name (case-insensitive).
     /// Persists stable `selectedLlmKey` plus the legacy index/display
     /// companion on the session row + best-effort tells the live runner via
@@ -360,9 +377,11 @@ pub(crate) enum SessionCmd {
         /// Optional project id. Session is detached (ungrouped) if omitted.
         #[arg(long)]
         project: Option<String>,
-        /// Optional LLM display name (case-insensitive). Resolved against
-        /// the `llm_list` pref cached by the GUI after warmup; if the
-        /// cache is empty or the name is unknown, exits 2 (invalid args).
+        /// Optional LLM display name (case-insensitive), as printed by
+        /// `galley llm list --runtime=<the new session's runtime>`: managed
+        /// resolves against the Galley model store, external against the
+        /// GUI's warmup cache. An unknown name (or an empty external cache)
+        /// exits 2 (invalid args).
         #[arg(long)]
         llm: Option<String>,
         /// Runtime for the new session. Default follows the GUI's

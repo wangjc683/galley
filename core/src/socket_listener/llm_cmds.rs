@@ -90,6 +90,11 @@ pub(super) struct LlmListEntry {
     key: Option<String>,
 }
 
+/// Resolve a managed `--llm=<name>` against the Galley model store. The
+/// candidate set, order, index and display names come from
+/// `SqliteGalley::list_managed_llm_choices` — the same enumeration
+/// `galley llm list --runtime=managed` prints — so every listed name
+/// resolves here. The provider model id is accepted as an alias.
 async fn resolve_managed_llm_name(
     galley: &SqliteGalley,
     name: Option<String>,
@@ -101,38 +106,23 @@ async fn resolve_managed_llm_name(
             display_name: None,
         });
     };
-    let models = match galley.list_managed_models().await {
-        Ok(models) => models,
+    let choices = match galley.list_managed_llm_choices().await {
+        Ok(choices) => choices,
         Err(e) => return Err(SocketResponseLite::from_err(e)),
     };
     let target = name.to_lowercase();
-    let mut index = 0_u32;
-    for model in models {
-        if model.credential_status == ManagedModelCredentialStatus::Missing {
-            continue;
-        }
-        let display_name = managed_model_display_name(&model.display_name, &model.model);
-        if display_name.to_lowercase() == target || model.model.to_lowercase() == target {
-            return Ok(ResolvedLlmSelection {
-                index: Some(index),
-                key: Some(model.id),
-                display_name: Some(display_name),
-            });
-        }
-        index += 1;
+    if let Some(choice) = choices.into_iter().find(|choice| {
+        choice.display_name.to_lowercase() == target || choice.model.to_lowercase() == target
+    }) {
+        return Ok(ResolvedLlmSelection {
+            index: Some(choice.index),
+            key: Some(choice.key),
+            display_name: Some(choice.display_name),
+        });
     }
     Err(SocketResponseLite::invalid_args(format!(
         "unknown managed llm '{name}'; configure it in Settings > Models"
     )))
-}
-
-fn managed_model_display_name(display_name: &str, model: &str) -> String {
-    let trimmed = display_name.trim();
-    if trimmed.is_empty() {
-        model.to_string()
-    } else {
-        trimmed.to_string()
-    }
 }
 
 /// Persist a session's per-bridge LLM choice + best-effort dispatch

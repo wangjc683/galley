@@ -190,26 +190,70 @@ $ galley project delete proj_demo --supervisor=ga-claude-1 --reason="merged into
 
 Exit codes: `0` success / `3 not_found` / `4 db_unavailable`.
 
-### 5.17 · `galley llm list`
+### 5.17 · `galley llm list [--runtime=current|managed|external]`
 
-**Read-only** — direct SQLite, no socket. Reads the cached `llm_list`
-pref that the GUI seeds after a bridge warmup. NDJSON, one entry per
-line.
+**Read-only** — direct SQLite, no socket. Prints the models one
+runtime can pick by name, NDJSON, one entry per line. Managed rows — and
+the entries current GUIs cache for external GA — carry the same keys:
+`index`, `name`, `key`, `displayName`, `isCurrent`.
+
+| Flag        | Default   | Notes                                                                                                                                              |
+| ----------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--runtime` | `current` | `current` follows the GUI's active runtime (as `sessions list` does). `all` is refused (`invalid_args`, exit 2): each runtime has its own model list. |
+
+**`managed`** reads the Galley model store (Settings > Models) with the
+exact rules `llm set` and `session new --llm` resolve against, so every
+printed `name` is accepted by them:
+
+- models whose credential is missing are skipped, and `index` counts
+  only the usable models, from 0;
+- `name` = `displayName` = the model's display name, or its provider
+  model id when the display name is blank; `key` = the model record id
+  (the value `llm set` persists as `selectedLlmKey`);
+- `isCurrent` is `true` on index 0 only: the model a managed runtime
+  started **without a model pick** uses — the Galley default model, or
+  the next usable one when the default has no credential. It is not a
+  per-session choice: a session's own pick is `selectedLlmDisplayName`
+  in `sessions list` / `session brief`, and a temporary `/llm` switch
+  inside an IM channel is invisible to the CLI (send `/status` in the
+  channel for that).
 
 ```bash
-$ galley llm list
-{"index":0,"name":"glm-5.1","key":"NativeClaudeSession/glm-5.1","displayName":"NativeClaudeSession/glm-5.1"}
-{"index":1,"name":"claude-opus-4-7","key":"NativeClaudeSession/claude-opus-4-7","displayName":"NativeClaudeSession/claude-opus-4-7"}
+$ galley llm list --runtime=managed
+{"index":0,"name":"GPT 6.1 Sol","key":"mm_1758000000000","displayName":"GPT 6.1 Sol","isCurrent":true}
+{"index":1,"name":"glm-5.3-flash","key":"mm_1758000000001","displayName":"glm-5.3-flash","isCurrent":false}
+```
+
+An empty model store returns empty stdout, exit 0.
+
+**`external`** prints the cached `llm_list` pref the GUI writes after an
+attached-GenericAgent bridge warmup, as stored (key order included);
+`isCurrent` there is the pick of the bridge that wrote the cache.
+
+```bash
+$ galley llm list --runtime=external
+{"displayName":"NativeClaudeSession/glm-5.1","index":0,"isCurrent":true,"key":"NativeClaudeSession/glm-5.1","name":"NativeClaudeSession/glm-5.1"}
+{"displayName":"NativeClaudeSession/claude-opus-4-7","index":1,"isCurrent":false,"key":"NativeClaudeSession/claude-opus-4-7","name":"NativeClaudeSession/claude-opus-4-7"}
 ```
 
 **Cache-miss is success**: an empty `llm_list` pref returns empty
 stdout, exit 0 — the cache fills the first time the GUI (or a future
-`llm warmup` command, §8) starts a bridge. If you suspect a stale
-cache, open the GUI once to re-warm.
+`llm warmup` command, §8) starts an external bridge. If you suspect a
+stale cache, open an external session in the GUI once to re-warm.
 
-Exit codes: `0` success (incl. empty cache) / `2 invalid_args` (the
-stored value isn't a JSON array — would indicate a future-GUI schema
-drift the CLI hasn't learned about) / `4 db_unavailable`.
+**Behavior fix inside `schemaVersion: 2` (2026-09-30).** Before the
+`--runtime` flag, `llm list` always printed the external cache, even
+while the GUI ran the managed runtime — agents in managed mode saw the
+last attached-GA model list (and its `isCurrent`) instead of the Galley
+model store `llm set` actually resolves against. Fields and exit codes
+are unchanged; in managed mode the rows now come from the model store.
+Pin `--runtime=external` to keep reading the cache regardless of the
+GUI's mode.
+
+Exit codes: `0` success (incl. empty store / empty cache) /
+`2 invalid_args` (`--runtime all`; or, external scope, the stored value
+isn't a JSON array — would indicate a future-GUI schema drift the CLI
+hasn't learned about) / `4 db_unavailable`.
 
 ### 5.18 · `galley llm set <session-id> <llm-name>`
 
@@ -219,8 +263,10 @@ effort tells any live runner the new pick. Two-step semantics mirror
 opportunistic.
 
 `<llm-name>` is matched case-insensitively against the session runtime's
-model list — managed sessions resolve Galley model records; external GA
-sessions resolve `galley llm list` entries. The persisted row keeps
+model list — managed sessions resolve Galley model records (the
+`galley llm list --runtime=managed` names; the provider model id is
+accepted too); external GA sessions resolve
+`galley llm list --runtime=external` entries. The persisted row keeps
 `selectedLlmKey` so reordering models does not silently point the
 session at a different model.
 

@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-30
+- [`galley llm list` 按运行时取数](./2026-09-30-llm-list-runtime-aware.md) — JC 在 Discord 问模型，bot 答 glm-5.3-flash，调用日志全是默认的 gpt-6.1-sol；链路：提示词按 state-block 规则不写模型名、让查 CLI，`llm list` 却只读外置 GA bridge 写的 `llm_list` 缓存（停在 09-23 切到内置前一分钟）；SOP 的 `llm list` → `llm set` 在内置模式同样坏，且早有「应改成按运行时」的遗忘待办；JC 选 A 修 CLI（加 `--runtime`，managed 读模型库、`isCurrent` = index 0），否掉只改提示词与注入模型名；core 抽共用枚举保证 list 的名字 set 必认、配跨命令回归测试；契约变更进 §7.1 新节；同批复现外置 `llm set` 撞 serde 别名重复字段必挂，另立票
 - [Discord 对话体验对齐桌面端](./2026-09-30-discord-conversation-ux.md) — JC 想优化 Discord 里的对话；读码：对话层是上游 dcapp 原样（五个月未动），ask_user 问题与候选被 🛠️ 清洗正则吞掉、`/btw` `/review` 落空、过程每步一条消息各推一次；JC 定范围 A 降噪 + B 交互（含缺陷）先行、C 报告卡片紧随、D 斜杠命令暂缓，形态以桌面为准；按「新消息推送 / 编辑不推送但挂已编辑」映射：live 窗口 → 一条原地编辑的状态消息，完成即折 → 删状态消息、回答首行 `-# N 步 · 用时 X`，回答只取收尾一步；ask_user 走 turn-end hook + 按 `candidateLayout` 出按钮、回显勾选、续跑计数累加；停止按钮定格；报告改 embed；新补丁 `0023` + reporter `send_report`；集成验收补两条跨票回归测试，「提问待答时报告可插入」裁决保留；JC 真机验收通过；supervisor 一问读全量会话另立题
 
 ### 2026-09-28
