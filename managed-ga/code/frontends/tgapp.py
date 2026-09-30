@@ -24,6 +24,20 @@ from chatapp_common import (
     require_runtime,
     split_text,
 )
+from galley_im_display import (
+    answer_body,
+    candidate_layout,
+    clip,
+    extract_ask_user_event,
+    final_step_text,
+    fold_label,
+    live_elapsed,
+    one_line,
+    step_summary,
+    stopped_text,
+    tables_to_lists,
+    visible_text,
+)
 from continue_cmd import handle_frontend_command, reset_conversation
 from btw_cmd import handle_frontend_command as handle_btw_frontend_command
 from review_cmd import handle as handle_review_command
@@ -137,28 +151,16 @@ async def _handle_owner_bind_message(update):
     await message.reply_text("✓ 已绑定为 Galley 的使用者，现在只响应你的消息。")
     print(f"已绑定 Galley owner: {uid}", flush=True)
 
-_DRAFT_HINT = "thinking..."
-_STREAM_SUFFIX = " ⏳"
-_STREAM_SEGMENT_LIMIT = max(1200, MessageLimit.MAX_TEXT_LENGTH - 256)
-_STREAM_UPDATE_INTERVAL_SECONDS = 2.0
-_STREAM_MIN_UPDATE_CHARS = 400
 _RETRY_AFTER_MARGIN_SECONDS = 1.0
-_QUEUE_WAIT_SECONDS = 1
 _ASK_USER_HOOK_KEY = "telegram_ask_user_menu"
 _ASK_CALLBACK_PREFIX = "ask:"
 _LLM_CALLBACK_PREFIX = "llm:"
-_ASK_CANCEL_ACTION = "none"
 _ASK_MULTI_DONE_ACTION = "done"
 _ASK_TOGGLE_ACTION = "toggle"
-_ASK_CANCEL_LABEL = "none of these above"
-_ASK_CANCEL_PROMPT = "已取消选择，请直接发送下一步操作。"
-_ASK_MULTI_HINT = "可多选：点选项目后点击 Done 提交。"
-_ASK_MULTI_EMPTY_HINT = "请至少选择一项，或选择 none of these above。"
+_ASK_MULTI_EMPTY_HINT = "请至少选择一项，或直接打字回复"
 _LLM_MENU_PROMPT = "请选择要切换的 LLM："
-_ask_menu_events = Q.Queue()
 _ask_menu_store = {}
 _llm_menu_store = {}
-_MULTI_SELECT_RE = re.compile(r"\[?(?:多选|multi(?:[-_ ]?select)?|select all)\]?", re.IGNORECASE)
 _QUOTE_OPEN_TAG = "<_quote_>"
 _QUOTE_CLOSE_TAG = "</_quote_>"
 _QUOTE_TOKEN_PATTERN = re.escape(_QUOTE_OPEN_TAG) + r"([\s\S]*?)" + re.escape(_QUOTE_CLOSE_TAG)
@@ -175,23 +177,47 @@ _MD_TOKEN_RE = re.compile(
     ),
     re.DOTALL,
 )
-_TURN_MARKER_RE = re.compile(r"^\*{0,2}LLM Running \(Turn (\d+)\) \.\.\.\*{0,2}\s*$")
 _CODE_FENCE_RE = re.compile(r"^\s*(`{3,})(.*)$")
-_TURN_SUMMARY_LIMIT = 160
-_TURN_SUMMARY_RE = re.compile(r"<summary>\s*(.*?)\s*</summary>", re.DOTALL)
-_TURN_SUMMARY_SEARCH_STRIP_RE = re.compile(r"`{3,}[\s\S]*?`{3,}|<thinking>[\s\S]*?</thinking>", re.DOTALL)
+_TURN_MARKER_LINE_RE = re.compile(r"^\*{0,2}LLM Running \(Turn \d+\) \.\.\.\*{0,2}[ \t]*$", re.M)
+_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
+_RULE_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
+_BULLET_RE = re.compile(r"^(\s*)[-*+]\s+")
+_BLOCKQUOTE_RE = re.compile(r"^\s{0,3}>\s?(.*)$")
+# Galley conversation UX (managed patch 0024): while a run works, its chat
+# shows one live surface -- a private-chat draft (sendMessageDraft: no push,
+# no trace, gone 30 s after its last update), or, in groups or once a draft
+# call fails, a silent status message edited in place and deleted at the
+# end. Then the run posts exactly one new message: its answer, stop
+# receipt, question or error.
+_LIVE_POLL_SECONDS = 1.0
+_DRAFT_REFRESH_SECONDS = 2.0
+_DRAFT_KEEPALIVE_SECONDS = 20.0
+_STATUS_EDIT_INTERVAL_SECONDS = 1.5
+_STATUS_CLOCK_REFRESH_SECONDS = 5.0
+# Posting the run's message already dismisses its draft (Bot API: a draft
+# disappears "if the bot sends a message"), and an empty draft text shows a
+# "Thinking..." placeholder rather than clearing it: off unless dogfood
+# shows a stale draft lingering after the answer.
+_CLEAR_DRAFT_AFTER_SEND = False
+_SEND_ATTEMPTS = 3
+_FOLD_STYLE = "b"  # TEMP(dogfood): remove after JC picks a fold style
+_FOLD_STEP_LINES = 30
+_FOLD_HEADER_BUDGET = MessageLimit.MAX_TEXT_LENGTH // 2
+_ASK_BUTTON_MAX_CANDIDATES = 50
+_ASK_LIST_BUTTONS_PER_ROW = 8
+_ASK_QUESTION_LIMIT = 3000
+_ASK_EVENT_LIMIT = 8
+_NO_RUNNING_TASK_TEXT = "当前没有在跑的任务"
+_clock = time.monotonic  # run timing and live pacing; injectable for tests
+_RUNS = []  # every registered run in GA's task order (one agent, FIFO)
+_ask_lock = threading.Lock()  # ask_user events arrive on the GA worker thread
+_ask_events = {}  # display queue of the asking task -> ask_user event
+_pending_asks = {}  # chat id -> _PendingAsk waiting for the owner's answer
+_last_message_ids = {}  # chat id -> newest message id seen, user's or bot's
+_background_tasks = set()
 
 def _make_draft_id():
     return random.randint(1, 2**31 - 1)
-
-def _visible_segments(text):
-    text = (text or "").strip()
-    if not text:
-        return []
-    segments = []
-    for part in split_text(text, _STREAM_SEGMENT_LIMIT):
-        segments.extend(_markdown_safe_segments(part))
-    return segments
 
 def _markdown_safe_segments(text, limit=None):
     limit = limit or MessageLimit.MAX_TEXT_LENGTH
@@ -222,49 +248,9 @@ def _markdown_safe_segments(text, limit=None):
         remaining = remaining[len(chunk):].lstrip()
     return parts
 
-def _line_complete(line):
-    return (line or "").endswith(("\n", "\r"))
-
-def _turn_marker_number(line):
-    match = _TURN_MARKER_RE.fullmatch((line or "").strip())
-    return int(match.group(1)) if match else None
-
-def _maybe_partial_turn_marker(line):
-    text = (line or "").strip().lstrip("*")
-    if not text:
-        return False
-    marker_head = "LLM Running (Turn "
-    return marker_head.startswith(text) or text.startswith(marker_head)
-
-def _maybe_partial_code_fence(line):
-    return bool(re.match(r"^\s*`{1,}[^`\r\n]*$", line or ""))
-
-def _extract_turn_summary(raw_text):
-    search_text = _TURN_SUMMARY_SEARCH_STRIP_RE.sub("", raw_text or "")
-    match = _TURN_SUMMARY_RE.search(search_text)
-    if not match:
-        return ""
-    summary = re.sub(r"\s+", " ", match.group(1)).strip()
-    if len(summary) > _TURN_SUMMARY_LIMIT:
-        summary = summary[:_TURN_SUMMARY_LIMIT - 3].rstrip() + "..."
-    return summary
-
 def _quote_tag(text):
     safe_text = (text or "").strip().replace(_QUOTE_OPEN_TAG, "").replace(_QUOTE_CLOSE_TAG, "")
     return f"{_QUOTE_OPEN_TAG}{safe_text}{_QUOTE_CLOSE_TAG}"
-
-def _inject_turn_summary(body, summary):
-    if not (body or "").strip() or not (summary or "").strip():
-        return body
-    lines = (body or "").splitlines()
-    if not lines or _turn_marker_number(lines[0]) is None:
-        return body
-    title = lines[0].strip()
-    rest = "\n".join(lines[1:]).strip()
-    summary_line = _quote_tag(summary)
-    if rest:
-        return f"{title}\n\n{summary_line}\n\n{rest}"
-    return f"{title}\n\n{summary_line}"
 
 def _resolve_files(paths):
     files, seen = [], set()
@@ -292,18 +278,15 @@ async def _send_files(root_msg, files):
         if fpath.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
             try:
                 with open(fpath, "rb") as fp:
-                    await root_msg.reply_photo(fp)
+                    _note_message(await root_msg.reply_photo(fp, disable_notification=True))
             except Exception:
                 pass
         else:
             try:
                 with open(fpath, "rb") as fp:
-                    await root_msg.reply_document(fp)
+                    _note_message(await root_msg.reply_document(fp, disable_notification=True))
             except Exception:
                 pass
-
-async def _send_files_from_text(root_msg, text):
-    await _send_files(root_msg, _files_from_text(text))
 
 def _escape_pre(text):
     return escape_markdown(text or "", version=2, entity_type="pre")
@@ -352,76 +335,21 @@ def _to_markdown_v2(text):
 def _is_not_modified_error(exc):
     return "not modified" in str(exc).lower()
 
-def _extract_ask_user_event(ctx):
-    exit_reason = (ctx or {}).get("exit_reason") or {}
-    if exit_reason.get("result") != "EXITED":
-        return None
-    payload = exit_reason.get("data")
-    if not isinstance(payload, dict):
-        return None
-    if payload.get("status") != "INTERRUPT" or payload.get("intent") != "HUMAN_INTERVENTION":
-        return None
-    data = payload.get("data")
-    if not isinstance(data, dict):
-        return None
-    raw_candidates = data.get("candidates") or []
-    if not isinstance(raw_candidates, (list, tuple)):
-        return None
-    candidates = []
-    for candidate in raw_candidates:
-        if candidate is None:
-            continue
-        text = str(candidate).strip()
-        if text:
-            candidates.append(text)
-    if not candidates:
-        return None
-    question = str(data.get("question") or "请选择下一步操作：").strip() or "请选择下一步操作："
-    return {
-        "question": question,
-        "candidates": candidates,
-        "multi": bool(_MULTI_SELECT_RE.search(question)),
-    }
-
 def _register_ask_user_hook():
     if not hasattr(agent, "_turn_end_hooks"):
         agent._turn_end_hooks = {}
     def _hook(ctx):
-        event = _extract_ask_user_event(ctx)
-        if event:
-            _ask_menu_events.put(event)
+        # GA worker thread, before the task's `done`: the event is tagged with
+        # the asking task's display queue, so only the run owning that task
+        # claims it (a completion-reporter turn that asks is never claimed).
+        event = extract_ask_user_event(ctx)
+        if event is None:
+            return
+        with _ask_lock:
+            _ask_events[getattr(agent, "_current_queue", None)] = event
+            while len(_ask_events) > _ASK_EVENT_LIMIT:
+                _ask_events.pop(next(iter(_ask_events)))
     agent._turn_end_hooks[_ASK_USER_HOOK_KEY] = _hook
-
-def _drain_latest_ask_user_event():
-    latest = None
-    while True:
-        try:
-            latest = _ask_menu_events.get_nowait()
-        except Q.Empty:
-            break
-    return latest
-
-def _build_ask_user_markup(menu_id, candidates, multi=False, selected_indexes=None):
-    selected_indexes = set(selected_indexes or [])
-    rows = []
-    for idx, candidate in enumerate(candidates):
-        if multi:
-            label = f"✓ {candidate}" if idx in selected_indexes else candidate
-            action = f"{_ASK_TOGGLE_ACTION}:{idx}"
-        else:
-            label = candidate
-            action = str(idx)
-        rows.append([
-            InlineKeyboardButton(label, callback_data=f"{_ASK_CALLBACK_PREFIX}{menu_id}:{action}")
-        ])
-    if multi:
-        rows.append([
-            InlineKeyboardButton("Done", callback_data=f"{_ASK_CALLBACK_PREFIX}{menu_id}:{_ASK_MULTI_DONE_ACTION}")
-        ])
-    rows.append([
-        InlineKeyboardButton(_ASK_CANCEL_LABEL, callback_data=f"{_ASK_CALLBACK_PREFIX}{menu_id}:{_ASK_CANCEL_ACTION}")
-    ])
-    return InlineKeyboardMarkup(rows)
 
 def _build_llm_markup(menu_id, llms):
     rows = []
@@ -447,508 +375,712 @@ def _parse_ask_callback_data(data):
 def _build_text_prompt(text):
     return f"{FILE_HINT}\n\n{text}"
 
-def _normalize_ask_menu_event(stored):
-    if isinstance(stored, dict):
-        candidates = stored.get("candidates") or []
-        return {
-            "question": str(stored.get("question") or "请选择下一步操作：").strip() or "请选择下一步操作：",
-            "candidates": [str(candidate).strip() for candidate in candidates if str(candidate).strip()],
-            "multi": bool(stored.get("multi")),
-            "selected": [int(idx) for idx in stored.get("selected", []) if isinstance(idx, int)],
-        }
-    if isinstance(stored, (list, tuple)):
-        return {
-            "question": "请选择下一步操作：",
-            "candidates": [str(candidate).strip() for candidate in stored if str(candidate).strip()],
-            "multi": False,
-            "selected": [],
-        }
-    return None
-
-def _render_ask_user_result(event, selected=None, cancelled=False):
-    question = str(event.get("question") or "请选择下一步操作：").strip() or "请选择下一步操作："
-    candidates = event.get("candidates") or []
-    lines = [question, "", "选项："]
-    for idx, candidate in enumerate(candidates, start=1):
-        lines.append(f"{idx}. {candidate}")
-    lines.append(f"{len(candidates) + 1}. {_ASK_CANCEL_LABEL}")
-    lines.append("")
-    if cancelled:
-        lines.append(f"已取消：{_ASK_CANCEL_LABEL}")
-    elif selected:
-        lines.append(f"已选择：{selected}")
-    text = "\n".join(lines)
-    if len(text) > MessageLimit.MAX_TEXT_LENGTH:
-        text = text[:MessageLimit.MAX_TEXT_LENGTH - 18].rstrip() + "\n...[truncated]"
-    return text
-
 async def _clear_ask_reply_markup(query):
     try:
         await query.edit_message_reply_markup(reply_markup=None)
     except Exception as exc:
         print(f"[TG ask_user menu cleanup] {type(exc).__name__}: {exc}", flush=True)
 
-async def _edit_ask_user_result(query, event, selected=None, cancelled=False):
+def _retry_after_seconds(exc):
+    retry_after = getattr(exc, "_retry_after", None)
+    if retry_after is None:
+        retry_after = getattr(exc, "retry_after", 0) or 0
+    if hasattr(retry_after, "total_seconds"):
+        retry_after = retry_after.total_seconds()
     try:
-        await query.edit_message_text(
-            _render_ask_user_result(event, selected=selected, cancelled=cancelled),
-            reply_markup=None,
-        )
-    except Exception as exc:
-        print(f"[TG ask_user menu edit] {type(exc).__name__}: {exc}", flush=True)
-        await _clear_ask_reply_markup(query)
+        return max(0.0, float(retry_after))
+    except (TypeError, ValueError):
+        return 0.0
 
-async def _send_ask_user_menu(root_msg, event):
-    menu_id = uuid.uuid4().hex[:16]
-    candidates = event["candidates"]
-    multi = bool(event.get("multi"))
-    _ask_menu_store[menu_id] = {
-        "question": event["question"],
-        "candidates": list(candidates),
-        "multi": multi,
-        "selected": [],
-    }
-    prompt = f"{event['question']}\n\n{_ASK_MULTI_HINT}" if multi else event["question"]
-    try:
-        await root_msg.reply_text(
-            prompt,
-            reply_markup=_build_ask_user_markup(menu_id, candidates, multi=multi),
-        )
-    except Exception as exc:
-        _ask_menu_store.pop(menu_id, None)
-        print(f"[TG ask_user menu error] {type(exc).__name__}: {exc}", flush=True)
-        fallback = event["question"] + "\n" + "\n".join(f"- {candidate}" for candidate in candidates)
-        await root_msg.reply_text(fallback)
+def _message_chat_id(message):
+    chat_id = getattr(message, "chat_id", None)
+    return chat_id if chat_id is not None else getattr(getattr(message, "chat", None), "id", None)
 
-class _TelegramStreamSession:
-    def __init__(self, root_msg):
-        self.root_msg = root_msg
-        self.private_chat = getattr(getattr(root_msg, "chat", None), "type", "") == ChatType.PRIVATE
-        self.can_use_draft = self.private_chat   # update tg client!
+def _is_private(message):
+    return getattr(getattr(message, "chat", None), "type", "") == ChatType.PRIVATE
+
+def _note_message(message):
+    """Remember each chat's newest message id, the user's or the bot's: the
+    Bot API cannot tell what landed last in a chat, and the answer's quote
+    rule needs to know."""
+    chat_id, message_id = _message_chat_id(message), getattr(message, "message_id", None)
+    if chat_id is not None and isinstance(message_id, int) and message_id > _last_message_ids.get(chat_id, 0):
+        _last_message_ids[chat_id] = message_id
+
+def _spawn(coro):
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
+def _rewrite_markdown(text):
+    """Source rewrite ahead of _to_markdown_v2 for what MarkdownV2 cannot
+    show: tables become lists, headings bold lines, `>` runs quote blocks,
+    rules disappear, -/*/+ bullets become •. Code fences are left alone."""
+    out, quote, fence = [], [], 0
+
+    def flush_quote():
+        if quote:
+            out.append(_quote_tag("\n".join(quote)))
+            quote.clear()
+
+    for line in tables_to_lists(text or "").split("\n"):
+        fence_match = _CODE_FENCE_RE.match(line)
+        if fence:
+            if fence_match and len(fence_match.group(1)) >= fence and not fence_match.group(2).strip():
+                fence = 0
+            out.append(line)
+            continue
+        quote_match = _BLOCKQUOTE_RE.match(line)
+        if quote_match:
+            quote.append(quote_match.group(1))
+            continue
+        flush_quote()
+        if fence_match and "```" not in fence_match.group(2):
+            fence = len(fence_match.group(1))
+            out.append(line)
+            continue
+        heading = _HEADING_RE.match(line)
+        if heading:
+            title = heading.group(1).replace("**", "").strip()
+            out.append(f"**{title}**" if title else "")
+        elif _RULE_RE.match(line):
+            out.append("")
+        else:
+            out.append(_BULLET_RE.sub(r"\1• ", line, count=1))
+    flush_quote()
+    return "\n".join(out)
+
+def _plain_text(text):
+    """What is sent when Telegram rejects the MarkdownV2: the source, with
+    quote tokens shown as `>` lines."""
+    def quoted(match):
+        return "\n".join(f"> {line}" if line else ">" for line in match.group(1).splitlines() or [""])
+    return re.sub(_QUOTE_TOKEN_PATTERN, quoted, text or "")
+
+def _md_segments(source, first_limit=None):
+    """(markdown_v2, plain) message parts of already rewritten Markdown; the
+    first part also fits first_limit, leaving room for a header on top."""
+    source = (source or "").strip()
+    if not source:
+        return []
+    parts = _markdown_safe_segments(source, first_limit)
+    if first_limit and len(parts) > 1:
+        parts = parts[:1] + _markdown_safe_segments(source[len(parts[0]):])
+    return [(_to_markdown_v2(part), _plain_text(part)) for part in parts]
+
+def markdown_v2_segments(text):
+    """Split Markdown `text` for sending as Telegram messages: a list of
+    (markdown_v2, plain) pairs, each within MessageLimit.MAX_TEXT_LENGTH once
+    converted. Applies the same Markdown rewrite as answers (tables to lists,
+    headings to bold lines, …) before conversion. `plain` is the fallback the
+    caller sends without parse_mode when Telegram rejects the MarkdownV2."""
+    return _md_segments(_rewrite_markdown(text))
+
+def _file_names(text):
+    """[FILE:path] markers shown as file names, and nothing else touched:
+    the transcript cleaning drops markers, so names go in before it (and
+    its tool-echo strip needs the step's trailing newline intact)."""
+    return re.sub(r"\[FILE:([^\]]+)\]", lambda match: os.path.basename(match.group(1)), text or "")
+
+def _answer_from(step_text, raw):
+    """A finished task's answer: its closing step cleaned (dcapp's
+    cleaning), else the whole transcript, with file names shown."""
+    return answer_body(_file_names(step_text), _file_names(raw))
+
+def answer_text(raw):
+    """User-visible answer of a finished task's full `done` text: the closing
+    step only (split on the `LLM Running (Turn N) ...` marker lines; tool
+    echoes, tool output and tags stripped, same cleaning as a live answer),
+    [FILE:] markers rendered as file names. Returns "" when nothing visible
+    remains."""
+    raw = raw or ""
+    markers = list(_TURN_MARKER_LINE_RE.finditer(raw))
+    return _answer_from(raw[markers[-1].start():] if markers else raw, raw)
+
+def _fold_header(run, steps, seconds):
+    """(markdown_v2, plain) header over the run's answer: the desktop fold
+    header `N 步 · 用时 X`, in the style under dogfood (a: italic line; b:
+    expandable quote with one line per step; c: none). None for 0 steps."""
+    label = fold_label(steps, seconds)
+    if steps < 1 or _FOLD_STYLE == "c":  # TEMP(dogfood): remove after JC picks a fold style
+        return "", ""
+    if _FOLD_STYLE == "a":  # TEMP(dogfood): remove after JC picks a fold style
+        return f"_{escape_markdown(label, version=2)}_", label
+    for width in (0, 60, 24):  # long step lines give way before the answer does
+        lines = [f"{n:02d} {run.summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
+        if width:
+            lines = [clip(line, width) for line in lines]
+        if len(lines) > _FOLD_STEP_LINES:
+            lines = [f"… 前 {len(lines) - _FOLD_STEP_LINES} 步略"] + lines[-_FOLD_STEP_LINES:]
+        quoted = [f"**>{escape_markdown(label, version=2)}"]
+        quoted += [f">{escape_markdown(line, version=2)}" for line in lines]
+        markdown = "\n".join(quoted) + "||"
+        if len(markdown) <= _FOLD_HEADER_BUDGET:
+            break
+    return markdown, "\n".join([label, *lines])
+
+class _LiveSurface:
+    """A run's live window in its chat: a draft in private chats; in groups,
+    or once a draft call fails, a silent status message edited in place."""
+
+    def __init__(self, message):
+        self.message = message  # the run's trigger: live output goes to its chat
+        self.mode = "draft" if _is_private(message) else "status"
         self.draft_id = _make_draft_id()
-        self.live_msg = None
-        self.raw_text = ""
-        self.files = []
-        self.sent_segments = 0
-        self.active_display = ""
-        self.pending_display = ""
-        self._edit_overflow_msgs = {}
+        self.status_msg = None
+        self.text = self.shape = self.sent_at = None
         self.retry_until = 0.0
-        self.last_update_at = 0.0
-        self.last_update_raw_len = 0
 
-    def _now(self):
-        return time.monotonic()
+class _TgRun:
+    """One run: a GA task, plus the ask_user segments it continues. _RUNS
+    lists every run in GA's task order; its head is the task GA is on (or
+    gets next). States: queued / running / asking / done / stopped / error."""
 
-    def _retry_after_seconds(self, exc):
-        retry_after = getattr(exc, "_retry_after", None)
-        if retry_after is None:
-            retry_after = getattr(exc, "retry_after", 0) or 0
-        if hasattr(retry_after, "total_seconds"):
-            retry_after = retry_after.total_seconds()
-        try:
-            return max(0.0, float(retry_after))
-        except (TypeError, ValueError):
-            return 0.0
+    def __init__(self, trigger, carry=None, answers_ask=False):
+        self.trigger = trigger
+        self.chat_id = _message_chat_id(trigger)
+        self.loop = asyncio.get_running_loop()
+        self.state = "queued"
+        self.dq = self.error = None
+        self.answers_ask, self.adopted = answers_ask, carry is not None
+        self.base_steps, self.base_elapsed, self.summaries = 0, 0.0, {}
+        self.adopt(carry)
+        self.task_turn = 0  # highest GA turn seen in this run's task
+        self.turn_texts = {}
+        self.queued_at = _clock()
+        self.started_at = self.step_started_at = self.ended_at = None
+        self.live = _LiveSurface(trigger)
+        self.lock = asyncio.Lock()  # live-surface writes vs. terminal messages
+        self.wake = asyncio.Event()
 
-    def _set_retry_after(self, exc):
-        wait_seconds = self._retry_after_seconds(exc) + _RETRY_AFTER_MARGIN_SECONDS
-        self.retry_until = max(self.retry_until, self._now() + wait_seconds)
+    def adopt(self, carry):
+        """Continue an ask_user-paused run: step numbers, summaries and
+        elapsed time add up across segments; the wait for the answer does
+        not count."""
+        if carry:
+            self.base_steps = int(carry.get("steps") or 0)
+            self.base_elapsed = float(carry.get("elapsed") or 0.0)
+            self.summaries = dict(carry.get("summaries") or {})
 
-    def _is_retrying(self):
-        return self._now() < self.retry_until
+    def settled_steps(self):
+        return self.base_steps + max(0, self.task_turn - 1)
 
-    async def _wait_for_retry(self):
-        remaining = self.retry_until - self._now()
-        if remaining > 0:
-            await asyncio.sleep(remaining)
+    def total_steps(self):
+        return self.base_steps + self.task_turn
 
-    def _should_stream_update(self, display):
-        if display == self.active_display:
-            return False
-        if self.last_update_at <= 0:
-            return True
-        elapsed = self._now() - self.last_update_at
-        raw_delta = len(self.raw_text) - self.last_update_raw_len
-        return elapsed >= _STREAM_UPDATE_INTERVAL_SECONDS or raw_delta >= _STREAM_MIN_UPDATE_CHARS
+    def elapsed(self, now):
+        if self.started_at is None:
+            return self.base_elapsed
+        return self.base_elapsed + max(0.0, now - self.started_at)
 
-    def _mark_stream_update(self, display):
-        self.active_display = display
-        self.pending_display = ""
-        self.last_update_at = self._now()
-        self.last_update_raw_len = len(self.raw_text)
+    def carry(self, now):
+        return {"steps": self.total_steps(), "elapsed": self.elapsed(now), "summaries": dict(self.summaries)}
 
-    def _stream_display(self, text):
-        base = (text or _DRAFT_HINT).strip() or _DRAFT_HINT
-        safe_parts = _markdown_safe_segments(base)
-        base = safe_parts[-1] if safe_parts else _DRAFT_HINT
-        if base == _DRAFT_HINT:
-            return base
-        display = base + _STREAM_SUFFIX
-        if len(_to_markdown_v2(display)) <= MessageLimit.MAX_TEXT_LENGTH:
-            return display
-        return base
+    def start(self, now):
+        self.state = "running"
+        self.started_at = self.step_started_at = now
 
-    async def prime(self):
-        if self.can_use_draft:
-            draft_result = await self._send_draft(_DRAFT_HINT)
-            if draft_result is True:
-                self.active_display = _DRAFT_HINT
-                return
-            if draft_result is None:
-                self.active_display = _DRAFT_HINT
-                return
-        try:
-            await self._upsert_live_message(_DRAFT_HINT, wait_retry=False)
-        except RetryAfter:
-            self.active_display = _DRAFT_HINT
-            return
-        self.active_display = _DRAFT_HINT
+    def observe(self, item, now):
+        """Fold one display-queue item in. `next` text is incremental
+        (inc_out) but `outputs` carries whole step texts: [previous, current]
+        on `next`, every step on `done`. Step k settles when an item for a
+        later turn arrives (the desktop's turn_end: its tools have run), and
+        `done` settles the last one. Returns `done`'s per-step texts."""
+        outputs = item.get("outputs")
+        outputs = [str(text or "") for text in outputs] if isinstance(outputs, list) else []
+        turn = item.get("turn") if isinstance(item.get("turn"), int) else 0
+        if "done" in item:
+            self.turn_texts.update(enumerate(outputs, 1))
+            turn = max(turn, len(outputs), self.task_turn)
+        elif turn > 0 and outputs:
+            self.turn_texts[turn] = outputs[-1]
+            if len(outputs) > 1 and turn > 1:
+                self.turn_texts[turn - 1] = outputs[-2]
+        if turn > self.task_turn:
+            for k in range(max(1, self.task_turn), turn):
+                self.summaries[self.base_steps + k] = step_summary(self.turn_texts.get(k, ""))
+            self.task_turn, self.step_started_at = turn, now
+        if "done" in item:
+            for k in range(1, self.task_turn + 1):
+                self.summaries[self.base_steps + k] = step_summary(self.turn_texts.get(k, ""))
+        return outputs
 
-    async def add_chunk(self, chunk):
-        if not chunk:
-            return
-        self.raw_text += chunk
-        await self._refresh(done=False, send_files=False)
+def _chat_runs(chat_id):
+    return [run for run in _RUNS if run.chat_id == chat_id]
 
-    async def finalize(self, full_text=None, send_files=True):
-        if full_text is not None:
-            self.raw_text = full_text
-        await self._refresh(done=True, send_files=send_files)
+def _is_waiting(run):
+    """Registered, but GA is not on its task yet: a run ahead of it, or a
+    task Galley's completion reporter put straight into the agent."""
+    if run.started_at is not None:
+        return False
+    if not _RUNS or _RUNS[0] is not run:
+        return True
+    return bool(getattr(agent, "is_running", False)) and getattr(agent, "_current_queue", None) is not run.dq
 
-    async def finish_with_notice(self, notice):
-        if self.raw_text.strip():
-            await self.finalize(send_files=False)
-            await self._reply_text(notice)
-            return
-        if self.live_msg is not None:
-            await self._edit_text(self.live_msg, notice)
-            self.live_msg = None
-            self.active_display = ""
-            return
-        await self._reply_text(notice)
-        self.active_display = ""
+def _live_text(run, now, clock=True):
+    lines = []
+    settled = run.settled_steps()
+    if settled >= 2:
+        lines.append(f"已完成 {settled} 步")
+    if settled >= 1:
+        lines.append(f"{settled:02d} {run.summaries.get(settled, '')}".rstrip())
+    if _is_waiting(run):
+        waited = live_elapsed(now - run.queued_at, still_running=False) if clock else ""
+        lines.append("·· 排队中" + (f" · {waited}" if waited else ""))
+    else:
+        since = run.step_started_at if run.step_started_at is not None else run.queued_at
+        running = live_elapsed(now - since) if clock else ""
+        lines.append("·· 思考中" + (f" · {running}" if running else ""))
+    runs = _chat_runs(run.chat_id)
+    behind = len(runs) - runs.index(run) - 1 if run in runs else 0
+    if behind > 0:
+        lines.append(f"另有 {behind} 条消息排队中")
+    return "\n".join(lines)
 
-    async def _refresh(self, done, send_files):
-        summary = _extract_turn_summary(self.raw_text)
-        cleaned = clean_reply(self.raw_text) if self.raw_text.strip() else ""
-        self.files = _files_from_text(cleaned)
-        body = _inject_turn_summary(_render_file_markers(cleaned), summary)
-        if done and not body and self.files:
-            body = "已生成附件"
-        elif done and not body:
-            body = "..."
-        segments = _visible_segments(body)
-        finalized_target = len(segments) if done else max(len(segments) - 1, 0)
-        while self.sent_segments < finalized_target:
-            await self._finalize_segment(segments[self.sent_segments])
-            self.sent_segments += 1
-        if done:
-            if send_files:
-                await self._send_files()
-            return
-        active_text = segments[-1] if segments else _DRAFT_HINT
-        await self._stream_active(active_text)
+def _live_due(live, text, shape, now):
+    if live.sent_at is None:
+        return True
+    since = now - live.sent_at
+    if live.mode == "draft":
+        # Only a changed text is sent, but at least every 20 s: a draft
+        # expires 30 s after its last update.
+        return since >= _DRAFT_KEEPALIVE_SECONDS or (text != live.text and since >= _DRAFT_REFRESH_SECONDS)
+    if text == live.text:
+        return False
+    if shape != live.shape:
+        return since >= _STATUS_EDIT_INTERVAL_SECONDS
+    return since >= _STATUS_CLOCK_REFRESH_SECONDS  # only the readout moved
 
-    async def _stream_active(self, text):
-        display = self._stream_display(text)
-        if display == self.active_display:
-            return
-        self.pending_display = display
-        if self._is_retrying() or not self._should_stream_update(display):
-            return
-        try:
-            if self.can_use_draft:
-                draft_result = await self._send_draft(display)
-                if draft_result is True:
-                    self._mark_stream_update(display)
-                    return
-                if draft_result is None:
-                    return
-            await self._upsert_live_message(display, wait_retry=False)
-            self._mark_stream_update(display)
-        except RetryAfter:
-            return
-
-    async def _finalize_segment(self, text):
-        final_text = (text or "").strip() or "..."
-        if self.live_msg is not None:
-            await self._edit_text(self.live_msg, final_text)
-            self.live_msg = None
-        else:
-            await self._reply_text(final_text)
-        self.active_display = ""
-        if self.can_use_draft:
-            self.draft_id = _make_draft_id()
-
-    async def _send_files(self):
-        await _send_files(self.root_msg, self.files)
-
-    async def _send_draft(self, text):
-        try:
-            await self.root_msg.reply_text_draft(
-                self.draft_id,
-                _to_markdown_v2(text),
-                parse_mode=ParseMode.MARKDOWN_V2,
-            )
-            return True
-        except RetryAfter as exc:
-            self._set_retry_after(exc)
-            return None
-        except Exception as exc:
-            if _is_not_modified_error(exc):
-                return True
-            print(f"[TG draft fallback] {type(exc).__name__}: {exc}", flush=True)
-            self.can_use_draft = False
-            self.draft_id = _make_draft_id()
-            return False
-
-    async def _retry_call(self, func, *args):
-        while True:
-            await self._wait_for_retry()
-            try:
-                return await func(*args)
-            except RetryAfter as exc:
-                self._set_retry_after(exc)
-
-    async def _reply_text_once(self, text):
-        markdown = _to_markdown_v2(text)
-        try:
-            return await self.root_msg.reply_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
-        except RetryAfter as exc:
-            self._set_retry_after(exc)
-            raise
-        except Exception as exc:
-            if _is_not_modified_error(exc):
-                return None
-            try:
-                return await self.root_msg.reply_text(text)
-            except RetryAfter as retry_exc:
-                self._set_retry_after(retry_exc)
-                raise
-
-    async def _reply_text(self, text, wait_retry=True):
-        last_msg = None
-        for segment in _markdown_safe_segments(text) or ["..."]:
-            if wait_retry:
-                last_msg = await self._retry_call(self._reply_text_once, segment)
-            else:
-                last_msg = await self._reply_text_once(segment)
-        return last_msg
-
-    async def _edit_text_once(self, msg, text):
-        markdown = _to_markdown_v2(text)
-        try:
-            updated = await msg.edit_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
-        except RetryAfter as exc:
-            self._set_retry_after(exc)
-            raise
-        except Exception as exc:
-            if _is_not_modified_error(exc):
-                return msg
-            try:
-                updated = await msg.edit_text(text)
-            except RetryAfter as retry_exc:
-                self._set_retry_after(retry_exc)
-                raise
-        return updated if hasattr(updated, "edit_text") else msg
-
-    def _message_key(self, msg):
-        chat_id = getattr(getattr(msg, "chat", None), "id", None)
-        message_id = getattr(msg, "message_id", None)
-        if chat_id is not None and message_id is not None:
-            return (chat_id, message_id)
-        if message_id is not None:
-            return ("message", message_id)
-        return ("object", id(msg))
-
-    async def _delete_text_once(self, msg):
-        delete = getattr(msg, "delete", None)
-        if delete is None:
-            return
-        try:
-            result = delete()
-            if hasattr(result, "__await__"):
-                await result
-        except RetryAfter as exc:
-            self._set_retry_after(exc)
-            raise
-        except Exception as exc:
-            print(f"[TG stale overflow delete error] {type(exc).__name__}: {exc}", flush=True)
-
-    async def _delete_text(self, msg, wait_retry=True):
-        if wait_retry:
-            await self._retry_call(self._delete_text_once, msg)
-        else:
-            await self._delete_text_once(msg)
-
-    async def _edit_text(self, msg, text, wait_retry=True):
-        segments = _markdown_safe_segments(text) or ["..."]
-        old_key = self._message_key(msg)
-        overflow_msgs = self._edit_overflow_msgs.get(old_key, [])
-        if wait_retry:
-            updated = await self._retry_call(self._edit_text_once, msg, segments[0])
-        else:
-            updated = await self._edit_text_once(msg, segments[0])
-        primary_msg = updated if hasattr(updated, "edit_text") else msg
-        self._edit_overflow_msgs.pop(old_key, None)
-
-        new_overflow_msgs = []
-        for index, segment in enumerate(segments[1:]):
-            if index < len(overflow_msgs):
-                overflow_msg = overflow_msgs[index]
-                if wait_retry:
-                    edited_overflow = await self._retry_call(self._edit_text_once, overflow_msg, segment)
-                else:
-                    edited_overflow = await self._edit_text_once(overflow_msg, segment)
-                new_overflow_msgs.append(
-                    edited_overflow if hasattr(edited_overflow, "edit_text") else overflow_msg
-                )
-            else:
-                new_overflow_msgs.append(await self._reply_text(segment, wait_retry=wait_retry))
-
-        for stale_msg in overflow_msgs[len(new_overflow_msgs):]:
-            await self._delete_text(stale_msg, wait_retry=wait_retry)
-
-        if new_overflow_msgs:
-            self._edit_overflow_msgs[self._message_key(primary_msg)] = new_overflow_msgs
-        return primary_msg
-
-    async def _upsert_live_message(self, text, wait_retry=True):
-        if self.live_msg is None:
-            self.live_msg = await self._reply_text(text, wait_retry=wait_retry)
-        else:
-            self.live_msg = await self._edit_text(self.live_msg, text, wait_retry=wait_retry)
-
-
-class _TelegramTurnStreamCoordinator:
-    def __init__(self, root_msg):
-        self.root_msg = root_msg
-        self.session = None
-        self.pending_line = ""
-        self.code_fence_len = 0
-        self.last_turn = 0
-
-    async def prime(self):
-        await self._ensure_session()
-
-    async def add_chunk(self, chunk):
-        if not chunk:
-            return
-        text = self.pending_line + chunk
-        self.pending_line = ""
-        for line in text.splitlines(keepends=True):
-            if _line_complete(line):
-                await self._process_line(line)
-            elif _maybe_partial_turn_marker(line) or _maybe_partial_code_fence(line):
-                self.pending_line = line
-            else:
-                await self._process_line(line)
-
-    async def finalize(self, done_text="", send_files=True):
-        await self._flush_pending_line()
-        if self.session is None:
-            if done_text:
-                await self._add_to_current(done_text)
-        elif not self.session.raw_text.strip() and done_text:
-            await self.session.finalize(done_text, send_files=False)
-            if send_files:
-                await _send_files_from_text(self.root_msg, done_text)
-            return
-        if self.session is not None:
-            await self.session.finalize(send_files=False)
-        if send_files:
-            await _send_files_from_text(self.root_msg, done_text)
-
-    async def finish_with_notice(self, notice):
-        await self._flush_pending_line()
-        await self._ensure_session()
-        await self.session.finish_with_notice(notice)
-
-    async def _ensure_session(self):
-        if self.session is None:
-            self.session = _TelegramStreamSession(self.root_msg)
-            await self.session.prime()
-
-    async def _start_turn(self, marker):
-        if self.session is not None and self.session.raw_text.strip():
-            await self.session.finalize(send_files=False)
-            self.session = None
-        await self._ensure_session()
-        await self.session.add_chunk(marker)
-
-    async def _add_to_current(self, text):
-        if not text:
-            return
-        await self._ensure_session()
-        await self.session.add_chunk(text)
-
-    async def _process_line(self, line):
-        turn_no = _turn_marker_number(line)
-        if self.code_fence_len == 0 and turn_no == self.last_turn + 1:
-            self.last_turn = turn_no
-            await self._start_turn(line)
-            return
-        await self._add_to_current(line)
-        self._update_code_fence(line)
-
-    async def _flush_pending_line(self):
-        if not self.pending_line:
-            return
-        line = self.pending_line
-        self.pending_line = ""
-        await self._add_to_current(line)
-
-    def _update_code_fence(self, line):
-        match = _CODE_FENCE_RE.match(line or "")
-        if not match:
-            return
-        fence_len = len(match.group(1))
-        if self.code_fence_len:
-            if fence_len >= self.code_fence_len:
-                self.code_fence_len = 0
-            return
-        self.code_fence_len = fence_len
-
-async def _stream(dq, msg):
-    stream = _TelegramTurnStreamCoordinator(msg)
-    await stream.prime()
+async def _send_draft(live, text):
+    """True once the draft landed; False when drafts do not work in this
+    chat (the caller falls back to a status message). RetryAfter propagates."""
     try:
-        while True:
-            try: first = await asyncio.to_thread(dq.get, True, _QUEUE_WAIT_SECONDS)
-            except Q.Empty: continue
-            items = [first]
-            try:
-                while True: items.append(dq.get_nowait())
-            except Q.Empty: pass
-            done_item = None
-            for item in items:
-                chunk = item.get("next", "")
-                if chunk:
-                    await stream.add_chunk(chunk)
-                if "done" in item:
-                    done_item = item
-                    break
-            if done_item is not None:
-                await stream.finalize(done_item.get("done", ""))
-                event = _drain_latest_ask_user_event()
-                if event:
-                    await _send_ask_user_menu(msg, event)
-                break
-    except asyncio.CancelledError:
-        await stream.finish_with_notice("⏹️ 已停止")
-    except RetryAfter as exc:
-        print(f"[TG stream retry_after] {type(exc).__name__}: {exc}", flush=True)
-        if stream.session is not None:
-            stream.session._set_retry_after(exc)
+        await live.message.reply_text_draft(live.draft_id, text)
+        return True
+    except RetryAfter:
+        raise
     except Exception as exc:
-        print(f"[TG stream error] {type(exc).__name__}: {exc}", flush=True)
-        if stream.session is not None and stream.session._is_retrying():
+        if _is_not_modified_error(exc):
+            return True
+        print(f"[TG draft fallback] {type(exc).__name__}: {exc}", flush=True)
+        return False
+
+async def _flush_live(run):
+    """Bring the run's live surface up to date, when an update is due."""
+    async with run.lock:
+        live = run.live
+        if run.state not in ("queued", "running") or live.mode is None:
+            return
+        now = _clock()
+        if now < live.retry_until:
+            return
+        text, shape = _live_text(run, now), _live_text(run, now, clock=False)
+        if not _live_due(live, text, shape, now):
             return
         try:
-            await stream.finish_with_notice(f"❌ 输出失败: {exc}")
-        except RetryAfter as retry_exc:
-            print(f"[TG stream error notice retry_after] {type(retry_exc).__name__}: {retry_exc}", flush=True)
+            if live.mode == "draft" and not await _send_draft(live, text):
+                live.mode = "status"
+            if live.mode == "status":
+                if live.status_msg is None:
+                    live.status_msg = await live.message.reply_text(text, disable_notification=True)
+                    _note_message(live.status_msg)
+                else:
+                    await live.status_msg.edit_text(text)
+        except RetryAfter as exc:
+            live.retry_until = now + _retry_after_seconds(exc) + _RETRY_AFTER_MARGIN_SECONDS
+            return
+        except Exception as exc:
+            if not _is_not_modified_error(exc):
+                print(f"[TG live surface error] {type(exc).__name__}: {exc}", flush=True)
+                if live.status_msg is None:
+                    live.mode = None  # no live surface for this run; its message still lands
+                    return
+        live.text, live.shape, live.sent_at = text, shape, now
+
+async def _retire_live(run, fallback):
+    """The run's message is out: end the live surface. A status message is
+    deleted, or, when Telegram refuses, stops claiming the run is working."""
+    live = run.live
+    mode, live.mode = live.mode, None
+    msg, live.status_msg = live.status_msg, None
+    if msg is not None:
+        try:
+            await msg.delete()
+        except Exception as exc:
+            print(f"[TG status delete error] {type(exc).__name__}: {exc}", flush=True)
+            try:
+                await msg.edit_text(fallback)
+            except Exception as edit_exc:
+                print(f"[TG status fallback error] {type(edit_exc).__name__}: {edit_exc}", flush=True)
+    elif mode == "draft" and live.sent_at is not None and _CLEAR_DRAFT_AFTER_SEND:
+        try:
+            await live.message.reply_text_draft(live.draft_id, "")
+        except Exception as exc:
+            print(f"[TG draft clear error] {type(exc).__name__}: {exc}", flush=True)
+
+def _should_quote(run):
+    """Quote the trigger only when something landed in the chat after it
+    (or after the run's status message); right below it, a reply needs no
+    quote."""
+    anchor = run.live.status_msg or run.trigger
+    anchor_id, last = getattr(anchor, "message_id", None), _last_message_ids.get(run.chat_id)
+    return isinstance(anchor_id, int) and isinstance(last, int) and last > anchor_id
+
+async def _reply(target, text, **kwargs):
+    """reply_text that waits out RetryAfter (a run's message must land) and
+    notes the sent message for the quote rule."""
+    for attempt in range(_SEND_ATTEMPTS):
+        try:
+            message = await target.reply_text(text, **kwargs)
+        except RetryAfter as exc:
+            if attempt + 1 >= _SEND_ATTEMPTS:
+                raise
+            await asyncio.sleep(_retry_after_seconds(exc) + _RETRY_AFTER_MARGIN_SECONDS)
+            continue
+        _note_message(message)
+        return message
+
+async def _reply_markdown(target, markdown, plain, **kwargs):
+    """Send as MarkdownV2; when Telegram rejects it, send the plain text."""
+    try:
+        return await _reply(target, markdown, parse_mode=ParseMode.MARKDOWN_V2, **kwargs)
+    except RetryAfter:
+        raise
+    except Exception as exc:
+        print(f"[TG markdown fallback] {type(exc).__name__}: {exc}", flush=True)
+        return await _reply(target, plain, **kwargs)
+
+async def _send_answer(run, raw, step_text, steps, seconds):
+    """The run's one pushed message: the fold header over the closing step's
+    text. Further parts and the files arrive silently."""
+    files = _files_from_text(raw)
+    body = _answer_from(step_text, raw) or ("已生成附件" if files else "")
+    header, header_plain = _fold_header(run, steps, seconds)
+    sep = "\n\n" if _FOLD_STYLE == "b" else "\n"  # TEMP(dogfood): remove after JC picks a fold style
+    first_limit = MessageLimit.MAX_TEXT_LENGTH - len(header) - len(sep) if header else None
+    parts = _md_segments(_rewrite_markdown(body), first_limit)
+    if header:
+        markdown, plain = parts[0] if parts else ("", "")
+        parts[:1] = [(
+            f"{header}{sep}{markdown}" if markdown else header,
+            f"{header_plain}{sep}{plain}" if plain else header_plain,
+        )]
+    quote = _should_quote(run)
+    for i, (markdown, plain) in enumerate(parts or [(escape_markdown("...", version=2), "...")]):
+        await _reply_markdown(run.trigger, markdown, plain, do_quote=quote and i == 0, disable_notification=i > 0)
+    await _send_files(run.trigger, files)
+
+class _PendingAsk:
+    """A posted ask_user question waiting for the owner: a button click, or
+    the next plain text message in the chat, answers it."""
+
+    def __init__(self, chat_id, event, carry, narration):
+        self.menu_id = uuid.uuid4().hex[:16]
+        self.chat_id, self.event, self.carry, self.narration = chat_id, event, carry, narration
+        self.layout = _ask_layout(event)
+        self.steps = carry["steps"]
+        self.selected = set()
+        self.message = None
+
+def _ask_layout(event):
+    """none: no candidates, answered by typing; row: one full-text button per
+    row; list: numbered in the text, number buttons; text: numbered, no
+    buttons (more than 50 candidates). Multi-select keeps row / list, with
+    toggles and a 提交 button."""
+    candidates = event["candidates"]
+    if not candidates:
+        return "none"
+    if len(candidates) > _ASK_BUTTON_MAX_CANDIDATES:
+        return "text"
+    return candidate_layout(candidates)
+
+def _ask_markup(pending):
+    if pending.layout not in ("row", "list"):
+        return None
+    multi = bool(pending.event.get("multi"))
+    buttons = []
+    for i, candidate in enumerate(pending.event["candidates"]):
+        label = one_line(candidate) if pending.layout == "row" else str(i + 1)
+        if multi and i in pending.selected:
+            label = f"✓ {label}"
+        action = f"{_ASK_TOGGLE_ACTION}:{i}" if multi else str(i)
+        buttons.append(InlineKeyboardButton(label, callback_data=f"{_ASK_CALLBACK_PREFIX}{pending.menu_id}:{action}"))
+    width = 1 if pending.layout == "row" else _ASK_LIST_BUTTONS_PER_ROW
+    rows = [buttons[i:i + width] for i in range(0, len(buttons), width)]
+    if multi:
+        rows.append([InlineKeyboardButton(
+            "提交", callback_data=f"{_ASK_CALLBACK_PREFIX}{pending.menu_id}:{_ASK_MULTI_DONE_ACTION}",
+        )])
+    return InlineKeyboardMarkup(rows)
+
+def _ask_text(pending, echo=False, chosen=()):
+    """(markdown_v2, plain) of the question message, or of its echo once
+    answered: chosen candidates ticked, the rest italic; a typed answer
+    ticks nothing."""
+    markdown, plain = [], []
+
+    def add(text, italic=False):
+        escaped = escape_markdown(text, version=2)
+        markdown.append(f"_{escaped}_" if italic else escaped)
+        plain.append(text)
+
+    add(f"{'已回复' if echo else '⏸ 等你回复'} · 已完成 {pending.steps} 步", italic=True)
+    if pending.narration:
+        source = _rewrite_markdown(pending.narration)
+        markdown.append(_to_markdown_v2(source))
+        plain.append(_plain_text(source))
+    add(clip(pending.event["question"], _ASK_QUESTION_LIMIT))  # keeps single newlines: GA's question is plain text
+    numbered = pending.layout in ("list", "text")
+    for i, candidate in enumerate(pending.event["candidates"]):
+        label = f"{i + 1}. {one_line(candidate)}" if numbered else one_line(candidate)
+        if echo:
+            add(f"✓ {label}" if i in chosen else label, italic=i not in chosen)
+        elif numbered:
+            add(label)
+    if not echo and pending.event.get("multi") and pending.layout in ("row", "list"):
+        add("多选：点选后按「提交」，也可以直接打字回复", italic=True)
+    return "\n".join(markdown), "\n".join(plain)
+
+async def _post_ask(run, event, narration, carry):
+    """Pause for the owner's answer: a new, pushed question message. The step
+    count and the clock wait in the pending question for the run that
+    answers it."""
+    pending = _PendingAsk(run.chat_id, event, carry, narration)
+    quote = _should_quote(run)
+    markdown, plain = _ask_text(pending)
+    if len(markdown) > MessageLimit.MAX_TEXT_LENGTH and narration:
+        # A long narration goes first, silently, so the question and its
+        # buttons stay one message.
+        for i, (part, part_plain) in enumerate(_md_segments(_rewrite_markdown(narration))):
+            await _reply_markdown(run.trigger, part, part_plain, do_quote=quote and i == 0, disable_notification=True)
+        quote, pending.narration = False, ""
+        markdown, plain = _ask_text(pending)
+    markup = _ask_markup(pending)
+    if len(markdown) > MessageLimit.MAX_TEXT_LENGTH:
+        pending.message = await _reply(
+            run.trigger, clip(plain, MessageLimit.MAX_TEXT_LENGTH), reply_markup=markup, do_quote=quote,
+        )
+    else:
+        pending.message = await _reply_markdown(run.trigger, markdown, plain, reply_markup=markup, do_quote=quote)
+    await _drop_pending_ask(run.chat_id)
+    _pending_asks[run.chat_id] = pending
+    _ask_menu_store[pending.menu_id] = pending
+    print(
+        f"[TG ask_user] posted: chat={run.chat_id} candidates={len(event['candidates'])} layout={pending.layout}",
+        flush=True,
+    )
+
+def _forget_pending(pending):
+    _ask_menu_store.pop(pending.menu_id, None)
+    if _pending_asks.get(pending.chat_id) is pending:
+        _pending_asks.pop(pending.chat_id, None)
+
+async def _drop_pending_ask(chat_id):
+    """The chat's pending question loses its buttons and carried step count."""
+    pending = _pending_asks.get(chat_id)
+    if pending is None:
+        return
+    _forget_pending(pending)
+    edit = getattr(pending.message, "edit_reply_markup", None)
+    if edit is not None:
+        try:
+            await edit(reply_markup=None)
+        except Exception as exc:
+            print(f"[TG ask_user cleanup] {type(exc).__name__}: {exc}", flush=True)
+
+async def _edit_ask_echo(pending, chosen=(), query=None):
+    """Edit the question into its echo and drop its buttons."""
+    markdown, plain = _ask_text(pending, echo=True, chosen=chosen)
+    edit = query.edit_message_text if query is not None else getattr(pending.message, "edit_text", None)
+    if edit is None:
+        return
+    if len(markdown) <= MessageLimit.MAX_TEXT_LENGTH:
+        try:
+            await edit(markdown, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=None)
+            return
+        except Exception as exc:
+            if _is_not_modified_error(exc):
+                return
+            print(f"[TG ask_user echo fallback] {type(exc).__name__}: {exc}", flush=True)
+    try:
+        await edit(clip(plain, MessageLimit.MAX_TEXT_LENGTH), reply_markup=None)
+    except Exception as exc:
+        print(f"[TG ask_user echo error] {type(exc).__name__}: {exc}", flush=True)
+
+async def _adopt_pending_ask(run):
+    """ask_user does not cut the run (desktop, 2026-09-18): a typed message
+    answers the chat's pending question and continues its step count and
+    clock. The question becomes an echo with nothing ticked."""
+    run.adopted = True
+    pending = _pending_asks.get(run.chat_id)
+    if pending is None:
+        return
+    _forget_pending(pending)
+    run.adopt(pending.carry)
+    await _edit_ask_echo(pending)
+    print(f"[TG ask_user] answered by message: chat={run.chat_id}", flush=True)
+
+def _take_ask_event(dq):
+    with _ask_lock:
+        if dq is not None and dq in _ask_events:
+            return _ask_events.pop(dq)
+        return _ask_events.pop(None, None)
+
+async def _finish_run(run, raw, outputs):
+    async with run.lock:
+        if run.state != "running":
+            return  # stopped while its `done` was on the way
+        now = _clock()
+        run.ended_at = now
+        step_text = final_step_text(raw, outputs)
+        event = _take_ask_event(run.dq)
+        if event is not None:
+            run.state = "asking"
+            await _post_ask(run, event, visible_text(_file_names(step_text)), run.carry(now))
+            await _retire_live(run, "⏸ 等你回复")
+            await _send_files(run.trigger, _files_from_text(raw))
+            return
+        run.state = "done"
+        await _send_answer(run, raw, step_text, run.total_steps(), run.elapsed(now))
+        await _retire_live(run, "✓ 已完成")
+
+async def _fail_run(run, error):
+    """A frontend failure (a GA backend error is part of `done`): a new
+    message, italic `N 步 · 用时 X` over `❌ 出错：…`."""
+    async with run.lock:
+        if run.state == "stopped":
+            return
+        run.state = "error"
+        label = fold_label(run.total_steps(), run.elapsed(run.ended_at or _clock()))
+        text = f"❌ 出错：{error}"
+        markdown = escape_markdown(text, version=2)
+        if label:
+            markdown, text = f"_{escape_markdown(label, version=2)}_\n{markdown}", f"{label}\n{text}"
+        try:
+            await _reply_markdown(run.trigger, markdown, text, do_quote=_should_quote(run))
+        except Exception as exc:
+            print(f"[TG run error notice] {type(exc).__name__}: {exc}", flush=True)
+        finally:
+            await _retire_live(run, "❌ 出错")
+
+def _mark_stopped(run):
+    # Synchronous on purpose: callers mark the run before anything awaits,
+    # so its display loop can never turn the aborted task's `done` into an
+    # answer.
+    run.state, run.ended_at = "stopped", _clock()
+    run.wake.set()
+
+async def _post_stopped(run):
+    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`: a new message that takes
+    the draft's place; a status message is frozen into it instead."""
+    async with run.lock:
+        text = stopped_text(run.total_steps(), run.elapsed(run.ended_at or _clock()))
+        live = run.live
+        if live.status_msg is not None:
+            try:
+                await live.status_msg.edit_text(text)
+                live.status_msg = live.mode = None
+                return
+            except Exception as exc:
+                print(f"[TG stop receipt edit error] {type(exc).__name__}: {exc}", flush=True)
+        try:
+            await _reply(run.trigger, text, do_quote=_should_quote(run))
+        except Exception as exc:
+            print(f"[TG stop receipt error] {type(exc).__name__}: {exc}", flush=True)
+        await _retire_live(run, text)
+
+def _running_run():
+    """The user run GA is working on, or None -- also while GA runs a
+    completion-reporter turn or sits between tasks, when /stop must abort
+    nothing."""
+    run = _RUNS[0] if _RUNS else None
+    if run is None or run.state != "running" or not getattr(agent, "is_running", False):
+        return None
+    current = getattr(agent, "_current_queue", None)
+    return run if current is None or current is run.dq else None
+
+def _call_noting_abort(fn, *args):
+    """Call a command helper that resets the conversation on some paths only
+    (upstream /continue n aborts for a valid index alone); return its result
+    and whether it aborted a running task."""
+    hits, original, own = [], agent.abort, "abort" in vars(agent)
+
+    def abort(*a, **kw):
+        hits.append(bool(getattr(agent, "is_running", False)))
+        return original(*a, **kw)
+
+    agent.abort = abort
+    try:
+        return fn(*args), bool(hits), any(hits)
+    finally:
+        if own:
+            agent.abort = original
+        else:
+            del agent.abort
+
+def _enqueue_run(trigger, prompt, carry=None, answers_ask=False):
+    """Register a run and hand its task to GA at once, so _RUNS and GA's
+    task queue keep the same order."""
+    loop = asyncio.get_running_loop()
+    _RUNS[:] = [run for run in _RUNS if run.loop is loop]  # a polling restart leaves dead runs behind
+    run = _TgRun(trigger, carry, answers_ask)
+    _RUNS.append(run)
+    try:
+        run.dq = agent.put_task(prompt, source="telegram")
+    except Exception as exc:
+        run.error = exc
+    print(f"[TG run] queued: chat={run.chat_id} position={len(_RUNS)} continued={carry is not None}", flush=True)
+    _spawn(_drive_run(run))
+    return run
+
+async def _wait_for_turn(run):
+    """Only the head of _RUNS reads its display queue, so each run's answer or
+    question lands before the next run starts (items wait in the queue).
+    Meanwhile a chat's first run keeps the chat's live surface."""
+    while run.state == "queued" and run in _RUNS and _RUNS[0] is not run:
+        if _chat_runs(run.chat_id)[0] is run:
+            await _flush_live(run)
+        run.wake.clear()
+        try:
+            await asyncio.wait_for(run.wake.wait(), _LIVE_POLL_SECONDS)
+        except asyncio.TimeoutError:
+            pass
+
+async def _drive_run(run):
+    try:
+        if run.error is not None:
+            raise run.error
+        if run.answers_ask and _RUNS and _RUNS[0] is run:
+            await _adopt_pending_ask(run)
+        await _wait_for_turn(run)
+        if run.answers_ask and not run.adopted and run.state == "queued":
+            await _adopt_pending_ask(run)
+        await _flush_live(run)
+        while run.state in ("queued", "running"):
+            try:
+                item = await asyncio.to_thread(run.dq.get, True, _LIVE_POLL_SECONDS)
+            except Q.Empty:
+                await _flush_live(run)
+                continue
+            if run.state not in ("queued", "running"):
+                break
+            now = _clock()
+            if run.started_at is None:
+                run.start(now)
+            outputs = run.observe(item, now)
+            if "done" in item:
+                await _finish_run(run, str(item.get("done") or ""), outputs)
+                break
+            await _flush_live(run)
+    except Exception as exc:
+        print(f"[TG run error] {type(exc).__name__}: {exc}", flush=True)
+        await _fail_run(run, exc)
+    finally:
+        if run in _RUNS:
+            _RUNS.remove(run)
+        for other in _RUNS:
+            other.wake.set()
 
 def _normalized_command(text):
     parts = (text or "").strip().split(None, 1)
@@ -956,10 +1088,6 @@ def _normalized_command(text):
     head = parts[0].lower()
     if head.startswith('/'): head = '/' + head[1:].split('@', 1)[0]
     return head + (f" {parts[1].strip()}" if len(parts) > 1 and parts[1].strip() else '')
-
-def _cancel_stream_task(ctx):
-    task = ctx.user_data.pop('stream_task', None)
-    if task and not task.done(): task.cancel()
 
 async def _sync_commands(application):
     await application.bot.set_my_commands([BotCommand(command, description) for command, description in TELEGRAM_MENU_COMMANDS])
@@ -980,6 +1108,15 @@ def _review_command_body(cmd):
         return cmd[len("/review"):].strip()
     return ""
 
+async def _handle_fold_command(message, cmd):  # TEMP(dogfood): remove after JC picks a fold style
+    global _FOLD_STYLE
+    parts = cmd.split()
+    if len(parts) > 1:
+        if parts[1].lower() not in ("a", "b", "c"):
+            return await message.reply_text("用法：/fold a|b|c")
+        _FOLD_STYLE = parts[1].lower()
+    return await message.reply_text(f"折叠头：{_FOLD_STYLE}")
+
 async def _handle_review_command(update, ctx, cmd):
     dq = Q.Queue()
     prompt = handle_review_command(agent, _review_command_body(cmd), dq)
@@ -989,10 +1126,7 @@ async def _handle_review_command(update, ctx, cmd):
             return await _reply_command_text(update.message, item.get("done", ""))
         except Q.Empty:
             return await _reply_command_text(update.message, "(review 无输出)")
-    _cancel_stream_task(ctx)
-    task_dq = agent.put_task(prompt, source="telegram")
-    task = asyncio.create_task(_stream(task_dq, update.message))
-    ctx.user_data['stream_task'] = task
+    _enqueue_run(update.message, prompt)
 
 async def handle_msg(update, ctx):
     uid = update.effective_user.id
@@ -1001,9 +1135,9 @@ async def handle_msg(update, ctx):
     if ALLOWED and uid not in ALLOWED:
         return await update.message.reply_text("no")
     prompt = _build_text_prompt(update.message.text)
-    dq = agent.put_task(prompt, source="telegram")
-    task = asyncio.create_task(_stream(dq, update.message))
-    ctx.user_data['stream_task'] = task
+    _note_message(update.message)
+    # With a question pending in the chat, this message is its answer.
+    _enqueue_run(update.message, prompt, answers_ask=True)
 
 async def handle_ask_callback(update, ctx):
     query = update.callback_query
@@ -1015,71 +1149,51 @@ async def handle_ask_callback(update, ctx):
     if ALLOWED and uid not in ALLOWED:
         return await query.answer("no", show_alert=True)
     menu_id, action = _parse_ask_callback_data(query.data)
-    if not menu_id:
-        return await query.answer("菜单无效")
-    event = _normalize_ask_menu_event(_ask_menu_store.get(menu_id))
-    if event is None:
-        await query.answer("菜单已过期")
+    pending = _ask_menu_store.get(menu_id) if menu_id else None
+    if pending is None:
+        # Answered, expired, or left over from an earlier process: acknowledge
+        # quietly and drop the buttons; nothing runs.
+        await query.answer()
         return await _clear_ask_reply_markup(query)
-    candidates = event["candidates"]
-    if event.get("multi") and action.startswith(f"{_ASK_TOGGLE_ACTION}:"):
+    candidates = pending.event["candidates"]
+    multi = bool(pending.event.get("multi"))
+    if multi and action.startswith(f"{_ASK_TOGGLE_ACTION}:"):
         try:
             selected_idx = int(action.split(":", 1)[1])
-            if selected_idx < 0 or selected_idx >= len(candidates):
-                raise ValueError
         except ValueError:
-            return await query.answer("菜单无效")
-        stored = _ask_menu_store.get(menu_id)
-        if not isinstance(stored, dict):
-            return await query.answer("菜单已过期")
-        selected = set(stored.get("selected", []))
-        if selected_idx in selected:
-            selected.remove(selected_idx)
-        else:
-            selected.add(selected_idx)
-        stored["selected"] = sorted(selected)
+            selected_idx = -1
+        if not 0 <= selected_idx < len(candidates):
+            return await query.answer()
+        pending.selected ^= {selected_idx}
         await query.answer()
-        return await query.edit_message_reply_markup(
-            reply_markup=_build_ask_user_markup(
-                menu_id,
-                candidates,
-                multi=True,
-                selected_indexes=stored["selected"],
-            )
-        )
-    if event.get("multi") and action == _ASK_MULTI_DONE_ACTION:
-        selected_indexes = event.get("selected") or []
-        if not selected_indexes:
+        try:
+            await query.edit_message_reply_markup(reply_markup=_ask_markup(pending))
+        except Exception as exc:
+            if not _is_not_modified_error(exc):
+                print(f"[TG ask_user toggle] {type(exc).__name__}: {exc}", flush=True)
+        return
+    if multi and action == _ASK_MULTI_DONE_ACTION:
+        if not pending.selected:
             return await query.answer(_ASK_MULTI_EMPTY_HINT, show_alert=True)
-        selected = "; ".join(candidates[idx] for idx in selected_indexes)
-        _ask_menu_store.pop(menu_id, None)
-        await query.answer()
-        await _edit_ask_user_result(query, event, selected=selected)
-        if query.message is None:
-            return
-        dq = agent.put_task(_build_text_prompt(selected), source="telegram")
-        task = asyncio.create_task(_stream(dq, query.message))
-        ctx.user_data['stream_task'] = task
-        return
-    if action == _ASK_CANCEL_ACTION:
-        _ask_menu_store.pop(menu_id, None)
-        await query.answer()
-        await _edit_ask_user_result(query, event, cancelled=True)
-        if query.message is not None:
-            await query.message.reply_text(_ASK_CANCEL_PROMPT)
-        return
-    try:
-        selected = candidates[int(action)]
-    except (ValueError, IndexError):
-        return await query.answer("菜单无效")
-    _ask_menu_store.pop(menu_id, None)
+        chosen = sorted(pending.selected)
+        answer = "；".join(candidates[idx] for idx in chosen)
+    else:
+        try:
+            selected_idx = int(action)
+        except ValueError:
+            selected_idx = -1
+        if multi or not 0 <= selected_idx < len(candidates):
+            return await query.answer()
+        chosen, answer = [selected_idx], candidates[selected_idx]
+    _forget_pending(pending)
     await query.answer()
-    await _edit_ask_user_result(query, event, selected=selected)
-    if query.message is None:
-        return
-    dq = agent.put_task(_build_text_prompt(selected), source="telegram")
-    task = asyncio.create_task(_stream(dq, query.message))
-    ctx.user_data['stream_task'] = task
+    await _edit_ask_echo(pending, chosen, query=query)
+    print(f"[TG ask_user] answered by button: chat={pending.chat_id} chosen={len(chosen)}", flush=True)
+    # The continuation's trigger is the question; an inaccessible-message
+    # stub (no reply methods) falls back to the question message as sent.
+    trigger = query.message if hasattr(query.message, "reply_text") else pending.message
+    if trigger is not None:
+        _enqueue_run(trigger, _build_text_prompt(answer), carry=pending.carry)
 
 async def _send_llm_menu(message):
     llms = agent.list_llms()
@@ -1130,9 +1244,15 @@ async def handle_llm_callback(update, ctx):
     await query.edit_message_text(f"✅ 已切换到 [{selected_idx}] {selected_name}")
 
 async def cmd_abort(update, ctx):
-    _cancel_stream_task(ctx)
+    # Stops the running run only: queued runs stay, and the run's stop
+    # receipt is the only reply.
+    run = _running_run()
+    if run is None:
+        return await update.message.reply_text(_NO_RUNNING_TASK_TEXT)
+    _mark_stopped(run)
     agent.abort()
-    await update.message.reply_text("⏹️ 正在停止...")
+    print(f"[TG run] stopped by command: chat={run.chat_id}", flush=True)
+    await _post_stopped(run)
 
 async def cmd_llm(update, ctx):
     args = (update.message.text or '').split()
@@ -1166,9 +1286,8 @@ async def handle_photo(update, ctx):
     await file.download_to_drive(os.path.join(_TEMP_DIR, fpath))
     caption = update.message.caption
     prompt = f"[TIPS] 收到{kind}temp/{fpath}\n{caption}" if caption else f"[TIPS] 收到{kind}temp/{fpath}，请等待下一步指令"
-    dq = agent.put_task(prompt, source="telegram")
-    task = asyncio.create_task(_stream(dq, update.message))
-    ctx.user_data['stream_task'] = task
+    _note_message(update.message)
+    _enqueue_run(update.message, prompt)
 
 async def handle_command(update, ctx):
     uid = update.effective_user.id
@@ -1178,6 +1297,8 @@ async def handle_command(update, ctx):
         return await update.message.reply_text("no")
     cmd = _normalized_command(update.message.text)
     op = cmd.split()[0] if cmd else ''
+    chat_id = _message_chat_id(update.message)
+    _note_message(update.message)
     if op == '/help': return await update.message.reply_text(HELP_TEXT)
     if op == '/status':
         llm = agent.get_llm_name() if agent.llmclient else '未配置'
@@ -1189,24 +1310,48 @@ async def handle_command(update, ctx):
         return await _reply_command_text(update.message, answer)
     if op == '/review':
         return await _handle_review_command(update, ctx, cmd)
+    if op == '/fold':  # TEMP(dogfood): remove after JC picks a fold style
+        return await _handle_fold_command(update.message, cmd)
+    # /new, /restore and /continue n abort the running run's task: that run
+    # ends as stopped (marked before anything awaits); queued runs go on.
     if op == '/new':
-        _cancel_stream_task(ctx)
-        return await update.message.reply_text(reset_conversation(agent))
+        run = _running_run()
+        if run is not None:
+            _mark_stopped(run)
+        reply = reset_conversation(agent)
+        await _drop_pending_ask(chat_id)
+        if run is not None:
+            await _post_stopped(run)
+        return await update.message.reply_text(reply)
     if op == '/restore':
-        _cancel_stream_task(ctx)
         try:
             restored_info, err = format_restore()
             if err:
                 return await update.message.reply_text(err)
             restored, fname, count = restored_info
+            run = _running_run()
+            if run is not None:
+                _mark_stopped(run)
             agent.abort()
             agent.history.extend(restored)
+            await _drop_pending_ask(chat_id)
+            if run is not None:
+                await _post_stopped(run)
             return await update.message.reply_text(f"✅ 已恢复 {count} 轮对话\n来源: {fname}\n(仅恢复上下文，请输入新问题继续)")
         except Exception as e:
             return await update.message.reply_text(f"❌ 恢复失败: {e}")
     if op == '/continue':
-        if cmd != '/continue': _cancel_stream_task(ctx)
-        return await update.message.reply_text(handle_frontend_command(agent, cmd))
+        if cmd == '/continue':
+            return await update.message.reply_text(handle_frontend_command(agent, cmd))
+        run = _running_run()
+        reply, reset, aborted = _call_noting_abort(handle_frontend_command, agent, cmd)
+        if run is not None and aborted:
+            _mark_stopped(run)
+        if reset:
+            await _drop_pending_ask(chat_id)
+        if run is not None and aborted:
+            await _post_stopped(run)
+        return await update.message.reply_text(reply)
     return await update.message.reply_text(HELP_TEXT)
 
 def check_config(init_agent=False):

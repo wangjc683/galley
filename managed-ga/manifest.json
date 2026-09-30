@@ -32,7 +32,8 @@
       "0020-managed-windows-no-console-spawns.patch",
       "0021-managed-retry-after-value-in-error.patch",
       "0022-managed-strip-goal-status.patch",
-      "0023-managed-discord-conversation-ux.patch"
+      "0023-managed-discord-conversation-ux.patch",
+      "0024-managed-telegram-conversation-ux.patch"
     ]
   },
   "stateSchemaVersion": 1

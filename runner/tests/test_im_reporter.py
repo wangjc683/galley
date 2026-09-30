@@ -8,10 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import email.message
+import io
 import json
 import queue
+import re
 import threading
 import types
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -465,6 +470,316 @@ def test_telegram_reporter_owner_and_busy_gates(
     tgapp.agent.is_running = False
     assert len(reporter.tick()) == 1
     assert sent[0][1] == "123456789"
+
+
+# ── Telegram report formatting (tgapp seams from patch 0024) ─────────
+
+TG_OWNER = "123456789"
+TG_SEND_URL = "https://api.telegram.org/bot42:stub-token/sendMessage"
+# A report turn's full `done` text as GA streams it: every step opens with
+# a turn marker, tool echoes follow the step's prose.
+TG_REPORT_DONE = (
+    "\nLLM Running (Turn 1) ...\n\n"
+    "<summary>查会话状态</summary>先看一下会话。\n"
+    '🛠️ code_run({"script": "galley session show s1"})\n'
+    "\nLLM Running (Turn 2) ...\n\n"
+    "报告正文"
+)
+
+
+class _FakeTelegramHttp:
+    """Stands in for ``urllib.request.urlopen`` under the real
+    ``_telegram_send_text``: records every Bot API request (failed ones
+    too) and raises the configured error for a request whose text is
+    listed in ``failures``."""
+
+    def __init__(self) -> None:
+        self.requests: list[urllib.request.Request] = []
+        self.failures: dict[str, Exception] = {}
+
+    def __call__(self, request: urllib.request.Request, timeout: float = 0) -> io.BytesIO:
+        self.requests.append(request)
+        failure = self.failures.get(str(_request_body(request)["text"]))
+        if failure is not None:
+            raise failure
+        return io.BytesIO(b'{"ok":true}')
+
+    @property
+    def bodies(self) -> list[dict[str, Any]]:
+        return [_request_body(request) for request in self.requests]
+
+
+def _request_body(request: urllib.request.Request) -> dict[str, Any]:
+    assert isinstance(request.data, bytes)
+    body: dict[str, Any] = json.loads(request.data)
+    return body
+
+
+def _http_error(code: int, description: str) -> urllib.error.HTTPError:
+    body = json.dumps({"ok": False, "error_code": code, "description": description})
+    return urllib.error.HTTPError(
+        TG_SEND_URL, code, "error", email.message.Message(), io.BytesIO(body.encode())
+    )
+
+
+def _seam_tgapp(replies: list[str]) -> Any:
+    """tgapp carrying patch 0024's two report seams. ``answer_text`` keeps
+    the closing step (marker split, like the real one); the segmenter
+    splits on blank lines and tags each piece so a test can tell a
+    MarkdownV2 send from its plain fallback, and records its input."""
+    tgapp = _stub_tgapp(replies)
+    tgapp.segment_inputs = []
+
+    def clean_reply(text: str) -> str:
+        raise AssertionError("the seam path must not fall back to clean_reply")
+
+    def answer_text(raw: str) -> str:
+        return re.split(r"LLM Running \(Turn \d+\) \.\.\.", raw)[-1].strip()
+
+    def markdown_v2_segments(text: str) -> list[tuple[str, str]]:
+        tgapp.segment_inputs.append(text)
+        return [(f"MD2<{part}>", f"PLAIN<{part}>") for part in text.split("\n\n")]
+
+    tgapp.clean_reply = clean_reply
+    tgapp.answer_text = answer_text
+    tgapp.markdown_v2_segments = markdown_v2_segments
+    return tgapp
+
+
+def _telegram_http_reporter(
+    monkeypatch: Any,
+    tmp_path: Path,
+    tgapp: Any,
+    *,
+    status: str = "idle",
+) -> tuple[TelegramReporter, _FakeTelegramHttp]:
+    """A running (non-baseline) Telegram reporter whose sends go through
+    the real ``_telegram_send_text`` into a fake ``urlopen``."""
+    state_path = tmp_path / "reporter_state.json"
+    state_path.write_text('{"sessions":{}}', encoding="utf-8")
+    messages = [_user_msg("u1", supervisor="galley-im/telegram", turn=1)]
+    if status == "idle":
+        messages.append(_agent_msg("a1", "done!", turn=1))
+    _fake_cli(
+        monkeypatch,
+        {
+            "sessions": [_session("s1", status=status, supervisor="galley-im/telegram")],
+            "show s1": messages,
+        },
+    )
+    http = _FakeTelegramHttp()
+    monkeypatch.setattr(urllib.request, "urlopen", http)
+    reporter = TelegramReporter(tgapp, "galley-im/telegram", state_path)
+    reporter.cli = "/stub/galley"
+    return reporter, http
+
+
+def _md2(text: str) -> dict[str, Any]:
+    return {"chat_id": TG_OWNER, "text": f"MD2<{text}>", "parse_mode": "MarkdownV2"}
+
+
+def _completed_report(title: str | None = "Task s1") -> Report:
+    session = _session("s1", supervisor="galley-im/telegram")
+    session["title"] = title
+    return Report(kind="completed", session=session, message=_agent_msg("a1", "done!"))
+
+
+def test_report_status_word_is_shared_by_discord_and_telegram() -> None:
+    for kind, word in [
+        ("completed", "已完成"),
+        ("cancelled", "已停止"),
+        ("error", "出错"),
+        ("some-future-dead-status", "出错"),
+    ]:
+        assert im_reporter.report_status_word(kind) == word
+        assert im_reporter.discord_report_outcome(kind)[1] == word
+        assert im_reporter.telegram_report_outcome(kind)[1] == word
+    assert im_reporter.telegram_report_outcome("completed")[0] == "✅"
+    assert im_reporter.telegram_report_outcome("cancelled")[0] == "⏹"
+    assert im_reporter.telegram_report_outcome("error")[0] == "❌"
+    assert im_reporter.telegram_report_outcome("some-future-dead-status")[0] == "❌"
+
+
+@pytest.mark.parametrize(
+    ("kind", "head", "foot"),
+    [
+        ("completed", "**✅ Task s1**", "*已完成 · s1*"),
+        ("cancelled", "**⏹ Task s1**", "*已停止 · s1*"),
+        ("error", "**❌ Task s1**", "*出错 · s1*"),
+    ],
+)
+def test_telegram_report_markdown_title_line_and_footer(
+    kind: str, head: str, foot: str
+) -> None:
+    report = Report(kind=kind, session=_session("s1"), message=None)
+    body = "第一段\n\n• 磁盘：49.2%"
+    assert im_reporter.telegram_report_markdown(body, report) == f"{head}\n\n{body}\n\n{foot}"
+
+
+@pytest.mark.parametrize(
+    ("title", "shown"),
+    [
+        ("", "s1"),
+        ("   ", "s1"),
+        (None, "s1"),
+        ("*_`", "s1"),
+        (" 修复 **im_reporter** 的 `报告` ", "修复 imreporter 的 报告"),
+    ],
+)
+def test_telegram_report_title_falls_back_to_id_and_drops_markup(
+    title: str | None, shown: str
+) -> None:
+    source = im_reporter.telegram_report_markdown("正文", _completed_report(title))
+    assert source.splitlines()[0] == f"**✅ {shown}**"
+
+
+def test_telegram_render_prefers_answer_text_seam() -> None:
+    legacy = _stub_tgapp([])
+    legacy.clean_reply = lambda text: text.replace("🛠️", "")
+    # Old payload: the whole done text is cleaned, earlier steps included.
+    assert im_reporter.TelegramChannel(legacy).render(TG_REPORT_DONE) == (
+        TG_REPORT_DONE.replace("🛠️", "").strip()
+    )
+    # Seam: the closing step only; clean_reply is never consulted.
+    seam = im_reporter.TelegramChannel(_seam_tgapp([]))
+    assert seam.render(TG_REPORT_DONE) == "报告正文"
+    assert seam.render("   ") == ""
+
+
+def test_telegram_report_goes_out_as_markdown_v2_segments_in_order(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    tgapp = _seam_tgapp([TG_REPORT_DONE])
+    reporter, http = _telegram_http_reporter(monkeypatch, tmp_path, tgapp)
+    assert len(reporter.tick()) == 1
+    # One source text, closing step only: no turn marker, no tool echo.
+    assert tgapp.segment_inputs == ["**✅ Task s1**\n\n报告正文\n\n*已完成 · s1*"]
+    assert http.bodies == [_md2("**✅ Task s1**"), _md2("报告正文"), _md2("*已完成 · s1*")]
+    assert {request.full_url for request in http.requests} == {TG_SEND_URL}
+    # Delivered once: no new activity, nothing re-sent.
+    assert reporter.tick() == []
+    assert len(http.requests) == 3
+
+
+def test_telegram_skip_reply_in_closing_step_sends_nothing(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """SKIP is judged after render, so it is found in the closing step even
+    though earlier steps of the report turn carried prose and tool echoes."""
+    done = TG_REPORT_DONE.replace("报告正文", "SKIP_REPORT")
+    tgapp = _seam_tgapp([done])
+    reporter, http = _telegram_http_reporter(monkeypatch, tmp_path, tgapp)
+    assert len(reporter.tick()) == 1
+    assert http.requests == []
+    assert tgapp.segment_inputs == []
+    assert reporter.state.entry("s1")["lastReportedMessageId"] == "a1"
+
+
+def test_telegram_rejected_segment_is_resent_as_plain_text(
+    monkeypatch: Any, tmp_path: Path, capsys: Any
+) -> None:
+    tgapp = _seam_tgapp(["报告正文"])
+    reporter, http = _telegram_http_reporter(monkeypatch, tmp_path, tgapp)
+    http.failures["MD2<报告正文>"] = _http_error(
+        400, "Bad Request: can't parse entities: can't find end of Bold entity at byte offset 3"
+    )
+    assert len(reporter.tick()) == 1
+    assert http.bodies == [
+        _md2("**✅ Task s1**"),
+        _md2("报告正文"),  # rejected by Telegram
+        {"chat_id": TG_OWNER, "text": "PLAIN<报告正文>"},  # no parse_mode key
+        _md2("*已完成 · s1*"),  # later segments stay MarkdownV2
+    ]
+    log = capsys.readouterr().out
+    assert "segment 2/3" in log
+    assert "can't parse entities" in log
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        _http_error(429, "Too Many Requests: retry after 5"),
+        _http_error(403, "Forbidden: bot was blocked by the user"),
+        urllib.error.URLError("network unreachable"),
+        TimeoutError("timed out"),
+    ],
+)
+def test_telegram_non_400_failure_is_a_retry_not_a_downgrade(
+    monkeypatch: Any, tmp_path: Path, error: Exception
+) -> None:
+    tgapp = _seam_tgapp(["报告正文", "报告正文"])
+    reporter, http = _telegram_http_reporter(monkeypatch, tmp_path, tgapp)
+    http.failures["MD2<报告正文>"] = error
+    assert reporter.tick() == []
+    entry = reporter.state.entry("s1")
+    assert entry["reportAttempts"] == 1
+    assert "lastReportedMessageId" not in entry
+    # Stopped at the failing segment: no plain fallback, no footer.
+    assert http.bodies == [_md2("**✅ Task s1**"), _md2("报告正文")]
+    # Not marked seen: the next tick retries the whole report and delivers.
+    del http.failures["MD2<报告正文>"]
+    assert len(reporter.tick()) == 1
+    assert http.bodies[2:] == [_md2("**✅ Task s1**"), _md2("报告正文"), _md2("*已完成 · s1*")]
+
+
+def test_telegram_plain_fallback_failure_raises(monkeypatch: Any, tmp_path: Path) -> None:
+    """A 400 that is not about entities (e.g. chat not found) fails the
+    plain resend too; that failure must reach _deliver as a retry."""
+    tgapp = _seam_tgapp([])
+    _, http = _telegram_http_reporter(monkeypatch, tmp_path, tgapp)
+    http.failures["MD2<**✅ Task s1**>"] = _http_error(400, "Bad Request: chat not found")
+    http.failures["PLAIN<**✅ Task s1**>"] = _http_error(400, "Bad Request: chat not found")
+    channel = im_reporter.TelegramChannel(tgapp)
+    with pytest.raises(urllib.error.HTTPError) as raised:
+        channel.send_report(TG_OWNER, "报告正文", "报告正文", _completed_report())
+    assert raised.value.code == 400
+    assert [body["text"] for body in http.bodies] == [
+        "MD2<**✅ Task s1**>",
+        "PLAIN<**✅ Task s1**>",
+    ]
+
+
+def test_telegram_report_that_renders_to_nothing_is_not_delivered(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    tgapp = _seam_tgapp([])
+    tgapp.markdown_v2_segments = lambda text: []
+    _, http = _telegram_http_reporter(monkeypatch, tmp_path, tgapp)
+    channel = im_reporter.TelegramChannel(tgapp)
+    with pytest.raises(im_reporter.ReporterCliError, match="no message segments"):
+        channel.send_report(TG_OWNER, "报告正文", "报告正文", _completed_report())
+    tgapp.BOT_TOKEN = ""
+    with pytest.raises(im_reporter.ReporterCliError, match="token unavailable"):
+        channel.send_report(TG_OWNER, "报告正文", "报告正文", _completed_report())
+    assert http.requests == []
+
+
+def test_telegram_without_seams_sends_byte_identical_payload(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """An older tgapp payload has neither seam: the report is the old
+    whole-text render sent through the old plain send, byte for byte."""
+    reply = "任务完成：结果是 **X**。\n| a | b |"
+    reporter, http = _telegram_http_reporter(monkeypatch, tmp_path, _stub_tgapp([reply]))
+    assert len(reporter.tick()) == 1
+    assert len(http.requests) == 1
+    request = http.requests[0]
+    # The exact expression the reporter used before parse_mode existed.
+    assert request.data == json.dumps({"chat_id": TG_OWNER, "text": reply}).encode("utf-8")
+    assert "parse_mode" not in _request_body(request)
+    assert request.full_url == TG_SEND_URL
+    assert request.get_header("Content-type") == "application/json"
+
+
+def test_telegram_send_text_adds_parse_mode_only_when_asked(monkeypatch: Any) -> None:
+    http = _FakeTelegramHttp()
+    monkeypatch.setattr(urllib.request, "urlopen", http)
+    im_reporter._telegram_send_text("42:stub-token", TG_OWNER, "hi")
+    im_reporter._telegram_send_text("42:stub-token", TG_OWNER, "hi", parse_mode=None)
+    im_reporter._telegram_send_text("42:stub-token", TG_OWNER, "*hi*", parse_mode="MarkdownV2")
+    legacy = json.dumps({"chat_id": TG_OWNER, "text": "hi"}).encode("utf-8")
+    assert [request.data for request in http.requests[:2]] == [legacy, legacy]
+    assert http.bodies[2] == {"chat_id": TG_OWNER, "text": "*hi*", "parse_mode": "MarkdownV2"}
 
 
 # ── Discord channel adapter ──────────────────────────────────────────
@@ -1094,13 +1409,14 @@ def test_reporter_strips_workbench_suggestion_tag(
     assert fsapp._sent == [("ou_owner", "报告正文。")]
 
 
-def test_feishu_and_telegram_reports_still_go_through_send(
+def test_feishu_reports_still_go_through_send(
     monkeypatch: Any, tmp_path: Path
 ) -> None:
-    """Only Discord dresses reports up; every other channel inherits the
-    default send_report, which is exactly the old send call."""
+    """Only Discord and Telegram dress reports up; Feishu inherits the
+    default send_report, which is exactly the old send call. (Telegram
+    without its tgapp seams is pinned by
+    test_telegram_without_seams_sends_byte_identical_payload.)"""
     assert im_reporter.FeishuChannel.send_report is im_reporter.ChannelAdapter.send_report
-    assert im_reporter.TelegramChannel.send_report is im_reporter.ChannelAdapter.send_report
     # A dead-status report reaches Feishu as the same plain message.
     fsapp = _stub_fsapp(["任务已取消。"])
     (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")

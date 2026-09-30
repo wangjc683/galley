@@ -206,6 +206,25 @@
 
 ---
 
+## IM 渠道的图片输入：相册合并与视觉输入
+
+- **状态**：暂缓（2026-09-30 Telegram 对话体验对齐桌面端时裁决不做，范围 D）
+- **提出**：2026-09-30，`.scratch/telegram-ux/PRD.md` 问题 6。
+- **现状**：Telegram 每张图单独起一个任务，提示词「[TIPS] 收到图片temp/…，请等待下一步指令」，
+  模型也会回一轮；相册 N 张 = N 轮 N 条回答（`tgapp.py` `handle_photo`）。图片只以路径进提示词，
+  不是视觉输入；Discord 同样只给路径（`dcapp.py` `_download_attachments`）。
+- **启动信号**：JC 或用户在 IM 里实际发图（`telegram.log` / `discord.log` 出现收图记录），
+  或抱怨「发了几张图它回了几遍」「它看不见我发的图」。
+- **方案**：①相册按 `media_group_id` 攒一小段时间（约 1 秒）合成一个任务；②managed runtime 的
+  `run()` 已消费 `put_task(images=)`（补丁 `0008`），图片路径直接传 `images=` 走视觉输入，
+  caption 当正文；③只有图没有文字时不再让模型「等待下一步指令」空回一轮——候选做法是收图后
+  只回一句确认、等下一条文字一起入队。
+- **待定**：③的交互（静默等文字 vs 回一句确认）；非图片文件是否同样合并。
+- **关联**：[上游 PR：让 GA `run()` 消费 `put_task(images=)`](#上游-pr让-ga-run-消费-put_taskimages删-0008--attach-wrapper)；
+  补丁 `0014` / `0024`（Telegram）、`0018` / `0023`（Discord）。
+
+---
+
 ## 消息级 Retry（丢弃失败轮重跑，galley#14）
 
 - **状态**：暂存（Continue 按钮已彻底否决，不在此列）

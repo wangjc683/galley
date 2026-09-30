@@ -376,6 +376,18 @@ Runtime tab 的任何问题）。
   停止 / 出错）。**不做**：气味段（supervisor 工具几乎全是 `code_run`）、
   读秒（单步 ≥ 60 秒才按分钟显示「仍在运行」）、步骤展开与斜杠命令（在
   [deferred](../devlog/deferred.md)）；实时思考预览在 Discord 做不到。
+- Telegram **聊天内的对话形态**（2026-09-30，补丁 `0024`，
+  [devlog](../devlog/2026-09-30-telegram-conversation-ux.md)）同样以桌面为准，
+  但按 Telegram 自己的机制映射：live 窗口是**私聊草稿**（`sendMessageDraft`：
+  不推送、不留痕，bot 发出正式消息即消失），内容同 Discord 三行，外加桌面
+  TurnMarker 的读秒（3 秒起 `· N 秒`，60 秒起 `· 已 M 分 S 秒 · 仍在运行`）与
+  「另有 K 条消息排队中」；群聊或草稿失败时退回 Discord 形态的静音状态消息。
+  一个 run 最后只发一条回答（收尾那一步），第二段起与附件静音。Discord 的
+  `-#` 小字在 Telegram 一律映射为**斜体行**；停止走原生命令菜单的 `/stop`
+  （桌面 Stop 在 Composer，菜单按钮也在输入框旁），不做按钮。Markdown 表格转
+  列表、标题转粗体（MarkdownV2 两者都不支持）。ask_user 同 Discord，多选保留
+  toggle +「提交」。完成报告是粗体标题行 + 正文 + 斜体 `状态 · session id`
+  脚注。回答首行的折叠头形态（斜体行 / 可折叠引用块逐步列出 / 无）待真机裁决。
 - 卡内层级规则（与 Runtime tab 同源）：
   - 每张卡同时至多一颗 primary 按钮，primary = 当前可执行的下一步。
     飞书的「保存凭证」和「启动服务」按此互斥：凭证未就绪时保存是

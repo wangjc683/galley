@@ -753,24 +753,37 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     Native* `ask` still fills it from thinking blocks, falling back to a
     prompted `<think(ing)>` block it moves out of `content`, and that
     `ToolClient._parse_mixed_response` still sets it.
-15. The display queue and ask_user payload the managed Discord frontend
-    reads (patch `0023`, 2026-09-30; see its row in the
+15. The display queue and ask_user payload the managed Discord and
+    Telegram frontends read (Discord: patch `0023`; Telegram: patch
+    `0024`; both 2026-09-30; see their rows in the
     [patch ledger](../managed-ga/patches/manifest.md)). A drift here still
-    applies cleanly and compiles, and the dcapp tests run on a hand-written
-    fake agent, so nothing but a real run catches it. Re-check on upgrade:
-    (a) `agentmain.GenericAgent.run()` items: `next` / `done` carrying
-    `turn` and `outputs` (`turn_resps[-2:]` on `next`, every step on
-    `done`), cumulative text when `inc_out` is off, a step opening with the
-    `LLM Running (Turn N)` marker, and the backend-error block appended to
-    `done` only; (b) the ask_user exit reaching `_turn_end_hooks` as
+    applies cleanly and compiles, and the dcapp / tgapp tests run on
+    hand-written fake agents, so nothing but a real run catches it.
+    Re-check on upgrade: (a) `agentmain.GenericAgent.run()` items: `next` /
+    `done` carrying `turn` and `outputs` (`turn_resps[-2:]` on `next`,
+    every step on `done`; `outputs` holds whole step texts either way), a
+    step opening with the `LLM Running (Turn N)` marker, and the
+    backend-error block appended to `done` only. The two frontends differ
+    in `next`'s text alone: dcapp's channel agents run with `inc_out` off
+    (cumulative text), tgapp's agent with `inc_out = True` (only the new
+    text since the last item); both read steps from `outputs`, never from
+    `next`. (b) the ask_user exit reaching `_turn_end_hooks` as
     `exit_reason = {"result": "EXITED", "data": {"status": "INTERRUPT",
     "intent": "HUMAN_INTERVENTION", "data": {question, candidates}}}` with
     `tool_calls` alongside (`ga.py` `ask_user` / `turn_end_callback`,
     `agent_loop.py` EXITED branch); (c) `agent._current_queue` pointing at
-    the running task's display queue when the hook fires; (d) `review_cmd`
-    still intercepting `/review` through `_handle_slash_cmd` only when the
-    query starts with it. The completion reporter (`runner/im_reporter.py`
-    `_deliver`) also reads `done` off `put_task`'s queue.
+    the running task's display queue when the hook fires, and staying on it
+    while `agent.is_running` (tgapp also reads the pair to tell a
+    completion-reporter turn from its own task: `·· 排队中`, `/stop`); (d)
+    `review_cmd` still intercepting `/review` through `_handle_slash_cmd`
+    only when the query starts with it (dcapp sends `/review` raw), and
+    `review_cmd.handle(agent, body, display_queue)` still returning the
+    prompt or putting a `done` itself (tgapp calls it directly); (e)
+    `continue_cmd.reset_conversation` still aborting through
+    `agent.abort()`, which tgapp's `/continue n` wraps for one call to learn
+    whether the running task was aborted. The completion reporter
+    (`runner/im_reporter.py` `_deliver`) also reads `done` off
+    `put_task`'s queue.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -798,6 +811,16 @@ start the audit there instead of grepping the bridge:
   `_DiscordRun.observe` (item shape), `_extract_ask_user_event` and
   `_install_ask_hook` (ask payload, `_current_queue`), and the `/review`
   branch of `handle_command`.
+- **`managed-ga/code/frontends/tgapp.py`** (patch `0024`) — item 15:
+  `_TgRun.observe` (item shape), `_register_ask_user_hook` and
+  `_take_ask_event` (ask payload, `_current_queue`), `_is_waiting` and
+  `_running_run` (`_current_queue` / `is_running`), `_handle_review_command`,
+  and `_call_noting_abort` (the `/continue n` abort probe). The shared
+  helpers it calls live in `frontends/galley_im_display.py` (same patch):
+  `extract_ask_user_event` (ask payload, sibling-candidate merge),
+  `final_step_text` (the `done` / `outputs` relation), and
+  `strip_transcript` / `step_summary` (the Turn marker and the 🛠️ echo
+  format of `agent_loop.py`).
 
 GA *public* API usage (items 8, plus `next_llm` / `verbose` / `inc_out`
 / `put_task`) is deliberately not wrapped — verify against upstream
@@ -937,6 +960,11 @@ already-generated bundle without rebuilding it. The smoke must verify
   bots answer on the same token): a multi-step request (status message
   edits in place, then only the answer remains under its `-# N 步 · 用时 X`
   line), an ask_user question answered by a button, and the stop button.
+- Managed Telegram channel (item 15; same caveat about an installed
+  Galley): a multi-step request in the private chat (the draft's lines
+  change, then only the answer remains, under its fold header), an
+  ask_user question answered by a button, and `/stop` during a long step
+  (a single `⏹ 已停止 · …` receipt).
 
 9. Sync the baseline metadata. `managed-ga/manifest.json`'s `upstream`
    block is the single source of truth — update all four fields there:

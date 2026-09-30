@@ -44,6 +44,7 @@ import subprocess
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -324,6 +325,19 @@ def _single_owner(public_access: Any, allowed: Any) -> str | None:
     return str(next(iter(users)))
 
 
+def report_status_word(kind: str) -> str:
+    """The word a report's outcome reads as, shared by every channel that
+    labels its reports (Discord card footer, Telegram footer line) so the
+    platforms never disagree. Anything that is neither completed nor
+    cancelled is a dead run and reads as an error, so a future dead status
+    still gets a truthful label."""
+    if kind == "completed":
+        return "已完成"
+    if kind == "cancelled":
+        return "已停止"
+    return "出错"
+
+
 class ChannelAdapter:
     """Channel-specific seams the reporter core needs."""
 
@@ -360,9 +374,10 @@ class ChannelAdapter:
         """Deliver the report with its outcome at hand — the entry point
         the dispatcher calls. ``send`` only sees rendered text, but a
         channel that dresses reports differently from ordinary replies
-        (Discord's embed card) needs the kind and the session. Defaults to
-        ``send`` so channels without such a surface (Feishu, Telegram)
-        keep their exact behavior; same MUST-raise contract as ``send``."""
+        (Discord's embed card, Telegram's title and footer lines) needs the
+        kind and the session. Defaults to ``send`` so channels without such
+        a surface (Feishu) keep their exact behavior; same MUST-raise
+        contract as ``send``."""
         self.send(owner, text, raw)
 
 
@@ -404,10 +419,49 @@ class FeishuChannel(ChannelAdapter):
 
 
 TELEGRAM_TEXT_LIMIT = 4000
+TELEGRAM_PARSE_MODE = "MarkdownV2"
+# Characters that would close or reopen the report title's bold span
+# (``**…**``) early once tgapp converts it to MarkdownV2.
+TELEGRAM_TITLE_MARKUP_RE = re.compile(r"[*_`]")
 
 
-def _telegram_send_text(token: str, chat_id: str, text: str) -> None:
-    payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
+def telegram_report_outcome(kind: str) -> tuple[str, str]:
+    """(title icon, footer status word) for a report kind — the Telegram
+    counterpart of the Discord card's color and footer word."""
+    word = report_status_word(kind)
+    if kind == "completed":
+        return "✅", word
+    if kind == "cancelled":
+        return "⏹", word
+    return "❌", word
+
+
+def telegram_report_markdown(text: str, report: Report) -> str:
+    """Markdown source of a Telegram report: a bold title line naming the
+    session, the rendered report body, and an italic footer with the
+    outcome and the session id — so a pushed background result reads
+    differently from the answer just above it, and several delegated
+    sessions stay tellable apart by title.
+
+    The footer uses ``*…*`` italics, not ``_…_``: tgapp's Markdown to
+    MarkdownV2 converter only recognizes the asterisk form and escapes a
+    bare underscore, which would print the underscores literally."""
+    session_id = str(report.session.get("id") or "")
+    title = TELEGRAM_TITLE_MARKUP_RE.sub("", str(report.session.get("title") or ""))
+    title = title.strip() or session_id
+    icon, word = telegram_report_outcome(report.kind)
+    return f"**{icon} {title}**\n\n{text}\n\n*{word} · {session_id}*"
+
+
+def _telegram_send_text(
+    token: str, chat_id: str, text: str, parse_mode: str | None = None
+) -> None:
+    body = {"chat_id": chat_id, "text": text}
+    if parse_mode is not None:
+        # Only added when asked for: a plain send's payload stays
+        # byte-identical to what the reporter always sent.
+        body["parse_mode"] = parse_mode
+    payload = json.dumps(body).encode("utf-8")
     request = urllib.request.Request(
         f"https://api.telegram.org/bot{token}/sendMessage",
         data=payload,
@@ -415,6 +469,17 @@ def _telegram_send_text(token: str, chat_id: str, text: str) -> None:
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         response.read()
+
+
+def _telegram_error_description(exc: urllib.error.HTTPError) -> str:
+    """Telegram's own reason for a rejected request (for the log line only;
+    for an entity-parse error it names a byte offset or a reserved
+    character, never the message text)."""
+    try:
+        body = json.loads(exc.read().decode("utf-8"))
+    except Exception:
+        return ""
+    return str(body.get("description") or "") if isinstance(body, dict) else ""
 
 
 class TelegramChannel(ChannelAdapter):
@@ -442,22 +507,74 @@ class TelegramChannel(ChannelAdapter):
         return self.tgapp.agent
 
     def render(self, raw: str) -> str:
+        """The report turn's user-visible text. ``raw`` is the turn's whole
+        ``done`` text, so ``LLM Running (Turn k) ...`` markers and tool
+        echoes of every step are in it; tgapp's ``answer_text`` seam
+        (patch 0024) keeps only the closing step, cleaned the same way as a
+        live answer. A tgapp payload that predates the seam gets the old
+        whole-text cleaning unchanged."""
         if not (raw or "").strip():
             return ""
+        answer_text = getattr(self.tgapp, "answer_text", None)
+        if callable(answer_text):
+            return str(answer_text(raw) or "")
         cleaned = self.tgapp.clean_reply(raw)
         render_markers = getattr(self.tgapp, "_render_file_markers", None)
         if callable(render_markers):
             return str(render_markers(cleaned) or "")
         return str(cleaned or "")
 
-    def send(self, owner: str, text: str, raw: str) -> None:
+    def _token(self) -> str:
         token = str(getattr(self.tgapp, "BOT_TOKEN", "") or "")
         if not token:
             raise ReporterCliError("Telegram bot token unavailable for reporter send")
+        return token
+
+    def send(self, owner: str, text: str, raw: str) -> None:
+        token = self._token()
         split = getattr(self.tgapp, "split_text", None)
         segments = split(text, TELEGRAM_TEXT_LIMIT) if callable(split) else [text]
         for segment in segments:
             _telegram_send_text(token, owner, segment)
+
+    def send_report(self, owner: str, text: str, raw: str, report: Report) -> None:
+        """Send the report as formatted MarkdownV2 messages: bold title
+        line, body, italic ``{status} · {session id}`` footer.
+
+        Coupling point: tgapp's ``markdown_v2_segments`` seam (patch 0024)
+        does the Markdown rewrite, conversion and splitting, exactly as for
+        answers, and pairs every segment with a plain-text fallback. A
+        segment Telegram rejects with HTTP 400 (entity parsing) is re-sent
+        as that plain text; any other failure raises so ``_deliver`` counts
+        a retry. A tgapp payload without the seam gets the plain ``send``
+        unchanged."""
+        segments_of = getattr(self.tgapp, "markdown_v2_segments", None)
+        if not callable(segments_of):
+            self.send(owner, text, raw)
+            return
+        token = self._token()
+        segments = [
+            (str(markdown_v2), str(plain))
+            for markdown_v2, plain in segments_of(telegram_report_markdown(text, report))
+        ]
+        if not segments:
+            # Sending nothing and returning would mark the report delivered.
+            raise ReporterCliError("Telegram report rendered to no message segments")
+        # One segment at a time, in order: each is sent (or has failed)
+        # before the next, so a failure stops the rest and reaches _deliver.
+        for index, (markdown_v2, plain) in enumerate(segments, start=1):
+            try:
+                _telegram_send_text(token, owner, markdown_v2, parse_mode=TELEGRAM_PARSE_MODE)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 400:
+                    raise
+                print(
+                    f"[galley-im-reporter] Telegram rejected report segment "
+                    f"{index}/{len(segments)} as MarkdownV2 "
+                    f"({_telegram_error_description(exc) or 'HTTP 400'}); "
+                    f"resending it as plain text"
+                )
+                _telegram_send_text(token, owner, plain)
 
 
 DISCORD_SEND_TIMEOUT_SEC = 30.0
@@ -478,11 +595,12 @@ def discord_report_outcome(kind: str) -> tuple[int, str]:
     """(embed color, footer status word) for a report kind. Anything that
     is neither completed nor cancelled is a dead run and reads as an
     error, so a future dead status still gets a truthful card."""
+    word = report_status_word(kind)
     if kind == "completed":
-        return DISCORD_REPORT_COLOR_COMPLETED, "已完成"
+        return DISCORD_REPORT_COLOR_COMPLETED, word
     if kind == "cancelled":
-        return DISCORD_REPORT_COLOR_CANCELLED, "已停止"
-    return DISCORD_REPORT_COLOR_ERROR, "出错"
+        return DISCORD_REPORT_COLOR_CANCELLED, word
+    return DISCORD_REPORT_COLOR_ERROR, word
 
 
 def split_embed_description(
