@@ -9,14 +9,14 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.5.4`.
-- Git tag / GitHub Release: `v0.5.4` is the current published stable release
-  (tagged at `dc77809b` on 2026-09-28, GitHub Latest).
+- Package version: `0.5.5`.
+- Git tag / GitHub Release: `v0.5.5` is the current published stable release
+  (tagged at `29e6aa37` on 2026-09-30, GitHub Latest).
 - Agent API schema: `schemaVersion: 2` (since the Goal v2 rework on
   2026-09-16, first shipped in `v0.5.0`). The server keeps answering `1` for
   every command that did not change; only the `goal` family is `2`-only, and
   the retired v1 goal commands are `unknown_command` under every version.
-- Release tier: stable patch; default update channel points at `v0.5.4`.
+- Release tier: stable patch; default update channel points at `v0.5.5`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `1b6442f` (audited 2026-09-18, first shipped in
   `v0.5.1`) — engine delta is Galley-positive abort-before-headers plus an
@@ -28,6 +28,38 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.5.5` (2026-09-30) is a patch two days after `v0.5.4`, 23 commits, almost
+all one IM-channel polish round. **Discord and Telegram conversations aligned
+with the desktop run view** (new managed patches `0023` / `0024`, a
+Galley-owned shared `frontends/galley_im_display.py`, the reporter's
+`send_report` seams): one silent status message per run, edited in place and
+deleted when the answer lands (the answer is the closing step, under a
+`-# N 步 · 用时 X` subtext line on Discord, an expandable step-list quote on
+Telegram); ask_user questions always reach the chat with `candidateLayout`
+buttons; stop is text `/stop`; Telegram's `/stop` / `/new` no longer leave a
+queued task running unseen and tables / headings render as lists / bold
+lines; Discord's `/btw` / `/review` work; completion reports are embed cards
+(Discord) or carry a bold title and an italic status footer (Telegram).
+**Restart continuity on all four channels**: Discord keeps activated channels
+across restarts and resumes each from its engine log (patch `0026`); Feishu,
+Telegram and WeChat do the same Galley-side (`runner/im_resume.py`, no new
+patch); WeChat gains `/new`; Disconnect (Core `logout`) clears the
+continuity state. **macOS Stop** interrupts a request still waiting for
+response headers (patch `0025`: upstream `abort()`'s force-close stays on
+Windows only; the upstream PR draft is on hold in deferred). **CLI**:
+`galley llm list` takes `--runtime` (default `current`) and lists the Galley
+model store under bundled GA — an Agent API behavior fix recorded in §7.1;
+external `llm set` / `session new --llm` no longer trip a serde alias on every
+GUI-written cache. Graded patch: the largest features stay on the existing IM
+channel line (the `v0.4.7` precedent); size alone does not grade. The
+bundled-runtime gate was mandatory and passed on `mac-x64`; the GA baseline
+audit was skipped with the reason in the devlog (upstream at `f308ee7`:
+a memory-distill prompt rewrite and a claude-cli UA bump, not critical,
+three of eight commits landed that day). `check.yml` was green on the release
+head (run 36736695562, all six jobs) before the tag; JC approved the draft;
+stable promoted and verified the same session (run 36742448919). Full
+narrative: devlog [2026-09-30-v0.5.5-release](./devlog/2026-09-30-v0.5.5-release.md).
 
 `v0.5.4` (2026-09-28) is a patch five days after `v0.5.3`, three GUI-only
 polish commits. **Send time**: a user message shows its send time at a break —
@@ -415,16 +447,21 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.5.4` is published and promoted as the live stable release (2026-09-28).
-The default `updates/stable/latest.json` channel points at `v0.5.4`, with the
+`v0.5.5` is published and promoted as the live stable release (2026-09-30).
+The default `updates/stable/latest.json` channel points at `v0.5.5`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. The live verifier passed with `--cache-bust` for both
 channels across all three platforms (darwin-aarch64, darwin-x86_64,
-windows-x86_64), in the promote run and again locally. One draft cut; JC
-approved the draft for publish. The bundled-runtime gate was skipped (no
-`managed-ga/`, `runner/` or dependency change); `check.yml` was green on the
-release head (run 36395727541, all six jobs). The promote workflow's
-download-by-release-id fix (`d42c727f`) promoted on the first run.
+windows-x86_64), in the promote run and again locally. One draft cut (release
+run 36738236573); JC approved the draft for publish. The bundled-runtime gate
+passed on `mac-x64`; `check.yml` was green on the release head (run
+36736695562, all six jobs).
+
+`v0.5.4` (2026-09-28) went through the same path: one draft cut, JC approved
+the draft, both channels verified with `--cache-bust`; its bundled-runtime
+gate was skipped (no `managed-ga/`, `runner/` or dependency change), and the
+promote workflow's download-by-release-id fix (`d42c727f`) promoted on the
+first run.
 
 `v0.5.3` (2026-09-23) went through the same path: one draft cut, JC smoked
 the draft, both channels verified with `--cache-bust`. Its bundled-runtime
@@ -479,8 +516,9 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.5.3` → `v0.5.4` is owed (not yet
-   reported); `v0.5.2` → `v0.5.3` passed on an
+1. App-update dogfood (SOP step 10): `v0.5.4` → `v0.5.5` is owed (not yet
+   reported); `v0.5.3` → `v0.5.4` is still unreported (asked again at the
+   `v0.5.5` release); `v0.5.2` → `v0.5.3` passed on an
    installed build (JC reported 2026-09-23, same session as the release);
    `v0.5.1` → `v0.5.2` passed (JC reported 2026-09-23);
    `v0.5.0` → `v0.5.1` was never reported and is written off;
@@ -515,62 +553,14 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.5.4`: the **Discord conversation UX** aligned with the desktop
-(new managed patch `0023` + the reporter's embed card; see
-[devlog](./devlog/2026-09-30-discord-conversation-ux.md)). One status message
-per run, edited in place and deleted when the answer lands under a
-`-# N 步 · 用时 X` subtext line; ask_user questions become visible with
-buttons (they were silently swallowed before); stop is text `/stop` only
-(the status message's stop button was dropped after the dogfood — it only
-stopped the supervisor's turn, not the sessions it delegated); `/btw` and
-`/review` work; completion reports are embed cards. Also after that dogfood
-(new managed patch `0026`): an activated channel stays activated across a
-Channels restart and picks its conversation back up from the engine's own
-log (it used to need a re-@, and its re-@ notice could be lost); a report
-for a task that settled while Channels restarted reaches the channel
-without anyone speaking; the activation notice is one line plus subtext.
-Feishu, Telegram and WeChat got the same restart continuity the same day,
-Galley-side only (`runner/im_resume.py`, no new managed patch; see
-[devlog](./devlog/2026-09-30-im-restart-continuity.md)): each resumes its
-conversation from its engine log after a restart (they used to restart
-blank without a word), WeChat gains `/new`, and a Disconnect now clears the
-continuity state (Core `logout`), so a reconnect starts clean. After a
-Telegram trial, the Telegram and Discord status messages dropped their
-`已完成 N 步` line (the step number below already says it) and the
-` · 仍在运行` tail of the minute line. JC passed the real-device
-dogfood the same day; the three open judgment calls (subtext on one-step
-answers, narration kept in the answered-question echo, the typing indicator
-lingering up to ~10 s) stay as built. Because `managed-ga/` and `runner/` changed, the
-bundled-runtime gate is mandatory next release. Filed alongside:
-`.scratch/im-supervisor-context-bloat/` (needs-triage). Found during that
-dogfood and fixed the same day: `galley llm list` now takes `--runtime`
-(default `current`) and in managed mode prints the Galley model store instead
-of the external-GA cache it used to print everywhere — an Agent API behavior
-fix recorded in §7.1 "Changes inside `2`" (see
-[devlog](./devlog/2026-09-30-llm-list-runtime-aware.md)); the pre-existing
-external `llm set` / `session new --llm` failure it surfaced (every cache the
-GUI writes tripped a serde alias as a duplicate field) was fixed the same
-day. The same day the **Telegram conversation UX** got the same alignment
-(new managed patch `0024` + a new Galley-owned shared file
-`frontends/galley_im_display.py` + the reporter's Telegram `send_report`; see
-[devlog](./devlog/2026-09-30-telegram-conversation-ux.md)): a silent
-status message is the live window (Discord's rules; the private-chat draft
-was dropped after JC's first dogfood round because the client pushes the
-whole chat up for it), each run posts one answer (the closing step) under an
-expandable step-list quote (JC picked style b), tables become lists,
-ask_user matches Discord, `/stop` and `/new` no longer leave a queued task
-running unseen, and reports carry a bold title and an italic status footer.
-JC passed the second real-device round the same day (the push-up gap is
-gone; minute line, stop freeze, ask_user, queue, reports and push count all
-as built). Found right after: on macOS a Stop could not interrupt an LLM
-request still waiting for response headers (upstream `abort()` force-closes
-the socket right after the shutdown, racing its wake-up), so the next
-message queued for up to the 180 s read timeout — new managed patch `0025`
-keeps the close on Windows only (desktop Stop and every IM `/stop` benefit;
-external GA keeps upstream behavior; the upstream PR draft is on hold in
-deferred; see
-[devlog](./devlog/2026-09-30-macos-abort-wake.md)).
-Release-scope truth remains `git log v0.5.4..HEAD`.
+Since `v0.5.5`: nothing yet. Filed during the `v0.5.5` IM round and still
+open: `.scratch/im-supervisor-context-bloat/` (needs-triage) and
+`.scratch/im-chrome-i18n/` (the IM chrome follows the UI language; deferred
+to the end of the Discord / Telegram polish). The three open judgment calls
+from the IM dogfood (subtext on one-step answers, narration kept in the
+answered-question echo, the typing indicator lingering up to ~10 s) stay as
+built.
+Release-scope truth remains `git log v0.5.5..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
 row stacked above the commission marker's eyebrow) reads cluttered has not
@@ -596,8 +586,13 @@ and `v0.5.3` without a re-audit — the pre-release audit was missed both times
 two commits ahead (`e86ca72`: a WeChat QR docs update and upstream TUI
 polish, neither of which Galley uses), so the shipped engine code is
 current. At `v0.5.4` upstream was still `e86ca72`, so the audit was skipped
-with that reason recorded in the release devlog; the next release re-checks
-upstream per the standard trigger. Upstream's default-constant line (`default_context_win`) has now
+with that reason recorded in the release devlog. At `v0.5.5` upstream was at
+`f308ee7`, eight commits ahead and the first skip with an engine-code delta
+(`ga.py`'s memory-distill prompt rewrite, a claude-cli UA bump in
+`llmcore.py`, one reflect-only line in `agentmain.py`); skipped as not
+critical and still moving that day, with the full reasoning in the release
+devlog. The next release re-checks upstream per the standard trigger, and if
+it skips again it must give the memory-distill prompt its own verdict. Upstream's default-constant line (`default_context_win`) has now
 collided with patch `0007` twice in a row — expect it again.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
@@ -642,7 +637,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.5.4 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.5.5 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `1b6442f` (2026-09-18); released builds ship it since `v0.5.1` (`efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -668,7 +663,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.5.4`. For the next release, bump every
+- Current package metadata uses `0.5.5`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
