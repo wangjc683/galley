@@ -219,12 +219,30 @@
   时 Discord 弹出的是它自己的斜杠命令面板，没注册原生命令就列不出我们的文本
   命令。解释后 JC 满意（直接当普通消息发即可），未要求开工；算半个「不知道有
   哪些命令」信号，再出现一次即可考虑启动。
+- **信号记录**（2026-09-30，同日）：状态消息上的停止按钮去掉后（`.scratch/discord-ux/issues/05`），文本 `/stop`
+  成了 Discord 里唯一的停止入口，本项的可发现性价值随之上升。
 - **方案**：用 discord.py `app_commands.CommandTree` 注册 `/stop` `/status` `/new`
   `/llm` `/btw` `/review` `/help`，输入 `/` 时有原生补全；文本命令保留兼容。
 - **实施要点**：命令树同步时机（启动时 guild 级同步最快生效）；邀请链接是否需要
   `applications.commands` scope 要先核实，setup guide 文案随之改；DiscordCard
   命令参考表同步。
 - **关联**：`frontends/dcapp.py` `handle_command`；[§9 Channels](../design/overlays-and-settings.md)。
+
+---
+
+## IM 渠道外壳多语言（跟随 Galley 界面语言）
+
+- **状态**：暂缓（2026-09-30 JC 裁决：Discord / Telegram 对话体验打磨收尾后最后做）
+- **提出**：2026-09-30，讨论 Discord 停止按钮时 JC 指出按钮是中文、英语用户会很奇怪；读码确认状态消息、回答小字、
+  提问回显、报告 footer 整层外壳都是中文，模型回复却跟随用户语言。
+- **启动信号**：Discord / Telegram 打磨告一段落（外壳文字定稿）；或更早出现英语用户对 IM 外壳的反馈。
+- **方案**：Discord / Telegram 只认配对绑定的 owner，频道对面就是 Galley 桌面主人，所以跟随 Galley 界面语言：Core 启动渠道时
+  注入解析后的语言，Galley 自己写的外壳（`0023`、`0024`、reporter）做中英两张表放进 `galley_im_display.py`。否决按每条消息
+  检测语言（混用时外壳会跳）。
+- **实施要点**：前置是把 `galley_im_display.py` 拆成独立补丁排到 `0023` 前面、dcapp 改用它（后续补丁改编号）；「跟随系统」
+  目前只在 GUI 解析（`gui/src/lib/language.ts`），Core 要补一次。
+- **待定**：上游原有中文（`/help`、Telegram 菜单、飞书 / 微信）覆盖与否；改语言时是否自动重启 Channels。
+- **关联**：`.scratch/im-chrome-i18n/PRD.md`（详细清单与依据）；[Discord 对齐](./2026-09-30-discord-conversation-ux.md)。
 
 ---
 

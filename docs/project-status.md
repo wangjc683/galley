@@ -520,7 +520,9 @@ Since `v0.5.4`: the **Discord conversation UX** aligned with the desktop
 [devlog](./devlog/2026-09-30-discord-conversation-ux.md)). One status message
 per run, edited in place and deleted when the answer lands under a
 `-# N 步 · 用时 X` subtext line; ask_user questions become visible with
-buttons (they were silently swallowed before); a stop button; `/btw` and
+buttons (they were silently swallowed before); stop is text `/stop` only
+(the status message's stop button was dropped after the dogfood — it only
+stopped the supervisor's turn, not the sessions it delegated); `/btw` and
 `/review` work; completion reports are embed cards. JC passed the real-device
 dogfood the same day; the three open judgment calls (subtext on one-step
 answers, narration kept in the answered-question echo, the typing indicator

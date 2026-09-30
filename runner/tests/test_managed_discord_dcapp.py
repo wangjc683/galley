@@ -493,10 +493,10 @@ def test_multi_step_status_edits_and_answer_is_last_step_only(env: Env) -> None:
             "01 读取会话列表\n·· 思考中",
             "已完成 2 步\n02 整理结果\n·· 思考中",
         ]
-        view = status.edits[0]["view"]
-        assert [b.label for b in view.children] == ["停止"]
-        assert view.children[0].custom_id.startswith("galley-dc:stop:")
-        assert view.timeout is None and view.stopped  # render-only, never stored
+        # No button, ever: stopping is the text /stop.
+        assert status.kwargs.get("view") is None
+        assert all(edit.get("view") is None for edit in status.edits)
+        assert status.view is None
         assert status.deleted
         assert answer.content == "-# 3 步 · 用时 10 秒\n一共有 3 个会话在跑。"
         assert "我先查一下" not in answer.content
@@ -544,17 +544,17 @@ def test_status_content_rendering(env: Env) -> None:
     # Pure rendering (asyncio.Event binds its loop lazily on 3.10+).
     run = env.dcapp._DiscordRun(CHAT, None)
     render = env.dcapp._status_content
-    assert render(run, 0.0) == ("·· 思考中", False)
+    assert render(run, 0.0) == "·· 思考中"
     run.queued = True
-    assert render(run, 0.0) == ("·· 排队中", False)
+    assert render(run, 0.0) == "·· 排队中"
     run.started_at = run.step_started_at = 0.0
     run.task_turn = 1
-    assert render(run, 59.0) == ("·· 思考中", True)
-    assert render(run, 60.0) == ("·· 思考中 · 已 1 分钟 · 仍在运行", True)
+    assert render(run, 59.0) == "·· 思考中"
+    assert render(run, 60.0) == "·· 思考中 · 已 1 分钟 · 仍在运行"
     run.task_turn, run.last_summary, run.step_started_at = 3, "读取会话列表", 50.0
-    assert render(run, 60.0) == ("已完成 2 步\n02 读取会话列表\n·· 思考中", True)
+    assert render(run, 60.0) == "已完成 2 步\n02 读取会话列表\n·· 思考中"
     run.adopt({"steps": 9, "elapsed": 1.0, "summary": ""})
-    assert render(run, 60.0) == ("已完成 11 步\n11\n·· 思考中", True)
+    assert render(run, 60.0) == "已完成 11 步\n11\n·· 思考中"
 
 
 def test_summary_fallbacks(env: Env) -> None:
@@ -653,7 +653,7 @@ def test_delete_failure_falls_back_to_done_marker(env: Env) -> None:
         await env.app.run_agent(CHAT, "hi", reply_to=env.trigger())
         status = env.channel.sent[0]
         assert not status.deleted
-        assert status.edits[-1] == {"content": "-# ✓ 已完成", "view": None}
+        assert status.edits[-1] == {"content": "-# ✓ 已完成"}
 
     env.run(body)
 
@@ -729,36 +729,36 @@ def test_stop_command_without_running_run(env: Env) -> None:
     env.run(body)
 
 
-def test_stop_button_stops_running_run(env: Env) -> None:
+def test_old_stop_button_is_stale_while_a_run_goes(env: Env) -> None:
+    """Status messages no longer carry a 停止 button; one left by an earlier
+    process is acknowledged and stripped, and never stops the channel's run."""
+
     async def body() -> None:
         t1 = turn_text(1, "<summary>长任务</summary>", "code_run({})")
         agent = env.agent
         task = asyncio.create_task(env.app.run_agent(CHAT, "one", reply_to=env.trigger()))
         await wait_until(lambda: len(agent.tasks) == 1)
-        agent.tasks[0][2].put(nxt([t1])[1], 2.0)
-        status = env.channel.sent[0]
-        await wait_until(lambda: status.view is not None)
-        custom_id = status.view.children[0].custom_id
+        agent.tasks[0][2].put(nxt([t1])[1])
+        await wait_until(lambda: env.app._running_run(CHAT) is not None)
+        old = FakeMessage(env.channel, "·· 思考中", view=object())
 
-        stranger = FakeInteraction("7", custom_id, status)
+        stranger = FakeInteraction("7", "galley-dc:stop:deadbeef", old)
         await env.app._handle_interaction(stranger)
         assert stranger.response.calls == [("defer", {})]
-        assert agent.aborted == 0
+        assert old.edits == []
 
-        env.clock.now += 3
-        click = FakeInteraction(OWNER, custom_id, status)
+        click = FakeInteraction(OWNER, "galley-dc:stop:deadbeef", old)
         await env.app._handle_interaction(click)
-        assert click.response.calls == [
-            ("edit_message", {"content": "⏹ 已停止 · 1 步 · 用时 3 秒", "view": None}),
-        ]
-        assert agent.aborted == 1
-        await task
-        assert not status.deleted
-        assert CHAT not in env.app.user_tasks
+        assert click.response.calls == [("defer", {})]
+        assert old.edits == [{"view": None}]
+        assert agent.aborted == 0
+        assert env.app._running_run(CHAT) is not None
 
-        again = FakeInteraction(OWNER, custom_id, status)
-        await env.app._handle_interaction(again)
-        assert again.response.calls == [("defer", {})]  # stale: acknowledged only
+        agent.tasks[0][2].put(done([t1, turn_text(2, "完成")])[1], 2.0)
+        await task
+        assert env.channel.sent[0].deleted
+        assert env.channel.sent[-1].content == "-# 2 步 · 用时 2 秒\n完成"
+        assert CHAT not in env.app.user_tasks
 
     env.run(body)
 
@@ -853,7 +853,7 @@ def test_ask_row_click_continues_run_with_carried_counts(env: Env) -> None:
         assert question.content == "-# ⏸ 等你回复 · 已完成 2 步\n我需要你确认一下。\n用哪个方案？"
         assert question.kwargs.get("reference") is None
         assert [b.label for b in question.view.children] == ["方案 A", "方案 B"]
-        assert question.view.timeout is None
+        assert question.view.timeout is None and question.view.stopped  # render-only, never stored
         assert CHAT not in env.app.user_tasks  # waiting for an answer is not busy
 
         c1 = turn_text(1, "<summary>执行</summary>好的，就用方案 B。")

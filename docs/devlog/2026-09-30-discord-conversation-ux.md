@@ -91,3 +91,29 @@ agent 正在跑 reporter 报告轮时用户消息也显示「排队中」；排�
 `discord.log` 里 JC 当天一问（12 字）让 supervisor 跑了 `galley llm --help`、`llm list` 和
 `sessions list --runtime all --all`，上下文从 658 涨到 28574 字符、三轮才答——四个 IM 渠道共享的提示词 / CLI 用法问题，
 立为 `.scratch/im-supervisor-context-bloat/`（needs-triage）。
+
+## 真机后追加：去掉停止按钮（JC，2026-09-30）
+
+JC 继续打磨时提出：状态消息上的「停止」按钮有点没必要，而且是中文，英语用户会觉得奇怪。拆成两件事讨论：
+
+- **按钮**。读码补上的事实：按钮只 abort supervisor 这一轮，派出去的 Galley session 照跑、报告照回（`managed_prompt.rs`
+  IM 入口层：重活交给 session），与桌面 Stop 停的是干活的 session 本身并不对等；真正会拖长的只有 `session wait`，停止在这里
+  的作用是「把频道要回来」；桌面 Stop 是纯图标（`ComposerActionSlot.tsx`），Discord 却写成了带字的「停止」；Telegram 本来就只靠
+  `/stop`。三案：A 去掉只留 `/stop`；B 换纯图标 ⏹；C 纯图标且本轮满 60 秒才挂。我推荐 C（Discord 没有别的可发现的停止入口，
+  A 让卡住时退回手敲），**JC 裁 A**，我同意：第 1 条事实让停止在 Discord 的价值本来就窄，为它每轮挂一排按钮不值；A 还与
+  Telegram 一致、外壳少一个要翻译的词。已知代价：运行中想停得手敲 `/stop`（`/help` 与 Settings 命令参考已列），不加
+  「发 /stop 可中断」提示，真机遇到再说；[deferred「Discord 原生斜杠命令」](./deferred.md) 记了这条信号。
+- **语言**。按钮只是冰山一角：状态消息、回答小字、提问回显、报告 footer 整层外壳都是中文，而模型回复跟随用户语言。
+  Discord / Telegram 只认配对绑定的 owner，频道对面就是 Galley 桌面主人，所以方案定为跟随 Galley 界面语言（否决按每条消息
+  检测）；**JC 裁决打磨收尾后最后做**，只翻定稿文字一遍。立为 `.scratch/im-chrome-i18n/` 并进 [deferred](./deferred.md)。
+- **迁移条件改写**。`0024` 台账行原写「`0023` 下次重导出时把 `galley_im_display.py` 拆成独立补丁排到它前面」，本次重导出
+  会触发它。改为随多语言一起做：多语言本来就要把字符串表放进共享文件；而插入补丁会让后续补丁改编号、牵动基线文档与台账，
+  打磨期间每次重导出都背这笔成本不合算。代价：打磨期间两渠道共用的规则仍要在 dcapp 与共享文件各改一次。
+
+实施：补丁 `0023` 重导出（`.scratch/discord-ux/issues/05`，Opus 子代理）。`_status_content` 只返回文字，`_on_stop_click`、
+`_runs_by_token`、`_DiscordRun.token` 删除；升级前遗留的 `galley-dc:stop:*` 按钮落到原有的 `_ack_stale`——静默应答并去掉按钮，
+即使频道此刻有新 run 在跑也不停它；文本 `/stop` 逐字不变。子代理自行裁量、主会话接受：状态消息另两处编辑（停止定格、删除失败的
+兜底）的 `view=None` 一并去掉（只为清停止按钮而存在）；「按钮视图只渲染、不常驻」的断言从删掉的测试挪到 ask 按钮测试。
+验证：主会话用干净克隆（`1b6442f`）独立重放 24 个补丁，重建后 `managed-ga/code` 与 `state-seed` 全部文件哈希不变；pytest
+409 passed，mypy strict、ruff、`git diff --check`、payload、baseline-drift 绿。**真机待验**：新 run 的状态消息没有按钮、长任务中
+`/stop` 定格。

@@ -965,7 +965,9 @@ already-generated bundle without rebuilding it. The smoke must verify
 - Managed Discord channel (item 15; quit any installed Galley first, or both
   bots answer on the same token): a multi-step request (status message
   edits in place, then only the answer remains under its `-# N 步 · 用时 X`
-  line), an ask_user question answered by a button, and the stop button.
+  line), an ask_user question answered by a button, and `/stop` during a
+  long run (the status message freezes into `⏹ 已停止 · …`, and no other
+  message follows).
 - Managed Telegram channel (item 15; same caveat about an installed
   Galley): a multi-step request in the private chat (the silent status
   message edits in place, then only the answer remains, under its fold

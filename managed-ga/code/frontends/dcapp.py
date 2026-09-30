@@ -606,8 +606,7 @@ class _DiscordRun:
 
     def __init__(self, chat_id, ga, trigger=None, carry=None):
         self.chat_id, self.ga, self.trigger = chat_id, ga, trigger
-        self.token = uuid.uuid4().hex[:12]
-        self.running = True  # cleared by /stop, the stop button, channel release
+        self.running = True  # cleared by /stop, channel release
         self.outcome = None  # "done" | "ask" | "stopped" | "error"
         self.queued = False
         self.adopted = carry is not None
@@ -669,9 +668,10 @@ class _DiscordRun:
 
 
 def _status_content(run, now):
-    """(content, show_stop_button) of a run's status message."""
+    """A run's status message. It never carries a button: stopping is the
+    text /stop."""
     if run.started_at is None and run.queued:
-        return "·· 排队中", False
+        return "·· 排队中"
     lines = []
     settled = run.settled_steps()
     if settled >= 2:
@@ -684,7 +684,7 @@ def _status_content(run, now):
         if minutes >= 1:
             thinking += f" · 已 {minutes} 分钟 · 仍在运行"
     lines.append(thinking)
-    return "\n".join(lines), run.started_at is not None
+    return "\n".join(lines)
 
 
 class _PendingAsk:
@@ -713,7 +713,6 @@ class DiscordApp(AgentChatMixin):
         self._agent_lock = threading.Lock()
         self._dm_notice_at = {}
         self._clock = time.monotonic  # run timing + edit throttle; injectable for tests
-        self._runs_by_token = {}  # stop-button token -> _DiscordRun
         self._ask_lock = threading.Lock()  # ask_user events arrive on GA worker threads
         self._ask_events = {}  # chat_id -> (display queue of the asking task, event)
         self._pending_asks = {}  # chat_id -> _PendingAsk waiting for an answer
@@ -1175,7 +1174,6 @@ class DiscordApp(AgentChatMixin):
         run = _DiscordRun(chat_id, ga, reply_to, carry)
         runs = self.user_tasks.setdefault(chat_id, [])
         runs.append(run)
-        self._runs_by_token[run.token] = run
         try:
             run.queued = len(runs) > 1 or bool(getattr(ga, "is_running", False))
             if answers_ask and not run.queued:
@@ -1213,7 +1211,6 @@ class DiscordApp(AgentChatMixin):
             await self._fail_run(run, e)
         finally:
             self._stop_typing(run)
-            self._runs_by_token.pop(run.token, None)
             if run in runs:
                 runs.remove(run)
             if runs:
@@ -1283,7 +1280,7 @@ class DiscordApp(AgentChatMixin):
         now = self._clock()
         rendering = _status_content(run, now)
         try:
-            run.status_msg = await run.channel.send(rendering[0], **_reply_kwargs(run.trigger))
+            run.status_msg = await run.channel.send(rendering, **_reply_kwargs(run.trigger))
             run.last_render, run.last_edit_at = rendering, now
         except Exception as e:
             print(f"[Discord] status message failed for {run.chat_id}: {e}")
@@ -1308,10 +1305,8 @@ class DiscordApp(AgentChatMixin):
             return
         if run.last_edit_at is not None and now - run.last_edit_at < STATUS_EDIT_INTERVAL_SECONDS:
             return
-        content, show_stop = rendering
-        view = _component_view([("停止", f"{_COMPONENT_PREFIX}stop:{run.token}")]) if show_stop else None
         try:
-            await run.status_msg.edit(content=content, view=view)
+            await run.status_msg.edit(content=rendering)
             run.last_render = rendering
         except Exception as e:
             print(f"[Discord] status edit failed for {run.chat_id}: {e}")
@@ -1328,7 +1323,7 @@ class DiscordApp(AgentChatMixin):
             return
         text = _stopped_text(run.total_steps(), run.elapsed(run.ended_at or self._clock()))
         try:
-            await run.status_msg.edit(content=text, view=None)
+            await run.status_msg.edit(content=text)
             run.final_written = True
         except Exception as e:
             print(f"[Discord] status stop edit failed for {run.chat_id}: {e}")
@@ -1345,7 +1340,7 @@ class DiscordApp(AgentChatMixin):
         except Exception as e:
             print(f"[Discord] status delete failed for {run.chat_id}: {e}")
         try:
-            await msg.edit(content=fallback, view=None)
+            await msg.edit(content=fallback)
         except Exception as e:
             print(f"[Discord] status fallback edit failed for {run.chat_id}: {e}")
 
@@ -1458,7 +1453,7 @@ class DiscordApp(AgentChatMixin):
         print(f"[Discord] ask_user answered by message: chat={run.chat_id}")
 
     async def _handle_interaction(self, interaction):
-        """Button clicks (ask_user answers, stop), routed by custom_id so that
+        """Button clicks (ask_user answers), routed by custom_id so that
         buttons left over from an earlier process are still answered."""
         data = getattr(interaction, "data", None)
         custom_id = str(data.get("custom_id") or "") if isinstance(data, dict) else ""
@@ -1471,11 +1466,13 @@ class DiscordApp(AgentChatMixin):
             print(f"[Discord] ignored button from unauthorized user {user_id}")
             return await self._ack(interaction)
         kind, _, rest = custom_id[len(_COMPONENT_PREFIX):].partition(":")
-        if kind == "stop":
-            return await self._on_stop_click(interaction, rest)
         if kind == "ask":
             token, _, index = rest.partition(":")
             return await self._on_ask_click(interaction, token, index)
+        # Anything else is stale. That includes the 停止 button
+        # (galley-dc:stop:<token>) status messages carried before stopping
+        # became text-only (/stop): it stops nothing, even when the channel
+        # has a run going now.
         return await self._ack_stale(interaction)
 
     async def _ack(self, interaction):
@@ -1491,21 +1488,6 @@ class DiscordApp(AgentChatMixin):
         message = getattr(interaction, "message", None)
         if message is not None:
             await self._strip_buttons(message)
-
-    async def _on_stop_click(self, interaction, token):
-        run = self._runs_by_token.get(token)
-        if run is None or run.status_msg is None or not run.running or run.outcome is not None:
-            return await self._ack_stale(interaction)
-        self._request_stop(run)
-        print(f"[Discord] run stopped by button: chat={run.chat_id}")
-        text = _stopped_text(run.total_steps(), run.elapsed(run.ended_at))
-        try:
-            await interaction.response.edit_message(content=text, view=None)
-            run.final_written = True
-        except Exception as e:
-            print(f"[Discord] stop button edit failed for {run.chat_id}: {e}")
-            await self._ack(interaction)
-            await self._write_stopped(run)
 
     async def _on_ask_click(self, interaction, token, index):
         with self._ask_lock:

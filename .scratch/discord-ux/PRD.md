@@ -62,7 +62,7 @@ Discord 的机制差异决定映射方式：**发新消息 = 手机推送一次�
 | ask_user 气泡 + chip；答后回显勾所选 | 提问发新消息 + 按钮；点选后编辑该消息：去按钮、列候选、勾所选；打字回复同样算回答 | 不另发「选了 X」一行 |
 | 候选排布（`candidateLayout`） | 同阈值：≥5 条、单条 >20 字、合计 >60 字 → 正文编号列表 + 按钮写序号；否则按钮直接写候选 | 按钮标签上限 80 字；>25 条纯文本 |
 | ask_user 不切断 run 计数（09-18） | 照搬：续跑的步号与用时累加，等待时间不计 | |
-| Composer Stop | 状态消息上的「停止」按钮 | 停止后状态消息**不删**，定格 `⏹ 已停止 · N 步 · 用时 X`（无回答可挂眉头） |
+| Composer Stop | ~~状态消息上的「停止」按钮~~ → 只靠文本 `/stop`（2026-09-30 真机后去掉按钮，见 05） | 停止后状态消息**不删**，定格 `⏹ 已停止 · N 步 · 用时 X`（无回答可挂眉头） |
 | 完成报告 | embed 卡片：标题 = session 标题，色条分完成 / 失败 / 取消，脚注 session id | 类比 Goal 收口标记 |
 
 **不做**：原生斜杠命令（D，进 deferred）、步骤展开按钮（进 deferred）、多选 ask_user 的按钮化（多选问题退回文本回复）。
@@ -76,6 +76,7 @@ rebase 风险低）。reporter 改动在 `runner/`，经 dcapp 新增的严格�
 - [02 ask_user 按钮、停止按钮、命令补齐](./issues/02-ask-user-stop-commands.md) — dcapp，补丁 0023（同一 agent 接 01 顺做）
 - [03 完成报告 embed](./issues/03-report-embed.md) — runner，可与 01/02 并行
 - [04 集成验收 + 真机](./issues/04-integration-and-dogfood.md) — 主会话 + JC
+- [05 去掉状态消息上的停止按钮](./issues/05-drop-stop-button.md) — dcapp，补丁 0023 重导出（真机验收后追加）
 
 ## 运行时影响
 
