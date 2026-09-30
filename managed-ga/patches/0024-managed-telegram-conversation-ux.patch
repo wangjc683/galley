@@ -1,9 +1,9 @@
 diff --git a/frontends/galley_im_display.py b/frontends/galley_im_display.py
 new file mode 100644
-index 0000000..cc60679
+index 0000000..de2e39e
 --- /dev/null
 +++ b/frontends/galley_im_display.py
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,270 @@
 +"""Platform-neutral display helpers for Galley's managed IM frontends.
 +
 +Galley-owned: added by managed patch 0024 as a new file, so upstream never
@@ -16,9 +16,9 @@ index 0000000..cc60679
 +conversation UX devlog).
 +
 +Everything here is pure text in, text out: GA's display-queue step texts,
-+the desktop's fold header and TurnMarker readout wording, the ask_user
-+payload of a turn-end hook, and a Markdown table rewrite for chat apps that
-+cannot render tables.
++the desktop's fold header wording, the still-running tail of a live status
++line, the ask_user payload of a turn-end hook, and a Markdown table rewrite
++for chat apps that cannot render tables.
 +"""
 +import re
 +
@@ -75,19 +75,14 @@ index 0000000..cc60679
 +    return f"⏹ 已停止 · {label}" if label else "⏹ 已停止"
 +
 +
-+def live_elapsed(seconds, still_running=True):
-+    """Desktop TurnMarker readout (docs/design/conversation.md, Thinking
-+    Placeholder): nothing under 3 s, then `S 秒`, from 60 s `已 M 分 S 秒 ·
-+    仍在运行`. Whole seconds, floored: a readout only ever counts up.
-+    still_running=False drops the trailing clause (a queue wait is not a
-+    run)."""
-+    sec = int(max(0.0, float(seconds or 0)))
-+    if sec < 3:
-+        return ""
-+    if sec < 60:
-+        return f"{sec} 秒"
-+    text = f"已 {sec // 60} 分 {sec % 60} 秒"
-+    return f"{text} · 仍在运行" if still_running else text
++def still_running_suffix(seconds):
++    """Tail of a live status line once the current step has run a full
++    minute: ` · 已 M 分钟 · 仍在运行` (M whole minutes, floored), nothing
++    before that. No seconds readout: the text changes once a minute at
++    most. Same wording and threshold as dcapp's `_status_content` (patch
++    0023)."""
++    minutes = int(max(0.0, float(seconds or 0)) // 60)
++    return f" · 已 {minutes} 分钟 · 仍在运行" if minutes >= 1 else ""
 +
 +
 +def strip_transcript(text):
@@ -280,7 +275,7 @@ index 0000000..cc60679
 +        i += 1
 +    return "\n".join(out)
 diff --git a/frontends/tgapp.py b/frontends/tgapp.py
-index 647569f..4cb2d9a 100644
+index 647569f..5bc912a 100644
 --- a/frontends/tgapp.py
 +++ b/frontends/tgapp.py
 @@ -26,0 +27,14 @@ from chatapp_common import (
@@ -291,9 +286,9 @@ index 647569f..4cb2d9a 100644
 +    extract_ask_user_event,
 +    final_step_text,
 +    fold_label,
-+    live_elapsed,
 +    one_line,
 +    step_summary,
++    still_running_suffix,
 +    stopped_text,
 +    tables_to_lists,
 +    visible_text,
@@ -320,33 +315,38 @@ index 647569f..4cb2d9a 100644
 -_MULTI_SELECT_RE = re.compile(r"\[?(?:多选|multi(?:[-_ ]?select)?|select all)\]?", re.IGNORECASE)
 @@ -178 +179,0 @@ _MD_TOKEN_RE = re.compile(
 -_TURN_MARKER_RE = re.compile(r"^\*{0,2}LLM Running \(Turn (\d+)\) \.\.\.\*{0,2}\s*$")
-@@ -180,3 +181,37 @@ _CODE_FENCE_RE = re.compile(r"^\s*(`{3,})(.*)$")
+@@ -180,15 +181,30 @@ _CODE_FENCE_RE = re.compile(r"^\s*(`{3,})(.*)$")
 -_TURN_SUMMARY_LIMIT = 160
 -_TURN_SUMMARY_RE = re.compile(r"<summary>\s*(.*?)\s*</summary>", re.DOTALL)
 -_TURN_SUMMARY_SEARCH_STRIP_RE = re.compile(r"`{3,}[\s\S]*?`{3,}|<thinking>[\s\S]*?</thinking>", re.DOTALL)
+-
+-def _make_draft_id():
+-    return random.randint(1, 2**31 - 1)
+-
+-def _visible_segments(text):
+-    text = (text or "").strip()
+-    if not text:
+-        return []
+-    segments = []
+-    for part in split_text(text, _STREAM_SEGMENT_LIMIT):
+-        segments.extend(_markdown_safe_segments(part))
+-    return segments
 +_TURN_MARKER_LINE_RE = re.compile(r"^\*{0,2}LLM Running \(Turn \d+\) \.\.\.\*{0,2}[ \t]*$", re.M)
 +_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
 +_RULE_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
 +_BULLET_RE = re.compile(r"^(\s*)[-*+]\s+")
 +_BLOCKQUOTE_RE = re.compile(r"^\s{0,3}>\s?(.*)$")
 +# Galley conversation UX (managed patch 0024): while a run works, its chat
-+# shows one live surface -- a private-chat draft (sendMessageDraft: no push,
-+# no trace, gone 30 s after its last update), or, in groups or once a draft
-+# call fails, a silent status message edited in place and deleted at the
-+# end. Then the run posts exactly one new message: its answer, stop
-+# receipt, question or error.
++# shows one live surface, a silent status message edited in place (private
++# chats and groups alike, as on Discord). The run then posts exactly one
++# new message, its answer, question or error, and the status message is
++# deleted; a stopped run freezes it into the stop receipt instead. Private
++# chats first used a sendMessageDraft preview, dropped after dogfood: the
++# client reserves a streaming area for a draft and pushes the chat up,
++# leaving a blank gap.
 +_LIVE_POLL_SECONDS = 1.0
-+_DRAFT_REFRESH_SECONDS = 2.0
-+_DRAFT_KEEPALIVE_SECONDS = 20.0
 +_STATUS_EDIT_INTERVAL_SECONDS = 1.5
-+_STATUS_CLOCK_REFRESH_SECONDS = 5.0
-+# Posting the run's message already dismisses its draft (Bot API: a draft
-+# disappears "if the bot sends a message"), and an empty draft text shows a
-+# "Thinking..." placeholder rather than clearing it: off unless dogfood
-+# shows a stale draft lingering after the answer.
-+_CLEAR_DRAFT_AFTER_SEND = False
 +_SEND_ATTEMPTS = 3
-+_FOLD_STYLE = "b"  # TEMP(dogfood): remove after JC picks a fold style
 +_FOLD_STEP_LINES = 30
 +_FOLD_HEADER_BUDGET = MessageLimit.MAX_TEXT_LENGTH // 2
 +_ASK_BUTTON_MAX_CANDIDATES = 50
@@ -361,17 +361,7 @@ index 647569f..4cb2d9a 100644
 +_pending_asks = {}  # chat id -> _PendingAsk waiting for the owner's answer
 +_last_message_ids = {}  # chat id -> newest message id seen, user's or bot's
 +_background_tasks = set()
-@@ -187,9 +221,0 @@ def _make_draft_id():
--def _visible_segments(text):
--    text = (text or "").strip()
--    if not text:
--        return []
--    segments = []
--    for part in split_text(text, _STREAM_SEGMENT_LIMIT):
--        segments.extend(_markdown_safe_segments(part))
--    return segments
--
-@@ -225,27 +250,0 @@ def _markdown_safe_segments(text, limit=None):
+@@ -225,27 +240,0 @@ def _markdown_safe_segments(text, limit=None):
 -def _line_complete(line):
 -    return (line or "").endswith(("\n", "\r"))
 -
@@ -399,7 +389,7 @@ index 647569f..4cb2d9a 100644
 -        summary = summary[:_TURN_SUMMARY_LIMIT - 3].rstrip() + "..."
 -    return summary
 -
-@@ -256,13 +254,0 @@ def _quote_tag(text):
+@@ -256,13 +244,0 @@ def _quote_tag(text):
 -def _inject_turn_summary(body, summary):
 -    if not (body or "").strip() or not (summary or "").strip():
 -        return body
@@ -413,17 +403,17 @@ index 647569f..4cb2d9a 100644
 -        return f"{title}\n\n{summary_line}\n\n{rest}"
 -    return f"{title}\n\n{summary_line}"
 -
-@@ -295 +281 @@ async def _send_files(root_msg, files):
+@@ -295 +271 @@ async def _send_files(root_msg, files):
 -                    await root_msg.reply_photo(fp)
 +                    _note_message(await root_msg.reply_photo(fp, disable_notification=True))
-@@ -301 +287 @@ async def _send_files(root_msg, files):
+@@ -301 +277 @@ async def _send_files(root_msg, files):
 -                    await root_msg.reply_document(fp)
 +                    _note_message(await root_msg.reply_document(fp, disable_notification=True))
-@@ -305,3 +290,0 @@ async def _send_files(root_msg, files):
+@@ -305,3 +280,0 @@ async def _send_files(root_msg, files):
 -async def _send_files_from_text(root_msg, text):
 -    await _send_files(root_msg, _files_from_text(text))
 -
-@@ -355,31 +337,0 @@ def _is_not_modified_error(exc):
+@@ -355,31 +327,0 @@ def _is_not_modified_error(exc):
 -def _extract_ask_user_event(ctx):
 -    exit_reason = (ctx or {}).get("exit_reason") or {}
 -    if exit_reason.get("result") != "EXITED":
@@ -455,7 +445,7 @@ index 647569f..4cb2d9a 100644
 -        "multi": bool(_MULTI_SELECT_RE.search(question)),
 -    }
 -
-@@ -390,3 +342,10 @@ def _register_ask_user_hook():
+@@ -390,3 +332,10 @@ def _register_ask_user_hook():
 -        event = _extract_ask_user_event(ctx)
 -        if event:
 -            _ask_menu_events.put(event)
@@ -469,7 +459,7 @@ index 647569f..4cb2d9a 100644
 +            _ask_events[getattr(agent, "_current_queue", None)] = event
 +            while len(_ask_events) > _ASK_EVENT_LIMIT:
 +                _ask_events.pop(next(iter(_ask_events)))
-@@ -395,31 +353,0 @@ def _register_ask_user_hook():
+@@ -395,31 +343,0 @@ def _register_ask_user_hook():
 -def _drain_latest_ask_user_event():
 -    latest = None
 -    while True:
@@ -501,7 +491,7 @@ index 647569f..4cb2d9a 100644
 -    ])
 -    return InlineKeyboardMarkup(rows)
 -
-@@ -450,35 +377,0 @@ def _build_text_prompt(text):
+@@ -450,35 +367,0 @@ def _build_text_prompt(text):
 -def _normalize_ask_menu_event(stored):
 -    if isinstance(stored, dict):
 -        candidates = stored.get("candidates") or []
@@ -537,7 +527,7 @@ index 647569f..4cb2d9a 100644
 -        text = text[:MessageLimit.MAX_TEXT_LENGTH - 18].rstrip() + "\n...[truncated]"
 -    return text
 -
-@@ -491 +384,6 @@ async def _clear_ask_reply_markup(query):
+@@ -491 +374,6 @@ async def _clear_ask_reply_markup(query):
 -async def _edit_ask_user_result(query, event, selected=None, cancelled=False):
 +def _retry_after_seconds(exc):
 +    retry_after = getattr(exc, "_retry_after", None)
@@ -545,7 +535,7 @@ index 647569f..4cb2d9a 100644
 +        retry_after = getattr(exc, "retry_after", 0) or 0
 +    if hasattr(retry_after, "total_seconds"):
 +        retry_after = retry_after.total_seconds()
-@@ -493,7 +391,131 @@ async def _edit_ask_user_result(query, event, selected=None, cancelled=False):
+@@ -493,43 +381,138 @@ async def _edit_ask_user_result(query, event, selected=None, cancelled=False):
 -        await query.edit_message_text(
 -            _render_ask_user_result(event, selected=selected, cancelled=cancelled),
 -            reply_markup=None,
@@ -553,6 +543,42 @@ index 647569f..4cb2d9a 100644
 -    except Exception as exc:
 -        print(f"[TG ask_user menu edit] {type(exc).__name__}: {exc}", flush=True)
 -        await _clear_ask_reply_markup(query)
+-
+-async def _send_ask_user_menu(root_msg, event):
+-    menu_id = uuid.uuid4().hex[:16]
+-    candidates = event["candidates"]
+-    multi = bool(event.get("multi"))
+-    _ask_menu_store[menu_id] = {
+-        "question": event["question"],
+-        "candidates": list(candidates),
+-        "multi": multi,
+-        "selected": [],
+-    }
+-    prompt = f"{event['question']}\n\n{_ASK_MULTI_HINT}" if multi else event["question"]
+-    try:
+-        await root_msg.reply_text(
+-            prompt,
+-            reply_markup=_build_ask_user_markup(menu_id, candidates, multi=multi),
+-        )
+-    except Exception as exc:
+-        _ask_menu_store.pop(menu_id, None)
+-        print(f"[TG ask_user menu error] {type(exc).__name__}: {exc}", flush=True)
+-        fallback = event["question"] + "\n" + "\n".join(f"- {candidate}" for candidate in candidates)
+-        await root_msg.reply_text(fallback)
+-
+-class _TelegramStreamSession:
+-    def __init__(self, root_msg):
+-        self.root_msg = root_msg
+-        self.private_chat = getattr(getattr(root_msg, "chat", None), "type", "") == ChatType.PRIVATE
+-        self.can_use_draft = self.private_chat   # update tg client!
+-        self.draft_id = _make_draft_id()
+-        self.live_msg = None
+-        self.raw_text = ""
+-        self.files = []
+-        self.sent_segments = 0
+-        self.active_display = ""
+-        self.pending_display = ""
+-        self._edit_overflow_msgs = {}
 +        return max(0.0, float(retry_after))
 +    except (TypeError, ValueError):
 +        return 0.0
@@ -560,9 +586,6 @@ index 647569f..4cb2d9a 100644
 +def _message_chat_id(message):
 +    chat_id = getattr(message, "chat_id", None)
 +    return chat_id if chat_id is not None else getattr(getattr(message, "chat", None), "id", None)
-+
-+def _is_private(message):
-+    return getattr(getattr(message, "chat", None), "type", "") == ChatType.PRIVATE
 +
 +def _note_message(message):
 +    """Remember each chat's newest message id, the user's or the bot's: the
@@ -664,14 +687,12 @@ index 647569f..4cb2d9a 100644
 +    return _answer_from(raw[markers[-1].start():] if markers else raw, raw)
 +
 +def _fold_header(run, steps, seconds):
-+    """(markdown_v2, plain) header over the run's answer: the desktop fold
-+    header `N 步 · 用时 X`, in the style under dogfood (a: italic line; b:
-+    expandable quote with one line per step; c: none). None for 0 steps."""
-+    label = fold_label(steps, seconds)
-+    if steps < 1 or _FOLD_STYLE == "c":  # TEMP(dogfood): remove after JC picks a fold style
++    """(markdown_v2, plain) header over the run's answer: an expandable
++    quote opening with the desktop fold header `N 步 · 用时 X`, then one
++    `NN summary` line per step (the last 30). Empty for 0 steps."""
++    if steps < 1:
 +        return "", ""
-+    if _FOLD_STYLE == "a":  # TEMP(dogfood): remove after JC picks a fold style
-+        return f"_{escape_markdown(label, version=2)}_", label
++    label = fold_label(steps, seconds)
 +    for width in (0, 60, 24):  # long step lines give way before the answer does
 +        lines = [f"{n:02d} {run.summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
 +        if width:
@@ -684,52 +705,19 @@ index 647569f..4cb2d9a 100644
 +        if len(markdown) <= _FOLD_HEADER_BUDGET:
 +            break
 +    return markdown, "\n".join([label, *lines])
-@@ -501,27 +523,7 @@ async def _edit_ask_user_result(query, event, selected=None, cancelled=False):
--async def _send_ask_user_menu(root_msg, event):
--    menu_id = uuid.uuid4().hex[:16]
--    candidates = event["candidates"]
--    multi = bool(event.get("multi"))
--    _ask_menu_store[menu_id] = {
--        "question": event["question"],
--        "candidates": list(candidates),
--        "multi": multi,
--        "selected": [],
--    }
--    prompt = f"{event['question']}\n\n{_ASK_MULTI_HINT}" if multi else event["question"]
--    try:
--        await root_msg.reply_text(
--            prompt,
--            reply_markup=_build_ask_user_markup(menu_id, candidates, multi=multi),
--        )
--    except Exception as exc:
--        _ask_menu_store.pop(menu_id, None)
--        print(f"[TG ask_user menu error] {type(exc).__name__}: {exc}", flush=True)
--        fallback = event["question"] + "\n" + "\n".join(f"- {candidate}" for candidate in candidates)
--        await root_msg.reply_text(fallback)
--
--class _TelegramStreamSession:
--    def __init__(self, root_msg):
--        self.root_msg = root_msg
--        self.private_chat = getattr(getattr(root_msg, "chat", None), "type", "") == ChatType.PRIVATE
--        self.can_use_draft = self.private_chat   # update tg client!
++
 +class _LiveSurface:
-+    """A run's live window in its chat: a draft in private chats; in groups,
-+    or once a draft call fails, a silent status message edited in place."""
++    """A run's live window in its chat: a silent status message edited in
++    place. Closed once the run's message is out, or for good when the
++    status message cannot be sent."""
 +
 +    def __init__(self, message):
 +        self.message = message  # the run's trigger: live output goes to its chat
-+        self.mode = "draft" if _is_private(message) else "status"
-@@ -529,7 +531,2 @@ class _TelegramStreamSession:
--        self.live_msg = None
--        self.raw_text = ""
--        self.files = []
--        self.sent_segments = 0
--        self.active_display = ""
--        self.pending_display = ""
--        self._edit_overflow_msgs = {}
++        self.anchor = message  # an answer right below it needs no quote
 +        self.status_msg = None
-+        self.text = self.shape = self.sent_at = None
-@@ -537,33 +534,131 @@ class _TelegramStreamSession:
++        self.closed = False
++        self.text = self.sent_at = None
+@@ -537,70 +519,0 @@ class _TelegramStreamSession:
 -        self.last_update_at = 0.0
 -        self.last_update_raw_len = 0
 -
@@ -763,7 +751,64 @@ index 647569f..4cb2d9a 100644
 -        if display == self.active_display:
 -            return False
 -        if self.last_update_at <= 0:
-+
+-            return True
+-        elapsed = self._now() - self.last_update_at
+-        raw_delta = len(self.raw_text) - self.last_update_raw_len
+-        return elapsed >= _STREAM_UPDATE_INTERVAL_SECONDS or raw_delta >= _STREAM_MIN_UPDATE_CHARS
+-
+-    def _mark_stream_update(self, display):
+-        self.active_display = display
+-        self.pending_display = ""
+-        self.last_update_at = self._now()
+-        self.last_update_raw_len = len(self.raw_text)
+-
+-    def _stream_display(self, text):
+-        base = (text or _DRAFT_HINT).strip() or _DRAFT_HINT
+-        safe_parts = _markdown_safe_segments(base)
+-        base = safe_parts[-1] if safe_parts else _DRAFT_HINT
+-        if base == _DRAFT_HINT:
+-            return base
+-        display = base + _STREAM_SUFFIX
+-        if len(_to_markdown_v2(display)) <= MessageLimit.MAX_TEXT_LENGTH:
+-            return display
+-        return base
+-
+-    async def prime(self):
+-        if self.can_use_draft:
+-            draft_result = await self._send_draft(_DRAFT_HINT)
+-            if draft_result is True:
+-                self.active_display = _DRAFT_HINT
+-                return
+-            if draft_result is None:
+-                self.active_display = _DRAFT_HINT
+-                return
+-        try:
+-            await self._upsert_live_message(_DRAFT_HINT, wait_retry=False)
+-        except RetryAfter:
+-            self.active_display = _DRAFT_HINT
+-            return
+-        self.active_display = _DRAFT_HINT
+@@ -608,20 +521,116 @@ class _TelegramStreamSession:
+-    async def add_chunk(self, chunk):
+-        if not chunk:
+-            return
+-        self.raw_text += chunk
+-        await self._refresh(done=False, send_files=False)
+-
+-    async def finalize(self, full_text=None, send_files=True):
+-        if full_text is not None:
+-            self.raw_text = full_text
+-        await self._refresh(done=True, send_files=send_files)
+-
+-    async def finish_with_notice(self, notice):
+-        if self.raw_text.strip():
+-            await self.finalize(send_files=False)
+-            await self._reply_text(notice)
+-            return
+-        if self.live_msg is not None:
+-            await self._edit_text(self.live_msg, notice)
+-            self.live_msg = None
+-            self.active_display = ""
 +class _TgRun:
 +    """One run: a GA task, plus the ask_user segments it continues. _RUNS
 +    lists every run in GA's task order; its head is the task GA is on (or
@@ -780,7 +825,6 @@ index 647569f..4cb2d9a 100644
 +        self.adopt(carry)
 +        self.task_turn = 0  # highest GA turn seen in this run's task
 +        self.turn_texts = {}
-+        self.queued_at = _clock()
 +        self.started_at = self.step_started_at = self.ended_at = None
 +        self.live = _LiveSurface(trigger)
 +        self.lock = asyncio.Lock()  # live-surface writes vs. terminal messages
@@ -850,7 +894,7 @@ index 647569f..4cb2d9a 100644
 +        return True
 +    return bool(getattr(agent, "is_running", False)) and getattr(agent, "_current_queue", None) is not run.dq
 +
-+def _live_text(run, now, clock=True):
++def _live_text(run, now):
 +    lines = []
 +    settled = run.settled_steps()
 +    if settled >= 2:
@@ -858,108 +902,30 @@ index 647569f..4cb2d9a 100644
 +    if settled >= 1:
 +        lines.append(f"{settled:02d} {run.summaries.get(settled, '')}".rstrip())
 +    if _is_waiting(run):
-+        waited = live_elapsed(now - run.queued_at, still_running=False) if clock else ""
-+        lines.append("·· 排队中" + (f" · {waited}" if waited else ""))
++        lines.append("·· 排队中")
++    elif run.step_started_at is None:  # GA has not begun the task: no step to time yet
++        lines.append("·· 思考中")
 +    else:
-+        since = run.step_started_at if run.step_started_at is not None else run.queued_at
-+        running = live_elapsed(now - since) if clock else ""
-+        lines.append("·· 思考中" + (f" · {running}" if running else ""))
++        lines.append("·· 思考中" + still_running_suffix(now - run.step_started_at))
 +    runs = _chat_runs(run.chat_id)
 +    behind = len(runs) - runs.index(run) - 1 if run in runs else 0
 +    if behind > 0:
 +        lines.append(f"另有 {behind} 条消息排队中")
 +    return "\n".join(lines)
 +
-+def _live_due(live, text, shape, now):
++def _live_due(live, text, now):
++    """Sent once, then edited only when its text changed, at least 1.5 s
++    apart (changes in between merge into the next edit)."""
 +    if live.sent_at is None:
 +        return True
-+    since = now - live.sent_at
-+    if live.mode == "draft":
-+        # Only a changed text is sent, but at least every 20 s: a draft
-+        # expires 30 s after its last update.
-+        return since >= _DRAFT_KEEPALIVE_SECONDS or (text != live.text and since >= _DRAFT_REFRESH_SECONDS)
-+    if text == live.text:
-+        return False
-+    if shape != live.shape:
-+        return since >= _STATUS_EDIT_INTERVAL_SECONDS
-+    return since >= _STATUS_CLOCK_REFRESH_SECONDS  # only the readout moved
++    return text != live.text and now - live.sent_at >= _STATUS_EDIT_INTERVAL_SECONDS
 +
-+async def _send_draft(live, text):
-+    """True once the draft landed; False when drafts do not work in this
-+    chat (the caller falls back to a status message). RetryAfter propagates."""
-+    try:
-+        await live.message.reply_text_draft(live.draft_id, text)
-+        return True
-+    except RetryAfter:
-+        raise
-+    except Exception as exc:
-+        if _is_not_modified_error(exc):
-@@ -571,36 +666,2 @@ class _TelegramStreamSession:
--        elapsed = self._now() - self.last_update_at
--        raw_delta = len(self.raw_text) - self.last_update_raw_len
--        return elapsed >= _STREAM_UPDATE_INTERVAL_SECONDS or raw_delta >= _STREAM_MIN_UPDATE_CHARS
--
--    def _mark_stream_update(self, display):
--        self.active_display = display
--        self.pending_display = ""
--        self.last_update_at = self._now()
--        self.last_update_raw_len = len(self.raw_text)
--
--    def _stream_display(self, text):
--        base = (text or _DRAFT_HINT).strip() or _DRAFT_HINT
--        safe_parts = _markdown_safe_segments(base)
--        base = safe_parts[-1] if safe_parts else _DRAFT_HINT
--        if base == _DRAFT_HINT:
--            return base
--        display = base + _STREAM_SUFFIX
--        if len(_to_markdown_v2(display)) <= MessageLimit.MAX_TEXT_LENGTH:
--            return display
--        return base
--
--    async def prime(self):
--        if self.can_use_draft:
--            draft_result = await self._send_draft(_DRAFT_HINT)
--            if draft_result is True:
--                self.active_display = _DRAFT_HINT
--                return
--            if draft_result is None:
--                self.active_display = _DRAFT_HINT
--                return
--        try:
--            await self._upsert_live_message(_DRAFT_HINT, wait_retry=False)
--        except RetryAfter:
--            self.active_display = _DRAFT_HINT
--            return
--        self.active_display = _DRAFT_HINT
-+        print(f"[TG draft fallback] {type(exc).__name__}: {exc}", flush=True)
-+        return False
-@@ -608,15 +669,5 @@ class _TelegramStreamSession:
--    async def add_chunk(self, chunk):
--        if not chunk:
--            return
--        self.raw_text += chunk
--        await self._refresh(done=False, send_files=False)
--
--    async def finalize(self, full_text=None, send_files=True):
--        if full_text is not None:
--            self.raw_text = full_text
--        await self._refresh(done=True, send_files=send_files)
--
--    async def finish_with_notice(self, notice):
--        if self.raw_text.strip():
--            await self.finalize(send_files=False)
--            await self._reply_text(notice)
 +async def _flush_live(run):
-+    """Bring the run's live surface up to date, when an update is due."""
++    """Bring the run's status message up to date, when an edit is due."""
 +    async with run.lock:
 +        live = run.live
-+        if run.state not in ("queued", "running") or live.mode is None:
-@@ -624,32 +675,2 @@ class _TelegramStreamSession:
--        if self.live_msg is not None:
--            await self._edit_text(self.live_msg, notice)
--            self.live_msg = None
--            self.active_display = ""
--            return
++        if run.state not in ("queued", "running") or live.closed:
+@@ -629,20 +638,2 @@ class _TelegramStreamSession:
 -        await self._reply_text(notice)
 -        self.active_display = ""
 -
@@ -980,21 +946,21 @@ index 647569f..4cb2d9a 100644
 -        if done:
 -            if send_files:
 -                await self._send_files()
--            return
++        now = _clock()
++        if now < live.retry_until:
+@@ -650,9 +641,2 @@ class _TelegramStreamSession:
 -        active_text = segments[-1] if segments else _DRAFT_HINT
 -        await self._stream_active(active_text)
 -
 -    async def _stream_active(self, text):
 -        display = self._stream_display(text)
 -        if display == self.active_display:
-+        now = _clock()
-+        if now < live.retry_until:
-@@ -657,2 +678,2 @@ class _TelegramStreamSession:
+-            return
 -        self.pending_display = display
 -        if self._is_retrying() or not self._should_stream_update(display):
-+        text, shape = _live_text(run, now), _live_text(run, now, clock=False)
-+        if not _live_due(live, text, shape, now):
-@@ -661,10 +682,10 @@ class _TelegramStreamSession:
++        text = _live_text(run, now)
++        if not _live_due(live, text, now):
+@@ -661,10 +645,10 @@ class _TelegramStreamSession:
 -            if self.can_use_draft:
 -                draft_result = await self._send_draft(display)
 -                if draft_result is True:
@@ -1005,103 +971,49 @@ index 647569f..4cb2d9a 100644
 -            await self._upsert_live_message(display, wait_retry=False)
 -            self._mark_stream_update(display)
 -        except RetryAfter:
-+            if live.mode == "draft" and not await _send_draft(live, text):
-+                live.mode = "status"
-+            if live.mode == "status":
-+                if live.status_msg is None:
-+                    live.status_msg = await live.message.reply_text(text, disable_notification=True)
-+                    _note_message(live.status_msg)
-+                else:
-+                    await live.status_msg.edit_text(text)
++            if live.status_msg is None:
++                below = not _should_quote(run)  # nothing landed after the trigger yet
++                live.status_msg = await live.message.reply_text(text, disable_notification=True)
++                _note_message(live.status_msg)
++                if below:
++                    live.anchor = live.status_msg
++            else:
++                await live.status_msg.edit_text(text)
 +        except RetryAfter as exc:
 +            live.retry_until = now + _retry_after_seconds(exc) + _RETRY_AFTER_MARGIN_SECONDS
-@@ -672,16 +693,15 @@ class _TelegramStreamSession:
--
--    async def _finalize_segment(self, text):
--        final_text = (text or "").strip() or "..."
--        if self.live_msg is not None:
--            await self._edit_text(self.live_msg, final_text)
--            self.live_msg = None
--        else:
--            await self._reply_text(final_text)
--        self.active_display = ""
--        if self.can_use_draft:
--            self.draft_id = _make_draft_id()
--
--    async def _send_files(self):
--        await _send_files(self.root_msg, self.files)
--
--    async def _send_draft(self, text):
+@@ -671,0 +656,47 @@ class _TelegramStreamSession:
 +        except Exception as exc:
 +            if not _is_not_modified_error(exc):
 +                print(f"[TG live surface error] {type(exc).__name__}: {exc}", flush=True)
 +                if live.status_msg is None:
-+                    live.mode = None  # no live surface for this run; its message still lands
++                    live.closed = True  # no live surface for this run; its message still lands
 +                    return
-+        live.text, live.shape, live.sent_at = text, shape, now
++        live.text, live.sent_at = text, now
 +
 +async def _retire_live(run, fallback):
-+    """The run's message is out: end the live surface. A status message is
-+    deleted, or, when Telegram refuses, stops claiming the run is working."""
++    """The run's message is out: delete its status message, or, when
++    Telegram refuses, edit it so it stops claiming the run is working."""
 +    live = run.live
-+    mode, live.mode = live.mode, None
++    live.closed = True
 +    msg, live.status_msg = live.status_msg, None
-+    if msg is not None:
-@@ -689,9 +709 @@ class _TelegramStreamSession:
--            await self.root_msg.reply_text_draft(
--                self.draft_id,
--                _to_markdown_v2(text),
--                parse_mode=ParseMode.MARKDOWN_V2,
--            )
--            return True
--        except RetryAfter as exc:
--            self._set_retry_after(exc)
--            return None
-+            await msg.delete()
-@@ -699,10 +711 @@ class _TelegramStreamSession:
--            if _is_not_modified_error(exc):
--                return True
--            print(f"[TG draft fallback] {type(exc).__name__}: {exc}", flush=True)
--            self.can_use_draft = False
--            self.draft_id = _make_draft_id()
--            return False
--
--    async def _retry_call(self, func, *args):
--        while True:
--            await self._wait_for_retry()
-+            print(f"[TG status delete error] {type(exc).__name__}: {exc}", flush=True)
-@@ -710,6 +713,4 @@ class _TelegramStreamSession:
--                return await func(*args)
--            except RetryAfter as exc:
--                self._set_retry_after(exc)
--
--    async def _reply_text_once(self, text):
--        markdown = _to_markdown_v2(text)
-+                await msg.edit_text(fallback)
-+            except Exception as edit_exc:
-+                print(f"[TG status fallback error] {type(edit_exc).__name__}: {edit_exc}", flush=True)
-+    elif mode == "draft" and live.sent_at is not None and _CLEAR_DRAFT_AFTER_SEND:
-@@ -717,4 +718 @@ class _TelegramStreamSession:
--            return await self.root_msg.reply_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
--        except RetryAfter as exc:
--            self._set_retry_after(exc)
--            raise
-+            await live.message.reply_text_draft(live.draft_id, "")
-@@ -722,6 +720,18 @@ class _TelegramStreamSession:
--            if _is_not_modified_error(exc):
--                return None
--            try:
--                return await self.root_msg.reply_text(text)
--            except RetryAfter as retry_exc:
--                self._set_retry_after(retry_exc)
-+            print(f"[TG draft clear error] {type(exc).__name__}: {exc}", flush=True)
++    if msg is None:
++        return
++    try:
++        await msg.delete()
++    except Exception as exc:
++        print(f"[TG status delete error] {type(exc).__name__}: {exc}", flush=True)
++        try:
++            await msg.edit_text(fallback)
++        except Exception as edit_exc:
++            print(f"[TG status fallback error] {type(edit_exc).__name__}: {edit_exc}", flush=True)
 +
 +def _should_quote(run):
-+    """Quote the trigger only when something landed in the chat after it
-+    (or after the run's status message); right below it, a reply needs no
-+    quote."""
-+    anchor = run.live.status_msg or run.trigger
-+    anchor_id, last = getattr(anchor, "message_id", None), _last_message_ids.get(run.chat_id)
++    """Quote the trigger only when something landed in the chat after it;
++    right below it, a reply needs no quote. The run's status message stands
++    in for the trigger when it went out right below it (a queued run's can
++    land after other messages, and then does not)."""
++    anchor_id = getattr(run.live.anchor, "message_id", None)
++    last = _last_message_ids.get(run.chat_id)
 +    return isinstance(anchor_id, int) and isinstance(last, int) and last > anchor_id
 +
 +async def _reply(target, text, **kwargs):
@@ -1112,20 +1024,22 @@ index 647569f..4cb2d9a 100644
 +            message = await target.reply_text(text, **kwargs)
 +        except RetryAfter as exc:
 +            if attempt + 1 >= _SEND_ATTEMPTS:
-@@ -728,0 +739,4 @@ class _TelegramStreamSession:
++                raise
 +            await asyncio.sleep(_retry_after_seconds(exc) + _RETRY_AFTER_MARGIN_SECONDS)
 +            continue
 +        _note_message(message)
 +        return message
-@@ -730,8 +744,72 @@ class _TelegramStreamSession:
--    async def _reply_text(self, text, wait_retry=True):
--        last_msg = None
--        for segment in _markdown_safe_segments(text) or ["..."]:
--            if wait_retry:
--                last_msg = await self._retry_call(self._reply_text_once, segment)
--            else:
--                last_msg = await self._reply_text_once(segment)
--        return last_msg
+@@ -673,10 +704,52 @@ class _TelegramStreamSession:
+-    async def _finalize_segment(self, text):
+-        final_text = (text or "").strip() or "..."
+-        if self.live_msg is not None:
+-            await self._edit_text(self.live_msg, final_text)
+-            self.live_msg = None
+-        else:
+-            await self._reply_text(final_text)
+-        self.active_display = ""
+-        if self.can_use_draft:
+-            self.draft_id = _make_draft_id()
 +async def _reply_markdown(target, markdown, plain, **kwargs):
 +    """Send as MarkdownV2; when Telegram rejects it, send the plain text."""
 +    try:
@@ -1137,19 +1051,18 @@ index 647569f..4cb2d9a 100644
 +        return await _reply(target, plain, **kwargs)
 +
 +async def _send_answer(run, raw, step_text, steps, seconds):
-+    """The run's one pushed message: the fold header over the closing step's
-+    text. Further parts and the files arrive silently."""
++    """The run's one pushed message: the fold header, a blank line, then the
++    closing step's text. Further parts and the files arrive silently."""
 +    files = _files_from_text(raw)
 +    body = _answer_from(step_text, raw) or ("已生成附件" if files else "")
 +    header, header_plain = _fold_header(run, steps, seconds)
-+    sep = "\n\n" if _FOLD_STYLE == "b" else "\n"  # TEMP(dogfood): remove after JC picks a fold style
-+    first_limit = MessageLimit.MAX_TEXT_LENGTH - len(header) - len(sep) if header else None
++    first_limit = MessageLimit.MAX_TEXT_LENGTH - len(header) - 2 if header else None
 +    parts = _md_segments(_rewrite_markdown(body), first_limit)
 +    if header:
 +        markdown, plain = parts[0] if parts else ("", "")
 +        parts[:1] = [(
-+            f"{header}{sep}{markdown}" if markdown else header,
-+            f"{header_plain}{sep}{plain}" if plain else header_plain,
++            f"{header}\n\n{markdown}" if markdown else header,
++            f"{header_plain}\n\n{plain}" if plain else header_plain,
 +        )]
 +    quote = _should_quote(run)
 +    for i, (markdown, plain) in enumerate(parts or [(escape_markdown("...", version=2), "...")]):
@@ -1179,7 +1092,9 @@ index 647569f..4cb2d9a 100644
 +    if len(candidates) > _ASK_BUTTON_MAX_CANDIDATES:
 +        return "text"
 +    return candidate_layout(candidates)
-+
+@@ -684,2 +757,18 @@ class _TelegramStreamSession:
+-    async def _send_files(self):
+-        await _send_files(self.root_msg, self.files)
 +def _ask_markup(pending):
 +    if pending.layout not in ("row", "list"):
 +        return None
@@ -1198,9 +1113,8 @@ index 647569f..4cb2d9a 100644
 +            "提交", callback_data=f"{_ASK_CALLBACK_PREFIX}{pending.menu_id}:{_ASK_MULTI_DONE_ACTION}",
 +        )])
 +    return InlineKeyboardMarkup(rows)
-@@ -739,2 +817,70 @@ class _TelegramStreamSession:
--    async def _edit_text_once(self, msg, text):
--        markdown = _to_markdown_v2(text)
+@@ -687 +776,70 @@ class _TelegramStreamSession:
+-    async def _send_draft(self, text):
 +def _ask_text(pending, echo=False, chosen=()):
 +    """(markdown_v2, plain) of the question message, or of its echo once
 +    answered: chosen candidates ticked, the rest italic; a typed answer
@@ -1271,15 +1185,36 @@ index 647569f..4cb2d9a 100644
 +    _forget_pending(pending)
 +    edit = getattr(pending.message, "edit_reply_markup", None)
 +    if edit is not None:
-@@ -742,4 +888,14 @@ class _TelegramStreamSession:
--            updated = await msg.edit_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
+@@ -689,9 +847 @@ class _TelegramStreamSession:
+-            await self.root_msg.reply_text_draft(
+-                self.draft_id,
+-                _to_markdown_v2(text),
+-                parse_mode=ParseMode.MARKDOWN_V2,
+-            )
+-            return True
 -        except RetryAfter as exc:
 -            self._set_retry_after(exc)
--            raise
+-            return None
 +            await edit(reply_markup=None)
-+        except Exception as exc:
+@@ -699,14 +849 @@ class _TelegramStreamSession:
+-            if _is_not_modified_error(exc):
+-                return True
+-            print(f"[TG draft fallback] {type(exc).__name__}: {exc}", flush=True)
+-            self.can_use_draft = False
+-            self.draft_id = _make_draft_id()
+-            return False
+-
+-    async def _retry_call(self, func, *args):
+-        while True:
+-            await self._wait_for_retry()
+-            try:
+-                return await func(*args)
+-            except RetryAfter as exc:
+-                self._set_retry_after(exc)
 +            print(f"[TG ask_user cleanup] {type(exc).__name__}: {exc}", flush=True)
-+
+@@ -714,2 +851,7 @@ class _TelegramStreamSession:
+-    async def _reply_text_once(self, text):
+-        markdown = _to_markdown_v2(text)
 +async def _edit_ask_echo(pending, chosen=(), query=None):
 +    """Edit the question into its echo and drop its buttons."""
 +    markdown, plain = _ask_text(pending, echo=True, chosen=chosen)
@@ -1287,30 +1222,32 @@ index 647569f..4cb2d9a 100644
 +    if edit is None:
 +        return
 +    if len(markdown) <= MessageLimit.MAX_TEXT_LENGTH:
-+        try:
+@@ -717,4 +859,2 @@ class _TelegramStreamSession:
+-            return await self.root_msg.reply_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
+-        except RetryAfter as exc:
+-            self._set_retry_after(exc)
+-            raise
 +            await edit(markdown, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=None)
 +            return
-@@ -748,20 +904,49 @@ class _TelegramStreamSession:
--                return msg
+@@ -723,18 +863,56 @@ class _TelegramStreamSession:
+-                return None
 -            try:
--                updated = await msg.edit_text(text)
+-                return await self.root_msg.reply_text(text)
 -            except RetryAfter as retry_exc:
 -                self._set_retry_after(retry_exc)
 -                raise
--        return updated if hasattr(updated, "edit_text") else msg
 -
--    def _message_key(self, msg):
--        chat_id = getattr(getattr(msg, "chat", None), "id", None)
--        message_id = getattr(msg, "message_id", None)
--        if chat_id is not None and message_id is not None:
--            return (chat_id, message_id)
--        if message_id is not None:
--            return ("message", message_id)
--        return ("object", id(msg))
+-    async def _reply_text(self, text, wait_retry=True):
+-        last_msg = None
+-        for segment in _markdown_safe_segments(text) or ["..."]:
+-            if wait_retry:
+-                last_msg = await self._retry_call(self._reply_text_once, segment)
+-            else:
+-                last_msg = await self._reply_text_once(segment)
+-        return last_msg
 -
--    async def _delete_text_once(self, msg):
--        delete = getattr(msg, "delete", None)
--        if delete is None:
+-    async def _edit_text_once(self, msg, text):
+-        markdown = _to_markdown_v2(text)
 +                return
 +            print(f"[TG ask_user echo fallback] {type(exc).__name__}: {exc}", flush=True)
 +    try:
@@ -1360,22 +1297,75 @@ index 647569f..4cb2d9a 100644
 +    message, italic `N 步 · 用时 X` over `❌ 出错：…`."""
 +    async with run.lock:
 +        if run.state == "stopped":
-@@ -768,0 +954,6 @@ class _TelegramStreamSession:
++            return
 +        run.state = "error"
 +        label = fold_label(run.total_steps(), run.elapsed(run.ended_at or _clock()))
 +        text = f"❌ 出错：{error}"
 +        markdown = escape_markdown(text, version=2)
 +        if label:
 +            markdown, text = f"_{escape_markdown(label, version=2)}_\n{markdown}", f"{label}\n{text}"
-@@ -770,6 +961 @@ class _TelegramStreamSession:
+@@ -742,4 +920 @@ class _TelegramStreamSession:
+-            updated = await msg.edit_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
+-        except RetryAfter as exc:
+-            self._set_retry_after(exc)
+-            raise
++            await _reply_markdown(run.trigger, markdown, text, do_quote=_should_quote(run))
+@@ -747,2 +922,19 @@ class _TelegramStreamSession:
+-            if _is_not_modified_error(exc):
+-                return msg
++            print(f"[TG run error notice] {type(exc).__name__}: {exc}", flush=True)
++        finally:
++            await _retire_live(run, "❌ 出错")
++
++def _mark_stopped(run):
++    # Synchronous on purpose: callers mark the run before anything awaits,
++    # so its display loop can never turn the aborted task's `done` into an
++    # answer.
++    run.state, run.ended_at = "stopped", _clock()
++    run.wake.set()
++
++async def _post_stopped(run):
++    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`: the run's status message
++    is frozen into it and stays; a new message only when there is none (or
++    the edit fails)."""
++    async with run.lock:
++        text = stopped_text(run.total_steps(), run.elapsed(run.ended_at or _clock()))
++        live = run.live
++        if live.status_msg is not None:
+@@ -750,19 +942,5 @@ class _TelegramStreamSession:
+-                updated = await msg.edit_text(text)
+-            except RetryAfter as retry_exc:
+-                self._set_retry_after(retry_exc)
+-                raise
+-        return updated if hasattr(updated, "edit_text") else msg
+-
+-    def _message_key(self, msg):
+-        chat_id = getattr(getattr(msg, "chat", None), "id", None)
+-        message_id = getattr(msg, "message_id", None)
+-        if chat_id is not None and message_id is not None:
+-            return (chat_id, message_id)
+-        if message_id is not None:
+-            return ("message", message_id)
+-        return ("object", id(msg))
+-
+-    async def _delete_text_once(self, msg):
+-        delete = getattr(msg, "delete", None)
+-        if delete is None:
+-            return
++                await live.status_msg.edit_text(text)
++                live.status_msg, live.closed = None, True
++                return
++            except Exception as exc:
++                print(f"[TG stop receipt edit error] {type(exc).__name__}: {exc}", flush=True)
+@@ -770,6 +948 @@ class _TelegramStreamSession:
 -            result = delete()
 -            if hasattr(result, "__await__"):
 -                await result
 -        except RetryAfter as exc:
 -            self._set_retry_after(exc)
 -            raise
-+            await _reply_markdown(run.trigger, markdown, text, do_quote=_should_quote(run))
-@@ -777,32 +963,39 @@ class _TelegramStreamSession:
++            await _reply(run.trigger, text, do_quote=_should_quote(run))
+@@ -777,32 +950,12 @@ class _TelegramStreamSession:
 -            print(f"[TG stale overflow delete error] {type(exc).__name__}: {exc}", flush=True)
 -
 -    async def _delete_text(self, msg, wait_retry=True):
@@ -1408,33 +1398,6 @@ index 647569f..4cb2d9a 100644
 -                )
 -            else:
 -                new_overflow_msgs.append(await self._reply_text(segment, wait_retry=wait_retry))
-+            print(f"[TG run error notice] {type(exc).__name__}: {exc}", flush=True)
-+        finally:
-+            await _retire_live(run, "❌ 出错")
-+
-+def _mark_stopped(run):
-+    # Synchronous on purpose: callers mark the run before anything awaits,
-+    # so its display loop can never turn the aborted task's `done` into an
-+    # answer.
-+    run.state, run.ended_at = "stopped", _clock()
-+    run.wake.set()
-+
-+async def _post_stopped(run):
-+    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`: a new message that takes
-+    the draft's place; a status message is frozen into it instead."""
-+    async with run.lock:
-+        text = stopped_text(run.total_steps(), run.elapsed(run.ended_at or _clock()))
-+        live = run.live
-+        if live.status_msg is not None:
-+            try:
-+                await live.status_msg.edit_text(text)
-+                live.status_msg = live.mode = None
-+                return
-+            except Exception as exc:
-+                print(f"[TG stop receipt edit error] {type(exc).__name__}: {exc}", flush=True)
-+        try:
-+            await _reply(run.trigger, text, do_quote=_should_quote(run))
-+        except Exception as exc:
 +            print(f"[TG stop receipt error] {type(exc).__name__}: {exc}", flush=True)
 +        await _retire_live(run, text)
 +
@@ -1447,7 +1410,7 @@ index 647569f..4cb2d9a 100644
 +        return None
 +    current = getattr(agent, "_current_queue", None)
 +    return run if current is None or current is run.dq else None
-@@ -810,2 +1003,5 @@ class _TelegramStreamSession:
+@@ -810,2 +963,5 @@ class _TelegramStreamSession:
 -        for stale_msg in overflow_msgs[len(new_overflow_msgs):]:
 -            await self._delete_text(stale_msg, wait_retry=wait_retry)
 +def _call_noting_abort(fn, *args):
@@ -1455,14 +1418,14 @@ index 647569f..4cb2d9a 100644
 +    (upstream /continue n aborts for a valid index alone); return its result
 +    and whether it aborted a running task."""
 +    hits, original, own = [], agent.abort, "abort" in vars(agent)
-@@ -813,3 +1009,3 @@ class _TelegramStreamSession:
+@@ -813,3 +969,3 @@ class _TelegramStreamSession:
 -        if new_overflow_msgs:
 -            self._edit_overflow_msgs[self._message_key(primary_msg)] = new_overflow_msgs
 -        return primary_msg
 +    def abort(*a, **kw):
 +        hits.append(bool(getattr(agent, "is_running", False)))
 +        return original(*a, **kw)
-@@ -817,3 +1013,6 @@ class _TelegramStreamSession:
+@@ -817,3 +973,6 @@ class _TelegramStreamSession:
 -    async def _upsert_live_message(self, text, wait_retry=True):
 -        if self.live_msg is None:
 -            self.live_msg = await self._reply_text(text, wait_retry=wait_retry)
@@ -1472,7 +1435,7 @@ index 647569f..4cb2d9a 100644
 +    finally:
 +        if own:
 +            agent.abort = original
-@@ -821,91 +1020,29 @@ class _TelegramStreamSession:
+@@ -821,91 +980,29 @@ class _TelegramStreamSession:
 -            self.live_msg = await self._edit_text(self.live_msg, text, wait_retry=wait_retry)
 -
 -
@@ -1593,12 +1556,12 @@ index 647569f..4cb2d9a 100644
 +            await asyncio.wait_for(run.wake.wait(), _LIVE_POLL_SECONDS)
 +        except asyncio.TimeoutError:
 +            pass
-@@ -913,3 +1050 @@ class _TelegramTurnStreamCoordinator:
+@@ -913,3 +1010 @@ class _TelegramTurnStreamCoordinator:
 -async def _stream(dq, msg):
 -    stream = _TelegramTurnStreamCoordinator(msg)
 -    await stream.prime()
 +async def _drive_run(run):
-@@ -917,4 +1052,9 @@ async def _stream(dq, msg):
+@@ -917,4 +1012,9 @@ async def _stream(dq, msg):
 -        while True:
 -            try: first = await asyncio.to_thread(dq.get, True, _QUEUE_WAIT_SECONDS)
 -            except Q.Empty: continue
@@ -1612,7 +1575,7 @@ index 647569f..4cb2d9a 100644
 +            await _adopt_pending_ask(run)
 +        await _flush_live(run)
 +        while run.state in ("queued", "running"):
-@@ -922,15 +1062,12 @@ async def _stream(dq, msg):
+@@ -922,15 +1022,12 @@ async def _stream(dq, msg):
 -                while True: items.append(dq.get_nowait())
 -            except Q.Empty: pass
 -            done_item = None
@@ -1640,7 +1603,7 @@ index 647569f..4cb2d9a 100644
 +            outputs = run.observe(item, now)
 +            if "done" in item:
 +                await _finish_run(run, str(item.get("done") or ""), outputs)
-@@ -938,6 +1075 @@ async def _stream(dq, msg):
+@@ -938,6 +1035 @@ async def _stream(dq, msg):
 -    except asyncio.CancelledError:
 -        await stream.finish_with_notice("⏹️ 已停止")
 -    except RetryAfter as exc:
@@ -1648,7 +1611,7 @@ index 647569f..4cb2d9a 100644
 -        if stream.session is not None:
 -            stream.session._set_retry_after(exc)
 +            await _flush_live(run)
-@@ -945,7 +1077,7 @@ async def _stream(dq, msg):
+@@ -945,7 +1037,7 @@ async def _stream(dq, msg):
 -        print(f"[TG stream error] {type(exc).__name__}: {exc}", flush=True)
 -        if stream.session is not None and stream.session._is_retrying():
 -            return
@@ -1663,35 +1626,25 @@ index 647569f..4cb2d9a 100644
 +            _RUNS.remove(run)
 +        for other in _RUNS:
 +            other.wake.set()
-@@ -960,4 +1091,0 @@ def _normalized_command(text):
+@@ -960,4 +1051,0 @@ def _normalized_command(text):
 -def _cancel_stream_task(ctx):
 -    task = ctx.user_data.pop('stream_task', None)
 -    if task and not task.done(): task.cancel()
 -
-@@ -982,0 +1111,9 @@ def _review_command_body(cmd):
-+async def _handle_fold_command(message, cmd):  # TEMP(dogfood): remove after JC picks a fold style
-+    global _FOLD_STYLE
-+    parts = cmd.split()
-+    if len(parts) > 1:
-+        if parts[1].lower() not in ("a", "b", "c"):
-+            return await message.reply_text("用法：/fold a|b|c")
-+        _FOLD_STYLE = parts[1].lower()
-+    return await message.reply_text(f"折叠头：{_FOLD_STYLE}")
-+
-@@ -992,4 +1129 @@ async def _handle_review_command(update, ctx, cmd):
+@@ -992,4 +1080 @@ async def _handle_review_command(update, ctx, cmd):
 -    _cancel_stream_task(ctx)
 -    task_dq = agent.put_task(prompt, source="telegram")
 -    task = asyncio.create_task(_stream(task_dq, update.message))
 -    ctx.user_data['stream_task'] = task
 +    _enqueue_run(update.message, prompt)
-@@ -1004,3 +1138,3 @@ async def handle_msg(update, ctx):
+@@ -1004,3 +1089,3 @@ async def handle_msg(update, ctx):
 -    dq = agent.put_task(prompt, source="telegram")
 -    task = asyncio.create_task(_stream(dq, update.message))
 -    ctx.user_data['stream_task'] = task
 +    _note_message(update.message)
 +    # With a question pending in the chat, this message is its answer.
 +    _enqueue_run(update.message, prompt, answers_ask=True)
-@@ -1018,5 +1152,5 @@ async def handle_ask_callback(update, ctx):
+@@ -1018,5 +1103,5 @@ async def handle_ask_callback(update, ctx):
 -    if not menu_id:
 -        return await query.answer("菜单无效")
 -    event = _normalize_ask_menu_event(_ask_menu_store.get(menu_id))
@@ -1702,16 +1655,16 @@ index 647569f..4cb2d9a 100644
 +        # Answered, expired, or left over from an earlier process: acknowledge
 +        # quietly and drop the buttons; nothing runs.
 +        await query.answer()
-@@ -1024,2 +1158,3 @@ async def handle_ask_callback(update, ctx):
+@@ -1024,2 +1109,3 @@ async def handle_ask_callback(update, ctx):
 -    candidates = event["candidates"]
 -    if event.get("multi") and action.startswith(f"{_ASK_TOGGLE_ACTION}:"):
 +    candidates = pending.event["candidates"]
 +    multi = bool(pending.event.get("multi"))
 +    if multi and action.startswith(f"{_ASK_TOGGLE_ACTION}:"):
-@@ -1028,2 +1162,0 @@ async def handle_ask_callback(update, ctx):
+@@ -1028,2 +1113,0 @@ async def handle_ask_callback(update, ctx):
 -            if selected_idx < 0 or selected_idx >= len(candidates):
 -                raise ValueError
-@@ -1031,10 +1164,4 @@ async def handle_ask_callback(update, ctx):
+@@ -1031,35 +1115,4 @@ async def handle_ask_callback(update, ctx):
 -            return await query.answer("菜单无效")
 -        stored = _ask_menu_store.get(menu_id)
 -        if not isinstance(stored, dict):
@@ -1722,11 +1675,7 @@ index 647569f..4cb2d9a 100644
 -        else:
 -            selected.add(selected_idx)
 -        stored["selected"] = sorted(selected)
-+            selected_idx = -1
-+        if not 0 <= selected_idx < len(candidates):
-+            return await query.answer()
-+        pending.selected ^= {selected_idx}
-@@ -1042,28 +1169,5 @@ async def handle_ask_callback(update, ctx):
+-        await query.answer()
 -        return await query.edit_message_reply_markup(
 -            reply_markup=_build_ask_user_markup(
 -                menu_id,
@@ -1751,7 +1700,11 @@ index 647569f..4cb2d9a 100644
 -        return
 -    if action == _ASK_CANCEL_ACTION:
 -        _ask_menu_store.pop(menu_id, None)
--        await query.answer()
++            selected_idx = -1
++        if not 0 <= selected_idx < len(candidates):
++            return await query.answer()
++        pending.selected ^= {selected_idx}
+@@ -1067,3 +1120,5 @@ async def handle_ask_callback(update, ctx):
 -        await _edit_ask_user_result(query, event, cancelled=True)
 -        if query.message is not None:
 -            await query.message.reply_text(_ASK_CANCEL_PROMPT)
@@ -1760,7 +1713,7 @@ index 647569f..4cb2d9a 100644
 +        except Exception as exc:
 +            if not _is_not_modified_error(exc):
 +                print(f"[TG ask_user toggle] {type(exc).__name__}: {exc}", flush=True)
-@@ -1071,5 +1175,14 @@ async def handle_ask_callback(update, ctx):
+@@ -1071,5 +1126,14 @@ async def handle_ask_callback(update, ctx):
 -    try:
 -        selected = candidates[int(action)]
 -    except (ValueError, IndexError):
@@ -1780,7 +1733,7 @@ index 647569f..4cb2d9a 100644
 +            return await query.answer()
 +        chosen, answer = [selected_idx], candidates[selected_idx]
 +    _forget_pending(pending)
-@@ -1077,6 +1190,7 @@ async def handle_ask_callback(update, ctx):
+@@ -1077,6 +1141,7 @@ async def handle_ask_callback(update, ctx):
 -    await _edit_ask_user_result(query, event, selected=selected)
 -    if query.message is None:
 -        return
@@ -1794,7 +1747,7 @@ index 647569f..4cb2d9a 100644
 +    trigger = query.message if hasattr(query.message, "reply_text") else pending.message
 +    if trigger is not None:
 +        _enqueue_run(trigger, _build_text_prompt(answer), carry=pending.carry)
-@@ -1133 +1247,6 @@ async def cmd_abort(update, ctx):
+@@ -1133 +1198,6 @@ async def cmd_abort(update, ctx):
 -    _cancel_stream_task(ctx)
 +    # Stops the running run only: queued runs stay, and the run's stop
 +    # receipt is the only reply.
@@ -1802,25 +1755,23 @@ index 647569f..4cb2d9a 100644
 +    if run is None:
 +        return await update.message.reply_text(_NO_RUNNING_TASK_TEXT)
 +    _mark_stopped(run)
-@@ -1135 +1254,2 @@ async def cmd_abort(update, ctx):
+@@ -1135 +1205,2 @@ async def cmd_abort(update, ctx):
 -    await update.message.reply_text("⏹️ 正在停止...")
 +    print(f"[TG run] stopped by command: chat={run.chat_id}", flush=True)
 +    await _post_stopped(run)
-@@ -1169,3 +1289,2 @@ async def handle_photo(update, ctx):
+@@ -1169,3 +1240,2 @@ async def handle_photo(update, ctx):
 -    dq = agent.put_task(prompt, source="telegram")
 -    task = asyncio.create_task(_stream(dq, update.message))
 -    ctx.user_data['stream_task'] = task
 +    _note_message(update.message)
 +    _enqueue_run(update.message, prompt)
-@@ -1180,0 +1300,2 @@ async def handle_command(update, ctx):
+@@ -1180,0 +1251,2 @@ async def handle_command(update, ctx):
 +    chat_id = _message_chat_id(update.message)
 +    _note_message(update.message)
-@@ -1191,0 +1313,4 @@ async def handle_command(update, ctx):
-+    if op == '/fold':  # TEMP(dogfood): remove after JC picks a fold style
-+        return await _handle_fold_command(update.message, cmd)
+@@ -1191,0 +1264,2 @@ async def handle_command(update, ctx):
 +    # /new, /restore and /continue n abort the running run's task: that run
 +    # ends as stopped (marked before anything awaits); queued runs go on.
-@@ -1193,2 +1318,8 @@ async def handle_command(update, ctx):
+@@ -1193,2 +1267,8 @@ async def handle_command(update, ctx):
 -        _cancel_stream_task(ctx)
 -        return await update.message.reply_text(reset_conversation(agent))
 +        run = _running_run()
@@ -1831,17 +1782,17 @@ index 647569f..4cb2d9a 100644
 +        if run is not None:
 +            await _post_stopped(run)
 +        return await update.message.reply_text(reply)
-@@ -1196 +1326,0 @@ async def handle_command(update, ctx):
+@@ -1196 +1275,0 @@ async def handle_command(update, ctx):
 -        _cancel_stream_task(ctx)
-@@ -1201,0 +1332,3 @@ async def handle_command(update, ctx):
+@@ -1201,0 +1281,3 @@ async def handle_command(update, ctx):
 +            run = _running_run()
 +            if run is not None:
 +                _mark_stopped(run)
-@@ -1203,0 +1337,3 @@ async def handle_command(update, ctx):
+@@ -1203,0 +1286,3 @@ async def handle_command(update, ctx):
 +            await _drop_pending_ask(chat_id)
 +            if run is not None:
 +                await _post_stopped(run)
-@@ -1208,2 +1344,11 @@ async def handle_command(update, ctx):
+@@ -1208,2 +1293,11 @@ async def handle_command(update, ctx):
 -        if cmd != '/continue': _cancel_stream_task(ctx)
 -        return await update.message.reply_text(handle_frontend_command(agent, cmd))
 +        if cmd == '/continue':

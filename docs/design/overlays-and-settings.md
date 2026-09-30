@@ -377,17 +377,19 @@ Runtime tab 的任何问题）。
   读秒（单步 ≥ 60 秒才按分钟显示「仍在运行」）、步骤展开与斜杠命令（在
   [deferred](../devlog/deferred.md)）；实时思考预览在 Discord 做不到。
 - Telegram **聊天内的对话形态**（2026-09-30，补丁 `0024`，
-  [devlog](../devlog/2026-09-30-telegram-conversation-ux.md)）同样以桌面为准，
-  但按 Telegram 自己的机制映射：live 窗口是**私聊草稿**（`sendMessageDraft`：
-  不推送、不留痕，bot 发出正式消息即消失），内容同 Discord 三行，外加桌面
-  TurnMarker 的读秒（3 秒起 `· N 秒`，60 秒起 `· 已 M 分 S 秒 · 仍在运行`）与
-  「另有 K 条消息排队中」；群聊或草稿失败时退回 Discord 形态的静音状态消息。
-  一个 run 最后只发一条回答（收尾那一步），第二段起与附件静音。Discord 的
-  `-#` 小字在 Telegram 一律映射为**斜体行**；停止走原生命令菜单的 `/stop`
-  （桌面 Stop 在 Composer，菜单按钮也在输入框旁），不做按钮。Markdown 表格转
-  列表、标题转粗体（MarkdownV2 两者都不支持）。ask_user 同 Discord，多选保留
-  toggle +「提交」。完成报告是粗体标题行 + 正文 + 斜体 `状态 · session id`
-  脚注。回答首行的折叠头形态（斜体行 / 可折叠引用块逐步列出 / 无）待真机裁决。
+  [devlog](../devlog/2026-09-30-telegram-conversation-ux.md)）同样以桌面为准：
+  live 窗口是一条**静音状态消息**（`disable_notification`），内容与规则同
+  Discord（`已完成 N 步` / `NN summary` / `·· 思考中`，不读秒，单步满 60 秒起
+  `· 已 N 分钟 · 仍在运行`），外加「另有 K 条消息排队中」；回答落地后删除，
+  停止时定格 `⏹ 已停止 · …`。**不用私聊草稿**（`sendMessageDraft`）：真机上客户端
+  会为草稿把整块消息上推、留一大片空白。一个 run 最后只发一条回答（收尾那一步），
+  第二段起与附件静音；回答顶部是**可折叠引用块**（首行 `N 步 · 用时 X`，点开逐步
+  `NN summary`），是桌面折叠头的对应物，1 步也有——代价是推送与聊天列表预览以它
+  开头（JC 听过这条代价后裁定；末尾挂与不挂两案被否）。Discord 的 `-#` 小字在 Telegram 一律
+  映射为**斜体行**；停止走原生命令菜单的 `/stop`（桌面 Stop 在 Composer，菜单按钮
+  也在输入框旁），不做按钮。Markdown 表格转列表、标题转粗体（MarkdownV2 两者都
+  不支持）。ask_user 同 Discord，多选保留 toggle +「提交」。完成报告是粗体标题行 +
+  正文 + 斜体 `状态 · session id` 脚注。
 - 卡内层级规则（与 Runtime tab 同源）：
   - 每张卡同时至多一颗 primary 按钮，primary = 当前可执行的下一步。
     飞书的「保存凭证」和「启动服务」按此互斥：凭证未就绪时保存是

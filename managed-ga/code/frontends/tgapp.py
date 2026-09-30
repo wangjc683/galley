@@ -31,9 +31,9 @@ from galley_im_display import (
     extract_ask_user_event,
     final_step_text,
     fold_label,
-    live_elapsed,
     one_line,
     step_summary,
+    still_running_suffix,
     stopped_text,
     tables_to_lists,
     visible_text,
@@ -184,23 +184,16 @@ _RULE_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
 _BULLET_RE = re.compile(r"^(\s*)[-*+]\s+")
 _BLOCKQUOTE_RE = re.compile(r"^\s{0,3}>\s?(.*)$")
 # Galley conversation UX (managed patch 0024): while a run works, its chat
-# shows one live surface -- a private-chat draft (sendMessageDraft: no push,
-# no trace, gone 30 s after its last update), or, in groups or once a draft
-# call fails, a silent status message edited in place and deleted at the
-# end. Then the run posts exactly one new message: its answer, stop
-# receipt, question or error.
+# shows one live surface, a silent status message edited in place (private
+# chats and groups alike, as on Discord). The run then posts exactly one
+# new message, its answer, question or error, and the status message is
+# deleted; a stopped run freezes it into the stop receipt instead. Private
+# chats first used a sendMessageDraft preview, dropped after dogfood: the
+# client reserves a streaming area for a draft and pushes the chat up,
+# leaving a blank gap.
 _LIVE_POLL_SECONDS = 1.0
-_DRAFT_REFRESH_SECONDS = 2.0
-_DRAFT_KEEPALIVE_SECONDS = 20.0
 _STATUS_EDIT_INTERVAL_SECONDS = 1.5
-_STATUS_CLOCK_REFRESH_SECONDS = 5.0
-# Posting the run's message already dismisses its draft (Bot API: a draft
-# disappears "if the bot sends a message"), and an empty draft text shows a
-# "Thinking..." placeholder rather than clearing it: off unless dogfood
-# shows a stale draft lingering after the answer.
-_CLEAR_DRAFT_AFTER_SEND = False
 _SEND_ATTEMPTS = 3
-_FOLD_STYLE = "b"  # TEMP(dogfood): remove after JC picks a fold style
 _FOLD_STEP_LINES = 30
 _FOLD_HEADER_BUDGET = MessageLimit.MAX_TEXT_LENGTH // 2
 _ASK_BUTTON_MAX_CANDIDATES = 50
@@ -215,9 +208,6 @@ _ask_events = {}  # display queue of the asking task -> ask_user event
 _pending_asks = {}  # chat id -> _PendingAsk waiting for the owner's answer
 _last_message_ids = {}  # chat id -> newest message id seen, user's or bot's
 _background_tasks = set()
-
-def _make_draft_id():
-    return random.randint(1, 2**31 - 1)
 
 def _markdown_safe_segments(text, limit=None):
     limit = limit or MessageLimit.MAX_TEXT_LENGTH
@@ -396,9 +386,6 @@ def _message_chat_id(message):
     chat_id = getattr(message, "chat_id", None)
     return chat_id if chat_id is not None else getattr(getattr(message, "chat", None), "id", None)
 
-def _is_private(message):
-    return getattr(getattr(message, "chat", None), "type", "") == ChatType.PRIVATE
-
 def _note_message(message):
     """Remember each chat's newest message id, the user's or the bot's: the
     Bot API cannot tell what landed last in a chat, and the answer's quote
@@ -499,14 +486,12 @@ def answer_text(raw):
     return _answer_from(raw[markers[-1].start():] if markers else raw, raw)
 
 def _fold_header(run, steps, seconds):
-    """(markdown_v2, plain) header over the run's answer: the desktop fold
-    header `N 步 · 用时 X`, in the style under dogfood (a: italic line; b:
-    expandable quote with one line per step; c: none). None for 0 steps."""
-    label = fold_label(steps, seconds)
-    if steps < 1 or _FOLD_STYLE == "c":  # TEMP(dogfood): remove after JC picks a fold style
+    """(markdown_v2, plain) header over the run's answer: an expandable
+    quote opening with the desktop fold header `N 步 · 用时 X`, then one
+    `NN summary` line per step (the last 30). Empty for 0 steps."""
+    if steps < 1:
         return "", ""
-    if _FOLD_STYLE == "a":  # TEMP(dogfood): remove after JC picks a fold style
-        return f"_{escape_markdown(label, version=2)}_", label
+    label = fold_label(steps, seconds)
     for width in (0, 60, 24):  # long step lines give way before the answer does
         lines = [f"{n:02d} {run.summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
         if width:
@@ -521,15 +506,16 @@ def _fold_header(run, steps, seconds):
     return markdown, "\n".join([label, *lines])
 
 class _LiveSurface:
-    """A run's live window in its chat: a draft in private chats; in groups,
-    or once a draft call fails, a silent status message edited in place."""
+    """A run's live window in its chat: a silent status message edited in
+    place. Closed once the run's message is out, or for good when the
+    status message cannot be sent."""
 
     def __init__(self, message):
         self.message = message  # the run's trigger: live output goes to its chat
-        self.mode = "draft" if _is_private(message) else "status"
-        self.draft_id = _make_draft_id()
+        self.anchor = message  # an answer right below it needs no quote
         self.status_msg = None
-        self.text = self.shape = self.sent_at = None
+        self.closed = False
+        self.text = self.sent_at = None
         self.retry_until = 0.0
 
 class _TgRun:
@@ -548,7 +534,6 @@ class _TgRun:
         self.adopt(carry)
         self.task_turn = 0  # highest GA turn seen in this run's task
         self.turn_texts = {}
-        self.queued_at = _clock()
         self.started_at = self.step_started_at = self.ended_at = None
         self.live = _LiveSurface(trigger)
         self.lock = asyncio.Lock()  # live-surface writes vs. terminal messages
@@ -618,7 +603,7 @@ def _is_waiting(run):
         return True
     return bool(getattr(agent, "is_running", False)) and getattr(agent, "_current_queue", None) is not run.dq
 
-def _live_text(run, now, clock=True):
+def _live_text(run, now):
     lines = []
     settled = run.settled_steps()
     if settled >= 2:
@@ -626,67 +611,45 @@ def _live_text(run, now, clock=True):
     if settled >= 1:
         lines.append(f"{settled:02d} {run.summaries.get(settled, '')}".rstrip())
     if _is_waiting(run):
-        waited = live_elapsed(now - run.queued_at, still_running=False) if clock else ""
-        lines.append("·· 排队中" + (f" · {waited}" if waited else ""))
+        lines.append("·· 排队中")
+    elif run.step_started_at is None:  # GA has not begun the task: no step to time yet
+        lines.append("·· 思考中")
     else:
-        since = run.step_started_at if run.step_started_at is not None else run.queued_at
-        running = live_elapsed(now - since) if clock else ""
-        lines.append("·· 思考中" + (f" · {running}" if running else ""))
+        lines.append("·· 思考中" + still_running_suffix(now - run.step_started_at))
     runs = _chat_runs(run.chat_id)
     behind = len(runs) - runs.index(run) - 1 if run in runs else 0
     if behind > 0:
         lines.append(f"另有 {behind} 条消息排队中")
     return "\n".join(lines)
 
-def _live_due(live, text, shape, now):
+def _live_due(live, text, now):
+    """Sent once, then edited only when its text changed, at least 1.5 s
+    apart (changes in between merge into the next edit)."""
     if live.sent_at is None:
         return True
-    since = now - live.sent_at
-    if live.mode == "draft":
-        # Only a changed text is sent, but at least every 20 s: a draft
-        # expires 30 s after its last update.
-        return since >= _DRAFT_KEEPALIVE_SECONDS or (text != live.text and since >= _DRAFT_REFRESH_SECONDS)
-    if text == live.text:
-        return False
-    if shape != live.shape:
-        return since >= _STATUS_EDIT_INTERVAL_SECONDS
-    return since >= _STATUS_CLOCK_REFRESH_SECONDS  # only the readout moved
-
-async def _send_draft(live, text):
-    """True once the draft landed; False when drafts do not work in this
-    chat (the caller falls back to a status message). RetryAfter propagates."""
-    try:
-        await live.message.reply_text_draft(live.draft_id, text)
-        return True
-    except RetryAfter:
-        raise
-    except Exception as exc:
-        if _is_not_modified_error(exc):
-            return True
-        print(f"[TG draft fallback] {type(exc).__name__}: {exc}", flush=True)
-        return False
+    return text != live.text and now - live.sent_at >= _STATUS_EDIT_INTERVAL_SECONDS
 
 async def _flush_live(run):
-    """Bring the run's live surface up to date, when an update is due."""
+    """Bring the run's status message up to date, when an edit is due."""
     async with run.lock:
         live = run.live
-        if run.state not in ("queued", "running") or live.mode is None:
+        if run.state not in ("queued", "running") or live.closed:
             return
         now = _clock()
         if now < live.retry_until:
             return
-        text, shape = _live_text(run, now), _live_text(run, now, clock=False)
-        if not _live_due(live, text, shape, now):
+        text = _live_text(run, now)
+        if not _live_due(live, text, now):
             return
         try:
-            if live.mode == "draft" and not await _send_draft(live, text):
-                live.mode = "status"
-            if live.mode == "status":
-                if live.status_msg is None:
-                    live.status_msg = await live.message.reply_text(text, disable_notification=True)
-                    _note_message(live.status_msg)
-                else:
-                    await live.status_msg.edit_text(text)
+            if live.status_msg is None:
+                below = not _should_quote(run)  # nothing landed after the trigger yet
+                live.status_msg = await live.message.reply_text(text, disable_notification=True)
+                _note_message(live.status_msg)
+                if below:
+                    live.anchor = live.status_msg
+            else:
+                await live.status_msg.edit_text(text)
         except RetryAfter as exc:
             live.retry_until = now + _retry_after_seconds(exc) + _RETRY_AFTER_MARGIN_SECONDS
             return
@@ -694,37 +657,34 @@ async def _flush_live(run):
             if not _is_not_modified_error(exc):
                 print(f"[TG live surface error] {type(exc).__name__}: {exc}", flush=True)
                 if live.status_msg is None:
-                    live.mode = None  # no live surface for this run; its message still lands
+                    live.closed = True  # no live surface for this run; its message still lands
                     return
-        live.text, live.shape, live.sent_at = text, shape, now
+        live.text, live.sent_at = text, now
 
 async def _retire_live(run, fallback):
-    """The run's message is out: end the live surface. A status message is
-    deleted, or, when Telegram refuses, stops claiming the run is working."""
+    """The run's message is out: delete its status message, or, when
+    Telegram refuses, edit it so it stops claiming the run is working."""
     live = run.live
-    mode, live.mode = live.mode, None
+    live.closed = True
     msg, live.status_msg = live.status_msg, None
-    if msg is not None:
+    if msg is None:
+        return
+    try:
+        await msg.delete()
+    except Exception as exc:
+        print(f"[TG status delete error] {type(exc).__name__}: {exc}", flush=True)
         try:
-            await msg.delete()
-        except Exception as exc:
-            print(f"[TG status delete error] {type(exc).__name__}: {exc}", flush=True)
-            try:
-                await msg.edit_text(fallback)
-            except Exception as edit_exc:
-                print(f"[TG status fallback error] {type(edit_exc).__name__}: {edit_exc}", flush=True)
-    elif mode == "draft" and live.sent_at is not None and _CLEAR_DRAFT_AFTER_SEND:
-        try:
-            await live.message.reply_text_draft(live.draft_id, "")
-        except Exception as exc:
-            print(f"[TG draft clear error] {type(exc).__name__}: {exc}", flush=True)
+            await msg.edit_text(fallback)
+        except Exception as edit_exc:
+            print(f"[TG status fallback error] {type(edit_exc).__name__}: {edit_exc}", flush=True)
 
 def _should_quote(run):
-    """Quote the trigger only when something landed in the chat after it
-    (or after the run's status message); right below it, a reply needs no
-    quote."""
-    anchor = run.live.status_msg or run.trigger
-    anchor_id, last = getattr(anchor, "message_id", None), _last_message_ids.get(run.chat_id)
+    """Quote the trigger only when something landed in the chat after it;
+    right below it, a reply needs no quote. The run's status message stands
+    in for the trigger when it went out right below it (a queued run's can
+    land after other messages, and then does not)."""
+    anchor_id = getattr(run.live.anchor, "message_id", None)
+    last = _last_message_ids.get(run.chat_id)
     return isinstance(anchor_id, int) and isinstance(last, int) and last > anchor_id
 
 async def _reply(target, text, **kwargs):
@@ -752,19 +712,18 @@ async def _reply_markdown(target, markdown, plain, **kwargs):
         return await _reply(target, plain, **kwargs)
 
 async def _send_answer(run, raw, step_text, steps, seconds):
-    """The run's one pushed message: the fold header over the closing step's
-    text. Further parts and the files arrive silently."""
+    """The run's one pushed message: the fold header, a blank line, then the
+    closing step's text. Further parts and the files arrive silently."""
     files = _files_from_text(raw)
     body = _answer_from(step_text, raw) or ("已生成附件" if files else "")
     header, header_plain = _fold_header(run, steps, seconds)
-    sep = "\n\n" if _FOLD_STYLE == "b" else "\n"  # TEMP(dogfood): remove after JC picks a fold style
-    first_limit = MessageLimit.MAX_TEXT_LENGTH - len(header) - len(sep) if header else None
+    first_limit = MessageLimit.MAX_TEXT_LENGTH - len(header) - 2 if header else None
     parts = _md_segments(_rewrite_markdown(body), first_limit)
     if header:
         markdown, plain = parts[0] if parts else ("", "")
         parts[:1] = [(
-            f"{header}{sep}{markdown}" if markdown else header,
-            f"{header_plain}{sep}{plain}" if plain else header_plain,
+            f"{header}\n\n{markdown}" if markdown else header,
+            f"{header_plain}\n\n{plain}" if plain else header_plain,
         )]
     quote = _should_quote(run)
     for i, (markdown, plain) in enumerate(parts or [(escape_markdown("...", version=2), "...")]):
@@ -972,15 +931,16 @@ def _mark_stopped(run):
     run.wake.set()
 
 async def _post_stopped(run):
-    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`: a new message that takes
-    the draft's place; a status message is frozen into it instead."""
+    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`: the run's status message
+    is frozen into it and stays; a new message only when there is none (or
+    the edit fails)."""
     async with run.lock:
         text = stopped_text(run.total_steps(), run.elapsed(run.ended_at or _clock()))
         live = run.live
         if live.status_msg is not None:
             try:
                 await live.status_msg.edit_text(text)
-                live.status_msg = live.mode = None
+                live.status_msg, live.closed = None, True
                 return
             except Exception as exc:
                 print(f"[TG stop receipt edit error] {type(exc).__name__}: {exc}", flush=True)
@@ -1107,15 +1067,6 @@ def _review_command_body(cmd):
     if cmd.startswith("/review "):
         return cmd[len("/review"):].strip()
     return ""
-
-async def _handle_fold_command(message, cmd):  # TEMP(dogfood): remove after JC picks a fold style
-    global _FOLD_STYLE
-    parts = cmd.split()
-    if len(parts) > 1:
-        if parts[1].lower() not in ("a", "b", "c"):
-            return await message.reply_text("用法：/fold a|b|c")
-        _FOLD_STYLE = parts[1].lower()
-    return await message.reply_text(f"折叠头：{_FOLD_STYLE}")
 
 async def _handle_review_command(update, ctx, cmd):
     dq = Q.Queue()
@@ -1310,8 +1261,6 @@ async def handle_command(update, ctx):
         return await _reply_command_text(update.message, answer)
     if op == '/review':
         return await _handle_review_command(update, ctx, cmd)
-    if op == '/fold':  # TEMP(dogfood): remove after JC picks a fold style
-        return await _handle_fold_command(update.message, cmd)
     # /new, /restore and /continue n abort the running run's task: that run
     # ends as stopped (marked before anything awaits); queued runs go on.
     if op == '/new':

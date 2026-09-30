@@ -961,10 +961,11 @@ already-generated bundle without rebuilding it. The smoke must verify
   edits in place, then only the answer remains under its `-# N 步 · 用时 X`
   line), an ask_user question answered by a button, and the stop button.
 - Managed Telegram channel (item 15; same caveat about an installed
-  Galley): a multi-step request in the private chat (the draft's lines
-  change, then only the answer remains, under its fold header), an
-  ask_user question answered by a button, and `/stop` during a long step
-  (a single `⏹ 已停止 · …` receipt).
+  Galley): a multi-step request in the private chat (the silent status
+  message edits in place, then only the answer remains, under its fold
+  header), an ask_user question answered by a button, and `/stop` during a
+  long step (the status message freezes into `⏹ 已停止 · …`, and no other
+  message follows).
 
 9. Sync the baseline metadata. `managed-ga/manifest.json`'s `upstream`
    block is the single source of truth — update all four fields there:

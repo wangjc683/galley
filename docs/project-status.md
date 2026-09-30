@@ -537,15 +537,15 @@ GUI writes tripped a serde alias as a duplicate field) was fixed the same
 day. The same day the **Telegram conversation UX** got the same alignment
 (new managed patch `0024` + a new Galley-owned shared file
 `frontends/galley_im_display.py` + the reporter's Telegram `send_report`; see
-[devlog](./devlog/2026-09-30-telegram-conversation-ux.md)): a private-chat
-draft is the live window (no push, no trace, the desktop readout), each run
-posts one answer (the closing step), tables become lists, ask_user matches
-Discord, `/stop` and `/new` no longer leave a queued task running unseen,
-and reports carry a bold title and an italic status footer. Real-device
-dogfood is owed (`.scratch/telegram-ux/issues/04`), including JC's pick of
-the fold-header style — a temporary hidden `/fold a|b|c` switch ships in the
-payload until then and must be removed before release. Release-scope truth
-remains `git log v0.5.4..HEAD`.
+[devlog](./devlog/2026-09-30-telegram-conversation-ux.md)): a silent
+status message is the live window (Discord's rules; the private-chat draft
+was dropped after JC's first dogfood round because the client pushes the
+whole chat up for it), each run posts one answer (the closing step) under an
+expandable step-list quote (JC picked style b), tables become lists,
+ask_user matches Discord, `/stop` and `/new` no longer leave a queued task
+running unseen, and reports carry a bold title and an italic status footer.
+A second real-device pass is owed (`.scratch/telegram-ux/issues/04`).
+Release-scope truth remains `git log v0.5.4..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
 row stacked above the commission marker's eyebrow) reads cluttered has not

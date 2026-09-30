@@ -94,8 +94,25 @@ Discord 对齐做完当天，JC 转向 Telegram。读码结论：对话层全是
   `check-managed-ga-payload.mjs`、`check-ga-baseline-drift.mjs` 绿。
 - runner：pytest 407 passed（新增 `test_managed_telegram_tgapp.py` 43 条、`test_im_reporter.py` 21 条），mypy strict、ruff、`git diff --check` 绿。
 
-## 待真机
+## 真机第一轮（JC，2026-09-30）与定稿
 
-`.scratch/telegram-ux/issues/04` 的清单：折叠头 a / b / c 三选一（裁后拆掉 `/fold` 与落选变体）、回答后草稿是否残留
-（决定 `_CLEAR_DRAFT_AFTER_SEND`）、b 的可折叠块 Telegram 是否接受（被拒会在 `telegram.log` 留 `[TG markdown fallback]`）、
-长任务草稿 30 秒后不消失、一轮只推一次。
+JC 在 dev 里测了三轮（先要重启 Telegram 子进程：它 17:06 起就在跑、Python 不热更；dev 窗口 Settings → Channels →
+「重启 Channels」，飞书 / Discord 当时空闲一并重启），给出三条：
+
+1. **草稿弃用**：发完消息后整块消息被迅速上推、留下一大片空白——客户端给草稿预留流式区域（三轮日志都走草稿、无回退）。
+   裁决 1「草稿最贴完成即折」的论证只算了推送与留痕，没算到客户端的布局行为，被真机推翻。**私聊也改走静音状态消息**，
+   与 Discord 同形：原地编辑、回答落地后删除、停止时定格 `⏹ 已停止 · …`。代价：app 在后台时状态消息带一个无声横幅。
+   `_CLEAR_DRAFT_AFTER_SEND` 等草稿相关代码随之删除。
+2. **读秒去掉**：视觉一般。对表里「读秒照搬桌面」作废，改 Discord 规则——不读秒，单步满 60 秒起 `· 已 N 分钟 · 仍在运行`、
+   按分钟更新；排队行不带时间。
+3. **折叠头定 b**（顶部可折叠引用块）。三变体真机后 JC 拿不定，讨论中我给了两条反对「头放顶部」的理由：Telegram 推送与聊天列表
+   预览取消息开头，a / b 会让每条推送以「N 步 · 用时 X」开头；Telegram 没有小字，任何头都是正文分量。据此推了 d（末尾可折叠块、
+   ≥ 2 步才挂）和更轻的 e（末尾一行、不带步骤），并引 JC 的桌面用法「主要看时长，步数扫一眼，工具调用正常不细看」
+   （[折叠头分层](./2026-09-23-run-fold-header-hierarchy.md)）。听完四案对比后 **JC 裁 b**（未另述理由）。b 保住的是：
+   最贴桌面「先过程、后结论、点开看步骤」；IM supervisor 的过程按宪法第 4 条不进 Galley，这里是唯一能看的地方。已知代价：
+   推送 / 列表预览被元数据占开头，1 步闲聊也顶一个框。d / e 未实现，不进 deferred（被否，不是暂缓）；临时切换器 `/fold` 与 a / c 两支拆除。
+
+实施：补丁 `0024` 重导出（`.scratch/telegram-ux/issues/05`，Opus 子代理）。两处自行裁量、主会话接受：状态消息只在紧贴触发消息
+发出时才接替成为引用锚点（排队 run 的状态消息落在别人的回答之后，否则它的回答不再引用触发消息，与草稿时期不一致）；分钟行从 GA
+的第一个 item 起算（同 dcapp，排队时间不算进「思考中」）。验证：干净克隆重放 23 个补丁全 clean、`managed-ga/code` 哈希一致，
+pytest 406 passed（tgapp 42 条），mypy / ruff / payload / baseline-drift 绿。
