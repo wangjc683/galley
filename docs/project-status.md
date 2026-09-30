@@ -516,9 +516,11 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.5.4` → `v0.5.5` is owed (not yet
-   reported); `v0.5.3` → `v0.5.4` is still unreported (asked again at the
-   `v0.5.5` release); `v0.5.2` → `v0.5.3` passed on an
+1. App-update dogfood (SOP step 10): `v0.5.4` → `v0.5.5` passed on an
+   installed build (JC reported 2026-10-01, same session as the release);
+   `v0.5.3` → `v0.5.4` was never reported and is written off (asked again at
+   the `v0.5.5` release, no result; no `v0.5.3` build is left installed);
+   `v0.5.2` → `v0.5.3` passed on an
    installed build (JC reported 2026-09-23, same session as the release);
    `v0.5.1` → `v0.5.2` passed (JC reported 2026-09-23);
    `v0.5.0` → `v0.5.1` was never reported and is written off;
