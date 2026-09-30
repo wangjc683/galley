@@ -47,12 +47,18 @@ JC 真机验收 Discord 时问 bot「你现在用的是哪个模型？」，bot 
   SOP「Switch Model」按运行时改写，4 份技能副本经 drift 脚本同步；`session new --llm` 的 help 与 §5.8 表格同步去掉「按缓存解析」的旧说法。
 - 外置运行时零行为变化；GUI 零改动。
 
-## 同批发现：外置 `llm set` 一直是坏的（另立票）
+## 同批发现：外置 `llm set` 一直是坏的（当日顺手修）
 
 子代理实施时发现、主会话复现确认：`LlmListEntry.name` 带 `#[serde(alias = "displayName")]`，而 GUI 写的缓存每条同时有
 `name` 和 `displayName`，serde 报 `duplicate field \`name\``（用 core 锁定的 serde 1.0.228 在 scratch 复现）——外置会话的
 `llm set` / `session new --llm` 必然以「llm_list pref shape mismatch」exit 2。现有单测只喂了单个 `displayName` 所以没抓到。
-与本票无关、且本票约束外置零变化，立为 `.scratch/llm-list-runtime/issues/02-external-llm-set-duplicate-field.md`（needs-triage）。
+与本票无关、且本票约束外置零变化，先立为 02 号票；JC 当日裁定顺手修。
+
+修法：`LlmListEntry` 去掉别名，`name` 与 `displayName` 拆成两个可选字段分开收；匹配两者任一（大小写不敏感），
+展示名取 `displayName` 优先、回退 `name`，稳定 key 取缓存的 `key` → `name` → 展示名；两者都缺的条目按形状错误报
+`invalid_args`（与原先整表解析失败同一错误类）。外置报错提示同步指向 `galley llm list --runtime=external`、
+「打开一次外置 GA 会话」，因为默认 `llm list` 如今跟随当前运行时。补单测两条（GUI 真实形状、只有 `name` 的回退）与
+socket 端到端一条（真实形状下按 `displayName` / 原始 `name` 都能 set，未知名字 `invalid_args`）。内置零变化。
 
 ## 验证
 

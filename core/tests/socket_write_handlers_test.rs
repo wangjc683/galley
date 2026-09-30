@@ -725,6 +725,50 @@ async fn llm_set_process_gone_persists_and_emits_updated() {
     assert_eq!(payload["via"], "llm.set");
 }
 
+/// The external cache as current GUIs write it: every entry carries both
+/// `name` and `displayName` (a serde alias between them used to fail the
+/// whole cache with `duplicate field`). Either name resolves.
+#[tokio::test]
+async fn llm_set_external_resolves_gui_cache_with_name_and_display_name() {
+    let h = Harness::new(FakeRunner::default()).await;
+    h.seed_session("s-ext").await;
+    h.galley
+        .set_pref_json(
+            "llm_list",
+            json!([
+                {"displayName": "NativeOAI/gpt-6-astra", "index": 0, "isCurrent": false,
+                 "key": "NativeOAI/gpt-6-astra", "name": "NativeOAI/gpt-6-astra"},
+                {"displayName": "GLM Flash", "index": 1, "isCurrent": true,
+                 "key": "NativeClaude/glm-5.3-flash", "name": "NativeClaude/glm-5.3-flash"}
+            ]),
+        )
+        .await
+        .unwrap();
+
+    for llm_name in ["GLM FLASH", "nativeclaude/glm-5.3-flash"] {
+        let resp = h
+            .dispatch(req(
+                "llm.set",
+                json!({"sessionId": "s-ext", "llmName": llm_name}),
+            ))
+            .await;
+        assert!(resp.ok, "{llm_name} must resolve: {resp:?}");
+        let session = &resp.result.as_ref().unwrap()["session"];
+        assert_eq!(session["selectedLlmKey"], "NativeClaude/glm-5.3-flash");
+        assert_eq!(session["selectedLlmIndex"], 1);
+        assert_eq!(session["selectedLlmDisplayName"], "GLM Flash");
+    }
+
+    let resp = h
+        .dispatch(req(
+            "llm.set",
+            json!({"sessionId": "s-ext", "llmName": "gpt-6.1-sol"}),
+        ))
+        .await;
+    assert!(!resp.ok);
+    assert_eq!(resp.error.as_deref(), Some("invalid_args"));
+}
+
 async fn seed_managed_provider(galley: &SqliteGalley, id: &str, with_secret: bool) {
     let api_key_ref = format!("managed-provider:{id}");
     galley

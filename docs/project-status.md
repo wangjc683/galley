@@ -532,9 +532,9 @@ dogfood and fixed the same day: `galley llm list` now takes `--runtime`
 of the external-GA cache it used to print everywhere — an Agent API behavior
 fix recorded in §7.1 "Changes inside `2`" (see
 [devlog](./devlog/2026-09-30-llm-list-runtime-aware.md)); the pre-existing
-external `llm set` failure it surfaced is filed as
-`.scratch/llm-list-runtime/issues/02-external-llm-set-duplicate-field.md`
-(needs-triage). Release-scope truth remains `git log v0.5.4..HEAD`.
+external `llm set` / `session new --llm` failure it surfaced (every cache the
+GUI writes tripped a serde alias as a duplicate field) was fixed the same
+day. Release-scope truth remains `git log v0.5.4..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
 row stacked above the commission marker's eyebrow) reads cluttered has not

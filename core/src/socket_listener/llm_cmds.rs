@@ -34,8 +34,10 @@ pub(super) async fn resolve_llm_selection(
 }
 
 /// Look up an external `--llm=<display-name>` against the cached `llm_list`
-/// pref. The stable key is the raw GA LLM name, falling back to display name
-/// for old cache entries.
+/// pref (what `galley llm list --runtime=external` prints). Matches the
+/// entry's `name` or `displayName`, case-insensitively. The stable key is
+/// the cached `key`, else the raw GA LLM name, else the display name for
+/// old cache entries.
 async fn resolve_external_llm_name(
     galley: &SqliteGalley,
     name: Option<String>,
@@ -64,30 +66,70 @@ async fn resolve_external_llm_name(
     };
     if entries.is_empty() {
         return Err(SocketResponseLite::invalid_args(
-            "llm cache empty; open Galley GUI once to warmup",
+            "external llm cache empty; open an attached-GenericAgent session once to warm it up",
         ));
     }
+    if let Some(index) = entries.iter().position(|e| e.label().is_none()) {
+        return Err(SocketResponseLite::invalid_args(format!(
+            "llm_list pref shape mismatch: entry {index} has neither name nor displayName"
+        )));
+    }
     let target = name.to_lowercase();
-    if let Some(entry) = entries.iter().find(|e| e.name.to_lowercase() == target) {
+    if let Some(entry) = entries.iter().find(|e| e.matches(&target)) {
+        let label = entry.label().unwrap_or_default().to_string();
         Ok(ResolvedLlmSelection {
             index: Some(entry.index),
-            key: Some(entry.key.clone().unwrap_or_else(|| entry.name.clone())),
-            display_name: Some(entry.name.clone()),
+            key: Some(
+                entry
+                    .key
+                    .clone()
+                    .or_else(|| entry.name.clone())
+                    .unwrap_or_else(|| label.clone()),
+            ),
+            display_name: Some(label),
         })
     } else {
         Err(SocketResponseLite::invalid_args(format!(
-            "unknown llm '{name}'; try `galley llm list` to see available"
+            "unknown llm '{name}'; try `galley llm list --runtime=external` to see available"
         )))
     }
 }
 
+/// One entry of the `llm_list` pref the GUI caches after an external-GA
+/// bridge warmup. Current GUIs write both `name` (the raw GA LLM name) and
+/// `displayName`; older caches carried `displayName` only. They are two
+/// separate optional fields on purpose: a `name` field with
+/// `alias = "displayName"` rejects every current cache with serde's
+/// `duplicate field` error, because both keys are present.
 #[derive(Debug, Deserialize)]
 pub(super) struct LlmListEntry {
     pub(super) index: u32,
-    #[serde(alias = "displayName")]
-    pub(super) name: String,
+    #[serde(default)]
+    pub(super) name: Option<String>,
+    #[serde(default, rename = "displayName")]
+    pub(super) display_name: Option<String>,
     #[serde(default)]
     key: Option<String>,
+}
+
+impl LlmListEntry {
+    /// The name an entry is shown and persisted by: `displayName`, else the
+    /// raw `name`. `None` when the entry carries neither (schema drift).
+    pub(super) fn label(&self) -> Option<&str> {
+        [&self.display_name, &self.name]
+            .into_iter()
+            .flatten()
+            .map(|s| s.trim())
+            .find(|s| !s.is_empty())
+    }
+
+    /// Case-insensitive match against either name; `target` is lowercase.
+    fn matches(&self, target: &str) -> bool {
+        [&self.name, &self.display_name]
+            .into_iter()
+            .flatten()
+            .any(|s| s.trim().to_lowercase() == target)
+    }
 }
 
 /// Resolve a managed `--llm=<name>` against the Galley model store. The

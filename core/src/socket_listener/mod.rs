@@ -876,7 +876,28 @@ mod tests {
         let entry: LlmListEntry =
             serde_json::from_str(r#"{"index":0,"displayName":"GPT 5.5"}"#).unwrap();
         assert_eq!(entry.index, 0);
-        assert_eq!(entry.name, "GPT 5.5");
+        assert_eq!(entry.label(), Some("GPT 5.5"));
+    }
+
+    /// The shape current GUIs write: `name` and `displayName` both present.
+    /// A serde alias between the two used to reject it as a duplicate field.
+    #[test]
+    fn llm_list_entry_accepts_cache_with_name_and_display_name() {
+        let entry: LlmListEntry = serde_json::from_str(
+            r#"{"displayName":"NativeOAI/gpt-6-astra","index":0,"isCurrent":false,"key":"NativeOAI/gpt-6-astra","name":"NativeOAI/gpt-6-astra"}"#,
+        )
+        .unwrap();
+        assert_eq!(entry.name.as_deref(), Some("NativeOAI/gpt-6-astra"));
+        assert_eq!(entry.label(), Some("NativeOAI/gpt-6-astra"));
+    }
+
+    #[test]
+    fn llm_list_entry_label_falls_back_to_raw_name() {
+        let entry: LlmListEntry =
+            serde_json::from_str(r#"{"index":1,"name":"glm-5.3-flash"}"#).unwrap();
+        assert_eq!(entry.label(), Some("glm-5.3-flash"));
+        let blank: LlmListEntry = serde_json::from_str(r#"{"index":2}"#).unwrap();
+        assert_eq!(blank.label(), None);
     }
 
     #[test]
