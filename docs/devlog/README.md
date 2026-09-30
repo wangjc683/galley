@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-09-30
+- [v0.5.5 发布](./2026-09-30-v0.5.5-release.md) — v0.5.4 后两天，一整轮 IM 渠道打磨（Discord / Telegram 对话体验对齐桌面、四个渠道重启续接）加 macOS 停止与 `galley llm list` 两项修复；patch（最大单个功能仍在既有 IM 渠道线上，先例同 `v0.4.7`；体量按规则不计）；打包门禁 `mac-x64` 通过；上游 GA 到 `f308ee7`，引擎有记忆提炼提示词重写与 UA 升级，非关键修复、无用户报告、上游当天仍在动，本次不审计并写明理由
 - [飞书 / Telegram / 微信重启后接回上下文](./2026-09-30-im-restart-continuity.md) — Discord 续接真机通过后 JC 问其余渠道；读码：三个渠道没有激活门槛，丢的是上下文且是静默丢（飞书日志 353 次启动、当天 8 次）；JC 裁三个一起做；全部在 supervisor 侧完成、零补丁（共享 `runner/im_resume.py`，与 dcapp `0026` 一一对应）；主会话补裁微信补 `/new`、断开连接清掉续接状态（Core `logout`，Discord 连激活频道一起清）；不加闲置过期规则
 - [macOS 上停止打不断「等响应头」的请求](./2026-09-30-macos-abort-wake.md) — Telegram 验收后 JC 报「排队中无法回复」；还原时间线：上一问中转站迟迟不回响应头，`/stop` 没打断，GA 卡到 `read_timeout` 180 秒才放行排队消息；复现确认上游 `abort()` 在 shutdown 后立刻 `_real_close()`，在 macOS 上与唤醒赛跑（13 次挂 6 次），只 shutdown 22/22；桌面停止同受影响；JC 选 A：内置补丁 `0025` 把 close 留给 Windows，另拟上游 PR（JC 裁暂不提交，草稿进 deferred）；ga-baseline 旧审计结论加更正
 - [`galley llm list` 按运行时取数](./2026-09-30-llm-list-runtime-aware.md) — JC 在 Discord 问模型，bot 答 glm-5.3-flash，调用日志全是默认的 gpt-6.1-sol；链路：提示词按 state-block 规则不写模型名、让查 CLI，`llm list` 却只读外置 GA bridge 写的 `llm_list` 缓存（停在 09-23 切到内置前一分钟）；SOP 的 `llm list` → `llm set` 在内置模式同样坏，且早有「应改成按运行时」的遗忘待办；JC 选 A 修 CLI（加 `--runtime`，managed 读模型库、`isCurrent` = index 0），否掉只改提示词与注入模型名；core 抽共用枚举保证 list 的名字 set 必认、配跨命令回归测试；契约变更进 §7.1 新节；同批复现外置 `llm set` 撞 serde 别名重复字段必挂，JC 裁定当日顺手修（name / displayName 拆成两个字段）
