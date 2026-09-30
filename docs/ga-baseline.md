@@ -753,6 +753,24 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     Native* `ask` still fills it from thinking blocks, falling back to a
     prompted `<think(ing)>` block it moves out of `content`, and that
     `ToolClient._parse_mixed_response` still sets it.
+15. The display queue and ask_user payload the managed Discord frontend
+    reads (patch `0023`, 2026-09-30; see its row in the
+    [patch ledger](../managed-ga/patches/manifest.md)). A drift here still
+    applies cleanly and compiles, and the dcapp tests run on a hand-written
+    fake agent, so nothing but a real run catches it. Re-check on upgrade:
+    (a) `agentmain.GenericAgent.run()` items: `next` / `done` carrying
+    `turn` and `outputs` (`turn_resps[-2:]` on `next`, every step on
+    `done`), cumulative text when `inc_out` is off, a step opening with the
+    `LLM Running (Turn N)` marker, and the backend-error block appended to
+    `done` only; (b) the ask_user exit reaching `_turn_end_hooks` as
+    `exit_reason = {"result": "EXITED", "data": {"status": "INTERRUPT",
+    "intent": "HUMAN_INTERVENTION", "data": {question, candidates}}}` with
+    `tool_calls` alongside (`ga.py` `ask_user` / `turn_end_callback`,
+    `agent_loop.py` EXITED branch); (c) `agent._current_queue` pointing at
+    the running task's display queue when the hook fires; (d) `review_cmd`
+    still intercepting `/review` through `_handle_slash_cmd` only when the
+    query starts with it. The completion reporter (`runner/im_reporter.py`
+    `_deliver`) also reads `done` off `put_task`'s queue.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -776,6 +794,10 @@ start the audit there instead of grepping the bridge:
 - **`runner/managed_runtime.py::install_managed_prompt_profile`** — the
   one backend write outside GaSession (`extra_sys_prompt`); shared with
   the Bridge-less `managed_im_supervisor` path.
+- **`managed-ga/code/frontends/dcapp.py`** (patch `0023`) — item 15:
+  `_DiscordRun.observe` (item shape), `_extract_ask_user_event` and
+  `_install_ask_hook` (ask payload, `_current_queue`), and the `/review`
+  branch of `handle_command`.
 
 GA *public* API usage (items 8, plus `next_llm` / `verbose` / `inc_out`
 / `put_task`) is deliberately not wrapped — verify against upstream
@@ -911,6 +933,10 @@ already-generated bundle without rebuilding it. The smoke must verify
 - External GA: streaming, thinking state, approvals, tool dispatch, LLM display.
 - Managed GA: model config injection, streaming, tools, state under app data,
   restart / restore behavior.
+- Managed Discord channel (item 15; quit any installed Galley first, or both
+  bots answer on the same token): a multi-step request (status message
+  edits in place, then only the answer remains under its `-# N 步 · 用时 X`
+  line), an ask_user question answered by a button, and the stop button.
 
 9. Sync the baseline metadata. `managed-ga/manifest.json`'s `upstream`
    block is the single source of truth — update all four fields there:
