@@ -551,7 +551,8 @@ request still waiting for response headers (upstream `abort()` force-closes
 the socket right after the shutdown, racing its wake-up), so the next
 message queued for up to the 180 s read timeout — new managed patch `0025`
 keeps the close on Windows only (desktop Stop and every IM `/stop` benefit;
-external GA waits for an upstream PR drafted in deferred; see
+external GA keeps upstream behavior; the upstream PR draft is on hold in
+deferred; see
 [devlog](./devlog/2026-09-30-macos-abort-wake.md)).
 Release-scope truth remains `git log v0.5.4..HEAD`.
 

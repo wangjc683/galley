@@ -42,7 +42,8 @@ requests 2.33.1 / urllib3 2.6.3）：
 - **A（采纳）**：内置补丁 `0025`，`abort()` 里的 `_real_close()` 只在 `os.name == 'nt'` 时执行，其余平台只 shutdown。Windows 行为
   逐字不变。复现只在 macOS 上跑过；Linux 上 shutdown 一般即可唤醒阻塞的读，未实测。受益：内置模式下的桌面停止与四个 IM 渠道的 `/stop`。
 - **同时给上游提 PR**（上游 HEAD 仍是同一写法）：合入后按宪法第 1 条删 `0025`。外置 GA 按第 1 条不能改，只能等上游。
-  PR 草稿在 [deferred](./deferred.md)「上游 PR：`abort()` 只在 Windows 上 `_real_close`」，提交前给 JC 过目。
+  PR 草稿在 [deferred](./deferred.md)「上游 PR：`abort()` 只在 Windows 上 `_real_close`」；JC 过目后裁「暂时不进行上游 PR」，
+  条目转为暂缓。
 - 否掉：只等上游（修不修、何时修不由我们定）；调小 `read_timeout`（不治本，误伤正常的长推理）。
 - 180 秒不回本身是中转站侧的事，Galley 管不了；修后 `/stop` 能立即生效，后面的消息不再被挡住。
 
