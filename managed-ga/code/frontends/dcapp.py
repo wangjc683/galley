@@ -12,7 +12,7 @@ from chatapp_common import (
     AgentChatMixin, build_done_text, ensure_single_instance, extract_files,
     public_access, redirect_log, require_runtime, split_text, strip_files, clean_reply,
     HELP_TEXT, FILE_HINT, format_restore,
-    _handle_continue_frontend, _reset_conversation,
+    _handle_continue_frontend, _reset_conversation, _handle_btw_frontend,
 )
 from llmcore import mykeys
 
@@ -111,6 +111,31 @@ OWNER_BOUND_TEXT = (
     "✓ 已绑定为 Galley 的使用者，现在只响应你的消息。\n"
     "接下来到你的 Server 频道里 @ 我即可激活该频道；私信不再处理对话。"
 )
+DISCORD_HELP_TEXT = HELP_TEXT + "\n退出该频道 / 退出该子区 - 停止在本频道响应"
+NO_RUNNING_TASK_TEXT = "当前没有在跑的任务"
+# One status message per run, edited in place (an edit does not push) and
+# deleted once the answer lands. Edits are throttled so a fast run never
+# leans on discord.py's 429 backoff; terminal writes skip the throttle.
+STATUS_EDIT_INTERVAL_SECONDS = 1.5
+STATUS_POLL_SECONDS = 3.0
+STEP_SUMMARY_LIMIT = 120
+_COMPONENT_PREFIX = "galley-dc:"
+_ASK_HOOK_KEY = "discord_ask_user"
+_ASK_BUTTON_LIMIT = 25  # Discord: 5 rows x 5 buttons
+_BUTTON_LABEL_LIMIT = 80
+_EMBED_TITLE_LIMIT, _EMBED_DESCRIPTION_LIMIT = 256, 4096
+_EMBED_FOOTER_LIMIT, _EMBED_TOTAL_LIMIT = 2048, 6000
+# Same thresholds as the desktop's candidateLayout (gui/src/lib/ask-user-candidates.ts).
+_CANDIDATE_LIST_MIN_COUNT = 5
+_CANDIDATE_LIST_MAX_ROW_CHARS = 20
+_CANDIDATE_LIST_MAX_ROW_TOTAL_CHARS = 60
+_MULTI_SELECT_RE = re.compile(r"\[?(?:多选|multi(?:[-_ ]?select)?|select all)\]?", re.IGNORECASE)
+_TOOL_CALL_RE = re.compile(r"^\s*🛠️\s+([A-Za-z_]\w*)\(", re.M)
+_SUMMARY_SEARCH_STRIP_RE = re.compile(r"```.*?```|<thinking>.*?</thinking>", re.DOTALL)
+_TOOL_LABELS = {
+    "code_run": "运行代码", "file_read": "读取文件", "file_write": "写入文件",
+    "file_patch": "修改文件", "web_scan": "读取网页", "web_execute_js": "执行网页脚本",
+}
 
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
@@ -383,6 +408,295 @@ def _display_done_text(text):
     return "..."
 
 
+def _visible_text(text):
+    body = _strip_discord_transcript(text)
+    return "" if body == "..." else body
+
+
+def _one_line(text):
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def _clip(text, limit):
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+def _format_elapsed(seconds):
+    """Desktop RunFoldHeader.formatDuration: rounded to whole seconds (half
+    up, like Math.round), nothing at all under one second."""
+    sec = int(max(0.0, float(seconds or 0)) + 0.5)
+    if sec < 1:
+        return ""
+    if sec < 60:
+        return f"用时 {sec} 秒"
+    return f"用时 {sec // 60} 分 {sec % 60} 秒"
+
+
+def _fold_label(steps, seconds):
+    parts = [f"{steps} 步"] if steps > 0 else []
+    elapsed = _format_elapsed(seconds)
+    if elapsed:
+        parts.append(elapsed)
+    return " · ".join(parts)
+
+
+def _stopped_text(steps, seconds):
+    label = _fold_label(steps, seconds)
+    return f"⏹ 已停止 · {label}" if label else "⏹ 已停止"
+
+
+def _step_summary(text):
+    """One status line for a settled step: its last <summary>, else the first
+    line of its visible prose, else which tool it called, else nothing."""
+    text = text or ""
+    summary = _extract_discord_progress(_SUMMARY_SEARCH_STRIP_RE.sub("", text))
+    if not summary:
+        body = _visible_text(text)
+        summary = next((line for line in body.splitlines() if line.strip()), "")
+    if not summary:
+        match = _TOOL_CALL_RE.search(text)
+        if match:
+            summary = f"调用了{_TOOL_LABELS.get(match.group(1), match.group(1))}"
+    return _one_line(summary)[:STEP_SUMMARY_LIMIT]
+
+
+def _final_step_text(raw, outputs):
+    """The closing step's text. The desktop answer is the last step
+    (finalAnswer); earlier steps' narration belongs to the process. Whatever
+    `done` carries beyond the per-step texts (GA appends the backend-error
+    block there) belongs to the closing step too."""
+    raw = raw or ""
+    if not outputs:
+        return raw
+    joined = "".join(outputs)
+    extra = raw[len(joined):] if raw.startswith(joined) else ""
+    return outputs[-1] + extra
+
+
+def _answer_body(step_text, raw):
+    body = _visible_text(step_text) or _display_done_text(raw)
+    return "" if body == "..." else body
+
+
+def _existing_files(raw_text):
+    return [p for p in extract_files(raw_text) if os.path.exists(p)]
+
+
+def _reply_kwargs(message):
+    """Quote a message without pinging its author; a deleted target degrades
+    to a plain send instead of failing it."""
+    if message is None:
+        return {}
+    reference = message
+    to_reference = getattr(message, "to_reference", None)
+    if callable(to_reference):
+        try:
+            reference = to_reference(fail_if_not_exists=False)
+        except Exception:
+            reference = message
+    return {"reference": reference, "mention_author": False}
+
+
+def _component_view(buttons):
+    """Render-only button rows. Clicks are routed by custom_id in
+    on_interaction, which also answers buttons that outlived this process, so
+    the view is finished before it is sent: discord.py then never files a
+    timeout=None view in its ViewStore, where one per message would pile up
+    for the life of the process."""
+    view = discord.ui.View(timeout=None)
+    for label, custom_id in buttons:
+        view.add_item(discord.ui.Button(
+            label=label, style=discord.ButtonStyle.secondary, custom_id=custom_id,
+        ))
+    view.stop()
+    return view
+
+
+def _candidate_list(raw):
+    items = raw if isinstance(raw, (list, tuple)) else ([] if raw is None else [raw])
+    return [str(item).strip() for item in items if item is not None and str(item).strip()]
+
+
+def _extract_ask_user_event(ctx):
+    """The ask_user payload of a turn-end hook ctx (tgapp's shape), or None.
+    Some models split one question into parallel ask_user calls with one
+    candidate each; GA serves only the first, so candidates of same-question
+    siblings are merged in, as the desktop does."""
+    ctx = ctx or {}
+    exit_reason = ctx.get("exit_reason") or {}
+    if not isinstance(exit_reason, dict) or exit_reason.get("result") != "EXITED":
+        return None
+    payload = exit_reason.get("data")
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("status") != "INTERRUPT" or payload.get("intent") != "HUMAN_INTERVENTION":
+        return None
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None
+    question = str(data.get("question") or "").strip() or "请提供输入："
+    candidates = _candidate_list(data.get("candidates"))
+    for call in ctx.get("tool_calls") or []:
+        args = call.get("args") if isinstance(call, dict) and call.get("tool_name") == "ask_user" else None
+        if not isinstance(args, dict) or str(args.get("question") or "").strip() != question:
+            continue
+        for candidate in _candidate_list(args.get("candidates")):
+            if candidate not in candidates:
+                candidates.append(candidate)
+    return {"question": question, "candidates": candidates, "multi": bool(_MULTI_SELECT_RE.search(question))}
+
+
+def _candidate_layout(candidates):
+    if len(candidates) >= _CANDIDATE_LIST_MIN_COUNT:
+        return "list"
+    total = 0
+    for candidate in candidates:
+        size = len(candidate.strip())
+        if size > _CANDIDATE_LIST_MAX_ROW_CHARS:
+            return "list"
+        total += size
+    return "list" if total > _CANDIDATE_LIST_MAX_ROW_TOTAL_CHARS else "row"
+
+
+def _ask_layout(event):
+    """row: buttons carry the candidates; list: numbered in the text, buttons
+    carry the numbers; text: numbered, answered by typing (multi-select, or
+    more than Discord's 25 buttons); none: no candidates at all."""
+    candidates = event["candidates"]
+    if not candidates:
+        return "none"
+    if event.get("multi") or len(candidates) > _ASK_BUTTON_LIMIT:
+        return "text"
+    return _candidate_layout(candidates)
+
+
+def _ask_prompt_text(event, layout, steps, narration=""):
+    # The question keeps its single newlines: GA's question is plain text.
+    lines = [f"-# ⏸ 等你回复 · 已完成 {steps} 步"]
+    if narration:
+        lines.append(narration)
+    lines.append(event["question"])
+    if layout in ("list", "text"):
+        lines.extend(f"{i}. {_one_line(c)}" for i, c in enumerate(event["candidates"], 1))
+    if event.get("multi") and event["candidates"]:
+        lines.append("-# 多选：直接回复序号或文字")
+    return "\n".join(lines)
+
+
+def _ask_echo_text(pending, selected=None):
+    """The answered question: the chosen candidate ticked at normal size, the
+    rest as subtext. A typed answer ticks nothing."""
+    lines = [f"-# 已回复 · 已完成 {pending.steps} 步"]
+    if pending.narration:
+        lines.append(pending.narration)
+    lines.append(pending.event["question"])
+    numbered = pending.layout in ("list", "text")
+    for i, candidate in enumerate(pending.event["candidates"]):
+        label = f"{i + 1}. {_one_line(candidate)}" if numbered else _one_line(candidate)
+        lines.append(f"✓ {label}" if i == selected else f"-# {label}")
+    return "\n".join(lines)
+
+
+class _DiscordRun:
+    """The Discord side of one run: a GA task, plus the ask_user segments it
+    continues. app.user_tasks[chat_id] lists a channel's runs in order: the
+    head is the one GA is on (or gets next), the rest wait behind it in the
+    agent's task queue. The completion reporter reads that entry's truth
+    value as "channel busy"."""
+
+    def __init__(self, chat_id, ga, trigger=None, carry=None):
+        self.chat_id, self.ga, self.trigger = chat_id, ga, trigger
+        self.token = uuid.uuid4().hex[:12]
+        self.running = True  # cleared by /stop, the stop button, channel release
+        self.outcome = None  # "done" | "ask" | "stopped" | "error"
+        self.queued = False
+        self.adopted = carry is not None
+        self.base_steps, self.base_elapsed, self.last_summary = 0, 0.0, ""
+        self.adopt(carry)
+        self.task_turn = 0  # highest GA turn seen in this run's task
+        self.turn_texts = {}
+        self.started_at = self.step_started_at = self.ended_at = None
+        self.channel = self.status_msg = self.typing_task = None
+        self.last_render = self.last_edit_at = None
+        self.final_written = False
+        self.wake = asyncio.Event()
+
+    def adopt(self, carry):
+        """Continue an ask_user-paused run: step numbers and elapsed time add
+        up across segments; the wait for the answer is not counted."""
+        if carry:
+            self.base_steps = int(carry.get("steps") or 0)
+            self.base_elapsed = float(carry.get("elapsed") or 0.0)
+            self.last_summary = str(carry.get("summary") or "")
+
+    def settled_steps(self):
+        return self.base_steps + max(0, self.task_turn - 1)
+
+    def total_steps(self):
+        return self.base_steps + self.task_turn
+
+    def elapsed(self, now):
+        if self.started_at is None:
+            return self.base_elapsed
+        return self.base_elapsed + max(0.0, now - self.started_at)
+
+    def carry(self, now):
+        return {"steps": self.total_steps(), "elapsed": self.elapsed(now), "summary": self.last_summary}
+
+    def observe(self, item, now):
+        """Fold one display-queue item in. The channel agent runs verbose=False
+        / inc_out=False: `outputs` is [previous step, current step] on `next`
+        items and every step on `done`. Step k settles when an item for a
+        later turn arrives (the desktop's turn_end: its tools have run), and
+        `done` settles the last one. Returns `done`'s per-step texts."""
+        outputs = item.get("outputs")
+        outputs = [str(text or "") for text in outputs] if isinstance(outputs, list) else []
+        turn = item.get("turn") if isinstance(item.get("turn"), int) else 0
+        if "done" in item:
+            self.turn_texts.update(enumerate(outputs, 1))
+            turn = max(turn, len(outputs), self.task_turn)
+        elif turn > 0 and outputs:
+            self.turn_texts[turn] = outputs[-1]
+            if len(outputs) > 1 and turn > 1:
+                self.turn_texts[turn - 1] = outputs[-2]
+        if turn > self.task_turn:
+            self.task_turn, self.step_started_at = turn, now
+            if turn > 1:
+                self.last_summary = _step_summary(self.turn_texts.get(turn - 1, ""))
+        if "done" in item and self.task_turn:
+            self.last_summary = _step_summary(self.turn_texts.get(self.task_turn, ""))
+        return outputs
+
+
+def _status_content(run, now):
+    """(content, show_stop_button) of a run's status message."""
+    if run.started_at is None and run.queued:
+        return "·· 排队中", False
+    lines = []
+    settled = run.settled_steps()
+    if settled >= 2:
+        lines.append(f"已完成 {settled} 步")
+    if settled >= 1:
+        lines.append(f"{settled:02d} {run.last_summary}".rstrip())
+    thinking = "·· 思考中"
+    if run.step_started_at is not None:
+        minutes = int((now - run.step_started_at) // 60)
+        if minutes >= 1:
+            thinking += f" · 已 {minutes} 分钟 · 仍在运行"
+    lines.append(thinking)
+    return "\n".join(lines), run.started_at is not None
+
+
+class _PendingAsk:
+    """A posted ask_user question waiting for the owner's answer."""
+
+    def __init__(self, chat_id, event, layout, steps, carry, narration):
+        self.token = uuid.uuid4().hex[:12]
+        self.chat_id, self.event, self.layout = chat_id, event, layout
+        self.steps, self.carry, self.narration = steps, carry, narration
+        self.message = None
+
+
 class DiscordApp(AgentChatMixin):
     label, source, split_limit = "Discord", "discord", 1900
 
@@ -398,6 +712,12 @@ class DiscordApp(AgentChatMixin):
         self._agents = OrderedDict()  # chat_id -> _ChannelAgent, each chat has isolated history
         self._agent_lock = threading.Lock()
         self._dm_notice_at = {}
+        self._clock = time.monotonic  # run timing + edit throttle; injectable for tests
+        self._runs_by_token = {}  # stop-button token -> _DiscordRun
+        self._ask_lock = threading.Lock()  # ask_user events arrive on GA worker threads
+        self._ask_events = {}  # chat_id -> (display queue of the asking task, event)
+        self._pending_asks = {}  # chat_id -> _PendingAsk waiting for an answer
+        self._pending_by_token = {}  # button token -> _PendingAsk
         # Channel history only lives inside this process, but the active set is
         # persisted: after a restart an "active" channel would silently hand the
         # user a blank agent. Drop the flag and say so on the next message.
@@ -435,6 +755,10 @@ class DiscordApp(AgentChatMixin):
         @self.client.event
         async def on_message(message):
             await self._handle_message(message)
+
+        @self.client.event
+        async def on_interaction(interaction):
+            await self._handle_interaction(interaction)
 
     def _chat_id(self, message):
         """Return a string chat_id: 'dm:<user_id>' or 'ch:<channel_id>'."""
@@ -517,9 +841,7 @@ class DiscordApp(AgentChatMixin):
 
     def _deactivate_channel(self, chat_id):
         changed = self._forget_active_channel(chat_id)
-        state = self.user_tasks.get(chat_id)
-        if state:
-            state["running"] = False
+        self._on_loop(self._release_channel_ui, chat_id)
         with self._agent_lock:
             handle = self._agents.pop(chat_id, None)
         if handle is not None:
@@ -569,6 +891,7 @@ class DiscordApp(AgentChatMixin):
             if handle is None:
                 handle = _ChannelAgent(chat_id)
                 self._emit_agent_created(handle.agent, chat_id)
+                self._install_ask_hook(handle.agent, chat_id)
                 self._agents[chat_id] = handle
                 if len(self._agents) > AGENT_CACHE_LIMIT:
                     _old_chat_id, evicted = self._agents.popitem(last=False)
@@ -583,9 +906,7 @@ class DiscordApp(AgentChatMixin):
         # The channel's history dies with its agent, so drop the active flag
         # too: the user must re-@ instead of silently getting a blank context.
         self._forget_active_channel(chat_id)
-        state = self.user_tasks.get(chat_id)
-        if state:
-            state["running"] = False
+        self._on_loop(self._release_channel_ui, chat_id)
         print(f"[Discord] evicted agent for {chat_id} (cache limit {AGENT_CACHE_LIMIT})")
         self._close_agent_async(handle)
         self._notify_threadsafe(chat_id, RETIRED_TEXT)
@@ -598,6 +919,87 @@ class DiscordApp(AgentChatMixin):
             asyncio.run_coroutine_threadsafe(self.send_text(chat_id, text), loop)
         except Exception as e:
             print(f"[Discord] failed to schedule notice for {chat_id}: {e}")
+
+    def _on_loop(self, fn, *args):
+        """Run fn on the event loop thread. _retire_agent is also reached from
+        the completion reporter's thread (via _get_agent), and run / question
+        state belongs to the loop."""
+        loop = self.loop
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        if loop is None or loop.is_closed() or current is loop:
+            return fn(*args)
+        loop.call_soon_threadsafe(fn, *args)
+
+    def _spawn(self, coro):
+        try:
+            task = asyncio.get_running_loop().create_task(coro)
+        except RuntimeError:
+            coro.close()
+            return None
+        self.background_tasks.add(task)
+        task.add_done_callback(self.background_tasks.discard)
+        return task
+
+    def _release_channel_ui(self, chat_id):
+        """The channel was released (exit command, agent eviction): all of its
+        runs stop, and a question waiting for an answer loses its buttons and
+        its carried step count."""
+        for run in list(self.user_tasks.get(chat_id) or []):
+            if run.outcome is None:
+                self._request_stop(run, abort=False)  # closing the agent aborts it
+            run.wake.set()
+        with self._ask_lock:
+            self._ask_events.pop(chat_id, None)
+        self._drop_pending_ask(chat_id)
+
+    def _install_ask_hook(self, ga, chat_id):
+        """Capture ask_user from GA's turn-end hook (tgapp's seam) instead of
+        parsing the 🛠️ echo. The hook runs on the GA worker thread, before the
+        task's `done`; the event is tagged with that task's display queue so
+        only the run owning the task claims it (a completion-reporter turn
+        that asks never lands on a user run)."""
+        hooks = getattr(ga, "_turn_end_hooks", None)
+        if not isinstance(hooks, dict):
+            hooks = {}
+            ga._turn_end_hooks = hooks
+
+        def hook(ctx):
+            event = _extract_ask_user_event(ctx)
+            if event is not None:
+                with self._ask_lock:
+                    self._ask_events[chat_id] = (getattr(ga, "_current_queue", None), event)
+
+        hooks[_ASK_HOOK_KEY] = hook
+
+    def _take_ask_event(self, chat_id, dq):
+        with self._ask_lock:
+            entry = self._ask_events.get(chat_id)
+            if entry is None or (entry[0] is not None and entry[0] is not dq):
+                return None
+            del self._ask_events[chat_id]
+        return entry[1]
+
+    def _take_pending_ask(self, chat_id):
+        with self._ask_lock:
+            pending = self._pending_asks.pop(chat_id, None)
+            if pending is not None:
+                self._pending_by_token.pop(pending.token, None)
+        return pending
+
+    def _drop_pending_ask(self, chat_id):
+        pending = self._take_pending_ask(chat_id)
+        if pending is not None and pending.message is not None:
+            self._spawn(self._strip_buttons(pending.message))
+        return pending
+
+    async def _strip_buttons(self, message):
+        try:
+            await message.edit(view=None)
+        except Exception as e:
+            print(f"[Discord] failed to remove buttons: {e}")
 
     def _new_turn_dir(self, chat_id):
         safe = re.sub(r"[^0-9A-Za-z]", "_", chat_id)
@@ -633,16 +1035,17 @@ class DiscordApp(AgentChatMixin):
         self._remember_channel(chat_id, channel)
         return channel
 
-    async def send_text(self, chat_id, content, **ctx):
-        """Send text to a chat_id (best effort, upstream semantics)."""
+    async def send_text(self, chat_id, content, reply_to=None, **ctx):
+        """Send text to a chat_id (best effort, upstream semantics). reply_to
+        quotes that message on the first part."""
         try:
             channel = await self._resolve_channel(chat_id)
         except Exception as e:
             print(f"[Discord] cannot resolve channel for {chat_id}: {e}")
             return
-        for part in _split_discord_text(content, self.split_limit):
+        for i, part in enumerate(_split_discord_text(content, self.split_limit)):
             try:
-                await channel.send(part)
+                await channel.send(part, **(_reply_kwargs(reply_to) if i == 0 else {}))
             except Exception as e:
                 print(f"[Discord] send error: {e}")
 
@@ -654,46 +1057,72 @@ class DiscordApp(AgentChatMixin):
         for part in _split_discord_text(content, self.split_limit):
             await channel.send(part)
 
+    async def deliver_embed(self, chat_id, *, title, description, color=None, footer=None):
+        """Strict send of one embed for programmatic callers (the completion reporter):
+        raises on resolve/send failure like deliver_text. Truncates title to 256 and
+        footer to 2048 chars; raises ValueError when description exceeds 4096 —
+        splitting long reports is the caller's job."""
+        description = str(description or "")
+        if len(description) > _EMBED_DESCRIPTION_LIMIT:
+            raise ValueError(
+                f"embed description is {len(description)} chars (limit {_EMBED_DESCRIPTION_LIMIT})"
+            )
+        title = str(title or "")[:_EMBED_TITLE_LIMIT]
+        # Discord also caps an embed's text at 6000 in total; the footer gives way.
+        room = _EMBED_TOTAL_LIMIT - len(title) - len(description)
+        footer = str(footer or "")[:min(_EMBED_FOOTER_LIMIT, room)]
+        channel = await self._resolve_channel(chat_id)
+        embed = discord.Embed(title=title or None, description=description or None, color=color)
+        if footer:
+            embed.set_footer(text=footer)
+        await channel.send(embed=embed)
+
     async def send_done(self, chat_id, raw_text, **ctx):
         """Send final reply: text parts + file attachments."""
-        files = [p for p in extract_files(raw_text) if os.path.exists(p)]
+        files = _existing_files(raw_text)
         body = _display_done_text(raw_text)
 
         # Send text (send_text handles splitting internally)
         if body and body != "...":
             await self.send_text(chat_id, body, **ctx)
 
-        # Send files as Discord attachments
-        if files:
-            try:
-                channel = await self._resolve_channel(chat_id)
-            except Exception as e:
-                print(f"[Discord] cannot resolve channel for files {chat_id}: {e}")
-                channel = None
-            if channel:
-                for fpath in files:
-                    try:
-                        await channel.send(file=discord.File(fpath))
-                    except Exception as e:
-                        print(f"[Discord] failed to send file {fpath}: {e}")
-                        await self.send_text(chat_id, f"⚠️ 文件发送失败: {os.path.basename(fpath)}", **ctx)
+        await self._send_files(chat_id, files)
 
         if not body and not files:
             await self.send_text(chat_id, "...", **ctx)
 
-    async def handle_command(self, chat_id, cmd, **ctx):
+    async def _send_files(self, chat_id, files):
+        """Send files as Discord attachments."""
+        if not files:
+            return
+        try:
+            channel = await self._resolve_channel(chat_id)
+        except Exception as e:
+            print(f"[Discord] cannot resolve channel for files {chat_id}: {e}")
+            return
+        for fpath in files:
+            try:
+                await channel.send(file=discord.File(fpath))
+            except Exception as e:
+                print(f"[Discord] failed to send file {fpath}: {e}")
+                await self.send_text(chat_id, f"⚠️ 文件发送失败: {os.path.basename(fpath)}")
+
+    async def handle_command(self, chat_id, cmd, message=None, **ctx):
         """Handle slash commands against the per-chat agent, keeping Discord chats isolated."""
         ga = self._get_agent(chat_id).agent
         parts = (cmd or "").split()
         op = (parts[0] if parts else "").lower()
         if op == "/help":
-            return await self.send_text(chat_id, HELP_TEXT, **ctx)
+            return await self.send_text(chat_id, DISCORD_HELP_TEXT, **ctx)
         if op == "/stop":
-            state = self.user_tasks.get(chat_id)
-            if state:
-                state["running"] = False
-            ga.abort()
-            return await self.send_text(chat_id, "⏹️ 正在停止...", **ctx)
+            # Stops the running run only (queued ones stay); its status
+            # message, frozen as "⏹ 已停止 · …", is the receipt.
+            run = self._running_run(chat_id)
+            if run is None:
+                return await self.send_text(chat_id, NO_RUNNING_TASK_TEXT, **ctx)
+            self._request_stop(run)
+            print(f"[Discord] run stopped by command: chat={chat_id}")
+            return await self._write_stopped(run)
         if op == "/status":
             llm = ga.get_llm_name() if ga.llmclient else "未配置"
             return await self.send_text(chat_id, f"状态: {'🔴 运行中' if ga.is_running else '🟢 空闲'}\nLLM: [{ga.llm_no}] {llm}", **ctx)
@@ -722,50 +1151,388 @@ class DiscordApp(AgentChatMixin):
         if op == "/continue":
             return await self.send_text(chat_id, _handle_continue_frontend(ga, cmd), **ctx)
         if op == "/new":
+            self._drop_pending_ask(chat_id)
             return await self.send_text(chat_id, _reset_conversation(ga), **ctx)
-        return await self.send_text(chat_id, HELP_TEXT, **ctx)
+        if op == "/btw":
+            answer = await asyncio.to_thread(_handle_btw_frontend, ga, cmd)
+            return await self.send_text(chat_id, answer, reply_to=message, **ctx)
+        if op == "/review":
+            # Sent raw: GA's /review slash handler only fires when the query
+            # starts with the command, which FILE_HINT would hide.
+            return await self.run_agent(chat_id, cmd, reply_to=message, hint=False, answers_ask=False)
+        return await self.send_text(chat_id, DISCORD_HELP_TEXT, **ctx)
 
-    async def run_agent(self, chat_id, text, turn_dir=None, **ctx):
-        """Run the isolated per-chat Discord agent."""
+    async def run_agent(self, chat_id, text, turn_dir=None, reply_to=None, carry=None,
+                        hint=True, answers_ask=True, **ctx):
+        """Run one task on the channel's agent behind a single status message:
+        replied under the triggering message, edited in place while steps
+        settle, deleted once the answer (or an ask_user question) is posted,
+        frozen as the receipt when stopped. carry continues an ask_user-paused
+        run (button answers); with answers_ask a run answers a question still
+        pending in the channel (typed answers)."""
         handle = self._get_agent(chat_id)
         ga = handle.agent
-        state = {"running": True}
-        self.user_tasks[chat_id] = state
+        run = _DiscordRun(chat_id, ga, reply_to, carry)
+        runs = self.user_tasks.setdefault(chat_id, [])
+        runs.append(run)
+        self._runs_by_token[run.token] = run
         try:
-            await self.send_text(chat_id, "思考中...", **ctx)
-            dq = ga.put_task(f"{FILE_HINT}\n\n{text}", source=self.source)
-            last_ping = time.time()
-            last_step = ""
-            step_no = 0
-            while state["running"] and not handle.stop_event.is_set():
+            run.queued = len(runs) > 1 or bool(getattr(ga, "is_running", False))
+            if answers_ask and not run.queued:
+                await self._adopt_pending_ask(run)
+            run.channel = await self._resolve_channel(chat_id)
+            await self._send_status(run)
+            dq = ga.put_task(f"{FILE_HINT}\n\n{text}" if hint else text, source=self.source)
+            await self._wait_for_turn(run, handle)
+            if answers_ask and not run.adopted and run.running:
+                await self._adopt_pending_ask(run)
+            while run.running and not handle.stop_event.is_set():
                 try:
-                    item = await asyncio.to_thread(dq.get, True, 3)
+                    item = await asyncio.to_thread(dq.get, True, self._status_poll_timeout(run))
                 except Q.Empty:
-                    if ga.is_running and time.time() - last_ping > self.ping_interval:
-                        await self.send_text(chat_id, "⏳ 还在处理中，请稍等...", **ctx)
-                        last_ping = time.time()
+                    await self._flush_status(run)
                     continue
-                if "next" in item:
-                    step = _extract_discord_progress(item.get("next", ""))
-                    if step and step != last_step:
-                        step_no += 1
-                        await self.send_text(chat_id, f"步骤{step_no}：{step}", **ctx)
-                        last_step = step
-                        last_ping = time.time()
-                    continue
-                if "done" in item:
-                    await self.send_done(chat_id, item.get("done", ""), **ctx)
+                if not run.running:
                     break
-            if not state["running"] or handle.stop_event.is_set():
-                await self.send_text(chat_id, "⏹️ 已停止", **ctx)
+                now = self._clock()
+                if run.started_at is None:
+                    self._start_run(run, now, typing="done" not in item)
+                outputs = run.observe(item, now)
+                if "done" in item:
+                    await self._finish_run(run, str(item.get("done") or ""), outputs, dq)
+                    break
+                await self._flush_status(run)
+            if run.outcome is None:  # the agent was closed under the run
+                self._request_stop(run, abort=False)
+            if run.outcome == "stopped":
+                await self._write_stopped(run)
         except Exception as e:
             import traceback
             print(f"[{self.label}] run_agent error: {e}")
             traceback.print_exc()
-            await self.send_text(chat_id, f"❌ 错误: {e}", **ctx)
+            await self._fail_run(run, e)
         finally:
-            self.user_tasks.pop(chat_id, None)
+            self._stop_typing(run)
+            self._runs_by_token.pop(run.token, None)
+            if run in runs:
+                runs.remove(run)
+            if runs:
+                runs[0].wake.set()
+            elif self.user_tasks.get(chat_id) is runs:
+                self.user_tasks.pop(chat_id, None)
             _cleanup_turn_dir(turn_dir)
+
+    def _running_run(self, chat_id):
+        runs = self.user_tasks.get(chat_id) or []
+        run = runs[0] if runs else None
+        if run is not None and run.running and run.outcome is None and run.started_at is not None:
+            return run
+        return None
+
+    def _request_stop(self, run, abort=True):
+        run.running = False
+        run.outcome = "stopped"
+        run.ended_at = self._clock()
+        self._stop_typing(run)
+        run.wake.set()
+        if abort:
+            try:
+                run.ga.abort()
+            except Exception as e:
+                print(f"[Discord] abort failed for {run.chat_id}: {e}")
+
+    async def _wait_for_turn(self, run, handle):
+        """A queued run reads its display queue only once it heads the
+        channel. GA runs the tasks in that order anyway; waiting keeps each
+        run's answer, question and status edits in the same order, so a
+        question posted by the run ahead is pending by the time this run
+        starts and can be answered by it."""
+        while run.running and not handle.stop_event.is_set():
+            runs = self.user_tasks.get(run.chat_id) or []
+            if runs and runs[0] is run:
+                return
+            run.wake.clear()
+            try:
+                await asyncio.wait_for(run.wake.wait(), STATUS_POLL_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+
+    def _start_run(self, run, now, typing=True):
+        """The run's task began: the clock starts (queueing is not counted),
+        and Discord's typing indicator carries liveness from here."""
+        run.started_at = run.step_started_at = now
+        if typing and run.channel is not None:
+            run.typing_task = asyncio.create_task(self._keep_typing(run.channel, run.chat_id))
+
+    async def _keep_typing(self, channel, chat_id):
+        # typing() re-sends the indicator every 5 seconds until exited.
+        try:
+            async with channel.typing():
+                await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[Discord] typing indicator failed for {chat_id}: {e}")
+
+    def _stop_typing(self, run):
+        task, run.typing_task = run.typing_task, None
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _send_status(self, run):
+        now = self._clock()
+        rendering = _status_content(run, now)
+        try:
+            run.status_msg = await run.channel.send(rendering[0], **_reply_kwargs(run.trigger))
+            run.last_render, run.last_edit_at = rendering, now
+        except Exception as e:
+            print(f"[Discord] status message failed for {run.chat_id}: {e}")
+
+    def _status_poll_timeout(self, run):
+        if run.status_msg is None or run.last_edit_at is None:
+            return STATUS_POLL_SECONDS
+        now = self._clock()
+        if _status_content(run, now) == run.last_render:
+            return STATUS_POLL_SECONDS
+        wait = STATUS_EDIT_INTERVAL_SECONDS - (now - run.last_edit_at)
+        return min(STATUS_POLL_SECONDS, max(0.05, wait))
+
+    async def _flush_status(self, run):
+        """Edit the status message when its rendering changed, at most once per
+        STATUS_EDIT_INTERVAL_SECONDS; intermediate states merge."""
+        if run.status_msg is None or run.outcome is not None:
+            return
+        now = self._clock()
+        rendering = _status_content(run, now)
+        if rendering == run.last_render:
+            return
+        if run.last_edit_at is not None and now - run.last_edit_at < STATUS_EDIT_INTERVAL_SECONDS:
+            return
+        content, show_stop = rendering
+        view = _component_view([("停止", f"{_COMPONENT_PREFIX}stop:{run.token}")]) if show_stop else None
+        try:
+            await run.status_msg.edit(content=content, view=view)
+            run.last_render = rendering
+        except Exception as e:
+            print(f"[Discord] status edit failed for {run.chat_id}: {e}")
+        run.last_edit_at = now
+        if run.outcome == "stopped":
+            # A stop landed while this edit was in flight and may have been
+            # overwritten by it: write the stopped receipt again.
+            run.final_written = False
+            await self._write_stopped(run)
+
+    async def _write_stopped(self, run):
+        """A stopped run keeps its status message, frozen as the receipt."""
+        if run.status_msg is None or run.final_written:
+            return
+        text = _stopped_text(run.total_steps(), run.elapsed(run.ended_at or self._clock()))
+        try:
+            await run.status_msg.edit(content=text, view=None)
+            run.final_written = True
+        except Exception as e:
+            print(f"[Discord] status stop edit failed for {run.chat_id}: {e}")
+
+    async def _retire_status(self, run, fallback):
+        """Delete the status message; if Discord refuses, never leave it
+        claiming the run is still thinking."""
+        msg, run.status_msg = run.status_msg, None
+        if msg is None:
+            return
+        try:
+            await msg.delete()
+            return
+        except Exception as e:
+            print(f"[Discord] status delete failed for {run.chat_id}: {e}")
+        try:
+            await msg.edit(content=fallback, view=None)
+        except Exception as e:
+            print(f"[Discord] status fallback edit failed for {run.chat_id}: {e}")
+
+    def _answer_reply_kwargs(self, run):
+        """Quote the trigger only when something landed after this run's
+        status message; right below it, the answer already reads as the reply."""
+        anchor = run.status_msg or run.trigger
+        last = getattr(run.channel, "last_message_id", None)
+        if anchor is not None and last is not None and last == getattr(anchor, "id", None):
+            return {}
+        return _reply_kwargs(run.trigger)
+
+    async def _finish_run(self, run, raw, outputs, dq):
+        now = self._clock()
+        run.ended_at = now
+        self._stop_typing(run)
+        steps, elapsed = run.total_steps(), run.elapsed(now)
+        step_text = _final_step_text(raw, outputs)
+        event = self._take_ask_event(run.chat_id, dq)
+        if event is not None:
+            run.outcome = "ask"
+            reply = self._answer_reply_kwargs(run)
+            await self._retire_status(run, "-# ⏸ 等你回复")
+            await self._post_ask(run, event, _visible_text(step_text), run.carry(now), reply)
+            await self._send_files(run.chat_id, _existing_files(raw))
+            return
+        run.outcome = "done"
+        await self._send_answer(run, raw, _answer_body(step_text, raw), steps, elapsed)
+        await self._retire_status(run, "-# ✓ 已完成")
+
+    async def _send_answer(self, run, raw, body, steps, elapsed):
+        """The run's one pushed message: the desktop's fold header as a
+        `-# N 步 · 用时 X` subtext line over the closing step's text. Files
+        still come from the whole transcript."""
+        label = _fold_label(steps, elapsed)
+        text = "\n".join(part for part in (f"-# {label}" if label else "", body) if part)
+        files = _existing_files(raw)
+        if not text and not files:
+            text = "..."
+        if text:
+            reply = self._answer_reply_kwargs(run)
+            for i, part in enumerate(_split_discord_text(text, self.split_limit)):
+                await run.channel.send(part, **(reply if i == 0 else {}))
+        await self._send_files(run.chat_id, files)
+
+    async def _fail_run(self, run, error):
+        now = self._clock()
+        run.running, run.outcome = False, "error"
+        self._stop_typing(run)
+        label = _fold_label(run.total_steps(), run.elapsed(run.ended_at or now))
+        await self._retire_status(run, "-# ❌ 出错")
+        text = f"❌ 出错：{error}"
+        await self.send_text(run.chat_id, f"-# {label}\n{text}" if label else text)
+
+    async def _post_ask(self, run, event, narration, carry, reply):
+        """Pause for the owner's answer: a new (pushed) question message,
+        answered by a button or by the next message typed in the channel.
+        The run's step count and clock wait in the pending question."""
+        layout = _ask_layout(event)
+        steps = carry["steps"]
+        pending = _PendingAsk(run.chat_id, event, layout, steps, carry, narration)
+        text = _ask_prompt_text(event, layout, steps, narration)
+        if len(text) > self.split_limit and narration:
+            # A long narration goes out first, so the question and its
+            # buttons stay one message.
+            for part in _split_discord_text(narration, self.split_limit):
+                await run.channel.send(part, **reply)
+                reply = {}
+            pending.narration = ""
+            text = _ask_prompt_text(event, layout, steps)
+        view = None
+        if layout in ("row", "list"):
+            view = _component_view([
+                (
+                    (_one_line(c) if layout == "row" else str(i + 1))[:_BUTTON_LABEL_LIMIT] or str(i + 1),
+                    f"{_COMPONENT_PREFIX}ask:{pending.token}:{i}",
+                )
+                for i, c in enumerate(event["candidates"])
+            ])
+        pending.message = await run.channel.send(_clip(text, self.split_limit), view=view, **reply)
+        with self._ask_lock:
+            replaced = self._pending_asks.pop(run.chat_id, None)
+            if replaced is not None:
+                self._pending_by_token.pop(replaced.token, None)
+            self._pending_asks[run.chat_id] = pending
+            self._pending_by_token[pending.token] = pending
+        if replaced is not None and replaced.message is not None:
+            await self._strip_buttons(replaced.message)
+        print(
+            f"[Discord] ask_user posted: chat={run.chat_id} "
+            f"candidates={len(event['candidates'])} layout={layout}"
+        )
+
+    async def _adopt_pending_ask(self, run):
+        """ask_user does not cut the run (desktop, 2026-09-18): the next run in
+        the channel is the answer, and continues the step count and clock.
+        Its question becomes an echo with nothing ticked (a typed answer)."""
+        run.adopted = True
+        pending = self._take_pending_ask(run.chat_id)
+        if pending is None:
+            return
+        run.adopt(pending.carry)
+        if pending.message is not None:
+            try:
+                await pending.message.edit(
+                    content=_clip(_ask_echo_text(pending), self.split_limit), view=None,
+                )
+            except Exception as e:
+                print(f"[Discord] ask_user echo failed for {run.chat_id}: {e}")
+        print(f"[Discord] ask_user answered by message: chat={run.chat_id}")
+
+    async def _handle_interaction(self, interaction):
+        """Button clicks (ask_user answers, stop), routed by custom_id so that
+        buttons left over from an earlier process are still answered."""
+        data = getattr(interaction, "data", None)
+        custom_id = str(data.get("custom_id") or "") if isinstance(data, dict) else ""
+        if not custom_id.startswith(_COMPONENT_PREFIX):
+            return
+        user_id = str(getattr(getattr(interaction, "user", None), "id", ""))
+        if not _is_allowed_user(user_id):
+            # Like a non-owner message: ignored, but acknowledged so Discord
+            # does not show "interaction failed".
+            print(f"[Discord] ignored button from unauthorized user {user_id}")
+            return await self._ack(interaction)
+        kind, _, rest = custom_id[len(_COMPONENT_PREFIX):].partition(":")
+        if kind == "stop":
+            return await self._on_stop_click(interaction, rest)
+        if kind == "ask":
+            token, _, index = rest.partition(":")
+            return await self._on_ask_click(interaction, token, index)
+        return await self._ack_stale(interaction)
+
+    async def _ack(self, interaction):
+        try:
+            await interaction.response.defer()
+        except Exception as e:
+            print(f"[Discord] interaction ack failed: {e}")
+
+    async def _ack_stale(self, interaction):
+        """An answered / expired / pre-restart button: acknowledge, drop the
+        buttons, start nothing."""
+        await self._ack(interaction)
+        message = getattr(interaction, "message", None)
+        if message is not None:
+            await self._strip_buttons(message)
+
+    async def _on_stop_click(self, interaction, token):
+        run = self._runs_by_token.get(token)
+        if run is None or run.status_msg is None or not run.running or run.outcome is not None:
+            return await self._ack_stale(interaction)
+        self._request_stop(run)
+        print(f"[Discord] run stopped by button: chat={run.chat_id}")
+        text = _stopped_text(run.total_steps(), run.elapsed(run.ended_at))
+        try:
+            await interaction.response.edit_message(content=text, view=None)
+            run.final_written = True
+        except Exception as e:
+            print(f"[Discord] stop button edit failed for {run.chat_id}: {e}")
+            await self._ack(interaction)
+            await self._write_stopped(run)
+
+    async def _on_ask_click(self, interaction, token, index):
+        with self._ask_lock:
+            pending = self._pending_by_token.get(token)
+            try:
+                idx = int(index)
+            except ValueError:
+                idx = -1
+            valid = pending is not None and 0 <= idx < len(pending.event["candidates"])
+            if valid:
+                self._pending_by_token.pop(token, None)
+                if self._pending_asks.get(pending.chat_id) is pending:
+                    self._pending_asks.pop(pending.chat_id, None)
+        if not valid:
+            return await self._ack_stale(interaction)
+        try:
+            await interaction.response.edit_message(
+                content=_clip(_ask_echo_text(pending, idx), self.split_limit), view=None,
+            )
+        except Exception as e:
+            print(f"[Discord] ask_user echo failed for {pending.chat_id}: {e}")
+            await self._ack(interaction)
+        print(f"[Discord] ask_user answered by button: chat={pending.chat_id} choice={idx + 1}")
+        self._spawn(self.run_agent(
+            pending.chat_id, pending.event["candidates"][idx],
+            reply_to=getattr(interaction, "message", None) or pending.message, carry=pending.carry,
+        ))
 
     async def _handle_message(self, message):
         # Ignore self
@@ -844,11 +1611,11 @@ class DiscordApp(AgentChatMixin):
 
         if content.startswith("/"):
             try:
-                return await self.handle_command(chat_id, content)
+                return await self.handle_command(chat_id, content, message=message)
             finally:
                 _cleanup_turn_dir(turn_dir)
 
-        task = asyncio.create_task(self.run_agent(chat_id, content, turn_dir=turn_dir))
+        task = asyncio.create_task(self.run_agent(chat_id, content, turn_dir=turn_dir, reply_to=message))
         self.background_tasks.add(task)
         task.add_done_callback(self.background_tasks.discard)
 
@@ -933,8 +1700,9 @@ _APP = None
 
 def get_app():
     """The DiscordApp instance main() is running. Galley's completion reporter
-    needs it to push into a channel: `app.deliver_text(chat_id, text)` scheduled
-    on `app.loop` via asyncio.run_coroutine_threadsafe(...).result(timeout)."""
+    needs it to push into a channel: `app.deliver_text(chat_id, text)` (or
+    `app.deliver_embed(...)`) scheduled on `app.loop` via
+    asyncio.run_coroutine_threadsafe(...).result(timeout)."""
     return _APP
 
 

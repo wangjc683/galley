@@ -356,6 +356,15 @@ class ChannelAdapter:
         reporter thread gets a real ACK (or a real exception)."""
         raise NotImplementedError
 
+    def send_report(self, owner: str, text: str, raw: str, report: Report) -> None:
+        """Deliver the report with its outcome at hand — the entry point
+        the dispatcher calls. ``send`` only sees rendered text, but a
+        channel that dresses reports differently from ordinary replies
+        (Discord's embed card) needs the kind and the session. Defaults to
+        ``send`` so channels without such a surface (Feishu, Telegram)
+        keep their exact behavior; same MUST-raise contract as ``send``."""
+        self.send(owner, text, raw)
+
 
 class FeishuChannel(ChannelAdapter):
     def __init__(self, fsapp: Any) -> None:
@@ -452,6 +461,51 @@ class TelegramChannel(ChannelAdapter):
 
 
 DISCORD_SEND_TIMEOUT_SEC = 30.0
+# Discord's embed description cap; dcapp's deliver_embed raises past it
+# instead of truncating, so the reporter splits before calling.
+DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
+# Report-card accent per outcome, from the light tokens in
+# docs/design/foundations.md (success / error / info). An embed has one
+# color for both Discord themes, so the light values are used as-is.
+# Cancelled is neutral like the desktop's "stopped" Goal marker: the
+# user asked for it, it is not a failure.
+DISCORD_REPORT_COLOR_COMPLETED = 0x5A8C5A
+DISCORD_REPORT_COLOR_ERROR = 0xB14545
+DISCORD_REPORT_COLOR_CANCELLED = 0x7A7A8E
+
+
+def discord_report_outcome(kind: str) -> tuple[int, str]:
+    """(embed color, footer status word) for a report kind. Anything that
+    is neither completed nor cancelled is a dead run and reads as an
+    error, so a future dead status still gets a truthful card."""
+    if kind == "completed":
+        return DISCORD_REPORT_COLOR_COMPLETED, "已完成"
+    if kind == "cancelled":
+        return DISCORD_REPORT_COLOR_CANCELLED, "已停止"
+    return DISCORD_REPORT_COLOR_ERROR, "出错"
+
+
+def split_embed_description(
+    text: str, limit: int = DISCORD_EMBED_DESCRIPTION_LIMIT
+) -> tuple[str, str]:
+    """Split a report into (embed description, plain-text remainder).
+
+    The card carries as much of the report as fits, cut at the last line
+    break inside the limit so the remainder starts on a fresh line; a
+    report with no break inside the limit is hard-cut. The remainder goes
+    out as ordinary messages right after the card (``deliver_text`` does
+    its own 1900-char splitting), so nothing is truncated away."""
+    if len(text) <= limit:
+        return text, ""
+    cut = text.rfind("\n", 0, limit + 1)
+    head = text[:cut].rstrip() if cut > 0 else ""
+    if head:
+        rest = text[cut + 1 :].lstrip("\n")
+    else:
+        head, rest = text[:limit], text[limit:]
+    # A whitespace-only remainder must not reach deliver_text: dcapp's
+    # splitter turns empty text into a literal "..." message.
+    return head, rest if rest.strip() else ""
 
 
 class DiscordChannel(ChannelAdapter):
@@ -514,17 +568,60 @@ class DiscordChannel(ChannelAdapter):
         clean = getattr(self.dcapp, "clean_reply", None)
         return str((clean(raw) if callable(clean) else raw) or "")
 
-    def send(self, owner: str, text: str, raw: str) -> None:
+    def _running_app(self) -> tuple[Any, Any]:
+        """(app, loop) for a reporter-thread send, raising when dcapp has
+        no running client — a send with nowhere to go is a failure the
+        dispatcher must count, not a silent success."""
         app = self._app()
         loop = getattr(app, "loop", None) if app is not None else None
         if app is None or loop is None:
             raise ReporterCliError("Discord app has no running loop for reporter send")
+        return app, loop
+
+    def send(self, owner: str, text: str, raw: str) -> None:
+        app, loop = self._running_app()
         # deliver_text raises on resolve/send failure and splits internally;
         # the threadsafe future is what turns that into a real ACK here.
         future = asyncio.run_coroutine_threadsafe(
             app.deliver_text(self.chat_id, text), loop
         )
         future.result(DISCORD_SEND_TIMEOUT_SEC)
+
+    def send_report(self, owner: str, text: str, raw: str, report: Report) -> None:
+        """Send the report as an embed card, so a background result pushed
+        into the channel reads differently from the answer just above it,
+        and several delegated sessions stay tellable apart by title.
+
+        Coupling point: dcapp's strict ``deliver_embed`` seam (patch 0023),
+        which raises on failure exactly like ``deliver_text``. A dcapp
+        payload that predates it gets the plain-text ``send`` unchanged."""
+        app, loop = self._running_app()
+        deliver_embed = getattr(app, "deliver_embed", None)
+        if not callable(deliver_embed):
+            self.send(owner, text, raw)
+            return
+        session_id = str(report.session.get("id") or "")
+        title = str(report.session.get("title") or "").strip() or session_id
+        color, status_word = discord_report_outcome(report.kind)
+        description, remainder = split_embed_description(text)
+        # Card first, then any overflow — each leg awaited before the next
+        # so the order holds and either failure reaches _deliver as a retry.
+        embed_future = asyncio.run_coroutine_threadsafe(
+            deliver_embed(
+                self.chat_id,
+                title=title,
+                description=description,
+                color=color,
+                footer=f"{status_word} · {session_id}",
+            ),
+            loop,
+        )
+        embed_future.result(DISCORD_SEND_TIMEOUT_SEC)
+        if remainder:
+            text_future = asyncio.run_coroutine_threadsafe(
+                app.deliver_text(self.chat_id, remainder), loop
+            )
+            text_future.result(DISCORD_SEND_TIMEOUT_SEC)
 
 
 # ── reporter core ────────────────────────────────────────────────────
@@ -732,7 +829,7 @@ class ImReporter:
             text = GOAL_STATUS_RE.sub("", NEXT_SUGGESTION_RE.sub("", channel.render(raw))).strip()
             if not text or is_skip_reply(text):
                 return "delivered"
-            channel.send(owner, text, raw)
+            channel.send_report(owner, text, raw, report)
         except Exception:
             traceback.print_exc()
             return "retry"

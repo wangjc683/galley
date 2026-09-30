@@ -364,6 +364,18 @@ Runtime tab 的任何问题）。
   - **英文界面里的退出命令保留中文原文**：`dcapp.py` 的退出词表只认
     `退出该频道` / `退出该子区`，英文文案若写成 "leave channel" 会给出
     一条发不出去的命令；en 保留中文命令本体，仅在描述里说明子区变体。
+- Discord **频道内的对话形态**（2026-09-30，补丁 `0023`，
+  [devlog](../devlog/2026-09-30-discord-conversation-ux.md)）以桌面
+  [conversation.md](./conversation.md) 为准，按「新消息 = 推送一次、编辑 =
+  不推送」映射：每个 run 一条状态消息（reply 挂在触发消息下），原地编辑
+  `已完成 N 步`（N ≥ 2）/ `NN summary` / `·· 思考中`，存活感交给 Discord
+  typing；完成时删掉状态消息，回答首行是折叠头的对应物 `-# N 步 · 用时 X`，
+  正文只取收尾那一步；停止则状态消息定格 `⏹ 已停止 · …` 不删。ask_user
+  是一条新消息 + 按 `candidateLayout` 同阈值的按钮，答后编辑成回显勾出所选，
+  续跑计数累加。完成报告是 embed 卡片（标题 = session 标题，色条分完成 /
+  停止 / 出错）。**不做**：气味段（supervisor 工具几乎全是 `code_run`）、
+  读秒（单步 ≥ 60 秒才按分钟显示「仍在运行」）、步骤展开与斜杠命令（在
+  [deferred](../devlog/deferred.md)）；实时思考预览在 Discord 做不到。
 - 卡内层级规则（与 Runtime tab 同源）：
   - 每张卡同时至多一颗 primary 按钮，primary = 当前可执行的下一步。
     飞书的「保存凭证」和「启动服务」按此互斥：凭证未就绪时保存是

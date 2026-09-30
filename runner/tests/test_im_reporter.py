@@ -470,17 +470,23 @@ def test_telegram_reporter_owner_and_busy_gates(
 # ── Discord channel adapter ──────────────────────────────────────────
 
 
-class _StubDiscordApp:
-    """Stub DiscordApp: the reporter only needs the loop, the per-channel
-    task map, the strict deliver coroutine and the agent accessor."""
+class _LegacyDiscordApp:
+    """Stub DiscordApp as shipped before patch 0023: the reporter only
+    needs the loop, the per-channel task map, the strict text deliver
+    coroutine and the agent accessor. No ``deliver_embed`` — reports must
+    fall back to plain text."""
 
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self.loop = loop
         self.user_tasks: dict[str, Any] = {}
         self.sent: list[tuple[str, str]] = []
+        self.order: list[str] = []
         self.active_ids: list[str] = []
         self.agents: dict[str, _StubAgent] = {}
+        # Every send fails (channel gone: resolution is shared by all sends).
         self.deliver_error: Exception | None = None
+        # Only deliver_text fails (the overflow leg after a delivered card).
+        self.text_error: Exception | None = None
 
     def active_channel_ids(self) -> list[str]:
         return list(self.active_ids)
@@ -488,13 +494,70 @@ class _StubDiscordApp:
     async def deliver_text(self, chat_id: str, content: str) -> None:
         if self.deliver_error is not None:
             raise self.deliver_error
+        if self.text_error is not None:
+            raise self.text_error
         self.sent.append((chat_id, content))
+        self.order.append("text")
 
     def _get_agent(self, chat_id: str) -> Any:
         return types.SimpleNamespace(agent=self.agents.setdefault(chat_id, _StubAgent([])))
 
 
-def _stub_dcapp(app: _StubDiscordApp | None) -> Any:
+class _StubDiscordApp(_LegacyDiscordApp):
+    """Stub DiscordApp with patch 0023's strict ``deliver_embed`` seam. It
+    enforces the seam's description cap (raise, not truncate), so a report
+    the reporter forgot to split fails here the way it would live."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        super().__init__(loop)
+        self.embeds: list[dict[str, Any]] = []
+        self.embed_error: Exception | None = None
+
+    async def deliver_embed(
+        self,
+        chat_id: str,
+        *,
+        title: str,
+        description: str,
+        color: int | None = None,
+        footer: str | None = None,
+    ) -> None:
+        if self.deliver_error is not None:
+            raise self.deliver_error
+        if self.embed_error is not None:
+            raise self.embed_error
+        if len(description) > im_reporter.DISCORD_EMBED_DESCRIPTION_LIMIT:
+            raise ValueError("embed description exceeds 4096")
+        self.embeds.append(
+            {
+                "chat_id": chat_id,
+                "title": title,
+                "description": description,
+                "color": color,
+                "footer": footer,
+            }
+        )
+        self.order.append("embed")
+
+
+def _embed(
+    description: str,
+    *,
+    chat_id: str = "ch:1",
+    title: str = "Task s1",
+    color: int = 0x5A8C5A,
+    footer: str = "已完成 · s1",
+) -> dict[str, Any]:
+    return {
+        "chat_id": chat_id,
+        "title": title,
+        "description": description,
+        "color": color,
+        "footer": footer,
+    }
+
+
+def _stub_dcapp(app: _LegacyDiscordApp | None) -> Any:
     return types.SimpleNamespace(
         ALLOWED={"555000111"},
         public_access=lambda allowed: not allowed or "*" in allowed,
@@ -549,8 +612,10 @@ def test_discord_channel_delivers_into_its_own_channel(
         assert agent.prompts == []
         app.user_tasks.clear()
         assert len(reporter.tick()) == 1
-        # The report goes back to the channel, not to the owner's DM.
-        assert app.sent == [("ch:1", "频道任务完成：结果是 X。")]
+        # The report goes back to the channel, not to the owner's DM,
+        # as a card rather than a reply-shaped plain message.
+        assert app.embeds == [_embed("频道任务完成：结果是 X。")]
+        assert app.sent == []
         # Detached channels stop being ours to report.
         reporter.detach_channel("ch:1")
         assert reporter.channels() == {}
@@ -602,6 +667,7 @@ def test_discord_send_failure_raises_and_counts_attempts(
         for _ in range(3):
             assert reporter.tick() == []
         assert app.sent == []
+        assert app.embeds == []
         assert len(agent.prompts) == 3
         # Bounded: the fourth tick gives up without burning another turn.
         assert reporter.tick() == []
@@ -629,7 +695,7 @@ def test_start_discord_reporter_restores_active_channels(
         # Routing works before any message arrives: the restored channel
         # resolves its agent through dcapp on first use.
         assert len(reporter.tick()) == 1
-        assert app.sent == [("ch:7", "restored report")]
+        assert app.embeds == [_embed("restored report", chat_id="ch:7")]
 
 
 def test_start_discord_reporter_disabled_without_supervisor_id(
@@ -648,6 +714,164 @@ def test_discord_reporter_without_app_is_inert(monkeypatch: Any, tmp_path: Path)
     assert reporter is not None
     assert reporter.channels() == {}
     assert not im_reporter.DiscordChannel(_stub_dcapp(None), "ch:1").connected()
+
+
+# ── Discord report card (embed) ──────────────────────────────────────
+
+
+def _discord_reporter(
+    tmp_path: Path, app: _LegacyDiscordApp, replies: list[str]
+) -> tuple[im_reporter.DiscordReporter, _StubAgent]:
+    """A running (non-baseline) Discord reporter with ch:1 attached."""
+    state_path = tmp_path / "reporter_state.json"
+    state_path.write_text('{"sessions":{}}', encoding="utf-8")
+    reporter = im_reporter.DiscordReporter(_stub_dcapp(app), "galley-im/discord", state_path)
+    reporter.cli = "/stub/galley"
+    agent = _StubAgent(replies)
+    reporter.attach_channel("ch:1", agent)
+    return reporter, agent
+
+
+def test_split_embed_description_cuts_at_last_line_break() -> None:
+    split = im_reporter.split_embed_description
+    assert split("short report") == ("short report", "")
+    assert split("x" * 4096) == ("x" * 4096, "")
+    # Last break inside the limit wins; the break itself is dropped.
+    assert split("a" * 10 + "\n" + "a" * 3990 + "\n" + "b" * 200) == (
+        "a" * 10 + "\n" + "a" * 3990,
+        "b" * 200,
+    )
+    # A break right at the limit still counts: the card is exactly full.
+    assert split("a" * 4096 + "\n" + "b" * 10) == ("a" * 4096, "b" * 10)
+    # A paragraph gap does not leave blank lines on either side of the cut.
+    assert split("a" * 3000 + "\n\n" + "b" * 2000) == ("a" * 3000, "b" * 2000)
+    # No usable break → hard cut, nothing lost.
+    assert split("x" * 5000) == ("x" * 4096, "x" * 904)
+    assert split("\n" + "x" * 5000) == ("\n" + "x" * 4095, "x" * 905)
+    # Whitespace-only overflow is dropped (dcapp would send it as "...").
+    assert split("a" * 4000 + "\n" + " " * 200) == ("a" * 4000, "")
+
+
+def test_discord_report_outcome_maps_every_dead_status_to_error() -> None:
+    outcome = im_reporter.discord_report_outcome
+    assert outcome("completed") == (0x5A8C5A, "已完成")
+    assert outcome("cancelled") == (0x7A7A8E, "已停止")
+    assert outcome("error") == (0xB14545, "出错")
+    assert outcome("some-future-dead-status") == (0xB14545, "出错")
+
+
+@pytest.mark.parametrize(
+    ("status", "color", "word"),
+    [
+        ("idle", 0x5A8C5A, "已完成"),
+        ("error", 0xB14545, "出错"),
+        ("cancelled", 0x7A7A8E, "已停止"),
+    ],
+)
+def test_discord_report_card_color_and_footer_follow_outcome(
+    monkeypatch: Any, tmp_path: Path, status: str, color: int, word: str
+) -> None:
+    messages = [_user_msg("u1", supervisor="galley-im/discord/ch:1", turn=1)]
+    if status == "idle":
+        messages.append(_agent_msg("a1", "done!", turn=1))
+    _fake_cli(
+        monkeypatch,
+        {"sessions": [_session("s1", status=status, supervisor=None)], "show s1": messages},
+    )
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        reporter, _ = _discord_reporter(tmp_path, app, ["报告正文"])
+        assert len(reporter.tick()) == 1
+        assert app.embeds == [_embed("报告正文", color=color, footer=f"{word} · s1")]
+        assert app.sent == []
+
+
+@pytest.mark.parametrize("title", ["", "   ", None])
+def test_discord_report_card_title_falls_back_to_session_id(
+    monkeypatch: Any, tmp_path: Path, title: str | None
+) -> None:
+    payloads = _discord_payloads()
+    payloads["sessions"][0]["title"] = title
+    _fake_cli(monkeypatch, payloads)
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        reporter, _ = _discord_reporter(tmp_path, app, ["report"])
+        assert len(reporter.tick()) == 1
+        assert app.embeds == [_embed("report", title="s1")]
+
+
+def test_discord_long_report_fills_card_then_overflows_as_text(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    head = "甲" * 4000
+    tail = "乙" * 3000
+    _fake_cli(monkeypatch, _discord_payloads())
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        reporter, _ = _discord_reporter(tmp_path, app, [f"{head}\n{tail}"])
+        assert len(reporter.tick()) == 1
+        # The stub's deliver_embed raises past 4096, so reaching here also
+        # proves the card was split before the seam saw it.
+        assert app.embeds == [_embed(head)]
+        assert app.sent == [("ch:1", tail)]
+        assert app.order == ["embed", "text"]
+
+
+def test_discord_card_failure_is_a_retry_not_a_delivery(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    _fake_cli(monkeypatch, _discord_payloads())
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        app.embed_error = RuntimeError("403 Forbidden")
+        reporter, agent = _discord_reporter(tmp_path, app, ["report", "report again"])
+        assert reporter.tick() == []
+        entry = reporter.state.entry("s1")
+        assert "lastReportedMessageId" not in entry
+        assert entry["reportAttempts"] == 1
+        # A failed card never degrades into a plain-text send: the text
+        # fallback is only for a dcapp without the seam at all.
+        assert app.embeds == []
+        assert app.sent == []
+        # Not marked seen either, so the next tick retries and delivers.
+        app.embed_error = None
+        assert len(reporter.tick()) == 1
+        assert app.embeds == [_embed("report again")]
+        assert len(agent.prompts) == 2
+
+
+def test_discord_overflow_failure_after_card_is_a_retry(tmp_path: Path) -> None:
+    """The overflow leg is as strict as the card: a report whose tail
+    never arrived is not delivered. The retry re-sends the whole report,
+    the same partial-duplicate trade-off a multi-part deliver_text has."""
+    with _loop_thread() as loop:
+        app = _StubDiscordApp(loop)
+        app.text_error = RuntimeError("rate limited")
+        reporter, _ = _discord_reporter(tmp_path, app, ["a" * 4000 + "\n" + "b" * 500])
+        channel = reporter.channels()["galley-im/discord/ch:1"]
+        report = Report(
+            kind="completed",
+            session=_session("s1", supervisor=None),
+            message=_agent_msg("a1", "done!", turn=1),
+        )
+        assert reporter._deliver(channel, report, "555000111") == "retry"
+        assert app.embeds == [_embed("a" * 4000)]
+        assert app.sent == []
+
+
+def test_discord_app_without_card_seam_falls_back_to_plain_text(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """An older dcapp payload has no deliver_embed: the report goes out
+    exactly as before — the whole text to deliver_text, unsplit here."""
+    long_reply = "x" * 5000
+    _fake_cli(monkeypatch, _discord_payloads())
+    with _loop_thread() as loop:
+        app = _LegacyDiscordApp(loop)
+        reporter, _ = _discord_reporter(tmp_path, app, [long_reply])
+        assert len(reporter.tick()) == 1
+        assert app.sent == [("ch:1", long_reply)]
+        assert app.order == ["text"]
 
 
 # ── dispatcher: message-origin routing + multi-channel registry ─────
@@ -849,7 +1073,7 @@ def test_owned_prefix_report_is_held_until_channel_reactivates(
         app.agents["ch:9"] = _StubAgent(["report text"])
         reporter.attach_channel("ch:9")
         assert len(reporter.tick()) == 1
-        assert app.sent == [("ch:9", "report text")]
+        assert app.embeds == [_embed("report text", chat_id="ch:9")]
 
 
 def test_reporter_strips_workbench_suggestion_tag(
@@ -868,3 +1092,23 @@ def test_reporter_strips_workbench_suggestion_tag(
     reporter = _make_reporter(monkeypatch, tmp_path, fsapp, payloads)
     assert len(reporter.tick()) == 1
     assert fsapp._sent == [("ou_owner", "报告正文。")]
+
+
+def test_feishu_and_telegram_reports_still_go_through_send(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Only Discord dresses reports up; every other channel inherits the
+    default send_report, which is exactly the old send call."""
+    assert im_reporter.FeishuChannel.send_report is im_reporter.ChannelAdapter.send_report
+    assert im_reporter.TelegramChannel.send_report is im_reporter.ChannelAdapter.send_report
+    # A dead-status report reaches Feishu as the same plain message.
+    fsapp = _stub_fsapp(["任务已取消。"])
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    payloads = {
+        "sessions": [_session("s1", status="cancelled")],
+        "show s1": [_user_msg("u1", supervisor=SUP, turn=1)],
+    }
+    reporter = _make_reporter(monkeypatch, tmp_path, fsapp, payloads)
+    delivered = reporter.tick()
+    assert [r.kind for r in delivered] == ["cancelled"]
+    assert fsapp._sent == [("ou_owner", "任务已取消。")]

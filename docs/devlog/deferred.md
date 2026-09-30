@@ -164,6 +164,41 @@
   文案的截断策略。
 - **关联**：workbench 幽灵文字功能（`fa6241ac`，2026-08-04）；
   0019 补丁的移除条件已指向本项。
+- **注**（2026-09-30）：Discord 的 ask_user 按钮（补丁 `0023`）落地后，
+  Discord 端的按钮基建（`discord.ui.View`、owner 校验、点选即发送）已现成，
+  本项在 Discord 上的实施量降为「带回 mandate + 渲染一排建议按钮」。
+
+---
+
+## Discord 回答的步骤展开（桌面折叠头「点开看过程」的对应物）
+
+- **状态**：暂缓（2026-09-30 Discord 对话体验对齐桌面端时裁决不做）
+- **提出**：2026-09-30，`.scratch/discord-ux/PRD.md` 对表「点折叠头展开步骤」一行。
+- **启动信号**：JC 在 Discord 里实际产生「这轮它到底干了什么」想回看过程的实感；
+  或 supervisor 出错时需要从 Discord 里排查步骤而不得不回桌面。
+- **方案**：回答消息下挂一个「步骤」按钮，点击回一条 ephemeral 消息（只有点击者
+  看得到、不进频道），内容是该 run 的步骤清单（`NN summary` 逐行）。步骤清单在 dcapp
+  进程内按回答消息 id 缓存（LRU），不持久化。
+- **实施要点**：进程重启后旧按钮失效（view 随进程消失），点击应静默或回一句
+  「步骤记录已随重启释放」；缓存上限与频道 agent 的 LRU 同量级。
+- **待定**：每条回答多一排按钮是否太重——可只给 ≥ N 步的 run 挂按钮。
+- **关联**：[conversation.md](../design/conversation.md) RunFoldHeader；补丁 `0023`。
+
+---
+
+## Discord 原生斜杠命令（app commands）
+
+- **状态**：暂缓（2026-09-30 同上裁决）
+- **提出**：2026-09-30，Discord 对话体验讨论方向 D。
+- **启动信号**：JC 或用户开始在 Discord 里频繁用命令（`discord.log` 的
+  `command=True` 占比明显上升）；或有人反馈「不知道有哪些命令」。当时 7 条消息
+  全部 `command=False`。
+- **方案**：用 discord.py `app_commands.CommandTree` 注册 `/stop` `/status` `/new`
+  `/llm` `/btw` `/review` `/help`，输入 `/` 时有原生补全；文本命令保留兼容。
+- **实施要点**：命令树同步时机（启动时 guild 级同步最快生效）；邀请链接是否需要
+  `applications.commands` scope 要先核实，setup guide 文案随之改；DiscordCard
+  命令参考表同步。
+- **关联**：`frontends/dcapp.py` `handle_command`；[§9 Channels](../design/overlays-and-settings.md)。
 
 ---
 

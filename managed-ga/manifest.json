@@ -31,7 +31,8 @@
       "0019-managed-im-strip-next-suggestion.patch",
       "0020-managed-windows-no-console-spawns.patch",
       "0021-managed-retry-after-value-in-error.patch",
-      "0022-managed-strip-goal-status.patch"
+      "0022-managed-strip-goal-status.patch",
+      "0023-managed-discord-conversation-ux.patch"
     ]
   },
   "stateSchemaVersion": 1
