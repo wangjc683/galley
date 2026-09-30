@@ -52,3 +52,8 @@ Settings → Channels → Telegram 关再开（debug 构建直接读仓库 `mana
 - diff 逐块审过：草稿、读秒、`/fold` 与 a / c 全部删净（残留 grep 只剩说明弃用原因的注释）；05 的两处偏差（引用锚点、分钟行起算）接受。
 - 独立复核：干净克隆重放 23 个补丁全 clean，`managed-ga/code` 全部文件哈希与工作区一致；pytest 406 passed、mypy、ruff、
   payload / baseline-drift、`git diff --check` 绿；新增中文行全角标点检查 0 处。
+
+### 2026-09-30 · 真机第二轮（JC，部分）
+
+- 第 2 项「发完消息后没有上推留白」：**通过**（静音状态消息取代草稿后留白消失，证实草稿是成因）。
+- 其余项（分钟行、`/stop` 定格、ask_user、排队、报告、推送）待看。
