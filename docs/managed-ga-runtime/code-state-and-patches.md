@@ -151,6 +151,14 @@ commit time; it only surfaces at the next baseline upgrade, when the rebase
 script's byte-identity gate refuses to run (see the `0015` repair note in
 the patch ledger).
 
+When a later patch touches the same file, re-export it too whenever the
+earlier one changes that file's line count. Zero-context hunks locate by line
+number alone, so a shifted file still applies: `git apply --unidiff-zero`
+exits 0 while pure-addition hunks land at the old line numbers. On
+2026-09-30 the stale `0026` landed two lines off after `0023` dropped two
+lines, and only `py_compile` happened to catch it. Rebuild, then compare the
+result byte for byte against the version you expect.
+
 `managed-ga/patches/manifest.md` is the authoritative ledger for the current
 stack, including the last verified replay date.
 

@@ -141,5 +141,5 @@ dcapp 补丁，`0023` 删行后其后续 hunk 行号整体偏移。子代理实�
 
 验证：主会话用干净克隆（`1b6442f`）独立重放 25 个补丁，重建后 `managed-ga/code` 与 `state-seed` 全部文件哈希不变；pytest 461 passed（两个多步用例
 各补「状态消息始终没有『已完成』」断言；把三个文件换回旧版，恰好改过的 10 条失败），mypy strict、ruff、`git diff --check`、payload、
-baseline-drift 绿。**真机待验**：Telegram / Discord 各跑一个多步任务，状态消息只有 `NN 摘要` / `·· 思考中` 两行；单步满 60 秒后
-`·· 思考中 · 已 1 分钟`。
+baseline-drift 绿。**真机：JC 验收通过（2026-09-30）**——Telegram / Discord 的多步任务状态消息只有 `NN 摘要` / `·· 思考中` 两行。
+「同文件后续补丁要随之重导出」的规则已写进 [补丁流程](../managed-ga-runtime/code-state-and-patches.md)「How To Modify An Existing Patch」。
