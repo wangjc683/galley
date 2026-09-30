@@ -115,5 +115,5 @@ JC 继续打磨时提出：状态消息上的「停止」按钮有点没必要�
 即使频道此刻有新 run 在跑也不停它；文本 `/stop` 逐字不变。子代理自行裁量、主会话接受：状态消息另两处编辑（停止定格、删除失败的
 兜底）的 `view=None` 一并去掉（只为清停止按钮而存在）；「按钮视图只渲染、不常驻」的断言从删掉的测试挪到 ask 按钮测试。
 验证：主会话用干净克隆（`1b6442f`）独立重放 24 个补丁，重建后 `managed-ga/code` 与 `state-seed` 全部文件哈希不变；pytest
-409 passed，mypy strict、ruff、`git diff --check`、payload、baseline-drift 绿。**真机待验**：新 run 的状态消息没有按钮、长任务中
-`/stop` 定格。
+409 passed，mypy strict、ruff、`git diff --check`、payload、baseline-drift 绿。**真机：JC 验收通过（2026-09-30）**——新 run 的
+状态消息没有按钮、长任务中 `/stop` 定格。
