@@ -1,6 +1,6 @@
 # PRD: Telegram 对话体验对齐桌面端
 
-Status: ready-for-human
+Status: done
 Date: 2026-09-30
 来源：Discord 对齐做完后，JC 提议打磨 Telegram；读码诊断后 JC「按建议推进」（五个裁决点全按推荐）
 关联：[Discord 对齐 devlog](../../docs/devlog/2026-09-30-discord-conversation-ux.md)（本次的母本，形态裁决多数照搬）·

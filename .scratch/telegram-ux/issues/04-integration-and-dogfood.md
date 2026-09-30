@@ -1,6 +1,6 @@
 # 04 集成验收 + 真机 dogfood
 
-Status: ready-for-human
+Status: done
 Blocked by: 01, 02, 03
 
 ## 主会话集成验收（票与票之间的组合地带）
@@ -57,3 +57,8 @@ Settings → Channels → Telegram 关再开（debug 构建直接读仓库 `mana
 
 - 第 2 项「发完消息后没有上推留白」：**通过**（静音状态消息取代草稿后留白消失，证实草稿是成因）。
 - 其余项（分钟行、`/stop` 定格、ask_user、排队、报告、推送）待看。
+
+### 2026-09-30 · 真机第二轮（JC）：全部通过
+
+- 其余各项（分钟行、`/stop` 定格、ask_user 三种回答方式、排队、完成报告、推送）JC 测过，全部通过。
+- `.scratch/telegram-ux/` 随下个版本发布后删除（durable 内容已在 devlog、§9 Channels、补丁台账）。

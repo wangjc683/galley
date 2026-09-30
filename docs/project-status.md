@@ -544,8 +544,9 @@ whole chat up for it), each run posts one answer (the closing step) under an
 expandable step-list quote (JC picked style b), tables become lists,
 ask_user matches Discord, `/stop` and `/new` no longer leave a queued task
 running unseen, and reports carry a bold title and an italic status footer.
-JC confirmed on device that the push-up gap is gone; the rest of the second
-pass is owed (`.scratch/telegram-ux/issues/04`).
+JC passed the second real-device round the same day (the push-up gap is
+gone; minute line, stop freeze, ask_user, queue, reports and push count all
+as built).
 Release-scope truth remains `git log v0.5.4..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
