@@ -68,6 +68,6 @@ rebase 面）。
   自己改的 `use` 块（该文件另有一处既有 rustfmt 差异，未动）。
 - GUI：typecheck、lint 绿；改动的 hunk 与 prettier 输出一致。
 - `git diff --check`、`check-managed-ga-payload`、`check-ga-baseline-drift` 绿；`managed-ga/` 零改动。
-- **真机待验**（三个渠道各一遍）：说一句要记住的话 → 重启 Channels → 再问，接得上（渠道日志出现 `[galley-im-resume] resumed from …`）；
+- **真机：JC 验收通过（2026-09-30）**，三个渠道各一遍：说一句要记住的话 → 重启 Channels → 再问，接得上（渠道日志出现 `[galley-im-resume] resumed from …`）；
   30 秒内连续重启两次仍接得上；`/new` 后重启不接回旧对话；微信 `/new` 回执；断开再连接后从头开始；Telegram / 飞书重启前派出的
   session 在重启后跑完，报告照常投递。

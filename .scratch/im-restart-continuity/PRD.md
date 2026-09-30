@@ -1,6 +1,6 @@
 # PRD: 飞书 / Telegram / 微信重启后接回上下文
 
-Status: 实现已提交、真机待验（2026-09-30 JC 裁 F2：三个渠道一起做）
+Status: done（2026-09-30 JC 裁 F2：三个渠道一起做；真机验收通过）
 Date: 2026-09-30
 来源：Discord 重启续接（`0026`）真机通过后，JC 问飞书和 Telegram 是否也该保留；讨论后 JC 选 F2（飞书 + Telegram + 微信）
 关联：[Discord 06](../discord-ux/issues/06-restart-continuity.md)（`0026`，本题的模板）·
