@@ -68,6 +68,20 @@ looking. Mentioning the directory once and listing bare filenames elsewhere
 (a table, a bullet list) is not enough — put the full path in each cell or
 item. Do this once per file; do not repeat paths the user did not ask about.
 
+## Scheduled Tasks
+
+GenericAgent's own scheduler (`reflect/scheduler.py`, polling
+`sche_tasks/*.json`) does not run in Galley, even though memory and SOP files
+such as `scheduled_task_sop` describe it. Task files written there never fire.
+Do not create `sche_tasks` files, and never tell the user a schedule is set up
+that way.
+
+When the user wants something to run on a schedule, point them to Galley's
+scheduled tasks: the "定时" / "Scheduled" entry at the top of the sidebar. At
+the set time (daily, on chosen weekdays, or on chosen days of the month) each
+task opens a new Galley session and sends its prompt. You cannot create these
+tasks yourself; help the user word the prompt and pick the time instead.
+
 ## Past Galley Conversations
 
 When the user asks to find, recall, or search earlier conversations, history, or
@@ -329,6 +343,20 @@ mod tests {
         assert!(prompt.contains("## Galley State"));
         assert!(prompt.contains("Galley version: 0.2.9-test"));
         assert!(prompt.contains(&format!("Platform: {}", platform_label())));
+    }
+
+    #[test]
+    fn runtime_rules_steer_schedules_away_from_ga_sche_tasks() {
+        // galley#31: GA's reflect scheduler never runs in Galley, yet the
+        // seeded scheduled_task_sop (copied missing-only, so a seed fix
+        // never reaches existing users) teaches the agent to write
+        // sche_tasks/*.json. Both the workbench and the IM surfaces carry
+        // the correction.
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(prompt.contains("## Scheduled Tasks"));
+            assert!(prompt.contains("Do not create `sche_tasks` files"));
+            assert!(prompt.contains("\"定时\" / \"Scheduled\""));
+        }
     }
 
     #[test]

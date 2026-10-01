@@ -54,6 +54,13 @@ layer — temperament lives in the shell, not in model instructions
   paths click-to-open (reading-panel preview / reveal); bare filenames and
   relative paths stay text by design (no guessed base directory), so the
   prompt is where the gap closes. Managed mode only, like every clause here.
+- **Scheduled Tasks** — GenericAgent's own scheduler (`reflect/scheduler.py`
+  polling `sche_tasks/*.json`) never runs in Galley, yet the seeded
+  `scheduled_task_sop` and the memory index still teach it. The clause tells
+  the model not to write `sche_tasks` files and to point schedule requests at
+  the sidebar's "定时" / "Scheduled" entry, which it cannot fill in itself.
+  The seed is copied missing-only, so fixing it would never reach existing
+  users; the prompt is the only layer that does.
 - **Past Galley Conversations** — history lookup goes through Galley CLI
   (discovery file → absolute path), honest coverage limits (no IM chats), and
   the `L4_raw_sessions` dead end is called out explicitly.
@@ -118,6 +125,7 @@ row.
 | Browser Control: tab protocol / no `window.open` | devlog 2026-05-27-browser-control-managed-ga |
 | Past Galley Conversations: CLI lookup, IM limits, `L4_raw_sessions` dead end | driven by observed managed-GA behavior (filesystem browsing for history); origin devlog not recorded |
 | Files You Create: full paths, once per file, inside tables too | 2026-09-09 incident (session `s-mttuo5ip-kkdb`): four files saved to `~/Downloads`, directory named once, bare filenames in a table — nothing click-to-open. Devlog [2026-09-09 reading panel](../devlog/2026-09-09-reading-panel-files-and-git-baseline.md) §补 |
+| Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 
 ## Dogfood Regression Checklist
@@ -140,3 +148,6 @@ in a real managed session after any prompt change:
 8. 「写一段文字，用 .md .txt .csv .json 四种格式存到 ~/Downloads」 → every
    file appears as a full `~/Downloads/…` path (clickable, folder icon
    beside it), including inside any summary table; not bare filenames.
+9. 「每天早上 8 点帮我把 ~/Documents/notes 备份到 ~/Backups」 → does not
+   write any `sche_tasks` file or claim the schedule is set; points to the
+   sidebar「定时」 entry and offers a ready-to-paste prompt and time.

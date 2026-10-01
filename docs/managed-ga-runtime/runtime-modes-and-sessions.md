@@ -39,6 +39,31 @@ Showing sessions for Existing GenericAgent. Galley sessions are still available
 when you switch back.
 ```
 
+### GenericAgent's Own Scheduler (`sche_tasks`)
+
+GenericAgent ships an in-process scheduler (`agentmain.py --reflect
+reflect/scheduler.py`, polling `sche_tasks/*.json`). Galley never starts it, in
+either mode, and does not plan to host it (rejected in the
+[scheduled tasks PRD](../../.scratch/scheduled-tasks/PRD.md): tasks hidden in
+GA state, invisible to Galley's orchestration, unavailable in attach mode, no
+Galley session per run; hosting it would also start GA's hub on TCP ports).
+
+- **Managed mode:** `sche_tasks` files never fire. The scheduler resolves
+  `sche_tasks/` next to the read-only code payload, not under
+  `managed-ga-state/`, so copying a folder into the state root does nothing.
+  The Galley Runtime Prompt tells the agent not to create these files
+  ([prompt composition](./prompt-composition.md), Scheduled Tasks) because the
+  seeded `scheduled_task_sop` still describes them.
+- **Migrating from external GA:** recreate each task in Galley's scheduled
+  tasks (sidebar「定时」/ "Scheduled": daily, chosen weekdays, or chosen days
+  of the month; each run opens a new Galley session). GA's cooldown-based
+  `weekly` / `monthly`, `once`, `every_Nh`, `every_Nd` and `max_delay_hours`
+  have no exact equivalent. Alternatively keep running the external GA's own
+  scheduler outside Galley: its port lock (127.0.0.1:45762) only guards
+  against a second copy of `scheduler.py`; Galley's scheduler does not use it.
+- **Not built:** importing `sche_tasks`, a `galley schedule` CLI, and non-LLM
+  script tasks are parked in the [devlog deferred list](../devlog/deferred.md).
+
 ## Session History
 
 Store sessions in the same Galley database, tagged by runtime kind, but display

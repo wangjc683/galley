@@ -789,3 +789,27 @@
 - **实施要点**：新命令属 Agent API 增量变更（宪法第 3 条），文档进 `docs/agent-api/` 的变更记录；队列落库与 [消息队列](./2026-08-12-session-message-queue.md) 决定 1「排队消息的地位等同未发出的草稿」相冲突，要做先重审那一条。
 - **待定**：撤回是否需要 supervisor 身份校验（只能撤自己发的）。
 - **关联**：`core/src/runner_manager/queue.rs`、`core/src/commands/queue.rs`、`docs/agent-api/session-commands.md` §5.5a。
+
+---
+
+## 导入 GA 的 `sche_tasks` 为 Galley 定时任务
+
+- **状态**：暂缓（2026-10-01 JC 按建议裁先不做）
+- **提出**：2026-10-01，[galley#31](https://github.com/wangjc683/galley/issues/31)：从外置 GA 迁到内置的用户想把 `sche_tasks/*.json` 带过来。
+- **启动信号**：再有迁移用户提同样的需求；或 `galley schedule` CLI（`.scratch/scheduled-tasks/issues/06`）落地，导入可以做成它的一个子命令。
+- **方案**：读外置 GA 的 `sche_tasks/*.json`（只读，宪法第 1 条），逐条映射：`schedule` → `time_of_day`、`enabled` → `enabled`、`prompt` → `prompt`、`daily` → Daily、`weekday` → Weekly 周一到周五；映射不了的列给用户看、不静默丢。
+- **实施要点**：映射有损，详见 [GA 调度器在内置模式下](./2026-10-01-ga-scheduler-managed-mode.md)的对照表：GA 的 `weekly` / `monthly` 是 6 / 27 天冷却而非固定星期几 / 几号，导入得替用户挑一天；`once`、`every_Nh`、`every_Nd`、`max_delay_hours` 没有对应；GA 套在 prompt 外的报告路径包装和 `done/` 报告会丢。
+- **待定**：导入入口放 GUI（定时任务对话框）还是 CLI。
+- **关联**：`core/src/api/schedule.rs`、`managed-ga/code/reflect/scheduler.py`、`.scratch/scheduled-tasks/PRD.md:140`（不桥接 GA 调度器的裁决）。
+
+---
+
+## 不经 LLM 的本地脚本定时任务
+
+- **状态**：暂缓（2026-10-01 JC 按建议裁先不做）
+- **提出**：2026-10-01，[galley#31](https://github.com/wangjc683/galley/issues/31)：希望定时任务能直接跑本地脚本（报告者在外置 GA 里用自加的 `handler` 字段直接调 Python 函数；上游截至 `2538ad9` 没有这个字段）。
+- **启动信号**：第二个用户提同样的需求；或定时任务的使用数据显示大量 prompt 只是「运行某个脚本」。
+- **方案**：定时任务加一种「脚本」类型，到点由 Core 起子进程执行，不开会话、不调模型，结果进定时任务的执行记录。
+- **实施要点**：这是 Galley 第一次在没有 agent 参与时执行用户代码，审批模型（现在靠工具审批）不适用，要先想清楚权限与提示；Windows 上的解释器与工作目录；失败通知复用「定时任务触发失败」。
+- **待定**：值不值得做——系统自带的 cron / launchd / 任务计划程序已经能跑脚本，Galley 的增量价值可能只是「在同一个面板里看见」。
+- **关联**：`core/src/scheduler.rs`、`.scratch/scheduled-tasks/PRD.md`。

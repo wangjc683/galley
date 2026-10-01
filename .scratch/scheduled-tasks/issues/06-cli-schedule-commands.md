@@ -25,3 +25,10 @@ Agent API 契约变更风险高于 GUI（Rule 3），不要顺手做。
 
 - `cargo check --workspace` / `cargo test --workspace` 通过；
   `docs/agent-api/` 文档与实现一致；按 Rule 3 做契约级验证。
+
+## 信号记录
+
+- 2026-10-01，[galley#31](https://github.com/wangjc683/galley/issues/31)：从外置 GA 迁到内置的用户，原来用 GA 的
+  `sche_tasks` 跑每日备份，要求 CLI 提供 `schedule` 子命令以便脚本化管理。这是第一个外部用例，但仍是「人用脚本管」，
+  不是 supervisor 用例，状态不变。同日内置提示词加了「定时」条款（不写 `sche_tasks`、引导到侧栏「定时」，agent 自己
+  建不了）；有了这条命令面，agent 就能在对话里直接替用户建任务，这是升级时的主要收益。
