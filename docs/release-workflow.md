@@ -476,6 +476,9 @@ Manifest rules:
 - `url` in the manifest points at the corresponding platform's updater package.
 - The live channel must pass
   `scripts/check-update-channel.mjs --cache-bust` before it counts as published.
+- Installed apps fetch the manifest without a cache-bust, so for up to 300 s
+  after a promote (the raw CDN's `max-age`) they can still be told they are up
+  to date; the SOP's app-update dogfood step waits this out (seen at `v0.5.6`).
 - Do not depend on `/releases/latest/download/latest.json` as the update
   channel; use the explicit `galley-update-channel` endpoint above to avoid
   leaking draft / prerelease / pre-smoke versions.
