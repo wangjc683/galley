@@ -556,8 +556,8 @@ Post-release follow-up:
 ## Unreleased On Main
 
 Since `v0.5.5` (2026-10-01, community issues #29–#32, all fixed on main;
-replies to the four threads are drafted next and wait for JC's per-item
-confirmation):
+JC will reply on the four threads after the release that ships them, drafts
+confirmed per item first):
 
 - #29: a run that reaches GA's per-run step cap (180, 100 in plan mode) now
   ends instead of hanging; the bridge also closes any other exit-less run as
