@@ -481,9 +481,8 @@ channels across all three platforms (darwin-aarch64, darwin-x86_64,
 windows-x86_64), in the promote run and again locally. One draft cut (release
 run 36856754423); JC approved the draft for publish. The bundled-runtime gate
 passed on `mac-x64`; `check.yml` was green on the release head (run
-36806046708, all six jobs). The Windows overwrite-install smoke that would
-reproduce the CLI version lag (a `galley session wait` holding `galley.exe`
-during setup) has no reported result yet.
+36806046708, all six jobs). The first in-app check after promote hit the raw
+CDN's 300 s cache and reported "up to date"; SOP step 10 now waits that out.
 
 `v0.5.5` (2026-09-30) went through the same path: one draft cut (release run
 36738236573), JC approved the draft, both channels verified with
@@ -548,8 +547,9 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.5.5` → `v0.5.6` is owed (not yet
-   reported); `v0.5.4` → `v0.5.5` passed on an
+1. App-update dogfood (SOP step 10): `v0.5.5` → `v0.5.6` passed on JC's
+   Windows machine (2026-10-01, same session; the bundled CLI came out at
+   0.5.6 too); `v0.5.4` → `v0.5.5` passed on an
    installed build (JC reported 2026-10-01, same session as the release);
    `v0.5.3` → `v0.5.4` was never reported and is written off (asked again at
    the `v0.5.5` release, no result; no `v0.5.3` build is left installed);
@@ -591,10 +591,12 @@ Post-release follow-up:
 Since `v0.5.6`: nothing yet. The four community threads #29–#32 shipped in
 `v0.5.6` and are now due JC's replies (drafts confirmed per item first; the
 #30 reply asks the reporter to confirm `galley version` and `where galley`).
-`.scratch/windows-cli-version-lag/` stays needs-triage: the #29 / #30
-reporter's bundled CLI reported 0.5.2 under app 0.5.3, and the `v0.5.6`
-Windows overwrite-install smoke that would reproduce it has no reported result
-yet. Default since 2026-10-01: no upstream PRs or issues unless JC asks; the
+`.scratch/windows-cli-version-lag/` is needs-info: the #29 / #30 reporter's
+CLI reported 0.5.2 under app 0.5.3, but JC's Windows in-app update replaced the
+bundled CLI, and Galley does not put the CLI on the Windows PATH, so the
+leading lead is a user-made copy; the #30 reply asks for `where.exe galley`.
+Found on the way: the NSIS pre-install hook's `Galley.exe` match (meant for the
+main app, which is `galley-core.exe`) hits the CLI case-insensitively. Default since 2026-10-01: no upstream PRs or issues unless JC asks; the
 upstream drafts in deferred are reference only.
 
 Filed during the `v0.5.5` IM round and still
