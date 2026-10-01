@@ -307,6 +307,13 @@ already-published installers or live update manifest.
 
 Use an installed older release build, not `tauri dev`.
 
+Wait at least 5 minutes after the promote push before checking from the app,
+or first confirm with a plain `curl` (no cache-bust) that the endpoint serves
+the new version: the raw CDN caches `latest.json` for 300 s, and the Step 8
+verifier's `--cache-bust` bypasses that cache, so a green verifier does not
+mean installed apps see the new version yet (`v0.5.6`: an app check about two
+minutes after promote reported "up to date").
+
 Expected path:
 
 1. Launch older Galley.
