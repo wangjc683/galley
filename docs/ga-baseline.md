@@ -878,6 +878,18 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `source: 'system'`; (c) the exception branch still appends
     `` ```\n{format_error(e)}\n``` `` to `done`, which the safety net
     lifts into its runtime error.
+18. `llmcore.auto_make_url` (2026-10-01, galley#32; managed patch `0027`).
+    Core's connection / model-list probe (`core/src/managed_model_probe.rs`,
+    `has_version_segment`) builds endpoints by the same rule the engine uses,
+    so "test connection passes" means the engine will hit the same URL.
+    `0027` widens the engine's version-segment regex to
+    `/v\d+[a-z0-9]*(/|$)` (Gemini's `/v1beta/openai/`); the Rust side matches.
+    `runner/tests/test_managed_ga_url.py` parses the Rust case table and runs
+    it against the payload's `auto_make_url`, so the two sides cannot drift
+    silently. Re-check on upgrade: whether upstream changed `auto_make_url`
+    (if it fixed version qualifiers, drop `0027` and keep the shared test
+    green); known gap outside this item: Core strips a trailing `/models` /
+    `/responses` / `/messages` before joining, the engine does not.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.

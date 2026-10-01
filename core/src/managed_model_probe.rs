@@ -267,11 +267,23 @@ fn provider_endpoint(api_base: &str, path: &str) -> Result<String> {
 }
 
 fn has_version_segment(api_base: &str) -> bool {
-    api_base.split('/').any(|segment| {
-        segment.len() > 1
-            && segment.starts_with('v')
-            && segment[1..].chars().all(|c| c.is_ascii_digit())
-    })
+    api_base.split('/').any(is_version_segment)
+}
+
+/// `v` + digits, optionally followed by a lowercase alphanumeric qualifier:
+/// `v1`, `v1beta` (Gemini's `/v1beta/openai`), `v2alpha1`, but not words
+/// that merely start with `v` (`vendor`, `video`) or an uppercase `V1`.
+/// Same rule as the managed runtime's `auto_make_url` (`llmcore.py`,
+/// managed patch `0027`), so the probe and the engine resolve one URL.
+fn is_version_segment(segment: &str) -> bool {
+    let Some(rest) = segment.strip_prefix('v') else {
+        return false;
+    };
+    let qualifier = rest.trim_start_matches(|c: char| c.is_ascii_digit());
+    qualifier.len() < rest.len()
+        && qualifier
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
 }
 
 fn with_beta_query(endpoint: &str) -> String {
@@ -413,6 +425,22 @@ mod tests {
             models_endpoint("https://relay.example/v1/messages").unwrap(),
             "https://relay.example/v1/models"
         );
+        // galley#32: Gemini's OpenAI-compatible base, as documented and as the
+        // full chat URL the old rule forced as a workaround.
+        for gemini in [
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        ] {
+            assert_eq!(
+                models_endpoint(gemini).unwrap(),
+                "https://generativelanguage.googleapis.com/v1beta/openai/models"
+            );
+        }
+        assert_eq!(
+            models_endpoint("https://relay.example/vendor/api").unwrap(),
+            "https://relay.example/vendor/api/v1/models"
+        );
     }
 
     #[test]
@@ -443,6 +471,154 @@ mod tests {
                 .unwrap(),
             "https://openrouter.ai/api/v1/chat/completions"
         );
+        for gemini in [
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+        ] {
+            assert_eq!(
+                inference_endpoint(gemini, ManagedModelProtocol::Openai).unwrap(),
+                "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+            );
+        }
+    }
+
+    /// `(base, path, expected)` for the cases where Core's `provider_endpoint`
+    /// and the managed runtime's `llmcore.auto_make_url` must agree: the
+    /// `$` pin, a base that already ends with the path, and the version-
+    /// segment rule (galley#32). Rust-only behavior stays out of this table
+    /// (Core also strips a `/models`, `/responses`, … suffix and trims
+    /// whitespace; the engine does not). `runner/tests/test_managed_ga_url.py`
+    /// parses this table and runs it against the payload's `auto_make_url`,
+    /// so keep each entry a plain three-string tuple.
+    const AUTO_MAKE_URL_CASES: &[(&str, &str, &str)] = &[
+        (
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "chat/completions",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        ),
+        (
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            "chat/completions",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        ),
+        (
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "responses",
+            "https://generativelanguage.googleapis.com/v1beta/openai/responses",
+        ),
+        (
+            "https://relay.example/v1beta1",
+            "chat/completions",
+            "https://relay.example/v1beta1/chat/completions",
+        ),
+        (
+            "https://relay.example/v2alpha/api",
+            "chat/completions",
+            "https://relay.example/v2alpha/api/chat/completions",
+        ),
+        (
+            "https://api.openai.com/v1",
+            "chat/completions",
+            "https://api.openai.com/v1/chat/completions",
+        ),
+        (
+            "https://openrouter.ai/api/v1/",
+            "chat/completions",
+            "https://openrouter.ai/api/v1/chat/completions",
+        ),
+        (
+            "https://relay.example",
+            "chat/completions",
+            "https://relay.example/v1/chat/completions",
+        ),
+        (
+            "https://api.anthropic.com",
+            "messages",
+            "https://api.anthropic.com/v1/messages",
+        ),
+        (
+            "https://api.deepseek.com/anthropic",
+            "messages",
+            "https://api.deepseek.com/anthropic/v1/messages",
+        ),
+        (
+            "https://relay.example/custom/endpoint/$",
+            "chat/completions",
+            "https://relay.example/custom/endpoint",
+        ),
+        (
+            "https://relay.example/v1/chat/completions",
+            "chat/completions",
+            "https://relay.example/v1/chat/completions",
+        ),
+        (
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            "chat/completions",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        ),
+        (
+            "https://relay.example/v1/messages",
+            "messages",
+            "https://relay.example/v1/messages",
+        ),
+        (
+            "https://relay.example/vendor/api",
+            "chat/completions",
+            "https://relay.example/vendor/api/v1/chat/completions",
+        ),
+        (
+            "https://relay.example/v/x",
+            "chat/completions",
+            "https://relay.example/v/x/v1/chat/completions",
+        ),
+        (
+            "https://relay.example/video",
+            "chat/completions",
+            "https://relay.example/video/v1/chat/completions",
+        ),
+        (
+            "https://relay.example/version/api",
+            "chat/completions",
+            "https://relay.example/version/api/v1/chat/completions",
+        ),
+        (
+            "https://relay.example/V1",
+            "chat/completions",
+            "https://relay.example/V1/v1/chat/completions",
+        ),
+        (
+            "https://relay.example/v1.5",
+            "chat/completions",
+            "https://relay.example/v1.5/v1/chat/completions",
+        ),
+        (
+            "https://v1.relay.example/api",
+            "chat/completions",
+            "https://v1.relay.example/api/v1/chat/completions",
+        ),
+    ];
+
+    #[test]
+    fn provider_endpoint_agrees_with_engine_auto_make_url() {
+        for (base, path, expected) in AUTO_MAKE_URL_CASES {
+            assert_eq!(
+                provider_endpoint(base, path).unwrap(),
+                *expected,
+                "base {base:?}, path {path:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn version_segment_allows_a_lowercase_qualifier_only() {
+        for segment in ["v1", "v2", "v10", "v1beta", "v1beta1", "v2alpha", "v1beta3"] {
+            assert!(is_version_segment(segment), "{segment}");
+        }
+        for segment in [
+            "", "v", "vendor", "version", "video", "V1", "v1Beta", "v1.5", "v1-beta", "beta1",
+        ] {
+            assert!(!is_version_segment(segment), "{segment}");
+        }
     }
 
     #[test]

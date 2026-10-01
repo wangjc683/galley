@@ -1,0 +1,6 @@
+diff --git a/llmcore.py b/llmcore.py
+--- a/llmcore.py
++++ b/llmcore.py
+@@ -137 +137 @@ def auto_make_url(base, path):
+-    return f"{b}/{p}" if re.search(r'/v\d+(/|$)', b) else f"{b}/v1/{p}"
++    return f"{b}/{p}" if re.search(r'/v\d+[a-z0-9]*(/|$)', b) else f"{b}/v1/{p}"

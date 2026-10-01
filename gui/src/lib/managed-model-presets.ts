@@ -25,7 +25,14 @@ export type ManagedModelProviderPresetId =
   | "xiaomi-mimo"
   | "zhipu-glm"
   | "custom-anthropic"
-  | "custom-openai";
+  | "custom-openai"
+  | "custom-endpoint";
+
+/** The neutral "Custom" card: any OpenAI- or Anthropic-compatible
+ * endpoint (relays, local servers, vendors without a named preset).
+ * The only card whose protocol is a user choice; `custom-openai` /
+ * `custom-anthropic` keep their ids but now mean the official APIs. */
+export const CUSTOM_ENDPOINT_PRESET_ID = "custom-endpoint";
 
 export interface ManagedModelProviderPreset {
   id: ManagedModelProviderPresetId;
@@ -52,7 +59,6 @@ export interface ManagedModelProviderPresetDraft {
   apiBase: string;
   model: string;
   displayName: string;
-  advancedOptions?: Record<string, unknown>;
 }
 
 export function managedModelProtocolAdvancedDefaults(
@@ -254,6 +260,21 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
       stream: true,
     },
   },
+  {
+    // Last on purpose (onboarding grid + Settings popover): the named
+    // presets cover the common paths, this is the catch-all. No
+    // first-party options and no apiKeyUrl; the label / description
+    // are localized in managed-model-preset-copy.ts. An empty apiBase
+    // keeps it out of record matching
+    // (managedModelProviderPresetForRecord), and an empty displayName
+    // lets a blank name fall back to the endpoint host at save time.
+    id: CUSTOM_ENDPOINT_PRESET_ID,
+    label: "Custom",
+    protocol: "openai",
+    apiBase: "",
+    model: "",
+    displayName: "",
+  },
 ];
 
 export function getManagedModelProviderPreset(
@@ -277,10 +298,20 @@ export function managedModelProviderPresetDraft(
     apiBase: preset.apiBase,
     model: preset.model,
     displayName: preset.displayName,
-    advancedOptions:
-      preset.advancedOptions ??
-      managedModelProtocolAdvancedDefaults(preset.protocol),
   };
+}
+
+/** API URL placeholder: the preset's own endpoint, or — for the custom
+ * card, which has none — a neutral example in the chosen protocol's
+ * path shape (never an official URL, which would read as a default). */
+export function apiBasePlaceholderForManagedModelProviderPreset(
+  preset: ManagedModelProviderPreset,
+  protocol: ManagedModelProtocol,
+): string {
+  if (preset.apiBase) return preset.apiBase;
+  return protocol === "openai"
+    ? "https://api.example.com/v1"
+    : "https://api.example.com/anthropic";
 }
 
 export function modelPlaceholderForManagedModelProviderPreset(
@@ -298,12 +329,16 @@ export function recommendedModelForManagedModelProviderPreset(
   return preset.model || preset.modelPlaceholder || "";
 }
 
+/** The card a saved provider that matches no shipped preset edits as.
+ * Codex OAuth stays on its own card; every api_key / none endpoint
+ * opens as the Custom card, its protocol taken from the record (the
+ * form keeps `provider.protocol`). Display only — the record itself
+ * is never rewritten. */
 export function customManagedModelProviderPresetId(
-  protocol: ManagedModelProtocol,
   authKind: ManagedModelAuthKind = "api_key",
 ): ManagedModelProviderPresetId {
   if (authKind === "chatgpt_codex_oauth") return "chatgpt-codex";
-  return protocol === "anthropic" ? "custom-anthropic" : "custom-openai";
+  return CUSTOM_ENDPOINT_PRESET_ID;
 }
 
 /** Resolve the original preset for a saved provider record by matching
@@ -325,22 +360,26 @@ export function managedModelProviderPresetForRecord(
 }
 
 export function advancedOptionsForManagedModelProvider(
-  provider: ManagedModelProviderRecord,
+  provider: Pick<
+    ManagedModelProviderRecord,
+    "protocol" | "authKind" | "apiBase"
+  >,
 ): Record<string, unknown> | undefined {
   return managedModelProviderPresetForRecord(provider)?.advancedOptions;
 }
 
+/** The preset layer a NEW model on this provider gets: the shipped
+ * preset matching protocol + auth kind + apiBase, else the protocol's
+ * defaults. Used for every new model — the first one created with the
+ * provider (provider-setup.ts) and the ones added later. */
 export function recommendedAdvancedOptionsForManagedModelProvider(
-  provider: ManagedModelProviderRecord,
+  provider: Pick<
+    ManagedModelProviderRecord,
+    "protocol" | "authKind" | "apiBase"
+  >,
 ): Record<string, unknown> {
   return (
     advancedOptionsForManagedModelProvider(provider) ??
     managedModelProtocolAdvancedDefaults(provider.protocol)
   );
-}
-
-export function managedModelProtocolLabel(
-  protocol: ManagedModelProtocol,
-): string {
-  return protocol === "openai" ? "OpenAI-compatible" : "Anthropic-compatible";
 }

@@ -118,8 +118,9 @@ Interaction rules:
 - Use one screen.
 - First managed-runtime onboarding uses a Provider preset dropdown. It may
   expose official-brand shortcuts such as OpenAI, Anthropic, DeepSeek, Kimi,
-  MiniMax, OpenRouter, SiliconFlow, Xiaomi MiMo, and GLM, plus protocol-family
-  entries when useful.
+  MiniMax, OpenRouter, SiliconFlow, Xiaomi MiMo, and GLM, plus a final Custom
+  entry (protocol chosen inside the card) for any other OpenAI- or
+  Anthropic-compatible endpoint.
 - A fresh setup must not select a Provider implicitly. Show an explicit empty
   state such as "选择提供商" first, then fill the dependent Provider fields
   from the selected preset.

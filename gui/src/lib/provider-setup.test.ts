@@ -1,10 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  CUSTOM_ENDPOINT_PRESET_ID,
+  getManagedModelProviderPreset,
+  managedModelProtocolAdvancedDefaults,
+} from "@/lib/managed-model-presets";
+import {
   canCommitProviderSetup,
   effectiveProviderAuthKind,
+  formToProbeInput,
   planAutoPick,
   providerConnectionFingerprint,
+  providerFormFromPreset,
+  providerFormFromRecord,
+  providerHostFallback,
   providerHostnameFallback,
   providerListFingerprint,
   runCodexComplete,
@@ -251,6 +260,178 @@ describe("providerHostnameFallback", () => {
   });
 });
 
+describe("providerHostFallback", () => {
+  it("keeps the port and tolerates non-URLs", () => {
+    expect(providerHostFallback("https://api.x.ai/v1")).toBe("api.x.ai");
+    expect(providerHostFallback(" http://localhost:11434/v1 ")).toBe(
+      "localhost:11434",
+    );
+    expect(providerHostFallback("not a url ")).toBe("not a url");
+    // Parses, but as a scheme with no host — fall back to the URL.
+    expect(providerHostFallback("localhost:11434")).toBe("localhost:11434");
+  });
+});
+
+describe("custom endpoint form", () => {
+  function customForm(patch: Partial<ProviderFormState> = {}) {
+    return {
+      ...providerFormFromPreset(CUSTOM_ENDPOINT_PRESET_ID),
+      apiKey: "sk-relay",
+      apiBase: "https://relay.example/v1",
+      model: "grok-5",
+      ...patch,
+    };
+  }
+
+  it("starts empty, OpenAI-compatible, with protocol defaults and no reasoning_effort", () => {
+    const fresh = providerFormFromPreset(CUSTOM_ENDPOINT_PRESET_ID);
+    expect(fresh).toMatchObject({
+      providerPresetId: CUSTOM_ENDPOINT_PRESET_ID,
+      protocol: "openai",
+      authKind: "api_key",
+      apiBase: "",
+      model: "",
+      displayName: "",
+    });
+    const options = formToProbeInput(customForm())?.advancedOptions;
+    expect(options).toEqual(managedModelProtocolAdvancedDefaults("openai"));
+    expect(options).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("a protocol switch keeps URL / key / model and resets options to that protocol's defaults", () => {
+    const before = customForm();
+    // What the segmented control does: updateProviderForm({ protocol }).
+    const after: ProviderFormState = { ...before, protocol: "anthropic" };
+    expect(after).toMatchObject({
+      apiKey: "sk-relay",
+      apiBase: "https://relay.example/v1",
+      model: "grok-5",
+    });
+    expect(formToProbeInput(before)?.advancedOptions).toEqual(
+      managedModelProtocolAdvancedDefaults("openai"),
+    );
+    expect(formToProbeInput(after)?.advancedOptions).toEqual(
+      managedModelProtocolAdvancedDefaults("anthropic"),
+    );
+  });
+
+  it("an unmatched saved endpoint edits as the Custom card with the record's protocol", () => {
+    const record = {
+      id: "prov-relay",
+      protocol: "anthropic" as const,
+      authKind: "api_key" as const,
+      apiBase: "https://relay.example/anthropic",
+      displayName: "relay.example",
+    };
+    expect(providerFormFromRecord(record)).toEqual({
+      id: "prov-relay",
+      providerPresetId: CUSTOM_ENDPOINT_PRESET_ID,
+      protocol: "anthropic",
+      authKind: "api_key",
+      apiKey: "",
+      apiBase: "https://relay.example/anthropic",
+      model: "",
+      displayName: "relay.example",
+    });
+    // No-auth local endpoints land on the Custom card too.
+    expect(
+      providerFormFromRecord({
+        ...record,
+        protocol: "openai",
+        authKind: "none",
+        apiBase: "http://localhost:11434/v1",
+      }).providerPresetId,
+    ).toBe(CUSTOM_ENDPOINT_PRESET_ID);
+    // Matched presets and Codex OAuth keep their own cards.
+    expect(
+      providerFormFromRecord({
+        ...record,
+        apiBase: "https://api.deepseek.com/anthropic",
+      }).providerPresetId,
+    ).toBe("deepseek");
+    expect(
+      providerFormFromRecord({
+        ...record,
+        protocol: "openai",
+        authKind: "chatgpt_codex_oauth",
+        apiBase: "https://chatgpt.example/codex",
+      }).providerPresetId,
+    ).toBe("chatgpt-codex");
+  });
+});
+
+describe("first-model preset options", () => {
+  function deps() {
+    return {
+      saveProvider: vi.fn().mockResolvedValue({ id: "prov-new" }),
+      saveModel: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  async function savedPresetOptions(form: ProviderFormState) {
+    const d = deps();
+    await runProviderCommit(d as never, {
+      form,
+      makeDefault: "always",
+      modelsCount: 0,
+    });
+    return (d.saveModel.mock.calls[0][0] as { presetOptions: unknown })
+      .presetOptions;
+  }
+
+  const openaiCard = () => ({
+    ...providerFormFromPreset("custom-openai"),
+    apiKey: "sk-test",
+  });
+
+  it("an OpenAI card left on the official URL keeps reasoning_effort high", async () => {
+    expect(await savedPresetOptions(openaiCard())).toEqual(
+      getManagedModelProviderPreset("custom-openai").advancedOptions,
+    );
+    expect(await savedPresetOptions(openaiCard())).toHaveProperty(
+      "reasoning_effort",
+      "high",
+    );
+  });
+
+  it("an OpenAI card repointed at a relay gets protocol defaults", async () => {
+    const repointed = { ...openaiCard(), apiBase: "https://relay.example/v1" };
+    expect(await savedPresetOptions(repointed)).toEqual(
+      managedModelProtocolAdvancedDefaults("openai"),
+    );
+    // The probe exercises the same options Save writes.
+    expect(formToProbeInput(repointed)?.advancedOptions).not.toHaveProperty(
+      "reasoning_effort",
+    );
+  });
+
+  it("the Custom card gets the chosen protocol's defaults", async () => {
+    const custom = {
+      ...providerFormFromPreset(CUSTOM_ENDPOINT_PRESET_ID),
+      apiKey: "sk-test",
+      apiBase: "https://relay.example/anthropic",
+      model: "claude-x",
+      protocol: "anthropic" as const,
+    };
+    expect(await savedPresetOptions(custom)).toEqual(
+      managedModelProtocolAdvancedDefaults("anthropic"),
+    );
+  });
+
+  it("a URL that matches a shipped preset gets that preset's options, whatever the card", async () => {
+    const custom = {
+      ...providerFormFromPreset(CUSTOM_ENDPOINT_PRESET_ID),
+      apiKey: "sk-test",
+      apiBase: "https://api.deepseek.com/anthropic",
+      model: "deepseek-v4-pro",
+      protocol: "anthropic" as const,
+    };
+    expect(await savedPresetOptions(custom)).toEqual(
+      getManagedModelProviderPreset("deepseek").advancedOptions,
+    );
+  });
+});
+
 describe("runProviderCommit", () => {
   const savedProvider = { id: "prov-9" };
   function deps() {
@@ -342,6 +523,56 @@ describe("runProviderCommit", () => {
     });
     expect(d2.saveProvider).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "My Provider" }),
+    );
+  });
+
+  it("a blank Custom-card name falls back to the endpoint host on both surfaces", async () => {
+    const custom = {
+      ...providerFormFromPreset(CUSTOM_ENDPOINT_PRESET_ID),
+      apiKey: "sk-x",
+      apiBase: "http://localhost:11434/v1",
+      model: "qwen4",
+    };
+    // Settings: no caller fallback.
+    const d = deps();
+    await runProviderCommit(d as never, {
+      form: custom,
+      makeDefault: "always",
+      modelsCount: 0,
+    });
+    expect(d.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "localhost:11434" }),
+    );
+    // Onboarding: the custom-card fallback wins over the hostname one.
+    const d2 = deps();
+    await runProviderCommit(d2 as never, {
+      form: custom,
+      makeDefault: "always",
+      modelsCount: 0,
+      displayNameFallback: providerHostnameFallback,
+    });
+    expect(d2.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "localhost:11434" }),
+    );
+    // A typed name is kept.
+    const d3 = deps();
+    await runProviderCommit(d3 as never, {
+      form: { ...custom, displayName: "Home GPU" },
+      makeDefault: "always",
+      modelsCount: 0,
+    });
+    expect(d3.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "Home GPU" }),
+    );
+    // Other cards in Settings keep sending the name verbatim.
+    const d4 = deps();
+    await runProviderCommit(d4 as never, {
+      form: form({ displayName: "" }),
+      makeDefault: "always",
+      modelsCount: 0,
+    });
+    expect(d4.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "" }),
     );
   });
 

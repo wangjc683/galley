@@ -10,14 +10,14 @@
 
 ## 上游 issue：计划模式撞 100 步上限前没有任何提醒
 
-- **状态**：草稿待 JC 过目（2026-10-01，随 galley#29–#32 的回帖一批确认后再发）
+- **状态**：不提交（2026-10-01 JC 定下默认不向上游提 PR / issue，专门提到才发；背景与草稿留作对照）
 - **提出**：2026-10-01，[galley#29 跑满步数上限后卡死](./2026-10-01-max-turns-run-end.md)核对时发现。
-- **启动信号**：JC 确认发出。
+- **启动信号**：JC 专门提到要提交；或上游自己修了计划模式的警告阈值（升级审计时顺带看一眼 `ga.py` 的 `turn >= 190`）。
 - **背景**（已核实，上游 `2538ad9`）：`enter_plan_mode()` 把上限降到 `self.max_turns = 100`（`ga.py:453`），计划模式的「已达上限，必须
   ask_user」警告却要 `turn >= 190` 才触发（`ga.py:593`），第 175 步的 ask_user 提醒又对计划模式跳过（`not _plan`，`ga.py:583`）。结果计划模式
   跑到第 100 步时一句提醒都没有，循环直接退出。是改数字时漏改：`a5aca59`（04-23）上限 100、警告 90，对得上；`df025ab`（06-19）把默认上限
   80→180、计划模式警告挪到 190，计划模式上限没动。
-- **方案**：只提 issue 不提 PR（警告改回 90 还是计划模式上限跟着抬，是上游的取舍）。我们不打补丁：撞上限后卡死已在桥里修好、两种模式都覆盖，
+- **方案**：若要提，只提 issue 不提 PR（警告改回 90 还是计划模式上限跟着抬，是上游的取舍）。我们不打补丁：撞上限后卡死已在桥里修好、两种模式都覆盖，
   缺提醒只让计划模式更早停，不再卡住。issue 里**不提** `agent_loop.py:104` 不回调 `MAX_TURNS_EXCEEDED` 的事：上游若按「循环后补一次回调」的
   形状修，同一轮会回调两次，桥要另做去重（见 [GA baseline](../ga-baseline.md) 契约面第 17 条）。
 - **issue 草稿**：
@@ -31,6 +31,27 @@
     > warning to 190, but left the plan cap at 100. Either moving the warning back under the cap (e.g. `turn >= 90`) or
     > raising the plan cap would fix it.
 - **关联**：[galley#29](https://github.com/wangjc683/galley/issues/29)；本台账「单次运行步数上限可配」一节。
+
+---
+
+## 上游 PR：`auto_make_url` 认 `v1beta` 这类版本段（删 0027）
+
+- **状态**：不提交（2026-10-01 JC 定下默认不向上游提 PR，专门提到才发；草稿留作上游修好时删 `0027` 的对照）
+- **提出**：2026-10-01，[自定义入口](./2026-10-01-custom-provider-entry.md)（galley#32）核对时发现。
+- **启动信号**：JC 专门提到要提交；或上游自己改了 `auto_make_url`（升级审计对照契约面第 18 条，上游修好就删 `0027`）。外置 GA 用户报 `v1beta` 端点连不上时，先给 `$` 钉死地址的绕法。
+- **方案**：向 `lsdefine/GenericAgent` 提 PR，只改 `llmcore.py` `auto_make_url` 的一行正则（同 `0027`）。合入后按宪法第 1 条删 `0027`，
+  `runner/tests/test_managed_ga_url.py` 应保持绿（它校验的是规则，不是补丁）。
+- **PR 草稿**：
+  - 标题：`fix(llmcore): treat /v1beta-style path segments as API versions in auto_make_url`
+  - 正文：
+
+    > `auto_make_url` only recognises all-digit version segments (`re.search(r'/v\d+(/|$)', b)`, `llmcore.py:137`), so
+    > Gemini's documented OpenAI-compatible base `https://generativelanguage.googleapis.com/v1beta/openai/` becomes
+    > `…/v1beta/openai/v1/chat/completions` and every request 404s. Allowing an alphanumeric qualifier after the digits —
+    > `/v\d+[a-z0-9]*(/|$)` — accepts `v1beta`, `v1beta1`, `v2alpha` while still rejecting `/vendor`, `/video`, `/v1.5`
+    > and hosts like `v1.relay.example`. Plain `/v1`, the no-version `/v1/` insertion, `$` pinning and full-path bases are
+    > unchanged.
+- **关联**：`managed-ga/patches/0027-managed-url-version-qualifier.patch`；[GA baseline](../ga-baseline.md) 契约面第 18 条。
 
 ---
 
@@ -135,11 +156,11 @@
 
 ## Ollama / 本地端点预设（Settings → Models 预设表）
 
-- **状态**：暂存（2026-08-31 无鉴权 Provider 落地时 JC 裁决本轮不加）
-- **提出**：2026-08-31，[无鉴权 Provider](./2026-08-31-no-auth-provider-empty-apikey.md) 的连带候选——预设表至今没有任何本地条目，本地用户要走「自定义」手填。
-- **启动信号**：本地端点用户反馈「配置 Ollama 要摸索」；或社区再出现 ollama / 本地模型相关 issue。
-- **背景**：无鉴权能力（`authKind: "none"`、key 可留空）已落地，是本项的前置。差的只是一张预设卡：apibase 预填 `http://localhost:11434/v1`、协议 openai、key 留空即可。
-- **方案**：`managed-model-presets.ts` 加 ollama 条目。要一并定的：预设显示名 / 图标；`recommendedModel` 给什么（本地模型名因人而异，可能留空走「读取模型列表」）；是否顺带覆盖 LM Studio（`localhost:1234/v1`）等近亲。
+- **状态**：暂存（2026-08-31 无鉴权 Provider 落地时 JC 裁决本轮不加；2026-10-01「自定义」卡上线后降为纯便利项）
+- **提出**：2026-08-31，[无鉴权 Provider](./2026-08-31-no-auth-provider-empty-apikey.md) 的连带候选——预设表至今没有任何本地条目。
+- **启动信号**：本地端点用户反馈「配置 Ollama 要摸索」（自定义卡之后仍有）；或社区再出现 ollama / 本地模型相关 issue。
+- **背景**：无鉴权能力（`authKind: "none"`、key 可留空）已落地。2026-10-01 起（[自定义入口](./2026-10-01-custom-provider-entry.md)，galley#32）本地服务走「自定义」：选 OpenAI 兼容、填 `http://localhost:11434/v1`、key 留空、模型从列表选，显示名称自动取 `localhost:11434`。具名预设省下的只是一次地址输入。
+- **方案**：`managed-model-presets.ts` 加 ollama 条目：apibase 预填 `http://localhost:11434/v1`、协议 openai、key 留空。要一并定的：显示名 / 图标；`recommendedModel` 给什么（本地模型名因人而异，可能留空走「读取模型列表」）；是否顺带覆盖 LM Studio（`localhost:1234/v1`）等近亲。
 - **待定**：一张卡还是「本地端点」一类；`apiKeyPlaceholder` 文案（应显式写「无需填写」）。
 - **关联**：[无鉴权 Provider devlog](./2026-08-31-no-auth-provider-empty-apikey.md)；下一节「`api_key_header` 的 GUI 入口」（同为该面的暂缓项，启动时可同批评估）。
 

@@ -61,8 +61,9 @@ probe and the composer effort pill only ever read the effective
 First-run Provider preset dropdown:
 
 ```text
-OpenAI
-Anthropic
+ChatGPT / Codex
+OpenAI            (official API)
+Anthropic         (official API)
 DeepSeek
 Kimi for Coding
 MiniMax
@@ -70,9 +71,15 @@ OpenRouter
 SiliconFlow
 Xiaomi MiMo
 Zhipu GLM
+Custom            (any OpenAI- or Anthropic-compatible endpoint; protocol chosen in the card)
 ```
 
-These are UI shortcuts, not separate runtime families. They should still compile
+These are UI shortcuts, not separate runtime families. Custom (2026-10-01,
+galley#32) is the neutral entry for relays, other vendors and local servers:
+empty URL and model, the chosen protocol's defaults, no first-party options.
+A new provider's first model takes its preset layer from the final URL (the
+matching shipped preset, else protocol defaults), so an official card repointed
+elsewhere behaves exactly like Custom. They should still compile
 down to one of the two protocol families unless there is a real protocol
 difference.
 

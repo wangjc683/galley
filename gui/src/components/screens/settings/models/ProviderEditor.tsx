@@ -18,14 +18,18 @@ import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCode
 import { ManagedModelProviderPicker } from "@/components/managed-models/ManagedModelProviderPicker";
 import { ModelCombobox } from "@/components/managed-models/ModelCombobox";
 import { Button, IconButton } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useCopy } from "@/lib/i18n";
 import {
+  apiBasePlaceholderForManagedModelProviderPreset,
+  CUSTOM_ENDPOINT_PRESET_ID,
   getManagedModelProviderPreset,
   modelPlaceholderForManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
 import type { CodexDeviceLoginStart } from "@/lib/managed-models";
 import { cn } from "@/lib/utils";
+import type { ManagedModelProtocol } from "@/types/managed-models";
 
 import {
   InfoLine,
@@ -101,6 +105,10 @@ export function ProviderEditor({
     : null;
   const providerSelected = Boolean(selectedPreset && form.protocol);
   const isCodexProvider = form.authKind === "chatgpt_codex_oauth";
+  // The Custom card leads with what it can't preset: the protocol and
+  // the endpoint, then the (optional) key. Every other card keeps
+  // key → URL.
+  const isCustomEndpoint = form.providerPresetId === CUSTOM_ENDPOINT_PRESET_ID;
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const apiKeyRevealLabel = apiKeyVisible ? copy.hideApiKey : copy.showApiKey;
   const trimmedModel = form.model.trim();
@@ -299,6 +307,32 @@ export function ProviderEditor({
 
         {providerSelected && selectedPreset && form.protocol && !isCodexProvider && (
           <>
+            {isCustomEndpoint && (
+              <>
+                <SegmentedControl<ManagedModelProtocol>
+                  size="sm"
+                  ariaLabel={copy.customProtocolAria}
+                  value={form.protocol}
+                  onValueChange={(protocol) => onChange({ protocol })}
+                  options={[
+                    { value: "openai", label: copy.openaiCompatibleProtocol },
+                    {
+                      value: "anthropic",
+                      label: copy.anthropicCompatibleProtocol,
+                    },
+                  ]}
+                />
+                <SettingsInput
+                  label={copy.apiUrl}
+                  value={form.apiBase}
+                  placeholder={apiBasePlaceholderForManagedModelProviderPreset(
+                    selectedPreset,
+                    form.protocol,
+                  )}
+                  onChange={(apiBase) => onChange({ apiBase })}
+                />
+              </>
+            )}
             <SettingsInput
               label={copy.apiKey}
               labelTrailing={
@@ -355,17 +389,17 @@ export function ProviderEditor({
             {isCreatingProvider && form.apiKey.trim() === "" && (
               <InfoLine message={copy.noAuthKeyHint} />
             )}
-            <SettingsInput
-              label={copy.apiUrl}
-              value={form.apiBase}
-              onChange={(apiBase) => onChange({ apiBase })}
-              placeholder={
-                selectedPreset.apiBase ||
-                (form.protocol === "openai"
-                  ? "https://api.openai.com/v1"
-                  : "https://api.anthropic.com")
-              }
-            />
+            {!isCustomEndpoint && (
+              <SettingsInput
+                label={copy.apiUrl}
+                value={form.apiBase}
+                placeholder={apiBasePlaceholderForManagedModelProviderPreset(
+                  selectedPreset,
+                  form.protocol,
+                )}
+                onChange={(apiBase) => onChange({ apiBase })}
+              />
+            )}
             {isCreatingProvider && (
               <div className="space-y-2">
                 <div className="flex flex-wrap items-end gap-2">

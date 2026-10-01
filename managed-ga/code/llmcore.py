@@ -134,7 +134,7 @@ def auto_make_url(base, path):
     b, p = base.rstrip('/'), path.strip('/')
     if b.endswith('$'): return b[:-1].rstrip('/')
     if b.endswith(p): return b
-    return f"{b}/{p}" if re.search(r'/v\d+(/|$)', b) else f"{b}/v1/{p}"
+    return f"{b}/{p}" if re.search(r'/v\d+[a-z0-9]*(/|$)', b) else f"{b}/v1/{p}"
 
 def _parse_claude_json(data):
     if data.get("stop_reason") == "refusal":

@@ -2,12 +2,16 @@ import * as Popover from "@radix-ui/react-popover";
 import { CaretDown, Check } from "@phosphor-icons/react";
 
 import {
+  CUSTOM_ENDPOINT_PRESET_ID,
   getManagedModelProviderPreset,
-  managedModelProtocolLabel,
   MANAGED_MODEL_PROVIDER_PRESETS,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
-import { providerPresetDescription } from "@/lib/managed-model-preset-copy";
+import {
+  managedModelProtocolLabel,
+  providerPresetDescription,
+  providerPresetLabel,
+} from "@/lib/managed-model-preset-copy";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ManagedModelProtocol } from "@/types/managed-models";
@@ -29,12 +33,16 @@ export function ManagedModelProviderPicker({
 }: ManagedModelProviderPickerProps) {
   const copy = useCopy().settings.models;
   const selectedPreset = value ? getManagedModelProviderPreset(value) : null;
+  // The Custom card's protocol is a choice shown by the segmented
+  // control right below the picker — no duplicate badge here.
   const badgeLabel =
     selectedPreset?.id === "chatgpt-codex"
       ? copy.chatgptCodexBadge
-      : protocol
-        ? managedModelProtocolLabel(protocol)
-        : null;
+      : selectedPreset?.id === CUSTOM_ENDPOINT_PRESET_ID
+        ? null
+        : protocol
+          ? managedModelProtocolLabel(copy, protocol)
+          : null;
 
   // `modal`: this picker lives inside the Settings Dialog, whose scroll
   // lock swallows wheel events on portaled content. A modal Popover
@@ -59,7 +67,9 @@ export function ManagedModelProviderPicker({
                 selectedPreset ? "text-ink" : "text-ink-muted",
               )}
             >
-              {selectedPreset?.label ?? copy.chooseProvider}
+              {selectedPreset
+                ? providerPresetLabel(copy, selectedPreset)
+                : copy.chooseProvider}
             </span>
             {badgeLabel && (
               <span className="mt-1 inline-flex rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-micro text-ink-muted">
@@ -114,7 +124,7 @@ export function ManagedModelProviderPicker({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-ui-secondary font-medium">
-                      {preset.label}
+                      {providerPresetLabel(copy, preset)}
                     </span>
                     {description && (
                       <span className="mt-0.5 block truncate text-ui-tertiary leading-4 text-ink-muted">

@@ -1,6 +1,9 @@
 import { Check } from "@phosphor-icons/react";
 
-import { providerPresetDescription } from "@/lib/managed-model-preset-copy";
+import {
+  providerPresetDescription,
+  providerPresetLabel,
+} from "@/lib/managed-model-preset-copy";
 import { useCopy } from "@/lib/i18n";
 import {
   MANAGED_MODEL_PROVIDER_PRESETS,
@@ -59,7 +62,7 @@ export function ManagedModelProviderCardGrid({
                   selected ? "text-ink" : "text-ink-soft",
                 )}
               >
-                {preset.label}
+                {providerPresetLabel(copy, preset)}
               </span>
               {selected && (
                 <Check

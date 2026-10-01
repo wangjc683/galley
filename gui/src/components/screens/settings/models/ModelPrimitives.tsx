@@ -4,10 +4,10 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCopy } from "@/lib/i18n";
+import { managedModelProtocolLabel } from "@/lib/managed-model-preset-copy";
 import { cn } from "@/lib/utils";
 import type { ManagedModelProtocol } from "@/types/managed-models";
 
-import { protocolLabel } from "./model-settings-utils";
 import type { ProbeAction, ProbeState } from "./types";
 
 export function SettingsInput({
@@ -211,7 +211,8 @@ export function ProtocolBadge({
   protocol: ManagedModelProtocol;
   apiBase: string;
 }) {
-  const label = protocolLabel(protocol);
+  const copy = useCopy().settings.models;
+  const label = managedModelProtocolLabel(copy, protocol);
   return (
     <span
       className="shrink-0 text-ui-micro leading-4 text-ink-muted/55"

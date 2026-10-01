@@ -63,7 +63,7 @@ Galley 是一个跑在你自己电脑上的个人 AI 助手，能真正做事—
 |---|---|
 | 🖥️ **系统级执行**<br/>终端、文件系统、键盘鼠标、屏幕视觉，直到通过 ADB 操作手机——从查资料到把事真正办完。 | 🌐 **真实浏览器**<br/>连上 Chrome / Edge，agent 用的就是你已登录的那个浏览器——账号、会员、工作后台都在，不必重新登录。 |
 | 🧬 **自进化技能**<br/>每解决一个新任务，就把做法沉淀成可复用的技能；越用越熟练，技能树长在你本地。 | 💰 **Token 效率，有数据**<br/>内核靠信息密度而不是窗口长度：在 [GenericAgent 论文](https://arxiv.org/abs/2604.17091)的 Lifelong AgentBench 上，它以 100% 准确率完成任务，输入 token 只有主流 Agent 的 1/3 到 1/6。Galley 默认把窗口设在 90K token，为长任务留足余量。 |
-| 🔌 **任意模型，包括本地的**<br/>Anthropic、OpenAI / ChatGPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、小米 MiMo 预设开箱可选，也支持任意 OpenAI 或 Anthropic 兼容端点；Ollama 这类本地服务不用填 API Key。 | 📖 **阅读面板**<br/>在输入框里引用本地文件，Markdown 在对话旁边直接预览；指向一个 Git 仓库，就能只读审阅未提交的改动，统一或分栏视图，不用离开 Galley。 |
+| 🔌 **任意模型，包括本地的**<br/>Anthropic、OpenAI / ChatGPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、小米 MiMo 预设开箱可选，其他任意 OpenAI 或 Anthropic 兼容端点走「自定义」；Ollama 这类本地服务不用填 API Key。 | 📖 **阅读面板**<br/>在输入框里引用本地文件，Markdown 在对话旁边直接预览；指向一个 Git 仓库，就能只读审阅未提交的改动，统一或分栏视图，不用离开 Galley。 |
 
 ### 一支团队，管得住
 
@@ -89,7 +89,7 @@ Galley 的编排层。你在 GUI 操作，Supervisor Agent 走稳定的 `galley`
 
 ## 快速开始
 
-先准备好 LLM 服务的 API Key。Anthropic、OpenAI / ChatGPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、小米 MiMo 预设开箱可选（端点和推荐模型已预填），也支持任意 OpenAI 或 Anthropic 兼容端点；Ollama 这类本地服务不用填 Key。
+先准备好 LLM 服务的 API Key。Anthropic、OpenAI / ChatGPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、小米 MiMo 预设开箱可选（端点和推荐模型已预填）；其他 OpenAI 或 Anthropic 兼容端点选「自定义」，填上地址即可；Ollama 这类本地服务不用填 Key。
 
 | 1. 下载 Galley | 2. 配置模型 | 3. 开始使用 |
 |---|---|---|

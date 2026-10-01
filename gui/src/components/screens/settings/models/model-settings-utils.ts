@@ -1,8 +1,4 @@
-import { managedModelProtocolLabel } from "@/lib/managed-model-presets";
-import type {
-  ManagedModelRecord,
-  ManagedModelProtocol,
-} from "@/types/managed-models";
+import type { ManagedModelRecord } from "@/types/managed-models";
 
 import type { ModelDraftState, ModelMoveFeedbackState } from "./types";
 
@@ -66,8 +62,4 @@ export function modelSwapAnimationClass(
       : "model-row-swap-up";
   }
   return undefined;
-}
-
-export function protocolLabel(protocol: ManagedModelProtocol): string {
-  return managedModelProtocolLabel(protocol);
 }

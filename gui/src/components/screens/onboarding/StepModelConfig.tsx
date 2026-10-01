@@ -19,8 +19,11 @@ import { ModelCombobox } from "@/components/managed-models/ModelCombobox";
 import { useProviderSetupController } from "@/components/managed-models/use-provider-setup-controller";
 import { Button, IconButton } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useCopy } from "@/lib/i18n";
 import {
+  apiBasePlaceholderForManagedModelProviderPreset,
+  CUSTOM_ENDPOINT_PRESET_ID,
   getManagedModelProviderPreset,
   modelPlaceholderForManagedModelProviderPreset,
 } from "@/lib/managed-model-presets";
@@ -31,6 +34,7 @@ import {
 } from "@/lib/provider-setup";
 import { cn } from "@/lib/utils";
 import { useManagedModelsStore } from "@/stores/managed-models";
+import type { ManagedModelProtocol } from "@/types/managed-models";
 
 const AUTO_CONNECTION_TEST_DELAY_MS = 800;
 
@@ -120,6 +124,10 @@ export function StepModelConfig({
     ? getManagedModelProviderPreset(providerPresetId)
     : null;
   const isCodexProvider = isCodexProviderForm;
+  // The Custom card has no endpoint to preset, so its URL is a primary
+  // field (protocol → URL → key → model) instead of hiding under 高级;
+  // every other card keeps key → model with the URL folded.
+  const isCustomEndpoint = providerPresetId === CUSTOM_ENDPOINT_PRESET_ID;
   // Only surface the key-console link while the endpoint still points
   // at the preset's official apiBase — for a custom/proxy endpoint the
   // preset's key console is likely the wrong place.
@@ -248,6 +256,36 @@ export function StepModelConfig({
 
         {providerSelected && selectedPreset && protocol && !isCodexProvider && (
           <>
+            {isCustomEndpoint && (
+              <>
+                <SegmentedControl<ManagedModelProtocol>
+                  ariaLabel={modelCopy.customProtocolAria}
+                  value={protocol}
+                  onValueChange={(value) =>
+                    updateProviderForm({ protocol: value })
+                  }
+                  options={[
+                    {
+                      value: "openai",
+                      label: modelCopy.openaiCompatibleProtocol,
+                    },
+                    {
+                      value: "anthropic",
+                      label: modelCopy.anthropicCompatibleProtocol,
+                    },
+                  ]}
+                />
+                <SetupInput
+                  label={modelCopy.apiUrl}
+                  value={apiBase}
+                  onChange={(value) => updateProviderForm({ apiBase: value })}
+                  placeholder={apiBasePlaceholderForManagedModelProviderPreset(
+                    selectedPreset,
+                    protocol,
+                  )}
+                />
+              </>
+            )}
             <SetupInput
               label={modelCopy.apiKey}
               labelTrailing={
@@ -349,17 +387,19 @@ export function StepModelConfig({
               </button>
               {advancedOpen && (
                 <div className="mt-3 space-y-4">
-                  <SetupInput
-                    label={modelCopy.apiUrl}
-                    value={apiBase}
-                    onChange={(value) => updateProviderForm({ apiBase: value })}
-                    placeholder={
-                      selectedPreset.apiBase ||
-                      (protocol === "openai"
-                        ? "https://api.openai.com/v1"
-                        : "https://api.anthropic.com")
-                    }
-                  />
+                  {!isCustomEndpoint && (
+                    <SetupInput
+                      label={modelCopy.apiUrl}
+                      value={apiBase}
+                      onChange={(value) =>
+                        updateProviderForm({ apiBase: value })
+                      }
+                      placeholder={apiBasePlaceholderForManagedModelProviderPreset(
+                        selectedPreset,
+                        protocol,
+                      )}
+                    />
+                  )}
                   <SetupInput
                     label={modelCopy.providerName}
                     value={providerDisplayNameValue}

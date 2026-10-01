@@ -1,7 +1,11 @@
 import type { useCopy } from "@/lib/i18n";
 import { effectiveAdvancedOptions } from "@/lib/managed-model-layers";
 import {
+  CUSTOM_ENDPOINT_PRESET_ID,
+  customManagedModelProviderPresetId,
   managedModelProviderPresetDraft,
+  managedModelProviderPresetForRecord,
+  recommendedAdvancedOptionsForManagedModelProvider,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
 import type {
@@ -13,6 +17,7 @@ import type { ManagedModelsStore } from "@/stores/managed-models";
 import type {
   ManagedModelAuthKind,
   ManagedModelProtocol,
+  ManagedModelProviderRecord,
 } from "@/types/managed-models";
 
 /**
@@ -54,11 +59,12 @@ export type ProviderFormState = {
   apiBase: string;
   model: string;
   displayName: string;
-  /** The preset layer for the first model this form creates — the
-   * preset's own option bag, seeded by `providerFormFromPreset`. The
-   * form never edits it (the layered fields live in the model
-   * editor); it rides into `save_managed_model` as `presetOptions`. */
-  advancedOptions?: Record<string, unknown>;
+  // No option bag: the first model's preset layer is resolved from the
+  // final protocol + auth kind + apiBase at probe / save time — the
+  // same `recommendedAdvancedOptionsForManagedModelProvider` every
+  // later model on the provider gets — never carried over from the
+  // picked card: an "OpenAI" card repointed at a relay must not keep
+  // the first-party-only `reasoning_effort`.
 };
 
 export function newProviderForm(): ProviderFormState {
@@ -83,6 +89,32 @@ export function providerFormFromPreset(
     ...draft,
     authKind: draft.authKind ?? "api_key",
     apiKey: preserved?.apiKey ?? "",
+  };
+}
+
+/** Edit form for a saved provider. The card is resolved by apiBase
+ * first so preset-derived affordances (label, "Get API Key" link)
+ * match the provider the user actually configured — a DeepSeek
+ * provider must not edit as a generic card. An endpoint matching no
+ * shipped preset edits as the Custom card with the record's protocol.
+ * Display only: the stored record is never rewritten. */
+export function providerFormFromRecord(
+  provider: Pick<
+    ManagedModelProviderRecord,
+    "id" | "protocol" | "authKind" | "apiBase" | "displayName"
+  >,
+): ProviderFormState {
+  return {
+    id: provider.id,
+    providerPresetId:
+      managedModelProviderPresetForRecord(provider)?.id ??
+      customManagedModelProviderPresetId(provider.authKind),
+    protocol: provider.protocol,
+    authKind: provider.authKind,
+    apiKey: "",
+    apiBase: provider.apiBase,
+    model: "",
+    displayName: provider.displayName,
   };
 }
 
@@ -123,7 +155,7 @@ export function effectiveProviderAuthKind(
 /** Trimmed probe input for the auto connection test. Null until a
  * protocol is chosen. The probe wants the EFFECTIVE options a freshly
  * created model would get — preset layer ⊕ the global defaults, with
- * no overrides yet. */
+ * no overrides yet — so the test exercises exactly what Save writes. */
 export function formToProbeInput(
   form: ProviderFormState,
   defaults: Record<string, unknown> = {},
@@ -136,26 +168,38 @@ export function formToProbeInput(
   advancedOptions?: Record<string, unknown>;
 } | null {
   if (!form.protocol) return null;
-  return {
+  const provider = {
+    protocol: form.protocol,
     // Create-flow only (the auto test never runs on an edit), so a
     // blank key resolves to a no-auth probe rather than "keep saved".
-    protocol: form.protocol,
     authKind: effectiveProviderAuthKind(form, false),
-    apiKey: form.apiKey.trim(),
     apiBase: form.apiBase.trim(),
+  };
+  return {
+    ...provider,
+    apiKey: form.apiKey.trim(),
     model: form.model.trim(),
-    advancedOptions: freshModelEffectiveOptions(form, defaults),
+    advancedOptions: freshModelEffectiveOptions(provider, defaults),
   };
 }
 
-/** What a model created from this form right now would actually run
- * with: its preset layer under the global defaults layer, overriding
- * nothing. */
+/** What a model created for this provider right now would actually
+ * run with: its preset layer — resolved from the protocol / auth kind
+ * / apiBase the caller is about to send, exactly as Save resolves it —
+ * under the global defaults layer, overriding nothing. */
 export function freshModelEffectiveOptions(
-  form: Pick<ProviderFormState, "advancedOptions">,
+  provider: {
+    protocol: ManagedModelProtocol;
+    authKind: ManagedModelAuthKind;
+    apiBase: string;
+  },
   defaults: Record<string, unknown>,
 ): Record<string, unknown> {
-  return effectiveAdvancedOptions(form.advancedOptions ?? {}, defaults, {});
+  return effectiveAdvancedOptions(
+    recommendedAdvancedOptionsForManagedModelProvider(provider),
+    defaults,
+    {},
+  );
 }
 
 /** Identity of one credential+endpoint+model combination — a passing
@@ -250,6 +294,19 @@ export function providerHostnameFallback(apiBase: string): string {
   }
 }
 
+/** Display-name fallback for the Custom card (both surfaces): the
+ * endpoint's host, port included (`api.x.ai`, `localhost:11434`) — the
+ * card's own label would name every custom provider 「自定义」. An
+ * unparsable URL (or one with no host) falls back to the trimmed URL. */
+export function providerHostFallback(apiBase: string): string {
+  const trimmed = apiBase.trim();
+  try {
+    return new URL(trimmed).host || trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
 /**
  * Save-provider(-and-first-model) sequence with injected store
  * actions. Edit (form.id set) saves the provider only — model edits
@@ -279,18 +336,30 @@ export async function runProviderCommit(
     throw new Error("provider protocol not set");
   }
   const isNewProvider = !form.id;
-  const displayName = args.displayNameFallback
-    ? form.displayName.trim() ||
-      args.displayNameFallback(form.apiBase.trim())
+  // The Custom card has no name of its own to pre-fill, so a blank
+  // name always falls back to the endpoint host there; other cards
+  // keep the caller's fallback (onboarding: hostname) or none
+  // (settings: Core falls back to the full URL).
+  const displayNameFallback =
+    form.providerPresetId === CUSTOM_ENDPOINT_PRESET_ID
+      ? providerHostFallback
+      : args.displayNameFallback;
+  const displayName = displayNameFallback
+    ? form.displayName.trim() || displayNameFallback(form.apiBase.trim())
     : form.displayName;
+  const authKind = effectiveProviderAuthKind(
+    form,
+    args.providerHasSavedKey ?? false,
+  );
+  const apiBase = args.trimCredentials ? form.apiBase.trim() : form.apiBase;
   const saved = await deps.saveProvider({
     id: form.id,
     protocol: form.protocol,
-    authKind: effectiveProviderAuthKind(form, args.providerHasSavedKey ?? false),
+    authKind,
     apiKey: args.trimCredentials
       ? form.apiKey.trim() || undefined
       : form.apiKey || undefined,
-    apiBase: args.trimCredentials ? form.apiBase.trim() : form.apiBase,
+    apiBase,
     displayName,
   });
   if (isNewProvider) {
@@ -298,10 +367,15 @@ export async function runProviderCommit(
       providerId: saved.id,
       model: form.model.trim(),
       displayName: "",
-      // The preset's option bag IS the new model's preset layer; the
-      // model starts out overriding nothing and following the global
-      // defaults.
-      presetOptions: form.advancedOptions,
+      // Resolved from what was just saved, exactly as for any model
+      // added to this provider later (use-provider-model-controller)
+      // — not from the picked card. The model starts out overriding
+      // nothing and following the global defaults.
+      presetOptions: recommendedAdvancedOptionsForManagedModelProvider({
+        protocol: form.protocol,
+        authKind,
+        apiBase,
+      }),
       advancedOverrides: {},
       makeDefault:
         args.makeDefault === "always" ? true : args.modelsCount === 0,

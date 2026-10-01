@@ -14,9 +14,7 @@ import {
 } from "@/lib/managed-models";
 import { useCopy } from "@/lib/i18n";
 import {
-  customManagedModelProviderPresetId,
   getManagedModelProviderPreset,
-  managedModelProviderPresetForRecord,
   recommendedModelForManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
@@ -30,6 +28,7 @@ import {
   planAutoPick,
   providerConnectionFingerprint,
   providerFormFromPreset,
+  providerFormFromRecord,
   providerListFingerprint,
   runCodexComplete,
   runProviderCommit,
@@ -463,26 +462,7 @@ export function useProviderSetupController({
 
   const startEditProvider = (provider: ManagedModelProviderRecord) => {
     expandProvider?.(provider.id);
-    setProviderForm({
-      id: provider.id,
-      // Resolve the original preset by apiBase first so preset-derived
-      // affordances (label, "Get API Key" link) match the provider the
-      // user actually configured — a DeepSeek provider must not edit
-      // as the generic Anthropic preset. Custom endpoints fall back to
-      // the protocol-generic preset.
-      providerPresetId:
-        managedModelProviderPresetForRecord(provider)?.id ??
-        customManagedModelProviderPresetId(
-          provider.protocol,
-          provider.authKind,
-        ),
-      protocol: provider.protocol,
-      authKind: provider.authKind,
-      apiKey: "",
-      apiBase: provider.apiBase,
-      model: "",
-      displayName: provider.displayName,
-    });
+    setProviderForm(providerFormFromRecord(provider));
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
@@ -515,7 +495,11 @@ export function useProviderSetupController({
               apiBase: visibleProviderForm.apiBase,
               model: testModel,
               advancedOptions: freshModelEffectiveOptions(
-                visibleProviderForm,
+                {
+                  protocol: visibleProviderForm.protocol,
+                  authKind: providerFormEffectiveAuthKind,
+                  apiBase: visibleProviderForm.apiBase,
+                },
                 defaults,
               ),
             }),
