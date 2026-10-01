@@ -442,6 +442,32 @@ def _classify_error(message: str, category: str) -> tuple[str | None, bool]:
     return None, True
 
 
+_BACKEND_ERROR_MAX_CHARS = 500
+# GA's `format_error` output: "ExcType: message @ file.py:12, func -> `source line`".
+_FORMAT_ERROR_HEAD_RE = re.compile(r"[A-Za-z_]\w*: ")
+_FORMAT_ERROR_LOCATION_RE = re.compile(r" @ \S+:\d+, \S+ -> `.*`\Z")
+
+
+def _backend_error_from_done(text: str) -> tuple[str, str] | None:
+    """The error GA's task loop appended to its `done` text when it raised
+    (`agentmain.run()`: `full_resp + "\\n```\\n" + format_error(e) + "\\n```"`),
+    as `(message, full_text)`, or None when `done` carries no such block.
+
+    `message` drops format_error's trailing source location, so the
+    keyword hints in `_classify_error` match the exception itself rather
+    than whatever the failing source line happens to mention."""
+    if not text.endswith("\n```"):
+        return None
+    start = text.rfind("\n```\n", 0, len(text) - 4)
+    if start < 0:
+        return None
+    full_text = text[start + 5 : -4].strip()
+    if not _FORMAT_ERROR_HEAD_RE.match(full_text):
+        return None
+    message = _FORMAT_ERROR_LOCATION_RE.sub("", full_text).strip()
+    return message[:_BACKEND_ERROR_MAX_CHARS], full_text
+
+
 def _resolve_ga_commit(ga_path: str) -> tuple[str, str]:
     """Return (commit_hash, commit_iso_date) for the GA install at ga_path.
 
@@ -758,9 +784,18 @@ class Bridge:
         self._pet_port: int = 0
         # Serializes the run-completion check-emit-clear across threads:
         # natural turn_end (agent thread), Abort (command thread), and
-        # slash-command done (drain thread) can otherwise interleave and
+        # the drain's `done` handling (slash-command completion and the
+        # no-exit safety net, drain thread) can otherwise interleave and
         # double-emit run_complete with an already-cleared telemetry base.
         self._run_complete_lock = threading.Lock()
+        # Which run a progress drain's `done` may still close (galley#29).
+        # Bumped under `_run_complete_lock` when a run opens and when Abort
+        # takes over a run's completion; each drain captures the value of
+        # the run it belongs to. Core dispatches the next message right
+        # after run_complete, so a late `done` from an earlier task must
+        # not close the newer run, nor pre-empt Abort's ABORTED (Core
+        # pauses a Goal only on ABORTED).
+        self._run_generation: int = 0
         # The parent watchdog exits with os._exit, which skips finally
         # blocks and atexit — an attached pet would survive as an orphan
         # holding its fixed port (and Galley Core is already gone, so
@@ -930,6 +965,15 @@ class Bridge:
         self._current_run_started_at = time.perf_counter()
         self._current_run_started_wall_at = time.time()
         self._current_usage_baseline = self._usage_snapshot()
+
+    def _open_run(self) -> int:
+        """Mark a new run in progress and return its generation (see
+        `_run_generation`). Bump and set happen under the completion lock,
+        so a drain's compare-and-close sees both or neither."""
+        with self._run_complete_lock:
+            self._run_generation += 1
+            self.run_in_progress.set()
+            return self._run_generation
 
     def _end_run_tracking(self) -> None:
         self._current_run_started_at = None
@@ -1308,7 +1352,7 @@ class Bridge:
     def _emit(self, ev: Any) -> None:
         self.event_queue.put(encode(ev))
 
-    def _start_progress_drain(self, display_queue: Any) -> None:
+    def _start_progress_drain(self, display_queue: Any, run_generation: int) -> None:
         """Forward GA's display_queue partial chunks as turn_progress
         IPC events so desktop can render the LLM output mid-turn.
 
@@ -1318,11 +1362,14 @@ class Bridge:
         `agent.inc_out = True` (set in `_setup_ga`), `next` is the
         delta since the last push rather than the full snapshot.
 
-        We don't republish `done` — the turn_end_callback hook fires
-        per GA turn and produces the canonical TurnEndEvent with full
-        tool calls / results / responseContent. `done` arrives at
-        whole-task completion (across multiple turns); duplicating it
-        as IPC would just give desktop a redundant signal.
+        We don't republish `done`'s text — the turn_end_callback hook
+        fires per GA turn and produces the canonical TurnEndEvent with
+        full tool calls / results / responseContent. `done` is put once,
+        after the task has ended (`agentmain.run()`), so it is only used
+        as an end-of-task signal: `source='system'` closes a slash-command
+        task, any other source is the safety net that closes a run GA
+        ended without reporting an exit (`_close_run_without_exit`).
+        `run_generation` is the run this drain belongs to (`_open_run`).
 
         Each user task gets its own daemon thread; the thread exits
         on `done` or on shutdown.
@@ -1366,8 +1413,9 @@ class Bridge:
                         # callback fires for these — emit a
                         # SystemMessageEvent so desktop can render
                         # the content. The default `'workbench'`
-                        # source's `done` is intentionally ignored
-                        # (turn_end carries the canonical payload).
+                        # source's text is not republished (turn_end
+                        # carries the canonical payload); it only
+                        # closes a run still left open (else branch).
                         if str(item.get("source", "")) == "system":
                             content = item.get("done", "")
                             if isinstance(content, str) and content:
@@ -1393,9 +1441,15 @@ class Bridge:
                             # stays set forever: the GUI spinner never
                             # stops and set_llm keeps being rejected until
                             # a manual Stop. Synthesize the completion
-                            # (same shape as the Abort path).
+                            # (same shape as the Abort path). Generation-
+                            # checked like the safety net below: a late
+                            # `done` from a slash command Abort already
+                            # closed must not close the next run.
                             with self._run_complete_lock:
-                                if self.run_in_progress.is_set():
+                                if (
+                                    self._run_generation == run_generation
+                                    and self.run_in_progress.is_set()
+                                ):
                                     self._emit(
                                         RunCompleteEvent(
                                             sessionId=self.session_id,
@@ -1412,6 +1466,11 @@ class Bridge:
                                     self._current_message_visibility = "visible"
                                     self._current_message_turn_base = None
                                     self._end_run_tracking()
+                        else:
+                            done_text = item.get("done", "")
+                            self._close_run_without_exit(
+                                run_generation, done_text if isinstance(done_text, str) else ""
+                            )
                         return
                     if "next" in item:
                         delta = item["next"]
@@ -1443,6 +1502,55 @@ class Bridge:
                 )
 
         threading.Thread(target=drain, daemon=True).start()
+
+    def _close_run_without_exit(self, run_generation: int, done_text: str) -> None:
+        """Safety net for a GA task that ended without reporting an exit
+        (galley#29): the task loop raised, a `_stop` file broke it, or any
+        future path that skips the final turn_end. GA's task-level `done`
+        is the last thing it puts, so a run still open when it arrives
+        would otherwise spin forever (GUI spinner, Core's message queue and
+        Goal engine all wait for run_complete). A normal finish, ask_user
+        and the max-turns cap have already closed the run by then, and
+        Abort retires the generation before GA unwinds, so this only fires
+        for a run nothing else will close.
+
+        A runtime error goes out first, carrying GA's backend error when
+        `done_text` has one: it tells the user why the run stopped, and
+        Core records it on the run (forwarder `draft.errored`, taken by
+        the run_complete right after it), so an active Goal lands on
+        Blocked instead of dispatching another continuation."""
+        with self._run_complete_lock:
+            if self._run_generation != run_generation or not self.run_in_progress.is_set():
+                return
+            print(
+                f"[run-complete] task ended without an exit after turn {self.current_turn}; "
+                "closing the run as DONE_WITHOUT_EXIT",
+                file=sys.stderr,
+            )
+            backend_error = _backend_error_from_done(done_text)
+            if backend_error is not None:
+                message, full_text = backend_error
+                self._emit_error(message, full_text, category="runtime", context="task_end")
+            else:
+                self._emit_error(
+                    "The engine task ended without reporting an exit; the run was closed.",
+                    None,
+                    category="runtime",
+                    context="task_end",
+                )
+            self._emit(
+                RunCompleteEvent(
+                    sessionId=self.session_id,
+                    exitReason={"result": "DONE_WITHOUT_EXIT", "data": None},
+                    finalContent="",
+                    totalTurns=self.current_turn,
+                    visibility=self._current_message_visibility,
+                )
+            )
+            self.run_in_progress.clear()
+            self._current_message_visibility = "visible"
+            self._current_message_turn_base = None
+            self._end_run_tracking()
 
     def _emit_error(
         self,
@@ -1489,6 +1597,17 @@ class Bridge:
             summary = _clean_turn_summary(str(ctx.get("summary") or ""))
             turn = int(ctx.get("turn") or 0)
             exit_reason = ctx.get("exit_reason") or None
+            # GA's last loop iteration (galley#29): `agent_runner_loop`
+            # leaves `while turn < handler.max_turns` with an empty
+            # exit_reason, so this in-loop callback is the last one — the
+            # post-loop callback is skipped and the MAX_TURNS_EXCEEDED it
+            # returns is discarded by `agentmain.run()`. Report that exit
+            # here so the run closes like any finish. `>=` because plan
+            # mode lowers the cap mid-run. Read-only on the live handler.
+            if not exit_reason:
+                max_turns = getattr(ctx.get("self"), "max_turns", None)
+                if isinstance(max_turns, int) and turn >= max_turns:
+                    exit_reason = {"result": "MAX_TURNS_EXCEEDED", "data": {"maxTurns": max_turns}}
             response_content = (
                 getattr(response, "content", "") if response is not None else ""
             )
@@ -1720,13 +1839,13 @@ class Bridge:
             self._current_message_visibility = cmd.visibility or "visible"
             self._current_message_turn_base = cmd.absoluteTurnIndex
             self._begin_run_tracking()
-            self.run_in_progress.set()
+            run_generation = self._open_run()
             self._emit_turn_start(1)
             self._arm_image_delivery(cmd.images)
             display_queue = self.agent.put_task(
                 cmd.text, source="workbench", images=cmd.images
             )
-            self._start_progress_drain(display_queue)
+            self._start_progress_drain(display_queue, run_generation)
         elif isinstance(cmd, ApprovalResponseCommand):
             ok = self.state.resolve_pending(cmd.approvalId, cmd.decision)
             if not ok:
@@ -1753,10 +1872,10 @@ class Bridge:
             self._current_message_visibility = "visible"
             self._current_message_turn_base = cmd.absoluteTurnIndex
             self._begin_run_tracking()
-            self.run_in_progress.set()
+            run_generation = self._open_run()
             self._emit_turn_start(1)
             display_queue = self.agent.put_task(cmd.text, source="workbench")
-            self._start_progress_drain(display_queue)
+            self._start_progress_drain(display_queue, run_generation)
         elif isinstance(cmd, AbortCommand):
             # GA's abort() sets stop_sig and breaks out of the run loop
             # without firing turn_end_callback, so we synthesize the
@@ -1764,6 +1883,11 @@ class Bridge:
             # abort() first so stop_sig is already set when a denied
             # approval wakes the agent thread — it then exits at the
             # next stop check instead of continuing the turn.
+            # Retire the run's generation before that: abort() makes GA
+            # end the task and put its `done`, which must not let the
+            # drain close the run as DONE_WITHOUT_EXIT ahead of ABORTED.
+            with self._run_complete_lock:
+                self._run_generation += 1
             self.agent.abort()
             self.state.resolve_all_pending("deny")
             with self._run_complete_lock:

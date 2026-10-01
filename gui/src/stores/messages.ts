@@ -155,6 +155,15 @@ export interface PerSessionMessages {
    * without ghost text until the next reply.
    */
   nextSuggestion: string | null;
+  /**
+   * True when the latest run stopped at GA's per-run step cap — its
+   * final turn_end carried `exitReason.result === "MAX_TURNS_EXCEEDED"`
+   * (#29). Drives MainView's step-limit thread tail while the session
+   * is idle. Rewritten on every final visible turn_end; cleared when
+   * the user sends or a new run starts (turn_start). In-memory only,
+   * like `nextSuggestion`: an app restart drops the tail.
+   */
+  pausedAtStepLimit: boolean;
 }
 
 export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
@@ -173,6 +182,7 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   runStepBase: 0,
   lastUserPersistRequestId: 0,
   nextSuggestion: null,
+  pausedAtStepLimit: false,
 }) as PerSessionMessages;
 
 function emptyMessages(): PerSessionMessages {
@@ -194,6 +204,7 @@ function emptyMessages(): PerSessionMessages {
     runStepBase: 0,
     lastUserPersistRequestId: 0,
     nextSuggestion: null,
+    pausedAtStepLimit: false,
   };
 }
 
@@ -317,6 +328,12 @@ interface MessagesActions {
    * when a new run starts.
    */
   setNextSuggestion: (sid: string, value: string | null) => void;
+  /**
+   * Set / clear the step-limit pause (`pausedAtStepLimit`). Written on
+   * every final visible turn_end, cleared on turn_start; user sends
+   * clear it inline. No-op when the value is unchanged.
+   */
+  setPausedAtStepLimit: (sid: string, value: boolean) => void;
   clearConversation: (sid: string) => void;
 
   // ---- approval writes ----
@@ -537,6 +554,8 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       pendingAskUser: null,
       // New run — the previous reply's ghost suggestion is spent.
       nextSuggestion: null,
+      // … and so is the step-limit tail: this send is the "继续".
+      pausedAtStepLimit: false,
       sendPhase: "saving",
       isStopping: false,
       turnIndexOffset: currentTurnCount,
@@ -645,6 +664,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       runStepBase: pendingReplyStepBase(m.turns),
       lastUserPersistRequestId: 0,
       nextSuggestion: null,
+      pausedAtStepLimit: false,
     }));
     // Only the ACTIVE session's submit moves the viewport: external
     // submits into background sessions (supervisor / CLI / goal
@@ -770,6 +790,18 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     set({ byId });
   },
 
+  setPausedAtStepLimit: (sid, value) => {
+    const state = get();
+    // turn_start calls this on every step; skip the store write when
+    // nothing changes (also avoids minting an entry just to say false).
+    if ((state.byId[sid]?.pausedAtStepLimit ?? false) === value) return;
+    const { byId } = patchMessages(state, sid, (m) => ({
+      ...m,
+      pausedAtStepLimit: value,
+    }));
+    set({ byId });
+  },
+
   appendInFlightDelta: (sid, delta) => {
     // HOT PATH — streaming `turn_progress`. N7 perf baseline measured
     // 1.42 ev/s for long prompts, so Zustand single-field set without
@@ -813,6 +845,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       currentTurnIndex: null,
       inFlightContent: "",
       sendPhase: null,
+      pausedAtStepLimit: false,
     }));
     set({ byId });  },
 

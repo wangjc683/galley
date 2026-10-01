@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import sys
 import threading
 import time
+from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -433,7 +435,7 @@ def test_ask_user_response_resets_visibility_to_visible() -> None:
     bridge = _new_test_bridge()
     bridge.agent = FakeAgent()
     bridge._btw_handler = None
-    bridge._start_progress_drain = lambda _queue: None  # type: ignore[assignment]
+    bridge._start_progress_drain = lambda _queue, _generation: None  # type: ignore[assignment]
     bridge._current_message_visibility = "hidden"
 
     bridge.dispatch_command(AskUserResponseCommand(text="yes", absoluteTurnIndex=4))
@@ -474,7 +476,7 @@ def test_user_message_emits_turn_start_before_progress_drain(
     bridge.agent = FakeAgent()
     bridge._btw_handler = None
 
-    def fake_drain(_queue: object) -> None:
+    def fake_drain(_queue: object, _generation: int) -> None:
         bridge._emit(
             TurnProgressEvent(
                 sessionId="s1",
@@ -589,7 +591,7 @@ def test_user_message_command_passes_images_to_agent() -> None:
 
     bridge = _new_test_bridge()
     bridge.agent = FakeAgent()
-    bridge._start_progress_drain = lambda _queue: None  # type: ignore[assignment]
+    bridge._start_progress_drain = lambda _queue, _generation: None  # type: ignore[assignment]
 
     bridge.dispatch_command(
         UserMessageCommand(
@@ -994,9 +996,9 @@ def test_slash_command_system_done_clears_run_state() -> None:
 
     bridge = _new_test_bridge()
     display_queue: _queue.Queue[dict[str, Any]] = _queue.Queue()
-    bridge.run_in_progress.set()
+    run_generation = bridge._open_run()
     bridge._begin_run_tracking()
-    bridge._start_progress_drain(display_queue)
+    bridge._start_progress_drain(display_queue, run_generation)
 
     display_queue.put({"done": "session.x set to v", "source": "system"})
 
@@ -1014,21 +1016,259 @@ def test_slash_command_system_done_clears_run_state() -> None:
     assert kinds == ["system_message", "run_complete"]
 
 
-def test_workbench_done_does_not_clear_run_state() -> None:
-    """The normal task path's `done` (source='workbench') must keep being
-    ignored — turn_end owns the canonical completion there."""
-    import queue as _queue
+class _QueueAgent:
+    """Fake GA agent whose `put_task` hands back a real display queue, so
+    the bridge's own progress drain runs on it. `on_abort` stands in for
+    GA unwinding the task while Abort is still being handled."""
 
+    def __init__(self) -> None:
+        self.queues: list[queue.Queue[dict[str, Any]]] = []
+        self.on_abort: Callable[[], None] | None = None
+
+    def put_task(self, text: str, source: str, **_kwargs: Any) -> queue.Queue[dict[str, Any]]:
+        display_queue: queue.Queue[dict[str, Any]] = queue.Queue()
+        self.queues.append(display_queue)
+        return display_queue
+
+    def abort(self) -> None:
+        if self.on_abort is not None:
+            self.on_abort()
+
+
+def _queue_bridge() -> tuple[Bridge, _QueueAgent]:
     bridge = _new_test_bridge()
-    display_queue: _queue.Queue[dict[str, Any]] = _queue.Queue()
-    bridge.run_in_progress.set()
-    bridge._start_progress_drain(display_queue)
+    agent = _QueueAgent()
+    bridge.agent = agent
+    bridge._btw_handler = None
+    return bridge, agent
 
-    display_queue.put({"done": "full answer", "source": "workbench"})
 
-    time.sleep(0.2)
+def _open_run_with_drain(
+    bridge: Bridge, agent: _QueueAgent
+) -> tuple[queue.Queue[dict[str, Any]], threading.Thread]:
+    """Open a run through the real user-message path; return the task's
+    display queue and the drain thread reading it."""
+    before = set(threading.enumerate())
+    bridge.dispatch_command(UserMessageCommand(text="go"))
+    started = [t for t in threading.enumerate() if t not in before]
+    assert len(started) == 1, started
+    return agent.queues[-1], started[0]
+
+
+def _finish_task(
+    display_queue: queue.Queue[dict[str, Any]],
+    drain: threading.Thread,
+    text: str = "full text",
+    source: str = "workbench",
+) -> None:
+    """GA's task-terminal `done`; returns once the drain has acted on it."""
+    display_queue.put({"done": text, "source": source})
+    drain.join(timeout=2.0)
+    assert not drain.is_alive()
+
+
+def _finished_turn_ctx(turn: int = 1) -> dict[str, Any]:
+    return {
+        "response": SimpleNamespace(content="答案。"),
+        "turn": turn,
+        "exit_reason": {"result": "CURRENT_TASK_DONE", "data": None},
+    }
+
+
+def test_task_done_without_exit_closes_the_run(capsys: pytest.CaptureFixture[str]) -> None:
+    """galley#29 safety net: GA's task ended (here a `_stop` file break)
+    without any turn_end reporting an exit. Its task-level `done` must
+    close the run, or the spinner, Core's message queue and the Goal
+    engine wait forever. A runtime error goes out first: it tells the user
+    why, and Core turns it into a Blocked Goal instead of another
+    continuation."""
+    bridge, agent = _queue_bridge()
+    display_queue, drain = _open_run_with_drain(bridge, agent)
+    assert [e["kind"] for e in _events(bridge)] == ["turn_start"]
+
+    _finish_task(display_queue, drain, text="**LLM Running (Turn 2) ...**\n\n部分回复")
+
+    error, run_complete = _events(bridge)
+    assert error["kind"] == "error"
+    assert error["category"] == "runtime"
+    assert error["severity"] == "error"
+    assert error["context"] == "task_end"
+    assert error["message"] == (
+        "The engine task ended without reporting an exit; the run was closed."
+    )
+    assert run_complete["kind"] == "run_complete"
+    assert run_complete["exitReason"] == {"result": "DONE_WITHOUT_EXIT", "data": None}
+    assert run_complete["finalContent"] == ""
+    assert not bridge.run_in_progress.is_set()
+    assert bridge._current_run_started_at is None
+    assert "DONE_WITHOUT_EXIT" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "backend_error,message,hint",
+    [
+        (
+            "RateLimitError: 429 Too Many Requests @ llmcore.py:88, ask -> `r = s.post(u)`",
+            "RateLimitError: 429 Too Many Requests",
+            "quota_exceeded",
+        ),
+        # The source line mentions a timeout; the exception does not, so
+        # the location is dropped before classifying.
+        (
+            "KeyError: 'choices' @ llmcore.py:91, ask -> `r = s.post(u, timeout=t)`",
+            "KeyError: 'choices'",
+            None,
+        ),
+    ],
+    ids=["rate-limit", "location-not-classified"],
+)
+def test_task_done_after_backend_error_reports_that_error(
+    backend_error: str, message: str, hint: str | None
+) -> None:
+    """GA's task loop raised: `agentmain.run()` appends format_error in a
+    fence to `done`. That error is what the user needs to see, classified
+    for a tailored Error Card, ahead of the run_complete."""
+    bridge, agent = _queue_bridge()
+    display_queue, drain = _open_run_with_drain(bridge, agent)
+    _events(bridge)
+
+    _finish_task(display_queue, drain, text=f"部分回复\n```\n{backend_error}\n```")
+
+    error, run_complete = _events(bridge)
+    assert error["kind"] == "error"
+    assert error["category"] == "runtime"
+    assert error["severity"] == "error"
+    assert error["message"] == message
+    assert error.get("hint") == hint
+    assert error["traceback"] == backend_error
+    assert run_complete["exitReason"] == {"result": "DONE_WITHOUT_EXIT", "data": None}
+    assert not bridge.run_in_progress.is_set()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "full text",
+        "答案\n```\nprint(1)\n```",
+        "\n```\nKeyError: x\n```\n收尾",
+    ],
+    ids=["no-fence", "code-block", "fence-not-at-end"],
+)
+def test_backend_error_from_done_ignores_text_without_an_error_fence(text: str) -> None:
+    from runner.workbench_bridge import _backend_error_from_done
+
+    assert _backend_error_from_done(text) is None
+
+
+def test_backend_error_from_done_caps_the_message() -> None:
+    from runner.workbench_bridge import _BACKEND_ERROR_MAX_CHARS, _backend_error_from_done
+
+    detail = "x" * 2000
+    result = _backend_error_from_done(f"\n```\nValueError: {detail}\n```")
+    assert result is not None
+    message, full_text = result
+    assert len(message) == _BACKEND_ERROR_MAX_CHARS
+    assert full_text == f"ValueError: {detail}"
+
+
+@pytest.mark.parametrize(
+    "final_ctx",
+    [
+        _finished_turn_ctx(),
+        {
+            "self": SimpleNamespace(max_turns=1, cwd=None),
+            "response": SimpleNamespace(content="还在推进。"),
+            "turn": 1,
+            "exit_reason": {},
+        },
+    ],
+    ids=["exit-reported", "turn-cap"],
+)
+def test_task_done_after_the_run_closed_emits_nothing(final_ctx: dict[str, Any]) -> None:
+    """The final turn_end (a reported exit, or the turn cap) closes the run
+    before GA puts `done`; the drain must not complete it a second time."""
+    bridge, agent = _queue_bridge()
+    display_queue, drain = _open_run_with_drain(bridge, agent)
+    bridge._on_turn_end(final_ctx)
+    kinds = [e["kind"] for e in _events(bridge)]
+    assert kinds == ["turn_start", "turn_end", "run_complete"]
+
+    _finish_task(display_queue, drain)
+
+    assert bridge.event_queue.empty()
+    assert not bridge.run_in_progress.is_set()
+
+
+def test_late_done_from_previous_task_leaves_the_next_run_open() -> None:
+    """Core dispatches the next message right after run_complete, so the
+    previous task's `done` can reach its drain after a new run opened. It
+    belongs to an older generation and must not close the new run."""
+    bridge, agent = _queue_bridge()
+    first_queue, first_drain = _open_run_with_drain(bridge, agent)
+    bridge._on_turn_end(_finished_turn_ctx())
+    second_queue, second_drain = _open_run_with_drain(bridge, agent)
+    _events(bridge)
+
+    _finish_task(first_queue, first_drain)
+
     assert bridge.run_in_progress.is_set()
     assert bridge.event_queue.empty()
+
+    # The new run's own `done` still reaches the safety net.
+    _finish_task(second_queue, second_drain)
+    error, run_complete = _events(bridge)
+    assert error["kind"] == "error"
+    assert run_complete["exitReason"]["result"] == "DONE_WITHOUT_EXIT"
+
+
+@pytest.mark.parametrize("next_run_started", [False, True])
+def test_late_done_after_abort_does_not_complete_twice(next_run_started: bool) -> None:
+    bridge, agent = _queue_bridge()
+    first_queue, first_drain = _open_run_with_drain(bridge, agent)
+    bridge.dispatch_command(AbortCommand())
+    events = _events(bridge)
+    assert [e["kind"] for e in events] == ["turn_start", "run_complete"]
+    assert events[-1]["exitReason"]["result"] == "ABORTED"
+    if next_run_started:
+        _open_run_with_drain(bridge, agent)
+        _events(bridge)
+
+    _finish_task(first_queue, first_drain)
+
+    assert bridge.event_queue.empty()
+    assert bridge.run_in_progress.is_set() is next_run_started
+
+
+def test_late_system_done_after_abort_leaves_the_next_run_open() -> None:
+    """A slash command's `done` (source='system') reaching its drain after
+    Abort closed that run and the next message opened a new one: the reply
+    still renders, but it must not close the new run."""
+    bridge, agent = _queue_bridge()
+    slash_queue, slash_drain = _open_run_with_drain(bridge, agent)
+    bridge.dispatch_command(AbortCommand())
+    _open_run_with_drain(bridge, agent)
+    _events(bridge)
+
+    _finish_task(slash_queue, slash_drain, text="✅ session.x = 1", source="system")
+
+    assert [e["kind"] for e in _events(bridge)] == ["system_message"]
+    assert bridge.run_in_progress.is_set()
+
+
+def test_done_while_abort_is_in_flight_leaves_completion_to_abort() -> None:
+    """GA puts `done` as soon as abort() breaks its task loop, which can
+    reach the drain before Abort emits its own run_complete. Core pauses a
+    Goal only on ABORTED, so the safety net must stand back."""
+    bridge, agent = _queue_bridge()
+    display_queue, drain = _open_run_with_drain(bridge, agent)
+    agent.on_abort = lambda: _finish_task(display_queue, drain)
+    _events(bridge)
+
+    bridge.dispatch_command(AbortCommand())
+
+    (run_complete,) = _events(bridge)
+    assert run_complete["exitReason"]["result"] == "ABORTED"
+    assert not bridge.run_in_progress.is_set()
 
 
 def test_run_loop_exit_detaches_pet() -> None:
@@ -1300,6 +1540,72 @@ def test_turn_end_extracts_goal_status_only_on_the_final_turn() -> None:
     assert final["goalStatus"] == "complete"
 
 
+@pytest.mark.parametrize(
+    "turn,max_turns",
+    [(180, 180), (150, 100)],
+    ids=["last-iteration", "plan-mode-lowered-cap"],
+)
+def test_final_loop_iteration_reports_max_turns_and_closes_run(turn: int, max_turns: int) -> None:
+    """galley#29: GA's loop leaves `while turn < handler.max_turns` with an
+    empty exit_reason, skips its post-loop callback and drops the
+    MAX_TURNS_EXCEEDED it returns. The bridge reports that exit on the
+    last turn_end and closes the run (plan mode can lower the cap below
+    the current turn, hence `>=`)."""
+    bridge = _new_test_bridge()
+    bridge.agent = SimpleNamespace()
+    bridge._open_run()
+
+    bridge._on_turn_end(
+        {
+            "self": SimpleNamespace(max_turns=max_turns, cwd=None),
+            "response": SimpleNamespace(content="还在推进。"),
+            "turn": turn,
+            "exit_reason": {},
+        }
+    )
+
+    expected = {"result": "MAX_TURNS_EXCEEDED", "data": {"maxTurns": max_turns}}
+    events = _events(bridge)
+    # No predictive turn_start(turn + 1): the run is over.
+    assert [e["kind"] for e in events] == ["turn_end", "run_complete"]
+    turn_end, run_complete = events
+    assert turn_end["exitReason"] == expected
+    assert run_complete["exitReason"] == expected
+    assert run_complete["totalTurns"] == turn
+    assert run_complete["finalContent"] == "还在推进。"
+    assert not bridge.run_in_progress.is_set()
+
+
+@pytest.mark.parametrize(
+    "handler,turn",
+    [
+        (SimpleNamespace(max_turns=180, cwd=None), 179),
+        (SimpleNamespace(cwd=None), 500),
+        (SimpleNamespace(max_turns="180", cwd=None), 500),
+    ],
+    ids=["below-cap", "no-max-turns", "non-int-max-turns"],
+)
+def test_turn_end_without_exit_below_or_without_cap_keeps_running(handler: Any, turn: int) -> None:
+    bridge = _new_test_bridge()
+    bridge.agent = SimpleNamespace()
+    bridge._open_run()
+
+    bridge._on_turn_end(
+        {
+            "self": handler,
+            "response": SimpleNamespace(content="还在推进。"),
+            "turn": turn,
+            "exit_reason": {},
+        }
+    )
+
+    events = _events(bridge)
+    assert [e["kind"] for e in events] == ["turn_end", "turn_start"]
+    assert events[0].get("exitReason") is None
+    assert events[1]["turnIndex"] == turn + 1
+    assert bridge.run_in_progress.is_set()
+
+
 def _turn_end_thinking(bridge: Bridge, response: Any, **ctx: Any) -> Any:
     bridge._on_turn_end({"response": response, "turn": 1, "exit_reason": None, **ctx})
     events: list[dict[str, Any]] = []
@@ -1559,7 +1865,7 @@ def _image_bridge(client: Any) -> tuple[Bridge, list[dict[str, Any]]]:
     bridge = _new_test_bridge()
     bridge.agent = FakeAgent()
     bridge._btw_handler = None
-    bridge._start_progress_drain = lambda _queue: None  # type: ignore[assignment]
+    bridge._start_progress_drain = lambda _queue, _generation: None  # type: ignore[assignment]
     return bridge, tasks
 
 

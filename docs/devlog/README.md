@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-10-01
+- [跑满单次步数上限后卡死](./2026-10-01-max-turns-run-end.md) — 社区 #29：一次运行跑满 180 步后引擎静默停机，桥只在 GA 上报退出时发 `run_complete`，界面「工作中」永不结束、队列与 Goal 一起冻住；逐行复核属实，外置同样中招，IM 渠道不卡；JC 按推荐裁 A：桥在最后一轮读 `handler.max_turns` 合成 `MAX_TURNS_EXCEEDED`，外加按运行代次守卫的 `done` 兜底（`DONE_WITHOUT_EXIT`，先发 runtime 错误让 Goal 转「受阻」），否掉 issue 原样兜底（迟到的 `done` 误关新运行）与内核补丁；执行代理加的「Stop 也换代次」采纳；GUI 线程尾「已达步数上限 · 回复「继续」接着跑」照抄 GoalPausedTail、灰字「继续」、通知改标题、侧栏「已暂停」；`max_turns` 可配与计划模式上游 issue 草稿进 deferred；本机 410 段运行最长 52 步
+
 ### 2026-09-30
 - [v0.5.5 发布](./2026-09-30-v0.5.5-release.md) — v0.5.4 后两天，一整轮 IM 渠道打磨（Discord / Telegram 对话体验对齐桌面、四个渠道重启续接）加 macOS 停止与 `galley llm list` 两项修复；patch（最大单个功能仍在既有 IM 渠道线上，先例同 `v0.4.7`；体量按规则不计）；打包门禁 `mac-x64` 通过；上游 GA 到 `f308ee7`，引擎有记忆提炼提示词重写与 UA 升级，非关键修复、无用户报告、上游当天仍在动，本次不审计并写明理由
 - [飞书 / Telegram / 微信重启后接回上下文](./2026-09-30-im-restart-continuity.md) — Discord 续接真机通过后 JC 问其余渠道；读码：三个渠道没有激活门槛，丢的是上下文且是静默丢（飞书日志 353 次启动、当天 8 次）；JC 裁三个一起做；全部在 supervisor 侧完成、零补丁（共享 `runner/im_resume.py`，与 dcapp `0026` 一一对应）；主会话补裁微信补 `/new`、断开连接清掉续接状态（Core `logout`，Discord 连激活频道一起清）；不加闲置过期规则

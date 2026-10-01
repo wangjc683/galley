@@ -10,6 +10,10 @@ export interface SessionStatusView {
   status: SessionStatus;
   pendingApprovalCount: number;
   hasPendingAskUser: boolean;
+  /** The latest run stopped at GA's per-run step cap (messages
+   * `pausedAtStepLimit`, live-only) — the settled subline must not
+   * claim completion. */
+  pausedAtStepLimit: boolean;
 }
 
 /**
@@ -35,6 +39,7 @@ export function useSessionStatusView(session: Session): SessionStatusView {
         agentRunning: m?.agentRunning ?? false,
         pendingApprovalCount: m?.pendingApprovals.length ?? 0,
         hasPendingAskUser: m?.pendingAskUser != null,
+        pausedAtStepLimit: m?.pausedAtStepLimit ?? false,
       };
     }),
   );
@@ -46,5 +51,6 @@ export function useSessionStatusView(session: Session): SessionStatusView {
     ),
     pendingApprovalCount: live.pendingApprovalCount,
     hasPendingAskUser: live.hasPendingAskUser,
+    pausedAtStepLimit: live.pausedAtStepLimit,
   };
 }

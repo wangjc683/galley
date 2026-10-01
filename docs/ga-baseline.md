@@ -853,6 +853,31 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     Galley moves the log after them (`begin_fresh_session` /
     `continue_copy`, as `0026` does); drop those two wrappers once
     upstream retargets.
+17. How a run ends when nothing reports an exit (2026-10-01, galley#29;
+    both runtime modes, no managed patch). `agent_runner_loop` leaves
+    `while turn < handler.max_turns` with an empty `exit_reason`, so the
+    in-loop `turn_end_callback` is the last one: the post-loop callback
+    is guarded by `if exit_reason:` (`agent_loop.py:104`) and the
+    `MAX_TURNS_EXCEEDED` the generator returns is dropped by
+    `agentmain.run()`'s `for chunk in gen:`. Galley relies on two things:
+    (a) `runner/workbench_bridge.py::_on_turn_end` reads
+    `ctx["self"].max_turns` read-only (the handler attribute
+    `agent_runner_loop` sets, lowered mid-run by `enter_plan_mode`) and
+    treats an exit-less turn with `turn >= max_turns` as the last
+    iteration, synthesizing `MAX_TURNS_EXCEEDED`; (b) `run()` puts exactly
+    one non-`system` `done` per task, after the loop has ended (normal
+    return, cap, `_stop` / `stop_sig` break, or the exception branch that
+    appends the backend error fence), which the drain uses as the
+    `DONE_WITHOUT_EXIT` safety net, guarded by a per-run generation.
+    Re-check on upgrade: (a) the loop still sets and re-reads
+    `handler.max_turns` and still skips the post-loop callback on the
+    cap. If upstream starts calling `turn_end_callback` after the loop
+    for the cap, the bridge sees a second `turn_end` for the same step
+    and (a) must be dropped in the same upgrade; (b) `done` is still
+    task-terminal and slash commands still mark theirs
+    `source: 'system'`; (c) the exception branch still appends
+    `` ```\n{format_error(e)}\n``` `` to `done`, which the safety net
+    lifts into its runtime error.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -871,8 +896,10 @@ start the audit there instead of grepping the bridge:
   `WorkbenchHandler` subclass and its dispatch/approval assumptions.
 - **`runner/workbench_bridge.py::_handle_reinject_tools`** — item 10:
   the GA asset file read (path + schema noted in its docstring).
-- **`runner/workbench_bridge.py::_on_turn_end`** — item 14: the
-  `response.thinking` read.
+- **`runner/workbench_bridge.py::_on_turn_end`** — items 14 and 17: the
+  `response.thinking` read and the `handler.max_turns` read.
+- **`runner/workbench_bridge.py::_close_run_without_exit`** — item 17:
+  the `done`-is-task-terminal safety net and its backend-error lift.
 - **`runner/managed_runtime.py::install_managed_prompt_profile`** — the
   one backend write outside GaSession (`extra_sys_prompt`); shared with
   the Bridge-less `managed_im_supervisor` path.

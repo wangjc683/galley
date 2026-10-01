@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { enCopy } from "@/i18n/locales/en";
+import { zhCopy } from "@/i18n/locales/zh";
+
 import {
   cleanSessionSummary,
   displaySessionSummary,
   isProtocolFailureSummary,
+  settledSessionSubline,
 } from "./session-summary";
 
 // Mirror of runner-side _clean_turn_summary (workbench_bridge.py) —
@@ -90,5 +94,42 @@ describe("displaySessionSummary", () => {
     expect(displaySessionSummary("第 3 步 · 修复了登录超时", "协议错误")).toBe(
       "修复了登录超时",
     );
+  });
+});
+
+describe("settledSessionSubline", () => {
+  const settled = { cancelled: false, pausedAtStepLimit: false };
+
+  it("claims completion only for a run that completed", () => {
+    expect(settledSessionSubline("修好了", settled, zhCopy.sidebar)).toBe(
+      "已完成 · 修好了",
+    );
+  });
+
+  it("says paused for a run stopped at the step cap (#29)", () => {
+    expect(
+      settledSessionSubline(
+        "读取 test_runner.py",
+        { ...settled, pausedAtStepLimit: true },
+        zhCopy.sidebar,
+      ),
+    ).toBe("已暂停 · 读取 test_runner.py");
+    expect(
+      settledSessionSubline(
+        "Read test_runner.py",
+        { ...settled, pausedAtStepLimit: true },
+        enCopy.sidebar,
+      ),
+    ).toBe("Paused · Read test_runner.py");
+  });
+
+  it("keeps the user-abort wording", () => {
+    expect(
+      settledSessionSubline(
+        "修好了",
+        { ...settled, cancelled: true },
+        zhCopy.sidebar,
+      ),
+    ).toBe("已中止 · 修好了");
   });
 });

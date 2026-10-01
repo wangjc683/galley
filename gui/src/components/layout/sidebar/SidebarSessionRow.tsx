@@ -20,7 +20,10 @@ import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
 import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
-import { displaySessionSummary } from "@/lib/session-summary";
+import {
+  displaySessionSummary,
+  settledSessionSubline,
+} from "@/lib/session-summary";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
@@ -106,7 +109,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // skips the unread mark for sessionId === activeSessionId.
   // Effective status is derived at read time from live conversation +
   // bridge state (replaces the old fireSessionMirror push onto the row).
-  const { status, pendingApprovalCount, hasPendingAskUser } =
+  const { status, pendingApprovalCount, hasPendingAskUser, pausedAtStepLimit } =
     useSessionStatusView(session);
   const hasPendingAsk = hasPendingAskUser;
   const isRunning = status === "running";
@@ -181,7 +184,8 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   //     language as MainView's in-progress placeholder for a
   //     unified register.
   //
-  //   settled → "已完成 · {summary}"（cancelled → "已中止 · {summary}"）
+  //   settled → "已完成 · {summary}"（cancelled → "已中止 · {summary}"；
+  //     live-only step-cap pause → "已暂停 · {summary}"）
   //     Same {summary} as the running row's final tick — the
   //     transition from running→settled keeps the recap text
   //     stable and only swaps the prefix. (Note: locally-settled
@@ -225,9 +229,13 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             : cleanSummary
               ? // A user-aborted session must not claim completion —
                 // its icon is already Prohibit; the words must match.
-                status === "cancelled"
-                ? copy.sidebar.cancelledSummary(cleanSummary)
-                : copy.sidebar.completedSummary(cleanSummary)
+                // Nor must a run paused at the step cap (#29): words
+                // only, icon and tone stay as for a completed session.
+                settledSessionSubline(
+                  cleanSummary,
+                  { cancelled: status === "cancelled", pausedAtStepLimit },
+                  copy.sidebar,
+                )
               : null;
   const sublineTone: "running" | "warning" | "error" | "muted" =
     hasBlockingError

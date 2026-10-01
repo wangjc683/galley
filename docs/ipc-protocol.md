@@ -290,7 +290,7 @@ bridge 解析 GA yield 出来的 markdown 字符串得到的非结构化进度�
 - `summary`：直接复用 GA 在 `turn_end_callback` 中提取的 `<summary>` 标签内容（GA 已 smart_format 截断到 100 字符）
 - `toolCalls / toolResults`：当 turn 中所有工具调用与结果
 - `toolCalls[].resolvedPath`：可选（增量字段，2026-09-17）。仅 `file_write` / `file_patch` 携带：bridge 在 turn 落定时按 GA `GenericAgentHandler._get_abs_path` 的规则（`abspath(join(handler.cwd, args.path))`）算出的**绝对路径**，即文件实际写到的位置；`args.path` 仍是模型原样的相对写法。Core 原样持久化进 `messages.tool_calls`。GUI 用它把过程区的写入步骤做成可打开的文件引用，并把回复正文里与之精确匹配的相对路径 / 裸文件名解析到该绝对路径（`gui/src/lib/written-files.ts`）。`code_run` 产出的文件不在此列。
-- `exitReason`：当且仅当 agent_runner_loop 决定退出时非 null（结构与 GA 内部 `exit_reason` 一致：`{"result": "CURRENT_TASK_DONE" | "EXITED" | "MAX_TURNS_EXCEEDED", "data": ...}`）
+- `exitReason`：当且仅当 agent_runner_loop 决定退出（或到达轮数上限，见下）时非 null（结构与 GA 内部 `exit_reason` 一致：`{"result": "CURRENT_TASK_DONE" | "EXITED" | "MAX_TURNS_EXCEEDED", "data": ...}`）。GA 自己从不上报 `MAX_TURNS_EXCEEDED`：最后一轮以空 `exit_reason` 跑完 `while turn < handler.max_turns` 后，循环后的那次回调被跳过，返回值又被 `agentmain.run()` 丢弃。因此 bridge 在 turn-end hook 里只读 `handler.max_turns`，`turn >= max_turns` 且 GA 未给出退出时，就在这个 final `turn_end` 上合成 `{"result": "MAX_TURNS_EXCEEDED", "data": {"maxTurns": N}}`，随后照常发 `run_complete`（galley#29；用 `>=` 是因为计划模式会中途把上限降到 100）。两种运行时模式都适用（只读属性，符合 attach 边界）。
 - `responseContent`：完整 LLM 响应文本（含 thinking / summary 标签），用于 desktop 自行解析展示
 - `telemetry`：可选。只在带 `exitReason` 的 final `turn_end` 上发送，用于最终回答 footer。字段均可缺失：`elapsedMs`、`inputTokens`、`outputTokens`、`cacheCreateTokens`、`cacheReadTokens`、`requestCount`、`contextUsedChars`、`contextLimitChars`。Managed GA 可通过 Galley-owned runtime hook 统计 token；external GA 不安装 token hook，只做 elapsed 与只读 context snapshot 的 best-effort 降级。
 - `nextSuggestion`：可选（增量字段）。用户口吻的下一步建议，bridge 从最终回答的 `<next-suggestion>` 标签正则提取（标签指令来自 managed runtime prompt profile，`core/src/managed_prompt.rs`）。只在带 `exitReason` 的 final `turn_end` 上非 null；模型未输出标签则缺失。External GA 不会输出该标签——attach 模式自然无此字段。Desktop 渲染为 composer ghost text（`.scratch/composer-next-suggestion/`），并在所有展示路径 strip 该标签（同 `<summary>` 处理）。
@@ -356,8 +356,10 @@ agent 主动调用 `ask_user` 工具时发出。bridge 此时 agent_runner_loop 
 `exitReason.result` 取值：
 - `"CURRENT_TASK_DONE"`：正常完成
 - `"EXITED"`：agent 主动 should_exit（如 ask_user）
-- `"MAX_TURNS_EXCEEDED"`：达到 max_turns 上限
+- `"MAX_TURNS_EXCEEDED"`：达到 max_turns 上限。由 bridge 在 final `turn_end` 上合成（`data.maxTurns` 为当时的上限），见 §4.7 `exitReason`
 - `"ABORTED"`：用户主动 abort（bridge 自定义状态，非 GA 原生）
+- `"SLASH_COMMAND_COMPLETED"`：斜杠命令（如 `/session.x=v`）由 GA 直接处理、不进 agent_runner_loop，没有 `turn_end`；bridge 收到 `source: "system"` 的 `done` 后先发 `system_message`，再合成这个 `run_complete`（bridge 自定义状态，非 GA 原生）
+- `"DONE_WITHOUT_EXIT"`：bridge 兜底（bridge 自定义状态，非 GA 原生，galley#29）。GA 的任务已经结束（display queue 的任务级 `done` 已到）却没有任何 `turn_end` 上报退出，例如任务循环抛异常、`_stop` 文件中断。前面没有带 `exitReason` 的 final `turn_end`，而是紧挨着一条 `category: "runtime"`、`severity: "error"`、`context: "task_end"` 的 `error`：任务循环抛异常时 `message` 是 GA 附在 `done` 末尾的 backend error（去掉源码位置，截到 500 字符，完整文本放 `traceback`），据此照常推断 `hint`；其他情况是一句通用说明。Core 把这条 error 记进本次运行，进行中的 Goal 因此转为 Blocked，而不是继续派发。`finalContent` 为空，`data` 为 null。bridge 按运行代次比对：上一个任务迟到的 `done` 不会关掉新开的运行，也不会抢在 `ABORTED` 之前关掉正被 abort 的运行；`SLASH_COMMAND_COMPLETED` 同样按代次比对
 
 ### 4.10 `error`
 

@@ -37,10 +37,18 @@ export interface ToolResult {
 }
 
 export interface ExitReason {
+  /**
+   * `MAX_TURNS_EXCEEDED`: GA stopped the run at its per-run step cap
+   * (`data: { maxTurns }`); the final turn_end and run_complete both
+   * carry it (#29). `DONE_WITHOUT_EXIT`: the bridge's safety net for a
+   * loop that ended without reporting an exit — arrives on run_complete
+   * only, with no final turn_end before it (`data: null`).
+   */
   result:
     | "CURRENT_TASK_DONE"
     | "EXITED"
     | "MAX_TURNS_EXCEEDED"
+    | "DONE_WITHOUT_EXIT"
     | "ABORTED"
     | string;
   data: unknown;

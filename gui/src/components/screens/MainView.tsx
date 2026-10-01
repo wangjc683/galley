@@ -16,6 +16,7 @@ import {
 } from "@/components/conversation/Conversation";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { GoalPausedTail } from "@/components/conversation/GoalRunMarkers";
+import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import { liveWindowHasSettledStep, planGoalRuns } from "@/lib/goal-run-groups";
 import { buildRunGroups, liveRunElapsedBaseMs } from "@/lib/run-groups";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
@@ -44,6 +45,7 @@ import {
   extractPreamble,
 } from "@/lib/ipc/ga-output-cleaning";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
+import { stepLimitTailVisible } from "@/lib/step-limit";
 import { cn } from "@/lib/utils";
 import { useMessagesStore } from "@/stores/messages";
 import type {
@@ -54,7 +56,11 @@ import type {
   SendPhase,
   Turn,
 } from "@/types/conversation";
-import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
+import {
+  isOpenGoalStatus,
+  type GoalBrief,
+  type GoalLaunchConfig,
+} from "@/types/goal";
 import type { ApprovalDecision } from "@/types/ipc";
 import type { ComposerHandle } from "@/components/conversation/composer-props";
 
@@ -238,6 +244,21 @@ function MainViewContent({
   );
   const goalPausedTailVisible =
     !!parkedGoal && !isRunning && !stillWaiting && !pendingAskUser;
+  // The latest run stopped at GA's per-run step cap (#29): same idle
+  // rule as the parked-goal tail, and an open Goal (active / paused /
+  // blocked) wins outright — its engine continues or parks the run.
+  const pausedAtStepLimit = useActiveMessages(
+    (m) => m.pausedAtStepLimit,
+    false,
+  );
+  const showStepLimitTail = stepLimitTailVisible({
+    pausedAtStepLimit,
+    isRunning,
+    waitingApproval: stillWaiting,
+    waitingAskUser: !!pendingAskUser,
+    hasOpenGoal:
+      !!goal || !!sessionGoals?.some((g) => isOpenGoalStatus(g.status)),
+  });
 
   // Streaming state, subscribed locally so token churn stays inside
   // this subtree instead of re-rendering the whole app. These were
@@ -632,6 +653,8 @@ function MainViewContent({
                 }
               />
             )}
+            {/* The run paused at GA's step cap; one reply continues it. */}
+            {showStepLimitTail && <StepLimitTail />}
           </div>
         </div>
 

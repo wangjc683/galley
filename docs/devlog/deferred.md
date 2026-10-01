@@ -8,6 +8,32 @@
 
 ---
 
+## 上游 issue：计划模式撞 100 步上限前没有任何提醒
+
+- **状态**：草稿待 JC 过目（2026-10-01，随 galley#29–#32 的回帖一批确认后再发）
+- **提出**：2026-10-01，[galley#29 跑满步数上限后卡死](./2026-10-01-max-turns-run-end.md)核对时发现。
+- **启动信号**：JC 确认发出。
+- **背景**（已核实，上游 `2538ad9`）：`enter_plan_mode()` 把上限降到 `self.max_turns = 100`（`ga.py:453`），计划模式的「已达上限，必须
+  ask_user」警告却要 `turn >= 190` 才触发（`ga.py:593`），第 175 步的 ask_user 提醒又对计划模式跳过（`not _plan`，`ga.py:583`）。结果计划模式
+  跑到第 100 步时一句提醒都没有，循环直接退出。是改数字时漏改：`a5aca59`（04-23）上限 100、警告 90，对得上；`df025ab`（06-19）把默认上限
+  80→180、计划模式警告挪到 190，计划模式上限没动。
+- **方案**：只提 issue 不提 PR（警告改回 90 还是计划模式上限跟着抬，是上游的取舍）。我们不打补丁：撞上限后卡死已在桥里修好、两种模式都覆盖，
+  缺提醒只让计划模式更早停，不再卡住。issue 里**不提** `agent_loop.py:104` 不回调 `MAX_TURNS_EXCEEDED` 的事：上游若按「循环后补一次回调」的
+  形状修，同一轮会回调两次，桥要另做去重（见 [GA baseline](../ga-baseline.md) 契约面第 17 条）。
+- **issue 草稿**：
+  - 标题：`Plan mode: the turn-190 "已达上限" warning can never fire under the 100-turn cap`
+  - 正文：
+
+    > `enter_plan_mode()` sets `self.max_turns = 100` (`ga.py:453`), but the plan-mode warning that tells the model to
+    > ask_user only fires at `turn >= 190` (`ga.py:593`), and the turn-175 ask_user nudge is skipped in plan mode
+    > (`not _plan`, `ga.py:583`). So a plan-mode run reaches the 100-turn cap without any warning and the loop just ends.
+    > Looks like drift: `a5aca59` had cap 100 / warning at 90; `df025ab` raised the default cap 80→180 and moved the plan
+    > warning to 190, but left the plan cap at 100. Either moving the warning back under the cap (e.g. `turn >= 90`) or
+    > raising the plan cap would fix it.
+- **关联**：[galley#29](https://github.com/wangjc683/galley/issues/29)；本台账「单次运行步数上限可配」一节。
+
+---
+
 ## 上游 PR：`abort()` 只在 Windows 上 `_real_close`（删 0025）
 
 - **状态**：暂缓（2026-09-30 JC 过目后裁「暂时不进行上游 PR」；草稿保留）
@@ -739,3 +765,15 @@
 - **方案**：折叠头悬停提示显示「14:32 开始 · 02:14 结束」，对话流不加元素（run-fold PRD 当初给时间戳留的位置）。完成时刻取 run 最后一条助手行的 `created_at`，需要给 `AgentTurn` 补时间字段（`rowsToTurns` 与 live `turn_end` 两条路径）。
 - **待定**：运行超过 1 小时是否在折叠头常显完成时刻，而不只是悬停。
 - **关联**：`gui/src/components/conversation/RunFoldHeader.tsx` · `gui/src/stores/messages/rowsToTurns.ts` · [用户消息发送时间](./2026-09-28-user-message-send-time.md)
+
+---
+
+## 单次运行步数上限可配（`max_turns`，galley#29 建议 C）
+
+- **状态**：暂缓（2026-10-01 JC 按建议裁不做）
+- **提出**：2026-10-01，[galley#29](https://github.com/wangjc683/galley/issues/29) 附带的产品建议：`max_turns` 按会话可配（180 / 500 / 无限），或在提示词里告诉模型本次运行还剩几步。
+- **启动信号**：[跑满上限的收尾修复](./2026-10-01-max-turns-run-end.md)发版后仍有人反馈「180 步不够 / 老撞上限」；或 `workbench.db` 里单次运行步数到顶（一次运行内助手行跨满 180 步；退出原因不落库，只能按步数数）的运行明显增多。
+- **方案**：内置补丁把 `agentmain.py` 写死的 `max_turns=180` 换成读会话配置，GUI 放进模型高级设置或会话设置。外置模式做不了（宪法第 1 条），只有内置。
+- **实施要点**：非计划模式下 GA 每逢第 175 步的倍数注入「必须 ask_user 汇总」（`ga.py:605-606`，`turn % 175 == 0`）：上限调大后它仍按 175、350… 叫停，要么接受、要么再补 `ga.py` 让提醒跟着上限走。「告知剩余步数」同理是改 `turn_end_callback` 的提示注入，也是内核补丁。计划模式另有自己的上限（`ga.py:475`，100），可配时要说清两者的关系。
+- **待定**：按会话还是全局；要不要允许「无限」（无人值守时等于没有刹车）。
+- **关联**：本台账「上游 issue：计划模式撞 100 步上限前没有任何提醒」一节；`managed-ga/code/agentmain.py:218`。

@@ -194,6 +194,8 @@ export const zhCopy = {
       `第 ${index} 步 · ${summary}`,
     completedSummary: (summary: string) => `已完成 · ${summary}`,
     cancelledSummary: (summary: string) => `已中止 · ${summary}`,
+    // 最近一次运行停在步数上限（#29，仅内存态，重启后回到「已完成」）。
+    pausedSummary: (summary: string) => `已暂停 · ${summary}`,
     // Shown in place of a summary that is really leaked tool-call
     // markup (#22). Keep in sync with the runner's fixed marker
     // (workbench_bridge.TURN_PROTOCOL_FAILURE_SUMMARY) — the GUI
@@ -209,6 +211,9 @@ export const zhCopy = {
     errorBadge: (count: number) => `${count} 错误`,
     waitingApproval: "等待审批",
     replyDone: "回复完成",
+    // 系统通知标题：本次运行停在 GA 的单次步数上限，没有完成（#29）。
+    // 与 replyDone 同一开关、同一节流键。
+    stepLimitReached: "已达步数上限",
     errored: "出错",
     rename: "重命名",
     pin: "置顶",
@@ -371,6 +376,9 @@ export const zhCopy = {
     askAnything: "问点什么…",
     continueConversation: "继续…",
     ghostAcceptHint: "按 → 填入",
+    // 运行停在步数上限时替换模型建议的幽灵文字；须与
+    // conversation.stepLimitTail 里引号中的词一致。
+    stepLimitContinue: "继续",
     ghostSrDescription: (suggestion: string) =>
       `下一步建议：${suggestion}。按 → 填入输入框。`,
     replyToContinue: "回复，或选择上方候选",
@@ -1487,6 +1495,9 @@ export const zhCopy = {
     goalContinuations: (rounds: number) => `续跑 ${rounds} 轮`,
     goalPausedTail: "Goal 已暂停 · 发消息继续",
     goalBlockedTail: "Goal 受阻 · 发消息继续",
+    // 线程尾：最近一次运行停在单次步数上限（不写数字：计划模式上限不同）。
+    // 与 Goal 线程尾同一写法「状态 · 动作」，状态词与通知标题同句。
+    stepLimitTail: "已达步数上限 · 回复「继续」接着跑",
     result: "结果",
     diffLinesAdded: (n: number) => `+${n} 行`,
     diffLinesRemoved: (n: number) => `−${n} 行`,

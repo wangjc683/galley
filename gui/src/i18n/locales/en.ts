@@ -212,6 +212,7 @@ export const enCopy: AppCopy = {
     stepSummary: (index, summary) => `Step ${index} · ${summary}`,
     completedSummary: (summary) => `Done · ${summary}`,
     cancelledSummary: (summary: string) => `Stopped · ${summary}`,
+    pausedSummary: (summary: string) => `Paused · ${summary}`,
     turnProtocolFailure: "Turn protocol error: tool call not delivered",
     archiveRunningTitle: "Archive a running conversation?",
     archiveRunningBody: (title: string) =>
@@ -224,6 +225,7 @@ export const enCopy: AppCopy = {
     errorBadge: (count) => `${count} error${count === 1 ? "" : "s"}`,
     waitingApproval: "Waiting for approval",
     replyDone: "Reply finished",
+    stepLimitReached: "Step limit reached",
     errored: "Error",
     rename: "Rename",
     pin: "Pin",
@@ -395,6 +397,7 @@ export const enCopy: AppCopy = {
     askAnything: "Ask anything…",
     continueConversation: "Continue…",
     ghostAcceptHint: "→ to fill in",
+    stepLimitContinue: "Continue",
     ghostSrDescription: (suggestion: string) =>
       `Suggested next step: ${suggestion}. Press right arrow to fill it in.`,
     replyToContinue: "Reply, or choose an option above",
@@ -1565,6 +1568,7 @@ export const enCopy: AppCopy = {
       `${rounds} ${rounds === 1 ? "continuation" : "continuations"}`,
     goalPausedTail: "Goal paused · send a message to continue",
     goalBlockedTail: "Goal blocked · send a message to continue",
+    stepLimitTail: "Step limit reached · reply “Continue” to keep going",
     result: "Result",
     diffLinesAdded: (n: number) => `+${n} lines`,
     diffLinesRemoved: (n: number) => `−${n} lines`,

@@ -25,6 +25,7 @@ import {
   isFinalAnswerTurn,
   toolEventsFromRaw,
 } from "@/lib/agent-turn";
+import { isStepLimitExit } from "@/lib/step-limit";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
 import type { AgentTurn, PendingApproval } from "@/types/conversation";
@@ -307,15 +308,27 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       if (visibility === "visible") {
         messages.appendAgentTurn(event.sessionId, turn);
       }
+      // GA stopped this run at its per-run step cap (#29): a pause,
+      // not a finished reply — the last step is usually a half-done
+      // tool step. Drives the ghost text, the thread tail and the
+      // notification title below.
+      const hitStepLimit = isStepLimitExit(event.exitReason);
       // Composer ghost text: the final reply's next-step suggestion.
       // Written unconditionally on the final visible turn_end (null
       // when the model emitted no tag) so a newer reply always
-      // replaces — or clears — the previous suggestion.
+      // replaces — or clears — the previous suggestion. A step-limit
+      // stop offers the localized "继续" instead: the model's tag (if
+      // any) was written mid-work, and continuing is the one move.
+      // The tail flag is rewritten on the same beat, so a newer
+      // final turn that ended normally drops a stale tail.
       if (event.exitReason != null && visibility === "visible") {
         messages.setNextSuggestion(
           event.sessionId,
-          event.nextSuggestion?.trim() || null,
+          hitStepLimit
+            ? currentCopy().composer.stepLimitContinue
+            : event.nextSuggestion?.trim() || null,
         );
+        messages.setPausedAtStepLimit(event.sessionId, hitStepLimit);
       }
       // No setAgentRunning(false) here — turn_end is per-step inside
       // GA's agent_runner_loop, not the run terminus. agentRunning
@@ -370,10 +383,15 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         const sessionTitle = useSessionsStore
           .getState()
           .sessions.find((s) => s.id === event.sessionId)?.title;
+        // A step-limit stop keeps the replyDone pref gate and throttle
+        // key but must not say "回复完成"; its body is the session
+        // alone — the last step's summary describes half-done work.
         void sendGatedSystemNotification("replyDone", {
-          title: currentCopy().sidebar.replyDone,
+          title: hitStepLimit
+            ? currentCopy().sidebar.stepLimitReached
+            : currentCopy().sidebar.replyDone,
           body: sessionTitle
-            ? event.summary
+            ? event.summary && !hitStepLimit
               ? `${sessionTitle} · ${event.summary}`
               : sessionTitle
             : (event.summary ?? ""),
@@ -479,6 +497,9 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       if (useMessagesStore.getState().byId[event.sessionId]?.pendingAskUser) {
         messages.setPendingAskUser(event.sessionId, null);
       }
+      // Same for the step-limit tail (#29): whatever started this run —
+      // composer, queue, CLI — the paused run is moving again.
+      messages.setPausedAtStepLimit(event.sessionId, false);
       messages.setCurrentTurnIndex(
         event.sessionId,
         (messages.byId[event.sessionId]?.runStepBase ?? 0) + event.turnIndex,
