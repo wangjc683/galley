@@ -9,14 +9,14 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.5.5`.
-- Git tag / GitHub Release: `v0.5.5` is the current published stable release
-  (tagged at `29e6aa37` on 2026-09-30, GitHub Latest).
+- Package version: `0.5.6`.
+- Git tag / GitHub Release: `v0.5.6` is the current published stable release
+  (tagged at `387fd622` on 2026-10-01, GitHub Latest).
 - Agent API schema: `schemaVersion: 2` (since the Goal v2 rework on
   2026-09-16, first shipped in `v0.5.0`). The server keeps answering `1` for
   every command that did not change; only the `goal` family is `2`-only, and
   the retired v1 goal commands are `unknown_command` under every version.
-- Release tier: stable patch; default update channel points at `v0.5.5`.
+- Release tier: stable patch; default update channel points at `v0.5.6`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `1b6442f` (audited 2026-09-18, first shipped in
   `v0.5.1`) — engine delta is Galley-positive abort-before-headers plus an
@@ -28,6 +28,32 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.5.6` (2026-10-01) is a patch one day after `v0.5.5`, eight commits (four
+product), one round of community fixes. **#29**: a run that reaches GA's
+per-run step cap ends as paused (step-limit tail, 「继续」 ghost text, "Step
+limit reached" notification, 「已暂停」 in the sidebar) instead of hanging;
+any other exit-less run closes as `DONE_WITHOUT_EXIT` after a runtime error.
+**#30**: a CLI / supervisor `session send` while a child's question is pending
+dispatches as the answer; `live.askPending` / `live.lastExit`, `askUser` on
+message rows, `session wait --until-idle` and `live` on wait frames are
+additive Agent API changes; the SOP, skills and IM supervisor prompt stop
+teaching `--after-turn=<turnCount+1>`. **#31**: the managed runtime prompt
+stops the agent from writing GA `sche_tasks` files that never fire.
+**#32**: a 「自定义」 provider card, 「官方 API」 on the official cards, the
+first model's preset layer taken from the final URL, and `v1beta`-style
+version segments joined correctly (managed patch `0027`). Graded patch: the
+largest features (#30, #32) extend existing capabilities and the Agent API
+change is additive inside `2` (precedents `v0.4.13`, `v0.5.5`). The
+bundled-runtime gate was mandatory and passed on `mac-x64`; the GA baseline
+audit was skipped for the fifth time in a row (upstream still `f308ee7`), with
+the memory-distill prompt's own verdict in the devlog (it lets the model
+rewrite existing memory entries — user state — so it belongs in a separate,
+observed audit). The Windows CLI version lag did not block the release.
+`check.yml` was green on the release head (run 36806046708, all six jobs)
+before the tag; JC approved the draft; stable promoted and verified the same
+session (run 36860757640). Full narrative: devlog
+[2026-10-01-v0.5.6-release](./devlog/2026-10-01-v0.5.6-release.md).
 
 `v0.5.5` (2026-09-30) is a patch two days after `v0.5.4`, 23 commits, almost
 all one IM-channel polish round. **Discord and Telegram conversations aligned
@@ -447,15 +473,21 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.5.5` is published and promoted as the live stable release (2026-09-30).
-The default `updates/stable/latest.json` channel points at `v0.5.5`, with the
+`v0.5.6` is published and promoted as the live stable release (2026-10-01).
+The default `updates/stable/latest.json` channel points at `v0.5.6`, with the
 legacy `updates/beta/latest.json` alias pointing at the same version for older
 installed builds. The live verifier passed with `--cache-bust` for both
 channels across all three platforms (darwin-aarch64, darwin-x86_64,
 windows-x86_64), in the promote run and again locally. One draft cut (release
-run 36738236573); JC approved the draft for publish. The bundled-runtime gate
+run 36856754423); JC approved the draft for publish. The bundled-runtime gate
 passed on `mac-x64`; `check.yml` was green on the release head (run
-36736695562, all six jobs).
+36806046708, all six jobs). The Windows overwrite-install smoke that would
+reproduce the CLI version lag (a `galley session wait` holding `galley.exe`
+during setup) has no reported result yet.
+
+`v0.5.5` (2026-09-30) went through the same path: one draft cut (release run
+36738236573), JC approved the draft, both channels verified with
+`--cache-bust`, bundled-runtime gate passed on `mac-x64`.
 
 `v0.5.4` (2026-09-28) went through the same path: one draft cut, JC approved
 the draft, both channels verified with `--cache-bust`; its bundled-runtime
@@ -516,7 +548,8 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.5.4` → `v0.5.5` passed on an
+1. App-update dogfood (SOP step 10): `v0.5.5` → `v0.5.6` is owed (not yet
+   reported); `v0.5.4` → `v0.5.5` passed on an
    installed build (JC reported 2026-10-01, same session as the release);
    `v0.5.3` → `v0.5.4` was never reported and is written off (asked again at
    the `v0.5.5` release, no result; no `v0.5.3` build is left installed);
@@ -555,34 +588,14 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.5.5` (2026-10-01, community issues #29–#32, all fixed on main;
-JC will reply on the four threads after the release that ships them, drafts
-confirmed per item first):
-
-- #29: a run that reaches GA's per-run step cap (180, 100 in plan mode) now
-  ends instead of hanging; the bridge also closes any other exit-less run as
-  `DONE_WITHOUT_EXIT` after a runtime error. The GUI shows a step-limit tail,
-  「继续」 ghost text, a "Step limit reached" notification and 「已暂停」 in the
-  sidebar ([devlog](./devlog/2026-10-01-max-turns-run-end.md)). JC passed it in dev.
-- #30: a CLI / supervisor send while a child's question is pending dispatches
-  as the answer; `live.askPending` / `live.lastExit`, `askUser` on message
-  rows, `session wait --until-idle` and `live` on wait frames are additive
-  Agent API changes; the SOP / skills / IM supervisor prompt stop teaching
-  `--after-turn=<turnCount+1>` ([devlog](./devlog/2026-10-01-ask-pending-supervisor-send.md)).
-- #31: the managed runtime prompt stops the agent from writing GA
-  `sche_tasks` files that never fire and points to the sidebar's 「定时」
-  ([devlog](./devlog/2026-10-01-ga-scheduler-managed-mode.md)).
-- #32: a 「自定义」 provider card (protocol chosen inside), official cards say
-  「官方 API」, a new provider's first model takes its preset layer from the
-  final URL, and `v1beta`-style version segments join correctly (managed patch
-  `0027`) ([devlog](./devlog/2026-10-01-custom-provider-entry.md)). The dev
-  build was opened for JC's review; JC called the close-out without item-by-item
-  feedback, so the real-device checklist in the devlog is still the reference.
-
-Also filed 2026-10-01: `.scratch/windows-cli-version-lag/` (needs-triage: the
-#29 / #30 reporter's bundled CLI reported 0.5.2 under app 0.5.3). Default
-since the same day: no upstream PRs or issues unless JC asks; the upstream
-drafts in deferred are reference only.
+Since `v0.5.6`: nothing yet. The four community threads #29–#32 shipped in
+`v0.5.6` and are now due JC's replies (drafts confirmed per item first; the
+#30 reply asks the reporter to confirm `galley version` and `where galley`).
+`.scratch/windows-cli-version-lag/` stays needs-triage: the #29 / #30
+reporter's bundled CLI reported 0.5.2 under app 0.5.3, and the `v0.5.6`
+Windows overwrite-install smoke that would reproduce it has no reported result
+yet. Default since 2026-10-01: no upstream PRs or issues unless JC asks; the
+upstream drafts in deferred are reference only.
 
 Filed during the `v0.5.5` IM round and still
 open: `.scratch/im-supervisor-context-bloat/` (needs-triage) and
@@ -591,7 +604,7 @@ to the end of the Discord / Telegram polish). The three open judgment calls
 from the IM dogfood (subtext on one-step answers, narration kept in the
 answered-question echo, the typing indicator lingering up to ~10 s) stay as
 built.
-Release-scope truth remains `git log v0.5.5..HEAD`.
+Release-scope truth remains `git log v0.5.6..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
 row stacked above the commission marker's eyebrow) reads cluttered has not
@@ -622,8 +635,13 @@ with that reason recorded in the release devlog. At `v0.5.5` upstream was at
 (`ga.py`'s memory-distill prompt rewrite, a claude-cli UA bump in
 `llmcore.py`, one reflect-only line in `agentmain.py`); skipped as not
 critical and still moving that day, with the full reasoning in the release
-devlog. The next release re-checks upstream per the standard trigger, and if
-it skips again it must give the memory-distill prompt its own verdict. Upstream's default-constant line (`default_context_win`) has now
+devlog. At `v0.5.6` upstream was still `f308ee7` and the audit was skipped a
+fifth time; the memory-distill prompt got its own verdict (it moves from
+"minimal update" to "merge duplicates, compress", letting the model rewrite
+existing memory entries — user state — so it belongs in a separate audit with
+observed long-term-update runs, not a fix release). The devlog recommends
+running that baseline audit on its own, outside a release; whether and when
+is JC's call. Upstream's default-constant line (`default_context_win`) has now
 collided with patch `0007` twice in a row — expect it again.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
@@ -668,7 +686,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.5.5 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.5.6 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `1b6442f` (2026-09-18); released builds ship it since `v0.5.1` (`efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -694,7 +712,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.5.5`. For the next release, bump every
+- Current package metadata uses `0.5.6`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
