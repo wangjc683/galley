@@ -589,15 +589,20 @@ Post-release follow-up:
 ## Unreleased On Main
 
 Since `v0.5.6`: nothing yet. The four community threads #29–#32 shipped in
-`v0.5.6` and are now due JC's replies (drafts confirmed per item first; the
-#30 reply asks the reporter to confirm `galley version` and `where galley`).
+`v0.5.6` and were answered 2026-10-01, all kept open:
+[#29](https://github.com/wangjc683/galley/issues/29#issuecomment-5931634906),
+[#30](https://github.com/wangjc683/galley/issues/30#issuecomment-5931635387)
+(asks for `where.exe galley`, `galley version` and the `cli-path` line),
+[#31](https://github.com/wangjc683/galley/issues/31#issuecomment-5931635868),
+[#32](https://github.com/wangjc683/galley/issues/32#issuecomment-5931636343)
+(asks for errors if Gemini / xAI reject a request; neither is tested).
 `.scratch/windows-cli-version-lag/` is needs-info: the #29 / #30 reporter's
 CLI reported 0.5.2 under app 0.5.3, but JC's Windows in-app update replaced the
 bundled CLI, and Galley does not put the CLI on the Windows PATH, so the
 leading lead is a user-made copy; the #30 reply asks for `where.exe galley`.
 Found on the way: the NSIS pre-install hook's `Galley.exe` match (meant for the
-main app, which is `galley-core.exe`) hits the CLI case-insensitively. Default since 2026-10-01: no upstream PRs or issues unless JC asks; the
-upstream drafts in deferred are reference only.
+main app, which is `galley-core.exe`) hits the CLI case-insensitively. Default since 2026-10-01: no upstream PRs
+or issues unless JC asks; the upstream drafts in deferred are reference only.
 
 Filed during the `v0.5.5` IM round and still
 open: `.scratch/im-supervisor-context-bloat/` (needs-triage) and
