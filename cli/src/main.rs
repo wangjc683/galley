@@ -132,7 +132,10 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             tail,
             final_show,
             after_turn,
-        }) => session::session_wait(id, timeout, poll, tail, final_show, after_turn).await,
+            until_idle,
+        }) => {
+            session::session_wait(id, timeout, poll, tail, final_show, after_turn, until_idle).await
+        }
         Command::Session(SessionCmd::New {
             task,
             project,

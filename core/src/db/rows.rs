@@ -1,4 +1,5 @@
 use super::*;
+use crate::api::AskUserBrief;
 
 #[derive(Debug, FromRow)]
 pub(super) struct SessionRow {
@@ -89,14 +90,26 @@ pub(super) struct MessageRow {
     pub(super) visibility: String,
     pub(super) goal_id: Option<String>,
     pub(super) created_at: String,
+    /// `tool_calls`, selected only when it may hold an `ask_user` call
+    /// (SQL pre-filter in `session_messages_inner`); NULL otherwise, so
+    /// the read path does not haul every tool payload into memory.
+    pub(super) ask_user_tool_calls: Option<String>,
 }
 
 impl MessageRow {
     pub(super) fn into_brief(self) -> Result<MessageBrief> {
+        let role = parse_message_role(&self.role)?;
+        let ask_user = match role {
+            MessageRole::Agent => self
+                .ask_user_tool_calls
+                .as_deref()
+                .and_then(AskUserBrief::from_tool_calls_json),
+            MessageRole::User | MessageRole::System => None,
+        };
         Ok(MessageBrief {
             id: MessageId(self.id),
             session_id: SessionId(self.session_id),
-            role: parse_message_role(&self.role)?,
+            role,
             content: self.content,
             final_answer: self.final_answer,
             created_at: self.created_at,
@@ -115,6 +128,7 @@ impl MessageRow {
                     })
                 })
                 .transpose()?,
+            ask_user,
         })
     }
 }

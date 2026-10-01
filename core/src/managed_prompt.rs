@@ -258,10 +258,15 @@ Default workflow:
   `live.busy` is the truthful "still working" signal — the persisted `status`
   column never reads `running`.
 - Continue an existing session when it preserves useful context. When you
-  send a follow-up and then wait, read the session's `turnCount` first and
-  pass `--after-turn=<turnCount+1>` to `session wait`, otherwise the wait
-  returns the previous turn's answer immediately. `dispatch:"queued"` means
-  the session was mid-run and your message will run next; do not resend.
+  send a follow-up and then wait, read the session's `turnCount` right before
+  sending and pass `--after-turn=<turnCount>` (that value, not +1) plus
+  `--until-idle` to `session wait`, otherwise the wait can return the previous
+  turn's answer, or a mid-run step, as the result. `dispatch:"queued"` means the
+  session was mid-run and your message will run next; do not resend.
+- When a session's `live.askPending` is true, its agent is asking a question:
+  read `askUser` (`question`, `candidates`) on the asking agent row (the
+  wait's final messages, or `session show`) and answer with a plain
+  `session send`; if the answer is the user's call, ask the user first.
 - Start one focused session for one bounded task.
 - For complex goals, create a Galley Project with a small set of child sessions,
   follow them until idle, then synthesize the result back to the user.
@@ -415,7 +420,13 @@ mod tests {
         let prompt = im_supervisor_prompt("/tmp/sop.md", "feishu", "galley-im/feishu");
         assert!(prompt.contains("`session stop` and `session archive` are reversible"));
         assert!(!prompt.contains("Confirm before stopping, archiving"));
-        assert!(prompt.contains("--after-turn="));
+        // The new message and its run's first step land at turn index
+        // `turnCount` (read before sending); `+1` skips that step.
+        assert!(prompt.contains("--after-turn=<turnCount>"));
+        assert!(!prompt.contains("turnCount+1"));
+        // Without `--until-idle` a wait can return on a mid-run step.
+        assert!(prompt.contains("--until-idle"));
+        assert!(prompt.contains("askUser"));
         assert!(prompt.contains("dispatch:\"queued\""));
         assert!(prompt.contains("live.busy"));
     }

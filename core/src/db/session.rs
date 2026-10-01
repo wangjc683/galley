@@ -10,6 +10,14 @@ pub(crate) const REASONING_EFFORT_TIERS: &[&str] =
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+/// `tool_calls` only where it may hold an `ask_user` call, else NULL:
+/// the one thing [`MessageRow::into_brief`] reads from it is
+/// `MessageBrief.askUser` (galley#30), so the message read path does not
+/// haul every tool payload into memory. `LIKE` is a superset match (`_`
+/// is a wildcard, ASCII case folds); the JSON parse decides.
+const ASK_USER_TOOL_CALLS_COL: &str =
+    "CASE WHEN tool_calls LIKE '%ask_user%' THEN tool_calls END AS ask_user_tool_calls";
+
 /// Provenance a rename stamps onto `sessions.title_source`. See
 /// migration `038_session_title_source.sql` for the full value set —
 /// `seed` and `auto` are never chosen by a rename caller directly
@@ -84,7 +92,8 @@ impl SqliteGalley {
             let limit = i64::try_from(n).unwrap_or(i64::MAX);
             let sql = format!(
                 "SELECT id, session_id, turn_index, role, content, final_answer, summary, \
-                        created_via, supervisor, origin_note, visibility, goal_id, created_at \
+                        created_via, supervisor, origin_note, visibility, goal_id, created_at, \
+                        {ASK_USER_TOOL_CALLS_COL} \
                  FROM messages \
                  WHERE session_id = ?{visibility_clause} \
                  ORDER BY turn_index DESC, sequence DESC \
@@ -101,7 +110,8 @@ impl SqliteGalley {
         } else {
             let sql = format!(
                 "SELECT id, session_id, turn_index, role, content, final_answer, summary, \
-                        created_via, supervisor, origin_note, visibility, goal_id, created_at \
+                        created_via, supervisor, origin_note, visibility, goal_id, created_at, \
+                        {ASK_USER_TOOL_CALLS_COL} \
                  FROM messages \
                  WHERE session_id = ?{visibility_clause} \
                  ORDER BY turn_index ASC, sequence ASC"

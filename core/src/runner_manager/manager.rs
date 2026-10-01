@@ -62,7 +62,7 @@ pub struct RunnerManager {
 /// Live run-state snapshot for one session ([`RunnerManager::run_state`]).
 /// The busy truth the DB's `sessions.status` column cannot carry —
 /// transient statuses live in memory and persist as `idle`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RunState {
     /// A runner subprocess is registered and has a pid.
     pub runner_alive: bool,
@@ -74,6 +74,13 @@ pub struct RunState {
     pub open_run: bool,
     /// Messages waiting in the outbound queue.
     pub queued_count: usize,
+    /// The last run ended on an `ask_user` question nobody has answered
+    /// yet; the queue drain is held until an answer is dispatched.
+    pub ask_pending: bool,
+    /// `exitReason.result` of the most recently completed run in this
+    /// Core process, verbatim (`None` until one completes). Kept across
+    /// the next run's start; replaced only by the next `RunComplete`.
+    pub last_exit: Option<String>,
 }
 
 /// What the per-spawn forwarder reports to the global drain task.
@@ -247,21 +254,14 @@ impl RunnerManager {
                             q.entry(sid.clone()).or_default().draft.errored = Some(e.message);
                         }
                         IpcEvent::RunComplete(e) => {
-                            {
-                                let mut q = queues.lock().await;
-                                let state = q.entry(sid.clone()).or_default();
-                                let draft = std::mem::take(&mut state.draft);
-                                state.last_outcome = Some(RunOutcome {
-                                    aborted: e.exit_reason.get("result").and_then(|v| v.as_str())
-                                        == Some("ABORTED"),
-                                    errored: draft.errored,
-                                    goal_tag: draft.goal_tag,
-                                    summary: draft.summary,
-                                    continuation: state.run_kind == RunKind::GoalContinuation,
-                                });
-                                state.run_kind = RunKind::UserTurn;
-                                state.started_notified = false;
-                            }
+                            // Settles the RunOutcome and records
+                            // `last_exit` (galley#30) in one step.
+                            queues
+                                .lock()
+                                .await
+                                .entry(sid.clone())
+                                .or_default()
+                                .settle_run(&e.exit_reason);
                             if tx
                                 .send(RunSignal::RunComplete {
                                     session_id: sid.clone(),
@@ -404,6 +404,8 @@ impl RunnerManager {
             let state = q.entry(session_id.to_string()).or_default();
             state.open_run = true;
             state.ask_pending = false;
+            // `last_exit` is deliberately left alone: it keeps saying why
+            // the previous run ended until this one completes (galley#30).
             // Every gate-opening dispatch is a user turn until the Goal
             // engine says otherwise (`mark_goal_continuation`).
             state.run_kind = RunKind::UserTurn;
@@ -501,11 +503,23 @@ impl RunnerManager {
 
     /// Atomic queue-or-dispatch decision for a new outbound message.
     ///
-    /// - Run open OR queue non-empty → enqueue (returns position).
-    /// - Otherwise → reserve the run gate and tell the caller to
-    ///   persist + dispatch now. Reservation means a concurrent offer
-    ///   routes behind this message; dispatch failure must release via
-    ///   [`Self::queue_release_run`].
+    /// - Run open → enqueue (returns position).
+    /// - No run open, but the last run ended on a pending `ask_user`
+    ///   question → dispatch now even if items are queued (galley#30):
+    ///   this message is the answer. The held items were queued before
+    ///   the question, so they keep waiting and drain FIFO once the
+    ///   answer's run completes — the same outcome as the GUI composer,
+    ///   which bypasses the queue while a question is pending. Without
+    ///   this, a CLI / supervisor send queued behind the hold and nothing
+    ///   could ever release it.
+    /// - Otherwise, queue non-empty → enqueue behind it.
+    /// - Otherwise → dispatch now.
+    ///
+    /// Dispatch-now reserves the run gate and tells the caller to
+    /// persist + dispatch. Reservation means a concurrent offer routes
+    /// behind this message; dispatch failure must release via
+    /// [`Self::queue_release_run`] (`ask_pending` stays set until the
+    /// send funnel actually delivers the answer).
     pub async fn queue_offer(
         &self,
         session_id: &str,
@@ -514,7 +528,9 @@ impl RunnerManager {
     ) -> QueueOffer {
         let mut q = self.queues.lock().await;
         let state = q.entry(session_id.to_string()).or_default();
-        if state.open_run || !state.items.is_empty() {
+        // With no run open, a pending question lets this message past the
+        // held items as the answer (see above).
+        if state.open_run || (!state.items.is_empty() && !state.ask_pending) {
             let queue_id = mint_queue_id();
             state.items.push_back(QueuedMessage {
                 queue_id: queue_id.clone(),
@@ -657,11 +673,17 @@ impl RunnerManager {
     /// Serves the `session.run_state` socket command the Goal controller
     /// polls between working turns.
     pub async fn run_state(&self, session_id: &str) -> RunState {
-        let (open_run, queued_count) = {
+        let (open_run, queued_count, ask_pending, last_exit) = {
             let q = self.queues.lock().await;
-            q.get(session_id)
-                .map(|s| (s.open_run, s.items.len()))
-                .unwrap_or((false, 0))
+            match q.get(session_id) {
+                Some(s) => (
+                    s.open_run,
+                    s.items.len(),
+                    s.ask_pending,
+                    s.last_exit.clone(),
+                ),
+                None => (false, 0, false, None),
+            }
         };
         let runner_alive = self.pid(session_id).await.is_some();
         let agent_running = self.agent_running(session_id).await;
@@ -670,6 +692,8 @@ impl RunnerManager {
             agent_running,
             open_run,
             queued_count,
+            ask_pending,
+            last_exit,
         }
     }
 
@@ -880,6 +904,122 @@ mod tests {
         assert!(mgr.queue_take_next(&rc_signal("s")).await.is_some());
     }
 
+    fn texts(items: Vec<QueuedMessage>) -> Vec<String> {
+        items.into_iter().map(|m| m.text).collect()
+    }
+
+    async fn set_ask_pending(mgr: &RunnerManager, sid: &str, pending: bool) {
+        mgr.queues
+            .lock()
+            .await
+            .entry(sid.into())
+            .or_default()
+            .ask_pending = pending;
+    }
+
+    /// Stand-in for the forwarder's `RunComplete` handling.
+    async fn settle(mgr: &RunnerManager, sid: &str, exit_reason: serde_json::Value) {
+        mgr.queues
+            .lock()
+            .await
+            .entry(sid.into())
+            .or_default()
+            .settle_run(&exit_reason);
+    }
+
+    // galley#30: a CLI / supervisor send while a question is pending used
+    // to queue behind the held items forever.
+    #[tokio::test]
+    async fn offer_while_a_question_is_pending_dispatches_as_the_answer() {
+        let mgr = RunnerManager::new();
+        let _ = offer(&mgr, "s", "a").await; // DispatchNow, gate open
+        let _ = offer(&mgr, "s", "b").await; // queued before the question
+        let _ = offer(&mgr, "s", "c").await;
+        set_ask_pending(&mgr, "s", true).await;
+        // Run "a" ends on the question: the drain holds b / c.
+        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
+
+        // The next send is the answer: dispatched now, ahead of b / c.
+        assert!(matches!(
+            offer(&mgr, "s", "answer").await,
+            QueueOffer::DispatchNow
+        ));
+        assert!(mgr.run_state("s").await.open_run, "gate reserved");
+        assert_eq!(texts(mgr.queue_snapshot("s").await), ["b", "c"]);
+
+        // A failed dispatch releases the gate; the hold is still on, so
+        // the retry is still the answer.
+        mgr.queue_release_run("s").await;
+        assert!(matches!(
+            offer(&mgr, "s", "answer").await,
+            QueueOffer::DispatchNow
+        ));
+        // Reserved gate: a concurrent offer routes behind the held items.
+        match offer(&mgr, "s", "d").await {
+            QueueOffer::Queued { position, .. } => assert_eq!(position, 2),
+            other => panic!("expected Queued, got {other:?}"),
+        }
+
+        // The send funnel delivers the answer (clears the hold); once the
+        // answer's run completes the held items drain FIFO.
+        set_ask_pending(&mgr, "s", false).await;
+        for expected in ["b", "c", "d"] {
+            let item = mgr.queue_take_next(&rc_signal("s")).await.expect("pops");
+            assert_eq!(item.text, expected);
+        }
+        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn offer_while_a_question_is_pending_but_the_run_is_open_still_queues() {
+        let mgr = RunnerManager::new();
+        let _ = offer(&mgr, "s", "a").await; // gate open
+                                             // `ask_user` arrived; the run's `RunComplete` has not.
+        set_ask_pending(&mgr, "s", true).await;
+        match offer(&mgr, "s", "b").await {
+            QueueOffer::Queued { position, .. } => assert_eq!(position, 0),
+            other => panic!("expected Queued, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn last_exit_is_kept_across_the_next_run_until_its_run_complete() {
+        let mgr = RunnerManager::new();
+        assert_eq!(mgr.run_state("s").await.last_exit, None, "no run yet");
+        let _ = offer(&mgr, "s", "a").await; // gate open
+        let _ = offer(&mgr, "s", "b").await; // queued
+        settle(
+            &mgr,
+            "s",
+            serde_json::json!({"result": "MAX_TURNS_EXCEEDED", "data": {"maxTurns": 70}}),
+        )
+        .await;
+        // The drain starts "b" at once; lastExit still says why "a" ended.
+        let b = mgr.queue_take_next(&rc_signal("s")).await.expect("pops b");
+        assert_eq!(b.text, "b");
+        let state = mgr.run_state("s").await;
+        assert!(state.open_run);
+        assert_eq!(state.last_exit.as_deref(), Some("MAX_TURNS_EXCEEDED"));
+        // The Goal engine taking the outcome does not clear it either.
+        assert!(mgr.take_run_outcome("s").await.is_some());
+        assert_eq!(
+            mgr.run_state("s").await.last_exit.as_deref(),
+            Some("MAX_TURNS_EXCEEDED")
+        );
+        // The next RunComplete replaces it (and still settles the outcome).
+        settle(
+            &mgr,
+            "s",
+            serde_json::json!({"result": "ABORTED", "data": null}),
+        )
+        .await;
+        assert_eq!(
+            mgr.run_state("s").await.last_exit.as_deref(),
+            Some("ABORTED")
+        );
+        assert!(mgr.take_run_outcome("s").await.expect("outcome").aborted);
+    }
+
     #[tokio::test]
     async fn bridge_close_holds_queue_but_closes_gate() {
         let mgr = RunnerManager::new();
@@ -1018,5 +1158,20 @@ mod tests {
         // No subprocess in these tests: process-derived fields stay
         // false; the queue-side truth carries the busy signal.
         assert!(!busy.runner_alive && !busy.agent_running);
+        assert!(!busy.ask_pending);
+        assert_eq!(busy.last_exit, None);
+        // The run ends on a question: both surface in the snapshot.
+        set_ask_pending(&mgr, "s", true).await;
+        settle(
+            &mgr,
+            "s",
+            serde_json::json!({"result": "EXITED", "data": null}),
+        )
+        .await;
+        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
+        let asking = mgr.run_state("s").await;
+        assert!(asking.ask_pending && !asking.open_run);
+        assert_eq!(asking.queued_count, 1);
+        assert_eq!(asking.last_exit.as_deref(), Some("EXITED"));
     }
 }

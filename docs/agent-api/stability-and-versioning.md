@@ -168,7 +168,7 @@ its name but returns `{goal}` only; `goal active` lists open goals
 (no wrap-up). Task / event / deliverable commands have no successor —
 the goal's session thread is the record.
 
-**Changes inside `2`** (additive flags and behavior fixes; fields, exit
+**Changes inside `2`** (additive flags, fields and behavior fixes; exit
 codes and error discriminants unchanged):
 
 - 2026-09-30 — `llm list` gained `--runtime=current|managed|external`
@@ -177,6 +177,30 @@ codes and error discriminants unchanged):
   against, instead of the external-GA cache it used to print in every
   mode. `--runtime=external` keeps the old output. See §5.17 in
   [project-and-llm-commands.md](./project-and-llm-commands.md).
+- 2026-10-01 — galley#30. The `live` run-state object (on `sessions
+  list` / `session brief` rows and in the `session.run_state` /
+  `sessions.run_state` socket answers) gained `askPending` and
+  `lastExit` (§5.2 in [session-commands.md](./session-commands.md)).
+  Behavior fix: when an `ask_user` question is pending and no run is
+  open, `session send` now dispatches at once as the answer instead of
+  queueing behind the messages that question holds, which nothing could
+  ever release (§5.5a); the GUI composer already behaved this way.
+  These commands are shared, so the same applies under `--schema=1`.
+- 2026-10-01 — galley#30, Supervisor waits. `session wait` gained
+  `--until-idle` (default off; without it completion is unchanged): it
+  completes only once the output condition holds and Galley Core reports
+  no run open or in progress, so a progress step no longer passes for the
+  result. A pending `ask_user` question counts as ended. An ended run is
+  confirmed by a second read 1 second later (best effort: the last row
+  gets time to land, and a short gap between runs is not taken for the
+  end). The `session` object in `session wait`'s `initial` and `final`
+  frames now carries `live` like `session brief`. `MessageBrief` gained
+  `askUser` (`{question, candidates}`) on the agent row that asked, so
+  every read that returns messages (`session show`, `session wait`,
+  `session follow`, `project show` / `follow`) shows the question
+  itself. See §5.5 and §5.5d in
+  [session-commands.md](./session-commands.md). Also served under
+  `--schema=1`.
 
 ### 7.2 `schemaVersion: 1` (frozen, served for unchanged commands)
 

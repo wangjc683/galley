@@ -23,7 +23,8 @@ use galley_core_lib::db::{
 use galley_core_lib::ipc::IpcCommand;
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
-    BroadcastItem, RunState, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
+    BroadcastItem, RunSignal, RunState, RunnerManager, RunnerSpawnError, SendCommandError,
+    ShutdownError, SpawnArgs,
 };
 use galley_core_lib::socket_listener::{
     dispatch_line_with, DbSource, DispatchResult, HandlerCtx, RunnerPort, SocketResponse,
@@ -31,7 +32,7 @@ use galley_core_lib::socket_listener::{
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use std::sync::Mutex;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 
 const MIG_001: &str = include_str!("../migrations/001_init.sql");
 const MIG_002: &str = include_str!("../migrations/002_add_has_unread.sql");
@@ -271,11 +272,10 @@ impl RunnerPort for FakeRunner {
         self.released.lock().unwrap().push(session_id.to_string());
     }
     async fn run_state(&self, _session_id: &str) -> RunState {
-        self.run_state.unwrap_or(RunState {
+        self.run_state.clone().unwrap_or(RunState {
             runner_alive: self.running,
             agent_running: self.running,
-            open_run: false,
-            queued_count: 0,
+            ..RunState::default()
         })
     }
 }
@@ -511,6 +511,191 @@ async fn session_send_unknown_session_is_not_found_and_silent() {
     assert_eq!(resp.error.as_deref(), Some("not_found"));
     // Nothing persisted → nothing emitted.
     assert!(h.notifier.names().is_empty(), "no emit on failed persist");
+}
+
+// ---------------- session.send × the real queue (galley#30) ----------------
+
+/// A Python 3 for the mock bridge below; `None` skips the test (same
+/// policy and candidates as `runner_manager_test.rs`).
+fn mock_python() -> Option<String> {
+    [
+        "/usr/bin/python3",
+        "/usr/local/bin/python3",
+        "/opt/homebrew/bin/python3",
+        "python3",
+        "python",
+    ]
+    .into_iter()
+    .find(|candidate| {
+        std::process::Command::new(candidate)
+            .args([
+                "-c",
+                "import sys; raise SystemExit(0 if sys.version_info.major >= 3 else 1)",
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    })
+    .map(str::to_string)
+}
+
+/// Mock `runner.workbench_bridge`: its first run ends on an `ask_user`
+/// question (`EXITED`) after a beat — long enough for a second send to
+/// land while that run is open — and every later run completes at once.
+fn write_ask_user_bridge(dir: &std::path::Path) {
+    let runner_dir = dir.join("runner");
+    std::fs::create_dir_all(&runner_dir).expect("mkdir runner");
+    std::fs::write(runner_dir.join("__init__.py"), "").expect("write __init__");
+    let script = r#"
+import argparse, json, os, sys, time
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ga-path", required=True)
+parser.add_argument("--session-id", required=True)
+args, _ = parser.parse_known_args()
+
+def emit(obj):
+    obj["sessionId"] = args.session_id
+    obj["timestamp"] = "2026-10-01T00:00:00+00:00"
+    print(json.dumps(obj), flush=True)
+
+emit({"kind": "ready", "protocolVersion": "0.1", "gaCommit": "mock",
+      "gaCommitDate": "2026-10-01T00:00:00+00:00", "gaPath": args.ga_path,
+      "llmName": "mock-llm", "cwd": os.getcwd(), "pid": os.getpid(),
+      "availableLLMs": []})
+runs = 0
+for line in sys.stdin:
+    try:
+        cmd = json.loads(line)
+    except ValueError:
+        continue
+    if cmd.get("kind") == "shutdown":
+        break
+    if cmd.get("kind") != "user_message":
+        continue
+    runs += 1
+    if runs == 1:
+        time.sleep(0.5)
+        emit({"kind": "ask_user", "question": "which one?", "candidates": []})
+        result = "EXITED"
+    else:
+        result = "CURRENT_TASK_DONE"
+    emit({"kind": "run_complete", "exitReason": {"result": result, "data": None},
+          "finalContent": "", "totalTurns": 1})
+"#;
+    std::fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
+}
+
+/// Stand-in for the global drain task: wait for the forwarder's next
+/// `RunComplete` signal (skipping `UserRunStarted`).
+async fn next_run_complete(signals: &mut mpsc::UnboundedReceiver<RunSignal>) -> RunSignal {
+    loop {
+        let signal = tokio::time::timeout(std::time::Duration::from_secs(5), signals.recv())
+            .await
+            .expect("run_complete within 5s")
+            .expect("signal channel open");
+        if matches!(signal, RunSignal::RunComplete { .. }) {
+            return signal;
+        }
+    }
+}
+
+/// galley#30 end to end, through the real RunnerManager + forwarder: a
+/// child's run ends on `ask_user` with a supervisor message already held
+/// behind it. The next `session.send` must dispatch as the answer (it
+/// used to queue behind the hold forever), and the held message drains
+/// once the answer's run completes. `session.run_state` shows the
+/// question and the last exit reason along the way.
+#[tokio::test]
+async fn session_send_answers_a_pending_question_ahead_of_held_messages() {
+    let Some(python) = mock_python() else {
+        eprintln!("[skip] no python on this machine");
+        return;
+    };
+    let bridge = tempfile::tempdir().expect("tempdir");
+    write_ask_user_bridge(bridge.path());
+    let manager = RunnerManager::new();
+    let (signal_tx, mut signals) = mpsc::unbounded_channel();
+    manager.set_run_signal(signal_tx);
+    manager
+        .spawn(
+            SpawnArgs {
+                python,
+                ga_path: bridge.path().to_path_buf(),
+                session_id: "s-ask".into(),
+                cwd: None,
+                workspace_root: None,
+                bridge_cwd: bridge.path().to_path_buf(),
+                llm_index: None,
+                llm_key: None,
+                reasoning_effort: None,
+                env: vec![],
+            },
+            None,
+        )
+        .await
+        .expect("spawn mock bridge");
+
+    // The harness supplies the DB + notifier; the runner is the real one.
+    let h = Harness::new(FakeRunner::default()).await;
+    h.seed_session("s-ask").await;
+    let ctx = HandlerCtx {
+        db: &h.db,
+        runner: &manager,
+        notifier: h.notifier.clone(),
+        app: None,
+    };
+    let dispatch = |request: Value| {
+        let line = serde_json::to_string(&request).unwrap();
+        let ctx = &ctx;
+        async move {
+            match dispatch_line_with(ctx, &line).await {
+                DispatchResult::Unary(resp) => resp,
+                DispatchResult::Stream { .. } => panic!("expected unary response"),
+            }
+        }
+    };
+    let send = |content: &str| {
+        dispatch(req(
+            "session.send",
+            json!({"sessionId": "s-ask", "content": content}),
+        ))
+    };
+    let run_state = || dispatch(req("session.run_state", json!({"sessionId": "s-ask"})));
+
+    let first = send("start").await;
+    assert_eq!(first.result.unwrap()["dispatch"], "dispatched");
+    let held = send("queued before the question").await;
+    assert_eq!(held.result.unwrap()["dispatch"], "queued");
+
+    // The first run ends on the question: the drain holds the queue.
+    let signal = next_run_complete(&mut signals).await;
+    assert!(manager.queue_take_next(&signal).await.is_none());
+    let live = run_state().await.result.unwrap();
+    assert_eq!(live["askPending"], true);
+    assert_eq!(live["lastExit"], "EXITED");
+    assert_eq!(live["openRun"], false);
+    assert_eq!(live["queuedCount"], 1);
+
+    // The next send is the answer: dispatched now, ahead of the held one.
+    let answer = send("the answer").await.result.unwrap();
+    assert_eq!(answer["dispatch"], "dispatched");
+    assert_eq!(answer["message"]["content"], "the answer");
+    assert_eq!(run_state().await.result.unwrap()["askPending"], false);
+
+    // The answer's run completes; the held message drains next.
+    let signal = next_run_complete(&mut signals).await;
+    let next = manager.queue_take_next(&signal).await.expect("held item");
+    assert_eq!(next.text, "queued before the question");
+    let live = run_state().await.result.unwrap();
+    assert_eq!(live["lastExit"], "CURRENT_TASK_DONE");
+    assert_eq!(live["queuedCount"], 0);
+
+    manager
+        .shutdown_all(std::time::Duration::from_millis(500))
+        .await;
 }
 
 // ---------------- session.checkpoint ----------------
@@ -1121,6 +1306,8 @@ async fn session_run_state_reports_manager_truth() {
         agent_running: false,
         open_run: true,
         queued_count: 2,
+        ask_pending: false,
+        last_exit: Some("MAX_TURNS_EXCEEDED".into()),
     }))
     .await;
     h.seed_session("s-live").await;
@@ -1136,6 +1323,9 @@ async fn session_run_state_reports_manager_truth() {
     assert_eq!(result["agentRunning"], false);
     assert_eq!(result["openRun"], true);
     assert_eq!(result["queuedCount"], 2);
+    // galley#30: additive fields, passed through verbatim.
+    assert_eq!(result["askPending"], false);
+    assert_eq!(result["lastExit"], "MAX_TURNS_EXCEEDED");
 }
 
 #[tokio::test]
@@ -1145,6 +1335,8 @@ async fn sessions_run_state_answers_for_requested_ids_with_busy_verdict() {
         agent_running: false,
         open_run: true,
         queued_count: 0,
+        ask_pending: true,
+        last_exit: None,
     }))
     .await;
 
@@ -1163,6 +1355,9 @@ async fn sessions_run_state_answers_for_requested_ids_with_busy_verdict() {
     assert_eq!(sessions[0]["sessionId"], "s-a");
     assert_eq!(sessions[0]["openRun"], true);
     assert_eq!(sessions[0]["busy"], true);
+    assert_eq!(sessions[0]["askPending"], true);
+    // No run has completed: an explicit null, not an absent key.
+    assert_eq!(sessions[0].get("lastExit"), Some(&Value::Null));
     assert_eq!(sessions[1]["sessionId"], "s-never-spawned");
 }
 

@@ -294,8 +294,10 @@ pub(crate) enum SessionCmd {
     /// Send a user message into a session. Persists the message with the
     /// supplied origin and dispatches it to the live runner; a mid-run
     /// send is held in Galley Core's queue (`dispatch: "queued"`) and
-    /// runs when the current task finishes. Requires Galley Core (exit 4
-    /// if the socket isn't reachable).
+    /// runs when the current task finishes. While the agent waits on an
+    /// `ask_user` question (`live.askPending`), a send is the answer and
+    /// dispatches at once, ahead of queued messages. Requires Galley
+    /// Core (exit 4 if the socket isn't reachable).
     Send {
         /// Session id.
         id: String,
@@ -334,9 +336,9 @@ pub(crate) enum SessionCmd {
         tail: usize,
     },
     /// Poll persisted session state until an agent-visible message
-    /// appears or the bounded wait times out. Intended for Supervisor /
-    /// IM flows where a local tool timeout must not be treated as task
-    /// failure.
+    /// appears (with `--until-idle`, and the run has ended) or the
+    /// bounded wait times out. Intended for Supervisor / IM flows where
+    /// a local tool timeout must not be treated as task failure.
     Wait {
         /// Session id.
         id: String,
@@ -364,6 +366,21 @@ pub(crate) enum SessionCmd {
         /// immediately on the PREVIOUS turn's answer.
         #[arg(long)]
         after_turn: Option<u32>,
+        /// Complete only when the run has also ended. Without this flag
+        /// any agent message with content (past `--after-turn`) completes
+        /// the wait, and every intermediate step has content, so a long
+        /// run returns on a progress step. With it, completion also needs
+        /// Galley Core to report no run open or in progress
+        /// (`live.openRun` and `live.agentRunning` both false). A pending
+        /// ask_user question counts as ended: read `live.askPending` from
+        /// the final frame's `session` and the question from the asking
+        /// row's `askUser`. Queued messages keep the run open, so the wait
+        /// lasts until they have all run. A run seen ended is confirmed by
+        /// a second read 1s later (so the last row can land) before the
+        /// wait completes from that read. On a poll where Core is
+        /// unreachable, the output condition alone decides, with no pause.
+        #[arg(long)]
+        until_idle: bool,
     },
     /// Create a new session with a first user message. Atomic: session
     /// row + first message commit together or roll back together. Returns

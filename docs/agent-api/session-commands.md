@@ -69,7 +69,7 @@ $ galley sessions list --project=proj_demo
 | `gaRuntimeId`     | string?         | stable runtime id for future multi-runtime support                                 |
 | `promptProfile`   | string?         | managed prompt profile id, when applied                                            |
 | `reasoningEffort` | string?         | **Additive (2026-09-22).** Per-session reasoning-effort override (`none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`); absent = the session follows the selected model's configured effort. Read-only for agents in this version: set from the composer LLM pill; Galley Core replays it to the runner on spawn and forwards changes to a live runner. An agent that wants a different tier for a session it drives can still type GA's own `/session.reasoning_effort=<tier>` as a message, but that runtime-only change is not reflected here. |
-| `live`            | `LiveRunState`? | **CLI-attached, additive (2026-09-09).** Present on `sessions list` / `session brief` rows when the CLI could reach Galley Core; absent when Core is unreachable or the probe exceeded 3s. Never absent to mean "idle": an idle session under a reachable Core carries an explicit all-false `live`. |
+| `live`            | `LiveRunState`? | **CLI-attached, additive (2026-09-09).** Present on `sessions list` / `session brief` rows (and, since 2026-10-01, on the `session` of `session wait` frames, §5.5d) when the CLI could reach Galley Core; absent when Core is unreachable or the probe exceeded 3s. Never absent to mean "idle": an idle session under a reachable Core carries an explicit `live` with `busy: false`. |
 
 `LiveRunState` fields (from the `sessions.run_state` socket command; the
 persisted `status` column never reads `running`, so this is the only
@@ -82,6 +82,8 @@ truthful busy signal an agent can read):
 | `agentRunning` | bool | the bridge is mid-turn right now (flickers false between steps; prefer `openRun`)      |
 | `runnerAlive`  | bool | a runner subprocess is registered for the session                                      |
 | `queuedCount`  | int  | messages held in Galley Core's outbound queue for this session                          |
+| `askPending`   | bool | **Additive (2026-10-01, galley#30).** The last run ended on an `ask_user` question nobody has answered yet. Queued messages are held while it is `true` (they were queued before the question and must not answer it), so `busy` stays `true` if any are waiting. Answer with `session send`: with no run open it dispatches at once as the answer, and the held messages run after it (§5.5a). |
+| `lastExit`     | string? | **Additive (2026-10-01, galley#30).** `exitReason.result` of this session's most recently completed run since Galley Core started, passed through verbatim; `null` until one completes (in memory only, not persisted). It is kept while the next run starts, because a queued message can start the moment a run ends and a Supervisor polling after `session wait` still needs to know why that run ended. Only the next run's completion replaces it. Values: `CURRENT_TASK_DONE` (finished), `EXITED` (the agent ended the run itself, including to ask the user, see `askPending`), `MAX_TURNS_EXCEEDED` (paused at the engine's per-run step cap; send a follow-up to continue), `ABORTED` (stopped), `SLASH_COMMAND_COMPLETED` (a slash command was handled), `DONE_WITHOUT_EXIT` (the engine task ended without an exit, after a runtime error). Treat any other value as "ended". |
 
 ### 5.3 · `galley sessions search <query> [--runtime current|managed|external|all] [--all]`
 
@@ -119,7 +121,7 @@ when Galley Core is reachable), or exit `3 not_found`.
 
 ```bash
 $ galley session brief s-abc
-{"id":"s-abc","title":"…","status":"idle","turnCount":4, …,"live":{"runnerAlive":true,"agentRunning":false,"openRun":false,"queuedCount":0,"busy":false}}
+{"id":"s-abc","title":"…","status":"idle","turnCount":4, …,"live":{"runnerAlive":true,"agentRunning":false,"openRun":false,"queuedCount":0,"busy":false,"askPending":false,"lastExit":"CURRENT_TASK_DONE"}}
 
 $ galley session brief sess_missing ; echo "exit: $?"
 {"error":"not_found","message":"session sess_missing not found"}
@@ -150,6 +152,7 @@ Conversation messages for a session, oldest first. NDJSON, one
 | `origin`      | `Origin`?       | source of this message (B2+; omitted on rows from before migration 006) |
 | `visibility`  | `visible/internal`? | additive field for internal controller/audit turns; ordinary session reads and GUI rendering return `visible` rows only |
 | `attachments` | `MessageAttachment[]`? | optional additive read metadata for Galley-owned message attachments; V1 supports image attachments created by the GUI only |
+| `askUser`     | `AskUser`?      | **Additive (2026-10-01, galley#30).** Present only on an `agent` row whose step called `ask_user`: the question the agent put to the user, `{ "question": string, "candidates": string[] }`. Derived on read from the row's stored tool calls. When one step makes several `ask_user` calls (some models split one question into one call per candidate), the first call's question wins, later calls with the same question (ignoring surrounding whitespace) add their candidates in order without duplicates, and calls with a different question are ignored, because the engine only ever serves the first. `candidates` may be empty (a free-form question). Unreadable stored data leaves the field out rather than failing the read. `live.askPending` (§5.2) tells you a question is waiting; this row tells you what it is. Answer with `session send` (§5.5a). |
 
 `MessageAttachment` fields:
 
@@ -174,8 +177,9 @@ it to the live runner subprocess. Requires Galley Core to be running
 
 **Queue semantics (since v0.4.6-dev, galley#19/#20)**: when the target
 session's run is open (a dispatched message whose `run_complete` has
-not arrived), the message is held in Galley Core's in-memory queue and
-runs automatically, in order, as prior tasks finish. The response then
+not arrived) or Galley Core's queue for it is non-empty, the message is
+held in Galley Core's in-memory queue and runs automatically, in order,
+as prior tasks finish. The response then
 carries `dispatch: "queued"`, `message: null` (the row is persisted at
 dequeue, not at accept — a removed queued item leaves no DB row), and
 a `queue` object. `--jump` converts the hold into "abort the current
@@ -185,6 +189,16 @@ in the engine's internal task queue while reporting `dispatched` with
 a corrupted event stream — `queued` is the same de-facto semantics
 made honest and controllable.
 
+**Answering a pending question (since 2026-10-01, galley#30)**: when the
+last run ended on an `ask_user` question (`live.askPending`) and no run
+is open, a send dispatches at once (`dispatch: "dispatched"`) as the
+answer, even if older messages are queued. Those were queued before the
+question, so they are not its answer: they keep waiting and run, in
+order, after the answer's run completes. This is what the GUI composer
+does. Before the fix, such a send queued behind the held messages and
+nothing ever released them. A send that arrives while the asking run is
+still open (`live.openRun` is `true`) queues as usual.
+
 V1 is text-only for CLI writes. Image attachments may appear in read
 metadata when created from the GUI, but `galley session send` does not
 accept or dispatch images inside `schemaVersion: 1`.
@@ -193,7 +207,7 @@ accept or dispatch images inside `schemaVersion: 1`.
 | -------------- | ---------------------------------------- | -------------------------------------------------------------------- |
 | `--supervisor` | (none → `origin.via = cli`)              | Supervisor label. When set, `origin.via` upgrades to `supervisor`.   |
 | `--reason`     | (none)                                   | Free-text rationale. Stored on `messages.origin_note`; appears in audit views. |
-| `--jump`       | off                                      | 插队: mid-run, abort the current task and run this message first (moves to queue front + sends abort; the dequeue happens on `run_complete`). No effect on an idle session. |
+| `--jump`       | off                                      | 插队: mid-run, abort the current task and run this message first (moves to queue front + sends abort; the dequeue happens on `run_complete`). With no run open nothing is aborted: the message dispatches at once, ahead of any messages already queued. |
 
 ```bash
 $ galley session send sess_abc "summarize the last turn" \
@@ -208,7 +222,7 @@ Response shape:
 | Field      | Type          | Notes                                                                             |
 | ---------- | ------------- | --------------------------------------------------------------------------------- |
 | `message`  | `MessageBrief \| null` | The persisted row, including server-assigned `id` + `createdAt`. **`null` when `dispatch == "queued"`** — the row is minted at dequeue time. |
-| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) — the row is in SQLite either way; `"queued"` if the session was mid-run and the message is held in Core's queue (additive value — handle unknowns per §stability) |
+| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) — the row is in SQLite either way; `"queued"` if a run is open or older messages are queued, and the message is held in Core's queue (additive value — handle unknowns per §stability) |
 | `queue`    | object        | Present only when `dispatch == "queued"`: `{ "queueId": "qm_…", "position": 0 }` (0-based; `--jump` yields position 0) |
 
 **Semantics**: fire-and-forget. The CLI returns as soon as the message
@@ -295,7 +309,7 @@ Exit codes: `0` when the session exists and the snapshot can be read /
 unopenable). Live-runner absence is reported in the end frame, not as
 exit 3.
 
-### 5.5d · `galley session wait <id> [--timeout=N] [--poll=N] [--tail=N] [--final-show[=true|false]]`
+### 5.5d · `galley session wait <id> [--timeout=N] [--poll=N] [--tail=N] [--final-show[=true|false]] [--after-turn=N] [--until-idle]`
 
 **Bounded result retrieval command** — additive in schema v1. Polls the
 Galley DB for a visible agent message, then emits a final payload and
@@ -329,8 +343,10 @@ Completion is detected from the returned visible message tail: any
 retrievable output. **On multi-turn sessions this means a bare
 send→wait pair returns immediately on the PREVIOUS turn's answer** —
 pass `--after-turn=N` (additive) to only count agent messages with
-`turnIndex >= N`. Read the session's `turnCount` before sending to pick
-`N`. `--final-show=false` omits `messages` from the final payload while
+`turnIndex >= N`. Pick `N` = the session's `turnCount` read right before
+sending, as is (not `turnCount + 1`): the new user message and the first
+agent step of its run both land at turn index `turnCount`.
+`--final-show=false` omits `messages` from the final payload while
 keeping the initial snapshot.
 
 Dead sessions end the wait early (additive): a session persisted in
@@ -339,6 +355,54 @@ so the waiter emits `status:"session_error"` / `status:"session_cancelled"`
 (same value as the `end` frame's `reason`) instead of burning the full
 deadline. Like `timed_out`, these describe the wait, not the delegated
 task's business outcome.
+
+**`--until-idle` (additive, 2026-10-01, galley#30)**: every intermediate
+step of a run has content (its `<summary>` at least), so the default
+condition above completes on the first progress step of a long run, and
+a Supervisor that reads the final frame as the result reports a progress
+step. With `--until-idle`, completion needs both the output condition
+(including `--after-turn`) and Galley Core reporting that the session
+has no run open or in progress: `live.openRun` and `live.agentRunning`
+both `false`. Without the flag nothing changes. Two cases follow from
+this definition:
+
+- A pending question counts as ended. When the run ends on an
+  `ask_user` call (`live.askPending: true`), its run is closed, so the
+  wait completes even though `live.busy` may still be `true` because
+  messages queued earlier are held behind the question. Read the question
+  from the asking row's `askUser` (§5.5) and answer it with
+  `session send` (§5.5a).
+- A draining queue keeps the wait going. Core starts the next queued
+  message the moment a run ends, and `live.openRun` stays `true` across
+  those runs, so the wait lasts until the queued messages have all run
+  (or one of them ends on a question).
+
+Before completing, the waiter confirms. When a poll (the initial check
+included) first sees output and an ended run with Core reachable, it
+pauses 1 second, probes Core and reads the database again, and completes
+only if that second read still passes both conditions; the final frame is
+built from that second read. Otherwise it keeps polling as usual. The
+reason: an agent row is persisted when the GUI handles the `turn_end`
+event that Core routes to it, which is slightly after Core has already
+closed the run on `run_complete`, so the pause lets the last row land.
+The re-check also rides over the brief gap between two runs when Core
+dispatches a Goal continuation or a queued message. This is best effort,
+not a guarantee: a row that takes longer than the pause to land, or a gap
+longer than it, can still slip through. The pause counts against
+`--timeout`, so a wait can end up to 1 second after the deadline.
+
+If Galley Core is unreachable on a poll (no `live`, as for
+`session brief`), that poll falls back to the output condition alone,
+with no pause. `timed_out`, `session_error` and `session_cancelled`
+behave as without the flag.
+
+**`live` on wait frames (additive, 2026-10-01, galley#30)**: the
+`session` object in the `initial` and `final` frames carries the
+CLI-attached `live` run state exactly as `session brief` does (§5.2,
+§5.4), probed once per poll; absent when Core is unreachable. Read
+`live.lastExit` and `live.askPending` straight from the final frame to
+learn why the run ended and whether a question waits, without a separate
+`session brief` call.
 
 Exit codes: `0` for `completed`, `timed_out`, `session_error`, and
 `session_cancelled` / `3 not_found` (session missing) /
@@ -493,6 +557,17 @@ stays alive so a subsequent `session send` resumes without the 5-10s
 respawn cost. Idempotent — stopping a session whose agent is already
 idle returns `{dispatch: "already_stopped"}` and exit 0.
 
+`already_stopped` means the agent was not mid-turn (`live.agentRunning`
+is `false`), which includes a session waiting on a question
+(`live.askPending`). Because `agentRunning` also reads `false` in the
+short gap between two steps of one run, re-read `live.openRun` if you
+need to be sure the run ended. `session stop` never touches the
+outbound queue: it neither drops queued messages nor releases ones held
+behind a pending question. After an abort, the next queued message
+starts as soon as the aborted run's `run_complete` arrives (unless a
+question is pending). To get past a pending question, answer it with
+`session send` (§5.5a).
+
 Sub-plan §1.4 explains the Abort vs Shutdown trade-off. A future
 `session kill` (§8) would surface the Shutdown path.
 
@@ -506,7 +581,7 @@ $ galley session stop sess_idle
 
 | Response field | Value                                          | Meaning                                                                            |
 | -------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `dispatch`     | `"abort_sent"` / `"already_stopped"`           | `abort_sent` = runner was mid-turn and received Abort; `already_stopped` = no-op.  |
+| `dispatch`     | `"abort_sent"` / `"already_stopped"`           | `abort_sent` = runner was mid-turn and received Abort; `already_stopped` = the agent was not mid-turn, nothing was sent (queued messages untouched).  |
 
 Exit codes: `0` (both branches) / `3 not_found` (session id) /
 `4 db_unavailable` / `5 runner_error` (rare: runner died mid-dispatch

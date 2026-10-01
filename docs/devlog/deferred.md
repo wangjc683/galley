@@ -777,3 +777,15 @@
 - **实施要点**：非计划模式下 GA 每逢第 175 步的倍数注入「必须 ask_user 汇总」（`ga.py:605-606`，`turn % 175 == 0`）：上限调大后它仍按 175、350… 叫停，要么接受、要么再补 `ga.py` 让提醒跟着上限走。「告知剩余步数」同理是改 `turn_end_callback` 的提示注入，也是内核补丁。计划模式另有自己的上限（`ga.py:475`，100），可配时要说清两者的关系。
 - **待定**：按会话还是全局；要不要允许「无限」（无人值守时等于没有刹车）。
 - **关联**：本台账「上游 issue：计划模式撞 100 步上限前没有任何提醒」一节；`managed-ga/code/agentmain.py:218`。
+
+---
+
+## Supervisor 的队列操作面：查看 / 撤回 / 取代 / 停止并收尾（galley#30 其余建议）
+
+- **状态**：暂缓（2026-10-01 JC 按建议裁先不做）
+- **提出**：2026-10-01，[galley#30](https://github.com/wangjc683/galley/issues/30)：supervisor 看不到子会话队列里排了什么（只有 `queuedCount`），撤不回自己发过的消息；建议 `session queue list / remove / jump`、`session send --supersede`（丢掉同会话未投递的排队项）、`session stop --wrap-up="<收尾要求>"`、内存队列落库。
+- **启动信号**：[子会话队列冻结的修复](./2026-10-01-ask-pending-supervisor-send.md)发版、`--jump` 写进 SOP 之后，仍有 supervisor 用户反馈「排队的消息撤不回来 / 叫停后还得再发一条收尾」。
+- **方案**：CLI 补 `session queue list / remove`，复用 Core 已有的 `session_queue_snapshot` 等 Tauri 命令背后的 manager API（`core/src/commands/queue.rs`），走 socket 新命令，同 schema 内新增；`--supersede` = 先清同会话排队项再按 `--jump` 派发；`stop --wrap-up` 等价于带收尾要求的 `--jump`，可能只需在 SOP 里写成惯用法，不必加参数。
+- **实施要点**：新命令属 Agent API 增量变更（宪法第 3 条），文档进 `docs/agent-api/` 的变更记录；队列落库与 [消息队列](./2026-08-12-session-message-queue.md) 决定 1「排队消息的地位等同未发出的草稿」相冲突，要做先重审那一条。
+- **待定**：撤回是否需要 supervisor 身份校验（只能撤自己发的）。
+- **关联**：`core/src/runner_manager/queue.rs`、`core/src/commands/queue.rs`、`docs/agent-api/session-commands.md` §5.5a。

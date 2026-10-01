@@ -94,8 +94,8 @@ Read commands:
 | `"$GALLEY" sessions search "<kw>"` | Find related conversations in the current runtime |
 | `"$GALLEY" sessions search "<kw>" --runtime all` | Cross-runtime search when explicitly needed |
 | `"$GALLEY" session brief <id>` | One-session summary with `turnCount` and `live` |
-| `"$GALLEY" session show <id> --tail=20` | Recent visible messages |
-| `"$GALLEY" session wait <id> --after-turn=<N> --timeout=600 --poll=5 --tail=20 --final-show` | Bounded result retrieval; `N` = the turn you just sent |
+| `"$GALLEY" session show <id> --tail=20` | Recent visible messages; an agent row that asked a question carries `askUser` |
+| `"$GALLEY" session wait <id> --after-turn=<N> --until-idle --timeout=600 --poll=5 --tail=20 --final-show` | Bounded result retrieval; `N` = the `turnCount` from `session brief` read right before sending (not +1); `--until-idle` = `completed` only once the run has finished; frames carry `session.live` |
 | `"$GALLEY" session follow <id> --tail=20` | Snapshot, live events if available, final snapshot |
 | `"$GALLEY" session watch <id>` | Raw live runner events; no backlog |
 | `"$GALLEY" project list` | Available Projects |
@@ -112,10 +112,10 @@ Write commands:
 | Command | Use |
 |---|---|
 | `"$GALLEY" session new "<task>" --supervisor=<id> --reason=<why>` | Create a session and send the first task |
-| `"$GALLEY" session send <id> "<text>" --supervisor=<id> --reason=<why>` | Send follow-up to a session; mid-run sends return `dispatch:"queued"` and run next |
-| `"$GALLEY" session send <id> "<text>" --jump --supervisor=<id> --reason=<why>` | Interrupt the current task and run this message first; only on explicit user intent |
+| `"$GALLEY" session send <id> "<text>" --supervisor=<id> --reason=<why>` | Send follow-up to a session; mid-run sends return `dispatch:"queued"` and run next. While `live.askPending` and no run is open it dispatches at once as the answer, ahead of earlier queued messages |
+| `"$GALLEY" session send <id> "<text>" --jump --supervisor=<id> --reason=<why>` | Mid-run: abort the current task and run this message first; no run open: dispatch now. For the user's interrupt, or when the task is superseded, done elsewhere, or going the wrong way; put the stop and the follow-up in one message |
 | `"$GALLEY" session btw <id> "<question>" --supervisor=<id> --reason=<why>` | Ask a temporary side question; not persisted |
-| `"$GALLEY" session stop <id> --supervisor=<id> --reason=<why>` | Interrupt current turn |
+| `"$GALLEY" session stop <id> --supervisor=<id> --reason=<why>` | Abort the running task (`abort_sent`; queued messages then run); `already_stopped` when the agent is not running, releasing nothing |
 | `"$GALLEY" session archive <id> --supervisor=<id> --reason=<why>` | Hide a session; reversible |
 | `"$GALLEY" session restore <id> --supervisor=<id> --reason=<why>` | Restore archived session |
 | `"$GALLEY" session move <id> --to=<project-id> --supervisor=<id> --reason=<why>` | Move session to Project; omit `--to` to unassign |
@@ -130,11 +130,11 @@ Write commands:
 
 Persisted `status` never reads `running`: Galley Core keeps transient run
 state in memory, so SQLite only ever shows `idle`, `archived`, `error`, and
-the like. The read commands therefore attach a `live` object whenever Galley
-Core is reachable:
+the like. The read commands (and the `session` object in `session wait`
+frames) therefore attach a `live` object whenever Galley Core is reachable:
 
 ```json
-{"id":"s-abc","status":"idle","turnCount":4,…,"live":{"runnerAlive":true,"agentRunning":true,"openRun":true,"queuedCount":0,"busy":true}}
+{"id":"s-abc","status":"idle","turnCount":4,…,"live":{"runnerAlive":true,"agentRunning":true,"openRun":true,"queuedCount":0,"busy":true,"askPending":false,"lastExit":"CURRENT_TASK_DONE"}}
 ```
 
 - `busy` — `openRun || agentRunning || queuedCount > 0`; the one field to
@@ -142,6 +142,28 @@ Core is reachable:
 - `openRun` — a dispatched run has not completed yet (survives the gaps
   between multi-step turns; `agentRunning` flickers there).
 - `queuedCount` — messages Galley is holding for this session.
+- `askPending` — the last run ended on a question (`ask_user`) and the agent
+  is waiting for an answer. A plain `session send` answers it: it dispatches
+  at once, ahead of messages queued earlier, which run after it. Messages
+  queued before the question never answer it. The question itself is on the
+  asking agent row as `askUser: {question, candidates}` (`candidates` may be
+  empty), in `session show` and in wait / follow `messages`.
+- `lastExit` — `exitReason.result` of the session's most recently completed
+  run in this Core process. It stays until the next run completes, so while
+  `busy` is true it describes the previous run; `null` = no run has
+  completed since Galley started (in memory only). Values:
+  - `CURRENT_TASK_DONE` — finished normally.
+  - `EXITED` — the agent exited the loop; includes `ask_user` (check
+    `askPending`).
+  - `MAX_TURNS_EXCEEDED` — paused mid-work at GA's per-run step cap (180
+    steps, 100 in plan mode). Nothing is broken; send a continue instruction
+    to resume.
+  - `ABORTED` — stopped (`session stop`, `--jump`, or the user).
+  - `SLASH_COMMAND_COMPLETED` — a slash command finished.
+  - `DONE_WITHOUT_EXIT` — the engine task ended without an exit, after a
+    runtime error. The error text is not in CLI output; find out what
+    failed before retrying.
+  - Unknown values — treat the run as ended.
 - Absent `live` — Core unreachable (app closed, or the probe timed out); say
   so rather than guessing. An explicit idle `live` (all false / 0) is a real
   answer.
@@ -156,10 +178,13 @@ Use `session wait` for Supervisor/IM result retrieval:
 ```bash
 "$GALLEY" session brief <id>                       # read turnCount
 "$GALLEY" session send <id> "<follow-up>" --supervisor=<id> --reason=<why>
-"$GALLEY" session wait <id> --after-turn=<turnCount+1> --timeout=600 --poll=5 --tail=20 --final-show
+"$GALLEY" session wait <id> --after-turn=<turnCount> --until-idle --timeout=600 --poll=5 --tail=20 --final-show
 ```
 
-`--after-turn=N` only counts agent messages with `turnIndex >= N`. On a
+`--after-turn=N` only counts agent messages with `turnIndex >= N`. Pass the
+`turnCount` read right before sending, as is: the new message and the first
+agent step of its run land at turn index `turnCount`, so `turnCount + 1`
+would skip that step (a one-step reply would then never count). On a
 session that already has turns, a bare `send` → `wait` returns immediately
 with the **previous** turn's answer, which is the single most common
 Supervisor mistake. A freshly created session (`session new`) has no prior
@@ -179,6 +204,25 @@ or:
 {"schemaVersion":1,"stream":"wait","phase":"final","status":"timed_out","session":{},"messages":[]}
 {"schemaVersion":1,"stream":"end","reason":"timeout"}
 ```
+
+Without `--until-idle`, `completed` means a visible agent message arrived,
+not that the run is over: any agent row with content counts, including an
+intermediate step. With `--until-idle` (the Supervisor default), `completed`
+also requires Core to report no run open or in progress
+(`live.openRun == false && live.agentRunning == false`). A pending question
+counts as idle (its run ended); while queued messages keep draining, the
+wait keeps waiting until their runs finish. If Core is unreachable it falls
+back to the output-only rule.
+
+Both frames' `session` object carries `live`, so branch on the final frame
+without another call. `live.askPending` — the agent is asking a question:
+read `askUser` on the asking row in `messages`, then answer with a plain
+`session send` or relay it to the user. Otherwise branch on `live.lastExit`
+(see Live State): on `MAX_TURNS_EXCEEDED` send a continue instruction and
+wait again with `--after-turn`; on `DONE_WITHOUT_EXIT` or `ABORTED` tell the
+user the run did not finish instead of presenting its last step as the
+result. No `live` in the final frame means Core was unreachable: the result
+may be a mid-run step, so say so.
 
 `timed_out` is the waiter's deadline, not task failure. If the tail contains
 only the user's message, tell the user the session started but no agent result
@@ -394,12 +438,17 @@ Never blindly retry.
 `queue` object: the session was mid-run, Galley holds the message in memory
 and runs it in order once the current task completes. This is success — do
 not resend. The queue does not survive a Galley restart; if the app was
-restarted before the message ran, the user must re-issue it.
+restarted before the message ran, the user must re-issue it. Exception:
+while the agent waits on a question (`live.askPending`) and no run is open,
+`session send` dispatches at once as the answer (`dispatch:"dispatched"`),
+ahead of messages queued earlier.
 
 `session send` and `llm set` can return `dispatch:"persisted_only"`: the DB
 write succeeded but no live runner consumed the command.
 
-`session stop` can return `dispatch:"already_stopped"`: this is success.
+`session stop` can return `dispatch:"already_stopped"`: this is success —
+the agent was not running, so nothing was aborted. It does not release
+queued messages or answer a pending question; answer with `session send`.
 
 `session wait` can return `status:"timed_out"`: the waiter timed out; the task
 may still finish later. `status:"session_error"` / `"session_cancelled"`

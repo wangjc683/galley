@@ -26,7 +26,7 @@ pub mod status;
 pub use goal::{CreateGoalInput, GoalBrief, GoalId, GoalStatus, DEFAULT_GOAL_BUDGET_SECONDS};
 pub use health::{HealthCheck, HealthReport, HealthStatus};
 pub use message::{
-    MessageAttachmentBrief, MessageBrief, MessageId, MessageRole, MessageTelemetry,
+    AskUserBrief, MessageAttachmentBrief, MessageBrief, MessageId, MessageRole, MessageTelemetry,
     MessageVisibility,
 };
 pub use model::{

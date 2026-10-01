@@ -521,6 +521,7 @@ pub(super) async fn insert_message_inner(
         goal_id: goal_id.map(str::to_string),
         attachments: Vec::new(),
         origin: Some(origin),
+        ask_user: None,
     })
 }
 

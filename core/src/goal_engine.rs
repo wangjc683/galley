@@ -733,7 +733,7 @@ mod tests {
                 runner_alive: true,
                 agent_running: self.open_run,
                 open_run: self.open_run,
-                queued_count: 0,
+                ..RunState::default()
             }
         }
         async fn mark_goal_continuation(&self, sid: &str) {

@@ -441,8 +441,9 @@ async fn session_wait_completed_returns_final_payload() {
     seed_message_with_role(&pool, "m2", "s_wait", 1, 1, "assistant", "", Some("done")).await;
     drop(pool);
 
-    let (stdout, code) = run_galley(
+    let (stdout, code) = run_galley_with_tmpdir(
         &db,
+        td.path(),
         &[
             "session",
             "wait",
@@ -486,8 +487,9 @@ async fn session_wait_timeout_returns_timed_out_exit_0() {
     seed_message_with_role(&pool, "m1", "s_pending", 1, 0, "user", "please work", None).await;
     drop(pool);
 
-    let (stdout, code) = run_galley(
+    let (stdout, code) = run_galley_with_tmpdir(
         &db,
+        td.path(),
         &[
             "session",
             "wait",
@@ -514,7 +516,11 @@ async fn session_wait_missing_session_exits_3() {
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
 
-    let (stdout, code) = run_galley(&db, &["session", "wait", "sess_missing", "--timeout=0"]);
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &["session", "wait", "sess_missing", "--timeout=0"],
+    );
     assert_eq!(code, Some(3), "stdout was: {stdout}");
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
     assert_eq!(payload["error"], "not_found");
@@ -525,7 +531,11 @@ async fn session_wait_missing_db_exits_4() {
     let td = tempdir();
     let db = td.path().join("nonexistent.db");
 
-    let (stdout, code) = run_galley(&db, &["session", "wait", "s_wait", "--timeout=0"]);
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &["session", "wait", "s_wait", "--timeout=0"],
+    );
     assert_eq!(code, Some(4), "stdout was: {stdout}");
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
     assert_eq!(payload["error"], "db_unavailable");
@@ -543,8 +553,9 @@ async fn session_wait_tail_limits_returned_messages() {
     seed_message_with_role(&pool, "m4", "s_tail", 2, 1, "assistant", "fourth", None).await;
     drop(pool);
 
-    let (stdout, code) = run_galley(
+    let (stdout, code) = run_galley_with_tmpdir(
         &db,
+        td.path(),
         &[
             "session",
             "wait",
@@ -753,7 +764,8 @@ async fn session_brief_attaches_live_from_core() {
         socket_path,
         serde_json::json!({"sessions": [{
             "sessionId": "s-live", "runnerAlive": true, "agentRunning": true,
-            "openRun": true, "queuedCount": 1, "busy": true
+            "openRun": true, "queuedCount": 1, "busy": true,
+            "askPending": false, "lastExit": "EXITED"
         }]}),
     );
 
@@ -770,6 +782,9 @@ async fn session_brief_attaches_live_from_core() {
     assert_eq!(row["live"]["busy"], true);
     assert_eq!(row["live"]["openRun"], true);
     assert_eq!(row["live"]["queuedCount"], 1);
+    // galley#30 fields ride through verbatim (no typed struct in between).
+    assert_eq!(row["live"]["askPending"], false);
+    assert_eq!(row["live"]["lastExit"], "EXITED");
     assert_eq!(
         row["live"].get("sessionId"),
         None,
@@ -814,6 +829,489 @@ async fn status_attaches_live_busy_and_queued_counts() {
     assert_eq!(status["total"], 1);
     assert_eq!(status["live"]["busy"], 2);
     assert_eq!(status["live"]["queued"], 3);
+}
+
+/// Seed an agent (`assistant`) row carrying a persisted `tool_calls`
+/// array, in the shape the GUI stores (`JSON.stringify` of the bridge's
+/// `TurnEndEvent.toolCalls`).
+async fn seed_agent_row_with_tool_calls(
+    pool: &SqlitePool,
+    id: &str,
+    session_id: &str,
+    turn_index: i64,
+    content: &str,
+    tool_calls: &serde_json::Value,
+) {
+    sqlx::query(
+        "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
+            tool_calls, created_at) \
+         VALUES (?, ?, ?, 1, 'assistant', ?, ?, '2026-05-18T00:00:00Z')",
+    )
+    .bind(id)
+    .bind(session_id)
+    .bind(turn_index)
+    .bind(content)
+    .bind(tool_calls.to_string())
+    .execute(pool)
+    .await
+    .expect("seed agent row");
+}
+
+/// Serve `sessions.run_state` on the tempdir socket for every
+/// connection: the n-th probe gets `answers[n]`, the last answer repeats.
+/// Returns the request lines seen so far; abort the task when done.
+#[cfg(unix)]
+fn fake_run_state_server_seq(
+    socket_path: std::path::PathBuf,
+    answers: Vec<serde_json::Value>,
+) -> (
+    tokio::task::JoinHandle<()>,
+    std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+) {
+    fake_run_state_server_with_write(socket_path, answers, None)
+}
+
+/// A DB write the fake Core fires `delay` after answering probe number
+/// `after_probe` (0-based): a row that lands shortly after Core reported
+/// the run ended, the way the GUI persists `turn_end`.
+#[cfg(unix)]
+struct LateWrite {
+    after_probe: usize,
+    delay: std::time::Duration,
+    db: std::path::PathBuf,
+    sql: &'static str,
+}
+
+/// [`fake_run_state_server_seq`] plus an optional [`LateWrite`].
+#[cfg(unix)]
+fn fake_run_state_server_with_write(
+    socket_path: std::path::PathBuf,
+    answers: Vec<serde_json::Value>,
+    write: Option<LateWrite>,
+) -> (
+    tokio::task::JoinHandle<()>,
+    std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+) {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixListener;
+    let listener = UnixListener::bind(&socket_path).expect("bind fake socket");
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen_by_server = seen.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let (read_half, mut write_half) = stream.into_split();
+            let mut lines = BufReader::new(read_half).lines();
+            let Ok(Some(request)) = lines.next_line().await else {
+                continue;
+            };
+            let n = {
+                let mut seen = seen_by_server.lock().unwrap();
+                seen.push(request);
+                seen.len() - 1
+            };
+            if let Some(late) = write.as_ref().filter(|w| w.after_probe == n) {
+                let (delay, db, sql) = (late.delay, late.db.clone(), late.sql);
+                tokio::spawn(async move {
+                    tokio::time::sleep(delay).await;
+                    let opts = SqliteConnectOptions::new().filename(db);
+                    let pool = SqlitePool::connect_with(opts).await.expect("open db");
+                    sqlx::raw_sql(sql).execute(&pool).await.expect("late write");
+                    pool.close().await;
+                });
+            }
+            let result = answers[n.min(answers.len() - 1)].clone();
+            let response = serde_json::json!({"ok": true, "requestId": null, "result": result});
+            let _ = write_half
+                .write_all(format!("{response}\n").as_bytes())
+                .await;
+        }
+    });
+    (task, seen)
+}
+
+#[cfg(unix)]
+fn run_state_answer(id: &str, open_run: bool, ask_pending: bool, queued: u32) -> serde_json::Value {
+    serde_json::json!({"sessions": [{
+        "sessionId": id, "runnerAlive": true, "agentRunning": open_run,
+        "openRun": open_run, "queuedCount": queued,
+        "busy": open_run || queued > 0,
+        "askPending": ask_pending, "lastExit": if open_run { "EXITED" } else { "CURRENT_TASK_DONE" }
+    }]})
+}
+
+/// galley#30: a mid-run step has content, so the default wait completes
+/// on it; both frames now carry `live` like `session brief`.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn session_wait_frames_carry_live_and_default_mode_ignores_it() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s-run", "run", "idle", "2026-05-18T00:00:00Z").await;
+    seed_message_with_role(&pool, "m1", "s-run", 4, 0, "user", "go", None).await;
+    seed_message_with_role(
+        &pool,
+        "m2",
+        "s-run",
+        4,
+        1,
+        "assistant",
+        "<summary>step</summary>",
+        None,
+    )
+    .await;
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let (server, seen) =
+        fake_run_state_server_seq(socket_path, vec![run_state_answer("s-run", true, false, 0)]);
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &[
+            "session",
+            "wait",
+            "s-run",
+            "--after-turn=4",
+            "--timeout=5",
+            "--poll=1",
+        ],
+    );
+    server.abort();
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let lines = parse_ndjson(&stdout);
+    assert_eq!(lines.len(), 3, "stdout = {stdout}");
+    assert_eq!(lines[1]["status"], "completed");
+    for frame in &lines[..2] {
+        assert_eq!(frame["session"]["id"], "s-run");
+        assert_eq!(frame["session"]["live"]["openRun"], true);
+        assert_eq!(frame["session"]["live"]["lastExit"], "EXITED");
+        assert_eq!(frame["session"]["live"].get("sessionId"), None);
+    }
+    let requests = seen.lock().unwrap().clone();
+    assert_eq!(requests.len(), 2, "initial + final probe: {requests:?}");
+    let req: serde_json::Value = serde_json::from_str(&requests[0]).expect("request json");
+    assert_eq!(req["command"], "sessions.run_state");
+    assert_eq!(req["args"]["sessionIds"], serde_json::json!(["s-run"]));
+}
+
+/// galley#30: `--until-idle` keeps waiting past a progress step until
+/// Core reports the run ended.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn session_wait_until_idle_waits_for_the_run_to_end() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s-run", "run", "idle", "2026-05-18T00:00:00Z").await;
+    seed_message_with_role(&pool, "m1", "s-run", 4, 0, "user", "go", None).await;
+    seed_message_with_role(
+        &pool,
+        "m2",
+        "s-run",
+        4,
+        1,
+        "assistant",
+        "<summary>step</summary>",
+        None,
+    )
+    .await;
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let (server, seen) = fake_run_state_server_seq(
+        socket_path,
+        vec![
+            run_state_answer("s-run", true, false, 0),  // initial
+            run_state_answer("s-run", true, false, 1),  // poll 1: queue draining
+            run_state_answer("s-run", false, false, 0), // poll 2: ended, then confirmed
+        ],
+    );
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &[
+            "session",
+            "wait",
+            "s-run",
+            "--after-turn=4",
+            "--until-idle",
+            "--timeout=20",
+            "--poll=1",
+        ],
+    );
+    server.abort();
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let lines = parse_ndjson(&stdout);
+    assert_eq!(lines.len(), 3, "stdout = {stdout}");
+    assert_eq!(lines[0]["session"]["live"]["openRun"], true);
+    assert_eq!(lines[1]["phase"], "final");
+    assert_eq!(lines[1]["status"], "completed");
+    assert_eq!(lines[1]["session"]["live"]["openRun"], false);
+    assert_eq!(lines[1]["session"]["live"]["lastExit"], "CURRENT_TASK_DONE");
+    assert_eq!(lines[2]["reason"], "completed");
+    assert_eq!(
+        seen.lock().unwrap().len(),
+        4,
+        "one probe per poll, plus the confirming probe after the grace"
+    );
+}
+
+/// galley#30: an ended run is re-checked after the grace. Here a Goal
+/// continuation (or the next queued run) reopened the gate in between,
+/// so the wait keeps polling and completes on a later confirmed read.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn session_wait_until_idle_keeps_polling_when_the_recheck_sees_a_new_run() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s-goal", "goal", "idle", "2026-05-18T00:00:00Z").await;
+    seed_message_with_role(&pool, "m1", "s-goal", 4, 0, "user", "go", None).await;
+    seed_message_with_role(
+        &pool,
+        "m2",
+        "s-goal",
+        4,
+        1,
+        "assistant",
+        "<summary>step</summary>",
+        None,
+    )
+    .await;
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let (server, seen) = fake_run_state_server_seq(
+        socket_path,
+        vec![
+            run_state_answer("s-goal", false, false, 0), // initial: ended
+            run_state_answer("s-goal", true, false, 0),  // recheck: reopened
+            run_state_answer("s-goal", false, false, 0), // poll 1, then confirmed
+        ],
+    );
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &[
+            "session",
+            "wait",
+            "s-goal",
+            "--after-turn=4",
+            "--until-idle",
+            "--timeout=20",
+            "--poll=1",
+        ],
+    );
+    server.abort();
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let lines = parse_ndjson(&stdout);
+    assert_eq!(lines.len(), 3, "stdout = {stdout}");
+    assert_eq!(lines[0]["session"]["live"]["openRun"], false);
+    assert_eq!(lines[1]["status"], "completed");
+    assert_eq!(lines[1]["session"]["live"]["openRun"], false);
+    assert_eq!(
+        seen.lock().unwrap().len(),
+        4,
+        "initial, recheck (reopened), poll, confirming recheck"
+    );
+}
+
+/// galley#30: the GUI persists the final row slightly after Core closed
+/// the run. Here it lands 300ms after Core first reports the run ended:
+/// an immediate re-read would miss it, the read after the 1s grace (which
+/// builds the final frame) has it.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn session_wait_until_idle_final_frame_includes_a_row_that_landed_during_the_grace() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s-late", "late", "idle", "2026-05-18T00:00:00Z").await;
+    seed_message_with_role(&pool, "m1", "s-late", 4, 0, "user", "go", None).await;
+    seed_message_with_role(
+        &pool,
+        "m2",
+        "s-late",
+        4,
+        1,
+        "assistant",
+        "<summary>step</summary>",
+        None,
+    )
+    .await;
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let (server, seen) = fake_run_state_server_with_write(
+        socket_path,
+        vec![run_state_answer("s-late", false, false, 0)],
+        Some(LateWrite {
+            after_probe: 0,
+            delay: std::time::Duration::from_millis(300),
+            db: db.clone(),
+            sql: "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
+                    final_answer, created_at) \
+                  VALUES ('m3', 's-late', 5, 1, 'assistant', 'all done', 'all done', \
+                    '2026-05-18T00:00:01Z')",
+        }),
+    );
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &[
+            "session",
+            "wait",
+            "s-late",
+            "--after-turn=4",
+            "--until-idle",
+            "--timeout=20",
+            "--poll=1",
+        ],
+    );
+    server.abort();
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let lines = parse_ndjson(&stdout);
+    assert_eq!(lines.len(), 3, "stdout = {stdout}");
+    assert_eq!(lines[0]["messages"].as_array().unwrap().len(), 2);
+    assert_eq!(lines[1]["status"], "completed");
+    let messages = lines[1]["messages"].as_array().expect("messages");
+    assert_eq!(messages.len(), 3, "stdout = {stdout}");
+    assert_eq!(messages[2]["finalAnswer"], "all done");
+    assert_eq!(seen.lock().unwrap().len(), 2, "initial + confirming probe");
+}
+
+/// galley#30: a run that ended on an ask_user question is idle for
+/// `--until-idle` even with messages held behind it (`busy` true); the
+/// final frame carries `live.askPending` and the asking row's `askUser`.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn session_wait_until_idle_completes_on_a_pending_question() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s-ask", "ask", "idle", "2026-05-18T00:00:00Z").await;
+    seed_message_with_role(&pool, "m1", "s-ask", 4, 0, "user", "go", None).await;
+    seed_agent_row_with_tool_calls(
+        &pool,
+        "m2",
+        "s-ask",
+        4,
+        "<summary>need a choice</summary>",
+        &serde_json::json!([
+            {"toolName": "ask_user", "args": {"question": "Which DB?", "candidates": ["sqlite"]}},
+            {"toolName": "ask_user", "args": {"question": "Which DB?", "candidates": ["postgres"]}},
+        ]),
+    )
+    .await;
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let (server, _seen) =
+        fake_run_state_server_seq(socket_path, vec![run_state_answer("s-ask", false, true, 2)]);
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &[
+            "session",
+            "wait",
+            "s-ask",
+            "--after-turn=4",
+            "--until-idle",
+            "--timeout=5",
+            "--poll=1",
+        ],
+    );
+    server.abort();
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let lines = parse_ndjson(&stdout);
+    assert_eq!(lines[1]["status"], "completed", "stdout = {stdout}");
+    let live = &lines[1]["session"]["live"];
+    assert_eq!(live["askPending"], true);
+    assert_eq!(live["busy"], true);
+    assert_eq!(live["queuedCount"], 2);
+    let messages = lines[1]["messages"].as_array().expect("messages");
+    assert_eq!(messages[0].get("askUser"), None, "user row");
+    assert_eq!(
+        messages[1]["askUser"],
+        serde_json::json!({"question": "Which DB?", "candidates": ["sqlite", "postgres"]})
+    );
+}
+
+/// galley#30: with Core unreachable, `--until-idle` falls back to the
+/// output condition for that poll, and frames carry no `live`.
+#[tokio::test]
+async fn session_wait_until_idle_without_core_falls_back_to_output() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s-run", "run", "idle", "2026-05-18T00:00:00Z").await;
+    seed_message_with_role(&pool, "m1", "s-run", 4, 0, "user", "go", None).await;
+    seed_message_with_role(&pool, "m2", "s-run", 4, 1, "assistant", "", Some("done")).await;
+    drop(pool);
+
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &[
+            "session",
+            "wait",
+            "s-run",
+            "--after-turn=4",
+            "--until-idle",
+            "--timeout=5",
+        ],
+    );
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let lines = parse_ndjson(&stdout);
+    assert_eq!(lines[1]["status"], "completed", "stdout = {stdout}");
+    assert_eq!(lines[0]["session"].get("live"), None);
+    assert_eq!(lines[1]["session"].get("live"), None);
+}
+
+/// galley#30: `session show` derives `askUser` from the asking row's
+/// persisted tool_calls; other rows carry no such key.
+#[tokio::test]
+async fn session_show_carries_ask_user_on_the_asking_row() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_session(&pool, "s-ask", "ask", "idle", "2026-05-18T00:00:00Z").await;
+    seed_message_with_role(&pool, "m1", "s-ask", 1, 0, "user", "go", None).await;
+    seed_agent_row_with_tool_calls(
+        &pool,
+        "m2",
+        "s-ask",
+        1,
+        "reading",
+        &serde_json::json!([{"toolName": "file_read", "args": {"path": "ask_user.md"}}]),
+    )
+    .await;
+    // Persisted shape copied from a real row (keys as the GUI stores them).
+    seed_agent_row_with_tool_calls(
+        &pool,
+        "m3",
+        "s-ask",
+        2,
+        "<summary>ask</summary>",
+        &serde_json::json!([{"args": {"candidates": ["A", "B"], "question": "Pick one"},
+                             "toolName": "ask_user"}]),
+    )
+    .await;
+    drop(pool);
+
+    let (stdout, code) = run_galley_with_tmpdir(&db, td.path(), &["session", "show", "s-ask"]);
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let rows = parse_ndjson(&stdout);
+    assert_eq!(rows.len(), 3, "stdout = {stdout}");
+    assert_eq!(rows[0].get("askUser"), None);
+    // `ask_user` appears in its tool_calls text but it is no ask_user call.
+    assert_eq!(rows[1].get("askUser"), None);
+    assert_eq!(
+        rows[2]["askUser"],
+        serde_json::json!({"question": "Pick one", "candidates": ["A", "B"]})
+    );
 }
 
 /// `galley sessions list | head` closes stdout early. That must end the

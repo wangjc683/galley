@@ -21,7 +21,13 @@
 //! a new send can never overtake an already-queued item, because a
 //! non-empty queue always routes to the back; and a message can never
 //! strand (enqueue with `open_run == false` and an empty queue never
-//! happens — that case dispatches).
+//! happens — that case dispatches). The one deliberate exception is a
+//! pending question (galley#30): with `ask_pending` set and no run open,
+//! a new offer dispatches at once as the answer, ahead of the items the
+//! hold is keeping back — they were queued BEFORE the question, so they
+//! cannot be its answer, and they drain FIFO once the answer's run
+//! completes. This is the GUI composer's behavior (it bypasses the
+//! queue while a question is pending), so CLI and GUI agree.
 //!
 //! Queue entries survive bridge crash / respawn (they hang off the
 //! session key, not the process). They do not survive Core restart —
@@ -54,6 +60,37 @@ pub(super) struct SessionQueueState {
     /// The forwarder already announced this run's first `TurnStart`
     /// ([`RunSignal::UserRunStarted`]); reset when the run settles.
     pub(super) started_notified: bool,
+    /// `exitReason.result` of the most recently completed run, verbatim
+    /// (`live.lastExit`). Unlike [`Self::last_outcome`] it is never taken
+    /// and never cleared when a new run starts — a queued message can
+    /// auto-drain the instant a run settles, and a supervisor polling
+    /// after `session wait` must still see why that run ended. Replaced
+    /// only by the next `RunComplete`.
+    pub(super) last_exit: Option<String>,
+}
+
+impl SessionQueueState {
+    /// Fold a `RunCompleteEvent`'s `exitReason` into the state (called by
+    /// the per-spawn forwarder): settle the run's draft into
+    /// [`RunOutcome`], record [`Self::last_exit`], and reset the per-run
+    /// marks. Does not touch the run gate — the drain task closes it via
+    /// [`RunnerManager::queue_take_next`].
+    pub(super) fn settle_run(&mut self, exit_reason: &serde_json::Value) {
+        let result = exit_reason.get("result").and_then(|v| v.as_str());
+        let draft = std::mem::take(&mut self.draft);
+        self.last_outcome = Some(RunOutcome {
+            aborted: result == Some("ABORTED"),
+            errored: draft.errored,
+            goal_tag: draft.goal_tag,
+            summary: draft.summary,
+            continuation: self.run_kind == RunKind::GoalContinuation,
+        });
+        // The bridge always reports a string `result`; a malformed one
+        // reads as "no reason known" rather than keeping a stale value.
+        self.last_exit = result.map(str::to_string);
+        self.run_kind = RunKind::UserTurn;
+        self.started_notified = false;
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -97,8 +134,10 @@ pub struct RunOutcome {
 pub enum QueueOffer {
     /// The message was queued. `position` is 0-based within the queue.
     Queued { queue_id: String, position: usize },
-    /// The session is idle with an empty queue: the caller must persist
-    /// and dispatch NOW. `open_run` has already been reserved so a
+    /// No run is open and either the queue is empty or the last run
+    /// ended on a pending `ask_user` question (this message is the
+    /// answer; held items stay queued): the caller must persist and
+    /// dispatch NOW. `open_run` has already been reserved so a
     /// concurrent offer routes behind this message; on dispatch failure
     /// the caller must call [`RunnerManager::queue_release_run`].
     DispatchNow,

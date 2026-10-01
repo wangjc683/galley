@@ -116,6 +116,8 @@ pub(super) async fn dispatch_session_send(
     // claimed it had started (`.scratch/message-queue/PRD.md` 调查结论
     // 3). `dispatch: "queued"` + null `message` is the honest shape;
     // `--jump` converts the hold into "abort current, run me first".
+    // While an ask_user question is pending and no run is open, the
+    // offer dispatches at once — this send is the answer (galley#30).
     match ctx
         .runner
         .queue_offer(&parsed.session_id, parsed.content.clone(), Some(origin.clone()))
@@ -508,7 +510,9 @@ pub(super) async fn dispatch_session_run_state(
 /// `session.run_state` and `sessions.run_state`. `busy` is the derived
 /// verdict the CLI's Goal controller already computes
 /// (`openRun || agentRunning || queuedCount > 0`) — exposed so Supervisors
-/// don't each re-derive it.
+/// don't each re-derive it. `askPending` / `lastExit` (additive,
+/// galley#30) let a Supervisor see that the run ended on a question it
+/// should answer, and why the last run ended at all.
 pub(super) fn run_state_json(session_id: &str, state: RunState) -> Value {
     serde_json::json!({
         "sessionId": session_id,
@@ -517,6 +521,8 @@ pub(super) fn run_state_json(session_id: &str, state: RunState) -> Value {
         "openRun": state.open_run,
         "queuedCount": state.queued_count,
         "busy": state.open_run || state.agent_running || state.queued_count > 0,
+        "askPending": state.ask_pending,
+        "lastExit": state.last_exit,
     })
 }
 

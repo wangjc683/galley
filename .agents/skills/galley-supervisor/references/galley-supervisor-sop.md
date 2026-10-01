@@ -6,7 +6,7 @@ skill stays self-contained when installed in an agent skills directory.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-sop.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-09-30 (`llm list` follows the runtime: `--runtime=current|managed|external`, managed lists the Galley model store).
+Last synced: 2026-10-01 (#30: `live.askPending` / `live.lastExit`, answering a pending question with a plain send, wider `--jump` guidance, `already_stopped` releases nothing; after-turn = turnCount, not +1; wait --until-idle; askUser).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings. Re-sync
@@ -127,9 +127,11 @@ needs a runtime. Otherwise omit it so Galley follows the GUI's current runtime.
 Each row carries a `live` object when Galley is running:
 `{"busy":true,"openRun":true,"queuedCount":0,...}`. `live.busy` is the
 truthful "still working" signal; `status` only tells you the persisted state
-(`idle`, `archived`, `error`, …). If `live` is absent, Galley Core was not
-reachable and no run-state claim can be made. `status` likewise reports
-`live.busy` / `live.queued` totals.
+(`idle`, `archived`, `error`, …). `live.askPending` means the agent ended its
+last run by asking a question and is waiting for an answer; `live.lastExit`
+says how its most recently completed run ended (see Start One Session). If
+`live` is absent, Galley Core was not reachable and no run-state claim can be
+made. `status` likewise reports `live.busy` / `live.queued` totals.
 
 Summarize titles, whether each is busy, last activity, and likely next steps.
 Do not dump raw JSON unless asked.
@@ -147,11 +149,27 @@ If the command returns `dispatch:"dispatched"`, the session was created and the
 first task was sent. For IM / Supervisor flows that need a bounded answer:
 
 ```bash
-"$GALLEY" session wait <id> --timeout=600 --poll=5 --tail=20 --final-show
+"$GALLEY" session wait <id> --until-idle --timeout=600 --poll=5 --tail=20 --final-show
 ```
 
-On `status:"completed"`, summarize the final payload. On
-`status:"timed_out"`, the task is still running — this is not a failure. If
+Use `--until-idle` by default: `completed` then also means the run has
+finished (and any queued follow-ups after it); a pending question counts as
+finished. Before you report, read `session.live` in the final frame:
+
+- `askPending` — the agent is asking a question; see Continue A Session.
+- otherwise `lastExit` says how the run ended. `MAX_TURNS_EXCEEDED`: it
+  paused mid-work at the engine's per-run step cap (180 steps, 100 in plan
+  mode); nothing is broken — send a continue instruction, then wait again
+  with `--after-turn`. `DONE_WITHOUT_EXIT`: an engine error ended it (the
+  error text is not in CLI output); check how far it got before retrying.
+  `ABORTED`: it was stopped. `CURRENT_TASK_DONE` or any other value: it
+  ended; summarize the final payload. `null`: no run has completed since
+  Galley started; judge from the transcript.
+
+Tell the user which case it is; never present a mid-work step as the result.
+If the final frame has no `live`, Galley Core was unreachable and the wait
+fell back to "any agent output arrived": it may be a mid-run step, so say so.
+On `status:"timed_out"`, the task is still running — this is not a failure. If
 your host environment delivers Galley completion reports to you (Galley's
 managed IM channels do), tell the user you will notify them when it
 finishes. Otherwise include the session id and offer to check later.
@@ -166,23 +184,41 @@ itself died or was cancelled before answering; report that and inspect with
 "$GALLEY" session send <id> "<follow-up instruction>" \
   --supervisor=my-agent/v1 \
   --reason="user follow-up"
-"$GALLEY" session wait <id> --after-turn=<turnCount+1> --timeout=600 --poll=5 --tail=20
+"$GALLEY" session wait <id> --after-turn=<turnCount> --until-idle --timeout=600 --poll=5 --tail=20
 ```
 
 **Always pass `--after-turn` when waiting on a session that already has
 turns.** Without it, `session wait` returns immediately on the previous
-turn's answer and you will report stale output as the result. `turnCount`
-comes from `session brief`; the new turn is `turnCount + 1`.
+turn's answer and you will report stale output as the result. Read
+`turnCount` from `session brief` right before sending and pass it as is:
+your message and the first agent step of its run land at turn index
+`turnCount` (`turnCount + 1` would skip that step).
 
 Read `dispatch` on the send:
 
 - `dispatched` — the runner received it now.
 - `queued` — the session was mid-run; Galley holds the message and runs it
   automatically when the current task finishes (`queue.position` tells you
-  where). Do not resend. Add `--jump` only when the user explicitly wants to
-  interrupt the current task and run this message first.
+  where). Do not resend.
 - `persisted_only` — saved, but no live runner consumed it. Report that
   distinction; do not resend blindly.
+
+Add `--jump` when the current task should not keep running: the user wants
+to interrupt it, or you need the child to drop it because the task was
+superseded, is already done elsewhere, or is going the wrong way. Mid-run it
+aborts the current task and runs this message first (with no run open it
+just dispatches now), so put the stop and the follow-up in one call, e.g.
+"Stop: this is already done. Summarize what you changed and leave the files
+as they are." To add information to a task that should keep running, send
+without `--jump`; it queues.
+
+**If `live.askPending` is true, the child is asking a question** and waits
+for an answer. Read it from `askUser` (`question`, `candidates`) on the
+asking agent row — in the wait's final `messages`, or with
+`session show <id> --tail=5`. Answer with a plain `session send`: it
+dispatches at once as the answer, ahead of messages queued earlier, which
+run after it. Messages queued before the question never answer it. If the
+answer is the user's call, relay the question first.
 
 ### Watch Or Wait
 
@@ -285,6 +321,12 @@ the user's request, do it and report what you did and how to undo it.
 impact summary and the user's confirmation first. `project delete` detaches
 sessions; it does not delete them.
 
+`session stop` aborts a running task (`dispatch:"abort_sent"`); anything
+already queued then runs in order. If the agent is not running it returns
+`already_stopped` and changes nothing: it does not release queued messages
+or answer a pending question. To stop and redirect in one step, use
+`session send --jump` instead.
+
 ### Switch Model
 
 ```bash
@@ -333,9 +375,10 @@ CLI errors are JSON on stdout.
 | `1 internal` | Galley internal error | Report; do not loop |
 
 Never blindly retry. Exit `0` with `dispatch:"queued"`, `"persisted_only"`,
-or `"already_stopped"` is not an error. Distinguish `dispatched`, `queued`,
-`persisted_only`, `already_stopped`, `completed`, `timed_out`,
-`session_error`, and `session_cancelled`.
+or `"already_stopped"` is not an error (`already_stopped`: the agent was not
+running, so nothing was aborted and nothing queued was released).
+Distinguish `dispatched`, `queued`, `persisted_only`, `already_stopped`,
+`completed`, `timed_out`, `session_error`, and `session_cancelled`.
 
 ## Boundaries
 
@@ -354,7 +397,10 @@ Before acting:
 - Did I choose the lightest mode?
 - Does this need confirmation?
 - Did I include origin fields where supported?
-- Did I pass `--after-turn` when waiting on a session with prior turns?
+- Did I wait with `--until-idle`, and pass `--after-turn` on a session with
+  prior turns?
+- After a wait, did I read `session.live` (`askPending`, `lastExit`) in the
+  final frame before reporting a result?
 - If waiting timed out, did I avoid calling the task failed?
 
 ## References

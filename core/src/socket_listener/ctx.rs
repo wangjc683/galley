@@ -87,12 +87,7 @@ pub trait RunnerPort: Send + Sync {
     /// Live run-state snapshot (`session.run_state`). Default reads as
     /// fully idle, matching the no-queue-support fakes.
     async fn run_state(&self, _session_id: &str) -> RunState {
-        RunState {
-            runner_alive: false,
-            agent_running: false,
-            open_run: false,
-            queued_count: 0,
-        }
+        RunState::default()
     }
     /// Session ids with any live state (`sessions.run_state` with no
     /// explicit ids). Default: none, matching the idle fakes.

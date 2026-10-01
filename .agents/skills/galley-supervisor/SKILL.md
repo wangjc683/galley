@@ -75,9 +75,12 @@ Target: Galley CLI `schemaVersion: 1` (frozen since `v0.2`, additive-only).
 5. **Approval prompts are the user's.** Never auto-approve Galley approval
    prompts; a session in step-approval mode waits for the human. Galley
    Settings are GUI-only (`galley config` does not exist).
-6. **Send → wait.** Read `turnCount` from `session brief` first and pass
-   `--after-turn=<turnCount+1>` to `session wait`; without it the wait returns
-   the previous turn's answer immediately. `dispatch:"queued"` means the
+6. **Send → wait.** Read `turnCount` from `session brief` right before
+   sending and pass `--after-turn=<turnCount>` (that value, not +1) plus
+   `--until-idle` to `session wait`; without `--after-turn` the wait returns
+   the previous turn's answer immediately, and without `--until-idle` it can
+   return on a mid-run step. Read `session.live` (`askPending`, `lastExit`)
+   in the final frame before reporting. `dispatch:"queued"` means the
    message will run after the current task; do not resend.
 7. **"Is it running?"** comes from `live.busy` on `sessions list` /
    `session brief` rows, never from `status` (persisted status never reads

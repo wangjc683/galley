@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-10-01
+- [子会话提问挂起后队列冻结](./2026-10-01-ask-pending-supervisor-send.md) — 社区 #30：supervisor 在子会话运行中发的消息入队，运行以 ask_user 结束后出队按 08-12 决定 5 暂停，之后的 CLI 发送排在旧消息后面永远出不去；GUI 输入框提问时绕开队列所以不卡，缺口是 CLI 与 GUI 不一致；issue 三处说法不对（`busy:false` 配 `queuedCount:6` 不可能、`state-seed` SOP 是上游协议、Goal 停止收尾 v2 已删）；JC 裁 A：提问挂起且没有开着的运行时 CLI 发送直接派发作回答，旧消息随后出队；`live` 加 `askPending` / `lastExit`；执行中查出 SOP、skill 与内置 IM supervisor 提示词的 `--after-turn=<turnCount+1>` 差一（本机数据坐实），`session wait` 中途就报 `completed`、CLI 读不到提问原文，JC 再裁加 `wait --until-idle`（判完成后宽限 1 秒复核，兜 GUI 落库滞后）、wait 帧带 `live`、消息行加 `askUser`；队列查看 / 撤回等进 deferred；dev 版端到端复现死锁现场后回答 `dispatched`
 - [跑满单次步数上限后卡死](./2026-10-01-max-turns-run-end.md) — 社区 #29：一次运行跑满 180 步后引擎静默停机，桥只在 GA 上报退出时发 `run_complete`，界面「工作中」永不结束、队列与 Goal 一起冻住；逐行复核属实，外置同样中招，IM 渠道不卡；JC 按推荐裁 A：桥在最后一轮读 `handler.max_turns` 合成 `MAX_TURNS_EXCEEDED`，外加按运行代次守卫的 `done` 兜底（`DONE_WITHOUT_EXIT`，先发 runtime 错误让 Goal 转「受阻」），否掉 issue 原样兜底（迟到的 `done` 误关新运行）与内核补丁；执行代理加的「Stop 也换代次」采纳；GUI 线程尾「已达步数上限 · 回复「继续」接着跑」照抄 GoalPausedTail、灰字「继续」、通知改标题、侧栏「已暂停」；`max_turns` 可配与计划模式上游 issue 草稿进 deferred；本机 410 段运行最长 52 步
 
 ### 2026-09-30
