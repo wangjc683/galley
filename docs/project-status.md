@@ -555,7 +555,36 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.5.5`: nothing yet. Filed during the `v0.5.5` IM round and still
+Since `v0.5.5` (2026-10-01, community issues #29–#32, all fixed on main;
+replies to the four threads are drafted next and wait for JC's per-item
+confirmation):
+
+- #29: a run that reaches GA's per-run step cap (180, 100 in plan mode) now
+  ends instead of hanging; the bridge also closes any other exit-less run as
+  `DONE_WITHOUT_EXIT` after a runtime error. The GUI shows a step-limit tail,
+  「继续」 ghost text, a "Step limit reached" notification and 「已暂停」 in the
+  sidebar ([devlog](./devlog/2026-10-01-max-turns-run-end.md)). JC passed it in dev.
+- #30: a CLI / supervisor send while a child's question is pending dispatches
+  as the answer; `live.askPending` / `live.lastExit`, `askUser` on message
+  rows, `session wait --until-idle` and `live` on wait frames are additive
+  Agent API changes; the SOP / skills / IM supervisor prompt stop teaching
+  `--after-turn=<turnCount+1>` ([devlog](./devlog/2026-10-01-ask-pending-supervisor-send.md)).
+- #31: the managed runtime prompt stops the agent from writing GA
+  `sche_tasks` files that never fire and points to the sidebar's 「定时」
+  ([devlog](./devlog/2026-10-01-ga-scheduler-managed-mode.md)).
+- #32: a 「自定义」 provider card (protocol chosen inside), official cards say
+  「官方 API」, a new provider's first model takes its preset layer from the
+  final URL, and `v1beta`-style version segments join correctly (managed patch
+  `0027`) ([devlog](./devlog/2026-10-01-custom-provider-entry.md)). The dev
+  build was opened for JC's review; JC called the close-out without item-by-item
+  feedback, so the real-device checklist in the devlog is still the reference.
+
+Also filed 2026-10-01: `.scratch/windows-cli-version-lag/` (needs-triage: the
+#29 / #30 reporter's bundled CLI reported 0.5.2 under app 0.5.3). Default
+since the same day: no upstream PRs or issues unless JC asks; the upstream
+drafts in deferred are reference only.
+
+Filed during the `v0.5.5` IM round and still
 open: `.scratch/im-supervisor-context-bloat/` (needs-triage) and
 `.scratch/im-chrome-i18n/` (the IM chrome follows the UI language; deferred
 to the end of the Discord / Telegram polish). The three open judgment calls
