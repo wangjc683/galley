@@ -7,27 +7,33 @@ import type { GoalBrief } from "@/types/goal";
 import { BrowserControlIndicator } from "./BrowserControlIndicator";
 import { ChannelsIndicator } from "./ChannelsIndicator";
 import { GoalIndicator } from "./GoalIndicator";
+import type { RuntimeIndicator } from "./runtime-indicator";
+import { RuntimeStatusIndicator } from "./RuntimeStatusIndicator";
 import { UpdateIndicator } from "./UpdateIndicator";
 import { updateIndicatorVisible } from "./update-indicator-status";
 
 /**
  * Left half of the MainHeader right group: state-of-the-world badges —
- * Goal / Browser Control / Channels / app Update. Each child
- * decides whether it renders as an icon button or a text badge; the
- * cluster only owns the ordering and the group ARIA landmark. The
+ * Goal / engine (内核) / Browser Control / Channels / app Update. Each
+ * child decides whether it renders as an icon button or a text badge;
+ * the cluster only owns the ordering and the group ARIA landmark. The
  * parent gates the whole cluster (and the divider after it) on
  * `hasTopBarStatusItems`, so an empty cluster never renders.
  *
- * Ordering: session/workspace-scoped indicators first; the app-level
- * Update badge sits last, at the boundary next to the utility cluster —
- * spatially closest to the Settings gear (where update controls also
- * live) without destabilizing the always-on utility buttons.
+ * Ordering: session/workspace-scoped indicators first, the engine ahead
+ * of the capabilities that run on it; the app-level Update badge sits
+ * last, at the boundary next to the utility cluster — spatially closest
+ * to the Settings gear (where update controls also live) without
+ * destabilizing the always-on utility buttons.
  */
 export function TopBarStatusCluster({
   activeGoals,
   onOpenGoal,
   onStopGoal,
   onExtendGoal,
+  runtimeIndicator,
+  onOpenRuntimeSettings,
+  onOpenModelsSettings,
   browserControlStatus,
   onOpenBrowserControl,
   channelsState,
@@ -41,6 +47,9 @@ export function TopBarStatusCluster({
   onOpenGoal?: (goalId: string) => void;
   onStopGoal?: (goalId: string) => void;
   onExtendGoal?: (goalId: string) => void;
+  runtimeIndicator: RuntimeIndicator;
+  onOpenRuntimeSettings?: () => void;
+  onOpenModelsSettings?: () => void;
   browserControlStatus: BrowserControlStatus | null;
   onOpenBrowserControl?: () => void;
   channelsState: ImSupervisorState | null;
@@ -64,6 +73,13 @@ export function TopBarStatusCluster({
           onOpenGoal={onOpenGoal}
           onStopGoal={onStopGoal}
           onExtendGoal={onExtendGoal}
+        />
+      )}
+      {runtimeIndicator !== "hidden" && (
+        <RuntimeStatusIndicator
+          indicator={runtimeIndicator}
+          onOpenRuntime={onOpenRuntimeSettings}
+          onOpenModels={onOpenModelsSettings}
         />
       )}
       {browserControlStatus && (

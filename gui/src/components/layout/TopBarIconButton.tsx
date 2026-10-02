@@ -3,9 +3,10 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Shared 28px icon button for MainHeader controls — the utility cluster
- * (width / font size / theme / settings) and the icon-form status
- * indicators (Browser Control / Channels). One place owns the hover /
+ * Shared 28px icon button for the column headers — MainHeader's utility
+ * cluster (width / font size / theme / Supervisor SOP / settings), its
+ * icon-form status indicators (engine / Browser Control / Channels),
+ * and SidebarHeader's 搜索 / 定时 / 项目. One place owns the hover /
  * press / popover-open rhythm so a motion tweak can't drift across the
  * call sites.
  *

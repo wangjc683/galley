@@ -23,10 +23,7 @@ import {
   PROJECT_REVIEW_EXIT_MS,
   projectReviewFallbackNowMs,
   type ProjectScopePhase,
-  type SidebarRuntimeIndicator,
 } from "./sidebar/types";
-
-export type { SidebarRuntimeIndicator } from "./sidebar/types";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -45,18 +42,17 @@ export interface SidebarProps {
   /** Timestamp captured when Project Review opens. Passed from an
    * event handler so "recent within 7 days" stays React-render pure. */
   projectReviewNowMs?: number;
-  runtimeIndicator?: SidebarRuntimeIndicator;
   onSelectSession?: (id: string) => void;
   onNewChat?: () => void;
   onSearch?: () => void;
   onOpenScheduled?: () => void;
   /** Scheduled items needing action (approval-blocked sessions +
-   * failed last fires) — badge on the 定时 row. */
+   * failed last fires) — badge on the 定时 icon. */
   scheduledActionCount?: number;
   /** Open the CreateProjectDialog. Wired to the quick-action "+"
    * and the empty Project Review hint. */
   onNewProject?: () => void;
-  /** Click 项目 quick action → enter/exit Project Review. */
+  /** Click the 项目 icon → enter/exit Project Review. */
   onToggleProjectView?: () => void;
   /** Click a project row → expand/collapse that one project. */
   onToggleProjectExpanded?: (id: string) => void;
@@ -103,12 +99,6 @@ export interface SidebarProps {
   /** Count of archived sessions. Not rendered as a numeral — it only
    * decides whether the footer exists at all (0 → no footer row). */
   archivedCount?: number;
-  /** Click the external runtime status → opens Settings → Runtime. */
-  onOpenRuntimeSettings?: () => void;
-  /** Click "配置模型" → opens Settings → Models. */
-  onOpenModelsSettings?: () => void;
-  /** Click the quiet Agent-control entry → opens Settings → Agent. */
-  onOpenAgentSettings?: () => void;
   /** Session that currently holds the Desktop Pet, or `null` when no
    * pet is running. Renders a small Cat badge on the matching session
    * row so users see "where the pet lives" at a glance — non-
@@ -124,10 +114,10 @@ export interface SidebarProps {
  *
  * Two visual modes, derived from `sessions.length`:
  *
- *   full  — sessions[] non-empty: header + quick actions + bucketed
+ *   full  — sessions[] non-empty: header + new-chat row + bucketed
  *           sections (pinned/today/week/earlier), plus the archive
  *           footer when anything is archived
- *   empty — sessions[] empty: header + quick actions + muted hint
+ *   empty — sessions[] empty: header + new-chat row + muted hint
  *           ("你的对话会出现在这里。"); no sections
  *
  * Either way the archive footer follows one rule: it exists only when
@@ -147,7 +137,6 @@ export function Sidebar({
   projectViewOpen = false,
   expandedProjectIds = [],
   projectReviewNowMs = projectReviewFallbackNowMs(),
-  runtimeIndicator = "hidden",
   onSelectSession,
   onNewChat,
   onSearch,
@@ -167,9 +156,6 @@ export function Sidebar({
   onOpenEarlier,
   onOpenArchived,
   archivedCount = 0,
-  onOpenRuntimeSettings,
-  onOpenModelsSettings,
-  onOpenAgentSettings,
   petAttachedSessionId,
   sessionGoalStatus,
 }: SidebarProps) {
@@ -292,12 +278,16 @@ export function Sidebar({
   }, [projectViewOpen]);
 
   return (
-    <div className="flex h-full flex-col bg-chrome text-[13px] text-ink">
+    // @container/sidebar: the width SidebarHeader and the new-chat row
+    // both query to decide where 搜索 / 定时 / 项目 go
+    // (sidebar/sidebar-width.ts).
+    <div className="@container/sidebar flex h-full flex-col bg-chrome text-[13px] text-ink">
       <SidebarHeader
-        runtimeIndicator={runtimeIndicator}
-        onOpenRuntimeSettings={onOpenRuntimeSettings}
-        onOpenModelsSettings={onOpenModelsSettings}
-        onOpenAgentSettings={onOpenAgentSettings}
+        onSearch={onSearch}
+        onOpenScheduled={onOpenScheduled}
+        scheduledActionCount={scheduledActionCount}
+        projectViewOpen={projectViewOpen}
+        onToggleProjectView={onToggleProjectView}
       />
       <SidebarQuickActions
         onNewChat={onNewChat}

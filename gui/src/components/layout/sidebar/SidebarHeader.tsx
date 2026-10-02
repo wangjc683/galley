@@ -1,42 +1,31 @@
-import { PlugsConnected } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
-import { IconTooltip } from "@/components/ui/tooltip";
-import { useCopy, type AppCopy } from "@/lib/i18n";
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
-import type { RuntimeIndicatorView, SidebarRuntimeIndicator } from "./types";
-
-// ---------- subcomponents ----------
-
-// The header's status entries render as one ~21px text line inside the
-// 44px header. A pseudo-element stretches each button's hit target to
-// ~40px tall without changing the visible pill (polish-checklist P6).
-// Costs a sliver of the drag region above/below the button — the
-// wordmark and MainHeader remain the primary drag handles.
-const HEADER_ENTRY_HIT_AREA =
-  "relative after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
+import { SIDEBAR_HEADER_PR } from "./sidebar-width";
+import { SidebarNavIcons } from "./SidebarNavIcons";
 
 export function SidebarHeader({
-  runtimeIndicator,
-  onOpenRuntimeSettings,
-  onOpenModelsSettings,
-  onOpenAgentSettings,
+  onSearch,
+  onOpenScheduled,
+  scheduledActionCount,
+  projectViewOpen,
+  onToggleProjectView,
 }: {
-  runtimeIndicator: SidebarRuntimeIndicator;
-  onOpenRuntimeSettings?: () => void;
-  onOpenModelsSettings?: () => void;
-  onOpenAgentSettings?: () => void;
+  onSearch?: () => void;
+  onOpenScheduled?: () => void;
+  scheduledActionCount?: number;
+  projectViewOpen: boolean;
+  onToggleProjectView?: () => void;
 }) {
-  const copy = useCopy();
-  // Single-line header (refactored 2026-05-13): the "Galley" wordmark
-  // is short (~50px at 16px serif), leaving room to right-align the
-  // runtime status indicator on the same row and reclaim one line of
-  // vertical space for the session list below.
+  // Masthead row (2026-10-03): the "Galley" wordmark left, 搜索 / 定时 /
+  // 项目 as 28px icons right — the same TopBarIconButton rhythm as
+  // MainHeader's utility cluster, so the two column headers read as one
+  // top strip. The engine indicator and Supervisor SOP that used to sit
+  // here moved to MainHeader's status / utility clusters.
   //
-  // This is now the TOP-MOST chrome of the Sidebar column (the old
+  // This is the TOP-MOST chrome of the Sidebar column (the old
   // full-width TopBar is gone — each column grows its own header; see
   // MainHeader.tsx). On macOS the traffic lights float at {16,16} over
   // this row (cluster right edge ~68px), so the left padding reserves
@@ -49,41 +38,17 @@ export function SidebarHeader({
   // items-center at ~22px. The lights are nudged to `trafficLightPosition
   // y=22` (tauri.conf.json) so their center lands on that same ~22px row
   // — the default y=16 rendered the lights visibly higher than the
-  // wordmark / Supervisor-SOP text. We move the lights, not the text:
-  // the text's center is shared with the right column's MainHeader (which
-  // has no lights), so nudging text up would break the two-column top
-  // strip. Carries `data-tauri-drag-region` + the
-  // Windows double-click-maximize handler so this header is a window
-  // drag handle just like MainHeader.
+  // wordmark. We move the lights, not the text: the text's center is
+  // shared with the right column's MainHeader (which has no lights), so
+  // nudging text up would break the two-column top strip. Carries
+  // `data-tauri-drag-region` + the Windows double-click-maximize handler
+  // so this header is a window drag handle just like MainHeader.
   //
-  // Narrow widths (min window 960px × 14% sidebar ≈ 134px): the 88px
-  // reserve eats most of the row; the wordmark stays visible and the
-  // runtime indicator truncates via its existing max-w / truncate.
-  const runtimeIndicatorView = renderRuntimeIndicator(
-    runtimeIndicator,
-    copy.sidebar,
-  );
-  const indicator =
-    runtimeIndicator === "external-ready" ? null : runtimeIndicatorView;
-  const externalRuntimeBadge =
-    runtimeIndicator === "external-ready" ? runtimeIndicatorView : null;
-  const supervisorSopLabel = copy.sidebar.supervisorSop;
-  const supervisorSopTooltip = copy.sidebar.supervisorSopTooltip;
-  const showSupervisorSop =
-    (runtimeIndicator === "hidden" || runtimeIndicator === "external-ready") &&
-    Boolean(onOpenAgentSettings);
-  // Attach mode (2026-09-18): the row is "Galley" + green "外部 GA" badge +
-  // Supervisor SOP, ~239px of content behind a 104px reserve — 343px of
-  // sidebar, which no laptop reaches at the 20% default (295px on a
-  // 1475px window; both min-w-0 children then truncate to "外.." /
-  // "Supervis…"). The badge is the wordmark's resident state
-  // (information); the SOP button is a shortcut (action), so the
-  // shortcut's label yields: in attach mode it renders as the shared
-  // 28px icon-only form with its tooltip (252px needed, fits 20% of any
-  // ≥1260px window). Keyed on the runtime mode, NOT a container width:
-  // managed mode's row ("Galley" + text pill, 279px) already fits at the
-  // default width and must not be caught by a threshold.
-  const supervisorSopIconOnly = externalRuntimeBadge !== null;
+  // Right padding puts the 项目 icon over the session rows' `⋯` column
+  // (Windows adds the list's scrollbar lane). Narrow widths: once the
+  // wordmark and the icons no longer fit (251px on mac, 189 / 179px
+  // elsewhere — sidebar-width.ts), the icons drop into the new-chat row
+  // below and this header is the wordmark alone.
   return (
     <div
       data-tauri-drag-region
@@ -100,7 +65,8 @@ export function SidebarHeader({
         }
       }}
       className={cn(
-        "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line/60 pr-4",
+        "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line/60",
+        SIDEBAR_HEADER_PR,
         // macOS: clear the traffic-light cluster (right edge ~68px) with
         // ~20px of breathing room so the wordmark reads as a deliberate
         // brand mark, not something crowding the OS lights. Non-mac has
@@ -111,144 +77,23 @@ export function SidebarHeader({
       {/* Product mark: sentence-case Galley keeps the name legible as
           a product rather than an acronym. */}
       {/* data-tauri-drag-region is non-bubbling (must be on the exact
-          mousedown target), so the wordmark and the badge carry it
-          explicitly — grabbing "Galley" next to the traffic lights is
-          the most natural window-drag spot in this column. */}
-      <div data-tauri-drag-region className="flex min-w-0 items-center gap-2">
-        <div
-          data-tauri-drag-region
-          className="shrink-0 font-serif text-[17px] font-medium italic tracking-[0.005em] text-ink"
-        >
-          Galley
-        </div>
-        {externalRuntimeBadge ? (
-          <IconTooltip text={externalRuntimeBadge.title} side="bottom">
-            <div
-              data-tauri-drag-region
-              className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-soft"
-            >
-              <RuntimeDot tone={externalRuntimeBadge.tone} />
-              <span data-tauri-drag-region className="min-w-0 truncate">
-                {externalRuntimeBadge.label}
-              </span>
-            </div>
-          </IconTooltip>
-        ) : null}
+          mousedown target), so the wordmark carries it explicitly —
+          grabbing "Galley" next to the traffic lights is the most
+          natural window-drag spot in this column. */}
+      <div
+        data-tauri-drag-region
+        className="shrink-0 font-serif text-[17px] font-medium italic tracking-[0.005em] text-ink"
+      >
+        Galley
       </div>
-      {indicator?.action === "models" ? (
-        <IconTooltip text={indicator.title} side="bottom">
-          <button
-            type="button"
-            onClick={onOpenModelsSettings}
-            aria-label={indicator.ariaLabel}
-            className={cn(
-              "flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink",
-              HEADER_ENTRY_HIT_AREA,
-            )}
-          >
-            <RuntimeDot tone={indicator.tone} />
-            <span className="min-w-0 truncate">{indicator.label}</span>
-          </button>
-        </IconTooltip>
-      ) : indicator?.action === "runtime" ? (
-        <IconTooltip text={indicator.title} side="bottom">
-          <button
-            type="button"
-            onClick={onOpenRuntimeSettings}
-            aria-label={indicator.ariaLabel}
-            className={cn(
-              "flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink",
-              HEADER_ENTRY_HIT_AREA,
-            )}
-          >
-            <RuntimeDot tone={indicator.tone} />
-            <span className="min-w-0 truncate">{indicator.label}</span>
-          </button>
-        </IconTooltip>
-      ) : showSupervisorSop && supervisorSopIconOnly ? (
-        <IconTooltip text={supervisorSopTooltip} side="bottom">
-          <TopBarIconButton
-            onClick={onOpenAgentSettings}
-            aria-label={copy.sidebar.openSupervisorSop}
-            className="shrink-0"
-          >
-            <PlugsConnected size={16} weight="thin" />
-          </TopBarIconButton>
-        </IconTooltip>
-      ) : showSupervisorSop ? (
-        <IconTooltip text={supervisorSopTooltip} side="bottom">
-          <button
-            type="button"
-            onClick={onOpenAgentSettings}
-            aria-label={copy.sidebar.openSupervisorSop}
-            className={cn(
-              "inline-flex min-w-0 max-w-[132px] items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[11.5px] text-ink-soft hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-              HEADER_ENTRY_HIT_AREA,
-            )}
-          >
-            <PlugsConnected size={13} weight="thin" className="shrink-0" />
-            <span className="min-w-0 truncate">{supervisorSopLabel}</span>
-          </button>
-        </IconTooltip>
-      ) : indicator ? (
-        <IconTooltip text={indicator.title} side="bottom">
-          <div
-            data-tauri-drag-region
-            className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-soft"
-          >
-            <RuntimeDot tone={indicator.tone} />
-            <span data-tauri-drag-region className="min-w-0 truncate">
-              {indicator.label}
-            </span>
-          </div>
-        </IconTooltip>
-      ) : (
-        <span aria-hidden="true" />
-      )}
+      <SidebarNavIcons
+        placement="header"
+        onSearch={onSearch}
+        onOpenScheduled={onOpenScheduled}
+        scheduledActionCount={scheduledActionCount}
+        projectViewOpen={projectViewOpen}
+        onToggleProjectView={onToggleProjectView}
+      />
     </div>
   );
-}
-
-function renderRuntimeIndicator(
-  indicator: SidebarRuntimeIndicator,
-  copy: AppCopy["sidebar"],
-): RuntimeIndicatorView | null {
-  switch (indicator) {
-    case "configure-models":
-      return {
-        label: copy.configureModels,
-        title: copy.bundledNeedsModel,
-        ariaLabel: copy.openModelsForBundled,
-        tone: "muted",
-        action: "models",
-      };
-    case "external-ready":
-      return {
-        label: copy.externalGA,
-        title: copy.usingExternalGA,
-        ariaLabel: copy.usingExternalGAAria,
-        tone: "success",
-      };
-    case "external-unconfigured":
-      return {
-        label: copy.connectExternalGA,
-        title: copy.chooseExistingGAFolder,
-        ariaLabel: copy.openRuntimeForExternal,
-        tone: "muted",
-        action: "runtime",
-      };
-    case "hidden":
-      return null;
-  }
-}
-
-function RuntimeDot({ tone }: { tone: RuntimeIndicatorView["tone"] }) {
-  const map: Record<RuntimeIndicatorView["tone"], string> = {
-    success: "bg-success ring-2 ring-success/20",
-    muted: "bg-ink-muted",
-  };
-  // shrink-0: inside min-w-0 truncating rows the dot is otherwise the
-  // only shrinkable item left once the label hits zero — at 14%
-  // sidebar width the status dot itself deformed.
-  return <span className={cn("size-2 shrink-0 rounded-full", map[tone])} />;
 }

@@ -217,7 +217,7 @@ function App() {
     llmConfigHint,
     hasConfiguredManagedModel,
     requiresManagedModelConfig,
-    sidebarRuntimeIndicator,
+    runtimeIndicator,
   } = useLLMDisplay({ screen, copy });
   // Generic entries (gear button, ⌘,, command palette) land on the
   // FIRST tab so the highlighted tab matches the list's visual order —
@@ -481,7 +481,7 @@ function App() {
   // (user expects modals to be closed on app re-open).
   const [archivedOpen, setArchivedOpen] = useState(false);
   // ScheduledTasksDialog: management surface for scheduled tasks,
-  // opened from the sidebar 定时 quick-action row. The sessions the
+  // opened from the sidebar 定时 icon. The sessions the
   // tasks produce live in the normal timeline.
   const [scheduledOpen, setScheduledOpen] = useState(false);
   // EarlierDialog: opens when the user clicks the collapsed
@@ -542,10 +542,6 @@ function App() {
       <AppShell
         sidebar={
           <Sidebar
-            runtimeIndicator={sidebarRuntimeIndicator}
-            onOpenRuntimeSettings={() => openSettings("runtime")}
-            onOpenModelsSettings={() => openSettings("models")}
-            onOpenAgentSettings={() => openSettings("integration")}
             sessions={visibleSessions}
             activeId={effectiveActiveId}
             onNewChat={() => {
@@ -637,6 +633,7 @@ function App() {
                   onExtendGoal={(goalId) => {
                     void extendGoalFromTopbar(goalId);
                   }}
+                  runtimeIndicator={runtimeIndicator}
                   openSettings={openSettings}
                   onOpenSettings={() => openSettings()}
                   resolvedTheme={resolvedTheme}

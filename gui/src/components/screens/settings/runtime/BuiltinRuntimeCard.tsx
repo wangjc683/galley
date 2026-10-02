@@ -89,7 +89,7 @@ export function BuiltinRuntimeCard({
               onClick={onOpenModels}
               leadingIcon={<Key size={12} weight="thin" />}
             >
-              {appCopy.sidebar.configureModels}
+              {appCopy.topbar.configureModels}
             </Button>
           ) : (
             !active && (

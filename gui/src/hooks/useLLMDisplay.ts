@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { resolveSidebarRuntimeIndicator } from "@/components/layout/sidebar/runtime-indicator";
+import { resolveRuntimeIndicator } from "@/components/layout/header/runtime-indicator";
 import { useActiveRuntime } from "@/hooks/useActiveSession";
 import { resolveDisplayedLLM } from "@/lib/current-llm";
 import type { AppCopy } from "@/lib/i18n";
@@ -14,11 +14,12 @@ import { useRuntimeStore } from "@/stores/runtime";
 import type { Screen } from "@/stores/ui";
 
 /**
- * The Composer/Sidebar LLM projection: resolve which LLM list + display
- * name the UI shows (active session slot > managed / external fallback,
- * see `resolveDisplayedLLM`), plus the managed-model-config gates
- * derived from the same inputs. i18n stays here (`managedLLMDisplayName`,
- * `llmConfigHint`); display precedence lives in `resolveDisplayedLLM`.
+ * The Composer LLM projection: resolve which LLM list + display name
+ * the UI shows (active session slot > managed / external fallback, see
+ * `resolveDisplayedLLM`), plus the managed-model-config gates and the
+ * MainHeader engine indicator derived from the same inputs. i18n stays
+ * here (`managedLLMDisplayName`, `llmConfigHint`); display precedence
+ * lives in `resolveDisplayedLLM`.
  */
 export function useLLMDisplay({
   screen,
@@ -71,7 +72,7 @@ export function useLLMDisplay({
   );
   const requiresManagedModelConfig =
     activeRuntimeKind === "managed" && !hasConfiguredManagedModel;
-  const sidebarRuntimeIndicator = resolveSidebarRuntimeIndicator(
+  const runtimeIndicator = resolveRuntimeIndicator(
     activeRuntimeKind,
     hasConfiguredManagedModel,
     gaConfig,
@@ -83,6 +84,6 @@ export function useLLMDisplay({
     llmConfigHint,
     hasConfiguredManagedModel,
     requiresManagedModelConfig,
-    sidebarRuntimeIndicator,
+    runtimeIndicator,
   };
 }

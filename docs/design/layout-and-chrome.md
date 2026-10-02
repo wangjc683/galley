@@ -1,6 +1,6 @@
 # 整体布局与窗口 Chrome
 
-> Galley 设计系统 · 原 DESIGN.md §3–§4.2（2026-07-04 拆分）：两栏布局、SidebarHeader / MainHeader、Browser Control / Channels indicator、Sidebar 结构、Session Row、Project 行。
+> Galley 设计系统 · 原 DESIGN.md §3–§4.2（2026-07-04 拆分）：两栏布局、SidebarHeader（书眉）/ MainHeader、Browser Control / 内核 / Channels indicator、Sidebar 结构、Session Row、Project 行。
 
 ## 3. 整体布局
 
@@ -39,18 +39,20 @@
 
 两个 header 都带 `data-tauri-drag-region`，共同作为窗口拖动 handle（Tauri v2 需 `core:window:allow-start-dragging` 权限，buttons 自动豁免）；非 mac 双击 header 空白处切最大化（`isWindowActionTarget` 判定），mac 由 overlay 接管。
 
-**SidebarHeader（Sidebar 栏顶，y=0）**
-- `Galley` 字标（左）+ runtime / Supervisor SOP 状态指示（右），单行。
+**SidebarHeader（Sidebar 栏顶，y=0）—— 书眉**（2026-10-03）
+- `Galley` 字标（左）+ 搜索 / 定时 / 项目三个图标（右），单行。角色是**书眉**：顶部两栏像摊开的书，左页印书名（Galley），右页印章名（会话标题）。整体感靠这个角色和共用的网格，不靠把字标和按钮焊在一起。字标不可点（08-14：它是拖窗把手；按题词先例，误点不能烧掉一个会话）。
+- 字标 17px Newsreader 斜体 500，**不缩**：Newsreader 的 x 高只有 0.43em（Inter 0.55em），17px 的 x 高 7.24px 与右栏 13px Inter 标题的 7.10px 同档（字体文件实测）；缩到 14px 小写反而比右栏小一号。宽 46.8px。
 - macOS：traffic light 浮于窗口左上 = 本 header 左上，故左 padding 让出 **88px**（红绿灯簇右缘约 68px + ~20px 间隙；代码现状，2026-09-18 回写——早先记的 ~78px 已被实机否掉：10px 间隙让斜体衬线字标看起来挤着彩色圆点）。**不要**退回 78px 或更贴。非 mac 用 16px 常规 gutter。
-- narrow（最小窗 960 × 14% sidebar ≈ 134px）：88px reserve 吃掉大半，字标保留、runtime 指示靠 `truncate` / `max-w` 优雅截断。
-- **外置模式 Supervisor SOP 退成 icon-only**（2026-09-18）：外置模式这一行是字标 + 绿色「外部 GA」徽标 + Supervisor SOP，内容 ~239px 加 104px 预留要 343px sidebar，20% 默认比例下笔记本全放不下（295px 时两者等权截成「外..」/「Supervis…」）。徽标是字标的驻留状态（信息），SOP 按钮是快捷入口（动作），让的是动作的文字：外置模式下 SOP 渲染为共用的 28px icon-only 形态（`TopBarIconButton` + tooltip），需要 252px。**按运行时模式判断，不按容器宽度**——内置模式的行（字标 + 文字 pill，279px）默认宽度已放得下，不能被阈值误伤，所以内置模式零变化。
+- 三个图标用 MainHeader 同款 `TopBarIconButton`（28px、16px thin、`gap-1`），左右两栏顶上的按钮是同一种东西；顺序 搜索 → 定时 → 项目。右边距让「项目」图标与会话行 hover `⋯` 落在同一竖列（行 `mx-1.5` + 触发器 `right-1.5`，同为 28px）：mac / Linux 12px；Windows 22px，多出的 10px 是会话列表 `scrollbar-gutter: stable` 留的滚动条槽位。项目按下态、定时徽标见 §4.2。
+- **窄宽回落，单一门槛**：放不下「字标 + 三图标」时，三个图标回到新对话那一行，即 09-28 的一行布局，顶行只剩字标。新对话行两态都在，所以切换时列表不上下跳；字标始终在。门槛按侧栏内容宽度（`@container/sidebar`，面板宽减 aside 的 1px 右边框）：mac 251px、Windows 189px、Linux 179px，算式在 `sidebar/sidebar-width.ts`。
+- 运行时状态与 Supervisor SOP 已移出（2026-10-03）：前者进 MainHeader 状态簇（见下「内核 Indicator」），后者进工具簇。2026-09-18「外置模式 SOP 退成 icon-only」一条随之作废。
 
 **MainHeader（Main 栏顶）** —— `[ 标题 ▾  ··· drag ···  状态簇 │ 工具簇 │ (Win 窗口控制) ]`
 - session title 左对齐贴 main 栏左 gutter（**不对齐居中的对话列**——对话列宽随 compact/wide 变，对齐它会让标题左右跳）。title 属于「当前对话」，放在对话区上方、视线最先到达处。本栏左侧无 OS chrome 保留区。
 - **Session title menu**：有 active session 时 title + `CaretDown` 是一个按钮，打开 session-scoped 菜单（Rename / Reinject Tools / Desktop Pet）。空状态渲染 italic muted "新对话"，不可点。Rename 进入 inline edit（Enter 提交 / Esc 取消）。
 - 右：两个清晰 group，最后才是 Windows window controls（不属于工具簇）：
-  - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ Browser Control → Channels。（2026-07-20：原列首的 YOLO 徽章随审批模式 per-session 化退役——审批模式的控件与状态合一，唯一入口是 Composer 的 LLM pill（审批模式并入其 popover，无独立控件），见 conversation.md §4.4。）
-  - **工具簇**（aria label：`视图与设置`）：conversation width toggle（compact / wide）→ 对话字号（`TextAa`，popover + 分段）→ 外观主题（popover + 分段）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。四个按钮共用 `TopBarIconButton`；宽度箭头图标为 14px（其余 16px）是刻意的视觉补偿——横向箭头光学上偏大，缩一档四个按钮才等重。
+  - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ 内核（2026-10-03 从 SidebarHeader 移入）→ Browser Control → Channels → 应用更新。只放有状态的东西。（2026-07-20：原列首的 YOLO 徽章随审批模式 per-session 化退役——审批模式的控件与状态合一，唯一入口是 Composer 的 LLM pill（审批模式并入其 popover，无独立控件），见 conversation.md §4.4。）
+  - **工具簇**（aria label：`视图与设置`）：conversation width toggle（compact / wide）→ 对话字号（`TextAa`，popover + 分段）→ 外观主题（popover + 分段）→ Supervisor SOP（`PlugsConnected` thin，tooltip 只写名字「Supervisor SOP」，2026-10-03 从 SidebarHeader 移入）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。常驻按钮共用 `TopBarIconButton`；宽度箭头图标为 14px（其余 16px）是刻意的视觉补偿——横向箭头光学上偏大，缩一档这些按钮才等重。SOP 放这里而不进状态簇：它没有状态，本质是「设置 → 集成」的深链，挨着齿轮读作「设置里一个常用页」；不按状态隐藏，两种运行时模式都在。
   - 两组之间用 1px 竖向分隔线；没有任何状态项时不显示状态簇和分隔线。
 - Windows window controls（min / max-restore / close）贴 MainHeader 最右端 = 窗口右上；macOS 不渲染（由左上 overlay traffic light 接管窗口控制）。
 
@@ -62,7 +64,7 @@
 - icon-only controls 必须使用项目统一的 Radix tooltip（`TooltipLabel` / `IconButton` tooltip），不使用原生 `title` 作为 hover 提示（延迟 / 样式 / 出现时机不可控，会让相邻按钮反馈节奏不一致）；可访问名称用 `aria-label` 保留。
 - **不放 Command Palette 按钮**：Sidebar 已有 Search quick action，`⌘K` 全局可用；重复 click affordance 只增加 chrome 噪音。
 - **不放 Sidebar toggle**：Sidebar 当前不可折叠，只可拖拽调整宽度。
-- **不显示**：runtime 详情（留在 SidebarHeader 指示，不进入 MainHeader）/ Stop（在 Composer Submit 位置）/ Context Window / 价格。
+- **不显示**：runtime 详情（状态簇只放内核状态的入口，详情在 Settings → 运行时 / 模型；2026-10-03 前这条写的是「留在 SidebarHeader，不进入 MainHeader」，随内核指示移入状态簇改写——状态簇早已有渠道、更新这些 app 级状态）/ Stop（在 Composer Submit 位置）/ Context Window / 价格。
 
 > 命名注记：组件文件为 `MainHeader.tsx`；其内部 helper（`TopBarStatusCluster` 等）与 i18n 命名空间 `copy.topbar` 保留历史名，仅为限制 churn，不代表仍存在全宽 top bar。下文 Browser Control / Channels indicator 小节中的「TopBar」措辞即指 MainHeader 状态簇。
 
@@ -92,16 +94,30 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 - Tab 内容（设置指引 / 状态卡 / 维护动作 / demo）的规范在
   [overlays-and-settings](./overlays-and-settings.md) §9 Browser Control。
 
+#### 内核 Indicator
+
+2026-10-03 从 SidebarHeader 移入状态簇，位于 Goal 后、Browser Control 前（内核是后面那些能力的前提）。照 Browser Control 的语法：没就绪时文字 badge，就绪后收成安静图标或不显示。
+
+| 状态 | 形态 | 点击 |
+|---|---|---|
+| 内置、无可用模型 | `配置模型` 文字 badge，`neutral` | Settings → 模型 |
+| 外置、未配置 GA 目录或 Python | `接入外部 GA` 文字 badge，`neutral` | Settings → 运行时 |
+| 外置、就绪 | `Cpu` thin 图标（Settings 运行时 tab 的图标），tooltip「使用你接入的 GenericAgent」 | Settings → 运行时 |
+| 内置、就绪 | 不显示 | — |
+
+- 色调刻意用 `neutral`：在侧栏时它们是灰点 + 浅墨文字，搬家不顺手升级严重度。
+- 外置就绪的图标是新增的可点入口（在侧栏时只是不可点的徽标），与 Browser Control / Channels 的就绪图标一样深链到各自的设置页。
+
 ### 4.2 Sidebar
 
 #### 结构（自上而下）
 
 ```
 ┌──────────────────────────────────┐
-│ Galley                    ● GA 就绪 │  product name + runtime dot
+│ Galley               ⌕   ◷   ▭  │  书眉：字标 + 搜索 / 定时 / 项目（2026-10-03 起）
 ├──────────────────────────────────┤
-│ + 新对话            ⌕   ◷   ▭    │  一行：新对话带字；搜索 / 定时 / 项目是图标
-│                                  │  （2026-09-28 起；此前四行）
+│ + 新对话                     ⌘N  │  独占一行：唯一主动作，全宽带字
+├──────────────────────────────────┤  （窄于门槛时三个图标回到这一行）
 │ ACTIVE PROJECTS              +   │  Project Review: 点击项目行展开/收起；+ 新建项目
 │   FolderOpen Galley        +     │  行点击展开/收起；+ 新建项目对话
 │     ◐ Session A                  │
@@ -125,12 +141,13 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 
 #### 关键决策
 
-- **单行 Header**：`Galley` product name + runtime 状态同行。产品名使用 sentence case，不使用全大写 wordmark，避免读成 acronym。位置（2026-07-05 回写实现现状）：external-ready 的绿色徽标贴在字标右侧同组（它是字标的"驻留状态"），可点动作类 indicator（配置模型 / 连接外部 GA）与 Supervisor SOP 按钮居行尾右侧。字标与非按钮徽标都自带 `data-tauri-drag-region`（该属性不冒泡）。
-- **Quick Actions 一行**（2026-09-28，此前四行各占一行，约 152px、合三条会话高）：左边「新对话」带字（品牌色粗加号 + medium），右边搜索 / 定时 / 项目三个 32px 图标，名称与快捷键在悬停提示里。JC 的用法：只有新对话高频，搜索次之（主要点这里、不按 ⌘K），项目与定时本机 0 使用；社区用法未知，所以是**降级不藏**。定时徽标缩到时钟图标右上角（只在有待处理事项时出现、增加时 pop，规则不变）；项目按钮开启时是按下态（`bg-selected/85` + `shadow-inner` + `FolderOpen`）。新建项目的 `+` 移到 Project Review 第一个分组标题右侧（命令面板也有「新建项目」，零项目 CTA 不变）。真机比过现状 / 一行·搜索带字 / 两行 / 底栏，再比过「新对话也去字」的纯图标与描边两档，JC 定一行带字。见 [devlog](../devlog/2026-09-28-sidebar-quick-actions-one-row.md)。
-- **新对话文字不截断**：动作文字要么完整显示，要么只剩加号（悬停提示给完整标签 + ⌘N）。门槛按语言：中文 198px、英文 220px（「New chat」Inter 500 13px 实测 58.8px）。项目版「新对话 · 项目名」只截项目名。
+- **书眉 Header**（2026-10-03）：`Galley` 字标 + 搜索 / 定时 / 项目三个图标同行，规格与窄宽回落见 §4.1 SidebarHeader。产品名使用 sentence case，不使用全大写 wordmark，避免读成 acronym。字标自带 `data-tauri-drag-region`（该属性不冒泡）。运行时状态与 Supervisor SOP 不在这里（移入 MainHeader，见 §4.1）。
+- **新对话独占一行 = 逃生出口**（2026-10-03）：侧栏这个按钮是窗口里唯一一直看得见的新对话入口（主区顶栏的「新对话」只是空状态标题；⌘N / ⌘K / mac 菜单栏都要用户先知道，Windows 没有菜单栏）。用户找不到它，会像被困在旧会话里。所以它按逃生出口的三条标准设计：**显眼**（品牌色粗加号 + medium 文字，这一带唯一的颜色）、**能读**（任何宽度都带字）、**位置固定**（不随宽度或状态挪去别处）。代价是不省高度：笔记本宽度下「字标常驻 / 新对话带字 / 省一行」只能三选二，JC 定带字优先于省一行。搜索 / 定时 / 项目是低频入口，上顶行是**降级不藏**（JC 本机项目与定时 0 使用，社区用法未知）。定时徽标在时钟图标右上角（只在有待处理事项时出现、增加时 pop）；项目按钮开启时是按下态（`bg-selected/85` + `shadow-inner` + `FolderOpen`）。新建项目的 `+` 在 Project Review 第一个分组标题右侧（命令面板也有「新建项目」，零项目 CTA 不变）。演进：四行（约 152px）→ 一行（2026-09-28，[devlog](../devlog/2026-09-28-sidebar-quick-actions-one-row.md)）→ 书眉 + 独占一行（[devlog](../devlog/2026-10-03-sidebar-header-masthead.md)）。
+- **新对话文字不截断**：独占一行时任何宽度都带字（中文约需 96px、英文约 116px，都低于最窄的 134px）。只有窄宽回落态（三个图标回到这一行）沿用 09-28 规则：动作文字要么完整显示，要么只剩加号，门槛中文 198px、英文 220px（「New chat」Inter 500 13px 实测 58.8px）。这两个数只在 mac 上起作用（都低于 251）；Windows / Linux 的回落门槛本身就低于它们，回落态一律只剩加号。项目版「新对话 · 项目名」只截项目名。
+- **行末 ⌘N 与项目上下文**：行末淡色快捷键提示只在**无项目上下文**且三个图标不在本行时显示；右缘离侧栏边 18px，mac 上与顶行「项目」图标的字形右缘对齐。项目上下文里新对话落进项目，而 ⌘N 总是普通新对话（`useGlobalShortcuts` 清项目上下文）——⌘N 是键盘上永远不变的逃生口，所以项目上下文里行末不显示 ⌘N，悬停提示也不写 ⌘N（2026-10-03 修正：此前提示写「新对话 · 项目名 ⌘N」，与 ⌘N 的实际行为不符）。
 - **普通 sidebar 不再显示项目列表**：普通视图只保留时间线，减少重复层级；需要看项目时显式进入 Project Review。
 - **Project row 不用 emoji**：用 Phosphor `Folder` / `FolderOpen` 表达层级与 filter，避免跨平台 emoji 造成的视觉重量和渲染差异。
-- **Project Review 由 Quick Action `项目` 图标切换**：开启后隐藏普通 timeline，展示完整 project list；项目 row 只负责展开/收起，允许多项目同时展开；再次点击 `项目` 退出 Project Review。入口用 selected tint 表示开启状态，不额外加说明文案；tooltip / aria-label 未开启时为「项目」，开启时为「退出项目视图」。
+- **Project Review 由顶行 `项目` 图标切换**（2026-10-03 起在书眉 header；此前在快捷入口行）：进入时自动展开第一个项目并软设项目上下文，正下方的新对话行立刻变成「新对话 · 项目名」，然后列表换成项目视图——按下后的变化从上到下连续，所以按钮离列表隔着新对话行不构成问题；退出时清空项目上下文。开启后隐藏普通 timeline，展示完整 project list；项目 row 只负责展开/收起，允许多项目同时展开；再次点击 `项目` 退出 Project Review。入口用 selected tint 表示开启状态，不额外加说明文案；tooltip / aria-label 未开启时为「项目」，开启时为「退出项目视图」。
 - **Project Review 进出动效**：模式切换不是硬替换。进入时 Project Review 从 0 高度轻展开并 fade in，普通 timeline 下沉 fade out；退出时 Project Review 保留约 150ms 完成上收 fade out，普通 timeline 从下方回到原位。项目内部 drawer 继续使用独立展开动画，避免两层动效互相抢戏。
 - **Project Review 按活跃度分组**：pinned 或 30 天内有非归档 session 活动的项目进入 `ACTIVE PROJECTS`；其余进入 `OLDER PROJECTS`，默认折叠。新建但 30 天内为空的项目视作 active，避免刚建完就被藏起来。（2026-09-09 从 7 天改为 30 天，跟随时间线的「本月」桶：会话在「本月」里而它的项目在「更早项目」里是打架。）
 - **项目对话创建是独立动作**：项目 row 右侧轻量 `+` 和空项目 CTA `+ 新建项目对话` 才会把右侧切到 project-aware EmptyState（placeholder: `在 {Project} 里交代什么？`，第一句话 lazily create 到该 project）。展开/收起项目不改变右侧当前对话。

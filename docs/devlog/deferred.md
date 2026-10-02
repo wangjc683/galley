@@ -619,7 +619,10 @@
 - **关联**：`core/src/app_menu.rs`（六个字段的注释已写明 macOS 只认哪些）；
   `gui/src/components/screens/settings/SettingsAbout.tsx`；sidebar wordmark
   交互讨论（2026-08-14，未落 devlog——被 About 话题打断，结论止于「拖拽把手
-  是硬约束、题词先例判死了开新 session、彩蛋是唯一误触无害的选项」）。
+  是硬约束、题词先例判死了开新 session、彩蛋是唯一误触无害的选项」）；
+  2026-10-03 侧栏顶部讨论里的「落款」方向（字标移到底部「已归档」行，离开顶行即
+  不再是拖窗把手，可做成通往 Settings → About 的门）是本条启动时的现成候选，当时
+  未采纳，见 [书眉 devlog](./2026-10-03-sidebar-header-masthead.md)。
 
 ## 定时任务当天补跑触发失败（scheduler catch-up fire 无会话产生）
 

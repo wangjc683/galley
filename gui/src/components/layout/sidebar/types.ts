@@ -25,18 +25,3 @@ export const PROJECT_ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
  * module-load constant: a desktop app left running for days would
  * otherwise classify against a stale clock. */
 export const projectReviewFallbackNowMs = () => Date.now();
-
-
-export type SidebarRuntimeIndicator =
-  | "hidden"
-  | "configure-models"
-  | "external-ready"
-  | "external-unconfigured";
-
-export type RuntimeIndicatorView = {
-  label: string;
-  title: string;
-  ariaLabel: string;
-  tone: "success" | "muted";
-  action?: "models" | "runtime";
-};

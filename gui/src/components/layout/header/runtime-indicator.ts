@@ -1,18 +1,23 @@
 import type { RuntimeKind } from "@/types/session";
 
-import type { SidebarRuntimeIndicator } from "./types";
+export type RuntimeIndicator =
+  | "hidden"
+  | "configure-models"
+  | "external-ready"
+  | "external-unconfigured";
 
 /**
- * Which runtime-config nudge the sidebar header shows. Managed runtime
- * surfaces nothing once any model has a usable credential, otherwise a
- * "configure models" prompt; external runtime is "ready" only when both
- * the GA path and a Python interpreter are set, otherwise "unconfigured".
+ * Which engine (内核) state the MainHeader status cluster shows. Managed
+ * runtime surfaces nothing once any model has a usable credential,
+ * otherwise a "configure models" prompt; external runtime is "ready"
+ * only when both the GA path and a Python interpreter are set,
+ * otherwise "unconfigured".
  */
-export function resolveSidebarRuntimeIndicator(
+export function resolveRuntimeIndicator(
   runtimeKind: RuntimeKind,
   hasConfiguredManagedModel: boolean,
   gaConfig: { gaPath: string; python: string },
-): SidebarRuntimeIndicator {
+): RuntimeIndicator {
   if (runtimeKind === "managed") {
     return hasConfiguredManagedModel ? "hidden" : "configure-models";
   }

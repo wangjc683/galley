@@ -1,4 +1,4 @@
-import { Gear } from "@phosphor-icons/react";
+import { Gear, PlugsConnected } from "@phosphor-icons/react";
 
 import { ThemePreferenceMenu } from "@/components/theme/ThemePreferenceMenu";
 import { TooltipLabel } from "@/components/ui/tooltip";
@@ -13,10 +13,11 @@ import { WidthToggleButton } from "./WidthToggleButton";
 import { ChangesToggleButton } from "./ChangesToggleButton";
 
 /**
- * Right half of the MainHeader right group: global view tools that
- * always apply, regardless of session state — width toggle, font size,
- * theme, and Settings. Unlike the status cluster these never gate on
- * state, so the cluster and its ARIA landmark render unconditionally.
+ * Right half of the MainHeader right group: global tools that always
+ * apply, regardless of session state — width toggle, font size, theme,
+ * Supervisor SOP, and Settings. Unlike the status cluster these never
+ * gate on state (Supervisor SOP shows in both runtime modes), so the
+ * cluster and its ARIA landmark render unconditionally.
  */
 export function TopBarUtilityCluster({
   changesOpen = false,
@@ -28,6 +29,7 @@ export function TopBarUtilityCluster({
   themePreference,
   resolvedTheme,
   onChangeThemePreference,
+  onOpenSupervisorSop,
   onOpenSettings,
 }: {
   changesOpen?: boolean;
@@ -39,6 +41,8 @@ export function TopBarUtilityCluster({
   themePreference: ThemePreference;
   resolvedTheme: ResolvedTheme;
   onChangeThemePreference?: (preference: ThemePreference) => void;
+  /** Opens Settings → Agent, where the Supervisor SOP is copied. */
+  onOpenSupervisorSop?: () => void;
   onOpenSettings?: () => void;
 }) {
   const copy = useCopy().topbar;
@@ -49,10 +53,10 @@ export function TopBarUtilityCluster({
       aria-label={copy.utilityGroupLabel}
       className="flex items-center gap-1"
     >
-      {/* No Search button here — the Sidebar's Quick Actions has
-          its own search affordance, and ⌘K opens the palette from
-          anywhere. Two click affordances for the same thing was
-          chrome clutter without payoff. */}
+      {/* No Search button here — the Sidebar has its own search
+          icon, and ⌘K opens the palette from anywhere. Two click
+          affordances for the same thing was chrome clutter without
+          payoff. */}
       {onToggleChanges && (
         <ChangesToggleButton open={changesOpen} onToggle={onToggleChanges} />
       )}
@@ -72,6 +76,14 @@ export function TopBarUtilityCluster({
           variant="topbar"
         />
       )}
+      <TooltipLabel text={copy.supervisorSopTooltip}>
+        <TopBarIconButton
+          onClick={onOpenSupervisorSop}
+          aria-label={copy.openSupervisorSop}
+        >
+          <PlugsConnected size={16} weight="thin" />
+        </TopBarIconButton>
+      </TooltipLabel>
       <TooltipLabel
         text={copy.settingsShortcut(formatShortcutReadable("Mod+,"))}
       >

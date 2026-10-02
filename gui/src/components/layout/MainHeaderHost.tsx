@@ -1,4 +1,5 @@
 import { MainHeader } from "@/components/layout/MainHeader";
+import type { RuntimeIndicator } from "@/components/layout/header/runtime-indicator";
 import { useContext } from "react";
 import { GitReviewContext } from "@/lib/git-review";
 import { useActiveRuntime } from "@/hooks/useActiveSession";
@@ -20,7 +21,8 @@ import type { GoalBrief } from "@/types/goal";
  * reinject, the pet toggle, app-update restart) select their stores
  * here; App passes down only what must stay single-instance at its
  * level (goal state from `useGoalEffects`, channel aggregates from
- * `useChannelsStatus`, the settings opener).
+ * `useChannelsStatus`, the engine indicator from `useLLMDisplay`, the
+ * settings opener).
  */
 export function MainHeaderHost({
   activeGoals,
@@ -29,6 +31,7 @@ export function MainHeaderHost({
   onOpenGoal,
   onStopGoal,
   onExtendGoal,
+  runtimeIndicator,
   openSettings,
   onOpenSettings,
   resolvedTheme,
@@ -40,7 +43,9 @@ export function MainHeaderHost({
   onOpenGoal: (goalId: string) => void;
   onStopGoal: (goalId: string) => void;
   onExtendGoal: (goalId: string) => void;
-  /** Open Settings on a specific tab (browser-control / channels entries). */
+  runtimeIndicator: RuntimeIndicator;
+  /** Open Settings on a specific tab (engine / browser-control /
+   * channels / Supervisor SOP entries). */
   openSettings: (tab: SettingsTab) => void;
   /** Open Settings on whatever tab it last showed (the gear entry). */
   onOpenSettings: () => void;
@@ -86,6 +91,10 @@ export function MainHeaderHost({
       onOpenChannelsSettings={
         activeRuntimeKind === "managed" ? () => openSettings("im") : undefined
       }
+      runtimeIndicator={runtimeIndicator}
+      onOpenRuntimeSettings={() => openSettings("runtime")}
+      onOpenModelsSettings={() => openSettings("models")}
+      onOpenSupervisorSop={() => openSettings("integration")}
       activeGoals={activeGoals}
       onOpenGoal={onOpenGoal}
       onStopGoal={onStopGoal}

@@ -588,7 +588,14 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.5.6`: nothing yet. The four community threads #29–#32 shipped in
+Since `v0.5.6`: the sidebar top rework (2026-10-03,
+[devlog](./devlog/2026-10-03-sidebar-header-masthead.md)), frontend only: the
+sidebar header carries the wordmark plus the 搜索 / 定时 / 项目 icons, the
+new-chat button gets its own full-width row, Supervisor SOP moves to MainHeader's utility cluster and the
+engine indicator to its status cluster; JC accepted it live. Core, runner and
+managed-ga are untouched.
+
+The four community threads #29–#32 shipped in
 `v0.5.6` and were answered 2026-10-01, all kept open:
 [#29](https://github.com/wangjc683/galley/issues/29#issuecomment-5931634906),
 [#30](https://github.com/wangjc683/galley/issues/30#issuecomment-5931635387)

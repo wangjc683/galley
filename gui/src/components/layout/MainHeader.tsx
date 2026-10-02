@@ -11,6 +11,7 @@ import type { AppUpdateStatus } from "@/stores/app-update";
 import type { GoalBrief } from "@/types/goal";
 
 import { WindowControls } from "./WindowControls";
+import type { RuntimeIndicator } from "./header/runtime-indicator";
 import { SessionTitleMenu } from "./header/SessionTitleMenu";
 import { TopBarStatusCluster } from "./header/StatusCluster";
 import { updateIndicatorVisible } from "./header/update-indicator-status";
@@ -31,6 +32,17 @@ export interface MainHeaderProps {
   channelsState?: ImSupervisorState | null;
   channelsLoadError?: string | null;
   onOpenChannelsSettings?: () => void;
+  /**
+   * Engine (内核) state from `resolveRuntimeIndicator`: nothing when the
+   * bundled engine has a model, a "configure" badge when it has none or
+   * when the external GA isn't set up, a quiet icon while an external GA
+   * is in use. The two handlers open Settings → Runtime / Models.
+   */
+  runtimeIndicator?: RuntimeIndicator;
+  onOpenRuntimeSettings?: () => void;
+  onOpenModelsSettings?: () => void;
+  /** Supervisor SOP entry in the utility cluster → Settings → Agent. */
+  onOpenSupervisorSop?: () => void;
   activeGoals?: GoalBrief[];
   onOpenGoal?: (goalId: string) => void;
   onStopGoal?: (goalId: string) => void;
@@ -104,10 +116,11 @@ export interface MainHeaderProps {
  * Layout — title left-aligned against the column's left gutter, the
  * action cluster pinned right, and draggable empty space between them.
  * The right group is split into two child clusters:
- *   - TopBarStatusCluster — state-of-the-world badges (Goal /
- *     Browser Control / Channels), gated on `hasTopBarStatusItems`.
- *   - TopBarUtilityCluster — always-on view tools (width / font / theme
- *     / Settings).
+ *   - TopBarStatusCluster — state-of-the-world badges (Goal / engine /
+ *     Browser Control / Channels / Update), gated on
+ *     `hasTopBarStatusItems`.
+ *   - TopBarUtilityCluster — always-on view tools (width / font / theme)
+ *     plus Supervisor SOP and Settings.
  * Each cluster and its indicators live under `./header/`.
  *
  * Why title-left (not centered): Galley is a multi-session workspace
@@ -148,6 +161,10 @@ export function MainHeader({
   channelsState = null,
   channelsLoadError = null,
   onOpenChannelsSettings,
+  runtimeIndicator = "hidden",
+  onOpenRuntimeSettings,
+  onOpenModelsSettings,
+  onOpenSupervisorSop,
   activeGoals = [],
   onOpenGoal,
   onStopGoal,
@@ -170,6 +187,7 @@ export function MainHeader({
   const copy = useCopy();
   const hasTopBarStatusItems =
     activeGoals.length > 0 ||
+    runtimeIndicator !== "hidden" ||
     browserControlStatus !== null ||
     Boolean(onOpenChannelsSettings) ||
     updateIndicatorVisible(appUpdateStatus);
@@ -259,6 +277,9 @@ export function MainHeader({
             onOpenGoal={onOpenGoal}
             onStopGoal={onStopGoal}
             onExtendGoal={onExtendGoal}
+            runtimeIndicator={runtimeIndicator}
+            onOpenRuntimeSettings={onOpenRuntimeSettings}
+            onOpenModelsSettings={onOpenModelsSettings}
             browserControlStatus={browserControlStatus}
             onOpenBrowserControl={onOpenBrowserControl}
             channelsState={channelsState}
@@ -282,6 +303,7 @@ export function MainHeader({
           themePreference={themePreference}
           resolvedTheme={resolvedTheme}
           onChangeThemePreference={onChangeThemePreference}
+          onOpenSupervisorSop={onOpenSupervisorSop}
           onOpenSettings={onOpenSettings}
         />
         {/* Windows-only custom chrome: min / max-restore / close. Hugs

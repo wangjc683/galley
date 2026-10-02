@@ -1,37 +1,35 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSidebarRuntimeIndicator } from "./runtime-indicator";
+import { resolveRuntimeIndicator } from "./runtime-indicator";
 
-describe("resolveSidebarRuntimeIndicator", () => {
+describe("resolveRuntimeIndicator", () => {
   const configured = { gaPath: "/path/to/ga", python: "/usr/bin/python3" };
 
   it("hides the nudge when managed runtime has a configured model", () => {
-    expect(resolveSidebarRuntimeIndicator("managed", true, configured)).toBe(
-      "hidden",
-    );
+    expect(resolveRuntimeIndicator("managed", true, configured)).toBe("hidden");
   });
 
   it("prompts model config when managed runtime has no usable credential", () => {
-    expect(resolveSidebarRuntimeIndicator("managed", false, configured)).toBe(
+    expect(resolveRuntimeIndicator("managed", false, configured)).toBe(
       "configure-models",
     );
   });
 
   it("is external-ready when both GA path and python are set", () => {
-    expect(resolveSidebarRuntimeIndicator("external", false, configured)).toBe(
+    expect(resolveRuntimeIndicator("external", false, configured)).toBe(
       "external-ready",
     );
   });
 
   it("is external-unconfigured when GA path or python is blank/whitespace", () => {
     expect(
-      resolveSidebarRuntimeIndicator("external", false, {
+      resolveRuntimeIndicator("external", false, {
         gaPath: "",
         python: "/usr/bin/python3",
       }),
     ).toBe("external-unconfigured");
     expect(
-      resolveSidebarRuntimeIndicator("external", false, {
+      resolveRuntimeIndicator("external", false, {
         gaPath: "/path/to/ga",
         python: "   ",
       }),
@@ -39,7 +37,7 @@ describe("resolveSidebarRuntimeIndicator", () => {
   });
 
   it("ignores managed-model config status for external runtime", () => {
-    expect(resolveSidebarRuntimeIndicator("external", true, configured)).toBe(
+    expect(resolveRuntimeIndicator("external", true, configured)).toBe(
       "external-ready",
     );
   });
