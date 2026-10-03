@@ -710,6 +710,9 @@ function SidebarProjectDrawer({
   return (
     <div
       ref={drawerRef}
+      // A collapsed drawer keeps its rows mounted at zero height; the
+      // Sidebar's reveal-active-row effect reads this to leave them be.
+      data-collapsed-drawer={expanded ? undefined : ""}
       className={cn(
         "grid overflow-hidden transition-[grid-template-rows] duration-(--motion-slow) ease-spring motion-reduce:transition-none",
         expanded

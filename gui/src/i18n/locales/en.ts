@@ -197,7 +197,6 @@ export const enCopy: AppCopy = {
     bucketRecent: "Recent",
     bucketEarlier: "Earlier",
     stepSummary: (index, summary) => `Step ${index} · ${summary}`,
-    completedSummary: (summary) => `Done · ${summary}`,
     cancelledSummary: (summary: string) => `Stopped · ${summary}`,
     pausedSummary: (summary: string) => `Paused · ${summary}`,
     turnProtocolFailure: "Turn protocol error: tool call not delivered",

@@ -100,9 +100,12 @@ describe("displaySessionSummary", () => {
 describe("settledSessionSubline", () => {
   const settled = { cancelled: false, pausedAtStepLimit: false };
 
-  it("claims completion only for a run that completed", () => {
+  it("shows a completed run's recap bare — the icon says done", () => {
     expect(settledSessionSubline("修好了", settled, zhCopy.sidebar)).toBe(
-      "已完成 · 修好了",
+      "修好了",
+    );
+    expect(settledSessionSubline("Fixed it", settled, enCopy.sidebar)).toBe(
+      "Fixed it",
     );
   });
 

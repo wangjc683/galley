@@ -592,8 +592,14 @@ Since `v0.5.6`: the sidebar top rework (2026-10-03,
 [devlog](./devlog/2026-10-03-sidebar-header-masthead.md)), frontend only: the
 sidebar header carries the wordmark plus the 搜索 / 定时 / 项目 icons, the
 new-chat button gets its own full-width row, Supervisor SOP moves to MainHeader's utility cluster and the
-engine indicator to its status cluster; JC accepted it live. Core, runner and
-managed-ga are untouched.
+engine indicator to its status cluster; JC accepted it live. Same day, a
+sidebar polish round ([devlog](./devlog/2026-10-03-sidebar-polish-selection-visibility.md)),
+also frontend only: an active session from 更早 borrows a row under the 更早
+entry and the active row is scrolled into view; settled rows say "done" with a
+muted check circle instead of a `已完成 · ` subline prefix (JC picked it live on
+a temporary switcher); the 已归档 footer sits on the row grid; native title
+tooltips only on truncated text. At the next Windows smoke, glance at the thin
+check circle on a 100% display. Core, runner and managed-ga are untouched.
 
 The four community threads #29–#32 shipped in
 `v0.5.6` and were answered 2026-10-01, all kept open:

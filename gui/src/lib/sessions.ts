@@ -192,6 +192,21 @@ export function backfillRecentSessions(
   };
 }
 
+/**
+ * Which bucket of an already-grouped timeline holds `sessionId`, or
+ * `undefined` when it isn't listed there (archived, unknown, not yet
+ * loaded). Reads the grouping instead of re-deriving from dates, so it
+ * agrees with `backfillRecentSessions` about rows promoted into `recent`.
+ */
+export function findSessionBucket(
+  buckets: GroupedSessions,
+  sessionId: string,
+): SessionBucket | undefined {
+  return BUCKET_ORDER.find((bucket) =>
+    buckets[bucket].some((s) => s.id === sessionId),
+  );
+}
+
 export const SIDEBAR_BUCKET_ORDER = BUCKET_ORDER;
 
 export const BUCKET_LABEL: Record<SessionBucket, string> = {

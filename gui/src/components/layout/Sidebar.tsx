@@ -3,9 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { useCopy } from "@/lib/i18n";
 import { sortProjectsForNavigation } from "@/lib/projects";
-import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
+import {
+  backfillRecentSessions,
+  findSessionBucket,
+  groupSessions,
+} from "@/lib/sessions";
 import type { GoalBrief } from "@/types/goal";
-import type { Project, Session } from "@/types/session";
+import type { Project, Session, SessionBucket } from "@/types/session";
 
 import { SidebarFooter } from "./sidebar/SidebarFooter";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
@@ -180,6 +184,13 @@ export function Sidebar({
     [sessions, dayStamp],
   );
   const globalEmpty = sessions.length === 0;
+  // Which timeline bucket the active session sits in — the reveal effect
+  // below watches it so a row that jumps sections (an old session gets a
+  // new message: borrowed slot under 更早 → top of 今天) is followed.
+  const activeBucket = useMemo(
+    () => (activeId ? findSessionBucket(globalBuckets, activeId) : undefined),
+    [globalBuckets, activeId],
+  );
   const navigationProjects = useMemo(
     () => sortProjectsForNavigation(projects, sessions),
     [projects, sessions],
@@ -214,6 +225,63 @@ export function Sidebar({
     );
   const previousProjectViewOpenRef = useRef(projectViewOpen);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Last session the user picked by pressing a row in this sidebar
+  // (timeline or Project Review). The reveal effect skips that one
+  // selection: rows activate on pointerdown, so scrolling a half-visible
+  // row into view would slide it out from under the cursor mid-click.
+  const sidebarSelectedIdRef = useRef<string | null>(null);
+  const previousRevealRef = useRef<{
+    id?: string;
+    bucket?: SessionBucket;
+  } | null>(null);
+  const handleSelectSession = (id: string) => {
+    sidebarSelectedIdRef.current = id;
+    onSelectSession?.(id);
+  };
+
+  // Keep "you are here" on screen. When the active session changes from
+  // outside the list (search / ⌘K / EarlierDialog / a new chat's first
+  // send / mount) or its row changes section while it stays active,
+  // bring the row into view if it isn't fully visible. Instant, not
+  // smooth: the user's attention is in the main pane, and motion in the
+  // periphery should stay quiet. `nearest` + the row's scroll-my-2 move
+  // the list just enough to show the row with 8px of air. Declared
+  // before the mode-flip effect below, so if both ever fire in one
+  // commit, the flip's snap-to-top still has the last word.
+  useEffect(() => {
+    const previous = previousRevealRef.current;
+    previousRevealRef.current = { id: activeId, bucket: activeBucket };
+    const idChanged = previous === null || previous.id !== activeId;
+    if (!idChanged && previous.bucket === activeBucket) return;
+    // The click mark only answers "did THIS selection come from a row".
+    // Consume it on every selection change, matched or not: a mark left
+    // by pressing the already-active row (activeId never moved) must not
+    // silence a later outside selection of that same session. A bucket
+    // change reveals regardless of origin.
+    const fromSidebarClick =
+      idChanged && sidebarSelectedIdRef.current === activeId;
+    if (idChanged) sidebarSelectedIdRef.current = null;
+    if (!activeId || fromSidebarClick) return;
+
+    const container = scrollContainerRef.current;
+    const row = container?.querySelector<HTMLElement>(
+      `[data-session-id="${CSS.escape(activeId)}"]`,
+    );
+    // Not listed (archived, no project in Project Review), or sitting in
+    // a collapsed project drawer — those stay mounted at zero height
+    // inside overflow-hidden boxes, and scrollIntoView would scroll the
+    // drawer's own clip box. Nothing to reveal either way.
+    if (!container || !row || row.closest("[data-collapsed-drawer]")) return;
+    const rowRect = row.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (
+      rowRect.top >= containerRect.top &&
+      rowRect.bottom <= containerRect.bottom
+    ) {
+      return;
+    }
+    row.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [activeId, activeBucket]);
 
   useEffect(() => {
     const previousProjectViewOpen = previousProjectViewOpenRef.current;
@@ -316,7 +384,7 @@ export function Sidebar({
               sessionGoalStatus={sessionGoalStatus}
               onToggleProjectExpanded={onToggleProjectExpanded}
               onStartProjectConversation={onStartProjectConversation}
-              onSelectSession={onSelectSession}
+              onSelectSession={handleSelectSession}
               onArchiveSession={onArchiveSession}
               onTogglePinSession={onTogglePinSession}
               onAssignSessionToProject={onAssignSessionToProject}
@@ -350,7 +418,7 @@ export function Sidebar({
                 projects={navigationProjects}
                 petAttachedSessionId={petAttachedSessionId}
                 sessionGoalStatus={sessionGoalStatus}
-                onSelectSession={onSelectSession}
+                onSelectSession={handleSelectSession}
                 onArchiveSession={onArchiveSession}
                 onTogglePinSession={onTogglePinSession}
                 onAssignSessionToProject={onAssignSessionToProject}

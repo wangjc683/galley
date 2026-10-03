@@ -134,6 +134,7 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 │ THIS WEEK                        │  滚动 7 天
 │ THIS MONTH                       │  滚动 30 天（2026-09-09 新增）
 │ EARLIER                          │  单行 "查看全部 N"，打开 EarlierDialog
+│   ◐ 当前会话                     │  仅当当前会话在「更早」里：借位挂一行（2026-10-03）
 ├──────────────────────────────────┤
 │ Archived                   N     │  底部
 └──────────────────────────────────┘
@@ -158,8 +159,9 @@ Browser Control 是 managed GA 的核心能力完成项，位于状态簇的 Goa
 - **时间桶是滚动窗口，四桶**：`今天`（自然日）/ `本周`（滚动 7 天）/ `本月`（滚动 30 天）/ `更早`。不用日历周 / 月：日历月在每月 1 号会把上月全部掉进「更早」，那天体验最差；「本周」叫日历名走滚动窗口从未被抱怨过，「本月」照此办理。`本月` 桶 2026-09-09 新增——一周对轻度用户偏短（JC 库里 8–30 天区间的会话数是 1–7 天的近三倍，正是「上次那个任务」最常落的区间），而一个月以上的确可以接受多两步去「更早」里找。加桶而不是把「本周」改名「本月」：重度用户一个月可能四五十条，保留「本周」这一段近的仍然近，一整块「本月」扫起来才有结构。
 - **时间桶 header 显示总数**：`PINNED 3` / `今天 5` / `本周 8` / `本月 14` / `更早 24 ›`。数字只表示桶内 session 总数，不拆 running / waiting / failed 分项。
 - **EARLIER 折叠成单行入口**：sidebar 是当前工作面，不是无限历史列表；完整旧 session 浏览进入 `EarlierDialog`（文案「N 个 30 天前的对话」）。Earlier 入口沿用同一 header + count 视觉族，只多一个 caret 表达可打开。
+- **选中行必在侧栏里**（2026-10-03）：当前会话属于「更早」时（从搜索 / ⌘K / EarlierDialog 打开，打开不刷新最后活动时间），它借位挂在 Earlier 入口正下方，是一条普通会话行（选中三通道、⋯ 菜单齐全），入口计数不变，切走即消失、无动效。选中从侧栏以外来、或当前会话换了桶（旧会话发一句话跳进今天）时，行不完全可见就瞬时 `scrollIntoView({ block: "nearest" })`（行带 `scroll-my-2`）；侧栏里点行不滚——行在 pointerdown 激活，滚动会让半露的行在指针下滑走。折叠的项目抽屉里的行不滚（`data-collapsed-drawer`）。
 - **永不空侧栏**：置顶 / 今天 / 本周 / 本月全空但有更早会话时，自动把最近 10 条提出来标为「最近」（2026-09-09 从 5 条提到 10 条，条件从「本周为空」扩到「整窗为空」——本月有内容时正常显示本月桶，不叠加回填）。提出来的行离开「更早」，计数与 dialog 保持一致。
-- **Archived 不叫 Trash**：archive 是保留数据；真正永久删除只在 Archived dialog 里出现。
+- **Archived 不叫 Trash**：archive 是保留数据；真正永久删除只在 Archived dialog 里出现。底部「已归档」行对齐会话行网格（2026-10-03）：图标中心 26px、文字起点 42px（`pl-4.5` + 12px 图标居中于 `w-4` + `gap-2`），按钮仍满宽。
 - Sidebar 不可折叠；可拖拽调整宽度。`⌘K` 全局 Command Palette。对象级低频操作由右键菜单和 row hover `⋯` 共同承载：session row 提供 pin / rename / move to project / archive（2026-09-16 置顶提到首项：本机 111 个 session 零置顶，按可发现性问题处理；行内专属 hover 图钉按钮被否，理由见 deferred「session 行 hover 置顶按钮」），project row 提供 pin / edit / delete。右键是熟练用户快捷入口，`⋯` 是可发现入口；两者必须共享同一组动作、排序和 destructive 样式，菜单视觉与 MainHeader 会话菜单同语域（`galley-pop-in` / 200px / 13px）。row contextual actions 使用 overlay，不在非 hover 状态制造额外右侧 gutter；hover / menu open 时文字临时让位给操作按钮。重命名进行中右键菜单禁用（右击边距会 blur-commit 编辑，再叠一个菜单是双重歧义）。
 - **归档运行中的会话需确认**（2026-07-05 决策）：会话自身 running 或作为 goal master 时，归档前弹 alertdialog——归档不停止运行，但会把还在跑的工作从状态板上藏起来；对话框文案如实陈述这两点。已结算会话保持一键归档（可逆，无需确认）。
 - **交互输入模型：鼠标优先**（2026-07-05 决策）：Galley 以鼠标 / 触控板为交互方式，键盘可达性（Tab 遍历行与菜单、focus reveal 等）明确不在当前范围。全局快捷键（`⌘K` / `⌘N` / `⌘,`）保留；不要为满足审计逐个补 tabIndex / role——若未来翻案，应整体设计键盘故事而非零星修补。
@@ -188,11 +190,11 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 
 行最左 14px Phosphor 图标，颜色随状态（见 `status-icon.tsx` `STATUS_MAP`）：
 
-- idle `Circle` muted / connecting `CircleNotch` 旋转 / running `CircleNotch` **bold** 杏沙旋转 / ask_user 与 waiting_approval `PauseCircle` 深琥珀（同图标——两者都是「停下等你」，靠状态行文案区分）/ error `XCircle` 深红 / cancelled `Prohibit` muted（区别于 error：用户主动）/ completed `CheckCircle` 杏沙 / archived `Archive` muted。
-- **completed 的现实（2026-07-05 澄清）**：`completed` 枚举只由 CLI / Supervisor 面写入（`galley session` 收尾）；GUI 本地跑完的会话结算为 `idle`。本地的「跑完了」由两个信号承担：状态行 `已完成 · {summary}` 前缀 + 未读时左图标实心填充。不存在本地 spinner→check 翻面。
+- 静止且跑完（`idle` 与 `completed` 同画）`CheckCircle` muted / 静止但没跑完（步数上限暂停、Goal 暂停或受阻、没有摘要；`StatusIcon` 的 `incomplete`）`Circle` muted / connecting `CircleNotch` 旋转 / running `CircleNotch` **bold** 杏沙旋转 / ask_user 与 waiting_approval `PauseCircle` 深琥珀（同图标——两者都是「停下等你」，靠状态行文案区分）/ error `XCircle` 深红 / cancelled `Prohibit` muted（区别于 error：用户主动）/ archived `Archive` muted。
+- **「已完成」由图标承担**（2026-10-03，JC 真机裁决，[devlog](../devlog/2026-10-03-sidebar-polish-selection-visibility.md)）：`completed` 枚举只由 CLI / Supervisor 面写入（`galley session` 收尾），GUI 本地跑完的会话结算为 `idle`（07-05 澄清）；两者都画成 muted 细线对勾圈，看过的完成行不分来源。此前本地完成行是空心环，靠副行 `已完成 · ` 前缀补说完成——空心环在待办类通用语法里恰是「没完成」，前缀又在几乎每一行重复成噪音。空心环从此只留给「停着但不算完成」的静止行。对勾是 muted 不是杏沙：它是几乎每一行的静止态，必须是最安静的那个；杏色只给它的未读形态。同一个 `StatusIcon` 也画 ⌘K 命令面板与「更早」对话框的会话列表，三处一致（那两处不传 `incomplete`，静止会话一律对勾）。
 - **三信号优先级必须一致**（rail / icon / 状态行同序）：error > ask_user > approval > running / goal-running > unread > idle。任何一路擅自换序都会让同一行「自相矛盾」。
-- **未读并入左图标，不再用右侧独立点**。旧方案的右侧静点在 hover 时会被 `⋯` 菜单顶替而消失，体验割裂；现在「完成未读」= 把左侧那个本就存在的图标渲染成 `weight="fill"` + `text-brand`（空心环→实心点），无需新增元素。
-- **光学权重而非几何直径对齐**：plain `Circle` 是整列唯一的实心盘 / 空心环，按视觉重量调尺寸——实心未读点 `size*0.7`（≈10px，填充墨量重），空心 idle 环 `size*0.78`（≈11px），让环略大于点但两者视觉重量相当；idle（最低优先级）也因此是整列最安静的标记。其它有内部结构的图标（spinner / check / pause / x）保持 14px。
+- **未读并入左图标，不再用右侧独立点**。旧方案的右侧静点在 hover 时会被 `⋯` 菜单顶替而消失，体验割裂；现在「完成未读」= 把左侧那个本就存在的图标渲染成 `weight="fill"` + `text-brand`（细线对勾圈→杏色实心对勾圈；没跑完的行仍是空心环→实心点），无需新增元素。实心对勾圈与 ask_user 的实心暂停圈同为 14px，靠字形与色相区分（深色模式下两色亮度接近，2026-10-03 真机看过可分辨）；整行还有琥珀竖条、琥珀副行与底色兜底。
+- **光学权重而非几何直径对齐**：plain `Circle`（只剩「没跑完」的静止行）是整列唯一的实心盘 / 空心环，按视觉重量调尺寸——实心未读点 `size*0.7`（≈10px，填充墨量重），空心环 `size*0.78`（≈11px），让环略大于点但两者视觉重量相当。其它有内部结构的图标（spinner / check / pause / x）保持 14px。
 - 未读优先级低于进行中状态：`showUnread` 仅在 settled（非 active、非 running、非 ask_user、非 approval、非 error）时为真。
 
 ##### 3. 状态行文案（subline = 状态行）
@@ -204,13 +206,14 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 - ask_user：`等你回复`（warning，copy key `waitingForYou`）。
 - approval：`等待审批 · N`（warning，`waitingApproval`；N=1 时不显示计数，下同）。
 - error：`出错 · N`（error，`errored`）。
-- settled：`已完成 · {summary}`（muted）；cancelled：`已中止 · {summary}`——用户主动中止的会话不得声称完成。
+- settled：只留 `{summary}`（muted）——「已完成」由左侧对勾圈说（2026-10-03；05-12 选的 `已完成 · ` 前缀当时只与「第 N 步 · 」和完成徽章比过，没测过不加前缀）。只有没跑完的才带词：cancelled `已中止 · {summary}`——用户主动中止的会话不得声称完成；步数上限暂停 `已暂停 · {summary}`（空心环）。标记例外、不标记常态，同「· 1 是噪音」。
 
 计数（approval / error）折进 subline，不再单设角标行，且**仅 N>1 时显示**（`· 1` 是噪音）。`{summary}` 在 running→settled 间保持稳定，只换前缀，给用户视觉连续性。legacy `第 N 步 · ` 前缀在渲染时 strip，无需 DB migration。时间桶（今天 / 本周）跨午夜自动重算（`useDayStamp`），常开监控不再停留在昨天的分组。
 
 ##### 4. 标题字重 + 入场 pop
 
 - 标题 13px Inter，进行中 / 未读 / 各 blocking 状态 `font-semibold`，其余 `font-medium`。
+- 标题与状态行截断时用原生 `title` 补全文（§4.1 icon-only 不用原生 `title` 的例外），且**只在确实截断时**挂：悬停时量 `scrollWidth > clientWidth`（`lib/truncated-title.ts`），放得下的文字不再弹一个重复自己的系统提示框（2026-10-03）。悬停时量是有意的：悬停时行右侧给 ⋯ 让出 28px，静止时放得下的标题悬停时可能被截。
 - **一次性入场 pop**（`sidebar-state-pop`）：进入 error / ask / approval / unread 时图标弹一下（keyed on `attentionKey`，replay on entry，不在 in-state 时循环）。强 overshoot（scale 0.42→1.38→0.94→1，0.44s `cubic-bezier(0.22,1,0.36,1)`）确保在繁忙状态板上是明确的「看这里」一拍。**running 不 pop**（它已有呼吸 rail + 旋转图标）。**挂载不 pop**（2026-07-05）：entry 指状态迁移；启动或从 Project Review 返回时全列齐射「看这里」不是信息，是噪音。
 - 所有 sidebar 状态动效都遵守 §2.7 与 reduced-motion：呼吸 rail 属外围 liveness 例外保留；pop / step-tick 是一次性入场，禁止无限闪烁 / shimmer / 大面积背景呼吸；`prefers-reduced-motion` 下 `sidebar-liveness-rail` / `sidebar-liveness-tick` / `sidebar-step-tick` / `sidebar-state-pop` 全部关停。
 - **Desktop Pet**：Cat icon 是 session status badge，仅在绑定 session 出现。

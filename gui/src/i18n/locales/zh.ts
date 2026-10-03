@@ -180,9 +180,8 @@ export const zhCopy = {
     bucketEarlier: "更早",
     stepSummary: (index: number, summary: string) =>
       `第 ${index} 步 · ${summary}`,
-    completedSummary: (summary: string) => `已完成 · ${summary}`,
     cancelledSummary: (summary: string) => `已中止 · ${summary}`,
-    // 最近一次运行停在步数上限（#29，仅内存态，重启后回到「已完成」）。
+    // 最近一次运行停在步数上限（#29，仅内存态，重启后回到完成态）。
     pausedSummary: (summary: string) => `已暂停 · ${summary}`,
     // Shown in place of a summary that is really leaked tool-call
     // markup (#22). Keep in sync with the runner's fixed marker

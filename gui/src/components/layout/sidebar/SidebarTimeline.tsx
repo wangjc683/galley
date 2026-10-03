@@ -1,4 +1,5 @@
 import { CaretRight } from "@phosphor-icons/react";
+import { Fragment } from "react";
 
 import { useCopy } from "@/lib/i18n";
 import { groupSessions, SIDEBAR_BUCKET_ORDER } from "@/lib/sessions";
@@ -9,107 +10,14 @@ import type { Project, Session, SessionBucket } from "@/types/session";
 import { SidebarSessionRow } from "./SidebarSessionRow";
 import type { ProjectScopePhase } from "./types";
 
-export function SidebarTimelineBuckets({
-  buckets,
-  activeId,
-  projects,
-  petAttachedSessionId,
-  sessionGoalStatus,
-  collapseEarlier = true,
-  onSelectSession,
-  onArchiveSession,
-  onTogglePinSession,
-  onAssignSessionToProject,
-  editingSessionId,
-  onOpenEarlier,
-  onRequestRename,
-  onConfirmRename,
-  onCancelRename,
-}: {
-  buckets: ReturnType<typeof groupSessions>;
+/** Everything a timeline row needs besides its session — shared by the
+ * bucket lists and the borrowed `earlier` row so the two can't drift. */
+type SidebarTimelineRowWiring = {
   activeId?: string;
   projects: Project[];
   petAttachedSessionId?: string | null;
   /** Map of session-id -> that session's open goal, so a row carrying
    * a goal shows its state instead of reading as a finished chat. */
-  sessionGoalStatus?: Map<string, GoalBrief>;
-  collapseEarlier?: boolean;
-  onSelectSession?: (id: string) => void;
-  onArchiveSession?: (id: string) => void;
-  onTogglePinSession?: (id: string) => void;
-  onAssignSessionToProject?: (
-    sessionId: string,
-    projectId: string | null,
-  ) => void;
-  editingSessionId?: string | null;
-  onOpenEarlier?: () => void;
-  onRequestRename?: (id: string) => void;
-  onConfirmRename: (id: string, newTitle: string) => void;
-  onCancelRename: () => void;
-}) {
-  return (
-    <>
-      {SIDEBAR_BUCKET_ORDER.map((bucket) => {
-        if (buckets[bucket].length === 0) return null;
-        // `earlier` collapses to a single entry row instead of
-        // inline-listing every old session — the sidebar is the
-        // "current work" surface, not an archive. Browsing the
-        // full list happens in EarlierDialog.
-        if (bucket === "earlier" && collapseEarlier) {
-          return (
-            <SidebarEarlierEntry
-              key={bucket}
-              count={buckets[bucket].length}
-              onClick={onOpenEarlier}
-            />
-          );
-        }
-        return (
-          <SidebarBucket
-            key={bucket}
-            bucket={bucket}
-            sessions={buckets[bucket]}
-            activeId={activeId}
-            projects={projects}
-            petAttachedSessionId={petAttachedSessionId}
-            sessionGoalStatus={sessionGoalStatus}
-            onSelectSession={onSelectSession}
-            onArchiveSession={onArchiveSession}
-            onTogglePinSession={onTogglePinSession}
-            onAssignSessionToProject={onAssignSessionToProject}
-            editingSessionId={editingSessionId}
-            onRequestRename={onRequestRename}
-            onConfirmRename={onConfirmRename}
-            onCancelRename={onCancelRename}
-          />
-        );
-      })}
-    </>
-  );
-}
-
-
-function SidebarBucket({
-  bucket,
-  sessions,
-  activeId,
-  projects,
-  petAttachedSessionId,
-  sessionGoalStatus,
-  onSelectSession,
-  onArchiveSession,
-  onTogglePinSession,
-  onAssignSessionToProject,
-  editingSessionId,
-  onRequestRename,
-  onConfirmRename,
-  onCancelRename,
-}: {
-  bucket: SessionBucket;
-  sessions: Session[];
-  activeId?: string;
-  projects: Project[];
-  petAttachedSessionId?: string | null;
   sessionGoalStatus?: Map<string, GoalBrief>;
   onSelectSession?: (id: string) => void;
   onArchiveSession?: (id: string) => void;
@@ -128,7 +36,80 @@ function SidebarBucket({
   onConfirmRename: (id: string, newTitle: string) => void;
   /** Inline input cancels (Esc). */
   onCancelRename: () => void;
-}) {
+};
+
+export function SidebarTimelineBuckets({
+  buckets,
+  collapseEarlier = true,
+  onOpenEarlier,
+  ...rowWiring
+}: {
+  buckets: ReturnType<typeof groupSessions>;
+  collapseEarlier?: boolean;
+  onOpenEarlier?: () => void;
+} & SidebarTimelineRowWiring) {
+  const { activeId } = rowWiring;
+  return (
+    <>
+      {SIDEBAR_BUCKET_ORDER.map((bucket) => {
+        if (buckets[bucket].length === 0) return null;
+        // `earlier` collapses to a single entry row instead of
+        // inline-listing every old session — the sidebar is the
+        // "current work" surface, not an archive. Browsing the
+        // full list happens in EarlierDialog.
+        if (bucket === "earlier" && collapseEarlier) {
+          // …except the session you're in. Opened from search / ⌘K /
+          // EarlierDialog, an old session would otherwise have no row
+          // anywhere in the sidebar — no "you are here". It borrows one
+          // slot directly under the entry for as long as it's active;
+          // the entry's count still includes it, because it still
+          // belongs to 更早 (activation doesn't bump lastActivityAt).
+          // Switching away drops the row, no animation: it was only
+          // ever a position marker. Only `earlier` matters here —
+          // backfill-promoted `recent` rows are already inlined. Keyed
+          // by id so hopping between two old sessions remounts the row
+          // rather than carrying one row's local state to the next.
+          const borrowed = activeId
+            ? buckets.earlier.find((s) => s.id === activeId)
+            : undefined;
+          return (
+            <Fragment key={bucket}>
+              <SidebarEarlierEntry
+                count={buckets[bucket].length}
+                onClick={onOpenEarlier}
+              />
+              {borrowed && (
+                <SidebarTimelineRow
+                  key={borrowed.id}
+                  session={borrowed}
+                  {...rowWiring}
+                />
+              )}
+            </Fragment>
+          );
+        }
+        return (
+          <SidebarBucket
+            key={bucket}
+            bucket={bucket}
+            sessions={buckets[bucket]}
+            {...rowWiring}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+
+function SidebarBucket({
+  bucket,
+  sessions,
+  ...rowWiring
+}: {
+  bucket: SessionBucket;
+  sessions: Session[];
+} & SidebarTimelineRowWiring) {
   const copy = useCopy();
   const bucketLabel: Record<SessionBucket, string> = {
     pinned: copy.sidebar.bucketPinned,
@@ -144,34 +125,51 @@ function SidebarBucket({
         {bucketLabel[bucket]}
       </SidebarSectionLabel>
       {sessions.map((s) => (
-        <SidebarSessionRow
-          key={s.id}
-          session={s}
-          active={s.id === activeId}
-          petAttached={s.id === petAttachedSessionId}
-          sessionGoal={sessionGoalStatus?.get(s.id)}
-          projects={projects}
-          onClick={() => onSelectSession?.(s.id)}
-          onArchive={
-            onArchiveSession ? () => onArchiveSession(s.id) : undefined
-          }
-          onTogglePin={
-            onTogglePinSession ? () => onTogglePinSession(s.id) : undefined
-          }
-          onAssignToProject={
-            onAssignSessionToProject
-              ? (projectId) => onAssignSessionToProject(s.id, projectId)
-              : undefined
-          }
-          isEditing={editingSessionId === s.id}
-          onRequestRename={
-            onRequestRename ? () => onRequestRename(s.id) : undefined
-          }
-          onConfirmRename={(newTitle) => onConfirmRename(s.id, newTitle)}
-          onCancelRename={onCancelRename}
-        />
+        <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
       ))}
     </>
+  );
+}
+
+function SidebarTimelineRow({
+  session: s,
+  activeId,
+  projects,
+  petAttachedSessionId,
+  sessionGoalStatus,
+  onSelectSession,
+  onArchiveSession,
+  onTogglePinSession,
+  onAssignSessionToProject,
+  editingSessionId,
+  onRequestRename,
+  onConfirmRename,
+  onCancelRename,
+}: { session: Session } & SidebarTimelineRowWiring) {
+  return (
+    <SidebarSessionRow
+      session={s}
+      active={s.id === activeId}
+      petAttached={s.id === petAttachedSessionId}
+      sessionGoal={sessionGoalStatus?.get(s.id)}
+      projects={projects}
+      onClick={() => onSelectSession?.(s.id)}
+      onArchive={onArchiveSession ? () => onArchiveSession(s.id) : undefined}
+      onTogglePin={
+        onTogglePinSession ? () => onTogglePinSession(s.id) : undefined
+      }
+      onAssignToProject={
+        onAssignSessionToProject
+          ? (projectId) => onAssignSessionToProject(s.id, projectId)
+          : undefined
+      }
+      isEditing={editingSessionId === s.id}
+      onRequestRename={
+        onRequestRename ? () => onRequestRename(s.id) : undefined
+      }
+      onConfirmRename={(newTitle) => onConfirmRename(s.id, newTitle)}
+      onCancelRename={onCancelRename}
+    />
   );
 }
 

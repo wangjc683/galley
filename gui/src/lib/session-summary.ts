@@ -89,22 +89,20 @@ export function displaySessionSummary(
 }
 
 /**
- * Sidebar subline for a settled session: the recap behind a prefix
- * that must not claim completion when the run did not complete — a
- * user abort (durable `cancelled` status) or a stop at GA's per-run
- * step cap (in-memory `pausedAtStepLimit`, #29; reverts to "done"
- * after an app restart). Words only: the row's icon and tone stay
- * whatever the status gives them.
+ * Sidebar subline for a settled session. A completed run shows the bare
+ * recap: "done" is the status icon's job (a check circle, see
+ * StatusIcon), and a 已完成 prefix repeated on nearly every row was
+ * noise (2026-10-03). Only a run that did not complete carries a word,
+ * so the exception is what gets marked — a user abort (durable
+ * `cancelled` status) or a stop at GA's per-run step cap (in-memory
+ * `pausedAtStepLimit`, #29; reverts to done after an app restart).
  */
 export function settledSessionSubline(
   summary: string,
   state: { cancelled: boolean; pausedAtStepLimit: boolean },
-  sidebar: Pick<
-    AppCopy["sidebar"],
-    "completedSummary" | "cancelledSummary" | "pausedSummary"
-  >,
+  sidebar: Pick<AppCopy["sidebar"], "cancelledSummary" | "pausedSummary">,
 ): string {
   if (state.cancelled) return sidebar.cancelledSummary(summary);
   if (state.pausedAtStepLimit) return sidebar.pausedSummary(summary);
-  return sidebar.completedSummary(summary);
+  return summary;
 }

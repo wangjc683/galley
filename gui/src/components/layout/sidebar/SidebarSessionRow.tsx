@@ -25,6 +25,7 @@ import {
   settledSessionSubline,
 } from "@/lib/session-summary";
 import { StatusIcon } from "@/lib/status-icon";
+import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
@@ -184,13 +185,15 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   //     language as MainView's in-progress placeholder for a
   //     unified register.
   //
-  //   settled → "已完成 · {summary}"（cancelled → "已中止 · {summary}"；
+  //   settled → "{summary}"（cancelled → "已中止 · {summary}"；
   //     live-only step-cap pause → "已暂停 · {summary}"）
   //     Same {summary} as the running row's final tick — the
   //     transition from running→settled keeps the recap text
-  //     stable and only swaps the prefix. (Note: locally-settled
-  //     sessions have status "idle"; the "completed" enum value is
-  //     only ever written by the CLI/supervisor surface.)
+  //     stable and only drops the step prefix; "done" is said by
+  //     the check-circle icon, not by words (2026-10-03). (Note:
+  //     locally-settled sessions have status "idle"; the
+  //     "completed" enum value is only ever written by the
+  //     CLI/supervisor surface. Both draw the same check.)
   //
   // displaySessionSummary repairs legacy "第 N 步 · " prefixes and
   // GA fallback-recap junk (residual tags / markdown) at render so
@@ -227,10 +230,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           : goalRunning || goalParked
             ? goalSubline
             : cleanSummary
-              ? // A user-aborted session must not claim completion —
-                // its icon is already Prohibit; the words must match.
-                // Nor must a run paused at the step cap (#29): words
-                // only, icon and tone stay as for a completed session.
+              ? // A completed run shows its recap bare — the check-circle
+                // icon says done. A user-aborted session must not read
+                // as done: its icon is Prohibit and the words say
+                // 已中止. Nor must a run paused at the step cap (#29):
+                // hollow ring, 已暂停, muted tone.
                 settledSessionSubline(
                   cleanSummary,
                   { cancelled: status === "cancelled", pausedAtStepLimit },
@@ -353,10 +357,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   const row = (
     <div
       data-galley-context-menu-trigger={hasRowActions ? "" : undefined}
+      // Sidebar finds the active row by id to reveal it when selection
+      // arrives from outside the list (search / ⌘K / EarlierDialog);
+      // scroll-my-2 keeps 8px of air between it and the scroll edge.
+      data-session-id={session.id}
       onPointerDown={handleRowPointerDown}
       onClick={handleRowClick}
       className={cn(
-        "group relative mx-1.5 grid min-h-[48px] grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
+        "group relative mx-1.5 grid min-h-[48px] scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
         // No row-level ring while editing — the input inside carries
         // its own brand ring; two nested rings for one focus state
         // was noisier than the app's quiet register.
@@ -415,6 +423,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             status={goalRunning ? "running" : status}
             size={14}
             unread={showUnread}
+            // Settled but not done: no check circle for a run paused at
+            // the step cap, a parked goal, or a row with no recap.
+            incomplete={pausedAtStepLimit || goalParked || !cleanSummary}
           />
         )}
       </span>
@@ -437,7 +448,12 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             />
           ) : (
             <div
-              title={session.title}
+              // Native title only while the ellipsis is actually
+              // clipping (measured on hover — see syncTruncatedTitle);
+              // a fully visible title gets no OS tooltip repeating it.
+              onPointerEnter={(e) =>
+                syncTruncatedTitle(e.currentTarget, session.title)
+              }
               className={cn(
                 "min-w-0 flex-1 truncate text-[13px]",
                 // Subtractive focus: the selected row keeps full-strength
@@ -506,9 +522,12 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           <div
             key={`${session.id}:${showRunningActivity ? `running:${session.lastStepIndex ?? "thinking"}:${cleanSummary ?? ""}` : `settled:${sublineText}`}`}
             // Same truncated-text native-title exception as the row
-            // title above — at 14% width the status line clips to
-            // almost nothing and was otherwise unrecoverable.
-            title={sublineText}
+            // title above, and likewise only while truncated — at 14%
+            // width the status line clips to almost nothing and was
+            // otherwise unrecoverable.
+            onPointerEnter={(e) =>
+              syncTruncatedTitle(e.currentTarget, sublineText)
+            }
             className={cn(
               // tabular-nums: the subline carries live counts (第 N 步 /
               // 等待审批 · N / 出错 · N) that tick while visible.
