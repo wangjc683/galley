@@ -1,8 +1,8 @@
 import { Target, X } from "@phosphor-icons/react";
 
 import {
-  COMPOSER_GOAL_BUTTON,
   COMPOSER_GOAL_BUTTON_ARMED,
+  COMPOSER_TERTIARY_ICON_BUTTON,
 } from "@/components/conversation/composer-styles";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -24,6 +24,8 @@ interface ComposerGoalControlsProps {
  * arm/disarm toggle. Since ticket 09 the armed state is announced by
  * the Composer's dress (brand-tint shell + eyebrow row), not by a text
  * hint here, so this control never changes the row's geometry.
+ * Idle it is a quiet ghost icon (G1, 2026-10-03): Goal is the heavy,
+ * low-frequency mode, so it must not out-shout the send button.
  * State and gating live in useComposerGoal; this is the view.
  */
 export function ComposerGoalControls({
@@ -69,10 +71,15 @@ export function ComposerGoalControls({
         className={cn(
           effectiveGoalArmed
             ? COMPOSER_GOAL_BUTTON_ARMED
-            : COMPOSER_GOAL_BUTTON,
+            : COMPOSER_TERTIARY_ICON_BUTTON,
           goalEntryDisabled &&
             !requiresModelConfig &&
-            "cursor-not-allowed opacity-50 hover:translate-y-0 hover:shadow-none active:translate-y-0 active:scale-100",
+            "cursor-not-allowed opacity-50 hover:translate-y-0 active:translate-y-0 active:scale-100",
+          goalEntryDisabled &&
+            !requiresModelConfig &&
+            (effectiveGoalArmed
+              ? "hover:shadow-none"
+              : "hover:bg-transparent hover:text-ink-muted"),
         )}
       >
         {/* Armed = ×, not a second Target: the launch button beside
@@ -81,7 +88,7 @@ export function ComposerGoalControls({
         {effectiveGoalArmed ? (
           <X size={15} weight="bold" />
         ) : (
-          <Target size={15} weight="thin" />
+          <Target size={17} weight="thin" />
         )}
       </button>
     </TooltipLabel>

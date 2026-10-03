@@ -11,7 +11,7 @@ import {
 } from "react";
 
 import { ComposerActionSlot } from "@/components/conversation/ComposerActionSlot";
-import { ComposerAttachButton } from "@/components/conversation/ComposerAttachButton";
+import { ComposerAddMenu } from "@/components/conversation/ComposerAddMenu";
 import { ComposerDropOverlay } from "@/components/conversation/ComposerDropOverlay";
 import { ComposerFooterHint } from "@/components/conversation/ComposerFooterHint";
 import { ComposerGoalControls } from "@/components/conversation/ComposerGoalControls";
@@ -28,7 +28,7 @@ import {
   type ComposerApprovalModeState,
   type ComposerLLMOption,
 } from "@/components/conversation/LLMPill";
-import { SavedPromptControl } from "@/components/conversation/SavedPromptControl";
+import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
 import { COMPOSER_MAX_HEIGHT_PX } from "@/components/conversation/composer-styles";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useComposerFocus } from "@/hooks/useComposerFocus";
@@ -36,7 +36,7 @@ import { useComposerGoal } from "@/hooks/useComposerGoal";
 import { useFileReferences } from "@/hooks/useFileReferences";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { usePasteFold } from "@/hooks/usePasteFold";
-import { IMAGE_ACCEPT, type ImageBlockReason } from "@/lib/composer-images";
+import type { ImageBlockReason } from "@/lib/composer-images";
 import {
   dropComposerDraft,
   readComposerDraft,
@@ -45,6 +45,7 @@ import {
 import { useCopy } from "@/lib/i18n";
 import { goalPillLabel } from "@/lib/goals";
 import { isImeCompositionKeydown } from "@/lib/ime";
+import { findPromptFillSlot } from "@/lib/saved-prompts";
 import { isSideQuestion } from "@/lib/side-question";
 import { cn } from "@/lib/utils";
 import { useQueueStore } from "@/stores/queue";
@@ -159,9 +160,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       previewImages,
       previewIndex,
       setPreviewIndex,
-      fileInputRef,
       isDropActive,
-      handleFileInputChange,
+      acceptPickedPaths,
       tryAcceptPastedImages,
       removeImage,
       clearImages,
@@ -227,7 +227,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     useComposerFocus(textareaRef, composerRootRef);
 
     const applyComposerText = useCallback(
-      (next: string, options: { clearImagesAfterPrefill?: boolean } = {}) => {
+      (
+        next: string,
+        options: {
+          clearImagesAfterPrefill?: boolean;
+          /** Select this range instead of parking the caret at the end
+           * (a saved prompt's trailing `[…]` slot). */
+          selection?: { start: number; end: number } | null;
+        } = {},
+      ) => {
         if (isControlled) {
           onChange?.(next);
         } else {
@@ -239,15 +247,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         resetPasteRegistry();
         resetFileRefRegistry();
         if (options.clearImagesAfterPrefill) clearImages();
-        // Focus + caret at end on the next frame, after React has
-        // committed the new textarea value. setSelectionRange before
-        // the commit lands at the old text length.
+        // Focus + caret at end (or the requested selection) on the
+        // next frame, after React has committed the new textarea value.
+        // setSelectionRange before the commit lands at the old length.
+        const selection = options.selection;
         requestAnimationFrame(() => {
           const ta = textareaRef.current;
           if (!ta) return;
           ta.focus();
           const end = ta.value.length;
-          ta.setSelectionRange(end, end);
+          if (selection && selection.end <= end) {
+            ta.setSelectionRange(selection.start, selection.end);
+          } else {
+            ta.setSelectionRange(end, end);
+          }
         });
       },
       [isControlled, onChange, clearImages, resetPasteRegistry, resetFileRefRegistry],
@@ -305,20 +318,33 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (draftKey) dropComposerDraft(draftKey);
     };
 
-    // 📎 → "reference files…": native path picker feeding the same
-    // placeholder insertion as a drop. Whatever the user picks becomes a
-    // reference — the menu split (image vs reference) already carried
-    // the intent, so no extension-based re-routing here.
-    const handleReferenceFiles = async () => {
+    // ＋ → "files or images…" / "folders…": native path pickers. Files
+    // take the drop's split (images attach, the rest become references);
+    // folders are always references. Two rows because the native panel
+    // can't pick files and folders at once.
+    const handlePickPaths = async (kind: "files" | "folders") => {
       try {
-        const picked = await openFileDialog({ multiple: true });
+        const picked = await openFileDialog({
+          multiple: true,
+          directory: kind === "folders",
+        });
         if (!picked) return;
-        await insertPathReferences(Array.isArray(picked) ? picked : [picked]);
+        const paths = Array.isArray(picked) ? picked : [picked];
+        if (kind === "files") {
+          acceptPickedPaths(paths);
+        } else {
+          await insertPathReferences(paths);
+        }
       } catch (err) {
         // No Tauri runtime (web-only session) or dialog failure — the
         // click simply does nothing beyond this log.
-        console.warn("[Composer] reference-files dialog failed", err);
+        console.warn("[Composer] file picker failed", err);
       }
+    };
+
+    const [promptsOpen, setPromptsOpen] = useState(false);
+    const focusTextarea = () => {
+      requestAnimationFrame(() => textareaRef.current?.focus());
     };
 
     const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -547,21 +573,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             className="block w-full resize-none overflow-y-auto border-0 bg-transparent p-0 [font-size:var(--conversation-composer-size)] leading-[1.55] text-ink outline-none placeholder:text-ink-muted/50"
           />
 
-          {/* Hidden file input backing the 📎 button. Visually absent but
-              focusable for a11y; the button above triggers its click.
-              `value=""` reset happens in handleFileInputChange so the same
-              file can be picked twice in a row. */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept={IMAGE_ACCEPT}
-            onChange={handleFileInputChange}
-            className="sr-only"
-            tabIndex={-1}
-            aria-hidden
-          />
-
           {pendingImages.length > 0 && (
             <ComposerImageStrip
               images={pendingImages}
@@ -571,7 +582,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           )}
 
           <div className="mt-2 flex items-center gap-2">
-            {/* Model + effort form ONE phrase (「⚡ grok-4.7 High ^」):
+            {/* ＋ opens left, like the chat apps people already know:
+                the left side says what goes in and who answers, the
+                right side only how it's sent (2026-10-03). It sits
+                flush against the model phrase (no row gap): with the
+                gap, ＋ read as a stray control 31px away from the
+                model name. Files aren't gated on stopMode — a
+                reference is plain text and queues like any message,
+                same as a drop.
+
+                Model + effort form ONE phrase (「⚡ grok-4.7 High ^」):
                 no row gap between them, the model pill drops its caret
                 in `phraseLead` mode and the effort pill carries the
                 phrase's single caret. The effort pill is deliberately
@@ -579,6 +599,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 the tier per request, so dialing it mid-run is
                 legitimate and lands on the next call. */}
             <div className="flex min-w-0 items-center">
+              <ComposerAddMenu
+                disabled={disabled}
+                imagesEnabled={imagesEnabled}
+                onPickFiles={() => void handlePickPaths("files")}
+                onPickFolders={() => void handlePickPaths("folders")}
+                onOpenPrompts={() => setPromptsOpen(true)}
+                onReturnFocus={focusTextarea}
+              />
               <LLMPill
                 llmDisplayName={llmDisplayName}
                 llms={llms}
@@ -596,24 +624,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             {goal && <GoalContextBadge goal={goal} />}
 
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              <div className="flex shrink-0 items-center gap-0">
-                <SavedPromptControl
-                  currentText={text}
-                  disabled={disabled}
-                  onPrefill={(next) =>
-                    applyComposerText(next, { clearImagesAfterPrefill: false })
-                  }
-                  onReturnFocus={() => {
-                    requestAnimationFrame(() => textareaRef.current?.focus());
-                  }}
-                />
-                <ComposerAttachButton
-                  disabled={disabled || stopMode}
-                  imagesEnabled={imagesEnabled}
-                  onPickImages={() => fileInputRef.current?.click()}
-                  onReferenceFiles={() => void handleReferenceFiles()}
-                />
-              </div>
               <ComposerGoalControls
                 canShowGoalEntry={canShowGoalEntry}
                 effectiveGoalArmed={effectiveGoalArmed}
@@ -651,6 +661,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           goalSubmitting={goalSubmitting}
           goalBlockedHintVisible={goalBlockedHintVisible}
           staticHint={staticHint}
+        />
+        <SavedPromptDialogs
+          open={promptsOpen}
+          onOpenChange={setPromptsOpen}
+          currentText={text}
+          disabled={disabled}
+          onPrefill={(next) =>
+            applyComposerText(next, {
+              clearImagesAfterPrefill: false,
+              selection: findPromptFillSlot(next),
+            })
+          }
+          onReturnFocus={focusTextarea}
         />
         <ImagePreviewDialog
           images={previewImages}

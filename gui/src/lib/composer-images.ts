@@ -18,7 +18,6 @@ export const IMAGE_MAX_LONG_EDGE = 1568;
 // Quality for JPEG re-encode (only reached when the source is JPEG and
 // needs resampling). PNG resampling stays lossless.
 export const IMAGE_RESAMPLE_QUALITY = 0.92;
-export const IMAGE_ACCEPT = "image/png,image/jpeg,image/webp";
 
 export type ImageBlockReason =
   | "goal"

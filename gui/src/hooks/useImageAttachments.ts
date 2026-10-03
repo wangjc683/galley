@@ -19,17 +19,18 @@ import { useNativeDragDrop } from "@/hooks/useNativeDragDrop";
 import type { PendingImageAttachment } from "@/types/conversation";
 
 /**
- * Owns the Composer's image-attachment concern: pending tiles, the hidden
- * file input, the preview-dialog index, and the three intake paths (paste
- * / drop / file picker) that all funnel through `acceptImageFiles`. Pulled
- * out of Composer so the textarea / paste-fold / goal logic isn't tangled
- * with object-URL lifetime bookkeeping.
+ * Owns the Composer's image-attachment concern: pending tiles, the
+ * preview-dialog index, and the three intake paths (paste / drop / file
+ * picker) that all funnel through `acceptImageFiles`. Pulled out of
+ * Composer so the textarea / paste-fold / goal logic isn't tangled with
+ * object-URL lifetime bookkeeping.
  *
- * Drop intake is Tauri-native (useNativeDragDrop): the OS hands us
- * filesystem paths, image-suffixed ones are read back into Files and fed
- * through the same `acceptImageFiles` pipeline as paste / picker, and
- * everything else is forwarded to `onNonImagePaths` for path-reference
- * insertion (the "images attach, files refer" split — PRD 定案 1).
+ * Drop and picker intake both arrive as filesystem paths (the drop via
+ * useNativeDragDrop, the picker via the native dialog): image-suffixed
+ * ones are read back into Files and fed through the same
+ * `acceptImageFiles` pipeline as paste, and everything else is forwarded
+ * to `onNonImagePaths` for path-reference insertion (the "images attach,
+ * files refer" split — PRD 定案 1, extended to the picker 2026-10-03).
  *
  * Object-URL ownership: every `previewUrl` minted by `readImageFile` is
  * revoked exactly once — on remove (tile X), on clear (submit / prefill),
@@ -46,10 +47,10 @@ export function useImageAttachments({
   onNonImagePaths,
   onTextDropBlocked,
 }: {
-  /** When false, all image intake (paste / drop / picker) is refused and
-   * routed to `onImageBlocked("external")` — the runtime can't deliver
-   * images. Non-image path drops are unaffected: a path in the message
-   * text works on every runtime. */
+  /** When false, image paste / drop is refused and routed to
+   * `onImageBlocked("external")` — the runtime can't deliver images.
+   * Picked images and non-image paths become references instead: a path
+   * in the message text works on every runtime. */
   imagesEnabled: boolean;
   onImageBlocked?: (reason: ImageBlockReason) => void;
   /** Alt text for the preview tiles / dialog (localized by the caller). */
@@ -65,9 +66,9 @@ export function useImageAttachments({
   /** Gate for the native drop intake — "can type ⇒ can drop", so the
    * Composer passes `!disabled`. */
   dropEnabled?: boolean;
-  /** Dropped paths that are not attachable images (plus images whose
-   * bytes we cannot read back, e.g. outside the fs scope) — the caller
-   * inserts them as file-reference placeholders. */
+  /** Dropped / picked paths that are not attachable images (plus images
+   * whose bytes we cannot read back, e.g. outside the fs scope) — the
+   * caller inserts them as file-reference placeholders. */
   onNonImagePaths?: (paths: string[]) => void;
   /** A drop that carried no filesystem paths (text / URL drag). Native
    * interception loses the payload, so the caller toasts an explanation
@@ -78,7 +79,6 @@ export function useImageAttachments({
     () => initialImages ?? [],
   );
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Drag-over affordance: `isDropActive` drives the Composer's drop
   // overlay. Native enter/leave events are window-level, so there is no
@@ -200,13 +200,21 @@ export function useImageAttachments({
     },
   });
 
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    // Reset so picking the same file twice in a row still fires onChange
-    // (the value is otherwise "already selected").
-    e.target.value = "";
-    if (files.length === 0) return;
-    void acceptImageFiles(files);
+  // ＋ → "files or images…": the picker follows the drop's split, so a
+  // PNG becomes an image whichever way it arrives. Until 2026-10-03 the
+  // menu had separate "image" / "file" items and a PNG picked through
+  // "file" became a bare path the model couldn't see. One difference
+  // from the drop: on a runtime without image support the picker's label
+  // never promised an image, so image paths pass through as references
+  // instead of being refused.
+  const acceptPickedPaths = (paths: string[]) => {
+    if (!imagesEnabled) {
+      onNonImagePaths?.(paths);
+      return;
+    }
+    const { imagePaths, filePaths } = splitDropPaths(paths);
+    if (imagePaths.length > 0) void intakeImagePaths(imagePaths);
+    if (filePaths.length > 0) onNonImagePaths?.(filePaths);
   };
 
   /**
@@ -270,9 +278,8 @@ export function useImageAttachments({
     previewImages,
     previewIndex,
     setPreviewIndex,
-    fileInputRef,
     isDropActive,
-    handleFileInputChange,
+    acceptPickedPaths,
     tryAcceptPastedImages,
     removeImage,
     clearImages,

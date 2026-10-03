@@ -415,14 +415,15 @@ export const enCopy: AppCopy = {
     queueEditTooltip: "Take back to edit (removes from the queue)",
     imageOnlyFallback: "Please look at this image.",
     pastedImage: "Pasted image",
-    attachImage: "Attach image",
-    attachTooltip: "Add images or files",
-    referenceFiles: "Add files…",
+    addMenuTooltip: "Add files or prompts",
+    addFilesOrImages: "Files or images…",
+    addFiles: "Files…",
+    addFolders: "Folders…",
     removeImage: "Remove image",
     dropToAttach: "Drop to add images or files",
     dropFilesOnly: "Drop to add files (images aren't supported on this runtime)",
     goalButton: "Goal",
-    goalTooltip: "Run as a Goal",
+    goalTooltip: "Goal · Galley keeps going on its own until it's done",
     goalBlockedByRunning:
       "Wait for the current reply to finish, then start the Goal.",
     goalBlockedByActive:
@@ -461,7 +462,7 @@ export const enCopy: AppCopy = {
     willCreateIn: (projectName) => `Will be created in ${projectName}`,
     clearProjectContext: "Switch to a plain new chat (not in the project)",
     savedPrompts: {
-      trigger: "Saved prompts",
+      menuItem: "Saved prompts…",
       replaceDraftTitle: "Replace the current draft?",
       replaceDraftBody: (title) =>
         `The input already has text. Replace it with "${title}"?`,

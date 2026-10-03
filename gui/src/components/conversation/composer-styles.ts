@@ -61,14 +61,13 @@ export const COMPOSER_CONFIG_BUTTON = cn(
   "active:shadow-[var(--shadow-control-press)]",
 );
 
-export const COMPOSER_GOAL_BUTTON = cn(
-  COMPOSER_ACTION_BUTTON,
-  "border-line bg-surface text-ink-soft",
-  "shadow-[var(--shadow-neutral-control)]",
-  "hover:border-brand/45 hover:bg-brand-soft hover:text-brand-strong hover:shadow-[var(--shadow-neutral-control-hover)]",
-  "active:shadow-[var(--shadow-control-press)]",
-);
-
+// The idle Goal toggle has no constant of its own: it is a ghost
+// COMPOSER_TERTIARY_ICON_BUTTON like ＋ (2026-10-03, G1). It used to be a
+// raised key — surface fill, border, shadow — which, on an empty draft,
+// made it the most pressable-looking control in the row while Send sat
+// unlit. Raised chrome now belongs to the send slot (send / stop /
+// configure), plus this armed × below.
+//
 // Elevated fill, not brand-soft: armed sits on the tinted Goal shell
 // (Composer.tsx), where a brand-soft circle sank into the background.
 export const COMPOSER_GOAL_BUTTON_ARMED = cn(

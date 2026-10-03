@@ -125,7 +125,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] 拖 PDF / 文件夹 → `[File #N: …]` 占位符，发送后展开为反斜杠原样路径
 - [ ] 从浏览器拖选中文字 → toast「不支持拖入文本」，无静默失效
 - [ ] 拖放与 TopBar 双击最大化 / composer focus 行为无交互问题
-- [ ] 📎 菜单「添加文件…」原生对话框正常
+- [ ] ＋ 菜单「文件或图片…」「文件夹…」原生对话框正常（图片进附件条、其余插路径引用）
 
 ### Keyboard shortcuts
 

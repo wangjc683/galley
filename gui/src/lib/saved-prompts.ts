@@ -181,6 +181,22 @@ export function deleteCustomPrompt(
   };
 }
 
+/**
+ * The fill-in slot a prompt body ends with: the trailing `[…]` line every
+ * preset closes on ("[写下要查证的问题]"). The Composer selects it after a
+ * prefill so typing — or dropping a file — replaces it, instead of the
+ * user deleting the hint by hand or sending it along. Only a bracket that
+ * opens the last line counts; one mid-line is content, not a slot.
+ */
+export function findPromptFillSlot(
+  body: string,
+): { start: number; end: number } | null {
+  const match = /(^|\n)(\[[^[\]\n]+\])\s*$/.exec(body);
+  if (!match) return null;
+  const start = match.index + match[1].length;
+  return { start, end: start + match[2].length };
+}
+
 function normalizeCustomPrompt(raw: unknown): CustomPrompt | null {
   if (!isRecord(raw)) return null;
   if (typeof raw.id !== "string" || !raw.id) return null;

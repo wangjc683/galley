@@ -5,6 +5,7 @@ import {
   createCopiedPromptTitle,
   deleteCustomPrompt,
   defaultSavedPromptsPrefs,
+  findPromptFillSlot,
   moveCustomPrompt,
   normalizeSavedPromptsPrefs,
   resolveSavedPrompts,
@@ -170,5 +171,27 @@ describe("saved prompt helpers", () => {
     expect(createCopiedPromptTitle("Check information", " (copy)")).toBe(
       "Check information (copy)",
     );
+  });
+
+  it("finds the trailing fill-in slot a preset ends with", () => {
+    const body = "请查证下面的问题：\n\n[写下要查证的问题]";
+    const slot = findPromptFillSlot(body);
+    expect(slot).not.toBeNull();
+    expect(body.slice(slot!.start, slot!.end)).toBe("[写下要查证的问题]");
+    // Trailing whitespace after the slot doesn't hide it.
+    const padded = "Check this:\n[Write the question]\n";
+    const paddedSlot = findPromptFillSlot(padded);
+    expect(padded.slice(paddedSlot!.start, paddedSlot!.end)).toBe(
+      "[Write the question]",
+    );
+    // A one-line body that is only the slot still counts.
+    expect(findPromptFillSlot("[topic]")).toEqual({ start: 0, end: 7 });
+  });
+
+  it("ignores brackets that are not a last-line slot", () => {
+    expect(findPromptFillSlot("Translate the [text] below")).toBeNull();
+    expect(findPromptFillSlot("See the note [1]")).toBeNull();
+    expect(findPromptFillSlot("[slot]\nthen more text")).toBeNull();
+    expect(findPromptFillSlot("No slot at all")).toBeNull();
   });
 });

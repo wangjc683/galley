@@ -1,10 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { BookmarkSimple } from "@phosphor-icons/react";
+import { BookOpenText } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 
 import { PromptManagerDialog } from "@/components/conversation/PromptManagerDialog";
 import { Button, DialogActionRow } from "@/components/ui/button";
-import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   PROMPT_PRESET_IDS,
   type PromptPreset,
@@ -13,32 +12,31 @@ import {
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-interface SavedPromptControlProps {
+interface SavedPromptDialogsProps {
+  /** The prompt library is open. Owned by the Composer: its ＋ menu opens
+   * it (ComposerAddMenu), so the library has no trigger of its own. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   currentText: string;
   onPrefill: (text: string) => void;
   onReturnFocus?: () => void;
   disabled?: boolean;
-  className?: string;
 }
 
-const SAVED_PROMPT_TRIGGER_BUTTON = cn(
-  "flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted",
-  "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm",
-  "hover:-translate-y-px active:translate-y-[2px] active:scale-[0.97]",
-  "hover:bg-hover hover:text-ink outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
-  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:active:translate-y-0 disabled:active:scale-100 disabled:hover:bg-transparent disabled:hover:text-ink-muted",
-);
-
-export function SavedPromptControl({
+/**
+ * The saved-prompt library dialog plus its "replace the current draft?"
+ * confirm. Until 2026-10-03 this rendered its own bookmark button in the
+ * Composer's right-hand row; the entry now lives in the ＋ menu next to
+ * files and folders (design/conversation.md, 常用提示词入口).
+ */
+export function SavedPromptDialogs({
+  open,
+  onOpenChange,
   currentText,
   onPrefill,
   onReturnFocus,
   disabled = false,
-  className,
-}: SavedPromptControlProps) {
-  const copy = useCopy();
-  const promptCopy = copy.composer.savedPrompts;
-  const [managerOpen, setManagerOpen] = useState(false);
+}: SavedPromptDialogsProps) {
   const [pendingPrompt, setPendingPrompt] =
     useState<ResolvedSavedPrompt | null>(null);
   const [pendingPromptCloseManager, setPendingPromptCloseManager] =
@@ -57,36 +55,16 @@ export function SavedPromptControl({
     }
     onPrefill(prompt.body);
     if (options.closeManager) {
-      setManagerOpen(false);
+      onOpenChange(false);
       window.setTimeout(() => onReturnFocus?.(), 0);
     }
   };
 
   return (
     <>
-      <TooltipLabel text={promptCopy.trigger} side="top">
-        <button
-          type="button"
-          aria-label={promptCopy.trigger}
-          disabled={disabled}
-          tabIndex={-1}
-          onMouseDown={(event) => {
-            event.preventDefault();
-          }}
-          onClick={(event) => {
-            event.preventDefault();
-            event.currentTarget.blur();
-            setManagerOpen(true);
-          }}
-          className={cn(SAVED_PROMPT_TRIGGER_BUTTON, className)}
-        >
-          <BookmarkSimple size={17} weight="thin" />
-        </button>
-      </TooltipLabel>
-
       <PromptManagerDialog
-        open={managerOpen}
-        onOpenChange={setManagerOpen}
+        open={open}
+        onOpenChange={onOpenChange}
         presets={presets}
         onUsePrompt={(prompt) => applyPrompt(prompt, { closeManager: true })}
       />
@@ -94,8 +72,8 @@ export function SavedPromptControl({
       <ReplaceDraftDialog
         open={Boolean(pendingPrompt)}
         prompt={pendingPrompt}
-        onOpenChange={(open) => {
-          if (open) return;
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) return;
           setPendingPrompt(null);
           setPendingPromptCloseManager(false);
         }}
@@ -103,7 +81,7 @@ export function SavedPromptControl({
           if (!pendingPrompt) return;
           onPrefill(pendingPrompt.body);
           if (pendingPromptCloseManager) {
-            setManagerOpen(false);
+            onOpenChange(false);
           }
           setPendingPrompt(null);
           setPendingPromptCloseManager(false);
@@ -152,7 +130,7 @@ function ReplaceDraftDialog({
             </Button>
             <Button
               variant="primary"
-              leadingIcon={<BookmarkSimple size={12} weight="thin" />}
+              leadingIcon={<BookOpenText size={12} weight="thin" />}
               onClick={onConfirm}
             >
               {promptCopy.replaceDraftAction}

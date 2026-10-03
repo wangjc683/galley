@@ -484,7 +484,7 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 - **杏沙 focus ring**（`brand` token）
 - 圆角 12px / `elevated` 背景（浮起的输入卡；曾写 `surface`，2026-07-05 回写）/ 默认 1px `border-default`
 - 上方留 1.5em，下方贴 viewport bottom（in-session）或居中（empty state hero）
-- 附件已落地：`Paperclip` 按钮 + 拖放 / 粘贴图片三路收口（旧文案「+ icon 占位（V0.2 接 attach）」作废）
+- 附件：左下 ＋ 菜单 + 拖放 + 粘贴三路收口，**三路同一条分流规则**——图片进附件条（模型能看到），其余文件与文件夹在光标处插入路径引用（2026-10-03 起 ＋ 菜单也按扩展名分流，见下方「＋ 菜单」）
 - 草稿按 session 驻留内存（切会话不丢半截消息）；进入会话自动聚焦
 
 #### Goal 模式（armed）= Composer 穿委派正装（2026-09-17，goal-simplify 票 09）
@@ -500,6 +500,16 @@ eyebrow，与 `GoalCommissionMarker` 的 eyebrow 同构——左 `Target + GOAL`
 标记。placeholder 换「写下要完成的目标…」，右下发送钮变实心 `Target`，切换钮
 变 ×；右侧不再有「Goal 模式」文字提示，右对齐行的几何在 armed 前后不动。
 
+- **未 armed 的切换钮是无底色图标钮**（2026-10-03，G1）：与 ＋ 同族
+  （`COMPOSER_TERTIARY_ICON_BUTTON`，`Target` thin 17px），静止无底色、无描边、
+  无投影，hover 才出 `hover` 底。此前是 `bg-surface` + 描边 + 投影的凸起键，
+  空草稿时发送钮是未点亮的灰圆，于是整行最像「能按」的是 Goal——低频重武器
+  压过了主动作（真机截图实测）。规则：**Composer 里凸起的键只留给发送位**
+  （发送 / 停止 / 去配置模型），凸起即「这会把东西发出去」；armed 的 × 是唯一
+  例外，保持 `bg-elevated` 圆（09-17：放在 tint 色板上要有自己的底）。
+  tooltip 用「名称 · 结果」句式，与上限 pill 同腔：「Goal · 让 Galley 自己
+  一直做到完成」。Rejected：**G2 带字开关**「◎ Goal」（armed 时按下锁住）——
+  能顺带解决图标难认，JC 取更安静的 G1。
 - **无确认框**：armed + Enter 直接启动，footer hint「Enter 启动 Goal · Esc
   取消」，启动中显示「启动中…」。v2 的 Goal 在当前对话里跑、顶栏一键停，
   armed 正装就是全部的「你确定吗」。v1 的确认框（目标回显 + 上限 + 说明
@@ -537,16 +547,52 @@ eyebrow，与 `GoalCommissionMarker` 的 eyebrow 同构——左 `Target + GOAL`
 - Enter 触发，Shift+Enter 换行；**输入法组字中的 Enter 交给 IME**（`isImeCompositionKeydown` 守卫，中文优先产品的硬约束）
 - agent running 时**位置替换为 Stop 按钮**（深琥珀填充 / Phosphor `Stop` **fill**，同上刻意加重），点击触发 abort；此时 footer hint 教 `/btw`（「Enter 发送」在运行态是谎言）
 
-#### 常用提示词入口（V0.2.16）
+#### ＋ 菜单（2026-10-03）
 
-位置：**Composer 内部右下角**，放在图片附件按钮左侧。常用提示词属于
-「往输入框添加内容」的工具，和添加图片同组；LLM picker 属于模型选择，
+位置：**Composer 按钮行最左**，紧贴模型短语（两者之间不留行间距——留 8px
+时 ＋ 与模型名的视觉空白约 31px，读作一个离群的控件）。左边是「放进什么、
+谁来回答」，右边只剩「怎么发」（Goal 切换钮 + 发送位）。与 ChatGPT /
+Claude.ai 的 ＋ 同位，借用户已有的肌肉记忆。
+
+- 形态：Phosphor `Plus` thin 17px，`COMPOSER_TERTIARY_ICON_BUTTON`（无底色
+  32px 圆），打开时 `bg-hover`；tooltip「添加文件或提示词」。pointer-first：
+  不进 Tab 顺序、mousedown 不抢焦点。
+- 菜单三行（向上开、左对齐）：
+  1. 「文件或图片…」（不支持图片的运行时写「文件…」）——原生多选面板，
+     **按扩展名分流，与拖放同一条规则**：图片进附件条，其余插 `[File #N: …]`。
+     不支持图片的运行时选中的图片也作路径引用（标签没许诺图片；拖放则仍按
+     原规则拒收并提示）。
+  2. 「文件夹…」——原生面板 `directory: true` 多选，插 `[Folder #N: …]`。
+     单列一行是因为原生面板不能文件、文件夹混选；用户真正懂的分界正是
+     文件 vs 文件夹。
+  3. 分隔线后「常用提示词…」——打开提示词库 dialog（见下节）。
+- 文件两行**不受运行中门控**：路径引用是纯文本，和拖放一样可以进队列；运行
+  中带图片发送仍在发送处被拦（既有规则）。
+- 菜单关闭后焦点回到输入框（保留原选区），所以选中的文件落在光标处、或替换
+  预设刚选中的 `[…]`；打开提示词库时不抢焦点，交给 dialog。
+- 由来：此前右下是 🔖 书签（常用提示词）+ 📎（两项菜单「添加图片 / 添加
+  文件…」），两颗不带字的图标要悬停才认得；书签读作「收藏」；📎 菜单逼用户
+  在「图片 / 文件」之间选（背后是「内容 vs 路径」），同一张 PNG 拖进来是图片、
+  从「添加文件…」进来却是模型看不到的路径；点击路径还选不了文件夹，而
+  「整理本地文件」预设要的正是文件夹路径。决策全程见
+  [devlog](../devlog/2026-10-03-composer-plus-menu.md)。
+- Rejected：**`/` 快路**（空输入框首字符 `/` 或行首「、」就地弹提示词列表）——
+  进 [deferred](../devlog/deferred.md)，本机自定义提示词为 0 条，受益者尚不
+  存在；**拿掉所有可见入口只留 `/`**——对新手等于藏起提示词库；**只修语义不动
+  布局**——右侧仍是四颗圆。
+
+#### 常用提示词入口（V0.2.16；2026-10-03 移入 ＋ 菜单）
+
+位置：**＋ 菜单第三行「常用提示词…」**（分隔线之后）。常用提示词属于
+「往输入框添加内容」的工具，和添加文件同组；LLM picker 属于模型选择，
 不和它绑定。
 
-- 形态：Phosphor `BookmarkSimple` thin icon，icon-only，32px 圆形 hit target；
-  无边框 / 无底色，hover 才出现 `hover` tint，与图片附件按钮同视觉族。
-- 点击图标直接打开提示词库 dialog；hover 只显示统一 Radix tooltip，不再打开
-  quick-fill popover，避免鼠标擦过 Composer 工具区时误弹大浮层。
+- 形态：没有独立的图标钮，入口是 ＋ 菜单里带字的一行（`BookOpenText` thin
+  14px + 「常用提示词…」）。2026-10-03 前是右下角的 `BookmarkSimple` 图标钮，
+  书签读作「收藏」、要悬停才认得，见 [devlog](../devlog/2026-10-03-composer-plus-menu.md)。
+  用户为加文件打开 ＋ 时会顺路看到这一行——借高频入口给能力发现。
+- 点菜单行直接打开提示词库 dialog；没有 hover 预览（quick-fill popover 早已
+  移除，避免鼠标擦过 Composer 工具区时误弹大浮层）。
 - 内置预设共 9 个，固定目录、只读、不可置顶排序。**这一板块同时是 Galley
   的能力发现 / 教学面**（2026-07-04 重构）：不再是「教用户把 prompt 写规整」
   的填空模板，而是「让用户一眼看到 Galley 能替他做什么」的能力菜单。因此
@@ -561,8 +607,8 @@ eyebrow，与 `GoalCommissionMarker` 的 eyebrow 同构——左 `Target + GOAL`
 - 每条预设带一个面向用户的 `description`（一句话，「Galley 用这条能替你做
   什么」），随 UI 语言本地化；数据模型上 `description` 是 `PromptPreset` /
   `ResolvedSavedPrompt` 的可选字段，只有预设携带，自定义不带。
-- 常用提示词入口采用 pointer-first，不进入键盘 Tab 顺序，也不显示 focus ring；
-  避免桌面 WebView 把焦点态误读成“选中”。
+- 入口的 pointer-first 规则随 ＋ 按钮（不进 Tab 顺序、不显示 focus ring，
+  避免桌面 WebView 把焦点态误读成“选中”）。
 - Dialog 顶部不显示可见副标题；尺寸约
   `920x680`，读作 Settings / Earlier / Archived 同族的工作台，而不是小确认窗。
   主体为工作台式 `bg-app` 画布 + 卡片平铺，分两个 group：上方「预设」（常驻
@@ -589,17 +635,22 @@ eyebrow，与 `GoalCommissionMarker` 的 eyebrow 同构——左 `Target + GOAL`
   落到 v2 默认值（空自定义）。
 - 若 Composer 已有非空草稿，选择 prompt 先确认再覆盖；图片附件保留，
   paste-fold registry 重置。
+- **填入后选中末尾的填空**（2026-10-03）：正文最后一行若是 `[…]`（九条预设
+  都以「[写下要查证的问题]」这类方括号收尾），填入后它被选中而不是光标停在
+  末尾——直接打字即替换，拖入文件 / 从 ＋ 选文件也替换它，不用手动删、也不会
+  连方括号一起发出去。只认「独占最后一行的方括号」，行中的方括号是内容不是
+  填空（`findPromptFillSlot`，`lib/saved-prompts.ts`）。
 - 首版明确不做：分类、搜索、变量、使用次数 / 最近使用排序、import/export、
   cloud sync、Agent API / CLI surface。
 
 设计判断：这既是高频便利入口，也承担能力发现（2026-07-04 起，见上文预设
-重构）。但它仍留在 Composer 工具组、按点击展开，**不回到 Empty State 下方的
+重构）。但它仍留在 Composer 的 ＋ 菜单里、按点击展开，**不回到 Empty State 下方的
 quick prompt 建议**——能力发现靠"用户主动打开库时看到能力菜单"，而不是把内容
 铺在空状态里打断安静书桌（空状态保持安静的决策见 Empty State 一节）。
 
 #### LLM 切换器（V0.1）
 
-位置：**Composer 内部左下角**。
+位置：**Composer 内部左下角**，紧跟在 ＋ 之后（2026-10-03 起 ＋ 占最左）。
 
 - 形态：LLM displayName + `CaretUp` thin（popover 向上开，箭头指向开启方向；旧文档写 CaretDown 已回写）。模型名本身已承担语义，不再显示
   Cube icon。
