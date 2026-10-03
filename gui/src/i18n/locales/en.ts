@@ -441,8 +441,8 @@ export const enCopy: AppCopy = {
     goalDurationOption: (minutes) => `${minutes} minutes`,
     goalDurationRecommended: "Recommended",
     goalDurationNoCeiling: "No ceiling",
-    cannotSwitchRunning: "Can't switch LLMs while running",
-    switchLlm: "Switch LLM",
+    cannotSwitchRunning: "Can't switch models while running",
+    switchLlm: "Switch model",
     approvalMode: {
       autoName: "Auto-run",
       approvalName: "Step approval",
@@ -555,13 +555,13 @@ export const enCopy: AppCopy = {
   command: {
     label: "Command palette",
     search: "Search conversations or type a command…",
-    searchLLM: "Search LLMs…",
+    searchLLM: "Search models…",
     newConversation: "New chat",
     newProject: "New project",
     groupRecentSessions: "Recent sessions",
     groupActions: "Actions",
     inConversationContent: "In conversation content",
-    switchLLM: "Switch LLM",
+    switchLLM: "Switch model",
     current: (name) => `Current: ${name}`,
     runHealthCheck: "Run Health Check",
     resetLayout: "Reset window layout",
@@ -574,7 +574,7 @@ export const enCopy: AppCopy = {
     noMatch: "No matches.",
     notFound: "No match found.",
     askDirectly: "Ask directly with Enter?",
-    noLLMs: "No LLMs configured.",
+    noLLMs: "No models configured.",
   },
   settings: {
     title: "Settings",
@@ -1542,7 +1542,7 @@ export const enCopy: AppCopy = {
     pythonInterpreter: "Python interpreter",
     bundledPython: "Galley bundled Python",
     loadablePython: "Find Python that can load GA",
-    llmConnection: "LLM connection test",
+    llmConnection: "Model connection test",
     llmConnectionDetail: "Real test, max 1 output token",
     entryModule: "Engine entry",
     llmConfigFile: "LLM config file",
@@ -1724,7 +1724,7 @@ export const enCopy: AppCopy = {
         ? `External GA's mykey.py depends on ${moduleName}, but the current Python does not have it. Run Health Check in Settings > Runtime, or switch to your GA venv.`
         : "External GA's mykey.py failed to import. Run Health Check in Settings > Runtime, or switch to your GA venv.",
     llmConfig: {
-      title: "LLM configuration may be wrong",
+      title: "Model configuration may be wrong",
       brief:
         "The first send failed. This is usually an API key or configuration issue.",
       checkMyKey: "Check mykey.py",
@@ -1733,16 +1733,16 @@ export const enCopy: AppCopy = {
     network: {
       title: "Network connection failed",
       brief:
-        "The request could not reach the LLM provider. It may be a timeout or DNS issue.",
+        "The request could not reach the model provider. It may be a timeout or DNS issue.",
     },
     quota: {
       title: "API quota exhausted",
-      brief: "Switch to another LLM to continue.",
+      brief: "Switch to another model to continue.",
     },
     details: "Show technical details",
     copyDetails: "Copy details",
     copiedDetails: "Copied",
-    switchLLM: "Switch LLM",
+    switchLLM: "Switch model",
     managedModelUnavailable:
       "The bundled engine has no usable model. Add a model in Models or re-enter the API Key.",
     managedRuntimeInvalid:

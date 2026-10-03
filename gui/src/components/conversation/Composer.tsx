@@ -591,13 +591,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 reference is plain text and queues like any message,
                 same as a drop.
 
-                Model + effort form ONE phrase (「⚡ grok-4.7 High ^」):
-                no row gap between them, the model pill drops its caret
-                in `phraseLead` mode and the effort pill carries the
-                phrase's single caret. The effort pill is deliberately
-                NOT gated on `stopMode` / `disabled`: the engine reads
-                the tier per request, so dialing it mid-run is
-                legitimate and lands on the next call. */}
+                Model + effort form ONE phrase (「grok-4.7 · high」): no
+                row gap between them and no caret on either half
+                (2026-10-03). The middle dot (same day) keeps
+                the tier from reading as part of the model id — tier
+                words double as model-name suffixes (o3-mini-high). It
+                is plain text, not a target; each pill keeps its own
+                hover box. The effort pill is deliberately NOT gated on
+                `stopMode` / `disabled`: the engine reads the tier per
+                request, so dialing it mid-run is legitimate and lands
+                on the next call. */}
             <div className="flex min-w-0 items-center">
               <ComposerAddMenu
                 disabled={disabled}
@@ -619,7 +622,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 stopMode={stopMode}
                 phraseLead={reasoningEffort !== undefined}
               />
-              {reasoningEffort && <EffortPill {...reasoningEffort} />}
+              {reasoningEffort && (
+                <>
+                  <span
+                    aria-hidden
+                    className="shrink-0 select-none px-0.5 text-[12.5px] text-ink-muted/60"
+                  >
+                    ·
+                  </span>
+                  <EffortPill {...reasoningEffort} />
+                </>
+              )}
             </div>
             {goal && <GoalContextBadge goal={goal} />}
 

@@ -164,7 +164,7 @@ About
 | `Python` | 保留 |
 | `API Key` | 字段名可保留；正文可说「密钥」 |
 | `YOLO` | 仅内部标识符（wire `set_yolo_mode`、prefs key），**不再出现在用户可见文案**；用户侧模式名为「自动执行 / 逐步审批」（2026-07-20 更名，见 devlog） |
-| `LLM` | 紧凑控件可保留；正文优先说「模型」或「大语言模型」 |
+| `LLM` | 界面一律说「模型」，紧凑控件也不例外（2026-10-03 JC 裁，此前「紧凑控件可保留」）；只在外置 GA 的技术语境保留，如 Health Check「mykey.py 存在」的副标签「LLM 配置文件」 |
 | 模型 / 服务品牌 | OpenAI、Anthropic、Claude、GPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、Xiaomi MiMo 等保留 |
 | `galley` | 命令名，保留并用 inline code |
 | 文件 / 目录名 | `agentmain.py`、`mykey.py`、`.venv`、`memory/`、`assets/` 等保留 |

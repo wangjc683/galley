@@ -73,7 +73,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 
 #### Action 类（少而精）
 
-- Switch LLM → 嵌套二级（展开当前 availableLLMs 列表）
+- 切换模型（Switch model）→ 嵌套二级（展开当前 availableLLMs 列表）
 - Re-run health check
 - Open settings
 - Attach GA folder（仅 onboarding 已完成、想换路径时）
@@ -103,7 +103,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 
 ### 关键交互
 
-- ↑↓ 选 / Enter 执行 / Tab 进二级（如 Switch LLM 子菜单）
+- ↑↓ 选 / Enter 执行 / Tab 进二级（如「切换模型」子菜单）
 - **对话内容命中 → 定位到那条消息**（2026-09-08，issue #27）：选中一条
   FTS 命中不只是打开会话，而是把命中的那条消息停在对话区的统一锚线
   （`USER_MSG_ANCHOR_TOP_PX`，与提交置顶 / ⌥↑↓ / rail 跳转同一根线），并给
@@ -128,8 +128,8 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 ### 排序规则
 
 - Session 类按 lastActiveAt
-- Action 类按内置优先级：New chat > Switch LLM > Re-run health check > Open settings > Attach GA folder
-- Switch LLM 嵌套二级而不是平铺（避免 LLM 多时淹没 session）
+- Action 类按内置优先级：New chat > 切换模型 > Re-run health check > Open settings > Attach GA folder
+- 切换模型嵌套二级而不是平铺（避免模型多时淹没 session）
 
 ---
 

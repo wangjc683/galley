@@ -1,6 +1,5 @@
 import * as Popover from "@radix-ui/react-popover";
 import {
-  CaretUp,
   Check,
   Gear,
   HandPalm,
@@ -24,14 +23,23 @@ export interface ComposerLLMOption {
 
 /**
  * Approval-mode slice of the conversation-config pill. The mode icon
- * (⚡ 自动执行 / ✋ 逐步审批) renders in front of the model name, and
- * the popover hosts a quiet mode section under the model list —
- * approval mode is per-session conversation config, same capsule as
- * the model (2026-07-20, fourth revision; see conversation.md §4.4).
+ * (⚡ 自动执行 / ✋ 逐步审批) renders in front of the model name only
+ * while the session deviates from the app-wide default, and the
+ * popover hosts a quiet mode section under the model list — approval
+ * mode is per-session conversation config, same capsule as the model
+ * (2026-07-20, fourth revision; see conversation.md §4.4).
  */
 export interface ComposerApprovalModeState {
   /** Effective mode for the surface (override ?? app-wide default). */
   mode: SessionApprovalMode;
+  /**
+   * `mode` differs from the app-wide default. Only then does the
+   * trigger show the mode icon (2026-10-03): a mark that never changes
+   * carries nothing — 135 of 135 sessions on JC's machine followed the
+   * default, so ⚡ sat on every one — and in front of a model name ⚡
+   * read as "fast" (two of seven configured models are *-flash).
+   */
+  deviatesFromDefault: boolean;
   /**
    * Switch the session's mode. Override = deviation: the data layer
    * clears the override when the picked mode equals the app default,
@@ -41,8 +49,9 @@ export interface ComposerApprovalModeState {
 }
 
 /**
- * Conversation-config pill — the current model (with the session's
- * approval-mode icon in front) opening one popover for both concerns:
+ * Conversation-config pill — the current model (with the approval-mode
+ * icon in front while the session deviates from the default) opening
+ * one popover for both concerns:
  * model list first, then a visually quieter approval-mode section,
  * then settings deep-links (DESIGN.md §4.4).
  *
@@ -83,11 +92,11 @@ export function LLMPill({
   stopMode: boolean;
   /**
    * The pill leads a phrase whose next word is the EffortPill
-   * (「⚡ grok-4.7 High ^」, 2026-09-22): drop this pill's own caret —
-   * the phrase carries ONE caret at its end, Codex-style — and tighten
-   * the right padding to a word space (4px) so the two read as one label.
-   * The effort pill mirrors the tight side, so hover boxes stay
-   * disjoint and each half still reveals itself as its own target.
+   * (「grok-4.7 · high」): pad both sides to 4px so the words sit close
+   * around the middle dot. Since the dot (2026-10-03) the inner side no
+   * longer has to be squeezed, so the hover box is symmetric again: the
+   * old `pl-2.5 pr-0.5` box jutted 10px left of the text, and its
+   * effort twin 10px right (JC: 两边多了一块).
    */
   phraseLead?: boolean;
 }) {
@@ -100,8 +109,8 @@ export function LLMPill({
       : modeCopy.approvalName
     : null;
   // Verb only (2026-09-22): the model name is already on the pill, so
-  // the tooltip no longer repeats it. It survives as the pill's last
-  // affordance signal now that the caret moved to the phrase end.
+  // the tooltip no longer repeats it. With no caret on the pill
+  // (2026-10-03) the hover box and this tooltip are its affordance.
   const title = stopMode
     ? copy.composer.cannotSwitchRunning
     : copy.composer.switchLlm;
@@ -112,7 +121,7 @@ export function LLMPill({
   // only pure-LLM pills keep the old "blocked = won't open" behavior.
   const blockOpen = disabled && !approvalMode;
 
-  const modeIcon = approvalMode ? (
+  const modeIcon = approvalMode?.deviatesFromDefault ? (
     approvalMode.mode === "auto" ? (
       <Lightning size={12} weight="thin" className="shrink-0" />
     ) : (
@@ -126,7 +135,7 @@ export function LLMPill({
     "hover:bg-hover hover:text-ink",
     "outline-none",
     "rounded-sm",
-    phraseLead ? "pl-2.5 pr-0.5" : "px-2.5",
+    phraseLead ? "px-1" : "px-2.5",
     blockOpen &&
       "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-ink-soft active:translate-y-0",
   );
@@ -153,9 +162,6 @@ export function LLMPill({
         >
           {modeIcon}
           <span className="min-w-0 truncate">{llmDisplayName}</span>
-          {!phraseLead && (
-            <CaretUp size={10} weight="thin" className="text-ink-muted" />
-          )}
         </button>
       </TooltipLabel>
     );
@@ -207,10 +213,13 @@ export function LLMPill({
             className={pillClasses}
           >
             {modeIcon}
+            {/* No caret (2026-10-03): with the middle dot the phrase
+                reads as two items, and the single tail caret sat in the
+                effort pill's hover box — one half had an arrow, the
+                other didn't. Neither does now; the hover box + tooltip
+                are the affordance, as they already were for the model
+                name since 09-22. */}
             <span className="min-w-0 truncate">{llmDisplayName}</span>
-            {!phraseLead && (
-              <CaretUp size={10} weight="thin" className="text-ink-muted" />
-            )}
           </button>
         </Popover.Trigger>
       </TooltipLabel>

@@ -184,9 +184,9 @@ bridge 端检测错误类型，emit 时附 `hint` 字段，desktop 渲染专用�
 
 | hint | 触发条件 | 卡片内容 |
 |---|---|---|
-| `check_llm_config` | 401/403/`api_key`/`unauthorized` keyword | 标题 "LLM 配置可能有问题" / 一行 "首次发送失败，通常是 API key 或配置问题" / Actions: "检查 mykey.py" / "查看 GA 文档" / "View raw error" |
+| `check_llm_config` | 401/403/`api_key`/`unauthorized` keyword | 标题 "模型配置可能有问题" / 一行 "首次发送失败，通常是 API key 或配置问题" / Actions: "检查 mykey.py" / "查看 GA 文档" / "View raw error" |
 | `network` | 网络超时 / DNS 失败 | 标题 "网络无法连接" / Actions: "Retry" / "View raw error" |
-| `quota_exceeded` | 429 / quota keyword | 标题 "API 配额耗尽" / 一行 "可切换其他 LLM 继续" / Actions: "Switch LLM" (打开 Composer LLM dropdown) / "View raw error" |
+| `quota_exceeded` | 429 / quota keyword | 标题 "API 配额耗尽" / 一行 "可切换其他模型继续" / Actions: "切换模型"（打开 Composer 模型弹层） / "View raw error" |
 | （无 hint） | 其他错误 | 标准 Error Card |
 
 **为什么不直接显示 "401 Unauthorized"**：普通用户看到原始错误不知道下一步。"哪里出错 → 怎么解决"的翻译是 Galley 比裸跑 GA 增值的关键点。

@@ -1,5 +1,5 @@
 import * as Popover from "@radix-ui/react-popover";
-import { CaretUp, Check } from "@phosphor-icons/react";
+import { Check } from "@phosphor-icons/react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -47,21 +47,22 @@ export interface ComposerReasoningEffortState {
  *   - Always present once a model is selected — no flicker in / out.
  *     `默认` covers "nothing set anywhere".
  *   - Same typeface and size as the model name next door, one ink
- *     step lighter (`text-ink-muted/80`, caret matched; tier labels from the Models
+ *     step lighter (`text-ink-muted/80`; tier labels from the Models
  *     settings copy) — the model is identity, the tier its parameter:
  *     JC's second live round rejected the settings-badge chip glyph
  *     here — beside a plain model name it was a third type style, and
  *     the pair read as clutter. Following vs overriding is NOT drawn
  *     on the trigger (a muted/full ink split at this size read as a
  *     broken button); the tooltip / aria label carries it.
- *   - Forms ONE phrase with the LLMPill, Codex-style: 「⚡ grok-4.7
- *     High ^」 — the model pill drops its own caret (`phraseLead`), the
- *     phrase carries a single caret here at its end, and the two sit a
- *     word space apart (their inner paddings, no row gap between them).
- *     Zero carets was considered and rejected: without one the phrase
- *     reads as a status line, every mature product keeps a chevron on
- *     the model picker, and the Goal ceiling pill next door keeps its
- *     caret by DESIGN rule (arrow points where the popover opens).
+ *   - Forms ONE phrase with the LLMPill: 「grok-4.7 · high」, a middle
+ *     dot (Composer.tsx) between the two — without it the tier read as
+ *     part of the model id (2026-10-03). No caret on either half since
+ *     the same day: 09-22 put ONE caret at the phrase end (Codex-style)
+ *     and rejected zero carets, but once the dot split the phrase into
+ *     two items that caret sat inside this pill's hover box and read as
+ *     the tier's own arrow while the model had none. The Goal ceiling
+ *     pill keeps its caret: in the eyebrow it must stand apart from the
+ *     label text around it.
  *   - Usable mid-run: the engine reads the value per request, so a
  *     change applies to the next call. The LLM switch lock does not
  *     reach here.
@@ -140,23 +141,23 @@ export function EffortPill({
               // Same pill grammar as the LLMPill trigger next door.
               // One register below the model name (identity) — the
               // tier is a parameter of it: same 12.5px so the row's
-              // baseline and caret rhythm hold, ink one step lighter,
+              // baseline holds, ink one step lighter,
               // hover lifts it to the model pill's resting ink. A
               // constant hierarchy, not a state signal (the rejected
               // muted/full split flipped with the override).
-              "flex h-7 shrink-0 items-center gap-1 text-[12.5px] text-ink-muted/80",
+              "flex h-7 shrink-0 items-center text-[12.5px] text-ink-muted/80",
               "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
               "hover:bg-hover hover:text-ink-soft",
               "outline-none",
-              // Phrase tail: `pl-0.5` mirrors the LLMPill's `pr-0.5` (its
-              // `phraseLead` mode), so the visible gap is one word
-              // space at 12.5px (4px, Codex-tight) and the two hover
-              // boxes meet without overlapping. Tune the pair together.
-              "rounded-sm pl-0.5 pr-2.5",
+              // Phrase tail: symmetric `px-1`, the twin of the LLMPill's
+              // `phraseLead` padding. With the middle dot's own `px-0.5`
+              // the words sit about 8px either side of the dot, and the
+              // dot clears both hover boxes by ~3px, so it belongs to
+              // neither. Tune the three together (2026-10-03).
+              "rounded-sm px-1",
             )}
           >
             <span className="min-w-0 truncate">{triggerLabel}</span>
-            <CaretUp size={10} weight="thin" className="text-ink-muted/80" />
           </button>
         </Popover.Trigger>
       </TooltipLabel>

@@ -51,7 +51,7 @@ const DEFAULT_HEALTH_CHECK_LABELS: HealthCheckLabels = {
   pythonInterpreter: "Python 解释器",
   bundledPython: "Galley 内置 Python",
   loadablePython: "查找能加载 GA 的 Python",
-  llmConnection: "LLM 连接测试",
+  llmConnection: "模型连接测试",
   llmConnectionDetail: "真实测试，最多 1 个输出 token",
   entryModule: "内核入口",
   llmConfigFile: "LLM 配置文件",

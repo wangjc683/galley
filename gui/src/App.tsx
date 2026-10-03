@@ -334,9 +334,15 @@ function App() {
   // default: picking the default-equal mode clears it (the sessions
   // store normalizes; the pending path normalizes here). The app-wide
   // default is edited only in Settings → 审批.
+  const defaultApprovalMode = yoloMode ? "auto" : "approval";
+  const mainApprovalMode = effectiveApprovalMode(
+    activeSession?.approvalMode,
+    yoloMode,
+  );
   const mainApprovalModeState = activeSessionId
     ? {
-        mode: effectiveApprovalMode(activeSession?.approvalMode, yoloMode),
+        mode: mainApprovalMode,
+        deviatesFromDefault: mainApprovalMode !== defaultApprovalMode,
         onSelectMode: (mode: "auto" | "approval") =>
           setSessionApprovalMode(activeSessionId, mode),
       }
@@ -370,12 +376,16 @@ function App() {
             setSessionReasoningEffort(activeSessionId, value),
         }
       : undefined;
+  const emptyApprovalMode = effectiveApprovalMode(
+    pendingApprovalMode,
+    yoloMode,
+  );
   const emptyApprovalModeState = {
-    mode: effectiveApprovalMode(pendingApprovalMode, yoloMode),
+    mode: emptyApprovalMode,
+    deviatesFromDefault: emptyApprovalMode !== defaultApprovalMode,
     onSelectMode: (mode: "auto" | "approval") =>
       useRuntimeStore.setState({
-        pendingApprovalMode:
-          mode === (yoloMode ? "auto" : "approval") ? undefined : mode,
+        pendingApprovalMode: mode === defaultApprovalMode ? undefined : mode,
       }),
   };
   // EmptyState's effort pill configures the NEXT session, same
