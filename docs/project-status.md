@@ -601,6 +601,17 @@ a temporary switcher); the 已归档 footer sits on the row grid; native title
 tooltips only on truncated text. At the next Windows smoke, glance at the thin
 check circle on a 100% display. Core, runner and managed-ga are untouched.
 
+Also 2026-10-03, two Composer rounds, frontend only, JC checked both live:
+the bookmark + paperclip on the right fold into a ＋ menu at the left
+(文件或图片… split by extension like a drop, 文件夹…, 常用提示词…; a filled
+preset selects its trailing `[…]`; the idle Goal toggle drops to a ghost icon;
+[devlog](./devlog/2026-10-03-composer-plus-menu.md)); then the model phrase
+reads 「gpt-6.1-sol · high」 with no caret, symmetric hover boxes, the approval
+icon only when a session deviates from the default, and user-facing LLM becomes
+模型 ([devlog](./devlog/2026-10-03-composer-model-effort-display.md)). The `/`
+prompt shortcut went to `deferred.md`. At the next Windows smoke, check the ＋
+menu's native file and folder pickers (checklist item updated).
+
 The four community threads #29–#32 shipped in
 `v0.5.6` and were answered 2026-10-01, all kept open:
 [#29](https://github.com/wangjc683/galley/issues/29#issuecomment-5931634906),
