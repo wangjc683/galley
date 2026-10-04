@@ -649,8 +649,8 @@ Agent API, never produced); the GUI loses the approval card, Dock, mode row,
 Settings page, notification toggle and YOLO intro. No migration. CLAUDE.md
 Rule 1 now allows the handler subclass for turn signals only. No Galley
 prompt rule: upstream's system prompt already says to ask before
-irreversible actions. Runner, Core, CLI and GUI changed; not yet checked
-live (restart `tauri dev` first; checklist in the devlog). At release, draft
+irreversible actions. Runner, Core, CLI and GUI changed; JC checked it live
+the same day. At release, draft
 the #16 reply, since that issue lists approval waits as a notification
 tone.
 

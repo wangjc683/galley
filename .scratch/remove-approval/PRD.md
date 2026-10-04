@@ -1,6 +1,6 @@
 # 去掉审批系统（与上游 GA 一致，只有自动执行）
 
-Status: done（2026-10-05 实施，静态门禁全绿；真机未验，见 devlog）
+Status: done（2026-10-05 实施并经 JC 真机验收，`7e55ac8c` / `83e27085`，见 devlog）
 
 来源：2026-10-04 浏览器控制 UX 讨论（`.scratch/browser-control-ux/`）票 04 调研的延伸。
 JC 裁定选 **A：完全去掉**，下个 session 实施。
