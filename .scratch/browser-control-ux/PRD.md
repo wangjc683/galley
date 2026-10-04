@@ -30,7 +30,7 @@ Status: ready-for-agent
 | 01 | 对话工具条显示网站（GUI；IM 摘要视数据可得性） | — | done（`db2dde5e`）；IM 先不跟（JC 10-04），进 deferred.md |
 | 02 | S‑b 浏览器桥常驻 + 实时状态 + 删启动检测 + 连上即自动验证 | — | done（`7044db88` 补丁 0028、`450dbeb1`） |
 | 03 | 顶栏点灯 + popover（浏览器、渠道）+「待解锁」语气 + 已连接范围说明 + 自动验证成功时的「试一试」提示 | 02 | 派出 |
-| 04 | 调研：逐步审批下 `web_execute_js` 按读／写区分（`no_monitor`）是否可行 | — | 待派，只调研 |
+| 04 | 调研：逐步审批下 `web_execute_js` 按读／写区分（`no_monitor`）是否可行 | — | done（`e3a1bba1`）；后续 A／修设置页／D 全部取消（JC 10-04），审批系统去留另议 |
 
 ## Comments
 
