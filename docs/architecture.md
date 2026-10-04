@@ -96,6 +96,16 @@ keeps the integration non-invasive.
 
 Each Galley session maps to its own GenericAgent subprocess.
 
+Core also owns long-lived runner processes that are not sessions, all
+managed-runtime only and all spawned, restarted and stopped by Core:
+
+- IM supervisors (`runner/managed_im_supervisor.py`, one per enabled channel,
+  `core/src/im_supervisor/`).
+- The resident browser bridge (`runner/managed_browser_bridge.py`,
+  `core/src/browser_bridge.rs`): hosts GA's TMWebDriver master so the browser
+  extension's connection state is live. See
+  [browser control](./managed-ga-runtime/browser-control.md).
+
 ## Localhost Only
 
 Galley Core accepts local control through:
@@ -106,6 +116,12 @@ Galley Core accepts local control through:
 It does not expose a TCP server, HTTP API, token auth, OAuth flow, or remote
 login. Remote workflows belong to the user's trusted Supervisor Agent or IM
 transport; Galley stays local.
+
+The managed GA engine's own browser driver binds 127.0.0.1:18765 / 18766
+(TMWebDriver, for the browser extension and for GA processes talking to its
+master). Those ports belong to GA code, not to Core: managed sessions open
+them when they first use the browser, and the resident browser bridge keeps
+one such master alive.
 
 ## Data Boundaries
 

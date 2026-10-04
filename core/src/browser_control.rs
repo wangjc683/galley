@@ -3,7 +3,10 @@
 //! Galley ships the upstream `tmwd_cdp_bridge` extension as managed GA code,
 //! but Chromium should load it from a stable user-data directory rather than
 //! directly from the app bundle. This module owns that synced directory and a
-//! small probe that verifies the extension can connect to TMWebDriver.
+//! small probe that verifies the extension can connect to TMWebDriver. The
+//! live connection state comes from the resident bridge
+//! (`crate::browser_bridge`); with it running, this probe is a remote client
+//! of that master and only verifies tab discovery and a script round trip.
 
 #[cfg(target_os = "windows")]
 use std::env;
@@ -52,7 +55,9 @@ pub enum BrowserControlProbeStatus {
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserControlProbeContext {
-    Startup,
+    /// The GUI's one-shot verification when the resident bridge first sees
+    /// the extension connect while setup is not yet verified.
+    AutoVerify,
     Recheck,
     Manual,
 }
@@ -61,9 +66,10 @@ impl BrowserControlProbeContext {
     fn wait_duration(self) -> Duration {
         match self {
             // Chromium MV3 service workers can be asleep when Galley starts a
-            // probe. Keep the temporary TMWebDriver server alive long enough
-            // for the extension's alarm-based reconnect path to fire.
-            Self::Startup => Duration::from_secs(35),
+            // probe. Keep waiting long enough for the extension's alarm-based
+            // reconnect path to fire (to the resident bridge's master, or to
+            // the probe's own temporary one when no master is running).
+            Self::AutoVerify => Duration::from_secs(35),
             Self::Recheck => Duration::from_secs(35),
             Self::Manual => Duration::from_secs(35),
         }
@@ -507,7 +513,7 @@ fn ensure_config_js(extension_dir: &Path) -> std::io::Result<()> {
     )
 }
 
-fn resolve_python(app: &AppHandle) -> PathBuf {
+pub(crate) fn resolve_python(app: &AppHandle) -> PathBuf {
     if !cfg!(debug_assertions) {
         if let Ok(resource_dir) = app.path().resource_dir() {
             let rel = if cfg!(windows) {
@@ -613,7 +619,7 @@ mod tests {
     fn probe_contexts_wait_through_mv3_reconnect_alarm() {
         let reconnect_window = Duration::from_secs(35);
         assert_eq!(
-            BrowserControlProbeContext::Startup.wait_duration(),
+            BrowserControlProbeContext::AutoVerify.wait_duration(),
             reconnect_window
         );
         assert_eq!(

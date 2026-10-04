@@ -380,8 +380,9 @@ fn prune_engine_logs(app: &tauri::App) {
     }
 }
 
-/// Fire-and-forget background services: IM supervisor autostart, and
-/// parking goals left `active` by the previous Core process. Goal v2's
+/// Fire-and-forget background services: IM supervisor autostart, the
+/// resident browser bridge (managed runtime only), and parking goals
+/// left `active` by the previous Core process. Goal v2's
 /// continuation loop lives in this process, so after a restart nothing
 /// is driving those goals; `paused` is the honest state and the user's
 /// next message on the session resumes them (goal-simplify PRD §3.3).
@@ -393,6 +394,15 @@ fn start_background_services(app: &tauri::App) {
     let app_for_im = app.handle().clone();
     tauri::async_runtime::spawn(async move {
         im_manager.autostart(app_for_im).await;
+    });
+
+    let bridge: std::sync::Arc<crate::browser_bridge::BrowserBridgeManager> = app
+        .state::<std::sync::Arc<crate::browser_bridge::BrowserBridgeManager>>()
+        .inner()
+        .clone();
+    let app_for_bridge = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        bridge.reconcile(app_for_bridge).await;
     });
 
     let galley_for_goals: SqliteGalley = app.state::<SqliteGalley>().inner().clone();

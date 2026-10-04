@@ -30,7 +30,7 @@ attach-mode behavior unless a task explicitly changes this document.
 | File | Contents |
 |---|---|
 | [product-and-onboarding.md](./product-and-onboarding.md) | Product model and first-run UX contract: one-screen model setup, copy direction, interaction rules |
-| [browser-control.md](./browser-control.md) | Browser Control capability: `tmwd_cdp_bridge` setup contract, probe rules, demo, recommended copy |
+| [browser-control.md](./browser-control.md) | Browser Control capability: `tmwd_cdp_bridge` setup contract, resident browser bridge (live status, auto-verify, TMWebDriver coupling points), probe rules, demo, recommended copy |
 | [runtime-modes-and-sessions.md](./runtime-modes-and-sessions.md) | `managed_ga` vs `external_ga` mode boundary, session history rules, and the CLI runtime contract (defaults, output shape, status) |
 | [model-configuration.md](./model-configuration.md) | Managed model config: Provider/Model records, encrypted credential rules, ChatGPT / Codex OAuth, managed IM channels |
 | [prompt-composition.md](./prompt-composition.md) | Galley Runtime Prompt composition, `GALLEY_RUNTIME_PROMPT_TEXT` seam, prompt profile |

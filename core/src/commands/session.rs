@@ -530,6 +530,7 @@ pub(crate) async fn get_pref_json(
 
 #[tauri::command]
 pub(crate) async fn set_pref_json(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     key: String,
     value: serde_json::Value,
@@ -537,7 +538,22 @@ pub(crate) async fn set_pref_json(
     galley
         .set_pref_json(&key, value)
         .await
-        .map_err(stringify_error)
+        .map_err(stringify_error)?;
+    // A runtime switch is only this pref write (GUI Settings / onboarding),
+    // so this is where the resident browser bridge follows it: started for
+    // managed, stopped for external (Rule 1).
+    if key == browser_bridge::ACTIVE_RUNTIME_KIND_PREF {
+        use tauri::Manager;
+        if let Some(bridge) =
+            app.try_state::<std::sync::Arc<browser_bridge::BrowserBridgeManager>>()
+        {
+            let bridge = bridge.inner().clone();
+            tauri::async_runtime::spawn(async move {
+                bridge.reconcile(app).await;
+            });
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]

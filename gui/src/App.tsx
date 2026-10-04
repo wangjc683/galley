@@ -27,7 +27,7 @@ import {
 } from "@/components/screens/project/EditProjectDialog";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
-import { useBrowserControlStartupEffect } from "@/hooks/useBrowserControlStartupEffect";
+import { useBrowserControlLiveStatus } from "@/hooks/useBrowserControlLiveStatus";
 import { useChannelsStatus } from "@/hooks/useChannelsStatus";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
 import { useSessionQueueEvents } from "@/hooks/useSessionQueueEvents";
@@ -264,7 +264,7 @@ function App() {
     pushToast,
     screen,
   });
-  useBrowserControlStartupEffect(activeRuntimeKind);
+  useBrowserControlLiveStatus(activeRuntimeKind);
   useGlobalShortcuts({ setEmptyComposerFocusTick, setSettingsTab });
   useExternalCoreEvents();
   useSessionQueueEvents(activeSessionId ?? null);

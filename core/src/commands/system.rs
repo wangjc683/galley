@@ -107,6 +107,13 @@ pub(crate) async fn probe_browser_control(
 }
 
 #[tauri::command]
+pub(crate) async fn get_browser_bridge_status(
+    manager: tauri::State<'_, std::sync::Arc<browser_bridge::BrowserBridgeManager>>,
+) -> std::result::Result<browser_bridge::BrowserBridgeStatus, String> {
+    Ok(manager.status().await)
+}
+
+#[tauri::command]
 pub(crate) async fn open_browser_control_extensions_page(
     browser: browser_control::BrowserControlBrowser,
 ) -> std::result::Result<(), String> {

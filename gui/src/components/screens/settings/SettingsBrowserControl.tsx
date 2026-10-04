@@ -47,6 +47,7 @@ function useBrowserControlView() {
   const layoutError = useBrowserControlStore((s) => s.layoutError);
   const status = useBrowserControlStore((s) => s.status);
   const lastProbe = useBrowserControlStore((s) => s.lastProbe);
+  const bridge = useBrowserControlStore((s) => s.bridge);
   const busy = useBrowserControlStore((s) => s.busy);
   const error = useBrowserControlStore((s) => s.error);
   const ensureLayout = useBrowserControlStore((s) => s.ensureLayout);
@@ -67,7 +68,7 @@ function useBrowserControlView() {
         ? copy.offlineStatus
         : error || lastProbe?.message || copy.waitingStatus;
   const statusDetail = connected
-    ? copy.connectedStatusDetail(lastProbe?.tabCount ?? 0)
+    ? copy.connectedStatusDetail(bridge?.tabCount ?? lastProbe?.tabCount ?? 0)
     : connectedNoTabs
       ? copy.connectedNoTabsStatusDetail
       : offline

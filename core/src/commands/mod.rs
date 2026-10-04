@@ -12,8 +12,9 @@ use crate::db::{
     UpsertManagedModelProviderMetadata,
 };
 use crate::{
-    browser_control, codex_oauth, credential_store, error, im_supervisor, managed_model_config,
-    managed_model_layers, managed_model_probe, managed_runtime, path_install, sop_install,
+    browser_bridge, browser_control, codex_oauth, credential_store, error, im_supervisor,
+    managed_model_config, managed_model_layers, managed_model_probe, managed_runtime, path_install,
+    sop_install,
 };
 use serde::Deserialize;
 // `State` is re-exported so every command module picks it up via its

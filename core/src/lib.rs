@@ -4,6 +4,7 @@ mod auto_title;
 mod app_paths;
 mod app_setup;
 pub mod app_update;
+pub mod browser_bridge;
 pub mod browser_control;
 pub mod codex_oauth;
 mod commands;
@@ -109,6 +110,11 @@ pub fn run() {
         .manage(std::sync::Arc::new(
             im_supervisor::ImSupervisorManager::new(),
         ))
+        // Resident browser bridge (managed runtime only); started from
+        // the setup hook and reconciled when the runtime pref changes.
+        .manage(std::sync::Arc::new(
+            browser_bridge::BrowserBridgeManager::new(),
+        ))
         .invoke_handler(tauri::generate_handler![
             path_exists,
             access_local_file,
@@ -126,6 +132,7 @@ pub fn run() {
             ensure_managed_runtime_layout,
             ensure_browser_control_layout,
             probe_browser_control,
+            get_browser_bridge_status,
             open_browser_control_extensions_page,
             open_browser_control_test_page,
             get_im_supervisor_status,
