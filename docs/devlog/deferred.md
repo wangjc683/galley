@@ -8,6 +8,23 @@
 
 ---
 
+## 浏览器插件上架 Chrome 应用商店 / Edge 加载项
+
+- **状态**：暂缓（2026-10-04 JC 裁定）
+- **提出**：2026-10-04，浏览器控制 UX 讨论（`.scratch/browser-control-ux/PRD.md`）。设置三步
+  （开开发者模式、拖入未打包文件夹、测试）里剩下的摩擦是 Chrome 对未上架扩展的硬限制，UI 层已压到底；
+  上架后用户点「添加至 Chrome」即装好、自动更新，是唯一还能大幅省步骤的杠杆。
+- **启动信号**：社区或 dogfood 里出现「装插件卡住 / 放弃」的反馈；或开发者模式扩展被 Chrome 进一步限制
+  （例如启动时弹停用提示）。
+- **方案**：先做一张调研票，只查两件事：商店审核政策对现有权限的态度、改造量；调研结论再决定是否上架。
+- **实施要点**：权限很重（`debugger`、`cookies`、`management`、`contentSettings`、`<all_urls>`、
+  全页面 MAIN world 的 `disable_dialogs.js`），审核可能卡；`config.js` 里每装一份生成的 TID
+  （`core/src/browser_control.rs` `ensure_config_js`）要改成运行时生成；商店自动更新与内置 GA 桥协议
+  的版本要对齐管理；外置 GA 用户的兼容（协议同源，07-20 结论）要复核。GA 为 MIT 许可，授权无碍。
+- **待定**：商店版与内置文件夹版是否并存（修复入口仍需要文件夹版）。
+- **关联**：[managed-ga-runtime/browser-control](../managed-ga-runtime/browser-control.md)、
+  [插件去侵入化](./2026-07-20-extension-badge-deintrusive.md)。
+
 ## Composer `/` 快路：就地调出常用提示词
 
 - **状态**：暂缓（2026-10-03 JC 选方案 B，＋ 菜单不带快路）
