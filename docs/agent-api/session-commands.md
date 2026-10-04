@@ -29,7 +29,7 @@ one `SessionBrief` per line.
 | ------------ | ------ | ------------ | ------------------------------------------------------------------------------------------------- |
 | `--runtime`  | enum   | `current`    | `current` follows the GUI's active runtime; `all` is explicit cross-runtime listing                |
 | `--project`  | string | (unset)      | restrict to one project id                                                                        |
-| `--status`   | string | (unset)      | one of `idle / connecting / running / waiting_approval / error / completed / cancelled / archived` |
+| `--status`   | string | (unset)      | one of `idle / connecting / running / waiting_approval / error / completed / cancelled / archived`. `waiting_approval` is still accepted but is no longer produced since approval was removed (2026-10-05), so it matches nothing |
 | `--archived` | bool   | false        | return only archived sessions                                                                     |
 | `--all`      | bool   | false        | include archived alongside active (overrides `--archived`)                                        |
 
@@ -423,7 +423,7 @@ $ galley status
 | --------------- | ---- | -------------------------------------------------------------------------------------------------- |
 | `total`         | int  | non-archived sessions                                                                              |
 | `running`       | int  | persisted sessions in `running` status. Direct SQLite rollup; transient statuses persist as `idle`, so this reads 0 in practice. Read `live.busy` instead. |
-| `waitingInput`  | int  | persisted sessions with `waiting_approval` status (same persistence caveat)                        |
+| `waitingInput`  | int  | persisted sessions with `waiting_approval` status. Always `0`: `waiting_approval` is no longer produced since approval was removed (2026-10-05) |
 | `errored`       | int  | persisted sessions in `error` status (same persistence caveat)                                     |
 | `live`          | object? | **CLI-attached, additive (2026-09-09).** `{"busy": <sessions currently busy>, "queued": <messages held in outbound queues>}` from the unscoped `sessions.run_state` probe. Absent when Galley Core is unreachable. |
 

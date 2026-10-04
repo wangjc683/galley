@@ -200,7 +200,7 @@ draft build.
 Download from the draft Release and run the platform smoke path:
 
 - macOS Apple Silicon: install DMG, right click Open if Gatekeeper blocks, run
-  a new session, switch LLM once, trigger one approval path.
+  a new session, switch LLM once.
 - macOS Intel: smoke the x64 build when available or use the documented local
   fallback.
 - Windows x64: install NSIS setup and run the

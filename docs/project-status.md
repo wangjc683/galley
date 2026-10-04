@@ -573,7 +573,7 @@ Post-release follow-up:
    (`maxlen_multiplier` 2.25 → 1.93 as a denominator). `f06d550` did not move
    it again, so the watch is unchanged: `...[Truncated]...` arriving sooner is
    the regression direction that only long real sessions surface.
-3. Verify the reply-done / goal-end / approval notifications on an installed
+3. Verify the reply-done / goal-end / ask_user notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
    `v0.4.5` adds sounds to these, so the Windows pass now also covers the
@@ -607,7 +607,8 @@ the bookmark + paperclip on the right fold into a ＋ menu at the left
 preset selects its trailing `[…]`; the idle Goal toggle drops to a ghost icon;
 [devlog](./devlog/2026-10-03-composer-plus-menu.md)); then the model phrase
 reads 「gpt-6.1-sol · high」 with no caret, symmetric hover boxes, the approval
-icon only when a session deviates from the default, and user-facing LLM becomes
+icon only when a session deviates from the default (the icon went with approval
+on 10-05), and user-facing LLM becomes
 模型 ([devlog](./devlog/2026-10-03-composer-model-effort-display.md)). The `/`
 prompt shortcut went to `deferred.md`. At the next Windows smoke, check the ＋
 menu's native file and folder pickers (checklist item updated).
@@ -635,10 +636,23 @@ changed this time. At the next Windows smoke, run the resident bridge items
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
 program) and walk the new-user flow (待解锁 → install → auto-verify → 试一试),
 which has not been walked live yet. Parked: IM step summaries with the site and
-the Chrome / Edge store listing (both in `deferred.md`). Next session:
-`.scratch/remove-approval/` — JC decided to drop step approval entirely and run
-auto only, as upstream GA does; the prompt rule (ask_user before irreversible
-actions) is still undecided.
+the Chrome / Edge store listing (both in `deferred.md`).
+
+2026-10-05, approval removed
+([devlog](./devlog/2026-10-05-remove-approval.md),
+`.scratch/remove-approval/`): every tool call runs directly, as in upstream
+GA. The wire drops `tool_call_pending` / `approval_response` /
+`set_approval_rules` / `set_yolo_mode`; `WorkbenchHandler` only synthesizes
+the turn signal; Core drops `set_session_approval_mode`, the tool-event
+commands and `SessionBrief.approvalMode` (`waiting_approval` stays in the
+Agent API, never produced); the GUI loses the approval card, Dock, mode row,
+Settings page, notification toggle and YOLO intro. No migration. CLAUDE.md
+Rule 1 now allows the handler subclass for turn signals only. No Galley
+prompt rule: upstream's system prompt already says to ask before
+irreversible actions. Runner, Core, CLI and GUI changed; not yet checked
+live (restart `tauri dev` first; checklist in the devlog). At release, draft
+the #16 reply, since that issue lists approval waits as a notification
+tone.
 
 The four community threads #29–#32 shipped in
 `v0.5.6` and were answered 2026-10-01, all kept open:
@@ -744,7 +758,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; audited upstream `b1e173dc` baseline shipped in v0.2.16; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime/README.md) |
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
-| Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications, missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
+| Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
 | Release path | v0.5.6 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |

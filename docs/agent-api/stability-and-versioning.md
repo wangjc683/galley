@@ -66,7 +66,7 @@ get a clean error path; the JSON envelope carries the original tag.
 
 | Enum                       | Values                                                                                |
 | -------------------------- | ------------------------------------------------------------------------------------- |
-| `SessionBrief.status`      | `idle / connecting / running / waiting_approval / error / completed / cancelled / archived` |
+| `SessionBrief.status`      | `idle / connecting / running / waiting_approval / error / completed / cancelled / archived` (`waiting_approval` is kept as a stable value but is no longer produced since approval was removed (2026-10-05)) |
 | `MessageBrief.role`        | `user / agent / system` (DB `tool` rows normalize to `agent`)                         |
 | `HealthCheck.status`       | `ok / warn / fail / deferred_b4` (`deferred_b4` is a legacy stable value; new `deferred_<phase>` values are additive) |
 | `Origin.via`               | `gui / cli / supervisor / system`                                                     |
@@ -201,6 +201,19 @@ codes and error discriminants unchanged):
   itself. See §5.5 and §5.5d in
   [session-commands.md](./session-commands.md). Also served under
   `--schema=1`.
+- 2026-10-05 — Approval removed: Galley no longer gates tool calls (step
+  approval, auto-run toggle and always-allow rules are gone; tools always
+  run directly, as in upstream GenericAgent). No documented command,
+  flag, field or enum value was removed. `SessionBrief.status` keeps
+  `waiting_approval` (§1.1), but it is no longer produced:
+  `sessions list --status=waiting_approval` is still accepted and
+  matches nothing, `galley status`'s `waitingInput` (which counts that
+  status) is always `0`, and `project follow` never sees a session in
+  it. `SessionBrief.approvalMode`, an
+  optional, never-documented field omitted whenever unset (meaning
+  "follow the default"), is gone. It was never emitted in practice and
+  its absence reads exactly as before, so this is not a breaking change.
+  The same applies under `--schema=1`.
 
 ### 7.2 `schemaVersion: 1` (frozen, served for unchanged commands)
 

@@ -138,7 +138,7 @@ running in the background:
   update channel.
 - `Quit Galley`: explicitly exit the app.
 
-The first version intentionally has no running / approval badge; task state
+The first version intentionally has no running badge; task state
 remains inside the main UI.
 
 ## Launch at Login

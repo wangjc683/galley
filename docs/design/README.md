@@ -23,9 +23,9 @@
 | 设计哲学与 Tokens（§1–§2） | [foundations.md](./foundations.md) | 设计哲学、源头分级；色板 / dark theme、typography scale、icon、圆角阴影、UI primitives、WebView discipline、动效分类 |
 | 整体布局与窗口 Chrome（§3–§4.2） | [layout-and-chrome.md](./layout-and-chrome.md) | 两栏布局；SidebarHeader（书眉）/ MainHeader、Browser Control / 内核 / Channels indicator；Sidebar 结构、Session Row、Project 行 |
 | Conversation 主区与 Composer（§4.3–§4.4、§7） | [conversation.md](./conversation.md) | turn 结构、Goal 章节框、Markdown / 代码块渲染、滚动与流式行为、Message Actions、Composer、Empty State |
-| Tool Callout 与审批（§4.5–§4.7） | [tools-and-approvals.md](./tools-and-approvals.md) | Tool Event Callout 状态映射、Approval Dock / Card、工具特定渲染（diff 等）、Inspector 退役记录 |
+| Tool Callout（§4.5–§4.7） | [tools-and-approvals.md](./tools-and-approvals.md) | Tool Event Callout 状态映射、`file_patch` diff 视图、审批与 Inspector 退役记录 |
 | Onboarding 与卡片家族（§5–§6） | [onboarding-and-cards.md](./onboarding-and-cards.md) | Onboarding 流程、Attach / Health Check、Error Card、overlay 层级、首次失败 hint 系统 |
-| Command Palette、Settings 与快捷键（§8–§10） | [overlays-and-settings.md](./overlays-and-settings.md) | ⌘K Command Palette、Settings modal 全部 tab（Runtime / Models / Channels / Approval / About / Agent / Shortcuts）、全局快捷键表 |
+| Command Palette、Settings 与快捷键（§8–§10） | [overlays-and-settings.md](./overlays-and-settings.md) | ⌘K Command Palette、Settings modal 全部 tab（Runtime / Models / Channels / About / Agent / Shortcuts）、全局快捷键表 |
 | 未决事项与历史对照（§11–§12） | [status-and-history.md](./status-and-history.md) | 当前 open 问题、推到未来版本的扩展、与 Notion 历史稿的关系 |
 | Polish 审查清单（2026-08-04 新增） | [polish-checklist.md](./polish-checklist.md) | 界面细节 audit 用的采纳 / 否决规则表（同心圆角、光学对齐、热区、tabular-nums 等）与 audit 记录 |
 

@@ -72,9 +72,8 @@ Target: Galley CLI `schemaVersion: 1` (frozen since `v0.2`, additive-only).
    summary and explicit approval first. Do not substitute `archive` for the
    user's "delete" without asking, and do not run `delete` on an ambiguous
    request either.
-5. **Approval prompts are the user's.** Never auto-approve Galley approval
-   prompts; a session in step-approval mode waits for the human. Galley
-   Settings are GUI-only (`galley config` does not exist).
+5. **Settings are GUI-only.** Galley Settings have no CLI surface
+   (`galley config` does not exist).
 6. **Send → wait.** Read `turnCount` from `session brief` right before
    sending and pass `--after-turn=<turnCount>` (that value, not +1) plus
    `--until-idle` to `session wait`; without `--after-turn` the wait returns

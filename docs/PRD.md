@@ -21,7 +21,7 @@
 
 它有两个对等的前端：
 
-- **Galley GUI**——给坐在桌前的 human operator 看进度、写指令、审批
+- **Galley GUI**——给坐在桌前的 human operator 看进度、写指令
 - **Galley CLI**——给 **Supervisor Agent**（外部 agent，可能是另一个 GA、可能是 Claude，可能是用户自己写的）远程操作整个 session team
 
 两个前端共享同一个 **Galley Core**（Rust 端权威层），数据 / 状态 / 命令调度都从这里走。
@@ -237,7 +237,7 @@ Supervisor 编排。
 
 GUI 信息架构跟 v0.2 PRD §7 + DESIGN.md 一致。本节不重复细节，详见：
 
-- [DESIGN.md](./DESIGN.md) — Sidebar Spec / Top Bar / Conversation / Approval Dock
+- [DESIGN.md](./DESIGN.md) — Sidebar Spec / Top Bar / Conversation / Tool Callout
 - [2026-05-13 sidebar overhaul devlog](./devlog/2026-05-13-sidebar-overhaul-and-projects.md) — 信息架构最新形态
 
 v0.2 在 GUI 侧的新增元素（B4 阶段实施）：
@@ -406,7 +406,6 @@ Settings → Agent → "安装 galley 命令" 按钮：
 
 - 静态：什么都不在跑
 - 带数字 badge：N 个 active session
-- 不做 approval 红点（v0.1 已经接受自动执行（原 YOLO）默认，supervisor 场景下 approval 不是主线）
 
 ### 13.3 Menubar 下拉菜单
 
@@ -555,7 +554,7 @@ migration 失败 → app 拒绝启动 + 显示错误页面：
 
 ## 19. Open Questions
 
-继承自 v0.2 PRD 的未解决问题（多 session API quota / web_execute_js 审批分类等）仍然 open。v0.2 新增的开放问题见 [vision pivot devlog](./devlog/2026-05-15-vision-pivot-to-orchestrator.md) §Open questions。
+继承自 v0.2 PRD 的未解决问题（多 session API quota 等）仍然 open。v0.2 新增的开放问题见 [vision pivot devlog](./devlog/2026-05-15-vision-pivot-to-orchestrator.md) §Open questions。
 
 ## 20. 当前默认决策表（v0.2）
 

@@ -75,7 +75,7 @@
 
 - 自第 1 条 user message 起显示（2026-07-21 起；原门槛"少于 3 条隐藏"按 index 职能设定，误伤了锚职能——深度研究型对话恰是一问 + 数千字长回答，最需要回跳时 rail 缺席。单点 rail 不再是索引，但作为锚成立，且与长对话中已学会的交互完全一致）。键盘路径 ⌥↑/⌥↓ 与对话长度无关，始终可用。
 - 历史 dots 永远只表达导航位置：active = brand filled，inactive = hollow ring，cluster = vertical capsule。
-- 只有最新 tail marker 可以临时承载 live 状态：running 时 single dot 替换为 Sidebar 同源的 brand `CircleNotch` spinner；waiting（approval / ask_user 合并）时替换为 warning `PauseCircle`。状态结束后恢复普通 dot / cluster。
+- 只有最新 tail marker 可以临时承载 live 状态：running 时 single dot 替换为 Sidebar 同源的 brand `CircleNotch` spinner；waiting（ask_user）时替换为 warning `PauseCircle`。状态结束后恢复普通 dot / cluster。
 - 最新提问落在 dense cluster 里时，保留 cluster capsule 和 hover list，再叠加同源状态图标；不能让状态图标吞掉“这里是一组提问”的导航语义。
 - 右 rail 不展示 subline / badge / row tint。状态文案只进入 tooltip / aria：`进行中` / `等你回应`。跨区记忆来自同一套状态图标语法，而不是把 Sidebar row chrome 搬进文档区。
 
@@ -131,7 +131,7 @@ Goal v1 时 Galley 在 master 线程里讲述 run 进展的旁白（system row�
 
 Agent 经 `ask_user` 停下来问人的那条：实时态是 warning 左条 + `PauseCircle` +「等你回复」+ 候选 chip；回答后（或重启恢复后）退成 `AnsweredAskUser` 回显——2px 30% warning 细规线、无底色、echo 字号 ink-soft、无 chip（交互已结束，再摆 chip 会暗示可重答）。
 
-- **问题正文走 `MarkdownView variant="agent"`，不再是裸 `<div>`**（2026-09-14）。直接原因是社区反馈「AskUser 界面不能复制文字」：`body` 全局 `user-select: none`（foundations.md §2.6），内容面靠 `select-text` 逐个开回来，用户消息 / agent 正文 / 工具输出 / 审批路径都开了，唯独 ask_user 问题漏了。顺带收益：GA 提问里常见的编号选项、路径、行内代码得到与正文相同的 markdown 排版（暖褐行内代码、列表缩进），字体寄存也与同一黄框里的 side_question 一致（CJK 衬线）。
+- **问题正文走 `MarkdownView variant="agent"`，不再是裸 `<div>`**（2026-09-14）。直接原因是社区反馈「AskUser 界面不能复制文字」：`body` 全局 `user-select: none`（foundations.md §2.6），内容面靠 `select-text` 逐个开回来，用户消息 / agent 正文 / 工具输出都开了，唯独 ask_user 问题漏了。顺带收益：GA 提问里常见的编号选项、路径、行内代码得到与正文相同的 markdown 排版（暖褐行内代码、列表缩进），字体寄存也与同一黄框里的 side_question 一致（CJK 衬线）。
 - **单换行保留为换行（`softBreaks`，remark-breaks）**。GA 的 `ask_user(question)` 只是透传字符串，TUI / Telegram 前端按纯文本打印，从没承诺过 markdown；LLM 写「第一行\n第二行」时若按 markdown 软换行合并，两个问句会并成一句、改变问题意思。remark-breaks 只碰段落内的软换行，列表 / 代码块 / 空行分段不受影响，所以 markdown 形状的问题仍得到完整处理。这是 `MarkdownView` 上的 opt-in prop，**只给 ask_user 用**——agent 回答是按 markdown 写的，软换行就该是折行。
 - **回显与实时态同一条渲染路径**：`AnsweredAskUser` 同样走 `MarkdownView` + `softBreaks`，用 `[&_p]/[&_li]` 覆盖到 echo 字号 + ink-soft（沿用 Goal 叙述 callout 的降权手法），同一段文字实时与回显只差大小和墨色。
 - **Composer 占位随候选数变**：有 chip 时「回复，或选择上方候选」，无 chip 时「回复上方提问」（`composer-register.ts` 的 `reply` / `replyOpen`）。`candidates` 是可选参数，模型对开放式问题常不给；无条件的「选择上方候选」会让人去找不存在的选项（2026-09-14 真机验收即如此）。
@@ -381,8 +381,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 | 第一批回答 chunk 到 | partial markdown 开始流出 |
 | 流式过程中 | partial 持续增长，Markdown re-render（行内 / 列表 / 代码块都跟着出现） |
 | `turn_end` 到 | partial 被 finalized AgentTurn **替换**（store `appendAgentTurn` clear inFlightContent） |
-| Tool call 触发 | partial 暂停，Approval Card 出现 |
-| 用户决策后 → bridge 继续 → 下一 turn | 新 turn 的 partial 重新开始流（store `turn_start` clear inFlightContent） |
+| 工具执行完 → bridge 继续 → 下一 turn | 新 turn 的 partial 重新开始流（store `turn_start` clear inFlightContent） |
 
 **关键 robustness**：partial 输入是 GA-raw（`<thinking>` / `<summary>` / `<tool_use>` / `<file_content>` / `[FILE:...]`），且**可能 mid-tag**（比如刚收到 `<thi` 没 close）。`cleanPartialContent` 的 4 步算法：
 
@@ -395,7 +394,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 
 #### Sticky-bottom + Scroll-to-bottom 浮动按钮
 
-- 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 把 `scrollTop = scrollHeight`——依赖覆盖**所有底部锚定增长源**（streaming partial、turn_end 落定、审批卡、AskUserBubble），不只 streaming buffer；**提交之间的增长**（2026-09-16：live 窗口的入场 / 出场 / 完成收合 sweep、DetailPanel 与 pill 展开、Shiki 回流）由内容列上的常驻 ResizeObserver 接住，仍在底部时每次尺寸变化重新钉底，否则新步比被顶掉的步高时底部会被作曲区盖住：tool-heavy 多步 run 的 partial 长期为空，只看 buffer 会让每步落定悄悄沉到折叠线下
+- 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 把 `scrollTop = scrollHeight`——依赖覆盖**所有底部锚定增长源**（streaming partial、turn_end 落定、AskUserBubble），不只 streaming buffer；**提交之间的增长**（2026-09-16：live 窗口的入场 / 出场 / 完成收合 sweep、DetailPanel 与 pill 展开、Shiki 回流）由内容列上的常驻 ResizeObserver 接住，仍在底部时每次尺寸变化重新钉底，否则新步比被顶掉的步高时底部会被作曲区盖住：tool-heavy 多步 run 的 partial 长期为空，只看 buffer 会让每步落定悄悄沉到折叠线下
 - **用户向上滚 → 不跟随**：`atBottom = false`，stream 继续但视图不动
 - **浮动按钮**：`atBottom = false` 时出现 32px 圆形 ghost 按钮（⬇ ArrowDown thin），**水平居中、贴对话列底部 16px**——实现时从"右下角"改为居中（代码注释记录了理由：右下角与 Composer 动作簇视觉打架），2026-07-05 回写
 - **双态信号**（2026-08-07，[devlog](../devlog/2026-08-07-scroll-button-two-state-signal.md)）：箭头永不变（永远回答"点了去哪"），按钮上叠加状态信号，两种视觉语法各自自解释——
@@ -411,7 +410,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 
 - 用户提交瞬间 store 设 `agentRunning = true`（不等 `turn_start` IPC，避免一次往返延迟）
 - conversation 末尾立即渲染 `TurnMarker` 的 thinking 态：单行直立 12px ink-soft，内容「序号栏 `··` + 思考中」（2026-09-16 前是「第 N 步 │ 思考中」；同日先试过空 gutter，真机看是个洞）+ 状态文字 shimmer（2026-08-12 前是三点 `LiveDots`）；不再用逐字 opacity 波浪
-- 触发条件：`agentRunning && pendingApprovals.length === 0 && !visiblePartial`
+- 触发条件：`agentRunning && !visiblePartial`
 - `turn_end` 到达时，落定的 AgentTurn（同一 step number 的 TurnMarker + tools）在占位行**上方**以 0fr 展开长出，占位行本身不重挂载、留在原地等下一步的 `turn_start` 原地归零时钟（2026-09-16 live 窗口）。**before/after 视觉一致**——同一个 TurnMarker 组件的两态，用户感受到的是一个步骤的进展，不是两个独立的 UI
 - **等待 ≥ 3 秒时显示 elapsed 计数，≥ 60 秒后追加仍在运行**——立即显示读秒会
   太机械，但 5 秒空等又明显让人产生等待感；3 秒是当前 dogfood 后的中点。
@@ -447,7 +446,7 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 - AgentTurn type 持有 `turnIndex`（一个 user message 在 conversation 里可能产生多个 AgentTurn）
 - 渲染（2026-09-16 序号栏形态）：每个 AgentTurn 的 thinking summary 之上一行，左侧是**两位补零序号**（`01`…，`lib/step-numeral.ts`）占一格固定宽度的 **`--step-gutter`（24px）**，**JetBrains Mono、`--conversation-tool-mono-size`（标准档 11px，与行右端的工具名同一寄存器）**、regular、`text-ink-muted`，行高钉到 summary 的行框（`calc(step-size * 1.6)`）让两者基线同高；summary（ink-soft，12px 档，**行高 1.6、自动换行不截断**）从 gutter 右缘起笔。序号与 summary 之间**没有分隔符**——固定列宽本身就是分隔。DetailPanel 的 caret **紧跟 summary 文字末尾**（inline-block，随末行换行；裸数字步则单独立在 gutter 右侧），不停在列右缘——披露 caret 贴着它所属的文字，与 pill 行、折叠头同一条规则（2026-09-16）。**不用 italic、不用 serif、不用 uppercase tracking**——结构 metadata 冷静直立，与下方 Newsreader 衬线正文形成对比张力
   - **可展开行的应答**（2026-09-23，[devlog](../devlog/2026-09-23-step-marker-hover-affordance.md)）：有 DetailPanel 内容的 marker 行是 `role=button` 披露控件（Tab 可达、Enter / Space、`aria-expanded`，可访问名取行内容，不设 `aria-label`），与 pill 行、折叠头同族：hover / focus-visible 在**内容列**（summary + caret）画 `bg-hover` 并提墨到 ink，即时无过渡；序号在框外，但悬停整行任一处都点亮内容框（`group-hover`）。框左缘 = 内容列 −10px，与 inline pill 的 hover 框同一条边，负 margin 抵消、文字 x 不变；上下不外溢，框即行框（live 窗口的裁剪框顶边贴着 marker 行，上溢会被切平）。summary 保留可选中，行内拖选不触发展开。提墨必须落在自带墨色的子元素上——行级 `hover:text-ink` 继承不到它们，此前正是这样悄悄失效的
-  - **过程区 = StepRegion（缩进 + rail）**（2026-09-16 第二轮）：一个 run 的整个过程体（marker、narration、inline pill、block 卡片、ask_user 回显与用户回复、DetailPanel 原文）包在 `StepRegion` 里，整体缩进一格 `--step-gutter`，左侧 x=5（折叠头 caret 中心）有一条 1px `bg-line` 竖向 rail 贯穿全高。于是序号落在 24–48、内容从 48 起笔，和折叠头文字（起于 19）形成「把手在左、列表在右」——与参考 trace 组件的 24 / 47 同比例。**live 与 settled 同构**：未完成的 run（以及 Goal run、/btw 等不可折 run）走 flat 的 StepRegion，rail 从第一步顶起；settled 可折 run 的 StepRegion 在 RunFoldSection 内，rail 从折叠头下缘（`-top-2.5`）挂下来。run 完成被重新包进折叠段时 x 不动。MainView 的 in-flight marker 与待审批卡片也各自包一层 StepRegion（两段 rail 之间有一小段断口，已知）。
+  - **过程区 = StepRegion（缩进 + rail）**（2026-09-16 第二轮）：一个 run 的整个过程体（marker、narration、inline pill、block 卡片、ask_user 回显与用户回复、DetailPanel 原文）包在 `StepRegion` 里，整体缩进一格 `--step-gutter`，左侧 x=5（折叠头 caret 中心）有一条 1px `bg-line` 竖向 rail 贯穿全高。于是序号落在 24–48、内容从 48 起笔，和折叠头文字（起于 19）形成「把手在左、列表在右」——与参考 trace 组件的 24 / 47 同比例。**live 与 settled 同构**：未完成的 run（以及 Goal run、/btw 等不可折 run）走 flat 的 StepRegion，rail 从第一步顶起；settled 可折 run 的 StepRegion 在 RunFoldSection 内，rail 从折叠头下缘（`-top-2.5`）挂下来。run 完成被重新包进折叠段时 x 不动。MainView 的 in-flight marker 也包一层 StepRegion（与上方 rail 之间有一小段断口，已知）。
   - **最终回答满宽**：StrongHr 之后的回答不在 StepRegion 里。为此 `answerOnly` 拆分扩展到**所有**有收口 turn 的 group（原只对可折 group）：收口 turn 的 marker 以 `markerOnly` 进区域，回答 flat 渲染。StrongHr 自己 `-ml-(--step-gutter)` 从缩进里破出来铺满列宽——「行动 → 结论」的横线属于回答的宽度。
   - **内容列 x 的两处细节**：pill 按钮保留 `px-2` hover 外溢，外层 `-ml-2.5` 拉回 8px 外溢 + 2px Phosphor 字形内留白，图标可见笔画正好落在 summary 首字的 x；裸步合并的 pill 行自画 gutter。
   - **锚点靠对齐，不靠墨量，层级为 头 → summary → 序号**：summary 是这一行的句子，序号是页边序号栏，是这一步里最轻的元素（第一轮曾保留 medium 以保 Windows 可扫性，真机看后层级比可扫性重要，改 regular 并降 1px）。RunFoldHeader 的「N 步」是计数、sidebar 的「第 N 步 · summary」是独立语境需要单位，均不跟随；「第 N 步」文案（`copy.conversation.step`）保留为序号旁的 sr-only 文本，屏幕阅读器仍念完整语义。序号栏在 `index` 未知的 pre-turn_start 窗口也占位（`··`），步落地时状态文字不右跳。
@@ -663,75 +662,40 @@ quick prompt 建议**——能力发现靠"用户主动打开库时看到能力�
   - 圆角 12px / 内边距 8px / 每行 32px
   - current 项左侧杏沙 ✓
   - 切换中 spinner（`CircleNotch`）未实现——切换足够快，V0.2 再议
-- agent running / waiting approval 时不可切换：`aria-disabled` + 点击
+- agent running 时不可切换：`aria-disabled` + 点击
   no-op（不用真 `disabled`——禁用元素吞掉指针事件，解释性 tooltip
   「运行中无法切换」永远弹不出来；这条规则适用于所有带解释 tooltip
   的禁用控件，Radix `TooltipLabel`，禁原生 `title`）
 - 长列表在 popover 内滚动（`max-h min(60vh,360px)`）
 - displayName 由 bridge 按 runtime 边界生成：external GA 显示完整 raw name；managed GA 显示 Galley Models 里的显示名或原始 model id（详见 IPC 协议）
 
-#### 审批模式（并入 LLM pill，2026-07-20 定稿）
+#### Trigger 与弹层（2026-07-20 定稿；2026-10-05 移出审批模式）
 
-审批模式（自动执行 / 逐步审批）**没有独立控件**——它是会话配置的一部分，
-与模型选择共用同一个 pill 和同一个 popover（第四次修订收敛于此：独立
-pill 无论文字还是收放形态，都让一个几乎永远等于默认值的设置与每刻都有
-信息量的模型名争夺层级；合并后主从关系由结构表达，不需要任何解释）。
-TopBar 无任何审批徽章（见 layout-and-chrome.md 历史注记）。
+审批模式（自动执行 / 逐步审批）曾并入这个 pill：偏离默认时 trigger 上的
+`HandPalm` / `Lightning` 图标、弹层动作栏的「改为逐步审批 / 改为自动执行」
+行。2026-10-05 随审批整体移除，见
+[tools-and-approvals.md](./tools-and-approvals.md) §4.6。
 
-- **Trigger**：［模式图标］+ 模型名，无箭头。**模式图标只在本会话偏离
-  全局默认时出现**（2026-10-03，JC 选方案 1）：默认自动执行时，切到逐步审批的
-  会话才显示 `HandPalm`；默认逐步审批时，切到自动执行的才显示 `Lightning`
-  （12px thin）。跟随默认的会话 trigger 上没有图标，读作「gpt-6.1-sol · high」。
-  理由：07-20 第四次修订让图标常驻（控件即状态），并写明「⚡ 在模型名前可能
-  被误读为 turbo 变体，dogfood 观察」；观察结论是本机 135 个会话 0 个偏离默认，
-  ⚡ 挂在每一个会话上、从不变化，等于广播已定型的偏好（与 TopBar YOLO 徽章
-  退役同一原则：常亮的警示等于没有警示）；且 7 个模型里两个叫 *-flash，⚡ 紧贴
-  模型名读作「快」。现在图标只在有信息量时出现，与「覆盖 = 偏离默认」同一套
-  语义。当前模式仍可从弹层的动作行读出（「改为逐步审批」即当前为自动执行），
-  模式名留在 aria。被否：常驻但换图标（`FastForward` / `Play` 等「自动」类
-  图标都带「快 / 开始」的歧义，且常驻零信息不变）；维持 ⚡。推理强度**不**进
-  这个 pill（见下方「推理强度 pill」，2026-09-22）。**有推理强度 pill 跟在后面
-  时**（`phraseLead`），左右内边距对称收到 `px-1`：两者加中间的「·」合成一个
+- **Trigger**：模型名，无箭头、无图标。推理强度**不**进这个 pill（见下方
+  「推理强度 pill」，2026-09-22）。**有推理强度 pill 跟在后面时**
+  （`phraseLead`），左右内边距对称收到 `px-1`：两者加中间的「·」合成一个
   短语「gpt-6.1-sol · high」。没有强度 pill（无模型可选）时内边距恢复 `px-2.5`。
-- **Popover 结构**（自上而下，主从分层；五次修订定稿——两行状态陈列
-  + 两行设置深链让从属区几乎与模型列表等高，体积破坏主从）：
+- **Popover 结构**（自上而下，主从分层）：
   1. 模型列表（主，12.5px）。**勾号在右、文字齐左**（2026-09-22 重审）：原
      左侧勾号列每行保留 22px 只为一行画勾，文字距弹层边缘 36px，JC 嫌浪费
      且占视野；改为 web 模型选择器惯例的尾随勾号（ChatGPT / Claude / Codex /
      Cursor），文字距边缘 14px，hover 浮出的服务商名排在勾号之前、勾永远
      贴右缘；**去掉最小宽度**（先收到 160 仍在短模型名旁留出 60px 空白，
-     截图 2x 量得），宽度由最长模型名决定、动作栏两行是下限（约 110px），
-     长模型名仍可撑到 320 上限。勾走后模型行与下方动作栏的文字同一条左线。
-  2. 分隔线 + **统一动作栏**（11px `text-ink-muted/70`，与「配置模型…」
-     完全同款行样式——全 popover 只有"内容 / 动作"两个字号层级，不设
-     中间档）：
-     - `改为{另一模式名}`（`✋ 改为逐步审批` / `⚡ 改为自动执行`），点击
-       即切。**popover 里的行是动作不是状态陈列**——当前值已由 trigger
-       图标表达，二元模式只需要"切到另一边"这一个动作；目标模式描述
-       进 aria。
-     - 末行「配置模型…」（`Gear`，导航项殿后）。**不放审批设置深链**：
-       默认值属低频设置，TopBar 齿轮两步可达，为捷径付出双 Gear 行不值。
-     - **无任何条件行**——不存在「恢复跟随默认」：见下方覆盖语义。
-- **运行中语义**（合并后的关键行为）：`stopMode` 只封锁**模型切换**
-  （模型行置灰 + 区顶一行「运行中无法切换模型」小字），popover 本身
-  照常打开，审批模式区保持可点——`set_yolo_mode` 即时生效，跑着的
-  会话切「逐步审批」正是"我要开始盯着"的合法动作。
-- **覆盖 = 偏离默认**（2026-07-20 终修，取代最初的「显式选择即覆盖」）：
-  在 pill 里选了与当前默认相同的模式，数据层直接清除覆盖（写 NULL），
-  而不是写一个恰好相等的覆盖——动词行 UI 下"改回去"的心智是撤销，
-  不是钉住；切去再切回必须完全复原、零残留。由此「恢复跟随默认」行
-  成为动词行的纯冗余，已删除。偏离中的会话若默认值事后被改到与之相等，
-  覆盖静默留存（行为无异；默认再改走时该会话钉住不动——用户当初的
-  偏离是有意的，不随默认反复横跳）。
-- 会话级切换一键生效、不弹确认；重确认只存在于 Settings 把**新会话
-  默认**切为自动执行时（`AutoDefaultConfirmModal`，Settings 专属）。
-- EmptyState 的同一 pill 配置**下一个新会话**（pendingApprovalMode，
-  与 LLM 预选同生命周期：createSession 消费、必清除）。
+     截图 2x 量得），宽度由最长模型名决定，长模型名仍可撑到 320 上限。勾走后
+     模型行与下方动作栏的文字同一条左线。
+  2. 分隔线 + 动作栏（11px `text-ink-muted/70`——全 popover 只有"内容 /
+     动作"两个字号层级，不设中间档）：「配置模型…」（`Gear`）。
+- **运行中语义**：`stopMode` 封锁模型切换（模型行置灰 + 区顶一行「运行中
+  无法切换模型」小字），popover 本身照常打开。
 
 **推理强度 pill**（2026-09-22，社区第二次提出后从 deferred 拎出）：LLMPill
 右侧一个**独立** pill，成熟产品的「模型选择器 + 强度选择器」并排惯例。它不
-并进 LLMPill 的理由与审批模式相反：审批是二元、几乎不动的开关，强度是会被
-拧的旋钮，且值本身有信息量（HIGH = 更慢更贵），有信息量的状态值得自己的
+并进 LLMPill 的理由：强度是会被拧的旋钮，且值本身有信息量（HIGH = 更慢更贵），有信息量的状态值得自己的
 位置。真机先验过「藏在模型弹层里一行」——模型一多它像挂在最后一个模型
 下面，且新对话里根本看不到，两条都被 JC 否掉。
 
@@ -779,13 +743,14 @@ TopBar 无任何审批徽章（见 layout-and-chrome.md 历史注记）。
   / `low` / `medium` / `high` / `xhigh`（同样小写），文字齐左、勾号在右（与
   模型弹层同一次重审），不设最小宽度、按四个词的宽度走（约 100px），点即选
   即关，无说明行、无设置深链。只给四档，`none` / `minimal` / `max` 留在设置里。
-- **覆盖 = 偏离**与审批模式同一条规则：选到与模型配置相同的档写 NULL。
+- **覆盖 = 偏离**：选到与模型配置相同的档写 NULL，而不是写一个恰好相等的
+  覆盖——切去再切回必须完全复原、零残留。
 - **运行中可点**（内核每次请求才读该值，作用于下一次调用）；LLM 切换封锁
   不波及它。切模型后覆盖保留。
 - **不等 ready**：内置模式的「模型配置值」直接从模型配置读，runner 上报后
   校正；外置模式 ready 前显示「默认」，ready 后校正。
 - **EmptyState 同一个 pill 配置下一个会话**（`pendingReasoningEffort`，与
-  `pendingApprovalMode` 同生命周期：createSession 消费、必清除）。
+  LLM 预选同生命周期：createSession 消费、必清除）。
 - 对所有模型一律显示（JC：low / medium / high 各家都认；第三方兼容端点认不认
   由用户判断，设置里的提示已交代）。
 

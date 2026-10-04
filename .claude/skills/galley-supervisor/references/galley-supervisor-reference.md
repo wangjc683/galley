@@ -6,7 +6,7 @@ workflow details.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-reference.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-10-01 (#30: `live.askPending` / `live.lastExit`, answering a pending question with a plain send, wider `--jump` guidance, `already_stopped` releases nothing; after-turn = turnCount, not +1; wait --until-idle; askUser).
+Last synced: 2026-10-05 (approval removed: dropped the auto-approve boundary).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins.
@@ -478,7 +478,6 @@ Do not:
 
 - modify external GA memory, SOP, skills, config, venv, or runtime state
 - store Goal state in GA memory/SOP (Galley Core owns it)
-- auto-approve Galley approval prompts
 - pretend to inspect a session without a read command
 - create many sessions without a clear split
 - create multiple writer sessions for the same files

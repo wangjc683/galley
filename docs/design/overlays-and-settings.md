@@ -27,7 +27,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
   Archived、Create/Edit Project、Prompt Manager、Scheduled Tasks、
   Tutorial、Settings、图片预览）。
 - **确认型 / 强制选择型不放 X**：关闭语义走 footer 按钮 + Esc
-  （ConfirmActionDialog 一族、FirstClose、YOLO intro）。给 confirm
+  （ConfirmActionDialog 一族、FirstClose）。给 confirm
   加 X 会制造第二条模糊的"取消"路径。
 - 两个变体：`inline`（默认，ghost，进 header row）；`floating`
   （同为 ghost 气质 + `bg-elevated/80` 半透明垫 + backdrop-blur，浮在
@@ -175,7 +175,6 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 通用          / General
 运行环境      / Runtime
 模型          / Models
-审批          / Approval
 智能体接入    / Agent
 聊天软件      / Channels
 浏览器控制    / Browser Control   （仅 managed 运行时显示）
@@ -206,13 +205,13 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
   [desktop-runtime.md](../desktop-runtime.md) §Launch at Login；设计要点
   是**操作系统为唯一事实源**——开关状态实时读插件 `isEnabled()`，不在
   prefs 存副本，系统侧移除登录项不产生漂移。
-- **通知**分区（2026-07-18 新增）两行开关：`任务结束时通知` /
-  `等待审批时通知`（默认都开）。系统通知只在窗口非聚焦时发送——聚焦时
+- **通知**分区（2026-07-18 新增）开关：`Goal 结束或需要介入时通知` /
+  `回复完成时通知` 等（原「等待审批时通知」2026-10-05 随审批移除）。
+  系统通知只在窗口非聚焦时发送——聚焦时
   应用内 toast 已覆盖，gating 全在 `gui/src/lib/notify.ts`（pref →
   节流 → isFocused → 权限 → send）。权限是独立于 pref 的第二层事实源：
   开关拨开时才请求权限，被拒**不回弹开关**，分区下方出提示行引导去
-  系统设置；启动时从不主动弹权限框。审批通知按 session 5 秒节流，
-  防 GA 并行工具连发刷屏。
+  系统设置；启动时从不主动弹权限框。
 - **应用行为**分区（2026-07-18 新增）两行开关：
   - `关闭窗口时保持后台运行`（默认开 = Background Mode 现状）。关闭后
     关窗走真退出（有任务运行时先弹确认框）。pref 语义存
@@ -463,63 +462,11 @@ Indicator）。
   它能看到你打开的所有标签页的标题和网址。」后半句是实情：每次 `web_scan`
   都把整张标签页列表（标题 + 网址）交给模型。标签页数保持次要。
 
-#### Approval（2026-07-20 修订：审批模式 per-session 化）
+#### Approval（已退役）
 
-- **新会话默认**（原 YOLO toggle）—— Tab 顶部第一项，中性 bordered card
-  （不再用 warning 色相——自动执行是产品默认态，不是警报态）：
-  - 左侧标题「新会话默认」14px semibold + 一行 muted 说明「未单独设置的
-    会话跟随此默认；每个会话可在输入框旁单独调整。」
-  - 右侧共享 `SegmentedControl` 两段：「自动执行 / 逐步审批」（段名复用
-    `copy.composer.approvalMode`，与 Composer pill 用词强一致）。
-  - 逐步审批 → 自动执行触发 confirm modal（见下）；反向直接生效。
-  - 会话级控件在 Composer LLM pill 的 popover（审批模式并入其中，无独立
-    pill，conversation.md §4.4）；改默认只影响未覆盖的会话，已覆盖会话
-    钉住不动。
-- **需要审批的工具**：复选列表（默认 `code_run` / `file_write` /
-  `file_patch` / `start_long_term_update`），用户可勾选。**常显可编辑,
-  不再因默认为自动执行而置灰**——规则作用于任何处于「逐步审批」的会话。
-  区块上方一行 muted hint：「以下规则作用于「逐步审批」模式下的会话。」
-- **白名单规则**：分两组显示
-  - **Per-project** —— 列出 tool name + remove 按钮
-  - **Global** —— 同上
-  - 同样常显，不再 dimmed
-- 改动后弹 toast "已应用到所有 session"（避免"太隐式"）
-- 底部 muted hint："在审批弹窗里加入白名单后，规则会显示在这里。"
-
-##### 自动执行默认 confirm modal
-
-Radix Dialog，~480，组件 `AutoDefaultConfirmModal`。仅在本页把**新会话
-默认**从逐步审批切为自动执行时出现——默认值的唯一编辑入口就是本页
-（Composer pill 的 popover 不放任何默认控件或审批设置深链，见
-conversation.md §4.4）。Composer pill 的**会话级**切换不弹确认（会话级、
-可逆）。
-文案（中文）：
-
-```
-把新会话默认设为自动执行？
-
-所有跟随默认的会话中，工具调用将不经审批直接执行——包括：
-
-  · file_patch（修改文件）
-  · file_write（写入文件）
-  · code_run（执行命令）
-  · 其他高风险操作
-
-适合：完全信任 Agent + 在沙盒环境工作（个人 repo / 临时虚拟机）
-不适合：生产代码 / 共享系统 / 不熟悉的 Agent / 敏感数据
-
-每个会话仍可在输入框旁随时切换为逐步审批。
-
-  [取消]  [是的，我知道在做什么]
-```
-
-视觉细节：
-
-- 标题左侧用 Phosphor `Lightning` + 标题 Newsreader medium 18px
-- 主体 13px Inter，bullet 列表用 mono `·` 锚点
-- "是的，我知道在做什么" 按钮：深琥珀 `bg-warning` 背景 + 白色文字（不是品牌杏沙——视觉上要显眼但不像"OK"那种条件反射按钮）
-- "取消"：ghost button 默认 focus，回车默认是取消（避免误触确认）
-- ESC 关闭 = 取消
+审批 tab（新会话默认审批模式、需要审批的工具、白名单规则）与自动执行
+默认确认弹窗 `AutoDefaultConfirmModal`、首启 YOLO 引导弹窗已随审批在
+2026-10-05 移除，见 [tools-and-approvals.md](./tools-and-approvals.md) §4.6。
 
 #### About（版权页 colophon，2026-07-03）
 
@@ -559,13 +506,12 @@ conversation.md §4.4）。Composer pill 的**会话级**切换不弹确认（�
 - **Tab list**：每项 32px 高 / 13px Inter / 左侧 16px Phosphor icon
   - General: `Gear`
   - Runtime: `Cpu`
-  - Approval: `ShieldCheck`
   - Agent: `PlugsConnected`
   - Shortcuts: `Keyboard`
   - About: `Info`
 - 选中态：`hover-tint` 背景 + 左侧 2px charcoal 竖条
 - **主内容区**：内边距 32px / 标题 18px Newsreader medium / 描述 13px Inter muted / 控件之间 24px 垂直间距
-- **Form 控件**：路径 input + 文件夹选择器按钮（Phosphor `FolderOpen`）/ 复选框跟 Approval Dock 同款 / Button 体系跟主界面一致
+- **Form 控件**：路径 input + 文件夹选择器按钮（Phosphor `FolderOpen`）/ 复选框与 Button 体系跟主界面一致
 - **没有 sticky save button**：所有改动**即时生效 + 自动持久化**（违反"不要让用户思考"），破坏性改动单独 confirm dialog
 
 ### 推到未来版本的 Tab

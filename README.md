@@ -45,11 +45,11 @@
 
 Galley is a personal AI assistant that runs on your own computer and actually gets things done — driving your browser, terminal, and files, even your phone. Its harness is deliberately thin: the engine keeps the tool set minimal and the context dense, so the model's own ability does the work, and every model upgrade lands as a Galley upgrade — no waiting for us to catch up.
 
-When one assistant isn't enough, Galley becomes a team. Multiple sessions advance in parallel, ready to switch, take over, and resume at any time. You watch progress, send instructions, and approve actions in the GUI; a Supervisor Agent orchestrates the same team through the CLI — two roles, one shared state, all of it on your machine.
+When one assistant isn't enough, Galley becomes a team. Multiple sessions advance in parallel, ready to switch, take over, and resume at any time. You watch progress and send instructions in the GUI; a Supervisor Agent orchestrates the same team through the CLI — two roles, one shared state, all of it on your machine.
 
 | For Humans | For Agents | Ready By Default |
 |---|---|---|
-| Manage sessions, projects, tool timelines, and approvals in the GUI | The `galley` CLI is a stable public contract for Supervisor Agents | Bundled engine, CPython 3.11, runtime dependencies, and Browser Control assets |
+| Manage sessions, projects, and tool timelines in the GUI | The `galley` CLI is a stable public contract for Supervisor Agents | Bundled engine, CPython 3.11, runtime dependencies, and Browser Control assets |
 
 ---
 
@@ -72,7 +72,7 @@ Galley's orchestration layer. You operate in the GUI; a Supervisor Agent goes th
 | | |
 |---|---|
 | 🧭 **Project workspace + multiple sessions**<br/>Point a folder — a code repo or a document directory — at a Project workspace; multiple sessions advance around the same project in parallel, then converge. | 🎯 **Galley Goal**<br/>Hand Galley a long-term goal, set the duration and Subagent budget, and it keeps working in the background until the goal is met or the budget runs out. |
-| 🔧 **Tool timeline + approvals**<br/>Every tool call's args, result, and timing are visible inline; risky actions support step approval, allowlists, or per-session auto-run. | ⏰ **Scheduled tasks**<br/>Give a prompt a time, daily or weekly; at that moment Galley opens a new session, runs it, and the result waits for you in the sidebar. Galley needs to be running. |
+| 🔧 **Tool timeline**<br/>Every tool call's args, result, and timing are visible inline. | ⏰ **Scheduled tasks**<br/>Give a prompt a time, daily or weekly; at that moment Galley opens a new session, runs it, and the result waits for you in the sidebar. Galley needs to be running. |
 | 💬 **IM Channels**<br/>Connect WeChat / Feishu / Telegram / Discord, keep the conversation going through everyday chat apps, and dispatch Galley Desktop remotely. | 💾 **Persistence + search + background mode**<br/>Close the window without quitting, dispatch remotely while away, then come back and pick up the thread. Past sessions are fully searchable. |
 
 ---

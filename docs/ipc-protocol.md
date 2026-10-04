@@ -116,9 +116,7 @@ desktop                             bridge subprocess
   │  { kind: "user_message", ... }        │
   │ ───────────────────────────────────► │
   │  ◄──── { kind: "turn_start", ... }    │
-  │  ◄──── { kind: "tool_call_*", ... }   │  (若有审批，bridge 阻塞)
-  │  { kind: "approval_response", ... }   │
-  │ ───────────────────────────────────► │
+  │  ◄──── { kind: "tool_call_*", ... }   │
   │  ◄──── { kind: "turn_end", ... }      │
   │  ◄──── { kind: "run_complete", ... }  │
   │                                       │
@@ -184,34 +182,13 @@ agent 进入一轮步骤。Bridge 会在普通 `user_message` / `ask_user_respon
 }
 ```
 
-### 4.3 `tool_call_pending`
+### 4.3 `tool_call_pending`（已删除）
 
-工具需要用户审批时发出，bridge 阻塞直到收到 `approval_response`。
-
-```json
-{
-  "kind": "tool_call_pending",
-  "sessionId": "sess_abc123",
-  "approvalId": "appr_xyz789",
-  "turnIndex": 1,
-  "toolName": "code_run",
-  "args": { "type": "python", "code": "print('hi')" },
-  "argsPreview": "type=python, code=print('hi')...",
-  "riskLevel": "high",
-  "reason": "Code execution can modify files / network",
-  "timestamp": "..."
-}
-```
-
-字段说明：
-- `args`：完整工具参数 JSON（用于审批 UI 完整展示）
-- `argsPreview`：≤200 字符的人类可读摘要
-- `riskLevel`：`"low" | "medium" | "high"`
-- `reason`：为何需要审批（用于 Approval Card 提示）
+2026-10-05 随审批移除，见 §6。编号保留，避免文内外引用错位。
 
 ### 4.4 `tool_call_start`
 
-工具开始执行（已通过审批 / 不需审批）。
+工具开始执行。
 
 ```json
 {
@@ -247,7 +224,7 @@ agent 进入一轮步骤。Bridge 会在普通 `user_message` / `ask_user_respon
 字段说明：
 - `status`：`"success" | "failed" | "denied" | "cancelled"`
 - `resultPreview`：≤500 字符的结果摘要
-- `denied` 仅当用户在 `tool_call_pending` 后回 `decision: "deny"` 时发出
+- `denied` 是审批时代的取值，2026-10-05 审批移除后不再产生
 
 ### 4.6 `tool_call_progress`（兜底）
 
@@ -571,25 +548,9 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 `run_complete` 后出队下发，正常流量不会触发该拒绝。`/btw` 旁路
 不受影响。
 
-### 5.2 `approval_response`
+### 5.2 `approval_response`（已删除）
 
-响应 `tool_call_pending`。
-
-```json
-{
-  "kind": "approval_response",
-  "approvalId": "appr_xyz789",
-  "decision": "allow_once"
-}
-```
-
-`decision` 取值：
-- `"allow_once"`：仅本次通过
-- `"deny"`：拒绝，bridge 让工具调用 short-circuit 返回 denied 状态
-- `"always_allow_project"`：本次通过 + 在当前 Project（含 Unfiled）规则缓存中记录
-- `"always_allow_global"`：本次通过 + 在全局规则缓存中记录
-
-**always_allow 规则的存储**：bridge 不持久化任何规则。规则由 desktop 维护并在 `tool_call_pending` 之前通过 `set_approval_rules` 命令同步给 bridge（见 5.6）。这样 bridge 在新 session 启动时即可知道"哪些工具已经永久通过"，避免每次都先 emit pending 再问 desktop。
+2026-10-05 随审批移除，见 §6。
 
 ### 5.3 `ask_user_response`
 
@@ -636,43 +597,13 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 
 `messages` 顺序与历史一致；bridge 直接构造对应的 GA history 结构注入。完成后回 `history_loaded`。
 
-### 5.6 `set_approval_rules`
+### 5.6 `set_approval_rules`（已删除）
 
-同步 desktop 维护的 always_allow 规则到 bridge。可在任意时刻调用，立即生效。
+2026-10-05 随审批移除，见 §6。
 
-```json
-{
-  "kind": "set_approval_rules",
-  "alwaysAllowGlobal": ["file_patch"],
-  "alwaysAllowProject": ["code_run"]
-}
-```
+### 5.7 `set_yolo_mode`（已删除）
 
-bridge 在 `tool_call_pending` 之前先查这两个列表，命中则跳过审批直接放行（仍 emit `tool_call_start` / `tool_call_end`，但**不** emit `tool_call_pending`）。
-
-注意：高敏感工具（V0.1 列表：`start_long_term_update`）不应进入 `alwaysAllowGlobal`；desktop UI 层禁用此选项，bridge 不强制校验。
-
-### 5.7 `set_yolo_mode`
-
-打开或关闭自动执行模式。可在任意时刻调用，立即生效。
-
-> 命名注记：`yolo` 仅为 wire / 内部标识符（契约稳定，不随文案改）。用户侧
-> 自 2026-07-20 起称「自动执行 / 逐步审批」，per-session 覆盖 + app 级默认
-> （sessions 表 `approval_mode` 列；desktop 控件为 Composer LLM pill 的
-> popover，无独立控件、无 TopBar 徽章）。见 devlog 2026-07-20。
-
-```json
-{
-  "kind": "set_yolo_mode",
-  "enabled": true
-}
-```
-
-bridge 收到后更新 `SessionState.yolo_mode`。下一个 tool dispatch 时 `WorkbenchHandler.needs_approval` 第一行检查此 flag——为真则直接放行（不 emit `tool_call_pending`，仍 emit `tool_call_start` / `tool_call_end`）。
-
-**spawn 后同步**：bridge 默认 `yolo_mode = false`（逐步审批）。desktop 在收到 `ready` 事件时解析该会话的有效审批模式（per-session 覆盖值，否则 app 级默认，`effectiveApprovalMode`），若为自动执行则立即 `set_yolo_mode { enabled: true }` 同步给 bridge。命令队列保证 spawn 后第一个 user message 之前模式已生效。失败方向安全：同步丢失时 bridge 停留在逐步审批（多弹审批，绝不少弹）。
-
-**与 always_allow 的关系**：自动执行是上位优先级——开启时 `always_allow_global` / `always_allow_project` 列表不再起作用（也无意义，反正全跳）。bridge 在 `needs_approval` 中先检查 yolo flag，再依次检查 approval_tools / always_allow。两个 state 独立，切回逐步审批不会清空 always_allow。
+2026-10-05 随审批移除，见 §6。
 
 ### 5.8 `set_llm`
 
@@ -687,7 +618,7 @@ bridge 收到后更新 `SessionState.yolo_mode`。下一个 tool dispatch 时 `W
 
 约束：
 
-- 只能在 agent **idle** 时切换。`running` / `waiting_approval` 状态下，desktop UI 应禁用切换器；如果 bridge 在非 idle 时收到 `set_llm`，emit `error` 不切换
+- 只能在 agent **idle** 时切换。`running` 状态下，desktop UI 应禁用切换器；如果 bridge 在非 idle 时收到 `set_llm`，emit `error` 不切换
 - `llmIndex` 必须在 `availableLLMs` 范围内；越界则 emit `error`
 - 切换会让 GA 把 `backend.history` 从旧 client 复制到新 client，对话上下文保留
 
@@ -816,39 +747,20 @@ self.system`，所以系统提示的常驻输出要求依然生效——`assets/
 **静默**丢弃，仅 stderr 记日志——Core 会在下次 `run_complete` 时重试，失败不该
 成为用户可见的错误噪音。
 
-## 6. Approval Flow（端到端示例）
+## 6. Approval Flow（已删除）
 
-agent 决定调用 `code_run`：
-
-```
-bridge:   { kind: "turn_start", turnIndex: 2 }
-bridge:   { kind: "tool_call_pending", approvalId: "a1", toolName: "code_run", args: {...}, riskLevel: "high" }
-          (bridge generator 阻塞)
-desktop:  显示 Approval Card
-user:     点击 "Allow once"
-desktop:  { kind: "approval_response", approvalId: "a1", decision: "allow_once" }
-bridge:   (generator 恢复，调用 super().dispatch())
-bridge:   { kind: "tool_call_start", toolCallId: "tc1", toolName: "code_run", ... }
-bridge:   { kind: "tool_call_progress", text: "[Action] Running python..." }
-bridge:   { kind: "tool_call_end", toolCallId: "tc1", status: "success", resultPreview: "..." }
-bridge:   { kind: "turn_end", turnIndex: 2, summary: "...", toolCalls: [...], toolResults: [...] }
-```
-
-如用户选 `deny`：
-
-```
-desktop:  { kind: "approval_response", approvalId: "a1", decision: "deny" }
-bridge:   (generator 恢复，short-circuit；不调用真实 tool method)
-bridge:   { kind: "tool_call_end", toolCallId: "tc1", status: "denied", resultPreview: "User denied this action" }
-bridge:   { kind: "turn_end", ... }   (agent 收到 denied 状态，下一轮决定如何应对)
-```
+审批在 2026-10-05 整体移除，与上游 GenericAgent 一致：工具调用一律直接执行，
+bridge 不再在 dispatch 前阻塞等待用户决定。`tool_call_pending` 事件与
+`approval_response` / `set_approval_rules` / `set_yolo_mode` 三条命令一并删除；
+其余消息不变，`ask_user` / `ask_user_response` 保留。`WorkbenchHandler`
+（`GenericAgentHandler` 子类）仍安装，只合成轮次信号与 `tool_num` 兼容转发，
+不改工具派发或结果。决策记录见 [devlog](./devlog/2026-10-05-remove-approval.md)。
 
 ## 7. Session Resume Flow
 
 ```
 spawn bridge with sessionId="sess_old"
 bridge:   { kind: "ready", ... }
-desktop:  { kind: "set_approval_rules", ... }
 desktop:  { kind: "load_history", messages: [...] }
 bridge:   { kind: "history_loaded", messageCount: 12 }
 desktop:  { kind: "user_message", text: "继续之前的话题" }
@@ -882,5 +794,3 @@ bridge:   { kind: "turn_start", ... }
 - [x] images 字段的传递路径（user_message → GA put_task）：managed GA 由补丁 0008 消费 `put_task(images=)`；external GA 上游 `run()` 不消费该参数，bridge 改在 `put_task` 前给 `backend.ask` 套一次性 wrapper 追加图片块（§4.1 `imagesSupported`，2026-09-18）
 - [x] **`abort` 路径** — GA 的 `abort()` 设 `stop_sig` 让 worker 跳出循环，但**不**触发 `turn_end_callback`。bridge 在 `dispatch_command` 收到 `AbortCommand` 时主动合成 `RunCompleteEvent` with `exitReason.result = "ABORTED"`。e2e 已验证。
 - [x] **`error` 事件结构化字段** — `category` / `severity` / `retryable` / `hint` 四字段在 v0.1 落地（见 §4.10）。runner 端 LLM 调用错误的 hint 推断逻辑见 `runner/workbench_bridge.py` 的 `_classify_error`。
-- [ ] **`file_patch` Approval Card diff 视图** — desktop 端用 `@pierre/diffs` 渲染。args 字典已含 `path` / `old_content` / `new_content` 三元组（GA 原生 signature），bridge 不需要额外处理；ToolCalled / tool_call_pending 事件结构无需扩展。Stage 2 desktop 实现时落地。
-- [ ] **`file_write` 内容预览限制** — GA `do_file_write` 在 `dispatch` 之后才从 `response.content` 通过 `extract_robust_content` 提取实际内容；审批拦截时拿不到内容。V0.1 不做内容预览（违反 non-invasive 第 4 条）；V0.2+ 可考虑给 GA 上游提 PR 让 extract 前置。

@@ -98,9 +98,6 @@ Runtime
 模型
 Models
 
-审批
-Approval
-
 智能体接入
 Agent
 
@@ -120,7 +117,6 @@ About
 General
 Runtime
 Models
-Approval
 Agent
 Channels
 Shortcuts
@@ -163,7 +159,6 @@ About
 | `CLI`、`API`、`MCP`、`Socket`、`schemaVersion` | 协议 / 契约词，保留 |
 | `Python` | 保留 |
 | `API Key` | 字段名可保留；正文可说「密钥」 |
-| `YOLO` | 仅内部标识符（wire `set_yolo_mode`、prefs key），**不再出现在用户可见文案**；用户侧模式名为「自动执行 / 逐步审批」（2026-07-20 更名，见 devlog） |
 | `LLM` | 界面一律说「模型」，紧凑控件也不例外（2026-10-03 JC 裁，此前「紧凑控件可保留」）；只在外置 GA 的技术语境保留，如 Health Check「mykey.py 存在」的副标签「LLM 配置文件」 |
 | 模型 / 服务品牌 | OpenAI、Anthropic、Claude、GPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、Xiaomi MiMo 等保留 |
 | `galley` | 命令名，保留并用 inline code |
@@ -260,8 +255,6 @@ About
 | Health Check button | `跑一次 Health Check` |
 | Models page title | 保留 `Models` |
 | Models subtitle | `为 Galley 配置模型提供商和模型` |
-| Approval page title | 保留 `Approval` |
-| Approval subtitle | `配置 Agent 操作的审批规则` |
 | Agent page title | 保留 `Agent` |
 | Agent subtitle | `让 Agent 接管和操作 Galley` |
 | Shortcuts page title | 保留 `Shortcuts` |
@@ -280,21 +273,6 @@ About
 
 用户可见的 session / chat 概念统一叫「对话」。
 
-### 审批
-
-沿用已有中文框架：
-
-- `允许`
-- `拒绝`
-- `加入「{projectName}」白名单`
-- `加入全局白名单`
-- `已通过 · 本次执行`
-- `已拒绝 · 已通知 AI`
-- `已加入此项目白名单`
-- `已加入全局白名单`
-
-按钮动词和操作后的状态要使用同一套概念，不要按钮说「始终允许」、状态说「已加入白名单」。
-
 ## 英文版出稿流程
 
 中文 source copy 确认后，再出英文稿。
@@ -312,7 +290,6 @@ About
 - Composer
 - Settings
 - Onboarding
-- Approval
 - Errors
 - Command palette
 - Toasts

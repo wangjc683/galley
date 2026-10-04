@@ -437,9 +437,9 @@
 
 - **状态**：暂存
 - **提出**：2026-07-23（Rust/GUI 大文件拆分两轮收尾时的排查结论，见 [拆分两轮 devlog](./2026-07-23-rust-and-gui-large-file-split-rounds.md)）
-- **启动信号**：下次需要在 bridge 里做实质性新功能（新命令域 / 新遥测 / 新审批流），或它再次成为理解/review 瓶颈。
-- **背景**：`runner/workbench_bridge.py` 1828 行，`Bridge` 一个类 50 个方法，混了 GA setup、managed 注入、usage/遥测、workspace 激活、审批 handler、事件发射、turn-end 序列化、命令分发、stdio 循环。是全仓最该拆的文件，但性质与 Rust 那五个不同：类方法共享 `self` 状态，是**类分解**不是自由函数搬家。
-- **方案**：按域委托出协作对象（telemetry / approval / command-dispatch / emit），`Bridge` 保留编排。不要一次全拆，按"下次要动哪个域就先拆哪个域"推进。
+- **启动信号**：下次需要在 bridge 里做实质性新功能（新命令域 / 新遥测），或它再次成为理解/review 瓶颈。
+- **背景**：`runner/workbench_bridge.py` 1828 行，`Bridge` 一个类 50 个方法，混了 GA setup、managed 注入、usage/遥测、workspace 激活、审批 handler（已于 2026-10-05 移除）、事件发射、turn-end 序列化、命令分发、stdio 循环。是全仓最该拆的文件，但性质与 Rust 那五个不同：类方法共享 `self` 状态，是**类分解**不是自由函数搬家。
+- **方案**：按域委托出协作对象（telemetry / command-dispatch / emit），`Bridge` 保留编排。不要一次全拆，按"下次要动哪个域就先拆哪个域"推进。
 - **实施要点**：动手前对照 CLAUDE.md Rule 1 —— 该文件正是 attach 模式集成点（`GenericAgentHandler` 子类、`_turn_end_hooks`、history 注入）的实现处，拆分不得改变 GA 边界行为；`tests/test_workbench_bridge.py`（1017 行）是护航基础，先跑通再动。
 - **待定**：协作对象之间共享 `SessionState` 的方式（传引用 vs 事件）；`_FenceFilter` 等已独立的类是否先行搬到单独模块作为低风险第一步。
 - **关联**：[Rust/GUI 大文件拆分两轮](./2026-07-23-rust-and-gui-large-file-split-rounds.md)。
@@ -744,12 +744,12 @@
 - **方案**：若启动，先加 ⌘K 命令「置顶 / 取消置顶当前会话」（零视觉成本）；再议行内按钮。行内按钮若做，借参考组件三处写法：`[@media(hover:hover)]` 下才隐藏、`aria-pressed`、已置顶态不随 hover 消失；位置需与 ⋯ 协调（并排或折进 ⋯ 左侧），标题让位量随之调整。
 - **关联**：`layout-and-chrome.md` Sidebar 行动作条款（line ~146）与 Session Row 三通道清单；`SidebarSessionMenuItems.tsx`。
 
-## 工具输出 / 审批面板的 `<pre>` 与正文代码块统一质感
+## 工具输出面板的 `<pre>` 与正文代码块统一质感
 
 - **状态**：暂缓
 - **提出**：2026-09-18，[代码块参考件对表改版](./2026-09-18-code-block-reference-audit.md) 自查第 7 条
 - **启动信号**：JC 真机觉得工具结果面板与正文代码块「两种质感」刺眼；或字号档调大后工具面板不跟随被投诉
-- **方案**：`ToolCallout` / `approval-renderers` / `MessageAgent` 里的 `<pre>` 目前是 bg-app + `border-line` + 写死 12.5px / 1.6；正文代码块是 code-surface + hairline + `--conversation-code-size` / `leading-code`。要么把工具面板改挂同一组 token（保留其 200px 上限与 ink-soft 的「日志」寄存器），要么明确记录「日志 vs 代码」是有意的两种寄存器
+- **方案**：`ToolCallout` / `MessageAgent` 里的 `<pre>`（审批面板已随审批于 2026-10-05 移除） 目前是 bg-app + `border-line` + 写死 12.5px / 1.6；正文代码块是 code-surface + hairline + `--conversation-code-size` / `leading-code`。要么把工具面板改挂同一组 token（保留其 200px 上限与 ink-soft 的「日志」寄存器），要么明确记录「日志 vs 代码」是有意的两种寄存器
 - **待定**：当初是否有意区分——07-05 审计没记
 
 ---
@@ -883,6 +883,6 @@
 - **提出**：2026-10-01，[galley#31](https://github.com/wangjc683/galley/issues/31)：希望定时任务能直接跑本地脚本（报告者在外置 GA 里用自加的 `handler` 字段直接调 Python 函数；上游截至 `2538ad9` 没有这个字段）。
 - **启动信号**：第二个用户提同样的需求；或定时任务的使用数据显示大量 prompt 只是「运行某个脚本」。
 - **方案**：定时任务加一种「脚本」类型，到点由 Core 起子进程执行，不开会话、不调模型，结果进定时任务的执行记录。
-- **实施要点**：这是 Galley 第一次在没有 agent 参与时执行用户代码，审批模型（现在靠工具审批）不适用，要先想清楚权限与提示；Windows 上的解释器与工作目录；失败通知复用「定时任务触发失败」。
+- **实施要点**：这是 Galley 第一次在没有 agent 参与时执行用户代码，会话里那层把关（上游提示词让模型在不可逆操作前先问用户；Galley 的工具审批已于 2026-10-05 移除）在这里不存在，要先想清楚权限与提示；Windows 上的解释器与工作目录；失败通知复用「定时任务触发失败」。
 - **待定**：值不值得做——系统自带的 cron / launchd / 任务计划程序已经能跑脚本，Galley 的增量价值可能只是「在同一个面板里看见」。
 - **关联**：`core/src/scheduler.rs`、`.scratch/scheduled-tasks/PRD.md`。

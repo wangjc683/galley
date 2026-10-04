@@ -464,7 +464,6 @@ Do not:
 
 - modify external GA memory, SOP, skills, config, venv, or runtime state
 - store Goal state in GA memory/SOP (Galley Core owns it)
-- auto-approve Galley approval prompts
 - pretend to inspect a session without a read command
 - create many sessions without a clear split
 - create multiple writer sessions for the same files

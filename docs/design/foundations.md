@@ -95,7 +95,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | `--color-brand-tint` | `bg-brand-tint` | `#F1DECE` | 比 brand-soft 更实的杏沙 band，用作用户消息底（长对话滚动可扫） |
 | `--color-brand-strong` | `bg-brand-strong` / `text-brand-strong` | `#C68762` | 杏沙 hover/active；当前 step 状态 icon、Submit hover |
 | `--color-success` | `text-success` / `bg-success` | `#5A8C5A` | 成功状态 line icon |
-| `--color-warning` | `text-warning` / `bg-warning` | `#BF7A1F` | 深琥珀 warning（与杏沙拉开 13° 色相）。**只表示警示 / 注意**（自动执行确认、Stop、审批待处理），不作功能身份色——Goal 等功能用品牌杏沙，避免稀释琥珀的警示力；Browser Control 未连接 2026-10-04 起是「待解锁」邀请，改用杏沙（见 layout-and-chrome §4.1） |
+| `--color-warning` | `text-warning` / `bg-warning` | `#BF7A1F` | 深琥珀 warning（与杏沙拉开 13° 色相）。**只表示警示 / 注意**（Stop、ask_user 等你回复），不作功能身份色——Goal 等功能用品牌杏沙，避免稀释琥珀的警示力；Browser Control 未连接 2026-10-04 起是「待解锁」邀请，改用杏沙（见 layout-and-chrome §4.1） |
 | `--color-error` | `text-error` / `bg-error` | `#B14545` | 深红 |
 | `--color-info` | `text-info` / `bg-info` | `#7A7A8E` | muted 灰蓝（info severity） |
 
@@ -320,10 +320,10 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 
 | Token（utility） | 值 | 角色 | 代表位置 |
 |---|---|---|---|
-| `text-ui-compact` | 13px | 紧凑正文 / CTA / session row title / tool name | `SidebarSessionRow` title、`ToolCallout` name、`ApprovalDock` body |
+| `text-ui-compact` | 13px | 紧凑正文 / CTA / session row title / tool name | `SidebarSessionRow` title、`ToolCallout` name |
 | `text-ui-secondary` | 12.5px | 次要正文 / dialog 描述 / menu item | `Composer` dialog 描述、`SettingsIM` 次级正文 |
 | `text-ui-meta` | 12px | metadata / hint / list item | `TopBar` hint、`PatchView` diff、list item |
-| `text-ui-tertiary` | 11.5px | 三级 hint / tooltip / subline | `SidebarSessionRow` subline、tooltip、approval hint |
+| `text-ui-tertiary` | 11.5px | 三级 hint / tooltip / subline | `SidebarSessionRow` subline、tooltip |
 | `text-ui-label` | 11px | **eyebrow / section header**（uppercase，见下方配方） | sidebar 桶 header、`ConfiguredModelsPanel` eyebrow |
 | `text-ui-micro` | 10.5px | uppercase chip / status badge / timestamp | code block 控件、用户消息发送时间（`MessageUser`） |
 | `text-ui-kbd` | 10px | 键盘提示 / 极小 eyebrow | `CommandPalette` kbd、`SidebarTimeline` header |
@@ -602,7 +602,7 @@ devlog [thinking 计时器与 shimmer 裁决](../devlog/2026-08-12-thinking-time
 > 再裁决：三点 → 状态文字扫光 + 0.1s 计数器，走上方豁免）；running tool
 > 左竖条呼吸 → 删除，running 态 liveness 改由 旋转图标 + 三点指示（`LiveDots`）+
 > 每秒跳动的 elapsed 计数器承担（皆为功能性 / 信息性指示，非装饰循环）。其余 B 类
-> （sidebar liveness rail、composer stop breath、approval / browser-control
+> （sidebar liveness rail、composer stop breath、browser-control
 > attention 等）逐个评估后再处理。
 
 #### Motion tokens（2026-07-16）

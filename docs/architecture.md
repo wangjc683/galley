@@ -43,8 +43,7 @@ Galley is built around four ideas:
 ### GUI
 
 The GUI lives in `gui/` and is built with Tauri, React, TypeScript, and
-Tailwind. It presents sessions, messages, approvals, settings, and supervisor
-activity. It does not own business authority; it invokes Rust commands and
+Tailwind. It presents sessions, messages, settings, and supervisor activity. It does not own business authority; it invokes Rust commands and
 subscribes to events.
 
 Local file references use `LocalFileWorkspace` for session-scoped transient
@@ -129,7 +128,6 @@ Galley stores:
 
 - session metadata
 - messages inside Galley sessions
-- tool and approval state
 - supervisor action origin fields, such as who issued a command and why
 
 Galley does not store the conversation between the user and their external

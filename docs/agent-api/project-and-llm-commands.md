@@ -129,6 +129,10 @@ session in the Project is persisted as `connecting`, `running`, or
 `{"stream":"end","reason":"project_idle"}`. This handles runner
 processes that stay alive after a turn emits `run_complete`.
 
+`waiting_approval` in the lists above is no longer produced since approval
+was removed (2026-10-05). It stays listed because it is still a stable
+`SessionBrief.status` value; no session reaches it any more.
+
 `--final-show` emits a final Project snapshot before the end frame even
 when no live stream naturally ended. Supervisors should usually combine
 it with `--until-idle` so they can synthesize directly from the final

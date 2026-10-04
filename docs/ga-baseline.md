@@ -710,7 +710,9 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
 
 1. `BaseHandler.dispatch` signature and generator protocol
 2. Whether `BaseHandler.dispatch` calls callbacks or `plugins.hooks`
-3. Galley's `WorkbenchHandler.dispatch` approval gate before `super()`
+3. Galley's `WorkbenchHandler.dispatch` wrapper around `super()`: turn-signal
+   synthesis and `tool_num` forwarding only (the pre-dispatch approval gate
+   was removed 2026-10-05; tools always run directly)
 4. `BaseHandler.turn_end_callback`
 5. `agent._turn_end_hooks`
 6. `agentmain.GenericAgentHandler` import path
@@ -905,7 +907,8 @@ start the audit there instead of grepping the bridge:
   the `GenericAgentHandler` module rebinding, the one-shot `backend.ask`
   image wrapper). Read the file top to bottom against the new baseline.
 - **[`runner/handlers.py`](../runner/handlers.py)** — items 1–4: the
-  `WorkbenchHandler` subclass and its dispatch/approval assumptions.
+  `WorkbenchHandler` subclass and its dispatch assumptions (turn-signal
+  synthesis, `tool_num` detection).
 - **`runner/workbench_bridge.py::_handle_reinject_tools`** — item 10:
   the GA asset file read (path + schema noted in its docstring).
 - **`runner/workbench_bridge.py::_on_turn_end`** — items 14 and 17: the
@@ -1075,7 +1078,7 @@ already-generated bundle without rebuilding it. The smoke must verify
 8. Start Galley dev mode and run a real multi-step task in both runtime modes
    when possible:
 
-- External GA: streaming, thinking state, approvals, tool dispatch, LLM display.
+- External GA: streaming, thinking state, tool dispatch, LLM display.
 - Managed GA: model config injection, streaming, tools, state under app data,
   restart / restore behavior.
 - Managed Discord channel (item 15; quit any installed Galley first, or both

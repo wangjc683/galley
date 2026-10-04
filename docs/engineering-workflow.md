@@ -100,8 +100,7 @@ Component guidance:
 - Use shadcn/Radix-style primitives for standard accessible behaviors:
   dialog, dropdown menu, popover, tabs, tooltip, command, input, button.
 - Use local product components for domain-specific surfaces:
-  Sidebar, Composer, Tool callouts, Approval Dock, Health Check, Onboarding,
-  Empty State.
+  Sidebar, Composer, Tool callouts, Health Check, Onboarding, Empty State.
 - Keep UI state in the relevant domain store. The old monolithic
   `useAppStore.ts` no longer exists.
 
