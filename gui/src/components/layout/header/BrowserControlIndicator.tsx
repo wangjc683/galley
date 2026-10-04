@@ -28,8 +28,11 @@ import {
  *
  *   - Set up: a `PuzzlePiece` lamp, lit while the extension is connected
  *     to Core's resident bridge (live), unlit when it is not (browser
- *     closed). Click → a status menu (`status-menu.ts`): the state in
- *     one row, a separator, 设置…. The scope line is not repeated here:
+ *     closed). Click → a status menu (`status-menu.ts`) in the Channels
+ *     menu's row grammar: the puzzle mark (dimmed when not live), 浏览器,
+ *     the state word in the right-hand column; below, the tab count, the
+ *     offline hint or the bridge's message; a separator, 设置….
+ *     The scope line is not repeated here:
  *     a glance surface is reopened every time, and what Galley can see
  *     is read once, in Settings' connected card (2026-10-04, JC: the
  *     panel read long). No 重新检测: the state is live, so a manual
@@ -38,7 +41,8 @@ import {
  *     Galley's headline capability, not a fault. Click → Settings →
  *     Browser Control directly; that is the only next step.
  *   - Bridge / probe failure: an error badge named by its cause; the
- *     menu adds the bridge's own message as the detail line.
+ *     menu row names the cause again in red and adds the bridge's own
+ *     message below — no separate title restating the badge.
  */
 export function BrowserControlIndicator({
   input,
@@ -89,6 +93,49 @@ export function BrowserControlIndicator({
           offline: copy.browserControlOfflineTitle,
           checking: copy.browserControlChecking,
         }[view.state];
+  const live =
+    view.form === "lamp" &&
+    (view.state === "connected" || view.state === "noTabs");
+  // Offline and checking dim the mark and the name: the lamp's grammar
+  // per row, as in the Channels menu.
+  const dimmed = view.form === "lamp" && !live;
+  const tabsLabel =
+    view.form === "lamp" && view.state === "connected"
+      ? popoverCopy.tabCount(input.tabCount)
+      : view.form === "lamp" && view.state === "noTabs"
+        ? popoverCopy.noTabs
+        : null;
+  // 已连接 in the restrained success green, the same word size and colour
+  // as the Channels menu's 已接入 (JC, 2026-10-04).
+  const stateWord =
+    view.form === "error"
+      ? (errorCopy?.state ?? popoverCopy.errorState)
+      : {
+          connected: popoverCopy.connected,
+          noTabs: popoverCopy.connected,
+          offline: popoverCopy.offlineState,
+          checking: popoverCopy.checking,
+        }[view.state];
+  const stateClass =
+    view.form === "error"
+      ? "text-error"
+      : live
+        ? "text-success"
+        : "text-ink-muted";
+  const hint =
+    view.form === "error"
+      ? input.errorDetail
+      : view.state === "offline"
+        ? popoverCopy.offlineHint
+        : null;
+  // Bridge failures retry on their own (the bridge with backoff, Core by
+  // restarting it); probe failures do not. The unreachable message
+  // already ends in 正在重试 (`managed_browser_bridge.py`), so it is not
+  // said twice.
+  const retrying =
+    view.form === "error" &&
+    Boolean(input.errorKind) &&
+    view.group !== "unreachable";
   return (
     <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <TooltipLabel text={tooltip} side="bottom">
@@ -124,60 +171,48 @@ export function BrowserControlIndicator({
           className={STATUS_MENU_CONTENT}
         >
           <div className={STATUS_MENU_ROW}>
-            {view.form === "lamp" ? (
-              <>
-                <div>
-                  {/* 已连接 in the restrained success green, the same
-                      health colour as the Channels menu's 已接入 and the
-                      Settings badges (JC, 2026-10-04). */}
-                  <span
-                    className={cn(
-                      "font-medium",
-                      (view.state === "connected" || view.state === "noTabs") &&
-                        "text-success",
-                    )}
-                  >
-                    {view.state === "offline"
-                      ? popoverCopy.offline
-                      : view.state === "checking"
-                        ? popoverCopy.checking
-                        : popoverCopy.connected}
-                  </span>
-                  {(view.state === "connected" || view.state === "noTabs") && (
-                    // The tab count rides on the state row as quieter
-                    // evidence, not a row of its own.
-                    <span className="tabular-nums text-ink-muted">
-                      {" · "}
-                      {view.state === "connected"
-                        ? popoverCopy.tabCount(input.tabCount)
-                        : popoverCopy.noTabs}
-                    </span>
-                  )}
-                </div>
-                {view.state === "offline" && (
-                  <div className="mt-0.5 text-ui-meta text-ink-muted">
-                    {popoverCopy.offlineHint}
-                  </div>
+            <div className="flex items-center gap-2">
+              <PuzzlePiece
+                size={14}
+                weight="thin"
+                aria-hidden
+                className={cn("shrink-0 text-ink-soft", dimmed && "opacity-50")}
+              />
+              <div className="flex min-w-0 flex-1 items-baseline justify-between gap-4">
+                <span className={cn(dimmed && "text-ink-soft")}>
+                  {popoverCopy.name}
+                </span>
+                <span className={cn("shrink-0 text-ui-meta", stateClass)}>
+                  {stateWord}
+                </span>
+              </div>
+            </div>
+            {/* Below the row, indented to the name column: the tab count
+                (a second line rather than beside the name — JC's live pick
+                on 2026-10-04), the offline hint, or the bridge's message,
+                which may widen the menu up to its 300px cap and is clamped
+                at two lines: Settings shows it in full. */}
+            {tabsLabel && (
+              <div className="mt-0.5 pl-5.5 text-ui-tertiary leading-snug tabular-nums text-ink-muted">
+                {tabsLabel}
+              </div>
+            )}
+            {hint && (
+              <div
+                className={cn(
+                  "mt-0.5 line-clamp-2 break-words pl-5.5 text-ui-tertiary leading-snug text-ink-muted",
+                  view.form === "error" && "select-text",
                 )}
-              </>
-            ) : (
-              <>
-                <div className="font-medium text-error">
-                  {errorCopy?.title ?? copy.browserControlErrorTitle}
-                </div>
-                {input.errorDetail && (
-                  <p className="mt-1 select-text break-words text-ui-meta leading-secondary text-ink-soft">
-                    {input.errorDetail}
-                  </p>
-                )}
-                {input.errorKind && (
-                  // Bridge failures retry on their own (the bridge with
-                  // backoff, Core by restarting it); probe failures do not.
-                  <p className="mt-1 text-ui-tertiary text-ink-muted">
-                    {popoverCopy.retrying}
-                  </p>
-                )}
-              </>
+              >
+                {hint}
+              </div>
+            )}
+            {retrying && (
+              // Its own line: run on after the message, the two-line
+              // clamp would cut it off.
+              <div className="mt-0.5 pl-5.5 text-ui-tertiary leading-snug text-ink-muted">
+                {popoverCopy.retrying}
+              </div>
             )}
           </div>
           <DropdownMenu.Separator className={STATUS_MENU_SEPARATOR} />

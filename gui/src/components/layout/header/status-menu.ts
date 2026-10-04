@@ -11,11 +11,17 @@ import { cn } from "@/lib/utils";
  * real buttons and explanatory text (Goal, Update) stay cards
  * (2026-10-04: entry surfaces are menus, decision surfaces are cards).
  *
+ * Both menus lay a status row out the same way: a 14px mark in the
+ * action icons' column, a name, and the state word in a right-hand
+ * column. Their floor is 168px rather than the 200px of the other
+ * compact menus: those rows run about 166px, and any slack landed in
+ * the gap between a name and its state.
+ *
  * Kept in a .ts module so both indicator files can share it without
  * tripping react-refresh's only-export-components rule.
  */
 export const STATUS_MENU_CONTENT = cn(
-  "galley-pop-in z-[70] w-max min-w-[200px] max-w-[300px] rounded-md border border-line bg-elevated p-1",
+  "galley-pop-in z-[70] w-max min-w-[168px] max-w-[300px] rounded-md border border-line bg-elevated p-1",
   "text-ui-compact text-ink shadow-elevated outline-none",
 );
 

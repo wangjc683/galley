@@ -63,7 +63,7 @@
 - **禁止**（勿回退）：状态点（05-31：聊天图标上的点读作未读消息；05-27：浏览器控制就绪后「无状态点、无动效」）；健康状态用颜色或动效；按钮面显示已定型的偏好。颜色只给 warning / error 文字 badge 和 `brand` 邀请 badge。
 - Topbar 内会打开 menu / popover 的 trigger，打开态需要保留轻微下沉 + press shadow，帮助用户把浮层和来源按钮对应起来。打开态按 `aria-expanded="true"` 取（`TopBarIconButton` 与 `TOPBAR_POPOVER_OPEN_STATE`）：每个 trigger 都套着 `TooltipLabel`，Tooltip trigger 自己的 `data-state` 会盖掉 popover 的 `data-state="open"`，只认后者时打开态从没显示过（2026-10-04 查出，显示 / Goal / 更新 popover 一并修好）。
 - **顶栏浮层两套形态，按用途分工**（2026-10-04）：**入口类用菜单式，决策类用卡片式。**
-  - **菜单式**（「显示」、Browser Control、Channels，与会话标题菜单、Composer ＋ 菜单同一套）：`galley-pop-in`、`z-[70]`、`align="end"`、6px 偏移、`p-1` 紧凑容器、宽度随内容（最小 200px，Channels 168px 见下；最大 300px）、13px 行；状态行不可点、与菜单项同内边距（`px-2 py-1.5`）；动作是整行悬停高亮的菜单项（14px thin 图标 + 文字），分隔线 `my-1 h-px bg-line`。Browser Control / Channels 用 Radix DropdownMenu（有方向键导航），样式常量在 `header/status-menu.ts`；「显示」用 Popover 是因为选后不关。macOS 菜单栏图标的先例：状态在上、分隔线、最后一行「Wi‑Fi 设置…」是菜单项不是按钮。
+  - **菜单式**（「显示」、Browser Control、Channels，与会话标题菜单、Composer ＋ 菜单同一套）：`galley-pop-in`、`z-[70]`、`align="end"`、6px 偏移、`p-1` 紧凑容器、宽度随内容（最小 200px；Browser Control / Channels 两个灯菜单 168px，见下；最大 300px）、13px 行；状态行不可点、与菜单项同内边距（`px-2 py-1.5`）；动作是整行悬停高亮的菜单项（14px thin 图标 + 文字），分隔线 `my-1 h-px bg-line`。Browser Control / Channels 用 Radix DropdownMenu（有方向键导航），样式常量在 `header/status-menu.ts`；「显示」用 Popover 是因为选后不关。macOS 菜单栏图标的先例：状态在上、分隔线、最后一行「Wi‑Fi 设置…」是菜单项不是按钮。
   - **卡片式**（Goal、应用更新）：Radix Popover、`z-50`、8px 偏移、`p-3`／`p-4`、标题 13px medium + 说明正文 + 明确按钮（停止 / 延长 / 重启）。它们是带决定的通知，需要说明文字和按钮，塞进菜单行会挤。
   - 曾经四个状态浮层统一用卡片式（16px 留白 + 凸起的「XX 设置…」secondary 按钮），JC 真机指出 Browser Control / Channels 与「显示」字体和样式不统一，当日改为上面的分工。
 - **外观类偏好控件的标准形态**（2026-07-05 定形，2026-10-04 合并为一个「显示」按钮）：一个 28px 图标按钮（`TopBarIconButton` + `TextAa`，tooltip「显示」）→ 一个小 popover → 每个偏好一行：左列 muted 小标签（`text-ui-tertiary`），右列共享 `SegmentedControl`，三个控件左缘对齐。现有三行：阅读宽度「紧凑 / 宽松」、字号「小 / 标准 / 大」、主题「跟随系统 / 浅色 / 深色」。用 Popover 而非 DropdownMenu 是刻意的：选后**不自动关闭**，用户可来回切档、看着背后的对话即时重排。按钮面**不用 brand tint 表达「偏离默认」**——已定型的偏好不是可行动信息，常驻高亮是安静工作台的噪音；当前状态只放在 popover 内（「跟随系统」的解析结果做主题分段下方 caption，只在选中「跟随系统」时出现）。新增外观偏好时加一行，不再加按钮、不再发明新样式。合并的理由与被否方案见 [devlog 2026-10-04](../devlog/2026-10-04-topbar-display-popover.md)。
@@ -94,7 +94,13 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 
 - **待解锁不是待修**（2026-10-04，改 05-27 的 `warning` 规约）：浏览器控制是 Galley 的头号能力，第一印象该是邀请，不是「坏了」。`brand` 而不是 `neutral`：`neutral` 会把它降到「新版本可用」那一档；`brand` 在本簇的含义是「Galley 在为你做事或邀请你开始」，是一类状态，不是这个功能的身份色。
 - **`unknown` 不再闪「检测中」**：启动时它只持续约一秒，旧的 neutral「检测中」badge 每次启动闪一下再换成别的。改为按已持久化的验证标记先画结论：待解锁的含义就是「设置没完成过」，这个标记启动时已知。
-- **菜单**（菜单式，见上「两套形态」）：只讲状态——状态行「已连接 · N 个标签页」/「已连接 · 暂无网页」（「已连接」medium、克制的 success 绿，与 Channels 菜单的「已接入」同一健康色；标签页数同一行浅墨）；「浏览器未连接」+ 次行「打开装了插件的浏览器后自动连接。」；检测中只一句「正在检测」→ 分隔线 →「设置…」菜单项。error 时标题换成按原因本地化的说法、红字，次行是桥自己的中文原文，桥类错误再加一行「正在自动重试。」。**范围说明不进菜单**（2026-10-04 JC 嫌长）：瞄状态的浮层每次打开都要重读，「它能看到什么」读一次就够，只留在 Settings 已连接卡（见 [overlays-and-settings](./overlays-and-settings.md) Browser Control）。
+- **菜单**（菜单式，见上「两套形态」）：只讲状态，行写法与 Channels 菜单相同——**拼图图标**（14px thin，与「设置…」的图标同列）+「浏览器」+ **右列状态词**（与 Channels 的状态词同字号、同色规则）；次行缩进到名称列。
+  - 已连接：右列「已连接」克制的 success 绿（与 Channels 的「已接入」同一健康色），次行「N 个标签页」/「暂无网页」浅墨。
+  - 未连接 / 检测中：图标 50%、「浏览器」降为 `ink-soft`（灯的语法逐行用，同 Channels 的暂停行）；右列「未连接」/「正在检测」浅墨；未连接次行「打开装了插件的浏览器后自动连接。」。
+  - error：右列红字写原因（端口被占用 / 连接中断 / 缺少组件 / 未能启动 / 需检查，即徽章后半截）；次行是桥自己的中文原文（两行截断，全文在 Settings）；桥类错误再单独一行「正在自动重试。」（接在原文后会被两行截断吃掉）。连接中断不加这行：桥的原文已经以「正在重试」结尾。**不另起红色标题**：它只是把徽章再说一遍。
+  - → 分隔线 →「设置…」菜单项。宽度同 Channels：最小 168px，报错原文可撑到 300px。
+  - 2026-10-04 真机三档（A2 标签页数跟在名称后 / A1 标签页数放次行 / B 保留「已连接 · N 个标签页」一句只补图标列），JC 选 A1（见 [devlog](../devlog/2026-10-04-browser-control-ux-round.md)「当日真机修订」）。
+**范围说明不进菜单**（2026-10-04 JC 嫌长）：瞄状态的浮层每次打开都要重读，「它能看到什么」读一次就够，只留在 Settings 已连接卡（见 [overlays-and-settings](./overlays-and-settings.md) Browser Control）。
 - **不放「重新检测」**：状态是实时的，手动检测只会重复桥已经报告的内容；脚本测试失败这类偶发错误去设置页点「测试连接」。
 - tooltip 仍说出状态（共享 Radix tooltip，不用原生 `title`）。
 - 未连接时（从没验证过）badge 与下方 banner 常驻：不可隐藏、不可 dismiss，无动效、无弹窗。
@@ -117,7 +123,7 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 
 - **「设置过」怎么算**：照 Core 的派生状态（`im_supervisor/manager.rs` `derived_status`）——没有凭据（微信无 `token.json`、飞书 / Telegram / Discord 无已保存配置）的停止平台报 `not_connected`，有凭据报 `stopped`；断开连接清凭据回到 `not_connected`。所以「设置过」= `enabled`（用户启动过且没停）或状态不是 `not_connected`。Settings → Channels 用的是同一组信号（`enabled` 决定重启按钮，状态决定卡片徽标）。
 - **菜单**（菜单式）：每个设置过的平台一个状态行：**平台图标**（14px、`ink-muted`，与 Settings 卡片同一套单色图形 `ChannelPlatformMark`；和下方菜单项的图标同列，文字也同列）+ 名称 + **右列状态词**（用 Settings 卡片徽标的同一套词：已接入 / 已暂停 / 正在接入 / 等待扫码 / 接入已失效 / 异常 …；已接入用克制的 success 绿（与 Settings 卡片徽标同色，一眼扫过去颜色即健康，JC 2026-10-04）、异常 / 失效标红、等扫码标琥珀，已暂停等其余状态浅墨）。**已暂停（以及刚启用、还没起来）的行，图标 50%、名称降为 `ink-soft`**——灯的语法逐行用。异常行下加两行以内的 `lastError`，缩进到名称列 → 分隔线 →「重启 Channels」菜单项（只在有已启用平台时出现，先弹与设置页同一个轻确认 `ConfirmActionDialog`）→「设置…」菜单项（浮层已说明是 Channels，不重复，与浏览器同词）。
-- **宽度**：最小 168px，低于菜单式共用的 200px——加了图标后行宽约 166px，原先多出的宽度全落在名称与状态词之间。报错原文可以把菜单撑到 300px 上限：异常态，全文比整齐重要。
+- **宽度**：最小 168px（两个灯菜单共用，`status-menu.ts`），低于其他紧凑菜单的 200px——加了图标后行宽约 166px，原先多出的宽度全落在名称与状态词之间。报错原文可以把菜单撑到 300px 上限：异常态，全文比整齐重要。
 - **图标单色、不用品牌色**：同 Settings 卡片的规矩；况且微信绿挨着「已接入」会被读成健康绿。2026-10-04 真机三档里 JC 选的 A′（见 [devlog](../devlog/2026-10-04-browser-control-ux-round.md)「当日真机修订」）。
 - **只列设置过的平台，不放占位**：05-31 否掉的是「平台清单」——这里只列用户自己设置过的。
 - 不放状态点：聊天图标上的点读作未读消息（05-31）。

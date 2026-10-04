@@ -146,10 +146,7 @@ export function ChannelsIndicator({
                 event.preventDefault();
               }
             }}
-            // Narrower floor than the shared 200px: with the marks the
-            // rows run about 166px, and the old slack all landed in the
-            // gap between a name and its state.
-            className={cn(STATUS_MENU_CONTENT, "min-w-[168px]")}
+            className={STATUS_MENU_CONTENT}
           >
             {loadError && (
               <div
