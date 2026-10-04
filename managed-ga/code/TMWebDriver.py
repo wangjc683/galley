@@ -264,7 +264,14 @@ class TMWebDriver:
 
     def get_all_sessions(self):
         if self.is_remote:
-            return self._remote_cmd({"cmd": "get_all_sessions"}).get('r', [])
+            sessions = self._remote_cmd({"cmd": "get_all_sessions"}).get('r', [])
+            # Galley: a remote client never sees tab registrations, so its default
+            # tab stayed None: every execute_js then cost the master's 3 s dead-session
+            # wait, and web_scan / web_execute_js reported no active tab. Keep a live
+            # default here the way a master does (first live tab, sticky until gone).
+            ids = [str(s.get('id')) for s in sessions]
+            if ids and str(self.default_session_id) not in ids: self.default_session_id = ids[0]
+            return sessions
         return [{'id': session.id, **session.info} for session in self.sessions.values()
                 if session.is_active()]
 
