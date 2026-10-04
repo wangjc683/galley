@@ -1,8 +1,8 @@
 # 顶栏「显示」：宽度 / 字号 / 主题合进一个 popover，改动按钮只在知道仓库时出现
 
 Date: 2026-10-04
-Status: committed (`d83e9b36`), unpushed; static gates green (typecheck / lint / vitest 587 /
-cargo check + test / diff check); awaiting JC's live acceptance in `tauri dev`; unreleased
+Status: pushed 2026-10-04 (`d83e9b36`) at JC's close-out; static gates green (typecheck / lint /
+vitest 587 / cargo check + test / diff check); unreleased
 Related: [layout-and-chrome §4.1](../design/layout-and-chrome.md)（工具簇、外观控件标准形态）、
 [overlays-and-settings](../design/overlays-and-settings.md)（General、命令面板、§10 快捷键）、
 [conversation.md 本地文件引用与预览](../design/conversation.md#本地文件引用与-markdown-预览)（改动入口）、

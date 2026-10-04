@@ -1,6 +1,6 @@
 # 浏览器控制 UX 一轮
 
-Status: ready-for-human（等 JC 真机验收）
+Status: ready-for-human（已 push；剩新用户流程真机走查与 Windows 冒烟常驻桥，见 docs/project-status.md）
 
 来源：2026-10-04 顶栏打磨讨论延伸。JC 定位：真实浏览器控制是 Galley 最大的卖点之一。
 

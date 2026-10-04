@@ -612,6 +612,31 @@ icon only when a session deviates from the default, and user-facing LLM becomes
 prompt shortcut went to `deferred.md`. At the next Windows smoke, check the ＋
 menu's native file and folder pickers (checklist item updated).
 
+2026-10-04, two rounds; JC checked the topbar live and steered several
+revisions in place.
+The topbar ([devlog](./devlog/2026-10-04-topbar-display-popover.md), frontend
+plus the macOS View menu in Core): width / font size / theme fold into one 显示
+popover, the Changes button shows only when a repository is known (palette
+entry 查看仓库改动), and ⌘= / ⌘− / ⌘0 step the conversation font size.
+Browser control ([devlog](./devlog/2026-10-04-browser-control-ux-round.md),
+`.scratch/browser-control-ux/`), now treated as the headline capability (45%
+of JC's sessions): browser steps show the site; **Core runs a resident browser
+bridge in managed mode** (`runner/managed_browser_bridge.py`, TMWebDriver
+master, live status, no per-launch probe, auto-verify on first connection)
+plus managed-ga patch `0028` (a remote driver's default tab); the Browser
+Control and Channels lamps are plain when live and dimmed when not, open
+compact menus (entry surfaces are menus, decision surfaces like Goal / Update
+stay cards), show health in the success green, and the unconnected state
+invites (浏览器控制 · 待解锁) instead of warning. Core, runner and managed-ga
+changed this time. At the next Windows smoke, run the resident bridge items
+(stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
+program) and walk the new-user flow (待解锁 → install → auto-verify → 试一试),
+which has not been walked live yet. Parked: IM step summaries with the site and
+the Chrome / Edge store listing (both in `deferred.md`). Next session:
+`.scratch/remove-approval/` — JC decided to drop step approval entirely and run
+auto only, as upstream GA does; the prompt rule (ask_user before irreversible
+actions) is still undecided.
+
 The four community threads #29–#32 shipped in
 `v0.5.6` and were answered 2026-10-01, all kept open:
 [#29](https://github.com/wangjc683/galley/issues/29#issuecomment-5931634906),

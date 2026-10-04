@@ -1,8 +1,9 @@
 # 浏览器控制一轮：对话显示网站、常驻浏览器桥、顶栏点灯与「待解锁」
 
 Date: 2026-10-04
-Status: committed（`db2dde5e` / `7044db88` / `450dbeb1` / `fe001911`），未 push；静态门禁全绿；
-等 JC 在 `tauri dev` 真机验收；unreleased
+Status: pushed 2026-10-04（主体 `db2dde5e` / `7044db88` / `450dbeb1` / `fe001911`，当日修订
+`a572632f` / `b7d30b23` / `ef5024b2` / `d4710b6c` / `cc94785e`）；静态门禁全绿；JC 真机看过顶栏的灯与菜单
+并当场改了几轮；新用户流程（待解锁 → 安装 → 自动验证 → 试一试）与 Windows 冒烟未走；unreleased
 Related: [票面](../../.scratch/browser-control-ux/PRD.md)、
 [managed-ga-runtime/browser-control](../managed-ga-runtime/browser-control.md)、
 [layout-and-chrome §4.1](../design/layout-and-chrome.md)（状态簇点灯、Browser Control / Channels Indicator）、

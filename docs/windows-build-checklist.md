@@ -191,6 +191,15 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] Settings sidebar shows `Channels` with Chinese helper `聊天软件`
 - [ ] WeChat QR refresh uses a fresh image path and does not show a stale QR code
 
+### Browser Control resident bridge (2026-10-04)
+
+- [ ] Managed mode: Task Manager shows one `python.exe -m runner.managed_browser_bridge` child of `galley-core.exe` and no console window; switching to External GA stops it, switching back starts it
+- [ ] Quitting Galley (tray Quit) ends the bridge process and frees ports 18765 / 18766 (`netstat -ano | findstr 1876`)
+- [ ] Killing `galley-core.exe` from Task Manager also ends the bridge within a few seconds (`GALLEY_CORE_PID` watchdog)
+- [ ] With another program listening on 18765, the topbar shows the red 浏览器控制 · 端口被占用 badge and its menu explains it; freeing the port recovers on its own
+- [ ] Closing and reopening Chrome / Edge dims and restores the PuzzlePiece lamp within a few seconds; the first browser step in a new session does not stall
+- [ ] New-user flow on a profile never verified: 浏览器控制 · 待解锁 badge + banner → load the extension → auto-verify completes step 3 → 浏览器控制已连接 toast → 试一试 runs the weather demo
+
 ### Tutorial modal
 
 - [ ] "memory-info" tutorial shows BOTH Mac/Linux and Windows command examples (already OS-agnostic in tutorial content)
