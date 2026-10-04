@@ -18,6 +18,11 @@ import { updateIndicatorVisible } from "./header/update-indicator-status";
 import { TopBarUtilityCluster } from "./header/UtilityCluster";
 
 export interface MainHeaderProps {
+  /**
+   * Git review toggle. Omitted (button hidden) while no repository is
+   * known and the review is closed — MainHeaderHost decides; the
+   * command palette's 查看仓库改动 stays as the always-there entry.
+   */
   onToggleChanges?: (source: HTMLElement) => void;
   changesOpen?: boolean;
   /**
@@ -58,11 +63,11 @@ export interface MainHeaderProps {
   onRestartAppUpdate?: () => void;
   /**
    * Conversation column width mode. "compact" = 760px (default),
-   * "wide" = 1200px. Renders an icon button next to the font-size
-   * control that flips between the two modes.
+   * "wide" = 1200px. One of the three rows in the 显示 popover, next
+   * to font size and theme.
    */
   conversationWidth?: "compact" | "wide";
-  onToggleConversationWidth?: () => void;
+  onChangeConversationWidth?: (width: "compact" | "wide") => void;
   conversationFontSize?: ConversationFontSize;
   onChangeConversationFontSize?: (size: ConversationFontSize) => void;
   themePreference?: ThemePreference;
@@ -119,8 +124,8 @@ export interface MainHeaderProps {
  *   - TopBarStatusCluster — state-of-the-world badges (Goal / engine /
  *     Browser Control / Channels / Update), gated on
  *     `hasTopBarStatusItems`.
- *   - TopBarUtilityCluster — always-on view tools (width / font / theme)
- *     plus Supervisor SOP and Settings.
+ *   - TopBarUtilityCluster — Changes (while a repository is known), the
+ *     显示 popover (width / font / theme), Supervisor SOP and Settings.
  * Each cluster and its indicators live under `./header/`.
  *
  * Why title-left (not centered): Galley is a multi-session workspace
@@ -173,7 +178,7 @@ export function MainHeader({
   hasRunningSessions = false,
   onRestartAppUpdate,
   conversationWidth = "compact",
-  onToggleConversationWidth,
+  onChangeConversationWidth,
   conversationFontSize = "standard",
   onChangeConversationFontSize,
   themePreference = "system",
@@ -297,7 +302,7 @@ export function MainHeader({
           changesOpen={changesOpen}
           onToggleChanges={onToggleChanges}
           conversationWidth={conversationWidth}
-          onToggleConversationWidth={onToggleConversationWidth}
+          onChangeConversationWidth={onChangeConversationWidth}
           conversationFontSize={conversationFontSize}
           onChangeConversationFontSize={onChangeConversationFontSize}
           themePreference={themePreference}

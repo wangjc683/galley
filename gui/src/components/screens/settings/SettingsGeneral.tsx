@@ -24,10 +24,10 @@ import { ErrorLine } from "./models/ModelPrimitives";
  * the app itself behaves on this machine.
  *
  * One row grammar for every preference: title + one-line description
- * on the left, the control on the right. Theme and language use the
- * shared SegmentedControl (same interaction as the topbar theme
- * control) so all three choices are visible and switching is one
- * click — no popover state. When "follow system" is selected the
+ * on the left, the control on the right. Theme, font size, reading
+ * width and language use the shared SegmentedControl (same interaction
+ * as the topbar 显示 popover) so every choice is visible and switching
+ * is one click — no popover state. When "follow system" is selected the
  * description line carries the currently resolved value.
  *
  * Launch at login: the OS is the single source of truth. The toggle
@@ -53,6 +53,8 @@ export function SettingsGeneral({
   onChangeThemePreference,
   conversationFontSize,
   onChangeConversationFontSize,
+  conversationWidth,
+  onChangeConversationWidth,
   notifyOnGoalEnd,
   onChangeNotifyOnGoalEnd,
   notifyOnApproval,
@@ -74,6 +76,8 @@ export function SettingsGeneral({
   onChangeThemePreference: (preference: ThemePreference) => void;
   conversationFontSize: ConversationFontSize;
   onChangeConversationFontSize: (size: ConversationFontSize) => void;
+  conversationWidth: "compact" | "wide";
+  onChangeConversationWidth: (width: "compact" | "wide") => void;
   notifyOnGoalEnd: boolean;
   onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
   notifyOnApproval: boolean;
@@ -237,6 +241,26 @@ export function SettingsGeneral({
                   value: "large",
                   label: copy.topbar.conversationFontSize.largeShort,
                 },
+              ]}
+            />
+          </PreferenceRow>
+          {/* Width joined General on 2026-10-04 so the tab lists all
+              three 显示 preferences. The modal hides the effect, so the
+              live-preview place stays the topbar 显示 popover. */}
+          <PreferenceRow
+            title={generalCopy.widthRowTitle}
+            description={generalCopy.widthRowDescription}
+          >
+            <SegmentedControl<"compact" | "wide">
+              value={conversationWidth}
+              ariaLabel={copy.topbar.conversationWidth.aria}
+              onValueChange={onChangeConversationWidth}
+              options={[
+                {
+                  value: "compact",
+                  label: copy.topbar.conversationWidth.compact,
+                },
+                { value: "wide", label: copy.topbar.conversationWidth.wide },
               ]}
             />
           </PreferenceRow>

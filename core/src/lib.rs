@@ -193,6 +193,7 @@ pub fn run() {
             tray::set_keep_in_background,
             tray::resolve_first_close,
             app_menu::set_width_menu_state,
+            app_menu::set_font_size_menu_state,
             bulk_archive_sessions,
             bulk_unarchive_sessions,
             bulk_delete_sessions,

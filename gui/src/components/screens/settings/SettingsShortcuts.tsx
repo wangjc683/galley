@@ -70,6 +70,13 @@ function buildGroups(copy: ReturnType<typeof useCopy>): ShortcutGroup[] {
           // doesn't reference macOS.
           note: isMac ? shortcuts.nativeEditingMac : shortcuts.nativeEditing,
         },
+        // ⌘= rather than ⌘+: the unshifted key US layouts press, and
+        // what the macOS View menu shows (⌘+ works too).
+        {
+          combo: `${formatShortcut("Mod+=")} / ${formatShortcut("Mod+-")}`,
+          action: shortcuts.fontSizeStep,
+        },
+        { combo: formatShortcut("Mod+0"), action: shortcuts.fontSizeReset },
       ],
     },
     {

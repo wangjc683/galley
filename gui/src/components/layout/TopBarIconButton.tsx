@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Shared 28px icon button for the column headers — MainHeader's utility
- * cluster (width / font size / theme / Supervisor SOP / settings), its
+ * cluster (Changes / 显示 / Supervisor SOP / settings), its
  * icon-form status indicators (engine / Browser Control / Channels),
  * and SidebarHeader's 搜索 / 定时 / 项目. One place owns the hover /
  * press / popover-open rhythm so a motion tweak can't drift across the
@@ -16,11 +16,11 @@ import { cn } from "@/lib/utils";
  * Tooltip also sets data-state on the same element, but its values are
  * "closed" / "delayed-open" / "instant-open" — never "open".)
  *
- * Appearance preferences (width / font size / theme) intentionally get
- * NO persistent "non-default" tint: a settled preference is not
- * actionable information, and a permanently tinted button is standing
- * noise in a quiet workbench. Current state lives in the tooltip and
- * inside the control's popover.
+ * Appearance preferences (the 显示 popover's width / font size / theme)
+ * intentionally get NO persistent "non-default" tint: a settled
+ * preference is not actionable information, and a permanently tinted
+ * button is standing noise in a quiet workbench. Current state lives
+ * inside the popover.
  */
 export const TopBarIconButton = forwardRef<
   HTMLButtonElement,

@@ -1,6 +1,5 @@
 import { Gear, PlugsConnected } from "@phosphor-icons/react";
 
-import { ThemePreferenceMenu } from "@/components/theme/ThemePreferenceMenu";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import { formatShortcutReadable } from "@/lib/shortcuts";
@@ -8,22 +7,22 @@ import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
 
 import { TopBarIconButton } from "../TopBarIconButton";
-import { ConversationFontSizeMenu } from "./ConversationFontSizeMenu";
-import { WidthToggleButton } from "./WidthToggleButton";
 import { ChangesToggleButton } from "./ChangesToggleButton";
+import { DisplayMenu } from "./DisplayMenu";
 
 /**
- * Right half of the MainHeader right group: global tools that always
- * apply, regardless of session state — width toggle, font size, theme,
- * Supervisor SOP, and Settings. Unlike the status cluster these never
- * gate on state (Supervisor SOP shows in both runtime modes), so the
- * cluster and its ARIA landmark render unconditionally.
+ * Right half of the MainHeader right group: global tools — Changes
+ * (only while a repository is known or the review is open; the host
+ * omits `onToggleChanges` otherwise), 显示 (width / font size / theme),
+ * Supervisor SOP, and Settings. Apart from Changes these never gate on
+ * state (Supervisor SOP shows in both runtime modes), so the cluster
+ * and its ARIA landmark render unconditionally.
  */
 export function TopBarUtilityCluster({
   changesOpen = false,
   onToggleChanges,
   conversationWidth,
-  onToggleConversationWidth,
+  onChangeConversationWidth,
   conversationFontSize,
   onChangeConversationFontSize,
   themePreference,
@@ -35,7 +34,7 @@ export function TopBarUtilityCluster({
   changesOpen?: boolean;
   onToggleChanges?: (source: HTMLElement) => void;
   conversationWidth: "compact" | "wide";
-  onToggleConversationWidth?: () => void;
+  onChangeConversationWidth?: (width: "compact" | "wide") => void;
   conversationFontSize: ConversationFontSize;
   onChangeConversationFontSize?: (size: ConversationFontSize) => void;
   themePreference: ThemePreference;
@@ -60,22 +59,15 @@ export function TopBarUtilityCluster({
       {onToggleChanges && (
         <ChangesToggleButton open={changesOpen} onToggle={onToggleChanges} />
       )}
-      <WidthToggleButton
-        mode={conversationWidth}
-        onToggle={onToggleConversationWidth}
+      <DisplayMenu
+        conversationWidth={conversationWidth}
+        onChangeConversationWidth={onChangeConversationWidth}
+        conversationFontSize={conversationFontSize}
+        onChangeConversationFontSize={onChangeConversationFontSize}
+        themePreference={themePreference}
+        resolvedTheme={resolvedTheme}
+        onChangeThemePreference={onChangeThemePreference}
       />
-      <ConversationFontSizeMenu
-        value={conversationFontSize}
-        onChange={onChangeConversationFontSize}
-      />
-      {onChangeThemePreference && (
-        <ThemePreferenceMenu
-          preference={themePreference}
-          resolvedTheme={resolvedTheme}
-          onChange={onChangeThemePreference}
-          variant="topbar"
-        />
-      )}
       <TooltipLabel text={copy.supervisorSopTooltip}>
         <TopBarIconButton
           onClick={onOpenSupervisorSop}

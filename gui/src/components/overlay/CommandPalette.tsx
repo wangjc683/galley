@@ -8,6 +8,7 @@ import {
   FolderOpen,
   FrameCorners,
   Gear,
+  GitDiff,
   MagnifyingGlass,
   Plus,
   User,
@@ -50,6 +51,9 @@ export interface CommandPaletteProps {
   onOpenMessage?: (sessionId: string, messageId: string, query: string) => void;
   onSwitchLLM?: (index: number) => void;
   onReRunHealthCheck?: () => void;
+  /** Open the Git review panel, like the header's Changes button (which
+   * hides while no repository is known; this entry never does). */
+  onReviewChanges?: () => void;
   onOpenSettings?: () => void;
   onAttachGAFolder?: () => void;
 
@@ -78,7 +82,8 @@ export interface CommandPaletteProps {
  *   - Recent sessions (≤8, fuzzy on title)
  *   - Full-text message hits (SQLite FTS5, query ≥ 2 chars)
  *   - Actions: Switch LLM (nested submenu) / Re-run health check /
- *     Reset layout / Open settings / Attach GA folder
+ *     Review repository changes / Reset layout / Open settings /
+ *     Attach GA folder
  *
  * Everything below the pinned creation rows sits in a labeled
  * Command.Group — the root list mixes four semantic kinds, so
@@ -212,6 +217,10 @@ export function CommandPalette(props: CommandPaletteProps) {
               props.onReRunHealthCheck?.();
               close();
             }}
+            onReviewChanges={() => {
+              props.onReviewChanges?.();
+              close();
+            }}
             onResetLayout={() => {
               // Self-contained module action (lib/layout-reset.ts), so
               // no prop from App — unlike its sibling handlers.
@@ -260,6 +269,7 @@ function RootPage({
   llmCount,
   currentLLM,
   onReRunHealthCheck,
+  onReviewChanges,
   onResetLayout,
   onOpenSettings,
   onAttachGAFolder,
@@ -276,6 +286,7 @@ function RootPage({
   llmCount: number;
   currentLLM?: string;
   onReRunHealthCheck: () => void;
+  onReviewChanges: () => void;
   onResetLayout: () => void;
   onOpenSettings: () => void;
   onAttachGAFolder: () => void;
@@ -412,6 +423,12 @@ function RootPage({
             Icon={ArrowsClockwise}
             label={copy.command.runHealthCheck}
           />
+        </Command.Item>
+        <Command.Item
+          value="review repository changes git diff worktree 查看仓库改动 工作区改动"
+          onSelect={onReviewChanges}
+        >
+          <PaletteRow Icon={GitDiff} label={copy.command.reviewChanges} />
         </Command.Item>
         <Command.Item
           value="reset default layout window 恢复默认布局 窗口"

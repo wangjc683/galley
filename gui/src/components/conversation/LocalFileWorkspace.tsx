@@ -52,6 +52,7 @@ import {
   reportFileError,
   type LocalFileResult,
 } from "@/lib/local-files";
+import { useUiStore } from "@/stores/ui";
 
 interface Preview {
   sessionId?: string;
@@ -122,9 +123,13 @@ export function LocalFileWorkspace({
      * a session switch keep the review the reader set up. */
     base?: string;
   } | null>(null);
-  const repository = useRef<string | undefined>(undefined);
+  // The repository this window last reviewed (opened from a project,
+  // chosen in the panel, or reached from a file). State, not a ref: the
+  // header shows its Changes button only while a repository is known,
+  // so remembering the first one must re-render. Window lifetime only.
+  const [repository, setRepository] = useState<string>();
   const rememberRepository = useCallback((root: string) => {
-    repository.current = root;
+    setRepository(root);
     setReview((current) => (current ? { ...current, path: root } : null));
   }, []);
   const rememberFile = useCallback((selectedPath: string) => {
@@ -226,18 +231,20 @@ export function LocalFileWorkspace({
       if (source && !pane.current?.contains(source)) origin.current = source;
       setPreview(null);
       setReview({
-        path: path ?? repository.current ?? repositoryHint,
+        path: path ?? repository ?? repositoryHint,
         id: generation.current,
         split: false,
       });
     },
-    [repositoryHint],
+    [repository, repositoryHint],
   );
 
   const reviewOpen = review !== null;
+  const repositoryKnown = Boolean(repository ?? repositoryHint);
   const reviewControl = useMemo(
     () => ({
       isOpen: reviewOpen,
+      repositoryKnown,
       toggle: (source: HTMLElement) => {
         if (reviewOpen) {
           origin.current = source;
@@ -247,7 +254,22 @@ export function LocalFileWorkspace({
         }
       },
     }),
-    [reviewOpen, close, openReview],
+    [reviewOpen, repositoryKnown, close, openReview],
+  );
+
+  // The command palette's 查看仓库改动 lives outside this provider (App
+  // renders it beside the main column), so it asks through the UI
+  // store. Subscribing keeps the open in a store callback, not in render
+  // or an effect body. An open review stays as it is (repository, file,
+  // baseline) and only takes focus.
+  useEffect(
+    () =>
+      useUiStore.subscribe((state, previous) => {
+        if (state.reviewRequest === previous.reviewRequest) return;
+        if (reviewOpen) pane.current?.focus({ preventScroll: true });
+        else openReview();
+      }),
+    [reviewOpen, openReview],
   );
 
   const load = useCallback(

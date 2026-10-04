@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { ApprovalConfig } from "@/components/screens/settings/settings-types";
 import {
   getPref,
+  setFontSizeMenuState,
   setKeepInBackground,
   setPref,
   setWidthMenuState,
@@ -405,6 +406,10 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   // ---- Conversation font size ----
   setConversationFontSize: async (size) => {
     set({ conversationFontSize: size });
+    // Mirror into View > Conversation Font Size, as width does above.
+    setFontSizeMenuState(size).catch((e) => {
+      console.debug("[prefs] setConversationFontSize: menu sync failed.", e);
+    });
     try {
       await setPref("conversation_font_size", size);
     } catch (e) {
@@ -623,11 +628,17 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     }
     try {
       const fontSize = await getPref<unknown>("conversation_font_size");
-      set({
-        conversationFontSize: isConversationFontSize(fontSize)
-          ? fontSize
-          : "standard",
-      });
+      const conversationFontSize = isConversationFontSize(fontSize)
+        ? fontSize
+        : "standard";
+      set({ conversationFontSize });
+      // Same as width: the menu boots on "standard"; re-sync only when
+      // the persisted pref differs.
+      if (conversationFontSize !== "standard") {
+        setFontSizeMenuState(conversationFontSize).catch((e) => {
+          console.debug("[prefs] hydratePrefs: font size menu sync failed.", e);
+        });
+      }
     } catch (e) {
       console.warn(
         "[prefs] hydratePrefs: conversation_font_size pref load failed.",

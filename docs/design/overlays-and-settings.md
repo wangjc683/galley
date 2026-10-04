@@ -77,7 +77,12 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 - Re-run health check
 - Open settings
 - Attach GA folder（仅 onboarding 已完成、想换路径时）
-- （V0.1 之后加入：New project、Reset window layout）
+- （V0.1 之后加入：New project、Reset window layout、查看仓库改动）
+- **查看仓库改动**（2026-10-04）：`GitDiff` 图标，与 MainHeader「改动」按钮
+  同一动作。按钮只在知道仓库时出现，这一项始终在，是不知道仓库时的入口
+  （[conversation.md](./conversation.md#本地文件引用与-markdown-预览)）。Palette
+  渲染在 `LocalFileWorkspace` 之外，经 UI store 的 `requestReview` 计数通知
+  面板的所有者。
 
 #### 故意排除（V0.1 不做）
 
@@ -194,8 +199,8 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 桌面应用自身的偏好，与引擎配置（Runtime）严格分家。整个 tab 只有一种行
 语法 `PreferenceRow`：左侧标题 + 一行说明，右侧控件。
 
-- **外观与语言**分区三行：主题 / 对话字号 / 语言，右侧都是
-  `SegmentedControl` 三段平铺（与 topbar 主题控件同一交互）。选
+- **外观与语言**分区四行：主题 / 对话字号 / 阅读宽度 / 语言，右侧都是
+  `SegmentedControl` 平铺（与 topbar「显示」popover 同一交互）。选
   `跟随系统` 时说明行动态显示当前解析值（`跟随系统 · 当前深色`）。
 - **启动**分区：`开机自动启动` 开关（默认关）。机制与静默启动细节见
   [desktop-runtime.md](../desktop-runtime.md) §Launch at Login；设计要点
@@ -222,10 +227,12 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 - 与「启动」分区的事实源区分：自启开关 OS 为唯一事实源；通知与应用
   行为四个开关 pref（SQLite）为事实源，仅通知**权限**沿用 OS 事实源
   的提示模式。
-- 主题与字号在 topbar 保留快捷入口（双入口：topbar 快捷调节，General
-  权威清单）。**对话宽度（compact/wide）有意不进 General**：Settings 是
-  遮住对话区的模态，切宽度看不到任何效果；它是视图控制，入口保持
-  topbar + macOS 菜单栏。
+- 主题、字号、阅读宽度三项都是双入口：topbar「显示」popover 快捷调节、
+  能看着对话即时变化；General 是权威清单。阅读宽度 2026-10-04 才进
+  General——此前「有意不进」，理由是 Settings 是遮住对话区的模态、切宽度
+  看不到效果。这条理由仍然成立，所以即时预览的家仍是「显示」popover；但宽度
+  从一键按钮变成 popover 里的一行之后，General 不列它就成了三项里唯一缺席的，
+  「权威清单」名不副实（[devlog 2026-10-04](../devlog/2026-10-04-topbar-display-popover.md)）。
 
 #### Runtime
 
@@ -531,7 +538,8 @@ conversation.md §4.4）。Composer pill 的**会话级**切换不弹确认（�
 
 #### Shortcuts（read-only）
 
-- 三个 group：Navigation / Composer / Overlays。
+- 四个 group：Navigation / Composer / Conversation / Overlays。Conversation
+  组含跳到上 / 下一条提问与对话字号（`⌘= / ⌘-` 放大缩小、`⌘0` 恢复标准）。
 - 每行：左侧 kbd chip（`bg-surface` + `border-line` + mono）+ action label + 可选 note。
 - 当前只展示，不提供自定义；重绑入口留到未来版本。
 
@@ -571,3 +579,15 @@ conversation.md §4.4）。Composer pill 的**会话级**切换不弹确认（�
 | `↑ / ↓` | 命令面板选项 |
 | `Tab` | 命令面板进二级 |
 | `⌥↑ / ⌥↓` | 跳到对话中上 / 下一条用户提问（焦点在 Composer 时不生效） |
+| `⌘= / ⌘-` | 对话字号放大 / 缩小一档（小 ↔ 标准 ↔ 大；`⌘+` 同 `⌘=`） |
+| `⌘0` | 对话字号恢复标准 |
+
+字号三键（2026-10-04）借的是浏览器页面缩放的键位——页面缩放已关
+（见 [foundations](./foundations.md) §2.6），这三键空着，用户手上也已有
+「放大 / 缩小 / 复位」的肌肉记忆。macOS 的 View → Conversation Font Size
+子菜单挂同样的加速键（Standard ⌘0、Bigger ⌘=、Smaller ⌘-）。一次按键只
+生效一次，与 `⌘N` / `⌘,` 同一机制：AppKit 先拿到就由菜单处理，webview 收不到；
+webview 先拿到则 JS 处理器 `preventDefault`，WebKit 不再把它转给菜单（见
+`useGlobalShortcuts.ts`）。两条路径做的是同一件事（一档 / 复位），哪条先到
+结果都一样。阅读宽度**不给快捷键**：没有约定俗成的键位，
+造一个只会没人记得；它留在「显示」popover、General 与 View 菜单。

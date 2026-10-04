@@ -66,6 +66,8 @@ export interface SettingsProps {
   onChangeThemePreference: (preference: ThemePreference) => void;
   conversationFontSize: ConversationFontSize;
   onChangeConversationFontSize: (size: ConversationFontSize) => void;
+  conversationWidth: "compact" | "wide";
+  onChangeConversationWidth: (width: "compact" | "wide") => void;
   notifyOnGoalEnd: boolean;
   onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
   notifyOnApproval: boolean;
@@ -135,6 +137,8 @@ export function Settings({
   onChangeThemePreference,
   conversationFontSize,
   onChangeConversationFontSize,
+  conversationWidth,
+  onChangeConversationWidth,
   notifyOnGoalEnd,
   onChangeNotifyOnGoalEnd,
   notifyOnApproval,
@@ -213,6 +217,8 @@ export function Settings({
                   onChangeThemePreference={onChangeThemePreference}
                   conversationFontSize={conversationFontSize}
                   onChangeConversationFontSize={onChangeConversationFontSize}
+                  conversationWidth={conversationWidth}
+                  onChangeConversationWidth={onChangeConversationWidth}
                   notifyOnGoalEnd={notifyOnGoalEnd}
                   onChangeNotifyOnGoalEnd={onChangeNotifyOnGoalEnd}
                   notifyOnApproval={notifyOnApproval}

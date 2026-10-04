@@ -549,7 +549,9 @@ Galley 是桌面客户端，不应暴露不必要的网页线索：
   `-webkit-user-drag: none`）。
 - 页面缩放三层防御：`zoomHotkeysEnabled: false`（tauri.conf.json 显式断言）
   + Ctrl+wheel 拦截（Chromium/WebView2 的捏合缩放也走这条路）+ WKWebView
-  `gesturestart/gesturechange` 拦截（useGlobalShortcuts.ts）。
+  `gesturestart/gesturechange` 拦截（useGlobalShortcuts.ts）。空出来的
+  `⌘= / ⌘- / ⌘0` 2026-10-04 起改调对话字号（只缩放对话区，chrome 不动；
+  见 [overlays-and-settings](./overlays-and-settings.md) §10）。
 - conversation markdown、用户消息、code block、input / textarea、路径 / key /
   error detail 等内容区域必须保留可选择文本。Galley 是工作台，复制内容是核心任务。
 - 滚动条按平台分治：macOS 保持原生 overlay 滚动条，**禁止**写不带

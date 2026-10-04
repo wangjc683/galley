@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { type Dispatch, type SetStateAction, useEffect } from "react";
 
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
+import { stepConversationFontSize } from "@/lib/conversation-font-size";
 import { resetWindowLayout } from "@/lib/layout-reset";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { usePrefsStore } from "@/stores/prefs";
@@ -13,6 +14,16 @@ function shouldSkipGlobalContextMenuGuard(target: EventTarget | null): boolean {
   return !!target.closest(
     'input, textarea, select, [contenteditable], [role="textbox"], [data-galley-context-menu-trigger]',
   );
+}
+
+/** One conversation font-size tier up or down from the size current at
+ * call time (read from the store, so neither the keydown effect nor the
+ * menu listeners re-bind on every size change). No write at either end. */
+function stepFontSizePref(direction: 1 | -1): void {
+  const { conversationFontSize, setConversationFontSize } =
+    usePrefsStore.getState();
+  const next = stepConversationFontSize(conversationFontSize, direction);
+  if (next !== conversationFontSize) void setConversationFontSize(next);
 }
 
 export function useGlobalShortcuts({
@@ -30,6 +41,9 @@ export function useGlobalShortcuts({
   );
   const setActiveSession = useSessionsStore((s) => s.setActiveSession);
   const setConversationWidth = usePrefsStore((s) => s.setConversationWidth);
+  const setConversationFontSize = usePrefsStore(
+    (s) => s.setConversationFontSize,
+  );
   const checkForAppUpdate = useAppUpdateStore((s) => s.check);
 
   useEffect(() => {
@@ -60,9 +74,28 @@ export function useGlobalShortcuts({
   }, []);
 
   useEffect(() => {
+    // Conversation font size: ⌘= / ⌘+ up, ⌘− down, ⌘0 back to standard
+    // (Ctrl on Windows / Linux) — the keys browsers use for page zoom,
+    // free here because page zoom is off. `+` is taken as well as `=`
+    // because + needs Shift on US layouts and is its own key elsewhere.
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey && !e.ctrlKey) return;
-      if (e.key === "k" || e.key === "K") {
+      // macOS also binds these to View > Conversation Font Size, and
+      // ⌘N / ⌘, to their menu items. A keystroke still acts once:
+      // whichever of AppKit and the webview sees it first handles it,
+      // and preventDefault below keeps WebKit from passing a handled
+      // key on to the menu. Alt is excluded so AltGr (Ctrl+Alt on
+      // Windows) typing a character is never read as a shortcut.
+      if (!e.altKey && (e.key === "=" || e.key === "+")) {
+        e.preventDefault();
+        stepFontSizePref(1);
+      } else if (!e.altKey && e.key === "-") {
+        e.preventDefault();
+        stepFontSizePref(-1);
+      } else if (!e.altKey && e.key === "0") {
+        e.preventDefault();
+        void setConversationFontSize("standard");
+      } else if (e.key === "k" || e.key === "K") {
         e.preventDefault();
         togglePalette();
       } else if (e.key === ",") {
@@ -85,6 +118,7 @@ export function useGlobalShortcuts({
     setActiveSession,
     setScreen,
     setEmptyComposerFocusTick,
+    setConversationFontSize,
   ]);
 
   useEffect(() => {
@@ -131,6 +165,26 @@ export function useGlobalShortcuts({
         },
       ],
       [
+        "menu:font_size_small",
+        () => {
+          void setConversationFontSize("small");
+        },
+      ],
+      [
+        "menu:font_size_standard",
+        () => {
+          void setConversationFontSize("standard");
+        },
+      ],
+      [
+        "menu:font_size_large",
+        () => {
+          void setConversationFontSize("large");
+        },
+      ],
+      ["menu:font_size_bigger", () => stepFontSizePref(1)],
+      ["menu:font_size_smaller", () => stepFontSizePref(-1)],
+      [
         "menu:reset_layout",
         () => {
           void resetWindowLayout();
@@ -159,6 +213,7 @@ export function useGlobalShortcuts({
     setActiveSession,
     setScreen,
     setConversationWidth,
+    setConversationFontSize,
     setSettingsTab,
     checkForAppUpdate,
   ]);

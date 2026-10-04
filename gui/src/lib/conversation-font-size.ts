@@ -17,6 +17,17 @@ export function isConversationFontSize(
   );
 }
 
+/** One tier up (`1`) or down (`-1`), clamped at the ends — what
+ * ⌘= / ⌘− and the View menu's Bigger / Smaller do. */
+export function stepConversationFontSize(
+  size: ConversationFontSize,
+  direction: 1 | -1,
+): ConversationFontSize {
+  const index = CONVERSATION_FONT_SIZE_VALUES.indexOf(size) + direction;
+  const last = CONVERSATION_FONT_SIZE_VALUES.length - 1;
+  return CONVERSATION_FONT_SIZE_VALUES[Math.min(Math.max(index, 0), last)];
+}
+
 /**
  * `--conversation-block-gap` is the base unit for markdown's vertical
  * rhythm — every block margin in `MarkdownView`'s `PROSE_BASE` is a

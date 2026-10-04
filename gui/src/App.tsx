@@ -89,6 +89,7 @@ function App() {
   const paletteOpen = useUiStore((s) => s.paletteOpen);
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen);
   const requestLocate = useUiStore((s) => s.requestLocate);
+  const requestReview = useUiStore((s) => s.requestReview);
 
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
@@ -814,6 +815,9 @@ function App() {
           }
         }}
         onReRunHealthCheck={() => console.info("[palette] re-run health check")}
+        // LocalFileWorkspace owns the review and listens on the UI
+        // store; the palette renders outside its provider.
+        onReviewChanges={requestReview}
         onOpenSettings={() => openSettings()}
         onAttachGAFolder={() =>
           console.info("[palette] attach GA folder — wired in #10")

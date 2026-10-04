@@ -29,6 +29,14 @@ interface UiState {
    * be re-requested. Pure UI coordination, never persisted.
    */
   locateRequest: LocateRequest | null;
+
+  /**
+   * "Open the Git review" — bumped by the command palette, which App
+   * renders outside LocalFileWorkspace (the review's owner) and so
+   * cannot reach GitReviewContext. The owner subscribes and opens the
+   * panel on every bump. Pure UI coordination, never persisted.
+   */
+  reviewRequest: number;
 }
 
 export interface LocateRequest {
@@ -55,6 +63,8 @@ interface UiActions {
 
   requestLocate: (sessionId: string, messageId: string, query?: string) => void;
   clearLocate: () => void;
+
+  requestReview: () => void;
 }
 
 export type UiStore = UiState & UiActions;
@@ -66,6 +76,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   toasts: [],
   pendingPetMigrationTo: null,
   locateRequest: null,
+  reviewRequest: 0,
 
   setScreen: (s) => set({ screen: s }),
   setPaletteOpen: (o) => set({ paletteOpen: o }),
@@ -96,4 +107,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
       },
     }),
   clearLocate: () => set({ locateRequest: null }),
+
+  requestReview: () =>
+    set((state) => ({ reviewRequest: state.reviewRequest + 1 })),
 }));

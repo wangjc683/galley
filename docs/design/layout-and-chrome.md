@@ -23,7 +23,7 @@
 - Sidebar 用 `react-resizable-panels`，默认 20%，约束 14–30%；宽度持久化到 localStorage。
 - Sidebar **不可折叠**。多 session 是 Galley 的核心产品形态，隐藏 Sidebar 等于隐藏差异化；需要更少 chrome 时通过拖拽缩到 14%。
 - 右侧 Inspector 已退役。详情分散到各自最相关的上下文：Tool callout inline 展示工具细节，Approval Dock/Approval Card 处理审批，Runtime/Approval metadata 进入 Settings。
-- 主区默认只有 Conversation column；阅读宽度由 TopBar 的 compact / wide toggle 控制。
+- 主区默认只有 Conversation column；阅读宽度（compact / wide）在 MainHeader 的「显示」popover 里切换（另有 Settings → General 与 macOS View 菜单）。
   点击 Markdown 文件或顶部「改动」时可临时打开右侧阅读面板：主区至少 1080px 时支持拖拽调整，
   预览默认占 46%，全局记住比例，双击分隔线复位；
   否则进入内容工作台档的覆盖预览。关闭后恢复原对话布局。完整行为见
@@ -52,14 +52,15 @@
 - **Session title menu**：有 active session 时 title + `CaretDown` 是一个按钮，打开 session-scoped 菜单（Rename / Reinject Tools / Desktop Pet）。空状态渲染 italic muted "新对话"，不可点。Rename 进入 inline edit（Enter 提交 / Esc 取消）。
 - 右：两个清晰 group，最后才是 Windows window controls（不属于工具簇）：
   - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ 内核（2026-10-03 从 SidebarHeader 移入）→ Browser Control → Channels → 应用更新。只放有状态的东西。（2026-07-20：原列首的 YOLO 徽章随审批模式 per-session 化退役——审批模式的控件与状态合一，唯一入口是 Composer 的 LLM pill（审批模式并入其 popover，无独立控件），见 conversation.md §4.4。）
-  - **工具簇**（aria label：`视图与设置`）：conversation width toggle（compact / wide）→ 对话字号（`TextAa`，popover + 分段）→ 外观主题（popover + 分段）→ Supervisor SOP（`PlugsConnected` thin，tooltip 只写名字「Supervisor SOP」，2026-10-03 从 SidebarHeader 移入）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。常驻按钮共用 `TopBarIconButton`；宽度箭头图标为 14px（其余 16px）是刻意的视觉补偿——横向箭头光学上偏大，缩一档这些按钮才等重。SOP 放这里而不进状态簇：它没有状态，本质是「设置 → 集成」的深链，挨着齿轮读作「设置里一个常用页」；不按状态隐藏，两种运行时模式都在。
+  - **工具簇**（aria label：`视图与设置`）：改动（`GitDiff`，条件渲染，见下）→ 显示（`TextAa`，popover 内三行：阅读宽度 / 字号 / 主题，2026-10-04 由三个按钮合并）→ Supervisor SOP（`PlugsConnected` thin，tooltip 只写名字「Supervisor SOP」，2026-10-03 从 SidebarHeader 移入）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。按钮共用 `TopBarIconButton`，图标一律 16px thin（原宽度箭头的 14px 视觉补偿随宽度按钮退役）。SOP 放这里而不进状态簇：它没有状态，本质是「设置 → 集成」的深链，挨着齿轮读作「设置里一个常用页」；不按状态隐藏，两种运行时模式都在。
+  - **改动按钮只在知道仓库时出现**（2026-10-04）：当前会话所属项目（空状态取当前项目）有根目录，或本窗口审阅过某个仓库，才显示；改动面板开着时一直显示（要能关掉它）。否则不显示——不知道仓库时它只能打开一个「选择仓库」空面板。始终可用的入口是命令面板「查看仓库改动」。行为细节见 [conversation.md](./conversation.md#本地文件引用与-markdown-预览)。
   - 两组之间用 1px 竖向分隔线；没有任何状态项时不显示状态簇和分隔线。
 - Windows window controls（min / max-restore / close）贴 MainHeader 最右端 = 窗口右上；macOS 不渲染（由左上 overlay traffic light 接管窗口控制）。
 
 **两 header 共通视觉规约**
 - 状态控件统一视觉语法：文字 badge 统一 28px 高度、6px 圆角、12px 字号、border / hover / press 节奏；icon-only 状态统一 28px 方形按钮、Radix tooltip，且不显示浏览器默认 focus outline。`warning` / `error` / `success` / `neutral` 只表达状态，不给某个功能单独造身份视觉。
 - Topbar 内会打开 menu / popover 的 trigger，打开态需要保留轻微下沉 + press shadow，帮助用户把浮层和来源按钮对应起来。
-- **外观类偏好控件的标准形态**（2026-07-05，字号 / 主题已落地）：28px 图标按钮（`TopBarIconButton`）→ 小 popover → 共享 `SegmentedControl` 三选一。用 Popover 而非 DropdownMenu 是刻意的：选后**不自动关闭**，用户可来回切档对比即时效果。按钮面**不用 brand tint 表达「偏离默认」**——已定型的偏好不是可行动信息，常驻高亮是安静工作台的噪音；当前状态放 tooltip 和 popover 内（如「跟随系统」的解析结果做分段下方 caption）。新增外观控件时沿用此形态，不再发明新样式。
+- **外观类偏好控件的标准形态**（2026-07-05 定形，2026-10-04 合并为一个「显示」按钮）：一个 28px 图标按钮（`TopBarIconButton` + `TextAa`，tooltip「显示」）→ 一个小 popover → 每个偏好一行：左列 muted 小标签（`text-ui-tertiary`），右列共享 `SegmentedControl`，三个控件左缘对齐。现有三行：阅读宽度「紧凑 / 宽松」、字号「小 / 标准 / 大」、主题「跟随系统 / 浅色 / 深色」。用 Popover 而非 DropdownMenu 是刻意的：选后**不自动关闭**，用户可来回切档、看着背后的对话即时重排。按钮面**不用 brand tint 表达「偏离默认」**——已定型的偏好不是可行动信息，常驻高亮是安静工作台的噪音；当前状态只放在 popover 内（「跟随系统」的解析结果做主题分段下方 caption，只在选中「跟随系统」时出现）。新增外观偏好时加一行，不再加按钮、不再发明新样式。合并的理由与被否方案见 [devlog 2026-10-04](../devlog/2026-10-04-topbar-display-popover.md)。
 - `SegmentedControl` 选中态（全局，`ui/segmented-control.tsx`）：`bg-hover` 轨道上的白色浮起块 + `text-brand-strong` medium 文字。轨道不用 `bg-surface`——它和 `bg-elevated` 在浅色下几乎同白，放进 elevated 父容器（popover）时选中态会不可读。
 - icon-only controls 必须使用项目统一的 Radix tooltip（`TooltipLabel` / `IconButton` tooltip），不使用原生 `title` 作为 hover 提示（延迟 / 样式 / 出现时机不可控，会让相邻按钮反馈节奏不一致）；可访问名称用 `aria-label` 保留。
 - **不放 Command Palette 按钮**：Sidebar 已有 Search quick action，`⌘K` 全局可用；重复 click affordance 只增加 chrome 噪音。

@@ -229,8 +229,8 @@ export function LLMPill({
           side="top"
           sideOffset={6}
           onOpenAutoFocus={(event) => {
-            // Sibling-popover convention (ThemePreferenceMenu /
-            // ConversationFontSizeMenu): suppress Radix's open
+            // Sibling-popover convention (EffortPill / header
+            // DisplayMenu): suppress Radix's open
             // autofocus. Every row here is tabIndex={-1}, so the focus
             // would land on this container itself and WebKit paints
             // its default blue ring around the whole popover on

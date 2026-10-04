@@ -408,6 +408,23 @@ pub(crate) fn setup_background_mode(app: &tauri::App, autostart_launch: bool) ->
                 }
                 let _ = app.emit("menu:width_wide", ());
             }
+            // Font size tiers: same immediate checkmark flip as width.
+            // Bigger / Smaller are plain items; the GUI steps from the
+            // current size and pushes the new checkmarks back.
+            "font_size_small" | "font_size_standard" | "font_size_large" => {
+                let id = event.id.0.as_str();
+                #[cfg(target_os = "macos")]
+                if let Some(state) = app.try_state::<crate::app_menu::FontSizeMenuState>() {
+                    state.set_font_size(id.trim_start_matches("font_size_"));
+                }
+                let _ = app.emit(&format!("menu:{id}"), ());
+            }
+            "font_size_bigger" => {
+                let _ = app.emit("menu:font_size_bigger", ());
+            }
+            "font_size_smaller" => {
+                let _ = app.emit("menu:font_size_smaller", ());
+            }
             // Layout reset is GUI-driven (the sidebar split lives in
             // React), so this only forwards; useGlobalShortcuts calls
             // the `reset_window_layout` command plus the panel reset.

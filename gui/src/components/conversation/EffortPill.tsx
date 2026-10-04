@@ -167,7 +167,7 @@ export function EffortPill({
           side="top"
           sideOffset={6}
           onOpenAutoFocus={(event) => {
-            // Sibling-popover convention (LLMPill / ThemePreferenceMenu):
+            // Sibling-popover convention (LLMPill / header DisplayMenu):
             // suppress Radix's open autofocus. Every row is
             // tabIndex={-1}, so focus would land on the container and
             // WebKit paints its default ring around the whole popover.

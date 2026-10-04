@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import type { MessageRow, ToolEventRow } from "@/types/db";
 import type { ApprovalDecision } from "@/types/ipc";
 import type { RuntimeKind } from "@/types/session";
@@ -351,4 +352,15 @@ export async function setWidthMenuState(
   width: "compact" | "wide",
 ): Promise<void> {
   await invoke("set_width_menu_state", { width });
+}
+
+/**
+ * Mirror the conversation font size pref into the macOS menu bar's
+ * Conversation Font Size checkmarks (View menu). Same push pattern and
+ * best-effort contract as `setWidthMenuState`.
+ */
+export async function setFontSizeMenuState(
+  size: ConversationFontSize,
+): Promise<void> {
+  await invoke("set_font_size_menu_state", { size });
 }

@@ -17,9 +17,9 @@ import type { GoalBrief } from "@/types/goal";
 
 /**
  * Self-subscribing wrapper around the MainHeader, extracted from
- * `App.tsx`. Header-only concerns (width / font / theme toggles,
- * reinject, the pet toggle, app-update restart) select their stores
- * here; App passes down only what must stay single-instance at its
+ * `App.tsx`. Header-only concerns (the 显示 popover's width / font /
+ * theme, reinject, the pet toggle, app-update restart) select their
+ * stores here; App passes down only what must stay single-instance at its
  * level (goal state from `useGoalEffects`, channel aggregates from
  * `useChannelsStatus`, the engine indicator from `useLLMDisplay`, the
  * settings opener).
@@ -75,9 +75,16 @@ export function MainHeaderHost({
   const restartAppUpdate = useAppUpdateStore((s) => s.restart);
   const appUpdateStatus = useAppUpdateStore((s) => s.status);
 
+  // Changes shows only while there is a repository to open (project
+  // root or the one last reviewed) — without one the button only led to
+  // an empty "choose a repository" panel. It stays while the review is
+  // open so it can close it. The palette's 查看仓库改动 is always there.
+  const showChanges =
+    gitReview !== null && (gitReview.isOpen || gitReview.repositoryKnown);
+
   return (
     <MainHeader
-      onToggleChanges={gitReview?.toggle}
+      onToggleChanges={showChanges ? gitReview.toggle : undefined}
       changesOpen={gitReview?.isOpen}
       sessionTitle={sessionTitle}
       browserControlStatus={
@@ -105,10 +112,8 @@ export function MainHeaderHost({
         void restartAppUpdate();
       }}
       conversationWidth={conversationWidth}
-      onToggleConversationWidth={() => {
-        void setConversationWidth(
-          conversationWidth === "wide" ? "compact" : "wide",
-        );
+      onChangeConversationWidth={(width) => {
+        void setConversationWidth(width);
       }}
       conversationFontSize={conversationFontSize}
       onChangeConversationFontSize={(size) => {

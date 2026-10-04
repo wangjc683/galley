@@ -1,6 +1,6 @@
-//! macOS menu bar and the Conversation Width menu state, extracted from
-//! `lib.rs`. `install_macos_menu` is called from the `setup` hook
-//! (`app_setup`); menu item clicks are routed by the shared
+//! macOS menu bar and the Conversation Width / Font Size menu state,
+//! extracted from `lib.rs`. `install_macos_menu` is called from the
+//! `setup` hook (`app_setup`); menu item clicks are routed by the shared
 //! `on_menu_event` handler installed in `tray::setup_background_mode`.
 
 /// Handles to the Conversation Width check items in the macOS menu
@@ -40,11 +40,47 @@ pub(crate) fn set_width_menu_state(width: String, app: tauri::AppHandle) {
     let _ = (width, app);
 }
 
+/// Handles to the Conversation Font Size check items, the font-size twin
+/// of `WidthMenuState`: same GUI-owned pref, same outward-only mirror.
+/// The Bigger / Smaller items are plain items with nothing to mirror.
+#[cfg(target_os = "macos")]
+pub(crate) struct FontSizeMenuState {
+    small: tauri::menu::CheckMenuItem<tauri::Wry>,
+    standard: tauri::menu::CheckMenuItem<tauri::Wry>,
+    large: tauri::menu::CheckMenuItem<tauri::Wry>,
+}
+
+#[cfg(target_os = "macos")]
+impl FontSizeMenuState {
+    pub(crate) fn set_font_size(&self, size: &str) {
+        let _ = self.small.set_checked(size == "small");
+        let _ = self.standard.set_checked(size == "standard");
+        let _ = self.large.set_checked(size == "large");
+    }
+}
+
+/// Mirror the conversation font size pref into the macOS menu-bar
+/// checkmarks. Called by the GUI at hydrate and on every font size
+/// change; registered on all platforms, no-op without a native menu bar
+/// (same contract as `set_width_menu_state`).
+#[tauri::command]
+pub(crate) fn set_font_size_menu_state(size: String, app: tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::Manager;
+        if let Some(state) = app.try_state::<FontSizeMenuState>() {
+            state.set_font_size(&size);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (size, app);
+}
+
 /// macOS-only top menu bar. On macOS apps that don't install
 /// a menu look "half-native" — the menu bar shows generic
 /// Tauri default entries. We install a Galley-specific menu
 /// that mirrors the in-app actions (Settings / New Chat /
-/// Check for Updates / Conversation Width) plus standard
+/// Check for Updates / Conversation Width / Font Size) plus standard
 /// system items (Hide / Quit / Cut / Copy / Paste /
 /// Minimize / Zoom).
 ///
@@ -162,11 +198,58 @@ pub(crate) fn install_macos_menu(app: &tauri::App) -> tauri::Result<()> {
         wide: width_wide_item,
     });
 
+    // Same radio-style check items for the three font size tiers
+    // (initial "standard" = the prefs-store default; the GUI re-syncs
+    // via `set_font_size_menu_state`), then Bigger / Smaller steps.
+    // The accelerators are the in-app ones (useGlobalShortcuts handles
+    // the same keys for Windows / Linux; a keystroke acts once — see the
+    // comment there). ⌘0 sits on Standard because resetting IS picking
+    // Standard. Bigger shows ⌘= rather than ⌘+: Tauri parses accelerators
+    // into physical keys and has no `+` key, and ⌘= is the unshifted
+    // key US layouts press anyway (⌘+ still works through the webview).
+    let font_small_item = CheckMenuItemBuilder::new("Small")
+        .id("font_size_small")
+        .checked(false)
+        .build(app)?;
+    let font_standard_item = CheckMenuItemBuilder::new("Standard")
+        .id("font_size_standard")
+        .accelerator("Cmd+0")
+        .checked(true)
+        .build(app)?;
+    let font_large_item = CheckMenuItemBuilder::new("Large")
+        .id("font_size_large")
+        .checked(false)
+        .build(app)?;
+    let font_size_submenu = SubmenuBuilder::new(app, "Conversation Font Size")
+        .item(&font_small_item)
+        .item(&font_standard_item)
+        .item(&font_large_item)
+        .separator()
+        .item(
+            &MenuItemBuilder::new("Bigger")
+                .id("font_size_bigger")
+                .accelerator("Cmd+=")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new("Smaller")
+                .id("font_size_smaller")
+                .accelerator("Cmd+-")
+                .build(app)?,
+        )
+        .build()?;
+    app.manage(FontSizeMenuState {
+        small: font_small_item,
+        standard: font_standard_item,
+        large: font_large_item,
+    });
+
     // No Sidebar toggle here on purpose: the sidebar is not
     // collapsible by product decision (multi-session IS the
     // product shape — see docs/design/layout-and-chrome.md).
     let view_submenu = SubmenuBuilder::new(app, "View")
         .item(&width_submenu)
+        .item(&font_size_submenu)
         .separator()
         .item(&PredefinedMenuItem::fullscreen(app, None)?)
         .build()?;

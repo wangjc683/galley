@@ -45,6 +45,10 @@ export type GitReviewRequest =
 
 export const GitReviewContext = createContext<{
   isOpen: boolean;
+  /** A repository to open is known: the current project's root, or the
+   * one this window last reviewed. The header shows its Changes button
+   * only then (or while the review is open, so it can be closed). */
+  repositoryKnown: boolean;
   toggle: (source: HTMLElement) => void;
 } | null>(null);
 

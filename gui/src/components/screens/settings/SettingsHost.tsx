@@ -56,6 +56,8 @@ export function SettingsHost({
   const setConversationFontSize = usePrefsStore(
     (s) => s.setConversationFontSize,
   );
+  const conversationWidth = usePrefsStore((s) => s.conversationWidth);
+  const setConversationWidth = usePrefsStore((s) => s.setConversationWidth);
   const notifyOnGoalEnd = usePrefsStore((s) => s.notifyOnGoalEnd);
   const setNotifyOnGoalEnd = usePrefsStore((s) => s.setNotifyOnGoalEnd);
   const notifyOnApproval = usePrefsStore((s) => s.notifyOnApproval);
@@ -183,6 +185,10 @@ export function SettingsHost({
       conversationFontSize={conversationFontSize}
       onChangeConversationFontSize={(size) => {
         void setConversationFontSize(size);
+      }}
+      conversationWidth={conversationWidth}
+      onChangeConversationWidth={(width) => {
+        void setConversationWidth(width);
       }}
       notifyOnGoalEnd={notifyOnGoalEnd}
       onChangeNotifyOnGoalEnd={(enabled) => {
