@@ -1,39 +1,81 @@
+import type { ReactNode } from "react";
+
 import feishuLogoMaskUrl from "@/assets/feishu-logo-mask.png";
 import telegramLogoMaskUrl from "@/assets/telegram-logo-mask.png";
+import type { ImSupervisorPlatform } from "@/lib/im-supervisor";
 import { cn } from "@/lib/utils";
+
+/**
+ * A platform's mark, monochrome in `currentColor` and sized by the caller
+ * (`size-*` in `className`): 20px in the Settings card tiles below, 14px
+ * in the topbar Channels menu rows, where it shares the action icons'
+ * column. Never in brand colour — besides the Settings rule, WeChat's
+ * green would read as the 已接入 health green next to it.
+ *
+ * `cutout` is the colour of the surface the mark sits on: WeChat's front
+ * bubble is outlined in it so the two bubbles read apart.
+ */
+export function ChannelPlatformMark({
+  platform,
+  className,
+  cutout = "var(--color-surface)",
+}: {
+  platform: ImSupervisorPlatform;
+  className?: string;
+  cutout?: string;
+}) {
+  if (platform === "wechat") {
+    return <WeChatMark className={className} cutout={cutout} />;
+  }
+  if (platform === "discord") return <DiscordMark className={className} />;
+  return (
+    <MaskMark
+      url={platform === "feishu" ? feishuLogoMaskUrl : telegramLogoMaskUrl}
+      className={className}
+    />
+  );
+}
 
 export function WeChatGlyph({ active }: { active: boolean }) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors duration-(--motion-fast) ease-firm",
-        active ? "text-ink" : "text-ink-soft",
-      )}
-    >
-      <svg viewBox="0 0 24 24" className="size-5" fill="none">
-        <path
-          fill="currentColor"
-          d="M10.2 3.8c-4.6 0-8.3 2.9-8.3 6.4 0 2 1.2 3.7 3.1 4.9l-.6 3.1 3.3-1.6c.8.2 1.6.3 2.5.3 4.6 0 8.3-2.9 8.3-6.4s-3.7-6.7-8.3-6.7Z"
-        />
-        <path
-          fill="currentColor"
-          stroke="var(--color-surface)"
-          strokeLinejoin="round"
-          strokeWidth="1.35"
-          d="M15 10.1c4 0 7.2 2.5 7.2 5.7 0 1.8-1 3.4-2.7 4.4l.5 2.4-2.7-1.3c-.7.2-1.5.3-2.3.3-4 0-7.2-2.6-7.2-5.8s3.2-5.7 7.2-5.7Z"
-        />
-        <circle cx="7.3" cy="9.1" r="1.05" className="fill-elevated" />
-        <circle cx="12.2" cy="9.1" r="1.05" className="fill-elevated" />
-        <circle cx="13.1" cy="15.5" r="0.9" className="fill-elevated" />
-        <circle cx="17.4" cy="15.5" r="0.9" className="fill-elevated" />
-      </svg>
-    </span>
+    <CardGlyph active={active}>
+      <ChannelPlatformMark platform="wechat" className="size-5" />
+    </CardGlyph>
   );
 }
 
 export function TelegramGlyph({ active }: { active: boolean }) {
   return (
+    <CardGlyph active={active}>
+      <ChannelPlatformMark platform="telegram" className="size-5" />
+    </CardGlyph>
+  );
+}
+
+export function DiscordGlyph({ active }: { active: boolean }) {
+  return (
+    <CardGlyph active={active}>
+      <ChannelPlatformMark platform="discord" className="size-5" />
+    </CardGlyph>
+  );
+}
+
+export function FeishuGlyph({ active }: { active: boolean }) {
+  return (
+    <CardGlyph active={active}>
+      <ChannelPlatformMark platform="feishu" className="size-5" />
+    </CardGlyph>
+  );
+}
+
+function CardGlyph({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
     <span
       aria-hidden="true"
       className={cn(
@@ -41,20 +83,36 @@ export function TelegramGlyph({ active }: { active: boolean }) {
         active ? "text-ink" : "text-ink-soft",
       )}
     >
-      <span
-        className="size-5 bg-current"
-        style={{
-          WebkitMaskImage: `url(${telegramLogoMaskUrl})`,
-          WebkitMaskPosition: "center",
-          WebkitMaskRepeat: "no-repeat",
-          WebkitMaskSize: "contain",
-          maskImage: `url(${telegramLogoMaskUrl})`,
-          maskPosition: "center",
-          maskRepeat: "no-repeat",
-          maskSize: "contain",
-        }}
-      />
+      {children}
     </span>
+  );
+}
+
+function WeChatMark({
+  className,
+  cutout,
+}: {
+  className?: string;
+  cutout: string;
+}) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none">
+      <path
+        fill="currentColor"
+        d="M10.2 3.8c-4.6 0-8.3 2.9-8.3 6.4 0 2 1.2 3.7 3.1 4.9l-.6 3.1 3.3-1.6c.8.2 1.6.3 2.5.3 4.6 0 8.3-2.9 8.3-6.4s-3.7-6.7-8.3-6.7Z"
+      />
+      <path
+        fill="currentColor"
+        stroke={cutout}
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+        d="M15 10.1c4 0 7.2 2.5 7.2 5.7 0 1.8-1 3.4-2.7 4.4l.5 2.4-2.7-1.3c-.7.2-1.5.3-2.3.3-4 0-7.2-2.6-7.2-5.8s3.2-5.7 7.2-5.7Z"
+      />
+      <circle cx="7.3" cy="9.1" r="1.05" className="fill-elevated" />
+      <circle cx="12.2" cy="9.1" r="1.05" className="fill-elevated" />
+      <circle cx="13.1" cy="15.5" r="0.9" className="fill-elevated" />
+      <circle cx="17.4" cy="15.5" r="0.9" className="fill-elevated" />
+    </svg>
   );
 }
 
@@ -64,47 +122,32 @@ export function TelegramGlyph({ active }: { active: boolean }) {
  * single silhouette, so `fill="currentColor"` already gives the monochrome,
  * theme-following result a mask PNG would, without shipping a binary asset.
  */
-export function DiscordGlyph({ active }: { active: boolean }) {
+function DiscordMark({ className }: { className?: string }) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors duration-(--motion-fast) ease-firm",
-        active ? "text-ink" : "text-ink-soft",
-      )}
-    >
-      <svg viewBox="0 0 24 24" className="size-5" fill="none">
-        <path
-          fill="currentColor"
-          d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057 13.0176 13.0176 0 0 1-1.8722-.8923.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.198.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.0765.0765 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.0776.0776 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286ZM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189Zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"
-        />
-      </svg>
-    </span>
+    <svg viewBox="0 0 24 24" className={className} fill="none">
+      <path
+        fill="currentColor"
+        d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057 13.0176 13.0176 0 0 1-1.8722-.8923.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.198.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.0765.0765 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.0776.0776 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286ZM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189Zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"
+      />
+    </svg>
   );
 }
 
-export function FeishuGlyph({ active }: { active: boolean }) {
+/** Feishu / Telegram: the multi-colour logos flattened into a mask. */
+function MaskMark({ url, className }: { url: string; className?: string }) {
   return (
     <span
-      aria-hidden="true"
-      className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-sm transition-colors duration-(--motion-fast) ease-firm",
-        active ? "text-ink" : "text-ink-soft",
-      )}
-    >
-      <span
-        className="size-5 bg-current"
-        style={{
-          WebkitMaskImage: `url(${feishuLogoMaskUrl})`,
-          WebkitMaskPosition: "center",
-          WebkitMaskRepeat: "no-repeat",
-          WebkitMaskSize: "contain",
-          maskImage: `url(${feishuLogoMaskUrl})`,
-          maskPosition: "center",
-          maskRepeat: "no-repeat",
-          maskSize: "contain",
-        }}
-      />
-    </span>
+      className={cn("bg-current", className)}
+      style={{
+        WebkitMaskImage: `url(${url})`,
+        WebkitMaskPosition: "center",
+        WebkitMaskRepeat: "no-repeat",
+        WebkitMaskSize: "contain",
+        maskImage: `url(${url})`,
+        maskPosition: "center",
+        maskRepeat: "no-repeat",
+        maskSize: "contain",
+      }}
+    />
   );
 }

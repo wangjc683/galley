@@ -369,6 +369,8 @@ Runtime tab 的任何问题）。
     `fill="currentColor"` 直接吃主题色（走 `WeChatGlyph` 的内联先例）；
     飞书 / Telegram 用 mask 是因为原 logo 多色需要先压平。视觉结果一致：
     单色、随 active 在 `text-ink` / `text-ink-soft` 间切换、规避品牌色。
+    四个图形收在 `ChannelPlatformMark`（尺寸由调用方定），顶栏 Channels
+    菜单用同一套的 14px 版，见 [layout-and-chrome](./layout-and-chrome.md) Channels Indicator。
   - **英文界面里的退出命令保留中文原文**：`dcapp.py` 的退出词表只认中文
     （`退出频道` / `退出该频道` / `退出子区` 等六个，频道与子区通用），英文
     文案若写成 "leave channel" 会给出一条发不出去的命令；en 保留中文命令本体。

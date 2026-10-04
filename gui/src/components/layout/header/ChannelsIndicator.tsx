@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowsClockwise, ChatCircleText, Gear } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 
+import { ChannelPlatformMark } from "@/components/screens/settings/im/Glyphs";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -38,11 +39,14 @@ import {
  *   - Set up: a lamp, lit while at least one platform runs, unlit when
  *     all are paused. Connecting / waiting for a scan / needs attention
  *     keep their text badges. Either form opens a status menu
- *     (`status-menu.ts`): one row per configured platform with its state
- *     (the Settings card words), a separator, then 重启 Channels behind
- *     the same confirm Settings uses and 设置…. Only platforms the user
- *     set up are listed — no placeholders for the rest (2026-05-31: not
- *     a platform inventory).
+ *     (`status-menu.ts`): one row per configured platform — its mark
+ *     (the Settings card glyph, monochrome, 14px so it shares the action
+ *     icons' column), name, and state (the Settings card words) in a
+ *     right-hand column, with a paused platform's mark and name dimmed
+ *     (the lamp's grammar per row) — then a separator, 重启 Channels
+ *     behind the same confirm Settings uses, and 设置…. Only platforms
+ *     the user set up are listed — no placeholders for the rest
+ *     (2026-05-31: not a platform inventory).
  *
  * No status dot on the chat glyph: a dot there reads as unread messages.
  */
@@ -142,7 +146,10 @@ export function ChannelsIndicator({
                 event.preventDefault();
               }
             }}
-            className={STATUS_MENU_CONTENT}
+            // Narrower floor than the shared 200px: with the marks the
+            // rows run about 166px, and the old slack all landed in the
+            // gap between a name and its state.
+            className={cn(STATUS_MENU_CONTENT, "min-w-[168px]")}
           >
             {loadError && (
               <div
@@ -159,27 +166,50 @@ export function ChannelsIndicator({
                 </div>
               </div>
             )}
-            {configured.map((channel) => (
-              <div key={channel.platform} className={STATUS_MENU_ROW}>
-                <div className="flex items-baseline justify-between gap-6">
-                  <span>{channelPlatformLabel(channel.platform, imCopy)}</span>
-                  <span
-                    className={cn(
-                      "shrink-0 text-ui-meta",
-                      channelStateClass(channel.state),
-                    )}
-                  >
-                    {channelStateLabel(channel.state, imCopy)}
-                  </span>
-                </div>
-                {(channel.state === "error" || channel.state === "expired") &&
-                  channel.lastError && (
-                    <div className="mt-0.5 line-clamp-2 select-text break-words text-ui-tertiary leading-snug text-ink-muted">
-                      {channel.lastError}
+            {configured.map((channel) => {
+              // The lamp's grammar per row: a platform with no live
+              // connection that is not in trouble either (paused, or not
+              // started yet) dims its mark to 50% and its name a step.
+              const dimmed =
+                channel.state === "stopped" ||
+                channel.state === "not_connected";
+              return (
+                <div key={channel.platform} className={STATUS_MENU_ROW}>
+                  <div className="flex items-center gap-2">
+                    <ChannelPlatformMark
+                      platform={channel.platform}
+                      cutout="var(--color-elevated)"
+                      className={cn(
+                        "size-3.5 shrink-0 text-ink-muted",
+                        dimmed && "opacity-50",
+                      )}
+                    />
+                    <div className="flex min-w-0 flex-1 items-baseline justify-between gap-4">
+                      <span className={cn(dimmed && "text-ink-soft")}>
+                        {channelPlatformLabel(channel.platform, imCopy)}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 text-ui-meta",
+                          channelStateClass(channel.state),
+                        )}
+                      >
+                        {channelStateLabel(channel.state, imCopy)}
+                      </span>
                     </div>
-                  )}
-              </div>
-            ))}
+                  </div>
+                  {/* Indented to the name column. A long error may
+                      widen the menu up to its 300px cap: it is the
+                      abnormal case, and the full text beats tidiness. */}
+                  {(channel.state === "error" || channel.state === "expired") &&
+                    channel.lastError && (
+                      <div className="mt-0.5 line-clamp-2 select-text break-words pl-5.5 text-ui-tertiary leading-snug text-ink-muted">
+                        {channel.lastError}
+                      </div>
+                    )}
+                </div>
+              );
+            })}
             <DropdownMenu.Separator className={STATUS_MENU_SEPARATOR} />
             {canRestart && (
               <DropdownMenu.Item
