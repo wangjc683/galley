@@ -8,7 +8,7 @@
 // shared rule now lives here exactly once:
 //
 //   - tool-event construction (defensive narrowing, id resolution,
-//     ≤500-char result preview, denial detection)
+//     ≤500-char result preview, denial detection, browser tab facts)
 //   - the final-answer-turn gate (`no_tool` / zero tools)
 //   - empty-final-answer → null normalization
 //   - field presence normalization (undefined vs omitted)
@@ -22,6 +22,7 @@
 // The round-trip invariant "live turn === restored turn for the same
 // data" is pinned by agent-turn.test.ts.
 
+import { browserFactsFromResult } from "@/lib/browser-site";
 import { settledToolStatus, toolErrorDisplay } from "@/lib/tool-outcome";
 import type { AgentTurn, ConversationToolEvent } from "@/types/conversation";
 
@@ -68,20 +69,26 @@ export function toolEventsFromRaw(
     const status = settledToolStatus(result?.content);
     const error =
       status === "failed-historical" ? toolErrorDisplay(result?.content) : null;
+    const name = typeof tc.toolName === "string" ? tc.toolName : "(unknown)";
+    const args = (tc.args as Record<string, unknown>) ?? {};
+    // Browser tab facts come from the full content: the 500-char
+    // preview below cuts a scan's tab list off (lib/browser-site.ts).
+    const browser = browserFactsFromResult(name, args, result?.content);
     return {
       id,
-      name: typeof tc.toolName === "string" ? tc.toolName : "(unknown)",
+      name,
       status,
       // Headline-first error rendering (#22): the one-line cause rides
       // the callout's summary slot (collapsed lead + expanded lead),
       // the decoded body replaces the raw-envelope preview.
       summary: error?.headline,
       errorDetail: error?.detail,
-      args: (tc.args as Record<string, unknown>) ?? {},
+      args,
       resultPreview: previewFromContent(result?.content),
       ...(typeof tc.resolvedPath === "string" && tc.resolvedPath
         ? { resolvedPath: tc.resolvedPath }
         : {}),
+      ...(browser ? { browser } : {}),
     };
   });
 }

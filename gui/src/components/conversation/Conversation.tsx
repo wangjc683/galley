@@ -20,6 +20,10 @@ import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubb
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import {
+  BrowserSitesContext,
+  buildBrowserSiteResolver,
+} from "@/lib/browser-site";
+import {
   WrittenFilesContext,
   buildWrittenFileResolver,
 } from "@/lib/written-files";
@@ -694,9 +698,15 @@ export function Conversation({
   // bridge-recorded absolute path (lib/written-files.ts), so a delivery
   // like `./汕尾旅游指南.md` opens even when the reply skipped the full path.
   const writtenFiles = useMemo(() => buildWrittenFileResolver(turns), [turns]);
+  // A script step names its tab only by id; the site comes from the
+  // session's most recent tab list (lib/browser-site.ts), so the
+  // resolution is a whole-session pass, not a per-pill one.
+  const browserSites = useMemo(() => buildBrowserSiteResolver(turns), [turns]);
   return (
     <WrittenFilesContext.Provider value={writtenFiles}>
-      <div>{rendered}</div>
+      <BrowserSitesContext.Provider value={browserSites}>
+        <div>{rendered}</div>
+      </BrowserSitesContext.Provider>
     </WrittenFilesContext.Provider>
   );
 }

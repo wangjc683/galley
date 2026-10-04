@@ -1588,6 +1588,7 @@ export const enCopy: AppCopy = {
     waitingApproval: "Waiting for approval",
     failed: "Failed",
     denied: "Denied",
+    browserTabCount: (count) => `${count} tab${count === 1 ? "" : "s"}`,
     turnProtocolFailureLead:
       "Turn protocol error: this turn's tool call came back as plain text and never reached the engine.",
     turnProtocolFailureRaw: "Raw output",

@@ -26,6 +26,29 @@
     不可靠。终裁：审计元数据放在审计发生的地方（展开体首行），静止行
     没有任何时隐时现的元素；**披露 caret 贴着它所属的文字**，与
     RunFoldHeader、TurnMarker 同一条规则。
+  - **浏览器步骤的预览是网站**（2026-10-04）：GA 的 `web_scan` /
+    `web_execute_js` 没有任何参数指向网页（`web_scan` 只有 `tabs_only` /
+    `switch_tab_id` / `text_only`，此前读 `query` / `url` 的分支从没命中），
+    网站在**结果**里，由 `gui/src/lib/browser-site.ts` 读出：
+    - `web_scan`：`页面标题 · 主机名`，如「读取网页 · 豆瓣电影 Top 250 ·
+      movie.douban.com」。扫描当场读的就是这一页，标题新鲜。
+    - `web_execute_js`：**只给主机名**。结果只带 `tab_id`，按同一会话里
+      最近一次标签页列表对回网站；标题来自上一次扫描，页内跳转就过期
+      （JC 的数据里下一次扫描换了标题的占 38%，换了主机名的 17%，多数是
+      执行跳转的那一步本身——它确实跑在旧页上）。扩展的开标签页命令
+      （`{"cmd": "tabs", "method": "create"}`）显示新开的那个站。
+    - 只列标签页、没读页面的步骤（`tabs_only` 扫描、扩展的标签页列表命令）
+      显示「N 个标签页」。
+    - 对不上就**什么都不加**，不猜：之前没见过标签页列表、标签页已不在最新
+      列表里、扫描的当前标签页已失效、结果被截断、`cdp` / `batch` 这类自带
+      目标标签页的扩展命令。
+    - 主机名去掉端口和开头的 `www.`；标题只是地址（无 `<title>` 的页面）
+      时不重复显示。行宽不够时**标题先吃省略号，主机名保留**——「哪个网站」
+      是主机名回答的，标题只是更好读的页名。两段都留在预览的 ink-muted，
+      hover 时只有标签提墨，与其他工具预览一致。
+    - 只进 inline pill：block 态里浏览器工具只有三种，GA 错误信封（无标签页
+      信息）、denied（无结果）、待审批（工具还没跑）。审批卡显示目标网站
+      要靠 `switch_tab_id` 回查，可能过期，留给审批面单独裁决。
 - **block callout**（`BlockToolCallout`）：一切需要注意力的状态
   （waiting_approval / failed / running / denied）。左 3px 状态竖条 +
   1px 边框 + 8px 圆角（`rounded-callout`）；waiting / failed 额外带

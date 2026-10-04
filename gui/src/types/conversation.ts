@@ -73,7 +73,46 @@ export interface ConversationToolEvent {
   /** Approval ID — present when status === "waiting_approval"; sent back
    * via ApprovalResponseCommand. */
   approvalId?: string;
+  /** What a settled `web_scan` / `web_execute_js` result says about the
+   * browser's tabs, parsed from the FULL result at construction (the
+   * ≤500-char resultPreview cuts a scan's tab list off). Absent for
+   * every other tool and for browser results that carry no tab facts
+   * (error envelopes, denials). lib/browser-site.ts turns these into
+   * the pill's site preview. */
+  browser?: BrowserFacts;
 }
+
+/** One browser tab as GA reports it. `id` is normalized to a string —
+ * scans report string ids, the extension's tab commands numbers. */
+export interface BrowserTab {
+  id: string;
+  url: string;
+  title: string;
+}
+
+/**
+ * Tab facts of one browser tool result (lib/browser-site.ts parses them):
+ *
+ *   scan      `web_scan`: the full tab list plus the tab it read
+ *             (`activeTabId`); `tabsOnly` scans read no page.
+ *   tab-list  `web_execute_js` running the extension's tab-list
+ *             command (`{"cmd": "tabs"}`): a full list, no page read.
+ *   tab-open  `web_execute_js` running `{"cmd": "tabs", "method":
+ *             "create"}`: the tab it opened.
+ *   script    any other `web_execute_js`: the tab the script ran in
+ *             (`tabId`, null when GA reported none) and tabs that
+ *             connected while it ran (`newTabs`, only those with a URL).
+ */
+export type BrowserFacts =
+  | {
+      kind: "scan";
+      tabsOnly: boolean;
+      activeTabId: string | null;
+      tabs: BrowserTab[];
+    }
+  | { kind: "tab-list"; tabs: BrowserTab[] }
+  | { kind: "tab-open"; tab: BrowserTab }
+  | { kind: "script"; tabId: string | null; newTabs: BrowserTab[] };
 
 /**
  * Audit metadata for any persisted write. Three-field tuple persisted in

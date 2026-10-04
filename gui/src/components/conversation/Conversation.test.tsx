@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { Conversation } from "./Conversation";
+import { toolEventsFromRaw } from "@/lib/agent-turn";
 import { LocalFilesContext } from "@/lib/local-files";
 import type { AgentTurn, Turn } from "@/types/conversation";
 
@@ -99,5 +100,66 @@ describe("Conversation step marker disclosure", () => {
     expect(tag).not.toContain('role="button"');
     expect(tag).not.toContain("tabindex");
     expect(tag).not.toContain("aria-expanded");
+  });
+});
+
+describe("Conversation browser step site", () => {
+  // Sanitized GA results (lib/browser-site.test.ts holds the full set).
+  const scan = (tabsOnly: boolean) =>
+    `{"status": "success", "metadata": {"tabs_count": 2, "tabs": [{"id": "11", "url": "https://movie.douban.com/top250", "title": "豆瓣电影 Top 250"}, {"id": "12", "url": "https://www.google.com/", "title": "Google"}], "active_tab": "11"}}` +
+    (tabsOnly ? "" : "\n```html\n豆瓣电影 Top 250\n```");
+
+  function render(
+    steps: { name: string; args: Record<string, unknown>; content: string }[],
+  ): string {
+    const turns: Turn[] = [
+      { role: "user", content: "看看豆瓣电影榜单" },
+      ...steps.map(
+        (step, i): Turn => ({
+          role: "agent",
+          turnIndex: i + 1,
+          finalAnswer: null,
+          summary: `第 ${i + 1} 步`,
+          tools: toolEventsFromRaw(
+            [{ toolName: step.name, args: step.args }],
+            [{ content: step.content }],
+            "t-",
+          ),
+        }),
+      ),
+    ];
+    return renderToStaticMarkup(
+      <Tooltip.Provider>
+        <LocalFilesContext.Provider value={() => undefined}>
+          <Conversation turns={turns} />
+        </LocalFilesContext.Provider>
+      </Tooltip.Provider>,
+    );
+  }
+
+  it("puts the page title and host on a scan, the host on a script", () => {
+    const html = render([
+      { name: "web_scan", args: { switch_tab_id: "11" }, content: scan(false) },
+      {
+        name: "web_execute_js",
+        args: { script: "document.title" },
+        content: `{"status": "success", "js_return": "豆瓣电影 Top 250", "tab_id": "11"}`,
+      },
+    ]);
+    expect(html).toContain("· 豆瓣电影 Top 250");
+    expect(html.split("· movie.douban.com").length - 1).toBe(2);
+  });
+
+  it("counts tabs on a tab-list scan and shows nothing for an unknown tab", () => {
+    const html = render([
+      { name: "web_scan", args: { tabs_only: true }, content: scan(true) },
+      {
+        name: "web_execute_js",
+        args: { script: "document.title" },
+        content: `{"status": "success", "js_return": 1, "tab_id": "99"}`,
+      },
+    ]);
+    expect(html).toContain("· 2 个标签页");
+    expect(html).not.toContain("douban.com");
   });
 });

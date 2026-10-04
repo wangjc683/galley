@@ -1518,6 +1518,9 @@ export const zhCopy = {
     waitingApproval: "等待审批",
     failed: "失败",
     denied: "已拒绝",
+    /** 只列标签页的浏览器步骤（`web_scan` 的 tabs_only、扩展的标签页
+     *  列表命令）没读任何页面，工具条预览报标签页数而不是网站。 */
+    browserTabCount: (count: number) => `${count} 个标签页`,
     /** #22：模型经第三方代理把工具调用当纯文本吐出时，正文只剩
      *  原始 markup。散文渲染换成这行说明 + 折叠原文。 */
     turnProtocolFailureLead:

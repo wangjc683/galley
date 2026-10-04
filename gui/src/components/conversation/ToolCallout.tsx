@@ -23,6 +23,7 @@ import { LiveDots } from "@/components/conversation/LiveIndicators";
 import { LocalFileReference } from "@/components/conversation/LocalFileReference";
 import { PatchView } from "@/components/conversation/diff/PatchView";
 import { IconButton } from "@/components/ui/button";
+import { BrowserSitesContext } from "@/lib/browser-site";
 import { useCopy } from "@/lib/i18n";
 import { previewKindByPath } from "@/lib/local-file-path";
 import { LocalFilesContext } from "@/lib/local-files";
@@ -501,8 +502,8 @@ function ResultBlock({ content }: { content: string }) {
  *
  * Icons: web_scan (read) vs web_execute_js (act) get different
  * glyphs (GlobeSimple vs CursorClick) so the two browser tools are
- * distinguishable at a glance — query/script arg differentiation
- * alone is unreliable when arg-preview is empty.
+ * distinguishable at a glance — both previews can be the same site,
+ * or empty when the tab is unknown.
  *
  * Unknown / future GA tools fall back to a name-only pill via
  * `TOOL_META[name] ?? null`; no icon, no Chinese label, just the
@@ -524,7 +525,7 @@ const TOOL_META: Record<string, { icon: Icon; zh: string }> = {
  * Compact single-line representation of a settled, read-only tool
  * invocation. Two-zone layout:
  *
- *   [Icon] 读取网页 · "电影 Drama 评价"            web_scan  ▾
+ *   [Icon] 读取网页 · 豆瓣电影 Top 250 · movie.douban.com  web_scan ▾
  *   └─ left zone (flex-grow): icon + zh label + arg preview
  *                              └─ user-facing prose register
  *                                                          └─ right zone
@@ -558,7 +559,20 @@ function InlineToolPill({
   const ToolIcon = meta?.icon;
   const toolLabel =
     (copy.tools as Record<string, string>)[tool.name] ?? meta?.zh;
-  const preview = previewArgs(tool.name, tool.args);
+  // Browser steps preview the site they touched, read from the results
+  // across the session (lib/browser-site.ts) — GA's browser tools take
+  // no URL argument, so previewArgs has nothing to offer them. A step
+  // that only listed tabs reports the count instead; an unresolved tab
+  // shows nothing.
+  const resolveBrowserStep = useContext(BrowserSitesContext);
+  const browserStep = resolveBrowserStep?.(tool) ?? null;
+  const site = browserStep?.kind === "site" ? browserStep : null;
+  const preview =
+    browserStep?.kind === "tabs"
+      ? copy.conversation.browserTabCount(browserStep.count)
+      : site
+        ? null
+        : previewArgs(tool.name, tool.args);
   // A settled file_write / file_patch knows where the file went (the
   // bridge resolved it against GA's cwd, 2026-09-17). The step is then
   // the one entrance that never depends on the model spelling the path
@@ -635,17 +649,38 @@ function InlineToolPill({
           to — the same rule the RunFoldHeader and TurnMarker follow
           (2026-09-16). The button still spans the row for hover. */}
       {ToolIcon && <ToolIcon size={13} weight="thin" className="shrink-0" />}
-      <span className="min-w-0 truncate [font-size:var(--conversation-tool-label-size)]">
-        {toolLabel ?? (
-          // Unknown tool: surface the GA name itself as the
-          // primary label (mono) so the pill still has a usable
-          // identity — better than a blank chip.
-          <span className="font-mono">{tool.name}</span>
-        )}
-        {preview && (
-          <span className="ml-1.5 text-ink-muted">· {preview}</span>
-        )}
-      </span>
+      {site ? (
+        // Site preview: title, then host. When the row runs out of
+        // room the title takes the ellipsis and the host stays — the
+        // host is the answer to "which website", the title only the
+        // friendlier name of the page. Both keep the preview's muted
+        // ink while the label lifts on hover.
+        <span className="flex min-w-0 items-baseline overflow-hidden [font-size:var(--conversation-tool-label-size)]">
+          <span className="shrink-0">{toolLabel}</span>
+          {site.title && (
+            <span className="ml-1.5 min-w-0 truncate text-ink-muted">
+              · {site.title}
+            </span>
+          )}
+          {site.host && (
+            <span className="ml-1.5 shrink-0 text-ink-muted">
+              · {site.host}
+            </span>
+          )}
+        </span>
+      ) : (
+        <span className="min-w-0 truncate [font-size:var(--conversation-tool-label-size)]">
+          {toolLabel ?? (
+            // Unknown tool: surface the GA name itself as the
+            // primary label (mono) so the pill still has a usable
+            // identity — better than a blank chip.
+            <span className="font-mono">{tool.name}</span>
+          )}
+          {preview && (
+            <span className="ml-1.5 text-ink-muted">· {preview}</span>
+          )}
+        </span>
+      )}
       <CaretDown
         size={10}
         weight="thin"
@@ -729,7 +764,8 @@ function InlineToolPill({
 /**
  * Pick the most useful single-line arg preview for a given tool.
  * Tool-specific rules — each tool exposes its primary input
- * differently and some tools (web_execute_js's JS code,
+ * differently and some tools (the browser tools, whose site comes
+ * from their results instead — see InlineToolPill;
  * update_working_checkpoint's nested args) have no preview worth
  * showing.
  *
@@ -760,16 +796,13 @@ function previewArgs(
     case "file_write":
     case "file_patch":
       return truncateKeepTail(get("path"));
-    case "web_scan": {
-      // Quote-wrap query so it reads as user-typed text vs raw URL.
-      const q = get("query");
-      if (q) return truncate(`"${q}"`);
-      return truncate(get("url"));
-    }
+    case "web_scan":
     case "web_execute_js":
-      // JS code as a preview is uninformative (long, syntax-heavy)
-      // — the icon + "执行网页脚本" label already conveys the action.
-      // Full code lives one click away in the expanded ArgsBlock.
+      // No arg names the page: web_scan takes only tabs_only /
+      // switch_tab_id / text_only (a query / url reading here never
+      // matched anything), and a script's JS is long, syntax-heavy
+      // and uninformative. The site preview comes from the results
+      // (lib/browser-site.ts); full args stay one click away.
       return null;
     case "code_run":
       // First non-comment, non-empty line of the script. GA scripts
