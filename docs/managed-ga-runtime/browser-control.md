@@ -54,7 +54,8 @@ Rules:
   invitation banner. Both say what the user gains, not that something is
   broken (2026-10-04: the earlier warning-tone 「待连接」 read as a fault). No
   motion, no dismiss, no modal spam, no red. Once set up, the entry is a lamp:
-  lit while the extension is connected, unlit while it is not. Exact rules:
+  lit (the plain thin glyph, like every other topbar icon) while the extension
+  is connected, dimmed to half opacity while it is not. Exact rules:
   [layout-and-chrome §4.1](../design/layout-and-chrome.md) Browser Control
   Indicator.
 - The success test must be deterministic and model-free: verify extension
@@ -208,7 +209,7 @@ Chinese copy (source of truth: `gui/src/i18n/locales/zh.ts`):
 ```text
 TopBar never set up: 浏览器控制 · 待解锁 (brand badge, tooltip 解锁浏览器控制)
 Invitation banner: 让 Galley 用你已登录的浏览器办事：查资料、填表单、操作网页后台。 / 解锁浏览器控制
-TopBar set up: PuzzlePiece lamp, lit while connected; tooltip 浏览器控制已可用 / 已配置，浏览器未打开
+TopBar set up: PuzzlePiece lamp, plain while connected, half opacity while not; tooltip 浏览器控制已可用 / 已配置，浏览器未打开
 Popover: 已连接 · N 个标签页 / 已连接 · 暂无网页 / 浏览器未连接 + 打开装了插件的浏览器后自动连接。 / 设置…
 Scope line (Settings connected card only, not the popover): Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，它能看到你打开的所有标签页的标题和网址。
 Error badges: 浏览器控制 · 缺少组件 / 端口被占用 / 连接中断 / 未能启动 / 需检查
