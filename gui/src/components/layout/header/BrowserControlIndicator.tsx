@@ -1,8 +1,7 @@
-import * as Popover from "@radix-ui/react-popover";
-import { PuzzlePiece } from "@phosphor-icons/react";
-import { useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Gear, PuzzlePiece } from "@phosphor-icons/react";
+import { useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 
@@ -11,6 +10,12 @@ import {
   type BrowserControlIndicatorInput,
   browserControlIndicatorView,
 } from "./browser-control-indicator-status";
+import {
+  STATUS_MENU_CONTENT,
+  STATUS_MENU_ITEM,
+  STATUS_MENU_ROW,
+  STATUS_MENU_SEPARATOR,
+} from "./status-menu";
 import { TopBarLampIcon } from "./TopBarLampIcon";
 import {
   TOPBAR_POPOVER_OPEN_STATE,
@@ -22,17 +27,17 @@ import {
  *
  *   - Set up: a `PuzzlePiece` lamp, lit while the extension is connected
  *     to Core's resident bridge (live), unlit when it is not (browser
- *     closed). Click → popover: the state in one line and 设置…. The
- *     scope line is not repeated here: a glance panel is reopened every
- *     time, and what Galley can see is read once, in Settings' connected
- *     card (2026-10-04, JC: the popover read long). No 重新检测: the
- *     state is live, so a manual check would only repeat what the bridge
- *     already reports.
+ *     closed). Click → a status menu (`status-menu.ts`): the state in
+ *     one row, a separator, 设置…. The scope line is not repeated here:
+ *     a glance surface is reopened every time, and what Galley can see
+ *     is read once, in Settings' connected card (2026-10-04, JC: the
+ *     panel read long). No 重新检测: the state is live, so a manual
+ *     check would only repeat what the bridge already reports.
  *   - Never set up: the 待解锁 badge in the brand tone — an invitation to
  *     Galley's headline capability, not a fault. Click → Settings →
  *     Browser Control directly; that is the only next step.
  *   - Bridge / probe failure: an error badge named by its cause; the
- *     popover adds the bridge's own message as the detail line.
+ *     menu adds the bridge's own message as the detail line.
  */
 export function BrowserControlIndicator({
   input,
@@ -43,12 +48,15 @@ export function BrowserControlIndicator({
 }) {
   const copy = useCopy().topbar;
   const [open, setOpen] = useState(false);
+  // 设置… hands focus to the Settings dialog; returning it to the
+  // trigger as the menu closes would pull it back out.
+  const settingsRequestedRef = useRef(false);
   const view = browserControlIndicatorView(input);
-  // A popover left open while the indicator turns into a plain badge
+  // A menu left open while the indicator turns into a plain badge
   // (an unverified install whose bridge error clears to 待解锁) must not
   // pop back open when the lamp returns.
-  const hasPopover = view.form === "lamp" || view.form === "error";
-  if (open && !hasPopover) setOpen(false);
+  const hasMenu = view.form === "lamp" || view.form === "error";
+  if (open && !hasMenu) setOpen(false);
   if (view.form === "hidden") return null;
 
   if (view.form === "pending") {
@@ -80,15 +88,10 @@ export function BrowserControlIndicator({
           offline: copy.browserControlOfflineTitle,
           checking: copy.browserControlChecking,
         }[view.state];
-  const openSettings = () => {
-    setOpen(false);
-    onOpenSettings?.();
-  };
-
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <TooltipLabel text={tooltip} side="bottom">
-        <Popover.Trigger asChild>
+        <DropdownMenu.Trigger asChild>
           {view.form === "lamp" ? (
             <TopBarIconButton aria-label={tooltip}>
               <TopBarLampIcon icon={PuzzlePiece} lit={view.lit} />
@@ -105,65 +108,81 @@ export function BrowserControlIndicator({
               {errorCopy?.badge ?? copy.browserControlError}
             </button>
           )}
-        </Popover.Trigger>
+        </DropdownMenu.Trigger>
       </TooltipLabel>
-      <Popover.Portal>
-        <Popover.Content
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
           align="end"
-          sideOffset={8}
-          className="galley-pop-in z-50 w-max min-w-[200px] max-w-[300px] rounded-md border border-line bg-elevated p-4 shadow-elevated outline-none"
+          sideOffset={6}
+          onCloseAutoFocus={(event) => {
+            if (settingsRequestedRef.current) {
+              settingsRequestedRef.current = false;
+              event.preventDefault();
+            }
+          }}
+          className={STATUS_MENU_CONTENT}
         >
-          {view.form === "lamp" ? (
-            <>
-              <div className="text-[13px] font-medium text-ink">
-                {view.state === "offline"
-                  ? popoverCopy.offline
-                  : view.state === "checking"
-                    ? popoverCopy.checking
-                    : popoverCopy.connected}
-                {(view.state === "connected" || view.state === "noTabs") && (
-                  // The tab count rides on the state line as quieter
-                  // evidence, not a line of its own.
-                  <span className="font-normal tabular-nums text-ink-muted">
-                    {" · "}
-                    {view.state === "connected"
-                      ? popoverCopy.tabCount(input.tabCount)
-                      : popoverCopy.noTabs}
+          <div className={STATUS_MENU_ROW}>
+            {view.form === "lamp" ? (
+              <>
+                <div>
+                  <span className="font-medium">
+                    {view.state === "offline"
+                      ? popoverCopy.offline
+                      : view.state === "checking"
+                        ? popoverCopy.checking
+                        : popoverCopy.connected}
                   </span>
-                )}
-              </div>
-              {view.state === "offline" && (
-                <div className="mt-1 text-[12px] text-ink-muted">
-                  {popoverCopy.offlineHint}
+                  {(view.state === "connected" || view.state === "noTabs") && (
+                    // The tab count rides on the state row as quieter
+                    // evidence, not a row of its own.
+                    <span className="tabular-nums text-ink-muted">
+                      {" · "}
+                      {view.state === "connected"
+                        ? popoverCopy.tabCount(input.tabCount)
+                        : popoverCopy.noTabs}
+                    </span>
+                  )}
                 </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="text-[13px] font-medium text-error">
-                {errorCopy?.title ?? copy.browserControlErrorTitle}
-              </div>
-              {input.errorDetail && (
-                <p className="mt-1.5 select-text break-words text-[12px] leading-[1.55] text-ink-soft">
-                  {input.errorDetail}
-                </p>
-              )}
-              {input.errorKind && (
-                // Bridge failures retry on their own (the bridge with
-                // backoff, Core by restarting it); probe failures do not.
-                <p className="mt-1.5 text-[11px] text-ink-muted">
-                  {popoverCopy.retrying}
-                </p>
-              )}
-            </>
-          )}
-          <div className="mt-3 flex justify-end">
-            <Button variant="secondary" size="sm" onClick={openSettings}>
-              {popoverCopy.settings}
-            </Button>
+                {view.state === "offline" && (
+                  <div className="mt-0.5 text-ui-meta text-ink-muted">
+                    {popoverCopy.offlineHint}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="font-medium text-error">
+                  {errorCopy?.title ?? copy.browserControlErrorTitle}
+                </div>
+                {input.errorDetail && (
+                  <p className="mt-1 select-text break-words text-ui-meta leading-secondary text-ink-soft">
+                    {input.errorDetail}
+                  </p>
+                )}
+                {input.errorKind && (
+                  // Bridge failures retry on their own (the bridge with
+                  // backoff, Core by restarting it); probe failures do not.
+                  <p className="mt-1 text-ui-tertiary text-ink-muted">
+                    {popoverCopy.retrying}
+                  </p>
+                )}
+              </>
+            )}
           </div>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+          <DropdownMenu.Separator className={STATUS_MENU_SEPARATOR} />
+          <DropdownMenu.Item
+            onSelect={() => {
+              settingsRequestedRef.current = true;
+              onOpenSettings?.();
+            }}
+            className={STATUS_MENU_ITEM}
+          >
+            <Gear size={14} weight="thin" className="text-ink-soft" />
+            <span>{popoverCopy.settings}</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

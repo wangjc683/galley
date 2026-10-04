@@ -311,10 +311,10 @@ Runtime tab 的任何问题）。
 
 #### Channels
 
-- 顶栏的 Channels 灯（亮 = 有平台在运行）、文字 badge 与 popover 的规范在 [layout-and-chrome](./layout-and-chrome.md) §4.1 Channels Indicator（2026-10-04 起；此前这里写的是「icon-only、不论状态都一样」）。
+- 顶栏的 Channels 灯（亮 = 有平台在运行）、文字 badge 与菜单的规范在 [layout-and-chrome](./layout-and-chrome.md) §4.1 Channels Indicator（2026-10-04 起；此前这里写的是「icon-only、不论状态都一样」）。
 - Channels 使用 managed model config revision 判断配置 freshness。模型配置变更后，已启用 Channel 若仍记录旧 revision，Settings -> Channels 卡片列表顶部显示 warning 状态条：标题 `Channels 正在使用旧模型配置` + 一行说明 + `重启 Channels` CTA。stale 信号只靠状态条传达，不再改按钮变体——反馈要引导行动，不是暗示。
 - `重启 Channels` 语义是重启所有已启用 Channel；手动 Stop / Disconnect 会把 Channel 置为未启用，不会被这个按钮重新拉起。
-- Models toast 里的 `重启 Channels` CTA 直接执行；Channels 页（状态条或底部按钮）和顶栏 Channels popover 先弹同一个轻确认，说明可能中断当前回复、不会退出登录。
+- Models toast 里的 `重启 Channels` CTA 直接执行；Channels 页（状态条或底部按钮）和顶栏 Channels 菜单先弹同一个轻确认，说明可能中断当前回复、不会退出登录。
 - 卡片下方的常驻 `重启 Channels` 按钮保持 ghost 权重，且只在存在已启用 Channel 且非 stale 时渲染——没有可重启对象时不占位，stale 时让位给状态条。
 - 重启不删除微信 token，不主动要求重新扫码；token 过期仍走现有 expired / scan 流程。
 - 重启不丢对话（2026-09-30）：每个渠道记下当前 GA 日志的文件名，重启后按日志接回上下文（飞书 / Telegram / 微信在 `runner/im_resume.py`，Discord 在补丁 `0026`，按频道）；接不上时下一条回答首行说一次「之前的对话没接上，这是新的上下文」。要清就发 `/new`（微信的 `/new` 由 Galley 补上）。断开连接（Disconnect）清掉续接状态，重连从头开始；解绑使用者不清。
@@ -426,7 +426,7 @@ Runtime tab 的任何问题）。
 
 从独立 setup dialog 迁移而来的 Tab（仅 managed 运行时显示，与 Channels 同
 一 gating）。顶栏「待解锁」badge 和邀请 banner 直达这里，灯与 error badge
-经 popover 底部的「设置…」进入；配置只有这一个家（见
+经菜单里的「设置…」进入；配置只有这一个家（见
 [layout-and-chrome](./layout-and-chrome.md) §4.1 Browser Control
 Indicator）。
 
@@ -456,7 +456,7 @@ Indicator）。
   测试本身不走模型，demo 由 managed GA 通过现有 `web_execute_js` /
   `tabs.create` 协议主动打开搜索页，不写回连接状态。
 - **范围说明**（2026-10-04，落实 06-16 设计审计「已连接态缺隐私与范围说明」）：
-  只放已连接卡第三行（`browserControl.connectedScope`；10-04 曾同时进顶栏 popover，当日以「瞄状态的面板不重复读一次就够的说明」撤出）：
+  只放已连接卡第三行（`browserControl.connectedScope`；10-04 曾同时进顶栏浮层，当日以「瞄状态的面板不重复读一次就够的说明」撤出）：
   「Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，
   它能看到你打开的所有标签页的标题和网址。」后半句是实情：每次 `web_scan`
   都把整张标签页列表（标题 + 网址）交给模型。标签页数保持次要。

@@ -210,8 +210,8 @@ Chinese copy (source of truth: `gui/src/i18n/locales/zh.ts`):
 TopBar never set up: 浏览器控制 · 待解锁 (brand badge, tooltip 解锁浏览器控制)
 Invitation banner: 让 Galley 用你已登录的浏览器办事：查资料、填表单、操作网页后台。 / 解锁浏览器控制
 TopBar set up: PuzzlePiece lamp, plain while connected, half opacity while not; tooltip 浏览器控制已可用 / 已配置，浏览器未打开
-Popover: 已连接 · N 个标签页 / 已连接 · 暂无网页 / 浏览器未连接 + 打开装了插件的浏览器后自动连接。 / 设置…
-Scope line (Settings connected card only, not the popover): Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，它能看到你打开的所有标签页的标题和网址。
+Menu: 已连接 · N 个标签页 / 已连接 · 暂无网页 / 浏览器未连接 + 打开装了插件的浏览器后自动连接。 / 设置…
+Scope line (Settings connected card only, not the topbar menu): Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，它能看到你打开的所有标签页的标题和网址。
 Error badges: 浏览器控制 · 缺少组件 / 端口被占用 / 连接中断 / 未能启动 / 需检查
 Step 3 hint: 插件装好后，Galley 会自动检测到连接。没反应时，在该浏览器打开任意网页（或点「打开测试页」），再点「测试连接」。
 Connected evidence: 已连接浏览器 / 检测到 N 个可操作标签页

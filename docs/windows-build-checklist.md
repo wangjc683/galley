@@ -185,7 +185,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 
 - [ ] Managed GA mode shows the TopBar Channels icon between Browser Control and Settings
 - [ ] External GA mode hides the TopBar Channels icon and the Settings Channels tab
-- [ ] With no platform ever set up, clicking the TopBar Channels icon opens Settings -> Channels; once one is set up it opens the Channels popover (per-platform rows, 重启 Channels behind a confirm, Channels 设置…)
+- [ ] With no platform ever set up, clicking the TopBar Channels icon opens Settings -> Channels; once one is set up it opens the Channels menu (per-platform status rows, then 重启 Channels behind a confirm and 设置… as menu items; arrow keys move between items)
 - [ ] The Channels lamp looks like the other topbar icons while a platform runs and dims to half opacity when all are paused (readable in light and dark)
 - [ ] Channels icon has no status dot or unread-message badge
 - [ ] Settings sidebar shows `Channels` with Chinese helper `聊天软件`

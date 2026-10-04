@@ -1,8 +1,7 @@
-import * as Popover from "@radix-ui/react-popover";
-import { ArrowsClockwise, ChatCircleText } from "@phosphor-icons/react";
-import { useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { ArrowsClockwise, ChatCircleText, Gear } from "@phosphor-icons/react";
+import { useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -19,6 +18,12 @@ import {
   channelStateLabel,
   configuredChannels,
 } from "./channels-indicator-status";
+import {
+  STATUS_MENU_CONTENT,
+  STATUS_MENU_ITEM,
+  STATUS_MENU_ROW,
+  STATUS_MENU_SEPARATOR,
+} from "./status-menu";
 import { TopBarLampIcon } from "./TopBarLampIcon";
 import {
   TOPBAR_POPOVER_OPEN_STATE,
@@ -32,11 +37,12 @@ import {
  *     Channels is optional; desktop-only users are not nagged.
  *   - Set up: a lamp, lit while at least one platform runs, unlit when
  *     all are paused. Connecting / waiting for a scan / needs attention
- *     keep their text badges. Either form opens a popover: one row per
- *     configured platform with its state (the Settings card words), then
- *     重启 Channels behind the same confirm Settings uses, then the
- *     settings link. Only platforms the user set up are listed — no
- *     placeholders for the rest (2026-05-31: not a platform inventory).
+ *     keep their text badges. Either form opens a status menu
+ *     (`status-menu.ts`): one row per configured platform with its state
+ *     (the Settings card words), a separator, then 重启 Channels behind
+ *     the same confirm Settings uses and 设置…. Only platforms the user
+ *     set up are listed — no placeholders for the rest (2026-05-31: not
+ *     a platform inventory).
  *
  * No status dot on the chat glyph: a dot there reads as unread messages.
  */
@@ -56,9 +62,12 @@ export function ChannelsIndicator({
   const imCopy = fullCopy.settings.im;
   const [open, setOpen] = useState(false);
   const [confirmRestartOpen, setConfirmRestartOpen] = useState(false);
+  // Both items hand focus to a dialog (the restart confirm, Settings);
+  // returning it to the trigger as the menu closes would pull it back.
+  const focusHandedOffRef = useRef(false);
   const configured = configuredChannels(statuses);
   const status = channelsIndicatorStatus(configured, loadError);
-  // Disconnecting the last platform from Settings while the popover is
+  // Disconnecting the last platform from Settings while the menu is
   // open turns this into the plain setup button.
   if (open && status === "setup") setOpen(false);
   // Restart only relaunches enabled platforms; with every one paused
@@ -95,9 +104,9 @@ export function ChannelsIndicator({
 
   return (
     <>
-      <Popover.Root open={open} onOpenChange={setOpen}>
+      <DropdownMenu.Root open={open} onOpenChange={setOpen}>
         <TooltipLabel text={title} side="bottom">
-          <Popover.Trigger asChild>
+          <DropdownMenu.Trigger asChild>
             {badgeLabel === null ? (
               <TopBarIconButton aria-label={title}>
                 <TopBarLampIcon
@@ -121,17 +130,28 @@ export function ChannelsIndicator({
                 {badgeLabel}
               </button>
             )}
-          </Popover.Trigger>
+          </DropdownMenu.Trigger>
         </TooltipLabel>
-        <Popover.Portal>
-          <Popover.Content
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
             align="end"
-            sideOffset={8}
-            className="galley-pop-in z-50 w-[300px] rounded-md border border-line bg-elevated p-4 shadow-elevated outline-none"
+            sideOffset={6}
+            onCloseAutoFocus={(event) => {
+              if (focusHandedOffRef.current) {
+                focusHandedOffRef.current = false;
+                event.preventDefault();
+              }
+            }}
+            className={STATUS_MENU_CONTENT}
           >
             {loadError && (
-              <div className="mb-3 text-[12px] leading-[1.55] text-error">
-                <div className="font-medium">
+              <div
+                className={cn(
+                  STATUS_MENU_ROW,
+                  "text-ui-meta leading-secondary",
+                )}
+              >
+                <div className="font-medium text-error">
                   {copy.channelsPopover.loadFailed}
                 </div>
                 <div className="mt-0.5 select-text break-words text-ink-soft">
@@ -139,65 +159,57 @@ export function ChannelsIndicator({
                 </div>
               </div>
             )}
-            {configured.length > 0 && (
-              <ul className="space-y-2">
-                {configured.map((channel) => (
-                  <li key={channel.platform}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[13px] text-ink">
-                        {channelPlatformLabel(channel.platform, imCopy)}
-                      </span>
-                      <span
-                        className={cn(
-                          "shrink-0 text-[12px]",
-                          channelStateClass(channel.state),
-                        )}
-                      >
-                        {channelStateLabel(channel.state, imCopy)}
-                      </span>
+            {configured.map((channel) => (
+              <div key={channel.platform} className={STATUS_MENU_ROW}>
+                <div className="flex items-baseline justify-between gap-6">
+                  <span>{channelPlatformLabel(channel.platform, imCopy)}</span>
+                  <span
+                    className={cn(
+                      "shrink-0 text-ui-meta",
+                      channelStateClass(channel.state),
+                    )}
+                  >
+                    {channelStateLabel(channel.state, imCopy)}
+                  </span>
+                </div>
+                {(channel.state === "error" || channel.state === "expired") &&
+                  channel.lastError && (
+                    <div className="mt-0.5 line-clamp-2 select-text break-words text-ui-tertiary leading-snug text-ink-muted">
+                      {channel.lastError}
                     </div>
-                    {(channel.state === "error" ||
-                      channel.state === "expired") &&
-                      channel.lastError && (
-                        <div className="mt-0.5 line-clamp-2 select-text break-words text-[11px] leading-snug text-ink-muted">
-                          {channel.lastError}
-                        </div>
-                      )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-3 flex items-center justify-between gap-2 border-t border-line/70 pt-3">
-              {canRestart ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="-ml-2"
-                  leadingIcon={<ArrowsClockwise size={13} weight="thin" />}
-                  onClick={() => {
-                    setOpen(false);
-                    setConfirmRestartOpen(true);
-                  }}
-                >
-                  {fullCopy.toasts.restartChannels}
-                </Button>
-              ) : (
-                <span />
-              )}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setOpen(false);
-                  onOpenSettings?.();
+                  )}
+              </div>
+            ))}
+            <DropdownMenu.Separator className={STATUS_MENU_SEPARATOR} />
+            {canRestart && (
+              <DropdownMenu.Item
+                onSelect={() => {
+                  focusHandedOffRef.current = true;
+                  setConfirmRestartOpen(true);
                 }}
+                className={STATUS_MENU_ITEM}
               >
-                {copy.channelsPopover.settings}
-              </Button>
-            </div>
-          </Popover.Content>
-        </Popover.Portal>
-      </Popover.Root>
+                <ArrowsClockwise
+                  size={14}
+                  weight="thin"
+                  className="text-ink-soft"
+                />
+                <span>{fullCopy.toasts.restartChannels}</span>
+              </DropdownMenu.Item>
+            )}
+            <DropdownMenu.Item
+              onSelect={() => {
+                focusHandedOffRef.current = true;
+                onOpenSettings?.();
+              }}
+              className={STATUS_MENU_ITEM}
+            >
+              <Gear size={14} weight="thin" className="text-ink-soft" />
+              <span>{copy.channelsPopover.settings}</span>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
       {/* The same light confirm as Settings → Channels: restarting can
           cut off a reply in progress. Only the Models toast CTA restarts
           without asking. */}

@@ -51,7 +51,7 @@
 - session title 左对齐贴 main 栏左 gutter（**不对齐居中的对话列**——对话列宽随 compact/wide 变，对齐它会让标题左右跳）。title 属于「当前对话」，放在对话区上方、视线最先到达处。本栏左侧无 OS chrome 保留区。
 - **Session title menu**：有 active session 时 title + `CaretDown` 是一个按钮，打开 session-scoped 菜单（Rename / Reinject Tools / Desktop Pet）。空状态渲染 italic muted "新对话"，不可点。Rename 进入 inline edit（Enter 提交 / Esc 取消）。
 - 右：两个清晰 group，最后才是 Windows window controls（不属于工具簇）：
-  - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ 内核（2026-10-03 从 SidebarHeader 移入）→ Browser Control → Channels → 应用更新。只放有状态的东西。Browser Control 与 Channels 就绪后是「灯」（见下「两 header 共通视觉规约」），点开小 popover。（2026-07-20：原列首的 YOLO 徽章随审批模式 per-session 化退役——审批模式的控件与状态合一，唯一入口是 Composer 的 LLM pill（审批模式并入其 popover，无独立控件），见 conversation.md §4.4。）
+  - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ 内核（2026-10-03 从 SidebarHeader 移入）→ Browser Control → Channels → 应用更新。只放有状态的东西。Browser Control 与 Channels 就绪后是「灯」（见下「两 header 共通视觉规约」），点开状态菜单（菜单式浮层）。（2026-07-20：原列首的 YOLO 徽章随审批模式 per-session 化退役——审批模式的控件与状态合一，唯一入口是 Composer 的 LLM pill（审批模式并入其 popover，无独立控件），见 conversation.md §4.4。）
   - **工具簇**（aria label：`视图与设置`）：改动（`GitDiff`，条件渲染，见下）→ 显示（`TextAa`，popover 内三行：阅读宽度 / 字号 / 主题，2026-10-04 由三个按钮合并）→ Supervisor SOP（`PlugsConnected` thin，tooltip 只写名字「Supervisor SOP」，2026-10-03 从 SidebarHeader 移入）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。按钮共用 `TopBarIconButton`，图标一律 16px thin（原宽度箭头的 14px 视觉补偿随宽度按钮退役）。SOP 放这里而不进状态簇：它没有状态，本质是「设置 → 集成」的深链，挨着齿轮读作「设置里一个常用页」；不按状态隐藏，两种运行时模式都在。
   - **改动按钮只在知道仓库时出现**（2026-10-04）：当前会话所属项目（空状态取当前项目）有根目录，或本窗口审阅过某个仓库，才显示；改动面板开着时一直显示（要能关掉它）。否则不显示——不知道仓库时它只能打开一个「选择仓库」空面板。始终可用的入口是命令面板「查看仓库改动」。行为细节见 [conversation.md](./conversation.md#本地文件引用与-markdown-预览)。
   - 两组之间用 1px 竖向分隔线；没有任何状态项时不显示状态簇和分隔线。
@@ -62,7 +62,10 @@
 - **灯（lamp）**（2026-10-04，Browser Control 与 Channels）：macOS 菜单栏语法（蓝牙关掉时的样子）——单色，状态画在字形本身。**亮** = 此刻有活连接：就是普通的 16px thin 图标，和相邻工具图标完全一样；**不亮** = 同一图标 50% 不透明度。极性是刻意的：在线是常态，所以融进整排，只有掉线才偏离。墨色与其他顶栏图标相同，亮灭切换无过渡，悬停照常给按钮底板。实现只有一处：`header/TopBarLampIcon.tsx`。当日真机修订：初版把「亮」画成 thin 轮廓下垫一层淡填充（`fill` 字重、`--opacity-medium`），两颗实心图标在细线行里重了一档、不统一，JC 改为现行反转极性；同时否掉的还有斜线 / 叉变体（带斜线的气泡读作「通知已静音」，拼图也没有斜线版）、图标下短线（16px 下看不见）、描边加粗一档（仍不同族）。50% 而非更低：要读作「关着」，不是「不可点」。
 - **禁止**（勿回退）：状态点（05-31：聊天图标上的点读作未读消息；05-27：浏览器控制就绪后「无状态点、无动效」）；健康状态用颜色或动效；按钮面显示已定型的偏好。颜色只给 warning / error 文字 badge 和 `brand` 邀请 badge。
 - Topbar 内会打开 menu / popover 的 trigger，打开态需要保留轻微下沉 + press shadow，帮助用户把浮层和来源按钮对应起来。打开态按 `aria-expanded="true"` 取（`TopBarIconButton` 与 `TOPBAR_POPOVER_OPEN_STATE`）：每个 trigger 都套着 `TooltipLabel`，Tooltip trigger 自己的 `data-state` 会盖掉 popover 的 `data-state="open"`，只认后者时打开态从没显示过（2026-10-04 查出，显示 / Goal / 更新 popover 一并修好）。
-- 状态簇 popover 的统一形态（Goal / 更新 / Browser Control / Channels）：Radix Popover、`galley-pop-in`、`align="end"`、8px 偏移、`rounded-md border-line bg-elevated shadow-elevated`；标题 13px medium、次行 11px muted、正文 12px / 1.55；设置深链放底部右侧，secondary 小按钮，文案「XX 设置…」。
+- **顶栏浮层两套形态，按用途分工**（2026-10-04）：**入口类用菜单式，决策类用卡片式。**
+  - **菜单式**（「显示」、Browser Control、Channels，与会话标题菜单、Composer ＋ 菜单同一套）：`galley-pop-in`、`z-[70]`、`align="end"`、6px 偏移、`p-1` 紧凑容器、宽度随内容（最小 200px、最大 300px）、13px 行；状态行不可点、与菜单项同内边距（`px-2 py-1.5`）；动作是整行悬停高亮的菜单项（14px thin 图标 + 文字），分隔线 `my-1 h-px bg-line`。Browser Control / Channels 用 Radix DropdownMenu（有方向键导航），样式常量在 `header/status-menu.ts`；「显示」用 Popover 是因为选后不关。macOS 菜单栏图标的先例：状态在上、分隔线、最后一行「Wi‑Fi 设置…」是菜单项不是按钮。
+  - **卡片式**（Goal、应用更新）：Radix Popover、`z-50`、8px 偏移、`p-3`／`p-4`、标题 13px medium + 说明正文 + 明确按钮（停止 / 延长 / 重启）。它们是带决定的通知，需要说明文字和按钮，塞进菜单行会挤。
+  - 曾经四个状态浮层统一用卡片式（16px 留白 + 凸起的「XX 设置…」secondary 按钮），JC 真机指出 Browser Control / Channels 与「显示」字体和样式不统一，当日改为上面的分工。
 - **外观类偏好控件的标准形态**（2026-07-05 定形，2026-10-04 合并为一个「显示」按钮）：一个 28px 图标按钮（`TopBarIconButton` + `TextAa`，tooltip「显示」）→ 一个小 popover → 每个偏好一行：左列 muted 小标签（`text-ui-tertiary`），右列共享 `SegmentedControl`，三个控件左缘对齐。现有三行：阅读宽度「紧凑 / 宽松」、字号「小 / 标准 / 大」、主题「跟随系统 / 浅色 / 深色」。用 Popover 而非 DropdownMenu 是刻意的：选后**不自动关闭**，用户可来回切档、看着背后的对话即时重排。按钮面**不用 brand tint 表达「偏离默认」**——已定型的偏好不是可行动信息，常驻高亮是安静工作台的噪音；当前状态只放在 popover 内（「跟随系统」的解析结果做主题分段下方 caption，只在选中「跟随系统」时出现）。新增外观偏好时加一行，不再加按钮、不再发明新样式。合并的理由与被否方案见 [devlog 2026-10-04](../devlog/2026-10-04-topbar-display-popover.md)。
 - `SegmentedControl` 选中态（全局，`ui/segmented-control.tsx`）：`bg-hover` 轨道上的白色浮起块 + `text-brand-strong` medium 文字。轨道不用 `bg-surface`——它和 `bg-elevated` 在浅色下几乎同白，放进 elevated 父容器（popover）时选中态会不可读。
 - icon-only controls 必须使用项目统一的 Radix tooltip（`TooltipLabel` / `IconButton` tooltip），不使用原生 `title` 作为 hover 提示（延迟 / 样式 / 出现时机不可控，会让相邻按钮反馈节奏不一致）；可访问名称用 `aria-label` 保留。
@@ -83,19 +86,19 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 
 | 状态 | 形态 | 点击 |
 |---|---|---|
-| `connected` / `connected_no_tabs` | `PuzzlePiece` 灯，**亮** | popover |
-| `offline`（验证过，插件没连上，多半浏览器没开） | `PuzzlePiece` 灯，**不亮** | popover |
+| `connected` / `connected_no_tabs` | `PuzzlePiece` 灯，**亮** | 菜单 |
+| `offline`（验证过，插件没连上，多半浏览器没开） | `PuzzlePiece` 灯，**不亮** | 菜单 |
 | `not_connected`（从没验证过） | `浏览器控制 · 待解锁` 文字 badge，`brand` | 直达 Settings → Browser Control |
-| `error` | 按桥的 `errorKind` 命名的 `error` badge：缺少组件 / 端口被占用 / 连接中断 / 未能启动；无 kind（脚本测试失败、插件目录同步失败）为 `需检查` | popover |
+| `error` | 按桥的 `errorKind` 命名的 `error` badge：缺少组件 / 端口被占用 / 连接中断 / 未能启动；无 kind（脚本测试失败、插件目录同步失败）为 `需检查` | 菜单 |
 | `unknown`（桥首次报告前、或重启中） | 验证过 → 不亮的灯；没验证过 → 待解锁 badge；验证标记读出前的几毫秒不渲染 | 同对应形态 |
 
 - **待解锁不是待修**（2026-10-04，改 05-27 的 `warning` 规约）：浏览器控制是 Galley 的头号能力，第一印象该是邀请，不是「坏了」。`brand` 而不是 `neutral`：`neutral` 会把它降到「新版本可用」那一档；`brand` 在本簇的含义是「Galley 在为你做事或邀请你开始」，是一类状态，不是这个功能的身份色。
 - **`unknown` 不再闪「检测中」**：启动时它只持续约一秒，旧的 neutral「检测中」badge 每次启动闪一下再换成别的。改为按已持久化的验证标记先画结论：待解锁的含义就是「设置没完成过」，这个标记启动时已知。
-- **popover**：只讲状态，一行加一个按钮——「已连接 · N 个标签页」/「已连接 · 暂无网页」（标签页数是同一行里的浅墨证据）；「浏览器未连接」+ 次行「打开装了插件的浏览器后自动连接。」；检测中只一句「正在检测」→「设置…」。宽度随内容（200–300px）。error 时标题换成按原因本地化的说法、红字，次行是桥自己的中文原文，桥类错误再加一行「正在自动重试。」。**范围说明不进 popover**（2026-10-04 JC 嫌长）：瞄状态的面板每次打开都要重读，「它能看到什么」读一次就够，只留在 Settings 已连接卡（见 [overlays-and-settings](./overlays-and-settings.md) Browser Control）。
+- **菜单**（菜单式，见上「两套形态」）：只讲状态——状态行「已连接 · N 个标签页」/「已连接 · 暂无网页」（状态词 medium，标签页数同一行浅墨）；「浏览器未连接」+ 次行「打开装了插件的浏览器后自动连接。」；检测中只一句「正在检测」→ 分隔线 →「设置…」菜单项。error 时标题换成按原因本地化的说法、红字，次行是桥自己的中文原文，桥类错误再加一行「正在自动重试。」。**范围说明不进菜单**（2026-10-04 JC 嫌长）：瞄状态的浮层每次打开都要重读，「它能看到什么」读一次就够，只留在 Settings 已连接卡（见 [overlays-and-settings](./overlays-and-settings.md) Browser Control）。
 - **不放「重新检测」**：状态是实时的，手动检测只会重复桥已经报告的内容；脚本测试失败这类偶发错误去设置页点「测试连接」。
 - tooltip 仍说出状态（共享 Radix tooltip，不用原生 `title`）。
 - 未连接时（从没验证过）badge 与下方 banner 常驻：不可隐藏、不可 dismiss，无动效、无弹窗。
-- **配置只有一个家：Settings → Browser Control。** 待解锁 badge 与 banner 直达该 Tab，灯与 error badge 经 popover 底部的设置深链进入。早期的独立 setup dialog（含「每次启动自动弹一次」的规则）已在 Tab 迁移中退役——不再有任何自动弹窗。
+- **配置只有一个家：Settings → Browser Control。** 待解锁 badge 与 banner 直达该 Tab，灯与 error badge 经菜单里的「设置…」进入。早期的独立 setup dialog（含「每次启动自动弹一次」的规则）已在 Tab 迁移中退役——不再有任何自动弹窗。
 - **邀请 banner**：从没验证过、且此刻没有连上时（`browserControlInviteVisible`），主内容区顶部显示 banner：与待解锁 badge 同一材质（`border-brand/30` + `bg-brand-soft`）、`PuzzlePiece` 小方块、文案说清用户得到什么，右侧 `brand-soft` 按钮「解锁浏览器控制」直达设置。按持久化的验证标记而不是实时状态判断，所以从第一帧就在、不会启动一秒后才挤下来。验证过的安装出了桥错误时不显示：没有可解锁的东西，error badge 已经在说。
 - **试一试**：自动验证成功的那一刻弹一条 info toast「浏览器控制已连接」+「试一试」（跑 Settings 里同一个 demo），不自动消失——它发生时用户多半还在浏览器扩展页里。只在自动验证由失败转成功时弹一次，手动「测试连接」成功不弹（设置页旁边就有 demo 按钮），以后的启动不弹。空状态保持全空（[conversation.md](./conversation.md) §7 勿回退条），这条 toast 就是那里说的「非空状态发现机制」。
 - Tab 内容（设置指引 / 状态卡 / 维护动作 / demo）的规范在
@@ -108,12 +111,12 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 | 状态 | 形态 | 点击 |
 |---|---|---|
 | 从没设置过任何平台 | `ChatCircleText` 灯，不亮 | 直达 Settings → Channels |
-| 设置过、至少一个在运行 | 灯，**亮** | popover |
-| 设置过、全部已暂停 | 灯，不亮 | popover |
-| 连接中 / 等扫码 / 需处理（含读取失败） | `Channels · 连接中`（`neutral`）/ `Channels · 扫码`（`warning`）/ `Channels · 需处理`（`error`），优先于灯 | popover |
+| 设置过、至少一个在运行 | 灯，**亮** | 菜单 |
+| 设置过、全部已暂停 | 灯，不亮 | 菜单 |
+| 连接中 / 等扫码 / 需处理（含读取失败） | `Channels · 连接中`（`neutral`）/ `Channels · 扫码`（`warning`）/ `Channels · 需处理`（`error`），优先于灯 | 菜单 |
 
 - **「设置过」怎么算**：照 Core 的派生状态（`im_supervisor/manager.rs` `derived_status`）——没有凭据（微信无 `token.json`、飞书 / Telegram / Discord 无已保存配置）的停止平台报 `not_connected`，有凭据报 `stopped`；断开连接清凭据回到 `not_connected`。所以「设置过」= `enabled`（用户启动过且没停）或状态不是 `not_connected`。Settings → Channels 用的是同一组信号（`enabled` 决定重启按钮，状态决定卡片徽标）。
-- **popover**：每个设置过的平台一行（名称 + 状态词，用 Settings 卡片徽标的同一套词：已接入 / 已暂停 / 正在接入 / 等待扫码 / 接入已失效 / 异常 …；只有异常 / 失效标红、等扫码标琥珀，健康状态不着色；异常行下加两行以内的 `lastError`）→ 分隔线 →「重启 Channels」（ghost，左；只在有已启用平台时出现，先弹与设置页同一个轻确认 `ConfirmActionDialog`）+「设置…」（右；面板已说明是 Channels，按钮不重复，与浏览器 popover 同词）。
+- **菜单**（菜单式）：每个设置过的平台一个状态行（名称 + 状态词，用 Settings 卡片徽标的同一套词：已接入 / 已暂停 / 正在接入 / 等待扫码 / 接入已失效 / 异常 …；只有异常 / 失效标红、等扫码标琥珀，健康状态不着色；异常行下加两行以内的 `lastError`）→ 分隔线 →「重启 Channels」菜单项（只在有已启用平台时出现，先弹与设置页同一个轻确认 `ConfirmActionDialog`）→「设置…」菜单项（浮层已说明是 Channels，不重复，与浏览器同词）。
 - **只列设置过的平台，不放占位**：05-31 否掉的是「平台清单」——这里只列用户自己设置过的。
 - 不放状态点：聊天图标上的点读作未读消息（05-31）。
 
@@ -129,7 +132,7 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 | 内置、就绪 | 不显示 | — |
 
 - 色调刻意用 `neutral`：在侧栏时它们是灰点 + 浅墨文字，搬家不顺手升级严重度。
-- 外置就绪的图标是新增的可点入口（在侧栏时只是不可点的徽标），直接深链到设置页。它不是灯：没有可报告的实时连接，所以不点灯、不开 popover（Browser Control / Channels 的灯点开 popover，见上）。
+- 外置就绪的图标是新增的可点入口（在侧栏时只是不可点的徽标），直接深链到设置页。它不是灯：没有可报告的实时连接，所以不点灯、不开菜单（Browser Control / Channels 的灯点开菜单，见上）。
 
 ### 4.2 Sidebar
 
