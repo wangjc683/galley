@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 import { TopBarIconButton } from "../TopBarIconButton";
 import {
@@ -126,7 +127,16 @@ export function BrowserControlIndicator({
             {view.form === "lamp" ? (
               <>
                 <div>
-                  <span className="font-medium">
+                  {/* 已连接 in the restrained success green, the same
+                      health colour as the Channels menu's 已接入 and the
+                      Settings badges (JC, 2026-10-04). */}
+                  <span
+                    className={cn(
+                      "font-medium",
+                      (view.state === "connected" || view.state === "noTabs") &&
+                        "text-success",
+                    )}
+                  >
                     {view.state === "offline"
                       ? popoverCopy.offline
                       : view.state === "checking"
