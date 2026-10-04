@@ -8,6 +8,22 @@
 
 ---
 
+## IM 渠道的浏览器步骤带上网站
+
+- **状态**：暂缓（2026-10-04 JC 裁定「先不跟」）。显式代价：GUI 对话里的浏览器步骤显示网站（`db2dde5e`），
+  IM 渠道仍是「调用了读取网页」，两边在这一点上暂时不一致。
+- **提出**：2026-10-04，浏览器控制 UX 票 01（`.scratch/browser-control-ux/PRD.md`）。
+- **启动信号**：IM 里有人追问 Agent 刚才去了哪个网站；或 IM 显示层因别的需求要接工具结果（届时顺手做）。
+- **方案**：在两个渠道已为 ask_user 挂的 `_turn_end_hooks` 里，从 ctx 的 `tool_results` 按轮次记下网站，交给 asyncio
+  侧的运行状态（照 ask 事件按 `_current_queue` 打标）；每个聊天维护一份跨轮次的标签页记忆；把
+  `gui/src/lib/browser-site.ts` 的解析与查找规则用 Python 重写并配测试。
+- **实施要点**：显示层今天拿不到网站——Telegram / Discord 以 `verbose = False` 运行（`tgapp.py:47`、`dcapp.py:26`），
+  `agent_loop.py:79-85` 只留 `🛠️ web_scan(参数)` 一行。要重导补丁 0024（tg + `galley_im_display`）、0023（dcapp）
+  及叠在其上的 0026（09-30 出过行号偏移），做 replay 逐字节比对。估计半天到一天。
+- **待定**：价值取决于 IM 显示设计：「调用了读取网页」只在步骤既无 summary 也无旁白时出现（真实数据 735 个浏览器步骤
+  仅 7 个），真要有用需给每条浏览器步骤行挂站名，这是新的 IM 显示设计，需先裁。
+- **关联**：[tools-and-approvals 浏览器步骤预览](../design/tools-and-approvals.md)；渠道改动默认全覆盖，「某渠道不跟」须写明代价（即本节状态行）。
+
 ## 浏览器插件上架 Chrome 应用商店 / Edge 加载项
 
 - **状态**：暂缓（2026-10-04 JC 裁定）
