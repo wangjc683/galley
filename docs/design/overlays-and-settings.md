@@ -426,7 +426,7 @@ Runtime tab 的任何问题）。
 
 从独立 setup dialog 迁移而来的 Tab（仅 managed 运行时显示，与 Channels 同
 一 gating）。顶栏「待解锁」badge 和邀请 banner 直达这里，灯与 error badge
-经 popover 底部的「浏览器控制设置…」进入；配置只有这一个家（见
+经 popover 底部的「设置…」进入；配置只有这一个家（见
 [layout-and-chrome](./layout-and-chrome.md) §4.1 Browser Control
 Indicator）。
 
@@ -456,7 +456,7 @@ Indicator）。
   测试本身不走模型，demo 由 managed GA 通过现有 `web_execute_js` /
   `tabs.create` 协议主动打开搜索页，不写回连接状态。
 - **范围说明**（2026-10-04，落实 06-16 设计审计「已连接态缺隐私与范围说明」）：
-  已连接卡第三行、顶栏浏览器 popover 正文，同一句（`browserControl.connectedScope`）：
+  只放已连接卡第三行（`browserControl.connectedScope`；10-04 曾同时进顶栏 popover，当日以「瞄状态的面板不重复读一次就够的说明」撤出）：
   「Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，
   它能看到你打开的所有标签页的标题和网址。」后半句是实情：每次 `web_scan`
   都把整张标签页列表（标题 + 网址）交给模型。标签页数保持次要。

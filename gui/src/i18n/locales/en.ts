@@ -283,16 +283,14 @@ export const enCopy: AppCopy = {
       },
     },
     browserControlPopover: {
-      connected: "Browser connected",
-      tabCount: (count: number) =>
-        `${count} operable ${count === 1 ? "tab" : "tabs"}`,
-      noTabs: "No operable tabs",
-      offline: "Browser not connected",
-      offlineHint:
-        "Open the browser with the extension and it connects on its own.",
-      checking: "Checking the browser connection",
-      retrying: "Galley keeps retrying.",
-      settings: "Browser Control settings…",
+      connected: "Connected",
+      tabCount: (count: number) => `${count} ${count === 1 ? "tab" : "tabs"}`,
+      noTabs: "no pages open",
+      offline: "Not connected",
+      offlineHint: "Connects when you open the browser with the extension.",
+      checking: "Checking",
+      retrying: "Retrying automatically.",
+      settings: "Settings…",
     },
     channelsSetup: "Set up Channels",
     channelsConnecting: "Channels connecting",
@@ -305,7 +303,7 @@ export const enCopy: AppCopy = {
     channelsNeedsAttentionBadge: "Channels · Needs attention",
     channelsPopover: {
       loadFailed: "Couldn't read Channels status",
-      settings: "Channels settings…",
+      settings: "Settings…",
     },
     configureModels: "Set up model",
     bundledNeedsModel: "Bundled engine needs a model",

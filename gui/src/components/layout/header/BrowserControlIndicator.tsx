@@ -22,9 +22,12 @@ import {
  *
  *   - Set up: a `PuzzlePiece` lamp, lit while the extension is connected
  *     to Core's resident bridge (live), unlit when it is not (browser
- *     closed). Click → popover: the state in words, the scope line, and
- *     the settings link. No 重新检测: the state is live, so a manual
- *     check would only repeat what the bridge already reports.
+ *     closed). Click → popover: the state in one line and 设置…. The
+ *     scope line is not repeated here: a glance panel is reopened every
+ *     time, and what Galley can see is read once, in Settings' connected
+ *     card (2026-10-04, JC: the popover read long). No 重新检测: the
+ *     state is live, so a manual check would only repeat what the bridge
+ *     already reports.
  *   - Never set up: the 待解锁 badge in the brand tone — an invitation to
  *     Galley's headline capability, not a fault. Click → Settings →
  *     Browser Control directly; that is the only next step.
@@ -38,8 +41,7 @@ export function BrowserControlIndicator({
   input: BrowserControlIndicatorInput;
   onOpenSettings?: () => void;
 }) {
-  const fullCopy = useCopy();
-  const copy = fullCopy.topbar;
+  const copy = useCopy().topbar;
   const [open, setOpen] = useState(false);
   const view = browserControlIndicatorView(input);
   // A popover left open while the indicator turns into a plain badge
@@ -109,34 +111,32 @@ export function BrowserControlIndicator({
         <Popover.Content
           align="end"
           sideOffset={8}
-          className="galley-pop-in z-50 w-[300px] rounded-md border border-line bg-elevated p-4 shadow-elevated outline-none"
+          className="galley-pop-in z-50 w-max min-w-[200px] max-w-[300px] rounded-md border border-line bg-elevated p-4 shadow-elevated outline-none"
         >
           {view.form === "lamp" ? (
             <>
               <div className="text-[13px] font-medium text-ink">
-                {
-                  {
-                    connected: popoverCopy.connected,
-                    noTabs: popoverCopy.connected,
-                    offline: popoverCopy.offline,
-                    checking: popoverCopy.checking,
-                  }[view.state]
-                }
+                {view.state === "offline"
+                  ? popoverCopy.offline
+                  : view.state === "checking"
+                    ? popoverCopy.checking
+                    : popoverCopy.connected}
+                {(view.state === "connected" || view.state === "noTabs") && (
+                  // The tab count rides on the state line as quieter
+                  // evidence, not a line of its own.
+                  <span className="font-normal tabular-nums text-ink-muted">
+                    {" · "}
+                    {view.state === "connected"
+                      ? popoverCopy.tabCount(input.tabCount)
+                      : popoverCopy.noTabs}
+                  </span>
+                )}
               </div>
-              {view.state !== "checking" && (
-                // Secondary on purpose: the tab count is evidence, the
-                // scope line below is what the user needs to know.
-                <div className="mt-1 text-[11px] tabular-nums text-ink-muted">
-                  {view.state === "connected"
-                    ? popoverCopy.tabCount(input.tabCount)
-                    : view.state === "noTabs"
-                      ? popoverCopy.noTabs
-                      : popoverCopy.offlineHint}
+              {view.state === "offline" && (
+                <div className="mt-1 text-[12px] text-ink-muted">
+                  {popoverCopy.offlineHint}
                 </div>
               )}
-              <p className="mt-3 text-[12px] leading-[1.55] text-ink-soft">
-                {fullCopy.browserControl.connectedScope}
-              </p>
             </>
           ) : (
             <>

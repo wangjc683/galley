@@ -91,7 +91,7 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 
 - **待解锁不是待修**（2026-10-04，改 05-27 的 `warning` 规约）：浏览器控制是 Galley 的头号能力，第一印象该是邀请，不是「坏了」。`brand` 而不是 `neutral`：`neutral` 会把它降到「新版本可用」那一档；`brand` 在本簇的含义是「Galley 在为你做事或邀请你开始」，是一类状态，不是这个功能的身份色。
 - **`unknown` 不再闪「检测中」**：启动时它只持续约一秒，旧的 neutral「检测中」badge 每次启动闪一下再换成别的。改为按已持久化的验证标记先画结论：待解锁的含义就是「设置没完成过」，这个标记启动时已知。
-- **popover**：状态一句话（「已连接浏览器」+ 次行「N 个可操作标签页」/「没有可操作的标签页」；「浏览器未连接」+ 次行「打开装了插件的浏览器，就会自动连上。」；检测中只一句）→ 范围说明（与 Settings 已连接卡同一句，见 [overlays-and-settings](./overlays-and-settings.md) Browser Control）→「浏览器控制设置…」。error 时标题换成按原因本地化的说法、红字，次行是桥自己的中文原文，桥类错误再加一行「Galley 会自动重试。」，不放范围说明。标签页数刻意是次行：它是证据，范围说明才是用户要知道的事。
+- **popover**：只讲状态，一行加一个按钮——「已连接 · N 个标签页」/「已连接 · 暂无网页」（标签页数是同一行里的浅墨证据）；「浏览器未连接」+ 次行「打开装了插件的浏览器后自动连接。」；检测中只一句「正在检测」→「设置…」。宽度随内容（200–300px）。error 时标题换成按原因本地化的说法、红字，次行是桥自己的中文原文，桥类错误再加一行「正在自动重试。」。**范围说明不进 popover**（2026-10-04 JC 嫌长）：瞄状态的面板每次打开都要重读，「它能看到什么」读一次就够，只留在 Settings 已连接卡（见 [overlays-and-settings](./overlays-and-settings.md) Browser Control）。
 - **不放「重新检测」**：状态是实时的，手动检测只会重复桥已经报告的内容；脚本测试失败这类偶发错误去设置页点「测试连接」。
 - tooltip 仍说出状态（共享 Radix tooltip，不用原生 `title`）。
 - 未连接时（从没验证过）badge 与下方 banner 常驻：不可隐藏、不可 dismiss，无动效、无弹窗。
@@ -113,7 +113,7 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 | 连接中 / 等扫码 / 需处理（含读取失败） | `Channels · 连接中`（`neutral`）/ `Channels · 扫码`（`warning`）/ `Channels · 需处理`（`error`），优先于灯 | popover |
 
 - **「设置过」怎么算**：照 Core 的派生状态（`im_supervisor/manager.rs` `derived_status`）——没有凭据（微信无 `token.json`、飞书 / Telegram / Discord 无已保存配置）的停止平台报 `not_connected`，有凭据报 `stopped`；断开连接清凭据回到 `not_connected`。所以「设置过」= `enabled`（用户启动过且没停）或状态不是 `not_connected`。Settings → Channels 用的是同一组信号（`enabled` 决定重启按钮，状态决定卡片徽标）。
-- **popover**：每个设置过的平台一行（名称 + 状态词，用 Settings 卡片徽标的同一套词：已接入 / 已暂停 / 正在接入 / 等待扫码 / 接入已失效 / 异常 …；只有异常 / 失效标红、等扫码标琥珀，健康状态不着色；异常行下加两行以内的 `lastError`）→ 分隔线 →「重启 Channels」（ghost，左；只在有已启用平台时出现，先弹与设置页同一个轻确认 `ConfirmActionDialog`）+「Channels 设置…」（右）。
+- **popover**：每个设置过的平台一行（名称 + 状态词，用 Settings 卡片徽标的同一套词：已接入 / 已暂停 / 正在接入 / 等待扫码 / 接入已失效 / 异常 …；只有异常 / 失效标红、等扫码标琥珀，健康状态不着色；异常行下加两行以内的 `lastError`）→ 分隔线 →「重启 Channels」（ghost，左；只在有已启用平台时出现，先弹与设置页同一个轻确认 `ConfirmActionDialog`）+「设置…」（右；面板已说明是 Channels，按钮不重复，与浏览器 popover 同词）。
 - **只列设置过的平台，不放占位**：05-31 否掉的是「平台清单」——这里只列用户自己设置过的。
 - 不放状态点：聊天图标上的点读作未读消息（05-31）。
 
