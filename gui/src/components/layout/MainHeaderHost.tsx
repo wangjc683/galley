@@ -4,7 +4,7 @@ import { useContext } from "react";
 import { GitReviewContext } from "@/lib/git-review";
 import { useActiveRuntime } from "@/hooks/useActiveSession";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
-import type { ImSupervisorState } from "@/lib/im-supervisor";
+import type { ImSupervisorStatus } from "@/lib/im-supervisor";
 import type { ResolvedTheme } from "@/lib/theme";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { useBrowserControlStore } from "@/stores/browser-control";
@@ -20,14 +20,15 @@ import type { GoalBrief } from "@/types/goal";
  * `App.tsx`. Header-only concerns (the 显示 popover's width / font /
  * theme, reinject, the pet toggle, app-update restart) select their
  * stores here; App passes down only what must stay single-instance at its
- * level (goal state from `useGoalEffects`, channel aggregates from
- * `useChannelsStatus`, the engine indicator from `useLLMDisplay`, the
- * settings opener).
+ * level (goal state from `useGoalEffects`, per-platform channel
+ * statuses and the restart action from `useChannelsStatus`, the engine
+ * indicator from `useLLMDisplay`, the settings opener).
  */
 export function MainHeaderHost({
   activeGoals,
-  channelsState,
+  channelStatuses,
   channelsLoadError,
+  onRestartChannels,
   onOpenGoal,
   onStopGoal,
   onExtendGoal,
@@ -38,8 +39,9 @@ export function MainHeaderHost({
   sessionTitle,
 }: {
   activeGoals: GoalBrief[];
-  channelsState: ImSupervisorState | null;
+  channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
   channelsLoadError: string | null;
+  onRestartChannels: () => void;
   onOpenGoal: (goalId: string) => void;
   onStopGoal: (goalId: string) => void;
   onExtendGoal: (goalId: string) => void;
@@ -53,6 +55,17 @@ export function MainHeaderHost({
   sessionTitle: string | undefined;
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);
+  const browserControlVerified = useBrowserControlStore((s) => s.verified);
+  const browserControlVerificationHydrated = useBrowserControlStore(
+    (s) => s.verificationHydrated,
+  );
+  const browserControlTabCount = useBrowserControlStore(
+    (s) => s.bridge?.tabCount ?? s.lastProbe?.tabCount ?? 0,
+  );
+  const browserControlErrorKind = useBrowserControlStore(
+    (s) => s.bridge?.errorKind ?? null,
+  );
+  const browserControlError = useBrowserControlStore((s) => s.error);
   const gitReview = useContext(GitReviewContext);
   const activeRuntimeKind = usePrefsStore((s) => s.activeRuntimeKind);
   const conversationWidth = usePrefsStore((s) => s.conversationWidth);
@@ -87,16 +100,28 @@ export function MainHeaderHost({
       onToggleChanges={showChanges ? gitReview.toggle : undefined}
       changesOpen={gitReview?.isOpen}
       sessionTitle={sessionTitle}
-      browserControlStatus={
-        activeRuntimeKind === "managed" ? browserControlStatus : null
+      browserControl={
+        activeRuntimeKind === "managed"
+          ? {
+              status: browserControlStatus,
+              verified: browserControlVerified,
+              verificationHydrated: browserControlVerificationHydrated,
+              tabCount: browserControlTabCount,
+              errorKind: browserControlErrorKind,
+              errorDetail: browserControlError,
+            }
+          : null
       }
       onOpenBrowserControl={() => openSettings("browser")}
-      channelsState={activeRuntimeKind === "managed" ? channelsState : null}
+      channelStatuses={activeRuntimeKind === "managed" ? channelStatuses : []}
       channelsLoadError={
         activeRuntimeKind === "managed" ? channelsLoadError : null
       }
       onOpenChannelsSettings={
         activeRuntimeKind === "managed" ? () => openSettings("im") : undefined
+      }
+      onRestartChannels={
+        activeRuntimeKind === "managed" ? onRestartChannels : undefined
       }
       runtimeIndicator={runtimeIndicator}
       onOpenRuntimeSettings={() => openSettings("runtime")}

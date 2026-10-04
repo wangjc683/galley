@@ -35,6 +35,8 @@ export interface ErrorCardActions {
   onViewGoal?: (goalId: string) => void;
   /** Restart enabled Channels from an actionable toast. */
   onRestartChannels?: () => void;
+  /** Run the Browser Control demo from the auto-verify success toast. */
+  onTryBrowserControl?: () => void;
 }
 
 interface ErrorCardProps extends ErrorCardActions {
@@ -70,6 +72,7 @@ export function ErrorCard({
   onViewProject,
   onViewGoal,
   onRestartChannels,
+  onTryBrowserControl,
 }: ErrorCardProps) {
   const copy = useCopy();
   const [open, setOpen] = useState(false);
@@ -97,6 +100,7 @@ export function ErrorCard({
         onViewProject,
         onViewGoal,
         onRestartChannels,
+        onTryBrowserControl,
       }),
   );
 
@@ -148,6 +152,7 @@ export function ErrorCard({
                 onViewProject={onViewProject}
                 onViewGoal={onViewGoal}
                 onRestartChannels={onRestartChannels}
+                onTryBrowserControl={onTryBrowserControl}
                 onToggleDetails={() => setOpen((v) => !v)}
                 detailsOpen={open}
               />
@@ -200,6 +205,7 @@ export function ErrorCard({
               onViewProject={onViewProject}
               onViewGoal={onViewGoal}
               onRestartChannels={onRestartChannels}
+              onTryBrowserControl={onTryBrowserControl}
               onToggleDetails={() => setOpen((v) => !v)}
               detailsOpen={open}
             />
@@ -240,6 +246,7 @@ interface ActionDef {
     | "onViewProject"
     | "onViewGoal"
     | "onRestartChannels"
+    | "onTryBrowserControl"
     | "copyDetails"
     | "toggleDetails";
 }
@@ -383,6 +390,14 @@ function defaultActions(error: AppError, copy: AppCopy): ActionDef[] {
       handler: "onRestartChannels",
     });
   }
+  if (error.action?.kind === "try_browser_control") {
+    actions.push({
+      id: "try-browser-control",
+      label: error.action.label,
+      kind: "primary",
+      handler: "onTryBrowserControl",
+    });
+  }
   if (error.retryable) {
     actions.push({
       id: "retry",
@@ -414,6 +429,7 @@ function isActionAvailable(
     | "onViewProject"
     | "onViewGoal"
     | "onRestartChannels"
+    | "onTryBrowserControl"
   >,
 ): boolean {
   switch (action.handler) {
@@ -435,6 +451,11 @@ function isActionAvailable(
       return (
         error.action?.kind === "restart_channels" &&
         Boolean(handlers.onRestartChannels)
+      );
+    case "onTryBrowserControl":
+      return (
+        error.action?.kind === "try_browser_control" &&
+        Boolean(handlers.onTryBrowserControl)
       );
     case "copyDetails":
       return hasDiagnosticDetails(error);
@@ -459,6 +480,7 @@ function ActionButton({
   onViewProject,
   onViewGoal,
   onRestartChannels,
+  onTryBrowserControl,
   onToggleDetails,
   detailsOpen,
 }: {
@@ -471,6 +493,7 @@ function ActionButton({
   onViewProject?: (projectId: string) => void;
   onViewGoal?: (goalId: string) => void;
   onRestartChannels?: () => void;
+  onTryBrowserControl?: () => void;
   onToggleDetails: () => void;
   detailsOpen: boolean;
 }) {
@@ -507,6 +530,11 @@ function ActionButton({
           return undefined;
         }
         return onRestartChannels;
+      case "onTryBrowserControl":
+        if (error.action?.kind !== "try_browser_control") {
+          return undefined;
+        }
+        return onTryBrowserControl;
       case "copyDetails":
         return () => {
           void copyTextToClipboard(formatErrorDetails(error)).then(() => {

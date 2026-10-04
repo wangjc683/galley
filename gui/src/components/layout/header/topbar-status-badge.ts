@@ -6,8 +6,15 @@ import { cn } from "@/lib/utils";
  * Control) all key off the same tone map so a colour or motion tweak
  * lands in one place instead of drifting across the call sites.
  *
- * Icon-form indicators use TopBarIconButton instead; this module is
- * only the text-badge track.
+ * Every tone names a kind of state, never a feature's identity: `brand`
+ * = Galley is working for you or invites you to start (a running Goal,
+ * Browser Control 待解锁); `warning` / `error` = needs your hands / is
+ * broken; `success` = done, waiting to be seen; `neutral` = in
+ * transition or a quiet setup gap.
+ *
+ * Icon-form indicators use TopBarIconButton instead (Browser Control and
+ * Channels as `TopBarLampIcon` lamps); this module is only the
+ * text-badge track.
  */
 
 export type TopBarStatusTone =
@@ -24,12 +31,14 @@ const TOPBAR_CONTROL_MOTION = cn(
 );
 
 /**
- * Press-in affordance for badges that are also popover triggers — Radix
- * sets `data-state="open"` on the trigger while its popover is open, so
- * the badge sinks + gains a pressed shadow for the duration.
+ * Press-in affordance for badges that are also popover triggers: while
+ * the popover is open the badge sinks + gains a pressed shadow. Keyed on
+ * `aria-expanded` as well as `data-state="open"` — the wrapping
+ * `TooltipLabel` merges its own data-state over the popover's (see
+ * TopBarIconButton).
  */
 export const TOPBAR_POPOVER_OPEN_STATE =
-  "data-[state=open]:translate-y-px data-[state=open]:shadow-[var(--shadow-control-press)]";
+  "data-[state=open]:translate-y-px data-[state=open]:shadow-[var(--shadow-control-press)] aria-expanded:translate-y-px aria-expanded:shadow-[var(--shadow-control-press)]";
 
 const TOPBAR_STATUS_BADGE_BASE = cn(
   "inline-flex h-7 items-center whitespace-nowrap rounded-md border px-2.5 text-[12px] font-medium",

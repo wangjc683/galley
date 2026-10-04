@@ -185,7 +185,8 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 
 - [ ] Managed GA mode shows the TopBar Channels icon between Browser Control and Settings
 - [ ] External GA mode hides the TopBar Channels icon and the Settings Channels tab
-- [ ] Clicking the TopBar Channels icon opens Settings -> Channels
+- [ ] With no platform ever set up, clicking the TopBar Channels icon opens Settings -> Channels; once one is set up it opens the Channels popover (per-platform rows, 重启 Channels behind a confirm, Channels 设置…)
+- [ ] The Channels lamp fills while a platform runs and is outline-only when all are paused (readable in light and dark)
 - [ ] Channels icon has no status dot or unread-message badge
 - [ ] Settings sidebar shows `Channels` with Chinese helper `聊天软件`
 - [ ] WeChat QR refresh uses a fresh image path and does not show a stale QR code

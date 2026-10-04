@@ -4,6 +4,13 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 
+/**
+ * The 待解锁 invitation at the top of the main area while Browser Control
+ * was never set up (managed runtime only). Brand tone, not warning: the
+ * capability is not broken, it is waiting to be unlocked, and the copy
+ * says what the user gains. It stays until setup completes — not
+ * dismissable, no motion, no modal (rules kept from 2026-05-27).
+ */
 export function BrowserControlAttentionBanner({
   onOpen,
 }: {
@@ -11,9 +18,12 @@ export function BrowserControlAttentionBanner({
 }) {
   const copy = useCopy().browserControlAttention;
   return (
-    <div className="flex min-h-11 shrink-0 items-center justify-between gap-4 border-b border-warning/[var(--opacity-medium)] bg-warning/[var(--opacity-soft)] px-5 py-2.5">
+    // The same material as the topbar 待解锁 badge (`brand` tone:
+    // border-brand/30 on bg-brand-soft), so badge and banner read as one
+    // voice; a brand alpha band went pink against the cream badge.
+    <div className="flex min-h-11 shrink-0 items-center justify-between gap-4 border-b border-brand/30 bg-brand-soft px-5 py-2.5">
       <div className="flex min-w-0 items-center gap-2.5">
-        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-warning/[var(--opacity-medium)] bg-warning/[var(--opacity-soft)] text-warning">
+        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-brand/30 bg-elevated text-brand-strong">
           <PuzzlePiece size={15} weight="thin" />
         </span>
         <p className="min-w-0 truncate text-[12.5px] font-medium text-ink">
@@ -21,8 +31,9 @@ export function BrowserControlAttentionBanner({
         </p>
       </div>
       <Button
-        variant="warning"
+        variant="brand-soft"
         size="sm"
+        className="shrink-0 whitespace-nowrap"
         onClick={onOpen}
         leadingIcon={<PuzzlePiece size={13} weight="thin" />}
       >

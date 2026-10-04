@@ -243,23 +243,58 @@ export const zhCopy = {
       standardShort: "标准",
       largeShort: "大",
     },
-    browserControlPending: "浏览器控制 · 待连接",
+    browserControlPending: "浏览器控制 · 待解锁",
     browserControlChecking: "浏览器控制 · 检测中",
     browserControlConnected: "浏览器控制 · 已可用",
     browserControlError: "浏览器控制 · 需检查",
-    browserControlPendingTitle: "连接浏览器控制",
+    browserControlPendingTitle: "解锁浏览器控制",
     browserControlConnectedTitle: "浏览器控制已可用",
     browserControlNoTabsTitle: "浏览器控制已连接，暂无网页",
     browserControlOfflineTitle: "已配置，浏览器未打开",
     browserControlErrorTitle: "浏览器控制需要检查",
+    // 按桥报的 errorKind 分组：badge 是顶栏短标签，title 是 popover 标题；
+    // 桥自己的中文 error 原文做 popover 的明细行。
+    browserControlErrors: {
+      missingDependency: {
+        badge: "浏览器控制 · 缺少组件",
+        title: "浏览器控制缺少运行组件",
+      },
+      portInUse: {
+        badge: "浏览器控制 · 端口被占用",
+        title: "浏览器控制的端口被其他程序占用",
+      },
+      unreachable: {
+        badge: "浏览器控制 · 连接中断",
+        title: "浏览器控制服务连接中断",
+      },
+      startFailed: {
+        badge: "浏览器控制 · 未能启动",
+        title: "浏览器控制服务没能启动",
+      },
+    },
+    browserControlPopover: {
+      connected: "已连接浏览器",
+      tabCount: (count: number) => `${count} 个可操作标签页`,
+      noTabs: "没有可操作的标签页",
+      offline: "浏览器未连接",
+      offlineHint: "打开装了插件的浏览器，就会自动连上。",
+      checking: "正在检测浏览器连接",
+      retrying: "Galley 会自动重试。",
+      settings: "浏览器控制设置…",
+    },
     channelsSetup: "设置 Channels",
     channelsConnecting: "Channels 正在连接",
     channelsWaitingScan: "Channels 等待扫码",
     channelsConnected: "Channels 已连接",
+    channelsIdle: "Channels 已暂停",
     channelsNeedsAttention: "Channels 需要处理",
     channelsConnectingBadge: "Channels · 连接中",
     channelsWaitingScanBadge: "Channels · 扫码",
     channelsNeedsAttentionBadge: "Channels · 需处理",
+    channelsPopover: {
+      loadFailed: "读取 Channels 状态失败",
+      settings: "Channels 设置…",
+    },
     configureModels: "配置模型",
     bundledNeedsModel: "内置内核还没有可用模型",
     openModelsForBundled: "打开 Models 为内置内核配置模型",
@@ -308,8 +343,8 @@ export const zhCopy = {
     closeDesktopPet: "关闭桌面宠物",
   },
   browserControlAttention: {
-    message: "连接浏览器控制后，Galley 才能操作你已登录的浏览器。",
-    action: "连接浏览器控制",
+    message: "让 Galley 用你已登录的浏览器办事：查资料、填表单、操作网页后台。",
+    action: "解锁浏览器控制",
   },
   browserControl: {
     folderName: "tmwd_cdp_bridge",
@@ -333,7 +368,7 @@ export const zhCopy = {
     stepPrepareFailed: "Galley 未能准备插件文件夹。请重试，或重新安装 Galley。",
     stepTest: "测试连接",
     stepTestHint:
-      "在该浏览器打开任意网页（或点「打开测试页」），再点「测试连接」。",
+      "插件装好后，Galley 会自动检测到连接。没反应时，在该浏览器打开任意网页（或点「打开测试页」），再点「测试连接」。",
     openTestPage: "打开测试页",
     troubleShow: "遇到问题？",
     troubleHide: "收起",
@@ -355,6 +390,8 @@ export const zhCopy = {
     connectedNoTabsStatusDetail: "打开测试页后，点击重新检测。",
     connectedStatusDetail: (tabCount: number) =>
       tabCount > 0 ? `检测到 ${tabCount} 个可操作标签页` : "",
+    connectedScope:
+      "Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，它能看到你打开的所有标签页的标题和网址。",
     repairTitle: "重新加载插件",
     reinstallOrRepair: "重新安装或修复插件",
     hideRepair: "收起",
@@ -1729,6 +1766,9 @@ export const zhCopy = {
     channelsRestartedMessage: "已启用 Channels 已重新启动。",
     channelsRestartFailed: "重启 Channels 失败",
     channelsRestartNone: "没有已启用的 Channel。",
+    browserControlReady: "浏览器控制已连接",
+    browserControlReadyMessage: "新建对话，让 Galley 用浏览器查天气。",
+    tryBrowserControl: "试一试",
     goalStarted: "Goal 已启动",
     goalStartedMessage: (minutes: number) =>
       `Galley 会自己推进这个目标，最多 ${minutes} 分钟。`,

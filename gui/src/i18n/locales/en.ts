@@ -255,23 +255,58 @@ export const enCopy: AppCopy = {
       standardShort: "Standard",
       largeShort: "Large",
     },
-    browserControlPending: "Browser Control · Connect",
+    browserControlPending: "Browser Control · Unlock",
     browserControlChecking: "Browser Control · Checking",
     browserControlConnected: "Browser Control · Ready",
-    browserControlError: "Browser Control · Needs setup",
-    browserControlPendingTitle: "Connect Browser Control",
+    browserControlError: "Browser Control · Needs attention",
+    browserControlPendingTitle: "Unlock Browser Control",
     browserControlConnectedTitle: "Browser Control ready",
     browserControlNoTabsTitle: "Browser Control connected, no page open",
     browserControlOfflineTitle: "Set up, browser not open",
     browserControlErrorTitle: "Browser Control needs attention",
+    browserControlErrors: {
+      missingDependency: {
+        badge: "Browser Control · Missing component",
+        title: "Browser Control is missing a component",
+      },
+      portInUse: {
+        badge: "Browser Control · Port in use",
+        title: "Another program is using Browser Control's port",
+      },
+      unreachable: {
+        badge: "Browser Control · Connection lost",
+        title: "Lost the connection to Browser Control",
+      },
+      startFailed: {
+        badge: "Browser Control · Couldn't start",
+        title: "Browser Control couldn't start",
+      },
+    },
+    browserControlPopover: {
+      connected: "Browser connected",
+      tabCount: (count: number) =>
+        `${count} operable ${count === 1 ? "tab" : "tabs"}`,
+      noTabs: "No operable tabs",
+      offline: "Browser not connected",
+      offlineHint:
+        "Open the browser with the extension and it connects on its own.",
+      checking: "Checking the browser connection",
+      retrying: "Galley keeps retrying.",
+      settings: "Browser Control settings…",
+    },
     channelsSetup: "Set up Channels",
     channelsConnecting: "Channels connecting",
     channelsWaitingScan: "Scan to connect Channels",
     channelsConnected: "Channels connected",
+    channelsIdle: "Channels paused",
     channelsNeedsAttention: "Channels needs attention",
     channelsConnectingBadge: "Channels · Connecting",
     channelsWaitingScanBadge: "Channels · Scan",
     channelsNeedsAttentionBadge: "Channels · Needs attention",
+    channelsPopover: {
+      loadFailed: "Couldn't read Channels status",
+      settings: "Channels settings…",
+    },
     configureModels: "Set up model",
     bundledNeedsModel: "Bundled engine needs a model",
     openModelsForBundled: "Open Models to set up the bundled engine",
@@ -323,8 +358,8 @@ export const enCopy: AppCopy = {
   },
   browserControlAttention: {
     message:
-      "Connect Browser Control so Galley can operate your signed-in browser.",
-    action: "Connect Browser Control",
+      "Let Galley use your signed-in browser: look things up, fill in forms, work in web dashboards.",
+    action: "Unlock Browser Control",
   },
   browserControl: {
     folderName: "tmwd_cdp_bridge",
@@ -349,7 +384,7 @@ export const enCopy: AppCopy = {
       "Galley could not prepare the extension folder. Try again, or reinstall Galley.",
     stepTest: "Test the connection",
     stepTestHint:
-      "Open any webpage in that browser (or click Open test page), then click Test connection.",
+      "Once the extension is installed, Galley detects the connection on its own. If nothing happens, open any webpage in that browser (or click Open test page), then click Test connection.",
     openTestPage: "Open test page",
     troubleShow: "Having trouble?",
     troubleHide: "Hide",
@@ -374,6 +409,8 @@ export const enCopy: AppCopy = {
     connectedNoTabsStatusDetail: "Open the test page, then click Check again.",
     connectedStatusDetail: (tabCount) =>
       tabCount > 0 ? `${tabCount} operable tabs detected` : "",
+    connectedScope:
+      "Galley reads and operates this browser only for tasks you give it, using your signed-in sessions. When it reads a page, it can see the titles and URLs of all your open tabs.",
     repairTitle: "Reload extension",
     reinstallOrRepair: "Reinstall or repair extension",
     hideRepair: "Hide",
@@ -1787,6 +1824,10 @@ export const enCopy: AppCopy = {
     channelsRestartedMessage: "Enabled Channels restarted.",
     channelsRestartFailed: "Could not restart Channels",
     channelsRestartNone: "No enabled Channel.",
+    browserControlReady: "Browser Control connected",
+    browserControlReadyMessage:
+      "Start a chat where Galley checks the weather in your browser.",
+    tryBrowserControl: "Try it",
     goalStarted: "Goal started",
     goalStartedMessage: (minutes: number) =>
       `Galley will push this goal forward on its own, for up to ${minutes} minutes.`,

@@ -1,9 +1,9 @@
 import { useCopy } from "@/lib/i18n";
-import type { BrowserControlStatus } from "@/lib/browser-control";
-import type { ImSupervisorState } from "@/lib/im-supervisor";
+import type { ImSupervisorStatus } from "@/lib/im-supervisor";
 import type { AppUpdateStatus } from "@/stores/app-update";
 import type { GoalBrief } from "@/types/goal";
 
+import type { BrowserControlIndicatorInput } from "./browser-control-indicator-status";
 import { BrowserControlIndicator } from "./BrowserControlIndicator";
 import { ChannelsIndicator } from "./ChannelsIndicator";
 import { GoalIndicator } from "./GoalIndicator";
@@ -15,8 +15,9 @@ import { updateIndicatorVisible } from "./update-indicator-status";
 /**
  * Left half of the MainHeader right group: state-of-the-world badges —
  * Goal / engine (内核) / Browser Control / Channels / app Update. Each
- * child decides whether it renders as an icon button or a text badge;
- * the cluster only owns the ordering and the group ARIA landmark. The
+ * child decides whether it renders as an icon button (Browser Control
+ * and Channels as lamps, see `TopBarLampIcon`) or a text badge; the
+ * cluster only owns the ordering and the group ARIA landmark. The
  * parent gates the whole cluster (and the divider after it) on
  * `hasTopBarStatusItems`, so an empty cluster never renders.
  *
@@ -34,11 +35,12 @@ export function TopBarStatusCluster({
   runtimeIndicator,
   onOpenRuntimeSettings,
   onOpenModelsSettings,
-  browserControlStatus,
+  browserControl,
   onOpenBrowserControl,
-  channelsState,
+  channelStatuses,
   channelsLoadError,
   onOpenChannelsSettings,
+  onRestartChannels,
   appUpdateStatus,
   hasRunningSessions,
   onRestartAppUpdate,
@@ -50,11 +52,12 @@ export function TopBarStatusCluster({
   runtimeIndicator: RuntimeIndicator;
   onOpenRuntimeSettings?: () => void;
   onOpenModelsSettings?: () => void;
-  browserControlStatus: BrowserControlStatus | null;
+  browserControl: BrowserControlIndicatorInput | null;
   onOpenBrowserControl?: () => void;
-  channelsState: ImSupervisorState | null;
+  channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
   channelsLoadError?: string | null;
   onOpenChannelsSettings?: () => void;
+  onRestartChannels?: () => void;
   appUpdateStatus: AppUpdateStatus;
   hasRunningSessions: boolean;
   onRestartAppUpdate?: () => void;
@@ -82,17 +85,18 @@ export function TopBarStatusCluster({
           onOpenModels={onOpenModelsSettings}
         />
       )}
-      {browserControlStatus && (
+      {browserControl && (
         <BrowserControlIndicator
-          status={browserControlStatus}
-          onOpen={onOpenBrowserControl}
+          input={browserControl}
+          onOpenSettings={onOpenBrowserControl}
         />
       )}
       {onOpenChannelsSettings && (
         <ChannelsIndicator
-          state={channelsState}
+          statuses={channelStatuses}
           loadError={channelsLoadError}
-          onOpen={onOpenChannelsSettings}
+          onOpenSettings={onOpenChannelsSettings}
+          onRestart={onRestartChannels}
         />
       )}
       {updateIndicatorVisible(appUpdateStatus) && (

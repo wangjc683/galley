@@ -210,6 +210,7 @@ export function SettingsBrowserControl({
               status={view.status}
               statusDetail={view.statusDetail}
               statusMessage={view.statusMessage}
+              scope={view.connected ? copy.connectedScope : undefined}
               actions={
                 view.needsWebpage ? (
                   <TestPageActions
@@ -573,6 +574,7 @@ function ConnectionStatusCard({
   status,
   statusDetail,
   statusMessage,
+  scope,
   embedded = false,
 }: {
   actions?: ReactNode;
@@ -581,6 +583,8 @@ function ConnectionStatusCard({
   status: string;
   statusDetail?: string;
   statusMessage: string;
+  /** What a connection lets Galley do, on the connected card only. */
+  scope?: string;
   embedded?: boolean;
 }) {
   const offline = status === "offline";
@@ -623,6 +627,14 @@ function ConnectionStatusCard({
           {statusDetail && (
             <span className="mt-0.5 block text-ui-tertiary leading-dense text-ink-soft">
               {statusDetail}
+            </span>
+          )}
+          {scope && (
+            // The honest scope (06-16 design audit): when and how it
+            // acts, and that reading a page shares every open tab's
+            // title and URL with the model.
+            <span className="mt-1.5 block text-ui-tertiary leading-notice text-ink-muted">
+              {scope}
             </span>
           )}
           {actions}

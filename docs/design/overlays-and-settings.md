@@ -311,10 +311,10 @@ Runtime tab 的任何问题）。
 
 #### Channels
 
-- TopBar 中 Channels 位于状态簇最后，常驻但默认安静。`setup` / `not_connected` / `stopped` 显示 neutral icon-only `ChatCircleText`，作为可选扩展入口而不是待办；`running` 同样收敛为 icon-only。只有已经进入连接或需要处理时才升级为文字 badge：`starting` 显示 `Channels · 连接中`；`waiting_scan` 显示 `Channels · 扫码`；`expired` / `error` / load error 显示 `Channels · 需处理`。
+- 顶栏的 Channels 灯（亮 = 有平台在运行）、文字 badge 与 popover 的规范在 [layout-and-chrome](./layout-and-chrome.md) §4.1 Channels Indicator（2026-10-04 起；此前这里写的是「icon-only、不论状态都一样」）。
 - Channels 使用 managed model config revision 判断配置 freshness。模型配置变更后，已启用 Channel 若仍记录旧 revision，Settings -> Channels 卡片列表顶部显示 warning 状态条：标题 `Channels 正在使用旧模型配置` + 一行说明 + `重启 Channels` CTA。stale 信号只靠状态条传达，不再改按钮变体——反馈要引导行动，不是暗示。
 - `重启 Channels` 语义是重启所有已启用 Channel；手动 Stop / Disconnect 会把 Channel 置为未启用，不会被这个按钮重新拉起。
-- Models toast 里的 `重启 Channels` CTA 直接执行；Channels 页（状态条或底部按钮）先弹轻确认，说明可能中断当前回复、不会退出登录。
+- Models toast 里的 `重启 Channels` CTA 直接执行；Channels 页（状态条或底部按钮）和顶栏 Channels popover 先弹同一个轻确认，说明可能中断当前回复、不会退出登录。
 - 卡片下方的常驻 `重启 Channels` 按钮保持 ghost 权重，且只在存在已启用 Channel 且非 stale 时渲染——没有可重启对象时不占位，stale 时让位给状态条。
 - 重启不删除微信 token，不主动要求重新扫码；token 过期仍走现有 expired / scan 流程。
 - 重启不丢对话（2026-09-30）：每个渠道记下当前 GA 日志的文件名，重启后按日志接回上下文（飞书 / Telegram / 微信在 `runner/im_resume.py`，Discord 在补丁 `0026`，按频道）；接不上时下一条回答首行说一次「之前的对话没接上，这是新的上下文」。要清就发 `/new`（微信的 `/new` 由 Galley 补上）。断开连接（Disconnect）清掉续接状态，重连从头开始；解绑使用者不清。
@@ -425,9 +425,10 @@ Runtime tab 的任何问题）。
 #### Browser Control
 
 从独立 setup dialog 迁移而来的 Tab（仅 managed 运行时显示，与 Channels 同
-一 gating）。TopBar indicator 和 attention banner 都深链到这里；配置只有
-这一个家（见 [layout-and-chrome](./layout-and-chrome.md) §4.1 Browser
-Control Indicator）。
+一 gating）。顶栏「待解锁」badge 和邀请 banner 直达这里，灯与 error badge
+经 popover 底部的「浏览器控制设置…」进入；配置只有这一个家（见
+[layout-and-chrome](./layout-and-chrome.md) §4.1 Browser Control
+Indicator）。
 
 - **结构按验证状态二分**：未验证（`unknown` / `error`）显示设置指引卡；
   验证过（`connected` / `connected_no_tabs` / `offline`）显示状态卡 +
@@ -435,7 +436,10 @@ Control Indicator）。
 - **设置指引卡**：浏览器选择（Chrome / Edge SegmentedControl）+ 三步编号
   步骤（打开扩展页并开开发者模式 → 定位 / 拖入 `tmwd_cdp_bridge` 文件夹
   → 测试连接）。步骤 3 内并排「打开测试页」（secondary）和「测试连接」
-  （primary）+ 内嵌状态行。准备失败停留在步骤 2 并给重试；「遇到问题？」
+  （primary）+ 内嵌状态行。插件连上常驻浏览器桥时 Galley 自己跑一次验证，
+  步骤 3 自动完成（2026-10-04 起），所以步骤 3 的提示先说「插件装好后，
+  Galley 会自动检测到连接」，再给没反应时的手动路径；「测试连接」按钮保留
+  作手动重试。准备失败停留在步骤 2 并给重试；「遇到问题？」
   折叠区放加载已解压扩展的兜底说明和官方图文指南 ghost link。
 - **动作锚定规则（本 Tab 的核心决策）**：推进状态的动作住在它作用的对象
   里——「测试连接」在步骤 3 内，「打开测试页 ×2 + 重新检测」在等待网页的
@@ -448,9 +452,14 @@ Control Indicator）。
   页」两个按钮（快速路径，用户可能没进过指引、无浏览器选择上下文）；指
   引卡里用 SegmentedControl 驱动各步骤（引导路径）。不要强行统一。
 - 已连接的状态卡降权为 `line-subtle` 安静信息行（✓ + `已连接浏览器` +
-  `检测到 N 个可操作标签页`）；demo 按钮（`试用浏览器控制`）保留：连接
+  `检测到 N 个可操作标签页` + 范围说明）；demo 按钮（`试用浏览器控制`）保留：连接
   测试本身不走模型，demo 由 managed GA 通过现有 `web_execute_js` /
   `tabs.create` 协议主动打开搜索页，不写回连接状态。
+- **范围说明**（2026-10-04，落实 06-16 设计审计「已连接态缺隐私与范围说明」）：
+  已连接卡第三行、顶栏浏览器 popover 正文，同一句（`browserControl.connectedScope`）：
+  「Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，
+  它能看到你打开的所有标签页的标题和网址。」后半句是实情：每次 `web_scan`
+  都把整张标签页列表（标题 + 网址）交给模型。标签页数保持次要。
 
 #### Approval（2026-07-20 修订：审批模式 per-session 化）
 

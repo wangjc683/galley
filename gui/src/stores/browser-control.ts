@@ -16,6 +16,11 @@ import {
   type BrowserControlStatus,
 } from "@/lib/browser-control";
 import { getPref, setPref } from "@/lib/db";
+import { copyForLanguage } from "@/lib/i18n";
+import { resolveLanguagePreference } from "@/lib/language";
+import { usePrefsStore } from "@/stores/prefs";
+import { useUiStore } from "@/stores/ui";
+import { makeAppError } from "@/types/app-error";
 
 const BROWSER_CONTROL_VERIFIED_PREF = "browser_control_verified";
 
@@ -26,6 +31,37 @@ let probesInFlight = 0;
 
 function isSuccessfulProbeStatus(status: BrowserControlProbeStatus): boolean {
   return status === "connected" || status === "connected_no_tabs";
+}
+
+/**
+ * The moment setup completes on its own is the moment the capability is
+ * worth trying, so the automatic verification's success offers the demo
+ * once (the empty state stays deliberately empty: conversation.md §7).
+ * Sticky: it fires while the user is still in the browser's extensions
+ * page, and a timed toast would be gone before they come back.
+ */
+function pushReadyToast() {
+  const copy = copyForLanguage(
+    resolveLanguagePreference(usePrefsStore.getState().languagePreference),
+  );
+  useUiStore.getState().pushToast(
+    makeAppError({
+      id: "browser-control-ready",
+      category: "business",
+      severity: "info",
+      title: copy.toasts.browserControlReady,
+      message: copy.toasts.browserControlReadyMessage,
+      hint: null,
+      retryable: false,
+      context: "browser_control_auto_verify",
+      traceback: null,
+      action: {
+        kind: "try_browser_control",
+        label: copy.toasts.tryBrowserControl,
+      },
+      autoDismissMs: 0,
+    }),
+  );
 }
 
 function statusForProbe(
@@ -136,6 +172,9 @@ export const useBrowserControlStore = create<BrowserControlState>(
         const verified = wasVerified || isSuccessfulProbeStatus(probe.status);
         if (verified && !wasVerified) {
           void setPref(BROWSER_CONTROL_VERIFIED_PREF, true).catch(() => {});
+          // Only the automatic run: a manual 测试连接 already has the
+          // demo button next to it in Settings.
+          if (context === "auto_verify") pushReadyToast();
         }
         // The live bridge owns the connection state; the probe adds the
         // verification and its sample. A failed script round trip still

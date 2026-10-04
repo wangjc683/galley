@@ -7,6 +7,7 @@ import {
   type BrowserControlProbe,
 } from "@/lib/browser-control";
 import { useBrowserControlStore } from "@/stores/browser-control";
+import { useUiStore } from "@/stores/ui";
 import { getTauriMocks } from "@/test/setup";
 
 type BridgeHandler = (event: { payload: BrowserBridgeStatus }) => void;
@@ -54,11 +55,18 @@ function setVerified(verified: boolean) {
   useBrowserControlStore.setState({ verified, verificationHydrated: true });
 }
 
+function readyToasts() {
+  return useUiStore
+    .getState()
+    .toasts.filter((toast) => toast.id === "browser-control-ready");
+}
+
 beforeEach(() => {
   useBrowserControlStore.setState(
     useBrowserControlStore.getInitialState(),
     true,
   );
+  useUiStore.setState({ toasts: [] });
 });
 
 describe("statusForBridge", () => {
@@ -145,6 +153,41 @@ describe("browser-control store with the live bridge", () => {
     store.applyBridgeStatus(bridge({ extensionConnected: true, tabCount: 4 }));
     await flushAsync();
     expect(probeCalls()).toHaveLength(1);
+
+    // The moment setup completes on its own offers the demo, once.
+    expect(readyToasts()).toHaveLength(1);
+    expect(readyToasts()[0]).toMatchObject({
+      severity: "info",
+      autoDismissMs: 0,
+      action: { kind: "try_browser_control" },
+    });
+  });
+
+  it("offers the demo only for the automatic verification", async () => {
+    setVerified(false);
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command) => {
+      if (command === "probe_browser_control") return probeResult();
+      return undefined;
+    });
+
+    await useBrowserControlStore.getState().probe("manual");
+    expect(useBrowserControlStore.getState().verified).toBe(true);
+    expect(readyToasts()).toHaveLength(0);
+  });
+
+  it("offers nothing when the automatic verification fails", async () => {
+    setVerified(false);
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command) => {
+      if (command === "probe_browser_control") {
+        return probeResult({ status: "error", message: "脚本测试失败" });
+      }
+      return undefined;
+    });
+
+    await useBrowserControlStore.getState().probe("auto_verify");
+    expect(readyToasts()).toHaveLength(0);
   });
 
   it("re-arms the automatic probe after the extension disconnects", async () => {

@@ -1,19 +1,20 @@
 import type { AppCopy } from "@/lib/i18n";
 import {
-  aggregateChannelsState,
   restartEnabledImSupervisors,
-  type ImSupervisorState,
+  type ImSupervisorStatus,
 } from "@/lib/im-supervisor";
 import { useImSupervisorStatus } from "@/hooks/useImSupervisorStatus";
 import { makeAppError } from "@/types/app-error";
 import type { AppError } from "@/types/app-error";
 
 /**
- * The four IM channel status feeds (WeChat / Feishu / Telegram / Discord) plus
- * their MainHeader aggregate and the toast-driven "restart channels"
- * action. `useImSupervisorStatus` holds per-instance polling state, so
- * this hook must be mounted exactly once (App) and its outputs passed
- * down — a second mount would double-poll every platform.
+ * The four IM channel status feeds (WeChat / Feishu / Telegram / Discord),
+ * handed to the MainHeader as one per-platform list (the topbar lamp and
+ * its popover derive everything from it), plus the "restart channels"
+ * action shared by the toast CTA and that popover. `useImSupervisorStatus`
+ * holds per-instance polling state, so this hook must be mounted exactly
+ * once (App) and its outputs passed down — a second mount would
+ * double-poll every platform.
  */
 export function useChannelsStatus({
   enabled,
@@ -30,14 +31,15 @@ export function useChannelsStatus({
   const telegramChannelsStatus = useImSupervisorStatus("telegram", enabled);
   const discordChannelsStatus = useImSupervisorStatus("discord", enabled);
 
-  const channelsState: ImSupervisorState | null = enabled
-    ? aggregateChannelsState([
-        wechatChannelsStatus.status?.state,
-        feishuChannelsStatus.status?.state,
-        telegramChannelsStatus.status?.state,
-        discordChannelsStatus.status?.state,
-      ])
-    : null;
+  // Fixed order = the Settings → Channels card order.
+  const channelStatuses: Array<ImSupervisorStatus | null> = enabled
+    ? [
+        wechatChannelsStatus.status,
+        feishuChannelsStatus.status,
+        telegramChannelsStatus.status,
+        discordChannelsStatus.status,
+      ]
+    : [];
   const channelsLoadError = enabled
     ? (wechatChannelsStatus.loadError ??
       feishuChannelsStatus.loadError ??
@@ -101,5 +103,5 @@ export function useChannelsStatus({
     }
   };
 
-  return { channelsState, channelsLoadError, restartChannels };
+  return { channelStatuses, channelsLoadError, restartChannels };
 }

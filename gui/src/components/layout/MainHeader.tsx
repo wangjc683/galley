@@ -3,14 +3,14 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCopy } from "@/lib/i18n";
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import type { BrowserControlStatus } from "@/lib/browser-control";
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
-import type { ImSupervisorState } from "@/lib/im-supervisor";
+import type { ImSupervisorStatus } from "@/lib/im-supervisor";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
 import type { AppUpdateStatus } from "@/stores/app-update";
 import type { GoalBrief } from "@/types/goal";
 
 import { WindowControls } from "./WindowControls";
+import type { BrowserControlIndicatorInput } from "./header/browser-control-indicator-status";
 import type { RuntimeIndicator } from "./header/runtime-indicator";
 import { SessionTitleMenu } from "./header/SessionTitleMenu";
 import { TopBarStatusCluster } from "./header/StatusCluster";
@@ -32,11 +32,14 @@ export interface MainHeaderProps {
    */
   sessionTitle?: string;
   onOpenSettings?: () => void;
-  browserControlStatus?: BrowserControlStatus | null;
+  /** Browser Control lamp / badge input; null outside the managed runtime. */
+  browserControl?: BrowserControlIndicatorInput | null;
   onOpenBrowserControl?: () => void;
-  channelsState?: ImSupervisorState | null;
+  /** Per-platform Channels statuses (fixed order, null = not loaded). */
+  channelStatuses?: ReadonlyArray<ImSupervisorStatus | null>;
   channelsLoadError?: string | null;
   onOpenChannelsSettings?: () => void;
+  onRestartChannels?: () => void;
   /**
    * Engine (内核) state from `resolveRuntimeIndicator`: nothing when the
    * bundled engine has a model, a "configure" badge when it has none or
@@ -161,11 +164,12 @@ export function MainHeader({
   changesOpen = false,
   sessionTitle,
   onOpenSettings,
-  browserControlStatus = null,
+  browserControl = null,
   onOpenBrowserControl,
-  channelsState = null,
+  channelStatuses = [],
   channelsLoadError = null,
   onOpenChannelsSettings,
+  onRestartChannels,
   runtimeIndicator = "hidden",
   onOpenRuntimeSettings,
   onOpenModelsSettings,
@@ -193,7 +197,7 @@ export function MainHeader({
   const hasTopBarStatusItems =
     activeGoals.length > 0 ||
     runtimeIndicator !== "hidden" ||
-    browserControlStatus !== null ||
+    browserControl !== null ||
     Boolean(onOpenChannelsSettings) ||
     updateIndicatorVisible(appUpdateStatus);
   return (
@@ -285,11 +289,12 @@ export function MainHeader({
             runtimeIndicator={runtimeIndicator}
             onOpenRuntimeSettings={onOpenRuntimeSettings}
             onOpenModelsSettings={onOpenModelsSettings}
-            browserControlStatus={browserControlStatus}
+            browserControl={browserControl}
             onOpenBrowserControl={onOpenBrowserControl}
-            channelsState={channelsState}
+            channelStatuses={channelStatuses}
             channelsLoadError={channelsLoadError}
             onOpenChannelsSettings={onOpenChannelsSettings}
+            onRestartChannels={onRestartChannels}
             appUpdateStatus={appUpdateStatus}
             hasRunningSessions={hasRunningSessions}
             onRestartAppUpdate={onRestartAppUpdate}

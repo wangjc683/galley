@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
 import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
+import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
@@ -95,6 +96,10 @@ function App() {
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const browserControlStatus = useBrowserControlStore((s) => s.status);
+  const browserControlVerified = useBrowserControlStore((s) => s.verified);
+  const browserControlVerificationHydrated = useBrowserControlStore(
+    (s) => s.verificationHydrated,
+  );
 
   // `sessions` carries only durable row state now; each sidebar row
   // derives its live status at read time via `useSessionStatusView`.
@@ -206,7 +211,7 @@ function App() {
     () => copyForLanguage(resolvedLanguage),
     [resolvedLanguage],
   );
-  const { channelsState, channelsLoadError, restartChannels } =
+  const { channelStatuses, channelsLoadError, restartChannels } =
     useChannelsStatus({
       enabled: activeRuntimeKind === "managed",
       copy,
@@ -522,8 +527,11 @@ function App() {
 
   const showBrowserControlAttention =
     activeRuntimeKind === "managed" &&
-    (browserControlStatus === "not_connected" ||
-      browserControlStatus === "error");
+    browserControlInviteVisible({
+      status: browserControlStatus,
+      verified: browserControlVerified,
+      verificationHydrated: browserControlVerificationHydrated,
+    });
 
   // Onboarding takeover: no AppShell, no overlays besides the dev
   // toggle.
@@ -633,8 +641,11 @@ function App() {
                 <MainHeaderHost
                   sessionTitle={activeSession?.title}
                   activeGoals={activeGoals}
-                  channelsState={channelsState}
+                  channelStatuses={channelStatuses}
                   channelsLoadError={channelsLoadError}
+                  onRestartChannels={() => {
+                    void restartChannels();
+                  }}
                   onOpenGoal={(goalId) => {
                     void openGoal(goalId);
                   }}
@@ -931,6 +942,10 @@ function App() {
         onViewGoal={openGoal}
         onRestartChannels={() => {
           void restartChannels();
+        }}
+        onTryBrowserControl={() => {
+          setSettingsOpen(false);
+          void runBrowserControlDemo();
         }}
       />
 

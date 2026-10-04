@@ -49,9 +49,14 @@ Rules:
   Chromium browsers can load the same unpacked extension manually. Safari and
   Firefox are out of scope for the first version because this bridge is
   Chrome-extension / CDP based.
-- While Browser Control is missing, TopBar must keep a persistent, high-weight
-  setup entry. The entry may use low-frequency motion, but should not use red
-  error styling or repeated modal spam.
+- While Browser Control was never set up, the TopBar keeps a persistent
+  invitation (「浏览器控制 · 待解锁」, brand tone) and the main area shows the
+  invitation banner. Both say what the user gains, not that something is
+  broken (2026-10-04: the earlier warning-tone 「待连接」 read as a fault). No
+  motion, no dismiss, no modal spam, no red. Once set up, the entry is a lamp:
+  lit while the extension is connected, unlit while it is not. Exact rules:
+  [layout-and-chrome §4.1](../design/layout-and-chrome.md) Browser Control
+  Indicator.
 - The success test must be deterministic and model-free: verify extension
   layout, bridge connection, tab discovery, and a minimal JavaScript execution
   such as reading `document.title`. It verifies the install (the persisted
@@ -144,7 +149,7 @@ subscribes in `useBrowserControlLiveStatus`, managed runtime only):
 | `running`, extension connected, no tabs | `connected_no_tabs` |
 | `running`, not connected | `offline` if verified, else `not_connected` |
 | `error` | `error` with the bridge's message |
-| `stopped` / `starting` / no report yet | `unknown` (resolves within about a second) |
+| `stopped` / `starting` / no report yet | `unknown` (resolves within about a second; the TopBar draws the unlit lamp if verified, 待解锁 if not, instead of a 「检测中」 badge) |
 
 Tabs win over the extension flag: GA can drive any tab the master lists, and an
 upstream master without `get_status` reports tabs but no extension flag.
@@ -155,8 +160,10 @@ Auto-verify: when the bridge first sees the extension (connected, or tabs
 listed) while `browser_control_verified` is not set, the GUI runs the existing
 deterministic probe once (`context: auto_verify`). With the resident master
 running the probe is a remote client, so it grabs no port. Success persists the
-pref, which completes setup step 3 without a click. One attempt per connection:
-it re-arms only after the bridge stops seeing the extension.
+pref, which completes setup step 3 without a click, and offers the demo once in
+a sticky info toast (「浏览器控制已连接」 + 「试一试」); a manual 测试连接 does
+not, since Settings shows the demo button next to it. One attempt per
+connection: it re-arms only after the bridge stops seeing the extension.
 
 Removed: the per-launch probe (it showed 「浏览器控制 · 检测中」 for 35 s every
 launch with the browser closed, went stale right after, and briefly held the
@@ -196,17 +203,23 @@ baseline upgrade):
   master does. Without it the resident master would make every managed
   session's browser calls seconds slower.
 
-Recommended Chinese copy:
+Chinese copy (source of truth: `gui/src/i18n/locales/zh.ts`):
 
 ```text
-TopBar missing: 浏览器控制 · 待连接
-TopBar ready: icon-only browser button, tooltip: 浏览器控制已可用
-Setup title: 连接浏览器控制
-Permission line: 安装后，Galley 可以读取和操作浏览器，并沿用你的登录态。
-Ready line: Galley 已能读取和操作浏览器，并沿用你的登录态。
+TopBar never set up: 浏览器控制 · 待解锁 (brand badge, tooltip 解锁浏览器控制)
+Invitation banner: 让 Galley 用你已登录的浏览器办事：查资料、填表单、操作网页后台。 / 解锁浏览器控制
+TopBar set up: PuzzlePiece lamp, lit while connected; tooltip 浏览器控制已可用 / 已配置，浏览器未打开
+Popover state: 已连接浏览器 · N 个可操作标签页 / 浏览器未连接 · 打开装了插件的浏览器，就会自动连上。
+Scope line: Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，它能看到你打开的所有标签页的标题和网址。
+Error badges: 浏览器控制 · 缺少组件 / 端口被占用 / 连接中断 / 未能启动 / 需检查
+Step 3 hint: 插件装好后，Galley 会自动检测到连接。没反应时，在该浏览器打开任意网页（或点「打开测试页」），再点「测试连接」。
 Connected evidence: 已连接浏览器 / 检测到 N 个可操作标签页
+Auto-verify toast: 浏览器控制已连接 / 新建对话，让 Galley 用浏览器查天气。 / 试一试
 Reload action: 重新加载插件
-Success demo: 试用浏览器控制
-Demo tooltip: 让 Galley 打开浏览器并搜索天气
+Success demo: 新建测试对话
 Demo prompt: 请打开百度，搜索今天的天气，并告诉我结果。不要用代码或外部 API 查询。
 ```
+
+The scope line's second sentence is literal: every `web_scan` result hands the
+model the whole tab list (titles and URLs, each URL cut at 50 characters; GA's
+`ga.py` `web_scan` `metadata.tabs`), not only the page it reads.
