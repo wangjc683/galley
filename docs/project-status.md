@@ -626,7 +626,10 @@ master, live status, no per-launch probe, auto-verify on first connection)
 plus managed-ga patch `0028` (a remote driver's default tab); the Browser
 Control and Channels lamps are plain when live and dimmed when not, open
 compact menus (entry surfaces are menus, decision surfaces like Goal / Update
-stay cards), show health in the success green, and the unconnected state
+stay cards), show health in the success green, and since a later live round
+share one row layout (a 14px mark, a name, the state word on the right; the
+Channels rows carry the platform marks, idle rows dim, the browser's tab count
+sits on a second line, errors no longer restate the badge), and the unconnected state
 invites (浏览器控制 · 待解锁) instead of warning. Core, runner and managed-ga
 changed this time. At the next Windows smoke, run the resident bridge items
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another

@@ -2,7 +2,8 @@
 
 Date: 2026-10-04
 Status: pushed 2026-10-04（主体 `db2dde5e` / `7044db88` / `450dbeb1` / `fe001911`，当日修订
-`a572632f` / `b7d30b23` / `ef5024b2` / `d4710b6c` / `cc94785e`）；静态门禁全绿；JC 真机看过顶栏的灯与菜单
+`a572632f` / `b7d30b23` / `ef5024b2` / `d4710b6c` / `cc94785e`，菜单行写法
+`19ceecbb` / `be75d7f2`）；静态门禁全绿；JC 真机看过顶栏的灯与菜单
 并当场改了几轮；新用户流程（待解锁 → 安装 → 自动验证 → 试一试）与 Windows 冒烟未走；unreleased
 Related: [票面](../../.scratch/browser-control-ux/PRD.md)、
 [managed-ga-runtime/browser-control](../managed-ga-runtime/browser-control.md)、
