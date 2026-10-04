@@ -25,7 +25,6 @@ import {
 } from "@/components/conversation/EffortPill";
 import {
   LLMPill,
-  type ComposerApprovalModeState,
   type ComposerLLMOption,
 } from "@/components/conversation/LLMPill";
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
@@ -58,7 +57,6 @@ import type {
 } from "@/components/conversation/composer-props";
 
 export type { ComposerLLMOption };
-export type { ComposerApprovalModeState };
 export type { ComposerReasoningEffortState };
 
 // Re-exported so callers wiring `onImageBlocked` keep importing the
@@ -99,7 +97,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onConfigureModels,
       requiresModelConfig = false,
       onOpenLLMSwitcher,
-      approvalMode,
       reasoningEffort,
       goal,
       hasActiveGoal = false,
@@ -617,7 +614,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 llmConfigHint={llmConfigHint}
                 onConfigureModels={onConfigureModels}
                 onOpenLLMSwitcher={onOpenLLMSwitcher}
-                approvalMode={approvalMode}
                 disabled={disabled || stopMode}
                 stopMode={stopMode}
                 phraseLead={reasoningEffort !== undefined}

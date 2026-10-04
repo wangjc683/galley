@@ -13,9 +13,7 @@ import {
   consumeReplyNotifyPending,
   markReplyNotifyPending,
 } from "@/lib/notify";
-import { deriveSessionStatus } from "@/lib/sessions";
 import { useMessagesStore } from "@/stores/messages";
-import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
@@ -39,7 +37,6 @@ function seedSession(): void {
     sessions: [makeSession({ id: "s-test", gaRuntimeKind: "external" })],
     activeSessionId: "s-test",
   });
-  usePrefsStore.setState({ yoloMode: false });
   useMessagesStore.getState().ensureMessages("s-test");
   useRuntimeStore.getState().ensureRuntime("s-test", { cachedLLMs: [] });
 }
@@ -279,57 +276,6 @@ describe("dispatchIPCEvent", () => {
       currentTurnIndex: 1,
       inFlightContent: "Early streamed prose",
     });
-  });
-
-  it("routes tool_call_pending and persists the absolute turn index", async () => {
-    useMessagesStore
-      .getState()
-      .appendUserTurnExternal("s-test", "Question", undefined, undefined, true, 5);
-    tauriMocks.invoke.mockClear();
-
-    dispatchIPCEvent({
-      kind: "tool_call_pending",
-      sessionId: "s-test",
-      approvalId: "appr-1",
-      turnIndex: 1,
-      toolName: "file_write",
-      args: { path: "README.md" },
-      argsPreview: "path=README.md",
-      riskLevel: "high",
-      reason: "Writes a file",
-      timestamp: "2026-06-18T08:02:00.000Z",
-    });
-
-    expect(useMessagesStore.getState().byId["s-test"].pendingApprovals).toEqual([
-      {
-        approvalId: "appr-1",
-        toolName: "file_write",
-        target: "README.md",
-        riskLevel: "high",
-        args: { path: "README.md" },
-      },
-    ]);
-    // Approval state lives on the messages slice (asserted above); the
-    // session row keeps its durable status and derives waiting_approval
-    // at read time rather than via the removed fireSessionMirror push.
-    const row = useSessionsStore.getState().sessions[0];
-    expect(row.status).toBe("idle");
-    expect(
-      deriveSessionStatus(row, { agentRunning: true, pendingApprovalCount: 1 }),
-    ).toBe("waiting_approval");
-
-    await flushPromises();
-    expect(tauriMocks.invoke).toHaveBeenCalledWith(
-      "persist_tool_event_pending",
-      {
-        input: expect.objectContaining({
-          approvalId: "appr-1",
-          sessionId: "s-test",
-          turnIndex: 5,
-          toolName: "file_write",
-        }),
-      },
-    );
   });
 
   it("ignores internal visibility for visible conversation state", () => {
@@ -666,30 +612,5 @@ describe("Core DB persistence retry on SQLite contention (CONC-8)", () => {
     // Initial attempt + 200/500/1000ms retries, then escalate.
     expect(persistCalls("persist_assistant_message")).toBe(4);
     expect(consoleError).toHaveBeenCalledTimes(1);
-  });
-
-  it("retries persist_tool_event_pending after a busy error", async () => {
-    failInvoke(
-      "persist_tool_event_pending",
-      "database is locked (code 5) SQLITE_BUSY",
-      1,
-    );
-
-    dispatchIPCEvent({
-      kind: "tool_call_pending",
-      sessionId: "s-test",
-      approvalId: "appr-retry",
-      turnIndex: 1,
-      toolName: "file_write",
-      args: { path: "README.md" },
-      argsPreview: "path=README.md",
-      riskLevel: "high",
-      reason: "Writes a file",
-      timestamp: "2026-06-18T08:02:00.000Z",
-    });
-    await vi.advanceTimersByTimeAsync(200);
-
-    expect(persistCalls("persist_tool_event_pending")).toBe(2);
-    expect(consoleError).not.toHaveBeenCalled();
   });
 });

@@ -3,12 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { deriveSessionStatus } from "@/lib/sessions";
 import { DEFAULT_NEW_SESSION_TITLE, useSessionsStore } from "@/stores/sessions";
 import { useMessagesStore } from "@/stores/messages";
-import { useRuntimeStore } from "@/stores/runtime";
 import { makeSession } from "@/test/factories";
 import { resetStores } from "@/test/store-reset";
-import { getTauriMocks } from "@/test/setup";
-
-const tauriMocks = getTauriMocks();
 
 function seedSession(id = "s-test"): void {
   useSessionsStore.setState({
@@ -33,11 +29,9 @@ describe("messages store", () => {
     expect(useMessagesStore.getState().byId["s-test"]).toBe(first);
     expect(first).toMatchObject({
       turns: [],
-      pendingApprovals: [],
       agentRunning: false,
       currentTurnIndex: null,
       inFlightContent: "",
-      approvalDecisions: {},
       pendingAskUser: null,
       turnIndexOffset: 0,
     });
@@ -78,42 +72,9 @@ describe("messages store", () => {
       title: "Summarize the release notes",
       status: "idle",
     });
-    expect(
-      deriveSessionStatus(session, { agentRunning: true, pendingApprovalCount: 0 }),
-    ).toBe("running");
-  });
-
-  it("addPendingApproval de-dupes pending approvals", () => {
-    const store = useMessagesStore.getState();
-
-    store.addPendingApproval("s-test", {
-      approvalId: "appr-1",
-      toolName: "file_write",
-      riskLevel: "high",
-      args: { path: "README.md" },
-    });
-    store.addPendingApproval("s-test", {
-      approvalId: "appr-1",
-      toolName: "file_patch",
-      riskLevel: "medium",
-      args: { path: "AGENTS.md" },
-    });
-
-    expect(useMessagesStore.getState().byId["s-test"].pendingApprovals).toEqual([
-      {
-        approvalId: "appr-1",
-        toolName: "file_patch",
-        riskLevel: "medium",
-        args: { path: "AGENTS.md" },
-      },
-    ]);
-    // The row is no longer mutated with derived approval state; the
-    // pendingApprovals slice above is the source deriveSessionStatus reads.
-    const session = useSessionsStore.getState().sessions[0];
-    expect(session.status).toBe("idle");
-    expect(
-      deriveSessionStatus(session, { agentRunning: false, pendingApprovalCount: 1 }),
-    ).toBe("waiting_approval");
+    expect(deriveSessionStatus(session, { agentRunning: true })).toBe(
+      "running",
+    );
   });
 
   it("covers streaming and run terminal cleanup", () => {
@@ -158,27 +119,6 @@ describe("messages store", () => {
       isStopping: false,
     });
     expect(useSessionsStore.getState().sessions[0].status).toBe("idle");
-  });
-
-  it("recordApprovalDecision stores the decision and persists the audit update", () => {
-    useRuntimeStore.getState().ensureRuntime("s-test", { cachedLLMs: [] });
-
-    useMessagesStore
-      .getState()
-      .recordApprovalDecision("s-test", "appr-1", "deny");
-
-    expect(
-      useMessagesStore.getState().byId["s-test"].approvalDecisions,
-    ).toEqual({
-      "appr-1": "deny",
-    });
-    expect(tauriMocks.invoke).toHaveBeenCalledWith(
-      "persist_tool_event_approval_decision",
-      expect.objectContaining({
-        approvalId: "appr-1",
-        decision: "deny",
-      }),
-    );
   });
 });
 

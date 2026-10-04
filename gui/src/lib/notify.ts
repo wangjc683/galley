@@ -2,7 +2,7 @@
  * System notifications — the "user isn't looking" channel.
  *
  * Galley hides to the background on window close, and long-running
- * goals / approval waits routinely outlive the user's attention. The
+ * goals / ask_user waits routinely outlive the user's attention. The
  * in-app toast covers the focused window; this module covers the rest
  * via `tauri-plugin-notification`, gated so it never duplicates the
  * toast and never surprises the user:
@@ -10,9 +10,8 @@
  *   pref (sync) → throttle (sync) → window focused? → permission → send
  *
  * Checks are ordered by cost. The throttle is recorded *before* the
- * async checks so a burst of events (GA parallel tool calls each
- * emitting `tool_call_pending`) can't all slip through during the
- * await gaps.
+ * async checks so a burst of events sharing a throttle key can't all
+ * slip through during the await gaps.
  *
  * Everything is best-effort and never throws: in Vite-only browser
  * dev the Tauri window / plugin APIs reject or throw synchronously,
@@ -37,7 +36,6 @@ import { usePrefsStore } from "@/stores/prefs";
 
 export type SystemNotifyKind =
   | "goalEnd"
-  | "approval"
   | "replyDone"
   | "askUser"
   | "scheduleFailed";
@@ -45,7 +43,7 @@ export type SystemNotifyKind =
 /**
  * Audible register of a notification, so an away user can tell from
  * sound alone whether to come back now ("the agent is blocked on
- * you") or at leisure ("it finished"). Three tones, not five kinds:
+ * you") or at leisure ("it finished"). Three tones, not four kinds:
  * users distinguish outcomes, not event sources.
  */
 export type NotifyTone = "done" | "needsYou" | "alert";
@@ -53,7 +51,6 @@ export type NotifyTone = "done" | "needsYou" | "alert";
 const KIND_TONE: Record<SystemNotifyKind, NotifyTone> = {
   goalEnd: "done",
   replyDone: "done",
-  approval: "needsYou",
   askUser: "needsYou",
   scheduleFailed: "alert",
 };
@@ -206,11 +203,9 @@ export async function sendGatedSystemNotification(
     const enabled =
       kind === "goalEnd"
         ? prefs.notifyOnGoalEnd
-        : kind === "approval"
-          ? prefs.notifyOnApproval
-          : kind === "replyDone" || kind === "askUser"
-            ? prefs.notifyOnReplyDone
-            : true;
+        : kind === "replyDone" || kind === "askUser"
+          ? prefs.notifyOnReplyDone
+          : true;
     if (!enabled) {
       console.debug("[notify] skipped: pref off.", { kind });
       return;

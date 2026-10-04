@@ -3,7 +3,6 @@ import {
   CheckCircle,
   Circle,
   CircleNotch,
-  PauseCircle,
   Prohibit,
   XCircle,
 } from "@phosphor-icons/react";
@@ -26,7 +25,6 @@ import type { SessionStatus } from "@/types/session";
  *   and both mean "this ran to the end" (2026-10-03). Muted, not brand:
  *   it is the resting state of nearly every row, so it has to be the
  *   quiet one; brand is reserved for its unread form.
- * - waiting_approval: amber PauseCircle (thin)
  * - error: deep red XCircle (thin)
  * - idle (not done) / connecting / archived: muted (thin)
  * - cancelled: muted Prohibit (different from error — user-initiated)
@@ -48,7 +46,6 @@ const STATUS_MAP: Record<
     weight: "bold",
     spin: true,
   },
-  waiting_approval: { Icon: PauseCircle, className: "text-warning" },
   error: { Icon: XCircle, className: "text-error" },
   cancelled: { Icon: Prohibit, className: "text-ink-muted" },
   completed: { Icon: CheckCircle, className: "text-ink-muted" },

@@ -30,9 +30,10 @@ interface FirstCloseDialogProps {
  * decision (keep it?) in a single surface, in Galley's own visual
  * language.
  *
- * Unlike YoloIntroDialog this one is dismissable: Esc / overlay click
- * cancels the close entirely. That's a real third answer — "not now" —
- * and it costs nothing because the dialog just asks again next time.
+ * Unlike a forced-choice dialog this one is dismissable: Esc / overlay
+ * click cancels the close entirely. That's a real third answer — "not
+ * now" — and it costs nothing because the dialog just asks again next
+ * time.
  * Stacked full-width buttons (not a side-by-side pair): the choice is
  * primary-vs-secondary in consequence, not left-vs-right in symmetry.
  */

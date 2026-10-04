@@ -204,10 +204,7 @@ export const enCopy: AppCopy = {
     archiveRunningConfirm: "Archive anyway",
     pendingAskPrefix: "Waiting for you",
     gaWaitingForReply: "GA is waiting for your reply",
-    pendingApprovalBadge: (count) =>
-      `${count} approval${count === 1 ? "" : "s"}`,
     errorBadge: (count) => `${count} error${count === 1 ? "" : "s"}`,
-    waitingApproval: "Waiting for approval",
     replyDone: "Reply finished",
     stepLimitReached: "Step limit reached",
     errored: "Error",
@@ -487,14 +484,6 @@ export const enCopy: AppCopy = {
     goalDurationNoCeiling: "No ceiling",
     cannotSwitchRunning: "Can't switch models while running",
     switchLlm: "Switch model",
-    approvalMode: {
-      autoName: "Auto-run",
-      approvalName: "Step approval",
-      autoDescription: "Tools run without asking each step",
-      approvalDescription: "High-risk actions ask you first",
-      switchTo: (name) => `Switch to ${name}`,
-      switchTooltip: (name) => `Approval mode · currently ${name}`,
-    },
     reasoningEffort: {
       tooltip: "Adjust reasoning effort",
       ariaFollowing: "Adjust reasoning effort · following the model",
@@ -627,7 +616,6 @@ export const enCopy: AppCopy = {
       general: { label: "General", helper: "通用" },
       runtime: { label: "Runtime", helper: "运行环境" },
       models: { label: "Models", helper: "模型" },
-      approval: { label: "Approval", helper: "审批" },
       agent: { label: "Agent", helper: "智能体接入" },
       im: { label: "Channels", helper: "Messaging" },
       browser: { label: "Browser Control", helper: "Browser control" },
@@ -656,9 +644,6 @@ export const enCopy: AppCopy = {
       notifyGoalEndTitle: "When a Goal ends or needs you",
       notifyGoalEndDescription:
         "System notification when a Goal completes, hits its time ceiling, gets blocked, or fails while the window is in the background",
-      notifyApprovalTitle: "When approval is needed",
-      notifyApprovalDescription:
-        "System notification when an agent is waiting for a tool approval while the window is in the background",
       notifyReplyDoneTitle: "When a reply finishes",
       notifyReplyDoneDescription:
         "System notification when a conversation you started finishes its reply while the window is in the background",
@@ -952,44 +937,6 @@ export const enCopy: AppCopy = {
           : `This will delete ${name} and delete the API Key saved locally by Galley.`,
       deleteProviderDialogAction: "Delete provider",
       cannotUndo: "This cannot be undone.",
-    },
-    approval: {
-      subtitle: "Approval rules for Agent actions",
-      defaultModeTitle: "Default for new sessions",
-      defaultModeDescription:
-        "Sessions without their own setting follow this default. Each session can be adjusted next to the composer.",
-      rulesScopeHint:
-        "The rules below apply to sessions running in Step approval.",
-      requiredTools: "Tools requiring approval",
-      projectAllowlist: (count) => `Project allowlist (${count})`,
-      globalAllowlist: (count) => `Global allowlist (${count})`,
-      noProjectRules: "No project allowlist rules",
-      removeRule: "Remove rule",
-      noGlobalRules: "No global allowlist rules",
-      allowlistHint:
-        "Rules appear here after you add them from an approval prompt.",
-      turnOnAutoTitle: "Make Auto-run the default for new sessions?",
-      autoModalIntro:
-        "In every session that follows the default, tool calls will run without approval — including:",
-      goodFor: "Good for",
-      notFor: "Not for",
-      goodForText:
-        "a trusted Agent in a sandboxed workspace, personal repo, or temporary VM",
-      notForText:
-        "production code, shared systems, unfamiliar Agents, or sensitive data",
-      perSessionNote:
-        "Any session can still switch to Step approval next to the composer at any time.",
-      understandRisk: "Yes, I understand the risk",
-      filePatch: "file_patch (modify files)",
-      fileWrite: "file_write (write files)",
-      codeRun: "code_run (run commands)",
-      otherHighRisk: "Other high-risk actions",
-      toolDescriptions: {
-        code_run: "Run shell / python / powershell",
-        file_write: "Overwrite or create files",
-        file_patch: "Modify existing files",
-        start_long_term_update: "Write to GenericAgent long-term memory",
-      },
     },
     shortcuts: {
       subtitle: "Keyboard shortcuts",
@@ -1626,7 +1573,6 @@ export const enCopy: AppCopy = {
     diffNoChange: "no change",
     running: "Running",
     completed: "Done",
-    waitingApproval: "Waiting for approval",
     failed: "Failed",
     denied: "Denied",
     browserTabCount: (count) => `${count} tab${count === 1 ? "" : "s"}`,
@@ -1707,46 +1653,6 @@ export const enCopy: AppCopy = {
     askedYou: "Asked you",
     fillCandidate: "Fill into the composer",
     chosenOption: "Your pick",
-    codeNoCommand: "(no command)",
-    emptyContent: "(empty content)",
-    fileWriteDeferred:
-      "The content comes from the AI's current reply and is written only after you approve, so there's no preview here yet.",
-  },
-  approval: {
-    allow: "Allow",
-    deny: "Deny",
-    allowProject: (projectName) => `Always allow in "${projectName}"`,
-    allowGlobal: "Always allow globally",
-    highRiskNoGlobal: "High-risk tools cannot be globally allowed",
-    genericReason: "This tool requires approval before it can run",
-    descriptions: {
-      file_patch: "Modifies an existing file",
-      file_write: "Writes or overwrites a file",
-      code_run: "Runs code or shell commands",
-      start_long_term_update: "Updates GA long-term memory",
-    },
-    actionFilePatch: (path) => `Will modify: ${path}`,
-    actionFileWrite: (path) => `Will write: ${path}`,
-    actionCodeRun: "Will run code or a command",
-    actionTool: (name) => `Will run ${name}`,
-    writeMode: {
-      overwrite: "Overwrite",
-      append: "Append",
-      prepend: "Prepend",
-    },
-    memoryKey: "Memory key",
-    risk: { low: "Low risk", medium: "Medium risk", high: "High risk" },
-    decisions: {
-      allow_once: "Allowed · This run",
-      deny: "Denied · AI notified",
-      always_allow_project: "Added to project allowlist",
-      always_allow_global: "Added to global allowlist",
-    },
-    pendingCount: (count) =>
-      `${count} approval${count === 1 ? "" : "s"} pending`,
-    nextApproval: "Next:",
-    goHandleApproval: "Go to approval",
-    goHandleApprovalAria: (toolName) => `Go to ${toolName} approval`,
   },
   tools: {
     web_scan: "Read webpage",
@@ -1763,7 +1669,6 @@ export const enCopy: AppCopy = {
     bridgeTitle: "Galley error",
     businessTitle: "Action could not be completed",
     sendFailed: "Send failed",
-    approvalSendFailed: "Approval didn't reach the agent — please decide again",
     stopFailed: "Stop didn't reach the agent — please try again",
     managedModelsLoadFailed:
       "Loading model config failed; keeping the current screen. Open Settings → Models to retry.",
@@ -2001,7 +1906,6 @@ export const enCopy: AppCopy = {
       `“${prompt}” could not start a session — open Galley to check.`,
     lastRunNone: "Not run yet",
     lastRunFailed: "Last fire failed",
-    lastRunWaitingApproval: "Last run waiting for approval",
     lastRun: (time: string) => `Last ${time}`,
     openLastRun: "Open the last run's session",
     enableAria: (prompt: string) => `Enable scheduled task: ${prompt}`,
@@ -2011,12 +1915,6 @@ export const enCopy: AppCopy = {
     deleteTitle: "Delete this scheduled task?",
     deleteBody: "Sessions it created stay in the timeline.",
     create: "Create",
-  },
-  yoloIntro: {
-    title: "Galley defaults to Auto-run",
-    body: "Tools run without step-by-step approval. You can switch an individual session to Step approval next to the composer, or change the default in Settings.",
-    revert: "Default new sessions to Step approval",
-    acknowledge: "Got it",
   },
   updates: {
     check: "Check for updates",

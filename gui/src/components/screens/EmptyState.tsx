@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   Composer,
-  type ComposerApprovalModeState,
   type ComposerHandle,
   type ComposerLLMOption,
   type ComposerReasoningEffortState,
@@ -54,12 +53,9 @@ export interface EmptyStateProps {
   requiresModelConfig?: boolean;
   /** Fallback for pre-bridge / dev when `llms` is empty. */
   onOpenLLMSwitcher?: () => void;
-  /** Approval-mode pill state — EmptyState configures the NEXT new
-   * session (pendingApprovalMode), same lifecycle as the LLM pre-pick. */
-  approvalMode?: ComposerApprovalModeState;
-  /** Reasoning-effort pill state — same story: it configures the NEXT
-   * new session (pendingReasoningEffort, consumed and always cleared by
-   * createSession). */
+  /** Reasoning-effort pill state — EmptyState configures the NEXT new
+   * session (pendingReasoningEffort, consumed and always cleared by
+   * createSession), same lifecycle as the LLM pre-pick. */
   reasoningEffort?: ComposerReasoningEffortState;
   /**
    * Width mode from the TopBar toggle. EmptyState's hero block tracks
@@ -121,7 +117,6 @@ export function EmptyState({
   onConfigureModels,
   requiresModelConfig = false,
   onOpenLLMSwitcher,
-  approvalMode,
   reasoningEffort,
   conversationWidth = "compact",
   conversationFontSize = "standard",
@@ -201,7 +196,6 @@ export function EmptyState({
           onConfigureModels={onConfigureModels}
           requiresModelConfig={requiresModelConfig}
           onOpenLLMSwitcher={onOpenLLMSwitcher}
-          approvalMode={approvalMode}
           reasoningEffort={reasoningEffort}
           imagesEnabled={imagesEnabled}
           onImageBlocked={onImageBlocked}

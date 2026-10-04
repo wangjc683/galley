@@ -104,19 +104,6 @@ pub(crate) async fn set_session_pinned(
         .map_err(stringify_error)
 }
 
-#[tauri::command]
-pub(crate) async fn set_session_approval_mode(
-    galley: State<'_, SqliteGalley>,
-    id: SessionId,
-    mode: Option<String>,
-    origin: Origin,
-) -> std::result::Result<SessionBrief, String> {
-    galley
-        .set_session_approval_mode(id, mode, origin)
-        .await
-        .map_err(stringify_error)
-}
-
 /// Persist the per-session reasoning-effort override, then push it to
 /// the session's live runner if one exists. Galley Core owns both halves
 /// (Rule 5): the GUI never talks to the bridge for this. A missing runner
@@ -459,63 +446,6 @@ pub(crate) async fn search_messages(
 ) -> std::result::Result<Vec<MessageSearchHit>, String> {
     galley
         .search_message_hits(query, limit, runtime_kind)
-        .await
-        .map_err(stringify_error)
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PersistToolEventPendingInput {
-    approval_id: String,
-    session_id: SessionId,
-    turn_index: u32,
-    tool_name: String,
-    args: serde_json::Value,
-    args_preview: String,
-    risk_level: String,
-    started_at: String,
-}
-
-#[tauri::command]
-pub(crate) async fn persist_tool_event_pending(
-    galley: State<'_, SqliteGalley>,
-    input: PersistToolEventPendingInput,
-) -> std::result::Result<(), String> {
-    galley
-        .persist_tool_event_pending(PersistToolEventPending {
-            approval_id: input.approval_id,
-            session_id: input.session_id,
-            turn_index: input.turn_index,
-            tool_name: input.tool_name,
-            args: input.args,
-            args_preview: input.args_preview,
-            risk_level: input.risk_level,
-            started_at: input.started_at,
-        })
-        .await
-        .map_err(stringify_error)
-}
-
-#[tauri::command]
-pub(crate) async fn persist_tool_event_approval_decision(
-    galley: State<'_, SqliteGalley>,
-    approval_id: String,
-    decision: String,
-    decided_at: String,
-) -> std::result::Result<(), String> {
-    galley
-        .persist_tool_event_approval_decision(&approval_id, &decision, &decided_at)
-        .await
-        .map_err(stringify_error)
-}
-
-#[tauri::command]
-pub(crate) async fn load_tool_events_by_session(
-    galley: State<'_, SqliteGalley>,
-    session_id: SessionId,
-) -> std::result::Result<Vec<ToolEventRow>, String> {
-    galley
-        .tool_event_rows_by_session(&session_id)
         .await
         .map_err(stringify_error)
 }

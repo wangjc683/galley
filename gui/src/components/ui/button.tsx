@@ -43,7 +43,7 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  *                      "选择" / "跑一次 Health Check").
  *
  *   warning — Amber filled. Used for high-attention but not destructive
- *             actions, such as "Stop" / YOLO confirmation.
+ *             actions, such as "Stop".
  *
  *   destructive — Red filled. Reserved for irreversible actions
  *                 ("彻底删除"). Use sparingly — its color cost is

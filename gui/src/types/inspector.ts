@@ -3,9 +3,9 @@
  *
  * Historical note (2026-05-12): this file is named `inspector.ts`
  * because the shapes here originally fed a right-pane Inspector with
- * Details / Approvals / Runtime tabs. That panel was retired and
- * `ApprovalRecord` (the audit log shape) went with it; `RuntimeInfo`
- * still drives Settings → Runtime. The filename stays the same to
+ * Details / Runtime tabs (among others). That panel was retired along
+ * with its audit-log shape; `RuntimeInfo` still drives Settings →
+ * Runtime. The filename stays the same to
  * avoid a wave of import-path churn — rename to `runtime.ts`
  * whenever we're already touching every importer.
  */

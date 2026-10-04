@@ -144,14 +144,12 @@ mod rows;
 mod schedule;
 mod search;
 mod session;
-mod tool_event;
 
 use helpers::*;
 use rows::*;
 
 pub use rows::{
     ManagedModelSecretRow, MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage,
-    PersistToolEventPending, PersistedMessageRow, ToolEventRow, UpsertManagedModelMetadata,
-    UpsertManagedModelProviderMetadata,
+    PersistedMessageRow, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
 };
 pub use session::RenameTitleSource;

@@ -23,7 +23,6 @@ pub(super) struct SessionRow {
     pub(super) ga_runtime_kind: String,
     pub(super) ga_runtime_id: Option<String>,
     pub(super) prompt_profile: Option<String>,
-    pub(super) approval_mode: Option<String>,
     pub(super) reasoning_effort: Option<String>,
 }
 
@@ -69,7 +68,6 @@ impl SessionRow {
             ga_runtime_kind: runtime_kind,
             ga_runtime_id: self.ga_runtime_id,
             prompt_profile: self.prompt_profile,
-            approval_mode: self.approval_mode,
             reasoning_effort: self.reasoning_effort,
         })
     }
@@ -266,17 +264,6 @@ pub struct PersistAssistantMessage {
     pub telemetry: Option<MessageTelemetry>,
 }
 
-pub struct PersistToolEventPending {
-    pub approval_id: String,
-    pub session_id: SessionId,
-    pub turn_index: u32,
-    pub tool_name: String,
-    pub args: serde_json::Value,
-    pub args_preview: String,
-    pub risk_level: String,
-    pub started_at: String,
-}
-
 pub struct UpsertManagedModelProviderMetadata {
     pub id: String,
     pub display_name: String,
@@ -426,24 +413,6 @@ pub struct MessageSearchHit {
     pub turn_index: i64,
     pub snippet: String,
     pub session_activity_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, FromRow)]
-pub struct ToolEventRow {
-    pub id: String,
-    pub session_id: String,
-    pub turn_index: i64,
-    pub tool_name: String,
-    pub status: String,
-    pub args_json: Option<String>,
-    pub args_preview: Option<String>,
-    pub result_preview: Option<String>,
-    pub risk_level: Option<String>,
-    pub approval_id: Option<String>,
-    pub approval_decision: Option<String>,
-    pub elapsed_ms: Option<i64>,
-    pub started_at: String,
-    pub ended_at: Option<String>,
 }
 
 #[derive(Debug, FromRow)]

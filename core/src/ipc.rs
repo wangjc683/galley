@@ -53,7 +53,6 @@ pub const PROTOCOL_VERSION: &str = "0.1";
 pub enum IpcEvent {
     Ready(ReadyEvent),
     TurnStart(TurnStartEvent),
-    ToolCallPending(ToolCallPendingEvent),
     ToolCallStart(ToolCallStartEvent),
     ToolCallEnd(ToolCallEndEvent),
     ToolCallProgress(ToolCallProgressEvent),
@@ -79,7 +78,6 @@ impl IpcEvent {
         match self {
             IpcEvent::Ready(e) => &e.session_id,
             IpcEvent::TurnStart(e) => &e.session_id,
-            IpcEvent::ToolCallPending(e) => &e.session_id,
             IpcEvent::ToolCallStart(e) => &e.session_id,
             IpcEvent::ToolCallEnd(e) => &e.session_id,
             IpcEvent::ToolCallProgress(e) => &e.session_id,
@@ -145,23 +143,6 @@ pub struct TurnStartEvent {
     pub turn_index: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visibility: Option<String>,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolCallPendingEvent {
-    pub session_id: String,
-    pub approval_id: String,
-    pub turn_index: i64,
-    #[serde(default)]
-    pub absolute_turn_index: Option<i64>,
-    pub tool_name: String,
-    pub args: Value,
-    pub args_preview: String,
-    /// "low" | "medium" | "high"
-    pub risk_level: String,
-    pub reason: String,
     pub timestamp: String,
 }
 
@@ -417,12 +398,9 @@ fn default_system_variant() -> String {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum IpcCommand {
     UserMessage(UserMessageCommand),
-    ApprovalResponse(ApprovalResponseCommand),
     AskUserResponse(AskUserResponseCommand),
     Abort,
     LoadHistory(LoadHistoryCommand),
-    SetApprovalRules(SetApprovalRulesCommand),
-    SetYoloMode(SetYoloModeCommand),
     SetLlm(SetLlmCommand),
     SetReasoningEffort(SetReasoningEffortCommand),
     Shutdown,
@@ -446,14 +424,6 @@ pub struct UserMessageCommand {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ApprovalResponseCommand {
-    pub approval_id: String,
-    /// "allow_once" | "deny" | "always_allow_project" | "always_allow_global"
-    pub decision: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct AskUserResponseCommand {
     pub text: String,
     #[serde(default)]
@@ -464,21 +434,6 @@ pub struct AskUserResponseCommand {
 #[serde(rename_all = "camelCase")]
 pub struct LoadHistoryCommand {
     pub messages: Vec<Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetApprovalRulesCommand {
-    #[serde(default)]
-    pub always_allow_global: Vec<String>,
-    #[serde(default)]
-    pub always_allow_project: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetYoloModeCommand {
-    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

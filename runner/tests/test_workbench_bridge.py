@@ -32,7 +32,6 @@ from runner.ipc import (
 )
 from runner.workbench_bridge import (
     Bridge,
-    SessionState,
     _classify_error,
     _clean_turn_summary,
     _FenceFilter,
@@ -610,62 +609,17 @@ def test_user_message_command_passes_images_to_agent() -> None:
     assert event["turnIndex"] == 1
 
 
-def test_resolve_all_pending_resolves_every_waiter() -> None:
-    state = SessionState()
-    p1 = state.register_pending("a1")
-    p2 = state.register_pending("a2")
-
-    assert state.resolve_all_pending("deny") == 2
-    assert p1.event.is_set() and p1.decision == "deny"
-    assert p2.event.is_set() and p2.decision == "deny"
-    # Idempotent once drained.
-    assert state.resolve_all_pending("deny") == 0
-
-
-def test_abort_denies_pending_approval_and_unblocks_agent_thread() -> None:
-    class FakeAgent:
-        def __init__(self) -> None:
-            self.aborted = False
-
-        def abort(self) -> None:
-            self.aborted = True
-
-    bridge = _new_test_bridge()
-    bridge.agent = FakeAgent()
-
-    # Agent thread blocked inside _request_approval, exactly the state
-    # a user sees when they hit Stop while an Approval Card is pending.
-    decisions: list[str] = []
-
-    def agent_thread() -> None:
-        decisions.append(bridge._request_approval("write_file", {"path": "/x"}))
-
-    t = threading.Thread(target=agent_thread, daemon=True)
-    t.start()
-    deadline = time.monotonic() + 2.0
-    while not bridge.state._pending and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert bridge.state._pending, "approval must be registered before abort"
-
-    bridge.dispatch_command(AbortCommand())
-
-    t.join(timeout=2.0)
-    assert not t.is_alive(), "abort must unblock the waiting agent thread"
-    assert decisions == ["deny"]
-    assert bridge.agent.aborted
-    assert not bridge.state._pending
-
-
-def test_shutdown_denies_pending_approval() -> None:
+def test_shutdown_detaches_pet_and_sets_shutdown_event() -> None:
     bridge = _new_test_bridge()
     bridge.agent = SimpleNamespace()
-    bridge._handle_detach_pet = lambda silent=False: None  # type: ignore[method-assign]
-    pending = bridge.state.register_pending("a1")
+    detach_calls: list[bool] = []
+    bridge._handle_detach_pet = (  # type: ignore[method-assign]
+        lambda silent=False: detach_calls.append(silent)
+    )
 
     bridge.dispatch_command(ShutdownCommand())
 
-    assert pending.event.is_set()
-    assert pending.decision == "deny"
+    assert detach_calls == [True]
     assert bridge.shutdown_event.is_set()
 
 

@@ -33,7 +33,6 @@ import {
   type ScheduledTaskRepeat,
 } from "@/lib/scheduled-tasks";
 import { cn } from "@/lib/utils";
-import { useMessagesStore } from "@/stores/messages";
 import type { LLMOption } from "@/stores/runtime";
 import type { Project, Session } from "@/types/session";
 
@@ -548,11 +547,6 @@ function LastRunCell({
 }) {
   const copy = useCopy();
   const language = useLanguage();
-  const waitingApproval = useMessagesStore((state) =>
-    session
-      ? (state.byId[session.id]?.pendingApprovals.length ?? 0) > 0
-      : false,
-  );
 
   if (!task.lastFiredAt) {
     return (
@@ -568,9 +562,9 @@ function LastRunCell({
       </span>
     );
   }
-  const label = waitingApproval
-    ? copy.scheduled.lastRunWaitingApproval
-    : copy.scheduled.lastRun(formatFireTime(task.lastFiredAt, language));
+  const label = copy.scheduled.lastRun(
+    formatFireTime(task.lastFiredAt, language),
+  );
   if (!session) {
     return (
       <span className="shrink-0 text-[11.5px] tabular-nums text-ink-muted">
@@ -587,9 +581,7 @@ function LastRunCell({
       className={cn(
         "shrink-0 rounded-sm px-1.5 py-0.5 text-[11.5px] tabular-nums outline-none",
         "focus-visible:ring-2 focus-visible:ring-brand/30",
-        waitingApproval
-          ? "text-warning hover:bg-warning/10"
-          : "text-ink-soft hover:bg-selected/60 hover:text-ink",
+        "text-ink-soft hover:bg-selected/60 hover:text-ink",
       )}
     >
       {label}

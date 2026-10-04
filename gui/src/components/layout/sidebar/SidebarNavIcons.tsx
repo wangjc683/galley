@@ -49,8 +49,8 @@ export function SidebarNavIcons({
   placement: NavIconsPlacement;
   onSearch?: () => void;
   onOpenScheduled?: () => void;
-  /** Scheduled items needing the user's action — approval-blocked
-   * sessions plus tasks whose last fire failed — rendered as a badge
+  /** Scheduled items needing the user's action — tasks whose last
+   * fire failed — rendered as a badge
    * on the 定时 icon so an overnight problem is visible at a glance.
    * Action-only by design: no idle total-count, so the position stays
    * meaningful (a number here always means "handle something"). */

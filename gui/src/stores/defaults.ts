@@ -7,7 +7,7 @@
  * builds, not test fixtures.
  *
  * Lifecycle:
- *   - `DEFAULT_GA_CONFIG` / `DEFAULT_APPROVAL_CONFIG` — `prefs.ts`
+ *   - `DEFAULT_GA_CONFIG` — `prefs.ts`
  *     initial state. Overwritten by SQLite-persisted prefs if any.
  *   - `DEFAULT_LLMS` / `DEFAULT_LLM_DISPLAY_NAME` — `runtime.ts`
  *     fallback when no per-session LLM list is known yet (e.g. the
@@ -19,7 +19,6 @@
  *     a louder signal than silently displaying a stale literal.
  */
 
-import type { ApprovalConfig } from "@/components/screens/settings/settings-types";
 import {
   GA_BASELINE_COMMIT,
   GA_BASELINE_COMMIT_DATE,
@@ -52,17 +51,6 @@ export const DEFAULT_LLMS = [
   { index: 2, displayName: "GPT 4o", isCurrent: false },
   { index: 3, displayName: "Gemini 2.5 Pro", isCurrent: false },
 ];
-
-export const DEFAULT_APPROVAL_CONFIG: ApprovalConfig = {
-  requiredTools: [
-    "code_run",
-    "file_write",
-    "file_patch",
-    "start_long_term_update",
-  ],
-  alwaysAllowProject: ["file_read", "web_scan"],
-  alwaysAllowGlobal: [],
-};
 
 export const DEFAULT_RUNTIME_INFO: RuntimeInfo = {
   gaPath: "",

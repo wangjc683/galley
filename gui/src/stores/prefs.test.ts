@@ -51,7 +51,7 @@ describe("prefsStore", () => {
   it("defaults the notification and app-behavior prefs to true", () => {
     const state = usePrefsStore.getState();
     expect(state.notifyOnGoalEnd).toBe(true);
-    expect(state.notifyOnApproval).toBe(true);
+    expect(state.notifyOnReplyDone).toBe(true);
     expect(state.keepInBackgroundOnClose).toBe(true);
     expect(state.autoDownloadUpdates).toBe(true);
   });
@@ -59,7 +59,7 @@ describe("prefsStore", () => {
   it("hydrates persisted false values for the new boolean prefs", async () => {
     mockPrefs({
       notify_on_goal_end: false,
-      notify_on_approval: false,
+      notify_on_reply_done: false,
       keep_in_background_on_close: false,
       auto_download_updates: false,
     });
@@ -68,7 +68,7 @@ describe("prefsStore", () => {
 
     const state = usePrefsStore.getState();
     expect(state.notifyOnGoalEnd).toBe(false);
-    expect(state.notifyOnApproval).toBe(false);
+    expect(state.notifyOnReplyDone).toBe(false);
     expect(state.keepInBackgroundOnClose).toBe(false);
     expect(state.autoDownloadUpdates).toBe(false);
   });
@@ -80,14 +80,14 @@ describe("prefsStore", () => {
 
     const state = usePrefsStore.getState();
     expect(state.notifyOnGoalEnd).toBe(true);
-    expect(state.notifyOnApproval).toBe(true);
+    expect(state.notifyOnReplyDone).toBe(true);
     expect(state.keepInBackgroundOnClose).toBe(true);
     expect(state.autoDownloadUpdates).toBe(true);
   });
 
   it("persists notification pref changes under their keys", async () => {
     await usePrefsStore.getState().setNotifyOnGoalEnd(false);
-    await usePrefsStore.getState().setNotifyOnApproval(false);
+    await usePrefsStore.getState().setNotifyOnReplyDone(false);
     await usePrefsStore.getState().setAutoDownloadUpdates(false);
 
     expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
@@ -95,7 +95,7 @@ describe("prefsStore", () => {
       value: false,
     });
     expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
-      key: "notify_on_approval",
+      key: "notify_on_reply_done",
       value: false,
     });
     expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {

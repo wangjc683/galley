@@ -50,8 +50,8 @@ export interface SidebarProps {
   onNewChat?: () => void;
   onSearch?: () => void;
   onOpenScheduled?: () => void;
-  /** Scheduled items needing action (approval-blocked sessions +
-   * failed last fires) — badge on the 定时 icon. */
+  /** Scheduled items needing action (failed last fires) — badge on
+   * the 定时 icon. */
   scheduledActionCount?: number;
   /** Open the CreateProjectDialog. Wired to the quick-action "+"
    * and the empty Project Review hint. */

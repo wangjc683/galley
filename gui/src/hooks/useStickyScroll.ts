@@ -1,17 +1,11 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
   USER_MSG_ANCHOR_TOP_PX,
 } from "@/lib/conversation-anchor";
 import { useUiStore } from "@/stores/ui";
-import type { PendingApproval, PendingAskUser } from "@/types/conversation";
+import type { PendingAskUser } from "@/types/conversation";
 
 /** How long the located message keeps its wash (matches the CSS
  * keyframes in globals.css — change both together or neither). */
@@ -90,7 +84,6 @@ function clearLocateHighlight(): void {
  *     SQLite restore, Shiki reflow, and WKWebView repaint skips)
  *   - stick-to-user-message-top on submit
  *   - ⌥↑ / ⌥↓ keyboard jump between user messages
- *   - advance-to-next-pending-approval scroll + focus
  *
  * Inputs are the bottom-anchored growth / navigation triggers the
  * effects depend on; the component owns the DOM these refs point at.
@@ -100,7 +93,6 @@ export function useStickyScroll({
   userSubmitTick,
   streamingContent,
   turnsLength,
-  pendingApprovalsLength,
   pendingAskUser,
   restoring = false,
 }: {
@@ -119,13 +111,10 @@ export function useStickyScroll({
   streamingContent: string;
   /** turns.length — each turn_end commits a new AgentTurn below the fold. */
   turnsLength: number;
-  /** pendingApprovals.length — an approval card landing grows the doc. */
-  pendingApprovalsLength: number;
   /** GA-initiated question; its appearance grows the doc tail. */
   pendingAskUser?: PendingAskUser | null;
 }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const pendingApprovalRefs = useRef(new Map<string, HTMLDivElement>());
 
   // Sticky-bottom mode for streaming: when the user is "near the
   // bottom" we follow newly-arrived chunks; if they've scrolled up
@@ -158,7 +147,6 @@ export function useStickyScroll({
   // Deps cover every source of bottom-anchored growth:
   //   - streamingContent:       streaming chunks (typewriter-revealed)
   //   - turnsLength:            each turn_end commits a new AgentTurn
-  //   - pendingApprovalsLength: approval card lands
   //   - pendingAskUser:         AskUserBubble appears
   //
   // Originally this only watched the streaming buffer — fine for the
@@ -175,13 +163,7 @@ export function useStickyScroll({
     const el = scrollContainerRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [
-    streamingContent,
-    atBottom,
-    turnsLength,
-    pendingApprovalsLength,
-    pendingAskUser,
-  ]);
+  }, [streamingContent, atBottom, turnsLength, pendingAskUser]);
 
   const stopMonitoringScrollToBottom = () => {
     setIsScrollingToBottom(false);
@@ -257,24 +239,6 @@ export function useStickyScroll({
     },
     [],
   );
-
-  const onClickAdvanceApproval = (next: PendingApproval) => {
-    const container = scrollContainerRef.current;
-    const target = pendingApprovalRefs.current.get(next.approvalId);
-    if (!container || !target) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const targetTop = target.getBoundingClientRect().top;
-    const delta = targetTop - containerRect.top - USER_MSG_ANCHOR_TOP_PX;
-    container.scrollBy({ top: delta, behavior: "smooth" });
-    setAtBottom(false);
-
-    window.setTimeout(() => {
-      const focusTarget =
-        target.querySelector<HTMLElement>("button:not([disabled])") ?? target;
-      focusTarget.focus({ preventScroll: true });
-    }, 180);
-  };
 
   // atBottom mirror for use inside async callbacks (ResizeObserver
   // below) where the captured closure would otherwise see a stale
@@ -607,27 +571,11 @@ export function useStickyScroll({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // Callback-ref factory for the in-flight approval cards. The hook
-  // owns the id → node map (onClickAdvanceApproval reads it); the
-  // component just spreads this onto each card.
-  const registerPendingApprovalRef = useCallback(
-    (approvalId: string) => (node: HTMLDivElement | null) => {
-      if (node) {
-        pendingApprovalRefs.current.set(approvalId, node);
-      } else {
-        pendingApprovalRefs.current.delete(approvalId);
-      }
-    },
-    [],
-  );
-
   return {
     scrollContainerRef,
     atBottom,
     setAtBottom,
     isScrollingToBottom,
     onClickScrollToBottom,
-    onClickAdvanceApproval,
-    registerPendingApprovalRef,
   };
 }

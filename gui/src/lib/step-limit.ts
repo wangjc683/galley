@@ -19,7 +19,6 @@ export interface StepLimitTailInput {
   /** messages `pausedAtStepLimit` for the session. */
   pausedAtStepLimit: boolean;
   isRunning: boolean;
-  waitingApproval: boolean;
   waitingAskUser: boolean;
   /** The session has an open Goal (active / paused / blocked). */
   hasOpenGoal: boolean;
@@ -35,7 +34,6 @@ export function stepLimitTailVisible(input: StepLimitTailInput): boolean {
   return (
     input.pausedAtStepLimit &&
     !input.isRunning &&
-    !input.waitingApproval &&
     !input.waitingAskUser &&
     !input.hasOpenGoal
   );

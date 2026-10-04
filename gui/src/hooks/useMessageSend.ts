@@ -1,5 +1,3 @@
-import { useCallback } from "react";
-
 import type { AppCopy } from "@/lib/i18n";
 import { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
 import { markReplyNotifyPending } from "@/lib/notify";
@@ -12,7 +10,6 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
 import type { PendingImageAttachment } from "@/types/conversation";
-import type { ApprovalDecision } from "@/types/ipc";
 import type { Session } from "@/types/session";
 
 /** The two main-agent commands the send machine can deliver. `/btw`
@@ -98,8 +95,8 @@ export async function ensureBridgeThenSend(
 }
 
 /**
- * Everything that turns a user action into a bridge command: approvals,
- * the main-view send path (with lazy bridge spawn + history replay),
+ * Everything that turns a user action into a bridge command: the
+ * main-view send path (with lazy bridge spawn + history replay),
  * `/btw` side questions, the empty-screen first-message path, Stop, and
  * the Browser Control demo. Pulled out of App so the entry component
  * stops carrying ~300 lines of dense IPC choreography inline.
@@ -148,54 +145,6 @@ export function useMessageSend({
       }),
     );
   };
-
-  // Stable approve handler — passed down to MainView → ToolCallout
-  // (React.memo'd). Keeping it referentially stable lets settled
-  // ToolCallouts skip re-render during the low-frequency App renders
-  // that still happen. Everything else is read at call time, so `copy`
-  // is the only dependency.
-  const handleApprove = useCallback(
-    (approvalId: string, decision: ApprovalDecision) => {
-      const sid = useSessionsStore.getState().activeSessionId;
-      if (!sid) return;
-      const m = useMessagesStore.getState();
-      // Snapshot before the optimistic removal so a failed send can
-      // put the card back.
-      const pending = m.byId[sid]?.pendingApprovals.find(
-        (p) => p.approvalId === approvalId,
-      );
-      m.recordApprovalDecision(sid, approvalId, decision);
-      m.removePendingApproval(sid, approvalId);
-      useRuntimeStore
-        .getState()
-        .sendIPCCommand(sid, {
-          kind: "approval_response",
-          approvalId,
-          decision,
-        })
-        .catch((e) => {
-          // The bridge never received the decision: the run is still
-          // blocked on this approval. Roll the optimistic UI back so the
-          // card doesn't show a decided pill for a decision GA never saw.
-          const messages = useMessagesStore.getState();
-          messages.revokeApprovalDecision(sid, approvalId);
-          if (pending) messages.addPendingApproval(sid, pending);
-          useUiStore.getState().pushToast(
-            makeAppError({
-              category: "bridge",
-              severity: "error",
-              title: copy.errors.approvalSendFailed,
-              message: e instanceof Error ? e.message : String(e),
-              hint: null,
-              retryable: true,
-              context: "approval_response",
-              traceback: null,
-            }),
-          );
-        });
-    },
-    [copy],
-  );
 
   const runBrowserControlDemo = async () => {
     if (requiresManagedModelConfig) {
@@ -454,7 +403,6 @@ export function useMessageSend({
   };
 
   return {
-    handleApprove,
     sendUserMessage,
     submitFromEmpty,
     stopRun,

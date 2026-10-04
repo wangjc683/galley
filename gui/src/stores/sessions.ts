@@ -12,8 +12,8 @@ import { create } from "zustand";
  * must not look successful to the user.
  *
  * This file does NOT own:
- *   - Per-session conversation state (turns / pending approvals /
- *     ask_user / in-flight streaming) — messagesStore (B3 M5).
+ *   - Per-session conversation state (turns / ask_user / in-flight
+ *     streaming) — messagesStore (B3 M5).
  *   - Bridge lifecycle (status / pid / errors) — runtimeStore (M3b).
  *   - LLM list + per-session selected LLM — runtimeStore (M3a/b);
  *     the *persisted* row column is set via `setSessionLlm` here
@@ -35,7 +35,7 @@ import { create } from "zustand";
  * sessions, emptyArchive calling the bulk delete, activateSession
  * reading projects) keep working through the shared `(set, get)`:
  *   - lifecycle-slice: sessions + activeSessionId, create/activate/
- *     rename/pin/approval/LLM/title + external session mirrors
+ *     rename/pin/effort/LLM/title + external session mirrors
  *   - archive-slice:   archive/unarchive/delete, single + bulk
  *   - project-slice:   projects + activeProjectFilter + external
  *     project mirrors

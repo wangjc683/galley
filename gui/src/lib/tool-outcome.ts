@@ -8,10 +8,11 @@
  *
  * Two structured exceptions, both exact-match on a known envelope:
  *
- *   - Denial. When the user rejects an approval, Galley's own
- *     WorkbenchHandler returns this exact payload to GA as the tool
- *     result (runner/handlers.py, "User denied" — coupling point,
- *     keep the shape in sync):
+ *   - Denial — historical data only: approval was removed on
+ *     2026-10-05 and no longer produces it. Older transcripts still
+ *     carry the exact payload the runner used to return to GA when
+ *     the user rejected a tool call, so it keeps parsing and keeps
+ *     rendering as 已拒绝:
  *
  *       {"status": "denied", "msg": "User denied this tool call"}
  *

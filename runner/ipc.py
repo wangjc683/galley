@@ -86,21 +86,6 @@ class TurnStartEvent:
 
 
 @dataclass
-class ToolCallPendingEvent:
-    sessionId: str
-    approvalId: str
-    turnIndex: int
-    toolName: str
-    args: dict[str, Any]
-    argsPreview: str
-    riskLevel: str  # "low" | "medium" | "high"
-    reason: str
-    absoluteTurnIndex: int | None = None
-    timestamp: str = field(default_factory=_now_iso)
-    kind: str = "tool_call_pending"
-
-
-@dataclass
 class ToolCallStartEvent:
     sessionId: str
     toolCallId: str
@@ -357,7 +342,6 @@ class SystemMessageEvent:
 Event = (
     ReadyEvent
     | TurnStartEvent
-    | ToolCallPendingEvent
     | ToolCallStartEvent
     | ToolCallEndEvent
     | ToolCallProgressEvent
@@ -390,13 +374,6 @@ class UserMessageCommand:
 
 
 @dataclass
-class ApprovalResponseCommand:
-    approvalId: str
-    decision: str  # "allow_once" | "deny" | "always_allow_project" | "always_allow_global"
-    kind: str = "approval_response"
-
-
-@dataclass
 class AskUserResponseCommand:
     text: str
     absoluteTurnIndex: int | None = None
@@ -412,30 +389,6 @@ class AbortCommand:
 class LoadHistoryCommand:
     messages: list[dict[str, Any]]
     kind: str = "load_history"
-
-
-@dataclass
-class SetApprovalRulesCommand:
-    alwaysAllowGlobal: list[str] = field(default_factory=list)
-    alwaysAllowProject: list[str] = field(default_factory=list)
-    kind: str = "set_approval_rules"
-
-
-@dataclass
-class SetYoloModeCommand:
-    """Toggle 自动执行 (auto-execute) mode. `yolo` survives only as
-    the stable wire identifier — user-facing naming has been
-    自动执行 / 逐步审批 since 2026-07-20, scoped per session with an
-    app-level default (desktop control: the composer LLM pill's
-    popover; no TopBar indicator).
-
-    When enabled, every dispatched tool call bypasses the approval
-    gate — no `tool_call_pending` is emitted; the tool runs as if
-    every approval were `allow_once`.
-    """
-
-    enabled: bool
-    kind: str = "set_yolo_mode"
 
 
 @dataclass
@@ -518,12 +471,9 @@ class GenerateTitleCommand:
 
 Command = (
     UserMessageCommand
-    | ApprovalResponseCommand
     | AskUserResponseCommand
     | AbortCommand
     | LoadHistoryCommand
-    | SetApprovalRulesCommand
-    | SetYoloModeCommand
     | SetLLMCommand
     | SetReasoningEffortCommand
     | ShutdownCommand
@@ -540,7 +490,6 @@ Command = (
 EVENT_KINDS: dict[str, type] = {
     "ready": ReadyEvent,
     "turn_start": TurnStartEvent,
-    "tool_call_pending": ToolCallPendingEvent,
     "tool_call_start": ToolCallStartEvent,
     "tool_call_end": ToolCallEndEvent,
     "tool_call_progress": ToolCallProgressEvent,
@@ -561,12 +510,9 @@ EVENT_KINDS: dict[str, type] = {
 
 COMMAND_KINDS: dict[str, type] = {
     "user_message": UserMessageCommand,
-    "approval_response": ApprovalResponseCommand,
     "ask_user_response": AskUserResponseCommand,
     "abort": AbortCommand,
     "load_history": LoadHistoryCommand,
-    "set_approval_rules": SetApprovalRulesCommand,
-    "set_yolo_mode": SetYoloModeCommand,
     "set_llm": SetLLMCommand,
     "set_reasoning_effort": SetReasoningEffortCommand,
     "shutdown": ShutdownCommand,

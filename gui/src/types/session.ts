@@ -17,7 +17,6 @@ export type SessionStatus =
   | "idle"
   | "connecting"
   | "running"
-  | "waiting_approval"
   | "error"
   | "completed"
   | "cancelled"
@@ -26,7 +25,7 @@ export type SessionStatus =
 /**
  * The subset of `SessionStatus` that is durable, persisted lifecycle
  * state — the only values a `Session` row may hold. The live/runtime
- * values (`connecting` / `running` / `waiting_approval` / `error`) are
+ * values (`connecting` / `running` / `error`) are
  * NOT stored on the row; they are derived at read time from conversation
  * + bridge state by `deriveSessionStatus` (see `useSessionStatusView`).
  * Narrowing the row to this type makes "the row never holds a runtime
@@ -61,7 +60,7 @@ export interface Session {
   title: string;
   /**
    * Durable lifecycle status only. Live runtime status (running /
-   * waiting_approval / connecting / error) is derived at read time via
+   * connecting / error) is derived at read time via
    * `useSessionStatusView` — never written here.
    */
   status: DurableSessionStatus;
@@ -113,13 +112,6 @@ export interface Session {
   cwd?: string;
 
   pinned?: boolean;
-
-  /**
-   * Per-session approval-mode override ("auto" | "approval").
-   * null / undefined = follow the app-wide default. See
-   * lib/approval-mode.ts for the effective-mode resolution rule.
-   */
-  approvalMode?: "auto" | "approval" | null;
 
   /**
    * Per-session reasoning-effort override (`none` / `minimal` / `low` /

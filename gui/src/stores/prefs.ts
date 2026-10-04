@@ -1,6 +1,5 @@
 import { create } from "zustand";
 
-import type { ApprovalConfig } from "@/components/screens/settings/settings-types";
 import {
   getPref,
   setFontSizeMenuState,
@@ -24,7 +23,7 @@ import {
   type ConversationFontSize,
 } from "@/lib/conversation-font-size";
 import { findCandidateByAlias } from "@/lib/python-probe";
-import { DEFAULT_APPROVAL_CONFIG, DEFAULT_GA_CONFIG } from "@/stores/defaults";
+import { DEFAULT_GA_CONFIG } from "@/stores/defaults";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
@@ -38,9 +37,6 @@ import type { RuntimeKind } from "@/types/session";
  *
  *   - gaConfig            (python / gaPath / bridgeCwd / useExternalPython)
  *   - activeRuntimeKind   (managed / external)
- *   - approvalConfig      (in-memory only, v0.1 doesn't persist rules)
- *   - yoloMode            (pref: yolo_mode)
- *   - yoloIntroSeen       (pref: yolo_intro_seen)
  *   - conversationWidth   (pref: conversation_width)
  *   - conversationFontSize (pref: conversation_font_size)
  *   - languagePreference  (pref: language_preference)
@@ -48,11 +44,9 @@ import type { RuntimeKind } from "@/types/session";
  *
  * setGAConfig fans out to runtimeStore (patchRuntimeInfo / resetWarmup
  * / warmupLLMList) + uiStore (pushToast) so a Settings → Runtime path
- * swap re-heats the bridge without a restart. setYoloMode iterates
- * runtimeStore.byId to broadcast set_yolo_mode IPC to every alive
- * bridge. Both are prefs-slice fan-out responsibilities — propagating
- * a pref change into the rest of the app belongs here, not in the
- * receiving slices.
+ * swap re-heats the bridge without a restart. That is a prefs-slice
+ * fan-out responsibility — propagating a pref change into the rest of
+ * the app belongs here, not in the receiving slices.
  *
  * hydratePrefs loads the persistable prefs from SQLite and
  * returns {hasGAConfig} so the top-level orchestrator at
@@ -93,31 +87,6 @@ interface PrefsState {
    */
   activeRuntimeKind: RuntimeKind;
 
-  approvalConfig: ApprovalConfig;
-
-  /**
-   * YOLO mode (PRD §11.5). When true, every tool dispatch on every
-   * alive bridge bypasses the approval gate. Persisted to prefs
-   * (sticky across launches). Global, not per-session — flipping
-   * this notifies every alive bridge.
-   *
-   * Default `true` for v0.1 — Galley's first-batch users are GA
-   * heavy users who run agents without approval. The first-launch
-   * `YoloIntroDialog` discloses this state and offers a one-click
-   * revert to approval mode for those who want it.
-   */
-  yoloMode: boolean;
-
-  /**
-   * Has the user dismissed the first-launch YOLO disclosure modal?
-   * Persisted to prefs (`yolo_intro_seen`). Initial state defaults
-   * to `true` so the modal stays hidden during cold start; hydrate
-   * flips to `false` only when the pref is missing, which is the
-   * only case that should surface the modal. Set back to `true` by
-   * either CTA on the modal.
-   */
-  yoloIntroSeen: boolean;
-
   /**
    * Conversation reading column width. Notion-style two-mode toggle:
    *   - "compact": 760px max-width — comfortable document measure
@@ -127,7 +96,7 @@ interface PrefsState {
    *     file_read outputs that get cramped at 760.
    *
    * Applies to the scrollable conversation column and the bottom
-   * stack (ApprovalDock + Composer + hint) in lockstep, so the width
+   * stack (Composer + hint) in lockstep, so the width
    * toggle has an obvious effect in both MainView and EmptyState.
    *
    * Global preference, not per-session: your monitor doesn't change
@@ -162,13 +131,6 @@ interface PrefsState {
    * lives in lib/notify.ts). Persisted to pref `notify_on_goal_end`.
    */
   notifyOnGoalEnd: boolean;
-
-  /**
-   * System notification when a tool call is waiting for approval.
-   * Same unfocused-only gating as `notifyOnGoalEnd`. Persisted to
-   * pref `notify_on_approval`.
-   */
-  notifyOnApproval: boolean;
 
   /**
    * System notification when a run the user started from this GUI
@@ -213,22 +175,6 @@ interface PrefsState {
 }
 
 interface PrefsActions {
-  // ---- Approval ----
-  setApprovalRequiredTools: (tools: string[]) => void;
-  removeAlwaysAllow: (scope: "project" | "global", tool: string) => void;
-
-  // ---- YOLO ----
-  /**
-   * Set the YOLO mode flag. Persists to prefs and broadcasts the new
-   * state to **every** alive bridge over IPC.
-   */
-  setYoloMode: (enabled: boolean) => Promise<void>;
-  /**
-   * Dismiss the first-launch YOLO disclosure modal. Optionally
-   * reverts YOLO to off when the user picked "改回审批模式".
-   */
-  acknowledgeYoloIntro: (revertToApproval?: boolean) => Promise<void>;
-
   // ---- Conversation width ----
   setConversationWidth: (mode: "compact" | "wide") => Promise<void>;
 
@@ -243,7 +189,6 @@ interface PrefsActions {
 
   // ---- Notifications ----
   setNotifyOnGoalEnd: (enabled: boolean) => Promise<void>;
-  setNotifyOnApproval: (enabled: boolean) => Promise<void>;
   setNotifyOnReplyDone: (enabled: boolean) => Promise<void>;
   setNotifySound: (enabled: boolean) => Promise<void>;
 
@@ -273,8 +218,8 @@ interface PrefsActions {
 
   // ---- Hydration ----
   /**
-   * Load persistable prefs (yolo_mode / yolo_intro_seen /
-   * conversation_width / conversation_font_size / ga_config) from SQLite.
+   * Load persistable prefs (conversation_width / conversation_font_size /
+   * ga_config / …) from SQLite.
    * Best-effort: each
    * pref miss falls back to the demo / default value. Returns
    * `{hasGAConfig}` so the top-level orchestrator at lib/hydrate.ts
@@ -299,93 +244,15 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   // ---- Initial state (demo fixtures until hydratePrefs) ----
   gaConfig: DEFAULT_GA_CONFIG,
   activeRuntimeKind: "managed",
-  approvalConfig: DEFAULT_APPROVAL_CONFIG,
-  yoloMode: true,
-  yoloIntroSeen: true,
   conversationWidth: "compact",
   conversationFontSize: "standard",
   languagePreference: "system",
   themePreference: readCachedThemePreference(),
   notifyOnGoalEnd: true,
-  notifyOnApproval: true,
   notifyOnReplyDone: true,
   notifySound: true,
   keepInBackgroundOnClose: true,
   autoDownloadUpdates: true,
-
-  // ---- Approval ----
-  setApprovalRequiredTools: (tools) =>
-    set((state) => ({
-      approvalConfig: { ...state.approvalConfig, requiredTools: tools },
-    })),
-
-  removeAlwaysAllow: (scope, tool) =>
-    set((state) => ({
-      approvalConfig:
-        scope === "project"
-          ? {
-              ...state.approvalConfig,
-              alwaysAllowProject:
-                state.approvalConfig.alwaysAllowProject.filter(
-                  (t) => t !== tool,
-                ),
-            }
-          : {
-              ...state.approvalConfig,
-              alwaysAllowGlobal: state.approvalConfig.alwaysAllowGlobal.filter(
-                (t) => t !== tool,
-              ),
-            },
-    })),
-
-  // ---- YOLO ----
-  setYoloMode: async (enabled) => {
-    set({ yoloMode: enabled });
-    // Best-effort persist: SQLite may be absent in Vite-only dev. The
-    // in-memory state still drives UI + IPC for the current launch.
-    try {
-      await setPref("yolo_mode", enabled);
-    } catch (e) {
-      console.warn("[prefs] setYoloMode: pref persistence failed.", e);
-    }
-    // `yolo_mode` is the app-wide DEFAULT (自动执行/逐步审批 for new
-    // and non-overridden sessions). Notify every alive bridge whose
-    // session follows the default; sessions with an explicit
-    // per-session override stay pinned to their own mode. Sessions
-    // spawned later sync via the on-`ready` handler in ipc-handlers.ts.
-    //
-    // Dynamic import: prefs is a leaf in the store slice DAG (AD-09) —
-    // sessions.ts statically imports prefs, so the reverse edge must
-    // stay lazy to avoid a module cycle.
-    const { useSessionsStore } = await import("@/stores/sessions");
-    const sessionRows = useSessionsStore.getState().sessions;
-    const runtimeSlots = useRuntimeStore.getState().byId;
-    for (const sid of Object.keys(runtimeSlots)) {
-      const override = sessionRows.find((s) => s.id === sid)?.approvalMode;
-      if (override === "auto" || override === "approval") continue;
-      try {
-        await useRuntimeStore
-          .getState()
-          .sendIPCCommand(sid, { kind: "set_yolo_mode", enabled });
-      } catch (e) {
-        console.warn(`[prefs] setYoloMode: bridge ${sid} notify failed.`, e);
-      }
-    }
-  },
-
-  acknowledgeYoloIntro: async (revertToApproval = false) => {
-    // Order matters: flip YOLO before marking the modal seen so
-    // bridges receive the new state alongside the prefs write.
-    if (revertToApproval) {
-      await get().setYoloMode(false);
-    }
-    set({ yoloIntroSeen: true });
-    try {
-      await setPref("yolo_intro_seen", true);
-    } catch (e) {
-      console.warn("[prefs] acknowledgeYoloIntro: pref persistence failed.", e);
-    }
-  },
 
   // ---- Conversation width ----
   setConversationWidth: async (mode) => {
@@ -451,15 +318,6 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       await setPref("notify_on_goal_end", enabled);
     } catch (e) {
       console.warn("[prefs] setNotifyOnGoalEnd: pref persistence failed.", e);
-    }
-  },
-
-  setNotifyOnApproval: async (enabled) => {
-    set({ notifyOnApproval: enabled });
-    try {
-      await setPref("notify_on_approval", enabled);
-    } catch (e) {
-      console.warn("[prefs] setNotifyOnApproval: pref persistence failed.", e);
     }
   },
 
@@ -581,33 +439,6 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
 
   // ---- Hydration ----
   hydratePrefs: async () => {
-    // YOLO mode — sticky preference. Best-effort load.
-    let userHasYoloPref = false;
-    try {
-      const yolo = await getPref<boolean>("yolo_mode");
-      if (typeof yolo === "boolean") {
-        set({ yoloMode: yolo });
-        userHasYoloPref = true;
-      }
-    } catch (e) {
-      console.warn("[prefs] hydratePrefs: yolo pref load failed.", e);
-    }
-    // YOLO intro modal — surfaces once for true-new users to disclose
-    // that YOLO is the default. Initial state is `true` (hidden) so
-    // the modal doesn't flash during cold start; only flip to `false`
-    // when both prefs say "user has never expressed a YOLO opinion on
-    // this device".
-    if (!userHasYoloPref) {
-      try {
-        const seen = await getPref<boolean>("yolo_intro_seen");
-        if (seen !== true) set({ yoloIntroSeen: false });
-      } catch (e) {
-        console.warn(
-          "[prefs] hydratePrefs: yolo_intro_seen pref load failed.",
-          e,
-        );
-      }
-    }
     try {
       const width = await getPref<"compact" | "wide">("conversation_width");
       if (width === "wide" || width === "compact") {
@@ -683,17 +514,6 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     } catch (e) {
       console.warn(
         "[prefs] hydratePrefs: notify_on_goal_end pref load failed.",
-        e,
-      );
-    }
-    try {
-      const notifyApproval = await getPref<boolean>("notify_on_approval");
-      if (typeof notifyApproval === "boolean") {
-        set({ notifyOnApproval: notifyApproval });
-      }
-    } catch (e) {
-      console.warn(
-        "[prefs] hydratePrefs: notify_on_approval pref load failed.",
         e,
       );
     }
@@ -801,7 +621,6 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
 //
 // Usage in console:
 //   __prefs.getState().gaConfig
-//   __prefs.getState().yoloMode
 if (import.meta.env.DEV) {
   (globalThis as { __prefs?: typeof usePrefsStore }).__prefs = usePrefsStore;
 }

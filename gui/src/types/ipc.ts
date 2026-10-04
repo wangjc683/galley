@@ -122,20 +122,6 @@ export interface TurnStartEvent {
   timestamp: string;
 }
 
-export interface ToolCallPendingEvent {
-  kind: "tool_call_pending";
-  sessionId: string;
-  approvalId: string;
-  turnIndex: number;
-  absoluteTurnIndex?: number | null;
-  toolName: string;
-  args: Record<string, unknown>;
-  argsPreview: string;
-  riskLevel: "low" | "medium" | "high";
-  reason: string;
-  timestamp: string;
-}
-
 export interface ToolCallStartEvent {
   kind: "tool_call_start";
   sessionId: string;
@@ -383,7 +369,6 @@ export interface TitleGeneratedEvent {
 export type IPCEvent =
   | ReadyEvent
   | TurnStartEvent
-  | ToolCallPendingEvent
   | ToolCallStartEvent
   | ToolCallEndEvent
   | ToolCallProgressEvent
@@ -411,18 +396,6 @@ export interface UserMessageCommand {
   absoluteTurnIndex?: number | null;
 }
 
-export type ApprovalDecision =
-  | "allow_once"
-  | "deny"
-  | "always_allow_project"
-  | "always_allow_global";
-
-export interface ApprovalResponseCommand {
-  kind: "approval_response";
-  approvalId: string;
-  decision: ApprovalDecision;
-}
-
 export interface AskUserResponseCommand {
   kind: "ask_user_response";
   text: string;
@@ -436,26 +409,6 @@ export interface AbortCommand {
 export interface LoadHistoryCommand {
   kind: "load_history";
   messages: ConversationMessage[];
-}
-
-export interface SetApprovalRulesCommand {
-  kind: "set_approval_rules";
-  alwaysAllowGlobal: string[];
-  alwaysAllowProject: string[];
-}
-
-/**
- * Toggle YOLO mode on the bridge (PRD §11.5).
- *
- * When enabled, every dispatched tool call bypasses the approval gate
- * — bridge does not emit `tool_call_pending`. The desktop is expected
- * to keep the user informed via the persistent TopBar indicator
- * (DESIGN.md §4.1). YOLO is upper-priority over `always_allow_*`
- * lists; toggling it back off does not clear those lists.
- */
-export interface SetYoloModeCommand {
-  kind: "set_yolo_mode";
-  enabled: boolean;
 }
 
 export interface SetLLMCommand {
@@ -524,12 +477,9 @@ export interface GenerateTitleCommand {
 
 export type IPCCommand =
   | UserMessageCommand
-  | ApprovalResponseCommand
   | AskUserResponseCommand
   | AbortCommand
   | LoadHistoryCommand
-  | SetApprovalRulesCommand
-  | SetYoloModeCommand
   | SetLLMCommand
   | SetReasoningEffortCommand
   | ShutdownCommand

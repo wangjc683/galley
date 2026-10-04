@@ -112,8 +112,8 @@ interface UserQuestionRailProps {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /** Live state of the latest exchange, surfaced on the tail dot so a
    * user scrolled up during a long run still sees whether the agent is
-   * working ("running") or it's their move — pending approval /
-   * ask_user ("waiting"). null = idle, no marker. */
+   * working ("running") or it's their move — a pending ask_user
+   * ("waiting"). null = idle, no marker. */
   tailStatus?: RailTailStatus | null;
   /** Called when the user jumps via the rail. MainView uses it to
    * break follow-the-bottom (setAtBottom(false)) so a streaming chunk

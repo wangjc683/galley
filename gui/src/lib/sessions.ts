@@ -20,8 +20,8 @@ export function toDurableStatus(status: SessionStatus): DurableSessionStatus {
     case "archived":
       return status;
     default:
-      // idle + any stale runtime value (connecting/running/
-      // waiting_approval/error) → idle.
+      // idle + any stale runtime value (connecting/running/error)
+      // or a retired status string this build no longer knows → idle.
       return "idle";
   }
 }
@@ -35,7 +35,6 @@ export function toDurableStatus(status: SessionStatus): DurableSessionStatus {
  */
 export interface SessionLiveState {
   agentRunning: boolean;
-  pendingApprovalCount: number;
 }
 
 /**
@@ -46,8 +45,6 @@ export interface SessionLiveState {
  * now". The remaining states reflect what the bridge + agent are doing
  * this second:
  *
- *   pendingApprovalCount > 0    → waiting_approval (highest priority —
- *                                  drives the amber pause icon)
  *   agentRunning                → running          (apricot spinner)
  *   bridgeStatus === "spawning" → connecting       (subtle loader)
  *   bridgeStatus === "error"    → error            (red dot)
@@ -69,7 +66,6 @@ export function deriveSessionStatus(
     return session.status;
   }
   if (!live) return session.status;
-  if (live.pendingApprovalCount > 0) return "waiting_approval";
   if (live.agentRunning) return "running";
   // bridgeStatus moved to runtimeStore in M3b — callers fetch it from
   // useRuntimeStore.getState().byId[sid]?.bridgeStatus and pass in.

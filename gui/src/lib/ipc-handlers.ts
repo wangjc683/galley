@@ -12,7 +12,6 @@ import {
   finishHistoryReplay,
   markHistoryReplayStale,
 } from "@/lib/ipc/history-replay";
-import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
 import {
@@ -28,7 +27,7 @@ import {
 import { isStepLimitExit } from "@/lib/step-limit";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
-import type { AgentTurn, PendingApproval } from "@/types/conversation";
+import type { AgentTurn } from "@/types/conversation";
 import type {
   IPCEvent,
   MessageVisibility,
@@ -71,15 +70,13 @@ function currentCopy() {
  *   error             → push toast (fromIPCError)
  *   turn_end          → append agent turn (thinking + tools + final
  *                       answer), persisted to messages table
- *   tool_call_pending → add to pendingApprovals
  *   tool_call_end     → no-op for V0.1 (the conversation rebuilds the
  *                       tool's final state from turn_end's
  *                       toolResults; we don't need a separate row)
  *   tool_call_progress→ debug log (not in conversation rendering)
  *   ask_user          → V0.1: log; ask_user surfaces via the existing
  *                       conversation flow when GA exits the loop
- *   run_complete      → log; pending list is already cleared by the
- *                       desktop when the user records a decision
+ *   run_complete      → clear the running state for the session
  *   history_loaded    → log
  *
  * Tool ids: turn_end's toolCalls / toolResults are positional, so we
@@ -159,32 +156,6 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         gaCommitDate: event.gaCommitDate,
         bridgePid: event.pid,
       });
-      // Sync session-scoped state to the freshly-spawned bridge.
-      // Approval mode: the bridge boots with yolo_mode=false (逐步审批);
-      // if this session's effective mode is 自动执行 (per-session
-      // override, else the app-wide default), push it now — it's queued
-      // in the bridge's command pipeline and processed before any
-      // subsequent user message can trigger a tool call.
-      const approvalOverride = useSessionsStore
-        .getState()
-        .sessions.find((s) => s.id === event.sessionId)?.approvalMode;
-      const effectiveMode = effectiveApprovalMode(
-        approvalOverride,
-        usePrefsStore.getState().yoloMode,
-      );
-      if (effectiveMode === "auto") {
-        // Failure direction is safe (bridge stays yolo=false → more
-        // approval prompts, never fewer), so log-only is enough.
-        useRuntimeStore
-          .getState()
-          .sendIPCCommand(event.sessionId, {
-            kind: "set_yolo_mode",
-            enabled: true,
-          })
-          .catch((e) => {
-            console.warn("[ipc] approval mode sync failed on ready", e);
-          });
-      }
       // Session Restore (Stage 3 Task 3). If this session has prior
       // turn history on disk, replay it into GA `backend.history` via
       // load_history. The MainView submit path waits on the same gate
@@ -410,47 +381,6 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       return;
     }
 
-    case "tool_call_pending": {
-      const offset = messages.byId[event.sessionId]?.turnIndexOffset ?? 0;
-      const absoluteTurnIndex = resolveAbsoluteTurnIndex(event, offset);
-      const target = pickTarget(event.args);
-      const pending: PendingApproval = {
-        approvalId: event.approvalId,
-        toolName: event.toolName,
-        target,
-        riskLevel: event.riskLevel,
-        args: event.args,
-      };
-      messages.addPendingApproval(event.sessionId, pending);
-      // The agent is now blocked on a human decision — worth a system
-      // notification when the window is unfocused (notify.ts gates
-      // pref / focus / permission). Per-session throttleKey collapses
-      // GA parallel-tool bursts into one notification. Session title
-      // leads the body — with many parallel sessions the user's first
-      // question is "which one wants me", same as replyDone/askUser.
-      const approvalSessionTitle = useSessionsStore
-        .getState()
-        .sessions.find((s) => s.id === event.sessionId)?.title;
-      const approvalDetail = target
-        ? `${event.toolName} · ${target}`
-        : event.toolName;
-      void sendGatedSystemNotification("approval", {
-        title: currentCopy().sidebar.waitingApproval,
-        body: approvalSessionTitle
-          ? `${approvalSessionTitle} · ${approvalDetail}`
-          : approvalDetail,
-        throttleKey: `approval:${event.sessionId}`,
-      });
-      // Best-effort Core DB write for audit trail. tool_events
-      // joins to messages by (session_id, turn_index) — must use
-      // absolute turn index so the join works after restore.
-      void persistToolEventPendingFromIPC({
-        ...event,
-        turnIndex: absoluteTurnIndex,
-      });
-      return;
-    }
-
     case "tool_call_end": {
       // turn_end carries the same toolResults; we don't need an
       // independent state shape for finished tools.
@@ -547,8 +477,8 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         question,
         candidates: event.candidates.map(stripGATags),
       });
-      // The agent is blocked on an answer — same "needs you" moment
-      // as an approval wait. The turn_end just before this skipped
+      // The agent is blocked on an answer — a "needs you" moment.
+      // The turn_end just before this skipped
       // its replyDone for exactly this event; consume the flag here
       // (same GUI-started-run gating) and send the question itself.
       // `reply:` throttleKey shared with replyDone: they're the same
@@ -752,13 +682,6 @@ function turnFromTurnEnd(event: {
   });
 }
 
-function pickTarget(args: Record<string, unknown>): string | undefined {
-  if (typeof args.path === "string") return args.path;
-  if (typeof args.command === "string") return args.command.slice(0, 60);
-  if (typeof args.code === "string") return args.code.slice(0, 60);
-  return undefined;
-}
-
 // ---------------- Core DB persistence (best-effort) ----------------
 
 const DB_CONTENTION_RETRY_DELAYS_MS = [200, 500, 1000];
@@ -805,47 +728,6 @@ async function persistWithContentionRetry(
       return;
     }
   }
-}
-
-/**
- * Best-effort Core DB write for the approval audit trail. Imported
- * lazily so a non-Tauri runtime (Vite-only dev) doesn't fail hard at
- * IPC dispatch time. See db.ts `persistToolEventPending` for the v0.1
- * scoping rationale (audit only, no completion rows).
- */
-async function persistToolEventPendingFromIPC(event: {
-  sessionId: string;
-  approvalId: string;
-  turnIndex: number;
-  toolName: string;
-  args: Record<string, unknown>;
-  argsPreview: string;
-  riskLevel: string;
-  timestamp: string;
-}): Promise<void> {
-  // Bridge sends riskLevel as a free string per the wire format; map
-  // unexpected values to 'medium' to keep the column constraint happy.
-  const risk: "low" | "medium" | "high" =
-    event.riskLevel === "low" || event.riskLevel === "high"
-      ? event.riskLevel
-      : "medium";
-  await persistWithContentionRetry(
-    "persistToolEventPending",
-    `session=${event.sessionId} approval=${event.approvalId} turn=${event.turnIndex}`,
-    async () => {
-      const { persistToolEventPending } = await import("@/lib/db");
-      await persistToolEventPending({
-        approvalId: event.approvalId,
-        sessionId: event.sessionId,
-        turnIndex: event.turnIndex,
-        toolName: event.toolName,
-        args: event.args,
-        argsPreview: event.argsPreview,
-        riskLevel: risk,
-        startedAt: event.timestamp,
-      });
-    },
-  );
 }
 
 /**

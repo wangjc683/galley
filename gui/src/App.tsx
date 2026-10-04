@@ -14,7 +14,6 @@ import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace
 import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
 import { SettingsHost } from "@/components/screens/settings/SettingsHost";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
-import { YoloIntroDialog } from "@/components/screens/YoloIntroDialog";
 import { FirstCloseDialog } from "@/components/screens/FirstCloseDialog";
 import { useFirstCloseRequest } from "@/hooks/useFirstCloseRequest";
 import { resolveFirstClose } from "@/lib/db";
@@ -50,7 +49,6 @@ import {
   useActiveRuntime,
 } from "@/hooks/useActiveSession";
 import { resolveLanguagePreference } from "@/lib/language";
-import { effectiveApprovalMode } from "@/lib/approval-mode";
 import {
   normalizeEffortOverride,
   resolveConfiguredEffort,
@@ -59,12 +57,7 @@ import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useBrowserControlStore } from "@/stores/browser-control";
 import { useManagedModelsStore } from "@/stores/managed-models";
-import {
-  EMPTY_APPROVALS,
-  EMPTY_DECISIONS,
-  EMPTY_TURNS,
-  useMessagesStore,
-} from "@/stores/messages";
+import { EMPTY_TURNS, useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
@@ -75,7 +68,7 @@ import { isOpenGoalStatus, type GoalBrief } from "@/types/goal";
  * V0.1 Stage 2 #8 — App entry.
  *
  * State lives in the Zustand slices under `stores/`. App is now
- * mostly wiring: pull screen / approval / runtime out of the stores,
+ * mostly wiring: pull screen / conversation / runtime out of the stores,
  * feed them down to the four screens (Onboarding, Empty State, Main
  * View, plus the modal-y Settings + Command Palette + ToastHost),
  * route component callbacks back to store actions. Header and
@@ -118,9 +111,6 @@ function App() {
   const unarchiveSession = useSessionsStore((s) => s.unarchiveSession);
   const togglePinSession = useSessionsStore((s) => s.togglePinSession);
   const renameSession = useSessionsStore((s) => s.renameSession);
-  const setSessionApprovalMode = useSessionsStore(
-    (s) => s.setSessionApprovalMode,
-  );
   const setSessionReasoningEffort = useSessionsStore(
     (s) => s.setSessionReasoningEffort,
   );
@@ -146,7 +136,6 @@ function App() {
     (s) => s.deleteSessionPermanently,
   );
   const emptyArchive = useSessionsStore((s) => s.emptyArchive);
-  const pendingApprovalMode = useRuntimeStore((s) => s.pendingApprovalMode);
   const pendingReasoningEffort = useRuntimeStore(
     (s) => s.pendingReasoningEffort,
   );
@@ -155,17 +144,6 @@ function App() {
   );
   const selectLLMForSession = useRuntimeStore((s) => s.selectLLMForSession);
 
-  // Per-session conversation reads — activeSessionId comes from
-  // sessionsStore (declared above), used by every selector below to
-  // index into messagesStore.byId. EMPTY_* singletons keep React 19
-  // strict-mode getSnapshot stable across renders.
-  const approvalDecisions = useActiveMessages(
-    (m) => m.approvalDecisions,
-    EMPTY_DECISIONS,
-  );
-  const yoloMode = usePrefsStore((s) => s.yoloMode);
-  const yoloIntroSeen = usePrefsStore((s) => s.yoloIntroSeen);
-  const acknowledgeYoloIntro = usePrefsStore((s) => s.acknowledgeYoloIntro);
   const conversationWidth = usePrefsStore((s) => s.conversationWidth);
   const conversationFontSize = usePrefsStore((s) => s.conversationFontSize);
   const languagePreference = usePrefsStore((s) => s.languagePreference);
@@ -250,11 +228,11 @@ function App() {
     setPaletteOpen(true);
   };
 
+  // Per-session conversation reads — activeSessionId comes from
+  // sessionsStore (declared above), used by every selector below to
+  // index into messagesStore.byId. EMPTY_* singletons keep React 19
+  // strict-mode getSnapshot stable across renders.
   const storeTurns = useActiveMessages((m) => m.turns, EMPTY_TURNS);
-  const storePending = useActiveMessages(
-    (m) => m.pendingApprovals,
-    EMPTY_APPROVALS,
-  );
   const agentRunning = useActiveMessages((m) => m.agentRunning, false);
   const isStopping = useActiveMessages((m) => m.isStopping, false);
   const hasRunningSessions = useMessagesStore((s) =>
@@ -284,12 +262,11 @@ function App() {
   // creates an explicit session immediately, because that click
   // *is* the intent.
 
-  // Conversation source of truth: messagesStore turns + pendingApprovals,
-  // populated by ipc-handlers as bridge events stream in. When no session
-  // is active, MainView renders the empty state instead of <Conversation>,
-  // so these reduce to EMPTY_TURNS / EMPTY_APPROVALS without rendering.
+  // Conversation source of truth: messagesStore turns, populated by
+  // ipc-handlers as bridge events stream in. When no session is active,
+  // MainView renders the empty state instead of <Conversation>, so this
+  // reduces to EMPTY_TURNS without rendering.
   const turns = storeTurns;
-  const pendingApprovals = storePending;
   // Composer Stop-mode is driven by the real `agentRunning` store flag
   // (set when user submits, cleared on turn_end / error / run_complete).
   const isRunning = agentRunning;
@@ -308,7 +285,7 @@ function App() {
     [sessions],
   );
   const archivedCount = sessions.length - visibleSessions.length;
-  const scheduledActionCount = useSchedulerActionCount(visibleSessions);
+  const scheduledActionCount = useSchedulerActionCount();
   // Epigraph condition = a read on the workspace pulse at the moment the
   // empty screen is entered. EmptyState snapshots this on mount, so it
   // frames arrival rather than mutating live (the live pulse is the
@@ -332,27 +309,6 @@ function App() {
     }
     return map;
   }, [activeGoals]);
-  // Approval-mode state for the merged conversation-config pill
-  // (conversation.md §4.4). MainView acts on the active session's
-  // persisted override; EmptyState configures the NEXT session via
-  // pendingApprovalMode (same lifecycle as the LLM pre-pick — consumed
-  // by createSession, always cleared). Override = deviation from the
-  // default: picking the default-equal mode clears it (the sessions
-  // store normalizes; the pending path normalizes here). The app-wide
-  // default is edited only in Settings → 审批.
-  const defaultApprovalMode = yoloMode ? "auto" : "approval";
-  const mainApprovalMode = effectiveApprovalMode(
-    activeSession?.approvalMode,
-    yoloMode,
-  );
-  const mainApprovalModeState = activeSessionId
-    ? {
-        mode: mainApprovalMode,
-        deviatesFromDefault: mainApprovalMode !== defaultApprovalMode,
-        onSelectMode: (mode: "auto" | "approval") =>
-          setSessionApprovalMode(activeSessionId, mode),
-      }
-    : undefined;
   // Effort pill state (conversation.md §4.4). The "model configuration
   // value" resolves without waiting for the bridge; the effective tier
   // is derived from the override + configured pair rather than the
@@ -382,20 +338,8 @@ function App() {
             setSessionReasoningEffort(activeSessionId, value),
         }
       : undefined;
-  const emptyApprovalMode = effectiveApprovalMode(
-    pendingApprovalMode,
-    yoloMode,
-  );
-  const emptyApprovalModeState = {
-    mode: emptyApprovalMode,
-    deviatesFromDefault: emptyApprovalMode !== defaultApprovalMode,
-    onSelectMode: (mode: "auto" | "approval") =>
-      useRuntimeStore.setState({
-        pendingApprovalMode: mode === defaultApprovalMode ? undefined : mode,
-      }),
-  };
   // EmptyState's effort pill configures the NEXT session, same
-  // lifecycle as the LLM / approval-mode pre-picks (createSession
+  // lifecycle as the LLM pre-pick (createSession
   // consumes and always clears it). Deviation is normalized here
   // because there is no session row yet for the store action to
   // normalize against.
@@ -428,21 +372,15 @@ function App() {
   // Composer.
   const goalSlotOccupied = Boolean(activeSessionGoal);
   const activeSessionBusy =
-    screen === "main" &&
-    (isRunning || pendingApprovals.length > 0 || pendingAskUser !== null);
-  const {
-    handleApprove,
-    sendUserMessage,
-    submitFromEmpty,
-    stopRun,
-    runBrowserControlDemo,
-  } = useMessageSend({
-    activeSession,
-    requiresManagedModelConfig,
-    copy,
-    showImageBlockedToast,
-    openModelsForMissingConfig,
-  });
+    screen === "main" && (isRunning || pendingAskUser !== null);
+  const { sendUserMessage, submitFromEmpty, stopRun, runBrowserControlDemo } =
+    useMessageSend({
+      activeSession,
+      requiresManagedModelConfig,
+      copy,
+      showImageBlockedToast,
+      openModelsForMissingConfig,
+    });
   const {
     activeProject,
     assignSessionToProjectWithToast,
@@ -691,7 +629,6 @@ function App() {
                       selectLLMForNewSession(idx);
                     }}
                     onOpenLLMSwitcher={openLLMSwitcherFallback}
-                    approvalMode={emptyApprovalModeState}
                     reasoningEffort={emptyReasoningEffortState}
                     onGoalSubmit={startGoalFromComposer}
                     hasActiveGoal={goalSlotOccupied}
@@ -709,12 +646,6 @@ function App() {
                     key={activeSessionId}
                     turns={turns}
                     llmDisplayName={llmDisplayName}
-                    projectName={
-                      activeSession?.projectId
-                        ? projects.find((p) => p.id === activeSession.projectId)
-                            ?.name
-                        : undefined
-                    }
                     llms={llms}
                     llmConfigHint={llmConfigHint}
                     onConfigureModels={openModelConfigFromSwitcher}
@@ -738,7 +669,6 @@ function App() {
                       }
                     }}
                     onOpenLLMSwitcher={openLLMSwitcherFallback}
-                    approvalMode={mainApprovalModeState}
                     reasoningEffort={mainReasoningEffortState}
                     goal={activeSessionGoal}
                     hasActiveGoal={goalSlotOccupied}
@@ -752,10 +682,7 @@ function App() {
                     }
                     onImageBlocked={handleImageBlocked}
                     onTextDropBlocked={handleTextDropBlocked}
-                    pendingApprovals={pendingApprovals}
-                    approvalDecisions={approvalDecisions}
                     onSubmit={sendUserMessage}
-                    onApprove={handleApprove}
                     onStop={stopRun}
                     isRunning={isRunning}
                     isStopping={isStopping}
@@ -946,13 +873,6 @@ function App() {
         onTryBrowserControl={() => {
           setSettingsOpen(false);
           void runBrowserControlDemo();
-        }}
-      />
-
-      <YoloIntroDialog
-        open={!yoloIntroSeen}
-        onAcknowledge={(revertToApproval) => {
-          void acknowledgeYoloIntro(revertToApproval);
         }}
       />
 

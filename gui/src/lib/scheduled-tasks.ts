@@ -27,7 +27,7 @@ export interface ScheduledFireFailedPayload {
 }
 
 /** Supervisor label Core stamps on scheduler-created sessions
- * (core/src/scheduler.rs). Used to derive the approval-blocked badge.
+ * (core/src/scheduler.rs). Used to mark scheduler-created sessions.
  * The literal is pinned on both sides of the language seam by
  * `scheduled-tasks.test.ts` — a rename must land in Rust too. */
 export const SCHEDULER_SUPERVISOR = "galley-scheduler";
@@ -142,7 +142,7 @@ export async function previewScheduledFire(input: {
 }
 
 /** Enabled tasks whose last fire produced no session — the "needs your
- * action" half the approval-blocked badge count doesn't cover. Disabled
+ * action" count on the 定时 badge. Disabled
  * tasks are excluded: pausing is itself the user's handling. The state
  * clears when the next fire succeeds; there is deliberately no manual
  * dismiss. */

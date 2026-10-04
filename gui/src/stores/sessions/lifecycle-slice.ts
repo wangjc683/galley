@@ -4,7 +4,6 @@ import {
   currentLLMDisplayName,
   managedModelsToLLMs,
 } from "@/lib/managed-model-options";
-import { effectiveApprovalMode } from "@/lib/approval-mode";
 import { logPerf, perfNow } from "@/lib/perf";
 import { normalizeEffortOverride } from "@/lib/reasoning-effort";
 import { toDurableStatus } from "@/lib/sessions";
@@ -152,17 +151,8 @@ export interface SessionLifecycleSlice {
   renameSession: (sessionId: string, newTitle: string) => void;
   togglePinSession: (sessionId: string) => void;
   /**
-   * Set or clear (null) the per-session approval-mode override, persist
-   * it, and push the resulting effective mode to the session's live
-   * bridge — unlike an LLM switch this takes effect immediately.
-   */
-  setSessionApprovalMode: (
-    sessionId: string,
-    mode: "auto" | "approval" | null,
-  ) => void;
-  /**
    * Set or clear (null) the per-session reasoning-effort override and
-   * persist it. Unlike the approval mode this sends NO bridge command:
+   * persist it. The GUI sends NO bridge command for this:
    * Galley Core owns both the write and the push to a live runner
    * (Rule 5 / PRD 裁决 3), and the next spawn reads the column, so
    * there is nothing to replay on `ready` either.
@@ -450,19 +440,14 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     );
     const promptProfile =
       gaRuntimeKind === "managed" ? MANAGED_PROMPT_PROFILE : undefined;
-    // EmptyState's approval-mode pill stashes an explicit pre-pick the
-    // same way the LLM picker stashes pendingLLMIndex: there is no
-    // session row yet to write the override onto. Consume (and always
-    // clear) it here so an abandoned pick can't leak into a later
-    // unrelated session.
-    const pendingApprovalMode = useRuntimeStore.getState().pendingApprovalMode;
-    if (pendingApprovalMode !== undefined) {
-      useRuntimeStore.setState({ pendingApprovalMode: undefined });
-    }
-    // Same story for the effort pill's pre-pick (`undefined` =
-    // untouched, `null` = follow the model configuration, a tier =
-    // override). Core forwards the value to the runner / next spawn —
-    // the GUI never talks to the bridge for this.
+    // EmptyState's effort pill stashes an explicit pre-pick the same
+    // way the LLM picker stashes pendingLLMIndex: there is no session
+    // row yet to write the override onto (`undefined` = untouched,
+    // `null` = follow the model configuration, a tier = override).
+    // Consume (and always clear) it here so an abandoned pick can't
+    // leak into a later unrelated session. Core forwards the value to
+    // the runner / next spawn — the GUI never talks to the bridge for
+    // this.
     const pendingReasoningEffort =
       useRuntimeStore.getState().pendingReasoningEffort;
     if (pendingReasoningEffort !== undefined) {
@@ -481,7 +466,6 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       runtimeLabel: gaRuntimeKind === "managed" ? "内置内核" : "外部 GA",
       gaRuntimeKind,
       promptProfile,
-      approvalMode: pendingApprovalMode ?? null,
       reasoningEffort: pendingReasoningEffort ?? null,
       selectedLlmIndex: llmSelection?.index,
       selectedLlmKey: llmSelection?.key,
@@ -505,18 +489,8 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       origin: GUI_ORIGIN,
     })
       .then(() => {
-        // Persist the pre-picked override after the row exists. The
-        // bridge-side flag is synced by the on-`ready` handler, which
-        // reads the (already optimistically set) session.approvalMode.
-        if (!pendingApprovalMode) return;
-        return invoke("set_session_approval_mode", {
-          id,
-          mode: pendingApprovalMode,
-          origin: GUI_ORIGIN,
-        });
-      })
-      .then(() => {
-        // Only a real tier needs persisting: `null` / `undefined` is
+        // Persist the pre-picked override after the row exists. Only a
+        // real tier needs persisting: `null` / `undefined` is
         // exactly what the freshly created row already holds.
         if (!pendingReasoningEffort) return;
         return invoke("set_session_reasoning_effort", {
@@ -642,62 +616,10 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     );
   },
 
-  setSessionApprovalMode: (sessionId, mode) => {
-    // Override = DEVIATION from the default. Picking the mode that
-    // equals the current default writes NULL (follow the default),
-    // not a coincidentally-equal override — under the verb-row UI,
-    // switching back reads as "undo my earlier switch", and a lingering
-    // pin would keep surfacing restore affordances after a round trip.
-    const defaultMode = effectiveApprovalMode(
-      null,
-      usePrefsStore.getState().yoloMode,
-    );
-    const normalized = mode === defaultMode ? null : mode;
-    const now = new Date().toISOString();
-    let applied = false;
-    set((state) => {
-      const { sessions, changed } = patchSessionInList(
-        state.sessions,
-        sessionId,
-        (s) => {
-          if (s.status === "archived") return s;
-          applied = true;
-          return { ...s, approvalMode: normalized, updatedAt: now };
-        },
-      );
-      return changed ? { sessions } : {};
-    });
-    if (!applied) return;
-    void invoke("set_session_approval_mode", {
-      id: sessionId,
-      mode: normalized,
-      origin: GUI_ORIGIN,
-    }).catch((e) =>
-      console.debug("[sessions] set_session_approval_mode invoke failed.", e),
-    );
-    // Push the effective mode to the live bridge right away. No bridge
-    // alive is fine — the on-`ready` sync in ipc-handlers.ts covers the
-    // next spawn. Failure direction is safe (bridge keeps its previous
-    // flag; approval mode errs toward more prompts, never fewer).
-    const effective = effectiveApprovalMode(
-      normalized,
-      usePrefsStore.getState().yoloMode,
-    );
-    void useRuntimeStore
-      .getState()
-      .sendIPCCommand(sessionId, {
-        kind: "set_yolo_mode",
-        enabled: effective === "auto",
-      })
-      .catch((e) =>
-        console.debug("[sessions] approval mode bridge sync failed.", e),
-      );
-  },
-
   setSessionReasoningEffort: (sessionId, picked) => {
-    // Override = DEVIATION (same rule as the approval mode): picking
-    // the tier the model configuration already carries writes NULL, so
-    // switching away and back leaves no pinned residue. The configured
+    // Override = DEVIATION: picking the tier the model configuration
+    // already carries writes NULL, so switching away and back leaves
+    // no pinned residue. The configured
     // tier is whatever the live runner last reported for this session.
     const configured =
       useRuntimeStore.getState().byId[sessionId]?.configuredReasoningEffort ??
@@ -930,10 +852,7 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
           turnCount: brief.turnCount ?? s.turnCount,
           pinned: brief.pinned ?? s.pinned,
           hasUnread: brief.hasUnread ?? s.hasUnread,
-          // Absent (serde skips None) keeps the local value — the GUI
-          // is the only writer and patches optimistically on change.
-          approvalMode: brief.approvalMode ?? s.approvalMode,
-          // Same absent-keeps-local rule as approvalMode above: Core
+          // Absent (serde skips None) keeps the local value: Core
           // drops None off the wire, and the GUI already patched
           // optimistically when the user picked a tier.
           reasoningEffort: brief.reasoningEffort ?? s.reasoningEffort,

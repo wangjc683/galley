@@ -17,7 +17,6 @@ export interface SessionRow {
   summary: string | null;
   turn_count: number;
   current_tool: string | null;
-  pending_approval_count: number;
   error_count: number;
   pid: number | null;
   cwd: string | null;
@@ -101,31 +100,6 @@ export interface MessageAttachmentRow {
   width?: number;
   height?: number;
   createdAt: string;
-}
-
-export interface ToolEventRow {
-  id: string;
-  session_id: string;
-  turn_index: number;
-  tool_name: string;
-  status: string;
-  args_json: string | null;
-  args_preview: string | null;
-  result_preview: string | null;
-  risk_level: "low" | "medium" | "high" | null;
-  approval_id: string | null;
-  approval_decision: string | null;
-  elapsed_ms: number | null;
-  started_at: string;
-  ended_at: string | null;
-}
-
-export interface ApprovalRuleRow {
-  id: number;
-  scope: "project" | "global";
-  project_id: string | null;
-  tool_name: string;
-  created_at: string;
 }
 
 export interface PrefRow {

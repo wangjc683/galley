@@ -1,8 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
-import type { MessageRow, ToolEventRow } from "@/types/db";
-import type { ApprovalDecision } from "@/types/ipc";
+import type { MessageRow } from "@/types/db";
 import type { RuntimeKind } from "@/types/session";
 import type { MessageAttachment, PendingImageAttachment } from "@/types/conversation";
 
@@ -148,7 +147,7 @@ export interface MessageSearchHit {
  *     even on tens of thousands of rows; supports CJK + ASCII
  *     uniformly.
  *   - query.length === 2 → LIKE substring fallback. Trigram can't
- *     match 2-char queries, but they're common in Chinese ("审批",
+ *     match 2-char queries, but they're common in Chinese ("发版",
  *     "调研"). LIKE is slower (full table scan) but acceptable for
  *     V1 message volumes.
  *   - query.length < 2 → returns [] (no implicit broad scan).
@@ -187,98 +186,6 @@ export async function loadMessagesBySession(
   sessionId: string,
 ): Promise<MessageRow[]> {
   return invoke<MessageRow[]>("session_message_rows", { sessionId });
-}
-
-// ---------------- tool_events ----------------
-//
-// V0.1 scope: persist **approval-related rows only** — one row per
-// tool_call_pending event, updated when the user records a decision.
-// This delivers the schema's stated core use case ("Approval state
-// lives here so we can audit later who approved what" — 001_init.sql
-// L82) without requiring an IPC protocol change.
-//
-// What we explicitly DON'T persist here:
-//   - tool_call_start / tool_call_end / tool_call_progress events
-//   - Auto-allowed tools (no preceding `pending`)
-//   - Completion data for approved tools (success/failed/elapsed_ms)
-//
-// Rationale: conversation rendering already rebuilds tool state from
-// turn_end's toolCalls/toolResults (persisted in `messages` table via
-// persistTurnEndToMessages). Full tool-timeline persistence —
-// including auto-allowed tools and execution outcomes — is V0.2 work,
-// likely paired with the Memory Inspector that surfaces it.
-//
-// Status semantics for the rows we DO write:
-//   - 'waiting_approval' — initial state on pending arrival
-//   - 'denied'           — user denied; row is terminal
-//   - 'running'          — user approved (allow_once / always_allow_*);
-//                          row stays at 'running' since we don't track
-//                          completion. Join messages.tool_results by
-//                          (session_id, turn_index, tool_name) for the
-//                          actual outcome.
-
-export interface PersistToolEventPendingParams {
-  approvalId: string;
-  sessionId: string;
-  turnIndex: number;
-  toolName: string;
-  args: Record<string, unknown>;
-  argsPreview: string;
-  riskLevel: "low" | "medium" | "high";
-  startedAt: string;
-}
-
-/**
- * INSERT a tool_events row on tool_call_pending. Uses approvalId as
- * the primary key — every pending event from the bridge carries a
- * unique approvalId, so re-emitted pending events upsert harmlessly.
- */
-export async function persistToolEventPending(
-  p: PersistToolEventPendingParams,
-): Promise<void> {
-  await invoke("persist_tool_event_pending", {
-    input: {
-      approvalId: p.approvalId,
-      sessionId: p.sessionId,
-      turnIndex: p.turnIndex,
-      toolName: p.toolName,
-      args: p.args,
-      argsPreview: p.argsPreview,
-      riskLevel: p.riskLevel,
-      startedAt: p.startedAt,
-    },
-  });
-}
-
-/**
- * UPDATE the existing tool_events row when the user records an
- * approval decision. No-op (zero rows affected) if the matching
- * `pending` row was never persisted — caller is best-effort anyway.
- *
- * Sets `ended_at` only for terminal decisions (deny). Approved rows
- * stay open (`ended_at` NULL, status 'running') since we don't track
- * the subsequent tool execution in this table.
- */
-export async function persistToolEventApprovalDecision(
-  approvalId: string,
-  decision: ApprovalDecision,
-  decidedAt: string,
-): Promise<void> {
-  await invoke("persist_tool_event_approval_decision", {
-    approvalId,
-    decision,
-    decidedAt,
-  });
-}
-
-/**
- * Load all tool_events rows for a session, ordered by start time.
- * Used by Session restore + Memory Inspector (Stage 3 follow-ups).
- */
-export async function loadToolEventsBySession(
-  sessionId: string,
-): Promise<ToolEventRow[]> {
-  return invoke<ToolEventRow[]>("load_tool_events_by_session", { sessionId });
 }
 
 // ---------------- prefs ----------------

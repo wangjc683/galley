@@ -11,10 +11,10 @@
  * Three rules live here because the composer pill, the store action and
  * the empty-state pending path must all agree on them:
  *
- *   1. **Override = deviation** (same rule as approval mode, DESIGN
- *      §4.4): picking the tier the model configuration already sets
- *      writes NULL rather than a coincidentally-equal override, so a
- *      switch-and-back round trip leaves zero residue.
+ *   1. **Override = deviation** (DESIGN §4.4): picking the tier the
+ *      model configuration already sets writes NULL rather than a
+ *      coincidentally-equal override, so a switch-and-back round trip
+ *      leaves zero residue.
  *   2. **The pill shows the effective tier**, and the popover only
  *      offers the `默认` row when the model configuration has no
  *      explicit tier — with an explicit tier there is nothing to

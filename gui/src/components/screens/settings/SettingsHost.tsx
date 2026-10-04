@@ -41,13 +41,6 @@ export function SettingsHost({
   const resolvedLanguage = useLanguage();
 
   const runtimeInfo = useRuntimeStore((s) => s.runtimeInfo);
-  const approvalConfig = usePrefsStore((s) => s.approvalConfig);
-  const setApprovalRequiredTools = usePrefsStore(
-    (s) => s.setApprovalRequiredTools,
-  );
-  const removeAlwaysAllow = usePrefsStore((s) => s.removeAlwaysAllow);
-  const yoloMode = usePrefsStore((s) => s.yoloMode);
-  const setYoloMode = usePrefsStore((s) => s.setYoloMode);
   const languagePreference = usePrefsStore((s) => s.languagePreference);
   const setLanguagePreference = usePrefsStore((s) => s.setLanguagePreference);
   const themePreference = usePrefsStore((s) => s.themePreference);
@@ -60,8 +53,6 @@ export function SettingsHost({
   const setConversationWidth = usePrefsStore((s) => s.setConversationWidth);
   const notifyOnGoalEnd = usePrefsStore((s) => s.notifyOnGoalEnd);
   const setNotifyOnGoalEnd = usePrefsStore((s) => s.setNotifyOnGoalEnd);
-  const notifyOnApproval = usePrefsStore((s) => s.notifyOnApproval);
-  const setNotifyOnApproval = usePrefsStore((s) => s.setNotifyOnApproval);
   const notifyOnReplyDone = usePrefsStore((s) => s.notifyOnReplyDone);
   const setNotifyOnReplyDone = usePrefsStore((s) => s.setNotifyOnReplyDone);
   const notifySound = usePrefsStore((s) => s.notifySound);
@@ -84,7 +75,6 @@ export function SettingsHost({
   const hasConfiguredManagedModel = managedModels.some(
     (model) => model.credentialStatus !== "missing",
   );
-  const projects = useSessionsStore((s) => s.projects);
   const setActiveProjectFilter = useSessionsStore(
     (s) => s.setActiveProjectFilter,
   );
@@ -102,21 +92,11 @@ export function SettingsHost({
       tab={tab}
       onTabChange={onTabChange}
       runtimeInfo={runtimeInfo}
-      approval={approvalConfig}
-      projectCount={projects.length}
       hasRunningSessions={hasRunningSessions}
       activeRuntimeKind={activeRuntimeKind}
       hasManagedRuntimeConfigured={hasConfiguredManagedModel}
       hasExternalRuntimeConfigured={gaConfig.gaPath.trim() !== ""}
-      yoloMode={yoloMode}
       useExternalPython={gaConfig.useExternalPython}
-      onChangeYoloMode={(enabled) => {
-        // Fire-and-forget: setYoloMode persists + notifies bridge,
-        // but the UI updates synchronously from the store action.
-        void setYoloMode(enabled);
-      }}
-      onChangeRequiredTools={setApprovalRequiredTools}
-      onRemoveAlwaysAllow={removeAlwaysAllow}
       onChangeGAPath={() => {
         void pickGAPath(setGAConfig, copy.app.chooseGAFolderTitle);
       }}
@@ -193,10 +173,6 @@ export function SettingsHost({
       notifyOnGoalEnd={notifyOnGoalEnd}
       onChangeNotifyOnGoalEnd={(enabled) => {
         void setNotifyOnGoalEnd(enabled);
-      }}
-      notifyOnApproval={notifyOnApproval}
-      onChangeNotifyOnApproval={(enabled) => {
-        void setNotifyOnApproval(enabled);
       }}
       notifyOnReplyDone={notifyOnReplyDone}
       onChangeNotifyOnReplyDone={(enabled) => {

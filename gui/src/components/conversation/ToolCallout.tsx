@@ -10,7 +10,6 @@ import {
   FolderOpen,
   GlobeSimple,
   type Icon,
-  PauseCircle,
   PencilSimpleLine,
   Prohibit,
   Terminal,
@@ -18,7 +17,6 @@ import {
 } from "@phosphor-icons/react";
 import { useContext, useEffect, memo, useState, type ReactNode } from "react";
 
-import { ApprovalForm } from "@/components/conversation/ApprovalForm";
 import { LiveDots } from "@/components/conversation/LiveIndicators";
 import { LocalFileReference } from "@/components/conversation/LocalFileReference";
 import { PatchView } from "@/components/conversation/diff/PatchView";
@@ -31,7 +29,6 @@ import { formatStepNumeral } from "@/lib/step-numeral";
 import { cn } from "@/lib/utils";
 import type {
   ConversationToolEvent,
-  OnApprove,
   ToolEventStatus,
 } from "@/types/conversation";
 
@@ -44,15 +41,6 @@ interface ToolCalloutProps {
    * margin. Inline tier only; block-tier states keep their separate
    * TurnMarker, so the dispatcher ignores this for them. */
   stepIndex?: number;
-  /** When status === "waiting_approval", drives the inline form. */
-  onApprove?: OnApprove;
-  /** Approval form's currently-recorded decision (for the "decided"
-   * post-state look). Pass undefined while still pending. */
-  approvalDecision?: string;
-  /** Name of the project the active session belongs to (if any) —
-   * powers the "Always allow in {projectName}" button label and
-   * controls whether the project-scoped decision is offered at all. */
-  projectName?: string;
 }
 
 /**
@@ -72,8 +60,8 @@ interface ToolCalloutProps {
  *               to audit a specific operation (e.g. file_patch
  *               diff, code_run output) click to expand.
  *
- *   "block"   — attention-demanding states: waiting_approval /
- *               failed / running / denied. These ALL need visual
+ *   "block"   — attention-demanding states: failed / running /
+ *               denied. These ALL need visual
  *               prominence regardless of which tool produced them
  *               (the user must see them; in-flight needs spinner
  *               space; errors need warning weight).
@@ -98,55 +86,39 @@ function pickToolTier(
  * Tool callout — dispatcher between the three visual tiers. See
  * `pickToolTier` for the rationale behind the split.
  */
-// Memoised: settled tool callouts carry immutable `tool` data. The
-// `onApprove` prop must be stable (useCallback) at the call site for
-// the memo to keep pending callouts from re-rendering on every stream
-// chunk — see the App.tsx handler wiring.
+// Memoised: settled tool callouts carry immutable `tool` data, so the
+// memo keeps historical callouts from re-rendering on every stream
+// chunk.
 export const ToolCallout = memo(function ToolCallout({
   tool,
   stepIndex,
-  onApprove,
-  approvalDecision,
-  projectName,
 }: ToolCalloutProps) {
   const tier = pickToolTier(tool);
   if (tier === "hidden") return null;
   if (tier === "inline")
     return <InlineToolPill tool={tool} stepIndex={stepIndex} />;
-  return (
-    <BlockToolCallout
-      tool={tool}
-      onApprove={onApprove}
-      approvalDecision={approvalDecision}
-      projectName={projectName}
-    />
-  );
+  return <BlockToolCallout tool={tool} />;
 });
 
 /**
  * Block-form tool callout — the original "Notion callout" treatment.
  * Used for external-world tools (file_patch / file_write / code_run)
  * in settled state, and for ANY tool in attention-demanding states
- * (waiting_approval / failed / running / denied). Per DESIGN.md §4.5.
+ * (failed / running / denied). Per DESIGN.md §4.5.
  *
- * Seven visual states (see ToolEventStatus):
+ * Six visual states (see ToolEventStatus):
  *
  *   running             apricot bar + spinning notch + live elapsed + auto-open
  *   success-current     apricot bar + check + auto-open
  *   success-historical  near-invisible bar + muted check + auto-collapse
  *                       (fades into the document)
- *   waiting_approval    amber bar + pause + amber 4% tint + FORCED OPEN
  *   failed              red bar + X + red 4% tint + FORCED OPEN
  *   failed-historical   faint red bar + X + auto-collapse with headline
  *                       lead (#22: settled GA error envelope)
- *   denied              muted bar + prohibit + auto-collapse
+ *   denied              muted bar + prohibit + auto-collapse (historical
+ *                       transcripts only, see lib/tool-outcome.ts)
  */
-function BlockToolCallout({
-  tool,
-  onApprove,
-  approvalDecision,
-  projectName,
-}: ToolCalloutProps) {
+function BlockToolCallout({ tool }: { tool: ConversationToolEvent }) {
   const cfg = STATUS_CONFIG[tool.status];
   const forcedOpen = cfg.forcedOpen;
   const [openManual, setOpenManual] = useState(cfg.defaultOpen);
@@ -222,16 +194,7 @@ function BlockToolCallout({
             </div>
           )}
 
-          {tool.status === "waiting_approval" && tool.approvalId ? (
-            <ApprovalForm
-              tool={tool}
-              onApprove={onApprove}
-              approvalDecision={approvalDecision}
-              projectName={projectName}
-            />
-          ) : (
-            <SettledToolBody tool={tool} />
-          )}
+          <SettledToolBody tool={tool} />
         </div>
       )}
     </div>
@@ -282,7 +245,7 @@ interface StatusConfig {
   /** Tailwind classes for the 3px left bar. */
   barClass: string;
   /** Tailwind classes for the callout background. Most states use the
-   * surface tint (no background); waiting / failed get 4% color tints
+   * surface tint (no background); failed gets a 4% color tint
    * to add forced visibility per DESIGN.md (prototype refinement we'll
    * codify in the v0.2 patch). */
   bgClass: string;
@@ -321,12 +284,6 @@ const STATUS_CONFIG: Record<ToolEventStatus, StatusConfig> = {
     forcedOpen: false,
     defaultOpen: false,
   },
-  waiting_approval: {
-    barClass: "bg-warning",
-    bgClass: "bg-warning/[var(--opacity-subtle)]",
-    forcedOpen: true,
-    defaultOpen: true,
-  },
   failed: {
     barClass: "bg-error",
     bgClass: "bg-error/[var(--opacity-subtle)]",
@@ -354,8 +311,6 @@ function StatusBit({ status }: { status: ToolEventStatus }) {
     );
   if (status === "success-historical")
     return <CheckCircle size={16} weight="thin" className="text-ink-muted" />;
-  if (status === "waiting_approval")
-    return <PauseCircle size={16} weight="thin" className="text-warning" />;
   if (status === "failed" || status === "failed-historical")
     return <XCircle size={16} weight="thin" className="text-error" />;
   // denied
@@ -368,7 +323,6 @@ function StatusPill({ status }: { status: ToolEventStatus }) {
     running: copy.conversation.running,
     "success-current": copy.conversation.completed,
     "success-historical": copy.conversation.completed,
-    waiting_approval: copy.conversation.waitingApproval,
     failed: copy.conversation.failed,
     "failed-historical": copy.conversation.failed,
     denied: copy.conversation.denied,
@@ -389,7 +343,6 @@ const STATUS_PILL_CLASS: Record<ToolEventStatus, string> = {
   running: "bg-brand/[var(--opacity-medium)] text-brand-strong",
   "success-current": "bg-success/[var(--opacity-soft)] text-success",
   "success-historical": "bg-success/[var(--opacity-soft)] text-success",
-  waiting_approval: "bg-warning/[var(--opacity-soft)] text-warning",
   failed: "bg-error/[var(--opacity-soft)] text-error",
   "failed-historical": "bg-error/[var(--opacity-soft)] text-error",
   denied: "bg-hover text-ink-muted",
@@ -398,9 +351,8 @@ const STATUS_PILL_CLASS: Record<ToolEventStatus, string> = {
 // ---------- arg / result blocks (fallbacks) ----------
 
 /**
- * Expanded body for a settled (non-approval) tool. file_patch gets the
- * same PatchView diff the approval card used — expanding a settled
- * patch previously dumped old_content/new_content as JSON-escaped
+ * Expanded body for a tool callout. file_patch gets the PatchView
+ * diff — expanding a settled patch previously dumped old_content/new_content as JSON-escaped
  * single-line soup via ArgsBlock, which made post-hoc audit unreadable.
  * Everything else keeps the generic args + result blocks.
  */
@@ -409,7 +361,8 @@ function SettledToolBody({ tool }: { tool: ConversationToolEvent }) {
     typeof tool.args?.path === "string" ? (tool.args.path as string) : "";
   if (tool.name === "file_patch" && path) {
     return (
-      // Same 480px audit window as the approval-time renderer.
+      // 480px audit window: long diffs scroll instead of swallowing
+      // the document column.
       <div className="max-h-[480px] overflow-auto">
         <PatchView
           path={path}
@@ -479,7 +432,7 @@ function ResultBlock({ content }: { content: string }) {
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
         {copy.conversation.result}
       </div>
-      {/* 200px scroll window per tools-and-approvals.md — one tool's
+      {/* 200px scroll window per the tool-callout spec — one tool's
           stdout must not swallow the document column. */}
       <pre className="max-h-[200px] overflow-y-auto whitespace-pre-wrap rounded-callout border border-line bg-app px-3 py-2.5 font-mono text-[12.5px] leading-[1.6] text-ink-soft">
         {content}
@@ -541,9 +494,8 @@ const TOOL_META: Record<string, { icon: Icon; zh: string }> = {
  *
  * Inline tier is *only* reached by settled-success tools (see
  * pickToolTier), so no leading status icon — the tool-specific
- * Phosphor glyph carries the slot. Failure / running /
- * awaiting-approval renders via BlockToolCallout where the status
- * bit carries real signal.
+ * Phosphor glyph carries the slot. Failure / running / denied render
+ * via BlockToolCallout where the status bit carries real signal.
  */
 function InlineToolPill({
   tool,

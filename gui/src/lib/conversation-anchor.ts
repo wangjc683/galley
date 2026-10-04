@@ -2,7 +2,7 @@
  * The conversation's shared user-message anchor geometry.
  *
  * Every "park a user message at the top" behavior — submit-time
- * stick-to-top, ⌥↑/⌥↓ keyboard jumps, advance-to-approval, and the
+ * stick-to-top, ⌥↑/⌥↓ keyboard jumps, and the
  * question rail's click-jump + active-dot tracking — must aim at the
  * SAME anchor line, or the boundary between "current" and "next"
  * question feels different depending on which affordance got you

@@ -1,10 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { ComposerReasoningEffortState } from "@/components/conversation/EffortPill";
-import type {
-  ComposerApprovalModeState,
-  ComposerLLMOption,
-} from "@/components/conversation/LLMPill";
+import type { ComposerLLMOption } from "@/components/conversation/LLMPill";
 import type { ImageBlockReason } from "@/lib/composer-images";
 import type { PendingImageAttachment } from "@/types/conversation";
 import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
@@ -111,9 +108,6 @@ export interface ComposerProps {
    * provided. Today the only caller using this path is the dev-toggle
    * harness; production wires `llms` + `onSelectLLM`. */
   onOpenLLMSwitcher?: () => void;
-  /** Approval-mode pill state (自动执行 / 逐步审批). Undefined hides
-   * the pill (e.g. dev harness without session context). */
-  approvalMode?: ComposerApprovalModeState;
   /** Reasoning-effort pill state (the independent pill right of the
    * model picker). Undefined hides the pill — e.g. a dev harness with
    * no session context, or before any model is selected. */

@@ -27,7 +27,6 @@ import sys
 import threading
 import time
 import traceback
-import uuid
 from pathlib import Path
 from typing import IO, Any
 
@@ -37,7 +36,6 @@ from runner.ipc import (
     PROTOCOL_VERSION,
     REASONING_EFFORT_TIERS,
     AbortCommand,
-    ApprovalResponseCommand,
     AskUserEvent,
     AskUserResponseCommand,
     AttachPetCommand,
@@ -55,14 +53,11 @@ from runner.ipc import (
     ReasoningEffortChangedEvent,
     ReinjectToolsCommand,
     RunCompleteEvent,
-    SetApprovalRulesCommand,
     SetLLMCommand,
     SetReasoningEffortCommand,
-    SetYoloModeCommand,
     ShutdownCommand,
     SystemMessageEvent,
     TitleGeneratedEvent,
-    ToolCallPendingEvent,
     ToolsReinjectedEvent,
     TurnEndEvent,
     TurnProgressEvent,
@@ -351,14 +346,6 @@ def _to_json_safe(obj: Any) -> Any:
     return str(obj)
 
 
-def _compact_args(args: dict[str, Any], max_len: int = 200) -> str:
-    cleaned = {k: v for k, v in args.items() if not k.startswith("_")}
-    s = json.dumps(cleaned, ensure_ascii=False, separators=(",", ":"))
-    if len(s) > max_len:
-        s = s[: max_len - 3] + "..."
-    return s
-
-
 _managed_model_config_from_env = managed_runtime.managed_model_config_from_env
 
 _USAGE_FIELDS = ("requests", "input", "output", "cache_create", "cache_read")
@@ -607,65 +594,6 @@ class _FenceFilter:
         return out
 
 
-# ---------------- Pending approval ----------------
-
-
-class _PendingApproval:
-    """Single pending approval slot. Worker thread waits on event, command
-    thread sets decision and signals."""
-
-    __slots__ = ("event", "decision")
-
-    def __init__(self) -> None:
-        self.event = threading.Event()
-        self.decision: str | None = None
-
-
-class SessionState:
-    """Owns rule sets and pending approvals at session scope."""
-
-    def __init__(self) -> None:
-        self.always_allow_global: set[str] = set()
-        self.always_allow_project: set[str] = set()
-        # YOLO mode (PRD §11.5). Default off; desktop syncs the user's
-        # persisted preference via SetYoloModeCommand right after `ready`.
-        # Read by WorkbenchHandler.needs_approval through the yolo_check
-        # closure on every dispatch — toggling here takes effect on the
-        # very next tool call.
-        self.yolo_mode: bool = False
-        self._pending: dict[str, _PendingApproval] = {}
-        self._lock = threading.Lock()
-
-    def register_pending(self, approval_id: str) -> _PendingApproval:
-        p = _PendingApproval()
-        with self._lock:
-            self._pending[approval_id] = p
-        return p
-
-    def resolve_pending(self, approval_id: str, decision: str) -> bool:
-        with self._lock:
-            p = self._pending.pop(approval_id, None)
-        if p is None:
-            return False
-        p.decision = decision
-        p.event.set()
-        return True
-
-    def resolve_all_pending(self, decision: str) -> int:
-        """Resolve every pending approval at once. Abort/shutdown must
-        call this: the agent thread blocks inside _request_approval's
-        event.wait() *within* the dispatch generator, so agent.abort()
-        alone cannot reach it — without a decision the thread stays
-        wedged for up to APPROVAL_WAIT_SECS."""
-        with self._lock:
-            drained = list(self._pending.values())
-            self._pending.clear()
-        for p in drained:
-            p.decision = decision
-            p.event.set()
-        return len(drained)
-
-
 # ---------------- Bridge runtime ----------------
 
 
@@ -705,8 +633,6 @@ def _validate_reasoning_effort(value: str | None) -> str | None:
 class Bridge:
     """One bridge process's runtime state and main loop."""
 
-    APPROVAL_WAIT_SECS = 600  # 10 min default; agent's deny on timeout
-
     @property
     def ga(self) -> GaSession:
         """The GA-internals seam (see ga_session.py). A property over
@@ -744,7 +670,6 @@ class Bridge:
         self._configured_reasoning_effort: dict[int, str | None] = {}
         self._stdout = stdout
         self._stdin = stdin
-        self.state = SessionState()
         # None is the writer-exit sentinel: everything enqueued before it
         # is guaranteed written + flushed before the writer thread ends.
         self.event_queue: queue.Queue[str | None] = queue.Queue()
@@ -1240,13 +1165,6 @@ class Bridge:
                     parent,
                     last_history,
                     cwd,
-                    request_approval=bridge_self._request_approval,
-                    always_allow_global=bridge_self.state.always_allow_global,
-                    always_allow_project=bridge_self.state.always_allow_project,
-                    # Closure over bridge_self.state so SetYoloModeCommand
-                    # can flip the flag at runtime without rebuilding the
-                    # handler. needs_approval() calls this on every dispatch.
-                    yolo_check=lambda: bridge_self.state.yolo_mode,
                     # turn_start emission: GA's agent_runner_loop has no
                     # turn_start_callback, but it sets handler.current_turn
                     # before each tool dispatch. WorkbenchHandler invokes
@@ -1761,38 +1679,6 @@ class Bridge:
                     candidates.append(c)
         return None if question is None else (question, candidates)
 
-    # ---------------- Approval request (called from worker thread) ----------------
-
-    def _request_approval(self, tool_name: str, args: dict[str, Any]) -> str:
-        from runner.handlers import APPROVAL_REASONS, RISK_LEVELS
-
-        approval_id = f"appr_{uuid.uuid4().hex[:12]}"
-        pending = self.state.register_pending(approval_id)
-        self._emit(
-            ToolCallPendingEvent(
-                sessionId=self.session_id,
-                approvalId=approval_id,
-                turnIndex=self.current_turn,
-                absoluteTurnIndex=self._current_absolute_turn_index(self.current_turn),
-                toolName=tool_name,
-                args=args,
-                argsPreview=_compact_args(args),
-                riskLevel=RISK_LEVELS.get(tool_name, "medium"),
-                reason=APPROVAL_REASONS.get(tool_name, "Tool requires user approval."),
-            )
-        )
-
-        if not pending.event.wait(timeout=self.APPROVAL_WAIT_SECS):
-            self._emit_error(
-                f"Approval timed out for {tool_name} ({self.APPROVAL_WAIT_SECS}s); denying.",
-                None,
-                category="business",
-                severity="warning",
-                context="approval_timeout",
-            )
-            return "deny"
-        return pending.decision or "deny"
-
     # ---------------- Command dispatch ----------------
 
     def dispatch_command(self, cmd: Command) -> None:
@@ -1846,14 +1732,6 @@ class Bridge:
                 cmd.text, source="workbench", images=cmd.images
             )
             self._start_progress_drain(display_queue, run_generation)
-        elif isinstance(cmd, ApprovalResponseCommand):
-            ok = self.state.resolve_pending(cmd.approvalId, cmd.decision)
-            if not ok:
-                self._emit_error(
-                    f"Unknown approval id: {cmd.approvalId}",
-                    None,
-                    context="approval_response",
-                )
         elif isinstance(cmd, AskUserResponseCommand):
             # Same defensive gate as UserMessage: an ask_user pause has
             # already emitted run_complete, so a legitimate answer
@@ -1880,16 +1758,12 @@ class Bridge:
             # GA's abort() sets stop_sig and breaks out of the run loop
             # without firing turn_end_callback, so we synthesize the
             # run_complete event ourselves with the ABORTED marker.
-            # abort() first so stop_sig is already set when a denied
-            # approval wakes the agent thread — it then exits at the
-            # next stop check instead of continuing the turn.
-            # Retire the run's generation before that: abort() makes GA
+            # Retire the run's generation first: abort() makes GA
             # end the task and put its `done`, which must not let the
             # drain close the run as DONE_WITHOUT_EXIT ahead of ABORTED.
             with self._run_complete_lock:
                 self._run_generation += 1
             self.agent.abort()
-            self.state.resolve_all_pending("deny")
             with self._run_complete_lock:
                 if self.run_in_progress.is_set():
                     self._emit(
@@ -1931,19 +1805,6 @@ class Bridge:
                     category="business",
                     context="load_history",
                 )
-        elif isinstance(cmd, SetApprovalRulesCommand):
-            # In-place mutation so the existing handler instance picks up
-            # changes without rebuild.
-            self.state.always_allow_global.clear()
-            self.state.always_allow_global.update(cmd.alwaysAllowGlobal)
-            self.state.always_allow_project.clear()
-            self.state.always_allow_project.update(cmd.alwaysAllowProject)
-        elif isinstance(cmd, SetYoloModeCommand):
-            # YOLO mode (PRD §11.5). Read by WorkbenchHandler through a
-            # closure that reaches into self.state, so this single
-            # assignment takes effect on the next tool dispatch — no
-            # need to rebuild the handler or notify it explicitly.
-            self.state.yolo_mode = cmd.enabled
         elif isinstance(cmd, SetLLMCommand):
             self._handle_set_llm(cmd)
         elif isinstance(cmd, SetReasoningEffortCommand):
@@ -1957,9 +1818,6 @@ class Bridge:
         elif isinstance(cmd, GenerateTitleCommand):
             self._handle_generate_title(cmd)
         elif isinstance(cmd, ShutdownCommand):
-            # A pending approval would keep the agent thread blocked
-            # through process teardown; deny it so the thread can exit.
-            self.state.resolve_all_pending("deny")
             # Make sure pet subprocess + hook don't leak on shutdown.
             self._handle_detach_pet(silent=True)
             self.shutdown_event.set()

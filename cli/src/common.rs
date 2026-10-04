@@ -33,6 +33,9 @@ pub(crate) fn parse_status_arg(s: &str) -> Result<SessionStatus, GalleyError> {
         "idle" => SessionStatus::Idle,
         "connecting" => SessionStatus::Connecting,
         "running" => SessionStatus::Running,
+        // Never produced since approvals were removed (2026-10-05); still
+        // accepted so existing callers keep working (Rule 3), it just
+        // matches nothing.
         "waiting_approval" => SessionStatus::WaitingApproval,
         "error" => SessionStatus::Error,
         "completed" => SessionStatus::Completed,

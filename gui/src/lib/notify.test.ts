@@ -138,13 +138,13 @@ describe("sendGatedSystemNotification", () => {
     expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
   });
 
-  it("gates approval notifications on the approval pref, not the goal pref", async () => {
-    usePrefsStore.setState({ notifyOnGoalEnd: false, notifyOnApproval: true });
+  it("gates askUser notifications on the replyDone pref, not the goal pref", async () => {
+    usePrefsStore.setState({ notifyOnGoalEnd: false, notifyOnReplyDone: true });
 
-    await sendGatedSystemNotification("approval", {
+    await sendGatedSystemNotification("askUser", {
       title: "t",
       body: "b",
-      throttleKey: "approval:pref-split",
+      throttleKey: "askUser:pref-split",
     });
 
     expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
@@ -182,10 +182,10 @@ describe("sendGatedSystemNotification", () => {
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     });
     try {
-      await sendGatedSystemNotification("approval", {
+      await sendGatedSystemNotification("askUser", {
         title: "t",
         body: "b",
-        throttleKey: "approval:sound-on",
+        throttleKey: "askUser:sound-on",
       });
     } finally {
       vi.unstubAllGlobals();
@@ -237,15 +237,15 @@ describe("sendGatedSystemNotification", () => {
   });
 
   it("collapses a burst sharing a throttleKey into one notification", async () => {
-    await sendGatedSystemNotification("approval", {
+    await sendGatedSystemNotification("askUser", {
       title: "t",
       body: "one",
-      throttleKey: "approval:burst-session",
+      throttleKey: "askUser:burst-session",
     });
-    await sendGatedSystemNotification("approval", {
+    await sendGatedSystemNotification("askUser", {
       title: "t",
       body: "two",
-      throttleKey: "approval:burst-session",
+      throttleKey: "askUser:burst-session",
     });
 
     expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);

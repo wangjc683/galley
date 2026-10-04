@@ -57,8 +57,8 @@ export interface SessionsState {
 
 // Mirror of Rust `SessionBrief` (see core/src/api/session.rs) — only
 // the durable fields that ship over the Tauri invoke wire. The GUI's
-// `Session` type adds runtime-only fields (pid, currentTool,
-// pendingApprovalCount, etc.) that this slice initialises to defaults.
+// `Session` type adds runtime-only fields (pid, currentTool, etc.)
+// that this slice initialises to defaults.
 export interface SessionBriefWire {
   id: string;
   projectId?: string;
@@ -72,7 +72,6 @@ export interface SessionBriefWire {
   pinned?: boolean;
   hasUnread?: boolean;
   origin?: Origin;
-  approvalMode?: "auto" | "approval" | null;
   reasoningEffort?: string | null;
   selectedLlmIndex?: number;
   selectedLlmKey?: string;
@@ -157,7 +156,6 @@ export function sessionFromBrief(b: SessionBriefWire): Session {
     pinned: b.pinned ?? false,
     hasUnread: b.hasUnread ?? false,
     origin: b.origin,
-    approvalMode: b.approvalMode ?? null,
     reasoningEffort: b.reasoningEffort ?? null,
     lastActivityAt: b.lastActivityAt,
     createdAt: b.createdAt,

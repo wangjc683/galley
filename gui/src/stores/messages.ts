@@ -2,7 +2,6 @@ import { create } from "zustand";
 
 import {
   loadMessagesBySession,
-  persistToolEventApprovalDecision,
   persistUserMessage,
 } from "@/lib/db";
 import { logPerf, perfNow } from "@/lib/perf";
@@ -16,7 +15,6 @@ import type {
   AgentTurn,
   MessageAttachment,
   Origin,
-  PendingApproval,
   PendingAskUser,
   PendingImageAttachment,
   SendPhase,
@@ -25,7 +23,6 @@ import type {
   UserTurn,
 } from "@/types/conversation";
 import type { MessageRow } from "@/types/db";
-import type { ApprovalDecision } from "@/types/ipc";
 
 // ============================================================
 // Module-level singletons
@@ -40,19 +37,13 @@ import type { ApprovalDecision } from "@/types/ipc";
 // projection default — saves the reader from rebuilding `[]` /
 // `{}` on every render.
 
-// Typed as mutable so they slot into existing component prop types
-// (Turn[] / PendingApproval[]). Frozen at runtime so accidental
+// Typed as mutable so it slots into existing component prop types
+// (Turn[]). Frozen at runtime so accidental
 // mutation throws — the freeze is the real safety net, the `readonly`
 // modifier was just signalling intent. Empty arrays/objects need an
 // `unknown` cast hop because `Object.freeze([])` yields
 // `readonly never[]` which doesn't overlap with `Turn[]`.
 export const EMPTY_TURNS: Turn[] = Object.freeze([] as Turn[]) as Turn[];
-export const EMPTY_APPROVALS: PendingApproval[] = Object.freeze(
-  [] as PendingApproval[],
-) as PendingApproval[];
-export const EMPTY_DECISIONS: Record<string, ApprovalDecision> = Object.freeze(
-  {} as Record<string, ApprovalDecision>,
-) as Record<string, ApprovalDecision>;
 
 type MessageRowsCacheEntry = {
   completedTurnCount: number;
@@ -110,12 +101,10 @@ export function invalidateMessageRowsCache(sid: string): void {
  */
 export interface PerSessionMessages {
   turns: Turn[];
-  pendingApprovals: PendingApproval[];
   agentRunning: boolean;
   currentRunStartedAtMs: number | null;
   currentTurnIndex: number | null;
   inFlightContent: string;
-  approvalDecisions: Record<string, ApprovalDecision>;
   pendingAskUser: PendingAskUser | null;
   sendPhase: SendPhase | null;
   /**
@@ -168,12 +157,10 @@ export interface PerSessionMessages {
 
 export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   turns: EMPTY_TURNS,
-  pendingApprovals: EMPTY_APPROVALS,
   agentRunning: false,
   currentRunStartedAtMs: null,
   currentTurnIndex: null,
   inFlightContent: "",
-  approvalDecisions: EMPTY_DECISIONS,
   pendingAskUser: null,
   sendPhase: null,
   isStopping: false,
@@ -190,12 +177,10 @@ function emptyMessages(): PerSessionMessages {
   // the frozen module singleton.
   return {
     turns: [],
-    pendingApprovals: [],
     agentRunning: false,
     currentRunStartedAtMs: null,
     currentTurnIndex: null,
     inFlightContent: "",
-    approvalDecisions: {},
     pendingAskUser: null,
     sendPhase: null,
     isStopping: false,
@@ -234,9 +219,9 @@ interface MessagesActions {
   clearSessionMessages: (sid: string) => void;
   /**
    * Bridge close-side cleanup. Resets only the streaming/in-flight
-   * fields — leaves `turns` / `pendingApprovals` / `approvalDecisions`
-   * intact so the user can still read the conversation while the
-   * bridge is down. Called from runtimeStore.spawnBridge onClose.
+   * fields — leaves `turns` intact so the user can still read the
+   * conversation while the bridge is down. Called from
+   * runtimeStore.spawnBridge onClose.
    */
   clearStreamingOnBridgeClose: (sid: string) => void;
 
@@ -335,16 +320,6 @@ interface MessagesActions {
    */
   setPausedAtStepLimit: (sid: string, value: boolean) => void;
   clearConversation: (sid: string) => void;
-
-  // ---- approval writes ----
-  addPendingApproval: (sid: string, p: PendingApproval) => void;
-  removePendingApproval: (sid: string, approvalId: string) => void;
-  recordApprovalDecision: (
-    sid: string,
-    approvalId: string,
-    decision: ApprovalDecision,
-  ) => void;
-  revokeApprovalDecision: (sid: string, approvalId: string) => void;
 }
 
 export type MessagesStore = MessagesState & MessagesActions;
@@ -838,8 +813,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [],
-      pendingApprovals: [],
-      approvalDecisions: {},
       agentRunning: false,
       currentRunStartedAtMs: null,
       currentTurnIndex: null,
@@ -847,62 +820,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       sendPhase: null,
       pausedAtStepLimit: false,
     }));
-    set({ byId });  },
-
-  // ---- approval writes ----
-
-  addPendingApproval: (sid, p) => {
-    const state = get();
-    const { byId } = patchMessages(state, sid, (m) => ({
-      ...m,
-      // de-dupe on approvalId so a re-emitted pending event doesn't
-      // create twin entries
-      pendingApprovals: [
-        ...m.pendingApprovals.filter((x) => x.approvalId !== p.approvalId),
-        p,
-      ],
-    }));
-    set({ byId });  },
-
-  removePendingApproval: (sid, approvalId) => {
-    const state = get();
-    const { byId } = patchMessages(state, sid, (m) => ({
-      ...m,
-      pendingApprovals: m.pendingApprovals.filter(
-        (x) => x.approvalId !== approvalId,
-      ),
-    }));
-    set({ byId });  },
-
-  recordApprovalDecision: (sid, approvalId, decision) => {
-    const state = get();
-    const { byId } = patchMessages(state, sid, (m) => ({
-      ...m,
-      approvalDecisions: { ...m.approvalDecisions, [approvalId]: decision },
-    }));
-    set({ byId });    // Best-effort Core DB write for the approval audit trail.
-    // The matching `pending` row was written when tool_call_pending
-    // arrived (see ipc-handlers.persistToolEventPendingFromIPC); this
-    // update fills in approval_decision + terminal status.
-    void persistToolEventApprovalDecision(
-      approvalId,
-      decision,
-      new Date().toISOString(),
-    ).catch((e) => {
-      console.debug("[messages] persistToolEventApprovalDecision failed.", e);
-    });
-  },
-
-  // Rollback for an optimistic recordApprovalDecision whose IPC send
-  // failed — the bridge never saw the decision, so the UI must not
-  // keep showing the decided pill. The DB audit row is left as-is; a
-  // successful re-decision overwrites it.
-  revokeApprovalDecision: (sid, approvalId) => {
-    const state = get();
-    const { byId } = patchMessages(state, sid, (m) => {
-      const { [approvalId]: _dropped, ...rest } = m.approvalDecisions;
-      return { ...m, approvalDecisions: rest };
-    });
     set({ byId });  },
 }));
 

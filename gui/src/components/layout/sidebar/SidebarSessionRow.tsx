@@ -101,7 +101,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // Row state model (current spec: layout-and-chrome.md §4.2 Session
   // Row) — three independent signals, same priority order in each:
   // status rail (left 3px channel) → status icon → subline text.
-  // Priority: error > ask_user > approval > running/goal-running >
+  // Priority: error > ask_user > running/goal-running >
   // unread > idle. Unread folds into the left icon (filled brand
   // circle); there is no right-side dot.
   //
@@ -110,12 +110,10 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // skips the unread mark for sessionId === activeSessionId.
   // Effective status is derived at read time from live conversation +
   // bridge state (replaces the old fireSessionMirror push onto the row).
-  const { status, pendingApprovalCount, hasPendingAskUser, pausedAtStepLimit } =
+  const { status, hasPendingAskUser, pausedAtStepLimit } =
     useSessionStatusView(session);
   const hasPendingAsk = hasPendingAskUser;
   const isRunning = status === "running";
-  const hasPendingApproval =
-    status === "waiting_approval" || pendingApprovalCount > 0;
   const hasBlockingError = status === "error";
   // A session carrying an open goal: its own bridge status can be idle
   // between continuations (or indefinitely, when the goal is parked).
@@ -123,24 +121,18 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // finished conversation. Yields to the session's own running /
   // blocking states if any.
   const goalOwned =
-    !!sessionGoal &&
-    !isRunning &&
-    !hasPendingAsk &&
-    !hasPendingApproval &&
-    !hasBlockingError;
+    !!sessionGoal && !isRunning && !hasPendingAsk && !hasBlockingError;
   // `active` breathes like a run in progress; `paused` / `blocked` are
   // waiting on the user and must not pretend to be working.
   const goalRunning = goalOwned && sessionGoal?.status === "active";
   const goalParked = goalOwned && sessionGoal?.status !== "active";
-  const showRunningActivity =
-    isRunning && !hasPendingAsk && !hasPendingApproval && !hasBlockingError;
+  const showRunningActivity = isRunning && !hasPendingAsk && !hasBlockingError;
   // Unread renders as the left icon's filled-brand form, and only for
   // fully settled rows — every live/blocking state outranks it.
   const showUnread =
     !!session.hasUnread &&
     !active &&
     !hasPendingAsk &&
-    !hasPendingApproval &&
     !hasBlockingError &&
     !isRunning &&
     !goalRunning &&
@@ -158,7 +150,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // static color (needs you / stuck). completed / idle = no rail.
   const railKind: "running" | "waiting" | "error" | null = hasBlockingError
     ? "error"
-    : hasPendingAsk || hasPendingApproval
+    : hasPendingAsk
       ? "waiting"
       : showRunningActivity || goalRunning
         ? "running"
@@ -202,7 +194,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   const cleanSummary = session.summary
     ? displaySessionSummary(session.summary, copy.sidebar.turnProtocolFailure)
     : null;
-  const approvalCount = pendingApprovalCount;
   const errorCount = session.errorCount || 0;
   // Goal subline — the same stage word the TopBar pill uses, prefixed
   // so the row says WHICH kind of work is open ("Goal · 已暂停"). Null
@@ -212,39 +203,35 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     : null;
   // Subline doubles as the status line — always state-colored, upright
   // (no italic), text-explicit for the blocking states so a glance
-  // reads "等你回复 / 等待审批 / 出错" without decoding an icon.
+  // reads "等你回复 / 出错" without decoding an icon.
   const sublineText = hasBlockingError
     ? errorCount > 1
       ? `${copy.sidebar.errored} · ${errorCount}`
       : copy.sidebar.errored
     : hasPendingAsk
       ? copy.sidebar.waitingForYou
-      : hasPendingApproval
-        ? approvalCount > 1
-          ? `${copy.sidebar.waitingApproval} · ${approvalCount}`
-          : copy.sidebar.waitingApproval
-        : showRunningActivity
-          ? session.lastStepIndex != null && cleanSummary
-            ? copy.sidebar.stepSummary(session.lastStepIndex, cleanSummary)
-            : copy.sidebar.thinking
-          : goalRunning || goalParked
-            ? goalSubline
-            : cleanSummary
-              ? // A completed run shows its recap bare — the check-circle
-                // icon says done. A user-aborted session must not read
-                // as done: its icon is Prohibit and the words say
-                // 已中止. Nor must a run paused at the step cap (#29):
-                // hollow ring, 已暂停, muted tone.
-                settledSessionSubline(
-                  cleanSummary,
-                  { cancelled: status === "cancelled", pausedAtStepLimit },
-                  copy.sidebar,
-                )
-              : null;
+      : showRunningActivity
+        ? session.lastStepIndex != null && cleanSummary
+          ? copy.sidebar.stepSummary(session.lastStepIndex, cleanSummary)
+          : copy.sidebar.thinking
+        : goalRunning || goalParked
+          ? goalSubline
+          : cleanSummary
+            ? // A completed run shows its recap bare — the check-circle
+              // icon says done. A user-aborted session must not read
+              // as done: its icon is Prohibit and the words say
+              // 已中止. Nor must a run paused at the step cap (#29):
+              // hollow ring, 已暂停, muted tone.
+              settledSessionSubline(
+                cleanSummary,
+                { cancelled: status === "cancelled", pausedAtStepLimit },
+                copy.sidebar,
+              )
+            : null;
   const sublineTone: "running" | "warning" | "error" | "muted" =
     hasBlockingError
       ? "error"
-      : hasPendingAsk || hasPendingApproval || goalParked
+      : hasPendingAsk || goalParked
         ? "warning"
         : showRunningActivity || goalRunning
           ? "running"
@@ -255,17 +242,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     ? "error"
     : hasPendingAsk
       ? "ask"
-      : hasPendingApproval
-        ? "approval"
-        : showUnread
-          ? "unread"
-          : isRunning || goalRunning
-            ? "running"
-            : goalParked
-              ? "goal-parked"
-              : "idle";
-  const shouldPopIcon =
-    hasBlockingError || hasPendingAsk || hasPendingApproval || showUnread;
+      : showUnread
+        ? "unread"
+        : isRunning || goalRunning
+          ? "running"
+          : goalParked
+            ? "goal-parked"
+            : "idle";
+  const shouldPopIcon = hasBlockingError || hasPendingAsk || showUnread;
   // Suppress the pop for the state the row MOUNTED in: app launch and
   // returning from Project Review must not fire a simultaneous burst
   // of "look here" for states that aren't news. Once the key changes,
@@ -311,7 +295,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // a "break the row's shape" variant, which lost to the lift.
   const inactiveRowClass = hasBlockingError
     ? "bg-error/[var(--opacity-subtle)] hover:bg-error/[var(--opacity-soft)]"
-    : hasPendingAsk || hasPendingApproval
+    : hasPendingAsk
       ? "bg-warning/[var(--opacity-subtle)] hover:bg-warning/[var(--opacity-soft)]"
       : "hover:bg-hover";
   const activateRow = () => {
@@ -468,7 +452,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                   goalParked ||
                   showUnread ||
                   hasPendingAsk ||
-                  hasPendingApproval ||
                   hasBlockingError
                   ? "font-semibold"
                   : "font-medium",
@@ -530,7 +513,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             }
             className={cn(
               // tabular-nums: the subline carries live counts (第 N 步 /
-              // 等待审批 · N / 出错 · N) that tick while visible.
+              // 出错 · N) that tick while visible.
               "mt-0.5 truncate text-[11px] leading-[1.4] tabular-nums",
               sublineTone === "warning"
                 ? "font-medium text-warning"

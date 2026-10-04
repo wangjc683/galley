@@ -47,19 +47,9 @@ import { buildRunGroups, replyUserIndices, type RunGroup } from "@/lib/run-group
 import { cn } from "@/lib/utils";
 import type { AgentTurn, MessageTelemetry, Turn } from "@/types/conversation";
 import type { GoalBrief } from "@/types/goal";
-import type { ApprovalDecision } from "@/types/ipc";
 
 export interface ConversationProps {
   turns: Turn[];
-  /** Map of approvalId -> recorded decision. When a tool's
-   * approvalId is in this map its callout flips to the decided pill. */
-  approvalDecisions?: Record<string, ApprovalDecision>;
-  /** Decision callback. Receives the approval id and the user's choice. */
-  onApprove?: (approvalId: string, decision: ApprovalDecision) => void;
-  /** Name of the project the active session belongs to (if any) —
-   * threaded down to ToolCallout → ApprovalForm so the "Always
-   * allow in {projectName}" button reflects context. */
-  projectName?: string;
   /**
    * Goals whose master session is the one being viewed (any status,
    * from `list_goals_for_session`). When present, the objective user
@@ -111,9 +101,6 @@ const SETTLE_SWEEP_MS = 300;
 
 export function Conversation({
   turns,
-  approvalDecisions,
-  onApprove,
-  projectName,
   goals,
   onExtendGoal,
   askUserPending = false,
@@ -517,9 +504,6 @@ export function Conversation({
         ) : (
           <AgentTurnView
             turn={item.turn}
-            approvalDecisions={approvalDecisions}
-            onApprove={onApprove}
-            projectName={projectName}
             hideMarker={turnIndex !== undefined && answerOnly.has(turnIndex)}
             stepNumber={
               turnIndex !== undefined
@@ -713,9 +697,6 @@ export function Conversation({
 
 function AgentTurnView({
   turn,
-  approvalDecisions,
-  onApprove,
-  projectName,
   hideMarker = false,
   markerOnly = false,
   suppressAskUserEcho = false,
@@ -725,9 +706,6 @@ function AgentTurnView({
   runTelemetry,
 }: {
   turn: AgentTurn;
-  approvalDecisions?: Record<string, ApprovalDecision>;
-  onApprove?: (approvalId: string, decision: ApprovalDecision) => void;
-  projectName?: string;
   /** Fold mode for a foldable run's closing turn: its marker and
    * StrongHr render inside the animated RunFoldSection (see
    * `markerOnly`), so the flat render is the answer section alone —
@@ -939,11 +917,6 @@ function AgentTurnView({
             key={tool.id}
             tool={tool}
             stepIndex={tool === mergedStepTool ? stepNumber : undefined}
-            approvalDecision={
-              tool.approvalId ? approvalDecisions?.[tool.approvalId] : undefined
-            }
-            onApprove={onApprove}
-            projectName={projectName}
           />
         ))}
 

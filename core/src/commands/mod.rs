@@ -7,9 +7,8 @@ use crate::api::{
     ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId, SetManagedModelDefaultsInput,
 };
 use crate::db::{
-    MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage, PersistToolEventPending,
-    PersistedMessageRow, SqliteGalley, ToolEventRow, UpsertManagedModelMetadata,
-    UpsertManagedModelProviderMetadata,
+    MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage, PersistedMessageRow,
+    SqliteGalley, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
 };
 use crate::{
     browser_bridge, browser_control, codex_oauth, credential_store, error, im_supervisor,

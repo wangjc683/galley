@@ -49,10 +49,10 @@ import { TooltipLabel } from "@/components/ui/tooltip";
  *   - Main     ≥ 40%
  *
  * **Why no right pane**: the previous Inspector (right-side Details /
- * Approvals / Runtime tabs) was retired 2026-05-12. Each of its tabs
+ * Runtime tabs, among others) was retired 2026-05-12. Each of its tabs
  * duplicated information already accessible elsewhere (ToolCallout
- * cards in the conversation, ApprovalDock for pending, Settings →
- * Runtime/Approval for metadata and audit log). Reclaiming the
+ * cards in the conversation, Settings → Runtime for metadata).
+ * Reclaiming the
  * 14–30% horizontal space gave the conversation column proper
  * breathing room; the app reads as a focused chat product rather
  * than an IDE clone. Memory Inspector (V0.2 PRD) — if it lands —

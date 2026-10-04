@@ -33,8 +33,8 @@ export function SettingsPanelHeader({
 
 export function SettingsSectionLabel({ children }: { children: ReactNode }) {
   return (
-    // tabular-nums: some labels interpolate live counts (approval
-    // allowlists shrink in place as rules are removed).
+    // tabular-nums: keeps digits even if a label ever interpolates a
+    // live count.
     <div className="text-ui-label font-semibold uppercase tracking-[0.08em] tabular-nums text-ink-muted">
       {children}
     </div>

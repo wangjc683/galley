@@ -147,7 +147,7 @@
   /*
    * Chrome type scale — font-size + line-height for UI surfaces OUTSIDE
    * the conversation reading area (sidebar, topbar, settings, dialogs,
-   * tool callout chrome, approval forms, etc.). See DESIGN.md §2.2B.
+   * tool callout chrome, etc.). See DESIGN.md §2.2B.
    *
    * The conversation reading surface (agent/user prose, markdown, step
    * markers, headings) is NOT covered here — those sizes are runtime
@@ -881,7 +881,7 @@ code {
   }
 }
 
-/* Gentle fade for callout body / approval reveal transitions */
+/* Gentle fade for callout body reveal transitions */
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -1001,24 +1001,6 @@ code {
   }
 }
 
-/* Pending approval is actionable, so it gets a small attention pulse.
-   Keep the motion on the icon instead of the dock or button: the user
-   should notice the wait, not feel nagged by a flashing CTA. */
-@keyframes approval-attention-breath {
-  0%,
-  100% {
-    opacity: 0.72;
-    filter: drop-shadow(0 0 0 rgba(191, 122, 31, 0));
-  }
-  50% {
-    opacity: 1;
-    filter: drop-shadow(0 0 4px rgba(191, 122, 31, 0.22));
-  }
-}
-.approval-attention-breath {
-  animation: approval-attention-breath 2.4s ease-in-out infinite;
-}
-
 /* Browser Control is a core managed-runtime setup item. While it is
    missing, the TopBar badge jumps periodically so the incomplete state is
    difficult to ignore without falling back to a modal interruption. */
@@ -1121,7 +1103,7 @@ code {
   }
 }
 /* One-shot "pop in" for a session row's status glyph when it enters an
-   attention state (waiting / approval / error) or lands as unread.
+   attention state (waiting / error) or lands as unread.
    Scale + fade with a pronounced overshoot so the entry reads as a
    deliberate "look here" beat on a busy multi-session board. Color
    comes from the glyph itself. Keyed per state so it replays on entry,
@@ -1315,7 +1297,6 @@ code {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .approval-attention-breath,
   .browser-control-attention,
   .sidebar-liveness-rail,
   .sidebar-liveness-tick,
@@ -1339,7 +1320,7 @@ code {
 }
 
 /* Shared quiet entrance for popovers / dropdown menus (TopBar Goal /
-   YOLO / Theme, and any Radix Popover|DropdownMenu content). Radix
+   Theme, and any Radix Popover|DropdownMenu content). Radix
    mounts content on open and unmounts on close, so applying the class
    directly animates on open; close stays instant. The transform-origin
    falls through whichever Radix primitive var is set, so the surface

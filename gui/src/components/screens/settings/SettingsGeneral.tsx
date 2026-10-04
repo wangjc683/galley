@@ -57,8 +57,6 @@ export function SettingsGeneral({
   onChangeConversationWidth,
   notifyOnGoalEnd,
   onChangeNotifyOnGoalEnd,
-  notifyOnApproval,
-  onChangeNotifyOnApproval,
   notifyOnReplyDone,
   onChangeNotifyOnReplyDone,
   notifySound,
@@ -80,8 +78,6 @@ export function SettingsGeneral({
   onChangeConversationWidth: (width: "compact" | "wide") => void;
   notifyOnGoalEnd: boolean;
   onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
-  notifyOnApproval: boolean;
-  onChangeNotifyOnApproval: (enabled: boolean) => void;
   notifyOnReplyDone: boolean;
   onChangeNotifyOnReplyDone: (enabled: boolean) => void;
   notifySound: boolean;
@@ -154,8 +150,7 @@ export function SettingsGeneral({
   // prompt when the OS has never asked.
   const [notifyPermissionMissing, setNotifyPermissionMissing] =
     useState(false);
-  const anyNotifyEnabled =
-    notifyOnGoalEnd || notifyOnApproval || notifyOnReplyDone;
+  const anyNotifyEnabled = notifyOnGoalEnd || notifyOnReplyDone;
   useEffect(() => {
     // No sync state reset here: the hint's render condition already
     // carries `anyNotifyEnabled`, so a stale `true` stays invisible
@@ -341,19 +336,7 @@ export function SettingsGeneral({
               ariaLabel={generalCopy.notifyGoalEndTitle}
             />
           </PreferenceRow>
-          <PreferenceRow
-            title={generalCopy.notifyApprovalTitle}
-            description={generalCopy.notifyApprovalDescription}
-          >
-            <Switch
-              checked={notifyOnApproval}
-              onCheckedChange={(next) =>
-                handleToggleNotify(onChangeNotifyOnApproval, next)
-              }
-              ariaLabel={generalCopy.notifyApprovalTitle}
-            />
-          </PreferenceRow>
-          {/* Sound is a modifier on the kinds above, not a fourth
+          {/* Sound is a modifier on the kinds above, not a third
               kind — plain onChange, no permission round-trip. */}
           <PreferenceRow
             title={generalCopy.notifySoundTitle}

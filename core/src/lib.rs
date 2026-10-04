@@ -60,8 +60,9 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         // System notifications (Settings -> General). Fired from the
-        // GUI only when the window is unfocused — goal terminal states
-        // and pending approvals (gui/src/lib/notify.ts owns the gating).
+        // GUI only when the window is unfocused — goal terminal states,
+        // finished replies and ask_user prompts (gui/src/lib/notify.ts
+        // owns the gating).
         .plugin(tauri_plugin_notification::init())
         // Launch at login (Settings -> General). Default off; the OS is
         // the single source of truth — the GUI reads `isEnabled()` live
@@ -174,7 +175,6 @@ pub fn run() {
             unarchive_session,
             rename_session,
             set_session_pinned,
-            set_session_approval_mode,
             set_session_reasoning_effort,
             delete_session,
             assign_session_to_project,
@@ -192,9 +192,6 @@ pub fn run() {
             delete_demo_sessions,
             backfill_fts_if_empty,
             search_messages,
-            persist_tool_event_pending,
-            persist_tool_event_approval_decision,
-            load_tool_events_by_session,
             get_pref_json,
             set_pref_json,
             tray::set_keep_in_background,

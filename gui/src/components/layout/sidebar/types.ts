@@ -1,11 +1,6 @@
 export type ProjectScopePhase = "entering" | "entered" | "exiting";
 
-export type SidebarAttention =
-  | "none"
-  | "error"
-  | "ask_user"
-  | "approval"
-  | "unread";
+export type SidebarAttention = "none" | "error" | "ask_user" | "unread";
 
 /** Unmount timers for the two sidebar-mode presences. Contract: must
  * exceed the exiting transition's duration (--motion-base, 160ms) plus

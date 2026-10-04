@@ -20,8 +20,8 @@ pub(crate) static ALLOW_APP_EXIT: AtomicBool = AtomicBool::new(false);
 /// (keep in background vs quit) via the GUI's FirstCloseDialog, or —
 /// legacy — saw the old one-time native background hint. The key keeps
 /// its historical string so users who already dismissed the old hint
-/// are not re-asked by the new dialog. Mirrors the `yolo_intro_seen`
-/// disclosure-once pattern.
+/// are not re-asked by the new dialog. Disclosure-once: set to `true`
+/// on the first choice and never cleared.
 pub(crate) const FIRST_CLOSE_CHOICE_PREF: &str = "close_to_background_hint_seen";
 
 /// Process-local mirror of `FIRST_CLOSE_CHOICE_PREF`. While `false`,

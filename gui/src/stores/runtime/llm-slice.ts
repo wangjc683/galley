@@ -52,15 +52,9 @@ export interface LlmSlice {
    */
   pendingLLMIndex: number | undefined;
   /**
-   * EmptyState approval-mode pre-pick — same lifecycle as
-   * `pendingLLMIndex`: stashed because no session row exists yet,
-   * consumed (and always cleared) by `sessionsStore.createSession`,
-   * which writes it as the new session's override.
-   */
-  pendingApprovalMode: "auto" | "approval" | undefined;
-  /**
    * EmptyState reasoning-effort pre-pick — same lifecycle as
-   * `pendingApprovalMode`: `undefined` = untouched, `null` = explicitly
+   * `pendingLLMIndex`: stashed because no session row exists yet;
+   * `undefined` = untouched, `null` = explicitly
    * follow the model configuration, a tier = override the next session.
    * Consumed (and always cleared) by `sessionsStore.createSession`,
    * which seeds the new session's override and lets Core forward it.
@@ -291,7 +285,6 @@ export const createLlmSlice: RuntimeSliceCreator<LlmSlice> = (set, get) => ({
   cachedLLMs: [],
   cachedLLMDisplayName: "",
   pendingLLMIndex: undefined,
-  pendingApprovalMode: undefined,
   pendingReasoningEffort: undefined,
   _warmupComplete: false,
 

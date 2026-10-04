@@ -10,31 +10,27 @@
  * App.tsx until that store lands.
  */
 
-import type { ApprovalDecision } from "@/types/ipc";
-
 /**
- * 7 visual states for a Tool callout per DESIGN.md §4.5:
+ * 6 visual states for a Tool callout per DESIGN.md §4.5:
  *   - running             : currently executing (apricot spinner)
  *   - success-current     : just completed, current focus (apricot)
  *   - success-historical  : older success (faded; almost invisible)
- *   - waiting_approval    : forced-open form (amber tint accent)
  *   - failed              : forced-open with error detail (red tint)
  *   - failed-historical   : settled tool whose result was GA's error
  *                           envelope (#22) — red accents but
  *                           auto-collapsed with a headline lead, the
  *                           `-historical` treatment of failed
- *   - denied              : user rejected; collapsed
+ *   - denied              : user rejected; collapsed. Historical
+ *                           transcripts only, no longer produced (see
+ *                           lib/tool-outcome.ts)
  */
 export type ToolEventStatus =
   | "running"
   | "success-current"
   | "success-historical"
-  | "waiting_approval"
   | "failed"
   | "failed-historical"
   | "denied";
-
-export type RiskLevel = "low" | "medium" | "high";
 
 export type SendPhase =
   | "saving"
@@ -53,8 +49,6 @@ export interface ConversationToolEvent {
   summary?: string;
   /** Elapsed display ("120ms" / "—" for pending / "pending · 14s" etc.) */
   elapsed?: string;
-  /** Risk level — drives the risk pill color in the Approval form. */
-  riskLevel?: RiskLevel;
   /** Raw args dict (rendered as a fallback mono block when no tool-specific
    * renderer applies). file_patch / file_write specific renderers land in #6. */
   args?: Record<string, unknown>;
@@ -70,9 +64,6 @@ export interface ConversationToolEvent {
    * stdout / msg with real newlines, tail-capped) — rendered in place
    * of the raw resultPreview. See lib/tool-outcome.toolErrorDisplay. */
   errorDetail?: string;
-  /** Approval ID — present when status === "waiting_approval"; sent back
-   * via ApprovalResponseCommand. */
-  approvalId?: string;
   /** What a settled `web_scan` / `web_execute_js` result says about the
    * browser's tabs, parsed from the FULL result at construction (the
    * ≤500-char resultPreview cuts a scan's tab list off). Absent for
@@ -245,7 +236,7 @@ export interface AgentTurn {
   preamble?: string;
   tools: ConversationToolEvent[];
   /** Final answer markdown. null when the agent is still working
-   * (e.g., waiting on approval). */
+   * (e.g., waiting on an ask_user reply). */
   finalAnswer: string | null;
   /**
    * GA-side turn number (1-based). One user message can produce
@@ -274,30 +265,6 @@ export interface AgentTurn {
 }
 
 export type Turn = UserTurn | AgentTurn | SystemTurn;
-
-export interface PendingApproval {
-  approvalId: string;
-  toolName: string;
-  /** Short target identifier shown in the Approval Dock — e.g. file path,
-   * command summary, memory key. */
-  target?: string;
-  riskLevel: RiskLevel;
-  /**
-   * Full tool args dict from the bridge's `tool_call_pending` event.
-   * Required so MainView can render a complete Approval Card (with
-   * tool-specific views like PatchView for file_patch, command preview
-   * for code_run, etc.) while the in-flight turn hasn't yet been
-   * folded into `turns[]` via turn_end. Without this the user sees
-   * only the dock's "等待审批中" placeholder — no diff, no buttons.
-   */
-  args?: Record<string, unknown>;
-}
-
-/** Decision callback shape used by the Approval form / Dock. */
-/** Carries the approvalId so one stable (useCallback) handler serves
- * every callout — per-tool closures broke ToolCallout's memo and
- * re-rendered every historical callout at stream frequency. */
-export type OnApprove = (approvalId: string, decision: ApprovalDecision) => void;
 
 /**
  * GA-initiated question awaiting a user reply (V0.2). Set on the

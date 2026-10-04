@@ -28,6 +28,10 @@ pub enum SessionStatus {
     Idle,
     Connecting,
     Running,
+    /// No longer produced since approvals were removed (2026-10-05):
+    /// every tool call runs directly. Kept, along with its
+    /// `"waiting_approval"` wire value, for Agent API compatibility
+    /// (Rule 3: additive-only within a schema version).
     WaitingApproval,
     Error,
     Completed,
@@ -111,12 +115,6 @@ pub struct SessionBrief {
     pub ga_runtime_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_profile: Option<String>,
-    /// Per-session approval-mode override: `"auto"` (run tools without
-    /// step approval) or `"approval"` (gate high-risk tools). Absent /
-    /// None = the session follows the app-wide default. Additive v1
-    /// field — agents may ignore it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub approval_mode: Option<String>,
     /// Per-session reasoning-effort override (`none` / `minimal` / `low` /
     /// `medium` / `high` / `xhigh` / `max`). Absent / None = the session
     /// follows the selected model's configured effort. Set from the

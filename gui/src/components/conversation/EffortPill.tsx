@@ -38,10 +38,9 @@ export interface ComposerReasoningEffortState {
  * model popover: with a few models it read as hanging off the last
  * model row, and the empty state never showed it at all).
  *
- * Opposite call from approval mode, which IS merged into the LLMPill:
- * approval is a binary switch that almost never moves, effort is a knob
- * users reach for mid-run and its value carries information (HIGH =
- * slower, pricier), which earns its own place.
+ * Effort is a knob users reach for mid-run and its value carries
+ * information (HIGH = slower, pricier), which earns it its own place
+ * rather than a row inside the LLMPill.
  *
  * Shape notes:
  *   - Always present once a model is selected — no flicker in / out.

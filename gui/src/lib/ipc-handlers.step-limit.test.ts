@@ -43,7 +43,7 @@ function seed(): void {
     ],
     activeSessionId: SID,
   });
-  usePrefsStore.setState({ yoloMode: false, languagePreference: "zh-CN" });
+  usePrefsStore.setState({ languagePreference: "zh-CN" });
   useMessagesStore.getState().ensureMessages(SID);
   useRuntimeStore.getState().ensureRuntime(SID, { cachedLLMs: [] });
 }

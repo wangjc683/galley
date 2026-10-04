@@ -1,9 +1,10 @@
-"""WorkbenchHandler: extends GenericAgentHandler with approval interception.
+"""WorkbenchHandler: extends GenericAgentHandler with turn-lifecycle signals.
 
-The approval gate sits in front of `super().dispatch()`. We keep GA's tool
-execution path as the authority, and only add Galley's approval + progress
-signals around it. GA upgrades can move internals around; this module uses
-runtime feature detection for the pieces Galley depends on.
+GA's tool execution path stays the authority: every tool call goes straight
+to `super().dispatch()`, and its results are never altered. The subclass only
+synthesizes Galley's live turn signal around dispatch and forwards `tool_num`
+when the loaded GA accepts it. GA upgrades can move internals around; this
+module uses runtime feature detection for the pieces Galley depends on.
 
 This module imports GA modules (`agent_loop`, `ga`). The caller must put
 the GA installation path on sys.path before importing this module.
@@ -16,7 +17,7 @@ from typing import Any
 
 # These imports require GA on sys.path. The bridge entrypoint and the
 # pytest conftest both arrange for that before this module loads.
-from agent_loop import BaseHandler, StepOutcome
+from agent_loop import BaseHandler
 from ga import GenericAgentHandler
 
 # Upstream GA commit 3205f4a (post-cf65515 baseline) added a `tool_num`
@@ -44,51 +45,20 @@ def _base_dispatch_calls_tool_before_callback() -> bool:
 
 # Upstream GA commit 1a8abc4 (post-b063518 baseline) replaced the
 # BaseHandler.dispatch callback calls with plugins.hooks triggers.
-# Approval still happens in WorkbenchHandler.dispatch before super(),
-# but Galley's live turn_start signal used tool_before_callback as its
+# Galley's live turn_start signal used tool_before_callback as its
 # hook. Detect whether the loaded GA still calls it; if not, emit the
 # signal ourselves immediately before delegating to GA's dispatch.
 _BASE_DISPATCH_CALLS_TOOL_BEFORE_CALLBACK: bool = (
     _base_dispatch_calls_tool_before_callback()
 )
 
-# Tools that require user approval by default. See PRD §11.2.
-DEFAULT_APPROVAL_TOOLS: frozenset[str] = frozenset(
-    {
-        "code_run",
-        "file_write",
-        "file_patch",
-        "start_long_term_update",
-    }
-)
-
-
-# Risk classification surfaced via tool_call_pending events for the Approval Card.
-RISK_LEVELS: dict[str, str] = {
-    "code_run": "high",
-    "file_write": "medium",
-    "file_patch": "medium",
-    "start_long_term_update": "high",
-}
-
-
-# Why each tool is gated. Shown in the Approval Card to give the user context.
-APPROVAL_REASONS: dict[str, str] = {
-    "code_run": "Executes arbitrary code; can modify files, processes, and network.",
-    "file_write": "Writes to disk; can overwrite existing files.",
-    "file_patch": "Modifies file content in place.",
-    "start_long_term_update": "Updates GA's long-term memory files.",
-}
-
-
-# Approval callable signature. Bridge entrypoint constructs this and injects it.
-# It must block until the desktop responds. Decision strings:
-#   "allow_once" | "deny" | "always_allow_project" | "always_allow_global"
-ApprovalRequester = Callable[[str, dict[str, Any]], str]
-
 
 class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no stubs
-    """GA handler that gates high-risk tool calls behind user approval."""
+    """GA handler that emits Galley's turn signal and forwards `tool_num`.
+
+    It must not change tool dispatch or results (CLAUDE.md Rule 1): every
+    call is delegated to GA's own dispatch unchanged.
+    """
 
     def __init__(
         self,
@@ -96,34 +66,9 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
         last_history: list[str] | None = None,
         cwd: str = "./temp",
         *,
-        request_approval: ApprovalRequester,
-        approval_tools: frozenset[str] = DEFAULT_APPROVAL_TOOLS,
-        always_allow_global: set[str] | None = None,
-        always_allow_project: set[str] | None = None,
-        yolo_check: Callable[[], bool] | None = None,
         turn_started_callback: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__(parent, last_history, cwd)
-        self._request_approval = request_approval
-        self._approval_tools = approval_tools
-        # Shared references on purpose: agentmain.run() rebuilds the handler
-        # on every put_task, so always-allow rules must outlive any single
-        # handler. The bridge entrypoint owns these sets at session scope and
-        # passes the same references in each time. dispatch's `.add()` and
-        # update_approval_rules's mutations all operate in place.
-        self._always_allow_global: set[str] = (
-            always_allow_global if always_allow_global is not None else set()
-        )
-        self._always_allow_project: set[str] = (
-            always_allow_project if always_allow_project is not None else set()
-        )
-        # YOLO mode (PRD §11.5): when this callable returns True, every
-        # tool dispatch bypasses the approval gate. Stored as a callable
-        # rather than a bool so the bridge can flip it at runtime via
-        # SetYoloModeCommand without rebuilding the handler — matches the
-        # mutable-set pattern used for always_allow_* above. Default to
-        # "always False" when not provided (test paths, legacy callers).
-        self._yolo_check: Callable[[], bool] = yolo_check or (lambda: False)
         # GA has no turn_start_callback extension point, so we synthesize
         # one around dispatch. Older GA called tool_before_callback
         # inside BaseHandler.dispatch. Newer GA switched to plugins.hooks,
@@ -175,44 +120,6 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
                 # going either way.
                 pass
 
-    def update_approval_rules(
-        self,
-        always_allow_global: set[str] | None = None,
-        always_allow_project: set[str] | None = None,
-    ) -> None:
-        """Sync always-allow lists from the desktop (SetApprovalRulesCommand).
-
-        Mutates the underlying sets in place so external holders of the
-        same references see the updated state.
-        """
-        if always_allow_global is not None:
-            self._always_allow_global.clear()
-            self._always_allow_global.update(always_allow_global)
-        if always_allow_project is not None:
-            self._always_allow_project.clear()
-            self._always_allow_project.update(always_allow_project)
-
-    def needs_approval(self, tool_name: str) -> bool:
-        """Return True iff this tool requires user approval right now.
-
-        Order matters:
-
-        1. YOLO mode short-circuits everything — the user has explicitly
-           opted out of approvals globally (PRD §11.5).
-        2. Tool not in the approval list → never gated.
-        3. Always-allow rules (global / project) → not gated.
-        4. Otherwise gate.
-        """
-        if self._yolo_check():
-            return False
-        if tool_name not in self._approval_tools:
-            return False
-        if tool_name in self._always_allow_global:
-            return False
-        if tool_name in self._always_allow_project:
-            return False
-        return True
-
     def dispatch(
         self,
         tool_name: str,
@@ -228,34 +135,6 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
         # only takes 4 positional args, so we feature-detect and drop
         # the kwarg when unsupported. See module-level
         # _BASE_DISPATCH_SUPPORTS_TOOL_NUM for rationale.
-        if self.needs_approval(tool_name):
-            # Defensive copy: super().dispatch mutates args (adds _index,
-            # and _tool_num on newer GA). Approval Cards in the desktop
-            # UI must show the user-facing args, not GA's bookkeeping.
-            decision = self._request_approval(tool_name, dict(args))
-            if decision == "deny":
-                yield f"[Approval] User denied: {tool_name}\n"
-                # Coupling point: this payload round-trips verbatim into
-                # turn_end.toolResults[].content, and the desktop parses
-                # `status == "denied"` to render the tool as denied in the
-                # transcript (gui/src/lib/tool-outcome.ts). Change the
-                # shape there and here together.
-                return StepOutcome(
-                    {"status": "denied", "msg": "User denied this tool call"},
-                    next_prompt="\n",
-                )
-            if decision == "always_allow_global":
-                self._always_allow_global.add(tool_name)
-            elif decision == "always_allow_project":
-                self._always_allow_project.add(tool_name)
-            elif decision != "allow_once":
-                # Fail-safe: unknown decision strings are treated as deny so a
-                # buggy desktop or stale protocol can't accidentally authorize.
-                yield f"[Approval] Unknown decision {decision!r}, treating as deny.\n"
-                return StepOutcome(
-                    {"status": "denied", "msg": f"Unknown approval decision: {decision}"},
-                    next_prompt="\n",
-                )
         if (
             not _BASE_DISPATCH_CALLS_TOOL_BEFORE_CALLBACK
             and hasattr(self, f"do_{tool_name}")

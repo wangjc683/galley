@@ -250,61 +250,51 @@ def test_bridge_full_message_round_trip(bridge_proc: _BridgeProc) -> None:
     assert "pong" in final.lower(), f"unexpected final content: {final!r}"
 
 
-def test_approval_deny_short_circuits(bridge_proc: _BridgeProc) -> None:
-    """Send a prompt designed to trigger code_run, deny the approval, and
-    verify the run still completes (agent receives denied status and proceeds)."""
+def test_code_run_executes_directly(bridge_proc: _BridgeProc) -> None:
+    """Send a prompt designed to trigger code_run and verify the tool runs
+    straight through: the turn carries the tool's real output and the run
+    completes on its own, with nothing sent back from the desktop."""
     _ready(bridge_proc)
 
+    marker = "direct-run-ok"
     bridge_proc.send(
         {
             "kind": "user_message",
             "text": (
                 "Invoke the code_run tool now with type=python and "
-                'code=\'print("approval-test")\'. Do not just show me the '
+                f"code='print(\"{marker}\")'. Do not just show me the "
                 "code; actually call the tool."
             ),
             "images": [],
         }
     )
 
-    # Look for tool_call_pending. The LLM may emit other events first
-    # (e.g. turn_end with no tool calls). Cap how long we wait for one.
-    pending: dict[str, Any] | None = None
-    deadline = time.monotonic() + 90
-    while time.monotonic() < deadline:
-        ev = bridge_proc.next_event(timeout=E2E_LINE_TIMEOUT)
-        if ev["kind"] == "tool_call_pending":
-            pending = ev
-            break
-        if ev["kind"] == "run_complete":
-            pytest.skip(
-                "LLM did not call code_run on this run; approval flow "
-                "couldn't be exercised. Try again or refine the prompt."
-            )
-
-    assert pending is not None, "no tool_call_pending observed"
-    assert pending["toolName"] == "code_run"
-    assert pending["riskLevel"] == "high"
-    assert pending["approvalId"]
-    assert pending["reason"]
-
-    # Deny.
-    bridge_proc.send(
-        {
-            "kind": "approval_response",
-            "approvalId": pending["approvalId"],
-            "decision": "deny",
-        }
-    )
-
-    # Drain until run_complete. Agent should observe denied tool result
-    # and finish the run on its own (possibly with a refusal message).
+    events: list[dict[str, Any]] = []
     deadline = time.monotonic() + E2E_RUN_TIMEOUT
     while time.monotonic() < deadline:
         ev = bridge_proc.next_event(timeout=E2E_LINE_TIMEOUT)
+        events.append(ev)
         if ev["kind"] == "run_complete":
-            return
-    pytest.fail("no run_complete after deny")
+            break
+    else:
+        pytest.fail(f"no run_complete within {E2E_RUN_TIMEOUT}s; events: "
+                    f"{[e['kind'] for e in events]}")
+
+    code_run_turns = [
+        e
+        for e in events
+        if e["kind"] == "turn_end"
+        and any(tc.get("toolName") == "code_run" for tc in e["toolCalls"])
+    ]
+    if not code_run_turns:
+        pytest.skip(
+            "LLM did not call code_run on this run; direct execution "
+            "couldn't be exercised. Try again or refine the prompt."
+        )
+    assert any(
+        marker in json.dumps(e["toolResults"], ensure_ascii=False)
+        for e in code_run_turns
+    ), "code_run result did not carry the printed marker"
 
 
 def test_load_history_restores_context(bridge_proc: _BridgeProc) -> None:

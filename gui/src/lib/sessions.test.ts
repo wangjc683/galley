@@ -8,7 +8,7 @@ import {
   RECENT_BACKFILL_COUNT,
   toDurableStatus,
 } from "@/lib/sessions";
-import type { Session } from "@/types/session";
+import type { Session, SessionStatus } from "@/types/session";
 
 describe("toDurableStatus", () => {
   it("passes through the durable lifecycle states", () => {
@@ -23,8 +23,13 @@ describe("toDurableStatus", () => {
     // session that was live when the app died; on load nothing runs.
     expect(toDurableStatus("running")).toBe("idle");
     expect(toDurableStatus("connecting")).toBe("idle");
-    expect(toDurableStatus("waiting_approval")).toBe("idle");
     expect(toDurableStatus("error")).toBe("idle");
+  });
+
+  it("collapses a retired status string from an older Core to idle", () => {
+    // `waiting_approval` left the union when approval was removed
+    // (2026-10-05); a row persisted before that must still load.
+    expect(toDurableStatus("waiting_approval" as SessionStatus)).toBe("idle");
   });
 });
 
@@ -36,7 +41,7 @@ describe("deriveSessionStatus", () => {
       expect(
         deriveSessionStatus(
           { status },
-          { agentRunning: true, pendingApprovalCount: 3 },
+          { agentRunning: true },
           "spawning",
         ),
       ).toBe(status);
@@ -48,20 +53,12 @@ describe("deriveSessionStatus", () => {
     expect(deriveSessionStatus(idle, undefined, "spawning")).toBe("idle");
   });
 
-  it("ranks pending approval above running", () => {
-    expect(
-      deriveSessionStatus(idle, { agentRunning: true, pendingApprovalCount: 1 }),
-    ).toBe("waiting_approval");
-  });
-
-  it("reports running when the agent is active and nothing is pending", () => {
-    expect(
-      deriveSessionStatus(idle, { agentRunning: true, pendingApprovalCount: 0 }),
-    ).toBe("running");
+  it("reports running when the agent is active", () => {
+    expect(deriveSessionStatus(idle, { agentRunning: true })).toBe("running");
   });
 
   it("overlays bridge status when the agent is idle", () => {
-    const quiet = { agentRunning: false, pendingApprovalCount: 0 };
+    const quiet = { agentRunning: false };
     expect(deriveSessionStatus(idle, quiet, "spawning")).toBe("connecting");
     expect(deriveSessionStatus(idle, quiet, "error")).toBe("error");
     expect(deriveSessionStatus(idle, quiet, "connected")).toBe("idle");

@@ -2,7 +2,6 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
 
 import { SettingsAbout } from "@/components/screens/settings/SettingsAbout";
-import { SettingsApproval } from "@/components/screens/settings/SettingsApproval";
 import { SettingsGeneral } from "@/components/screens/settings/SettingsGeneral";
 import { SettingsBrowserControl } from "@/components/screens/settings/SettingsBrowserControl";
 import { SettingsIM } from "@/components/screens/settings/SettingsIM";
@@ -20,19 +19,13 @@ import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { RuntimeInfo } from "@/types/inspector";
 import type { RuntimeKind } from "@/types/session";
-import type { ApprovalConfig, SettingsTab } from "./settings-types";
+import type { SettingsTab } from "./settings-types";
 
 export interface SettingsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 
   runtimeInfo: RuntimeInfo;
-  approval: ApprovalConfig;
-  /** Total project count — drives whether the Approval tab's
-   * "Per-project" section renders. */
-  projectCount?: number;
-  /** PRD §11.5 / DESIGN.md §9 Approval. */
-  yoloMode: boolean;
   hasRunningSessions: boolean;
   activeRuntimeKind: RuntimeKind;
   hasManagedRuntimeConfigured: boolean;
@@ -47,9 +40,6 @@ export interface SettingsProps {
    * card and the legacy picker. */
   useExternalPython: boolean;
 
-  onChangeRequiredTools?: (tools: string[]) => void;
-  onRemoveAlwaysAllow?: (scope: "project" | "global", tool: string) => void;
-  onChangeYoloMode: (enabled: boolean) => void;
   onChangeGAPath?: () => void;
   onChangeBridgePython?: () => void;
   onReRunHealthCheck?: () => void;
@@ -70,8 +60,6 @@ export interface SettingsProps {
   onChangeConversationWidth: (width: "compact" | "wide") => void;
   notifyOnGoalEnd: boolean;
   onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
-  notifyOnApproval: boolean;
-  onChangeNotifyOnApproval: (enabled: boolean) => void;
   notifyOnReplyDone: boolean;
   onChangeNotifyOnReplyDone: (enabled: boolean) => void;
   notifySound: boolean;
@@ -109,18 +97,12 @@ export function Settings({
   open,
   onOpenChange,
   runtimeInfo,
-  approval,
-  projectCount,
-  yoloMode,
   hasRunningSessions,
   activeRuntimeKind,
   hasManagedRuntimeConfigured,
   hasExternalRuntimeConfigured,
   defaultTab = "general",
   useExternalPython,
-  onChangeRequiredTools,
-  onRemoveAlwaysAllow,
-  onChangeYoloMode,
   onChangeGAPath,
   onChangeBridgePython,
   onReRunHealthCheck,
@@ -141,8 +123,6 @@ export function Settings({
   onChangeConversationWidth,
   notifyOnGoalEnd,
   onChangeNotifyOnGoalEnd,
-  notifyOnApproval,
-  onChangeNotifyOnApproval,
   notifyOnReplyDone,
   onChangeNotifyOnReplyDone,
   notifySound,
@@ -221,8 +201,6 @@ export function Settings({
                   onChangeConversationWidth={onChangeConversationWidth}
                   notifyOnGoalEnd={notifyOnGoalEnd}
                   onChangeNotifyOnGoalEnd={onChangeNotifyOnGoalEnd}
-                  notifyOnApproval={notifyOnApproval}
-                  onChangeNotifyOnApproval={onChangeNotifyOnApproval}
                   notifyOnReplyDone={notifyOnReplyDone}
                   onChangeNotifyOnReplyDone={onChangeNotifyOnReplyDone}
                   notifySound={notifySound}
@@ -255,16 +233,6 @@ export function Settings({
               )}
               {tab === "models" && (
                 <SettingsModels activeRuntimeKind={activeRuntimeKind} />
-              )}
-              {tab === "approval" && (
-                <SettingsApproval
-                  config={approval}
-                  yoloMode={yoloMode}
-                  projectCount={projectCount}
-                  onChangeYoloMode={onChangeYoloMode}
-                  onChangeRequiredTools={onChangeRequiredTools}
-                  onRemoveAlwaysAllow={onRemoveAlwaysAllow}
-                />
               )}
               {tab === "integration" && <SettingsIntegration />}
               {showImTab && tab === "im" && (

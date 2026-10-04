@@ -1,11 +1,9 @@
 import { ArrowDown } from "@phosphor-icons/react";
 import { useMemo, useRef, useState } from "react";
 
-import { ApprovalDock } from "@/components/conversation/ApprovalDock";
 import { AskUserBubble } from "@/components/conversation/AskUserBubble";
 import {
   Composer,
-  type ComposerApprovalModeState,
   type ComposerLLMOption,
   type ComposerReasoningEffortState,
   type ImageBlockReason,
@@ -24,7 +22,6 @@ import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
-import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
@@ -49,8 +46,6 @@ import { stepLimitTailVisible } from "@/lib/step-limit";
 import { cn } from "@/lib/utils";
 import { useMessagesStore } from "@/stores/messages";
 import type {
-  ConversationToolEvent,
-  PendingApproval,
   PendingAskUser,
   PendingImageAttachment,
   SendPhase,
@@ -61,18 +56,11 @@ import {
   type GoalBrief,
   type GoalLaunchConfig,
 } from "@/types/goal";
-import type { ApprovalDecision } from "@/types/ipc";
 import type { ComposerHandle } from "@/components/conversation/composer-props";
 
 export interface MainViewProps {
   turns: Turn[];
   llmDisplayName: string;
-  pendingApprovals?: PendingApproval[];
-  approvalDecisions?: Record<string, ApprovalDecision>;
-  /** Name of the project the active session belongs to (if any).
-   * Threaded through to ToolCallout → ApprovalForm so the "Always
-   * allow in {projectName}" decision button can show context. */
-  projectName?: string;
   /** Active session's id. MainView watches it to scroll to the bottom
    * of the new conversation when the user switches sessions. The
    * component doesn't read or display the id, just uses identity
@@ -86,7 +74,6 @@ export interface MainViewProps {
     text: string,
     config: GoalLaunchConfig,
   ) => void | Promise<void>;
-  onApprove?: (approvalId: string, decision: ApprovalDecision) => void;
   onStop?: () => void;
   /** When true, the agent is mid-run; the Composer hides Submit and
    * shows Stop, the LLM switcher disables. */
@@ -105,9 +92,7 @@ export interface MainViewProps {
   // the top bar / sidebar / settings no longer reconcile per chunk.
   //
   // GA-side turn currently being run, surfaced into the thinking
-  // placeholder (Turn N · 思考中…) and into pending Approval Card
-  // headers when the agent has a request mid-turn. `null` during
-  // quiet states.
+  // placeholder (Turn N · 思考中…). `null` during quiet states.
   /** LLM list for the Composer's inline picker. */
   llms?: ComposerLLMOption[];
   /** Called when the user picks an LLM from the inline dropdown. */
@@ -120,8 +105,6 @@ export interface MainViewProps {
   requiresModelConfig?: boolean;
   /** Fallback for pre-bridge / dev when `llms` is empty. */
   onOpenLLMSwitcher?: () => void;
-  /** Approval-mode pill state for this session's Composer. */
-  approvalMode?: ComposerApprovalModeState;
   /** Reasoning-effort pill state for this session's Composer (the
    * independent pill right of the model picker). */
   reasoningEffort?: ComposerReasoningEffortState;
@@ -165,13 +148,13 @@ export interface MainViewProps {
    * for Workbench's mixed prose + code block + tool callout content.
    *
    * Both the scrollable conversation column AND the bottom stack
-   * (ApprovalDock + Composer + hint) follow this mode in lockstep.
+   * (Composer + hint) follow this mode in lockstep.
    * Earlier iterations kept the bottom stack narrow on the
    * "input doesn't need to be wide" theory; this turned out to be
    * wrong: (a) the EmptyState toggle then had no visible effect
-   * since EmptyState only contains a Composer, and (b) the Dock and
-   * Composer at different widths produced visual misalignment in
-   * MainView. Single width keeps the affordance consistent and
+   * since EmptyState only contains a Composer, and (b) bottom-stack
+   * pieces at a different width from the column produced visual
+   * misalignment in MainView. Single width keeps the affordance consistent and
    * predictable across all screens.
    */
   conversationWidth?: "compact" | "wide";
@@ -183,12 +166,11 @@ export interface MainViewProps {
 
 /**
  * Main view — the in-session screen. Per DESIGN.md §3 layout floor +
- * §4.3 conversation document + §4.6 approval dock + §4.4 composer.
+ * §4.3 conversation document + §4.4 composer.
  *
- * Three vertical regions, all aligned to a 760px reading column:
+ * Two vertical regions, both aligned to a 760px reading column:
  *
  *   Conversation (scrollable, takes the bleeding flex-1 space)
- *   Approval Dock (sticky-ish, only renders when pending)
  *   Composer + keyboard hint row
  *
  * Title / runtime / inspector toggle live in the AppShell-level Top
@@ -201,13 +183,9 @@ export function MainView(props: MainViewProps) {
 function MainViewContent({
   turns,
   llmDisplayName,
-  pendingApprovals = [],
-  approvalDecisions,
-  projectName,
   activeSessionId,
   onSubmit,
   onGoalSubmit,
-  onApprove,
   onStop,
   isRunning = false,
   isStopping = false,
@@ -217,7 +195,6 @@ function MainViewContent({
   onConfigureModels,
   requiresModelConfig = false,
   onOpenLLMSwitcher,
-  approvalMode,
   reasoningEffort,
   goal,
   hasActiveGoal,
@@ -232,7 +209,6 @@ function MainViewContent({
   onTextDropBlocked,
 }: MainViewProps) {
   const copy = useCopy();
-  const stillWaiting = pendingApprovals.length > 0;
   // The two RECOVERABLE goal states get a thread tail (see
   // GoalPausedTail): `paused` says how to resume, `blocked` says what
   // the model needs. `active` gets nothing — Core bridges the gaps
@@ -242,8 +218,7 @@ function MainViewContent({
   const parkedGoal = sessionGoals?.find(
     (g) => g.status === "paused" || g.status === "blocked",
   );
-  const goalPausedTailVisible =
-    !!parkedGoal && !isRunning && !stillWaiting && !pendingAskUser;
+  const goalPausedTailVisible = !!parkedGoal && !isRunning && !pendingAskUser;
   // The latest run stopped at GA's per-run step cap (#29): same idle
   // rule as the parked-goal tail, and an open Goal (active / paused /
   // blocked) wins outright — its engine continues or parks the run.
@@ -254,7 +229,6 @@ function MainViewContent({
   const showStepLimitTail = stepLimitTailVisible({
     pausedAtStepLimit,
     isRunning,
-    waitingApproval: stillWaiting,
     waitingAskUser: !!pendingAskUser,
     hasOpenGoal:
       !!goal || !!sessionGoals?.some((g) => isOpenGoalStatus(g.status)),
@@ -386,7 +360,7 @@ function MainViewContent({
 
   // Conversation scroll behavior — sticky-bottom follow, the
   // scroll-to-bottom button, session-switch snap, stick-to-user-message,
-  // ⌥↑/↓ jump, and advance-to-approval — lives in its own hook so this
+  // and ⌥↑/↓ jump — lives in its own hook so this
   // component stays a flat render tree. See useStickyScroll.
   const {
     scrollContainerRef,
@@ -394,14 +368,11 @@ function MainViewContent({
     setAtBottom,
     isScrollingToBottom,
     onClickScrollToBottom,
-    onClickAdvanceApproval,
-    registerPendingApprovalRef,
   } = useStickyScroll({
     activeSessionId,
     userSubmitTick,
     streamingContent: markdownPartial,
     turnsLength: turns.length,
-    pendingApprovalsLength: pendingApprovals.length,
     pendingAskUser,
     restoring,
   });
@@ -471,60 +442,18 @@ function MainViewContent({
                 // folded (conversation-run-fold PRD 定案 2).
                 key={activeSessionId ?? "conversation"}
                 turns={turns}
-                approvalDecisions={approvalDecisions}
-                onApprove={onApprove}
-                projectName={projectName}
                 goals={sessionGoals}
                 onExtendGoal={onExtendGoal}
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
               />
             )}
-            {/* In-flight pending approvals — rendered after the
-              completed turns. The agent has emitted tool_call_pending
-              but the turn hasn't ended yet, so these tools aren't in
-              `turns[].tools` (turn_end is what folds them in). We
-              render them inline as ToolCallouts so the user sees the
-              full Approval Card (diff / args / buttons), not just an
-              "等待审批中" placeholder. Once the user decides, the
-              store removes the pending entry; the eventual turn_end
-              brings the same tool back as part of a finalized turn. */}
-            {stillWaiting && (
-              // No wrapper margin — TurnMarker provides its own
-              // mt-7, and ToolCallout's my-3 spaces successive cards.
-              // space-y-2 stays for the multi-pending case.
-              <StepRegion
-                className="space-y-2"
-                railFrom={inRunRail ? "header" : "content"}
-              >
-                {currentTurnIndex != null && (
-                  <TurnMarker index={currentTurnIndex} />
-                )}
-                {pendingApprovals.map((p) => (
-                  <div
-                    key={p.approvalId}
-                    ref={registerPendingApprovalRef(p.approvalId)}
-                    data-pending-approval-id={p.approvalId}
-                    tabIndex={-1}
-                    className="focus:outline-none"
-                  >
-                    <ToolCallout
-                      tool={pendingToToolEvent(p)}
-                      onApprove={onApprove}
-                      projectName={projectName}
-                    />
-                  </div>
-                ))}
-              </StepRegion>
-            )}
-
             {/* In-flight placeholder. User sent a message; the bridge
               is dispatching but turn_end hasn't come back yet (LLM
               TTFT can be several seconds). Without this the
-              conversation looks frozen. Hidden once an Approval Card
-              shows up (already covers "agent waiting on you") OR
-              once streaming content has begun (the partial render
-              is itself the live signal).
+              conversation looks frozen. Hidden once streaming content
+              has begun (the partial render is itself the live
+              signal).
 
               Renders as TurnMarker in thinking mode — same upright
               12px structural register as the settled marker, just
@@ -535,7 +464,7 @@ function MainViewContent({
               thinking content, not a one-liner "still working"
               line. Sharing visual register with TurnMarker collapses
               the before/after into one per-step rhythm. */}
-            {isRunning && !stillWaiting && (
+            {isRunning && (
               // The elapsed clock inside TurnMarker resets whenever
               // `index` changes — step 1 took 30s; step 2's clock
               // starts at 0 again — including the first `turn_start`
@@ -665,13 +594,7 @@ function MainViewContent({
         <UserQuestionRail
           turns={turns}
           scrollContainerRef={scrollContainerRef}
-          tailStatus={
-            stillWaiting || pendingAskUser
-              ? "waiting"
-              : isRunning
-                ? "running"
-                : null
-          }
+          tailStatus={pendingAskUser ? "waiting" : isRunning ? "running" : null}
           onJump={() => setAtBottom(false)}
         />
         <SelectionCopyToolbar scrollContainerRef={scrollContainerRef} />
@@ -748,7 +671,7 @@ function MainViewContent({
         )}
       </div>
 
-      {/* Bottom stack: dock + composer + hint. Matches the conversation
+      {/* Bottom stack: composer + hint. Matches the conversation
           column width in lockstep — see MainViewProps `conversationWidth`
           doc for why we don't keep this narrower. */}
       <div className="bg-app px-8 pb-4">
@@ -758,11 +681,6 @@ function MainViewContent({
             conversationWidth === "wide" ? "max-w-[1200px]" : "max-w-[760px]",
           )}
         >
-          <ApprovalDock
-            pending={pendingApprovals}
-            onAdvance={onClickAdvanceApproval}
-          />
-
           <Composer
             ref={composerRef}
             key={activeSessionId ?? "main-composer"}
@@ -798,7 +716,6 @@ function MainViewContent({
             onConfigureModels={onConfigureModels}
             requiresModelConfig={requiresModelConfig}
             onOpenLLMSwitcher={onOpenLLMSwitcher}
-            approvalMode={approvalMode}
             reasoningEffort={reasoningEffort}
             goal={goal}
             hasActiveGoal={hasActiveGoal}
@@ -845,24 +762,4 @@ function compactLiveStepStatus(text?: string): string | undefined {
     .slice(0, LIVE_STEP_STATUS_MAX_CHARS - 1)
     .join("")
     .trimEnd()}…`;
-}
-
-/**
- * Synthesize a ConversationToolEvent from a PendingApproval so
- * ToolCallout (which expects the full event shape) can render the
- * in-flight Approval Card. Status is hard-coded "waiting_approval"
- * — that's the only state pendings ever appear in. `args` is what
- * lets the tool-specific renderers (PatchView for file_patch,
- * command preview for code_run) light up; without it ToolCallout
- * falls back to the raw mono args block.
- */
-function pendingToToolEvent(p: PendingApproval): ConversationToolEvent {
-  return {
-    id: p.approvalId,
-    name: p.toolName,
-    status: "waiting_approval",
-    args: p.args,
-    riskLevel: p.riskLevel,
-    approvalId: p.approvalId,
-  };
 }

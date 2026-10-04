@@ -166,14 +166,13 @@ function actionableBridgeCrashMessage(message: string): string {
 }
 
 function shouldFailWhenBridgeMissing(cmd: IPCCommand): boolean {
-  // approval_response and abort are direct user actions on a live run:
-  // silently dropping them leaves the UI showing a state (decided /
+  // Sends, ask_user replies and abort are direct user actions on a live
+  // run: silently dropping them leaves the UI showing a state (sent /
   // stopping) the bridge never heard about. They must reject so the
   // caller can roll back and tell the user.
   return (
     cmd.kind === "user_message" ||
     cmd.kind === "ask_user_response" ||
-    cmd.kind === "approval_response" ||
     cmd.kind === "abort"
   );
 }

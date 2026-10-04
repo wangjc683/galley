@@ -10,7 +10,6 @@ import {
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
 import { rowsToTurns } from "@/stores/messages/rowsToTurns";
 import { useMessagesStore } from "@/stores/messages";
-import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { makeMessageRow, makeSession } from "@/test/factories";
@@ -126,7 +125,6 @@ describe("live → persist → restore round trip", () => {
       sessions: [makeSession({ id: "s-test", gaRuntimeKind: "external" })],
       activeSessionId: "s-test",
     });
-    usePrefsStore.setState({ yoloMode: false });
     useMessagesStore.getState().ensureMessages("s-test");
     useRuntimeStore.getState().ensureRuntime("s-test", { cachedLLMs: [] });
   });

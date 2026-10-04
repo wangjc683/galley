@@ -67,7 +67,7 @@ pub struct MessageTelemetry {
 }
 
 /// Summary of one persisted message. Full conversation rendering needs
-/// more fields (tool calls, approvals, etc.); B1's read APIs surface
+/// more fields (tool calls, step telemetry, etc.); B1's read APIs surface
 /// just enough for sidebar peek + agent CLI display.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

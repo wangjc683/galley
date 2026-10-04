@@ -392,8 +392,8 @@ describe("buildBrowserSiteResolver", () => {
     const resolve = buildBrowserSiteResolver(turns);
     expect(resolve(tools[0])).toMatchObject({ host: "google.com" });
     expect(resolve(tools[1])).toMatchObject({ host: "reddit.com" });
-    // An event the session does not hold (an approval card's synthetic
-    // event) resolves to nothing.
+    // An event the session does not hold (a copy built outside its
+    // turns) resolves to nothing.
     const stranger: ConversationToolEvent = { ...tools[0] };
     expect(resolve(stranger)).toBeNull();
   });

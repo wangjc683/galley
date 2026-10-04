@@ -247,7 +247,7 @@ export function MainHeader({
 
           Empty state ("新对话" placeholder): non-interactive, draggable
           span. Same "affordance only when usable" rule applied
-          elsewhere (ApprovalDock / Composer Stop / AskUserBubble).
+          elsewhere (Composer Stop / AskUserBubble).
 
           Drag region: the wrapping div is draggable so the empty space
           to the right of the left-aligned title still drags the window.

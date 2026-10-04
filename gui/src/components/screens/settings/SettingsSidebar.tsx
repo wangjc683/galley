@@ -8,7 +8,6 @@ import {
   Megaphone,
   PlugsConnected,
   PuzzlePiece,
-  ShieldCheck,
 } from "@phosphor-icons/react";
 
 import { useCopy } from "@/lib/i18n";
@@ -63,12 +62,6 @@ export function SettingsSidebar({
           Icon={Key}
           {...labelsFor(tabCopy.models)}
           onClick={() => onChange("models")}
-        />
-        <SettingsTabButton
-          active={tab === "approval"}
-          Icon={ShieldCheck}
-          {...labelsFor(tabCopy.approval)}
-          onClick={() => onChange("approval")}
         />
         <SettingsTabButton
           active={tab === "integration"}

@@ -8,7 +8,6 @@ import pytest
 from runner.ipc import (
     PROTOCOL_VERSION,
     AbortCommand,
-    ApprovalResponseCommand,
     AskUserResponseCommand,
     AttachPetCommand,
     DetachPetCommand,
@@ -21,12 +20,9 @@ from runner.ipc import (
     ReadyEvent,
     ReinjectToolsCommand,
     RunCompleteEvent,
-    SetApprovalRulesCommand,
     SetLLMCommand,
-    SetYoloModeCommand,
     ShutdownCommand,
     ToolCallEndEvent,
-    ToolCallPendingEvent,
     ToolCallStartEvent,
     ToolsReinjectedEvent,
     TurnEndEvent,
@@ -125,21 +121,6 @@ def test_turn_progress_handles_empty_source() -> None:
     """GA can push chunks with `source` defaulting to '' (system /
     interstitial messages); the bridge forwards verbatim."""
     ev = TurnProgressEvent(sessionId="s1", delta="…", source="")
-    decoded = decode_event(encode(ev))
-    assert decoded == ev
-
-
-def test_tool_call_pending_round_trip() -> None:
-    ev = ToolCallPendingEvent(
-        sessionId="s1",
-        approvalId="a1",
-        turnIndex=1,
-        toolName="code_run",
-        args={"type": "python", "code": "print(1)"},
-        argsPreview="type=python, code=print(1)",
-        riskLevel="high",
-        reason="Code execution",
-    )
     decoded = decode_event(encode(ev))
     assert decoded == ev
 
@@ -315,13 +296,6 @@ def test_user_message_default_images() -> None:
     assert decoded == cmd
 
 
-def test_approval_response_round_trip() -> None:
-    for decision in ("allow_once", "deny", "always_allow_project", "always_allow_global"):
-        cmd = ApprovalResponseCommand(approvalId="a1", decision=decision)
-        decoded = decode_command(encode(cmd))
-        assert decoded == cmd
-
-
 def test_ask_user_response_round_trip() -> None:
     cmd = AskUserResponseCommand(text="yes", absoluteTurnIndex=3)
     assert decode_command(encode(cmd)) == cmd
@@ -349,34 +323,11 @@ def test_load_history_round_trip() -> None:
     assert decoded == cmd
 
 
-def test_set_approval_rules_round_trip() -> None:
-    cmd = SetApprovalRulesCommand(
-        alwaysAllowGlobal=["file_patch"],
-        alwaysAllowProject=["code_run", "file_write"],
-    )
-    decoded = decode_command(encode(cmd))
-    assert decoded == cmd
-
-
 def test_set_llm_round_trip() -> None:
     cmd = SetLLMCommand(llmIndex=2)
     decoded = decode_command(encode(cmd))
     assert decoded == cmd
     assert decoded.llmIndex == 2
-
-
-def test_set_yolo_mode_round_trip_enabled() -> None:
-    cmd = SetYoloModeCommand(enabled=True)
-    decoded = decode_command(encode(cmd))
-    assert decoded == cmd
-    assert decoded.enabled is True
-
-
-def test_set_yolo_mode_round_trip_disabled() -> None:
-    cmd = SetYoloModeCommand(enabled=False)
-    decoded = decode_command(encode(cmd))
-    assert decoded == cmd
-    assert decoded.enabled is False
 
 
 # ---------------- Error paths ----------------

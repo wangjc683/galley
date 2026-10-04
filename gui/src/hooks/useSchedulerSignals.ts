@@ -1,6 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useMemo, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
+import { useEffect, useState } from "react";
 
 import { useCopy } from "@/lib/i18n";
 import { sendGatedSystemNotification } from "@/lib/notify";
@@ -9,50 +8,20 @@ import {
   listScheduledTasks,
   SCHEDULED_TASKS_CHANGED_EVENT,
   SCHEDULED_TASK_FIRE_FAILED_EVENT,
-  SCHEDULER_SUPERVISOR,
   type ScheduledFireFailedPayload,
 } from "@/lib/scheduled-tasks";
-import { useMessagesStore } from "@/stores/messages";
-import type { Session } from "@/types/session";
 
 /**
  * "Needs your action" count for the sidebar's 定时 quick-action row:
- * scheduler-created sessions waiting for an approval, plus enabled
- * tasks whose last fire failed to create a session. One number on
- * purpose — the badge's job is "something needs handling"; the two
- * categories are told apart inside the dialog, not in 16px of chrome.
+ * enabled tasks whose last fire failed to create a session. The
+ * badge's job is "something needs handling"; details live inside the
+ * dialog, not in 16px of chrome.
  *
- * The approval half mirrors `useSessionStatusView`'s waiting_approval
- * branch (pendingApprovals on the live conversation slice), narrowed to
- * sessions whose creation origin carries the scheduler's supervisor
- * label. Sessions without a loaded conversation slice count as not
- * blocked — a false negative the system notification backstops; the
- * badge is a glance aid, not the source of truth.
- *
- * The failure half refetches the task list on Core's change event
- * (emitted on every CRUD and every fire), so the badge clears itself
- * the moment a later fire succeeds — no polling, no manual dismiss.
+ * Refetches the task list on Core's change event (emitted on every
+ * CRUD and every fire), so the badge clears itself the moment a later
+ * fire succeeds — no polling, no manual dismiss.
  */
-export function useSchedulerActionCount(sessions: Session[]): number {
-  const schedulerIds = useMemo(
-    () =>
-      sessions
-        .filter((s) => s.origin?.supervisor === SCHEDULER_SUPERVISOR)
-        .map((s) => s.id),
-    [sessions],
-  );
-  const blocked = useMessagesStore(
-    useShallow((state) =>
-      schedulerIds.reduce(
-        (count, id) =>
-          (state.byId[id]?.pendingApprovals.length ?? 0) > 0
-            ? count + 1
-            : count,
-        0,
-      ),
-    ),
-  );
-
+export function useSchedulerActionCount(): number {
   const [failed, setFailed] = useState(0);
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +44,7 @@ export function useSchedulerActionCount(sessions: Session[]): number {
     };
   }, []);
 
-  return blocked + failed;
+  return failed;
 }
 
 /**

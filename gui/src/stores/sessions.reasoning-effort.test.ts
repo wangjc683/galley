@@ -97,7 +97,7 @@ describe("sessionsStore · setSessionReasoningEffort", () => {
 /**
  * EmptyState's pill has no session row to write onto, so it stashes
  * `pendingReasoningEffort` and `createSession` consumes it — same
- * lifecycle as `pendingApprovalMode` / `pendingLLMIndex`: seeded onto
+ * lifecycle as `pendingLLMIndex`: seeded onto
  * the new session, ALWAYS cleared, and persisted through Core (which
  * forwards to the runner / next spawn).
  */

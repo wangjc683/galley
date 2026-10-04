@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * The one top-right close X for content dialogs. Confirm / forced-choice
- * dialogs (ConfirmActionDialog, FirstClose, YoloIntro) intentionally have
+ * dialogs (ConfirmActionDialog, FirstClose) intentionally have
  * no X — their close semantics live in the footer buttons. See
  * docs/design/overlays-and-settings.md → Dialog 关闭按钮.
  *

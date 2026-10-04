@@ -7,7 +7,7 @@
  *
  *   1. App version → runtimeInfo (so Settings → About shows the
  *      real bundle version rather than the demo "0.1.0" fixture).
- *   2. prefsStore.hydratePrefs (runtime mode, yolo / conversationWidth /
+ *   2. prefsStore.hydratePrefs (runtime mode, conversationWidth /
  *      gaConfig). Runtime mode must be known before sessions hydrate so
  *      the sidebar can show the current runtime's sessions only.
  *   3. Saved prompts hydrate (Composer convenience state).

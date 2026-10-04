@@ -29,7 +29,6 @@ describe("stepLimitTailVisible", () => {
   const idle: StepLimitTailInput = {
     pausedAtStepLimit: true,
     isRunning: false,
-    waitingApproval: false,
     waitingAskUser: false,
     hasOpenGoal: false,
   };
@@ -46,9 +45,6 @@ describe("stepLimitTailVisible", () => {
 
   it("hides while anything else signals activity", () => {
     expect(stepLimitTailVisible({ ...idle, isRunning: true })).toBe(false);
-    expect(stepLimitTailVisible({ ...idle, waitingApproval: true })).toBe(
-      false,
-    );
     expect(stepLimitTailVisible({ ...idle, waitingAskUser: true })).toBe(false);
   });
 

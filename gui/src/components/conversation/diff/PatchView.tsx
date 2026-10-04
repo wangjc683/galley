@@ -14,8 +14,8 @@ export interface PatchViewProps {
 }
 
 /**
- * Two-column split-diff view for the file_patch Approval Card body.
- * DESIGN.md §4.6 (file_patch renderer).
+ * Two-column split-diff view for an expanded file_patch tool callout
+ * (ToolCallout's settled body). DESIGN.md §4.6 (file_patch renderer).
  *
  * Self-rendered using `diff.diffLines` to compute change blocks, then
  * laying them out as paired rows: deletions go on the left, additions
@@ -25,7 +25,7 @@ export interface PatchViewProps {
  *
  * Why not @pierre/diffs: tried it, but its Shiki backend pulls every
  * language bundle into the build (~+400 KB after gzip). For V0.1 we
- * don't need syntax highlighting in the approval surface — line-by-
+ * don't need syntax highlighting in the callout body — line-by-
  * line +/- with a clear path header is enough. We can revisit
  * @pierre/diffs in V0.2 if we want hover/highlight inside the diff,
  * scoped down to the languages we actually use.
