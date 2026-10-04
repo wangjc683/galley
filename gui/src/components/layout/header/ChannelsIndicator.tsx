@@ -233,10 +233,15 @@ export function ChannelsIndicator({
   );
 }
 
-/** Colour only where the user has to act: a failure, a QR to scan. */
+/**
+ * The Settings card badge colours, so a word reads the same in both
+ * places: 已接入 in the restrained success green (JC, 2026-10-04: a
+ * glance down the rows should show health by colour), failures red, a
+ * QR to scan amber; paused and the rest stay muted ink.
+ */
 function channelStateClass(state: ImSupervisorState) {
   if (state === "error" || state === "expired") return "text-error";
   if (state === "waiting_scan") return "text-warning";
-  if (state === "running") return "text-ink-soft";
+  if (state === "running") return "text-success";
   return "text-ink-muted";
 }
