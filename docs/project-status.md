@@ -9,14 +9,14 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.5.6`.
-- Git tag / GitHub Release: `v0.5.6` is the current published stable release
-  (tagged at `387fd622` on 2026-10-01, GitHub Latest).
+- Package version: `0.6.0`.
+- Git tag / GitHub Release: `v0.6.0` is the current published stable release
+  (tagged at `df11b88e` on 2026-10-05, GitHub Latest).
 - Agent API schema: `schemaVersion: 2` (since the Goal v2 rework on
   2026-09-16, first shipped in `v0.5.0`). The server keeps answering `1` for
   every command that did not change; only the `goal` family is `2`-only, and
   the retired v1 goal commands are `unknown_command` under every version.
-- Release tier: stable patch; default update channel points at `v0.5.6`.
+- Release tier: stable minor; default update channel points at `v0.6.0`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `1b6442f` (audited 2026-09-18, first shipped in
   `v0.5.1`) — engine delta is Galley-positive abort-before-headers plus an
@@ -28,6 +28,34 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.6.0` (2026-10-05) is the first minor since `v0.5.0`, four days after
+`v0.5.6`, 33 commits on three lines. **Approval removed**: every tool call
+runs directly, as in upstream GA; the per-session mode, the auto-run switch,
+always-allow rules, the approval card / Dock and the Settings page are gone,
+with no migration (the old columns, tables and prefs stay unread). In the
+Agent API `waiting_approval` is kept but never produced and the undocumented
+`SessionBrief.approvalMode` is gone, which is not a breaking change (still
+`schemaVersion: 2`). **Browser control**: in managed mode Core runs a resident
+browser bridge (TMWebDriver master, live status, no per-launch probe,
+auto-verify on first connection, managed patch `0028` for the remote driver's
+default tab); browser steps show the site; the Browser Control and Channels
+lamps are plain when live, dimmed when not, and open compact status menus; the
+unverified state invites (浏览器控制 · 待解锁). **Chrome polish**: the 显示
+popover (width / font size / theme, ⌘= / ⌘− / ⌘0, a macOS View submenu), the
+Changes button only when a repository is known, the Composer ＋ menu, 模型
+instead of LLM, the sidebar masthead (SOP and engine status move to the top
+bar), check circles for finished sessions and an always-visible active row.
+Graded minor although the magnitude rule reads patch: removing a whole
+user-facing safety system is outside that rule (a community user, #16,
+described relying on approval, and stable auto-updates), so the release
+version rules gain "removals grade too". The bundled-runtime gate was
+mandatory and passed on `mac-x64`; the GA baseline audit was skipped a sixth
+time (upstream still `f308ee7`). `check.yml` was green on the release head
+(run 37331980948, all six jobs) before the tag; JC approved publish without an
+item-by-item smoke report; stable promoted and verified the same session (run
+37391302939). Full narrative: devlog
+[2026-10-05-v0.6.0-release](./devlog/2026-10-05-v0.6.0-release.md).
 
 `v0.5.6` (2026-10-01) is a patch one day after `v0.5.5`, eight commits (four
 product), one round of community fixes. **#29**: a run that reaches GA's
@@ -473,16 +501,22 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.5.6` is published and promoted as the live stable release (2026-10-01).
-The default `updates/stable/latest.json` channel points at `v0.5.6`, with the
-legacy `updates/beta/latest.json` alias pointing at the same version for older
-installed builds. The live verifier passed with `--cache-bust` for both
-channels across all three platforms (darwin-aarch64, darwin-x86_64,
-windows-x86_64), in the promote run and again locally. One draft cut (release
-run 36856754423); JC approved the draft for publish. The bundled-runtime gate
-passed on `mac-x64`; `check.yml` was green on the release head (run
-36806046708, all six jobs). The first in-app check after promote hit the raw
-CDN's 300 s cache and reported "up to date"; SOP step 10 now waits that out.
+`v0.6.0` is published and promoted as the live stable release (published
+2026-10-05 23:56 UTC). The default `updates/stable/latest.json` channel points
+at `v0.6.0`, with the legacy `updates/beta/latest.json` alias pointing at the
+same version for older installed builds. The live verifier passed with
+`--cache-bust` for both channels across all three platforms (darwin-aarch64,
+darwin-x86_64, windows-x86_64), in the promote run and again locally. One
+draft cut (release run 37333557134); JC approved publishing it without
+reporting smoke items, so the Windows items under Unreleased On Main are still
+owed. The bundled-runtime gate passed on `mac-x64`; `check.yml` was green on
+the release head (run 37331980948, all six jobs).
+
+`v0.5.6` (2026-10-01) went through the same path: one draft cut (release run
+36856754423), JC approved the draft, both channels verified with
+`--cache-bust`, bundled-runtime gate passed on `mac-x64`. The first in-app
+check after promote hit the raw CDN's 300 s cache and reported "up to date";
+SOP step 10 now waits that out.
 
 `v0.5.5` (2026-09-30) went through the same path: one draft cut (release run
 36738236573), JC approved the draft, both channels verified with
@@ -547,7 +581,8 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.5.5` → `v0.5.6` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.5.6` → `v0.6.0` is owed (not yet
+   reported); `v0.5.5` → `v0.5.6` passed on JC's
    Windows machine (2026-10-01, same session; the bundled CLI came out at
    0.5.6 too); `v0.5.4` → `v0.5.5` passed on an
    installed build (JC reported 2026-10-01, same session as the release);
@@ -588,71 +623,13 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.5.6`: the sidebar top rework (2026-10-03,
-[devlog](./devlog/2026-10-03-sidebar-header-masthead.md)), frontend only: the
-sidebar header carries the wordmark plus the 搜索 / 定时 / 项目 icons, the
-new-chat button gets its own full-width row, Supervisor SOP moves to MainHeader's utility cluster and the
-engine indicator to its status cluster; JC accepted it live. Same day, a
-sidebar polish round ([devlog](./devlog/2026-10-03-sidebar-polish-selection-visibility.md)),
-also frontend only: an active session from 更早 borrows a row under the 更早
-entry and the active row is scrolled into view; settled rows say "done" with a
-muted check circle instead of a `已完成 · ` subline prefix (JC picked it live on
-a temporary switcher); the 已归档 footer sits on the row grid; native title
-tooltips only on truncated text. At the next Windows smoke, glance at the thin
-check circle on a 100% display. Core, runner and managed-ga are untouched.
-
-Also 2026-10-03, two Composer rounds, frontend only, JC checked both live:
-the bookmark + paperclip on the right fold into a ＋ menu at the left
-(文件或图片… split by extension like a drop, 文件夹…, 常用提示词…; a filled
-preset selects its trailing `[…]`; the idle Goal toggle drops to a ghost icon;
-[devlog](./devlog/2026-10-03-composer-plus-menu.md)); then the model phrase
-reads 「gpt-6.1-sol · high」 with no caret, symmetric hover boxes, the approval
-icon only when a session deviates from the default (the icon went with approval
-on 10-05), and user-facing LLM becomes
-模型 ([devlog](./devlog/2026-10-03-composer-model-effort-display.md)). The `/`
-prompt shortcut went to `deferred.md`. At the next Windows smoke, check the ＋
-menu's native file and folder pickers (checklist item updated).
-
-2026-10-04, two rounds; JC checked the topbar live and steered several
-revisions in place.
-The topbar ([devlog](./devlog/2026-10-04-topbar-display-popover.md), frontend
-plus the macOS View menu in Core): width / font size / theme fold into one 显示
-popover, the Changes button shows only when a repository is known (palette
-entry 查看仓库改动), and ⌘= / ⌘− / ⌘0 step the conversation font size.
-Browser control ([devlog](./devlog/2026-10-04-browser-control-ux-round.md),
-`.scratch/browser-control-ux/`), now treated as the headline capability (45%
-of JC's sessions): browser steps show the site; **Core runs a resident browser
-bridge in managed mode** (`runner/managed_browser_bridge.py`, TMWebDriver
-master, live status, no per-launch probe, auto-verify on first connection)
-plus managed-ga patch `0028` (a remote driver's default tab); the Browser
-Control and Channels lamps are plain when live and dimmed when not, open
-compact menus (entry surfaces are menus, decision surfaces like Goal / Update
-stay cards), show health in the success green, and since a later live round
-share one row layout (a 14px mark, a name, the state word on the right; the
-Channels rows carry the platform marks, idle rows dim, the browser's tab count
-sits on a second line, errors no longer restate the badge), and the unconnected state
-invites (浏览器控制 · 待解锁) instead of warning. Core, runner and managed-ga
-changed this time. At the next Windows smoke, run the resident bridge items
+Since `v0.6.0`: nothing yet. Owed from the `v0.6.0` Windows smoke (JC
+approved publish without an item-by-item report): the resident browser bridge
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
-program) and walk the new-user flow (待解锁 → install → auto-verify → 试一试),
-which has not been walked live yet. Parked: IM step summaries with the site and
-the Chrome / Edge store listing (both in `deferred.md`).
-
-2026-10-05, approval removed
-([devlog](./devlog/2026-10-05-remove-approval.md),
-`.scratch/remove-approval/`): every tool call runs directly, as in upstream
-GA. The wire drops `tool_call_pending` / `approval_response` /
-`set_approval_rules` / `set_yolo_mode`; `WorkbenchHandler` only synthesizes
-the turn signal; Core drops `set_session_approval_mode`, the tool-event
-commands and `SessionBrief.approvalMode` (`waiting_approval` stays in the
-Agent API, never produced); the GUI loses the approval card, Dock, mode row,
-Settings page, notification toggle and YOLO intro. No migration. CLAUDE.md
-Rule 1 now allows the handler subclass for turn signals only. No Galley
-prompt rule: upstream's system prompt already says to ask before
-irreversible actions. Runner, Core, CLI and GUI changed; JC checked it live
-the same day. At release, draft
-the #16 reply, since that issue lists approval waits as a notification
-tone.
+program), the browser new-user flow (待解锁 → install → auto-verify → 试一试),
+which has not been walked live on any platform, the ＋ menu's native file and
+folder pickers, and the thin sidebar check circle on a 100% display. The #16
+reply about approval waits is on hold (JC, 2026-10-06: no reply for now).
 
 The four community threads #29–#32 shipped in
 `v0.5.6` and were answered 2026-10-01, all kept open:
@@ -677,7 +654,7 @@ to the end of the Discord / Telegram polish). The three open judgment calls
 from the IM dogfood (subtext on one-step answers, narration kept in the
 answered-question echo, the typing indicator lingering up to ~10 s) stay as
 built.
-Release-scope truth remains `git log v0.5.6..HEAD`.
+Release-scope truth remains `git log v0.6.0..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
 row stacked above the commission marker's eyebrow) reads cluttered has not
@@ -714,7 +691,8 @@ fifth time; the memory-distill prompt got its own verdict (it moves from
 existing memory entries — user state — so it belongs in a separate audit with
 observed long-term-update runs, not a fix release). The devlog recommends
 running that baseline audit on its own, outside a release; whether and when
-is JC's call. Upstream's default-constant line (`default_context_win`) has now
+is JC's call. At `v0.6.0` upstream was still `f308ee7` and the audit was
+skipped a sixth time on the same reasoning. Upstream's default-constant line (`default_context_win`) has now
 collided with patch `0007` twice in a row — expect it again.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
@@ -759,7 +737,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.5.6 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.6.0 stable minor is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `1b6442f` (2026-09-18); released builds ship it since `v0.5.1` (`efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -785,7 +763,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.5.6`. For the next release, bump every
+- Current package metadata uses `0.6.0`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
