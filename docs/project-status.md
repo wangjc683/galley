@@ -796,6 +796,11 @@ Detailed phase narratives are intentionally not duplicated here. Use:
   single feature, not the batch total — a release that accumulates several
   patch-tier features stays patch (JC ruling, 2026-08-06, v0.4.3). When
   unsure, list the decision points and ask JC.
+- Removals grade too (JC ruling, 2026-10-05, v0.6.0): removing a whole
+  user-facing system that changes product behavior or the safety model
+  (e.g. tool approval) is minor even when nothing is added. The magnitude
+  rule above judges additions; a patch number would tell auto-updating users
+  that nothing they rely on was taken away.
 - Use `vX.Y.Z` for Git tag and GitHub Release title.
 - Agent API is at `schemaVersion: 2`; changes within a version are
   additive-only.
