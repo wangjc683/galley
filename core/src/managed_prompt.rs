@@ -530,8 +530,10 @@ mod tests {
     #[test]
     fn im_supervisor_prompt_defers_orchestration_details_to_the_sop() {
         let prompt = im_supervisor_prompt("/tmp/sop.md", "feishu", "galley-im/feishu");
-        assert!(prompt.contains("Before your first Galley\nCLI write"));
-        assert!(prompt.contains("/tmp/sop.md"));
+        // Single-line fragments only: a Windows checkout makes the raw
+        // string CRLF, so a substring spanning a line break fails there.
+        assert!(prompt.contains("Before your first Galley"));
+        assert!(prompt.contains("read the Galley Supervisor SOP at /tmp/sop.md"));
         for moved in ["--after-turn", "--until-idle", "askPending", "live.busy"] {
             assert!(!prompt.contains(moved), "{moved} belongs to the SOP only");
         }

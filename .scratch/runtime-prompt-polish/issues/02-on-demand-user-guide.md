@@ -11,6 +11,7 @@ Status: needs-triage（暂缓，等启动信号；台账见 [deferred](../../../
 待查的实现细节：
 
 1. 放哪：倾向 Core 在会话启动时写到内置状态目录里 Galley 自己的子目录（随版本覆盖，不算用户状态）。
+   先例：Core 已把 Supervisor SOP 写到 `im/reference/galley-supervisor-sop.md`（`materialize_sop_reference`）。
    备选 `galley guide` CLI 命令：外部 Supervisor 也能用，但动 Agent API 公开契约，等 Supervisor 侧有需求再说。
 2. 项目模式下工作目录会变，相对路径是否还能找到指南，要先验证；状态块不能注入路径（准入规则第 4 条）。
 3. 语言：先只写中文，还是中英两份（2026-10-06 讨论时没定）。

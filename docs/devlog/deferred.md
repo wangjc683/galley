@@ -17,7 +17,9 @@
   把 About 的功能地图挪进指南，常驻可再省约 350 tok，指南因此也是减法工具。
 - **方案**：一份面向用户的使用指南，单一来源放仓库（README 链接它），打包时带进 App；模型被问到操作细节时去读，
   常驻提示词只加两三行指向它。
-- **实施要点**：倾向由 Core 在会话启动时写到内置状态目录里 Galley 自己的子目录（随版本覆盖）；备选 `galley guide`
+- **实施要点**：倾向由 Core 在会话启动时写到内置状态目录里 Galley 自己的子目录（随版本覆盖）。已有先例：IM 启动时
+  Core 把 Supervisor SOP 写到 `im/reference/galley-supervisor-sop.md`（`core/src/im_supervisor/mod.rs`
+  `materialize_sop_reference`），入口层再把这个路径交给模型。备选 `galley guide`
   CLI 命令（动 Agent API，等 Supervisor 侧有需求）。项目模式下工作目录会变，相对路径要先验证；状态块不能注入路径。
 - **待定**：只写中文还是中英两份；发版 SOP 加同步检查还是做漂移门禁。
 - **关联**：`.scratch/runtime-prompt-polish/issues/02-on-demand-user-guide.md`；
