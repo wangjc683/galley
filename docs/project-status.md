@@ -647,7 +647,13 @@ sessions only when asked or when a task would run long, with orchestration
 details left to the SOP (~786 → ~369 tok, `IM_PROMPT_BUDGET_BYTES`; see
 [devlog](./devlog/2026-10-06-im-entry-layer-phone-first.md)); it also
 resolves `.scratch/im-supervisor-context-bloat/`. Owed: an IM live trial,
-checklist items 14–17. Owed from the `v0.6.0` Windows smoke (JC
+checklist items 14–17. Then the **Settings cross-tab pass** (JC decisions
+D1–D6, 2026-10-07): Chinese-UI page headers and section labels in Chinese,
+two badge and two disclosure primitives, 提供商 → 服务商, and the sidebar
+regrouped by usage (see
+[devlog](./devlog/2026-10-07-settings-cross-tab-pass.md)); JC reviewed
+before/after screenshots. Next is a per-tab second pass, Models first; dark
+mode has not been looked at. Owed from the `v0.6.0` Windows smoke (JC
 approved publish without an item-by-item report): the resident browser bridge
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
 program), the browser new-user flow (待解锁 → install → auto-verify → 试一试),
