@@ -1,7 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
-  CaretDown,
-  CaretRight,
   CheckCircle,
   CircleNotch,
   DotsThreeVertical,
@@ -14,10 +12,11 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { SettingsTag } from "@/components/screens/settings/settings-badges";
+import { SettingsDisclosureCard } from "@/components/screens/settings/settings-disclosure";
 import { Button, IconButton } from "@/components/ui/button";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { useCopy } from "@/lib/i18n";
-import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
 import type {
   ManagedModelProviderRecord,
@@ -190,69 +189,38 @@ export function ProviderCard({
       (modelProbeState.kind === "success" && modelOptions.length === 0));
 
   return (
-    <div
-      ref={rootRef}
-      className={cn(
-        // Quiet header grammar, matching the ChannelCard / model-row
-        // idiom: light hover tint + caret emphasis only. The primary
-        // "我的模型" list above must stay the loudest surface on this
-        // tab — the maintenance area doesn't lift, shadow, or turn
-        // brand-colored on hover.
-        "group/provider overflow-hidden rounded-sm border border-line bg-surface transition-colors duration-(--motion-fast) ease-firm",
-        open && "border-line-strong",
-      )}
-    >
-      <div className="flex min-w-0 items-center gap-3 px-2 py-1.5">
-        <button
-          type="button"
-          tabIndex={-1}
-          onMouseDown={preventMouseFocus}
-          aria-expanded={open}
-          className={cn(
-            "group/toggle flex min-w-0 flex-1 items-center gap-3 rounded-sm px-1.5 py-0.5 text-left",
-            "outline-none hover:bg-hover",
-          )}
-          onClick={onToggle}
-        >
+    // Quiet header grammar, shared with the Channels cards: light hover
+    // tint + caret emphasis only. The primary "我的模型" list above must
+    // stay the loudest surface on this tab — the maintenance area
+    // doesn't lift, shadow, or turn brand-colored on hover.
+    <SettingsDisclosureCard
+      rootRef={rootRef}
+      open={open}
+      onToggle={onToggle}
+      header={
+        <>
           <span
-            className={cn(
-              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-colors duration-(--motion-fast) ease-firm",
-              open ? "text-ink" : "text-ink-soft",
-            )}
+            className="min-w-0 truncate text-ui-compact font-medium text-ink"
+            title={provider.displayName}
           >
-            {open ? (
-              <CaretDown size={12} weight="bold" />
-            ) : (
-              <CaretRight size={12} weight="bold" />
-            )}
+            {provider.displayName}
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span
-              className="min-w-0 truncate text-ui-compact font-medium text-ink"
-              title={provider.displayName}
-            >
-              {provider.displayName}
-            </span>
-            <CredentialBadge
-              status={provider.credentialStatus}
-              authKind={provider.authKind}
-            />
-            <span className="inline-flex shrink-0 rounded-sm border border-line bg-surface/80 px-1.5 py-px text-ui-micro tabular-nums text-ink-muted">
-              {copy.enabledModelsCount(models.length)}
-            </span>
-            <ProtocolBadge
-              protocol={provider.protocol}
-              apiBase={provider.apiBase}
-            />
-          </span>
-        </button>
-        <div
-          className={cn(
-            "ml-auto flex shrink-0 items-center gap-1.5 opacity-75",
-            "group-hover/provider:opacity-100",
-            headerProbeState.kind === "loading" && "opacity-100",
-          )}
-        >
+          <CredentialBadge
+            status={provider.credentialStatus}
+            authKind={provider.authKind}
+          />
+          <SettingsTag className="tabular-nums">
+            {copy.enabledModelsCount(models.length)}
+          </SettingsTag>
+          <ProtocolBadge
+            protocol={provider.protocol}
+            apiBase={provider.apiBase}
+          />
+        </>
+      }
+      actionsPinned={headerProbeState.kind === "loading"}
+      actions={
+        <>
           {models.length > 0 && (
             <IconButton
               ariaLabel={copy.checkService}
@@ -280,154 +248,149 @@ export function ProviderCard({
             onEdit={onEditProvider}
             onDelete={onDeleteProvider}
           />
-        </div>
-      </div>
-      <ProbeErrorLine
-        state={headerProbeState}
-        action={providerProbeAction}
-        className="px-4 pb-3"
-      />
-      {open && (
-        <div className="border-t border-line/70 bg-app px-2.5 py-2">
-          <div className="space-y-2 pl-8 pr-1">
-            {providerEditor}
-            {expanded && (
-              <>
-                {keyMissing && <ErrorLine message={copy.keyNeedsResave} />}
+        </>
+      }
+      notice={
+        <ProbeErrorLine
+          state={headerProbeState}
+          action={providerProbeAction}
+          className="px-4 pb-3"
+        />
+      }
+      bodyClassName="py-2"
+    >
+      <div className="space-y-2 pl-8 pr-1">
+        {providerEditor}
+        {expanded && (
+          <>
+            {keyMissing && <ErrorLine message={copy.keyNeedsResave} />}
 
-                {models.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-                    <span className="text-ui-tertiary text-ink-muted">
-                      {copy.enabledFromProvider}
-                    </span>
-                    {models.map((model) => (
-                      <span
-                        key={model.id}
-                        className="inline-flex max-w-[200px] shrink-0 truncate rounded-sm bg-ink-muted/10 px-1.5 py-px font-mono text-ui-label leading-4 text-ink-muted/85"
-                        title={model.model}
-                      >
-                        {modelDisplayParts(model).title}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center gap-1.5 rounded-sm border border-line/60 bg-surface px-2 py-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="px-1.5 text-ink-muted/80 hover:text-ink"
-                    disabled={!canFetchModels}
-                    onClick={onFetchModels}
-                    leadingIcon={
-                      modelProbeState.kind === "loading" &&
-                      modelProbeState.action === "model-list" ? (
-                        <span className="spin">
-                          <CircleNotch size={12} weight="thin" />
-                        </span>
-                      ) : (
-                        <ListMagnifyingGlass size={12} weight="thin" />
-                      )
-                    }
+            {models.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+                <span className="text-ui-tertiary text-ink-muted">
+                  {copy.enabledFromProvider}
+                </span>
+                {models.map((model) => (
+                  <span
+                    key={model.id}
+                    className="inline-flex max-w-[200px] shrink-0 truncate rounded-sm bg-ink-muted/10 px-1.5 py-px font-mono text-ui-label leading-4 text-ink-muted/85"
+                    title={model.model}
                   >
-                    {copy.fetchModelList}
-                  </Button>
-                  <InlineProbeStatus
-                    state={modelProbeState}
-                    action="model-list"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="px-1.5 text-ink-muted/80 hover:text-ink"
-                    disabled={keyMissing || saving}
-                    onClick={onStartModelDraft}
-                    leadingIcon={<Plus size={12} weight="bold" />}
-                  >
-                    {copy.addManually}
-                  </Button>
-                </div>
-                {modelDraft && !modelDraft.id && (
-                  <ModelDraftEditor
-                    draft={modelDraft}
-                    protocol={provider.protocol}
-                    authKind={provider.authKind}
-                    saving={saving}
-                    keyMissing={keyMissing}
-                    modelProbeState={modelProbeState}
-                    allModelCount={allModelCount}
-                    onChange={onChangeModelDraft}
-                    onCancel={onCancelModelDraft}
-                    onTest={() => onTestModelDraft(modelDraft)}
-                    onSave={() => onSaveModelDraft(modelDraft)}
-                  />
-                )}
-                <ProbeErrorLine state={modelProbeState} action="model-list" />
-                {shouldShowManualModelHint && (
-                  <InfoLine message={copy.modelListManualFallback} />
-                )}
-
-                {modelOptions.length > 0 && (
-                  <div className="space-y-1.5 pt-0.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-ui-secondary font-medium text-ink">
-                        {copy.availableModels}
-                      </div>
-                      <div className="relative w-full max-w-[260px]">
-                        <MagnifyingGlass
-                          size={12}
-                          weight="thin"
-                          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted"
-                        />
-                        <input
-                          value={modelFilter}
-                          onChange={(e) => onSetModelFilter(e.target.value)}
-                          placeholder={copy.filterModels}
-                          spellCheck={false}
-                          className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-ui-meta text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
-                        />
-                      </div>
-                    </div>
-                    <ScrollFade maxHeightClass="max-h-[260px]">
-                      <div className="divide-y divide-line">
-                        {visibleOptions.length === 0 && (
-                          <EmptyRow text={copy.noMatchingModels} />
-                        )}
-                        {visibleOptions.map((option) => {
-                          const enabledModel = enabledModelsByName.get(option);
-                          return (
-                            <DetectedModelRow
-                              key={option}
-                              modelName={option}
-                              enabled={!!enabledModel}
-                              canRemove={
-                                !!enabledModel &&
-                                enabledModel.id !== defaultModelId
-                              }
-                              saving={saving}
-                              onEnable={() => onEnableDetectedModel(option)}
-                              onRemove={() =>
-                                enabledModel &&
-                                onRemoveDetectedModel(enabledModel)
-                              }
-                            />
-                          );
-                        })}
-                      </div>
-                    </ScrollFade>
-                    {filteredOptions.length > visibleOptions.length && (
-                      <div className="text-ui-tertiary text-ink-muted">
-                        {copy.visibleOptionsHint(visibleOptions.length)}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
+                    {modelDisplayParts(model).title}
+                  </span>
+                ))}
+              </div>
             )}
-          </div>
-        </div>
-      )}
-    </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 rounded-sm border border-line/60 bg-surface px-2 py-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-1.5 text-ink-muted/80 hover:text-ink"
+                disabled={!canFetchModels}
+                onClick={onFetchModels}
+                leadingIcon={
+                  modelProbeState.kind === "loading" &&
+                  modelProbeState.action === "model-list" ? (
+                    <span className="spin">
+                      <CircleNotch size={12} weight="thin" />
+                    </span>
+                  ) : (
+                    <ListMagnifyingGlass size={12} weight="thin" />
+                  )
+                }
+              >
+                {copy.fetchModelList}
+              </Button>
+              <InlineProbeStatus state={modelProbeState} action="model-list" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-1.5 text-ink-muted/80 hover:text-ink"
+                disabled={keyMissing || saving}
+                onClick={onStartModelDraft}
+                leadingIcon={<Plus size={12} weight="bold" />}
+              >
+                {copy.addManually}
+              </Button>
+            </div>
+            {modelDraft && !modelDraft.id && (
+              <ModelDraftEditor
+                draft={modelDraft}
+                protocol={provider.protocol}
+                authKind={provider.authKind}
+                saving={saving}
+                keyMissing={keyMissing}
+                modelProbeState={modelProbeState}
+                allModelCount={allModelCount}
+                onChange={onChangeModelDraft}
+                onCancel={onCancelModelDraft}
+                onTest={() => onTestModelDraft(modelDraft)}
+                onSave={() => onSaveModelDraft(modelDraft)}
+              />
+            )}
+            <ProbeErrorLine state={modelProbeState} action="model-list" />
+            {shouldShowManualModelHint && (
+              <InfoLine message={copy.modelListManualFallback} />
+            )}
+
+            {modelOptions.length > 0 && (
+              <div className="space-y-1.5 pt-0.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-ui-secondary font-medium text-ink">
+                    {copy.availableModels}
+                  </div>
+                  <div className="relative w-full max-w-[260px]">
+                    <MagnifyingGlass
+                      size={12}
+                      weight="thin"
+                      className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted"
+                    />
+                    <input
+                      value={modelFilter}
+                      onChange={(e) => onSetModelFilter(e.target.value)}
+                      placeholder={copy.filterModels}
+                      spellCheck={false}
+                      className="w-full rounded-sm border border-line bg-surface py-1.5 pl-7 pr-2.5 text-ui-meta text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
+                    />
+                  </div>
+                </div>
+                <ScrollFade maxHeightClass="max-h-[260px]">
+                  <div className="divide-y divide-line">
+                    {visibleOptions.length === 0 && (
+                      <EmptyRow text={copy.noMatchingModels} />
+                    )}
+                    {visibleOptions.map((option) => {
+                      const enabledModel = enabledModelsByName.get(option);
+                      return (
+                        <DetectedModelRow
+                          key={option}
+                          modelName={option}
+                          enabled={!!enabledModel}
+                          canRemove={
+                            !!enabledModel && enabledModel.id !== defaultModelId
+                          }
+                          saving={saving}
+                          onEnable={() => onEnableDetectedModel(option)}
+                          onRemove={() =>
+                            enabledModel && onRemoveDetectedModel(enabledModel)
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                </ScrollFade>
+                {filteredOptions.length > visibleOptions.length && (
+                  <div className="text-ui-tertiary text-ink-muted">
+                    {copy.visibleOptionsHint(visibleOptions.length)}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </SettingsDisclosureCard>
   );
 }
 

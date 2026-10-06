@@ -19,7 +19,6 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowDown,
   ArrowUp,
-  CheckCircle,
   CircleNotch,
   DotsSixVertical,
   DotsThreeVertical,
@@ -30,9 +29,11 @@ import {
 import { useState } from "react";
 
 import { Button, IconButton } from "@/components/ui/button";
+import { SettingsTag } from "@/components/screens/settings/settings-badges";
 import { SettingsSectionLabel } from "@/components/screens/settings/settings-ui";
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useCopy } from "@/lib/i18n";
+import { useCopy, useLanguage } from "@/lib/i18n";
+import { isChineseLanguage } from "@/lib/language";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
 import type {
@@ -225,13 +226,19 @@ function ModelScopeHint({
 }: {
   copy: ReturnType<typeof useCopy>["settings"]["models"];
 }) {
+  const latinEyebrow = !isChineseLanguage(useLanguage());
   return (
     <TooltipLabel
       align="start"
       contentClassName="max-w-[300px] p-2.5 text-left leading-normal"
       text={
         <>
-          <div className="text-ui-label font-semibold uppercase tracking-[0.06em] text-ink">
+          <div
+            className={cn(
+              "text-ui-label font-semibold text-ink",
+              latinEyebrow && "uppercase tracking-[0.06em]",
+            )}
+          >
             {copy.sessionModelScopeTitle}
           </div>
           <div className="mt-1 text-ui-tertiary leading-4 text-ink-soft">
@@ -411,10 +418,7 @@ function ConfiguredModelRow({
               {model.providerDisplayName}
             </span>
             {isDefault && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-brand/15 bg-brand-soft px-1.5 py-px text-ui-micro leading-4 text-brand-strong">
-                <CheckCircle size={10} weight="fill" />
-                {copy.defaultModel}
-              </span>
+              <SettingsTag tone="brand">{copy.defaultModel}</SettingsTag>
             )}
             {/* No reasoning-effort chip on the row (2026-09-22): the
                 composer pill is where the effective tier is read and

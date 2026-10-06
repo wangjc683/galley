@@ -4,7 +4,6 @@ import {
   Eye,
   EyeSlash,
   ListMagnifyingGlass,
-  ArrowSquareOut,
   PlugsConnected,
   Plus,
   SignIn,
@@ -12,7 +11,6 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
 import { ManagedModelProviderPicker } from "@/components/managed-models/ManagedModelProviderPicker";
@@ -31,6 +29,7 @@ import type { CodexDeviceLoginStart } from "@/lib/managed-models";
 import { cn } from "@/lib/utils";
 import type { ManagedModelProtocol } from "@/types/managed-models";
 
+import { ExternalLinkIcon, ExternalTextLink } from "../external-link";
 import {
   InfoLine,
   InlineProbeStatus,
@@ -240,7 +239,7 @@ export function ProviderEditor({
                       size="sm"
                       disabled={probeState.kind === "loading"}
                       onClick={onCodexOpenLoginPage}
-                      leadingIcon={<ArrowSquareOut size={12} weight="thin" />}
+                      leadingIcon={<ExternalLinkIcon />}
                     >
                       {copy.openChatGPTLoginPage}
                     </Button>
@@ -351,10 +350,13 @@ export function ProviderEditor({
                       preset's key console is likely the wrong place. */}
                   {selectedPreset.apiKeyUrl &&
                     form.apiBase.trim() === selectedPreset.apiBase && (
-                      <ApiKeyPageLink
-                        label={copy.getApiKey}
-                        url={selectedPreset.apiKeyUrl}
-                      />
+                      <ExternalTextLink
+                        href={selectedPreset.apiKeyUrl}
+                        tone="muted"
+                        className="text-ui-tertiary"
+                      >
+                        {copy.getApiKey}
+                      </ExternalTextLink>
                     )}
                 </span>
               }
@@ -518,22 +520,5 @@ export function ProviderEditor({
         )}
       </div>
     </div>
-  );
-}
-
-function ApiKeyPageLink({ label, url }: { label: string; url: string }) {
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void openUrl(url).catch((e: unknown) => {
-          console.warn("[settings] open api key page failed.", e);
-        });
-      }}
-      className="inline-flex items-center gap-1 rounded-sm text-ui-tertiary text-ink-muted hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
-    >
-      {label}
-      <ArrowSquareOut size={10} weight="thin" />
-    </button>
   );
 }

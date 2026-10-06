@@ -1,3 +1,10 @@
+/**
+ * How long a "Copied" confirmation (check icon / swapped label) stays
+ * up before reverting. One value so every copy affordance in Settings
+ * settles at the same pace; matches the conversation copy buttons.
+ */
+export const COPY_FEEDBACK_MS = 1500;
+
 export async function copyTextToClipboard(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     try {

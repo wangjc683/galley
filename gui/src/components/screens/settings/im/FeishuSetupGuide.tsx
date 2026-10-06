@@ -2,9 +2,10 @@ import { CaretDown, CaretRight, ChatCircleText, Check, Copy } from "@phosphor-ic
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { COPY_FEEDBACK_MS, copyTextToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
+import { ExternalLinkIcon } from "../external-link";
 import type {
   FeishuSetupStep,
   FeishuSetupStepPart,
@@ -61,7 +62,7 @@ export function FeishuSetupGuide({
       }
       permissionsTimerRef.current = window.setTimeout(
         () => setPermissionsCopied(false),
-        1400,
+        COPY_FEEDBACK_MS,
       );
     } catch (error) {
       console.warn("[FeishuSetupGuide] copy permissions failed", error);
@@ -101,7 +102,8 @@ export function FeishuSetupGuide({
               variant="secondary"
               size="sm"
               disabled={openDisabled}
-              leadingIcon={<ChatCircleText size={13} />}
+              leadingIcon={<ChatCircleText size={13} weight="thin" />}
+              trailingIcon={<ExternalLinkIcon />}
               onClick={onOpenConsole}
             >
               {imCopy.openFeishuConsole}

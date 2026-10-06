@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { useLanguage } from "@/lib/i18n";
+import { isChineseLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
 
 export function SettingsPanelHeader({
@@ -32,10 +34,20 @@ export function SettingsPanelHeader({
 }
 
 export function SettingsSectionLabel({ children }: { children: ReactNode }) {
+  // Uppercase + letter-spacing is an English-UI eyebrow treatment only
+  // (2026-10-07). In the Chinese UI it does nothing for Han characters
+  // except spread them apart, and it forces embedded Latin words into
+  // caps (「将随 Bug 报告附上」 rendered as "BUG").
+  const latinEyebrow = !isChineseLanguage(useLanguage());
   return (
     // tabular-nums: keeps digits even if a label ever interpolates a
     // live count.
-    <div className="text-ui-label font-semibold uppercase tracking-[0.08em] tabular-nums text-ink-muted">
+    <div
+      className={cn(
+        "text-ui-label font-semibold tabular-nums text-ink-muted",
+        latinEyebrow && "uppercase tracking-[0.08em]",
+      )}
+    >
       {children}
     </div>
   );

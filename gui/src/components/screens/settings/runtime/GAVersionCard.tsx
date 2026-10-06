@@ -1,8 +1,8 @@
 import { CheckCircle, Info } from "@phosphor-icons/react";
 
+import { SettingsStatusBadge } from "@/components/screens/settings/settings-badges";
 import { SettingsFieldLabel } from "@/components/screens/settings/settings-ui";
 import { useCopy } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 export function GAVersionCard({
   gaCommit,
@@ -32,29 +32,19 @@ export function GAVersionCard({
         <div className="mt-1 flex items-center gap-2 font-mono text-ui-meta text-ink-soft">
           <span className="text-ink-muted">{copy.verifiedVersion}</span>
           <span className="select-text">{baselineShort}</span>
-          <span
-            className={cn(
-              "ml-1 inline-flex items-center gap-1 rounded-sm px-1.5 py-px text-ui-micro not-italic",
-              isMatched
-                ? "bg-success/[var(--opacity-soft)] text-success"
-                : "bg-hover text-ink-muted",
-            )}
+          {/* Self-updated is information, not a fault: the note below
+              says what it means, so the badge stays neutral. font-sans
+              because the row is mono and the label is prose. */}
+          <SettingsStatusBadge
+            tone={isMatched ? "success" : "neutral"}
+            icon={isMatched ? CheckCircle : Info}
+            className="ml-1 font-sans"
           >
-            {isMatched ? (
-              <>
-                <CheckCircle size={11} weight="fill" />
-                {copy.aligned}
-              </>
-            ) : (
-              <>
-                <Info size={11} weight="bold" />
-                {copy.selfUpdated}
-              </>
-            )}
-          </span>
+            {isMatched ? copy.aligned : copy.selfUpdated}
+          </SettingsStatusBadge>
         </div>
       )}
-      <p className="mt-1.5 text-ui-tertiary leading-[1.55] text-ink-muted">
+      <p className="mt-1.5 text-ui-tertiary leading-secondary text-ink-muted">
         {copy.commitCompatibilityNote}
       </p>
     </div>

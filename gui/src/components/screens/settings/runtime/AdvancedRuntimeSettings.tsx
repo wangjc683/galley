@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 
+import { SettingsDisclosureList } from "@/components/screens/settings/settings-disclosure";
 import { SettingsSectionLabel } from "@/components/screens/settings/settings-ui";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -35,9 +36,9 @@ export function AdvancedRuntimeSettings({
   return (
     <div>
       <SettingsSectionLabel>{copy.more}</SettingsSectionLabel>
-      <div
+      <SettingsDisclosureList
         className={cn(
-          "mt-2 divide-y divide-line overflow-hidden rounded-sm border border-line bg-surface",
+          "mt-2",
           // The activation pulse targets this bordered container (the
           // row headers have no border of their own and overflow-hidden
           // would clip a row-level shadow), so the acknowledgement
@@ -62,7 +63,7 @@ export function AdvancedRuntimeSettings({
         </ExternalRuntimeAccess>
 
         {managedDiagnosticsSlot}
-      </div>
+      </SettingsDisclosureList>
     </div>
   );
 }

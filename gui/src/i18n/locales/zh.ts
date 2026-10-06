@@ -301,12 +301,12 @@ export const zhCopy = {
     },
     configureModels: "配置模型",
     bundledNeedsModel: "内置内核还没有可用模型",
-    openModelsForBundled: "打开 Models 为内置内核配置模型",
+    openModelsForBundled: "打开模型设置，为内置内核配置模型",
     usingExternalGA: "使用你接入的 GenericAgent",
     usingExternalGAAria: "正在使用外部 GA",
     connectExternalGA: "接入外部 GA",
     chooseExistingGAFolder: "选择已有的 GenericAgent 目录",
-    openRuntimeForExternal: "打开 Runtime 接入外部 GA",
+    openRuntimeForExternal: "打开运行环境设置，接入外部 GA",
     updateAvailableBadge: "新版本",
     updateDownloadingBadge: "新版本 · 下载中",
     updateReadyBadge: "新版本 · 就绪",
@@ -408,7 +408,7 @@ export const zhCopy = {
     runDemoTitle: "新建一条对话，让 Galley 打开浏览器搜索天气",
     demoPrompt:
       "请打开百度，搜索今天的天气，并告诉我结果。不要用代码或外部 API 查询。",
-    tabSubtitle: "让 Galley 读取和操作你的浏览器，并沿用你的登录态。",
+    tabSubtitle: "让 Galley 读取和操作你的浏览器，并沿用你的登录态",
     openChromeTestPage: "Chrome",
     openEdgeTestPage: "Edge",
   },
@@ -594,14 +594,22 @@ export const zhCopy = {
   },
   settings: {
     title: "设置",
+    // label: English tab name, the sidebar sub-label (term anchor) in the
+    // Chinese UI. helper: sidebar primary label. title: page header,
+    // the same Chinese name as the sidebar (2026-10-07). Feedback and
+    // About headers use their own copy (feedback.title / the wordmark).
     tabs: {
-      general: { label: "General", helper: "通用" },
-      runtime: { label: "Runtime", helper: "运行环境" },
-      models: { label: "Models", helper: "模型" },
-      agent: { label: "Agent", helper: "智能体接入" },
-      im: { label: "Channels", helper: "聊天软件" },
-      browser: { label: "Browser Control", helper: "浏览器控制" },
-      shortcuts: { label: "Shortcuts", helper: "快捷键" },
+      general: { label: "General", helper: "通用", title: "通用" },
+      runtime: { label: "Runtime", helper: "运行环境", title: "运行环境" },
+      models: { label: "Models", helper: "模型", title: "模型" },
+      agent: { label: "Agent", helper: "智能体接入", title: "智能体接入" },
+      im: { label: "Channels", helper: "聊天软件", title: "聊天软件" },
+      browser: {
+        label: "Browser Control",
+        helper: "浏览器控制",
+        title: "浏览器控制",
+      },
+      shortcuts: { label: "Shortcuts", helper: "快捷键", title: "快捷键" },
       feedback: { label: "Feedback", helper: "报告问题" },
       about: { label: "About", helper: "关于" },
     },
@@ -644,7 +652,7 @@ export const zhCopy = {
     },
     runtime: {
       subtitle: "Galley 的运行环境",
-      runtimeMode: "Runtime Mode",
+      runtimeMode: "运行模式",
       bundledGA: "内置内核",
       recommended: "推荐",
       active: "正在使用",
@@ -703,15 +711,15 @@ export const zhCopy = {
       notGenerated: "未生成",
     },
     models: {
-      subtitle: "为 Galley 配置模型提供商和模型",
+      subtitle: "为 Galley 配置模型服务商和模型",
       externalNotice:
         "当前使用外部 GA。这里的模型只用于内置内核，不影响外部 GA。",
-      noProviders: "还没有模型提供商。",
+      noProviders: "还没有模型服务商。",
       addProvider: "添加",
-      addProviderAria: "添加模型提供商",
+      addProviderAria: "添加模型服务商",
       editProvider: "编辑配置",
-      provider: "模型提供商",
-      chooseProvider: "选择提供商",
+      provider: "模型服务商",
+      chooseProvider: "选择服务商",
       openaiPresetDescription: "官方 API",
       anthropicPresetDescription: "官方 API",
       customPresetLabel: "自定义",
@@ -756,7 +764,7 @@ export const zhCopy = {
         "没有读到模型列表也可以继续，手动填写模型名后保存即可。",
       selectedModelOutsideList: (model: string) =>
         `当前会保存 ${model}。它不在刚读到的列表里，也可以作为手动模型继续使用。`,
-      providerName: "提供商显示名称",
+      providerName: "服务商显示名称",
       providerNamePlaceholder: "可自定义；方便在列表中识别",
       leaveKeyBlank: "密钥留空会继续使用已保存的 Key",
       leaveExistingKey: "留空表示不修改现有 Key",
@@ -794,10 +802,10 @@ export const zhCopy = {
       displayName: "显示名称",
       displayNamePlaceholder: "可选；默认使用模型名",
       filterModels: "筛选模型",
-      closeProviderEditor: "关闭模型提供商编辑",
+      closeProviderEditor: "关闭模型服务商编辑",
       closeModelEditor: "关闭模型编辑",
-      editProviderAria: "编辑模型提供商",
-      deleteProviderAria: "删除模型提供商",
+      editProviderAria: "编辑模型服务商",
+      deleteProviderAria: "删除模型服务商",
       editProviderAction: "编辑",
       deleteProviderAction: "删除",
       editModel: "编辑模型",
@@ -826,7 +834,7 @@ export const zhCopy = {
       saveService: "保存服务",
       saveAndEnableModel: "保存并启用模型",
       providerCreatedToastMessage:
-        "已接入模型提供商，并启用 1 个模型；可以继续在这个 Provider 下添加模型。",
+        "已接入模型服务商，并启用 1 个模型；可以继续在这个服务商下添加模型。",
       check: "检查",
       checkService: "检查服务",
       keyNeedsResave: "这个服务的密钥需要重新保存。",
@@ -897,30 +905,30 @@ export const zhCopy = {
       connectionUsable: "连接可用",
       modelUsable: "模型可用",
       connectionUsableCanSave: "连接可用，可以继续保存",
-      deleteProviderDialogTitle: "删除模型提供商？",
+      deleteProviderDialogTitle: "删除模型服务商？",
       deleteProviderDialogBody: (name: string, modelCount: number) =>
         modelCount > 0
           ? `这会删除 ${name}，同时移除 ${modelCount} 个已启用模型，并删除 Galley 本地保存的 API Key。`
           : `这会删除 ${name}，并删除 Galley 本地保存的 API Key。`,
-      deleteProviderDialogAction: "删除提供商",
+      deleteProviderDialogAction: "删除服务商",
       cannotUndo: "此操作无法撤销。",
     },
     shortcuts: {
       subtitle: "键盘快捷键",
-      navigation: "Navigation",
+      navigation: "导航",
       openCommandPalette: "打开命令面板",
       newConversation: "新建对话",
       openSettings: "打开设置",
       composer: "输入框",
       sendMessage: "发送消息",
       newline: "换行（不发送）",
-      conversation: "Conversation",
+      conversation: "对话",
       jumpQuestion: "跳到上 / 下一条提问",
       fontSizeStep: "放大 / 缩小对话字号",
       fontSizeReset: "恢复标准字号",
       nativeEditingMac: "焦点在输入框时不生效（macOS 文本编辑原生快捷键保留）",
       nativeEditing: "焦点在输入框时不生效（保留原生文本编辑快捷键）",
-      overlays: "Overlays",
+      overlays: "浮层",
       closeOverlay: "关闭当前浮层或退出编辑状态",
       moveList: "在命令面板 / 列表中上下选择",
       enterSubmenu: "在命令面板中进入二级菜单",
@@ -942,7 +950,7 @@ export const zhCopy = {
     about: {
       subtitle: "开源的本地 Agent 工作台",
       version: "版本",
-      links: "Links",
+      links: "链接",
       origin:
         "Galley 最初是 GenericAgent 的 workbench；名字前两个字母 GA，是对它的致意。",
       gaKernelDetail: (commit: string, date?: string) =>
@@ -961,7 +969,7 @@ export const zhCopy = {
       discoveryFile: "Discovery file",
       discoveryDescription:
         "Galley 启动时把 CLI 的绝对路径写进这个文件。Galley Supervisor SOP 第一步读它来定位 galley。",
-      agentSop: "Galley Supervisor SOP",
+      agentSop: "Supervisor SOP",
       sopDescription: "复制给你的 Agent，让它学会用 Galley 调度 sessions。",
       sopCapabilities: [
         "继续现有 session",
@@ -1072,7 +1080,7 @@ export const zhCopy = {
           ],
         },
         {
-          title: "Galley Settings · 保存凭证",
+          title: "Galley 设置 · 保存凭证",
           steps: [
             {
               parts: [
@@ -1093,7 +1101,7 @@ export const zhCopy = {
           ],
         },
         {
-          title: "Galley Settings · 启动服务",
+          title: "Galley 设置 · 启动服务",
           steps: [
             {
               parts: [
@@ -1300,7 +1308,7 @@ export const zhCopy = {
       staleConfigBody: "模型配置已更新，重启后新回复会使用最新配置。",
       openModels: "先去配置模型",
       modelRequired:
-        "Channels 会使用 Galley 已配置的模型。接入前，需要先在 Models 里配置一个可用模型。",
+        "Channels 会使用 Galley 已配置的模型。接入前，需要先在 设置 → 模型 里配置一个可用模型。",
       feishuBindWaitingTitle: "等待绑定使用者",
       feishuBindWaitingLead: "在飞书私聊中向机器人发送配对码：",
       feishuBindWaitingAfterCode:
@@ -1632,13 +1640,13 @@ export const zhCopy = {
     sendFailed: "发送失败",
     stopFailed: "停止指令未送达 Agent，请重试",
     managedModelsLoadFailed:
-      "模型配置读取失败，已保留当前界面。打开 Settings → Models 可重试。",
+      "模型配置读取失败，已保留当前界面。打开 设置 → 模型 可重试。",
     bridgeCrashed: "Bridge 进程崩溃",
     bridgeFailed: "Bridge 启动失败",
     externalMyKeyImportFailed: (moduleName: string | null) =>
       moduleName
-        ? `外部 GA 的 mykey.py 依赖 ${moduleName}，但当前 Python 没有这个包。请在 Settings → Runtime 跑 Health Check，或切到你的 GA venv。`
-        : "外部 GA 的 mykey.py 导入失败。请在 Settings → Runtime 跑 Health Check，或切到你的 GA venv。",
+        ? `外部 GA 的 mykey.py 依赖 ${moduleName}，但当前 Python 没有这个包。请在 设置 → 运行环境 跑 Health Check，或切到你的 GA venv。`
+        : "外部 GA 的 mykey.py 导入失败。请在 设置 → 运行环境 跑 Health Check，或切到你的 GA venv。",
     llmConfig: {
       title: "模型配置可能有问题",
       brief: "首次发送失败，通常是 API key 或配置问题。",
@@ -1647,7 +1655,7 @@ export const zhCopy = {
     },
     network: {
       title: "网络无法连接",
-      brief: "请求未能到达模型提供商，可能是超时或 DNS 问题。",
+      brief: "请求未能到达模型服务商，可能是超时或 DNS 问题。",
     },
     quota: {
       title: "API 配额耗尽",
@@ -1658,10 +1666,10 @@ export const zhCopy = {
     copiedDetails: "Copied",
     switchLLM: "切换模型",
     managedModelUnavailable:
-      "内置内核没有可用模型。在 Models 添加模型，或重填 API Key。",
+      "内置内核没有可用模型。在 设置 → 模型 添加模型，或重填 API Key。",
     managedRuntimeInvalid: "Galley 内置运行时不完整。请重新安装或更新 Galley。",
     gaPathInvalid:
-      "接入的 GenericAgent 路径不可用。到 Settings → Runtime 重选 GA 目录。",
+      "接入的 GenericAgent 路径不可用。到 设置 → 运行环境 重选 GA 目录。",
   },
   toasts: {
     conversationUpdated: "对话已更新",
@@ -1858,7 +1866,7 @@ export const zhCopy = {
     restart: "重启并更新",
     retry: "重试",
     manualDownload: "手动下载",
-    diagnosticPrefix: "诊断",
+    diagnosticPrefix: "诊断：",
     checking: "正在检查",
     devNoChannel: "Dev 构建未连接更新通道",
     upToDate: "已是最新版本",

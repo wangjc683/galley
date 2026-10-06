@@ -96,7 +96,7 @@ export function SettingsShortcuts() {
   return (
     <div className="space-y-7">
       <SettingsPanelHeader
-        title={copy.settings.tabs.shortcuts.label}
+        title={copy.settings.tabs.shortcuts.title}
         subtitle={copy.settings.shortcuts.subtitle}
       />
 

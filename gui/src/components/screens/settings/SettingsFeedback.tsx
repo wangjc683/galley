@@ -1,4 +1,4 @@
-import { ArrowSquareOut, Check, Copy } from "@phosphor-icons/react";
+import { Check, Copy } from "@phosphor-icons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useRef, useState } from "react";
@@ -8,9 +8,12 @@ import {
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
 import { Button } from "@/components/ui/button";
+import { COPY_FEEDBACK_MS, copyTextToClipboard } from "@/lib/clipboard";
 import { useCopy } from "@/lib/i18n";
 import { usePrefsStore } from "@/stores/prefs";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
+
+import { ExternalLinkIcon } from "./external-link";
 
 /**
  * Settings → 报告问题 — the in-app feedback path (issue #15, scoped).
@@ -145,10 +148,13 @@ export function SettingsFeedback({
 
   const copyEnv = async () => {
     try {
-      await navigator.clipboard.writeText(payload);
+      await copyTextToClipboard(payload);
       setCopied(true);
       if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
-      copiedTimer.current = window.setTimeout(() => setCopied(false), 1500);
+      copiedTimer.current = window.setTimeout(
+        () => setCopied(false),
+        COPY_FEEDBACK_MS,
+      );
     } catch (e) {
       console.warn("[SettingsFeedback] env copy failed", e);
     }
@@ -169,7 +175,7 @@ export function SettingsFeedback({
           <Button
             variant="secondary"
             size="sm"
-            trailingIcon={<ArrowSquareOut size={14} weight="thin" />}
+            trailingIcon={<ExternalLinkIcon />}
             onClick={openBugForm}
           >
             {feedbackCopy.reportBug}
@@ -177,7 +183,7 @@ export function SettingsFeedback({
           <Button
             variant="secondary"
             size="sm"
-            trailingIcon={<ArrowSquareOut size={14} weight="thin" />}
+            trailingIcon={<ExternalLinkIcon />}
             onClick={openFeatureForm}
           >
             {feedbackCopy.requestFeature}

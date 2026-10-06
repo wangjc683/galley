@@ -16,6 +16,8 @@ import {
   type ImSupervisorStatus,
 } from "@/lib/im-supervisor";
 
+import { SettingsInput } from "../models/ModelPrimitives";
+
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelCard } from "./ChannelCard";
 import { ChannelErrorBlock } from "./ChannelErrorBlock";
@@ -226,35 +228,23 @@ export function FeishuCard({
               openDisabled={busy}
               credentialsForm={
                 <div className="grid gap-3 md:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
-                      {imCopy.feishuAppIdLabel}
-                    </span>
-                    <input
-                      value={appId}
-                      onChange={(e) => setAppId(e.target.value)}
-                      placeholder={imCopy.feishuAppIdPlaceholder}
-                      spellCheck={false}
-                      className="w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
-                      {imCopy.feishuAppSecretLabel}
-                    </span>
-                    <input
-                      type="password"
-                      value={appSecret}
-                      onChange={(e) => setAppSecret(e.target.value)}
-                      placeholder={
-                        hasSavedSecretForApp
-                          ? imCopy.feishuSecretSavedPlaceholder
-                          : imCopy.feishuAppSecretPlaceholder
-                      }
-                      spellCheck={false}
-                      className="w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
-                    />
-                  </label>
+                  <SettingsInput
+                    label={imCopy.feishuAppIdLabel}
+                    value={appId}
+                    onChange={setAppId}
+                    placeholder={imCopy.feishuAppIdPlaceholder}
+                  />
+                  <SettingsInput
+                    label={imCopy.feishuAppSecretLabel}
+                    type="password"
+                    value={appSecret}
+                    onChange={setAppSecret}
+                    placeholder={
+                      hasSavedSecretForApp
+                        ? imCopy.feishuSecretSavedPlaceholder
+                        : imCopy.feishuAppSecretPlaceholder
+                    }
+                  />
                 </div>
               }
               saveAction={
@@ -270,9 +260,9 @@ export function FeishuCard({
                     disabled={busy || !canSaveCredentials}
                     leadingIcon={
                       localBusy === "save" ? (
-                        <CircleNotch size={13} className="spin" />
+                        <CircleNotch size={13} weight="thin" className="spin" />
                       ) : (
-                        <Check size={13} />
+                        <Check size={13} weight="thin" />
                       )
                     }
                     onClick={saveCredentials}
@@ -297,9 +287,9 @@ export function FeishuCard({
                     disabled={busy || !canStartService}
                     leadingIcon={
                       localBusy === "connect" ? (
-                        <CircleNotch size={13} className="spin" />
+                        <CircleNotch size={13} weight="thin" className="spin" />
                       ) : (
-                        <Power size={13} />
+                        <Power size={13} weight="thin" />
                       )
                     }
                     onClick={connect}

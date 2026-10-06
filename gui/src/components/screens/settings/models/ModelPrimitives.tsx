@@ -1,6 +1,10 @@
 import { CheckCircle, Info, WarningCircle } from "@phosphor-icons/react";
-import type { KeyboardEvent, ReactNode } from "react";
+import { useId, type KeyboardEvent, type ReactNode } from "react";
 
+import {
+  SettingsStatusBadge,
+  SettingsTag,
+} from "@/components/screens/settings/settings-badges";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCopy } from "@/lib/i18n";
@@ -31,19 +35,24 @@ export function SettingsInput({
   reserveTrailing?: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
+  const inputId = useId();
   return (
     <div>
       {/* Field-tier label (same tier as SettingsFieldLabel): these
           inputs always render inside nested editors, where page-level
           uppercase eyebrows are off-limits. */}
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <label className="block text-ui-meta font-medium text-ink-soft">
+        <label
+          htmlFor={inputId}
+          className="block text-ui-meta font-medium text-ink-soft"
+        >
           {label}
         </label>
         {labelTrailing}
       </div>
       <div className="relative">
         <input
+          id={inputId}
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -181,26 +190,15 @@ export function CredentialBadge({
   if (authKind === "none") {
     // No-auth endpoint: a neutral marker, not a warning — nothing is
     // missing, the provider was deliberately saved without a key.
-    return (
-      <span className="inline-flex shrink-0 rounded-sm border border-line bg-surface/80 px-1.5 py-px text-ui-micro text-ink-muted">
-        {copy.noAuthBadge}
-      </span>
-    );
+    return <SettingsTag>{copy.noAuthBadge}</SettingsTag>;
   }
   if (status === "present") return null;
-  if (status === "unknown") {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-warning/[var(--opacity-soft)] px-1.5 py-px text-ui-micro text-warning">
-        <WarningCircle size={10} weight="fill" />
-        {copy.keyStatusUnknownShort}
-      </span>
-    );
-  }
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-warning/[var(--opacity-soft)] px-1.5 py-px text-ui-micro text-warning">
-      <WarningCircle size={10} weight="fill" />
-      {copy.keyNeedsResaveShort}
-    </span>
+    <SettingsStatusBadge tone="warning" icon={WarningCircle}>
+      {status === "unknown"
+        ? copy.keyStatusUnknownShort
+        : copy.keyNeedsResaveShort}
+    </SettingsStatusBadge>
   );
 }
 
@@ -215,7 +213,7 @@ export function ProtocolBadge({
   const label = managedModelProtocolLabel(copy, protocol);
   return (
     <span
-      className="shrink-0 text-ui-micro leading-4 text-ink-muted/55"
+      className="shrink-0 text-ui-tertiary leading-4 text-ink-muted/55"
       title={`${label} · ${apiBase}`}
     >
       {label}

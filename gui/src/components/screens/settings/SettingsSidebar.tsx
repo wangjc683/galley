@@ -31,9 +31,10 @@ export function SettingsSidebar({
 }) {
   const copy = useCopy();
   // Chinese UI: the Chinese name is the primary label and the English
-  // tab name drops to a secondary term anchor (it stays the identifier
-  // that page headers and "Settings → Runtime" copy refer to). English
-  // UI shows the English name alone. Community feedback 2026-09-16:
+  // tab name drops to a secondary term anchor (since 2026-10-07 page
+  // headers and "设置 → 运行环境" copy use the Chinese name too, so this
+  // sub-label is the only place it shows). English UI shows the English
+  // name alone. Community feedback 2026-09-16:
   // the previous English-primary / 10.5px-Chinese-annotation layout was
   // unreadable for users who don't read English.
   const chinesePrimary = isChineseLanguage(resolvedLanguage);
@@ -44,65 +45,77 @@ export function SettingsSidebar({
       : { label: entry.label, subLabel: undefined };
   return (
     <nav className="flex w-[180px] shrink-0 flex-col border-r border-line bg-app py-3">
-      <div>
-        <SettingsTabButton
-          active={tab === "general"}
-          Icon={Gear}
-          {...labelsFor(tabCopy.general)}
-          onClick={() => onChange("general")}
-        />
-        <SettingsTabButton
-          active={tab === "runtime"}
-          Icon={Cpu}
-          {...labelsFor(tabCopy.runtime)}
-          onClick={() => onChange("runtime")}
-        />
-        <SettingsTabButton
-          active={tab === "models"}
-          Icon={Key}
-          {...labelsFor(tabCopy.models)}
-          onClick={() => onChange("models")}
-        />
-        <SettingsTabButton
-          active={tab === "integration"}
-          Icon={PlugsConnected}
-          {...labelsFor(tabCopy.agent)}
-          onClick={() => onChange("integration")}
-        />
-        {showImTab && (
+      {/* Three groups, separated by space only (no rules): everyday setup
+          (general / models / browser / channels), agent and engine
+          plumbing (agent access / runtime / shortcuts), then meta
+          (feedback / about). Browser and Channels exist only on the
+          managed runtime; general and models keep group one non-empty
+          in external mode, so no gap ever renders without tabs. */}
+      <div className="flex flex-col gap-3">
+        <div>
           <SettingsTabButton
-            active={tab === "im"}
-            Icon={ChatCircleText}
-            {...labelsFor(tabCopy.im)}
-            onClick={() => onChange("im")}
+            active={tab === "general"}
+            Icon={Gear}
+            {...labelsFor(tabCopy.general)}
+            onClick={() => onChange("general")}
           />
-        )}
-        {showBrowserTab && (
           <SettingsTabButton
-            active={tab === "browser"}
-            Icon={PuzzlePiece}
-            {...labelsFor(tabCopy.browser)}
-            onClick={() => onChange("browser")}
+            active={tab === "models"}
+            Icon={Key}
+            {...labelsFor(tabCopy.models)}
+            onClick={() => onChange("models")}
           />
-        )}
-        <SettingsTabButton
-          active={tab === "shortcuts"}
-          Icon={Keyboard}
-          {...labelsFor(tabCopy.shortcuts)}
-          onClick={() => onChange("shortcuts")}
-        />
-        <SettingsTabButton
-          active={tab === "feedback"}
-          Icon={Megaphone}
-          {...labelsFor(tabCopy.feedback)}
-          onClick={() => onChange("feedback")}
-        />
-        <SettingsTabButton
-          active={tab === "about"}
-          Icon={Info}
-          {...labelsFor(tabCopy.about)}
-          onClick={() => onChange("about")}
-        />
+          {showBrowserTab && (
+            <SettingsTabButton
+              active={tab === "browser"}
+              Icon={PuzzlePiece}
+              {...labelsFor(tabCopy.browser)}
+              onClick={() => onChange("browser")}
+            />
+          )}
+          {showImTab && (
+            <SettingsTabButton
+              active={tab === "im"}
+              Icon={ChatCircleText}
+              {...labelsFor(tabCopy.im)}
+              onClick={() => onChange("im")}
+            />
+          )}
+        </div>
+        <div>
+          <SettingsTabButton
+            active={tab === "integration"}
+            Icon={PlugsConnected}
+            {...labelsFor(tabCopy.agent)}
+            onClick={() => onChange("integration")}
+          />
+          <SettingsTabButton
+            active={tab === "runtime"}
+            Icon={Cpu}
+            {...labelsFor(tabCopy.runtime)}
+            onClick={() => onChange("runtime")}
+          />
+          <SettingsTabButton
+            active={tab === "shortcuts"}
+            Icon={Keyboard}
+            {...labelsFor(tabCopy.shortcuts)}
+            onClick={() => onChange("shortcuts")}
+          />
+        </div>
+        <div>
+          <SettingsTabButton
+            active={tab === "feedback"}
+            Icon={Megaphone}
+            {...labelsFor(tabCopy.feedback)}
+            onClick={() => onChange("feedback")}
+          />
+          <SettingsTabButton
+            active={tab === "about"}
+            Icon={Info}
+            {...labelsFor(tabCopy.about)}
+            onClick={() => onChange("about")}
+          />
+        </div>
       </div>
     </nav>
   );
@@ -128,7 +141,7 @@ function SettingsTabButton({
       className={cn(
         "group relative flex w-full items-center gap-3 px-4 text-left",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40",
-        subLabel ? "h-[50px]" : "h-8 text-ui-compact",
+        subLabel ? "h-[50px]" : "h-8",
         active ? "bg-hover" : "hover:bg-hover",
       )}
     >

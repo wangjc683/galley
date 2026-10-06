@@ -1,6 +1,6 @@
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
 
+import { SettingsDisclosureCard } from "@/components/screens/settings/settings-disclosure";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useCopy } from "@/lib/i18n";
@@ -122,6 +122,7 @@ export function ModelAdvancedOptionsPanel({
     <OptionsFold
       open={open}
       onOpenChange={onOpenChange}
+      surface="inset"
       title={copy.advancedConfig}
       rightText={
         overridden > 0 ? copy.overrideCount(overridden) : copy.followDefaults
@@ -369,47 +370,46 @@ function LayeredNumberGrid({
   );
 }
 
+/**
+ * The advanced-config fold, in both homes: the Models page's
+ * 「默认高级配置」 section (`card`, on the Settings canvas) and the model
+ * editor's 「高级配置」 (`inset`, nested in the already-raised editor —
+ * same header and caret, no fill of its own; see SettingsDisclosureCard).
+ */
 function OptionsFold({
   open,
   onOpenChange,
+  surface = "card",
   title,
   rightText,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  surface?: "card" | "inset";
   title: string;
   rightText: string;
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-sm border border-line/70 bg-elevated/35">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => onOpenChange(!open)}
-        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-elevated/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {open ? (
-            <CaretDown size={12} weight="bold" className="text-ink-muted" />
-          ) : (
-            <CaretRight size={12} weight="bold" className="text-ink-muted" />
-          )}
-          <span className="text-ui-secondary font-medium text-ink">
+    <SettingsDisclosureCard
+      open={open}
+      onToggle={() => onOpenChange(!open)}
+      surface={surface}
+      header={
+        <>
+          <span className="min-w-0 truncate text-ui-compact font-medium text-ink">
             {title}
           </span>
-        </span>
-        <span className="shrink-0 text-ui-tertiary tabular-nums text-ink-muted">
-          {rightText}
-        </span>
-      </button>
-      {open && (
-        <div className="space-y-3 border-t border-line px-3 py-3">
-          {children}
-        </div>
-      )}
-    </div>
+          <span className="ml-auto shrink-0 text-ui-tertiary tabular-nums text-ink-muted">
+            {rightText}
+          </span>
+        </>
+      }
+      bodyClassName="space-y-3 px-3"
+    >
+      {children}
+    </SettingsDisclosureCard>
   );
 }
 

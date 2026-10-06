@@ -16,7 +16,7 @@ import { AdvancedRuntimeSettings } from "@/components/screens/settings/runtime/A
 import { BuiltinRuntimeCard } from "@/components/screens/settings/runtime/BuiltinRuntimeCard";
 import { GAVersionCard } from "@/components/screens/settings/runtime/GAVersionCard";
 import { HealthCheckSection } from "@/components/screens/settings/runtime/HealthCheckSection";
-import { RuntimeAccordionRow } from "@/components/screens/settings/runtime/RuntimeAccordionRow";
+import { SettingsDisclosureRow } from "@/components/screens/settings/settings-disclosure";
 import type { SettingsRuntimeProps } from "@/components/screens/settings/runtime/types";
 import { Button } from "@/components/ui/button";
 import { isImeCompositionKeydown } from "@/lib/ime";
@@ -129,7 +129,7 @@ export function SettingsRuntime({
   return (
     <div className="space-y-7">
       <SettingsPanelHeader
-        title={copy.settings.tabs.runtime.label}
+        title={copy.settings.tabs.runtime.title}
         subtitle={runtimeCopy.subtitle}
       />
 
@@ -278,9 +278,9 @@ function ManagedRuntimeCard({
           defaultModel ? ` · ${defaultModel.displayName}` : ""
         }`;
   return (
-    <RuntimeAccordionRow
+    <SettingsDisclosureRow
       title={copy.advancedDiagnostics}
-      expanded={expanded}
+      open={expanded}
       onToggle={() => setExpanded((v) => !v)}
     >
       <div>
@@ -327,10 +327,10 @@ function ManagedRuntimeCard({
           }
         />
       </div>
-      <p className="mt-3 text-ui-tertiary leading-[1.55] text-ink-muted">
+      <p className="mt-3 text-ui-tertiary leading-secondary text-ink-muted">
         {copy.diagnosticsNote}
       </p>
-    </RuntimeAccordionRow>
+    </SettingsDisclosureRow>
   );
 }
 

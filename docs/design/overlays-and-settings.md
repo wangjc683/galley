@@ -173,21 +173,37 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 
 ```text
 通用          / General
-运行环境      / Runtime
 模型          / Models
-智能体接入    / Agent
-聊天软件      / Channels
 浏览器控制    / Browser Control   （仅 managed 运行时显示）
+聊天软件      / Channels          （仅 managed 运行时显示）
+
+智能体接入    / Agent
+运行环境      / Runtime
 快捷键        / Shortcuts
+
 报告问题      / Feedback
 关于          / About
 ```
+
+顺序与分组（2026-10-07 JC 裁）：按使用频率排，三组之间只留约 12px 间距、
+不画分隔线——日常用的四项在前，进阶三项居中，支持两项垫底。浏览器控制是
+头号能力（45% 会话在用），运行环境在内置模式下只剩一张卡和三个低频行，
+所以两者对调了位置。外置模式下第一组只剩通用、模型，不留空位；选中的
+tab 被隐藏时仍退回运行环境（那里能切回内置内核，也就解释了 tab 为何消失）。
 
 视觉上不要真的使用斜杠；主标签和副标签上下两行显示。中文主标签
 14px medium ink-soft（active 为 ink）；英文副标签 `text-ui-tertiary`
 11.5px normal ink-muted，只做术语锚点，active 态也不抬权重。两行之间
 保留明确间距。该双层标签只用于 Settings 左侧导航，正文不做大面积
-双语；页头标题仍是英文 tab 名 + 中文副标题。汉字不得用 10.5px
+双语。页头标题跟随界面语言：中文 UI 用中文 tab 名（与侧栏主标签同字），
+英文 UI 用英文 tab 名，副标题照旧（2026-10-07 起；此前中文 UI 的页头也是
+英文大字，与已翻成中文主的侧栏主次倒挂）。中文文案里提到设置页写
+「设置 → 运行环境」，不写「Settings → Runtime」。
+
+页面级节标题 `SettingsSectionLabel` 的 uppercase + `tracking-[0.08em]`
+只在英文 UI 生效；中文 UI 的节标题是中文、不加字距（2026-10-07 起；此前
+中文 UI 里有 RUNTIME MODE、NAVIGATION、LINKS 等英文大写眉标，与同页中文
+眉标混排，`uppercase` 还把「Bug」写成「BUG」）。汉字不得用 10.5px
 `text-ui-micro`（该 token 是拉丁大写 chip 的），此前的 10.5px + ink-muted
 75% 在浅色模式只有 2.5:1，社区反馈看不清。
 
@@ -235,22 +251,23 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 
 #### Runtime
 
-页面骨架是「Runtime Mode 主区 + 更多 低频组」两段，
+页面骨架是「运行模式（英文 UI：Runtime Mode）主区 + 更多 低频组」两段，
 内置内核是主推路径（产品站位见根 CLAUDE.md），外部 GA 是兼容模式，
 入口整体降级进「更多」。页面不带 Galley 版本行：版本 + 手动检查更新
 只在 About，更新发现与安装由 TopBar 更新指示器承担（2026-07-18 把
 更新控件收进 About，2026-07-21 删掉残留的纯版本行——它不回答
 Runtime tab 的任何问题）。
 
-- **Runtime Mode**：内置内核卡。未激活时 `推荐` badge；激活后换成
-  `正在使用` badge（两者不同时出现——已经在用了还标「推荐」是噪音），
+- **运行模式**：内置内核卡。未激活时 `推荐`（brand `SettingsTag`）；激活后换成
+  `正在使用`（neutral `SettingsTag`，不是状态徽标，见「视觉 → 共享组件」）（两者不同时出现——已经在用了还标「推荐」是噪音），
   detail 行显示当前默认模型（内置模式下用户唯一真正管理的事实），
   而不是复读 badge 的「正在使用内置内核」。未配置模型时右侧 primary
   按钮是「配置模型」，已配置未激活时是「切换到内置内核」。有运行中
   对话时切换禁用并显示原因。
 - **更多**：一个 hairline 分行的带边框容器，三行共用一套行语法——
   整行可点，尾部字形区分行为：caret = 原地展开（手风琴），arrow =
-  跳走（导航）。
+  跳走（导航）。行语法即共享组件 `SettingsDisclosureRow` / `SettingsNavRow`
+  （见下「视觉 → 共享组件」）：行标题 13px（2026-10-07 前是 12.5px），caret 展开时旋转。
   - **设置向导**：导航行，一行短说明（「重新走一遍首次设置，现有对话
     会保留」）；有任务运行时禁用，subtitle 换成禁用原因。
   - **接入外部 GA**：手风琴。外部 GA 激活时头部常驻 `正在使用`
@@ -283,16 +300,16 @@ Runtime tab 的任何问题）。
 
 - Managed / bundled GA 的模型配置入口；attach mode 不读取这里。
 - 支持添加多个模型：`OpenAI-compatible` / `Anthropic-compatible`、API Key、Base URL、模型名、可选显示名。
-- Provider picker 中，`OpenAI` / `Anthropic` 只代表官方 API（副标题「官方 API」）；第三方中转站、兼容接口、本地服务走排在最后的「自定义」（副标题「任意 OpenAI 或 Anthropic 兼容接口」）。自定义卡内用 `SegmentedControl` 选协议（「OpenAI 兼容」/「Anthropic 兼容」，默认前者），字段顺序为协议 → `API 地址` → `API Key` → `模型` → `提供商显示名称`：对自定义来说地址才是定义它的字段，所以排在 Key 前；显示名称留空时取地址的主机（含端口，如 `localhost:11434`），不叫「自定义」。地址不匹配任何预设的已有 Provider，编辑时显示为「自定义」。官方卡的地址仍可改，改了之后与自定义行为一致：新 Provider 第一个模型的预设层按最终地址判定，不再带第一方专属的 `reasoning_effort`。2026-10-01 起（galley#32：卡名与预填让兼容端点用户找不到入口），取代 05-26「官方 API 或 compatible endpoint」的写法。
+- Provider picker 中，`OpenAI` / `Anthropic` 只代表官方 API（副标题「官方 API」）；第三方中转站、兼容接口、本地服务走排在最后的「自定义」（副标题「任意 OpenAI 或 Anthropic 兼容接口」）。自定义卡内用 `SegmentedControl` 选协议（「OpenAI 兼容」/「Anthropic 兼容」，默认前者），字段顺序为协议 → `API 地址` → `API Key` → `模型` → `服务商显示名称`：对自定义来说地址才是定义它的字段，所以排在 Key 前；显示名称留空时取地址的主机（含端口，如 `localhost:11434`），不叫「自定义」。地址不匹配任何预设的已有 Provider，编辑时显示为「自定义」。官方卡的地址仍可改，改了之后与自定义行为一致：新 Provider 第一个模型的预设层按最终地址判定，不再带第一方专属的 `reasoning_effort`。2026-10-01 起（galley#32：卡名与预填让兼容端点用户找不到入口），取代 05-26「官方 API 或 compatible endpoint」的写法。
 - 页面分为主视图和维护区：
   - `我的模型` 是主视图，显示 Galley 当前会使用的模型队列、默认模型和排序。（早期文档名「当前配置模型」已演进为「我的模型」；维护区同期演进为「服务商」。）
   - `我的模型` 的标签行（标题 + `Info` tooltip + 模型数量）放在卡片外，和 `服务商` 的 section 标签同构——卡片只装列表，标签属于页面骨架；配置生效范围放在 `Info` tooltip。标签行下保留一行小字副标题（「按顺序排列，第一个为默认」）：这是「header 不放常驻说明文字」的**有意例外**——顺序 = 切换菜单顺序、第一个 = 默认是不可推断的核心语义，tooltip 藏不起。
   - 模型新增、编辑、排序或设为默认成功后，用短 toast 提醒：新对话立即使用最新配置；如果存在已启用 Channels，toast 带 `重启 Channels` CTA，直接重启已启用 Channel 进程，不要求重新登录。
-  - `我的模型` 行 hover / focus 只做轻底色和排序箭头显性化，提示可操作但不做抬升、缩放或阴影；Provider 名称是**淡墨文字**，紧跟模型名、以「·」相连（2026-09-22 起；此前是灰底 metadata chip，和状态徽标同一容器语法、一行三个盒子太满），默认模型标签保留可见但不做重 Badge——盒子只留给状态。行内**不放推理强度徽标**（2026-09-22 裁决删除；此前 09-08 加的等宽枚举 chip 是为了区分同模型不同强度的两条条目，那个玩法当天已否，分层后强度是可继承的配置项、会话 pill 才是读和改生效值的地方，行徽标只能显示模型层自己的值，会造成两个真相）。一行只有「默认」这一枚状态徽标和一个 Provider chip；某模型是否单独覆盖过强度，进编辑器看折叠头「N 项覆盖」。
-  - `服务商` 是维护区，标题右侧按钮只写 `添加`，accessible label 保留完整的 `添加模型提供商`；`添加` 按钮只在没有任何服务商时用 primary（此时它是当前唯一的下一步），已有配置后降为 secondary。Provider 摘要压成单行，长名称截断，不撑高卡片；协议类型放在模型数量之后，用低权重 metadata chip 显示，不使用明显边框或等宽字体，避免和 Provider 名称、模型数量抢层级。
+  - `我的模型` 行 hover / focus 只做轻底色和排序箭头显性化，提示可操作但不做抬升、缩放或阴影；Provider 名称是**淡墨文字**，紧跟模型名、以「·」相连（2026-09-22 起；此前是灰底 metadata chip，和状态徽标同一容器语法、一行三个盒子太满），默认模型标签保留可见但不做重 Badge——盒子只留给状态（2026-10-07 起是 brand `SettingsTag`，去掉了勾图标）。行内**不放推理强度徽标**（2026-09-22 裁决删除；此前 09-08 加的等宽枚举 chip 是为了区分同模型不同强度的两条条目，那个玩法当天已否，分层后强度是可继承的配置项、会话 pill 才是读和改生效值的地方，行徽标只能显示模型层自己的值，会造成两个真相）。一行只有「默认」这一枚状态徽标和一个 Provider chip；某模型是否单独覆盖过强度，进编辑器看折叠头「N 项覆盖」。
+  - `服务商` 是维护区，标题右侧按钮只写 `添加`，accessible label 保留完整的 `添加模型服务商`；`添加` 按钮只在没有任何服务商时用 primary（此时它是当前唯一的下一步），已有配置后降为 secondary。Provider 摘要压成单行，长名称截断，不撑高卡片；协议类型放在模型数量之后，用低权重 metadata chip 显示，不使用明显边框或等宽字体，避免和 Provider 名称、模型数量抢层级。
   - Provider 卡的 hover 语法必须比主视图安静或同级：轻底色 + caret 显性化，不做抬升、阴影或品牌色 hover——主视图是这个 Tab 视觉上最重的表面，维护区不抢。
-  - Provider 摘要行的正常状态不显示 Key 图标或 `Key 已保存`；只有缺少密钥 / 状态异常时才显示 warning badge。
-  - 新增 Provider 表单贴着 `服务商` 标题区展开，位于 Provider 列表上方；新增表单不重复显示标题，Provider picker 不显示额外 label，placeholder 用 `选择提供商`，关闭按钮与 picker 同行，避免小区域反复出现“模型提供商”或形成空标题区；编辑已接入 Provider 时，编辑表单必须贴着对应 Provider 原地展开，不跳回页面上方。
+  - Provider 摘要行的正常状态不显示 Key 图标或 `Key 已保存`；只有缺少密钥 / 状态异常时才显示 warning badge（`SettingsStatusBadge` warning）；模型数量是 neutral `SettingsTag`，协议名是 11.5px 淡墨文字。
+  - 新增 Provider 表单贴着 `服务商` 标题区展开，位于 Provider 列表上方；新增表单不重复显示标题，Provider picker 不显示额外 label，placeholder 用 `选择服务商`，关闭按钮与 picker 同行，避免小区域反复出现“模型服务商”或形成空标题区；编辑已接入 Provider 时，编辑表单必须贴着对应 Provider 原地展开，不跳回页面上方。
   - 全 Tab 只有一种「正在内联编辑」的表面语法：brand 左边条（3px）+ `bg-elevated`，无阴影。Provider 编辑器和 Model 编辑器共用，不因入口不同改变视觉层级；嵌套表单的字段标签用 field 级标签（非 uppercase），页面级眉标不进入编辑器内部。
   - Provider / Model 的局部编辑表单关闭入口统一用右上角 `X` icon button；不要混用右上角文字「取消」。
   - Provider 展开后才显示模型维护操作；展开时自动读取一次模型列表（有 Key 且无缓存时；Codex 跳过；失败静默降级），`读取模型列表` 按钮保留为手动刷新入口，零模型 Provider 的卡片 header 不再重复放同名按钮。
@@ -301,7 +318,7 @@ Runtime tab 的任何问题）。
   - `可添加模型` 列表里的模型行操作使用低权重 `+ 添加`；已加入配置的模型在同一位置显示 `✓ 已添加`，两者高度和占位保持一致，避免形成一列重按钮。
   - 高级配置自 2026-09-22 起**分层**：`生效 = 预设 ⊕ 默认 ⊕ 模型覆盖 ⊕ 会话（仅推理强度）`。Settings → 模型 页尾新节 `默认高级配置`（`ModelDefaultsPanel`，折叠，头部「使用推荐值 / N 项已自定义」，节标题下一行「未单独设置的模型跟随此默认；每个模型可在编辑器里单独覆盖」）只收六个协议无关键：`reasoning_effort`（档位只给 low / medium / high / xhigh / max 加「由服务商决定」）、`max_retries`、`read_timeout`、`max_retry_after`、`trim_keep_prefix`、`stream`；点击即存，数字框失焦 / 回车才提交，底部「恢复推荐值」。编辑模型里的折叠 `高级配置`（`ModelAdvancedOptionsPanel`，默认关闭）头部写「跟随默认 / N 项覆盖」，字段顺序：推理强度三态行（「跟随默认（high）」/「不设置，由服务商决定」= `null` 墓碑 / 各档位，按协议给完整档位表，Claude 列表含 `max`——内核把 `xhigh` 与 `max` 都映射成最高档，警告忽略的只有 `none` / `minimal`）、五个分层字段、协议方言字段（OpenAI 的 `api_mode`；Anthropic 的 `thinking_type`、`Claude Code 兼容透传`；Codex 不显示 `stream`）。控件显示**生效值**，未覆盖的字段墨色淡一档（与会话 pill 的跟随 / 覆盖同一语法）；偏离规则：改回和基线相同的值即删键，不留残余，旧的「0 / 60 = 删键」哨兵只在默认层保留为「等于出厂不写」。底部两个 ghost 动作：「全部跟随默认」与「设为所有模型的默认」（把本模型的六个分层键写进默认、清空本模型这几项覆盖，其他模型自己的覆盖不动；默认层即时保存，模型自身仍随编辑器保存）。`max_retry_after` 语义不变（服务商 Retry-After 超过它就直接报错而不是干等，出厂 = 内核默认 60 秒；报错文案带服务商要求的实际秒数）。`thinking_budget_tokens` 不开放，因此 `thinking_type` 暂不提供 `enabled`。新增服务商表单不再放推理强度字段（2026-09-08 的一级字段方案被分层取代：全局面板是「设一次」入口、会话 pill 是日常入口，模型层持久覆盖是少数路径），Onboarding 亦无。
   - `reasoning_effort` 的默认语义（2026-08-07，2026-09-22 分层后仍成立）：默认层出厂留空 = 不发送该参数、由服务商决定，文案「由服务商决定」并带 info 说明。三个第一方预设（Codex / OpenAI / Anthropic）在**预设层**显式写 `high`（支持性确定的端点上采质量优先默认）；第三方兼容 / 任意端点预设一律不写——该字段是第一方 API 契约，兼容层实现无保证。用户设了默认层档位就是自己的选择，中转拒收时在该模型上选「不设置，由服务商决定」（墓碑）。存量记录由迁移 042 拆层，逐行生效值不变。
-- 新增 / 编辑 Provider 表单中，`提供商显示名称` 是可选身份字段，不放进折叠的 `更多`；它常驻在连接信息和模型字段之后、保存按钮之前，作为最后一步轻量命名。Onboarding 首次模型配置是例外：2026-07-17 起它与 `API 地址` 一起收进 `高级` 折叠（见 [onboarding-and-cards](./onboarding-and-cards.md) Step 1；「自定义」卡的地址不折叠，名称仍折叠）。
+- 新增 / 编辑 Provider 表单中，`服务商显示名称` 是可选身份字段，不放进折叠的 `更多`；它常驻在连接信息和模型字段之后、保存按钮之前，作为最后一步轻量命名。Onboarding 首次模型配置是例外：2026-07-17 起它与 `API 地址` 一起收进 `高级` 折叠（见 [onboarding-and-cards](./onboarding-and-cards.md) Step 1；「自定义」卡的地址不折叠，名称仍折叠）。
 - Provider 检查成功态使用低权重 inline 文本，不长期占用绿色块；失败态保留说明块并贴近对应 Provider。
 - `我的模型` 行首最左是拖拽把手（`DotsSixVertical`，与排序箭头同一 hover 显性化权重；拖动态只做 `bg-elevated` 实底 + z-index，不抬升、不加阴影，沿用行 hover 规则；把手可聚焦，Space 拿起、方向键移动、Space 放下），其后是 radio 圆点承担默认模型：实心 = 默认，点击空心圆点一键设为默认（移到顶部，tooltip 明写这一等价）；标题旁保留轻量 `默认` badge。行右侧常驻控件收敛为 `↑ ↓ ⋯` 三个——`↑ ↓` 保留为单步 / 键盘路径，长距离移动走拖拽（2026-09-08 起，dnd-kit）；测试 / 移除收进与服务商卡片同语法的 `⋯` 菜单，编辑 = 点击行本身，不再放冗余编辑图标（2026-07-17 改版，此前每行最多 6 个 hover 图标按钮）。
 - API Key 字段只用于保存到本地加密凭据存储；列表正常态不展示凭据状态，只有缺少密钥 / 状态异常时显示提示，诊断可显示 `apiKeyRef` 对应状态但不显示密钥。
@@ -418,7 +435,11 @@ Runtime tab 的任何问题）。
     uppercase、无 tracking），页面级眉标语法不进入卡内。
   - StatusBadge（带边框 + 语义色 + 图标的 chip）是有意比 Runtime tab
     的 badge 语法重一档的分叉：连接状态是 Channels 卡的核心信息，
-    值得这个权重。不要把两处强行统一。
+    值得这个权重。不要把两处强行统一。2026-10-07 起这条分叉落在共享
+    组件上：渠道状态用 `SettingsStatusBadge`，运行环境的「正在使用」用
+    `SettingsTag`（按语义分，见「视觉 → 共享组件」）；Channels 卡的折叠
+    外壳与服务商卡共用 `SettingsDisclosureCard`（展开区 `bg-app`，头部
+    展开时不再加底色）。
   - 四个确认弹窗（微信断开、飞书断开、飞书解绑、重启）共用一个
     shell（`ConfirmActionDialog`），取消键默认聚焦，回车不会误触
     执行。
@@ -479,7 +500,7 @@ Indicator）。
 - 版式：一行陈述正文与等宽字体（Newsreader / 苹方 / 雅黑 / JetBrains Mono）
 - 题词：PI §43（产品论题「意义即用法」）——译文 + 德文原句 + 出处行；
   不加框，与 origin 的 callout 卡片区分（页面上的引文，不是 UI 里的卡片）
-- Links（Phosphor `ArrowSquareOut`）：GitHub / Feedback / GenericAgent 上游 / maker links
+- 链接 / Links（`ExternalLinkIcon`，经 `openExternalUrl` 打开）：GitHub / GenericAgent 上游 / maker links
 - Footer：`由 JC Wang 开发 · MIT License`
 
 连带决策（2026-07-03 当日二审翻案）：曾把空状态题词收敛为仅 `silent`
@@ -492,25 +513,49 @@ Indicator）。
 
 - Copy Supervisor SOP：复制 Galley Agent SOP，不写入 GenericAgent memory。
 - CLI install / path 指引：帮助可信 Agent 找到 `galley` CLI。
-- Agent API reference：链接到 `docs/agent-api.md`，强调 `schemaVersion: 1`。
+- Agent API reference：链接到 `docs/agent-api/README.md`，强调 `schemaVersion`（现行 `2`）。
+- 「高级选项」（discovery file、命令行快捷入口、API 文档）2026-10-07 起装进与运行环境「更多」同一套带边框列表，
+  是其中唯一一行手风琴（此前是一条分隔线下的无容器折叠）。
 
 #### Shortcuts（read-only）
 
-- 四个 group：Navigation / Composer / Conversation / Overlays。Conversation
+- 四个 group：导航 / 输入框 / 对话 / 浮层（英文 UI：Navigation / Composer / Conversation / Overlays；
+  2026-10-07 前中文 UI 只有「输入框」是中文）。对话
   组含跳到上 / 下一条提问与对话字号（`⌘= / ⌘-` 放大缩小、`⌘0` 恢复标准）。
 - 每行：左侧 kbd chip（`bg-surface` + `border-line` + mono）+ action label + 可选 note。
 - 当前只展示，不提供自定义；重绑入口留到未来版本。
 
 ### 视觉
 
-- **Tab list**：每项 32px 高 / 13px Inter / 左侧 16px Phosphor icon
-  - General: `Gear`
-  - Runtime: `Cpu`
-  - Agent: `PlugsConnected`
-  - Shortcuts: `Keyboard`
-  - About: `Info`
+- **Tab list**：180px 宽。中文 UI 每项 50px 高（中文主标签 14px medium + 英文副标签 11.5px），
+  英文 UI 每项 32px 高（14px）；左侧 16px Phosphor icon，thin：
+  通用 `Gear`、模型 `Key`、浏览器控制 `PuzzlePiece`、聊天软件 `ChatCircleText`、
+  智能体接入 `PlugsConnected`、运行环境 `Cpu`、快捷键 `Keyboard`、报告问题 `Megaphone`、关于 `Info`。
+  顺序与三组见上「语言与 Tabs」。
 - 选中态：`hover-tint` 背景 + 左侧 2px charcoal 竖条
-- **主内容区**：内边距 32px / 标题 18px Newsreader medium / 描述 13px Inter muted / 控件之间 24px 垂直间距
+- **主内容区**：`px-8 pb-7`，顶部 `pt-12`（48px 安全区，给浮动关闭按钮让出安静背景，见「Dialog 关闭按钮」）；
+  页头标题 18px sans semibold（只有关于页是 20px Newsreader 字标）、副标题 12.5px muted；
+  各 tab 根节点节间距统一 `space-y-7`（2026-10-07 起，此前通用、模型两页是 `space-y-6`）
+- **共享组件**（`components/screens/settings/`，2026-10-07 横切收口；新内容直接用，不要再手写一份）：
+  - 页头与标签（`settings-ui.tsx`）：`SettingsPanelHeader`、`SettingsSectionLabel`（英文 UI 才 uppercase + 字距）、
+    `SettingsFieldLabel`（展开区内部的字段级标签）。
+  - 徽标两种（`settings-badges.tsx`）：`SettingsStatusBadge`——24px 高、带边框、语义色（success / neutral /
+    warning / error）、带 12px 图标（success 的勾实心，其余 thin），只给**会变化的连接 / 运行状态**
+    （渠道运行状态、更新状态、缺凭证、GA 版本对齐）；`SettingsTag`——无边框、无图标、11.5px，neutral / brand
+    两色，给**静态标记**（「推荐」「默认」、运行环境的「正在使用」、模型数量、无鉴权）。汉字一律不小于 11.5px。
+    分界按语义而不是按页面：运行环境的「正在使用」表示「选中了哪个」、内置模式下几乎常驻，是标签；渠道的
+    「服务已启动」是会变化的运行状态，是状态徽标——07-05「Channels 徽标重一档、不与 Runtime 统一」的旧裁决
+    由这条分界保住（2026-10-07 JC 真机 A/B 定 B）。
+  - 折叠两种（`settings-disclosure.tsx`）：`SettingsDisclosureCard`——独立卡片，caret 在左、展开时旋转 90°，
+    展开后边框加深为 `border-line-strong`、头部不加底色、展开区 `border-t border-line/70 bg-app`；服务商卡、
+    聊天软件卡、默认高级配置共用（模型编辑器里的高级配置用 `inset` 变体：不填底色，避免在抬起的编辑面里下陷）。
+    `SettingsDisclosureList` + `SettingsDisclosureRow` / `SettingsNavRow`——带边框列表里的行，标题 13px medium，
+    caret 在右并旋转，导航行用 arrow；运行环境「更多」、智能体接入「高级选项」共用。卡片头和列表行都可用
+    Tab 键聚焦，鼠标点击不留焦点环。
+  - 外链（`external-link.tsx`）：`ExternalTextLink`（行内文字链接，brand / muted 两色）与 `ExternalLinkIcon`
+    （`ArrowSquareOut` 12px thin，按钮尾部也用它）；一律经 `lib/open-external.ts` 的 `openExternalUrl` 打开。
+  - 复制统一走 `copyTextToClipboard`，「已复制」反馈停留 `COPY_FEEDBACK_MS`（1500ms，`lib/clipboard.ts`）。
+  - 输入框用 `SettingsInput`（`models/ModelPrimitives.tsx`，标签与输入框已用 `htmlFor` 关联）。
 - **Form 控件**：路径 input + 文件夹选择器按钮（Phosphor `FolderOpen`）/ 复选框与 Button 体系跟主界面一致
 - **没有 sticky save button**：所有改动**即时生效 + 自动持久化**（违反"不要让用户思考"），破坏性改动单独 confirm dialog
 

@@ -1,6 +1,5 @@
+import { SettingsNavRow } from "@/components/screens/settings/settings-disclosure";
 import { useCopy } from "@/lib/i18n";
-
-import { RuntimeNavRow } from "./RuntimeAccordionRow";
 
 export function SetupAssistantAccess({
   hasRunningSessions,
@@ -12,7 +11,7 @@ export function SetupAssistantAccess({
   const copy = useCopy().settings.runtime;
   const disabled = hasRunningSessions || !onOpenSetupAssistant;
   return (
-    <RuntimeNavRow
+    <SettingsNavRow
       title={copy.setupAssistant}
       subtitle={
         hasRunningSessions

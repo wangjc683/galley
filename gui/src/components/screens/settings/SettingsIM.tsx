@@ -149,7 +149,7 @@ export function SettingsIM({
   return (
     <div className="space-y-7">
       <SettingsPanelHeader
-        title={copy.settings.tabs.im.label}
+        title={copy.settings.tabs.im.title}
         subtitle={imCopy.subtitle}
       />
 
@@ -192,9 +192,9 @@ export function SettingsIM({
                 disabled={busyAction === "restart"}
                 leadingIcon={
                   busyAction === "restart" ? (
-                    <CircleNotch size={13} className="spin" />
+                    <CircleNotch size={13} weight="thin" className="spin" />
                   ) : (
-                    <ArrowsClockwise size={13} />
+                    <ArrowsClockwise size={13} weight="thin" />
                   )
                 }
                 onClick={() => setConfirmRestartOpen(true)}
@@ -244,9 +244,9 @@ export function SettingsIM({
                 disabled={busyAction === "restart"}
                 leadingIcon={
                   busyAction === "restart" ? (
-                    <CircleNotch size={13} className="spin" />
+                    <CircleNotch size={13} weight="thin" className="spin" />
                   ) : (
-                    <ArrowsClockwise size={13} />
+                    <ArrowsClockwise size={13} weight="thin" />
                   )
                 }
                 onClick={() => setConfirmRestartOpen(true)}
@@ -271,7 +271,7 @@ export function SettingsIM({
             body={imCopy.restartChannelsDialogBody}
             confirmLabel={copy.toasts.restartChannels}
             confirmVariant="warning"
-            confirmIcon={<ArrowsClockwise size={13} />}
+            confirmIcon={<ArrowsClockwise size={13} weight="thin" />}
             onConfirm={() => {
               setConfirmRestartOpen(false);
               void restartChannels();

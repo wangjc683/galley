@@ -16,7 +16,7 @@ import {
 import type { LanguagePreference, ResolvedLanguage } from "@/lib/language";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
 
-import { ErrorLine } from "./models/ModelPrimitives";
+import { ErrorLine, InfoLine } from "./models/ModelPrimitives";
 
 /**
  * General — desktop-app preferences: appearance, language, launch at
@@ -185,9 +185,9 @@ export function SettingsGeneral({
     resolvedLanguage === "zh-CN" ? copy.language.zh : copy.language.en;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <SettingsPanelHeader
-        title={copy.settings.tabs.general.label}
+        title={copy.settings.tabs.general.title}
         subtitle={generalCopy.subtitle}
       />
 
@@ -351,7 +351,10 @@ export function SettingsGeneral({
           </PreferenceRow>
           {anyNotifyEnabled && notifyPermissionMissing && (
             <div className="px-3 py-2.5">
-              <ErrorLine message={generalCopy.notificationsPermissionHint} />
+              {/* Guidance, not a failure: the user just needs to grant
+                  permission in System Settings, so it reads as a neutral
+                  notice. The autostart line above is a real error. */}
+              <InfoLine message={generalCopy.notificationsPermissionHint} />
             </div>
           )}
         </div>

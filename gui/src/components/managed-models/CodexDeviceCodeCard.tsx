@@ -2,7 +2,7 @@ import { Check, Copy } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { COPY_FEEDBACK_MS, copyTextToClipboard } from "@/lib/clipboard";
 import type { AppCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +37,10 @@ export function CodexDeviceCodeCard({
       if (copyTimerRef.current !== null) {
         window.clearTimeout(copyTimerRef.current);
       }
-      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1400);
+      copyTimerRef.current = window.setTimeout(
+        () => setCopied(false),
+        COPY_FEEDBACK_MS,
+      );
     } catch (error) {
       console.warn("[CodexDeviceCodeCard] copy failed", error);
     }

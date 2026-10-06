@@ -1,6 +1,5 @@
 import {
   ArrowClockwise,
-  ArrowSquareOut,
   CheckCircle,
   CircleNotch,
   Info,
@@ -8,11 +7,17 @@ import {
 } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
+import {
+  SettingsStatusBadge,
+  type SettingsStatusTone,
+} from "@/components/screens/settings/settings-badges";
 import { Button } from "@/components/ui/button";
 import { downloadPercent } from "@/lib/app-update";
 import { useCopy, type AppCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAppUpdateStore, type AppUpdateStatus } from "@/stores/app-update";
+
+import { ExternalTextLink } from "./external-link";
 
 interface SettingsUpdateControlProps {
   hasRunningSessions: boolean;
@@ -83,16 +88,18 @@ function UpdateActionControl({
   const Icon = view.Icon;
   if (view.kind === "status") {
     return (
-      <span
+      <SettingsStatusBadge
         role="status"
+        tone={view.tone}
+        icon={Icon}
+        spin={view.spin}
         className={cn(
-          "inline-flex h-6 cursor-default select-none items-center justify-center gap-1 rounded-sm border px-2 text-ui-tertiary leading-none",
-          view.className,
+          "cursor-default select-none",
+          view.tabularNums && "tabular-nums",
         )}
       >
-        <Icon size={12} weight="thin" className={cn(view.spin && "spin")} />
-        <span>{view.label}</span>
-      </span>
+        {view.label}
+      </SettingsStatusBadge>
     );
   }
 
@@ -140,20 +147,18 @@ function UpdateInlineStatus({
       <span className="min-w-0">{view.message}</span>
       {status.kind === "error" && (
         <>
-          <a
+          <ExternalTextLink
             href={status.manualDownloadUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 text-brand-strong underline decoration-brand-strong/35 underline-offset-[3px] hover:decoration-brand-strong"
+            className="shrink-0"
           >
-            <span>{copy.updates.manualDownload}</span>
-            <ArrowSquareOut size={10} weight="thin" />
-          </a>
+            {copy.updates.manualDownload}
+          </ExternalTextLink>
           <code
-            className="min-w-0 max-w-[min(34rem,100%)] truncate rounded-sm border border-line bg-surface px-1.5 py-0.5 font-mono text-ui-micro leading-tight text-ink-muted select-text"
+            className="min-w-0 max-w-[min(34rem,100%)] truncate rounded-sm border border-line bg-surface px-1.5 py-0.5 font-mono text-ui-tertiary leading-tight text-ink-muted select-text"
             title={status.detail}
           >
-            {copy.updates.diagnosticPrefix}: {status.detail}
+            {copy.updates.diagnosticPrefix}
+            {status.detail}
           </code>
         </>
       )}
@@ -177,8 +182,11 @@ function updateActionView(
       kind: "status";
       label: string;
       Icon: typeof ArrowClockwise;
-      className: string;
+      // In-flight states (checking / preparing / installing) read
+      // neutral + spinner, the same grammar as a channel starting up.
+      tone: SettingsStatusTone;
       spin?: boolean;
+      tabularNums?: boolean;
     } {
   switch (status.kind) {
     case "checking":
@@ -186,7 +194,7 @@ function updateActionView(
         kind: "status",
         label: copy.updates.checking,
         Icon: CircleNotch,
-        className: "border-line bg-elevated text-ink-muted",
+        tone: "neutral",
         spin: true,
       };
     case "available":
@@ -196,9 +204,7 @@ function updateActionView(
           ? copy.updates.foundAfterTasks
           : copy.updates.preparing,
         Icon: hasRunningSessions ? Warning : CircleNotch,
-        className: hasRunningSessions
-          ? "border-warning/30 bg-warning/[var(--opacity-soft)] text-warning"
-          : "border-line bg-elevated text-brand-strong",
+        tone: hasRunningSessions ? "warning" : "neutral",
         spin: !hasRunningSessions,
       };
     case "downloading": {
@@ -216,8 +222,9 @@ function updateActionView(
         kind: "status",
         label,
         Icon: CircleNotch,
-        className: "border-line bg-elevated text-brand-strong tabular-nums",
+        tone: "neutral",
         spin: true,
+        tabularNums: true,
       };
     }
     case "ready":

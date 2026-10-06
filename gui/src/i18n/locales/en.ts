@@ -426,7 +426,7 @@ export const enCopy: AppCopy = {
     demoPrompt:
       "Open Baidu, search for today's weather, and tell me the result. Do not use code or external APIs.",
     tabSubtitle:
-      "Let Galley read and operate your browser, using your existing login state.",
+      "Let Galley read and operate your browser, using your existing login state",
     openChromeTestPage: "Chrome",
     openEdgeTestPage: "Edge",
   },
@@ -613,13 +613,17 @@ export const enCopy: AppCopy = {
   settings: {
     title: "Settings",
     tabs: {
-      general: { label: "General", helper: "通用" },
-      runtime: { label: "Runtime", helper: "运行环境" },
-      models: { label: "Models", helper: "模型" },
-      agent: { label: "Agent", helper: "智能体接入" },
-      im: { label: "Channels", helper: "Messaging" },
-      browser: { label: "Browser Control", helper: "Browser control" },
-      shortcuts: { label: "Shortcuts", helper: "快捷键" },
+      general: { label: "General", helper: "通用", title: "General" },
+      runtime: { label: "Runtime", helper: "运行环境", title: "Runtime" },
+      models: { label: "Models", helper: "模型", title: "Models" },
+      agent: { label: "Agent", helper: "智能体接入", title: "Agent" },
+      im: { label: "Channels", helper: "Messaging", title: "Channels" },
+      browser: {
+        label: "Browser Control",
+        helper: "Browser control",
+        title: "Browser Control",
+      },
+      shortcuts: { label: "Shortcuts", helper: "快捷键", title: "Shortcuts" },
       feedback: { label: "Feedback", helper: "报告问题" },
       about: { label: "About", helper: "关于" },
     },
@@ -1924,7 +1928,7 @@ export const enCopy: AppCopy = {
     restart: "Restart to update",
     retry: "Retry",
     manualDownload: "Manual download",
-    diagnosticPrefix: "Diagnostic",
+    diagnosticPrefix: "Diagnostic: ",
     checking: "Checking",
     devNoChannel: "Dev build is not connected to an update channel.",
     upToDate: "Up to date",

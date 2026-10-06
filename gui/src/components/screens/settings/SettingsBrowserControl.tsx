@@ -1,5 +1,4 @@
 import {
-  ArrowSquareOut,
   ArrowsClockwise,
   CaretRight,
   CheckCircle,
@@ -16,6 +15,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { SettingsPanelHeader } from "@/components/screens/settings/settings-ui";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { COPY_FEEDBACK_MS, copyTextToClipboard } from "@/lib/clipboard";
 import {
   openBrowserControlExtensionsPage,
   openBrowserControlTestPage,
@@ -24,6 +24,8 @@ import {
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useBrowserControlStore } from "@/stores/browser-control";
+
+import { ExternalLinkIcon } from "./external-link";
 
 type BrowserControlCopy = ReturnType<typeof useCopy>["browserControl"];
 
@@ -144,9 +146,9 @@ function useOpenActions(copy: BrowserControlCopy) {
   const copyPath = async () => {
     const currentLayout = layout ?? (await ensureLayout());
     if (!currentLayout) return;
-    await navigator.clipboard.writeText(currentLayout.extensionDir);
+    await copyTextToClipboard(currentLayout.extensionDir);
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+    window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
   };
 
   return {
@@ -197,7 +199,7 @@ export function SettingsBrowserControl({
   return (
     <div className="space-y-7">
       <SettingsPanelHeader
-        title={fullCopy.settings.tabs.browser.label}
+        title={fullCopy.settings.tabs.browser.title}
         subtitle={copy.tabSubtitle}
       />
 
@@ -307,7 +309,7 @@ function TestPageActions({
           variant="secondary"
           size="sm"
           onClick={() => void openTestPage("chrome")}
-          leadingIcon={<ArrowSquareOut size={13} weight="thin" />}
+          leadingIcon={<ExternalLinkIcon />}
         >
           {copy.openChromeTestPage}
         </Button>
@@ -315,7 +317,7 @@ function TestPageActions({
           variant="secondary"
           size="sm"
           onClick={() => void openTestPage("edge")}
-          leadingIcon={<ArrowSquareOut size={13} weight="thin" />}
+          leadingIcon={<ExternalLinkIcon />}
         >
           {copy.openEdgeTestPage}
         </Button>
@@ -384,7 +386,7 @@ function SetupGuide({
             variant="secondary"
             size="sm"
             onClick={() => void open.openExtensionsPage(browser)}
-            leadingIcon={<ArrowSquareOut size={13} weight="thin" />}
+            leadingIcon={<ExternalLinkIcon />}
           >
             {copy.openExtensions}
           </Button>
@@ -468,7 +470,7 @@ function SetupGuide({
               variant="secondary"
               size="sm"
               onClick={() => void open.openTestPage(browser)}
-              leadingIcon={<ArrowSquareOut size={13} weight="thin" />}
+              leadingIcon={<ExternalLinkIcon />}
             >
               {copy.openTestPage}
             </Button>
@@ -542,7 +544,7 @@ function SetupGuide({
                   className="-ml-2 h-6 px-2 text-ui-meta"
                   title={copy.openGuideTitle}
                   onClick={() => void open.openGuide()}
-                  trailingIcon={<ArrowSquareOut size={12} weight="thin" />}
+                  trailingIcon={<ExternalLinkIcon />}
                 >
                   {copy.openGuide}
                 </Button>

@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 
+import { SettingsTag } from "@/components/screens/settings/settings-badges";
+import { SettingsDisclosureRow } from "@/components/screens/settings/settings-disclosure";
 import { useCopy } from "@/lib/i18n";
 import type { RuntimeKind } from "@/types/session";
 
 import { ExternalRuntimeCard } from "./ExternalRuntimeCard";
-import { RuntimeAccordionRow } from "./RuntimeAccordionRow";
 
 export function ExternalRuntimeAccess({
   expanded,
@@ -26,16 +27,10 @@ export function ExternalRuntimeAccess({
   const copy = useCopy().settings.runtime;
   const active = value === "external";
   return (
-    <RuntimeAccordionRow
+    <SettingsDisclosureRow
       title={copy.connectExternalGA}
-      badge={
-        active ? (
-          <span className="rounded-sm bg-hover px-1.5 py-px text-ui-micro text-ink-muted">
-            {copy.active}
-          </span>
-        ) : undefined
-      }
-      expanded={expanded}
+      badge={active ? <SettingsTag>{copy.active}</SettingsTag> : undefined}
+      open={expanded}
       onToggle={onToggleExpanded}
     >
       <div className="space-y-5">
@@ -47,6 +42,6 @@ export function ExternalRuntimeAccess({
         />
         {children}
       </div>
-    </RuntimeAccordionRow>
+    </SettingsDisclosureRow>
   );
 }

@@ -1,5 +1,3 @@
-import { ArrowSquareOut } from "@phosphor-icons/react";
-
 import {
   SettingsPanelHeader,
   SettingsSectionLabel,
@@ -8,7 +6,10 @@ import { SettingsUpdateControl } from "@/components/screens/settings/SettingsUpd
 import { RELEASE_DATE } from "@/lib/build-info";
 import { EPIGRAPHS } from "@/lib/epigraphs";
 import { useCopy, useLanguage } from "@/lib/i18n";
+import { openExternalUrl } from "@/lib/open-external";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
+
+import { ExternalLinkIcon } from "./external-link";
 
 interface SettingsAboutProps {
   workbenchVersion: string;
@@ -167,7 +168,7 @@ export function SettingsAbout({
             </p>
             <p
               lang="de"
-              className="m-0 mt-1 text-[11.5px] italic leading-[1.5] text-ink-muted/70"
+              className="m-0 mt-1 text-[11.5px] italic leading-notice text-ink-muted/70"
             >
               {colophonEpigraph.de}
             </p>
@@ -195,17 +196,20 @@ function ExternalLink({
       href={href}
       target="_blank"
       rel="noreferrer"
+      onClick={(event) => {
+        // Same open path as every other Settings link (see
+        // ExternalTextLink); preventDefault keeps the opener plugin's
+        // own _blank hook from firing a second open.
+        event.preventDefault();
+        openExternalUrl(href);
+      }}
       className="group grid min-w-0 grid-cols-[120px_1fr_18px] items-baseline gap-3 rounded-sm px-1 py-1 text-ui-compact hover:bg-hover"
     >
       <span className="font-medium text-ink">{label}</span>
       <span className="min-w-0 text-ink-muted group-hover:text-ink-soft">
         {detail}
       </span>
-      <ArrowSquareOut
-        size={11}
-        weight="thin"
-        className="shrink-0 translate-y-px text-ink-muted group-hover:text-brand-strong"
-      />
+      <ExternalLinkIcon className="translate-y-px text-ink-muted group-hover:text-brand-strong" />
     </a>
   );
 }

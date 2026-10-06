@@ -228,9 +228,9 @@ export function SettingsModels({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <SettingsPanelHeader
-        title={copy.settings.tabs.models.label}
+        title={copy.settings.tabs.models.title}
         subtitle={modelCopy.subtitle}
       />
 

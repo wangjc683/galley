@@ -85,41 +85,54 @@ English
 
 中文版 Settings 左侧 tab 使用**中文主标签 + 小号英文副标签**（2026-09-16
 翻转；此前是英文主 + 中文小字注释）。中文是用户选定的界面语言，导航必须
-中文优先；英文保留为术语锚点——它仍是页头标题和「Settings → Runtime」
-这类文案所指的标识符，用户在侧栏能找到对应词。
+中文优先；英文保留为术语锚点，只出现在侧栏副标签里。页头标题和
+「设置 → 运行环境」这类跨页引用在中文版一律用中文 tab 名（2026-10-07
+JC 裁；此前页头标题和「Settings → Runtime」用英文名，副标签是它们的
+对应词）。
 
 ```text
 通用
 General
 
-运行环境
-Runtime
-
 模型
 Models
 
-智能体接入
-Agent
+浏览器控制
+Browser Control
 
 聊天软件
 Channels
 
+智能体接入
+Agent
+
+运行环境
+Runtime
+
 快捷键
 Shortcuts
+
+报告问题
+Feedback
 
 关于
 About
 ```
 
+顺序与分组（三组之间留间距）以 [overlays-and-settings §9](./design/overlays-and-settings.md)
+「语言与 Tabs」为准（2026-10-07 按使用频率重排）。
+
 英文版只显示英文主标签：
 
 ```text
 General
-Runtime
 Models
-Agent
+Browser Control
 Channels
+Agent
+Runtime
 Shortcuts
+Feedback
 About
 ```
 
@@ -132,10 +145,29 @@ About
 - 两行之间保留明确间距，避免像同一行信息的换行。
 - 中文版每个 tab 都带英文副标签，不要只给部分 tab 补。
 - 不要写成 `运行环境 / Runtime`。斜杠会让 UI 像术语表。
-- 双层标签只用于 Settings 左侧导航，不扩散到正文；页头标题仍用英文
-  tab 名 + 中文副标题，本轮不动。
+- 双层标签只用于 Settings 左侧导航，不扩散到正文和页头。
 - 汉字不用 `text-ui-micro`（10.5px）：该 token 是给拉丁大写 chip 的，
   汉字在这个字号上会丢笔画，且此前的 ink-muted 75% 在浅色下只有 2.5:1。
+
+页头与跨页引用（2026-10-07 JC 裁）：
+
+- 中文版页头标题用中文 tab 名，与侧栏主标签同字：通用、运行环境、模型、
+  智能体接入、聊天软件、浏览器控制、快捷键、报告问题。关于页保留 `Galley`
+  字标。英文版页头不变，仍是英文 tab 名（报告问题页是 `Report an Issue`）。
+- 页头标题取 locale 的 `settings.tabs.*.title`（报告问题页取
+  `settings.feedback.title`），不在各页按语言分支。
+- 中文文案引用设置页时写「设置 → 模型」「设置 → 运行环境」，与页头同名；
+  不写 `Settings → Models`。
+- 页头副标题句末不加句号，中英文版都一样。
+
+Section 标签（2026-10-07 JC 裁）：
+
+- 中文版 Settings 的 section 标签（`SettingsSectionLabel`）用中文，不强制
+  大写、不加字距。全大写 + 字距的 eyebrow 只是英文版的排印处理：对汉字它
+  只会把字拉散，还会把夹在中文里的拉丁词改成大写（「将随 Bug 报告附上」
+  曾显示成 BUG）。
+- 组件按解析后的界面语言切换这两项，字号、字重、颜色不变；英文版外观不变。
+- 装饰性 section header `PROJECTS` 的例外保留，见「项目与对话」。
 
 ## 中文版英文词边界
 
@@ -153,8 +185,8 @@ About
 | `Agent` | 外部操作者 / 生态角色，保留英文；不要翻成「代理」 |
 | `Supervisor` | `Supervisor SOP` 或 supervisor 集成语境保留 |
 | `SOP` | 保留；必要时用中文短句补语义 |
-| `Runtime` | 模块名保留；正文可以说「运行环境」 |
-| `Channels` | Settings tab / TopBar 入口保留；中文辅助标签用「聊天软件」，正文可说「微信等应用」 |
+| `Runtime` | 只作 Settings 侧栏英文副标签；页头标题、「设置 → 运行环境」引用和正文都说「运行环境」（2026-10-07 起页头同侧栏） |
+| `Channels` | TopBar 入口与渠道状态文案保留（如「Channels 已连接」）；Settings 侧栏主标签和页头标题用「聊天软件」，`Channels` 只作侧栏英文副标签（2026-10-07 起页头同侧栏）；正文可说「微信等应用」 |
 | `Health Check` | 作为流程 / 组件名保留 |
 | `CLI`、`API`、`MCP`、`Socket`、`schemaVersion` | 协议 / 契约词，保留 |
 | `Python` | 保留 |
@@ -172,7 +204,7 @@ About
 | Settings | 设置 |
 | Project | 项目；只有装饰性 section header `PROJECTS` 可以保留英文 |
 | Session / Chat | 对话 |
-| Provider | 提供商 |
+| Provider | 服务商（2026-10-07 JC 裁，此前「提供商」） |
 | Tool call | 工具调用 |
 | Command Palette | 命令面板；`Command Palette` 只保留为搜索 alias |
 | Composer | 输入框，或避免暴露这个词 |
@@ -221,7 +253,7 @@ About
 - `已通知 AI`
 - `AI 回复`
 
-「智能体」只用作中文辅助解释，帮助不懂英文的用户建立概念，例如 Settings tab 辅助标签 `智能体接入`。正文不大面积把 `Agent` 改成「智能体」。
+「智能体」只用作中文辅助解释，帮助不懂英文的用户建立概念，例如 Settings tab 中文标签与页头标题 `智能体接入`。正文不大面积把 `Agent` 改成「智能体」。
 
 ## 中文版待清理区域
 
@@ -248,18 +280,24 @@ About
 
 | 区域 | 方向 |
 |---|---|
-| 左侧 tab | 中文 UI 使用英文主标签 + 中文辅助标签 |
-| Runtime page title | 保留 `Runtime` |
-| Runtime subtitle | `Galley 的运行环境`（2026-07-03 内核规则：managed 语境不出现 GA） |
-| Health Check section | 保留 `Health Check` |
+| 左侧 tab | 中文主标签 + 小号英文副标签（2026-09-16 起） |
+| 页头标题 | 中文 tab 名，与侧栏主标签同字（2026-10-07 起）；关于页保留 `Galley` 字标 |
+| 页头副标题 | 句末不加句号 |
+| Section 标签 | 中文，不强制大写、不加字距（2026-10-07 起） |
+| 通用 subtitle | `外观、语言与应用行为` |
+| 运行环境 subtitle | `Galley 的运行环境`（2026-07-03 内核规则：managed 语境不出现 GA） |
+| 运行环境 section | `运行模式`（此前 `Runtime Mode`） |
+| Health Check 字段标签 | 保留 `Health Check` |
 | Health Check button | `跑一次 Health Check` |
-| Models page title | 保留 `Models` |
-| Models subtitle | `为 Galley 配置模型提供商和模型` |
-| Agent page title | 保留 `Agent` |
-| Agent subtitle | `让 Agent 接管和操作 Galley` |
-| Shortcuts page title | 保留 `Shortcuts` |
-| Shortcuts subtitle | `快捷键设置` |
-| About title | 保留 `Galley` |
+| 模型 subtitle | `为 Galley 配置模型服务商和模型` |
+| 智能体接入 subtitle | `把 Galley 交给本地 Agent 调度` |
+| 智能体接入 section | `Supervisor SOP`（此前 `Galley Supervisor SOP`） |
+| 聊天软件 subtitle | `在聊天软件里和 Galley 对话` |
+| 浏览器控制 subtitle | `让 Galley 读取和操作你的浏览器，并沿用你的登录态` |
+| 快捷键 subtitle | `键盘快捷键` |
+| 快捷键 section | `导航`、`输入框`、`对话`、`浮层`（此前英文 `Navigation` / `Conversation` / `Overlays`） |
+| 报告问题 subtitle | `把 Bug 或建议提交到 GitHub` |
+| 关于 subtitle | `开源的本地 Agent 工作台`；section `链接`（此前 `Links`） |
 
 ### 命令面板
 

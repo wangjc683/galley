@@ -15,6 +15,8 @@ import {
   type TelegramImConfig,
 } from "@/lib/im-supervisor";
 
+import { SettingsInput } from "../models/ModelPrimitives";
+
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelCard } from "./ChannelCard";
 import { ChannelErrorBlock } from "./ChannelErrorBlock";
@@ -211,23 +213,17 @@ export function TelegramCard({
           ) : (
             <>
               <div className="max-w-[460px]">
-                <label className="block">
-                  <span className="mb-1.5 block text-ui-meta font-medium text-ink-soft">
-                    {imCopy.telegramBotTokenLabel}
-                  </span>
-                  <input
-                    type="password"
-                    value={botToken}
-                    onChange={(e) => setBotToken(e.target.value)}
-                    placeholder={
-                      config?.hasBotToken
-                        ? imCopy.telegramTokenSavedPlaceholder
-                        : imCopy.telegramBotTokenPlaceholder
-                    }
-                    spellCheck={false}
-                    className="w-full rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
-                  />
-                </label>
+                <SettingsInput
+                  label={imCopy.telegramBotTokenLabel}
+                  type="password"
+                  value={botToken}
+                  onChange={setBotToken}
+                  placeholder={
+                    config?.hasBotToken
+                      ? imCopy.telegramTokenSavedPlaceholder
+                      : imCopy.telegramBotTokenPlaceholder
+                  }
+                />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -240,9 +236,9 @@ export function TelegramCard({
                   disabled={busy || !canSaveCredentials}
                   leadingIcon={
                     localBusy === "save" ? (
-                      <CircleNotch size={13} className="spin" />
+                      <CircleNotch size={13} weight="thin" className="spin" />
                     ) : (
-                      <Check size={13} />
+                      <Check size={13} weight="thin" />
                     )
                   }
                   onClick={saveCredentials}
@@ -258,9 +254,9 @@ export function TelegramCard({
                   disabled={busy || !canStartService}
                   leadingIcon={
                     localBusy === "connect" ? (
-                      <CircleNotch size={13} className="spin" />
+                      <CircleNotch size={13} weight="thin" className="spin" />
                     ) : (
-                      <Power size={13} />
+                      <Power size={13} weight="thin" />
                     )
                   }
                   onClick={connect}

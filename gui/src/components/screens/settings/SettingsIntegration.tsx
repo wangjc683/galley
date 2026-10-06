@@ -1,25 +1,23 @@
-import {
-  ArrowSquareOut,
-  BookOpen,
-  CaretDown,
-  CaretRight,
-  Check,
-  Copy,
-  Terminal,
-} from "@phosphor-icons/react";
+import { BookOpen, Check, Copy, Terminal } from "@phosphor-icons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 
+import {
+  SettingsDisclosureList,
+  SettingsDisclosureRow,
+} from "@/components/screens/settings/settings-disclosure";
 import {
   SettingsFieldLabel,
   SettingsPanelHeader,
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
 import { Button } from "@/components/ui/button";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { COPY_FEEDBACK_MS, copyTextToClipboard } from "@/lib/clipboard";
 import { useCopy } from "@/lib/i18n";
 import { isMac, isWindows } from "@/lib/platform";
+
+import { ExternalLinkIcon } from "./external-link";
 
 type SopCopyState =
   | { kind: "idle" }
@@ -239,7 +237,7 @@ export function SettingsIntegration() {
     try {
       await copyTextToClipboard(text);
       setCopiedExampleIndex(index);
-      window.setTimeout(() => setCopiedExampleIndex(null), 1400);
+      window.setTimeout(() => setCopiedExampleIndex(null), COPY_FEEDBACK_MS);
     } catch {
       setCopiedExampleIndex(null);
     }
@@ -248,7 +246,7 @@ export function SettingsIntegration() {
   return (
     <div className="space-y-7">
       <SettingsPanelHeader
-        title={copy.settings.tabs.agent.label}
+        title={copy.settings.tabs.agent.title}
         subtitle={agentCopy.subtitle}
       />
 
@@ -336,101 +334,93 @@ export function SettingsIntegration() {
         </div>
       </section>
 
-      <section className="border-t border-line pt-2">
-        <button
-          type="button"
-          className="-mx-2 flex w-full items-center justify-between gap-3 rounded-sm px-2 py-2 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40"
-          aria-expanded={advancedOpen}
-          onClick={() => setAdvancedOpen((current) => !current)}
-        >
-          <span className="text-ui-secondary font-medium text-ink">
-            {agentCopy.advanced}
-          </span>
-          {advancedOpen ? (
-            <CaretDown size={12} weight="bold" className="shrink-0 text-ink-soft" />
-          ) : (
-            <CaretRight size={12} weight="bold" className="shrink-0 text-ink-soft" />
-          )}
-        </button>
-
-        {advancedOpen && (
-          <div className="mt-3 space-y-6">
-            {/* Discovery file row. Informational, not interactive — the
-                file is written automatically at Galley startup (B4 M3
-                T3.1) and supervisors read it without needing user
-                input. Kept under Advanced because it is implementation
-                detail, not part of the ordinary user handoff path. */}
-            <div>
-              <SettingsFieldLabel>{agentCopy.discoveryFile}</SettingsFieldLabel>
-              <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
-                {agentCopy.discoveryDescription}
-              </p>
-              <dl className="mt-3 grid grid-cols-[88px_1fr] gap-x-3 text-ui-secondary">
-                <dt className="text-ink-muted">{discoveryPlatformLabel}</dt>
-                <dd className="m-0 select-text break-all font-mono text-ink">
-                  {discoveryFilePath}
-                </dd>
-              </dl>
-            </div>
-
-            {/* Optional `galley` command shortcut (T3.3). Supervisors do
-                not need this because the SOP uses the discovery file.
-                macOS can create /usr/local/bin/galley via the system
-                auth prompt; Windows is intentionally presented as
-                unsupported until the user-level PATH writer exists. */}
-            <div>
-              <SettingsFieldLabel>{agentCopy.cliShortcut}</SettingsFieldLabel>
-              <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
-                {agentCopy.cliDescription}
-              </p>
-              {pathInstallHint && (
-                <p className="mt-2 text-ui-tertiary text-ink-muted">
-                  {pathInstallHint}
+      <section>
+        <SettingsDisclosureList>
+          <SettingsDisclosureRow
+            title={agentCopy.advanced}
+            open={advancedOpen}
+            onToggle={() => setAdvancedOpen((current) => !current)}
+          >
+            <div className="space-y-6">
+              {/* Discovery file row. Informational, not interactive — the
+                  file is written automatically at Galley startup (B4 M3
+                  T3.1) and supervisors read it without needing user
+                  input. Kept under Advanced because it is implementation
+                  detail, not part of the ordinary user handoff path. */}
+              <div>
+                <SettingsFieldLabel>
+                  {agentCopy.discoveryFile}
+                </SettingsFieldLabel>
+                <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
+                  {agentCopy.discoveryDescription}
                 </p>
-              )}
-              <PathInstallRow
-                status={pathStatus}
-                busy={pathBusy}
-                unsupportedCopy={pathInstallUnsupportedCopy}
-                onInstall={() => void installPath()}
-                onUninstall={() => void uninstallPath()}
-              />
-              {pathError && <InlineErrorWithCopy message={pathError} />}
-            </div>
+                <dl className="mt-3 grid grid-cols-[88px_1fr] gap-x-3 text-ui-secondary">
+                  <dt className="text-ink-muted">{discoveryPlatformLabel}</dt>
+                  <dd className="m-0 select-text break-all font-mono text-ink">
+                    {discoveryFilePath}
+                  </dd>
+                </dl>
+              </div>
 
-            {/* Developer-facing docs link. Kept low ceremony: this is
-                for users wiring their own scripts / Skills / agents,
-                while the SOP covers the normal copy-paste path. */}
-            <div>
-              <SettingsFieldLabel>{agentCopy.apiDocs}</SettingsFieldLabel>
-              <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
-                {agentCopy.apiDescription}
-              </p>
-              <div className="mt-3">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    void openExternal(
-                      "https://github.com/wangjc683/galley/blob/main/docs/agent-api.md",
-                    )
-                  }
-                  leadingIcon={<BookOpen size={14} weight="thin" />}
-                  trailingIcon={<ArrowSquareOut size={11} weight="thin" />}
-                >
-                  {agentCopy.openApiDocs}
-                </Button>
-                {docOpenError && (
-                  <InlineErrorWithCopy
-                    message={agentCopy.openFailed(docOpenError)}
-                    details={docOpenError}
-                  />
+              {/* Optional `galley` command shortcut (T3.3). Supervisors do
+                  not need this because the SOP uses the discovery file.
+                  macOS can create /usr/local/bin/galley via the system
+                  auth prompt; Windows is intentionally presented as
+                  unsupported until the user-level PATH writer exists. */}
+              <div>
+                <SettingsFieldLabel>{agentCopy.cliShortcut}</SettingsFieldLabel>
+                <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
+                  {agentCopy.cliDescription}
+                </p>
+                {pathInstallHint && (
+                  <p className="mt-2 text-ui-tertiary text-ink-muted">
+                    {pathInstallHint}
+                  </p>
                 )}
+                <PathInstallRow
+                  status={pathStatus}
+                  busy={pathBusy}
+                  unsupportedCopy={pathInstallUnsupportedCopy}
+                  onInstall={() => void installPath()}
+                  onUninstall={() => void uninstallPath()}
+                />
+                {pathError && <InlineErrorWithCopy message={pathError} />}
+              </div>
+
+              {/* Developer-facing docs link. Kept low ceremony: this is
+                  for users wiring their own scripts / Skills / agents,
+                  while the SOP covers the normal copy-paste path. */}
+              <div>
+                <SettingsFieldLabel>{agentCopy.apiDocs}</SettingsFieldLabel>
+                <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
+                  {agentCopy.apiDescription}
+                </p>
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      void openExternal(
+                        "https://github.com/wangjc683/galley/blob/main/docs/agent-api.md",
+                      )
+                    }
+                    leadingIcon={<BookOpen size={14} weight="thin" />}
+                    trailingIcon={<ExternalLinkIcon />}
+                  >
+                    {agentCopy.openApiDocs}
+                  </Button>
+                  {docOpenError && (
+                    <InlineErrorWithCopy
+                      message={agentCopy.openFailed(docOpenError)}
+                      details={docOpenError}
+                    />
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          </SettingsDisclosureRow>
+        </SettingsDisclosureList>
       </section>
     </div>
   );
@@ -601,11 +591,11 @@ function InlineErrorWithCopy({
       <Button
         variant="ghost"
         size="sm"
-        className="h-5 shrink-0 px-1.5 text-ui-micro text-error/75 hover:text-error"
+        className="h-5 shrink-0 px-1.5 text-ui-label text-error/75 hover:text-error"
         onClick={() => {
           void copyTextToClipboard(details ?? message).then(() => {
             setCopied(true);
-            window.setTimeout(() => setCopied(false), 1400);
+            window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           });
         }}
       >

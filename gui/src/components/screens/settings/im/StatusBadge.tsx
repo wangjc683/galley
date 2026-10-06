@@ -7,10 +7,18 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 
+import {
+  SettingsStatusBadge,
+  type SettingsStatusTone,
+} from "@/components/screens/settings/settings-badges";
 import { useCopy } from "@/lib/i18n";
 import type { ImSupervisorState } from "@/lib/im-supervisor";
-import { cn } from "@/lib/utils";
 
+/**
+ * Channel run-state → Settings status badge. Only the mapping lives here
+ * (tone from `state`, icon from `iconStateOverride ?? state`); geometry,
+ * tones and icon weight belong to `SettingsStatusBadge`.
+ */
 export function StatusBadge({
   state,
   labelOverride,
@@ -46,27 +54,19 @@ export function StatusBadge({
             : iconState === "stopped"
               ? Pause
               : Power;
+  const tone: SettingsStatusTone =
+    state === "running"
+      ? "success"
+      : state === "error" || state === "expired"
+        ? "error"
+        : "neutral";
   return (
-    <span
-      className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-sm border px-2 text-ui-tertiary",
-        state === "running"
-          ? "border-success/30 bg-success/[var(--opacity-soft)] text-success"
-          : state === "error" || state === "expired"
-            ? "border-error/25 bg-error/[var(--opacity-subtle)] text-error"
-            : "border-line bg-surface text-ink-muted",
-      )}
+    <SettingsStatusBadge
+      tone={tone}
+      icon={Icon}
+      spin={iconState === "starting" || iconState === "reconnecting"}
     >
-      <Icon
-        size={12}
-        weight={iconState === "running" ? "fill" : "regular"}
-        className={
-          iconState === "starting" || iconState === "reconnecting"
-            ? "spin"
-            : undefined
-        }
-      />
       {label}
-    </span>
+    </SettingsStatusBadge>
   );
 }

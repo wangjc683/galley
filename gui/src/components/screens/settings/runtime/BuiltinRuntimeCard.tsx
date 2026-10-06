@@ -1,5 +1,6 @@
 import { Key, Package } from "@phosphor-icons/react";
 
+import { SettingsTag } from "@/components/screens/settings/settings-badges";
 import { SettingsSectionLabel } from "@/components/screens/settings/settings-ui";
 import { Button } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
@@ -68,15 +69,13 @@ export function BuiltinRuntimeCard({
                 {/* "推荐" is a pitch for the un-activated; once active
                     it would just be noise next to "正在使用". */}
                 {!active && (
-                  <span className="rounded-sm bg-brand-soft px-1.5 py-px text-ui-micro font-medium text-brand-strong">
-                    {copy.recommended}
-                  </span>
+                  <SettingsTag tone="brand">{copy.recommended}</SettingsTag>
                 )}
-                {active && (
-                  <span className="rounded-sm bg-hover px-1.5 py-px text-ui-micro text-ink-muted">
-                    {copy.active}
-                  </span>
-                )}
+                {/* "正在使用" marks which runtime is selected, not a live
+                    connection state, so it is a quiet tag rather than a
+                    status badge — the heavier badge stays reserved for
+                    Channels-style run state (07-05 fork, kept 2026-10-07). */}
+                {active && <SettingsTag>{copy.active}</SettingsTag>}
               </div>
               <div className="mt-0.5 text-ui-meta text-ink-muted">{detail}</div>
             </div>

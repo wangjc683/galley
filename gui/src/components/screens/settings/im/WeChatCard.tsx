@@ -119,9 +119,9 @@ export function WeChatCard({
                   disabled={busyAction !== null}
                   leadingIcon={
                     busyAction === "rescan" ? (
-                      <CircleNotch size={13} className="spin" />
+                      <CircleNotch size={13} weight="thin" className="spin" />
                     ) : (
-                      <QrCode size={13} />
+                      <QrCode size={13} weight="thin" />
                     )
                   }
                   onClick={onRescan}
@@ -168,7 +168,7 @@ function WeChatSetupAction({
   onRescan: () => void;
 }) {
   const busy = busyAction !== null;
-  const loadingIcon = <CircleNotch size={13} className="spin" />;
+  const loadingIcon = <CircleNotch size={13} weight="thin" className="spin" />;
 
   if (state === "running") return null;
   if (state === "starting" || state === "reconnecting") {
@@ -193,7 +193,11 @@ function WeChatSetupAction({
         variant="primary"
         disabled={busy}
         leadingIcon={
-          busyAction === "rescan" ? loadingIcon : <QrCode size={13} />
+          busyAction === "rescan" ? (
+            loadingIcon
+          ) : (
+            <QrCode size={13} weight="thin" />
+          )
         }
         onClick={onRescan}
       >
@@ -209,7 +213,11 @@ function WeChatSetupAction({
         variant="primary"
         disabled={busy}
         leadingIcon={
-          busyAction === "connect" ? loadingIcon : <Power size={13} />
+          busyAction === "connect" ? (
+            loadingIcon
+          ) : (
+            <Power size={13} weight="thin" />
+          )
         }
         onClick={onConnect}
       >
@@ -224,7 +232,11 @@ function WeChatSetupAction({
       variant="primary"
       disabled={busy}
       leadingIcon={
-        busyAction === "connect" ? loadingIcon : <QrCode size={13} />
+        busyAction === "connect" ? (
+          loadingIcon
+        ) : (
+          <QrCode size={13} weight="thin" />
+        )
       }
       onClick={onConnect}
     >
