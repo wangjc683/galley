@@ -2,9 +2,22 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-10-04` against upstream
-`1b6442fe4f97d87a3d9d52d76569f69d156af853` (27-patch stack, through `0028`;
-same baseline, for the new `0028`): the committed 26-patch stack was first
+Last replay verified: `2026-10-06` against upstream
+`f308ee7eb079cc402edf5a934fa65f6d71a4c7ad` (27-patch stack, through `0028`;
+the `1b6442f` -> `f308ee7` baseline upgrade). `rebase-managed-ga-patches.sh`
+replayed the old chain, matched the committed payload byte-for-byte, and
+rebased onto the new baseline with **zero conflicts**. `0001` and `0003`
+re-exported with header-only drift (`ga.py` −6 lines below upstream's
+rewritten distill prompt, `agentmain.py` +1 in the reflect branch);
+`0024` re-exported without its two text `index` lines, the script's
+normalization (it had been exported by hand). `build-managed-ga.sh` then
+applied all 27 clean, its `py_compile` sweep passed,
+`check-managed-ga-payload.mjs` passed, and the rebuilt payload's diff
+against the previous payload equals upstream's diff line for line in every
+changed file (no patch body moved).
+
+Previous replay (`2026-10-04`, `1b6442f`, 27-patch stack through `0028`,
+for the new `0028`): the committed 26-patch stack was first
 rebuilt from a fresh clone in an isolated build root and matched the
 committed `managed-ga/code` and `managed-ga/state-seed` (`diff -r`, no
 differences), then `build-managed-ga.sh` applied all 27 clean, its

@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-10-06
+- [GA 上游升级 1b6442f -> f308ee7](./2026-10-06-ga-upstream-upgrade-1b6442f-to-f308ee7.md) — 连跳三次发版后单独审计（JC 要求）；8 提交 10 文件 +401/−50，引擎核心只有三处：**记忆提炼提示词**从「最小局部修改」改为「融入旧条目、合并重复、压缩冗述」（允许改写已有记忆，即用户状态；workbench.db 140 会话 3 次调用；采用上游、不加补丁，观察头几次提炼，丢事实就加一行补丁回退）、claude-cli UA 2.1.280（Core 探测仍是 2.1.113，只记录）、reflect 一行（惰性）；hub 的 `.hub_token` 写在代码根 `temp/`，但内置 bundle 没有 fastapi / uvicorn，起不了服务端；rebase 零冲突，`0001` / `0003` 只漂行号，`0024` 去掉 index 行；兼容矩阵 496 passed、bundle mac-x64 162M、drift gate 四面 OK；SOP 第 8 步并入下一版冒烟
+
 ### 2026-10-05
 - [v0.6.0 发布](./2026-10-05-v0.6.0-release.md) — v0.5.6 后四天，界面打磨 + 浏览器控制一轮 + 去掉审批；minor：现行规则字面判 patch（看新增功能），但去掉一整套用户可见的安全系统不在规则覆盖内，#16 有社区用户在用审批、stable 会自动推送，版本号是最便宜的告知；规则补「拿掉也定级」一条；Agent API 仍是 `schemaVersion: 2`；打包门禁 `mac-x64` 通过；上游仍是 `f308ee7`，连续第六次不审计；冒烟重点是 Windows 常驻浏览器桥与新用户流程
 - [去掉审批系统：工具一律直接执行，与上游 GA 一致](./2026-10-05-remove-approval.md) — 10-04 票 04 调研的延伸，JC 裁完全去掉；workbench.db 只读：136 个会话零覆盖、规则与审计表 0 行，逐步审批从不拦 `web_execute_js`，设置审批页是摆设；提示词规则不加（上游 sys_prompt 已有「不可逆操作先询问用户」）；四张 Opus 票并行：wire 删四条消息，`WorkbenchHandler` 只剩轮次信号，Core 删四个 Tauri 命令与 `approvalMode`（`waiting_approval` 按 Rule 3 保留、不再产生），GUI 删 7 个文件，不加迁移；CLAUDE.md Rule 1 改措辞；JC 真机验收通过

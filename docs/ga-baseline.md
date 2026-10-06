@@ -15,16 +15,104 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `1b6442fe4f97d87a3d9d52d76569f69d156af853`
+Locked commit: `f308ee7eb079cc402edf5a934fa65f6d71a4c7ad`
 
-- Tree hash: `d865e30e6a16197c30f254fbf601bbcd06c22eb3`
+- Tree hash: `85f99e16330aa3474a1b034dac41d304a0e52f38`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-09-18
-- Shipped in: `v0.5.1` (2026-09-18)
+- Date audited: 2026-10-06
+- Shipped in: not yet (audited after `v0.6.0`; rides the next release)
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `efb3bc6ad1db0d7a82dce9eb38aacdf954286513`
+- Previous baseline: `1b6442fe4f97d87a3d9d52d76569f69d156af853`
+  (tree `d865e30e6a16197c30f254fbf601bbcd06c22eb3`, audited 2026-09-18,
+  shipped `v0.5.1` … `v0.6.0`)
+- Delta (`1b6442f..f308ee7` = 8 commits): 10 files, +401 / −50. Engine
+  core delta is `ga.py` (+4 / −10, the memory-distill prompt),
+  `llmcore.py` (two UA strings) and `agentmain.py` (+1, reflect only);
+  `agent_loop.py` and root `pyproject.toml` had **zero diff**
+  (`GA_DEPS` untouched). The rest is upstream frontends
+  (`tuiapp_v2.py` +296 / −22, `stapp.py`, `hub.py`), two `memory/` seed
+  files, and the README / WeChat QR refresh.
+- Result: no bridge protocol or dependency break. One behavior change to
+  watch in dogfood, the memory-distill prompt (below). Patch-stack rebase
+  had **zero conflicts**: `0001` and `0003` drifted positionally (`ga.py`
+  −6 lines below the distill prompt, `agentmain.py` +1 in the reflect
+  branch), bodies identical; `0024` re-exported without its two text
+  `index` lines (the rebase script's normalization; `0024` had been
+  exported by hand). The rebuilt payload's diff against the previous one
+  equals upstream's diff line for line in every changed file, so no patch
+  body moved.
+- History: upstream had sat at `f308ee7` since 2026-09-30. The audit was
+  skipped at `v0.5.5`, `v0.5.6` and `v0.6.0` and run on its own here, as
+  the `v0.5.6` devlog recommended, because the memory-distill prompt
+  changes what the engine writes into user state.
+- Standing guard re-run: `grep -rn "hub.connect" managed-ga/code/` still
+  shows only `agentmain.py --reflect`, `hub.py` itself and `stapp.py` —
+  none on Galley's path.
+- Devlog: [GA upstream upgrade 1b6442f -> f308ee7](./devlog/2026-10-06-ga-upstream-upgrade-1b6442f-to-f308ee7.md)
+
+New in the `1b6442f` -> `f308ee7` range:
+
+- `ga.py` — **memory-distill prompt rewritten** (upstream `f308ee7`,
+  `do_start_long_term_update`). The old prompt ended on "先 `file_read`
+  看现有 → 判断类型 → 最小化更新 → 无新内容跳过，保证对记忆库最小局部
+  修改". The new one says "先读后patch，将已验证、长期有用且难以重建的新
+  知识融入旧条目，合并重复、压缩冗述，不堆叠流水账", bounded by "不得为
+  缩短而丢失关键事实、适用条件和踩坑信息". So one distillation may now
+  rewrite existing entries (merge, compress), not only add the new fact.
+  Also new: "不得将模型推测或建议记作用户要求", "记忆整理仅是内部收尾；
+  完成或跳过后，仍须向用户报告原任务结果", and `get_global_memory()` now
+  comes before the instructions instead of after. Galley coupling: none
+  in code. The GUI callout reads the call's arguments only
+  (`gui/src/components/conversation/ToolCallout.tsx`), and the tool's
+  `[Info] Start distilling…` line is unchanged. Rule 1 reading: the
+  writes are still the engine's own `file_patch` calls into the managed
+  state root's `memory/`, and the upgrade itself overwrites no memory
+  (the seed copies missing files only); what changes is how much of an
+  existing entry one distillation may touch. Size (workbench.db,
+  2026-10-06): 3 calls in 140 sessions, all under the old prompt, each a
+  "read L1 / L2, then a minimal patch". External GA picks this up only
+  when the user pulls upstream. **Watch item**: diff the managed state's
+  `memory/` around the first few distillations on this baseline; if one
+  drops a fact or a condition, the cheap exit is a one-line managed patch
+  restoring "最小局部修改". Not taken now: upstream behavior is the
+  default, and no loss has been seen.
+- `llmcore.py` — Claude-CLI `default_ua` / `native_ua` `2.1.251 →
+  2.1.280` (`f308ee7`). Galley's managed model config does not set
+  `user_agent`, so managed native-Claude sessions send the new string.
+  Core's connection probe (`core/src/managed_model_probe.rs`) sends its own
+  `claude-cli/2.1.113`, unchanged since 2026-05-25 through three upstream
+  version bumps (`2.1.152`, `2.1.251`, `2.1.280`); it is not a baseline
+  sync surface, noted only.
+- `agentmain.py` — reflect mode: a reflect script's module-level `LLM`
+  name picks the backend before each trigger (`c913871`). Inside
+  `if __name__ == '__main__':`, and Galley starts `--reflect` in neither
+  mode (see the 2026-10-01 GA-scheduler devlog). Inert.
+- `frontends/hub.py` — `inject` op (`intervene` / `keyinfo` mid-run
+  steering, written to `agent.intervene` / `agent.extrakeyinfo`, which
+  `ga.py` turn-end already reads), HTTP `/api/{name}/intervene` and
+  `/keyinfo`, a `hub.call()` / `hub.peers()` client, and the token persisted
+  to `temp/.hub_token` (`9dcbf5a`). That file sits under the **code root's**
+  `temp/`, a write that bypasses `GALLEY_GA_STATE_ROOT`, but only the hub
+  server (`python hub.py`) writes it, and that server needs `fastapi` /
+  `uvicorn`, which the bundle does not ship (checked against the rebuilt
+  bundle), so it cannot run on the managed runtime. Not patched.
+- `memory/subagent.md` — new "Hub：向已有 agent 投递消息" note pointing at
+  `frontends/hub.py`; `memory/memory_cleanup_sop.md` — new "L3 内容审计"
+  section (delete misleading rather than merely long content). Both ride
+  `managed-ga/state-seed/memory/`, missing-only: existing managed state
+  keeps the old files, new installs get these. On the managed runtime the
+  Hub note leads nowhere (no hub server, see above); an agent that follows
+  it gets a failed call, not a side effect.
+- `frontends/stapp.py` (unbounded Streamlit WS send queue, long-answer
+  folding), `frontends/tuiapp_v2.py` (upstream TUI rendering / history
+  preview, `e86ca72`), README + `assets/images/wechat_group22.jpg`
+  (WeChat group 23 QR). Inert on Galley's path.
+
+Carried forward from the `efb3bc6` -> `1b6442f` range (2026-09-18):
+
+- Previous-previous baseline: `efb3bc6ad1db0d7a82dce9eb38aacdf954286513`
   (tree `84e56c2297b6d1ad4d53ecc576fac1ffc6ed3656`, audited 2026-08-31,
   shipped `v0.4.11` … `v0.5.0`)
 - Delta (`efb3bc6..1b6442f` = 10 commits): 15 files, +119 / −76. Engine
@@ -1170,6 +1258,9 @@ Current bundled GenericAgent core deps:
 - `qrcode[pil]` (managed WeChat IM Supervisor)
 - `pycryptodome` (managed WeChat IM Supervisor)
 - `python-dotenv` (common external-GA `mykey.py` compatibility)
+- `lark-oapi` (managed Feishu channel)
+- `python-telegram-bot` (managed Telegram channel)
+- `discord.py` (managed Discord channel)
 
 Runtime packaging details live in [desktop runtime](./desktop-runtime.md).
 

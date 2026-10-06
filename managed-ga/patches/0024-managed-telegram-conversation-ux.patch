@@ -1,6 +1,5 @@
 diff --git a/frontends/galley_im_display.py b/frontends/galley_im_display.py
 new file mode 100644
-index 0000000..81ba31b
 --- /dev/null
 +++ b/frontends/galley_im_display.py
 @@ -0,0 +1,270 @@
@@ -275,7 +274,6 @@ index 0000000..81ba31b
 +        i += 1
 +    return "\n".join(out)
 diff --git a/frontends/tgapp.py b/frontends/tgapp.py
-index 647569f..6f3cc9b 100644
 --- a/frontends/tgapp.py
 +++ b/frontends/tgapp.py
 @@ -26,0 +27,14 @@ from chatapp_common import (

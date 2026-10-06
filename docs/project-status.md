@@ -21,7 +21,9 @@ live in [refactor](./archive/refactor/README.md).
 - Shipped GA baseline: `1b6442f` (audited 2026-09-18, first shipped in
   `v0.5.1`) — engine delta is Galley-positive abort-before-headers plus an
   8% tool-output-limit shrink from the `context_win` default nudge. The
-  previous `efb3bc6` shipped `v0.4.11` … `v0.5.0`. See
+  previous `efb3bc6` shipped `v0.4.11` … `v0.5.0`. Audited on main, not
+  yet shipped: `f308ee7` (2026-10-06; the memory-distill prompt now lets
+  the model merge and compress existing memory entries). See
   [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
@@ -623,7 +625,13 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.6.0`: nothing yet. Owed from the `v0.6.0` Windows smoke (JC
+Since `v0.6.0`: the **GA baseline bump `1b6442f` -> `f308ee7`** (audited
+2026-10-06, zero patch conflicts; see
+[devlog](./devlog/2026-10-06-ga-upstream-upgrade-1b6442f-to-f308ee7.md)).
+It makes the next release's bundled-runtime gate mandatory, and its SOP
+step 8 (a real task in each runtime mode) is still owed. Watch the first
+few managed memory distillations on it: the new prompt may merge and
+compress existing entries. Owed from the `v0.6.0` Windows smoke (JC
 approved publish without an item-by-item report): the resident browser bridge
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
 program), the browser new-user flow (待解锁 → install → auto-verify → 试一试),
@@ -692,7 +700,9 @@ existing memory entries — user state — so it belongs in a separate audit wit
 observed long-term-update runs, not a fix release). The devlog recommends
 running that baseline audit on its own, outside a release; whether and when
 is JC's call. At `v0.6.0` upstream was still `f308ee7` and the audit was
-skipped a sixth time on the same reasoning. Upstream's default-constant line (`default_context_win`) has now
+skipped a sixth time on the same reasoning. On 2026-10-06 the audit ran on
+its own, outside a release, and `f308ee7` became the audited baseline (see
+Since `v0.6.0` above). Upstream's default-constant line (`default_context_win`) has now
 collided with patch `0007` twice in a row — expect it again.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
@@ -740,7 +750,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Release path | v0.6.0 stable minor is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `1b6442f` (2026-09-18); released builds ship it since `v0.5.1` (`efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `f308ee7` (2026-10-06), not yet shipped; released builds ship `1b6442f` since `v0.5.1` (`efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 

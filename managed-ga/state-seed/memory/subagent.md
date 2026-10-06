@@ -17,6 +17,9 @@
 - [[可选fork]]：将变量history(str)写入task目录下`_history.json`继承对话上下文
 - [[可选监察者]]：主agent空闲时读output观察进度，必要时干预文件纠偏。加`--verbose`可审查原始数据
 
+## Hub：向已有 agent 投递消息
+通过 Hub 向已有 agent 投递消息：查 GA 代码根 `frontends/hub.py`，页面入口及投递接口均在其中。
+
 ## 共通规则
 - 所有agent的cwd=temp，方便文件共享
 - input：目标+约束即可，subagent同等智能。**禁写步骤/过度描述**，大量数据给路径

@@ -774,7 +774,7 @@ GA Web 工具运行在**真实、持久化的 Chrome/Chromium 会话**中，而�
 <div align="center">
   <table>
     <tr>
-      <td align="center"><strong>微信群 22</strong><br/><img src="assets/images/wechat_group22.jpg" alt="微信群 22 二维码" width="240"/></td>
+      <td align="center"><strong>微信群 23</strong><br/><img src="assets/images/wechat_group22.jpg" alt="微信群 23 二维码" width="240"/></td>
     </tr>
   </table>
 </div>

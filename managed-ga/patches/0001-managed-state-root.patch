@@ -29,7 +29,7 @@ diff --git a/agentmain.py b/agentmain.py
 @@ -251 +254 @@ if __name__ == '__main__':
 -        agent.task_dir = d = os.path.join(script_dir, f'temp/{args.task}'); nround = ''
 +        agent.task_dir = d = state_path('temp', args.task); nround = ''
-@@ -316 +319 @@ if __name__ == '__main__':
+@@ -317 +320 @@ if __name__ == '__main__':
 -                log_dir = os.path.join(script_dir, 'temp/reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 +                log_dir = state_path('temp', 'reflect_logs'); os.makedirs(log_dir, exist_ok=True)
 diff --git a/assets/ga_ultraplan.py b/assets/ga_ultraplan.py
@@ -74,10 +74,10 @@ diff --git a/ga.py b/ga.py
 @@ -160 +164 @@ def log_memory_access(path):
 -    stats_file = os.path.join(script_dir, 'memory/file_access_stats.json')
 +    stats_file = state_path('memory', 'file_access_stats.json')
-@@ -607 +611 @@ def get_global_memory():
+@@ -601 +605 @@ def get_global_memory():
 -        with open(os.path.join(script_dir, 'memory/global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
 +        with open(state_path('memory', 'global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
-@@ -609 +613 @@ def get_global_memory():
+@@ -603 +607 @@ def get_global_memory():
 -        prompt += f'cwd = {os.path.join(script_dir, "temp")} (./)\n'
 +        prompt += f'cwd = {state_path("temp")} (./)\n'
 diff --git a/llmcore.py b/llmcore.py

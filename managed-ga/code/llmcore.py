@@ -897,7 +897,7 @@ class BaseSession:
         self.api_mode = 'responses' if mode in ('responses', 'response') else 'chat_completions'
         self.temperature = cfg.get('temperature', 1)
         self.max_tokens = cfg.get('max_tokens')
-        self.default_ua = "claude-cli/2.1.251 (external, cli)"
+        self.default_ua = "claude-cli/2.1.280 (external, cli)"
         self.user_agent = cfg.get("user_agent", self.default_ua)
     def _apply_claude_thinking(self, payload):
         if self.thinking_type:
@@ -1009,7 +1009,7 @@ def _fix_messages(messages):
     return merged
 
 class NativeClaudeSession(BaseSession):
-    native_ua = "claude-cli/2.1.251 (native, cli)"
+    native_ua = "claude-cli/2.1.280 (native, cli)"
     def __init__(self, cfg):
         super().__init__(cfg)
         self.fake_cc_system_prompt = cfg.get("fake_cc_system_prompt", False)
