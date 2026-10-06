@@ -631,7 +631,11 @@ Since `v0.6.0`: the **GA baseline bump `1b6442f` -> `f308ee7`** (audited
 It makes the next release's bundled-runtime gate mandatory, and its SOP
 step 8 (a real task in each runtime mode) is still owed. Watch the first
 few managed memory distillations on it: the new prompt may merge and
-compress existing entries. Owed from the `v0.6.0` Windows smoke (JC
+compress existing entries. Also the managed **runtime prompt's
+self-description** (rewritten About with a feature map, a configuration
+boundary, the author clause as instructions; see
+[devlog](./devlog/2026-10-06-runtime-prompt-self-description.md)); its live
+regression, items 10–13 of the prompt checklist, is owed. Owed from the `v0.6.0` Windows smoke (JC
 approved publish without an item-by-item report): the resident browser bridge
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
 program), the browser new-user flow (待解锁 → install → auto-verify → 试一试),

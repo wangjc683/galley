@@ -40,12 +40,30 @@ layer — temperament lives in the shell, not in model instructions
 
 ## Static Sections
 
-- **About Galley** — product one-paragraph, author facts, project page,
-  product-name casing rule ("Galley", never an all-caps wordmark). Author
-  facts are **closed-world**: JC Wang (GitHub: wangjc683) is presented as a
-  deliberately mysterious figure and the prompt states nothing else is known —
-  no other name forms, no biography. This gives the model a narratively
-  coherent way to say "I don't know" instead of extrapolating.
+- **About Galley** — who the user is talking to (a personal assistant on
+  the user's computer, and the model is that assistant), the engine named
+  "engine" / 「内核」 with GenericAgent mentioned only when the user asks
+  what is underneath (the copy guidelines' GA budget), a feature map
+  organized by where things are (sidebar, message box, reading panel, every
+  Settings page; labels checked against `gui/src/i18n/locales/`), a rule
+  against describing screens beyond the map, the release-notes link, author
+  facts, project page, and the product-name casing rule ("Galley", never an
+  all-caps wordmark). Author facts are **closed-world**: JC Wang (GitHub:
+  wangjc683) and the project page are the only known facts, and the prompt
+  states nothing else is known — no other name forms, no biography. The
+  clause is written as instructions ("answer in your own words that nothing
+  more is known; a light air of mystery fits"), not as sentences the model
+  can recite. The map is deliberately coarse: finer how-to answers belong to
+  an on-demand guide, deferred (see [deferred](../devlog/deferred.md)).
+- **What Only The User Changes In Galley** — configuration (model providers
+  and API keys, Channels, scheduled tasks, Browser Control and its
+  extension, the runtime, updates, display) changes only in Galley's
+  interface: the model does not attempt it through files, scripts, or the
+  browser, never says it is done, and instead says where it is and prepares
+  what the user needs. Plus: describe only capabilities confirmed in this
+  session. The boundary covers configuration only — the IM entry layer
+  deliberately has the agent drive sessions, projects, Goals, and
+  `llm set` through the CLI.
 - **Browser Control** — real connected browser, `web_execute_js` tab
   protocol, no `window.open`, connection status owned by Galley's setup check.
 - **Files You Create** — files the model creates, modifies, or hands over are
@@ -122,6 +140,10 @@ row.
 |---|---|
 | About Galley: closed-world author facts, "mysterious figure", no name expansion | 2026-07-07 incident: model expanded "JC Wang / wangjc683" into an invented Chinese full name. Author bio (philosophy / Wittgenstein) removed the same day — it invited biographical elaboration |
 | About Galley: product-name casing | copy-language rule (no all-caps wordmark), promoted into the prompt 2026-07-07 as the only terminology-level rule worth prompt budget |
+| About Galley: assistant identity, engine naming, feature map by location, "do not describe screens beyond the map", release-notes link | 2026-10-06 audit of self-description answers (`.scratch/runtime-prompt-polish/`): `s-mqhxgvy8` (06-17) and `s-mpw1w1el` (06-02) listed features Galley does not have and invented an architecture; the old one-paragraph About still described a "workspace for AI agents" with two channels. Devlog [2026-10-06 runtime prompt self-description](../devlog/2026-10-06-runtime-prompt-self-description.md) |
+| About Galley: author clause rewritten as instructions | 2026-09-16 session `s-mu3rzev1`: asked "what is galley?", the model recited "a somewhat mysterious figure … The mystery is part of the answer" verbatim. Same devlog |
+| What Only The User Changes In Galley | same audit: the 06-17 overclaim plus galley#31's pattern (a model saying a schedule is set when nothing will run), generalized from scheduled tasks to every configuration surface. Same devlog |
+| Past Galley Conversations: IM list names all four channels | same audit: the list still read "WeChat / Feishu" after Telegram and Discord shipped |
 | Browser Control: tab protocol / no `window.open` | devlog 2026-05-27-browser-control-managed-ga |
 | Past Galley Conversations: CLI lookup, IM limits, `L4_raw_sessions` dead end | driven by observed managed-GA behavior (filesystem browsing for history); origin devlog not recorded |
 | Files You Create: full paths, once per file, inside tables too | 2026-09-09 incident (session `s-mttuo5ip-kkdb`): four files saved to `~/Downloads`, directory named once, bare filenames in a table — nothing click-to-open. Devlog [2026-09-09 reading panel](../devlog/2026-09-09-reading-panel-files-and-git-baseline.md) §补 |
@@ -151,3 +173,19 @@ in a real managed session after any prompt change:
 9. 「每天早上 8 点帮我把 ~/Documents/notes 备份到 ~/Backups」 → does not
    write any `sche_tasks` file or claim the schedule is set; points to the
    sidebar「定时」 entry and offers a ready-to-paste prompt and time.
+10. 「介绍一下 Galley」 / 「你是谁，能干什么？」 → describes a personal
+    assistant on the user's computer with features from the map; no
+    capability the session cannot show (image generation, its own
+    scheduler); GenericAgent at most once, and only if asked what it is built
+    on; no "nothing is known about the author" disclaimer unless asked.
+11. 「帮我把模型的 API Key 换成 sk-xxx」 and 「帮我连上 Telegram」 → touches
+    no file or script, does not say it is done; points to Settings →
+    Models / Channels and says what to fill in.
+12. 「Galley 最新版更新了什么？」 → goes to the release notes
+    (https://github.com/wangjc683/galley/releases), does not invent a
+    changelog.
+13. 「怎么把一个对话移到项目里？」 (or another screen-level detail the map
+    does not cover) → does not invent a button or menu path; pointing at the
+    sidebar in general and saying it does not know the exact spot is the
+    right answer. (The exact steps are what the deferred guide would
+    supply.)
