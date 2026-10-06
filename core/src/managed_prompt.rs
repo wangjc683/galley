@@ -275,60 +275,40 @@ pub(crate) fn im_supervisor_prompt(sop_path: &str, platform: &str, supervisor_id
         "discord" => "Discord",
         _ => "the current IM channel",
     };
+    // WeChat's frontend keeps only a Markdown link's text and strips `1.`
+    // list numbers (`frontends/wechatapp.py` `_strip_md`); the other three
+    // keep both.
+    let platform_note = if platform == "wechat" {
+        "\n- WeChat shows only a Markdown link's text and drops `1.` list\n  numbers: write URLs bare and number steps `1、` `2、`."
+    } else {
+        ""
+    };
     format!(
         r#"## Galley IM Entry Layer
 
-The user is talking to Galley through {platform_label}. Treat {platform_label}
-as the current IM channel.
+The user is talking to you through {platform_label}, usually on a phone. You
+are the same assistant as in Galley's desktop app: do what they ask yourself,
+with your tools.
 
-Use this IM chat as a lightweight control surface for local Galley work. For
-simple questions, status checks, and clarifications, reply directly. For
-substantial tasks, use Galley CLI to inspect, continue, create, or monitor
-local Galley sessions instead of doing all work only inside this IM chat.
+Your replies are read on a phone screen:
+- Open with the answer or outcome in a sentence or two. Add only the details
+  the user needs next, and do not repeat the answer as a closing summary.
+- No tables: they wrap or break on a phone. Put one item per line, such as
+  `内存：20 GB（63%）`. No headings; use bold sparingly.
+- Keep paragraphs and lists short, and code blocks to a few lines.{platform_note}
+
+Hand a task to a desktop Galley session only when the user asks for one, or
+when it would keep this chat busy for a long time. Before your first Galley
+CLI write in this conversation, read the Galley Supervisor SOP at {sop_path}:
+it covers waiting on sessions, answering their questions, and reports. To see
+what is running, use plain `sessions list`; add `--all` or `--runtime all`
+only when the user asks about archived or older sessions.
 
 Your Galley supervisor identity is `{supervisor_id}`. On every CLI write
 command (session new / session send / project create / goal / llm set) pass
 exactly `--supervisor={supervisor_id}` plus a short `--reason=<why>`. Galley
-uses this identity to watch sessions you started and to route their
-completion reports back to this channel — a different or improvised id
-breaks that routing.
-
-Default workflow:
-- Inspect current Galley state before creating or changing sessions. Re-ground
-  through CLI reads instead of trusting your own memory of what you delegated;
-  Galley holds the durable state. `sessions list` rows carry a `live` object:
-  `live.busy` is the truthful "still working" signal — the persisted `status`
-  column never reads `running`.
-- Continue an existing session when it preserves useful context. When you
-  send a follow-up and then wait, read the session's `turnCount` right before
-  sending and pass `--after-turn=<turnCount>` (that value, not +1) plus
-  `--until-idle` to `session wait`, otherwise the wait can return the previous
-  turn's answer, or a mid-run step, as the result. `dispatch:"queued"` means the
-  session was mid-run and your message will run next; do not resend.
-- When a session's `live.askPending` is true, its agent is asking a question:
-  read `askUser` (`question`, `candidates`) on the asking agent row (the
-  wait's final messages, or `session show`) and answer with a plain
-  `session send`; if the answer is the user's call, ask the user first.
-- Start one focused session for one bounded task.
-- For complex goals, create a Galley Project with a small set of child sessions,
-  follow them until idle, then synthesize the result back to the user.
-- If `session wait` times out, the task is still running — not failed. Tell the
-  user it is running and that you will message them here when it finishes, then
-  end your turn. Galley triggers an automated report request in this
-  conversation when a session you started finishes; follow its instructions
-  when it arrives.
-- `session stop` and `session archive` are reversible: when one clearly serves
-  the user's request, do it and say how to undo it. Confirm first before
-  `project delete`, publishing, spending money, changing credentials, or broad
-  file changes.
-- Keep IM replies concise, actionable, and readable on mobile.
-
-The full Galley Supervisor SOP is available at:
-{sop_path}
-
-Read that SOP before complex orchestration, destructive actions, project
-splitting, runtime/search decisions, or whenever Galley Supervisor behavior is
-unclear."#
+uses this identity to route a finished session's report request back to this
+chat; follow that request when it arrives."#
     )
 }
 
@@ -509,14 +489,13 @@ mod tests {
 
         let feishu = im_supervisor_prompt("/tmp/sop.md", "feishu", "galley-im/feishu");
         assert!(feishu.contains("through Feishu"));
-        assert!(feishu.contains("Use this IM chat as a lightweight control surface"));
+        assert!(feishu.contains("the same assistant as in Galley's desktop app"));
     }
 
     #[test]
     fn im_supervisor_prompt_names_discord() {
         let discord = im_supervisor_prompt("/tmp/sop.md", "discord", "galley-im/discord");
         assert!(discord.contains("through Discord"));
-        assert!(discord.contains("Treat Discord"));
     }
 
     #[test]
@@ -542,23 +521,76 @@ mod tests {
         assert!(prompt.contains("report request"));
     }
 
-    /// The entry layer must agree with the SOP's reversibility split
-    /// (2026-07-03 D2) and teach the two send→wait footguns the CLI
-    /// grew since (`--after-turn`, `dispatch:"queued"`); it drifted
-    /// behind the SOP on all three once.
+    /// IM is the same assistant reached from a phone (2026-10-06, JC). The
+    /// orchestration details (waits, session questions, reversibility,
+    /// timeouts) live only in the Supervisor SOP, which the entry layer
+    /// sends the agent to before its first CLI write. They used to be
+    /// copied into the entry layer too and drifted behind the SOP once;
+    /// one home now, checked here against the SOP Galley materializes.
     #[test]
-    fn im_supervisor_prompt_matches_sop_reversibility_and_wait_rules() {
+    fn im_supervisor_prompt_defers_orchestration_details_to_the_sop() {
         let prompt = im_supervisor_prompt("/tmp/sop.md", "feishu", "galley-im/feishu");
-        assert!(prompt.contains("`session stop` and `session archive` are reversible"));
-        assert!(!prompt.contains("Confirm before stopping, archiving"));
-        // The new message and its run's first step land at turn index
-        // `turnCount` (read before sending); `+1` skips that step.
-        assert!(prompt.contains("--after-turn=<turnCount>"));
-        assert!(!prompt.contains("turnCount+1"));
-        // Without `--until-idle` a wait can return on a mid-run step.
-        assert!(prompt.contains("--until-idle"));
-        assert!(prompt.contains("askUser"));
-        assert!(prompt.contains("dispatch:\"queued\""));
-        assert!(prompt.contains("live.busy"));
+        assert!(prompt.contains("Before your first Galley\nCLI write"));
+        assert!(prompt.contains("/tmp/sop.md"));
+        for moved in ["--after-turn", "--until-idle", "askPending", "live.busy"] {
+            assert!(!prompt.contains(moved), "{moved} belongs to the SOP only");
+        }
+        let sop = crate::sop_install::sop_body();
+        for rule in [
+            "--after-turn=<turnCount>",
+            "--until-idle",
+            "`askPending`",
+            "dispatch:\"queued\"",
+            "`live.busy`",
+            "Timeout is not failure",
+            "are reversible",
+        ] {
+            assert!(sop.contains(rule), "SOP lost: {rule}");
+        }
+    }
+
+    /// 2026-09-30 context bloat (`.scratch/im-supervisor-context-bloat/`):
+    /// a 12-character message made the supervisor run `sessions list
+    /// --runtime all --all` (658 -> 28574 context chars). Status checks use
+    /// the plain list.
+    #[test]
+    fn im_supervisor_prompt_checks_status_with_plain_sessions_list() {
+        let prompt = im_supervisor_prompt("/tmp/sop.md", "discord", "galley-im/discord");
+        assert!(prompt.contains("use plain `sessions list`"));
+    }
+
+    /// Replies are read on a phone: 7 of 21 IM final answers in the
+    /// 2026-09-30 logs were tables. WeChat additionally loses link targets
+    /// and `1.` numbers in its frontend, so only its prompt says so.
+    #[test]
+    fn im_supervisor_prompt_shapes_replies_for_a_phone() {
+        for platform in ["wechat", "feishu", "telegram", "discord"] {
+            let prompt = im_supervisor_prompt("/tmp/sop.md", platform, "galley-im/x");
+            assert!(prompt.contains("No tables"));
+            assert!(prompt.contains("Open with the answer"));
+            assert_eq!(prompt.contains("write URLs bare"), platform == "wechat");
+        }
+    }
+
+    /// Byte cap on the IM entry layer, same rule as
+    /// `STATIC_PROMPT_BUDGET_BYTES`: set with no headroom at the 2026-10-06
+    /// slimming, on the longest platform variant (WeChat, which carries the
+    /// link note), measured on the template with an empty SOP path so the
+    /// user's state-root path does not count. `\r` is not counted.
+    const IM_PROMPT_BUDGET_BYTES: usize = 1503;
+
+    #[test]
+    fn im_supervisor_prompt_stays_within_budget() {
+        for platform in ["wechat", "feishu", "telegram", "discord"] {
+            let len = im_supervisor_prompt_template("", platform)
+                .bytes()
+                .filter(|&byte| byte != b'\r')
+                .count();
+            assert!(
+                len <= IM_PROMPT_BUDGET_BYTES,
+                "{platform} IM prompt is {len} bytes, budget {IM_PROMPT_BUDGET_BYTES}: \
+                 remove a clause first, or raise the budget with a reason"
+            );
+        }
     }
 }

@@ -640,7 +640,14 @@ pass on the same prompt: scheduled tasks folded into the configuration
 boundary, history commands for this platform only, and a byte cap on the
 static text (`STATIC_PROMPT_BUDGET_BYTES`; see
 [devlog](./devlog/2026-10-06-runtime-prompt-budget.md)), ~1710 → ~1400 tok;
-checklist items 6 and 9 join the owed live regression. Owed from the `v0.6.0` Windows smoke (JC
+checklist items 6 and 9 join the owed live regression. Then the **IM entry
+layer**: IM is the same assistant reached from a phone (JC, 2026-10-06), so
+the layer now shapes replies for a phone screen and delegates to desktop
+sessions only when asked or when a task would run long, with orchestration
+details left to the SOP (~786 → ~369 tok, `IM_PROMPT_BUDGET_BYTES`; see
+[devlog](./devlog/2026-10-06-im-entry-layer-phone-first.md)); it also
+resolves `.scratch/im-supervisor-context-bloat/`. Owed: an IM live trial,
+checklist items 14–17. Owed from the `v0.6.0` Windows smoke (JC
 approved publish without an item-by-item report): the resident browser bridge
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
 program), the browser new-user flow (待解锁 → install → auto-verify → 试一试),
@@ -665,7 +672,8 @@ main app, which is `galley-core.exe`) hits the CLI case-insensitively. Default s
 or issues unless JC asks; the upstream drafts in deferred are reference only.
 
 Filed during the `v0.5.5` IM round and still
-open: `.scratch/im-supervisor-context-bloat/` (needs-triage) and
+open: `.scratch/im-supervisor-context-bloat/` (done 2026-10-06 by the IM
+entry layer rewrite; the directory goes after the IM live trial) and
 `.scratch/im-chrome-i18n/` (the IM chrome follows the UI language; deferred
 to the end of the Discord / Telegram polish). The three open judgment calls
 from the IM dogfood (subtext on one-step answers, narration kept in the

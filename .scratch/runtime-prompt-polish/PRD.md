@@ -45,4 +45,8 @@ JC 提出「less harness，要控制系统提示词的量」。实测 Galley 静
 1. 与 GA 核心提示词对齐：「禁止推诿」与能力边界的张力已由边界一节覆盖，暂无新事故，不加文字。
 2. 告诉模型界面能渲染什么：804 条最终回答里 mermaid / LaTeX 为 0，无事故，不加。
 3. 回归网：现在只有 [prompt-composition](../../docs/managed-ga-runtime/prompt-composition.md) 的手动清单，没有遥测。
-4. IM 入口层（约 790 tok，只在 IM 渠道）：体量大，但关系到 Supervisor 正确性，单独一轮看。
+4. ~~IM 入口层~~：2026-10-06 已做，见 `issues/04`。
+
+## 第三轮：IM 入口层（`issues/04`，已做）
+
+JC 裁定 IM 定位为「同一个助手，用户从手机 IM 上对话」，按方案 A 瘦身，重点是手机上的简洁与阅读体验。

@@ -140,6 +140,36 @@ The block closes with the fallback rule: for state not listed, check via
 Galley CLI where available, otherwise ask the user to check Settings — self-
 serve before deflecting.
 
+## IM Entry Layer
+
+IM channels (WeChat, Feishu, Telegram, Discord; managed runtime only) compose
+GA core prompt + GA memory + the shared static rules (no suggestion section)
++ the state block + the **IM entry layer**: `im_supervisor_prompt` in
+`core/src/managed_prompt.rs`, passed as `GALLEY_IM_SUPERVISOR_PROMPT_TEXT`
+(Discord: `GALLEY_IM_SUPERVISOR_PROMPT_TEMPLATE`, one supervisor id per
+channel). Positioning (JC, 2026-10-06): **IM is the same assistant, reached
+from a phone** — not a control surface that delegates by default. The layer
+says four things:
+
+- **Who**: the same assistant as the desktop app; do the work yourself.
+- **Reply shape for a phone screen**: open with the answer or outcome; only
+  the details the user needs next; no closing summary that repeats it; no
+  tables (one item per line instead) and no headings; short paragraphs,
+  short code blocks. WeChat's variant adds that its frontend keeps only a
+  Markdown link's text and strips `1.` list numbers (`wechatapp.py`
+  `_strip_md`), so URLs go bare and steps are numbered `1、`.
+- **Delegation**: hand a task to a desktop Galley session only when the user
+  asks, or when it would keep the chat busy for a long time; read the
+  Supervisor SOP (materialized at `im/reference/galley-supervisor-sop.md`)
+  before the first CLI write. Waits, session questions, timeouts,
+  reversibility, and projects live **only** in the SOP; the tests check them
+  there. Status checks use plain `sessions list`.
+- **Supervisor identity**: `--supervisor=<id>` plus `--reason` on every CLI
+  write, which routes the completion report request back to the chat.
+
+Budget: `IM_PROMPT_BUDGET_BYTES` caps the template (empty SOP path, `\r` not
+counted) on the longest platform variant, same rule as the static budget.
+
 ## Profile Id And Hash
 
 Managed sessions may record `prompt_profile = galley-runtime-v1` for
@@ -166,6 +196,7 @@ row.
 | About Galley: author clause rewritten as instructions | 2026-09-16 session `s-mu3rzev1`: asked "what is galley?", the model recited "a somewhat mysterious figure … The mystery is part of the answer" verbatim. Same devlog |
 | What Only The User Changes In Galley | same audit: the 06-17 overclaim plus galley#31's pattern (a model saying a schedule is set when nothing will run), generalized from scheduled tasks to every configuration surface. Same devlog |
 | Past Galley Conversations: one platform's commands, compressed wording | 2026-10-06 budget pass (devlog [2026-10-06 runtime prompt budget](../devlog/2026-10-06-runtime-prompt-budget.md)): the macOS and Windows blocks were both sent on every platform |
+| IM entry layer: same assistant from a phone, reply shape, delegation only when asked or long, SOP before the first CLI write, plain `sessions list` for status, `IM_PROMPT_BUDGET_BYTES` | 2026-10-06 IM audit (devlog [2026-10-06 IM entry layer](../devlog/2026-10-06-im-entry-layer-phone-first.md)): `galley-im/*` supervisors created 0 sessions since 07-03; 7 of 21 IM final answers in the 09-30 logs were tables; the 09-30 context bloat (`.scratch/im-supervisor-context-bloat/`) came from a broad `sessions list --runtime all --all` on a 12-character message |
 | Budget cap (`STATIC_PROMPT_BUDGET_BYTES`) | same budget pass: Galley's static text was the largest block of the fixed prefix |
 | Past Galley Conversations: IM list names all four channels | same audit: the list still read "WeChat / Feishu" after Telegram and Discord shipped |
 | Browser Control: tab protocol / no `window.open` | devlog 2026-05-27-browser-control-managed-ga |
@@ -213,3 +244,13 @@ in a real managed session after any prompt change:
     sidebar in general and saying it does not know the exact spot is the
     right answer. (The exact steps are what the deferred guide would
     supply.)
+14. IM (any channel, on a phone): 「查一下我电脑内存和硬盘情况」 → answers
+    itself; opens with the verdict; no table, one item per line; no
+    repeated closing summary.
+15. IM: 「现在 Galley 里在跑什么？」 → plain `sessions list`, no `--all` /
+    `--runtime all`; short answer.
+16. IM: 「在桌面开个会话，帮我整理 ~/Downloads 里的 PDF，做完告诉我」 →
+    reads the SOP before `session new`, passes `--supervisor` and
+    `--reason`; the completion report arrives in the same chat.
+17. WeChat: a reply with a link or numbered steps → bare URL, steps numbered
+    `1、`, not `1.`.
