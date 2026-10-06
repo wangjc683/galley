@@ -9,12 +9,37 @@ use std::fmt::Write;
 
 pub const PROMPT_PROFILE_ID: &str = "galley-runtime-v1";
 
+/// History-lookup commands for the platform this Core is built for: only one
+/// block reaches the prompt (2026-10-06 budget pass). macOS and Linux share
+/// the POSIX discovery path.
+#[cfg(windows)]
+macro_rules! history_cli_commands {
+    () => {
+        r#"In PowerShell:
+
+  $GALLEY = Get-Content "$env:APPDATA\galley\cli-path" | Select-Object -First 1
+  & $GALLEY sessions search "<keywords>" --runtime all --all
+  & $GALLEY sessions list --runtime all --all
+  & $GALLEY session show <id> --tail=20"#
+    };
+}
+#[cfg(not(windows))]
+macro_rules! history_cli_commands {
+    () => {
+        r#"  GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
+  "$GALLEY" sessions search "<keywords>" --runtime all --all
+  "$GALLEY" sessions list --runtime all --all
+  "$GALLEY" session show <id> --tail=20"#
+    };
+}
+
 /// Static runtime rules. The full prompt sent to managed GA is composed by
 /// [`compose_runtime_prompt`], which appends a session-start state block.
 /// Author facts are deliberately closed-world: the prompt states that nothing
 /// beyond the given name forms is known, so the model declines instead of
 /// extrapolating (e.g. inventing a Chinese full name from the GitHub handle).
-pub(crate) const RUNTIME_PROMPT_STATIC: &str = r#"## Galley Runtime Layer
+pub(crate) const RUNTIME_PROMPT_STATIC: &str = concat!(
+    r#"## Galley Runtime Layer
 
 You are running inside Galley.
 
@@ -29,8 +54,8 @@ open-source GenericAgent.
 
 Galley's features, and where the user finds them:
 - Sidebar: conversations, Projects (conversations grouped around a folder),
-  and scheduled tasks ("定时" / "Scheduled", see below). ⌘K (Ctrl+K on
-  Windows) searches every past conversation.
+  and scheduled tasks ("定时" / "Scheduled"). ⌘K (Ctrl+K on Windows)
+  searches every past conversation.
 - Message box: this conversation's model and reasoning effort; Goal, which
   keeps working on a long objective in the background until it is done; the ＋
   menu for files, folders, and saved prompts.
@@ -65,7 +90,13 @@ interface: model providers and API keys, Channels, scheduled tasks, Browser
 Control and its browser extension, the runtime, updates, and display. When
 asked to change one of these, do not attempt it through files, scripts, or the
 browser, and never say it is done. Tell the user where it is, and prepare what
-they need: the prompt and time for a scheduled task, or the values to fill in.
+they need: the values to fill in, or the prompt and time for a scheduled task
+(it runs daily, on chosen weekdays, or on chosen days of the month, each time
+in a new conversation, so the prompt must stand on its own).
+
+GenericAgent's own scheduler (`sche_tasks/*.json`, described in memory files
+such as `scheduled_task_sop`) does not run in Galley: never write `sche_tasks`
+files or say a schedule is set up that way.
 
 When asked what you can do, describe what your tools here actually do. Do not
 claim a capability you have not confirmed you have in this session.
@@ -100,58 +131,22 @@ looking. Mentioning the directory once and listing bare filenames elsewhere
 (a table, a bullet list) is not enough — put the full path in each cell or
 item. Do this once per file; do not repeat paths the user did not ask about.
 
-## Scheduled Tasks
-
-GenericAgent's own scheduler (`reflect/scheduler.py`, polling
-`sche_tasks/*.json`) does not run in Galley, even though memory and SOP files
-such as `scheduled_task_sop` describe it. Task files written there never fire.
-Do not create `sche_tasks` files, and never tell the user a schedule is set up
-that way.
-
-When the user wants something to run on a schedule, point them to Galley's
-scheduled tasks: the "定时" / "Scheduled" entry at the top of the sidebar. At
-the set time (daily, on chosen weekdays, or on chosen days of the month) each
-task opens a new Galley session and sends its prompt. You cannot create these
-tasks yourself; help the user word the prompt and pick the time instead.
-
 ## Past Galley Conversations
 
-When the user asks to find, recall, or search earlier conversations, history, or
-sessions in Galley, use the Galley CLI — do not browse the filesystem for them.
+To find earlier Galley conversations, use the Galley CLI, not the filesystem.
+It is not on PATH: read its absolute path from the discovery file. Read-only
+commands need no running app. Search broadly by default (`--runtime all --all`
+covers archived sessions and both runtimes); narrow only when asked.
 
-Galley CLI is not on PATH. Resolve it from the discovery file, then call by
-absolute path. Read-only commands open the local DB directly; no daemon needed.
+"#,
+    history_cli_commands!(),
+    r#"
 
-Use broad history lookup by default so archived sessions and both runtime modes
-are included. Narrow the scope only when the user asks for the current runtime or
-active sessions.
-
-macOS / Linux:
-
-  DISCOVERY="${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path"
-  GALLEY="$(sed -n '1p' "$DISCOVERY")"
-  "$GALLEY" sessions list --runtime all --all
-  "$GALLEY" sessions search "<keywords>" --runtime all --all
-  "$GALLEY" session show <id> --tail=20
-
-Windows PowerShell:
-
-  $Discovery = "$env:APPDATA\galley\cli-path"
-  $GALLEY = Get-Content $Discovery | Select-Object -First 1
-  & $GALLEY sessions list --runtime all --all
-  & $GALLEY sessions search "<keywords>" --runtime all --all
-  & $GALLEY session show <id> --tail=20
-
-Coverage and limits — state these honestly:
-- You CAN retrieve any Galley session's conversation, whether it ran in the
-  desktop GUI or was created by a supervisor via the CLI.
-- You CANNOT retrieve direct IM chats (WeChat / Feishu / Telegram /
-  Discord). Galley is an orchestrator, not a chat platform; IM conversations
-  belong to the IM channel and are not stored in Galley. Do not claim you can
-  fetch them.
-- Do NOT look for past conversations under ../memory/L4_raw_sessions/. That
-  history layer is inactive in Galley's session mode and is always empty — use
-  the CLI above instead."#;
+You can read any Galley session, from the desktop or created by a supervisor.
+You cannot read direct IM chats (WeChat / Feishu / Telegram / Discord): they
+belong to the IM channel and Galley does not store them. Do not look under
+../memory/L4_raw_sessions/ either; it is always empty in Galley."#
+);
 
 /// GUI-composer surface feature: the ghost-text suggestion the workbench
 /// composer renders after each turn. Workbench-only — IM supervisors have
@@ -386,9 +381,9 @@ mod tests {
         // sche_tasks/*.json. Both the workbench and the IM surfaces carry
         // the correction.
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
-            assert!(prompt.contains("## Scheduled Tasks"));
-            assert!(prompt.contains("Do not create `sche_tasks` files"));
+            assert!(prompt.contains("never write `sche_tasks`"));
             assert!(prompt.contains("\"定时\" / \"Scheduled\""));
+            assert!(prompt.contains("the prompt must stand on its own"));
         }
     }
 
@@ -428,6 +423,43 @@ mod tests {
                 assert!(body.contains(channel), "{heading} should name {channel}");
             }
         }
+    }
+
+    /// Only the commands for the platform this Core is built for reach the
+    /// prompt (2026-10-06 budget pass).
+    #[test]
+    fn history_lookup_carries_only_this_platforms_commands() {
+        assert!(RUNTIME_PROMPT_STATIC.contains("sessions search \"<keywords>\""));
+        let (own, other) = if cfg!(windows) {
+            ("$env:APPDATA", "XDG_CONFIG_HOME")
+        } else {
+            ("XDG_CONFIG_HOME", "$env:APPDATA")
+        };
+        assert!(RUNTIME_PROMPT_STATIC.contains(own));
+        assert!(!RUNTIME_PROMPT_STATIC.contains(other));
+    }
+
+    /// Byte cap on Galley's static prompt text (shared rules + the
+    /// workbench suggestion section, exactly what `prompt_hash` covers).
+    /// Set with no headroom at the 2026-10-06 budget pass, on the larger
+    /// platform variant (Windows). To add a clause, remove one first, or
+    /// raise this number in the same diff and say why — see the budget
+    /// rule in docs/managed-ga-runtime/prompt-composition.md. Bytes, not
+    /// tokens: there is no tokenizer in CI. `\r` is not counted: a Windows
+    /// checkout (`core.autocrlf`) puts CRLF into the raw string literals.
+    const STATIC_PROMPT_BUDGET_BYTES: usize = 6688;
+
+    #[test]
+    fn static_prompt_stays_within_budget() {
+        let len = workbench_static_prompt()
+            .bytes()
+            .filter(|&byte| byte != b'\r')
+            .count();
+        assert!(
+            len <= STATIC_PROMPT_BUDGET_BYTES,
+            "static prompt is {len} bytes, budget {STATIC_PROMPT_BUDGET_BYTES}: \
+             remove a clause first, or raise the budget with a reason"
+        );
     }
 
     #[test]

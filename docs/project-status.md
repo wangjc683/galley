@@ -635,7 +635,12 @@ compress existing entries. Also the managed **runtime prompt's
 self-description** (rewritten About with a feature map, a configuration
 boundary, the author clause as instructions; see
 [devlog](./devlog/2026-10-06-runtime-prompt-self-description.md)); its live
-regression, items 10–13 of the prompt checklist, is owed. Owed from the `v0.6.0` Windows smoke (JC
+regression, items 10–13 of the prompt checklist, is owed. Then a budget
+pass on the same prompt: scheduled tasks folded into the configuration
+boundary, history commands for this platform only, and a byte cap on the
+static text (`STATIC_PROMPT_BUDGET_BYTES`; see
+[devlog](./devlog/2026-10-06-runtime-prompt-budget.md)), ~1710 → ~1400 tok;
+checklist items 6 and 9 join the owed live regression. Owed from the `v0.6.0` Windows smoke (JC
 approved publish without an item-by-item report): the resident browser bridge
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
 program), the browser new-user flow (待解锁 → install → auto-verify → 试一试),

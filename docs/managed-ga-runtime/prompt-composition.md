@@ -38,6 +38,23 @@ observed (see the clause ledger below). The runtime prompt is not a persona
 layer — temperament lives in the shell, not in model instructions
 (`docs/temperament.md`).
 
+### Budget
+
+Galley's static text rides every request, and in 2026-10 it was the largest
+single block of the managed fixed prefix (static rules ~1710 tok against GA's
+core prompt ~480, GA memory ~680, and the tool schema ~1510, estimated). The
+2026-10-06 budget pass cut it to ~1400 tok and capped it: the test
+`static_prompt_stays_within_budget` in `core/src/managed_prompt.rs` holds
+`workbench_static_prompt()` (shared rules + the suggestion section, exactly
+what the hash covers) to `STATIC_PROMPT_BUDGET_BYTES`, set with no headroom
+on the larger platform variant. Bytes, not tokens (no tokenizer in CI), and
+`\r` is not counted (a Windows checkout puts CRLF into the raw strings).
+
+To add a clause, remove or shorten one first. Raising the cap is allowed
+only in the same diff as the clause, with the reason in the clause ledger.
+Before adding, also check whether an existing section already says it: the
+2026-10-06 pass found the scheduled-tasks routing said twice.
+
 ## Static Sections
 
 - **About Galley** — who the user is talking to (a personal assistant on
@@ -63,7 +80,14 @@ layer — temperament lives in the shell, not in model instructions
   what the user needs. Plus: describe only capabilities confirmed in this
   session. The boundary covers configuration only — the IM entry layer
   deliberately has the agent drive sessions, projects, Goals, and
-  `llm set` through the CLI.
+  `llm set` through the CLI. Since 2026-10-06 it also carries what used to
+  be the Scheduled Tasks section: a prepared scheduled-task prompt must
+  stand on its own (each run opens a new conversation), and GenericAgent's
+  own scheduler (`sche_tasks/*.json`) never runs in Galley, so the model
+  never writes those files or says a schedule is set up that way. The seeded
+  `scheduled_task_sop` and the memory index still teach that scheduler and
+  are copied missing-only, so the prompt is the only layer that reaches
+  existing users.
 - **Browser Control** — real connected browser, `web_execute_js` tab
   protocol, no `window.open`, connection status owned by Galley's setup check.
 - **Files You Create** — files the model creates, modifies, or hands over are
@@ -72,16 +96,12 @@ layer — temperament lives in the shell, not in model instructions
   paths click-to-open (reading-panel preview / reveal); bare filenames and
   relative paths stay text by design (no guessed base directory), so the
   prompt is where the gap closes. Managed mode only, like every clause here.
-- **Scheduled Tasks** — GenericAgent's own scheduler (`reflect/scheduler.py`
-  polling `sche_tasks/*.json`) never runs in Galley, yet the seeded
-  `scheduled_task_sop` and the memory index still teach it. The clause tells
-  the model not to write `sche_tasks` files and to point schedule requests at
-  the sidebar's "定时" / "Scheduled" entry, which it cannot fill in itself.
-  The seed is copied missing-only, so fixing it would never reach existing
-  users; the prompt is the only layer that does.
 - **Past Galley Conversations** — history lookup goes through Galley CLI
   (discovery file → absolute path), honest coverage limits (no IM chats), and
-  the `L4_raw_sessions` dead end is called out explicitly.
+  the `L4_raw_sessions` dead end is called out explicitly. Only the commands
+  for the platform Core is built for are included (the
+  `history_cli_commands!` macro, `cfg(windows)` vs POSIX), so the static text
+  differs by platform.
 
 ## Session-Start State Block
 
@@ -128,7 +148,9 @@ embedded in Galley Core as Galley-owned managed-runtime behavior, not stored
 as user-editable prompt content. Diagnostics expose the profile id plus a
 short prompt hash. **The hash covers only the static rules** — the state
 block is data, not behavior, so app-version bumps must not read as new prompt
-generations. Do not change `PROMPT_PROFILE_ID` unless we explicitly want new
+generations. Since 2026-10-06 the static rules carry one platform's history
+commands, so a Windows build and a macOS build report different hashes for
+the same prompt generation. Do not change `PROMPT_PROFILE_ID` unless we explicitly want new
 sessions to be distinguishable by prompt generation.
 
 ## Clause Ledger
@@ -143,11 +165,13 @@ row.
 | About Galley: assistant identity, engine naming, feature map by location, "do not describe screens beyond the map", release-notes link | 2026-10-06 audit of self-description answers (`.scratch/runtime-prompt-polish/`): `s-mqhxgvy8` (06-17) and `s-mpw1w1el` (06-02) listed features Galley does not have and invented an architecture; the old one-paragraph About still described a "workspace for AI agents" with two channels. Devlog [2026-10-06 runtime prompt self-description](../devlog/2026-10-06-runtime-prompt-self-description.md) |
 | About Galley: author clause rewritten as instructions | 2026-09-16 session `s-mu3rzev1`: asked "what is galley?", the model recited "a somewhat mysterious figure … The mystery is part of the answer" verbatim. Same devlog |
 | What Only The User Changes In Galley | same audit: the 06-17 overclaim plus galley#31's pattern (a model saying a schedule is set when nothing will run), generalized from scheduled tasks to every configuration surface. Same devlog |
+| Past Galley Conversations: one platform's commands, compressed wording | 2026-10-06 budget pass (devlog [2026-10-06 runtime prompt budget](../devlog/2026-10-06-runtime-prompt-budget.md)): the macOS and Windows blocks were both sent on every platform |
+| Budget cap (`STATIC_PROMPT_BUDGET_BYTES`) | same budget pass: Galley's static text was the largest block of the fixed prefix |
 | Past Galley Conversations: IM list names all four channels | same audit: the list still read "WeChat / Feishu" after Telegram and Discord shipped |
 | Browser Control: tab protocol / no `window.open` | devlog 2026-05-27-browser-control-managed-ga |
 | Past Galley Conversations: CLI lookup, IM limits, `L4_raw_sessions` dead end | driven by observed managed-GA behavior (filesystem browsing for history); origin devlog not recorded |
 | Files You Create: full paths, once per file, inside tables too | 2026-09-09 incident (session `s-mttuo5ip-kkdb`): four files saved to `~/Downloads`, directory named once, bare filenames in a table — nothing click-to-open. Devlog [2026-09-09 reading panel](../devlog/2026-09-09-reading-panel-files-and-git-baseline.md) §补 |
-| Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
+| Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 (merged into What Only The User Changes, 2026-10-06; the sidebar pointer now comes from the About map) | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 
 ## Dogfood Regression Checklist

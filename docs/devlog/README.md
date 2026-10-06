@@ -17,6 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-10-06
+- [系统提示词减法与预算闸](./2026-10-06-runtime-prompt-budget.md) — JC「less harness，要控制提示词的量」；实测 Galley 静态规则约 1710 tok，是固定前缀（约 4860）里最大的一块，Galley 层合计约 45%；逐节对数据：浏览器 `tabs create` 135 次保留、下一步建议按轮遵从 76→86→100%（按消息算的 38% 是分母错）、采纳 16% 保留不压；定时并进配置边界、历史查询按 `cfg(windows)` 只带一套命令（`concat!` + `macro_rules!`）；预算闸 `STATIC_PROMPT_BUDGET_BYTES = 6688` 不留余量、不计 `\r`（Windows 检出 CRLF，否则误报）；加法候选（渲染、禁止推诿）无事故不加；指南的启动信号加「预算闸卡住」；约 1710 → 1400 tok；38 passed
 - [系统提示词打磨·方向一：让模型答对「Galley 是什么、在哪、能不能」](./2026-10-06-runtime-prompt-self-description.md) — JC 发起提示词打磨；workbench.db 只读：437 条用户消息里约 10 条问 Galley 本身；失败形态是把内核能力说成 Galley 功能（06 月称能设定时、生图，架构是编的）、照念作者条款原文（09-16）、About 过时；方向一拆成身份 / 地图 / 能力边界 / 版本四件，裁 B（常驻精简 + 按需指南，指南暂缓进 deferred）；About 重写（个人助手、内核称谓、按界面位置的功能地图含 Settings 九页、Releases 链接）、作者条款改指令写法、新节「只有用户能改的配置」（只划配置面，不碰 IM 入口层的 CLI 写操作）、历史一节补 Telegram / Discord；静态规则 724 → 1028 词；测试 36 passed；真机回归第 10–13 条待 JC
 - [GA 上游升级 1b6442f -> f308ee7](./2026-10-06-ga-upstream-upgrade-1b6442f-to-f308ee7.md) — 连跳三次发版后单独审计（JC 要求）；8 提交 10 文件 +401/−50，引擎核心只有三处：**记忆提炼提示词**从「最小局部修改」改为「融入旧条目、合并重复、压缩冗述」（允许改写已有记忆，即用户状态；workbench.db 140 会话 3 次调用；采用上游、不加补丁，观察头几次提炼，丢事实就加一行补丁回退）、claude-cli UA 2.1.280（Core 探测仍是 2.1.113，只记录）、reflect 一行（惰性）；hub 的 `.hub_token` 写在代码根 `temp/`，但内置 bundle 没有 fastapi / uvicorn，起不了服务端；rebase 零冲突，`0001` / `0003` 只漂行号，`0024` 去掉 index 行；兼容矩阵 496 passed、bundle mac-x64 162M、drift gate 四面 OK；SOP 第 8 步并入下一版冒烟
 
