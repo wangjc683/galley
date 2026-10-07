@@ -708,8 +708,15 @@
 
 ## 定时任务当天补跑触发失败（scheduler catch-up fire 无会话产生）
 
-- **状态**：待查
+- **状态**：大概率已修（`6124cc16`，2026-10-07），未用真实定时任务确认
 - **提出**：2026-09-09，README 截图 v2 实拍中两次观察到
+- **2026-10-07 更新**：v0.6.1 回归里查出 GUI hydrate 的 `delete_empty_new_sessions` 只看「默认标题 +
+  `turn_count = 0`」，会删掉首轮还没跑完的 `session.new` 会话。补跑走的正是 `session.new`（标题「新对话」），
+  调度器在 setup 阶段启动、首个 tick 立即补跑，页面随后 hydrate 就把它删了；`last_run_session_id` 是
+  `ON DELETE SET NULL`，于是留下「`last_fired_at` 已写、`last_run_session_id` 为 NULL」，与 09-09 的现象一致。
+  下面「方案」怀疑的派发失败因此不太可能。`6124cc16` 改为只删一条消息都没有的会话
+  （[devlog](./2026-10-07-core-owned-turn-persistence.md)）。确认办法不变：按下面的复现路径种一条任务，启动后看
+  补跑会话是否留下、`last_run_session_id` 是否有值。
 - **启动信号**：任何用户报告「上次触发失败」；或下次碰 `core/src/scheduler.rs`
 - **方案**：复现路径已知——种一条 `last_fired_at` 早于今天时段的每日任务，
   启动 dev，Core 在一个 tick 内发起补跑，`last_fired_at` 被盖成触发时刻、

@@ -715,7 +715,10 @@ JC's per-item confirmation); the #21 thread has not yet been told the
 ask_user option-description PRD was cancelled (2026-09-14, see
 [devlog](./devlog/2026-09-14-ask-user-option-desc-cancelled.md)). Carried
 over from `v0.4.12`: a scheduled task's same-day catch-up fire produced no
-session twice in a row, root cause unknown (see deferred); issues #26 and #27
+session twice in a row; the likely cause, found 2026-10-07 and fixed in
+`6124cc16`, is the GUI hydrate sweep deleting a 「新对话」 session still on its
+first turn (`last_run_session_id` is `ON DELETE SET NULL`), not yet confirmed
+with a real scheduled task (see deferred); issues #26 and #27
 stay open by JC's ruling, with the #27 commenter still owing a clarification
 of their sidebar / project report; real WeChat end-to-end acceptance of the
 supervisor-side fix is still owed from a machine with a paired WeChat account.
