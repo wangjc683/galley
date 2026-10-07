@@ -214,9 +214,17 @@ fn pref_key(platform: &str) -> Option<&'static str> {
     }
 }
 
+/// Write the SOP the IM entry layer points at, plus the reference it links
+/// to as a sibling (`./galley-supervisor-reference.md`): without it the
+/// supervisor's attempt to follow the Boundaries link hit "File not found"
+/// (2026-10-07 v0.6.1 pre-flight).
 fn materialize_sop_reference(state_root: &Path) -> std::io::Result<PathBuf> {
     let dir = state_root.join("im").join("reference");
     std::fs::create_dir_all(&dir)?;
+    std::fs::write(
+        dir.join("galley-supervisor-reference.md"),
+        crate::sop_install::reference_body(),
+    )?;
     let path = dir.join("galley-supervisor-sop.md");
     std::fs::write(&path, crate::sop_install::sop_body())?;
     Ok(path)
@@ -313,7 +321,20 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let path = materialize_sop_reference(tmp.path()).expect("write sop reference");
         assert!(path.ends_with("im/reference/galley-supervisor-sop.md"));
-        let body = std::fs::read_to_string(path).expect("read sop");
+        let body = std::fs::read_to_string(&path).expect("read sop");
         assert!(body.contains("Galley Supervisor SOP"));
+
+        // Every sibling `./*.md` link in the SOP resolves inside the copy.
+        let dir = path.parent().expect("reference dir");
+        let mut linked = 0;
+        for target in body.split("](./").skip(1) {
+            let file = target.split(')').next().expect("link target");
+            assert!(dir.join(file).exists(), "SOP links to missing {file}");
+            linked += 1;
+        }
+        assert!(linked > 0, "SOP no longer links a sibling file");
+        let reference =
+            std::fs::read_to_string(dir.join("galley-supervisor-reference.md")).expect("read ref");
+        assert!(reference.contains("## Boundaries"));
     }
 }

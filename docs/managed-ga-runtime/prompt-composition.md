@@ -163,8 +163,8 @@ says four things:
   `_strip_md`), so URLs go bare and steps are numbered `1、`.
 - **Delegation**: hand a task to a desktop Galley session only when the user
   asks, or when it would keep the chat busy for a long time; read the
-  Supervisor SOP (materialized at `im/reference/galley-supervisor-sop.md`)
-  before the first CLI write. Waits, session questions, timeouts,
+  Supervisor SOP (materialized at `im/reference/galley-supervisor-sop.md`,
+  with the reference it links to beside it) before the first CLI write. Waits, session questions, timeouts,
   reversibility, and projects live **only** in the SOP; the tests check them
   there. Status checks use plain `sessions list`.
 - **Supervisor identity**: `--supervisor=<id>` plus `--reason` on every CLI

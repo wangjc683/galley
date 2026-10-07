@@ -11,9 +11,20 @@
 /// automatically updates the embedded body on the next `cargo build`.
 const SOP_BODY: &str = include_str!("../../docs/integrations/galley-supervisor-sop.md");
 
+/// The longer reference the SOP links to as a sibling file
+/// (`./galley-supervisor-reference.md`, e.g. for the canonical Boundaries
+/// list). Only the managed IM reference directory ships it next to the SOP;
+/// "Copy SOP" stays the SOP alone.
+const REFERENCE_BODY: &str = include_str!("../../docs/integrations/galley-supervisor-reference.md");
+
 /// Read the embedded SOP body for preview / copy surfaces.
 pub fn sop_body() -> &'static str {
     SOP_BODY
+}
+
+/// Read the embedded Supervisor reference body.
+pub fn reference_body() -> &'static str {
+    REFERENCE_BODY
 }
 
 #[cfg(test)]
