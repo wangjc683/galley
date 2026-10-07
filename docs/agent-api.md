@@ -3,8 +3,9 @@
 Split into topic files on 2026-07-04. This stub keeps the stable path;
 the content now lives in [docs/agent-api/](./agent-api/README.md).
 
-> **`schemaVersion: 1` is frozen for the `v0.2.x` line — additive-only.**
-> Breaking changes require a `schemaVersion: 2` bump.
+> **`schemaVersion: 2` is current (since `v0.5.0`); `1` is still served for
+> every command that did not change.** Additive-only within a version;
+> breaking changes require the next version.
 
 Section map (original § numbers preserved inside each file):
 

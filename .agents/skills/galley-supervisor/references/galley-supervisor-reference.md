@@ -6,7 +6,7 @@ command and workflow details.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-reference.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-10-05 (approval removed: dropped the auto-approve boundary).
+Last synced: 2026-10-07 (header only: target `schemaVersion: 2`).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings.
@@ -18,9 +18,10 @@ This is the detailed reference for people maintaining or auditing the
 [Galley Supervisor SOP](./galley-supervisor-sop.md). The SOP is the copy-first
 document shown in Settings and should stay short. This reference can be longer.
 
-Target: Agent API `schemaVersion: 1` (frozen since `v0.2`, additive-only; this text
-reflects the CLI surface on `main` as of the review date). Last reviewed:
-2026-09-09.
+Target: Agent API `schemaVersion: 2` (since `v0.5.0`; only the `goal` family is
+`2`-only, every other command still answers `1`; additive-only within a version;
+this text reflects the CLI surface on `main` as of the review date). Last
+reviewed: 2026-09-09.
 
 ## Operating Model
 

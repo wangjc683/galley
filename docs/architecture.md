@@ -68,8 +68,10 @@ sessions, inspect context, create sessions, send messages, move sessions,
 switch LLMs, and archive or restore work.
 
 The CLI contract is documented in [agent-api](./agent-api.md).
-`schemaVersion: 1` is frozen (since v0.2; breaking changes require
-`schemaVersion: 2`). Since 2026-07-11 the schema's single code home is
+`schemaVersion: 2` is current (since v0.5.0, for the Goal v2 family);
+`1` stays frozen and is still served for every command that did not change.
+Changes within a version are additive-only; a breaking change requires the
+next version. Since 2026-07-11 the schema's single code home is
 `core/src/protocol/` — command args, envelopes, and error tags shared
 by Core's socket listener and the CLI's `SocketClient`.
 

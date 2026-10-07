@@ -8,6 +8,19 @@
 
 ---
 
+## README 截图第三版（重拍）
+
+- **状态**：暂缓（2026-10-07 JC 裁决：截图先不动，不重拍；README 文字已刷新，截图与图注原样保留）。
+- **提出**：2026-10-07，README 全面排查。
+- **启动信号**：任一即可。① UI 一轮大改收尾（Settings 逐页第二段与暗色复查做完），外壳短期不再变；② 有用户或社区
+  反馈截图与实物对不上（尤其 Goal）；③ Goal 或运行区再改版，`goal.png` / `hero.png` 偏差继续扩大。
+- **方案**：18 张全部早于 v0.4.16 起的改版；`goal.png` 仍是 v1 的「3 个 Agent · 预算 30 分钟」，图注「章节标记」
+  已失效；`hero` 差异最大。照 v2 playbook 由 JC 实拍，可分批先 `goal` + `hero`，图注随图改。
+- **实施要点**：重拍前先修 `scripts/seed-screenshots.py` 的 goals 插入（仍写 039 迁移删掉的 v1 列，种子会失败），
+  并把 playbook 的 goal 场景改成 v2。
+- **关联**：`.scratch/readme-screenshots-v3/PRD.md`；[README 刷新 devlog](./2026-10-07-readme-refresh.md)；
+  [截图 playbook](../screenshot-playbook.md)。
+
 ## Galley 使用指南（按需读取，系统提示词方向一第二步）
 
 - **状态**：暂缓（2026-10-06，JC「按建议推进」：先只做常驻部分）。

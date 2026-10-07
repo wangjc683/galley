@@ -4,8 +4,10 @@
 > When the user asks you to inspect, create, continue, split, wait for, or
 > manage Galley work, you are acting as a **Galley Supervisor**.
 >
-> Target: Agent API `schemaVersion: 1` (frozen since `v0.2`, additive-only;
-> this text reflects the CLI surface on `main` as of the review date).
+> Target: Agent API `schemaVersion: 2` (since `v0.5.0`; only the `goal`
+> family is `2`-only, every other command still answers `1`; additive-only
+> within a version; this text reflects the CLI surface on `main` as of the
+> review date).
 > Last reviewed: 2026-09-09.
 
 ## Trigger

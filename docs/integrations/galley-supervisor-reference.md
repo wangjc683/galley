@@ -4,9 +4,10 @@ This is the detailed reference for people maintaining or auditing the
 [Galley Supervisor SOP](./galley-supervisor-sop.md). The SOP is the copy-first
 document shown in Settings and should stay short. This reference can be longer.
 
-Target: Agent API `schemaVersion: 1` (frozen since `v0.2`, additive-only; this text
-reflects the CLI surface on `main` as of the review date). Last reviewed:
-2026-09-09.
+Target: Agent API `schemaVersion: 2` (since `v0.5.0`; only the `goal` family is
+`2`-only, every other command still answers `1`; additive-only within a version;
+this text reflects the CLI surface on `main` as of the review date). Last
+reviewed: 2026-09-09.
 
 ## Operating Model
 

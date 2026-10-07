@@ -653,7 +653,14 @@ two badge and two disclosure primitives, 提供商 → 服务商, and the sideba
 regrouped by usage (see
 [devlog](./devlog/2026-10-07-settings-cross-tab-pass.md)); JC reviewed
 before/after screenshots. Next is a per-tab second pass, Models first; dark
-mode has not been looked at. Owed from the `v0.6.0` Windows smoke (JC
+mode has not been looked at. Then a **README refresh** (2026-10-07): both
+READMEs now match Goal v2, the `schemaVersion: 2` CLI, the Settings names and
+the features shipped since 2026-09-09; CONTRIBUTING becomes the single home
+for clean-clone setup; the stale "`schemaVersion: 1` frozen since v0.2" line
+is gone from the SOP, reference, skill files, architecture and the agent-api
+stub (see [devlog](./devlog/2026-10-07-readme-refresh.md)). The README
+screenshots stay as shot on 2026-09-09 (JC: no reshoot for now; see
+[deferred](./devlog/deferred.md)). Owed from the `v0.6.0` Windows smoke (JC
 approved publish without an item-by-item report): the resident browser bridge
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
 program), the browser new-user flow (待解锁 → install → auto-verify → 试一试),

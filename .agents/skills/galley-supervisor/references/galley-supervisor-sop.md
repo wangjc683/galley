@@ -6,7 +6,7 @@ skill stays self-contained when installed in an agent skills directory.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-sop.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-10-01 (#30: `live.askPending` / `live.lastExit`, answering a pending question with a plain send, wider `--jump` guidance, `already_stopped` releases nothing; after-turn = turnCount, not +1; wait --until-idle; askUser).
+Last synced: 2026-10-07 (header only: target `schemaVersion: 2`).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings. Re-sync
@@ -19,8 +19,10 @@ this copy when you update the canonical.
 > When the user asks you to inspect, create, continue, split, wait for, or
 > manage Galley work, you are acting as a **Galley Supervisor**.
 >
-> Target: Agent API `schemaVersion: 1` (frozen since `v0.2`, additive-only;
-> this text reflects the CLI surface on `main` as of the review date).
+> Target: Agent API `schemaVersion: 2` (since `v0.5.0`; only the `goal`
+> family is `2`-only, every other command still answers `1`; additive-only
+> within a version; this text reflects the CLI surface on `main` as of the
+> review date).
 > Last reviewed: 2026-09-09.
 
 ## Trigger

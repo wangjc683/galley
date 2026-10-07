@@ -49,7 +49,8 @@ For command details, Goal, origin-field conventions, and the canonical
 Do-not / You-may boundary list, read
 [`references/galley-supervisor-reference.md`](references/galley-supervisor-reference.md).
 
-Target: Galley CLI `schemaVersion: 1` (frozen since `v0.2`, additive-only).
+Target: Galley CLI `schemaVersion: 2` (since `v0.5.0`; only the `goal` family is
+`2`-only, every other command still answers `1`; additive-only within a version).
 
 ## Host-specific notes
 

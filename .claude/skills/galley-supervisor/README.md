@@ -69,9 +69,10 @@ and wait for your approval first.
 
 ## Schema + stability
 
-This skill targets **Galley CLI `schemaVersion: 1`**, frozen since `v0.2`
-and additive-only since. Breaking changes bump to v2 and will ship as a
-new skill version.
+This skill targets **Galley CLI `schemaVersion: 2`** (since `v0.5.0`). Only
+the `goal` family is `2`-only; every other command still answers `1`.
+Changes within a version are additive-only; a breaking change bumps the
+version and ships as a new skill version.
 
 ## Updates
 
