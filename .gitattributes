@@ -1,0 +1,5 @@
+# Upstream GenericAgent code and seed memory shipped as Galley's managed
+# runtime. Keep them out of GitHub's language bar so it reflects Galley's own
+# code (Rust Core / CLI, TypeScript GUI, Python runner).
+managed-ga/code/** linguist-vendored
+managed-ga/state-seed/** linguist-vendored

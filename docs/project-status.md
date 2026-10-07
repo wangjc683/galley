@@ -660,7 +660,15 @@ for clean-clone setup; the stale "`schemaVersion: 1` frozen since v0.2" line
 is gone from the SOP, reference, skill files, architecture and the agent-api
 stub (see [devlog](./devlog/2026-10-07-readme-refresh.md)). The README
 screenshots stay as shot on 2026-09-09 (JC: no reshoot for now; see
-[deferred](./devlog/deferred.md)). Owed from the `v0.6.0` Windows smoke (JC
+[deferred](./devlog/deferred.md)). The same day a **README visual pass**:
+a typographic banner (light / dark) replaces the logo and H1, highlights
+become single-column lists, the table-as-card layouts and the doubled rules
+are gone, the architecture diagram is Mermaid, and three brand-colored badges
+remain; `scripts/render-readme-assets.py` re-renders the banner and the
+social preview, `.gitattributes` keeps the upstream engine out of the
+language bar, and the repo gained topics (see
+[devlog](./devlog/2026-10-07-readme-visual-pass.md)). The social preview
+image waits for JC to upload it in the repo settings. Owed from the `v0.6.0` Windows smoke (JC
 approved publish without an item-by-item report): the resident browser bridge
 (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another
 program), the browser new-user flow (待解锁 → install → auto-verify → 试一试),

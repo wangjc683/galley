@@ -15,7 +15,10 @@
 - **启动信号**：任一即可。① UI 一轮大改收尾（Settings 逐页第二段与暗色复查做完），外壳短期不再变；② 有用户或社区
   反馈截图与实物对不上（尤其 Goal）；③ Goal 或运行区再改版，`goal.png` / `hero.png` 偏差继续扩大。
 - **方案**：18 张全部早于 v0.4.16 起的改版；`goal.png` 仍是 v1 的「3 个 Agent · 预算 30 分钟」，图注「章节标记」
-  已失效；`hero` 差异最大。照 v2 playbook 由 JC 实拍，可分批先 `goal` + `hero`，图注随图改。
+  已失效；`hero` 差异最大。照 v2 playbook 由 JC 实拍，可分批先 `goal` + `hero`，图注随图改。同日版式打磨
+  （[devlog](./2026-10-07-readme-visual-pass.md)）把依赖重拍的第三层并到这里：导览从 2×3 小图（每张约 370px，
+  手机上约 150px，UI 读不出）改成大图逐张或局部特写；补深色版截图（现在深色模式下是 6 块浅色图块）；
+  一段 20–40 秒真实任务的演示视频（user-attachments 上传的 mp4 能在 README 里内联播放）。
 - **实施要点**：重拍前先修 `scripts/seed-screenshots.py` 的 goals 插入（仍写 039 迁移删掉的 v1 列，种子会失败），
   并把 playbook 的 goal 场景改成 v2。
 - **关联**：`.scratch/readme-screenshots-v3/PRD.md`；[README 刷新 devlog](./2026-10-07-readme-refresh.md)；

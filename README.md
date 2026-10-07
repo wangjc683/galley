@@ -1,12 +1,11 @@
 <p align="center">
-  <img src="docs/assets/galley-icon.png" alt="Galley logo" width="96" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-banner-dark.png">
+    <img src="docs/assets/readme-banner.png" alt="Galley — Less harness. More model." width="640" />
+  </picture>
 </p>
 
-<h1 align="center">Galley</h1>
-
 <p align="center">
-  <strong>Less harness. More model.</strong>
-  <br/>
   A lightweight, general-purpose assistant that lives on your computer: a thin harness that leans on the model itself, built to get better with every model release.
 </p>
 
@@ -23,10 +22,9 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <a href="https://github.com/wangjc683/galley/releases"><img src="https://img.shields.io/github/v/release/wangjc683/galley?include_prereleases" alt="Latest Release" /></a>
-  <a href="https://github.com/wangjc683/galley/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue" alt="Platform" /></a>
-  <a href="https://github.com/wangjc683/galley/stargazers"><img src="https://img.shields.io/github/stars/wangjc683/galley?style=social" alt="Stars" /></a>
+  <a href="https://github.com/wangjc683/galley/releases"><img src="https://img.shields.io/github/v/release/wangjc683/galley?include_prereleases&style=flat-square&label=release&color=c68762&labelColor=211f1c" alt="Latest Release" /></a>
+  <a href="https://github.com/wangjc683/galley/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-c68762?style=flat-square&labelColor=211f1c" alt="Platform: macOS | Windows" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-c68762?style=flat-square&labelColor=211f1c" alt="License: MIT" /></a>
 </p>
 
 <p align="center">
@@ -38,20 +36,11 @@
   <sub>Follows your system appearance — light or dark.</sub>
 </p>
 
----
-
-
 ## What Is Galley
 
 Galley is a personal AI assistant that runs on your own computer and actually gets things done — driving your browser, terminal, and files, even your phone. Its harness is deliberately thin: the engine keeps the tool set minimal and the context dense, so the model's own ability does the work, and every model upgrade lands as a Galley upgrade — no waiting for us to catch up.
 
 When one assistant isn't enough, Galley becomes a team. Multiple sessions advance in parallel, ready to switch, take over, and resume at any time. You watch progress and send instructions in the GUI; a Supervisor Agent orchestrates the same team through the CLI — two roles, one shared state, all of it on your machine.
-
-| For Humans | For Agents | Ready By Default |
-|---|---|---|
-| Manage sessions, projects, and tool timelines in the GUI | The `galley` CLI is a stable public contract for Supervisor Agents | Bundled engine, CPython 3.11, runtime dependencies, and Browser Control assets |
-
----
 
 ## Highlights
 
@@ -59,41 +48,48 @@ When one assistant isn't enough, Galley becomes a team. Multiple sessions advanc
 
 Powered by the bundled engine — a derivative work of [GenericAgent](https://github.com/lsdefine/GenericAgent), shipped inside the installer, ready on first launch.
 
-| | |
-|---|---|
-| 🖥️ **System-level execution**<br/>Terminal, filesystem, keyboard and mouse, screen vision, all the way to driving a phone over ADB — from looking things up to actually getting them done. | 🌐 **Your real browser**<br/>Unlock it once by loading the bundled extension into Chrome or Edge, and the agent works in the browser you are already signed into — accounts, memberships, and work consoles are all there. No re-login. |
-| 🧬 **Self-evolving skills**<br/>Every new task it solves is crystallized into a reusable skill; the longer you use it, the more capable it gets — and the skill tree lives on your machine. | 💰 **Token efficiency, measured**<br/>The engine keeps context dense instead of long. In the [GenericAgent paper](https://arxiv.org/abs/2604.17091) it completed Lifelong AgentBench at 100% accuracy on 3–6× fewer input tokens than leading agents. Galley sets the default window at 90K tokens, leaving headroom for long tasks. |
-| 🔌 **Any model, including local ones**<br/>Built-in presets from Anthropic and OpenAI to DeepSeek, Kimi, and GLM — or sign in with your ChatGPT account instead of an API key. Custom takes any OpenAI- or Anthropic-compatible endpoint, a local server such as Ollama needs no key, and each conversation sets its own reasoning effort. | 📖 **Reading panel**<br/>Files the agent writes open from the step that wrote them, right beside the conversation — Markdown, code, images, CSV as a table. Add files or images from the composer, and point the panel at a Git repository to review changes read-only, unified or split, without leaving Galley. |
+- 🖥️ **System-level execution** — terminal, files, keyboard and mouse, screen vision, even a phone over ADB: from looking things up to getting them done.
+- 🌐 **Your real browser** — load the bundled extension into Chrome or Edge once, and the agent works in the browser you're already signed into. No re-login.
+- 🧬 **Self-evolving skills** — every new task it solves becomes a reusable skill; the skill tree grows on your machine.
+- 💰 **Token efficiency, measured** — dense context instead of long: 100% on Lifelong AgentBench with 3–6× fewer input tokens than leading agents ([paper](https://arxiv.org/abs/2604.17091)). The default window is 90K.
+- 🔌 **Any model, including local ones** — presets from Anthropic and OpenAI to DeepSeek, Kimi, and GLM, ChatGPT sign-in, any compatible endpoint, Ollama with no key; reasoning effort per conversation.
+- 📖 **Reading panel** — files the agent writes open beside the conversation: Markdown, code, images, CSV as a table. Add files or images from the composer; review a Git repository's changes read-only, unified or split.
 
 ### One team you can actually manage
 
 Galley's orchestration layer. You operate in the GUI; a Supervisor Agent goes through the stable `galley` CLI. Both are first-class operators sharing the same sessions and history — not separate worlds.
 
-| | |
-|---|---|
-| 🧭 **Project workspace + multiple sessions**<br/>Point a folder — a code repo or a document directory — at a Project workspace; multiple sessions advance around the same project in parallel, then converge. | 🎯 **Galley Goal**<br/>Hand a conversation a goal and Galley keeps it going on its own, round after round, until the model declares the goal done, the time ceiling you set runs out, or you stop it. |
-| 🔧 **Transparent runs**<br/>Watch the model's reasoning stream in while it works; every step opens to its full arguments and result, and a finished run folds into one line — how many steps, how long. | ⏰ **Scheduled tasks**<br/>Give a prompt a time — daily, weekly, or monthly; at that moment Galley opens a new session, runs it, and the result waits for you in the sidebar. Galley needs to be running, and it can launch at login. |
-| 💬 **IM Channels**<br/>Connect WeChat, Feishu, Telegram, or Discord and the same assistant answers from your phone — it does the work itself, and can hand longer jobs to sessions on your desktop. | 💾 **Persistence + search + background mode**<br/>Close the window without quitting: Galley stays in the menu bar / tray and notifies you when a reply or a Goal finishes. Every past conversation is searchable with ⌘K (Ctrl+K on Windows). |
-
----
+- 🧭 **Projects + parallel sessions** — point a Project at a folder, a code repo or a document directory, and let several sessions advance around it in parallel.
+- 🎯 **Galley Goal** — give a conversation a goal and it keeps going on its own until the model says it's done, the time ceiling runs out, or you stop it.
+- 🔧 **Transparent runs** — watch the reasoning stream in; every step opens to its full arguments and result, and a finished run folds into one line.
+- ⏰ **Scheduled tasks** — a prompt that runs daily, weekly, or monthly in a new session, its result waiting in the sidebar. Galley needs to be running and can launch at login.
+- 💬 **IM Channels** — WeChat, Feishu, Telegram, or Discord: the same assistant from your phone, handing longer jobs to desktop sessions.
+- 💾 **Background + search** — close the window and Galley stays in the menu bar / tray, notifies you when work finishes, and ⌘K (Ctrl+K on Windows) searches every past conversation.
 
 ## A Quick Tour
 
-| | |
-|---|---|
-| ![Tool timeline](docs/screenshots/en/tools.png)<br/><sub>Tool timeline — every call's arguments, result, and timing, inline</sub> | ![Reading panel](docs/screenshots/en/reading.png)<br/><sub>Reading panel — review worktree changes beside the conversation</sub> |
-| ![Project view](docs/screenshots/en/projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Goal](docs/screenshots/en/goal.png)<br/><sub>Goal — a long-running objective with chapter markers</sub> |
-| ![Scheduled tasks](docs/screenshots/en/scheduled.png)<br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub> | ![Search](docs/screenshots/en/search.png)<br/><sub>⌘K — every past conversation, straight to the matching line</sub> |
-
----
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/screenshots/en/tools.png" alt="Tool timeline" /><br/><sub>Tool timeline — every call's arguments, result, and timing, inline</sub></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/en/reading.png" alt="Reading panel" /><br/><sub>Reading panel — review worktree changes beside the conversation</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/screenshots/en/projects.png" alt="Project view" /><br/><sub>Project view — sessions advancing around one project</sub></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/en/goal.png" alt="Goal" /><br/><sub>Goal — a long-running objective with chapter markers</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/screenshots/en/scheduled.png" alt="Scheduled tasks" /><br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/en/search.png" alt="Search" /><br/><sub>⌘K — every past conversation, straight to the matching line</sub></td>
+  </tr>
+</table>
 
 ## Quick Start
 
 Decide how you'll connect a model first. Presets for ChatGPT / Codex, OpenAI, Anthropic, DeepSeek, Kimi for Coding, MiniMax, OpenRouter, SiliconFlow, Xiaomi MiMo, and Zhipu GLM are built in, with the endpoint prefilled: ChatGPT / Codex signs in with your ChatGPT account, the others take an API Key. For any other OpenAI- or Anthropic-compatible endpoint, pick Custom and enter its URL; a local server such as Ollama needs no key.
 
-| 1. Download Galley | 2. Configure a model | 3. Start using it |
-|---|---|---|
-| Download the macOS / Windows installer from [Releases](https://github.com/wangjc683/galley/releases). | On first launch, pick a provider and paste your API Key (or sign in with ChatGPT) — the connection is tested automatically. | Click "Start using Galley" to enter the main conversation view (a ChatGPT sign-in takes you straight there). |
+1. **Download Galley** — the macOS / Windows installer from [Releases](https://github.com/wangjc683/galley/releases).
+2. **Configure a model** — on first launch, pick a provider and paste your API Key (or sign in with ChatGPT); the connection is tested automatically.
+3. **Start using it** — click "Start using Galley" to enter the main conversation view (a ChatGPT sign-in takes you straight there).
 
 | Platform | Installer |
 |---|---|
@@ -115,8 +111,6 @@ On Windows, when SmartScreen says the publisher is unknown, choose "More info" �
 If you already have a [GenericAgent](https://github.com/lsdefine/GenericAgent) environment, choose the GA folder from **Settings → Runtime → More → Connect external GA**. Once attached, Galley stays strictly read-only and never touches your external GA's code, memory, SOP, or `mykey.py`. Browser Control and Channels run on the bundled engine only, and the providers under **Settings → Models** serve the bundled engine; an external GA keeps using its own `mykey.py`.
 
 </details>
-
----
 
 ## Supervisor / Channels
 
@@ -191,53 +185,22 @@ Full command reference, JSON schemas, and exit codes live in the [Agent API docs
 
 </details>
 
----
-
 ## Architecture
 
 The GUI and the CLI are **peer frontends** — not a GUI wrapping a CLI, but two equals each talking directly to the same **Rust Core**: the GUI from inside the app, the CLI over a local socket. Core is the single authority, owning session / Project / Goal state, the Goal loop, scheduled tasks, SQLite writes, and every Python process Galley runs; by default those run on the bundled engine, ready out of the box.
 
-<details>
-<summary>Show architecture diagram</summary>
-
-```text
-+----------------+                  +----------------+
-|   Galley GUI   |---+          +---|   Galley CLI   |
-|  Tauri/React   |   |          |   |      Rust      |
-+----------------+   |          |   +----------------+
-         in-process  v          v
-              +------------------------+        localhost only
-              |      Galley Core       | <----  unix socket / named pipe
-              |          Rust          |        no TCP / no token / no TLS
-              |  - session lifecycle   |
-              |  - projects + goals    |
-              |  - scheduled tasks     |
-              |  - SQLite authority    |
-              |  - process ownership   |
-              +-----------+------------+
-                          |
-       +------------------+-------------------+
-       v                  v                   v
-+-------------+   +---------------+   +----------------+
-| Runner x N  |   | IM channels   |   | Browser bridge |
-| one per     |   | one per       |   | resident,      |
-| session     |   | connected app |   | for Chrome/Edge|
-+------+------+   +-------+-------+   +--------+-------+
-       |                  |                    |
-       +------------------+--------------------+
-                          v
-              +------------------------+
-              |   Galley-managed GA    |
-              | - GenericAgent engine  |
-              | - Galley patch stack   |
-              | - Galley runtime prompt|
-              | - bundled CPython 3.11 |
-              +------------------------+
+```mermaid
+flowchart TB
+  GUI["Galley GUI<br/>Tauri · React"] -- in-process --> Core
+  CLI["Galley CLI<br/>Rust"] -- "local socket · named pipe<br/>no TCP · no token" --> Core
+  Core["Galley Core · Rust<br/>sessions · projects · goals<br/>scheduled tasks · SQLite"]
+  Core --> R["Session runners<br/>one per session"]
+  Core --> IM["IM channels<br/>one per connected app"]
+  Core --> BB["Browser bridge<br/>resident"]
+  R & IM & BB --> GA["Galley-managed GA<br/>GenericAgent engine + Galley patches<br/>runtime prompt · CPython 3.11"]
 ```
 
 All three kinds of process run Python. When you attach an external GA, session runners use it instead, and IM channels and the browser bridge stay off.
-
-</details>
 
 **Tech stack:** Tauri v2 + React 19 + TypeScript 5.8 + Tailwind v4 / Rust (Galley Core + Galley CLI) / Python (runner, wraps GenericAgent) / SQLite + FTS5 trigram
 
@@ -245,8 +208,6 @@ More docs:
 [Architecture](./docs/architecture.md) ·
 [Contributing](./CONTRIBUTING.md) ·
 [Docs index](./docs/README.md)
-
----
 
 ## Under the Hood
 
@@ -268,8 +229,6 @@ A few design choices that aren't in the feature list but shape Galley's engineer
 - **A persistence layer built to evolve.** SQLite is the authoritative store; before applying ordered migrations, an upgrade backs up the whole data directory. Past sessions are indexed with FTS5 trigram so even Chinese substrings are searchable, staying resident in the background and instantly searchable when you return.
 
 </details>
-
----
 
 ## Why "Galley"?
 
