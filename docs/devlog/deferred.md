@@ -8,6 +8,26 @@
 
 ---
 
+## 浏览器操作抢走前台
+
+- **状态**：暂缓（2026-10-07 JC 裁决：Chrome 用户基本不受影响，保持现状）。
+- **提出**：2026-10-07，JC 提议「锁定前台显示」按钮：智能体每次调用浏览器，浏览器就跳到前台盖住 Galley。
+- **启动信号**：任一即可。① JC 在 Vivaldi 里被抢得受不了（这是他的主力浏览器，每次运行第一步新开标签页都会抢）；
+  ② 有 Edge / Brave / Arc 或 Windows 用户报同类问题，或用探针测出 Edge 也抢；③ Vivaldi 修了 VB-111875，那就删掉这一条。
+- **方案**：实测的抢前台来源是浏览器自身行为，不在 Galley。Chrome 155 新开标签页（前台、后台）都不抢，只有
+  `tabs switch` 和 `Page.bringToFront` 抢，而这两个真实用量都是 0 次。Vivaldi 8.2 只要新建标签页或窗口就激活整个应用
+  （`focused:false` 也无视），扩展层面修不了。首选方案 B「抢了再还」：在 Galley 自己的常驻桥
+  `runner/managed_browser_bridge.py` 里包一层 master 转发，命令期间浏览器变成前台而原先不是，就按 pid 把前台还给原先的
+  应用。原型实测浏览器在前台停留 257～334 ms。置顶按钮、改扩展（方案 A）、改用 Chrome、让模型少开标签页都已否决，
+  理由见 PRD。
+- **实施要点**：用 `lsappinfo` 读前台（约 8 ms）；按 pid 激活，不能按 bundle id，否则 dev 构建会拉起已安装的
+  Galley.app；命令发出时就并行盯，进程内激活，把闪烁压到 100 ms 以内（未验证）；命令开始后有键鼠输入就不还；
+  `Page.bringToFront` 不还；只在 macOS、内置模式、桥是 master 时生效，外置模式没有变化。
+- **待定**：前台还给任何之前在前台的应用（推荐）还是只还给 Galley；闪烁能否接受要在 `tauri dev` 真机看；Edge 和
+  Windows 都没测。
+- **关联**：`.scratch/browser-focus-steal/PRD.md`（实测表、源码出处、原型数据、探针做法和坑）；
+  [浏览器控制](../managed-ga-runtime/browser-control.md)。
+
 ## README 截图第三版（重拍）
 
 - **状态**：暂缓（2026-10-07 JC 裁决：截图先不动，不重拍；README 文字已刷新，截图与图注原样保留）。
