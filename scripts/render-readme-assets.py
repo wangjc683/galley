@@ -10,8 +10,8 @@ re-rendering when the slogan, the icon or the brand palette changes.
 
 Outputs:
 
-  - docs/assets/readme-banner.png       800 x 320 CSS px @2x, transparent
-  - docs/assets/readme-banner-dark.png  same, dark-mode inks
+  - docs/assets/readme-banner.png       800 x 320 CSS px @2x, white card
+  - docs/assets/readme-banner-dark.png  same, dark inks on a #0d1117 card
   - docs/assets/social-preview.png      1280 x 640, upload by hand in the
                                         repo's Settings -> Social preview
 
@@ -36,10 +36,14 @@ ASSETS = ROOT / "docs/assets"
 FONTS = ROOT / "gui/node_modules/@fontsource"
 ICON = ASSETS / "galley-icon.png"
 
-# Light / dark inks from gui/src/styles/globals.css.
+# Light / dark inks from gui/src/styles/globals.css. Each banner also gets an
+# opaque card in GitHub's own page color (default light / dark theme): it is
+# seamless on github.com, and wherever a renderer ignores <picture> or guesses
+# the scheme wrong, the image still carries its own background, so the
+# wordmark never lands dark-on-dark or light-on-light.
 THEMES = {
-    "light": {"ink": "#211f1c", "soft": "#57534c", "rule": "#c68762"},
-    "dark": {"ink": "#ede7e0", "soft": "#c6bdb2", "rule": "#d6a083"},
+    "light": {"ink": "#211f1c", "soft": "#57534c", "rule": "#c68762", "card": "#ffffff"},
+    "dark": {"ink": "#ede7e0", "soft": "#c6bdb2", "rule": "#d6a083", "card": "#0d1117"},
 }
 
 
@@ -75,7 +79,7 @@ def font_faces() -> str:
 
 
 def banner_html(theme: dict[str, str]) -> str:
-    return f"""<div style="box-sizing:border-box;width:798px;height:320px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+    return f"""<div style="box-sizing:border-box;width:800px;height:320px;background:{theme['card']};border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center">
 <img src="{ICON.as_uri()}" style="width:76px;height:76px;margin-bottom:20px">
 <div style="font:italic 500 92px/1 NR;letter-spacing:.005em;color:{theme['ink']}">Galley</div>
 <div style="width:36px;height:1.5px;background:{theme['rule']};margin:22px 0 18px"></div>
