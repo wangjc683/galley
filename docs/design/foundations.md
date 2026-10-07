@@ -114,11 +114,18 @@ Tailwind 颜色修饰符 `bg-brand/[var(--opacity-soft)]`，编译成
 生成了、值不合法）。这些 token **不能**当 `opacity:` 的值用（那个属性要
 数字）。
 
-#### Dark theme（暖炭黑）
+#### Dark theme（冷蓝灰）
 
-Dark theme 是 Galley light theme 的夜间版本，不是另一个产品方向。视觉目标是
-**夜间书桌**：长文可读、状态仍清楚、杏沙品牌只作为体温点出现；不走纯黑
-OLED，也不走冷灰蓝 IDE / dashboard 感。
+Dark theme 是 Galley light theme 的夜间版本，不是另一个产品方向：明度层级、
+品牌色、语义色共用一套逻辑。视觉目标是**夜间书桌**：长文可读、状态仍清楚、
+杏沙品牌只作为体温点出现；不走纯黑 OLED。
+
+**底色与墨色走安静的冷蓝灰**（2026-10-07 起，H ≈ 260，底色 C ≈ .008–.010）。
+两个主题的冷暖因此不对称：light 是近中性纸 + 暖墨，dark 是冷蓝灰底 + 冷白墨，
+暖度在 dark 下只由品牌家族（杏沙、用户消息带、选中行）、行内代码与语义色
+承担。这是 JC 真机两轮变体实测的裁决（见
+[devlog](../devlog/2026-10-07-dark-theme-cool-ground.md)），**不要**按「跨主
+题同一策略」把 dark 的底或墨拉回暖色。
 
 默认主题偏好为 `system`，跟随系统深浅；用户可手动选择 `light` / `dark`。
 实现上写 `html[data-theme="light|dark"]` 与 `color-scheme`，所有颜色从
@@ -126,20 +133,20 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 
 | CSS variable | Dark 值 | 用途 |
 |---|---|---|
-| `--color-chrome` | `#1E1B17` | Sidebar chrome。**dark 下比 app 更亮**（与 light 相反），见下方「Chrome 的方向随主题翻转」 |
-| `--color-app` | `#191614` | 暖黑 app 底 |
-| `--color-surface` | `#201B19` | 普通卡片底 |
-| `--color-code-surface` | `#24201C` | 块代码底 |
-| `--color-elevated` | `#27231F` | 浮层 / dialog / command palette |
-| `--color-line` | `#353029` | 默认边框 |
-| `--color-line-strong` | `#4D443C` | hover / focus 边 |
-| `--color-ink` | `#EDE7E0` | 主文本，不用纯白 |
-| `--color-ink-soft` | `#C6BDB2` | 次级文本 |
-| `--color-ink-muted` | `#92897D` | hint / timestamp |
-| `--color-hover` | `#2A2622` | 中性 hover |
+| `--color-chrome` | `#191C20` | Sidebar chrome。**dark 下比 app 更亮**（与 light 相反），见下方「Chrome 的方向随主题翻转」 |
+| `--color-app` | `#14171A` | 冷蓝灰 app 底 |
+| `--color-surface` | `#1A1C21` | 普通卡片底 |
+| `--color-code-surface` | `#1E2126` | 块代码底 |
+| `--color-elevated` | `#212429` | 浮层 / dialog / command palette |
+| `--color-line` | `#2D3137` | 默认边框 |
+| `--color-line-strong` | `#41464E` | hover / focus 边 |
+| `--color-ink` | `#E5E8EC` | 主文本，冷白、不用纯白；对 app 14.64:1 |
+| `--color-ink-soft` | `#BABFC5` | 次级文本 |
+| `--color-ink-muted` | `#858B93` | hint / timestamp |
+| `--color-hover` | `#24272C` | 中性 hover |
 | `--color-selected` / `--color-brand-soft` | `#3E3026` | 杏沙 tint |
 | `--color-brand-tint` | `#362D24` | 用户消息气泡底。2026-09-17 由 `#4D3B2B` 收响度：原值比画布亮 OKLCH +16.5、彩度 0.036 高于 light，且亮过 elevated / hover 整个阶梯，读作贴在黑底上的发光面板；现 +10 / C 0.020 / 色相 63 不变（light 步长的 1.4 倍、彩度的三分之二，与 07-25 去暖地面同一逻辑）。委派标记与 armed Composer 同穿此 token，一起变安静 |
-| *(sidebar 内覆写)* | `--color-hover` `#2F2B27` / `--color-selected` `#4D3B2B` | `.chrome-hover-scope`，见下方；light 侧同名覆写 `--color-selected` `#E7D8C0`。dark 的 selected 曾与 `brand-tint` 同值但**从不绑定**（标定重合，见 [选中行三通道](../devlog/2026-08-21-sidebar-selected-row-three-channels.md)）；2026-09-17 brand-tint 收响度后两者分开，selected 不动 |
+| *(sidebar 内覆写)* | `--color-hover` `#282C32` / `--color-selected` `#4D3B2B` | `.chrome-hover-scope`，见下方；light 侧同名覆写 `--color-selected` `#E7D8C0`。dark 的 selected 曾与 `brand-tint` 同值但**从不绑定**（标定重合，见 [选中行三通道](../devlog/2026-08-21-sidebar-selected-row-three-channels.md)）；2026-09-17 brand-tint 收响度后两者分开，selected 不动 |
 | `--color-brand` | `#D6A083` | 品牌主色 |
 | `--color-brand-strong` | `#E2AE8D` | 品牌 hover / link |
 | `--color-success` | `#8FBF8F` | 成功（较 light 提亮） |
@@ -147,7 +154,19 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 | `--color-error` | `#D97A76` | 错误红（较 light 提亮） |
 | `--color-info` | `#A8A7C3` | info 灰蓝（较 light 提亮） |
 
-> **2026-07-25 降暖一档（勿回退到旧值）**：上表的表面 / 墨色是原值 chroma
+> **2026-10-07 换冷色相（上表即落地值）**：JC 读出 dark「字发黄、发脏，背景也
+> 黄黄的」，对照的是经典暗色主题。第一轮真机变体（现状 / 近中性 / 近中性降亮 /
+> 冷相）选冷相；第二轮围绕冷相测「底色加色 / 墨色降亮 / TN 的紫色相」，JC 仍选
+> 第一轮那档。落地方式：表面、线、hover、墨色全部转到 H ≈ 260，**OKLCH L 原样
+> 保留**（±0.1，正文对比 14.67 → 14.64:1）。底色 chroma 几乎没变（≈ .009，与
+> 暖底同级）——问题出在色相，不在量；墨色 chroma 减半（.0114 → .0063）。
+> 07-25「奶油字不是元凶」的结论**撤回**：它比的是 C/L，而 light 的墨是深色、
+> dark 的墨是浅色，除以明度把 light 侧放大近 4 倍；按绝对 chroma，dark 奶油
+> 字是 light 墨的 1.8 倍。品牌家族、行内代码、语义色本轮**有意未动**。
+> 以下 07-25 / 08-21 两段是暖底时期的记录：明度阶梯与论证仍有效，色相与
+> chroma 数值已被取代。
+
+> **2026-07-25 降暖一档（历史，数值已被 10-07 取代）**：上表的表面 / 墨色是原值 chroma
 > 的 **0.6 倍**，L 与色相原样不动——纯 chroma 旋钮，对比度与层级毫无变化
 > （正文 ink/app 14.97:1 → 14.95:1）。起因：light 的表面实质是中性的
 > （C ≈ 0.002，暖度全交给暖墨 + 杏沙），而 dark 曾悄悄换成"染色纸"策略
@@ -160,7 +179,7 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 > 品牌家族（`brand` / `brand-strong` / `brand-tint` / `selected`）与语义色
 > **有意未动**——先看安静下来的底色之下品牌色的相对响度对不对，再决定下一轮。
 
-> **2026-08-21 抬画布 + chroma 松到 0.73× + chrome 翻向**：上表已是本次落地值。
+> **2026-08-21 抬画布 + chroma 松到 0.73× + chrome 翻向**（明度阶梯沿用至今，色相 / chroma 已被 10-07 取代）。
 > 整条表面阶梯上移 **3.3 个 OKLCH L 点**，随后 chrome 与 app 对调、主区阶梯
 > 随 app 回落 2.1（见下方「Chrome 的方向随主题翻转」）。触发信号是 JC 在 dark
 > 下读出「sidebar 太重、头重脚轻」。以 Tokyo Night 为
@@ -175,7 +194,7 @@ OLED，也不走冷灰蓝 IDE / dashboard 感。
 > （C/L .0321）。仍远低于 TN 的 .078–.095，因为我们是暖相——暖色在冷蓝紫还
 > 撑得住的 chroma 上就已经发闷。07-25「墨色必须同向同幅」的规则继续生效：
 > 墨色同取 1.21×，**明度不动**，故对比度漂移 ≤0.03。`--shadow-*` 的高光内嵌
-> 随 ink 更新为 `rgba(237,231,224,…)`（17 处）。
+> 随 ink 更新为 `rgba(237,231,224,…)`（17 处；10-07 随冷白墨改为 `rgba(229,232,236,…)`，现 18 处）。
 >
 > **墨色明度有意未动**，故正文对比是画布位置的因变量：抬画布后 13.96:1，
 > 翻转让画布回落后 **14.67:1**（原 14.95，TN 10.59）。要往 TN 那个区间走必须
@@ -199,20 +218,23 @@ Light 的纸是近白的，所以 chrome 比它暗；dark 的画布是近黑的�
 | | app | chrome | ΔL\* | 方向 |
 |---|---|---|---|---|
 | Light | `#faf9f8` | `#efeeec` | **3.85** | chrome 更暗 |
-| Dark | `#191614` | `#1E1B17` | **2.46** | **chrome 更亮** |
+| Dark | `#14171a` | `#191c20` | **2.57** | **chrome 更亮** |
 
 Dark 的 2.2（OKLCH L）直接抄 Tokyo Night 的 sidebar↔editor 差值；light 的 3.85
 是在近白端标定的，两端不共用一个数字。
 
 Dark 侧的两条承重后果，**都是有意的、不要"修"**：
 
-- chrome（L 22.4）与 `--color-surface`（22.7）基本持平，即 sidebar 与主区卡片
+- chrome（L 22.5）与 `--color-surface`（22.7）基本持平，即 sidebar 与主区卡片
   共处同一明度带。这正是「浮起来的材质」的读法。
 - 全局 `--color-hover` / `--color-selected` 是按主区阶梯标定的，在 chrome 上
   贴得太近而不可见——与 light 同病。Sidebar 通过 `.chrome-hover-scope` 覆写
   两者，取值就是**翻转前的全局值**（sidebar 的地面现在恰好等于翻转前的 app
-  底，故按那个地面标定过的交互色原样成立）：`chrome→hover` ΔL\* 7.85、
-  `hover→selected` ΔL\* 5.66，与主区的 7.95 / 5.67 几乎重合。
+  底，故按那个地面标定过的交互色原样成立）：`chrome→hover` ΔL\* 7.72，与主区
+  `app→hover` 的 7.98 几乎重合；sidebar 选中 `#4D3B2B` 比 hover 高 8.55，比主区
+  selected 的 5.60 更响，是有意的（见
+  [选中行三通道](../devlog/2026-08-21-sidebar-selected-row-three-channels.md)）。
+  以上为 10-07 冷底实测值。
 
 以下为这条规则的形成史（数值已被上表取代，保留论证）。
 

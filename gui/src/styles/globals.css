@@ -314,7 +314,12 @@
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surface chroma dialed back to 0.6× on 2026-07-25 (L and hue held
+  /* CURRENT STATE: a quiet cool blue-grey ground (2026-10-07, see the
+     last paragraph of this comment). The 07-25 / 08-21 paragraphs before
+     it are the history of the retired warm ground — their lightness
+     ladder still holds, their hues and chroma values do not.
+
+     Surface chroma dialed back to 0.6× on 2026-07-25 (L and hue held
      fixed, so contrast / elevation / readability are untouched — this
      was a pure chroma knob). Rationale: light-mode surfaces are
      effectively neutral (C ≈ 0.002) and let the warm inks + apricot
@@ -370,10 +375,27 @@ html[data-theme="dark"] {
      Brand fills (selected / brand-soft / brand-tint) ride the lift but
      keep their chroma at pure L-compensation — they were excluded from
      the 07-25 de-warm, so scaling them here would add warmth to
-     something that never lost any. */
-  --color-app: #191614;
-  --color-surface: #201b19;
-  --color-elevated: #27231f;
+     something that never lost any.
+
+     Hue flip to cool, 2026-10-07. JC read dark as yellow and dirty, ink
+     and ground alike, next to classic dark themes. Live variants
+     (current / near-neutral / near-neutral dimmed / cool) picked the
+     cool control; a second round around it (more ground chroma, dimmed
+     ink, Tokyo Night's violet hue) still picked the same one. So every
+     surface, line, hover and ink moved to H ≈ 260 at its existing OKLCH
+     L (±0.1; body contrast 14.67 → 14.64:1, chrome→app ΔL* 2.46 → 2.57
+     from 8-bit rounding). Ground chroma barely moved (≈ .009, the warm
+     ground's level): the complaint was the hue, not the amount. Ink
+     chroma halved (.0114 → .0063): 07-25 cleared the cream ink by
+     comparing C/L, but dividing by L inflates light's dark ink ~4×; in
+     absolute C the cream ink ran 1.8× light's. Warmth now lives only in
+     the brand family (brand / brand-soft / brand-tint / selected),
+     code-ink and the semantic colours, all deliberately left untouched
+     in this pass. The shadow highlight insets (18 now; 08-21 counted
+     17) follow the ink as rgba(229,232,236,…). */
+  --color-app: #14171a;
+  --color-surface: #1a1c21;
+  --color-elevated: #212429;
   /* DARK CHROME IS *LIGHTER* THAN --color-app. This is the one token
      whose direction differs between the themes, so read this before
      "fixing" it back.
@@ -414,25 +436,25 @@ html[data-theme="dark"] {
 
      Judge this gap with CIE Lab ΔL* (or OKLCH L), never WCAG contrast —
      see the light --color-chrome comment for why. */
-  --color-chrome: #1e1b17;
+  --color-chrome: #191c20;
   /* Dark code fill: a touch lighter than the near-black page (mirrors
      inline code's --color-hover relationship in dark) so the block
      separates as a distinct code medium without a harsh outline. */
-  --color-code-surface: #24201c;
+  --color-code-surface: #1e2126;
   /* Dark inline-code ink: same hue, flipped for a dark ground — a light
      warm tan rather than a dark warm brown, so the hue signal survives
      without the glare a saturated light-on-dark would carry. */
   --color-code-ink: #e0a882;
 
-  --color-line: #353029;
-  --color-line-strong: #4d443c;
-  --color-line-subtle: rgba(237, 231, 224, 0.08);
+  --color-line: #2d3137;
+  --color-line-strong: #41464e;
+  --color-line-subtle: rgba(229, 232, 236, 0.08);
 
-  --color-ink: #ede7e0;
-  --color-ink-soft: #c6bdb2;
-  --color-ink-muted: #92897d;
+  --color-ink: #e5e8ec;
+  --color-ink-soft: #babfc5;
+  --color-ink-muted: #858b93;
 
-  --color-hover: #2a2622;
+  --color-hover: #24272c;
   --color-selected: #3e3026;
 
   --color-brand: #d6a083;
@@ -461,7 +483,7 @@ html[data-theme="dark"] {
   /* Filled-button hover fills flip direction in dark: the fills are
      light here, so hover brightens (lift toward the light), not
      darkens. See the light-mode block for the full rationale. */
-  --color-ink-hover: #f7f1e8;
+  --color-ink-hover: #eff2f6;
   --color-warning-hover: #e0b468;
   --color-error-hover: #e2908c;
 
@@ -484,46 +506,46 @@ html[data-theme="dark"] {
      the "raised" read that the shadow alone cannot. */
   --shadow-selected:
     0 1px 2px rgba(0, 0, 0, 0.4), 0 3px 10px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(237, 231, 224, 0.05);
+    inset 0 1px 0 rgba(229, 232, 236, 0.05);
   --shadow-elevated:
-    0 14px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(237, 231, 224, 0.03);
+    0 14px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(229, 232, 236, 0.03);
   --shadow-button-raised:
-    0 1px 0 rgba(237, 231, 224, 0.07), 0 2px 8px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(237, 231, 224, 0.08);
+    0 1px 0 rgba(229, 232, 236, 0.07), 0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(229, 232, 236, 0.08);
   --shadow-button-raised-hover:
-    0 2px 0 rgba(237, 231, 224, 0.08), 0 3px 9px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(237, 231, 224, 0.1);
+    0 2px 0 rgba(229, 232, 236, 0.08), 0 3px 9px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(229, 232, 236, 0.1);
   --shadow-button-raised-active: inset 0 1px 3px rgba(0, 0, 0, 0.34);
   --shadow-button-primary:
-    0 1px 0 rgba(237, 231, 224, 0.09), 0 2px 8px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(237, 231, 224, 0.08);
+    0 1px 0 rgba(229, 232, 236, 0.09), 0 2px 8px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(229, 232, 236, 0.08);
   --shadow-button-primary-hover:
-    0 2px 0 rgba(237, 231, 224, 0.1), 0 3px 9px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(237, 231, 224, 0.1);
+    0 2px 0 rgba(229, 232, 236, 0.1), 0 3px 9px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(229, 232, 236, 0.1);
   --shadow-button-primary-active: inset 0 2px 5px rgba(0, 0, 0, 0.44);
   --shadow-brand-control:
     0 1px 0 rgba(226, 174, 141, 0.18), 0 2px 8px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(237, 231, 224, 0.08);
+    inset 0 1px 0 rgba(229, 232, 236, 0.08);
   --shadow-brand-control-hover:
     0 2px 0 rgba(226, 174, 141, 0.22), 0 3px 9px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(237, 231, 224, 0.1);
+    inset 0 1px 0 rgba(229, 232, 236, 0.1);
   --shadow-brand-control-active: inset 0 2px 5px rgba(0, 0, 0, 0.38);
   --shadow-neutral-control:
-    0 1px 0 rgba(237, 231, 224, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(237, 231, 224, 0.07);
+    0 1px 0 rgba(229, 232, 236, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(229, 232, 236, 0.07);
   --shadow-neutral-control-hover:
-    0 2px 0 rgba(237, 231, 224, 0.07), 0 3px 9px rgba(0, 0, 0, 0.26),
-    inset 0 1px 0 rgba(237, 231, 224, 0.09);
+    0 2px 0 rgba(229, 232, 236, 0.07), 0 3px 9px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(229, 232, 236, 0.09);
   --shadow-neutral-control-active: inset 0 2px 5px rgba(0, 0, 0, 0.34);
   --shadow-control-press: inset 0 3px 7px rgba(0, 0, 0, 0.5);
   --shadow-float: 0 10px 24px rgba(0, 0, 0, 0.38);
   --shadow-float-hover: 0 12px 30px rgba(0, 0, 0, 0.46);
   --shadow-composer-stop:
     0 1px 0 rgba(214, 162, 80, 0.22), 0 2px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(237, 231, 224, 0.08), 0 0 0 0 rgba(214, 162, 80, 0.16);
+    inset 0 1px 0 rgba(229, 232, 236, 0.08), 0 0 0 0 rgba(214, 162, 80, 0.16);
   --shadow-composer-stop-pulse:
     0 1px 0 rgba(214, 162, 80, 0.24), 0 2px 8px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(237, 231, 224, 0.08), 0 0 0 4px rgba(214, 162, 80, 0.12);
+    inset 0 1px 0 rgba(229, 232, 236, 0.08), 0 0 0 4px rgba(214, 162, 80, 0.12);
 
   --color-overlay: rgba(0, 0, 0, 0.56);
 }
@@ -628,11 +650,12 @@ html:not([data-theme="dark"]) .chrome-hover-scope {
    be right where selected wants to sit. In light every sign is reversed, so
    the same value would land at ΔL* -0.73 from hover — indistinguishable.
    That is why light keeps its own value and this is not a cross-theme
-   rule. Measured here: ΔL* +16.42 over chrome, +8.57 over hover, +6.22
-   over line (a selection fill should out-light the dividers) and still
-   3.12 under line-strong so borders keep containing it. */
+   rule. Measured here (on the 10-07 cool ground): ΔL* +16.27 over
+   chrome, +8.55 over hover, +6.23 over line (a selection fill should
+   out-light the dividers) and still 3.16 under line-strong so borders
+   keep containing it. */
 html[data-theme="dark"] .chrome-hover-scope {
-  --color-hover: #2f2b27;
+  --color-hover: #282c32;
   --color-selected: #4d3b2b;
 }
 
