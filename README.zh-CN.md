@@ -193,11 +193,11 @@ GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自�
 flowchart TB
   GUI["Galley GUI<br/>Tauri · React"] -- in-process --> Core
   CLI["Galley CLI<br/>Rust"] -- "local socket · named pipe<br/>no TCP · no token" --> Core
-  Core["Galley Core · Rust<br/>sessions · projects · goals<br/>scheduled tasks · SQLite"]
+  Core["Galley Core<br/>Rust<br/>sessions<br/>projects · goals<br/>scheduled tasks<br/>SQLite"]
   Core --> R["Session runners<br/>one per session"]
-  Core --> IM["IM channels<br/>one per connected app"]
+  Core --> IM["IM channels<br/>one per app"]
   Core --> BB["Browser bridge<br/>resident"]
-  R & IM & BB --> GA["Galley-managed GA<br/>GenericAgent engine + Galley patches<br/>runtime prompt · CPython 3.11"]
+  R & IM & BB --> GA["Galley-managed<br/>GenericAgent<br/>Galley patches<br/>runtime prompt<br/>CPython 3.11"]
 ```
 
 三类进程都是 Python。接入外部 GA 时，会话 runner 改用外部 GA，聊天软件与浏览器桥不启动。

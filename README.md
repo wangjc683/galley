@@ -193,11 +193,11 @@ The GUI and the CLI are **peer frontends** — not a GUI wrapping a CLI, but two
 flowchart TB
   GUI["Galley GUI<br/>Tauri · React"] -- in-process --> Core
   CLI["Galley CLI<br/>Rust"] -- "local socket · named pipe<br/>no TCP · no token" --> Core
-  Core["Galley Core · Rust<br/>sessions · projects · goals<br/>scheduled tasks · SQLite"]
+  Core["Galley Core<br/>Rust<br/>sessions<br/>projects · goals<br/>scheduled tasks<br/>SQLite"]
   Core --> R["Session runners<br/>one per session"]
-  Core --> IM["IM channels<br/>one per connected app"]
+  Core --> IM["IM channels<br/>one per app"]
   Core --> BB["Browser bridge<br/>resident"]
-  R & IM & BB --> GA["Galley-managed GA<br/>GenericAgent engine + Galley patches<br/>runtime prompt · CPython 3.11"]
+  R & IM & BB --> GA["Galley-managed<br/>GenericAgent<br/>Galley patches<br/>runtime prompt<br/>CPython 3.11"]
 ```
 
 All three kinds of process run Python. When you attach an external GA, session runners use it instead, and IM channels and the browser bridge stay off.

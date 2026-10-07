@@ -65,6 +65,8 @@ JC 要求视觉改动先本地看。做法：`gh api -X POST markdown` 渲染 RE
   预览时要拆掉这层 `<a>`。
 - 接口会剥掉 `file://` 图片地址，变体图要放在预览根目录下用相对路径引用。
 - 接口不渲染 Mermaid，只给代码块；预览页用本地 mermaid.js 补渲染，github.com 上的实际样子推送后再核对。
+  推送后确实翻了一次：github.com 的 Mermaid 渲染器把节点文字按约 120px 宽强行折行（「Galley Core · Rust」
+  「Galley-managed GA」被拆碎），本地 mermaid 11 不会。修法是每行压到约 15 个字符以内、用 `<br/>` 手动分行。
 
 ## 未验证
 
