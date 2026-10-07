@@ -979,7 +979,7 @@ export const enCopy: AppCopy = {
       healthUnavailable: "Health checks unavailable — omitted from this report",
     },
     about: {
-      subtitle: "An open-source local Agent workbench",
+      subtitle: "A lightweight local AI assistant",
       version: "Version",
       links: "Links",
       origin:

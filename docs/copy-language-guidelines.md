@@ -297,7 +297,7 @@ Section 标签（2026-10-07 JC 裁）：
 | 快捷键 subtitle | `键盘快捷键` |
 | 快捷键 section | `导航`、`输入框`、`对话`、`浮层`（此前英文 `Navigation` / `Conversation` / `Overlays`） |
 | 报告问题 subtitle | `把 Bug 或建议提交到 GitHub` |
-| 关于 subtitle | `开源的本地 Agent 工作台`；section `链接`（此前 `Links`） |
+| 关于 subtitle | `极简 harness 的本地全能 AI 助手`（2026-10-07 起与 GitHub 仓库 About 的中文句同字，此前 `开源的本地 Agent 工作台`；`harness` 是品牌 tagline 用语，保留英文）；section `链接`（此前 `Links`） |
 
 ### 命令面板
 

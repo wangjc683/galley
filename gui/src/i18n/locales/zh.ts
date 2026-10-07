@@ -948,7 +948,7 @@ export const zhCopy = {
       healthUnavailable: "健康检查不可用，本次报告将不包含",
     },
     about: {
-      subtitle: "开源的本地 Agent 工作台",
+      subtitle: "极简 harness 的本地全能 AI 助手",
       version: "版本",
       links: "链接",
       origin:
