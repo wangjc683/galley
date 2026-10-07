@@ -49,6 +49,8 @@ core prompt ~480, GA memory ~680, and the tool schema ~1510, estimated). The
 what the hash covers) to `STATIC_PROMPT_BUDGET_BYTES`, set with no headroom
 on the larger platform variant. Bytes, not tokens (no tokenizer in CI), and
 `\r` is not counted (a Windows checkout puts CRLF into the raw strings).
+Raised once since, on 2026-10-07: 6688 → 6855 bytes (+167, the Chinese
+Settings labels; see the clause ledger).
 
 To add a clause, remove or shorten one first. Raising the cap is allowed
 only in the same diff as the clause, with the reason in the clause ledger.
@@ -62,7 +64,8 @@ Before adding, also check whether an existing section already says it: the
   "engine" / 「内核」 with GenericAgent mentioned only when the user asks
   what is underneath (the copy guidelines' GA budget), a feature map
   organized by where things are (sidebar, message box, reading panel, every
-  Settings page; labels checked against `gui/src/i18n/locales/`), a rule
+  Settings page, followed by the Chinese tab names in the same order; labels
+  checked against `gui/src/i18n/locales/`), a rule
   against describing screens beyond the map, the release-notes link, author
   facts, project page, and the product-name casing rule ("Galley", never an
   all-caps wordmark). Author facts are **closed-world**: JC Wang (GitHub:
@@ -198,6 +201,7 @@ row.
 | Past Galley Conversations: one platform's commands, compressed wording | 2026-10-06 budget pass (devlog [2026-10-06 runtime prompt budget](../devlog/2026-10-06-runtime-prompt-budget.md)): the macOS and Windows blocks were both sent on every platform |
 | IM entry layer: same assistant from a phone, reply shape, delegation only when asked or long, SOP before the first CLI write, plain `sessions list` for status, `IM_PROMPT_BUDGET_BYTES` | 2026-10-06 IM audit (devlog [2026-10-06 IM entry layer](../devlog/2026-10-06-im-entry-layer-phone-first.md)): `galley-im/*` supervisors created 0 sessions since 07-03; 7 of 21 IM final answers in the 09-30 logs were tables; the 09-30 context bloat (`.scratch/im-supervisor-context-bloat/`) came from a broad `sessions list --runtime all --all` on a 12-character message |
 | Budget cap (`STATIC_PROMPT_BUDGET_BYTES`) | same budget pass: Galley's static text was the largest block of the fixed prefix |
+| About Galley: Chinese Settings labels (「In the Chinese UI they read 通用, 模型 …」) | 2026-10-07 `v0.6.1` pre-flight regression, items 10–11: with an English-only map the model told Chinese users 「Channels（渠道）」 and 「供应商」, while the Settings cross-tab pass the same day made the tabs read 聊天软件 and the providers 服务商. Cap raised 6688 → 6855 (+167 bytes) in the same diff, JC's ruling |
 | Past Galley Conversations: IM list names all four channels | same audit: the list still read "WeChat / Feishu" after Telegram and Discord shipped |
 | Browser Control: tab protocol / no `window.open` | devlog 2026-05-27-browser-control-managed-ga |
 | Past Galley Conversations: CLI lookup, IM limits, `L4_raw_sessions` dead end | driven by observed managed-GA behavior (filesystem browsing for history); origin devlog not recorded |

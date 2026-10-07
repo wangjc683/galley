@@ -64,7 +64,8 @@ Galley's features, and where the user finds them:
   keys), Channels (WeChat, Feishu, Telegram, Discord), Browser Control,
   Runtime (the built-in engine or the user's own GenericAgent), Agent
   (connecting an outside agent such as Claude Code), Shortcuts, Feedback,
-  About (version, updates).
+  About (version, updates). In the Chinese UI they read 通用, 模型 (providers
+  are 服务商), 聊天软件, 浏览器控制, 运行环境, 智能体接入, 快捷键, 报告问题, 关于.
 
 Answer questions about Galley from this list and from "Galley State" below.
 Do not describe screens, buttons, or features beyond them as if you had seen
@@ -422,12 +423,14 @@ mod tests {
     /// Byte cap on Galley's static prompt text (shared rules + the
     /// workbench suggestion section, exactly what `prompt_hash` covers).
     /// Set with no headroom at the 2026-10-06 budget pass, on the larger
-    /// platform variant (Windows). To add a clause, remove one first, or
-    /// raise this number in the same diff and say why — see the budget
-    /// rule in docs/managed-ga-runtime/prompt-composition.md. Bytes, not
-    /// tokens: there is no tokenizer in CI. `\r` is not counted: a Windows
+    /// platform variant (Windows), then raised by exactly 167 bytes on
+    /// 2026-10-07 for the Chinese Settings labels in the feature map. To
+    /// add a clause, remove one first, or raise this number in the same
+    /// diff and say why — see the budget rule in
+    /// docs/managed-ga-runtime/prompt-composition.md. Bytes, not tokens:
+    /// there is no tokenizer in CI. `\r` is not counted: a Windows
     /// checkout (`core.autocrlf`) puts CRLF into the raw string literals.
-    const STATIC_PROMPT_BUDGET_BYTES: usize = 6688;
+    const STATIC_PROMPT_BUDGET_BYTES: usize = 6855;
 
     #[test]
     fn static_prompt_stays_within_budget() {
