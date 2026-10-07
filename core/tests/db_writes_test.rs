@@ -176,7 +176,7 @@ async fn assistant_message_telemetry_round_trips() {
     let galley = SqliteGalley::from_pool(pool);
 
     galley
-        .persist_gui_assistant_message(PersistAssistantMessage {
+        .persist_assistant_message(PersistAssistantMessage {
             session_id: sid("sess_telemetry"),
             turn_index: 1,
             content: "Final answer".into(),
@@ -1229,6 +1229,64 @@ async fn managed_model_order_drives_default_model() {
     assert!(models[0].is_default);
 }
 
+// ---------------- delete_empty_new_sessions ----------------
+
+/// `session.new` commits the default title, `turn_count = 0` and the
+/// first user message together; the GUI's hydrate sweep ran while such a
+/// session was still in its first turn and deleted it with its message.
+#[tokio::test]
+async fn delete_empty_new_sessions_spares_sessions_with_messages() {
+    let pool = fresh_pool().await;
+    for (id, status) in [
+        ("s-empty", "idle"),
+        ("s-first-turn", "running"),
+        ("s-archived", "archived"),
+    ] {
+        sqlx::query(
+            "INSERT INTO sessions (id, title, status, turn_count, pending_approval_count, \
+                error_count, pinned, last_activity_at, created_at, updated_at) \
+             VALUES (?, '新对话', ?, 0, 0, 0, 0, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(status)
+        .bind("2026-10-07T00:00:00Z")
+        .bind("2026-10-07T00:00:00Z")
+        .bind("2026-10-07T00:00:00Z")
+        .execute(&pool)
+        .await
+        .expect("seed session");
+    }
+    sqlx::query(
+        "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, created_at) \
+         VALUES ('msg_s-first-turn_0_user', 's-first-turn', 0, 0, 'user', 'task', ?)",
+    )
+    .bind("2026-10-07T00:00:00Z")
+    .execute(&pool)
+    .await
+    .expect("seed first user message");
+    let galley = SqliteGalley::from_pool(pool.clone());
+
+    let removed = galley
+        .delete_empty_new_sessions()
+        .await
+        .expect("sweep empty sessions");
+
+    assert_eq!(removed, 1);
+    let left: Vec<String> = sqlx::query_scalar("SELECT id FROM sessions ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .expect("list sessions");
+    assert_eq!(
+        left,
+        vec!["s-archived".to_string(), "s-first-turn".to_string()]
+    );
+    let messages: i64 = sqlx::query_scalar("SELECT count(*) FROM messages")
+        .fetch_one(&pool)
+        .await
+        .expect("count messages");
+    assert_eq!(messages, 1);
+}
+
 // ---------------- create_session ----------------
 
 #[tokio::test]
@@ -1877,6 +1935,36 @@ async fn bump_session_after_turn_not_found() {
     let galley = SqliteGalley::from_pool(pool);
     let err = galley
         .bump_session_after_turn(sid("ghost"), Some("x".into()), Some(1), false)
+        .await
+        .expect_err("missing");
+    assert!(matches!(err, GalleyError::NotFound { .. }));
+}
+
+// ---------------- mark_session_unread ----------------
+
+#[tokio::test]
+async fn mark_session_unread_sets_flag_and_is_idempotent() {
+    let pool = fresh_pool().await;
+    seed_session_idle(&pool, "s1").await;
+    let galley = SqliteGalley::from_pool(pool);
+    for _ in 0..2 {
+        galley
+            .mark_session_unread(sid("s1"))
+            .await
+            .expect("mark unread");
+    }
+    let brief = galley.session_brief(sid("s1")).await.unwrap();
+    assert_eq!(brief.has_unread, Some(true));
+    // Unread never moves the turn counter — that is Core's bump.
+    assert_eq!(brief.turn_count, Some(0));
+}
+
+#[tokio::test]
+async fn mark_session_unread_not_found() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool);
+    let err = galley
+        .mark_session_unread(sid("ghost"))
         .await
         .expect_err("missing");
     assert!(matches!(err, GalleyError::NotFound { .. }));

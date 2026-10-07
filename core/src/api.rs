@@ -284,12 +284,13 @@ pub trait GalleyApi: Send + Sync {
     ) -> Result<SessionBrief>;
 
     /// Increment `turn_count`, refresh `summary` + `last_activity_at` +
-    /// `updated_at`, and flip `has_unread = 1` when the call says so
-    /// (typically when the bumped session isn't the active one in the
-    /// GUI). `summary` is server-side truncated to 80 chars.
+    /// `updated_at`, and flip `has_unread = 1` when the call says so.
+    /// `summary` is server-side truncated to 80 chars.
     ///
-    /// No `origin` — this is a system-driven write triggered by the
-    /// runner on `turn_end`.
+    /// No `origin` — this is a system-driven write: Core's turn
+    /// persistence calls it on every visible runner `turn_end`
+    /// (`crate::turn_persistence`, always `mark_unread: false`; the GUI
+    /// owns unread through [`Self::mark_session_unread`]).
     ///
     /// **Errors**: `not_found`.
     async fn bump_session_after_turn(
@@ -299,6 +300,14 @@ pub trait GalleyApi: Send + Sync {
         step_number: Option<u32>,
         mark_unread: bool,
     ) -> Result<SessionBrief>;
+
+    /// Set `has_unread`. The GUI calls it when a run's final reply lands
+    /// on a session that is not on screen — only the GUI knows which one
+    /// is (Core writes the rest of the turn itself). No `origin` (system
+    /// write, not user action).
+    ///
+    /// Idempotent. **Errors**: `not_found`.
+    async fn mark_session_unread(&self, id: SessionId) -> Result<()>;
 
     /// Clear `has_unread`. Called when the user activates a session —
     /// the inbox metaphor says opening a session reads it. No `origin`

@@ -161,10 +161,13 @@ export interface SessionLifecycleSlice {
    * configured tier so picking the configured value clears the override.
    */
   setSessionReasoningEffort: (sessionId: string, picked: string | null) => void;
-  /** Server-side bump on turn_end. Optimistic in-memory update +
-   * fire-and-forget invoke. Callers decide whether this turn is user-visible
-   * enough to mark unread; intermediate agent-loop steps should only update
-   * progress. */
+  /** In-memory mirror of Core's session bump on turn_end (turn_count /
+   * summary / last activity — Core writes those to SQLite itself,
+   * core/src/turn_persistence). Unread is this page's call: only it
+   * knows which session is on screen, so a final reply on another
+   * session is flagged here and persisted via `mark_session_unread`.
+   * Callers decide whether this turn is user-visible enough to mark
+   * unread; intermediate agent-loop steps should only update progress. */
   bumpSessionAfterTurn: (
     sessionId: string,
     summary?: string,
@@ -351,11 +354,19 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     const bridgeStatus =
       useRuntimeStore.getState().byId[id]?.bridgeStatus ?? "idle";
     const hasBridgeClient = useRuntimeStore.getState().hasBridgeClient(id);
-    const needsSpawn =
+    const needsBridge =
       bridgeStatus === "idle" ||
       bridgeStatus === "closed" ||
       bridgeStatus === "error" ||
       (bridgeStatus === "connected" && !hasBridgeClient);
+    // This page holding no bridge does not mean Core holds none: after
+    // a webview reload (or a dev HMR, or a CLI spawn whose event this
+    // page missed) the runner is still alive and may be mid-run.
+    // Spawning would shut it down first (RunnerManager::spawn) — killing
+    // the run — so attach to it instead.
+    const attachedLive =
+      needsBridge && (await useRuntimeStore.getState().attachLiveRunner(id));
+    const needsSpawn = needsBridge && !attachedLive;
     if (needsSpawn) {
       // Project = pure grouping. We deliberately do NOT inject the
       // project's rootPath as the bridge cwd here — doing so would
@@ -665,8 +676,8 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
         (s) => {
           const turnCount = (s.turnCount ?? 0) + 1;
           // Truncate to keep the sidebar single-line. Mirrors the
-          // Rust-side `truncate_summary` (80 + "…") used by the
-          // invoke counterpart; both must agree or the in-memory and
+          // Rust-side `truncate_summary` (80 + "…") Core applies to
+          // the persisted bump; both must agree or the in-memory and
           // persisted values diverge.
           const nextSummary =
             summary && summary.trim() ? truncateSummary(summary) : s.summary;
@@ -688,14 +699,11 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       didUpdate = true;
       return { sessions };
     });
-    if (!didUpdate) return;
-    void invoke("bump_session_after_turn", {
-      id: sessionId,
-      summary: summary ?? null,
-      stepNumber: stepNumber ?? null,
-      markUnread: becameUnread,
-    }).catch((e) =>
-      console.debug("[sessions] bump_session_after_turn invoke failed.", e),
+    // No turn_count / summary write: Core already made it (a second
+    // write here would double-count). Only the unread flag is ours.
+    if (!didUpdate || !becameUnread) return;
+    void invoke("mark_session_unread", { id: sessionId }).catch((e) =>
+      console.debug("[sessions] mark_session_unread invoke failed.", e),
     );
   },
 

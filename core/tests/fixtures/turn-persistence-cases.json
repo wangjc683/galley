@@ -1,0 +1,462 @@
+{
+  "about": "Golden inputs for Core-owned turn persistence. Each turnEnd is a runner turn_end in Core's wire shape (what a GUI page receives as runner-event). turn-persistence-rows.json holds the assistant-row columns the GUI's own TypeScript derivation produces for each case; it is generated, never hand-edited: GALLEY_UPDATE_TURN_GOLDEN=1 pnpm --dir gui test turn-persistence. Both vitest (gui/src/lib/turn-persistence.golden.test.ts) and cargo test (core/src/turn_persistence) assert against the same two files. Hand-edit this file only; keep its literals (30.0, 1e21, integer-like keys) - they pin JSON.stringify behavior. Object key order here does not matter: Core holds runner JSON in serde_json maps that iterate sorted by key bytes, so a page receives sorted keys; the vitest re-keys every object that way and cargo parses into the same maps.",
+  "cases": [
+    {
+      "name": "final-answer-plain",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "Answered",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "Final answer",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "telemetry": {
+          "elapsedMs": 5120,
+          "inputTokens": 1200,
+          "outputTokens": 340,
+          "cacheCreateTokens": 0,
+          "cacheReadTokens": 900,
+          "requestCount": 1,
+          "contextUsedChars": 48000,
+          "contextLimitChars": 800000
+        },
+        "absoluteTurnIndex": 10,
+        "timestamp": "2026-10-07T08:00:00+00:00"
+      }
+    },
+    {
+      "name": "tool-step-with-preamble",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "读取 PRD 第 180-230 行",
+        "toolCalls": [
+          { "toolName": "file_read", "toolUseId": "call-1", "args": { "path": "docs/PRD.md", "start": 180, "count": 50 } }
+        ],
+        "toolResults": [{ "toolUseId": "call-1", "content": "line 180…line 230" }],
+        "responseContent": "<thinking>需要先看 PRD</thinking>当前阶段：读取需求文档。<tool_use>file_read</tool_use>",
+        "exitReason": null,
+        "absoluteTurnIndex": 11,
+        "timestamp": "2026-10-07T08:00:01+00:00"
+      }
+    },
+    {
+      "name": "no-tool-final-with-thinking-tag",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "回答完毕",
+        "toolCalls": [{ "toolName": "no_tool", "args": {} }],
+        "toolResults": [{ "content": null }],
+        "responseContent": "<thinking>可以直接回答</thinking>最终答案在此。",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 3,
+        "timestamp": "2026-10-07T08:00:02+00:00"
+      }
+    },
+    {
+      "name": "native-thinking-wins",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "Answered",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "<thinking>tag reasoning</thinking>Final answer",
+        "responseThinking": "\n  Native reasoning first.  \n",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 4,
+        "timestamp": "2026-10-07T08:00:03+00:00"
+      }
+    },
+    {
+      "name": "blank-native-thinking-falls-back-to-tag",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "Answered",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "<thinking> tag reasoning </thinking>Final answer",
+        "responseThinking": "  \n ",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 5,
+        "timestamp": "2026-10-07T08:00:04+00:00"
+      }
+    },
+    {
+      "name": "ask-user-final",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 3,
+        "summary": "询问用户选哪个方案",
+        "toolCalls": [
+          {
+            "toolName": "ask_user",
+            "toolUseId": "call-ask",
+            "args": { "question": "<summary>回顾</summary>选哪个？", "candidates": ["方案 A", "方案 B"] }
+          }
+        ],
+        "toolResults": [{ "toolUseId": "call-ask", "content": "{\"status\": \"INTERRUPT\", \"intent\": \"HUMAN_INTERVENTION\"}" }],
+        "responseContent": "两个方案各有代价，我需要你定。<summary>询问用户选哪个方案</summary>",
+        "exitReason": { "result": "EXITED", "data": { "status": "INTERRUPT", "intent": "HUMAN_INTERVENTION" } },
+        "absoluteTurnIndex": 22,
+        "timestamp": "2026-10-07T08:00:05+00:00"
+      }
+    },
+    {
+      "name": "step-limit-final",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 100,
+        "summary": "继续检索第 7 页",
+        "toolCalls": [{ "toolName": "web_scan", "toolUseId": "call-100", "args": { "tabs_only": false } }],
+        "toolResults": [{ "toolUseId": "call-100", "content": "page 7 …" }],
+        "responseContent": "还差两页没看。<summary>继续检索第 7 页</summary>",
+        "exitReason": { "result": "MAX_TURNS_EXCEEDED", "data": { "maxTurns": 100 } },
+        "telemetry": { "elapsedMs": 600000, "requestCount": 100 },
+        "absoluteTurnIndex": 140,
+        "timestamp": "2026-10-07T08:00:06+00:00"
+      }
+    },
+    {
+      "name": "internal-goal-traffic",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "计划已拆分",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "计划：先读代码，再改。<goal-status>blocked</goal-status>",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "visibility": "internal",
+        "absoluteTurnIndex": 30,
+        "goalStatus": "blocked",
+        "timestamp": "2026-10-07T08:00:07+00:00"
+      }
+    },
+    {
+      "name": "explicit-visible",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "可见的回答",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "visibility": "visible",
+        "absoluteTurnIndex": 31,
+        "timestamp": "2026-10-07T08:00:08+00:00"
+      }
+    },
+    {
+      "name": "leaked-tool-markup",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "<invoke name=\"file_read\">\n<parameter name=\"path\">a.md</parameter>\n</invoke>",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 6,
+        "timestamp": "2026-10-07T08:00:09+00:00"
+      }
+    },
+    {
+      "name": "llm-running-marker",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 3,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "**LLM Running (Turn 3) ...**\n\n真正的回答\n  LLM Running (Turn 4) ...*  \n尾巴",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 7,
+        "timestamp": "2026-10-07T08:00:10+00:00"
+      }
+    },
+    {
+      "name": "llm-running-marker-crlf-and-stars",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 12,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "LLM Running (Turn 12) ...\r\n\r\n答案 \r\n***LLM Running (Turn 1) ...**\nLLM Running (Turn x) ...\n结尾 LLM Running (Turn 2) ...",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 8,
+        "timestamp": "2026-10-07T08:00:11+00:00"
+      }
+    },
+    {
+      "name": "action-lines-and-file-refs",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "写入结果",
+        "toolCalls": [{ "toolName": "code_run", "args": { "code": "print(1)" } }],
+        "toolResults": [{ "content": "1" }],
+        "responseContent": "[Action] Running code\n完成了 [FILE:/tmp/a.txt] 写入，[FILE:] 不算引用。\n\n\n\n下一段\n [Action] 行首有空格不算\n[Action] 最后一行",
+        "exitReason": null,
+        "absoluteTurnIndex": 9,
+        "timestamp": "2026-10-07T08:00:12+00:00"
+      }
+    },
+    {
+      "name": "phase-preamble-variants",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "**当前阶段**：分析\n\n结论在这里\n当前阶段 : 第二段\r下一行\n*当前阶段*\n\n：跨行冒号\n当前阶段 没有冒号\n***当前阶段：三颗星不算",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 12,
+        "timestamp": "2026-10-07T08:00:13+00:00"
+      }
+    },
+    {
+      "name": "verbose-dispatch-block",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "读文件",
+        "toolCalls": [{ "toolName": "file_read", "args": { "path": "a" } }],
+        "toolResults": [{ "content": "ok" }],
+        "responseContent": "先读文件。\n🛠️ Tool: `file_read`  📥 args:\n````text\n{\"path\": \"a\"}\n````\n读完再说。\n🛠 Tool: `web_scan` 📥 args:\n````text\n{}\n`````\n后续",
+        "exitReason": null,
+        "absoluteTurnIndex": 13,
+        "timestamp": "2026-10-07T08:00:14+00:00"
+      }
+    },
+    {
+      "name": "verbose-dispatch-partial",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "看页面",
+        "toolCalls": [{ "toolName": "web_scan", "args": {} }],
+        "toolResults": [{ "content": "ok" }],
+        "responseContent": "看看页面\n🛠 Tool: `web_scan` 📥 args:\n````text\n{\"url\"",
+        "exitReason": null,
+        "absoluteTurnIndex": 14,
+        "timestamp": "2026-10-07T08:00:15+00:00"
+      }
+    },
+    {
+      "name": "compact-dispatch-marker",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "扫描",
+        "toolCalls": [{ "toolName": "web_scan", "args": { "url": "x" } }],
+        "toolResults": [{ "content": "ok" }],
+        "responseContent": "说明一下\n🛠️ web_scan({\"url\": \"x\"})  \n🛠 bad(no close\n🛠\tfile_read(a) (b)\t\n🛠️ 中文(参数)\n结尾",
+        "exitReason": null,
+        "absoluteTurnIndex": 15,
+        "timestamp": "2026-10-07T08:00:16+00:00"
+      }
+    },
+    {
+      "name": "unclosed-tag-truncation",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 4,
+        "summary": "截断",
+        "toolCalls": [{ "toolName": "file_write", "args": { "path": "b.md" }, "resolvedPath": "/tmp/work/b.md" }],
+        "toolResults": [{ "content": "written" }],
+        "responseContent": "前言在这里 <summary\tx=1>还没闭合\n后面的都不要",
+        "exitReason": null,
+        "absoluteTurnIndex": 16,
+        "timestamp": "2026-10-07T08:00:17+00:00"
+      }
+    },
+    {
+      "name": "file-content-and-tag-blocks",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "<summary>摘要里也有标签</summary>",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "<file_content path=\"a.md\" lines=\"1-3\">内容\n多行</file_content>正文<tool_use>x</tool_use> 继续<summary>s</summary>",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 17,
+        "timestamp": "2026-10-07T08:00:18+00:00"
+      }
+    },
+    {
+      "name": "next-suggestion-and-goal-status",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "完成",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "完成了。\n<next-suggestion>再跑一遍测试</next-suggestion>\n<goal-status>complete</goal-status>",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 18,
+        "nextSuggestion": "再跑一遍测试",
+        "goalStatus": "complete",
+        "timestamp": "2026-10-07T08:00:19+00:00"
+      }
+    },
+    {
+      "name": "js-whitespace-edges",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "﻿ 摘要 　",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "\u0085答案\u0085<thinking>  </thinking>",
+        "responseThinking": "  ᠎",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 19,
+        "timestamp": "2026-10-07T08:00:20+00:00"
+      }
+    },
+    {
+      "name": "unicode-line-terminators",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "",
+        "toolCalls": [{ "toolName": "file_read", "args": {} }],
+        "toolResults": [{ "content": "x" }],
+        "responseContent": "答案 当前阶段：读文件\n结尾 [Action] x 尾\r🛠 web_scan(a) 后",
+        "exitReason": null,
+        "absoluteTurnIndex": 20,
+        "timestamp": "2026-10-07T08:00:21+00:00"
+      }
+    },
+    {
+      "name": "json-numbers-and-key-order",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "参数",
+        "toolCalls": [
+          {
+            "toolName": "code_run",
+            "args": {
+              "timeout": 30.0,
+              "ratio": 0.5,
+              "big": 12345678901234567890,
+              "tiny": 1e-7,
+              "small": 0.000001,
+              "huge": 1e21,
+              "large": 1e20,
+              "negZero": -0.0,
+              "neg": -2.5e-3,
+              "2": "two",
+              "10": "ten",
+              "b": 1,
+              "a": [3.0, { "z": 1, "1": true, "0": null }],
+              "01": "leading zero",
+              "4294967295": "not an index",
+              "4294967294": "index"
+            },
+            "toolUseId": "call-n"
+          }
+        ],
+        "toolResults": [{ "toolUseId": "call-n", "content": { "exit": 0, "stdout": "ok", "elapsed": 1.10 } }],
+        "responseContent": "",
+        "exitReason": null,
+        "absoluteTurnIndex": 21,
+        "timestamp": "2026-10-07T08:00:22+00:00"
+      }
+    },
+    {
+      "name": "json-string-escapes",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "转义",
+        "toolCalls": [{ "toolName": "file_write", "args": { "content": "\u0001\u001f\t\b\f\r\n\"\\/ \u007f 🛠️ é" } }],
+        "toolResults": [{ "content": "\u0000 null byte" }],
+        "responseContent": "写好了。",
+        "exitReason": null,
+        "absoluteTurnIndex": 23,
+        "timestamp": "2026-10-07T08:00:23+00:00"
+      }
+    },
+    {
+      "name": "empty-everything",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "",
+        "exitReason": null,
+        "absoluteTurnIndex": 24,
+        "timestamp": "2026-10-07T08:00:24+00:00"
+      }
+    },
+    {
+      "name": "whitespace-only-answer",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "   ",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "   \n\n  ",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 25,
+        "timestamp": "2026-10-07T08:00:25+00:00"
+      }
+    },
+    {
+      "name": "tool-step-no-prose",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "只调用工具",
+        "toolCalls": [{ "toolName": "web_execute_js", "args": { "script": "1+1" } }, { "toolName": "no_tool", "args": {} }],
+        "toolResults": [{ "content": "2" }],
+        "responseContent": "<summary>只调用工具</summary>",
+        "exitReason": null,
+        "absoluteTurnIndex": 26,
+        "timestamp": "2026-10-07T08:00:26+00:00"
+      }
+    },
+    {
+      "name": "multiple-thinking-blocks-and-blank-runs",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "<thinking>first</thinking>a\n\n\n\nb<thinking>second</thinking>\n\n\n",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "telemetry": {},
+        "absoluteTurnIndex": 27,
+        "timestamp": "2026-10-07T08:00:27+00:00"
+      }
+    },
+    {
+      "name": "unclosed-thinking-stays-in-answer",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "<thinking>never closed\n回答",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 28,
+        "timestamp": "2026-10-07T08:00:28+00:00"
+      }
+    }
+  ]
+}

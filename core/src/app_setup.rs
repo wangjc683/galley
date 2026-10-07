@@ -21,6 +21,7 @@ pub(crate) fn setup_app(
     migration_safety_gates(app, latest_migration_version);
     register_sql_plugin_and_recover(app, migrations)?;
     open_shared_galley(app)?;
+    wire_turn_persistence(app);
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     seed_close_prefs(app);
     if start_socket_listener(app) {
@@ -243,6 +244,18 @@ fn open_shared_galley(app: &tauri::App) -> Result<(), String> {
         .map_err(stringify_error)?;
     app.manage(shared_galley);
     Ok(())
+}
+
+/// Core-owned turn persistence: hand the shared pool to the
+/// RunnerManager so every runner's `turn_end` is written by Core, GUI or
+/// no GUI (`crate::turn_persistence`). Must run before the socket listener
+/// starts — a CLI `session new` can spawn a runner from then on.
+fn wire_turn_persistence(app: &tauri::App) {
+    let manager: std::sync::Arc<runner_manager::RunnerManager> = app
+        .state::<std::sync::Arc<runner_manager::RunnerManager>>()
+        .inner()
+        .clone();
+    manager.set_turn_store(app.state::<SqliteGalley>().inner().clone());
 }
 
 /// Seed the first-close-choice guard from the persisted flag, now that

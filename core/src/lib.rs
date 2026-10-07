@@ -38,10 +38,23 @@ pub mod scheduler;
 pub mod socket_listener;
 pub mod sop_install;
 mod tray;
+pub mod turn_persistence;
 
 use commands::*;
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
+
+/// Test support: apply every schema migration, in the order the app runs
+/// them, to `pool`. Lets an integration test that needs the full schema
+/// use the runtime list instead of adding yet another hand-written
+/// `include_str!` list to keep in sync.
+#[doc(hidden)]
+pub async fn apply_all_migrations_for_tests(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
+    for migration in db_migrations::all() {
+        sqlx::raw_sql(migration.sql).execute(pool).await?;
+    }
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -179,7 +192,7 @@ pub fn run() {
             delete_session,
             assign_session_to_project,
             set_session_llm,
-            bump_session_after_turn,
+            mark_session_unread,
             clear_session_unread,
             session_message_rows,
             persist_user_message,
@@ -187,7 +200,6 @@ pub fn run() {
             queue_jump_message,
             queue_remove_message,
             session_queue_snapshot,
-            persist_assistant_message,
             delete_empty_new_sessions,
             delete_demo_sessions,
             backfill_fts_if_empty,
@@ -229,6 +241,7 @@ pub fn run() {
             runner_commands::runner_stderr_tail,
             runner_commands::probe_ga_runtime,
             runner_commands::shutdown_all_runners,
+            runner_commands::list_live_runners,
         ])
         .setup(move |app| app_setup::setup_app(app, migrations, latest_migration_version))
         .build(tauri::generate_context!())

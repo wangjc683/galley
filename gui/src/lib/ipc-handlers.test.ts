@@ -1,12 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-  type MockInstance,
-} from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
 import {
@@ -156,17 +148,11 @@ describe("dispatchIPCEvent", () => {
     });
 
     expect(useMessagesStore.getState().byId["s-test"].agentRunning).toBe(false);
-    await flushPromises();
-    expect(tauriMocks.invoke).toHaveBeenCalledWith(
-      "persist_assistant_message",
-      expect.objectContaining({
-        input: expect.objectContaining({
-          sessionId: "s-test",
-          turnIndex: 10,
-          finalAnswer: "Final answer",
-        }),
-      }),
-    );
+    // The live node carries the id of the row Core wrote under the
+    // absolute index (user row 10, step 1) — palette hits locate it.
+    expect(useMessagesStore.getState().byId["s-test"].turns[1]).toMatchObject({
+      messageId: "msg_s-test_10_assistant",
+    });
   });
 
   it("marks a denied tool as denied in the live turn_end path", () => {
@@ -205,7 +191,7 @@ describe("dispatchIPCEvent", () => {
     });
   });
 
-  it("settles native reasoning from turn_end's responseThinking and persists it (2026-09-23)", async () => {
+  it("settles native reasoning from turn_end's responseThinking (2026-09-23)", () => {
     dispatchIPCEvent({
       kind: "turn_end",
       sessionId: "s-test",
@@ -225,14 +211,8 @@ describe("dispatchIPCEvent", () => {
     if (agent.role !== "agent") throw new Error("expected agent turn");
     expect(agent.thinking).toBe("Native reasoning first.");
     expect(agent.finalAnswer).toBe("Final answer");
-
-    await flushPromises();
-    expect(tauriMocks.invoke).toHaveBeenCalledWith(
-      "persist_assistant_message",
-      expect.objectContaining({
-        input: expect.objectContaining({ thinking: "Native reasoning first." }),
-      }),
-    );
+    // The persisted `thinking` column is Core's to write; the golden
+    // fixtures pin it to this same value (native-thinking-wins).
   });
 
   it("falls back to the <thinking> tag when responseThinking is absent or blank", () => {
@@ -522,14 +502,8 @@ describe("dispatchIPCEvent", () => {
   });
 });
 
-describe("Core DB persistence retry on SQLite contention (CONC-8)", () => {
-  let consoleError: MockInstance<typeof console.error>;
-
-  function persistCalls(command: string): number {
-    return tauriMocks.invoke.mock.calls.filter(([c]) => c === command).length;
-  }
-
-  function turnEndEvent(): IPCEvent {
+describe("turn_end leaves SQLite to Core (2026-10-07)", () => {
+  function finalTurnEnd(): Extract<IPCEvent, { kind: "turn_end" }> {
     return {
       kind: "turn_end",
       sessionId: "s-test",
@@ -538,79 +512,51 @@ describe("Core DB persistence retry on SQLite contention (CONC-8)", () => {
       toolCalls: [],
       toolResults: [],
       responseContent: "Final answer",
-      exitReason: null,
-      timestamp: "2026-06-18T08:01:02.000Z",
+      exitReason: { result: "CURRENT_TASK_DONE", data: null },
+      absoluteTurnIndex: 4,
+      timestamp: "2026-10-07T08:00:00.000Z",
     };
   }
 
-  function failInvoke(command: string, message: string, times: number): void {
-    let failures = times;
-    tauriMocks.invoke.mockImplementation(async (c) => {
-      if (c === command && failures > 0) {
-        failures -= 1;
-        throw new Error(message);
-      }
-      return undefined;
-    });
+  function invokedCommands(): string[] {
+    return tauriMocks.invoke.mock.calls.map(([command]) => command);
   }
 
   beforeEach(() => {
     resetStores();
     seedSession();
-    vi.useFakeTimers();
-    consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-    consoleError.mockRestore();
+  it("writes no row and no session bump from the page", async () => {
+    dispatchIPCEvent(finalTurnEnd());
+    await flushPromises();
+    // Core's runner watcher already wrote both; a second bump here
+    // would double-count turn_count.
+    expect(invokedCommands()).not.toContain("persist_assistant_message");
+    expect(invokedCommands()).not.toContain("bump_session_after_turn");
+    // The sidebar still moves: an in-memory mirror of Core's bump.
+    expect(useSessionsStore.getState().sessions[0]).toMatchObject({
+      turnCount: 1,
+      summary: "Answered",
+    });
   });
 
-  it("retries persist_assistant_message after a busy error", async () => {
-    failInvoke(
-      "persist_assistant_message",
-      "database is locked (code 5) SQLITE_BUSY",
-      1,
-    );
-
-    dispatchIPCEvent(turnEndEvent());
-    await vi.advanceTimersByTimeAsync(0);
-    expect(persistCalls("persist_assistant_message")).toBe(1);
-
-    await vi.advanceTimersByTimeAsync(200);
-    expect(persistCalls("persist_assistant_message")).toBe(2);
-    expect(consoleError).not.toHaveBeenCalled();
+  it("flags a background session's final reply unread through Core", async () => {
+    useSessionsStore.setState({ activeSessionId: "s-elsewhere" });
+    dispatchIPCEvent(finalTurnEnd());
+    await flushPromises();
+    expect(useSessionsStore.getState().sessions[0].hasUnread).toBe(true);
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("mark_session_unread", {
+      id: "s-test",
+    });
   });
 
-  it("does not retry non-contention errors and logs identifiers", async () => {
-    failInvoke(
-      "persist_assistant_message",
-      "no such table: messages",
-      Infinity,
-    );
-
-    dispatchIPCEvent(turnEndEvent());
-    await vi.advanceTimersByTimeAsync(5000);
-
-    expect(persistCalls("persist_assistant_message")).toBe(1);
-    expect(consoleError).toHaveBeenCalledTimes(1);
-    const logged = String(consoleError.mock.calls[0][0]);
-    expect(logged).toContain("session=s-test");
-    expect(logged).toContain("turn=1");
-  });
-
-  it("gives up after three contention retries and logs at error level", async () => {
-    failInvoke(
-      "persist_assistant_message",
-      "database is locked (code 5) SQLITE_BUSY",
-      Infinity,
-    );
-
-    dispatchIPCEvent(turnEndEvent());
-    await vi.advanceTimersByTimeAsync(5000);
-
-    // Initial attempt + 200/500/1000ms retries, then escalate.
-    expect(persistCalls("persist_assistant_message")).toBe(4);
-    expect(consoleError).toHaveBeenCalledTimes(1);
+  it("leaves the on-screen session and intermediate steps read", async () => {
+    dispatchIPCEvent(finalTurnEnd());
+    useSessionsStore.setState({ activeSessionId: "s-elsewhere" });
+    dispatchIPCEvent({ ...finalTurnEnd(), exitReason: null });
+    await flushPromises();
+    expect(invokedCommands()).not.toContain("mark_session_unread");
+    expect(useSessionsStore.getState().sessions[0].hasUnread).toBeFalsy();
   });
 });

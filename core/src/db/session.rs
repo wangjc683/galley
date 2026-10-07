@@ -169,7 +169,12 @@ impl SqliteGalley {
         Ok(())
     }
 
-    pub async fn persist_gui_assistant_message(&self, p: PersistAssistantMessage) -> Result<()> {
+    /// Upsert one assistant row on its deterministic
+    /// `msg_{session}_{turn}_assistant` id. Core's turn persistence
+    /// ([`crate::turn_persistence`]) is the only caller in the app: it
+    /// writes every runner `turn_end`, GUI or no GUI. `created_at` is
+    /// kept on conflict, so a repeated write is harmless.
+    pub async fn persist_assistant_message(&self, p: PersistAssistantMessage) -> Result<()> {
         let id = format!("msg_{}_{}_assistant", p.session_id.as_str(), p.turn_index);
         let created_at = chrono_now_iso();
         let telemetry_json = p
@@ -805,6 +810,19 @@ impl SqliteGalley {
         .map_err(map_sqlx_err)
     }
 
+    /// `turn_index` of the latest user row — the base of the message
+    /// block a runner step belongs to. Fallback for a `turn_end` that
+    /// carries no `absoluteTurnIndex` ([`crate::turn_persistence`]).
+    pub async fn latest_user_turn_index(&self, id: &str) -> Result<Option<i64>> {
+        sqlx::query_scalar(
+            "SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user'",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
+    }
+
     pub(super) async fn set_session_pinned_db(
         &self,
         id: SessionId,
@@ -1025,6 +1043,22 @@ impl SqliteGalley {
         // future audit table may pick it up.
         let _ = step;
         self.session_brief(id).await
+    }
+
+    pub(super) async fn mark_session_unread_db(&self, id: SessionId) -> Result<()> {
+        let now = chrono_now_iso();
+        let res = sqlx::query("UPDATE sessions SET has_unread = 1, updated_at = ? WHERE id = ?")
+            .bind(&now)
+            .bind(id.as_str())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!("session {id} not found"),
+            });
+        }
+        Ok(())
     }
 
     pub(super) async fn clear_session_unread_db(&self, id: SessionId) -> Result<()> {

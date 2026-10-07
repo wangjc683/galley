@@ -67,10 +67,11 @@ export async function deleteDemoSessions(): Promise<number> {
 //     store `appendUserTurn` the moment the user submits, so a crash before
 //     turn_end doesn't lose the question. Core assigns the durable
 //     `turn_index` and returns it to the GUI.
-//   - `persistTurnEndToMessages` (lib/ipc-handlers.ts, routed through Rust Core) — called on
-//     `turn_end`, writes the assistant row with thinking / tool_calls /
-//     tool_results / final_answer + GA's raw responseContent (the latter
-//     is what the bridge replays on `load_history`).
+//   - Core's runner watcher (core/src/turn_persistence, since 2026-10-07;
+//     the GUI no longer writes it) — on every `turn_end`, with or without
+//     a page listening, writes the assistant row with thinking /
+//     tool_calls / tool_results / final_answer + GA's raw responseContent
+//     (the latter is what the bridge replays on `load_history`).
 //
 // `turn_index` is the absolute message-loop index Core persisted for this
 // session. GA still emits 1-based per-loop step numbers; the GUI sends the

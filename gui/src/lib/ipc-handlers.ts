@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-
 import { copyForLanguage } from "@/lib/i18n";
 import {
   cleanFinalAnswer,
@@ -69,7 +67,9 @@ function currentCopy() {
  *   llm_changed       → flip currentness in llms[]
  *   error             → push toast (fromIPCError)
  *   turn_end          → append agent turn (thinking + tools + final
- *                       answer), persisted to messages table
+ *                       answer). Core writes the messages row and the
+ *                       session bump itself (core/src/turn_persistence)
+ *                       — this page only renders, flags unread, notifies
  *   tool_call_end     → no-op for V0.1 (the conversation rebuilds the
  *                       tool's final state from turn_end's
  *                       toolResults; we don't need a separate row)
@@ -249,11 +249,11 @@ export function dispatchIPCEvent(event: IPCEvent): void {
 
     case "turn_end": {
       const visibility = eventVisibility(event);
-      // SQLite keys on the absolute, session-wide turn index (the
-      // per-message `msg_${sessionId}_${turnIndex}_assistant` primary key
-      // would collide across user messages otherwise). Core normally
-      // supplies it on the event; the offset is the fallback. See
-      // lib/turn-index.ts for the invariant.
+      // The row Core writes keys on the absolute, session-wide turn
+      // index (the per-message `msg_${sessionId}_${turnIndex}_assistant`
+      // primary key would collide across user messages otherwise). Core
+      // normally supplies it on the event; the offset is the fallback.
+      // See lib/turn-index.ts for the invariant.
       const offset = messages.byId[event.sessionId]?.turnIndexOffset ?? 0;
       const absoluteTurnIndex = resolveAbsoluteTurnIndex(event, offset);
       console.info("[ipc] turn_end", {
@@ -269,9 +269,8 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // recovers the same number). What the user SEES is numbered by
       // position within the run (goal-run-groups `stepNumberOf`), so
       // an ask_user reply — a fresh GA loop, step 1 again — does not
-      // restart the count. Built unconditionally: the persist below
-      // reuses the same turn's derived fields even when the turn is
-      // `visibility: internal` (goal master-plan traffic).
+      // restart the count. Internal turns (goal master-plan traffic)
+      // are not rendered; Core persists them all the same.
       const turn = turnFromTurnEnd(event);
       // Same primary key Core mints for the row below — lets a palette
       // hit on this reply locate the live node without a restore.
@@ -308,13 +307,14 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // run in progress. (Prior code cleared it on every turn_end,
       // which made the sidebar flip to "已完成" after step 1 of an
       // N-step run.)
-      // Update the session row (turn_count + last_activity_at +
-      // summary). Sidebar `第 N 步 · {summary}` previews show the
-      // display step — GA's per-loop step plus the run's step base
-      // (messages `runStepBase`), so it matches the main view's
-      // position numbering across an ask_user reply. turn_count
-      // itself keeps incrementing in absolute terms — that's the
-      // offset's source of truth.
+      // Mirror Core's session bump in memory (turn_count +
+      // last_activity_at + summary — Core already wrote them to SQLite,
+      // core/src/turn_persistence). Sidebar `第 N 步 · {summary}`
+      // previews show the display step — GA's per-loop step plus the
+      // run's step base (messages `runStepBase`), so it matches the
+      // main view's position numbering across an ask_user reply.
+      // turn_count itself keeps incrementing in absolute terms — that's
+      // the offset's source of truth.
       //
       // Unread is a completed-reply signal, not an intermediate-step
       // signal. GA emits turn_end for every loop step; only the final
@@ -369,15 +369,11 @@ export function dispatchIPCEvent(event: IPCEvent): void {
           throttleKey: `reply:${event.sessionId}`,
         });
       }
-      // SQLite: persist under the ABSOLUTE turn index. rowsToTurns
-      // reconstructs the per-message step at restore by tracking
-      // the latest user row's turn_index as a per-message base.
-      void persistTurnEndToMessages({
-        ...event,
-        turnIndex: absoluteTurnIndex,
-        visibility,
-        turn,
-      });
+      // No SQLite write here (2026-10-07): Core's runner watcher
+      // persisted this turn before the event reached the page, so a
+      // reloaded or absent page loses nothing. The row it wrote equals
+      // `turn` field for field — the shared golden fixtures pin Core's
+      // derivation to `turnFromTurnEnd` (turn-persistence.golden.test.ts).
       return;
     }
 
@@ -651,8 +647,14 @@ export function dispatchIPCEvent(event: IPCEvent): void {
 // path. This function only contributes what's live-exclusive: deriving
 // thinking/preamble out of the raw responseContent (restore reads the
 // persisted columns instead).
+//
+// Core derives the persisted row from the same event with a Rust port
+// of these rules (core/src/turn_persistence/derive.rs). Exported so the
+// shared golden fixtures can hold the two to the same output — change
+// one side, regenerate the fixtures, and the other side's test fails
+// until it matches.
 
-function turnFromTurnEnd(event: {
+export function turnFromTurnEnd(event: {
   turnIndex: number;
   summary: string;
   toolCalls: IPCToolCall[];
@@ -680,97 +682,4 @@ function turnFromTurnEnd(event: {
     summary: event.summary,
     telemetry: event.telemetry,
   });
-}
-
-// ---------------- Core DB persistence (best-effort) ----------------
-
-const DB_CONTENTION_RETRY_DELAYS_MS = [200, 500, 1000];
-
-/**
- * Rust commands reject with a stringified GalleyError (see Core's
- * `stringify_error`), so SQLite contention is only recognizable by
- * text. Match defensively on the SQLITE_BUSY / SQLITE_LOCKED
- * phrasings sqlx surfaces.
- */
-function isSqliteContention(e: unknown): boolean {
-  const text = (e instanceof Error ? e.message : String(e)).toLowerCase();
-  return text.includes("database is locked") || text.includes("busy");
-}
-
-/**
- * Runs a fire-and-forget Core DB write, retrying on SQLite contention
- * (e.g. an FTS rebuild or a slow transaction elsewhere holding the
- * write lock). Never throws — callers `void` the promise and the IPC
- * dispatch path must not block on persistence — but non-contention
- * errors and exhausted retries log at error level with `ids` so a
- * lost row is diagnosable (CONC-8).
- */
-async function persistWithContentionRetry(
-  label: string,
-  ids: string,
-  write: () => Promise<void>,
-): Promise<void> {
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      await write();
-      return;
-    } catch (e) {
-      if (
-        isSqliteContention(e) &&
-        attempt < DB_CONTENTION_RETRY_DELAYS_MS.length
-      ) {
-        await new Promise((resolve) => {
-          setTimeout(resolve, DB_CONTENTION_RETRY_DELAYS_MS[attempt]);
-        });
-        continue;
-      }
-      console.error(`[ipc] ${label} failed — row lost (${ids}).`, e);
-      return;
-    }
-  }
-}
-
-/**
- * Persist a turn_end under the ABSOLUTE turn index. The derived columns
- * (thinking / finalAnswer / summary / preamble / telemetry) come from
- * the already-built [`AgentTurn`] — what the user saw rendered live IS
- * what lands in SQLite; there is no second derivation that could drift.
- */
-async function persistTurnEndToMessages(event: {
-  sessionId: string;
-  turnIndex: number;
-  toolCalls: IPCToolCall[];
-  toolResults: IPCToolResult[];
-  responseContent: string;
-  visibility?: MessageVisibility;
-  turn: AgentTurn;
-}): Promise<void> {
-  const { turn } = event;
-  await persistWithContentionRetry(
-    "persistTurnEndToMessages",
-    `session=${event.sessionId} turn=${event.turnIndex}`,
-    async () => {
-      await invoke("persist_assistant_message", {
-        input: {
-          sessionId: event.sessionId,
-          turnIndex: event.turnIndex,
-          content: event.responseContent,
-          toolCalls: JSON.stringify(event.toolCalls),
-          toolResults: JSON.stringify(event.toolResults),
-          thinking: turn.thinking ?? null,
-          // NULL (not "") for tool-only intermediate turns, matching
-          // the rendered `finalAnswer: null`. Restore normalizes both
-          // this and legacy ""-storing rows.
-          finalAnswer: turn.finalAnswer,
-          // NULL when empty so the TurnMarker renders the bare
-          // "第 N 步" instead of an empty separator.
-          summary: turn.summary ?? null,
-          // Already gated: final-answer turns carry no preamble.
-          preamble: turn.preamble ?? null,
-          telemetry: turn.telemetry ?? null,
-          visibility: event.visibility ?? "visible",
-        },
-      });
-    },
-  );
 }

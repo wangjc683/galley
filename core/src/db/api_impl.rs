@@ -167,6 +167,10 @@ impl GalleyApi for SqliteGalley {
             .await
     }
 
+    async fn mark_session_unread(&self, id: SessionId) -> Result<()> {
+        self.mark_session_unread_db(id).await
+    }
+
     async fn clear_session_unread(&self, id: SessionId) -> Result<()> {
         self.clear_session_unread_db(id).await
     }

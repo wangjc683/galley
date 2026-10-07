@@ -52,7 +52,8 @@ Trait signatures (Rust types):
 | `delete_session` | `SessionId`, `Origin` | `()` |
 | `assign_session_to_project` | `SessionId`, `Option<String>`, `Origin` | `SessionBrief` |
 | `set_session_llm` | `SessionId`, `index: Option<u32>`, `key: Option<String>`, `display_name: Option<String>` | `SessionBrief` |
-| `bump_session_after_turn` | `SessionId`, `Option<String>`, `Option<u32>`, `mark_unread: bool` | `SessionBrief` |
+| `bump_session_after_turn` | `SessionId`, `Option<String>`, `Option<u32>`, `mark_unread: bool` | `SessionBrief` (Core-internal since 2026-10-07: called by Core's turn persistence, no Tauri command) |
+| `mark_session_unread` | `SessionId` | `()` |
 | `clear_session_unread` | `SessionId` | `()` |
 | `bulk_archive_sessions` | `Vec<SessionId>`, `Origin` | `u32` |
 | `bulk_unarchive_sessions` | `Vec<SessionId>`, `Origin` | `u32` |

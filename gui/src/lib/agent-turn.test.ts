@@ -12,10 +12,12 @@ import { rowsToTurns } from "@/stores/messages/rowsToTurns";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
+import { assistantRowFromTurnEnd } from "@/test/assistant-row";
 import { makeMessageRow, makeSession } from "@/test/factories";
 import { getTauriMocks } from "@/test/setup";
 import { resetStores } from "@/test/store-reset";
 import type { AgentTurn } from "@/types/conversation";
+import type { TurnEndEvent } from "@/types/ipc";
 
 const tauriMocks = getTauriMocks();
 
@@ -115,8 +117,9 @@ describe("isFinalAnswerTurn / normalizeFinalAnswer / buildAgentTurn", () => {
 // The whole point of the shared module: a turn rendered live and the
 // same turn reopened from SQLite must be one shape. Drives the REAL
 // live path (dispatchIPCEvent → store) and the REAL restore path
-// (persist payload → MessageRow → rowsToTurns) with no re-derivation
-// in between, so a one-sided edit to either path fails here.
+// (persisted columns → MessageRow → rowsToTurns), so a one-sided edit
+// to either path fails here. The columns come from the helper the
+// golden fixtures pin Core's Rust derivation to.
 
 describe("live → persist → restore round trip", () => {
   beforeEach(() => {
@@ -136,36 +139,41 @@ describe("live → persist → restore round trip", () => {
     toolResults: unknown[];
     responseContent: string;
   }): Promise<{ live: AgentTurn; restored: AgentTurn }> {
-    dispatchIPCEvent({
+    const turnEnd = {
       kind: "turn_end",
       sessionId: "s-test",
       exitReason: null,
       timestamp: "2026-06-18T08:01:02.000Z",
       ...event,
-    } as never);
+    } as TurnEndEvent;
+    dispatchIPCEvent(turnEnd);
     await flushPromises();
 
     const turns = useMessagesStore.getState().byId["s-test"].turns;
     const live = turns[turns.length - 1] as AgentTurn;
 
-    const persistCall = tauriMocks.invoke.mock.calls.find(
-      ([cmd]) => cmd === "persist_assistant_message",
-    );
-    expect(persistCall).toBeDefined();
-    const input = (persistCall![1] as { input: Record<string, unknown> })
-      .input;
+    // The page writes nothing: Core persists the row (2026-10-07).
+    expect(
+      tauriMocks.invoke.mock.calls.some(
+        ([cmd]) => cmd === "persist_assistant_message",
+      ),
+    ).toBe(false);
 
-    // The persisted columns, exactly as Core would hand them back.
+    // The persisted columns, as Core writes them — the shared golden
+    // fixtures (turn-persistence.golden.test.ts + cargo test) hold
+    // Core's derivation to this helper. No absoluteTurnIndex and a
+    // fresh store (offset 0): the row keys on the bare step.
+    const columns = assistantRowFromTurnEnd(turnEnd);
     const assistantRow = makeMessageRow({
       role: "assistant",
-      turn_index: input.turnIndex as number,
-      content: input.content as string,
-      tool_calls: input.toolCalls as string,
-      tool_results: input.toolResults as string,
-      thinking: input.thinking as string | null,
-      final_answer: input.finalAnswer as string | null,
-      summary: input.summary as string | null,
-      preamble: input.preamble as string | null,
+      turn_index: event.turnIndex,
+      content: columns.content,
+      tool_calls: columns.toolCalls,
+      tool_results: columns.toolResults,
+      thinking: columns.thinking,
+      final_answer: columns.finalAnswer,
+      summary: columns.summary,
+      preamble: columns.preamble,
     });
     // User row opening the message block — base for step recovery
     // (turnIndexOffset is 0 in this fresh store, so base = 1).

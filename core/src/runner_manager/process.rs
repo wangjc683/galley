@@ -117,6 +117,12 @@ pub struct RunnerProcess {
     /// still emits a close event, but maps it to a clean close so GUI does not
     /// show a crash toast for deliberate lifecycle transitions.
     expected_close: Arc<AtomicBool>,
+    /// Set by the stdout reader right before it broadcasts `Closed`: the
+    /// child is gone even though the manager still holds this entry (it
+    /// stays registered until a shutdown or respawn). Lets
+    /// [`RunnerManager::live_runners`](super::manager::RunnerManager::live_runners)
+    /// tell a crashed runner from a live one.
+    closed: Arc<AtomicBool>,
     /// Rolling buffer of the last [`STDERR_TAIL_MAX`] stderr lines. Used to
     /// surface "bridge died with this Python error" toasts on abnormal exit
     /// (the prod-build failure mode hit 2026-05-15 on first .dmg dogfood,
@@ -237,6 +243,7 @@ impl RunnerProcess {
         let (tx, _) = broadcast::channel::<BroadcastItem>(BROADCAST_CAPACITY);
         let agent_running = Arc::new(AtomicBool::new(false));
         let expected_close = Arc::new(AtomicBool::new(false));
+        let closed_flag = Arc::new(AtomicBool::new(false));
         let stderr_tail = Arc::new(Mutex::new(VecDeque::with_capacity(STDERR_TAIL_MAX)));
         let child = Arc::new(Mutex::new(child));
 
@@ -249,6 +256,7 @@ impl RunnerProcess {
             let agent_running = agent_running.clone();
             let child = child.clone();
             let expected_close = expected_close.clone();
+            let closed_flag = closed_flag.clone();
             let sid_for_log = args.session_id.clone();
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stdout).lines();
@@ -322,6 +330,7 @@ impl RunnerProcess {
                         },
                     }
                 };
+                closed_flag.store(true, Ordering::SeqCst);
                 let _ = tx.send(closed);
             });
         }
@@ -353,6 +362,7 @@ impl RunnerProcess {
             stdout_tx: tx,
             agent_running,
             expected_close,
+            closed: closed_flag,
             stderr_tail,
         })
     }
@@ -365,6 +375,12 @@ impl RunnerProcess {
 
     pub fn session_id(&self) -> &str {
         &self.session_id
+    }
+
+    /// The child has exited (its stdout reader broadcast `Closed`), even
+    /// though the manager may still hold this entry.
+    pub fn has_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
     }
 
     /// Subscribe to the broadcast channel. Each subscriber gets its own

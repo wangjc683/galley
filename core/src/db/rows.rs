@@ -250,6 +250,7 @@ pub struct MessageAttachmentCreate {
     pub height: Option<u32>,
 }
 
+#[derive(Debug, Clone)]
 pub struct PersistAssistantMessage {
     pub session_id: SessionId,
     pub turn_index: u32,

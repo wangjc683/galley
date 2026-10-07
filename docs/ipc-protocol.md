@@ -273,6 +273,8 @@ bridge 解析 GA yield 出来的 markdown 字符串得到的非结构化进度�
 - `nextSuggestion`：可选（增量字段）。用户口吻的下一步建议，bridge 从最终回答的 `<next-suggestion>` 标签正则提取（标签指令来自 managed runtime prompt profile，`core/src/managed_prompt.rs`）。只在带 `exitReason` 的 final `turn_end` 上非 null；模型未输出标签则缺失。External GA 不会输出该标签——attach 模式自然无此字段。Desktop 渲染为 composer ghost text（`.scratch/composer-next-suggestion/`），并在所有展示路径 strip 该标签（同 `<summary>` 处理）。
 - `responseThinking`：可选（增量字段，2026-09-23）。该 turn 的推理文本，bridge 在 turn-end hook 里只读取 GA 的 `response.thinking`：原生推理（thinking content block / `reasoning_content`），或 GA 从 `content` 中移出的提示式 `<thinking>` 块。**每个** turn_end 都可能携带（不限 final）；strip 后为空则为 null/缺失；不截断。两种运行时模式都发送（只读属性，符合 attach 边界）。`responseContent` 不含原生推理，推理的落定版本只在这里。
 
+落库（2026-10-07 起由 Core 负责）：Core 在每个 runner 的事件流上挂 runner watcher（`RunnerManager::spawn`，所有 spawn 路径都覆盖），每收到一条 `turn_end` 就写一行 assistant 消息（行 id `msg_{sessionId}_{absoluteTurnIndex}_assistant`，upsert；缺 `absoluteTurnIndex` 时按 runner 自己的公式取最近一条 user 行的 `turn_index` 加 `turnIndex - 1`），可见的 `turn_end` 还会更新会话的 `turn_count` / `summary` / `last_activity_at`。写入在该 runner 的 `run_complete` 关闭运行之前完成。`thinking` / `finalAnswer` / `preamble` / `summary` / `toolCalls` 等派生列与 GUI 实时渲染逐字段一致：Rust 端移植了 GUI 的推导（`core/src/turn_persistence/derive.rs`），vitest 与 cargo test 共用 `core/tests/fixtures/turn-persistence-*.json` 黄金样例。GUI 只渲染、标未读（`mark_session_unread`）、发通知，不再写库；页面重载后用 `list_live_runners` 重新挂接仍存活的 runner。
+
 ### 4.7a `turn_progress`
 
 LLM 流式 partial output。Bridge 启动时设 `agent.inc_out = True`，订阅 GA 的 `display_queue`（`agentmain.put_task` 返回的 queue），每个 partial chunk 转 IPC 事件。Desktop 累积成 `inFlightContent` 实时渲染。`turn_progress.delta` 的粒度是 GA display_queue chunk，不是 token-level 合约；GUI 可以在本地做 typewriter 平滑，调用方不能用它推断 token rate。

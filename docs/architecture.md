@@ -89,6 +89,34 @@ Galley Core lives in `core/`. It owns:
 This is the authoritative layer. New write behavior should be modeled here
 first, then exposed to GUI and CLI.
 
+#### Runner events and turn persistence
+
+Each runner's stdout becomes a broadcast inside Core, with two kinds of
+subscribers:
+
+- **Core's runner watcher**, attached in `RunnerManager::spawn` so every
+  spawn path (GUI, CLI `session new`, Goal, scheduler) gets one. It writes
+  every `turn_end` as an assistant `messages` row and, for visible turns,
+  bumps the session (`turn_count`, `summary`, `last_activity_at`)
+  ([`core/src/turn_persistence`](../core/src/turn_persistence/mod.rs)),
+  then does the outbound-queue bookkeeping. One ordered consumer does
+  both, so a run's rows are in SQLite before its `run_complete` closes the
+  run gate.
+- **Presentation subscribers**: the `runner-event` emit task (GUI pages)
+  and the auto-title watcher. Nothing durable depends on a page receiving
+  an event.
+
+The GUI renders, flags unread (only it knows which session is on screen;
+`mark_session_unread`) and notifies. Until 2026-10-07 the assistant row and
+the session bump were written only when a page handled `turn_end`, so a
+webview reload (macOS WebContent crash recovery, Windows F5, dev HMR)
+silently dropped whole runs. A reloaded page now re-attaches to the runners
+Core still holds (`list_live_runners`) instead of re-spawning them, which
+would have killed a running turn. The row's derived columns come from a
+Rust port of the GUI's derivation; shared golden fixtures under
+`core/tests/fixtures/` keep vitest and cargo test on the same output. See
+the [devlog](./devlog/2026-10-07-core-owned-turn-persistence.md).
+
 ### Runner
 
 The runner lives in `runner/`. It is the Python bridge into GenericAgent. It

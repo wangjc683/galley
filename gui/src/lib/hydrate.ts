@@ -14,7 +14,9 @@
  *   4. Managed runtime layout ensure (creates state dirs if missing and
  *      records diagnostics for Settings).
  *   5. Managed model records hydrate (needed for managed-mode routing).
- *   6. sessionsStore.hydrate (sessions + projects via Rust Core).
+ *   6. sessionsStore.hydrate (sessions + projects via Rust Core), then
+ *      re-attach every runner Core still holds — a no-op on a cold
+ *      start, the recovery path after a webview reload.
  *   7. SQLite housekeeping + FTS backfill in the background.
  *      Best-effort — never blocks first paint.
  *   8. Cached LLM seed → runtimeStore (short-term hint so cold-start
@@ -98,6 +100,12 @@ export async function hydrateApp(): Promise<void> {
   // Core so a slow direct-SQL housekeeping pass cannot leave the
   // sidebar blank on Dev hot restarts.
   await useSessionsStore.getState().hydrate();
+  // A webview reload (macOS WebContent crash recovery, Windows F5, dev
+  // HMR) drops every `runner-event` listener while Core's runners keep
+  // going. Core persisted their turns regardless; re-attaching makes the
+  // running ones render live again. Fire-and-forget: first paint must
+  // not wait on history restores.
+  void useRuntimeStore.getState().reattachLiveRunners();
   // Update auto-prepare is deliberately after sessions hydrate. If a
   // dev reload preserves an in-flight task in messagesStore, the updater
   // guard can see it and defer install work until the session is idle.

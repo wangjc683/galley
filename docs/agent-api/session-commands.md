@@ -382,13 +382,13 @@ included) first sees output and an ended run with Core reachable, it
 pauses 1 second, probes Core and reads the database again, and completes
 only if that second read still passes both conditions; the final frame is
 built from that second read. Otherwise it keeps polling as usual. The
-reason: an agent row is persisted when the GUI handles the `turn_end`
-event that Core routes to it, which is slightly after Core has already
-closed the run on `run_complete`, so the pause lets the last row land.
-The re-check also rides over the brief gap between two runs when Core
-dispatches a Goal continuation or a queued message. This is best effort,
-not a guarantee: a row that takes longer than the pause to land, or a gap
-longer than it, can still slip through. The pause counts against
+reason: the re-check rides over the brief gap between two runs when Core
+dispatches a Goal continuation or a queued message. (Before 2026-10-07 it
+also let the last agent row land: rows were written only when a GUI page
+handled the `turn_end`. Core now writes every row itself, before it closes
+the run on `run_complete`, so an ended run's rows are already in the
+database.) This is best effort, not a guarantee: a gap between runs
+longer than the pause can still slip through. The pause counts against
 `--timeout`, so a wait can end up to 1 second after the deadline.
 
 If Galley Core is unreachable on a poll (no `live`, as for

@@ -4,6 +4,7 @@
 //! `_bridgeClients` Map + `_lruOrder` + `_stderrTails` → here).
 
 use crate::api::QueuedMessage;
+use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, IpcEvent};
 use crate::runner_manager::error::{RunnerSpawnError, SendCommandError, ShutdownError};
 use crate::runner_manager::process::{BroadcastItem, RunnerProcess};
@@ -54,9 +55,13 @@ pub struct RunnerManager {
     /// See [`crate::runner_manager::queue`] for the state model.
     queues: Arc<Mutex<HashMap<String, SessionQueueState>>>,
     /// Drain signal wired once at app init ([`Self::set_run_signal`]):
-    /// each spawn attaches a forwarder that reports RunComplete / close
+    /// each spawn attaches a watcher that reports RunComplete / close
     /// here; the global drain task (`crate::message_queue`) consumes it.
     run_signal_tx: std::sync::RwLock<Option<mpsc::UnboundedSender<RunSignal>>>,
+    /// Core-owned turn persistence, wired once at app init
+    /// ([`Self::set_turn_store`]): each spawn's watcher writes the
+    /// runner's `turn_end`s to this database ([`crate::turn_persistence`]).
+    turn_store: std::sync::RwLock<Option<SqliteGalley>>,
 }
 
 /// Live run-state snapshot for one session ([`RunnerManager::run_state`]).
@@ -83,7 +88,7 @@ pub struct RunState {
     pub last_exit: Option<String>,
 }
 
-/// What the per-spawn forwarder reports to the global drain task.
+/// What the per-spawn runner watcher reports to the global drain task.
 #[derive(Debug, Clone)]
 pub enum RunSignal {
     /// A `RunCompleteEvent` arrived for this session: close the run
@@ -122,14 +127,24 @@ impl RunnerManager {
             cap,
             queues: Arc::new(Mutex::new(HashMap::new())),
             run_signal_tx: std::sync::RwLock::new(None),
+            turn_store: std::sync::RwLock::new(None),
         }
     }
 
     /// Wire the queue-drain signal channel. Called exactly once at app
     /// init before any spawn; spawns that happen with no signal set
-    /// simply attach no forwarder (headless tests).
+    /// simply get no queue bookkeeping (headless tests).
     pub fn set_run_signal(&self, tx: mpsc::UnboundedSender<RunSignal>) {
         *self.run_signal_tx.write().expect("run_signal_tx poisoned") = Some(tx);
+    }
+
+    /// Wire Core-owned turn persistence: every runner spawned afterwards
+    /// has its `turn_end`s written to `galley` by Core itself, whether or
+    /// not a GUI page is listening (2026-10-07 — a webview reload used to
+    /// drop whole runs). Called once at app init, before anything can
+    /// spawn; headless tests that skip it get no persistence.
+    pub fn set_turn_store(&self, galley: SqliteGalley) {
+        *self.turn_store.write().expect("turn_store poisoned") = Some(galley);
     }
 
     /// Spawn a new runner subprocess for `args.session_id`. Returns its PID.
@@ -180,12 +195,12 @@ impl RunnerManager {
         }
         self.touch(&session_id).await;
 
-        // Attach the queue forwarder (galley#19/#20): watches this
-        // process's broadcast for AskUser / RunComplete / close and
-        // keeps the queue state + global drain task informed. Attached
-        // HERE so every spawn path (GUI, socket session.new, goal) is
-        // covered by construction.
-        self.attach_queue_forwarder(&session_id).await;
+        // Attach the runner watcher: persists every turn_end (Core-owned
+        // turn persistence) and keeps the queue state + global drain
+        // task informed (galley#19/#20). Attached HERE so every spawn
+        // path (GUI, socket session.new, goal, scheduler) is covered by
+        // construction.
+        self.attach_runner_watcher(&session_id).await;
 
         // Now enforce the cap. The just-spawned session is at the END of
         // the LRU so it's safe from being its own victim.
@@ -194,97 +209,87 @@ impl RunnerManager {
         Ok(pid)
     }
 
-    /// Subscribe to the just-spawned process and forward queue-relevant
-    /// happenings: `ask_user` flips the hold flag synchronously (so it
-    /// is set before the same stream's RunComplete reaches the drain),
-    /// RunComplete / close go to the global drain task via
-    /// [`RunSignal`]. No-op when no signal channel is wired.
-    async fn attach_queue_forwarder(&self, session_id: &str) {
-        let tx = self
+    /// Subscribe to the just-spawned process and act on its events in
+    /// stream order, without a GUI:
+    ///
+    /// - `turn_end` → the assistant row + session bump
+    ///   ([`crate::turn_persistence`]), when a turn store is wired;
+    /// - queue bookkeeping, when a run-signal channel is wired: `ask_user`
+    ///   flips the hold flag (before the same stream's RunComplete reaches
+    ///   the drain), RunComplete / close go to the global drain task via
+    ///   [`RunSignal`].
+    ///
+    /// One ordered consumer does both, so a run's rows are in SQLite
+    /// before its RunComplete closes the run gate — `session wait
+    /// --until-idle` and `session show` never see a run as ended ahead of
+    /// its final answer. The broadcast is drained by a separate pump
+    /// ([`pump_watched_events`]) so a slow write cannot make this
+    /// subscriber lag and skip events. No-op when neither is wired.
+    async fn attach_runner_watcher(&self, session_id: &str) {
+        let mut signal_tx = self
             .run_signal_tx
             .read()
             .expect("run_signal_tx poisoned")
             .clone();
-        let Some(tx) = tx else { return };
-        let Some(mut rx) = self.subscribe(session_id).await else {
+        let store = self.turn_store.read().expect("turn_store poisoned").clone();
+        if signal_tx.is_none() && store.is_none() {
+            return;
+        }
+        let Some(rx) = self.subscribe(session_id).await else {
             return;
         };
+        let mut events = pump_watched_events(rx, session_id.to_string());
         let queues = self.queues.clone();
         let sid = session_id.to_string();
         tokio::spawn(async move {
-            loop {
-                match rx.recv().await {
-                    Ok(BroadcastItem::Event(boxed)) => match *boxed {
-                        IpcEvent::AskUser(_) => {
-                            let mut q = queues.lock().await;
-                            q.entry(sid.clone()).or_default().ask_pending = true;
+            while let Some(item) = events.recv().await {
+                let event = match item {
+                    BroadcastItem::Event(boxed) => *boxed,
+                    BroadcastItem::Closed { .. } => {
+                        if let Some(tx) = &signal_tx {
+                            let _ = tx.send(RunSignal::Closed {
+                                session_id: sid.clone(),
+                            });
                         }
-                        IpcEvent::TurnStart(_) => {
-                            let announce = {
-                                let mut q = queues.lock().await;
-                                let state = q.entry(sid.clone()).or_default();
-                                if state.run_kind == RunKind::UserTurn && !state.started_notified {
-                                    state.started_notified = true;
-                                    true
-                                } else {
-                                    false
-                                }
-                            };
-                            if announce
-                                && tx
-                                    .send(RunSignal::UserRunStarted {
-                                        session_id: sid.clone(),
-                                    })
-                                    .is_err()
-                            {
-                                break;
-                            }
-                        }
-                        // Goal v2 bookkeeping: remember the final turn's
-                        // `<goal-status>` tag and any fatal error so the
-                        // drain task can judge the run once it settles.
-                        IpcEvent::TurnEnd(e) if e.exit_reason.is_some() => {
-                            let mut q = queues.lock().await;
-                            let draft = &mut q.entry(sid.clone()).or_default().draft;
-                            draft.goal_tag = e.goal_status;
-                            draft.summary = Some(e.summary).filter(|s| !s.trim().is_empty());
-                        }
-                        IpcEvent::Error(e) if e.category != "business" && e.severity == "error" => {
-                            let mut q = queues.lock().await;
-                            q.entry(sid.clone()).or_default().draft.errored = Some(e.message);
-                        }
-                        IpcEvent::RunComplete(e) => {
-                            // Settles the RunOutcome and records
-                            // `last_exit` (galley#30) in one step.
-                            queues
-                                .lock()
-                                .await
-                                .entry(sid.clone())
-                                .or_default()
-                                .settle_run(&e.exit_reason);
-                            if tx
-                                .send(RunSignal::RunComplete {
-                                    session_id: sid.clone(),
-                                })
-                                .is_err()
-                            {
-                                break;
-                            }
-                        }
-                        _ => {}
-                    },
-                    Ok(BroadcastItem::Closed { .. }) => {
-                        let _ = tx.send(RunSignal::Closed {
-                            session_id: sid.clone(),
-                        });
                         break;
                     }
-                    Ok(BroadcastItem::Malformed(_)) => continue,
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(broadcast::error::RecvError::Closed) => break,
+                    BroadcastItem::Malformed(_) => continue,
+                };
+                if let (IpcEvent::TurnEnd(turn), Some(store)) = (&event, &store) {
+                    crate::turn_persistence::persist_turn_end(store, &sid, turn).await;
+                }
+                if let Some(tx) = &signal_tx {
+                    if !queue_bookkeeping(&queues, &sid, tx, event).await {
+                        // The drain task is gone (app shutting down);
+                        // keep persisting whatever is still in flight.
+                        signal_tx = None;
+                    }
                 }
             }
         });
+    }
+
+    /// Every runner whose child is still alive, with its pid (order not
+    /// kept). Lets a GUI page that lost its listeners — a webview reload —
+    /// re-attach instead of re-spawning (which would kill a running
+    /// turn). A crashed runner stays registered until a shutdown or
+    /// respawn but is left out here, so re-clicking its session still
+    /// respawns it.
+    pub async fn live_runners(&self) -> Vec<(String, u32)> {
+        let processes: Vec<(String, Arc<Mutex<RunnerProcess>>)> = {
+            let map = self.processes.read().await;
+            map.iter()
+                .map(|(sid, proc)| (sid.clone(), proc.clone()))
+                .collect()
+        };
+        let mut out = Vec::with_capacity(processes.len());
+        for (sid, proc) in processes {
+            let p = proc.lock().await;
+            if let (Some(pid), false) = (p.pid(), p.has_closed()) {
+                out.push((sid, pid));
+            }
+        }
+        out
     }
 
     /// Move `session_id` to the end of the LRU (most-recently-used).
@@ -742,6 +747,123 @@ impl RunnerManager {
             }
         }
     }
+}
+
+/// The events the runner watcher acts on.
+fn is_watched(event: &IpcEvent) -> bool {
+    matches!(
+        event,
+        IpcEvent::AskUser(_)
+            | IpcEvent::TurnStart(_)
+            | IpcEvent::TurnEnd(_)
+            | IpcEvent::Error(_)
+            | IpcEvent::RunComplete(_)
+    )
+}
+
+/// Drain a runner's broadcast into an unbounded queue of the events the
+/// watcher acts on, in stream order. The pump awaits nothing but the
+/// broadcast itself, so a slow SQLite write downstream can never push
+/// this subscriber past the broadcast capacity (where events are
+/// silently skipped). Ends after forwarding `Closed`, or when the
+/// broadcast closes.
+fn pump_watched_events(
+    mut rx: broadcast::Receiver<BroadcastItem>,
+    session_id: String,
+) -> mpsc::UnboundedReceiver<BroadcastItem> {
+    let (tx, out) = mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(item @ BroadcastItem::Closed { .. }) => {
+                    let _ = tx.send(item);
+                    break;
+                }
+                Ok(BroadcastItem::Event(event)) if is_watched(&event) => {
+                    if tx.send(BroadcastItem::Event(event)).is_err() {
+                        break;
+                    }
+                }
+                Ok(_) => continue,
+                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                    eprintln!("[runner watch {session_id}] lagged, skipped {skipped} events");
+                    continue;
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+    out
+}
+
+/// Queue-side handling of one watched event (galley#19/#20, Goal v2).
+/// Returns `false` once the drain task's channel is gone.
+async fn queue_bookkeeping(
+    queues: &Mutex<HashMap<String, SessionQueueState>>,
+    sid: &str,
+    tx: &mpsc::UnboundedSender<RunSignal>,
+    event: IpcEvent,
+) -> bool {
+    match event {
+        IpcEvent::AskUser(_) => {
+            let mut q = queues.lock().await;
+            q.entry(sid.to_string()).or_default().ask_pending = true;
+        }
+        IpcEvent::TurnStart(_) => {
+            let announce = {
+                let mut q = queues.lock().await;
+                let state = q.entry(sid.to_string()).or_default();
+                if state.run_kind == RunKind::UserTurn && !state.started_notified {
+                    state.started_notified = true;
+                    true
+                } else {
+                    false
+                }
+            };
+            if announce
+                && tx
+                    .send(RunSignal::UserRunStarted {
+                        session_id: sid.to_string(),
+                    })
+                    .is_err()
+            {
+                return false;
+            }
+        }
+        // Goal v2 bookkeeping: remember the final turn's
+        // `<goal-status>` tag and any fatal error so the drain task can
+        // judge the run once it settles.
+        IpcEvent::TurnEnd(e) if e.exit_reason.is_some() => {
+            let mut q = queues.lock().await;
+            let draft = &mut q.entry(sid.to_string()).or_default().draft;
+            draft.goal_tag = e.goal_status;
+            draft.summary = Some(e.summary).filter(|s| !s.trim().is_empty());
+        }
+        IpcEvent::Error(e) if e.category != "business" && e.severity == "error" => {
+            let mut q = queues.lock().await;
+            q.entry(sid.to_string()).or_default().draft.errored = Some(e.message);
+        }
+        IpcEvent::RunComplete(e) => {
+            // Settles the RunOutcome and records `last_exit`
+            // (galley#30) in one step.
+            queues
+                .lock()
+                .await
+                .entry(sid.to_string())
+                .or_default()
+                .settle_run(&e.exit_reason);
+            if tx
+                .send(RunSignal::RunComplete {
+                    session_id: sid.to_string(),
+                })
+                .is_err()
+            {
+                return false;
+            }
+        }
+        _ => {}
+    }
+    true
 }
 
 #[cfg(test)]

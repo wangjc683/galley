@@ -211,11 +211,11 @@ fn live_run_ended(live: &Value) -> bool {
 }
 
 /// How long `--until-idle` waits before confirming a run it saw ended.
-/// Assistant rows are persisted when the GUI handles `turn_end` (routed
-/// through Core), slightly after Core has already closed the run on
-/// `run_complete`; the grace lets that final row land. The re-check also
-/// rides over the brief gap between runs when a Goal continuation or a
-/// queued message is dispatched. Best effort, not a guarantee.
+/// The re-check rides over the brief gap between runs when a Goal
+/// continuation or a queued message is dispatched. (It once also let the
+/// final assistant row land, back when the GUI wrote rows on `turn_end`;
+/// since 2026-10-07 Core writes them before it closes the run.) Best
+/// effort, not a guarantee.
 const UNTIL_IDLE_GRACE: Duration = Duration::from_secs(1);
 
 /// What one wait poll decides.

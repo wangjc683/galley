@@ -121,6 +121,9 @@ stdout/stderr 读取任务，broadcast `send` 非阻塞（容量 1024，溢出�
   分类器按小写子串防御性匹配），最终失败升级 `console.error` 并带
   session/turn/approval 标识，不再静默。新增 4 个 vitest 用例覆盖重试/
   不重试/放弃路径。
+  **2026-10-07 迁移**：assistant 行改由 Core 自己写（`core/src/turn_persistence`），
+  同一套退避重试随之移入 Rust（`with_contention_retry`），GUI 侧写入与这 4 个
+  vitest 用例一并删除。
 - `[ ]` **CONC-9** · `core/src/db/session.rs:411-458, 883-944` — 附件文件
   写（≤25MB `tokio::fs::write`）在 `BEGIN IMMEDIATE` 写事务内，慢盘上
   持写锁超 5s 会让并发 persist 报 busy。修法：先写文件后开短事务。

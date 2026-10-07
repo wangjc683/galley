@@ -1,12 +1,20 @@
 use super::*;
 
 impl SqliteGalley {
+    /// Sweep the GUI's abandoned "新对话" rows at hydrate. A row counts
+    /// as abandoned only when it holds no message at all: `session.new`
+    /// (CLI, IM delegation, scheduled fires) commits the default title,
+    /// `turn_count = 0` and the first user message together, and keeps
+    /// both until its first turn ends — so a hydrate during that first
+    /// turn (app launch beside a scheduler catch-up, a webview reload)
+    /// used to delete a live session and, by cascade, its message.
     pub async fn delete_empty_new_sessions(&self) -> Result<u32> {
         let res = sqlx::query(
             "DELETE FROM sessions \
              WHERE title = ? \
                AND turn_count = 0 \
-               AND status != 'archived'",
+               AND status != 'archived' \
+               AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.session_id = sessions.id)",
         )
         .bind(DEFAULT_NEW_SESSION_TITLE)
         .execute(&self.pool)

@@ -44,6 +44,21 @@ export interface BridgeSlice {
    * action just registers event handlers and tracks the client locally.
    */
   attachExternalBridge: (sessionId: string, pid: number) => Promise<void>;
+  /**
+   * Attach to the runner Core still holds for `sessionId`, if any —
+   * instead of spawning, which would shut that runner down first and
+   * kill its run. A session whose run is still open gets its history
+   * restored before the listener goes up, then shows as running. True
+   * when a live runner was found and attached.
+   */
+  attachLiveRunner: (sessionId: string) => Promise<boolean>;
+  /**
+   * After a webview reload: re-attach every runner Core still holds for
+   * a session in the sidebar, so running sessions keep rendering live.
+   * Core keeps persisting their turns either way; this only restores
+   * the view. No-op on a cold start (Core has no runners yet).
+   */
+  reattachLiveRunners: () => Promise<void>;
   /** Graceful shutdown. No-op if no bridge alive for `sid`. */
   shutdownBridge: (sid: string) => Promise<void>;
   /** Send an IPC command to `sid`'s bridge over stdin. User-turn commands
@@ -68,6 +83,10 @@ export interface BridgeSlice {
 //   avoids triggering subscribers on every spawn/touch.
 
 const _bridgeClients = new Map<string, BridgeClient>();
+// In-flight attaches, so a reload's bulk re-attach, an activation and a
+// late `runner-spawned-external` cannot register two listener sets for
+// one runner (every event would then render twice).
+const _attachesInFlight = new Map<string, Promise<void>>();
 const _stderrTails = new Map<string, string[]>();
 const _bridgeSpawnStartedAt = new Map<string, number>();
 const _STDERR_TAIL_MAX = 8;
@@ -199,6 +218,44 @@ async function _enforceLRUCap(): Promise<void> {
       console.warn(`[lru] shutdown of ${victim} failed:`, e);
       _lruRemove(victim); // force-unblock even if shutdown threw
     }
+  }
+}
+
+/** One runner Core still holds — `runner_commands::LiveRunnerPayload`. */
+interface LiveRunner {
+  sessionId: string;
+  pid: number;
+  /** A run is open or the agent is mid-turn. */
+  runOpen: boolean;
+}
+
+async function _listLiveRunners(): Promise<LiveRunner[]> {
+  try {
+    const runners = await invoke<LiveRunner[] | null>("list_live_runners");
+    return Array.isArray(runners) ? runners : [];
+  } catch (e) {
+    console.debug("[runtime] list_live_runners failed.", e);
+    return [];
+  }
+}
+
+async function _attachLive(runner: LiveRunner): Promise<void> {
+  const { sessionId } = runner;
+  if (_bridgeClients.has(sessionId)) return;
+  if (runner.runOpen) {
+    // Restore before the listener goes up: once live turns land in an
+    // empty transcript, activation no longer restores (it reads a
+    // non-empty transcript as already loaded) and the history before
+    // the reload would stay missing. Core persisted every turn, so the
+    // read is complete up to now.
+    const messages = useMessagesStore.getState();
+    if ((messages.byId[sessionId]?.turns.length ?? 0) === 0) {
+      await messages.restoreSessionTurns(sessionId);
+    }
+  }
+  await useRuntimeStore.getState().attachExternalBridge(sessionId, runner.pid);
+  if (runner.runOpen && _bridgeClients.has(sessionId)) {
+    useMessagesStore.getState().setAgentRunning(sessionId, true);
   }
 }
 
@@ -407,38 +464,71 @@ export const createBridgeSlice: RuntimeSliceCreator<BridgeSlice> = (
     if (_bridgeClients.has(sessionId)) {
       return;
     }
-    try {
-      const client = await attachBridgeProcess(
-        sessionId,
-        pid,
-        makeBridgeHandlers(sessionId),
-      );
-      _bridgeClients.set(sessionId, client);
-      _lruTouch(sessionId);
-      set((state) => ({
-        byId: {
-          ...state.byId,
-          [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
-            bridgeStatus: "connected",
-            bridgeError: null,
-            bridgePid: pid,
-          }),
-        },
-      }));
-      void _enforceLRUCap();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      set((state) => ({
-        byId: {
-          ...state.byId,
-          [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
-            bridgeStatus: "error",
-            bridgeError: msg,
-            bridgePid: null,
-          }),
-        },
-      }));
+    const inFlight = _attachesInFlight.get(sessionId);
+    if (inFlight) {
+      await inFlight;
+      return;
     }
+    const attach = (async () => {
+      try {
+        const client = await attachBridgeProcess(
+          sessionId,
+          pid,
+          makeBridgeHandlers(sessionId),
+        );
+        _bridgeClients.set(sessionId, client);
+        _lruTouch(sessionId);
+        set((state) => ({
+          byId: {
+            ...state.byId,
+            [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+              bridgeStatus: "connected",
+              bridgeError: null,
+              bridgePid: pid,
+            }),
+          },
+        }));
+        void _enforceLRUCap();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        set((state) => ({
+          byId: {
+            ...state.byId,
+            [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+              bridgeStatus: "error",
+              bridgeError: msg,
+              bridgePid: null,
+            }),
+          },
+        }));
+      }
+    })();
+    _attachesInFlight.set(sessionId, attach);
+    try {
+      await attach;
+    } finally {
+      _attachesInFlight.delete(sessionId);
+    }
+  },
+
+  attachLiveRunner: async (sessionId) => {
+    const runner = (await _listLiveRunners()).find(
+      (r) => r.sessionId === sessionId,
+    );
+    if (!runner) return false;
+    await _attachLive(runner);
+    return _bridgeClients.has(sessionId);
+  },
+
+  reattachLiveRunners: async () => {
+    const runners = await _listLiveRunners();
+    if (runners.length === 0) return;
+    const known = new Set(
+      useSessionsStore.getState().sessions.map((session) => session.id),
+    );
+    await Promise.all(
+      runners.filter((r) => known.has(r.sessionId)).map(_attachLive),
+    );
   },
 
   shutdownBridge: async (sessionId) => {

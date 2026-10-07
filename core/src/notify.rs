@@ -16,6 +16,11 @@ pub trait Notifier: Send + Sync {
     /// Fire-and-forget emit. Implementations must not block or fail the
     /// caller — event delivery is best-effort by contract (a GUI that
     /// missed an event resyncs from the DB, which is authoritative).
+    /// That holds only because Core writes everything durable itself:
+    /// runner `turn_end`s included, since 2026-10-07
+    /// (`crate::turn_persistence`) — before, assistant rows were written
+    /// only when a page received `runner-event`, so a webview reload lost
+    /// them for good. Never make an emit the trigger of a DB write.
     fn emit(&self, event: &str, payload: Value);
 }
 

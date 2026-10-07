@@ -1,6 +1,6 @@
 //! Tauri-command surface that wraps [`crate::runner_manager::RunnerManager`].
 //!
-//! Seven `#[tauri::command]`s are registered:
+//! Eight `#[tauri::command]`s are registered:
 //!
 //! 1. [`spawn_runner`] — spawn a new Python runner subprocess + start an
 //!    emit task that fans broadcast events to the GUI
@@ -13,6 +13,9 @@
 //! 6. [`probe_ga_runtime`] — validate an external GA checkout before a
 //!    session is created (implementation in the `probe` submodule)
 //! 7. [`shutdown_all_runners`] — graceful shutdown of every live runner
+//! 8. [`list_live_runners`] — every runner Core still holds, so a GUI page
+//!    that lost its listeners (webview reload) re-attaches instead of
+//!    re-spawning
 //!
 //! External-runtime spawn-arg preparation lives in the `external_spawn`
 //! submodule; the managed-runtime spawn path stays in this file.
@@ -528,10 +531,48 @@ pub async fn shutdown_all_runners(
     Ok(())
 }
 
+/// One runner Core still holds ([`list_live_runners`]).
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveRunnerPayload {
+    pub session_id: String,
+    pub pid: u32,
+    /// A run is open or the agent is mid-turn — the GUI shows the
+    /// session as running and restores its history before the next
+    /// live event lands.
+    pub run_open: bool,
+}
+
+/// Every runner Core still holds. A webview reload drops the page's
+/// `runner-event` listeners while the runners (and Core's own turn
+/// persistence) keep going; the reloaded page lists them here and
+/// re-attaches. Spawning instead would shut the live runner down first
+/// (`RunnerManager::spawn`) — killing its run. Never fails.
+#[tauri::command]
+pub async fn list_live_runners(
+    manager: State<'_, std::sync::Arc<RunnerManager>>,
+) -> Result<Vec<LiveRunnerPayload>, ()> {
+    let mut out = Vec::new();
+    for (session_id, pid) in manager.live_runners().await {
+        let state = manager.run_state(&session_id).await;
+        out.push(LiveRunnerPayload {
+            session_id,
+            pid,
+            run_open: state.open_run || state.agent_running,
+        });
+    }
+    Ok(out)
+}
+
 /// Background task that subscribes to a session's broadcast and re-emits
 /// as Tauri events to the GUI. Lives for the lifetime of the subprocess —
 /// when the broadcast channel closes (subprocess exited, all senders
 /// dropped) the task emits a final `runner-closed` event and terminates.
+///
+/// Presentation only: nothing durable depends on a page receiving these.
+/// Turn rows and session bumps are written by Core's runner watcher
+/// (`crate::turn_persistence`); a page that missed events re-reads them
+/// from SQLite and re-attaches via [`list_live_runners`].
 pub(crate) fn spawn_emit_task(
     notifier: std::sync::Arc<dyn crate::notify::Notifier>,
     session_id: String,

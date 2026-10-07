@@ -177,16 +177,16 @@ pub(crate) async fn set_session_llm(
         .map_err(stringify_error)
 }
 
+/// Unread is the GUI's half of a turn: Core writes the row and the
+/// session bump itself (`crate::turn_persistence`), the GUI flags the
+/// reply unread when its session is not on screen.
 #[tauri::command]
-pub(crate) async fn bump_session_after_turn(
+pub(crate) async fn mark_session_unread(
     galley: State<'_, SqliteGalley>,
     id: SessionId,
-    summary: Option<String>,
-    step_number: Option<u32>,
-    mark_unread: bool,
-) -> std::result::Result<SessionBrief, String> {
+) -> std::result::Result<(), String> {
     galley
-        .bump_session_after_turn(id, summary, step_number, mark_unread)
+        .mark_session_unread(id)
         .await
         .map_err(stringify_error)
 }
@@ -369,45 +369,6 @@ mod tests {
             error::GalleyError::InvalidArgs { message } if message.contains("too many images")
         ));
     }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PersistAssistantMessageInput {
-    session_id: SessionId,
-    turn_index: u32,
-    content: String,
-    tool_calls: Option<String>,
-    tool_results: Option<String>,
-    thinking: Option<String>,
-    final_answer: Option<String>,
-    summary: Option<String>,
-    preamble: Option<String>,
-    visibility: Option<MessageVisibility>,
-    telemetry: Option<MessageTelemetry>,
-}
-
-#[tauri::command]
-pub(crate) async fn persist_assistant_message(
-    galley: State<'_, SqliteGalley>,
-    input: PersistAssistantMessageInput,
-) -> std::result::Result<(), String> {
-    galley
-        .persist_gui_assistant_message(PersistAssistantMessage {
-            session_id: input.session_id,
-            turn_index: input.turn_index,
-            content: input.content,
-            tool_calls: input.tool_calls,
-            tool_results: input.tool_results,
-            thinking: input.thinking,
-            final_answer: input.final_answer,
-            summary: input.summary,
-            preamble: input.preamble,
-            visibility: input.visibility.unwrap_or(MessageVisibility::Visible),
-            telemetry: input.telemetry,
-        })
-        .await
-        .map_err(stringify_error)
 }
 
 #[tauri::command]

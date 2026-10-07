@@ -1,14 +1,14 @@
 use crate::api::CreateScheduledTaskInput;
 use crate::api::{
     self, CreateProjectInput, CreateSessionInput, GalleyApi, GoalBrief, GoalId,
-    ManagedModelAuthKind, ManagedModelProbeInput, MessageTelemetry, MessageVisibility, Origin,
-    ProjectBrief, ProjectId, ProjectPatch, ReorderManagedModelsInput, RuntimeKind,
-    SaveManagedModelInput, SaveManagedProviderInput, ScheduledTaskBrief, ScheduledTaskId,
-    ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId, SetManagedModelDefaultsInput,
+    ManagedModelAuthKind, ManagedModelProbeInput, Origin, ProjectBrief, ProjectId, ProjectPatch,
+    ReorderManagedModelsInput, RuntimeKind, SaveManagedModelInput, SaveManagedProviderInput,
+    ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch, SessionBrief, SessionFilter,
+    SessionId, SetManagedModelDefaultsInput,
 };
 use crate::db::{
-    MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage, PersistedMessageRow,
-    SqliteGalley, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
+    MessageAttachmentCreate, MessageSearchHit, PersistedMessageRow, SqliteGalley,
+    UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
 };
 use crate::{
     browser_bridge, browser_control, codex_oauth, credential_store, error, im_supervisor,
