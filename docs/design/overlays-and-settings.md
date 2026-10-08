@@ -348,10 +348,10 @@ Runtime tab 的任何问题）。
 #### Channels
 
 - 顶栏的 Channels 灯（亮 = 有平台在运行）、文字 badge 与菜单的规范在 [layout-and-chrome](./layout-and-chrome.md) §4.1 Channels Indicator（2026-10-04 起；此前这里写的是「icon-only、不论状态都一样」）。
-- Channels 使用 managed model config revision 判断配置 freshness。模型配置变更后，已启用 Channel 若仍记录旧 revision，Settings -> Channels 卡片列表顶部显示 warning 状态条：标题 `Channels 正在使用旧模型配置` + 一行说明 + `重启 Channels` CTA。stale 信号只靠状态条传达，不再改按钮变体——反馈要引导行动，不是暗示。
-- `重启 Channels` 语义是重启所有已启用 Channel；手动 Stop / Disconnect 会把 Channel 置为未启用，不会被这个按钮重新拉起。
-- Models toast 里的 `重启 Channels` CTA 直接执行；Channels 页（状态条或底部按钮）和顶栏 Channels 菜单先弹同一个轻确认，说明可能中断当前回复、不会退出登录。
-- 卡片下方的常驻 `重启 Channels` 按钮保持 ghost 权重，且只在存在已启用 Channel 且非 stale 时渲染——没有可重启对象时不占位，stale 时让位给状态条。
+- Channels 使用 managed model config revision 判断配置 freshness。模型配置变更后，已启用 Channel 若仍记录旧 revision，Settings -> Channels 卡片列表顶部显示 warning 状态条：标题 `渠道正在使用旧模型配置` + 一行说明 + `重启全部渠道` CTA（2026-10-08 前写作 `Channels …` / `重启 Channels`，中文正文统一叫「渠道」，见 copy-language-guidelines）。stale 信号只靠状态条传达，不再改按钮变体——反馈要引导行动，不是暗示。
+- `重启全部渠道` 语义是重启所有已启用渠道；手动暂停 / 解除接入会把渠道置为未启用，不会被这个按钮重新拉起。逐个重启、一个失败不拖累其余（2026-10-08 起，此前遇到第一个失败就整体放弃）：失败的那个记成「异常」，toast 写「部分渠道重启失败 / 已重启 N 个渠道；{平台}：{原因}」；只有所有渠道共用的准备步骤失败才整体报「重启渠道失败」。
+- Models toast 里的 `重启全部渠道` CTA 直接执行；Channels 页（状态条或底部按钮）和顶栏 Channels 菜单先弹同一个轻确认，说明可能中断当前回复、不会退出登录。
+- 卡片下方的常驻 `重启全部渠道` 按钮保持 ghost 权重，且只在存在已启用 Channel 且非 stale 时渲染——没有可重启对象时不占位，stale 时让位给状态条。
 - 重启不删除微信 token，不主动要求重新扫码；token 过期仍走现有 expired / scan 流程。
 - 重启不丢对话（2026-09-30）：每个渠道记下当前 GA 日志的文件名，重启后按日志接回上下文（飞书 / Telegram / 微信在 `runner/im_resume.py`，Discord 在补丁 `0026`，按频道）；接不上时下一条回答首行说一次「之前的对话没接上，这是新的上下文」。要清就发 `/new`（微信的 `/new` 由 Galley 补上）。断开连接（Disconnect）清掉续接状态，重连从头开始；解绑使用者不清。
 - 飞书卡片与微信并列，但流程不是扫码：展开区提供开放平台步骤、App ID / App Secret 输入和启动按钮。App Secret 保存后不回显，留空表示沿用已保存凭据。使用者通过配对码绑定：服务启动后未绑定时展示配对码，首个在飞书私聊发送配对码的用户成为机器人唯一响应的使用者，可在卡片内解绑（早期「不做绑定码」的定位已被 owner-binding 实现取代）。
@@ -359,8 +359,9 @@ Runtime tab 的任何问题）。
   不回显、留空沿用；设置指引用微信同款编号步骤列表（不需要飞书那种多段开
   放平台指引）。配对码绑定与飞书同一套交互和视觉（`OwnerBoundRow` /
   `BindCodeCallout` 共享组件）；与飞书的有意差异是换 Bot Token 不清除绑定
-  （Telegram user id 全局，飞书 open_id 是应用作用域）。「保存凭证 / 启动
-  服务」沿用 primary = 当前可执行下一步的互斥规则。不做代理配置 UI：默认
+  （Telegram user id 全局，飞书 open_id 是应用作用域；飞书已绑定时 App ID 框下
+  提示「换应用会解绑当前使用者，需要重新配对」，2026-10-08 起）。「保存 / 启动
+  服务」沿用 primary = 当前可执行下一步的互斥规则（2026-10-08 前按钮叫「保存凭证」）。不做代理配置 UI：默认
   Telegram 用户具备网络解决能力，错误 hint 提示网络可达性即可。
 - Discord 是第四张卡，凭据同样只有一个 Bot Token（Developer Portal），保存
   后不回显、留空沿用；卡片是 Telegram 卡的等形态移植（密码框 token +
@@ -449,7 +450,7 @@ Runtime tab 的任何问题）。
   正文 + 斜体 `状态 · session id` 脚注。
 - 卡内层级规则（与 Runtime tab 同源）：
   - 每张卡同时至多一颗 primary 按钮，primary = 当前可执行的下一步。
-    飞书的「保存凭证」和「启动服务」按此互斥：凭证未就绪时保存是
+    飞书的「保存」和「启动服务」按此互斥：App Secret 未就绪时保存是
     primary、启动是 secondary，就绪后互换。
   - 卡内表单标签、错误块 / 配对码块的标题用 field 级标签（非
     uppercase、无 tracking），页面级眉标语法不进入卡内。
@@ -460,9 +461,46 @@ Runtime tab 的任何问题）。
     `SettingsTag`（按语义分，见「视觉 → 共享组件」）；Channels 卡的折叠
     外壳与服务商卡共用 `SettingsDisclosureCard`（展开区 `bg-app`，头部
     展开时不再加底色）。
-  - 四个确认弹窗（微信断开、飞书断开、飞书解绑、重启）共用一个
-    shell（`ConfirmActionDialog`），取消键默认聚焦，回车不会误触
-    执行。
+  - 八个确认弹窗（四个渠道的解除接入、飞书 / Telegram / Discord 的解绑、重启全部
+    渠道）共用一个 shell（`ConfirmActionDialog`），取消键默认聚焦，回车不会误触
+    执行。解除接入的正文写全删什么（2026-10-08 起，此前飞书只说「要再粘贴 App
+    Secret」，实际 App ID、绑定、接回的对话也一并清掉）：「这会停止{平台}接入，删除
+    已保存的{凭据}，解绑使用者，并清空接回的对话。下次接入要重新{粘贴 / 填写}并配对。」
+    Discord 另说清空已激活的频道；微信说要重新扫码、不会退出手机上的微信。
+- **四张卡同一套视图**（2026-10-08 Settings 逐页第四批，[devlog](../devlog/2026-10-08-settings-channels-tab-pass.md)；
+  判据与视图在 `im/channel-view.ts`，卡片与顶栏共用）：
+  - **「设置好了」的判据**：飞书 / Telegram / Discord = 已绑定使用者；微信 = 有登录 token
+    （状态不是未接入 / 等待扫码 / 接入已失效）。只存了密钥、没人配对，仍算没设置好。
+  - **四种卡体**：没设置好 → 新手引导（步骤 + 表单 + 启动，同今天）；设置好但没在运行 →
+    「已配置」视图：状态提示 → 错误详情 → 一颗主按钮（暂停后「恢复接收」、出错「重试」、
+    接入 / 重连中禁用的「处理中…」）→ 一行列表折叠「更换 Bot Token 或查看配置步骤」
+    （飞书「更换 App ID / App Secret 或查看配置步骤」）收起表单与教程；运行中 → 状态提示 +
+    命令表 + 绑定行 / 配对码块 + 安全说明（微信、Telegram 不再有运行中三步说明，与飞书一致；
+    Discord 的三步讲激活语义，保留）；飞书运行中但还没绑定 → 6 节指南保持展开，提示「服务
+    已启动。回到飞书开放平台完成第 4–6 节，然后在飞书私聊机器人发送配对码。」——配对成功
+    本身证明长连接、事件、权限、发布都通了，之后才折叠。此前配好的渠道一出错 / 暂停 / 重连就
+    整张退回新手引导，错误详情压在卡底。
+  - **徽标**：运行中且已绑定 →「已接入」（四卡；Telegram / Discord 未绑定也是，配对码块就地说
+    下一步）；飞书运行中未绑定 →「服务已启动」（它是飞书教程第 3 节的路标，那时还收不到消息）；
+    设置好后停止 →「已暂停」+ 暂停图标；只存了密钥没启动过 →「未启动」；等待扫码用 warning（与
+    顶栏琥珀一致）。此前 Telegram / Discord 照抄飞书写「服务已启动」，与顶栏「已接入」不一致。
+  - **暂停接收在任何启用态都有**（⋯ 菜单，`canPauseChannel`）：此前只在运行中有，正在重连、
+    等扫码、出错的渠道停不下来，出错时唯一出口是「解除接入」（删凭据、清绑定）。
+  - **命令表四卡同一张**：`/new` `/stop` `/status` `/llm` `/llm n` `/help`；Telegram 的 `/llm` 写
+    「查看并切换模型」（按钮菜单，平台差异），说明句多一句「输入 / 也可以从命令菜单选」；Discord
+    前面加「@机器人」「退出频道」两行。微信的 `/help` `/status` 由 runner 补（与 09-30 补 `/new`
+    同法，零补丁）。`/continue` `/restore` 不进表，`/help` 里能查到。
+  - **安全说明一个模板**：「…其他人（{飞书：包括群聊里 @ 它的成员 / Telegram：包括群组里的成员 /
+    Discord：包括同一 Server 里的成员}）的消息会被忽略，也不会收到回复。」Discord 两条附加声明不动；
+    微信不加（没有绑定机制，谁能给 iLink 机器人发消息未核实，不写没把握的承诺）。
+  - **错误按原因说人话**（`im/channel-error.ts`，四卡与重启 toast 共用）：按原文归类出本地化标题，
+    原文等宽、可选中放在下面——token 无效、没开 MESSAGE CONTENT INTENT、连不上（提示网络或代理）、
+    二维码过期、内置内核缺少组件、另一个 Galley 正在运行这个渠道；匹配不上用各平台的泛提示。靠
+    字符串匹配是因为原文出自上游前端，加机器字段要改补丁。顶栏菜单的错误行仍是原文。
+  - **密钥脱敏**：渠道状态行、渠道日志与 Core 读到的子进程 stderr 都把已知的 token / App Secret
+    换成「…末 4 位」（runner 与 Core，零补丁）。此前 Telegram token 被拒时，python-telegram-bot 的
+    报错原文带完整 token，会出现在错误详情、顶栏菜单和 `telegram.log` 里。
+  - 绑定时间跟随 app 的日期格式（「7月3日 11:34」，不带秒；此前是系统区域的 `toLocaleString`）。
 
 #### Browser Control
 

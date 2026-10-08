@@ -8,6 +8,15 @@
 
 ---
 
+## 微信渠道的任务完成汇报
+
+- **状态**：暂缓（2026-10-08 Settings 逐页第四批 D9，JC 按推荐：先补台账，微信不跟写成显式代价）。
+- **提出**：2026-10-08 聊天软件页审计 X27：飞书 / Telegram / Discord 有委派任务完成后的汇报（`runner/im_reporter.py`），微信没有；08-13 Discord 上线时只写了一句「微信缺席是历史遗留，不是范本」（[devlog](./2026-08-13-discord-channel-shipped.md)），没进台账。
+- **显式代价**：微信用户委派出去的任务做完不会收到消息，要自己回桌面看。为什么现在不跟：微信渠道 0 人在用（JC 也没启用）；10-06 起 IM 定位是「同一个助手，从手机上对话」，委派只在用户要求时，汇报的价值随之下降；真机验证要扫码。
+- **启动信号**：有人开始用微信渠道委派任务，或微信渠道的使用量起来。
+- **方案**：`im_reporter` 加一个微信 channel（发送走 runner 已持有的 bot 客户端）；先核实能否零补丁。
+- **关联**：`runner/im_reporter.py` · `runner/managed_im_supervisor.py` · [第四批 devlog](./2026-10-08-settings-channels-tab-pass.md)
+
 ## Windows 上一键安装 `galley` 命令（用户级 PATH）
 
 - **状态**：暂缓（2026-10-08 Settings 逐页第二批 D5，JC 按推荐：先补台账 + 文案给手动办法）。

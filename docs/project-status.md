@@ -683,7 +683,16 @@ Brave / Arc, folds repair into a disclosure card with a reload-after-update
 line, has the GUI word probe results from a new `kind` field (no Core Chinese
 in the English UI), and skips the 35 s wait when the bridge already says the
 extension is not there. The new-user flow is still not walked end to end on a
-real machine. Owed from the `v0.6.1` smoke (JC approved
+real machine. The fourth batch, Channels
+([devlog](./devlog/2026-10-08-settings-channels-tab-pass.md)), redacts channel
+secrets in status lines, logs and Core-captured stderr (a rejected Telegram
+token used to appear in full), gives set-up channels a configured view
+instead of falling back to onboarding on error / pause / reconnect, words
+the running badge by pairing (「已接入」; Feishu before pairing keeps
+「服务已启动」), shares one command table across the four cards (WeChat gains
+`/help` and `/status` in the runner), names the module 「渠道」 in Chinese
+body copy, lets every enabled channel pause, and restarts channels one by
+one. Owed from the `v0.6.1` smoke (JC approved
 publish without an item-by-item report): on Windows, F5 / Ctrl+R mid-run
 (steps and final answer kept, the run not restarted; that WebView2 reloads on
 these keys is inferred, not observed) and a first session on the `f308ee7`

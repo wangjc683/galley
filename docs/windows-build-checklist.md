@@ -187,7 +187,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] With no platform ever set up, clicking the TopBar Channels icon opens Settings -> Channels; once one is set up it opens the Channels menu (per-platform status rows, then 重启 Channels behind a confirm and 设置… as menu items; arrow keys move between items)
 - [ ] The Channels lamp looks like the other topbar icons while a platform runs and dims to half opacity when all are paused (readable in light and dark)
 - [ ] Channels icon has no status dot or unread-message badge
-- [ ] Settings sidebar shows `Channels` with Chinese helper `聊天软件`
+- [ ] Settings sidebar shows `聊天软件` with the English helper `Channels` (Chinese UI; flipped 2026-09-16)
 - [ ] WeChat QR refresh uses a fresh image path and does not show a stale QR code
 
 ### Browser Control resident bridge (2026-10-04)
