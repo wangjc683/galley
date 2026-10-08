@@ -8,18 +8,19 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { downloadPercent } from "@/lib/app-update";
-import { useCopy } from "@/lib/i18n";
+import { type AppCopy, useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { AppUpdateStatus } from "@/stores/app-update";
+import { type AppUpdateStatus, useAppUpdateStore } from "@/stores/app-update";
 
 import {
   TOPBAR_POPOVER_OPEN_STATE,
   topBarStatusBadgeClass,
 } from "./topbar-status-badge";
 import {
-  type TopBarUpdateStatus,
+  type TopBarUpdateBadge,
+  updateBadgeKind,
   updateIndicatorVisible,
+  updatePopoverBody,
 } from "./update-indicator-status";
 
 /**
@@ -27,20 +28,26 @@ import {
  *
  * Visible only for `available` / `downloading` / `ready` — the three
  * states where "a new version exists" is true and worth ambient
- * awareness. `error` intentionally stays out of the TopBar (toast +
- * Settings own update errors); a persistent red badge for a background
- * nicety would be noise.
+ * awareness. `error` never shows here (2026-07-15): update errors show
+ * only in Settings → About, and a failed background download raises no
+ * notice at all; the next launch's check tries again. A persistent
+ * badge for a background nicety would be noise.
  *
- * Two-tier visual weight: available/downloading ride the quiet neutral
- * badge track; only `ready` earns the success tint, because that's the
- * only state with a user action attached.
+ * Two-tier visual weight: available/downloading/installing ride the
+ * quiet neutral badge track; only `ready` earns the success tint, the
+ * state the update waits on the user for.
  *
- * Click → popover with version info and, when ready, the restart
- * button. No one-click restart on the badge itself: restarting tears
- * down the IM supervisor + runner children, so it stays behind an
- * explicit action inside the popover. The store's `restart()` also
- * refuses while sessions run; the disabled button + `readyAfterTasks`
- * note here are the visible face of that same guard.
+ * Click → popover with version info and the one action the state
+ * allows: 下载更新 when a new version was found (auto-download off; it
+ * never waits for tasks, downloading touches no child process), the
+ * restart once downloaded. No one-click restart on the badge itself:
+ * installing tears down the IM supervisor + runner children, so it
+ * stays behind an explicit action inside the popover. The store's
+ * `restart()` also refuses while sessions run; the disabled button +
+ * `readyAfterTasks` note here are the visible face of that same guard.
+ *
+ * The download action comes from the store directly; `onRestart` is
+ * passed down from MainHeaderHost.
  */
 export function UpdateIndicator({
   status,
@@ -52,15 +59,11 @@ export function UpdateIndicator({
   onRestart?: () => void;
 }) {
   const copy = useCopy();
+  const download = useAppUpdateStore((s) => s.download);
   if (!updateIndicatorVisible(status)) return null;
 
-  const installing =
-    status.kind === "downloading" && status.phase === "installing";
-  const downloadBarPercent =
-    status.kind === "downloading" && !installing
-      ? downloadPercent(status.progress)
-      : null;
-  const badge = updateBadgeView(status, copy.topbar);
+  const body = updatePopoverBody(status, hasRunningSessions);
+  const badge = updateBadgeView(updateBadgeKind(status), copy);
   const version =
     status.kind === "downloading" ? (status.version ?? null) : status.version;
   const currentVersion =
@@ -109,14 +112,19 @@ export function UpdateIndicator({
               `status.body` would show a raw link as prose. Re-add once
               the release SOP produces real notes text. */}
 
-          {/* Downloading with a known Content-Length gets a determinate
-              bar — real byte progress, so the no-fake-progress rule is
-              satisfied. `total: null` and the pre-first-event window fall
-              through to the spinner; the install phase gets its own copy
-              so the bar never freezes at 100%. */}
-          {status.kind === "ready" ? (
+          {/* What each body means: update-indicator-status.ts. */}
+          {body.kind === "download" ? (
+            <Button
+              variant="brand-soft"
+              size="md"
+              onClick={() => void download()}
+              className="mt-3 w-full"
+            >
+              {copy.updates.download}
+            </Button>
+          ) : body.kind === "restart" ? (
             <>
-              {hasRunningSessions && (
+              {body.waitForTasks && (
                 <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-[1.55] text-warning">
                   <Warning size={13} weight="thin" className="mt-0.5 shrink-0" />
                   <span>{copy.updates.readyAfterTasks}</span>
@@ -126,49 +134,40 @@ export function UpdateIndicator({
                 variant="brand-soft"
                 size="md"
                 onClick={onRestart}
-                disabled={hasRunningSessions}
+                disabled={body.waitForTasks}
                 className="mt-3 w-full"
               >
                 {copy.updates.restart}
               </Button>
             </>
-          ) : downloadBarPercent !== null ? (
+          ) : body.kind === "progress" ? (
             <div className="mt-3">
               <div className="flex items-center justify-between gap-2 text-[12px] leading-[1.55] text-ink-muted">
                 <span>{copy.updates.preparing}</span>
-                <span className="tabular-nums">{downloadBarPercent}%</span>
+                <span className="tabular-nums">{body.percent}%</span>
               </div>
               <div
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={downloadBarPercent}
+                aria-valuenow={body.percent}
                 aria-label={copy.updates.preparing}
                 className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-brand/15"
               >
                 <div
                   className="app-update-bar-fill h-full rounded-full bg-brand"
-                  style={{ width: `${downloadBarPercent}%` }}
+                  style={{ width: `${body.percent}%` }}
                 />
               </div>
             </div>
           ) : (
             <p className="mt-3 flex items-center gap-1.5 text-[12px] leading-[1.55] text-ink-muted">
-              {status.kind === "available" && hasRunningSessions ? (
-                <>
-                  <Warning size={13} weight="thin" className="shrink-0" />
-                  <span>{copy.updates.foundAfterTasks}</span>
-                </>
-              ) : (
-                <>
-                  <CircleNotch size={13} weight="thin" className="spin shrink-0" />
-                  <span>
-                    {installing
-                      ? copy.updates.installing
-                      : copy.updates.preparing}
-                  </span>
-                </>
-              )}
+              <CircleNotch size={13} weight="thin" className="spin shrink-0" />
+              <span>
+                {body.installing
+                  ? copy.updates.installing
+                  : copy.updates.preparing}
+              </span>
             </p>
           )}
         </Popover.Content>
@@ -178,8 +177,8 @@ export function UpdateIndicator({
 }
 
 function updateBadgeView(
-  status: TopBarUpdateStatus,
-  copy: ReturnType<typeof useCopy>["topbar"],
+  badge: TopBarUpdateBadge,
+  copy: AppCopy,
 ): {
   label: string;
   tooltip: string;
@@ -187,27 +186,36 @@ function updateBadgeView(
   Icon: typeof DownloadSimple;
   spin?: boolean;
 } {
-  if (status.kind === "ready") {
-    return {
-      label: copy.updateReadyBadge,
-      tooltip: copy.updateReadyTooltip,
-      tone: "success",
-      Icon: CheckCircle,
-    };
+  switch (badge) {
+    case "ready":
+      return {
+        label: copy.topbar.updateReadyBadge,
+        tooltip: copy.topbar.updateReadyTooltip,
+        tone: "success",
+        Icon: CheckCircle,
+      };
+    case "installing":
+      return {
+        label: copy.topbar.updateInstallingBadge,
+        tooltip: copy.updates.installing,
+        tone: "neutral",
+        Icon: CircleNotch,
+        spin: true,
+      };
+    case "downloading":
+      return {
+        label: copy.topbar.updateDownloadingBadge,
+        tooltip: copy.topbar.updateDownloadingTooltip,
+        tone: "neutral",
+        Icon: CircleNotch,
+        spin: true,
+      };
+    case "available":
+      return {
+        label: copy.topbar.updateAvailableBadge,
+        tooltip: copy.topbar.updateAvailableTooltip,
+        tone: "neutral",
+        Icon: DownloadSimple,
+      };
   }
-  if (status.kind === "downloading") {
-    return {
-      label: copy.updateDownloadingBadge,
-      tooltip: copy.updateDownloadingTooltip,
-      tone: "neutral",
-      Icon: CircleNotch,
-      spin: true,
-    };
-  }
-  return {
-    label: copy.updateAvailableBadge,
-    tooltip: copy.updateAvailableTooltip,
-    tone: "neutral",
-    Icon: DownloadSimple,
-  };
 }

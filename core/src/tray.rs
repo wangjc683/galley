@@ -451,14 +451,15 @@ pub(crate) fn setup_background_mode(app: &tauri::App, autostart_launch: bool) ->
                     .opener()
                     .open_url("https://github.com/wangjc683/galley", None::<&str>);
             }
-            // /new/choose (not /issues): the menu item's job is filing,
-            // and the chooser fronts the bug / feature forms. Same
-            // reasoning as the Settings → About link (issue #15).
+            // Opens Settings → Report an Issue, whose bug button
+            // pre-fills the environment info; the GitHub chooser this
+            // used to open carried none. Same show-then-forward shape
+            // as Check for Updates; the GUI listens for
+            // `menu:report_issue`.
             "issues" | "tray_report_issue" => {
-                let _ = app.opener().open_url(
-                    "https://github.com/wangjc683/galley/issues/new/choose",
-                    None::<&str>,
-                );
+                show_main_window(app);
+                let _ = tray_toggle_for_menu.set_text(TRAY_HIDE_GALLEY_LABEL);
+                let _ = app.emit("menu:report_issue", ());
             }
             _ => {}
         }

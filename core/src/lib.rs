@@ -129,6 +129,9 @@ pub fn run() {
         .manage(std::sync::Arc::new(
             browser_bridge::BrowserBridgeManager::new(),
         ))
+        // Downloaded, verified app update parked until the user clicks
+        // "Restart and Update" (see app_update.rs module docs).
+        .manage(app_update::PreparedAppUpdate::default())
         .invoke_handler(tauri::generate_handler![
             path_exists,
             access_local_file,
@@ -137,6 +140,7 @@ pub fn run() {
             get_supervisor_sop,
             health_report,
             app_update::check_app_update,
+            app_update::download_app_update,
             app_update::install_app_update,
             conversation_image::save_conversation_image,
             conversation_image::open_conversation_image,

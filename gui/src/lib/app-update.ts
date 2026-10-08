@@ -18,12 +18,17 @@ export type AppUpdateCheckResult =
       date: string | null;
     };
 
+/** What `download_app_update` and `install_app_update` resolve with. */
 export interface AppUpdateInstallResult {
   currentVersion: string;
   version: string;
 }
 
-/** Payload of the Rust `app-update-progress` event (core/src/app_update.rs). */
+/**
+ * Payload of the Rust `app-update-progress` event (core/src/app_update.rs).
+ * `download_app_update` sends only `downloading`; `install_app_update`
+ * sends one `installing` before it stops the children and installs.
+ */
 export type AppUpdateProgressEvent =
   | { phase: "downloading"; downloaded: number; total: number | null }
   | { phase: "installing" };
@@ -68,6 +73,21 @@ export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
   return invoke<AppUpdateCheckResult>("check_app_update");
 }
 
+/**
+ * Download and verify the update in the background. Touches no child
+ * process, so it may run while tasks run. Rejects `no_update_available`
+ * when the channel has nothing newer.
+ */
+export async function downloadAppUpdate(): Promise<AppUpdateInstallResult> {
+  return invoke<AppUpdateInstallResult>("download_app_update");
+}
+
+/**
+ * Install the package `downloadAppUpdate` prepared: stops the children,
+ * installs, resolves; the caller relaunches. On Windows the installer
+ * quits the app and this never resolves. Rejects `no_prepared_update`
+ * when nothing was downloaded.
+ */
 export async function installAppUpdate(): Promise<AppUpdateInstallResult> {
   return invoke<AppUpdateInstallResult>("install_app_update");
 }

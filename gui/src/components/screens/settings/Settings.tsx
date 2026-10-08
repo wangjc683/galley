@@ -277,6 +277,11 @@ export function Settings({
                 <SettingsFeedback
                   workbenchVersion={runtimeInfo.workbenchVersion}
                   managedRuntime={runtimeInfo.managedRuntime}
+                  externalGaCommit={
+                    runtimeInfo.gaCommitRuntimeKind === "external"
+                      ? runtimeInfo.gaCommit
+                      : undefined
+                  }
                 />
               )}
               {tab === "about" && (

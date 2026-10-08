@@ -106,9 +106,10 @@ export async function hydrateApp(): Promise<void> {
   // running ones render live again. Fire-and-forget: first paint must
   // not wait on history restores.
   void useRuntimeStore.getState().reattachLiveRunners();
-  // Update auto-prepare is deliberately after sessions hydrate. If a
-  // dev reload preserves an in-flight task in messagesStore, the updater
-  // guard can see it and defer install work until the session is idle.
+  // Update check after sessions hydrate. The background download never
+  // waits for running tasks (it touches no child process); only the
+  // install behind 重启并更新 does, and that reads messagesStore when
+  // the user clicks.
   void useAppUpdateStore.getState().check({
     silent: true,
     // Settings -> General "auto-download updates". hydratePrefs already

@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { ShortcutGlyphs } from "@/components/ui/shortcut-glyphs";
 import { searchMessages, type MessageSearchHit } from "@/lib/db";
 import { useCopy } from "@/lib/i18n";
 import { displaySessionSummary } from "@/lib/session-summary";
@@ -658,7 +659,9 @@ function PaletteRow({
             !sub && !checked && "ml-auto",
           )}
         >
-          {shortcut}
+          {/* ⌘ in the system font, as in the sidebar and Settings →
+              Shortcuts (lib/shortcuts.ts). */}
+          <ShortcutGlyphs text={shortcut} />
         </span>
       )}
     </div>

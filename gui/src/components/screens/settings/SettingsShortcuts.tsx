@@ -1,22 +1,30 @@
 /**
- * Settings → Shortcuts tab. Lists every global keyboard shortcut
- * the V0.1 build wires up. Pulled out of EmptyState's hint footer
- * (which felt like chrome dilution on the first-impression screen)
- * — DESIGN.md §10 lists the canonical set; this view is the user-
- * facing presentation of that table.
+ * Settings → Shortcuts tab. Lists the keyboard shortcuts Galley wires
+ * up — the global ones plus the composer and overlay keys. Pulled out
+ * of EmptyState's hint footer (which felt like chrome dilution on the
+ * first-impression screen) — docs/design/overlays-and-settings.md §10
+ * lists the canonical set; this view is the user-facing presentation
+ * of that table.
  *
- * V0.1 read-only: rebinding lands in V0.2 Settings → Shortcuts as
- * row-level edit affordances. For now the list is static.
+ * Read-only: the list is static, and rebinding is left for a later
+ * version (the subtitle says so).
  *
  * OS-conditional display: rows with a platform modifier (Mod/Alt)
  * resolve through formatShortcut so Mac sees glyphs and Win sees
  * Ctrl+K word names. KbdCombo spaces dense Mac chords as
- * "⌘ + K" inside this page. Rows without a modifier (Enter, Esc,
- * arrows, Tab) render the same on both OSes.
+ * "⌘ + K" inside this page, and a chip holding a lone modifier glyph
+ * takes the system font (`.shortcut-glyph`, see lib/shortcuts.ts).
+ * Rows without a modifier (Enter, Esc, arrows) render the same on
+ * both OSes.
  */
 
 import { isMac } from "@/lib/platform";
-import { formatShortcut } from "@/lib/shortcuts";
+import {
+  formatShortcut,
+  isSymbolGlyph,
+  shortcutParts,
+} from "@/lib/shortcuts";
+import { cn } from "@/lib/utils";
 import {
   SettingsPanelHeader,
   SettingsSectionLabel,
@@ -56,6 +64,8 @@ function buildGroups(copy: ReturnType<typeof useCopy>): ShortcutGroup[] {
       rows: [
         { combo: "Enter", action: shortcuts.sendMessage },
         { combo: "Shift+Enter", action: shortcuts.newline },
+        { combo: "→", action: shortcuts.acceptSuggestion },
+        { combo: "Esc", action: shortcuts.cancelGoalMode },
       ],
     },
     {
@@ -84,7 +94,13 @@ function buildGroups(copy: ReturnType<typeof useCopy>): ShortcutGroup[] {
       rows: [
         { combo: "Esc", action: shortcuts.closeOverlay },
         { combo: "↑ / ↓", action: shortcuts.moveList },
-        { combo: "Tab", action: shortcuts.enterSubmenu },
+        // Two chips like "Shift + Enter", not formatShortcut("Mod+Enter"):
+        // that gives Mac "⌘↵", and ↵ falls back to the same undersized
+        // Menlo glyph the modifiers had.
+        {
+          combo: `${formatShortcut("Mod")}+Enter`,
+          action: shortcuts.submitProjectDialog,
+        },
       ],
     },
   ];
@@ -104,6 +120,8 @@ export function SettingsShortcuts() {
         <section key={g.title}>
           <SettingsSectionLabel>{g.title}</SettingsSectionLabel>
           <ul className="m-0 mt-2 list-none divide-y divide-line overflow-hidden rounded-sm border border-line bg-surface p-0">
+            {/* Combos are unique within a group (Esc sits in two
+                groups, each its own list), so they key the rows. */}
             {g.rows.map((r) => (
               <li
                 key={r.combo}
@@ -113,7 +131,7 @@ export function SettingsShortcuts() {
                 <div className="min-w-0 flex-1">
                   <div className="text-ui-compact text-ink">{r.action}</div>
                   {r.note && (
-                    <div className="mt-0.5 text-ui-label italic text-ink-muted">
+                    <div className="mt-0.5 text-ui-tertiary text-ink-muted">
                       {r.note}
                     </div>
                   )}
@@ -146,7 +164,12 @@ function KbdCombo({ combo }: { combo: string }) {
               {partIndex > 0 && (
                 <span className="text-ui-micro text-ink-muted">+</span>
               )}
-              <kbd className="inline-flex min-w-[28px] items-center justify-center rounded-sm border border-line bg-app px-1.5 py-0.5 font-mono text-ui-label text-ink">
+              <kbd
+                className={cn(
+                  "inline-flex min-w-[28px] items-center justify-center rounded-sm border border-line bg-app px-1.5 py-0.5 font-mono text-ui-label text-ink",
+                  isSymbolGlyph(part) && "shortcut-glyph",
+                )}
+              >
                 {part}
               </kbd>
             </span>
@@ -155,13 +178,4 @@ function KbdCombo({ combo }: { combo: string }) {
       ))}
     </div>
   );
-}
-
-function shortcutParts(chord: string): string[] {
-  if (chord.includes("+")) {
-    return chord.split("+").filter(Boolean);
-  }
-  const compactMacChord = chord.match(/^([⌘⌃⌥⇧]+)(.+)$/);
-  if (!compactMacChord) return [chord];
-  return [...compactMacChord[1], compactMacChord[2]];
 }

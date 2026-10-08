@@ -7,6 +7,7 @@ import { RELEASE_DATE } from "@/lib/build-info";
 import { EPIGRAPHS } from "@/lib/epigraphs";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { openExternalUrl } from "@/lib/open-external";
+import { cn } from "@/lib/utils";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
 
 import { ExternalLinkIcon } from "./external-link";
@@ -28,8 +29,9 @@ interface SettingsAboutProps {
  *   2. Origin story
  *   3. Version — Galley only; the product has one version
  *   4. Typesetting — what the text is set in, stated as fact
- *   5. Links — Galley source/issues, GenericAgent upstream credit
+ *   5. Links — Galley source repo, GenericAgent upstream credit
  *      (carrying the engine commit as its detail), maker links.
+ *      (Issues live in Settings → 报告问题, not here.)
  *   6. Footer with author + license.
  *   7. Epigraph — PI §43, the page's closing line.
  *
@@ -88,8 +90,10 @@ export function SettingsAbout({
               <>
                 <span className="font-mono text-ink">v{workbenchVersion}</span>
                 {/* Colophon logic: an edition states when it was
-                    printed. RELEASE_DATE is the tag date of this
-                    version, null in dev builds (no tag, no date). */}
+                    printed. RELEASE_DATE is the commit date of this
+                    version's `v<version>` tag, read at build time; null
+                    while that tag doesn't exist yet (no tag, no date —
+                    see lib/build-info.ts). */}
                 {RELEASE_DATE && (
                   <span className="text-ui-tertiary text-ink-muted">
                     · {RELEASE_DATE}
@@ -168,12 +172,21 @@ export function SettingsAbout({
             </p>
             <p
               lang="de"
-              className="m-0 mt-1 text-[11.5px] italic leading-notice text-ink-muted/70"
+              className="m-0 mt-1 text-ui-tertiary italic leading-notice text-ink-muted/70"
             >
               {colophonEpigraph.de}
             </p>
           </blockquote>
-          <figcaption className="mt-1.5 text-ui-tertiary text-ink-muted">
+          {/* The Chinese source opens with "——": Newsreader's em dash is
+              narrower than the em with side bearings, so the pair shows
+              a seam. The sans stack's is a flush full em, so the two
+              join into one rule. English keeps the serif single dash. */}
+          <figcaption
+            className={cn(
+              "mt-1.5 text-ui-tertiary text-ink-muted",
+              language !== "en-US" && "font-sans",
+            )}
+          >
             {copy.settings.about.epigraphSource}
           </figcaption>
         </figure>

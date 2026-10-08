@@ -1434,6 +1434,17 @@ code {
   color: inherit;
 }
 
+/* Key glyphs inside mono shortcut labels that the mono stack has no good
+   copy of (⌘ ⌥ ⌃ ⇧ ← → ↵: JetBrains Mono's subset lacks them, the
+   fallback Menlo draws ⌘ at ~69% of letter height), SF Pro's are letter
+   height. Unlayered on purpose so it beats the `font-mono` utility on the
+   same element. Applied via lib/shortcuts.ts (isSymbolGlyph /
+   splitSymbolGlyphs) in Settings → Shortcuts, the sidebar ⌘N hint and
+   the command palette (2026-10-08). */
+.shortcut-glyph {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
 /* Git review inherits Galley's colors in both themes. */
 .git-review-diff {
   --diff-background-color: var(--color-app);

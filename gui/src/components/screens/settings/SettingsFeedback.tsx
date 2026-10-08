@@ -14,6 +14,11 @@ import { usePrefsStore } from "@/stores/prefs";
 import type { ManagedRuntimeDiagnostics } from "@/types/inspector";
 
 import { ExternalLinkIcon } from "./external-link";
+import {
+  buildFeedbackPayload,
+  formatHealthLine,
+  type HealthCheckDto,
+} from "./feedback-payload";
 
 /**
  * Settings → 报告问题 — the in-app feedback path (issue #15, scoped).
@@ -38,6 +43,8 @@ import { ExternalLinkIcon } from "./external-link";
  * strings are deliberately dropped — they carry local paths (DB file
  * under the user's home, external GA path), which is exactly the
  * content issue #15 asked us never to ship off-machine unreviewed.
+ * Checks the command doesn't probe (`deferred_b4`) are left out too.
+ * The text itself is built in ./feedback-payload.ts.
  */
 
 const REPO_NEW_ISSUE_URL = "https://github.com/wangjc683/galley/issues/new";
@@ -53,12 +60,6 @@ const ENGINE_OPTIONS = {
   external: "外部 GA / External GenericAgent",
 } as const;
 
-interface HealthCheckDto {
-  id: string;
-  status: string;
-  detail?: string;
-}
-
 function detectOs(): keyof typeof OS_OPTIONS | null {
   const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
   if (/windows/i.test(ua)) return "windows";
@@ -70,14 +71,23 @@ function detectOs(): keyof typeof OS_OPTIONS | null {
 export function SettingsFeedback({
   workbenchVersion,
   managedRuntime,
+  externalGaCommit,
 }: {
   workbenchVersion: string;
   managedRuntime?: ManagedRuntimeDiagnostics;
+  /** HEAD commit an external session's `ready` reported; external
+   * engine only (see feedback-payload.ts). */
+  externalGaCommit?: string;
 }) {
   const copy = useCopy();
   const feedbackCopy = copy.settings.feedback;
   const activeRuntimeKind = usePrefsStore((s) => s.activeRuntimeKind);
-  const [healthLine, setHealthLine] = useState<string | null>(null);
+  // Raw checks, not the formatted line: once every unprobed check is
+  // filtered out the line can be empty, which must still read as
+  // "loaded", not "loading".
+  const [healthChecks, setHealthChecks] = useState<HealthCheckDto[] | null>(
+    null,
+  );
   const [healthFailed, setHealthFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
@@ -87,9 +97,7 @@ export function SettingsFeedback({
     invoke<{ checks: HealthCheckDto[] }>("health_report")
       .then((report) => {
         if (cancelled) return;
-        setHealthLine(
-          report.checks.map((c) => `${c.id}=${c.status}`).join("; "),
-        );
+        setHealthChecks(report.checks);
       })
       .catch(() => {
         // Vite-only dev has no Tauri runtime; a real failure just
@@ -109,21 +117,16 @@ export function SettingsFeedback({
 
   const os = detectOs();
   const isManaged = activeRuntimeKind === "managed";
-  const kernelLabel =
-    isManaged && managedRuntime
-      ? `${managedRuntime.upstreamCommit.slice(0, 7)} (${managedRuntime.patchStackId}, ${managedRuntime.patchCount} patches)`
-      : null;
 
   // The single source for preview, Copy, and the bug-form prefill.
-  // Locale-independent keys on purpose: this text lands in a GitHub
-  // issue, where stable ASCII keys outlive the reporter's UI language.
-  const payload = [
-    `galley_version: ${workbenchVersion}`,
-    `os: ${os ? OS_OPTIONS[os] : "unknown"}`,
-    `engine: ${activeRuntimeKind}`,
-    ...(kernelLabel ? [`kernel: ${kernelLabel}`] : []),
-    ...(healthLine ? [`health: ${healthLine}`] : []),
-  ].join("\n");
+  const payload = buildFeedbackPayload({
+    workbenchVersion,
+    os: os ? OS_OPTIONS[os] : null,
+    activeRuntimeKind,
+    managedRuntime,
+    externalGaCommit,
+    healthLine: healthChecks ? formatHealthLine(healthChecks) : null,
+  });
 
   const openBugForm = () => {
     const params = new URLSearchParams();
@@ -134,11 +137,7 @@ export function SettingsFeedback({
       "engine",
       isManaged ? ENGINE_OPTIONS.managed : ENGINE_OPTIONS.external,
     );
-    const healthParts = [
-      ...(kernelLabel ? [`kernel: ${kernelLabel}`] : []),
-      ...(healthLine ? [healthLine] : []),
-    ];
-    if (healthParts.length > 0) params.set("health", healthParts.join("\n"));
+    if (payload.healthField) params.set("health", payload.healthField);
     void openUrl(`${REPO_NEW_ISSUE_URL}?${params.toString()}`);
   };
 
@@ -148,7 +147,7 @@ export function SettingsFeedback({
 
   const copyEnv = async () => {
     try {
-      await copyTextToClipboard(payload);
+      await copyTextToClipboard(payload.text);
       setCopied(true);
       if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(
@@ -196,12 +195,14 @@ export function SettingsFeedback({
           {feedbackCopy.attachSectionTitle}
         </SettingsSectionLabel>
         <div className="mt-2 rounded-sm border border-line bg-surface">
-          <pre className="m-0 overflow-x-auto px-4 py-3 font-mono text-[12px] leading-[1.7] text-ink-soft">
-            {payload}
+          {/* Wraps for display only (a typical health line is wider
+              than the box); Copy and the bug form get the text as is. */}
+          <pre className="m-0 whitespace-pre-wrap break-words px-4 py-3 font-mono text-ui-meta leading-[1.7] text-ink-soft">
+            {payload.text}
           </pre>
           <div className="flex items-center justify-between gap-3 border-t border-line/70 px-4 py-2">
             <p className="m-0 text-ui-tertiary leading-secondary text-ink-muted">
-              {healthLine
+              {healthChecks
                 ? feedbackCopy.envNote
                 : healthFailed
                   ? feedbackCopy.healthUnavailable

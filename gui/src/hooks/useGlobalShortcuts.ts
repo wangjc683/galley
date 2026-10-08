@@ -4,6 +4,7 @@ import { type Dispatch, type SetStateAction, useEffect } from "react";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { stepConversationFontSize } from "@/lib/conversation-font-size";
 import { resetWindowLayout } from "@/lib/layout-reset";
+import { isMac } from "@/lib/platform";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { usePrefsStore } from "@/stores/prefs";
 import { useSessionsStore } from "@/stores/sessions";
@@ -79,7 +80,11 @@ export function useGlobalShortcuts({
     // free here because page zoom is off. `+` is taken as well as `=`
     // because + needs Shift on US layouts and is its own key elsewhere.
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey && !e.ctrlKey) return;
+      // Platform modifier only: ⌘ on macOS, Ctrl elsewhere. On a Mac,
+      // Ctrl is the Cocoa text-editing modifier (Ctrl+K kills to end of
+      // line, Ctrl+N moves down a line), so it must reach the field
+      // instead of opening the palette or a new chat.
+      if (!(isMac ? e.metaKey : e.ctrlKey)) return;
       // macOS also binds these to View > Conversation Font Size, and
       // ⌘N / ⌘, to their menu items. A keystroke still acts once:
       // whichever of AppKit and the webview sees it first handles it,
@@ -100,6 +105,8 @@ export function useGlobalShortcuts({
         togglePalette();
       } else if (e.key === ",") {
         e.preventDefault();
+        // Same landing tab as the menu item, gear and palette entry.
+        setSettingsTab("general");
         setSettingsOpen(true);
       } else if (e.key === "n" || e.key === "N") {
         e.preventDefault();
@@ -114,6 +121,7 @@ export function useGlobalShortcuts({
   }, [
     togglePalette,
     setSettingsOpen,
+    setSettingsTab,
     setActiveProjectFilter,
     setActiveSession,
     setScreen,
@@ -142,6 +150,14 @@ export function useGlobalShortcuts({
           setSettingsTab("about");
           setSettingsOpen(true);
           void checkForAppUpdate({ silent: false });
+        },
+      ],
+      [
+        // App menu / tray "Report an Issue…" (no payload).
+        "menu:report_issue",
+        () => {
+          setSettingsTab("feedback");
+          setSettingsOpen(true);
         },
       ],
       [

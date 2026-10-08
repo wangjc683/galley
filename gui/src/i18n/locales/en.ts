@@ -128,17 +128,17 @@ export const enCopy: AppCopy = {
     aria: "Choose interface language",
     system: "System",
     systemHelper: "Follow system",
-    zh: "Simplified Chinese",
+    zh: "简体中文",
     en: "English",
-    current: (name) => `Current ${name}`,
+    current: (name) => `Currently ${name}`,
   },
   theme: {
     aria: "Choose appearance theme",
     system: "System",
     light: "Light",
     dark: "Dark",
-    currentLight: "Light now",
-    currentDark: "Dark now",
+    currentLight: "Currently light",
+    currentDark: "Currently dark",
   },
   app: {
     unconfiguredModel: "No model configured",
@@ -318,6 +318,7 @@ export const enCopy: AppCopy = {
     openRuntimeForExternal: "Open Runtime to connect external GA",
     updateAvailableBadge: "Update",
     updateDownloadingBadge: "Update · Downloading",
+    updateInstallingBadge: "Update · Installing",
     updateReadyBadge: "Update · Ready",
     updateAvailableTooltip: "New version found · View details",
     updateDownloadingTooltip: "Downloading the new version",
@@ -650,7 +651,7 @@ export const enCopy: AppCopy = {
       appearanceSectionTitle: "Appearance & language",
       themeRowTitle: "Theme",
       themeRowDescription: "Light or dark interface",
-      fontSizeRowTitle: "Conversation font size",
+      fontSizeRowTitle: "Conversation text size",
       fontSizeRowDescription: "Text size in the conversation area",
       widthRowTitle: "Reading width",
       widthRowDescription: "Width of the conversation column",
@@ -662,13 +663,15 @@ export const enCopy: AppCopy = {
       launchAtLoginDescription:
         "Galley starts in the background (menu bar / tray) when you sign in — no window pops up. Connected channels and remote supervision are ready from boot.",
       launchAtLoginError: (detail) => `Could not update launch at login: ${detail}`,
+      launchAtLoginUnavailable:
+        "Couldn't read the launch-at-login state, so it can't be changed here for now.",
       notificationsSectionTitle: "Notifications",
       notifyGoalEndTitle: "When a Goal ends or needs you",
       notifyGoalEndDescription:
         "System notification when a Goal completes, hits its time ceiling, gets blocked, or fails while the window is in the background",
       notifyReplyDoneTitle: "When a reply finishes",
       notifyReplyDoneDescription:
-        "System notification when a conversation you started finishes its reply while the window is in the background",
+        "System notification when a conversation you started finishes its reply or waits for your answer while the window is in the background",
       notifySoundTitle: "Notification sound",
       notifySoundDescription:
         "Play a sound with system notifications — completion, waiting-for-you, and failure each use a distinct tone",
@@ -976,14 +979,17 @@ export const enCopy: AppCopy = {
       cannotUndo: "This cannot be undone.",
     },
     shortcuts: {
-      subtitle: "Keyboard shortcuts",
+      subtitle: "View only for now — shortcuts can't be changed yet",
       navigation: "Navigation",
-      openCommandPalette: "Open command palette",
+      openCommandPalette: "Search / command palette",
       newConversation: "New chat",
       openSettings: "Open Settings",
       composer: "Input",
       sendMessage: "Send message",
       newline: "New line without sending",
+      cancelGoalMode: "Cancel Goal mode",
+      acceptSuggestion:
+        "Fill in the suggested next step (when the input is empty)",
       conversation: "Conversation",
       jumpQuestion: "Jump to previous / next question",
       fontSizeStep: "Larger / smaller conversation text",
@@ -995,7 +1001,7 @@ export const enCopy: AppCopy = {
       overlays: "Overlays",
       closeOverlay: "Close the current overlay or leave edit mode",
       moveList: "Move through command palette and list items",
-      enterSubmenu: "Enter the command palette submenu",
+      submitProjectDialog: "Submit a project dialog",
     },
     feedback: {
       title: "Report an Issue",
@@ -1025,7 +1031,7 @@ export const enCopy: AppCopy = {
       epigraphSource: "— Philosophical Investigations, §43",
       alsoBy: "More by JC Wang",
       subsageDetail: "Your AI Agent's Subscription Memory · subsage.top",
-      filmDetail: "IMAX Film Datebase · 15perf70mm.com",
+      filmDetail: "IMAX Film Database · 15perf70mm.com",
       madeBy: "Built by JC Wang · MIT License",
     },
     agent: {
@@ -1926,23 +1932,24 @@ export const enCopy: AppCopy = {
   },
   updates: {
     check: "Check for updates",
-    checkingShort: "Checking",
-    waitForTasks: "Waiting for tasks",
-    preparingShort: "Downloading",
     restart: "Restart to update",
+    download: "Download update",
     retry: "Retry",
     manualDownload: "Manual download",
-    diagnosticPrefix: "Diagnostic: ",
     checking: "Checking",
-    devNoChannel: "Dev build is not connected to an update channel.",
+    devNoChannel: "Dev build is not connected to an update channel",
     upToDate: "Up to date",
-    foundPreparing: "Downloading update",
     preparing: "Downloading update",
     installing: "Installing update",
-    ready: "New version downloaded. Restart Galley to apply it.",
     readyAfterTasks: "Restart after the current task finishes.",
-    foundAfterTasks:
-      "New version found. Galley will prepare it after the current task finishes.",
+    foundVersion: (version: string) => `New version v${version} available`,
+    downloadingVersion: (version: string) => `New version v${version}`,
+    readyVersion: (version: string) =>
+      `v${version} downloaded — restart Galley to apply it`,
+    readyVersionAfterTasks: (version: string) =>
+      `v${version} downloaded — restart after the current task finishes`,
+    preparedUpdateMissing:
+      "The downloaded update is no longer available. Check for updates again.",
     noUpdateAvailable: "No installable update is available.",
     invalidEndpoint:
       "The update channel is misconfigured. Check GALLEY_UPDATER_ENDPOINT.",

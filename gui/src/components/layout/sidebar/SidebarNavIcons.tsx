@@ -7,6 +7,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
+import { ShortcutGlyphs } from "@/components/ui/shortcut-glyphs";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { type AppCopy, useCopy } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
@@ -18,7 +19,8 @@ import {
 } from "./sidebar-width";
 
 /** Mono, muted shortcut text — the tooltip's "⌘K" and the new-chat
- * row's ⌘N hint. */
+ * row's ⌘N hint. Render the text through `ShortcutGlyphs` so the
+ * modifier glyph takes the system font (lib/shortcuts.ts). */
 export const SHORTCUT_TEXT_CLASS =
   "font-mono text-[10.5px] tracking-wide text-ink-muted";
 
@@ -186,7 +188,9 @@ export function ShortcutTooltipText({
   return (
     <span className="inline-flex items-center gap-1.5">
       <span>{label}</span>
-      <span className={SHORTCUT_TEXT_CLASS}>{shortcut}</span>
+      <span className={SHORTCUT_TEXT_CLASS}>
+        <ShortcutGlyphs text={shortcut} />
+      </span>
     </span>
   );
 }

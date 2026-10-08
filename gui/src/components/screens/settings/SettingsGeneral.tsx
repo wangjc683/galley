@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 
 import {
@@ -35,6 +36,8 @@ import { ErrorLine, InfoLine } from "./models/ModelPrimitives";
  * every change — nothing is mirrored into Galley prefs, so removing
  * the login item from system settings shows up here as "off" without
  * drift. Default is off (the plugin writes nothing until enabled).
+ * When the read fails the toggle stays disabled and a neutral line
+ * says the state can't be read, so it doesn't pass for still loading.
  *
  * Notifications / app behavior: pref-driven (SQLite is the source of
  * truth), unlike launch-at-login. OS notification *permission* is a
@@ -42,7 +45,8 @@ import { ErrorLine, InfoLine } from "./models/ModelPrimitives";
  * for permission, but a denial never flips the toggle back — the pref
  * records intent, and granting permission later in system settings
  * makes it effective without revisiting this tab. The hint line below
- * the section surfaces that mismatch.
+ * the section surfaces that mismatch, and clears on its own when the
+ * window regains focus after the user grants permission.
  */
 export function SettingsGeneral({
   languagePreference,
@@ -89,20 +93,25 @@ export function SettingsGeneral({
 }) {
   const copy = useCopy();
   const generalCopy = copy.settings.general;
-  // null = unknown: still loading, or the plugin is unreachable
-  // (Vite-only browser). The toggle stays disabled in that state.
+  // null = unknown: still loading, or the read failed (plugin
+  // unreachable, e.g. Vite-only browser). The toggle stays disabled in
+  // both; `autostartUnavailable` tells them apart so a failed read says
+  // so instead of looking like a load that never ends.
   const [autostartEnabled, setAutostartEnabled] = useState<boolean | null>(
     null,
   );
+  const [autostartUnavailable, setAutostartUnavailable] = useState(false);
   const [autostartBusy, setAutostartBusy] = useState(false);
   const [autostartError, setAutostartError] = useState<string | null>(null);
 
   const refreshAutostart = useCallback(async () => {
     try {
       setAutostartEnabled(await isEnabled());
+      setAutostartUnavailable(false);
     } catch (e) {
       console.warn("[settings] autostart isEnabled failed.", e);
       setAutostartEnabled(null);
+      setAutostartUnavailable(true);
     }
   }, []);
 
@@ -110,11 +119,15 @@ export function SettingsGeneral({
     let cancelled = false;
     isEnabled()
       .then((enabled) => {
-        if (!cancelled) setAutostartEnabled(enabled);
+        if (cancelled) return;
+        setAutostartEnabled(enabled);
+        setAutostartUnavailable(false);
       })
       .catch((e: unknown) => {
         console.warn("[settings] autostart isEnabled failed.", e);
-        if (!cancelled) setAutostartEnabled(null);
+        if (cancelled) return;
+        setAutostartEnabled(null);
+        setAutostartUnavailable(true);
       });
     return () => {
       cancelled = true;
@@ -132,6 +145,7 @@ export function SettingsGeneral({
         await disable();
       }
       setAutostartEnabled(await isEnabled());
+      setAutostartUnavailable(false);
     } catch (e) {
       setAutostartError(
         generalCopy.launchAtLoginError(
@@ -146,8 +160,11 @@ export function SettingsGeneral({
 
   // OS notification permission is missing while at least one
   // notification pref is on. Pre-filled on mount with a query-only
-  // check (never prompts); refreshed after each toggle-ON, which does
-  // prompt when the OS has never asked.
+  // check (never prompts), re-queried whenever the window regains focus
+  // (the user grants permission in System Settings, outside Galley, and
+  // the hint should clear on return without revisiting the tab), and
+  // refreshed after each toggle-ON, which does prompt when the OS has
+  // never asked.
   const [notifyPermissionMissing, setNotifyPermissionMissing] =
     useState(false);
   const anyNotifyEnabled = notifyOnGoalEnd || notifyOnReplyDone;
@@ -157,11 +174,31 @@ export function SettingsGeneral({
     // while all toggles are off (and toggling back on re-queries).
     if (!anyNotifyEnabled) return;
     let cancelled = false;
-    void queryNotificationPermission().then((granted) => {
-      if (!cancelled) setNotifyPermissionMissing(!granted);
-    });
+    const requery = () => {
+      void queryNotificationPermission().then((granted) => {
+        if (!cancelled) setNotifyPermissionMissing(!granted);
+      });
+    };
+    requery();
+    // Tauri's focus event, not the DOM one: WebView2 skips the DOM
+    // `focus` on Alt+Tab (see useComposerFocus).
+    let unlistenFocus: (() => void) | undefined;
+    void (async () => {
+      try {
+        const unlisten = await getCurrentWindow().onFocusChanged(
+          ({ payload: focused }) => {
+            if (focused) requery();
+          },
+        );
+        if (cancelled) unlisten();
+        else unlistenFocus = unlisten;
+      } catch {
+        // Non-Tauri host (Vite-only browser): the mount query stands.
+      }
+    })();
     return () => {
       cancelled = true;
+      unlistenFocus?.();
     };
   }, [anyNotifyEnabled]);
 
@@ -299,6 +336,13 @@ export function SettingsGeneral({
               ariaLabel={generalCopy.launchAtLogin}
             />
           </PreferenceRow>
+          {autostartUnavailable && (
+            <div className="px-3 pb-2.5">
+              {/* Neutral, like the permission hint below: nothing the
+                  user did failed, the state just can't be read here. */}
+              <InfoLine message={generalCopy.launchAtLoginUnavailable} />
+            </div>
+          )}
           {autostartError && (
             <div className="px-3 pb-2.5">
               <ErrorLine message={autostartError} />
@@ -406,7 +450,7 @@ function PreferenceRow({
     <div className="flex items-center justify-between gap-4 px-3 py-2.5">
       <div className="min-w-0">
         <div className="text-ui-compact font-medium text-ink">{title}</div>
-        <div className="mt-0.5 max-w-[460px] text-ui-meta leading-snug text-ink-muted">
+        <div className="mt-0.5 max-w-[600px] text-ui-meta leading-snug text-ink-muted">
           {description}
         </div>
       </div>

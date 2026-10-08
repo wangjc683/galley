@@ -1,11 +1,50 @@
+//! In-app updater commands.
+//!
+//! An update is applied in two steps (2026-10-08):
+//!
+//! 1. `download_app_update` runs in the background: check the channel,
+//!    download the package (`Update::download` verifies the signature),
+//!    then park the verified package in [`PreparedAppUpdate`]. It stays in
+//!    memory until restart (~100 MB on macOS, ~60 MB on Windows) and is
+//!    never written to disk.
+//! 2. `install_app_update` runs when the user clicks "Restart and Update":
+//!    stop Galley's child processes, then `Update::install` the parked
+//!    package. The GUI relaunches on macOS / Linux; on Windows `install`
+//!    never returns (see below).
+//!
+//! Why child-process shutdown happens at install time, not after the
+//! background download:
+//!
+//! - Windows needs it before `install`: the runners, IM channels and the
+//!   browser bridge run Galley's bundled Python, whose `.pyd` / DLL files
+//!   stay locked while loaded, so the installer fails to overwrite them
+//!   (devlog 2026-06-03-windows-updater-file-lock).
+//! - Windows `Update::install` launches the installer and then calls
+//!   `std::process::exit(0)` (tauri-plugin-updater 2.10.1 `updater.rs`),
+//!   so a background install closed the app out from under the user.
+//! - macOS installs in place and keeps running, but the channels it stopped
+//!   do not come back on their own (`im_supervisor::manager::wait_child`
+//!   records them as Error) and the browser bridge stays down, so a
+//!   background install left both dead until the user got around to
+//!   restarting.
+//!
+//! Stopping children and installing only when the user asks for the
+//! restart keeps the 06-03 file-lock fix and removes both side effects.
+
 use serde::Serialize;
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 /// Broadcast event carrying updater download/install progress to the GUI.
 /// Same emit-and-forget pattern as `im_supervisor::EVENT_NAME`.
 const PROGRESS_EVENT: &str = "app-update-progress";
+
+/// Error returned by `install_app_update` when nothing has been
+/// downloaded yet (or the parked package was dropped). Stable string:
+/// the GUI maps it to its own copy.
+const NO_PREPARED_UPDATE: &str = "no_prepared_update";
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -24,11 +63,76 @@ pub enum AppUpdateCheckResult {
     },
 }
 
+/// Returned by both `download_app_update` and `install_app_update`:
+/// `{ "currentVersion": string, "version": string }`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AppUpdateInstallResult {
+pub struct AppUpdateVersions {
     current_version: String,
     version: String,
+}
+
+impl AppUpdateVersions {
+    fn of(update: &Update) -> Self {
+        Self {
+            current_version: update.current_version.clone(),
+            version: update.version.clone(),
+        }
+    }
+}
+
+/// Tauri managed state: the downloaded, signature-verified update waiting
+/// for the user's "Restart and Update" click. A newer download replaces
+/// it; `install_app_update` takes it out.
+#[derive(Default)]
+pub struct PreparedAppUpdate(PreparedSlot<PreparedPackage>);
+
+struct PreparedPackage {
+    update: Update,
+    bytes: Vec<u8>,
+}
+
+/// Single-value holder behind [`PreparedAppUpdate`]. Generic only so the
+/// slot rules are unit-testable without a real `Update`. The lock is
+/// never held across an `.await`.
+struct PreparedSlot<T>(Mutex<Option<T>>);
+
+impl<T> Default for PreparedSlot<T> {
+    fn default() -> Self {
+        Self(Mutex::new(None))
+    }
+}
+
+impl<T> PreparedSlot<T> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<T>> {
+        // A panic while holding the lock cannot leave `Option` half-written.
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Stores `value`, dropping whatever was parked before.
+    fn put(&self, value: T) {
+        *self.lock() = Some(value);
+    }
+
+    /// Removes and returns the parked value, or `no_prepared_update`.
+    fn take(&self) -> Result<T, String> {
+        self.lock()
+            .take()
+            .ok_or_else(|| NO_PREPARED_UPDATE.to_string())
+    }
+
+    /// Puts `value` back after a failed install, unless a download that
+    /// finished meanwhile already parked a newer one.
+    fn restore_if_empty(&self, value: T) {
+        let mut slot = self.lock();
+        if slot.is_none() {
+            *slot = Some(value);
+        }
+    }
+
+    fn clear(&self) {
+        *self.lock() = None;
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -100,22 +204,25 @@ pub async fn check_app_update<R: Runtime>(
     })
 }
 
+/// Background step: check, download and verify the update, then park it
+/// in [`PreparedAppUpdate`]. Touches no child process and installs
+/// nothing (see the module docs for why).
 #[tauri::command]
-pub async fn install_app_update<R: Runtime>(
+pub async fn download_app_update<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<AppUpdateInstallResult, String> {
-    let update = check_available_update(&app)
-        .await?
-        .ok_or_else(|| "no_update_available".to_string())?;
-    let result = AppUpdateInstallResult {
-        current_version: update.current_version.clone(),
-        version: update.version.clone(),
+    prepared: State<'_, PreparedAppUpdate>,
+) -> Result<AppUpdateVersions, String> {
+    let Some(update) = check_available_update(&app).await? else {
+        // The channel no longer offers an update (e.g. a pulled release):
+        // a package parked earlier must not be installed anymore.
+        prepared.0.clear();
+        return Err("no_update_available".to_string());
     };
+    let result = AppUpdateVersions::of(&update);
 
     let mut downloaded: u64 = 0;
     let mut throttle = ProgressThrottle::new();
     let progress_app = app.clone();
-    let finished_app = app.clone();
     let bytes = update
         .download(
             move |chunk, total| {
@@ -127,20 +234,40 @@ pub async fn install_app_update<R: Runtime>(
                     );
                 }
             },
-            move || {
-                // Download done, but child-process shutdown + install still
-                // run for seconds; tell the GUI so it doesn't freeze at 100%.
-                let _ = finished_app.emit(PROGRESS_EVENT, AppUpdateProgressEvent::Installing);
-            },
+            // No `Installing` here: installing waits for the user's click.
+            || {},
         )
         .await
         .map_err(|e| format_update_error_for_phase("download", e))?;
 
+    prepared.0.put(PreparedPackage { update, bytes });
+    Ok(result)
+}
+
+/// User-initiated step ("Restart and Update"): stop Galley's child
+/// processes, then install the package `download_app_update` parked.
+/// Returns `no_prepared_update` when nothing is parked. On macOS / Linux
+/// the GUI relaunches after this returns; on Windows `Update::install`
+/// exits the process and this never returns.
+#[tauri::command]
+pub async fn install_app_update<R: Runtime>(
+    app: AppHandle<R>,
+    prepared: State<'_, PreparedAppUpdate>,
+) -> Result<AppUpdateVersions, String> {
+    let package = prepared.0.take()?;
+    let result = AppUpdateVersions::of(&package.update);
+
+    // Child-process shutdown + install run for seconds; tell the GUI.
+    let _ = app.emit(PROGRESS_EVENT, AppUpdateProgressEvent::Installing);
+
     stop_galley_child_processes(&app).await;
 
-    update
-        .install(bytes)
-        .map_err(|e| format_update_error_for_phase("install", e))?;
+    if let Err(e) = package.update.install(&package.bytes) {
+        // The package is still verified; keep it so a retry does not
+        // need another download.
+        prepared.0.restore_if_empty(package);
+        return Err(format_update_error_for_phase("install", e));
+    }
 
     Ok(result)
 }
@@ -261,5 +388,75 @@ mod tests {
         assert!(throttle.should_emit(10, Some(0), start));
         // Zero total never derives a percent, so only the interval applies.
         assert!(!throttle.should_emit(20, Some(0), start + Duration::from_millis(100)));
+    }
+
+    #[test]
+    fn prepared_slot_take_when_empty_is_no_prepared_update() {
+        let slot = PreparedSlot::<u32>::default();
+        assert_eq!(slot.take(), Err("no_prepared_update".to_string()));
+    }
+
+    #[test]
+    fn prepared_slot_take_empties_the_slot() {
+        let slot = PreparedSlot::default();
+        slot.put(1);
+        assert_eq!(slot.take(), Ok(1));
+        assert_eq!(slot.take(), Err(NO_PREPARED_UPDATE.to_string()));
+    }
+
+    #[test]
+    fn prepared_slot_newer_download_replaces_older() {
+        let slot = PreparedSlot::default();
+        slot.put(1);
+        slot.put(2);
+        assert_eq!(slot.take(), Ok(2));
+    }
+
+    #[test]
+    fn prepared_slot_restore_refills_only_an_empty_slot() {
+        let slot = PreparedSlot::default();
+        slot.restore_if_empty(1);
+        assert_eq!(slot.take(), Ok(1));
+
+        // A download that finished during the failed install wins.
+        slot.put(2);
+        slot.restore_if_empty(1);
+        assert_eq!(slot.take(), Ok(2));
+    }
+
+    #[test]
+    fn prepared_slot_clear_drops_the_parked_value() {
+        let slot = PreparedSlot::default();
+        slot.put(1);
+        slot.clear();
+        assert_eq!(slot.take(), Err(NO_PREPARED_UPDATE.to_string()));
+    }
+
+    #[test]
+    fn versions_serialize_as_camel_case_contract() {
+        let versions = AppUpdateVersions {
+            current_version: "0.5.6".to_string(),
+            version: "0.5.7".to_string(),
+        };
+        assert_eq!(
+            serde_json::to_value(versions).unwrap(),
+            serde_json::json!({ "currentVersion": "0.5.6", "version": "0.5.7" })
+        );
+    }
+
+    #[test]
+    fn progress_events_serialize_with_phase_tag() {
+        assert_eq!(
+            serde_json::to_value(AppUpdateProgressEvent::Installing).unwrap(),
+            serde_json::json!({ "phase": "installing" })
+        );
+        assert_eq!(
+            serde_json::to_value(AppUpdateProgressEvent::Downloading {
+                downloaded: 5,
+                total: Some(10),
+            })
+            .unwrap(),
+            serde_json::json!({ "phase": "downloading", "downloaded": 5, "total": 10 })
+        );
     }
 }

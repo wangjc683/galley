@@ -4,6 +4,7 @@ import { create } from "zustand";
 import {
   applyProgressEvent,
   checkAppUpdate,
+  downloadAppUpdate,
   installAppUpdate,
   relaunchApp,
   type AppUpdateCheckResult,
@@ -31,12 +32,15 @@ export type AppUpdateStatus =
       date: string | null;
     }
   | {
+      // In flight: the background download (`phase: "downloading"`), or
+      // the install `restart()` runs before relaunching
+      // (`phase: "installing"`).
       kind: "downloading";
       version?: string;
-      // Fed by the Rust `app-update-progress` event. Absent until the
-      // first event arrives; `progress` stays absent when the server
-      // sent no Content-Length (UI falls back to the spinner).
       phase?: "downloading" | "installing";
+      // Fed by the Rust `app-update-progress` event. Absent until the
+      // first chunk arrives, and for good when the server sent no
+      // Content-Length (UI falls back to the spinner).
       progress?: AppUpdateDownloadProgress;
     }
   | { kind: "ready"; currentVersion: string; version: string }
@@ -56,13 +60,16 @@ interface AppUpdateStore {
   status: AppUpdateStatus;
   lastCheckedAt: string | null;
   check: (options?: CheckOptions) => Promise<void>;
-  downloadAndInstall: () => Promise<void>;
+  /** Download + verify in the background; ends `ready`. */
+  download: () => Promise<void>;
+  /** Install the downloaded update and relaunch. */
   restart: () => Promise<void>;
   noteAppLaunched: (currentVersion: string) => Promise<void>;
   resetError: () => void;
 }
 
-// Emitted by core/src/app_update.rs during `install_app_update`.
+// Emitted by core/src/app_update.rs during `download_app_update`
+// (downloading) and `install_app_update` (installing).
 const APP_UPDATE_PROGRESS_EVENT = "app-update-progress";
 
 const PREF_LAST_SEEN_VERSION = "app_update_last_seen_version";
@@ -80,7 +87,15 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
 
   check: async (options) => {
     const current = get().status.kind;
-    if (current === "checking" || current === "downloading") return;
+    // `ready` holds a downloaded package waiting for the restart: a
+    // check from the menu must not reset it and download it again.
+    if (
+      current === "checking" ||
+      current === "downloading" ||
+      current === "ready"
+    ) {
+      return;
+    }
 
     set({ status: { kind: "checking" } });
     try {
@@ -89,17 +104,17 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
         set({ status: { kind: "idle" } });
         return;
       }
-      const shouldPrepare =
+      // Downloading touches no child process, so it never waits for
+      // running tasks; only the install at restart does.
+      const shouldDownload =
         result.kind === "available" &&
         (options?.downloadIfAvailable === true || options?.silent !== true);
       set({
         status: statusFromCheckResult(result),
         lastCheckedAt: new Date().toISOString(),
       });
-      if (shouldPrepare && hasRunningSessions()) {
-        ensureAutoPrepareOnIdleWatcher();
-      } else if (shouldPrepare) {
-        await get().downloadAndInstall();
+      if (shouldDownload) {
+        await get().download();
       }
     } catch (error) {
       if (options?.silent) {
@@ -113,36 +128,27 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
     }
   },
 
-  downloadAndInstall: async () => {
+  download: async () => {
     const current = get().status;
-    if (current.kind === "checking" || current.kind === "downloading") return;
-    if (hasRunningSessions()) {
-      if (current.kind === "available") {
-        ensureAutoPrepareOnIdleWatcher();
-      }
+    if (
+      current.kind === "checking" ||
+      current.kind === "downloading" ||
+      current.kind === "ready"
+    ) {
       return;
     }
 
     set({
       status: {
         kind: "downloading",
+        phase: "downloading",
         version: current.kind === "available" ? current.version : undefined,
       },
     });
     let unlistenProgress: UnlistenFn | undefined;
     try {
-      // Register before invoking so no early chunk event is missed
-      // (same ordering rule as lib/bridge.ts).
-      unlistenProgress = await listen<AppUpdateProgressEvent>(
-        APP_UPDATE_PROGRESS_EVENT,
-        (event) => {
-          const status = get().status;
-          // A late event must not resurrect a terminal ready/error state.
-          if (status.kind !== "downloading") return;
-          set({ status: { ...status, ...applyProgressEvent(event.payload) } });
-        },
-      );
-      const result = await installAppUpdate();
+      unlistenProgress = await listenProgress();
+      const result = await downloadAppUpdate();
       set({
         status: {
           kind: "ready",
@@ -152,7 +158,40 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
       });
       await notePreparedVersion(result.version);
     } catch (error) {
-      console.warn("[updates] download/install failed", error);
+      console.warn("[updates] download failed", error);
+      set({
+        status: {
+          kind: "error",
+          ...readableUpdateError(error, "download"),
+        },
+      });
+    } finally {
+      unlistenProgress?.();
+    }
+  },
+
+  restart: async () => {
+    // Installing stops the IM supervisor and runner children, so it
+    // waits until no task runs (the buttons are disabled meanwhile).
+    if (hasRunningSessions()) return;
+    const current = get().status;
+    if (current.kind !== "ready") return;
+
+    set({
+      status: {
+        kind: "downloading",
+        phase: "installing",
+        version: current.version,
+      },
+    });
+    let unlistenProgress: UnlistenFn | undefined;
+    try {
+      unlistenProgress = await listenProgress();
+      // On Windows the installer quits Galley here and never returns.
+      await installAppUpdate();
+      await relaunchApp();
+    } catch (error) {
+      console.warn("[updates] install failed", error);
       set({
         status: {
           kind: "error",
@@ -162,11 +201,6 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
     } finally {
       unlistenProgress?.();
     }
-  },
-
-  restart: async () => {
-    if (hasRunningSessions()) return;
-    await relaunchApp();
   },
 
   noteAppLaunched: async (currentVersion) => {
@@ -194,10 +228,14 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
 //
 // Usage in console:
 //   __appUpdateStore.setState({ status: { kind: "available", currentVersion: "0.3.1", version: "0.4.0", body: "notes", date: null } })
-//   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0" } })
+//   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0", phase: "downloading" } })
 //   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0", phase: "downloading", progress: { downloaded: 42_000_000, total: 100_000_000 } } })
-//   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0", phase: "installing" } })
 //   __appUpdateStore.setState({ status: { kind: "ready", currentVersion: "0.3.1", version: "0.4.0" } })
+//   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0", phase: "installing" } })
+//   __appUpdateStore.setState({ status: { kind: "error", message: "下载更新失败，请稍后重试。", detail: "download request failed: connection reset", manualDownloadUrl: "https://github.com/wangjc683/galley/releases/latest" } })
+//
+// The download / restart buttons call Core for real; in dev they end in
+// an error (no channel, nothing downloaded).
 if (import.meta.env.DEV) {
   (
     globalThis as { __appUpdateStore?: typeof useAppUpdateStore }
@@ -228,46 +266,29 @@ function statusFromCheckResult(result: AppUpdateCheckResult): AppUpdateStatus {
 }
 
 function hasRunningSessions(): boolean {
-  return hasRunningSessionsInState(useMessagesStore.getState());
-}
-
-function hasRunningSessionsInState(
-  state: ReturnType<typeof useMessagesStore.getState>,
-): boolean {
-  return Object.values(state.byId).some((messages) => messages.agentRunning);
-}
-
-let autoPrepareOnIdleWatcherStarted = false;
-
-function ensureAutoPrepareOnIdleWatcher(): void {
-  if (!autoPrepareOnIdleWatcherStarted) {
-    autoPrepareOnIdleWatcherStarted = true;
-    useMessagesStore.subscribe((state, previousState) => {
-      if (hasRunningSessionsInState(state)) return;
-      if (!hasRunningSessionsInState(previousState)) return;
-
-      // Re-read the pref at fire time: the watcher registration is
-      // irreversible (module flag), so a user who turns auto-download
-      // off mid-session must be honored here, not at registration.
-      if (!usePrefsStore.getState().autoDownloadUpdates) return;
-      const status = useAppUpdateStore.getState().status;
-      if (status.kind !== "available") return;
-      void useAppUpdateStore.getState().downloadAndInstall();
-    });
-  }
-
-  const status = useAppUpdateStore.getState().status;
-  if (
-    status.kind === "available" &&
-    !hasRunningSessions() &&
-    usePrefsStore.getState().autoDownloadUpdates
-  ) {
-    void useAppUpdateStore.getState().downloadAndInstall();
-  }
+  return Object.values(useMessagesStore.getState().byId).some(
+    (messages) => messages.agentRunning,
+  );
 }
 
 /**
- * Record which version was prepared so the post-restart "Galley 已更新"
+ * Feed `app-update-progress` into the in-flight `downloading` status.
+ * Awaited before the command is invoked so no early event is missed
+ * (same ordering rule as lib/bridge.ts).
+ */
+function listenProgress(): Promise<UnlistenFn> {
+  return listen<AppUpdateProgressEvent>(APP_UPDATE_PROGRESS_EVENT, (event) => {
+    const status = useAppUpdateStore.getState().status;
+    // A late event must not resurrect a terminal ready/error state.
+    if (status.kind !== "downloading") return;
+    useAppUpdateStore.setState({
+      status: { ...status, ...applyProgressEvent(event.payload) },
+    });
+  });
+}
+
+/**
+ * Record which version was downloaded so the post-restart "Galley 已更新"
  * toast can tell an update apart from a plain relaunch.
  *
  * No toast at the ready moment (2026-09-18; the 2026-07-15 devlog left
@@ -345,7 +366,7 @@ function updateCopy() {
   );
 }
 
-type UpdateErrorPhase = "check" | "install";
+type UpdateErrorPhase = "check" | "download" | "install";
 
 function readableUpdateError(
   error: unknown,
@@ -366,6 +387,8 @@ function readableUpdateError(
     manualDownloadUrl: APP_UPDATE_MANUAL_DOWNLOAD_URL,
   });
 
+  if (normalized.includes("no_prepared_update"))
+    return makeError(copy.updates.preparedUpdateMissing);
   if (normalized.includes("no_update_available"))
     return makeError(copy.updates.noUpdateAvailable);
   if (
@@ -421,9 +444,9 @@ function readableUpdateError(
     normalized.includes("timeout")
   ) {
     return makeError(
-      phase === "install"
-        ? copy.updates.downloadFailed
-        : copy.updates.networkUnavailable,
+      phase === "check"
+        ? copy.updates.networkUnavailable
+        : copy.updates.downloadFailed,
     );
   }
   if (
@@ -434,6 +457,9 @@ function readableUpdateError(
     normalized.includes("failed to determine updater package extract path")
   ) {
     return makeError(copy.updates.installFailed);
+  }
+  if (phase === "download") {
+    return makeError(copy.updates.downloadFailed);
   }
   if (phase === "install") {
     return makeError(copy.updates.installFailed);

@@ -1,5 +1,6 @@
 import { Plus } from "@phosphor-icons/react";
 
+import { ShortcutGlyphs } from "@/components/ui/shortcut-glyphs";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
@@ -154,7 +155,7 @@ function NewChatButton({
               SHORTCUT_TEXT_CLASS,
             )}
           >
-            {shortcut}
+            <ShortcutGlyphs text={shortcut} />
           </span>
         )}
       </button>
