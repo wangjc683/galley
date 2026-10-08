@@ -612,6 +612,11 @@ html:not([data-theme="dark"]) .chrome-hover-scope {
      active states, composer) sit on app / elevated and keep the global
      value — which is why this is an override and not a token change. */
   --color-selected: #e7d8c0;
+  /* Hover on a selected row that is also an action (the 新对话 row while
+     the empty composer shows, 2026-10-08): the selected fill one hover
+     step toward ink. 5% matches this scope's hover step over chrome
+     (OKLab L 0.033); dark needs 12% for its own step (0.067). */
+  --color-selected-hover: color-mix(in oklab, var(--color-selected), var(--color-ink) 5%);
 }
 
 /* Dark needed no override until the 2026-08-21 chrome flip: with chrome
@@ -657,6 +662,7 @@ html:not([data-theme="dark"]) .chrome-hover-scope {
 html[data-theme="dark"] .chrome-hover-scope {
   --color-hover: #282c32;
   --color-selected: #4d3b2b;
+  --color-selected-hover: color-mix(in oklab, var(--color-selected), var(--color-ink) 12%);
 }
 
 body {

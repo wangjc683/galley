@@ -141,8 +141,12 @@ function NewChatButton({
           // the plus.
           "flex h-8 min-w-[28px] flex-1 items-center gap-2 rounded-sm pl-3 text-left text-[13px] text-ink",
           "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          // Selected or not, the row answers the pointer: it is an
+          // action (clicking it while selected refocuses the composer),
+          // unlike a selected session row. Selected hover deepens the
+          // fill one hover step (--color-selected-hover, globals.css).
           active
-            ? "bg-selected shadow-[var(--shadow-selected)]"
+            ? "bg-selected shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)"
             : "hover:bg-hover",
           "active:translate-y-px",
           "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",

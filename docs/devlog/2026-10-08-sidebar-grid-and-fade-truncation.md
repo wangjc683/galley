@@ -1,7 +1,7 @@
 # 侧栏：时间桶标题上网格、截断改渐隐、新对话成为列表的开头
 
 Date: 2026-10-08
-Status: 实现完成，typecheck / lint / vitest 849 / diff check；dev 窗口截图量过墨迹；JC 真机验收 OK
+Status: 实现完成，typecheck / lint / vitest 849 / diff check；dev 窗口截图量过墨迹；JC 真机验收 OK（新对话五档里定第 5 档；最后补的选中态悬停反馈，JC 收尾时要求推送，没有单独回报手感）
 Related: [layout-and-chrome §Sidebar](../design/layout-and-chrome.md)、[10-03 侧栏书眉](./2026-10-03-sidebar-header-masthead.md)、
 [第五批 Settings](./2026-10-08-settings-general-shortcuts-feedback-about-pass.md)
 
@@ -45,7 +45,7 @@ C 只加选中态。dev 里放临时切换器（主区顶部常驻 pill，localS
 工具栏的滚动分隔线）。翻车点预先说明：不出线时新对话与「本周」之间约 18px 的空会不会让它像「本周」组里的一项。JC 真机看过定 5。
 
 落地：`App` 传 `newChatActive = screen === "empty"`，`Sidebar` 在列表 `onScroll` 里记 `scrollTop > 0` 传给新对话行；新对话行
-选中时用会话行的选中样式与 `aria-current`，边框常在、静止透明。切换器已拆。被否：2（选中被两条线夹在带子里，读作按下的工具
+选中时用会话行的选中样式与 `aria-current`，边框常在、静止透明。切换器已拆。JC 实测发现选中时悬停没有任何反馈（选中样式与 `hover:bg-hover` 写成了二选一，照搬了选中会话行不响应悬停的做法；但新对话是动作按钮）：补 `--color-selected-hover`，选中底色朝墨色走一个悬停步，浅色 5%、深色 12%（按各自主题悬停相对 chrome 的 OKLab 明度步 0.033 / 0.067 算）。被否：2（选中被两条线夹在带子里，读作按下的工具
 按钮）、3（无选中）、4（滚动时会话行被看不见的边硬切）。
 
 ## 代价与遗留
