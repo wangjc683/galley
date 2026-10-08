@@ -8,6 +8,24 @@
 
 ---
 
+## Windows 上一键安装 `galley` 命令（用户级 PATH）
+
+- **状态**：暂缓（2026-10-08 Settings 逐页第二批 D5，JC 按推荐：先补台账 + 文案给手动办法）。
+- **提出**：2026-05-15 愿景转向时计划过「Windows 写用户级 PATH，不需管理员」（[devlog](./2026-05-15-vision-pivot-to-orchestrator.md)），一直没进台账；2026-10-08 运行环境 / 智能体接入审计 C13 翻出。
+- **启动信号**：Windows 用户要求在终端里直接用 `galley`，或社区 #30 一类「CLI 版本滞后 / 找不到命令」在 Windows 复现。
+- **方案**：Core 在 Windows 上把 CLI 所在目录写进 `HKCU\Environment` 的 `Path`（用户级，不需管理员），广播 `WM_SETTINGCHANGE`；移除时删同一段。界面与 macOS 同一个「安装 / 移除」按钮。
+- **实施要点**：只追加、不重排用户 PATH；已存在同目录时不重复写；Supervisor SOP 不依赖 PATH（05-21 定），这仍是给人的可选出口。现状：Windows 上显示「可以把这个目录加入 PATH」+ CLI 所在目录（2026-10-08 起，此前只有一句「稍后支持」）。
+- **关联**：`core/src/path_install.rs` · `SettingsIntegration.tsx` · [第二批 devlog](./2026-10-08-settings-runtime-agent-tab-pass.md)
+
+## 智能体接入：复制 SOP 之后显示「接上了没有」
+
+- **状态**：暂缓（2026-10-08 Settings 逐页第二批 D7，JC 按推荐不做）。
+- **提出**：2026-10-08 审计 C5：复制 SOP 后页面只说「可以发给 Agent 了」，新用户无从确认链路通了；JC 库里由 Agent 创建的对话 20 个、CLI 22 个，这页都看不到。
+- **启动信号**：有用户说「贴了 SOP 不知道成没成」，或 Supervisor 接入类问题出现第二起。
+- **方案**：页内一行「最近 7 天有 N 个对话由 Agent 创建」，数据经 Core 查 `sessions.created_via` / `created_by_supervisor`（GUI 不直读 SQLite，05-21 定）。
+- **待定**：只显示计数还是列最近一个对话（可点开）；05-27 定过这页保持稀疏，加一行要守住这条。
+- **关联**：`SettingsIntegration.tsx` · [第二批 devlog](./2026-10-08-settings-runtime-agent-tab-pass.md)
+
 ## 模型显示名入口太深（Settings → 模型）
 
 - **状态**：暂缓（2026-10-08 Settings 逐页第二段·模型批，JC 按推荐暂缓）。
@@ -23,7 +41,7 @@
 - **提出**：2026-10-08，模型页审计 C10：切 tab、关设置、按 Esc 时，模型编辑器与服务商编辑器里没保存的内容静默丢失（`Settings.tsx` 条件渲染卸载、Dialog 无 `onEscapeKeyDown` 守卫）。
 - **启动信号**：JC 或用户真的因此丢过一次输入（典型是粘贴好的 API Key）。
 - **方案**：Settings 外壳在关闭 / 切 tab 前询问当前 tab 是否有脏编辑器（各 tab 注册一个 `isDirty` 回调），有则弹轻确认「放弃未保存的修改？」。
-- **待定**：只做模型页还是做成 Settings 通用机制；Esc 在输入框内时是否只关编辑器不关设置。与「Channels 展开态跨进出 Settings 记忆」同属「组件态离开即丢」，可同批评估。
+- **待定**：只做模型页还是做成 Settings 通用机制。（「Esc 在输入框内时是否只关编辑器不关设置」2026-10-08 第二批 D3 已定：焦点在输入框时第一下 Esc 只离开输入框，第二下才关设置，全设置页生效。）与「Channels 展开态跨进出 Settings 记忆」同属「组件态离开即丢」，可同批评估。
 - **关联**：[模型页逐页对表](./2026-10-08-settings-models-tab-pass.md) · `gui/src/components/screens/settings/Settings.tsx`
 
 ## Codex「读取模型列表」与预设不同步

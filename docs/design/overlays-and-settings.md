@@ -74,9 +74,9 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 #### Action 类（少而精）
 
 - 切换模型（Switch model）→ 嵌套二级（展开当前 availableLLMs 列表）
-- Re-run health check
 - Open settings
-- Attach GA folder（仅 onboarding 已完成、想换路径时）
+- ~~Re-run health check~~、~~Attach GA folder~~：2026-10-08 删除（Settings 逐页第二批 D2，JC 选 B）。两项从
+  Stage 2 起只打日志、选了什么都不发生；入口唯一在设置 → 运行环境 →「接入外部 GA」。
 - （V0.1 之后加入：New project、Reset window layout、查看仓库改动）
 - **查看仓库改动**（2026-10-04）：`GitDiff` 图标，与 MainHeader「改动」按钮
   同一动作。按钮只在知道仓库时出现，这一项始终在，是不知道仓库时的入口
@@ -133,7 +133,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 ### 排序规则
 
 - Session 类按 lastActiveAt
-- Action 类按内置优先级：New chat > 切换模型 > Re-run health check > Open settings > Attach GA folder
+- Action 类按内置优先级：New chat > 切换模型 > Open settings
 - 切换模型嵌套二级而不是平铺（避免模型多时淹没 session）
 
 ---
@@ -156,6 +156,10 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 - 左侧 180px Tab list（垂直），右侧主内容区
 - 右上角 28px close icon（floating `DialogCloseButton`；右栏顶部 48px
   安全区 + 同色渐隐给它让位，见「Dialog 关闭按钮」节），Esc 可关闭
+- **Esc 先让给输入框**（2026-10-08 第二批 D3）：焦点在设置内的可编辑文本框（input / textarea /
+  contenteditable）时，第一下 Esc 只离开输入框（字段自己有 Esc 规则的照它的来，如外部 GA 路径框还原
+  草稿），第二下才关设置；输入法组字中的 Esc 不处理。全设置页生效，实现在 `Settings.tsx` 的
+  `onEscapeKeyDown`——Radix Dialog 在捕获阶段处理 Esc，字段自己的 keydown 走不到。
 - 触发：主窗口 ⌘, / Sidebar runtime unconfigured / Command Palette "Open settings" / TopBar Gear
 - 内容区 `px-8 py-7`，可滚动；Tab list 固定
 
@@ -270,19 +274,33 @@ Runtime tab 的任何问题）。
   （见下「视觉 → 共享组件」）：行标题 13px（2026-10-07 前是 12.5px），caret 展开时旋转。
   - **设置向导**：导航行，一行短说明（「重新走一遍首次设置，现有对话
     会保留」）；有任务运行时禁用，subtitle 换成禁用原因。
-  - **接入外部 GA**：手风琴。外部 GA 激活时头部常驻 `正在使用`
-    badge——状态可见性不依赖展开状态。展开内容依次是：状态 + 「切换
-    到外部 GA」行（激活时整行不渲染，badge 已承担状态）、外部 GA 路
-    径（mono 输入 + 文件夹选择器，输入可手打、Enter/blur 提交、
-    debounce 校验，`not-found` 拒绝保存；改动后 toast 提示重启
-    Galley 生效，不弹 confirm dialog）、Python（默认内置 CPython
-    只读展示，「使用外部 Python…」ghost link 切到外部模式，路径由
-    python-probe 决定、只读回显）、GenericAgent 版本（当前 / 已验证
-    commit + 对齐 badge）、Health Check（说明 + accent-secondary sm
-    按钮重跑）。
+  - **接入外部 GA**：手风琴。外部 GA 激活时头部标题换成名词「外部 GA」并常驻 `正在使用`
+    badge（2026-10-08 起；此前动作短语「接入外部 GA」配状态标签）——状态可见性不依赖展开状态。
+    展开内容依次是：
+    - 状态 + 「切换到外部 GA」行（激活时整行不渲染，badge 已承担状态）。状态行三态（2026-10-08
+      第二批 D4，此前只看路径字符串非空）：展开时跑一次只读路径校验（只查文件在不在），通过前
+      中性的「已设置路径」，通过后「外部 GA 已可用」，路径不存在时黄色提示并禁用切换；缺
+      `agentmain.py` 按中性处理（交给 Health Check）。顶栏「外部 GA 可用」判据同口径，只看路径、不再
+      多要求 Python 非空。
+    - 外部 GA 路径：mono 输入 + 文件夹选择器，可手打，Enter / blur / 在字段外按下鼠标时提交（按钮
+      按下不夺焦，只靠 blur 会让「跑一次 Health Check」「切换到外部 GA」用旧路径，同 10-08 模型页数字框），
+      Esc 还原草稿；debounce 校验，`not-found` 拒绝保存。保存 toast 按运行模式分口径：内置激活时
+      「切换到外部 GA 后生效」，外部激活时提示重启 Galley 让现有对话生效；不弹 confirm dialog。
+    - Python：默认内置 CPython 只读展示；「使用外部 Python…」ghost link 切到外部模式，路径由
+      python-probe 决定，以 mono 纯文本只读回显（2026-10-08 前是带框输入框，违反下方「只读展示不带框」）。
+      这个开关**只管外部 GA**：内置内核的对话一律用打包 Python，与 CLI / socket 路径一致
+      （`shouldUseBundledPython`，2026-10-08 修了打包版里开关泄漏进内置对话的 bug）。
+    - GenericAgent 版本（当前 / 已验证 commit + 对齐 badge）：**只在版本数据来自外部 GA 的对话时
+      渲染**（`gaCommitRuntimeKind === "external"`，2026-10-08 第二批 D1）。数据是最近一次对话启动时
+      runner 报上来的提交，内置对话不再写它；此前内置模式下这张卡显示的是内核自己的版本、永远「已对齐」。
+      内核版本看高级诊断。
+    - Health Check（说明 + accent-secondary sm 按钮重跑）。跑完「返回设置」时手风琴保持展开
+      （`external-access-intent`）。
   - **高级诊断**：手风琴，仅内置内核激活时出现；key-value 只读行。
     不含「当前模式」行——该手风琴只在内置内核激活时渲染，这一行永远
-    是同一个值，零信息。
+    是同一个值，零信息。标签中文 UI 走 locale（2026-10-08 起：内核版本 / 补丁 / 代码 / 提示词 /
+    记忆与 SOP / 状态目录 / 模型 / 模型配置文件，此前是 Patch stack、Code 等英文），值带量词
+    （「27 个补丁」「7 个模型」「缺 2 个关键文件」）。
 
 层级规则（这轮打磨的决策，后续改动不要破坏）：
 
@@ -513,9 +531,16 @@ Indicator）。
 
 #### Agent
 
-- Copy Supervisor SOP：复制 Galley Agent SOP，不写入 GenericAgent memory。
-- CLI install / path 指引：帮助可信 Agent 找到 `galley` CLI。
-- Agent API reference：链接到 `docs/agent-api/README.md`，强调 `schemaVersion`（现行 `2`）。
+- Copy Supervisor SOP：复制 Supervisor SOP（英文 UI 叫 Galley Supervisor SOP），不写入 GenericAgent memory。
+  按钮「已复制」1.5 秒后复位（与例句、「复制详情」同一节奏），右侧「可以发给 Agent 了」保留；SOP 读取
+  失败单列一句，不再说「复制失败」。
+- 正文里的 `galley` 命令名用 inline code（`InlineCodeText`，样式同飞书引导的 inline code）。
+- CLI install / path 指引：帮助可信 Agent 找到 `galley` CLI。macOS「安装 / 移除」失败、系统授权拉不起来、
+  找不到 CLI 时按原因映射中文（原文留在「复制详情」），找不到 CLI 分 dev / 打包两句。Windows 上没有一键
+  安装（进 deferred），显示「可以把这个目录加入 PATH：」+ CLI 所在目录（2026-10-08 起，此前只有一句
+  「稍后支持」）。
+- Agent API reference：直接链到 `docs/agent-api/README.md`（2026-10-08 前链到 07-04 拆分后留下的跳转页），
+  强调 `schemaVersion`（现行 `2`）。
 - 「高级选项」（discovery file、命令行快捷入口、API 文档）2026-10-07 起装进与运行环境「更多」同一套带边框列表，
   是其中唯一一行手风琴（此前是一条分隔线下的无容器折叠）。
 

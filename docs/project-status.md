@@ -666,7 +666,15 @@ provider form gets the model draft's dirty guard and both editors flag a
 refused switch, write failures are error toasts and a failed load is its own
 state, 「保存 / 添加 / 密钥」 wording, provider edit can test first with the
 preset read-only, 「编辑默认配置」 lands 09-22's dropped header link, and the
-model-layer number fields stop clamping per keystroke. Owed from the `v0.6.1` smoke (JC approved
+model-layer number fields stop clamping per keystroke. The second batch,
+Runtime + Agent ([devlog](./devlog/2026-10-08-settings-runtime-agent-tab-pass.md)),
+fixes a packaged-build bug where 「使用外部 Python」 leaked into bundled-engine
+sessions started from the GUI, shows the GA version card only for data from an
+external session, lets the first Esc in a Settings field leave the field
+instead of closing Settings, validates the external GA path before saying
+「外部 GA 已可用」, routes the Setup Assistant's runtime switch through the same
+action as Settings, drops the two Command Palette entries that only logged,
+and gives Windows a manual PATH hint for `galley`. Owed from the `v0.6.1` smoke (JC approved
 publish without an item-by-item report): on Windows, F5 / Ctrl+R mid-run
 (steps and final answer kept, the run not restarted; that WebView2 reloads on
 these keys is inferred, not observed) and a first session on the `f308ee7`
