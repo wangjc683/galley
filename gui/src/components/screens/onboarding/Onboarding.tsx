@@ -263,7 +263,14 @@ export function Onboarding({
   const handleItemAction = (_item: HealthCheckItem, actionId: string) => {
     if (actionId === "use-external-python") {
       setProbedPython(null);
-      void setGAConfig({ useExternalPython: true }).then(() => {
+      // Outside revisit this Health step belongs to the attach flow,
+      // which lands on the external runtime when it completes — word
+      // the toast for that runtime, not the bundled default of a fresh
+      // install.
+      void setGAConfig(
+        { useExternalPython: true },
+        isRevisit ? undefined : { effectiveRuntimeKind: "external" },
+      ).then(() => {
         setHealthRunNonce((n) => n + 1);
       });
       return;

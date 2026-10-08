@@ -146,16 +146,24 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         configuredReasoningEffort: event.configuredReasoningEffort ?? null,
       });
       // Sync the user's actual GA HEAD into runtimeInfo so the
-      // Settings → Runtime panel shows "GA 版本: cf65515 · 2026-05-11"
-      // alongside the workbench-tested baseline. gaCommit/Date are
-      // the same across every bridge (they all run against the same
-      // ga_path), so writing on every `ready` is safe — N-active
-      // background bridges don't conflict.
-      useRuntimeStore.getState().patchRuntimeInfo({
-        gaCommit: event.gaCommit,
-        gaCommitDate: event.gaCommitDate,
-        bridgePid: event.pid,
-      });
+      // Settings → 运行环境 → 接入外部 GA version card shows
+      // "当前版本 cf65515 · 2026-05-11" against the verified baseline.
+      // Only external sessions report the user's checkout — every
+      // external bridge runs the same ga_path, so N-active background
+      // bridges don't conflict. A bundled-engine `ready` reports the
+      // engine's own manifest commit; letting it write here made the
+      // card describe the engine as "your GA" (and hid a real external
+      // version after any bundled session started).
+      if (runtimeKind === "external") {
+        useRuntimeStore.getState().patchRuntimeInfo({
+          gaCommit: event.gaCommit,
+          gaCommitDate: event.gaCommitDate,
+          gaCommitRuntimeKind: "external",
+          bridgePid: event.pid,
+        });
+      } else {
+        useRuntimeStore.getState().patchRuntimeInfo({ bridgePid: event.pid });
+      }
       // Session Restore (Stage 3 Task 3). If this session has prior
       // turn history on disk, replay it into GA `backend.history` via
       // load_history. The MainView submit path waits on the same gate

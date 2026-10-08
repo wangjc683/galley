@@ -13,7 +13,7 @@ export function HealthCheckSection({
   return (
     <div>
       <SettingsFieldLabel>Health Check</SettingsFieldLabel>
-      <p className="mt-1.5 text-ui-meta leading-secondary text-ink-muted">
+      <p className="mt-1.5 text-ui-tertiary leading-secondary text-ink-muted">
         {copy.healthDescription}
       </p>
       <Button

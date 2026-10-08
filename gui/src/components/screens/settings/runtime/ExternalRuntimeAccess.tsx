@@ -10,6 +10,7 @@ import { ExternalRuntimeCard } from "./ExternalRuntimeCard";
 export function ExternalRuntimeAccess({
   expanded,
   value,
+  gaPath,
   hasExternalRuntimeConfigured,
   hasRunningSessions,
   onToggleExpanded,
@@ -18,6 +19,7 @@ export function ExternalRuntimeAccess({
 }: {
   expanded: boolean;
   value: RuntimeKind;
+  gaPath: string;
   hasExternalRuntimeConfigured: boolean;
   hasRunningSessions: boolean;
   onToggleExpanded: () => void;
@@ -28,7 +30,9 @@ export function ExternalRuntimeAccess({
   const active = value === "external";
   return (
     <SettingsDisclosureRow
-      title={copy.connectExternalGA}
+      // Inactive, the row is an action ("接入外部 GA"); once external
+      // is the runtime in use, it names the thing next to "正在使用".
+      title={active ? copy.externalGA : copy.connectExternalGA}
       badge={active ? <SettingsTag>{copy.active}</SettingsTag> : undefined}
       open={expanded}
       onToggle={onToggleExpanded}
@@ -36,6 +40,7 @@ export function ExternalRuntimeAccess({
       <div className="space-y-5">
         <ExternalRuntimeCard
           value={value}
+          gaPath={gaPath}
           hasExternalRuntimeConfigured={hasExternalRuntimeConfigured}
           hasRunningSessions={hasRunningSessions}
           onActivate={onActivate}

@@ -1,7 +1,7 @@
 import { BookOpen, Check, Copy, Terminal } from "@phosphor-icons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   SettingsDisclosureList,
@@ -14,10 +14,25 @@ import {
 } from "@/components/screens/settings/settings-ui";
 import { Button } from "@/components/ui/button";
 import { COPY_FEEDBACK_MS, copyTextToClipboard } from "@/lib/clipboard";
-import { useCopy } from "@/lib/i18n";
-import { isMac, isWindows } from "@/lib/platform";
+import { useCopy, useLanguage } from "@/lib/i18n";
+import { isChineseLanguage } from "@/lib/language";
+import { accessLocalFile } from "@/lib/local-files";
+import { isMac, isWindows, platformName } from "@/lib/platform";
 
 import { ExternalLinkIcon } from "./external-link";
+import { InlineCodeText } from "./inline-code-text";
+import {
+  parentDirectory,
+  parseDiscoveryCliPath,
+  pathInstallError,
+  pathInstallNotice,
+  pathUninstallError,
+  type PathActionError,
+  type PathInstallNotice,
+  type PathInstallOutcome,
+  type PathInstallStatus,
+  type PathUninstallOutcome,
+} from "./path-install";
 
 type SopCopyState =
   | { kind: "idle" }
@@ -25,28 +40,36 @@ type SopCopyState =
   | { kind: "copied" }
   | { kind: "error"; reason: string };
 
-/** Mirror of Rust core/src/path_install.rs::PathInstallStatus. */
-type PathInstallStatus =
-  | { status: "installed"; symlink: string; target: string }
-  | { status: "not_installed" }
-  | { status: "other_target"; symlink: string; actual: string }
-  | { status: "unsupported"; reason: string };
+/** The bundled SOP text, fetched once per mount. Reading it and copying
+ * it fail for different reasons, so the two failures read differently. */
+type SopLoadState =
+  | { kind: "loading" }
+  | { kind: "ready"; body: string }
+  | { kind: "failed"; reason: string };
 
-/** Mirror of PathInstallOutcome (install). */
-type PathInstallOutcome =
-  | { outcome: "installed"; symlink: string; target: string }
-  | { outcome: "user_cancelled" }
-  | { outcome: "cli_binary_not_found"; searched: string }
-  | { outcome: "failed"; reason: string; details: string }
-  | { outcome: "unsupported"; reason: string };
-
-/** Mirror of PathUninstallOutcome. */
-type PathUninstallOutcome =
-  | { outcome: "uninstalled"; symlink: string }
-  | { outcome: "not_installed" }
-  | { outcome: "user_cancelled" }
-  | { outcome: "failed"; reason: string; details: string }
-  | { outcome: "unsupported"; reason: string };
+/**
+ * Windows has no one-click install yet, so the command-shortcut row
+ * points at the folder holding galley.exe instead. Source: the discovery
+ * file Galley Core writes at startup (`%APPDATA%\galley\cli-path`,
+ * core/src/discovery.rs; line 1 = the CLI's absolute path), read through
+ * the existing `access_local_file` command. The path is confirmed with
+ * `path_exists`, so a stale file left by a moved install falls back to
+ * the generic sentence instead of naming a dead folder.
+ */
+async function readWindowsCliDir(): Promise<string | null> {
+  try {
+    const { dataDir, join } = await import("@tauri-apps/api/path");
+    const file = await join(await dataDir(), "galley", "cli-path");
+    const { content } = await accessLocalFile(file, "read");
+    const cliPath = parseDiscoveryCliPath(content ?? "");
+    if (!cliPath) return null;
+    const exists = await invoke<boolean>("path_exists", { path: cliPath });
+    return exists ? parentDirectory(cliPath) : null;
+  } catch (e) {
+    console.warn("[SettingsIntegration] CLI folder lookup failed", e);
+    return null;
+  }
+}
 
 /**
  * Settings → Agent tab. PRD §12 / B4 M3 surface — the screen
@@ -68,21 +91,30 @@ type PathUninstallOutcome =
 export function SettingsIntegration() {
   const copy = useCopy();
   const agentCopy = copy.settings.agent;
+  const labelSeparator = isChineseLanguage(useLanguage()) ? "：" : ": ";
   const [sopState, setSopState] = useState<SopCopyState>({ kind: "idle" });
-  const [sopBody, setSopBody] = useState<string | null>(null);
+  const [sopLoad, setSopLoad] = useState<SopLoadState>({ kind: "loading" });
+  // The button's 「已复制」 settles after COPY_FEEDBACK_MS like every other
+  // copy affordance; the status line beside it stays until the next copy.
+  const [sopCopiedFlash, setSopCopiedFlash] = useState(false);
+  const sopCopiedTimerRef = useRef<number | null>(null);
   const [copiedExampleIndex, setCopiedExampleIndex] = useState<number | null>(
     null,
   );
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pathStatus, setPathStatus] = useState<PathInstallStatus | null>(null);
   const [pathBusy, setPathBusy] = useState(false);
-  const [pathError, setPathError] = useState<string | null>(null);
+  const [pathError, setPathError] = useState<PathActionError | null>(null);
   const [docOpenError, setDocOpenError] = useState<string | null>(null);
-  const pathInstallUnsupportedCopy = isMac
-    ? null
-    : isWindows
-      ? agentCopy.pathUnsupportedWindows
-      : agentCopy.pathUnsupportedGeneric;
+  // Windows only: `undefined` until the discovery file has been read.
+  const [windowsCliDir, setWindowsCliDir] = useState<string | null | undefined>(
+    undefined,
+  );
+  const pathNotice = pathInstallNotice(
+    platformName,
+    pathStatus?.status === "unsupported",
+    windowsCliDir,
+  );
   const pathInstallHint = isMac ? agentCopy.pathInstallHintMac : null;
   const discoveryPlatformLabel = isMac
     ? "macOS"
@@ -107,7 +139,7 @@ export function SettingsIntegration() {
       setPathStatus(next);
     } catch (e) {
       setPathStatus(null);
-      setPathError(e instanceof Error ? e.message : String(e));
+      setPathError({ message: e instanceof Error ? e.message : String(e) });
     }
   };
   useEffect(() => {
@@ -124,9 +156,23 @@ export function SettingsIntegration() {
       } catch (e) {
         if (!cancelled) {
           setPathStatus(null);
-          setPathError(e instanceof Error ? e.message : String(e));
+          setPathError({
+            message: e instanceof Error ? e.message : String(e),
+          });
         }
       }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (platformName !== "windows") return;
+    let cancelled = false;
+    void (async () => {
+      const dir = await readWindowsCliDir();
+      if (!cancelled) setWindowsCliDir(dir);
     })();
     return () => {
       cancelled = true;
@@ -138,11 +184,11 @@ export function SettingsIntegration() {
     void (async () => {
       try {
         const body = await invoke<string>("get_supervisor_sop");
-        if (!cancelled) setSopBody(body);
+        if (!cancelled) setSopLoad({ kind: "ready", body });
       } catch (e) {
         if (!cancelled) {
-          setSopState({
-            kind: "error",
+          setSopLoad({
+            kind: "failed",
             reason: e instanceof Error ? e.message : String(e),
           });
         }
@@ -150,6 +196,14 @@ export function SettingsIntegration() {
     })();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (sopCopiedTimerRef.current !== null) {
+        window.clearTimeout(sopCopiedTimerRef.current);
+      }
     };
   }, []);
 
@@ -167,22 +221,14 @@ export function SettingsIntegration() {
     setPathError(null);
     try {
       const result = await invoke<PathInstallOutcome>("install_galley_to_path");
-      switch (result.outcome) {
-        case "installed":
-        case "user_cancelled":
-          break; // expected outcomes; refresh status to reflect reality
-        case "cli_binary_not_found":
-          setPathError(agentCopy.cliBinaryNotFound(result.searched));
-          break;
-        case "failed":
-          setPathError(`${result.reason}: ${result.details.slice(0, 200)}`);
-          break;
-        case "unsupported":
-          setPathError(result.reason);
-          break;
-      }
+      // Expected outcomes map to null; the status refresh below reflects
+      // reality either way.
+      setPathError(pathInstallError(result, agentCopy, import.meta.env.DEV));
     } catch (e) {
-      setPathError(e instanceof Error ? e.message : String(e));
+      setPathError({
+        message: agentCopy.pathInstallFailed,
+        details: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setPathBusy(false);
       await refreshPathStatus();
@@ -196,36 +242,41 @@ export function SettingsIntegration() {
       const result = await invoke<PathUninstallOutcome>(
         "uninstall_galley_from_path",
       );
-      switch (result.outcome) {
-        case "uninstalled":
-        case "not_installed":
-        case "user_cancelled":
-          break;
-        case "failed":
-          setPathError(`${result.reason}: ${result.details.slice(0, 200)}`);
-          break;
-        case "unsupported":
-          setPathError(result.reason);
-          break;
-      }
+      setPathError(pathUninstallError(result, agentCopy));
     } catch (e) {
-      setPathError(e instanceof Error ? e.message : String(e));
+      setPathError({
+        message: agentCopy.pathRemoveFailed,
+        details: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setPathBusy(false);
       await refreshPathStatus();
     }
   };
 
-  const copySop = async () => {
-    if (!sopBody) {
-      setSopState({ kind: "error", reason: agentCopy.sopStillLoading });
-      return;
+  const clearSopCopiedFlash = () => {
+    if (sopCopiedTimerRef.current !== null) {
+      window.clearTimeout(sopCopiedTimerRef.current);
+      sopCopiedTimerRef.current = null;
     }
+  };
+
+  const copySop = async () => {
+    // The button stays disabled until the SOP is ready.
+    if (sopLoad.kind !== "ready") return;
     setSopState({ kind: "pending" });
     try {
-      await copyTextToClipboard(sopBody);
+      await copyTextToClipboard(sopLoad.body);
       setSopState({ kind: "copied" });
+      setSopCopiedFlash(true);
+      clearSopCopiedFlash();
+      sopCopiedTimerRef.current = window.setTimeout(() => {
+        setSopCopiedFlash(false);
+        sopCopiedTimerRef.current = null;
+      }, COPY_FEEDBACK_MS);
     } catch (e) {
+      clearSopCopiedFlash();
+      setSopCopiedFlash(false);
       setSopState({
         kind: "error",
         reason: e instanceof Error ? e.message : String(e),
@@ -278,10 +329,10 @@ export function SettingsIntegration() {
             type="button"
             variant="primary"
             size="sm"
-            disabled={sopState.kind === "pending" || !sopBody}
+            disabled={sopState.kind === "pending" || sopLoad.kind !== "ready"}
             onClick={() => void copySop()}
             leadingIcon={
-              sopState.kind === "copied" ? (
+              sopCopiedFlash ? (
                 <Check size={14} weight="bold" />
               ) : (
                 <Copy size={14} weight="thin" />
@@ -290,13 +341,16 @@ export function SettingsIntegration() {
           >
             {sopState.kind === "pending"
               ? agentCopy.sopCopying
-              : sopState.kind === "copied"
+              : sopCopiedFlash
                 ? agentCopy.sopCopied
-                : sopBody
-                  ? agentCopy.sopCopy
-                  : agentCopy.sopLoading}
+                : sopLoad.kind === "loading"
+                  ? agentCopy.sopLoading
+                  : agentCopy.sopCopy}
           </Button>
-          <SopStatus state={sopState} />
+          <SopStatus
+            state={sopState}
+            loadError={sopLoad.kind === "failed" ? sopLoad.reason : null}
+          />
         </div>
       </section>
 
@@ -309,7 +363,7 @@ export function SettingsIntegration() {
               type="button"
               variant="ghost"
               size="sm"
-              aria-label={`${agentCopy.copyExample}: ${example}`}
+              aria-label={`${agentCopy.copyExample}${labelSeparator}${example}`}
               className="group h-auto w-full items-start justify-start gap-1.5 rounded-none border-l border-line px-3 py-1 text-left hover:border-brand/40 hover:bg-hover/50 focus-visible:border-brand/40 focus-visible:bg-hover/50"
               onClick={() => void copyExample(example, index)}
             >
@@ -351,8 +405,8 @@ export function SettingsIntegration() {
                 <SettingsFieldLabel>
                   {agentCopy.discoveryFile}
                 </SettingsFieldLabel>
-                <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
-                  {agentCopy.discoveryDescription}
+                <p className="mt-2 text-ui-secondary leading-secondary text-ink-soft">
+                  <InlineCodeText text={agentCopy.discoveryDescription} />
                 </p>
                 <dl className="mt-3 grid grid-cols-[88px_1fr] gap-x-3 text-ui-secondary">
                   <dt className="text-ink-muted">{discoveryPlatformLabel}</dt>
@@ -365,12 +419,13 @@ export function SettingsIntegration() {
               {/* Optional `galley` command shortcut (T3.3). Supervisors do
                   not need this because the SOP uses the discovery file.
                   macOS can create /usr/local/bin/galley via the system
-                  auth prompt; Windows is intentionally presented as
-                  unsupported until the user-level PATH writer exists. */}
+                  auth prompt; Windows has no one-click install until the
+                  user-level PATH writer exists, so it names the CLI's
+                  folder for a manual PATH entry instead. */}
               <div>
                 <SettingsFieldLabel>{agentCopy.cliShortcut}</SettingsFieldLabel>
-                <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
-                  {agentCopy.cliDescription}
+                <p className="mt-2 text-ui-secondary leading-secondary text-ink-soft">
+                  <InlineCodeText text={agentCopy.cliDescription} />
                 </p>
                 {pathInstallHint && (
                   <p className="mt-2 text-ui-tertiary text-ink-muted">
@@ -380,11 +435,16 @@ export function SettingsIntegration() {
                 <PathInstallRow
                   status={pathStatus}
                   busy={pathBusy}
-                  unsupportedCopy={pathInstallUnsupportedCopy}
+                  notice={pathNotice}
                   onInstall={() => void installPath()}
                   onUninstall={() => void uninstallPath()}
                 />
-                {pathError && <InlineErrorWithCopy message={pathError} />}
+                {pathError && (
+                  <InlineErrorWithCopy
+                    message={pathError.message}
+                    details={pathError.details}
+                  />
+                )}
               </div>
 
               {/* Developer-facing docs link. Kept low ceremony: this is
@@ -392,7 +452,7 @@ export function SettingsIntegration() {
                   while the SOP covers the normal copy-paste path. */}
               <div>
                 <SettingsFieldLabel>{agentCopy.apiDocs}</SettingsFieldLabel>
-                <p className="mt-2 text-ui-secondary leading-[1.6] text-ink-soft">
+                <p className="mt-2 text-ui-secondary leading-secondary text-ink-soft">
                   {agentCopy.apiDescription}
                 </p>
                 <div className="mt-3">
@@ -402,7 +462,7 @@ export function SettingsIntegration() {
                     size="sm"
                     onClick={() =>
                       void openExternal(
-                        "https://github.com/wangjc683/galley/blob/main/docs/agent-api.md",
+                        "https://github.com/wangjc683/galley/blob/main/docs/agent-api/README.md",
                       )
                     }
                     leadingIcon={<BookOpen size={14} weight="thin" />}
@@ -431,7 +491,9 @@ export function SettingsIntegration() {
  *   - not_installed     [ 安装 galley 命令 ] button only
  *   - installed          status line + [ 移除命令 ] button
  *   - other_target       status line ("当前指向：…") + [ 替换 / 移除 ] buttons
- *   - unsupported        explanatory text only, no button
+ *   - unsupported        explanatory text only, no button (`notice`;
+ *                        Windows adds the CLI folder for a manual PATH
+ *                        entry, see `pathInstallNotice`)
  *
  * Loading state (`busy`) disables every button uniformly so the user
  * can't double-click during the auth prompt. `null` status (the brief
@@ -442,21 +504,34 @@ export function SettingsIntegration() {
 function PathInstallRow({
   status,
   busy,
-  unsupportedCopy,
+  notice,
   onInstall,
   onUninstall,
 }: {
   status: PathInstallStatus | null;
   busy: boolean;
-  unsupportedCopy?: string | null;
+  notice: PathInstallNotice | null;
   onInstall: () => void;
   onUninstall: () => void;
 }) {
   const copy = useCopy().settings.agent;
-  if (unsupportedCopy || status?.status === "unsupported") {
+  if (notice?.kind === "pending") return null;
+  if (notice?.kind === "windows-manual") {
+    return (
+      <div className="mt-3">
+        <p className="text-ui-meta text-ink-muted">
+          <InlineCodeText text={copy.pathUnsupportedWindows} />
+        </p>
+        <p className="mt-1.5 select-text break-all font-mono text-ui-secondary text-ink">
+          {notice.dir}
+        </p>
+      </div>
+    );
+  }
+  if (notice?.kind === "generic") {
     return (
       <p className="mt-3 text-ui-meta text-ink-muted">
-        {unsupportedCopy ?? copy.pathUnsupportedGeneric}
+        {copy.pathUnsupportedGeneric}
       </p>
     );
   }
@@ -542,34 +617,55 @@ function PathInstallRow({
 }
 
 /**
- * Inline status line next to the install button. Stays low-emphasis
- * ([11px], ink-muted) so the section label and prose dominate; the
- * install button is the visual anchor.
+ * Inline status line next to the copy button. Stays low-emphasis
+ * (11.5px, ink-muted) so the section label and prose dominate; the
+ * copy button is the visual anchor. A failed SOP read outranks the copy
+ * state: the button is disabled then, so no copy can be in flight.
  */
-function SopStatus({ state }: { state: SopCopyState }) {
+function SopStatus({
+  state,
+  loadError,
+}: {
+  state: SopCopyState;
+  loadError: string | null;
+}) {
   const copy = useCopy().settings.agent;
+  if (loadError !== null) {
+    return <SopError reason={loadError} format={copy.sopLoadFailed} />;
+  }
   switch (state.kind) {
+    // While pending the button already reads 「复制中…」; a second word
+    // for the same moment is noise.
     case "idle":
-      return null;
     case "pending":
-      return (
-        <span className="text-ui-label text-ink-muted">{copy.sopPending}</span>
-      );
+      return null;
     case "copied":
       return (
-        <span className="text-ui-label text-ink-soft">{copy.readyForAgent}</span>
-      );
-    case "error":
-      return (
-        <span
-          className="select-text break-all text-ui-label text-error"
-          title={state.reason}
-        >
-          {copy.sopFailed(state.reason.slice(0, 80))}
-          {state.reason.length > 80 && "…"}
+        <span className="text-ui-tertiary text-ink-soft">
+          {copy.readyForAgent}
         </span>
       );
+    case "error":
+      return <SopError reason={state.reason} format={copy.sopFailed} />;
   }
+}
+
+function SopError({
+  reason,
+  format,
+}: {
+  reason: string;
+  format: (reason: string) => string;
+}) {
+  return (
+    <span
+      className="select-text break-all text-ui-tertiary text-error"
+      title={reason}
+    >
+      {format(reason.slice(0, 80))}
+      {reason.length > 80 && "…"}
+    </span>
+  );
 }
 
 function InlineErrorWithCopy({
@@ -584,14 +680,14 @@ function InlineErrorWithCopy({
   const visible =
     message.length > 140 ? `${message.slice(0, 140)}…` : message;
   return (
-    <div className="mt-2 flex items-start gap-2 text-ui-label text-error">
+    <div className="mt-2 flex items-start gap-2 text-ui-tertiary text-error">
       <p className="m-0 min-w-0 flex-1 select-text break-all" title={message}>
         {visible}
       </p>
       <Button
         variant="ghost"
         size="sm"
-        className="h-5 shrink-0 px-1.5 text-ui-label text-error/75 hover:text-error"
+        className="h-5 shrink-0 px-1.5 text-ui-tertiary text-error/75 hover:text-error"
         onClick={() => {
           void copyTextToClipboard(details ?? message).then(() => {
             setCopied(true);

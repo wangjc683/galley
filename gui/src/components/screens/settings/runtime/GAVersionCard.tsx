@@ -4,6 +4,15 @@ import { SettingsStatusBadge } from "@/components/screens/settings/settings-badg
 import { SettingsFieldLabel } from "@/components/screens/settings/settings-ui";
 import { useCopy } from "@/lib/i18n";
 
+/**
+ * The attached GenericAgent checkout's version vs the verified baseline.
+ * Rendered by the parent only once an external session has reported its
+ * HEAD (`RuntimeInfo.gaCommitRuntimeKind === "external"`) — before that
+ * the values describe the bundled engine, not the user's GA.
+ *
+ * Rows are prose (sans) with only the hash and date in mono, so the
+ * Chinese labels never fall back through the monospace stack.
+ */
 export function GAVersionCard({
   gaCommit,
   gaCommitDate,
@@ -16,29 +25,35 @@ export function GAVersionCard({
   const copy = useCopy().settings.runtime;
   const isUnknown = gaCommit === "unknown" || gaCommit === "";
   const isMatched = !isUnknown && gaCommit === gaBaseline;
-  const currentShort = isUnknown ? "unknown" : gaCommit.slice(0, 7);
   const baselineShort = gaBaseline.slice(0, 7);
   const currentDate = formatCommitDate(gaCommitDate);
 
   return (
     <div>
       <SettingsFieldLabel>{copy.genericAgentVersion}</SettingsFieldLabel>
-      <div className="mt-1.5 flex items-center gap-2 font-mono text-ui-secondary text-ink">
+      <div className="mt-1.5 flex items-center gap-2 text-ui-secondary text-ink">
         <span className="text-ink-muted">{copy.currentVersion}</span>
-        <span className="select-text">{currentShort}</span>
-        {currentDate && <span className="text-ink-muted">· {currentDate}</span>}
+        {isUnknown ? (
+          <span>{copy.gaVersionUnknown}</span>
+        ) : (
+          <span className="select-text font-mono">{gaCommit.slice(0, 7)}</span>
+        )}
+        {currentDate && (
+          <span className="text-ink-muted">
+            · <span className="font-mono">{currentDate}</span>
+          </span>
+        )}
       </div>
       {!isUnknown && (
-        <div className="mt-1 flex items-center gap-2 font-mono text-ui-meta text-ink-soft">
+        <div className="mt-1 flex items-center gap-2 text-ui-secondary text-ink-soft">
           <span className="text-ink-muted">{copy.verifiedVersion}</span>
-          <span className="select-text">{baselineShort}</span>
+          <span className="select-text font-mono">{baselineShort}</span>
           {/* Self-updated is information, not a fault: the note below
-              says what it means, so the badge stays neutral. font-sans
-              because the row is mono and the label is prose. */}
+              says what it means, so the badge stays neutral. */}
           <SettingsStatusBadge
             tone={isMatched ? "success" : "neutral"}
             icon={isMatched ? CheckCircle : Info}
-            className="ml-1 font-sans"
+            className="ml-1"
           >
             {isMatched ? copy.aligned : copy.selfUpdated}
           </SettingsStatusBadge>

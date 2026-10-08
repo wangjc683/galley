@@ -69,6 +69,23 @@ export interface GAConfig {
   useExternalPython: boolean;
 }
 
+export interface SetGAConfigOptions {
+  /**
+   * The runtime this config change will run under once the caller's
+   * flow settles. Only picks the toast's "when does it take effect"
+   * line; defaults to the active runtime. Onboarding completion passes
+   * `"external"` because it switches to the external runtime right
+   * after saving.
+   */
+  effectiveRuntimeKind?: RuntimeKind;
+  /**
+   * False skips the saved toast. The Setup Assistant passes it when a
+   * runtime switch follows the save: the switch toast already says what
+   * changed, and two cards for one action is noise.
+   */
+  toast?: boolean;
+}
+
 interface PrefsState {
   /**
    * GA subprocess spawn config. `python` + `gaPath` are user-editable
@@ -208,10 +225,14 @@ interface PrefsActions {
    * Update the GA spawn config and persist to prefs. Resolves the
    * python alias to a display path, reflects gaPath / python into
    * runtimeInfo, resets warmup so a new gaPath / python triggers a
-   * fresh LLM list refresh, and toasts the user that the new config
-   * applies on next launch for existing bridges.
+   * fresh LLM list refresh, and toasts when the new config takes
+   * effect (bundled engine active: once the user switches to external
+   * GA; external active: existing bridges need a Galley restart).
    */
-  setGAConfig: (partial: Partial<GAConfig>) => Promise<void>;
+  setGAConfig: (
+    partial: Partial<GAConfig>,
+    options?: SetGAConfigOptions,
+  ) => Promise<void>;
 
   // ---- Runtime mode ----
   setActiveRuntimeKind: (kind: RuntimeKind) => Promise<void>;
@@ -375,7 +396,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   },
 
   // ---- GA config ----
-  setGAConfig: async (partial) => {
+  setGAConfig: async (partial, options) => {
     const merged = normalizeGAConfig({ ...get().gaConfig, ...partial });
     // Translate the python alias (Tauri shell-capability `name` like
     // "python-framework-3-14") to its resolved display path for the
@@ -399,21 +420,34 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     } catch (e) {
       console.warn("[prefs] setGAConfig: pref persistence failed.", e);
     }
-    // Existing alive bridges keep their old config. Tell the user
-    // that the change takes effect on next launch.
+    // Existing alive bridges keep their old config. Tell the user when
+    // the change takes effect: in a packaged build every GA config
+    // field (path, Python alias, the external-Python switch) only feeds
+    // external GA sessions — Core swaps in the bundled engine's own code
+    // root, and `shouldUseBundledPython` pins its interpreter — so while
+    // the bundled engine is active nothing running is affected yet.
     const changedField = Object.entries(partial).find(
       ([, v]) => v !== undefined && v !== "",
     );
-    if (changedField) {
+    if (changedField && options?.toast !== false) {
+      const state = get();
       const copy = copyForLanguage(
-        resolveLanguagePreference(get().languagePreference),
+        resolveLanguagePreference(state.languagePreference),
       );
+      const runtimeKind =
+        options?.effectiveRuntimeKind ?? state.activeRuntimeKind;
       useUiStore.getState().pushToast(
         makeAppError({
           category: "business",
           severity: "info",
-          title: copy.toasts.savedPath,
-          message: copy.toasts.restartForExisting,
+          title:
+            partial.useExternalPython !== undefined
+              ? copy.toasts.savedPythonSetting
+              : copy.toasts.savedPath,
+          message:
+            runtimeKind === "managed"
+              ? copy.toasts.savedForExternal
+              : copy.toasts.restartForExisting,
           hint: null,
           retryable: false,
           context: "setGAConfig",

@@ -85,7 +85,36 @@ describe("dispatchIPCEvent", () => {
     expect(useRuntimeStore.getState().runtimeInfo).toMatchObject({
       gaCommit: "abc123",
       gaCommitDate: "2026-06-18T08:00:00.000Z",
+      gaCommitRuntimeKind: "external",
       bridgePid: 4242,
+    });
+  });
+
+  it("keeps the external GA version when a bundled-engine session becomes ready", () => {
+    dispatchIPCEvent(readyEvent());
+    useSessionsStore.setState({
+      sessions: [
+        makeSession({ id: "s-test", gaRuntimeKind: "external" }),
+        makeSession({ id: "s-managed", gaRuntimeKind: "managed" }),
+      ],
+    });
+    useMessagesStore.getState().ensureMessages("s-managed");
+    useRuntimeStore.getState().ensureRuntime("s-managed", { cachedLLMs: [] });
+
+    dispatchIPCEvent({
+      ...(readyEvent() as Extract<IPCEvent, { kind: "ready" }>),
+      sessionId: "s-managed",
+      // The bundled engine reports its own manifest commit.
+      gaCommit: "engine0",
+      gaCommitDate: "2026-10-06",
+      pid: 5151,
+    });
+
+    expect(useRuntimeStore.getState().runtimeInfo).toMatchObject({
+      gaCommit: "abc123",
+      gaCommitDate: "2026-06-18T08:00:00.000Z",
+      gaCommitRuntimeKind: "external",
+      bridgePid: 5151,
     });
   });
 

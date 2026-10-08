@@ -1,14 +1,13 @@
+import { isExternalGAConfigured } from "@/components/layout/header/runtime-indicator";
 import { Settings } from "@/components/screens/settings/Settings";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import type { ResolvedTheme } from "@/lib/theme";
 import { useCopy, useLanguage } from "@/lib/i18n";
+import { switchRuntimeKind } from "@/lib/runtime-mode";
 import { useManagedModelsStore } from "@/stores/managed-models";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
-import { useSessionsStore } from "@/stores/sessions";
-import { useUiStore } from "@/stores/ui";
-import { makeAppError } from "@/types/app-error";
 
 /**
  * Self-subscribing wrapper around the Settings dialog, extracted from
@@ -68,22 +67,15 @@ export function SettingsHost({
     (s) => s.setAutoDownloadUpdates,
   );
   const setGAConfig = usePrefsStore((s) => s.setGAConfig);
-  const setActiveRuntimeKind = usePrefsStore((s) => s.setActiveRuntimeKind);
   const gaConfig = usePrefsStore((s) => s.gaConfig);
   const activeRuntimeKind = usePrefsStore((s) => s.activeRuntimeKind);
   const managedModels = useManagedModelsStore((s) => s.models);
   const hasConfiguredManagedModel = managedModels.some(
     (model) => model.credentialStatus !== "missing",
   );
-  const setActiveProjectFilter = useSessionsStore(
-    (s) => s.setActiveProjectFilter,
-  );
-  const setActiveSession = useSessionsStore((s) => s.setActiveSession);
   const hasRunningSessions = useMessagesStore((s) =>
     Object.values(s.byId).some((messages) => messages.agentRunning),
   );
-  const setScreen = useUiStore((s) => s.setScreen);
-  const pushToast = useUiStore((s) => s.pushToast);
 
   return (
     <Settings
@@ -95,7 +87,7 @@ export function SettingsHost({
       hasRunningSessions={hasRunningSessions}
       activeRuntimeKind={activeRuntimeKind}
       hasManagedRuntimeConfigured={hasConfiguredManagedModel}
-      hasExternalRuntimeConfigured={gaConfig.gaPath.trim() !== ""}
+      hasExternalRuntimeConfigured={isExternalGAConfigured(gaConfig)}
       useExternalPython={gaConfig.useExternalPython}
       onChangeGAPath={() => {
         void pickGAPath(setGAConfig, copy.app.chooseGAFolderTitle);
@@ -104,40 +96,22 @@ export function SettingsHost({
         // Manual-typed GA path from Settings → Runtime. The
         // SettingsRuntime field has already validated and refuses to
         // call this on `not-found`; we trust it here. setGAConfig
-        // shows the same "重启 Galley 才能生效" toast as the picker
+        // shows the same "when it takes effect" toast as the picker
         // flow, keeping both entry points symmetric.
         await setGAConfig({ gaPath: path });
       }}
       onToggleExternalPython={(useExternal) => {
         // v0.1.1: persist the bundled-vs-external choice. Like
-        // gaPath, takes effect on next bridge spawn (existing live
-        // sessions keep their current Python). setGAConfig shows
-        // the same "重启 Galley" toast.
+        // gaPath, takes effect on the next external bridge spawn
+        // (existing live sessions keep their current Python; bundled-
+        // engine sessions always use the bundled one). setGAConfig
+        // toasts "已保存 Python 设置" + when it takes effect.
         void setGAConfig({ useExternalPython: useExternal });
       }}
       onChangeRuntimeKind={(kind) => {
-        if (kind === activeRuntimeKind) return;
-        void (async () => {
-          await setActiveRuntimeKind(kind);
-          useRuntimeStore.setState({ pendingLLMIndex: undefined });
-          setActiveProjectFilter(undefined);
-          setActiveSession(undefined);
-          setScreen("empty");
-          await useSessionsStore.getState().hydrate();
-          pushToast(
-            makeAppError({
-              category: "business",
-              severity: "info",
-              title: copy.toasts.switchedRuntime(kind),
-              message: copy.toasts.runtimeSwitchKept,
-              hint: null,
-              retryable: false,
-              context: null,
-              traceback: null,
-              autoDismissMs: 4200,
-            }),
-          );
-        })();
+        // Shared with the Setup Assistant: pref + state reset + session
+        // reload + toast; no-op when `kind` is already active.
+        void switchRuntimeKind(kind);
       }}
       // Bridge Python picker intentionally not wired — V0.1 relies
       // on the python probe to pick the interpreter; advanced users

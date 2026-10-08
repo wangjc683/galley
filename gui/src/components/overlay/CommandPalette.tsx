@@ -1,7 +1,6 @@
 import { Command } from "cmdk";
 import {
   ArrowLeft,
-  ArrowsClockwise,
   ChatCircleText,
   Check,
   Cube,
@@ -50,12 +49,10 @@ export interface CommandPaletteProps {
    * anchor line. Falls back to onOpenSession when absent. */
   onOpenMessage?: (sessionId: string, messageId: string, query: string) => void;
   onSwitchLLM?: (index: number) => void;
-  onReRunHealthCheck?: () => void;
   /** Open the Git review panel, like the header's Changes button (which
    * hides while no repository is known; this entry never does). */
   onReviewChanges?: () => void;
   onOpenSettings?: () => void;
-  onAttachGAFolder?: () => void;
 
   /** Called when the user presses Enter on an empty/no-match palette
    * (DESIGN.md §8 "Empty state") — typically: open new chat with this
@@ -213,10 +210,6 @@ export function CommandPalette(props: CommandPaletteProps) {
             onEnterSwitchLLM={() => setPage("switch-llm")}
             llmCount={props.llms?.length ?? 0}
             currentLLM={props.llms?.find((l) => l.isCurrent)?.displayName}
-            onReRunHealthCheck={() => {
-              props.onReRunHealthCheck?.();
-              close();
-            }}
             onReviewChanges={() => {
               props.onReviewChanges?.();
               close();
@@ -229,10 +222,6 @@ export function CommandPalette(props: CommandPaletteProps) {
             }}
             onOpenSettings={() => {
               props.onOpenSettings?.();
-              close();
-            }}
-            onAttachGAFolder={() => {
-              props.onAttachGAFolder?.();
               close();
             }}
             onSubmitFreeText={(text) => {
@@ -268,11 +257,9 @@ function RootPage({
   onEnterSwitchLLM,
   llmCount,
   currentLLM,
-  onReRunHealthCheck,
   onReviewChanges,
   onResetLayout,
   onOpenSettings,
-  onAttachGAFolder,
   onSubmitFreeText,
 }: {
   search: string;
@@ -285,11 +272,9 @@ function RootPage({
   onEnterSwitchLLM: () => void;
   llmCount: number;
   currentLLM?: string;
-  onReRunHealthCheck: () => void;
   onReviewChanges: () => void;
   onResetLayout: () => void;
   onOpenSettings: () => void;
-  onAttachGAFolder: () => void;
   onSubmitFreeText: (text: string) => void;
 }) {
   const copy = useCopy();
@@ -416,15 +401,6 @@ function RootPage({
           />
         </Command.Item>
         <Command.Item
-          value="rerun health check 体检 健康检查"
-          onSelect={onReRunHealthCheck}
-        >
-          <PaletteRow
-            Icon={ArrowsClockwise}
-            label={copy.command.runHealthCheck}
-          />
-        </Command.Item>
-        <Command.Item
           value="review repository changes git diff worktree 查看仓库改动 工作区改动"
           onSelect={onReviewChanges}
         >
@@ -442,12 +418,6 @@ function RootPage({
             label={copy.command.openSettings}
             shortcut={formatShortcutReadable("Mod+,")}
           />
-        </Command.Item>
-        <Command.Item
-          value="attach ga folder 切换 GA 路径"
-          onSelect={onAttachGAFolder}
-        >
-          <PaletteRow Icon={FolderOpen} label={copy.command.changeGAFolder} />
         </Command.Item>
       </Command.Group>
     </>

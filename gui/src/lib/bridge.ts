@@ -49,10 +49,8 @@ export interface BridgeSpawnArgs {
   python?: string;
   /**
    * v0.1.1+: when false (default), spawn the Galley-bundled Python
-   * at `$RESOURCE/python/`. The Rust side now resolves the bundled
-   * vs external decision the same way the old TS path did:
-   * production build + `useExternalPython === false` → bundled;
-   * otherwise → `args.python` (default `python3` / `python`).
+   * at `$RESOURCE/python/`. Only the external (attach) runtime honors
+   * it — see `shouldUseBundledPython` for the full rule.
    *
    * Dev mode (`pnpm tauri dev`) is always external because the
    * bundled tree doesn't materialize until `tauri build`.
@@ -139,6 +137,36 @@ interface SpawnRunnerArgsJson {
   activeSessionId?: string;
 }
 
+/**
+ * Whether a bridge spawn runs on the Galley-bundled interpreter.
+ *
+ * - Dev builds never do: the bundled tree only exists after
+ *   `tauri build`.
+ * - Bundled-engine (managed) sessions always do in a packaged build.
+ *   The "使用外部 Python…" escape hatch lives under 接入外部 GA and is
+ *   an attach-runtime setting; the bundled engine shipping on its own
+ *   Python is a release contract (devlog 2026-06-04). GUI callers
+ *   spread the whole `gaConfig` into the spawn args, so the flag must
+ *   be ignored here rather than at each call site. Core's socket / CLI
+ *   path already pins managed spawns the same way
+ *   (`core/src/socket_listener/spawn_config.rs`, `GaConfigPref::default()`).
+ * - External (attach) sessions — and callers that omit `runtimeKind`,
+ *   which is the legacy external default — honor `useExternalPython`.
+ */
+export function shouldUseBundledPython({
+  isProd,
+  runtimeKind,
+  useExternalPython,
+}: {
+  isProd: boolean;
+  runtimeKind?: RuntimeKind;
+  useExternalPython?: boolean;
+}): boolean {
+  if (!isProd) return false;
+  if (runtimeKind === "managed") return true;
+  return !useExternalPython;
+}
+
 export async function spawnBridge(
   args: BridgeSpawnArgs,
   handlers: BridgeHandlers,
@@ -149,7 +177,11 @@ export async function spawnBridge(
   // a TS-side resolution because Tauri's $RESOURCE token is a build-
   // time bundle path and the JS side already knows whether bundling
   // happened (PROD env).
-  const wantBundled = import.meta.env.PROD && !args.useExternalPython;
+  const wantBundled = shouldUseBundledPython({
+    isProd: import.meta.env.PROD,
+    runtimeKind: args.runtimeKind,
+    useExternalPython: args.useExternalPython,
+  });
   const resolvePythonStartedAt = perfNow();
   const python = await resolvePythonPath(args.python, wantBundled);
   logPerf("bridge.resolvePythonPath", resolvePythonStartedAt, {

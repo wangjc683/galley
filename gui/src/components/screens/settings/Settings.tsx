@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { SettingsAbout } from "@/components/screens/settings/SettingsAbout";
 import { SettingsGeneral } from "@/components/screens/settings/SettingsGeneral";
@@ -84,7 +84,9 @@ export interface SettingsProps {
  *   - 1040x680, centered (uses portal + backdrop scrim)
  *   - left tab list 180px
  *   - right content area 860px
- *   - close button top-right (Esc also works via Radix Dialog)
+ *   - close button top-right (Esc also works via Radix Dialog; while a
+ *     text field has focus the first Esc only leaves the field — see
+ *     `handleEscapeKeyDown`)
  *   - backdrop clicks do not close Settings; users often leave Galley
  *     to copy model provider keys/URLs, and accidental outside clicks
  *     must not discard in-progress settings forms.
@@ -151,12 +153,38 @@ export function Settings({
     if (!showBrowserTab && tab === "browser") setTab("runtime");
   }, [setTab, showBrowserTab, tab]);
 
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Radix handles Esc on `document` in the capture phase, so without
+  // this a field's own Esc handling (the GA path field reverts its
+  // draft) never runs — the whole dialog closes first. While focus is in
+  // an editable text field inside Settings, keep the dialog open and let
+  // the key reach the field; if the field did not leave focus on its
+  // own, blur it here. First Esc leaves the field (a number field
+  // commits its draft on blur, which is fine), the second closes
+  // Settings. Menus / dropdowns / nested dialogs are separate Radix
+  // layers: while one is open it is the top layer and gets Esc instead
+  // of this handler.
+  const handleEscapeKeyDown = (event: KeyboardEvent) => {
+    const field = editableTextField(contentRef.current, event.target);
+    if (!field) return;
+    event.preventDefault();
+    // Esc during IME composition belongs to the IME (cancels it).
+    if (event.isComposing) return;
+    // A macrotask, not a microtask: the field's own keydown handler
+    // runs later in this same dispatch.
+    window.setTimeout(() => {
+      if (document.activeElement === field) field.blur();
+    }, 0);
+  };
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
         <Dialog.Content
+          ref={contentRef}
           aria-describedby={undefined}
+          onEscapeKeyDown={handleEscapeKeyDown}
           onPointerDownOutside={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
           className={cn(
@@ -277,4 +305,41 @@ export function Settings({
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+/** Input types that take no typing — Esc on them closes Settings. */
+const NON_TEXT_INPUT_TYPES = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "hidden",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+]);
+
+/**
+ * `target` when it is a focused, editable text field inside `container`
+ * (text-like `<input>`, `<textarea>`, contenteditable); otherwise null.
+ */
+function editableTextField(
+  container: HTMLElement | null,
+  target: EventTarget | null,
+): HTMLElement | null {
+  if (!container || !(target instanceof HTMLElement)) return null;
+  if (!container.contains(target)) return null;
+  if (target instanceof HTMLInputElement) {
+    return NON_TEXT_INPUT_TYPES.has(target.type) ||
+      target.readOnly ||
+      target.disabled
+      ? null
+      : target;
+  }
+  if (target instanceof HTMLTextAreaElement) {
+    return target.readOnly || target.disabled ? null : target;
+  }
+  return target.isContentEditable ? target : null;
 }

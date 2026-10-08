@@ -5,7 +5,7 @@ import {
   Warning,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import {
   SettingsFieldLabel,
@@ -14,6 +14,10 @@ import {
 import type { PathValidation } from "@/components/screens/onboarding/StepAttach";
 import { AdvancedRuntimeSettings } from "@/components/screens/settings/runtime/AdvancedRuntimeSettings";
 import { BuiltinRuntimeCard } from "@/components/screens/settings/runtime/BuiltinRuntimeCard";
+import {
+  clearExternalAccessExpandRequest,
+  isExternalAccessExpandRequested,
+} from "@/components/screens/settings/runtime/external-access-intent";
 import { GAVersionCard } from "@/components/screens/settings/runtime/GAVersionCard";
 import { HealthCheckSection } from "@/components/screens/settings/runtime/HealthCheckSection";
 import { SettingsDisclosureRow } from "@/components/screens/settings/settings-disclosure";
@@ -56,7 +60,6 @@ export function SettingsRuntime({
   hasExternalRuntimeConfigured,
   useExternalPython,
   onChangeGAPath,
-  onChangeBridgePython,
   onReRunHealthCheck,
   onOpenSetupAssistant,
   onToggleExternalPython,
@@ -66,14 +69,19 @@ export function SettingsRuntime({
 }: SettingsRuntimeProps) {
   const copy = useCopy();
   const runtimeCopy = copy.settings.runtime;
+  // Open by default while external is the runtime in use, or when
+  // coming back from 「跑一次 Health Check」 (launched from inside this
+  // accordion — see `external-access-intent`).
   const [externalExpanded, setExternalExpanded] = useState(
-    activeRuntimeKind === "external",
+    () =>
+      isExternalAccessExpandRequested() || activeRuntimeKind === "external",
   );
   const [highlightedRuntimeKind, setHighlightedRuntimeKind] =
     useState<RuntimeKind | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    clearExternalAccessExpandRequest();
     return () => {
       if (highlightTimerRef.current !== null) {
         window.clearTimeout(highlightTimerRef.current);
@@ -112,15 +120,19 @@ export function SettingsRuntime({
       <PythonPanel
         useExternal={useExternalPython}
         externalPath={info.pythonVersion}
-        onChangeExternalPath={onChangeBridgePython}
         onToggle={onToggleExternalPython}
       />
 
-      <GAVersionCard
-        gaCommit={info.gaCommit}
-        gaCommitDate={info.gaCommitDate}
-        gaBaseline={info.gaBaseline}
-      />
+      {/* Only once an external session has reported its checkout's
+          HEAD: before that the values are the bundled engine's own
+          (高级诊断 → 内核版本 already shows those). */}
+      {info.gaCommitRuntimeKind === "external" && (
+        <GAVersionCard
+          gaCommit={info.gaCommit}
+          gaCommitDate={info.gaCommitDate}
+          gaBaseline={info.gaBaseline}
+        />
+      )}
 
       <HealthCheckSection onReRunHealthCheck={onReRunHealthCheck} />
     </>
@@ -145,6 +157,7 @@ export function SettingsRuntime({
       <AdvancedRuntimeSettings
         expanded={externalExpanded}
         value={activeRuntimeKind}
+        gaPath={info.gaPath}
         hasExternalRuntimeConfigured={hasExternalRuntimeConfigured}
         hasRunningSessions={hasRunningSessions}
         highlighted={highlightedRuntimeKind === "external"}
@@ -176,10 +189,10 @@ export function SettingsRuntime({
  *     underneath reveals the legacy picker for advanced users
  *     (custom GA forks, live venv iteration).
  *
- *   - **External**: a read-only PathField mirrors the
- *     python-probe-selected path the way it did pre-v0.1.1. Same
- *     "Re-run Health Check" button below (in the parent) re-triggers
- *     the probe. A "改回 Galley 内置 Python" toggle returns to
+ *   - **External**: the python-probe-selected path as a read-only mono
+ *     line (read-only display is borderless — Settings §9 Runtime
+ *     layering rule). "跑一次 Health Check" below (in the parent)
+ *     re-runs the probe. A "改回 Galley 内置 Python" toggle returns to
  *     bundled mode.
  *
  * Toggle hands off to the parent via `onToggle(bool)` — caller
@@ -189,12 +202,10 @@ export function SettingsRuntime({
 function PythonPanel({
   useExternal,
   externalPath,
-  onChangeExternalPath,
   onToggle,
 }: {
   useExternal: boolean;
   externalPath: string;
-  onChangeExternalPath?: () => void;
   onToggle?: (useExternal: boolean) => void;
 }) {
   const copy = useCopy().settings.runtime;
@@ -205,7 +216,7 @@ function PythonPanel({
         <div className="mt-1.5 font-mono text-ui-secondary text-ink">
           CPython {BUNDLED_PYTHON_VERSION}
         </div>
-        <div className="mt-0.5 text-ui-tertiary text-ink-muted">
+        <div className="mt-0.5 text-ui-tertiary leading-secondary text-ink-muted">
           {copy.bundledPythonDetail}
         </div>
         {onToggle && (
@@ -221,19 +232,20 @@ function PythonPanel({
       </div>
     );
   }
+  // The probe owns selection (no picker); the resolved path is shown
+  // for visibility, and 「跑一次 Health Check」 below re-probes.
   return (
     <div>
-      <PathField
-        label="Python"
-        value={externalPath}
-        // External mode keeps the V0.1-era picker-suppressed behavior:
-        // the probe owns selection; we surface the resolved path for
-        // visibility, and Re-run Health Check (button below in
-        // parent) re-probes when needed.
-        onPick={onChangeExternalPath}
-        readOnly
-        hint={copy.externalPythonHint}
-      />
+      <SettingsFieldLabel>Python</SettingsFieldLabel>
+      <div
+        className="mt-1.5 select-text truncate font-mono text-ui-secondary text-ink"
+        title={externalPath}
+      >
+        {externalPath}
+      </div>
+      <div className="mt-0.5 text-ui-tertiary leading-secondary text-ink-muted">
+        {copy.externalPythonHint}
+      </div>
       {onToggle && (
         <Button
           variant="ghost"
@@ -269,12 +281,12 @@ function ManagedRuntimeCard({
   const memorySeedStatus = diagnostics
     ? diagnostics.state.memorySeed.criticalFilesPresent
       ? `${copy.complete} · ${diagnostics.paths.memoryDir}`
-      : `${copy.missing} · ${missingSeedFiles} ${copy.criticalFiles} · ${diagnostics.paths.memorySeedDir}`
+      : `${copy.missingCriticalFiles(missingSeedFiles)} · ${diagnostics.paths.memorySeedDir}`
     : copy.notLoaded;
   const modelStatus =
     models.length === 0
       ? copy.notConfigured
-      : `${models.length} ${copy.models} · ${copy.keysOnDemand}${
+      : `${copy.modelCount(models.length)} · ${copy.keysOnDemand}${
           defaultModel ? ` · ${defaultModel.displayName}` : ""
         }`;
   return (
@@ -286,15 +298,15 @@ function ManagedRuntimeCard({
       <div>
         <RuntimeDiagnosticRow label={copy.kernelVersion} value={upstreamShort} />
         <RuntimeDiagnosticRow
-          label="Patch stack"
+          label={copy.diagPatches}
           value={
             diagnostics
-              ? `${diagnostics.patchStackId} · ${diagnostics.patchCount} patches`
+              ? `${diagnostics.patchStackId} · ${copy.patchCount(diagnostics.patchCount)}`
               : copy.notLoaded
           }
         />
         <RuntimeDiagnosticRow
-          label="Code"
+          label={copy.diagCode}
           value={
             diagnostics
               ? diagnostics.code.agentmainExists
@@ -303,10 +315,10 @@ function ManagedRuntimeCard({
               : copy.notLoaded
           }
         />
-        <RuntimeDiagnosticRow label="Prompts" value={promptStatus} />
+        <RuntimeDiagnosticRow label={copy.diagPrompts} value={promptStatus} />
         <RuntimeDiagnosticRow label={copy.memorySop} value={memorySeedStatus} />
         <RuntimeDiagnosticRow
-          label="State"
+          label={copy.diagState}
           value={
             diagnostics
               ? diagnostics.state.initialized
@@ -317,7 +329,7 @@ function ManagedRuntimeCard({
         />
         <RuntimeDiagnosticRow label={copy.models} value={modelStatus} />
         <RuntimeDiagnosticRow
-          label="Config file"
+          label={copy.configFile}
           value={
             diagnostics
               ? diagnostics.state.modelConfigExists
@@ -355,17 +367,18 @@ function RuntimeDiagnosticRow({
 }
 
 /**
- * Path field with three modes:
- *   - readonly: display-only (Python — value comes from probe)
+ * Path field with two modes:
  *   - picker:   value + folder picker button (no manual typing)
- *   - editable: input is typeable; commit on Enter / blur. Folder
- *               picker stays available when `onPick` is also provided.
+ *   - editable: input is typeable; commit on Enter / blur / a press
+ *               outside the field. Folder picker stays available when
+ *               `onPick` is also provided.
  *
  * Editable mode runs `validateGAPath` debounced (300ms) and renders an
  * inline status line. Commit is blocked only on `not-found` — picker
  * also accepts whatever the OS dialog returns without validation, so
  * typed paths follow the same trust model except for the impossible
- * case.
+ * case. Esc reverts the draft and leaves the field (Settings keeps the
+ * dialog open while a text field has focus).
  */
 function PathField({
   label,
@@ -374,7 +387,6 @@ function PathField({
   hint,
   onPick,
   onCommit,
-  readOnly = false,
 }: {
   label: string;
   value: string;
@@ -385,14 +397,20 @@ function PathField({
    * commits on Enter / blur. Picker (if `onPick` set) still works in
    * parallel. */
   onCommit?: (path: string) => Promise<void>;
-  /** When true, the field shows the value but suppresses the picker —
-   * used for Bridge Python (see capabilities constraint comment above). */
-  readOnly?: boolean;
 }) {
   const copy = useCopy().settings.runtime;
   const editable = !!onCommit;
   const [draft, setDraft] = useState(value);
   const [validation, setValidation] = useState<PathValidation>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  // Esc's own blur must not commit: that blur runs inside the keydown
+  // handler, before the reverted draft has rendered, so it would still
+  // see the dirty draft.
+  const revertingRef = useRef(false);
+  // The draft currently being validated / committed. An outside press
+  // commits and the blur that follows it would commit the same draft
+  // again (double save, double toast) while the first is in flight.
+  const committingRef = useRef<string | null>(null);
 
   // Re-sync draft + validation when the saved value changes externally
   // (picker commit, store hydration). Uses React's "adjust state on
@@ -448,16 +466,56 @@ function PathField({
       setValidation(null);
       return;
     }
-    // Force a settled validation result so a fast Enter doesn't slip
-    // a `not-found` path through during the debounce window.
-    setValidation({ kind: "checking" });
-    const v = await validateGAPath(trimmed);
-    setValidation(v);
-    if (v?.kind === "not-found") {
-      // Block commit; keep draft + error visible so the user can fix.
-      return;
+    if (committingRef.current === trimmed) return;
+    committingRef.current = trimmed;
+    try {
+      // Force a settled validation result so a fast Enter doesn't slip
+      // a `not-found` path through during the debounce window.
+      setValidation({ kind: "checking" });
+      const v = await validateGAPath(trimmed);
+      setValidation(v);
+      if (v?.kind === "not-found") {
+        // Block commit; keep draft + error visible so the user can fix.
+        return;
+      }
+      await onCommit!(trimmed);
+    } finally {
+      committingRef.current = null;
     }
-    await onCommit!(trimmed);
+  };
+
+  // Galley's Buttons keep focus where it is on mouse press
+  // (`preventMouseFocus`), so typing a path and then pressing
+  // 「跑一次 Health Check」 or 「切换到外部 GA」 never blurs this input —
+  // the action would run on the old path and the draft would be lost.
+  // While a draft exists, any press outside the field commits it first,
+  // as the blur would have (same as the Models tab number fields). The
+  // field includes 「选择」, whose own mouse-down guard keeps the picker
+  // result from racing a commit.
+  const commitBeforeOutsidePress = useEffectEvent(() => {
+    void tryCommit();
+  });
+  const dirty = editable && draft !== value;
+  useEffect(() => {
+    if (!dirty) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        fieldRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      commitBeforeOutsidePress();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [dirty]);
+
+  const handleBlur = () => {
+    if (revertingRef.current) return;
+    void tryCommit();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -469,12 +527,14 @@ function PathField({
       e.preventDefault();
       setDraft(value);
       setValidation(null);
+      revertingRef.current = true;
       e.currentTarget.blur();
+      revertingRef.current = false;
     }
   };
 
   return (
-    <div>
+    <div ref={fieldRef}>
       <SettingsFieldLabel>{label}</SettingsFieldLabel>
       <div className="mt-1.5 flex gap-2">
         <input
@@ -483,35 +543,35 @@ function PathField({
           placeholder={placeholder}
           readOnly={!editable}
           onChange={editable ? handleChange : undefined}
-          onBlur={editable ? () => void tryCommit() : undefined}
+          onBlur={editable ? handleBlur : undefined}
           onKeyDown={editable ? handleKeyDown : undefined}
           spellCheck={false}
           className={cn(
-            "min-w-0 flex-1 rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none placeholder:text-ink-muted/70",
+            "min-w-0 flex-1 rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70",
             editable &&
               "focus:border-brand focus:ring-[3px] focus:ring-brand/20",
           )}
         />
-        {!readOnly && (
-          <Button
-            variant="accent-secondary"
-            size="md"
-            // Prevent the input's blur-commit from firing before the
-            // picker's selection lands. Otherwise a dirty draft would
-            // commit, then immediately get overwritten by the picker
-            // result — double toast, confusing audit trail.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={onPick}
-            className="shrink-0 px-3 py-2 text-ui-secondary"
-            leadingIcon={<FolderOpen size={13} weight="thin" />}
-          >
-            {copy.choose}
-          </Button>
-        )}
+        <Button
+          variant="accent-secondary"
+          size="md"
+          // Prevent the input's blur-commit from firing before the
+          // picker's selection lands. Otherwise a dirty draft would
+          // commit, then immediately get overwritten by the picker
+          // result — double toast, confusing audit trail.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onPick}
+          className="shrink-0 px-3 py-2 text-ui-secondary"
+          leadingIcon={<FolderOpen size={13} weight="thin" />}
+        >
+          {copy.choose}
+        </Button>
       </div>
       {editable && <ValidationLine validation={validation} />}
       {hint && (
-        <div className="mt-1.5 text-ui-meta text-ink-muted">{hint}</div>
+        <div className="mt-1.5 text-ui-tertiary leading-secondary text-ink-muted">
+          {hint}
+        </div>
       )}
     </div>
   );

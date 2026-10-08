@@ -752,14 +752,10 @@ function App() {
             );
           }
         }}
-        onReRunHealthCheck={() => console.info("[palette] re-run health check")}
         // LocalFileWorkspace owns the review and listens on the UI
         // store; the palette renders outside its provider.
         onReviewChanges={requestReview}
         onOpenSettings={() => openSettings()}
-        onAttachGAFolder={() =>
-          console.info("[palette] attach GA folder — wired in #10")
-        }
         onSubmitFreeText={(text) => {
           console.info("[palette] free-text submit:", text);
           setScreen("main");

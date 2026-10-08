@@ -1,6 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { copyForLanguage } from "@/lib/i18n";
 import { usePrefsStore } from "@/stores/prefs";
+import { useRuntimeStore } from "@/stores/runtime";
+import { useUiStore } from "@/stores/ui";
 import { resetStores } from "@/test/store-reset";
 import { getTauriMocks } from "@/test/setup";
 
@@ -131,6 +134,72 @@ describe("prefsStore", () => {
     expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
       key: "keep_in_background_on_close",
       value: false,
+    });
+  });
+
+  describe("setGAConfig toast", () => {
+    const zh = copyForLanguage("zh-CN");
+
+    beforeEach(() => {
+      usePrefsStore.setState({
+        languagePreference: "zh-CN",
+        // Absolute path: the display lookup short-circuits without a
+        // probe.
+        gaConfig: {
+          python: "/usr/bin/python3",
+          gaPath: "/ga",
+          bridgeCwd: ".",
+          useExternalPython: false,
+        },
+      });
+      // Saving re-runs the external LLM warmup; keep it from spawning.
+      useRuntimeStore.setState({ warmupLLMList: vi.fn(async () => {}) });
+    });
+
+    it("says the Python switch waits for external GA while the bundled engine is active", async () => {
+      usePrefsStore.setState({ activeRuntimeKind: "managed" });
+
+      await usePrefsStore.getState().setGAConfig({ useExternalPython: true });
+
+      expect(useUiStore.getState().toasts).toMatchObject([
+        {
+          title: zh.toasts.savedPythonSetting,
+          message: zh.toasts.savedForExternal,
+        },
+      ]);
+    });
+
+    it("keeps the restart note for path changes while external GA is active", async () => {
+      usePrefsStore.setState({ activeRuntimeKind: "external" });
+
+      await usePrefsStore.getState().setGAConfig({ gaPath: "/ga-next" });
+
+      expect(useUiStore.getState().toasts).toMatchObject([
+        {
+          title: zh.toasts.savedPath,
+          message: zh.toasts.restartForExisting,
+        },
+      ]);
+    });
+
+    it("words the toast for the runtime the caller is about to switch to", async () => {
+      // Onboarding completion: bundled engine still active at save
+      // time, external GA right after.
+      usePrefsStore.setState({ activeRuntimeKind: "managed" });
+
+      await usePrefsStore
+        .getState()
+        .setGAConfig(
+          { gaPath: "/ga-next" },
+          { effectiveRuntimeKind: "external" },
+        );
+
+      expect(useUiStore.getState().toasts).toMatchObject([
+        {
+          title: zh.toasts.savedPath,
+          message: zh.toasts.restartForExisting,
+        },
+      ]);
     });
   });
 });

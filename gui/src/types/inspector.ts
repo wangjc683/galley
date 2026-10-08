@@ -10,6 +10,8 @@
  * whenever we're already touching every importer.
  */
 
+import type { RuntimeKind } from "@/types/session";
+
 /**
  * Health check single check. Driven from the bridge's `ready` event
  * and any subsequent re-runs. Follows DESIGN.md §6.1's six states.
@@ -49,6 +51,13 @@ export interface RuntimeInfo {
    * fallback. Pairs with `gaCommit` for the Settings → Runtime
    * version row. */
   gaCommitDate: string;
+  /** Runtime of the session whose `ready` wrote `gaCommit` /
+   * `gaCommitDate`. Unset until one has: the defaults are the bundled
+   * engine's manifest commit, a first-paint placeholder. Only external
+   * sessions write it today (a bundled-engine `ready` reports the
+   * engine's own manifest commit, which 高级诊断 already shows), so the
+   * 接入外部 GA version card renders only when this is `"external"`. */
+  gaCommitRuntimeKind?: RuntimeKind;
   /** Galley-side tested baseline commit (from docs/ga-baseline.md).
    * Hardcoded — bumped whenever we re-verify
    * upstream compatibility. */

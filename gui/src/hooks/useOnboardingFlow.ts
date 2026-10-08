@@ -1,5 +1,8 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
+import { requestExternalAccessExpanded } from "@/components/screens/settings/runtime/external-access-intent";
+import { switchRuntimeKind } from "@/lib/runtime-mode";
+import type { SetGAConfigOptions } from "@/stores/prefs";
 import type { Screen } from "@/stores/ui";
 import type { RuntimeKind } from "@/types/session";
 
@@ -20,6 +23,12 @@ export type OnboardingMode = "fresh" | "setup" | "revisit";
  * `revisitReturnScreen` remembers where the user was when they triggered
  * the flow so completion / cancel restores that screen *and* re-opens
  * Settings — the trigger came from inside the Settings dialog.
+ *
+ * Runtime switches on completion: first launch (`fresh`) writes the pref
+ * directly — there are no conversations to reload or keep, so no toast.
+ * The Setup Assistant (`setup`) goes through `switchRuntimeKind`, the
+ * same action as Settings → 运行环境 (reload the session list, clear
+ * old-runtime state, confirm with a toast). Revisit never switches.
  */
 export function useOnboardingFlow({
   screen,
@@ -38,6 +47,7 @@ export function useOnboardingFlow({
   gaConfig: { gaPath: string; python?: string };
   setGAConfig: (
     partial: Partial<{ gaPath: string; python: string }>,
+    options?: SetGAConfigOptions,
   ) => Promise<void>;
   activeRuntimeKind: RuntimeKind;
   setActiveRuntimeKind: (kind: RuntimeKind) => Promise<void>;
@@ -55,6 +65,10 @@ export function useOnboardingFlow({
       : "fresh";
 
   const returnToSettings = () => {
+    // Health Check is launched from inside 接入外部 GA; reopen it there
+    // instead of landing on a collapsed accordion (it remounts closed in
+    // bundled mode).
+    if (healthCheckRevisit) requestExternalAccessExpanded();
     setHealthCheckRevisit(false);
     setSetupAssistantFromSettings(false);
     setScreen(revisitReturnScreen);
@@ -78,8 +92,33 @@ export function useOnboardingFlow({
       partial.python = pythonAlias;
     }
     if (Object.keys(partial).length > 0) {
-      await setGAConfig(partial);
+      // Fresh / setup completion lands on the external runtime right
+      // after this save, so the toast speaks for external even while
+      // the bundled engine is still active; revisit keeps the current
+      // runtime.
+      await setGAConfig(
+        partial,
+        healthCheckRevisit
+          ? undefined
+          : {
+              effectiveRuntimeKind: "external",
+              // The Setup Assistant switches right after this save and
+              // the switch toast covers it; fresh install keeps its card.
+              toast: mode !== "setup" || activeRuntimeKind === "external",
+            },
+      );
     }
+  };
+
+  // Fresh install writes the pref directly (nothing to reload, no
+  // toast); the Setup Assistant shares Settings' switch flow. Both are
+  // no-ops when `kind` is already active.
+  const activateRuntimeKind = async (kind: RuntimeKind) => {
+    if (mode === "fresh") {
+      if (activeRuntimeKind !== kind) await setActiveRuntimeKind(kind);
+      return;
+    }
+    await switchRuntimeKind(kind);
   };
 
   // Settings → "Re-run Health Check". Remember the current screen, close
@@ -108,8 +147,8 @@ export function useOnboardingFlow({
     // has no GA deps — silent crash).
     void (async () => {
       await saveExternalGAConfigIfChanged(gaPath, pythonAlias);
-      if (!healthCheckRevisit && activeRuntimeKind !== "external") {
-        await setActiveRuntimeKind("external");
+      if (!healthCheckRevisit) {
+        await activateRuntimeKind("external");
       }
       if (healthCheckRevisit) {
         // Settings → "跑一次 Health Check" round-trip: return
@@ -124,9 +163,7 @@ export function useOnboardingFlow({
 
   const handleManagedComplete = () => {
     void (async () => {
-      if (activeRuntimeKind !== "managed") {
-        await setActiveRuntimeKind("managed");
-      }
+      await activateRuntimeKind("managed");
       returnToMainAfterSetup();
     })();
   };

@@ -247,13 +247,24 @@ export function SettingsNavRow({
       onClick={onOpen}
       className={cn(
         LIST_ROW_CLASS,
-        disabled ? "cursor-not-allowed opacity-60" : "hover:bg-hover",
+        disabled ? "cursor-not-allowed" : "hover:bg-hover",
       )}
     >
       <span className="min-w-0">
-        <span className={cn("block", LIST_ROW_TITLE_CLASS)}>{title}</span>
+        {/* Disabled dims only the title and arrow: the subtitle then
+            carries the reason, already at ink-muted — dimming it again
+            would make the one line worth reading the faintest. */}
+        <span
+          className={cn(
+            "block",
+            LIST_ROW_TITLE_CLASS,
+            disabled && "opacity-60",
+          )}
+        >
+          {title}
+        </span>
         {subtitle && (
-          <span className="mt-0.5 block text-ui-tertiary leading-[1.5] text-ink-muted">
+          <span className="mt-0.5 block text-ui-tertiary leading-notice text-ink-muted">
             {subtitle}
           </span>
         )}
@@ -262,7 +273,7 @@ export function SettingsNavRow({
         size={12}
         weight="bold"
         aria-hidden
-        className="shrink-0 text-ink-soft"
+        className={cn("shrink-0 text-ink-soft", disabled && "opacity-60")}
       />
     </button>
   );

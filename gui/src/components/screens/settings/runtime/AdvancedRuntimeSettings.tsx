@@ -12,6 +12,7 @@ import { SetupAssistantAccess } from "./SetupAssistantAccess";
 export function AdvancedRuntimeSettings({
   expanded,
   value,
+  gaPath,
   hasExternalRuntimeConfigured,
   hasRunningSessions,
   highlighted,
@@ -23,6 +24,7 @@ export function AdvancedRuntimeSettings({
 }: {
   expanded: boolean;
   value: RuntimeKind;
+  gaPath: string;
   hasExternalRuntimeConfigured: boolean;
   hasRunningSessions: boolean;
   highlighted: boolean;
@@ -54,6 +56,7 @@ export function AdvancedRuntimeSettings({
         <ExternalRuntimeAccess
           expanded={expanded}
           value={value}
+          gaPath={gaPath}
           hasExternalRuntimeConfigured={hasExternalRuntimeConfigured}
           hasRunningSessions={hasRunningSessions}
           onToggleExpanded={onToggleExpanded}
