@@ -1,6 +1,6 @@
 # 整体布局与窗口 Chrome
 
-> Galley 设计系统 · 原 DESIGN.md §3–§4.2（2026-07-04 拆分）：两栏布局、SidebarHeader（书眉）/ MainHeader、Browser Control / 内核 / Channels indicator、Sidebar 结构、Session Row、Project 行。
+> Galley 设计系统 · 原 DESIGN.md §3–§4.2（2026-07-04 拆分）：两栏布局、SidebarHeader（书眉）/ MainHeader、Browser Control / 内核 / Channels indicator、Sidebar 结构、Session Row、Project 组行。
 
 ## 3. 整体布局
 
@@ -41,7 +41,7 @@
 - `Galley` 字标（左）+ 搜索 / 定时 / 项目三个图标（右），单行。角色是**书眉**：顶部两栏像摊开的书，左页印书名（Galley），右页印章名（会话标题）。整体感靠这个角色和共用的网格，不靠把字标和按钮焊在一起。字标不可点（08-14：它是拖窗把手；按题词先例，误点不能烧掉一个会话）。
 - 字标 17px Newsreader 斜体 500，**不缩**：Newsreader 的 x 高只有 0.43em（Inter 0.55em），17px 的 x 高 7.24px 与右栏 13px Inter 标题的 7.10px 同档（字体文件实测）；缩到 14px 小写反而比右栏小一号。宽 46.8px。
 - macOS：traffic light 浮于窗口左上 = 本 header 左上，故左 padding 让出 **88px**（红绿灯簇右缘约 68px + ~20px 间隙；代码现状，2026-09-18 回写——早先记的 ~78px 已被实机否掉：10px 间隙让斜体衬线字标看起来挤着彩色圆点）。**不要**退回 78px 或更贴。非 mac 用 16px 常规 gutter。
-- 三个图标用 MainHeader 同款 `TopBarIconButton`（28px、16px thin、`gap-1`），左右两栏顶上的按钮是同一种东西；顺序 搜索 → 定时 → 项目。右边距让「项目」图标与会话行 hover `⋯` 落在同一竖列（行 `mx-1.5` + 触发器 `right-1.5`，同为 28px）：mac / Linux 12px；Windows 22px，多出的 10px 是会话列表 `scrollbar-gutter: stable` 留的滚动条槽位。项目按下态、定时徽标见 §4.2。
+- 三个图标用 MainHeader 同款 `TopBarIconButton`（28px、16px thin、`gap-1`），左右两栏顶上的按钮是同一种东西；顺序 搜索 → 定时 → 项目。右边距让「项目」图标与会话行 hover `⋯` 落在同一竖列（行 `mx-1.5` + 触发器 `right-1.5`，同为 28px）：mac / Linux 12px；Windows 22px，多出的 10px 是会话列表 `scrollbar-gutter: stable` 留的滚动条槽位。项目菜单、定时徽标见 §4.2。
 - **窄宽回落，单一门槛**：放不下「字标 + 三图标」时，三个图标回到新对话那一行，即 09-28 的一行布局，顶行只剩字标。新对话行两态都在，所以切换时列表不上下跳；字标始终在。门槛按侧栏内容宽度（`@container/sidebar`，面板宽减 aside 的 1px 右边框）：mac 251px、Windows 189px、Linux 179px，算式在 `sidebar/sidebar-width.ts`。
 - 运行时状态与 Supervisor SOP 已移出（2026-10-03）：前者进 MainHeader 状态簇（见下「内核 Indicator」），后者进工具簇。2026-09-18「外置模式 SOP 退成 icon-only」一条随之作废。
 
@@ -145,19 +145,15 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 ├──────────────────────────────────┤
 │ + 新对话                     ⌘N  │  独占一行：唯一主动作，全宽带字；列表的开头，空状态时是选中行
 ┊┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┊  （分隔线只在列表滚动后出现；窄于门槛时三个图标回到这一行）
-│ ACTIVE PROJECTS              +   │  Project Review: 点击项目行展开/收起；+ 新建项目
-│   FolderOpen Galley        +     │  行点击展开/收起；+ 新建项目对话
-│     ◐ Session A                  │
-│   FolderOpen Website       +     │
-│     + 新建项目对话               │  空项目 CTA，点击新建到该项目
-│ OLDER PROJECTS              12   │  默认折叠；点击展开 30 天前项目
-├──────────────────────────────────┤
-│ PINNED                           │  仅有 pin session 时显示
+│ PINNED                           │  仅有 pin session 或 pin 项目时显示
 │   ◐ Session A                    │
 ├──────────────────────────────────┤
-│ TODAY                            │
+│ TODAY                         3  │  计数 = 桶内顶层行数（会话行 + 项目组行）
 │   ◐ Session 1                    │
-│   ◐ Session 2                    │
+│ ▌ Folder 发版回归                │  项目组行（2026-10-08）：默认折叠，点击展开/收起
+│     1 个等你回复 · 共 19 个      │  第二行：最高优先级状态 + 总数
+│     ┃ ⏸ 回归 #7                  │  折叠时露出：等你回复 / 出错 / 选中的子会话
+│   ◐ Session 2                    │  组行与会话行按活动时间交错
 │ THIS WEEK                        │  滚动 7 天
 │ THIS MONTH                       │  滚动 30 天（2026-09-09 新增）
 │ EARLIER                          │  单行 "查看全部 N"，打开 EarlierDialog
@@ -170,26 +166,24 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 #### 关键决策
 
 - **书眉 Header**（2026-10-03）：`Galley` 字标 + 搜索 / 定时 / 项目三个图标同行，规格与窄宽回落见 §4.1 SidebarHeader。产品名使用 sentence case，不使用全大写 wordmark，避免读成 acronym。字标自带 `data-tauri-drag-region`（该属性不冒泡）。运行时状态与 Supervisor SOP 不在这里（移入 MainHeader，见 §4.1）。
-- **新对话独占一行 = 逃生出口**（2026-10-03）：侧栏这个按钮是窗口里唯一一直看得见的新对话入口（主区顶栏的「新对话」只是空状态标题；⌘N / ⌘K / mac 菜单栏都要用户先知道，Windows 没有菜单栏）。用户找不到它，会像被困在旧会话里。所以它按逃生出口的三条标准设计：**显眼**（品牌色粗加号 + medium 文字，这一带唯一的颜色）、**能读**（任何宽度都带字）、**位置固定**（不随宽度或状态挪去别处）。代价是不省高度：笔记本宽度下「字标常驻 / 新对话带字 / 省一行」只能三选二，JC 定带字优先于省一行。搜索 / 定时 / 项目是低频入口，上顶行是**降级不藏**（JC 本机项目与定时 0 使用，社区用法未知）。定时徽标在时钟图标右上角（只在有待处理事项时出现、增加时 pop）；项目按钮开启时是按下态（`bg-selected/85` + `shadow-inner` + `FolderOpen`）。新建项目的 `+` 在 Project Review 第一个分组标题右侧（命令面板也有「新建项目」，零项目 CTA 不变）。演进：四行（约 152px）→ 一行（2026-09-28，[devlog](../devlog/2026-09-28-sidebar-quick-actions-one-row.md)）→ 书眉 + 独占一行（[devlog](../devlog/2026-10-03-sidebar-header-masthead.md)）。
+- **新对话独占一行 = 逃生出口**（2026-10-03）：侧栏这个按钮是窗口里唯一一直看得见的新对话入口（主区顶栏的「新对话」只是空状态标题；⌘N / ⌘K / mac 菜单栏都要用户先知道，Windows 没有菜单栏）。用户找不到它，会像被困在旧会话里。所以它按逃生出口的三条标准设计：**显眼**（品牌色粗加号 + medium 文字，这一带唯一的颜色）、**能读**（任何宽度都带字）、**位置固定**（不随宽度或状态挪去别处）。代价是不省高度：笔记本宽度下「字标常驻 / 新对话带字 / 省一行」只能三选二，JC 定带字优先于省一行。搜索 / 定时 / 项目是低频入口，上顶行是**降级不藏**（JC 本机项目与定时 0 使用，社区用法未知）。定时徽标在时钟图标右上角（只在有待处理事项时出现、增加时 pop）；「项目」按钮打开项目菜单，新建项目是菜单首项（命令面板也有「新建项目」），见下方「书眉『项目』是菜单」。演进：四行（约 152px）→ 一行（2026-09-28，[devlog](../devlog/2026-09-28-sidebar-quick-actions-one-row.md)）→ 书眉 + 独占一行（[devlog](../devlog/2026-10-03-sidebar-header-masthead.md)）。
 - **新对话是列表的开头，空状态时是选中行**（2026-10-08，JC 真机比五档后定）：主区是空的新对话输入框时（`screen === "empty"`，含项目上下文的「新对话 · 项目名」），这一行用与打开的会话行相同的选中样式（`bg-selected` + 抬起阴影，`aria-current`），侧栏因此永远恰好有一行在说「你在这里」——此前点了新对话，侧栏里没有任何一行亮着。发出第一句后选中交给「今天」里那条新会话。它是动作按钮，选中时悬停也要有反馈（选中时再点一下会把焦点送回输入框）：选中底色朝正文墨色再走一个悬停步（`--color-selected-hover`，浅色混 5%、深色 12%，与侧栏普通悬停的 OKLab 明度步一致）；选中的会话行仍然不响应悬停。它与列表之间**静止时不画分隔线**：列表在顶部时没有东西被裁，那条线只是把新对话隔成一条孤立的工具带；列表一滚动，线出现，标出会话行滑进去的裁切边（macOS 工具栏随滚动出现分隔线的同一行为；1px 边框常在、静止时透明，出现时不跳）。被否：保留分隔线只加选中态（选中被两条线夹在一条带子里，读作工具条上按下的按钮，而不是列表里的一行）、去线不加选中、去线且滚动时也不出线（会话行被看不见的边硬切）。⌘N 常显。
 - **新对话文字不截断**：独占一行时任何宽度都带字（中文约需 96px、英文约 116px，都低于最窄的 134px）。只有窄宽回落态（三个图标回到这一行）沿用 09-28 规则：动作文字要么完整显示，要么只剩加号，门槛中文 198px、英文 220px（「New chat」Inter 500 13px 实测 58.8px）。这两个数只在 mac 上起作用（都低于 251）；Windows / Linux 的回落门槛本身就低于它们，回落态一律只剩加号。项目版「新对话 · 项目名」只截项目名。
 - **行末 ⌘N 与项目上下文**：行末淡色快捷键提示只在**无项目上下文**且三个图标不在本行时显示；右缘离侧栏边 18px，mac 上与顶行「项目」图标的字形右缘对齐。项目上下文里新对话落进项目，而 ⌘N 总是普通新对话（`useGlobalShortcuts` 清项目上下文）——⌘N 是键盘上永远不变的逃生口，所以项目上下文里行末不显示 ⌘N，悬停提示也不写 ⌘N（2026-10-03 修正：此前提示写「新对话 · 项目名 ⌘N」，与 ⌘N 的实际行为不符）。
-- **普通 sidebar 不再显示项目列表**：普通视图只保留时间线，减少重复层级；需要看项目时显式进入 Project Review。
+- **项目折进时间线，没有项目视图**（2026-10-08，[devlog](../devlog/2026-10-08-sidebar-project-groups.md)）：侧栏只有一条时间线。项目会话不单独成行，折进所属项目的组行；组行规则见下方「Project 组行」。此前（05-22 起）项目要按书眉「项目」进 Project Review 模式看，时间线同时列出全部项目会话、行上不标所属项目——Supervisor 拆一次任务、或一批回归，就把「本周」刷满（JC 库 10-08：近 7 天 25 条里 19 条是一个回归项目）。直接把项目会话从时间线藏起来被否：等你回复 / 出错会在默认视图里失明，也破坏「选中行必在侧栏里」。
 - **Project row 不用 emoji**：用 Phosphor `Folder` / `FolderOpen` 表达层级与 filter，避免跨平台 emoji 造成的视觉重量和渲染差异。
-- **Project Review 由顶行 `项目` 图标切换**（2026-10-03 起在书眉 header；此前在快捷入口行）：进入时自动展开第一个项目并软设项目上下文，正下方的新对话行立刻变成「新对话 · 项目名」，然后列表换成项目视图——按下后的变化从上到下连续，所以按钮离列表隔着新对话行不构成问题；退出时清空项目上下文。开启后隐藏普通 timeline，展示完整 project list；项目 row 只负责展开/收起，允许多项目同时展开；再次点击 `项目` 退出 Project Review。入口用 selected tint 表示开启状态，不额外加说明文案；tooltip / aria-label 未开启时为「项目」，开启时为「退出项目视图」。
-- **Project Review 进出动效**：模式切换不是硬替换。进入时 Project Review 从 0 高度轻展开并 fade in，普通 timeline 下沉 fade out；退出时 Project Review 保留约 150ms 完成上收 fade out，普通 timeline 从下方回到原位。项目内部 drawer 继续使用独立展开动画，避免两层动效互相抢戏。
-- **Project Review 按活跃度分组**：pinned 或 30 天内有非归档 session 活动的项目进入 `ACTIVE PROJECTS`；其余进入 `OLDER PROJECTS`，默认折叠。新建但 30 天内为空的项目视作 active，避免刚建完就被藏起来。（2026-09-09 从 7 天改为 30 天，跟随时间线的「本月」桶：会话在「本月」里而它的项目在「更早项目」里是打架。）
-- **项目对话创建是独立动作**：项目 row 右侧轻量 `+` 和空项目 CTA `+ 新建项目对话` 才会把右侧切到 project-aware EmptyState（placeholder: `在 {Project} 里交代什么？`，第一句话 lazily create 到该 project）。展开/收起项目不改变右侧当前对话。
-- **零项目空态 CTA**：Project Review 开启但一个项目都没有时，展示显性 `+ 新建第一个项目` 按钮（brand 描边 + regular 加号——空态的主动作不得弱于常规入口）+ 一行 muted 说明。把"没有项目"从死路变成入口。
+- **书眉「项目」是菜单**（2026-10-08）：不再是模式开关，没有按下态。点开是下拉菜单（与 10-04 顶栏两个灯菜单同语域）：第一项「新建项目」，分隔线，下面是全部项目（`sortProjectsForNavigation`：置顶在前，再按内容活跃度）；没有项目时「新建项目」下面一行 muted「还没有项目」。点项目 = 在该项目里新建对话，同时在时间线里展开它的组。已经沉到「更早」的项目只能从这里找到，它的旧会话靠搜索 / EarlierDialog——这是删掉项目视图的已知代价。窄宽回落态（三个图标回到新对话行）是同一个菜单。
+- **项目对话创建是独立动作**：组行右侧轻量 `+`、空项目 CTA `+ 新建项目对话`、书眉菜单里的项目项，才会把右侧切到 project-aware EmptyState（placeholder: `在 {Project} 里交代什么？`，第一句话 lazily create 到该 project）。展开 / 收起组不设项目上下文，也不改变右侧当前对话——时间线里展开多半只是看一眼（2026-10-08；Project Review 时代展开即软设项目上下文）。
+- **新建项目 / 「查看项目」**：建完项目、或「移到项目」提示里点「查看项目」，时间线里展开该组并滚进视野。新建的空项目按 `createdAt` 落在「今天」，展开即见 `+ 新建项目对话`。
 - **去掉 ACTIVE / WAITING FOR YOU 区块**：普通 timeline 不做状态队列，也不按 failed / waiting / running / unread 重排；状态只在 row 内用 rail / icon / subline / tint 表达。
 - **去掉 "UNFILED" 命名**：通用 Agent 工作台 80%+ 对话本就 free-floating，时间分组就是主体
 - **PINNED section** 仅在有 pin session 时显示，空时不占位
 - **时间桶是滚动窗口，四桶**：`今天`（自然日）/ `本周`（滚动 7 天）/ `本月`（滚动 30 天）/ `更早`。不用日历周 / 月：日历月在每月 1 号会把上月全部掉进「更早」，那天体验最差；「本周」叫日历名走滚动窗口从未被抱怨过，「本月」照此办理。`本月` 桶 2026-09-09 新增——一周对轻度用户偏短（JC 库里 8–30 天区间的会话数是 1–7 天的近三倍，正是「上次那个任务」最常落的区间），而一个月以上的确可以接受多两步去「更早」里找。加桶而不是把「本周」改名「本月」：重度用户一个月可能四五十条，保留「本周」这一段近的仍然近，一整块「本月」扫起来才有结构。
-- **时间桶 header 显示总数**：`PINNED 3` / `今天 5` / `本周 8` / `本月 14` / `更早 24 ›`。数字只表示桶内 session 总数，不拆 running / waiting / failed 分项。
+- **时间桶 header 显示总数**：`PINNED 3` / `今天 5` / `本周 8` / `本月 14` / `更早 24 ›`。数字是桶内的顶层行数（会话行 + 项目组行，一个组算一行，2026-10-08 起），即用户看到的行数；不拆 running / waiting / failed 分项。「更早」入口的数字仍是 30 天前的会话数（EarlierDialog 的列表）。
 - **EARLIER 折叠成单行入口**：sidebar 是当前工作面，不是无限历史列表；完整旧 session 浏览进入 `EarlierDialog`（文案「N 个 30 天前的对话」）。Earlier 入口沿用同一 header + count 视觉族，只多一个 caret 表达可打开。
-- **选中行必在侧栏里**（2026-10-03）：当前会话属于「更早」时（从搜索 / ⌘K / EarlierDialog 打开，打开不刷新最后活动时间），它借位挂在 Earlier 入口正下方，是一条普通会话行（选中三通道、⋯ 菜单齐全），入口计数不变，切走即消失、无动效。选中从侧栏以外来、或当前会话换了桶（旧会话发一句话跳进今天）时，行不完全可见就瞬时 `scrollIntoView({ block: "nearest" })`（行带 `scroll-my-2`）；侧栏里点行不滚——行在 pointerdown 激活，滚动会让半露的行在指针下滑走。折叠的项目抽屉里的行不滚（`data-collapsed-drawer`）。
+- **选中行必在侧栏里**（2026-10-03）：当前会话属于「更早」时（从搜索 / ⌘K / EarlierDialog 打开，打开不刷新最后活动时间），它借位挂在 Earlier 入口正下方，是一条普通会话行（选中三通道、⋯ 菜单齐全），入口计数不变，切走即消失、无动效。选中从侧栏以外来、或当前会话换了桶（旧会话发一句话跳进今天）时，行不完全可见就瞬时 `scrollIntoView({ block: "nearest" })`（行带 `scroll-my-2`）；侧栏里点行不滚——行在 pointerdown 激活，滚动会让半露的行在指针下滑走。折叠的项目组里，选中的子会话挂在组行下面（见「Project 组行」），因此照样可见、照样滚进视野；折叠抽屉里不再挂它，`data-session-id` 不重复（`data-collapsed-drawer` 里的行仍然跳过）。
 - **永不空侧栏**：置顶 / 今天 / 本周 / 本月全空但有更早会话时，自动把最近 10 条提出来标为「最近」（2026-09-09 从 5 条提到 10 条，条件从「本周为空」扩到「整窗为空」——本月有内容时正常显示本月桶，不叠加回填）。提出来的行离开「更早」，计数与 dialog 保持一致。
-- **侧栏网格**（2026-10-08 补齐）：三条竖线——左 18px（新对话加号、状态图标、时间桶标题与「更早」入口、项目视图分组标题的左缘）、文字列 42px（新对话文字、会话标题与状态行、已归档）、右 18px（顶行「项目」图标、⌘N、时间桶计数、会话行文字边）。时间桶标题此前是 `px-4`（16px，05-18 遗留），比网格左右各外凸 2px，计数与 ⌘N 差约 2.5px；新对话文字此前起于 43px。**Windows 的代价**：列表有 10px 常驻滚动条通道（`scrollbar-stable`），列表里的右缘比 ⌘N 所在的新对话行再往里 10px，对齐只在 mac 成立；没有为此让列表内容吃进滚动条通道。
+- **侧栏网格**（2026-10-08 补齐）：三条竖线——左 18px（新对话加号、状态图标、时间桶标题与「更早」入口、项目组行的文件夹图标）、文字列 42px（新对话文字、会话标题与状态行、已归档）、右 18px（顶行「项目」图标、⌘N、时间桶计数、会话行文字边）。时间桶标题此前是 `px-4`（16px，05-18 遗留），比网格左右各外凸 2px，计数与 ⌘N 差约 2.5px；新对话文字此前起于 43px。**Windows 的代价**：列表有 10px 常驻滚动条通道（`scrollbar-stable`），列表里的右缘比 ⌘N 所在的新对话行再往里 10px，对齐只在 mac 成立；没有为此让列表内容吃进滚动条通道。
 - **Archived 不叫 Trash**：archive 是保留数据；真正永久删除只在 Archived dialog 里出现。底部「已归档」行对齐会话行网格（2026-10-03）：图标中心 26px、文字起点 42px（`pl-4.5` + 12px 图标居中于 `w-4` + `gap-2`），按钮仍满宽。
 - Sidebar 不可折叠；可拖拽调整宽度。`⌘K` 全局 Command Palette。对象级低频操作由右键菜单和 row hover `⋯` 共同承载：session row 提供 pin / rename / move to project / archive（2026-09-16 置顶提到首项：本机 111 个 session 零置顶，按可发现性问题处理；行内专属 hover 图钉按钮被否，理由见 deferred「session 行 hover 置顶按钮」），project row 提供 pin / edit / delete。右键是熟练用户快捷入口，`⋯` 是可发现入口；两者必须共享同一组动作、排序和 destructive 样式，菜单视觉与 MainHeader 会话菜单同语域（`galley-pop-in` / 200px / 13px）。row contextual actions 使用 overlay，不在非 hover 状态制造额外右侧 gutter；hover / menu open 时文字临时让位给操作按钮。重命名进行中右键菜单禁用（右击边距会 blur-commit 编辑，再叠一个菜单是双重歧义）。
 - **归档运行中的会话需确认**（2026-07-05 决策）：会话自身 running 或作为 goal master 时，归档前弹 alertdialog——归档不停止运行，但会把还在跑的工作从状态板上藏起来；对话框文案如实陈述这两点。已结算会话保持一键归档（可逆，无需确认）。
@@ -243,14 +237,23 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 - 标题 13px Inter，进行中 / 未读 / 各 blocking 状态 `font-semibold`，其余 `font-medium`。
 - **截断用渐隐，不用省略号**（2026-10-08）：标题与状态行排到 18px 文字边为止，真被截断时最后 22px 淡出（`.truncate-fade` + `lib/truncation-fade.ts` 维护的 `data-truncated`；放得下的行不渐隐，免得末字落进渐隐区像被截了）。浏览器的 `…` 只能在整字处截断，汉字 13px 一个，截断的行右缘散在约 10px 的带里，截在全角逗号后还会出现浮着的「，…」。遮罩只加在文字上，选中 / 悬停底色不受影响。
 - 标题与状态行截断时用原生 `title` 补全文（§4.1 icon-only 不用原生 `title` 的例外），且**只在确实截断时**挂：悬停时量 `scrollWidth > clientWidth`（`lib/truncated-title.ts`），放得下的文字不再弹一个重复自己的系统提示框（2026-10-03）。悬停时量是有意的：悬停时行右侧给 ⋯ 让出 28px，静止时放得下的标题悬停时可能被截。
-- **一次性入场 pop**（`sidebar-state-pop`）：进入 error / ask / unread 时图标弹一下（keyed on `attentionKey`，replay on entry，不在 in-state 时循环）。强 overshoot（scale 0.42→1.38→0.94→1，0.44s `cubic-bezier(0.22,1,0.36,1)`）确保在繁忙状态板上是明确的「看这里」一拍。**running 不 pop**（它已有呼吸 rail + 旋转图标）。**挂载不 pop**（2026-07-05）：entry 指状态迁移；启动或从 Project Review 返回时全列齐射「看这里」不是信息，是噪音。
+- **一次性入场 pop**（`sidebar-state-pop`）：进入 error / ask / unread 时图标弹一下（keyed on `attentionKey`，replay on entry，不在 in-state 时循环）。强 overshoot（scale 0.42→1.38→0.94→1，0.44s `cubic-bezier(0.22,1,0.36,1)`）确保在繁忙状态板上是明确的「看这里」一拍。**running 不 pop**（它已有呼吸 rail + 旋转图标）。**挂载不 pop**（2026-07-05）：entry 指状态迁移；启动时全列齐射「看这里」不是信息，是噪音。
 - 所有 sidebar 状态动效都遵守 §2.7 与 reduced-motion：呼吸 rail 属外围 liveness 例外保留；pop / step-tick 是一次性入场，禁止无限闪烁 / shimmer / 大面积背景呼吸；`prefers-reduced-motion` 下 `sidebar-liveness-rail` / `sidebar-liveness-tick` / `sidebar-step-tick` / `sidebar-state-pop` 全部关停。
 - **Desktop Pet**：Cat icon 是 session status badge，仅在绑定 session 出现。
 - **Supervisor 来源徽标**：`origin.via === "supervisor"` 的 session 在标题右侧显示 `PlugsConnected` 小徽标，tooltip / aria 为「Supervisor 创建」。这是 provenance，不是运行状态；不得参与排序，也不得覆盖 running / waiting / error 的 rail、icon、subline。
 
-#### Project 行
+#### Project 组行
 
-- Project Review list：`pinned desc`，再按项目内容活跃度排序（项目内非归档 session 的最大 `lastActivityAt`；空项目回退 `createdAt`）。Project Review 显示全部项目；`OLDER PROJECTS` 默认折叠来承接长期增长。
-- Row：Phosphor `Folder` / `FolderOpen` + name + optional pinned icon + project conversation `+`。项目行右侧 `+` 是 32px 透明 hit area 的 contextual action：默认收敛，row hover / active 时显现为裸 `+`；button hover 只给轻量 `bg-hover` + 文字色变化，不加常驻边框或阴影。Quick Action 里的新建项目 `+` 使用同一套轻按钮规则，但常驻可见。空项目 CTA 用显性 `+ 新建项目对话`。当前右侧项目上下文或展开 row 用 `bg-selected`。
-- Right-click menu：Pin / Unpin、Edit、Delete。Delete 走 confirm dialog；删除 Project 不删除 session。
+2026-10-08 起项目在时间线里是一行可折叠的组（[devlog](../devlog/2026-10-08-sidebar-project-groups.md)），取代 Project Review 的项目行与抽屉。
+
+- **一个项目只出现一次**：组的活动时间 = 项目里未归档、未置顶会话的最大 `lastActivityAt`；空项目回退 `createdAt`。组按这个时间落进 今天 / 本周 / 本月 / 最近，在桶内与会话行按活动时间交错。置顶项目的组在置顶区。活动时间落在「更早」的项目不在侧栏出现（会话照旧进「更早」，项目在书眉菜单里）。不按桶拆成多行：同一个项目在「今天」和「本周」各一行，名字重复。
+- **置顶会话不进组**：项目里置顶的会话作为普通会话行留在置顶区（置顶优先于日期）；子会话全部置顶的项目没有组行。
+- **一律折叠**：只有一个会话的项目也是组（JC 真机定，「≥2 才折」落选）——项目会话永远在项目行下面，行的形态不随数量变。启动时全部折叠，展开状态只在本次运行内记住（「默认展开」落选）。
+- **组内平铺，不再套时间分组**：30 天窗口内、未归档、未置顶的会话按最近活动排序；窗口外的放在末行「更早 N」（`更早` 入口同款 10px 标签 + 计数 + caret），点击就地展开。空项目展开显示 `+ 新建项目对话`。子会话缩进在 `ml-6` + `border-l border-brand/35` 引导线里（Project Review 抽屉原样）。
+- **双行**（JC 真机定，「单行 + 右侧计数」落选）：与会话行同网格（16px 图标列、42px 文字列）、同 `min-h-[48px]`。第一行 `Folder`（展开时 `FolderOpen` + `text-brand-strong`）+ 项目名 + 置顶图钉；第二行 11px 只说最高优先级的那一种状态 + 总数，用会话行的词与色调：「1 个出错 · 共 19 个」（error）/「1 个等你回复 · 共 19 个」（warning）/「2 个正在工作 · 共 5 个」（running）/「1 个未读 · 共 4 个」/ 空闲「共 19 个对话」（muted）。汇总算组内全部会话，含尾行里的旧会话。
+- **状态汇总沿用会话行三通道**：优先级 出错 > 等你回复 > 正在工作（含 Goal 运行中）> 未读 > 空闲。左侧 3px 状态条同会话行（running 呼吸 / waiting 琥珀 / error 红），有任何非空闲状态时项目名 semibold；进入 error / ask / unread 时文件夹图标 pop 一次，挂载不 pop。
+- **组行永远不用 `bg-selected`**：侧栏里恰好一行在说「你在这里」，那是选中的会话或新对话行；展开只靠 `FolderOpen` 表达。悬停 `bg-hover`。
+- **折叠时，需要你的会话露出来**：出错或等你回复的子会话、以及选中的子会话，作为普通会话行挂在组行正下方（同样的缩进与引导线），每个只挂这一份——折叠的抽屉里不再挂它。正在工作与未读不露，交给组行汇总。规则：需要你处理的会话永远不会被折叠藏起来。展开时尾行收着、而选中的是尾行里的旧会话，它借位挂在尾行上方（同「更早」入口的借位）。
+- 行内动作：悬停显现 `+`（在项目里新建对话，32px 透明 hit area、裸 `+`、hover 只给 `bg-hover` + 文字色）与 `⋯`；右键菜单与 `⋯` 同一组：置顶 / 取消置顶、编辑项目、归档全部对话、分隔线、删除项目（destructive）。删除走 confirm dialog，删除项目不删除会话。
+- **归档全部对话**：确认框写明数量（「归档「项目名」里的 N 个对话？」），有运行中的会话时沿用单条归档的口径说明归档不会停止它们；走 `archiveSessionsBulk`，项目本身保留。置顶的会话不在组里，不被归档。
 - `CreateProjectDialog` / `EditProjectDialog` 是 420px modal，收 `name` 和可选项目文件夹。选择文件夹即绑定到 GA Project Mode，清除文件夹即关闭；它不是 cwd-binding，不能悄悄改变 GA 相对路径语义。

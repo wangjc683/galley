@@ -606,8 +606,9 @@ html:not([data-theme="dark"]) .chrome-hover-scope {
      fill stays a colour rather than a warm grey. Adjudicated on real
      hardware against a lift variant.
 
-     Scope-wide on purpose: SidebarQuickActions and SidebarProjectReview
-     also paint bg-selected on chrome and had the same invisible step. The
+     Scope-wide on purpose: SidebarQuickActions and the project groups'
+     empty-project CTA also paint bg-selected on chrome (the latter was
+     Project Review's, which had the same invisible step). The
      eight bg-selected call sites OUTSIDE the sidebar (dialogs, button
      active states, composer) sit on app / elevated and keep the global
      value — which is why this is an override and not a token change. */

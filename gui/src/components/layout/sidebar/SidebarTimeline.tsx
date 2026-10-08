@@ -2,174 +2,165 @@ import { CaretRight } from "@phosphor-icons/react";
 import { Fragment } from "react";
 
 import { useCopy } from "@/lib/i18n";
-import { groupSessions, SIDEBAR_BUCKET_ORDER } from "@/lib/sessions";
+import {
+  SIDEBAR_INLINE_BUCKETS,
+  type SidebarInlineBucket,
+  type SidebarTimeline,
+  type SidebarTimelineItem,
+} from "@/lib/sidebar-timeline";
 import { cn } from "@/lib/utils";
-import type { GoalBrief } from "@/types/goal";
-import type { Project, Session, SessionBucket } from "@/types/session";
 
-import { SidebarSessionRow } from "./SidebarSessionRow";
-import type { ProjectScopePhase } from "./types";
+import { SidebarProjectGroup } from "./SidebarProjectGroup";
+import {
+  SidebarTimelineRow,
+  type SidebarTimelineRowWiring,
+} from "./SidebarTimelineRow";
 
-/** Everything a timeline row needs besides its session — shared by the
- * bucket lists and the borrowed `earlier` row so the two can't drift. */
-type SidebarTimelineRowWiring = {
-  activeId?: string;
-  projects: Project[];
-  petAttachedSessionId?: string | null;
-  /** Map of session-id -> that session's open goal, so a row carrying
-   * a goal shows its state instead of reading as a finished chat. */
-  sessionGoalStatus?: Map<string, GoalBrief>;
-  onSelectSession?: (id: string) => void;
-  onArchiveSession?: (id: string) => void;
-  onTogglePinSession?: (id: string) => void;
-  onAssignSessionToProject?: (
-    sessionId: string,
-    projectId: string | null,
-  ) => void;
-  /** Session currently in inline-edit mode (one at a time across the
-   * whole sidebar). Tracked by the parent `Sidebar`. */
-  editingSessionId?: string | null;
-  /** Right-click "重命名" → flip this session into edit mode.
-   * Undefined when host doesn't wire renameSession. */
-  onRequestRename?: (id: string) => void;
-  /** Inline input commits (Enter / blur). */
-  onConfirmRename: (id: string, newTitle: string) => void;
-  /** Inline input cancels (Esc). */
-  onCancelRename: () => void;
+/** Project-level wiring for the timeline's project groups. */
+export type SidebarProjectGroupWiring = {
+  /** Project ids whose drawers are open (this run only, D9). */
+  expandedProjectIds: Set<string>;
+  onToggleProjectExpanded?: (id: string) => void;
+  onStartProjectConversation?: (id: string) => void;
+  onTogglePinProject?: (id: string) => void;
+  onEditProject?: (id: string) => void;
+  onDeleteProject?: (id: string) => void;
+  onArchiveSessions?: (ids: string[]) => void;
 };
 
 export function SidebarTimelineBuckets({
-  buckets,
-  collapseEarlier = true,
+  timeline,
   onOpenEarlier,
+  groupWiring,
   ...rowWiring
 }: {
-  buckets: ReturnType<typeof groupSessions>;
-  collapseEarlier?: boolean;
+  timeline: SidebarTimeline;
   onOpenEarlier?: () => void;
+  groupWiring: SidebarProjectGroupWiring;
 } & SidebarTimelineRowWiring) {
   const { activeId } = rowWiring;
+  // `earlier` collapses to a single entry row instead of inline-listing
+  // every old session — the sidebar is the "current work" surface, not
+  // an archive. Browsing the full list happens in EarlierDialog.
+  //
+  // …except the session you're in. Opened from search / ⌘K /
+  // EarlierDialog, an old session would otherwise have no row anywhere
+  // in the sidebar — no "you are here". It borrows one slot directly
+  // under the entry for as long as it's active; the entry's count still
+  // includes it, because it still belongs to 更早 (activation doesn't
+  // bump lastActivityAt). Switching away drops the row, no animation: it
+  // was only ever a position marker. An old session a project group
+  // lists (its 更早 tail) is shown by that group instead. Keyed by id so
+  // hopping between two old sessions remounts the row rather than
+  // carrying one row's local state to the next.
+  const borrowed =
+    activeId && !timeline.groupedSessionIds.has(activeId)
+      ? timeline.earlier.find((s) => s.id === activeId)
+      : undefined;
   return (
     <>
-      {SIDEBAR_BUCKET_ORDER.map((bucket) => {
-        if (buckets[bucket].length === 0) return null;
-        // `earlier` collapses to a single entry row instead of
-        // inline-listing every old session — the sidebar is the
-        // "current work" surface, not an archive. Browsing the
-        // full list happens in EarlierDialog.
-        if (bucket === "earlier" && collapseEarlier) {
-          // …except the session you're in. Opened from search / ⌘K /
-          // EarlierDialog, an old session would otherwise have no row
-          // anywhere in the sidebar — no "you are here". It borrows one
-          // slot directly under the entry for as long as it's active;
-          // the entry's count still includes it, because it still
-          // belongs to 更早 (activation doesn't bump lastActivityAt).
-          // Switching away drops the row, no animation: it was only
-          // ever a position marker. Only `earlier` matters here —
-          // backfill-promoted `recent` rows are already inlined. Keyed
-          // by id so hopping between two old sessions remounts the row
-          // rather than carrying one row's local state to the next.
-          const borrowed = activeId
-            ? buckets.earlier.find((s) => s.id === activeId)
-            : undefined;
-          return (
-            <Fragment key={bucket}>
-              <SidebarEarlierEntry
-                count={buckets[bucket].length}
-                onClick={onOpenEarlier}
-              />
-              {borrowed && (
-                <SidebarTimelineRow
-                  key={borrowed.id}
-                  session={borrowed}
-                  {...rowWiring}
-                />
-              )}
-            </Fragment>
-          );
-        }
-        return (
+      {SIDEBAR_INLINE_BUCKETS.map((bucket) =>
+        timeline.items[bucket].length === 0 ? null : (
           <SidebarBucket
             key={bucket}
             bucket={bucket}
-            sessions={buckets[bucket]}
+            items={timeline.items[bucket]}
+            groupWiring={groupWiring}
             {...rowWiring}
           />
-        );
-      })}
+        ),
+      )}
+      {timeline.earlier.length > 0 && (
+        <Fragment key="earlier">
+          <SidebarEarlierEntry
+            count={timeline.earlier.length}
+            onClick={onOpenEarlier}
+          />
+          {borrowed && (
+            <SidebarTimelineRow
+              key={borrowed.id}
+              session={borrowed}
+              {...rowWiring}
+            />
+          )}
+        </Fragment>
+      )}
     </>
   );
 }
 
-
 function SidebarBucket({
   bucket,
-  sessions,
+  items,
+  groupWiring,
   ...rowWiring
 }: {
-  bucket: SessionBucket;
-  sessions: Session[];
+  bucket: SidebarInlineBucket;
+  items: SidebarTimelineItem[];
+  groupWiring: SidebarProjectGroupWiring;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
-  const bucketLabel: Record<SessionBucket, string> = {
+  const bucketLabel: Record<SidebarInlineBucket, string> = {
     pinned: copy.sidebar.bucketPinned,
     today: copy.sidebar.bucketToday,
     week: copy.sidebar.bucketWeek,
     month: copy.sidebar.bucketMonth,
     recent: copy.sidebar.bucketRecent,
-    earlier: copy.sidebar.bucketEarlier,
   };
+  const {
+    expandedProjectIds,
+    onToggleProjectExpanded,
+    onStartProjectConversation,
+    onTogglePinProject,
+    onEditProject,
+    onDeleteProject,
+    onArchiveSessions,
+  } = groupWiring;
+  // The count is the rows under the label — a project group is one.
   return (
     <>
-      <SidebarSectionLabel count={sessions.length}>
+      <SidebarSectionLabel count={items.length}>
         {bucketLabel[bucket]}
       </SidebarSectionLabel>
-      {sessions.map((s) => (
-        <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
-      ))}
+      {items.map((item) => {
+        if (item.kind === "session") {
+          return (
+            <SidebarTimelineRow
+              key={item.session.id}
+              session={item.session}
+              {...rowWiring}
+            />
+          );
+        }
+        const id = item.project.id;
+        return (
+          <SidebarProjectGroup
+            key={`project:${id}`}
+            project={item.project}
+            sessions={item.sessions}
+            olderSessions={item.olderSessions}
+            expanded={expandedProjectIds.has(id)}
+            onToggleExpanded={
+              onToggleProjectExpanded
+                ? () => onToggleProjectExpanded(id)
+                : undefined
+            }
+            onStartConversation={
+              onStartProjectConversation
+                ? () => onStartProjectConversation(id)
+                : undefined
+            }
+            onTogglePin={
+              onTogglePinProject ? () => onTogglePinProject(id) : undefined
+            }
+            onEdit={onEditProject ? () => onEditProject(id) : undefined}
+            onDelete={onDeleteProject ? () => onDeleteProject(id) : undefined}
+            onArchiveAll={onArchiveSessions}
+            {...rowWiring}
+          />
+        );
+      })}
     </>
-  );
-}
-
-function SidebarTimelineRow({
-  session: s,
-  activeId,
-  projects,
-  petAttachedSessionId,
-  sessionGoalStatus,
-  onSelectSession,
-  onArchiveSession,
-  onTogglePinSession,
-  onAssignSessionToProject,
-  editingSessionId,
-  onRequestRename,
-  onConfirmRename,
-  onCancelRename,
-}: { session: Session } & SidebarTimelineRowWiring) {
-  return (
-    <SidebarSessionRow
-      session={s}
-      active={s.id === activeId}
-      petAttached={s.id === petAttachedSessionId}
-      sessionGoal={sessionGoalStatus?.get(s.id)}
-      projects={projects}
-      onClick={() => onSelectSession?.(s.id)}
-      onArchive={onArchiveSession ? () => onArchiveSession(s.id) : undefined}
-      onTogglePin={
-        onTogglePinSession ? () => onTogglePinSession(s.id) : undefined
-      }
-      onAssignToProject={
-        onAssignSessionToProject
-          ? (projectId) => onAssignSessionToProject(s.id, projectId)
-          : undefined
-      }
-      isEditing={editingSessionId === s.id}
-      onRequestRename={
-        onRequestRename ? () => onRequestRename(s.id) : undefined
-      }
-      onConfirmRename={(newTitle) => onConfirmRename(s.id, newTitle)}
-      onCancelRename={onCancelRename}
-    />
   );
 }
 
@@ -231,28 +222,5 @@ function SidebarEarlierEntry({
         <CaretRight size={9} weight="thin" className="opacity-70" />
       </span>
     </button>
-  );
-}
-
-export function SidebarTimelinePresence({
-  phase,
-  children,
-}: {
-  phase: ProjectScopePhase;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "transition-[opacity,transform] duration-(--motion-slow) ease-pop motion-reduce:transition-none",
-        phase === "entered" && "translate-y-0 opacity-100",
-        phase === "entering" && "translate-y-3 opacity-0",
-        phase === "exiting" &&
-          "translate-y-4 opacity-0 duration-(--motion-base) ease-in",
-        phase !== "entered" && "pointer-events-none",
-      )}
-    >
-      {children}
-    </div>
   );
 }

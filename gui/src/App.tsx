@@ -388,15 +388,14 @@ function App() {
     deletingProject,
     editingProject,
     expandedProjectIds,
+    openProject,
     openProjectInSidebar,
-    projectReviewNowMs,
-    projectViewOpen,
+    projectReveal,
     setCreateProjectOpen,
     setDeletingProjectId,
     setEditingProjectId,
     startProjectConversation,
     toggleProjectExpanded,
-    toggleProjectView,
   } = useProjectNavigation({
     activeProjectFilter,
     activeSessionBusy,
@@ -511,10 +510,10 @@ function App() {
               // createSession + activateSession when the user
               // commits to a first message.
               //
-              // 注意:这里不再清 activeProjectFilter。项目视图是一个
-              // 连贯工作区——New Chat 落在"最后展开/最后进入的项目"
-              // 里(由 expand 或 select-session 设置),文案自动变成
-              // "新对话 · XXX"。没有 filter 时仍是普通新对话。
+              // 注意：这里不再清 activeProjectFilter。New Chat 落在
+              // 最后进入的项目里（由项目组的 +、项目菜单或选中项目里的
+              // 对话设置），文案自动变成「新对话 · XXX」。没有 filter 时
+              // 仍是普通新对话。展开项目组不设置它（D8）。
               setActiveSession(undefined);
               setScreen("empty");
               setEmptyComposerFocusTick((tick) => tick + 1);
@@ -526,8 +525,8 @@ function App() {
               //
               // 项目上下文跟着 session 走:点哪个项目的对话,New Chat
               // 就落在那个项目;不属于任何项目的对话则回到普通新对话。
-              // 这让"当前项目上下文"在 expand / select / New Chat 三个
-              // 入口下保持一致。
+              // 这让「当前项目上下文」在 select / New Chat 入口下保持
+              // 一致。
               const sessionProjectId = visibleSessions.find(
                 (s) => s.id === id,
               )?.projectId;
@@ -546,11 +545,10 @@ function App() {
             scheduledActionCount={scheduledActionCount}
             projects={projects}
             activeProjectFilter={activeProjectFilter}
-            projectViewOpen={projectViewOpen}
             expandedProjectIds={expandedProjectIds}
-            projectReviewNowMs={projectReviewNowMs || undefined}
+            projectReveal={projectReveal}
             onNewProject={() => setCreateProjectOpen(true)}
-            onToggleProjectView={toggleProjectView}
+            onOpenProject={openProject}
             onToggleProjectExpanded={toggleProjectExpanded}
             onStartProjectConversation={startProjectConversation}
             onAssignSessionToProject={assignSessionToProjectWithToast}
@@ -560,6 +558,7 @@ function App() {
             }}
             onEditProject={(id) => setEditingProjectId(id)}
             onDeleteProject={(id) => setDeletingProjectId(id)}
+            onArchiveSessions={(ids) => archiveSessionsBulk(ids)}
             petAttachedSessionId={petAttachedSessionId}
             sessionGoalStatus={sessionGoalStatus}
           />
@@ -824,9 +823,10 @@ function App() {
         open={createProjectOpen}
         onOpenChange={setCreateProjectOpen}
         onCreate={async (input) => {
-          // Create + immediately open the new project in Project
-          // View. Creation is organization, not conversation
-          // creation; the row's inline + is the explicit "start a
+          // Create + immediately open the new project's group in the
+          // sidebar timeline (an empty project sits under 今天 by its
+          // createdAt). Creation is organization, not conversation
+          // creation; the group row's + is the explicit "start a
           // project conversation" action.
           const created = await createProject(input);
           openProjectInSidebar(created.id);

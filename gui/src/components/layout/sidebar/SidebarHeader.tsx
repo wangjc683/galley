@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import type { Project } from "@/types/session";
 
 import { SIDEBAR_HEADER_PR } from "./sidebar-width";
 import { SidebarNavIcons } from "./SidebarNavIcons";
@@ -10,14 +11,16 @@ export function SidebarHeader({
   onSearch,
   onOpenScheduled,
   scheduledActionCount,
-  projectViewOpen,
-  onToggleProjectView,
+  projects,
+  onNewProject,
+  onOpenProject,
 }: {
   onSearch?: () => void;
   onOpenScheduled?: () => void;
   scheduledActionCount?: number;
-  projectViewOpen: boolean;
-  onToggleProjectView?: () => void;
+  projects: Project[];
+  onNewProject?: () => void;
+  onOpenProject?: (id: string) => void;
 }) {
   // Masthead row (2026-10-03): the "Galley" wordmark left, 搜索 / 定时 /
   // 项目 as 28px icons right — the same TopBarIconButton rhythm as
@@ -91,8 +94,9 @@ export function SidebarHeader({
         onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
-        projectViewOpen={projectViewOpen}
-        onToggleProjectView={onToggleProjectView}
+        projects={projects}
+        onNewProject={onNewProject}
+        onOpenProject={onOpenProject}
       />
     </div>
   );

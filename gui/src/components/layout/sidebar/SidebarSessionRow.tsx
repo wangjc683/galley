@@ -252,7 +252,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             : "idle";
   const shouldPopIcon = hasBlockingError || hasPendingAsk || showUnread;
   // Suppress the pop for the state the row MOUNTED in: app launch and
-  // returning from Project Review must not fire a simultaneous burst
+  // opening a project group must not fire a simultaneous burst
   // of "look here" for states that aren't news. Once the key changes,
   // popEnabled latches true and the keyed icon span remounts with the
   // class already present, so the animation plays exactly on entry.

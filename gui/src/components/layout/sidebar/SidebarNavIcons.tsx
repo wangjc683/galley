@@ -1,9 +1,4 @@
-import {
-  Clock,
-  Folder,
-  FolderOpen,
-  MagnifyingGlass,
-} from "@phosphor-icons/react";
+import { Clock, MagnifyingGlass } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
@@ -12,11 +7,13 @@ import { IconTooltip } from "@/components/ui/tooltip";
 import { type AppCopy, useCopy } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
+import type { Project } from "@/types/session";
 
 import {
   HEADER_NAV_ICONS_DISPLAY,
   ROW_NAV_ICONS_DISPLAY,
 } from "./sidebar-width";
+import { SidebarProjectsMenu } from "./SidebarProjectsMenu";
 
 /** Mono, muted shortcut text — the tooltip's "⌘K" and the new-chat
  * row's ⌘N hint. Render the text through `ShortcutGlyphs` so the
@@ -38,15 +35,17 @@ type NavIconsPlacement = "header" | "row";
  * - row: the 32px QuickIconButton with 14px icons, gap-0.5 — the
  *   2026-09-28 one-row layout, unchanged.
  *
- * The 定时 badge and the 项目 pressed state ride along in both.
+ * The 定时 badge rides along in both; 项目 opens the same menu from
+ * either (SidebarProjectsMenu).
  */
 export function SidebarNavIcons({
   placement,
   onSearch,
   onOpenScheduled,
   scheduledActionCount = 0,
-  projectViewOpen,
-  onToggleProjectView,
+  projects,
+  onNewProject,
+  onOpenProject,
 }: {
   placement: NavIconsPlacement;
   onSearch?: () => void;
@@ -57,17 +56,15 @@ export function SidebarNavIcons({
    * Action-only by design: no idle total-count, so the position stays
    * meaningful (a number here always means "handle something"). */
   scheduledActionCount?: number;
-  projectViewOpen: boolean;
-  onToggleProjectView?: () => void;
+  /** The 项目 menu's list, already in navigation order. */
+  projects: Project[];
+  onNewProject?: () => void;
+  onOpenProject?: (id: string) => void;
 }) {
   const copy = useCopy();
   const inHeader = placement === "header";
   const NavButton = inHeader ? HeaderIconButton : QuickIconButton;
   const iconSize = inHeader ? 16 : 14;
-  const ProjectIcon = projectViewOpen ? FolderOpen : Folder;
-  const projectActionLabel = projectViewOpen
-    ? copy.sidebar.exitProjects
-    : copy.sidebar.projects;
   const scheduledLabel = scheduledTooltip(copy, scheduledActionCount);
   return (
     <div
@@ -101,14 +98,12 @@ export function SidebarNavIcons({
         <Clock size={iconSize} weight="thin" />
         <ScheduledBadge count={scheduledActionCount} placement={placement} />
       </NavButton>
-      <NavButton
-        label={projectActionLabel}
-        tooltip={projectActionLabel}
-        pressed={projectViewOpen}
-        onClick={onToggleProjectView}
-      >
-        <ProjectIcon size={iconSize} weight="thin" />
-      </NavButton>
+      <SidebarProjectsMenu
+        placement={placement}
+        projects={projects}
+        onNewProject={onNewProject}
+        onOpenProject={onOpenProject}
+      />
     </div>
   );
 }
@@ -207,27 +202,14 @@ function scheduledTooltip(copy: AppCopy, count: number): string {
 type NavIconButtonProps = {
   label: string;
   tooltip: React.ReactNode;
-  /** Toggle buttons only; leave undefined for plain actions. */
-  pressed?: boolean;
   onClick?: () => void;
   children: React.ReactNode;
 };
 
-// 项目's on state: shadow-inner + darker fill + FolderOpen flip (from
-// the caller) read as a button held down, so Project Review stays
-// visibly on; "press again = exit" is carried by the tooltip / aria
-// (layout-and-chrome.md §4.2).
-const PRESSED_CLASS = "bg-selected/85 text-brand-strong shadow-inner";
-
-/**
- * Header form: the shared TopBarIconButton. When pressed, its hover
- * border / fill / ink are pinned to the pressed values so hovering a
- * held-down button doesn't lift it back toward the idle look.
- */
+/** Header form: the shared TopBarIconButton. */
 function HeaderIconButton({
   label,
   tooltip,
-  pressed,
   onClick,
   children,
 }: NavIconButtonProps) {
@@ -236,16 +218,8 @@ function HeaderIconButton({
       <TopBarIconButton
         onClick={onClick}
         aria-label={label}
-        aria-pressed={pressed}
-        className={cn(
-          // relative: anchors the 定时 badge.
-          "relative",
-          pressed &&
-            cn(
-              PRESSED_CLASS,
-              "hover:border-transparent hover:bg-selected/85 hover:text-brand-strong",
-            ),
-        )}
+        // relative: anchors the 定时 badge.
+        className="relative"
       >
         {children}
       </TopBarIconButton>
@@ -258,7 +232,6 @@ function HeaderIconButton({
 function QuickIconButton({
   label,
   tooltip,
-  pressed,
   onClick,
   children,
 }: NavIconButtonProps) {
@@ -268,16 +241,13 @@ function QuickIconButton({
         type="button"
         onClick={onClick}
         aria-label={label}
-        aria-pressed={pressed}
         className={cn(
           // Default flex-shrink stays on: at the 134px minimum sidebar
           // the row squeezes these to ~29px instead of overflowing.
           "relative inline-flex size-8 items-center justify-center rounded-sm",
           "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
           "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-          pressed
-            ? PRESSED_CLASS
-            : "text-ink-soft hover:bg-hover hover:text-ink active:bg-selected/60",
+          "text-ink-soft hover:bg-hover hover:text-ink active:bg-selected/60",
         )}
       >
         {children}

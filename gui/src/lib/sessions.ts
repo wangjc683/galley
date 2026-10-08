@@ -96,7 +96,19 @@ export function bucketSession(
   now: Date = new Date(),
 ): SessionBucket {
   if (s.pinned) return "pinned";
-  const last = new Date(s.lastActivityAt).getTime();
+  return bucketForTimestamp(s.lastActivityAt, now);
+}
+
+/**
+ * The time half of `bucketSession`: which date bucket an ISO timestamp
+ * falls into. Also places an empty project's sidebar group by its
+ * `createdAt` (lib/sidebar-timeline.ts).
+ */
+export function bucketForTimestamp(
+  iso: string,
+  now: Date = new Date(),
+): "today" | "week" | "month" | "earlier" {
+  const last = new Date(iso).getTime();
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
   const todayMs = startOfToday.getTime();
@@ -111,7 +123,7 @@ export function bucketSession(
 const DAY_MS = 24 * 3600 * 1000;
 export const WEEK_WINDOW_DAYS = 7;
 /** Also the boundary the EarlierDialog copy describes ("older than 30
- * days") and the Project Review's active-project window mirrors. */
+ * days"). */
 export const MONTH_WINDOW_DAYS = 30;
 
 const BUCKET_ORDER: SessionBucket[] = [
@@ -167,10 +179,10 @@ export const RECENT_BACKFILL_COUNT = 10;
  * promoted rows leave `earlier` entirely, so the "更早 N" entry count
  * and the EarlierDialog list stay consistent with what's inlined.
  *
- * Applied only to the global timeline (and its EarlierDialog source) —
- * the Project Review drawers inline-list all buckets and need no
- * backfill. As soon as any session is pinned or active this month, the
- * grouping is returned untouched.
+ * Applied to the global timeline (and its EarlierDialog source) before
+ * project sessions fold into their groups (lib/sidebar-timeline.ts), so
+ * promoted project sessions still fold. As soon as any session is pinned
+ * or active this month, the grouping is returned untouched.
  */
 export function backfillRecentSessions(
   buckets: GroupedSessions,

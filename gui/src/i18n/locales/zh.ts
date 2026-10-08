@@ -154,7 +154,6 @@ export const zhCopy = {
       `新对话 · ${projectName}`,
     search: "搜索",
     projects: "项目",
-    exitProjects: "退出项目视图",
     newProject: "新建项目",
     scheduled: "定时",
     openScheduled: "管理定时任务",
@@ -202,7 +201,6 @@ export const zhCopy = {
     unpin: "取消置顶",
     addToProject: "加入项目",
     noProjects: "还没有项目",
-    createFirstProject: "新建第一个项目",
     removeFromProject: "从项目移除",
     archive: "归档",
     newConversationInProjectTitle: (projectName: string) =>
@@ -210,10 +208,27 @@ export const zhCopy = {
     newProjectConversation: "新建项目对话",
     showAll: "查看全部",
     archived: "已归档",
-    activeProjects: "活跃项目",
-    olderProjects: "更早项目",
     editProject: "编辑项目",
     deleteProject: "删除项目",
+    // 时间线里的项目组行（2026-10-08）：只说最高优先级的一种状态 + 总数，
+    // 状态词与会话行一致。
+    groupErrored: (count: number, total: number) =>
+      `${count} 个出错 · 共 ${total} 个`,
+    groupWaiting: (count: number, total: number) =>
+      `${count} 个等你回复 · 共 ${total} 个`,
+    groupWorking: (count: number, total: number) =>
+      `${count} 个正在工作 · 共 ${total} 个`,
+    groupUnread: (count: number, total: number) =>
+      `${count} 个未读 · 共 ${total} 个`,
+    groupTotal: (total: number) => `共 ${total} 个对话`,
+    groupOlder: (count: number) => `更早 ${count} 个`,
+    archiveProjectSessions: "归档全部对话",
+    archiveProjectSessionsTitle: (projectName: string, count: number) =>
+      `归档「${projectName}」里的 ${count} 个对话？`,
+    archiveProjectSessionsBody: (runningCount: number) =>
+      runningCount > 0
+        ? `归档后它们从侧栏消失，可在「已归档」里恢复。其中 ${runningCount} 个仍在运行，归档不会停止它们，但你将看不到后续进展。`
+        : "归档后它们从侧栏消失，可在「已归档」里恢复。",
   },
   topbar: {
     newConversation: "新对话",

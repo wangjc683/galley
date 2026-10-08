@@ -4,30 +4,17 @@ import { useDayStamp } from "@/hooks/useDayStamp";
 import { useCopy } from "@/lib/i18n";
 import { sortProjectsForNavigation } from "@/lib/projects";
 import {
-  backfillRecentSessions,
-  findSessionBucket,
-  groupSessions,
-} from "@/lib/sessions";
+  buildSidebarTimeline,
+  findTimelineBucket,
+  SIDEBAR_INLINE_BUCKETS,
+} from "@/lib/sidebar-timeline";
 import type { GoalBrief } from "@/types/goal";
 import type { Project, Session, SessionBucket } from "@/types/session";
 
 import { SidebarFooter } from "./sidebar/SidebarFooter";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
 import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
-import {
-  SidebarProjectReview,
-  SidebarProjectReviewPresence,
-} from "./sidebar/SidebarProjectReview";
-import {
-  SidebarTimelineBuckets,
-  SidebarTimelinePresence,
-} from "./sidebar/SidebarTimeline";
-import {
-  GLOBAL_TIMELINE_EXIT_MS,
-  PROJECT_REVIEW_EXIT_MS,
-  projectReviewFallbackNowMs,
-  type ProjectScopePhase,
-} from "./sidebar/types";
+import { SidebarTimelineBuckets } from "./sidebar/SidebarTimeline";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -36,19 +23,15 @@ export interface SidebarProps {
   /** The main area shows the empty new-chat composer; the 新对话 row
    * is then the sidebar's selected row. */
   newChatActive?: boolean;
-  /** Project context for the right-side empty composer. This no
-   * longer drives Sidebar filtering; Project Review owns sidebar
-   * grouping/expansion independently. */
+  /** Project context for the right-side empty composer — the new-chat
+   * row reads it ("新对话 · 项目名"). It does not filter the list. */
   activeProjectFilter?: string;
-  /** Sidebar-only mode: when true, the global timeline is hidden and
-   * Project Review becomes the main monitoring surface. */
-  projectViewOpen?: boolean;
-  /** Project ids currently expanded inside Project Review. Multiple
-   * ids are allowed so users can monitor work across projects. */
+  /** Project ids whose timeline groups are expanded (this run only).
+   * Several can be open, to watch work across projects. */
   expandedProjectIds?: string[];
-  /** Timestamp captured when Project Review opens. Passed from an
-   * event handler so "recent within 7 days" stays React-render pure. */
-  projectReviewNowMs?: number;
+  /** Bring this project's group into view — set by creating a project,
+   * a toast's 查看项目, or the 项目 menu. `seq` re-fires a repeat ask. */
+  projectReveal?: { id: string; seq: number } | null;
   onSelectSession?: (id: string) => void;
   onNewChat?: () => void;
   onSearch?: () => void;
@@ -56,12 +39,11 @@ export interface SidebarProps {
   /** Scheduled items needing action (failed last fires) — badge on
    * the 定时 icon. */
   scheduledActionCount?: number;
-  /** Open the CreateProjectDialog. Wired to the quick-action "+"
-   * and the empty Project Review hint. */
+  /** Open the CreateProjectDialog. Wired to the 项目 menu's 新建项目. */
   onNewProject?: () => void;
-  /** Click the 项目 icon → enter/exit Project Review. */
-  onToggleProjectView?: () => void;
-  /** Click a project row → expand/collapse that one project. */
+  /** 项目 menu → a project: a new chat in it, its group expanded. */
+  onOpenProject?: (id: string) => void;
+  /** Click a project group row → expand/collapse that one project. */
   onToggleProjectExpanded?: (id: string) => void;
   /** Click a project's inline + → prepare a new conversation whose
    * first message will be assigned to that project. */
@@ -95,6 +77,8 @@ export interface SidebarProps {
   /** Right-click project → Delete (destructive item below separator).
    * Parent opens ConfirmDeleteProjectDialog. */
   onDeleteProject?: (id: string) => void;
+  /** Project group → 归档全部对话, after its confirm. */
+  onArchiveSessions?: (ids: string[]) => void;
   /** Click the collapsed "Earlier (N)" row → open the EarlierDialog
    * (browse all sessions older than 7 days). Replaces the old
    * inline-expanded `earlier` bucket so the sidebar stays bounded as
@@ -119,12 +103,15 @@ export interface SidebarProps {
 /**
  * Left navigation panel. Per DESIGN.md §4.2 Sidebar Spec.
  *
- * Two visual modes, derived from `sessions.length`:
+ * Two visual modes, derived from whether the timeline lists anything:
  *
- *   full  — sessions[] non-empty: header + new-chat row + bucketed
- *           sections (pinned/today/week/earlier), plus the archive
- *           footer when anything is archived
- *   empty — sessions[] empty: header + new-chat row + muted hint
+ *   full  — something listed: header + new-chat row + bucketed
+ *           sections (pinned/today/week/month/earlier), each project's
+ *           sessions folded into one collapsible group row
+ *           (lib/sidebar-timeline.ts), plus the archive footer when
+ *           anything is archived
+ *   empty — nothing listed (no sessions, no fresh empty project):
+ *           header + new-chat row + muted hint
  *           ("你的对话会出现在这里。"); no sections
  *
  * Either way the archive footer follows one rule: it exists only when
@@ -142,16 +129,15 @@ export function Sidebar({
   activeId,
   newChatActive = false,
   activeProjectFilter,
-  projectViewOpen = false,
   expandedProjectIds = [],
-  projectReviewNowMs = projectReviewFallbackNowMs(),
+  projectReveal,
   onSelectSession,
   onNewChat,
   onSearch,
   onOpenScheduled,
   scheduledActionCount,
   onNewProject,
-  onToggleProjectView,
+  onOpenProject,
   onToggleProjectExpanded,
   onStartProjectConversation,
   onArchiveSession,
@@ -161,6 +147,7 @@ export function Sidebar({
   onTogglePinProject,
   onEditProject,
   onDeleteProject,
+  onArchiveSessions,
   onOpenEarlier,
   onOpenArchived,
   archivedCount = 0,
@@ -168,47 +155,39 @@ export function Sidebar({
   sessionGoalStatus,
 }: SidebarProps) {
   const copy = useCopy();
-  // Project context belongs to the right-side empty composer. Sidebar
-  // Project Review is a separate monitoring mode, so users can inspect
-  // multiple projects without hijacking the main conversation.
   const activeProject = activeProjectFilter
     ? projects.find((p) => p.id === activeProjectFilter)
     : undefined;
-  // Memoised: `groupSessions` walks every session; without memo it
-  // re-runs on every Sidebar render, and Sidebar re-renders whenever
+  // Memoised: building the timeline walks every session; without memo
+  // it re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
   // pendingAskUser / bridgeStatus). `dayStamp` is in the deps because
   // bucketing captures "today" at call time — without it, an app left
   // open past midnight kept yesterday's sessions under 今天 until an
   // unrelated session mutation happened to retrigger the memo.
   const dayStamp = useDayStamp();
-  const globalBuckets = useMemo(
-    () => backfillRecentSessions(groupSessions(sessions)),
+  const timeline = useMemo(
+    () => buildSidebarTimeline(sessions, projects),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessions, dayStamp],
+    [sessions, projects, dayStamp],
   );
-  const globalEmpty = sessions.length === 0;
-  // Which timeline bucket the active session sits in — the reveal effect
-  // below watches it so a row that jumps sections (an old session gets a
-  // new message: borrowed slot under 更早 → top of 今天) is followed.
+  const timelineEmpty =
+    timeline.earlier.length === 0 &&
+    SIDEBAR_INLINE_BUCKETS.every(
+      (bucket) => timeline.items[bucket].length === 0,
+    );
+  // Which timeline bucket the active session sits in (its own row, or
+  // its group's) — the reveal effect below watches it so a row that
+  // jumps sections (an old session gets a new message: borrowed slot
+  // under 更早 → top of 今天) is followed.
   const activeBucket = useMemo(
-    () => (activeId ? findSessionBucket(globalBuckets, activeId) : undefined),
-    [globalBuckets, activeId],
+    () => (activeId ? findTimelineBucket(timeline, activeId) : undefined),
+    [timeline, activeId],
   );
   const navigationProjects = useMemo(
     () => sortProjectsForNavigation(projects, sessions),
     [projects, sessions],
   );
-  const projectSessionsById = useMemo(() => {
-    const byId = new Map<string, Session[]>();
-    for (const session of sessions) {
-      if (!session.projectId) continue;
-      const group = byId.get(session.projectId);
-      if (group) group.push(session);
-      else byId.set(session.projectId, [session]);
-    }
-    return byId;
-  }, [sessions]);
   const expandedProjectIdSet = useMemo(
     () => new Set(expandedProjectIds),
     [expandedProjectIds],
@@ -219,23 +198,14 @@ export function Sidebar({
   // edit state is ephemeral UI affecting only sidebar rendering, and
   // not visible / actionable from anywhere else.
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
-  const [globalTimelinePhase, setGlobalTimelinePhase] =
-    useState<ProjectScopePhase | null>(() =>
-      projectViewOpen ? null : "entered",
-    );
-  const [projectReviewPhase, setProjectReviewPhase] =
-    useState<ProjectScopePhase | null>(() =>
-      projectViewOpen ? "entered" : null,
-    );
-  const previousProjectViewOpenRef = useRef(projectViewOpen);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   // Drives the new-chat row's scroll-linked divider. Set from onScroll
   // only (React bails out when the boolean does not change).
   const [listScrolled, setListScrolled] = useState(false);
-  // Last session the user picked by pressing a row in this sidebar
-  // (timeline or Project Review). The reveal effect skips that one
-  // selection: rows activate on pointerdown, so scrolling a half-visible
-  // row into view would slide it out from under the cursor mid-click.
+  // Last session the user picked by pressing a row in this sidebar. The
+  // reveal effect skips that one selection: rows activate on
+  // pointerdown, so scrolling a half-visible row into view would slide
+  // it out from under the cursor mid-click.
   const sidebarSelectedIdRef = useRef<string | null>(null);
   const previousRevealRef = useRef<{
     id?: string;
@@ -252,9 +222,7 @@ export function Sidebar({
   // bring the row into view if it isn't fully visible. Instant, not
   // smooth: the user's attention is in the main pane, and motion in the
   // periphery should stay quiet. `nearest` + the row's scroll-my-2 move
-  // the list just enough to show the row with 8px of air. Declared
-  // before the mode-flip effect below, so if both ever fire in one
-  // commit, the flip's snap-to-top still has the last word.
+  // the list just enough to show the row with 8px of air.
   useEffect(() => {
     const previous = previousRevealRef.current;
     previousRevealRef.current = { id: activeId, bucket: activeBucket };
@@ -274,10 +242,11 @@ export function Sidebar({
     const row = container?.querySelector<HTMLElement>(
       `[data-session-id="${CSS.escape(activeId)}"]`,
     );
-    // Not listed (archived, no project in Project Review), or sitting in
-    // a collapsed project drawer — those stay mounted at zero height
-    // inside overflow-hidden boxes, and scrollIntoView would scroll the
-    // drawer's own clip box. Nothing to reveal either way.
+    // Not listed (archived), or sitting in a collapsed project drawer —
+    // those stay mounted at zero height inside overflow-hidden boxes,
+    // and scrollIntoView would scroll the drawer's own clip box. (The
+    // selected session of a collapsed group hangs under its row
+    // instead, so this only skips rows the user can't see anyway.)
     if (!container || !row || row.closest("[data-collapsed-drawer]")) return;
     const rowRect = row.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
@@ -290,67 +259,16 @@ export function Sidebar({
     row.scrollIntoView({ block: "nearest", behavior: "instant" });
   }, [activeId, activeBucket]);
 
+  // Bring a project's group into view when asked from outside the list
+  // (a new project, a toast's 查看项目, the 项目 menu). A drawer that
+  // just opened nudges its own sessions into view after its animation.
   useEffect(() => {
-    const previousProjectViewOpen = previousProjectViewOpenRef.current;
-    previousProjectViewOpenRef.current = projectViewOpen;
-    if (projectViewOpen === previousProjectViewOpen) return;
-
-    // Mode flip = a new document: snap the shared scroll container to
-    // the top, instantly. Without this, switching modes from a deeply
-    // scrolled list plays the whole entrance choreography above the
-    // fold and lands with a clamp jump once the old view unmounts.
-    // Instant, not smooth — the entrance animation itself supplies
-    // the motion continuity.
-    scrollContainerRef.current?.scrollTo({ top: 0 });
-
-    const frameIds: number[] = [];
-    const timeoutIds: number[] = [];
-
-    const scheduleFrame = (callback: FrameRequestCallback) => {
-      const id = window.requestAnimationFrame(callback);
-      frameIds.push(id);
-    };
-
-    const scheduleTimeout = (callback: () => void, delayMs: number) => {
-      const id = window.setTimeout(callback, delayMs);
-      timeoutIds.push(id);
-    };
-
-    scheduleFrame(() => {
-      if (projectViewOpen) {
-        setProjectReviewPhase("entering");
-        setGlobalTimelinePhase((phase) => (phase ? "exiting" : null));
-        scheduleFrame(() => {
-          setProjectReviewPhase((phase) =>
-            phase === "entering" ? "entered" : phase,
-          );
-        });
-        scheduleTimeout(() => {
-          setGlobalTimelinePhase((phase) =>
-            phase === "exiting" ? null : phase,
-          );
-        }, GLOBAL_TIMELINE_EXIT_MS);
-      } else {
-        setProjectReviewPhase((phase) => (phase ? "exiting" : null));
-        setGlobalTimelinePhase("entering");
-        scheduleFrame(() => {
-          setGlobalTimelinePhase((phase) =>
-            phase === "entering" ? "entered" : phase,
-          );
-        });
-        scheduleTimeout(() => {
-          setProjectReviewPhase((phase) =>
-            phase === "exiting" ? null : phase,
-          );
-        }, PROJECT_REVIEW_EXIT_MS);
-      }
-    });
-
-    return () => {
-      frameIds.forEach((id) => window.cancelAnimationFrame(id));
-      timeoutIds.forEach((id) => window.clearTimeout(id));
-    };
-  }, [projectViewOpen]);
+    if (!projectReveal) return;
+    const group = scrollContainerRef.current?.querySelector<HTMLElement>(
+      `[data-project-id="${CSS.escape(projectReveal.id)}"]`,
+    );
+    group?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [projectReveal]);
 
   return (
     // @container/sidebar: the width SidebarHeader and the new-chat row
@@ -361,16 +279,18 @@ export function Sidebar({
         onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
-        projectViewOpen={projectViewOpen}
-        onToggleProjectView={onToggleProjectView}
+        projects={navigationProjects}
+        onNewProject={onNewProject}
+        onOpenProject={onOpenProject}
       />
       <SidebarQuickActions
         onNewChat={onNewChat}
         onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
-        projectViewOpen={projectViewOpen}
-        onToggleProjectView={onToggleProjectView}
+        projects={navigationProjects}
+        onNewProject={onNewProject}
+        onOpenProject={onOpenProject}
         activeProjectName={activeProject?.name}
         newChatActive={newChatActive}
         listScrolled={listScrolled}
@@ -381,70 +301,41 @@ export function Sidebar({
         onScroll={(e) => setListScrolled(e.currentTarget.scrollTop > 0)}
         className="scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2"
       >
-        {projectReviewPhase && (
-          <SidebarProjectReviewPresence phase={projectReviewPhase}>
-            <SidebarProjectReview
-              projects={navigationProjects}
-              sessionsByProjectId={projectSessionsById}
-              activeProjectFilter={activeProjectFilter}
-              expandedProjectIds={expandedProjectIdSet}
-              reviewNowMs={projectReviewNowMs}
-              activeId={activeId}
-              petAttachedSessionId={petAttachedSessionId}
-              sessionGoalStatus={sessionGoalStatus}
-              onToggleProjectExpanded={onToggleProjectExpanded}
-              onStartProjectConversation={onStartProjectConversation}
-              onSelectSession={handleSelectSession}
-              onArchiveSession={onArchiveSession}
-              onTogglePinSession={onTogglePinSession}
-              onAssignSessionToProject={onAssignSessionToProject}
-              editingSessionId={editingSessionId}
-              onRequestRename={
-                onRenameSession ? (id) => setEditingSessionId(id) : undefined
-              }
-              onConfirmRename={(id, newTitle) => {
-                onRenameSession?.(id, newTitle);
-                setEditingSessionId(null);
-              }}
-              onCancelRename={() => setEditingSessionId(null)}
-              onTogglePinProject={onTogglePinProject}
-              onEditProject={onEditProject}
-              onDeleteProject={onDeleteProject}
-              onNewProject={onNewProject}
-            />
-          </SidebarProjectReviewPresence>
-        )}
-
-        {globalTimelinePhase && (
-          <SidebarTimelinePresence phase={globalTimelinePhase}>
-            {globalEmpty ? (
-              <div className="px-5 py-6 text-[12.5px] italic text-ink-muted">
-                {copy.sidebar.emptySessions}
-              </div>
-            ) : (
-              <SidebarTimelineBuckets
-                buckets={globalBuckets}
-                activeId={activeId}
-                projects={navigationProjects}
-                petAttachedSessionId={petAttachedSessionId}
-                sessionGoalStatus={sessionGoalStatus}
-                onSelectSession={handleSelectSession}
-                onArchiveSession={onArchiveSession}
-                onTogglePinSession={onTogglePinSession}
-                onAssignSessionToProject={onAssignSessionToProject}
-                editingSessionId={editingSessionId}
-                onOpenEarlier={onOpenEarlier}
-                onRequestRename={
-                  onRenameSession ? (id) => setEditingSessionId(id) : undefined
-                }
-                onConfirmRename={(id, newTitle) => {
-                  onRenameSession?.(id, newTitle);
-                  setEditingSessionId(null);
-                }}
-                onCancelRename={() => setEditingSessionId(null)}
-              />
-            )}
-          </SidebarTimelinePresence>
+        {timelineEmpty ? (
+          <div className="px-5 py-6 text-[12.5px] italic text-ink-muted">
+            {copy.sidebar.emptySessions}
+          </div>
+        ) : (
+          <SidebarTimelineBuckets
+            timeline={timeline}
+            activeId={activeId}
+            projects={navigationProjects}
+            petAttachedSessionId={petAttachedSessionId}
+            sessionGoalStatus={sessionGoalStatus}
+            onSelectSession={handleSelectSession}
+            onArchiveSession={onArchiveSession}
+            onTogglePinSession={onTogglePinSession}
+            onAssignSessionToProject={onAssignSessionToProject}
+            editingSessionId={editingSessionId}
+            onOpenEarlier={onOpenEarlier}
+            onRequestRename={
+              onRenameSession ? (id) => setEditingSessionId(id) : undefined
+            }
+            onConfirmRename={(id, newTitle) => {
+              onRenameSession?.(id, newTitle);
+              setEditingSessionId(null);
+            }}
+            onCancelRename={() => setEditingSessionId(null)}
+            groupWiring={{
+              expandedProjectIds: expandedProjectIdSet,
+              onToggleProjectExpanded,
+              onStartProjectConversation,
+              onTogglePinProject,
+              onEditProject,
+              onDeleteProject,
+              onArchiveSessions,
+            }}
+          />
         )}
       </div>
 

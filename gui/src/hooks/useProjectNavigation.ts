@@ -1,7 +1,6 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import type { AppCopy } from "@/lib/i18n";
-import { sortProjectsForNavigation } from "@/lib/projects";
 import { makeAppError, type AppError } from "@/types/app-error";
 import type { Project, Session } from "@/types/session";
 import type { Screen } from "@/stores/ui";
@@ -34,9 +33,15 @@ export function useProjectNavigation({
   setScreen: (screen: Screen) => void;
   visibleSessions: Session[];
 }) {
-  const [projectViewOpen, setProjectViewOpen] = useState(false);
+  // Expanded project groups in the sidebar timeline — this run only;
+  // every group starts collapsed (D9).
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
-  const [projectReviewNowMs, setProjectReviewNowMs] = useState(0);
+  // Ask the sidebar to scroll a project's group into view; `seq` lets
+  // the same project be asked twice.
+  const [projectReveal, setProjectReveal] = useState<{
+    id: string;
+    seq: number;
+  } | null>(null);
   // CreateProjectDialog open state. Local for the same reason as the
   // other dialogs in App — modal visibility should not persist across
   // launches.
@@ -62,58 +67,25 @@ export function useProjectNavigation({
     [projects, deletingProjectId],
   );
 
-  const toggleProjectView = () => {
-    if (projectViewOpen) {
-      setActiveProjectFilter(undefined);
-      setProjectViewOpen(false);
-      return;
-    }
-    // 进入项目视图时自动 expand 第一个项目(已按 pinned 优先、再按
-    // 最近 active 排序),并据此软设 filter——这样用户一进来,New Chat
-    // 立刻有归属,不会经历"项目视图里 New Chat 是个死按钮"的尴尬态。
-    // 没有项目时保持空(filter 仍 undefined),交给空状态 CTA 承接。
-    const firstProject = sortProjectsForNavigation(
-      projects,
-      visibleSessions,
-    )[0];
-    setProjectReviewNowMs(Date.now());
-    setProjectViewOpen(true);
-    if (firstProject) {
-      setExpandedProjectIds([firstProject.id]);
-      setActiveProjectFilter(firstProject.id);
-    } else {
-      setExpandedProjectIds([]);
-    }
-  };
-
-  const openProjectInSidebar = (projectId: string) => {
-    setProjectReviewNowMs(Date.now());
-    setProjectViewOpen(true);
+  // Expanding or collapsing a group never touches project context (D8):
+  // in the timeline it is usually a glance. The row's +, the empty
+  // project's CTA and the 项目 menu set it.
+  const toggleProjectExpanded = (projectId: string) => {
     setExpandedProjectIds((ids) =>
-      ids.includes(projectId) ? ids : [...ids, projectId],
+      ids.includes(projectId)
+        ? ids.filter((id) => id !== projectId)
+        : [...ids, projectId],
     );
   };
 
-  const toggleProjectExpanded = (projectId: string) => {
-    if (!projectViewOpen) {
-      setProjectReviewNowMs(Date.now());
-      setExpandedProjectIds([projectId]);
-      setProjectViewOpen(true);
-      // expand 即软设 filter: New Chat 文案 / 右侧 composer 项目徽标
-      // 都跟着"最近一次展开的项目"走。只有展开动作(false→true)
-      // 更新;收起不动,所以新建对话永远落在最后展开的那个项目。
-      setActiveProjectFilter(projectId);
-      return;
-    }
-    setExpandedProjectIds((ids) => {
-      if (ids.includes(projectId)) {
-        // 收起: 不动 filter,保留最后展开的项目作为 New Chat 目标。
-        return ids.filter((id) => id !== projectId);
-      }
-      // 展开: 更新 filter 为这个项目,成为新的 New Chat 目标。
-      setActiveProjectFilter(projectId);
-      return [...ids, projectId];
-    });
+  const openProjectInSidebar = (projectId: string) => {
+    setExpandedProjectIds((ids) =>
+      ids.includes(projectId) ? ids : [...ids, projectId],
+    );
+    setProjectReveal((previous) => ({
+      id: projectId,
+      seq: (previous?.seq ?? 0) + 1,
+    }));
   };
 
   const startProjectConversation = (projectId: string) => {
@@ -122,6 +94,12 @@ export function useProjectNavigation({
     setActiveSession(undefined);
     setScreen("empty");
     setEmptyComposerFocusTick((tick) => tick + 1);
+  };
+
+  // 项目 menu → a project: a new chat in it, and its group opened.
+  const openProject = (projectId: string) => {
+    startProjectConversation(projectId);
+    openProjectInSidebar(projectId);
   };
 
   const assignSessionToProjectWithToast = (
@@ -190,14 +168,13 @@ export function useProjectNavigation({
     deletingProject,
     editingProject,
     expandedProjectIds,
+    openProject,
     openProjectInSidebar,
-    projectReviewNowMs,
-    projectViewOpen,
+    projectReveal,
     setCreateProjectOpen,
     setDeletingProjectId,
     setEditingProjectId,
     startProjectConversation,
     toggleProjectExpanded,
-    toggleProjectView,
   };
 }

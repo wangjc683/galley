@@ -169,7 +169,7 @@ export interface Project {
   /** Legacy metadata; current GUI renders Phosphor folder icons instead. */
   icon?: string;
   color?: string;
-  /** Pin to top in Project Review. PRD §8.2. */
+  /** Pin the project's sidebar group to 置顶. PRD §8.2. */
   pinned: boolean;
   /** max(non-archived sessions.lastActivityAt where projectId = this.id),
    * fallback to createdAt when project has no active content.

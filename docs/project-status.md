@@ -711,6 +711,13 @@ and sublines fade out instead of ending in a ragged `…`; the 新对话 row now
 heads the list — it is the selected row while the empty new-chat composer is
 showing, and its divider appears only once the list scrolls
 ([devlog](./devlog/2026-10-08-sidebar-grid-and-fade-truncation.md)).
+Project sessions now fold into one collapsible group row per project in the
+timeline, and Project Review is gone: the group sums its sessions' states on a
+second line, sessions waiting for a reply or erroring (and the selected one)
+hang under a collapsed group, and the header 项目 icon opens a menu (new
+project + every project) ([devlog](./devlog/2026-10-08-sidebar-project-groups.md)).
+The README screenshots still show the old sidebar and `projects.png` the old
+Project Review; re-shoot with the next screenshot round.
 Owed for `v0.6.2`: the new update path on a
 real older build (it takes effect from the update after `v0.6.2`, since the
 installed build runs its own updater) and the Windows App update smoke items.

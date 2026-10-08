@@ -169,7 +169,6 @@ export const enCopy: AppCopy = {
       `New chat · ${projectName}`,
     search: "Search",
     projects: "Projects",
-    exitProjects: "Exit projects",
     newProject: "New project",
     scheduled: "Scheduled",
     openScheduled: "Manage scheduled tasks",
@@ -213,7 +212,6 @@ export const enCopy: AppCopy = {
     unpin: "Unpin",
     addToProject: "Add to project",
     noProjects: "No projects yet",
-    createFirstProject: "Create your first project",
     removeFromProject: "Remove from project",
     archive: "Archive",
     newConversationInProjectTitle: (projectName) =>
@@ -221,10 +219,28 @@ export const enCopy: AppCopy = {
     newProjectConversation: "New chat",
     showAll: "Show all",
     archived: "Archived",
-    activeProjects: "Active projects",
-    olderProjects: "Older projects",
     editProject: "Edit project",
     deleteProject: "Delete project",
+    groupErrored: (count, total) =>
+      `${count} ${count === 1 ? "error" : "errors"} · ${total} ${total === 1 ? "conversation" : "conversations"}`,
+    groupWaiting: (count, total) =>
+      `${count} waiting for you · ${total} ${total === 1 ? "conversation" : "conversations"}`,
+    groupWorking: (count, total) =>
+      `${count} working · ${total} ${total === 1 ? "conversation" : "conversations"}`,
+    groupUnread: (count, total) =>
+      `${count} new ${count === 1 ? "reply" : "replies"} · ${total} ${total === 1 ? "conversation" : "conversations"}`,
+    groupTotal: (total) =>
+      `${total} ${total === 1 ? "conversation" : "conversations"}`,
+    groupOlder: (count) => `${count} earlier`,
+    archiveProjectSessions: "Archive all conversations",
+    archiveProjectSessionsTitle: (projectName, count) =>
+      `Archive ${count} ${count === 1 ? "conversation" : "conversations"} in "${projectName}"?`,
+    archiveProjectSessionsBody: (runningCount) =>
+      runningCount === 0
+        ? "Archived conversations leave the sidebar and can be restored from Archived."
+        : runningCount === 1
+          ? "Archived conversations leave the sidebar and can be restored from Archived. 1 is still running: archiving won't stop it, but you won't see its progress."
+          : `Archived conversations leave the sidebar and can be restored from Archived. ${runningCount} are still running: archiving won't stop them, but you won't see their progress.`,
   },
   topbar: {
     newConversation: "New chat",
