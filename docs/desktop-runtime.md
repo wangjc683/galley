@@ -136,6 +136,10 @@ running in the background:
 - `Settings`: reopen Galley and open Settings.
 - `Check for Updates...`: reopen Galley to Settings -> About and check the
   update channel.
+- `Report an Issue…`: reopen Galley to Settings -> 报告问题, whose bug button
+  pre-fills the environment info (since 2026-10-08; before, it opened the
+  GitHub template chooser with nothing filled in). The macOS Help menu item
+  of the same name does the same.
 - `Quit Galley`: explicitly exit the app.
 
 The first version intentionally has no running badge; task state

@@ -6,8 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        感谢反馈！环境信息可以在 Galley 里一键获取：Settings → About 查看版本，
-        或用 CLI 运行 `galley health` 获取健康检查结果。
+        感谢反馈！最省事的办法：在 Galley 里打开「设置 → 报告问题」点「报告 Bug」，
+        版本、系统、内核和健康检查会自动填进这张表单（Settings → Report an Issue → Report a bug）。
+        也可以用 CLI 运行 `galley health` 获取健康检查结果。
         粘贴日志前请自行检查并移除敏感内容（API key、含用户名的路径、内网地址等）。
   - type: textarea
     id: what-happens
@@ -36,7 +37,7 @@ body:
     id: galley-version
     attributes:
       label: Galley 版本 / Galley version
-      description: Settings → About 中显示，或 `galley version`
+      description: 「设置 → 关于」中显示（Settings → About），或 `galley version`
       placeholder: "0.4.4"
     validations:
       required: true
@@ -54,7 +55,7 @@ body:
     id: engine
     attributes:
       label: 内核模式 / Engine mode
-      description: Settings → Runtime 中显示当前使用的运行时
+      description: 「设置 → 运行环境」中显示当前使用的内核（Settings → Runtime）
       options:
         - 内置内核（默认） / Bundled engine (default)
         - 外部 GA / External GenericAgent

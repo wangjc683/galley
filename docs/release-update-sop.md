@@ -320,9 +320,15 @@ Expected path:
 2. Settings -> About shows update status (the TopBar indicator surfaces
    available / downloading / ready states; Runtime only shows the version
    as plain text).
-3. If no session is running, Galley downloads/prepares in the background.
-4. If a session is running, Galley remembers the update and waits.
-5. After preparation, click restart.
+3. With auto-download on, Galley downloads the update in the background,
+   even while a session is running (since 2026-10-08 the download no
+   longer touches channels, the browser bridge, or runners). With it off,
+   Settings -> About and the TopBar popover offer "Download update".
+4. Settings -> About reads "vX downloaded, restart Galley to apply"; the
+   channels keep running while the update waits. Restart is disabled while
+   a session is running.
+5. Click restart: Galley stops its child processes, installs, and
+   relaunches (on Windows the installer takes over and relaunches).
 6. Relaunched app shows the new version.
 
 Dev builds without updater compile-time variables should show the expected

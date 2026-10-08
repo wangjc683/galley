@@ -692,7 +692,23 @@ the running badge by pairing (「已接入」; Feishu before pairing keeps
 「服务已启动」), shares one command table across the four cards (WeChat gains
 `/help` and `/status` in the runner), names the module 「渠道」 in Chinese
 body copy, lets every enabled channel pause, and restarts channels one by
-one. Owed from the `v0.6.1` smoke (JC approved
+one. The fifth batch, General / Shortcuts / Report an Issue / About
+([devlog](./devlog/2026-10-08-settings-general-shortcuts-feedback-about-pass.md)),
+moves the update install to the 重启并更新 click: the background step only
+downloads and verifies (it no longer waits for tasks), because installing
+right after download stopped the channels and browser bridge on macOS with
+nothing bringing them back, and on Windows the updater's install exits the
+app. The About version row now names the target version and offers
+「下载更新」 when auto-download is off (it used to spin 「正在下载更新」 with
+nothing downloading); ⌘ ⌥ ← → key caps use the system font instead of the
+Menlo fallback; the Shortcuts table drops a Tab row that was never wired and
+adds three real keys; on macOS only ⌘ triggers the global shortcuts (Ctrl+K /
+Ctrl+N stay Cocoa editing keys); the Report an Issue… menu and tray item open
+Settings → 报告问题; the environment payload drops `deferred_b4` checks and
+gains `ga_commit` for external GA. Owed for `v0.6.2`: the new update path on a
+real older build (it takes effect from the update after `v0.6.2`, since the
+installed build runs its own updater) and the Windows App update smoke items.
+Owed from the `v0.6.1` smoke (JC approved
 publish without an item-by-item report): on Windows, F5 / Ctrl+R mid-run
 (steps and final answer kept, the run not restarted; that WebView2 reloads on
 these keys is inferred, not observed) and a first session on the `f308ee7`

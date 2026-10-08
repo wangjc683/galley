@@ -133,6 +133,8 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] **Ctrl+N** starts a new chat
 - [ ] **Ctrl+,** opens Settings
 - [ ] Settings → Shortcuts shows `Ctrl+K`-style labels (not `⌘K`)
+- [ ] Ctrl+, opens Settings on 通用 / General even after leaving it on another tab (2026-10-08)
+- [ ] Settings → Shortcuts lists `Ctrl` + `Enter` for project dialogs, no `Tab` row (2026-10-08)
 
 ### Onboarding
 
@@ -162,6 +164,13 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] Settings close button remains clickable while toasts are visible
 - [ ] Error / warning toast still shows diagnostic copy details when traceback or context exists
 
+### App update（2026-10-08 安装挪到重启时）
+
+- [ ] An older installed build finds the new version and downloads it in the background **without closing the app** (before 2026-10-08 the updater's `install` ran right after download and exited the app)
+- [ ] Settings → About shows `vX 已下载，重启 Galley 后生效`; channels and the browser bridge keep running while the update waits
+- [ ] Clicking 重启并更新 stops Galley's child processes, the installer takes over, and Galley relaunches on the new version — no `_bz2.pyd` file-lock dialog
+- [ ] Tray 「Report an Issue…」opens Settings → 报告问题 (not the GitHub chooser)
+
 ### Settings -> Models
 
 - [ ] Provider list-model action is labeled as reading the model list when no model exists
@@ -171,7 +180,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 
 ### Settings -> General / Launch at login (2026-07-17)
 
-- [ ] Settings sidebar shows `General` first with Chinese helper `通用`; theme + language moved here from the sidebar footer, plus a conversation-font-size row (topbar quick controls unchanged)
+- [ ] Settings sidebar shows `通用` first (Chinese main label since 2026-09-16, English helper `General`); theme + language moved here from the sidebar footer, plus conversation font-size and reading-width rows (topbar quick controls unchanged)
 - [ ] Launch-at-login toggle defaults OFF on a fresh install
 - [ ] Enabling the toggle creates the `Galley` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (with `--autostart` argument)
 - [ ] Sign out / sign in (or reboot): Galley starts hidden — tray icon present, no window, tray toggle reads `Open Galley`
