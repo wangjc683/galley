@@ -190,7 +190,7 @@ Section 标签（2026-10-07 JC 裁）：
 | `Health Check` | 作为流程 / 组件名保留 |
 | `CLI`、`API`、`MCP`、`Socket`、`schemaVersion` | 协议 / 契约词，保留 |
 | `Python` | 保留 |
-| `API Key` | 字段名可保留；正文可说「密钥」 |
+| `API Key` | 字段名保留（「API Key」「获取 API Key」「401 未授权：API Key 不正确」）；正文、提示、按钮一律说「密钥」，同一句里不混用「Key」（2026-10-08 起）。「凭证」只用于 ChatGPT / Codex 登录这类没有密钥的鉴权，徽标写「需要登录」 |
 | `LLM` | 界面一律说「模型」，紧凑控件也不例外（2026-10-03 JC 裁，此前「紧凑控件可保留」）；只在外置 GA 的技术语境保留，如 Health Check「mykey.py 存在」的副标签「LLM 配置文件」 |
 | 模型 / 服务品牌 | OpenAI、Anthropic、Claude、GPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、Xiaomi MiMo 等保留 |
 | `galley` | 命令名，保留并用 inline code |
@@ -204,7 +204,8 @@ Section 标签（2026-10-07 JC 裁）：
 | Settings | 设置 |
 | Project | 项目；只有装饰性 section header `PROJECTS` 可以保留英文 |
 | Session / Chat | 对话 |
-| Provider | 服务商（2026-10-07 JC 裁，此前「提供商」） |
+| Provider | 服务商（2026-10-07 JC 裁，此前「提供商」）；编辑器内的按钮去名词只写「保存」，其他按钮与正文不写成「服务」（2026-10-08 起，此前「保存服务」「检查服务」） |
+| Add / Remove model | 添加 / 已添加 / 移除，不用「启用 / 已启用」（2026-10-08 起：同一动作两个动词，对立面本来就是「移除」） |
 | Tool call | 工具调用 |
 | Command Palette | 命令面板；`Command Palette` 只保留为搜索 alias |
 | Composer | 输入框，或避免暴露这个词 |

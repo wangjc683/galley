@@ -657,7 +657,16 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.6.1`: nothing yet. Owed from the `v0.6.1` smoke (JC approved
+Since `v0.6.1`: the dark theme's ground and ink turned cool blue-grey
+(H ~260, L unchanged); the browser focus-steal fix was deferred with its probe
+findings; and the Settings per-tab second pass shipped its first batch,
+Models (2026-10-08, [devlog](./devlog/2026-10-08-settings-models-tab-pass.md)):
+the row end is a single ⋯ with 上移 / 下移 inside (drag is the main path), the
+provider form gets the model draft's dirty guard and both editors flag a
+refused switch, write failures are error toasts and a failed load is its own
+state, 「保存 / 添加 / 密钥」 wording, provider edit can test first with the
+preset read-only, 「编辑默认配置」 lands 09-22's dropped header link, and the
+model-layer number fields stop clamping per keystroke. Owed from the `v0.6.1` smoke (JC approved
 publish without an item-by-item report): on Windows, F5 / Ctrl+R mid-run
 (steps and final answer kept, the run not restarted; that WebView2 reloads on
 these keys is inferred, not observed) and a first session on the `f308ee7`
@@ -669,8 +678,12 @@ pickers, and the thin sidebar check circle on a 100% display. Watch the first
 managed memory distillations on `f308ee7`: the one that ran in the `v0.6.1`
 regression wrote nothing, so the merge-and-compress path is still unobserved
 (fallback: a one-line managed patch back to minimal updates). Settings: the
-per-tab second pass, Models first, is next; dark mode was checked tab by tab
-in the `v0.6.1` pre-flight with no issues. The README social preview image
+per-tab second pass continues with 运行环境 + 智能体接入, then 浏览器控制,
+聊天软件, and 通用 / 快捷键 / 报告问题 / 关于; the 2026-10-08 dark sweep of all
+nine tabs on the cool ground found nothing cross-tab (快捷键's small `⌘`
+keycap glyph and 浏览器控制's faint connected-card title wait for their
+batches). Windows drag-to-reorder in Settings → Models has still not been
+reported on. The README social preview image
 waits for JC to upload it in the repo settings. Regression leftovers to
 delete (JC: after the release): the project 「v0.6.1 发版回归」 with its 19
 sessions and a Chrome tab; the `~/Downloads` test files went to the Trash on
@@ -678,8 +691,10 @@ sessions and a Chrome tab; the `~/Downloads` test files went to the Trash on
 「现在 Galley 里在跑什么？」 ran the plain `sessions list` as the prompt says,
 then filtered it and ran `status` (3 steps where `status` alone would do); a
 reattached live runner does not replay `ready`, so its model list keeps the
-seed values; CLI-created external sessions record no model display name; in
-Settings → Models the sticky provider header slides under the close button.
+seed values; CLI-created external sessions record no model display name. (The
+「sticky provider header slides under the close button」 note is dropped: Settings
+has no sticky header; it was ordinary scrolled content passing under the X,
+which the pane's top safe zone and fade already handle, 2026-08-07.)
 The #16 reply about approval waits is on hold (JC, 2026-10-06: no reply for
 now).
 
