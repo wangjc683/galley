@@ -296,6 +296,7 @@ Section 标签（2026-10-07 JC 裁）：
 | 智能体接入正文 | session / sessions / Project / repo 在中文 UI 写「对话 / 项目 / 仓库」，例句也不例外（Agent 拿到 SOP 后能对上）；`Goal` 保留；`Discovery file` 写「CLI 路径文件」（2026-10-08 起） |
 | 聊天软件 subtitle | `在聊天软件里和 Galley 对话` |
 | 浏览器控制 subtitle | `让 Galley 读取和操作你的浏览器，并沿用你的登录态` |
+| 浏览器控制正文 | Galley 自己的东西叫「插件」（Galley 插件、还没检测到插件）；「扩展页」「扩展管理页」「加载已解压的扩展程序」「开发者模式」是浏览器自己的页面与按钮名，照浏览器写。探测动作只叫「测试连接」（2026-10-08 起，此前还有「重新测试」「重新检测」） |
 | 快捷键 subtitle | `键盘快捷键` |
 | 快捷键 section | `导航`、`输入框`、`对话`、`浮层`（此前英文 `Navigation` / `Conversation` / `Overlays`） |
 | 报告问题 subtitle | `把 Bug 或建议提交到 GitHub` |

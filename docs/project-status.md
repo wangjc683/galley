@@ -674,7 +674,16 @@ external session, lets the first Esc in a Settings field leave the field
 instead of closing Settings, validates the external GA path before saying
 「外部 GA 已可用」, routes the Setup Assistant's runtime switch through the same
 action as Settings, drops the two Command Palette entries that only logged,
-and gives Windows a manual PATH hint for `galley`. Owed from the `v0.6.1` smoke (JC approved
+and gives Windows a manual PATH hint for `galley`. The third batch, Browser
+Control ([devlog](./devlog/2026-10-08-settings-browser-control-tab-pass.md)),
+keeps a verified install on its status card when the bridge errors or
+restarts (it used to fall back to the three-step install guide), words the
+two waiting states apart and drops 「重新检测」, adds 「其他」 for Vivaldi /
+Brave / Arc, folds repair into a disclosure card with a reload-after-update
+line, has the GUI word probe results from a new `kind` field (no Core Chinese
+in the English UI), and skips the 35 s wait when the bridge already says the
+extension is not there. The new-user flow is still not walked end to end on a
+real machine. Owed from the `v0.6.1` smoke (JC approved
 publish without an item-by-item report): on Windows, F5 / Ctrl+R mid-run
 (steps and final answer kept, the run not restarted; that WebView2 reloads on
 these keys is inferred, not observed) and a first session on the `f308ee7`

@@ -39,16 +39,18 @@ Rules:
   the user to reinstall Galley's copy just to match the extension source path.
 - The extension's user-visible identity is Galley-branded (display name
   "Galley Browser Bridge", patch `0015`). It injects no in-page indicator:
-  the toolbar icon badge shows `ON` only while the bridge WebSocket to the
-  local driver is actually connected, and the popup is a status panel
+  the toolbar icon is full-color only while the bridge WebSocket to the
+  local driver is actually connected and grayscale otherwise (commit
+  `2848c4b2` replaced the earlier `ON` badge), and the popup is a status panel
   (connection state + operable tab count; cookie copy sits behind an explicit
   button). While an agent drives the browser via the debugger, Chromium's own
   infobar is the in-page signal. Do not reintroduce page-injected indicators.
 - The first supported browser family is Chromium. The UI provides one-click
-  open buttons for Chrome and Edge, while copy should mention that other
-  Chromium browsers can load the same unpacked extension manually. Safari and
-  Firefox are out of scope for the first version because this bridge is
-  Chrome-extension / CDP based.
+  open buttons for Chrome and Edge, and a third choice 「其他」 for other
+  Chromium browsers (Vivaldi, Brave, Arc, …): it shows `chrome://extensions`
+  to enter by hand and drops the test-page button, since Core only opens
+  Chrome / Edge (2026-10-08). Safari and Firefox are out of scope for the
+  first version because this bridge is Chrome-extension / CDP based.
 - While Browser Control was never set up, the TopBar keeps a persistent
   invitation (「浏览器控制 · 待解锁」, brand tone) and the main area shows the
   invitation banner. Both say what the user gains, not that something is
@@ -63,8 +65,16 @@ Rules:
   such as reading `document.title`. It verifies the install (the persisted
   `browser_control_verified` pref); the connection state itself is live from
   the resident bridge (see below). Galley runs it by itself once when the
-  extension first connects before setup is verified, and the buttons
-  `测试连接` / `重新检测` / `重新测试` run the same probe on demand.
+  extension first connects before setup is verified, and `测试连接` runs the
+  same probe on demand (2026-10-08: the only name for it; 「重新检测」 and
+  「重新测试」 are gone). A manual test does not start a probe while the
+  resident bridge is running and does not see the extension: the bridge is
+  the wake-up path the next bullet asks for, so the page says the extension
+  is not detected yet instead of waiting 35 s for the same reconnect. The
+  probe result carries a machine `kind` (`connected` / `no_tabs` /
+  `not_connected` / `script_failed` / `no_result` / `exception`) and a raw
+  `detail` for the failure kinds; the GUI words each kind and shows `detail`
+  as a secondary line. Core's Chinese `message` stays for logs only.
 - Browser Control probes must tolerate Chromium MV3 service-worker wake-up and
   reconnect timing, especially on Windows. Do not collapse the probe window
   back to a few seconds unless the extension has an equivalent immediate
@@ -218,9 +228,14 @@ Menu action: 设置…
 Scope line (Settings connected card only, not the topbar menu): Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，它能看到你打开的所有标签页的标题和网址。
 Error badges: 浏览器控制 · 缺少组件 / 端口被占用 / 连接中断 / 未能启动 / 需检查
 Step 3 hint: 插件装好后，Galley 会自动检测到连接。没反应时，在该浏览器打开任意网页（或点「打开测试页」），再点「测试连接」。
-Connected evidence: 已连接浏览器 / 检测到 N 个可操作标签页
+Step 3 status (not connected yet): 还没检测到插件，装好后会自动连上。
+Browser choice: Chrome / Edge / 其他 (其他: 打开扩展管理页 + chrome://extensions + 复制地址)
+Connected evidence: 已连接浏览器 / 检测到 N 个可操作标签页 (after a manual test: 测试通过)
+Waiting states: 浏览器未连接 / 打开装了插件的浏览器后会自动连上。 ; 已连接，暂无网页 / 在浏览器里打开任意网页就能用了。
+Restarting bridge (verified): 正在连接浏览器控制服务…
+Probe action: 测试连接 (busy: 正在测试…)
 Auto-verify toast: 浏览器控制已连接 / 新建对话，让 Galley 用浏览器查天气。 / 试一试
-Reload action: 重新加载插件
+Repair fold: 重新安装或修复插件 (step 2 adds: 已经装过的：Galley 更新后，在扩展页找到 Galley Browser Bridge，点 ↻ 重新加载。)
 Success demo: 新建测试对话
 Demo prompt: 请打开百度，搜索今天的天气，并告诉我结果。不要用代码或外部 API 查询。
 ```
