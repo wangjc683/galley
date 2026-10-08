@@ -1803,11 +1803,21 @@ export const zhCopy = {
     noArchivedConversations: "没有已归档的对话。",
     turns: (count: number) => `${count} 步`,
     deleteProject: "删除项目",
-    deleteProjectHint: "里面的对话不会被删除，自动解绑回时间线",
+    deleteProjectHint: "里面的对话不会被删除，确认时可以一并归档",
     deleteProjectTitle: (name: string) => `删除项目「${name}」？`,
-    deleteProjectBody: "该项目下的对话不会被删除，会自动解绑回时间线。",
+    deleteProjectCannotUndo: "项目删除后无法恢复。",
+    // 删除确认框的「同时归档」勾选项（2026-10-08）：默认勾上；下面一行
+    // 说当前选择的后果。不勾时对话脱离项目，回到时间分组。
+    deleteProjectArchiveSessions: (count: number) =>
+      `同时归档里面的 ${count} 个对话`,
+    deleteProjectArchiveBody: (runningCount: number) =>
+      runningCount > 0
+        ? `归档后可以在「已归档」里恢复，但不会再回到这个项目。其中 ${runningCount} 个仍在运行，归档不会停止它们，但你将看不到后续进展。`
+        : "归档后可以在「已归档」里恢复，但不会再回到这个项目。",
+    deleteProjectKeepBody:
+      "对话会回到侧栏，按最后活动时间排进今天、本周等分组。",
     cannotUndo: "此操作无法撤销。",
-    deleteProjectAction: "删除 Project",
+    deleteProjectAction: "删除项目",
     permanentlyDeleteConversation: "永久删除这个对话？",
     permanentlyDeleteConversationBody: (title: string) =>
       `「${title}」连同它的所有对话记录将被永久删除。`,

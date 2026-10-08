@@ -3,11 +3,14 @@ import { FolderOpen, Trash, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button, DialogActionRow } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
+import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import { useCopy } from "@/lib/i18n";
 import { pickFolder } from "@/lib/pick-folder";
 import { cn } from "@/lib/utils";
-import type { Project } from "@/types/session";
+import type { GoalBrief } from "@/types/goal";
+import type { Project, Session } from "@/types/session";
 
 export interface EditProjectDialogProps {
   /** Project to edit. `null` = closed. The parent owns this state so
@@ -22,7 +25,7 @@ export interface EditProjectDialogProps {
     partial: { name: string; rootPath?: string },
   ) => Promise<void>;
   /** Trigger delete confirm flow. Called when the user clicks the
-   * destructive "删除 Project" button; a separate AlertDialog handles
+   * destructive "删除项目" button; a separate AlertDialog handles
    * the confirm step (parent owns it for consistency with the
    * existing ConfirmDelete* pattern in ArchivedDialog). */
   onRequestDelete: (project: Project) => void;
@@ -215,22 +218,42 @@ export function EditProjectDialog({
 
 export interface ConfirmDeleteProjectDialogProps {
   project: Project | null;
+  /** The sessions 归档全部对话 would archive (`archivableProjectSessions`):
+   * what 「同时归档」 archives, and what otherwise returns to the time
+   * buckets. Pinned sessions stay in 置顶 either way. */
+  sessions: Session[];
+  sessionGoalStatus?: Map<string, GoalBrief>;
   onCancel: () => void;
-  onConfirm: () => Promise<void>;
+  /** `archiveSessions`: the 「同时归档」 box was ticked. */
+  onConfirm: (archiveSessions: boolean) => Promise<void>;
 }
 
 /**
  * Single-layer confirm before deleting a project. Same pattern as
- * ArchivedDialog's ConfirmDeleteOne — the user already deliberated
- * by navigating into Edit and clicking destructive, so no
- * checkbox-acknowledge friction needed.
+ * ArchivedDialog's ConfirmDeleteOne — no checkbox-acknowledge friction.
+ *
+ * Deleting a project keeps its conversations, which then pour back into
+ * the time buckets: the opposite of what someone tidying up expects
+ * from deleting a folder (2026-10-08). So the dialog carries the fork
+ * as a choice — 「同时归档里面的 N 个对话」, ticked by default, with the
+ * line under it saying what the current choice does. The parent keys
+ * the dialog by project id, so each opening starts ticked.
  */
 export function ConfirmDeleteProjectDialog({
   project,
+  sessions,
+  sessionGoalStatus,
   onCancel,
   onConfirm,
 }: ConfirmDeleteProjectDialogProps) {
   const copy = useCopy();
+  const [archiveSessions, setArchiveSessions] = useState(true);
+  const { runningCount } = useSessionsAttention(
+    sessions,
+    undefined,
+    sessionGoalStatus,
+  );
+  const count = sessions.length;
   return (
     <Dialog.Root
       open={!!project}
@@ -257,11 +280,27 @@ export function ConfirmDeleteProjectDialog({
           </div>
           <p
             id="confirm-delete-project-desc"
-            className="mt-2 text-[12.5px] leading-[1.55] text-ink-soft"
+            className="mt-2 text-[12.5px] leading-[1.55] text-ink"
           >
-            {copy.projects.deleteProjectBody}{" "}
-            <span className="text-ink">{copy.projects.cannotUndo}</span>
+            {copy.projects.deleteProjectCannotUndo}
           </p>
+
+          {count > 0 && (
+            <Checkbox
+              checked={archiveSessions}
+              onCheckedChange={setArchiveSessions}
+              className="mt-4 flex items-start gap-2 rounded-sm border border-line bg-app px-3 py-2.5 text-[12.5px] leading-[1.55] text-ink hover:border-line-strong"
+            >
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span>{copy.projects.deleteProjectArchiveSessions(count)}</span>
+                <span className="text-ink-soft">
+                  {archiveSessions
+                    ? copy.projects.deleteProjectArchiveBody(runningCount)
+                    : copy.projects.deleteProjectKeepBody}
+                </span>
+              </span>
+            </Checkbox>
+          )}
 
           <DialogActionRow>
             <Button variant="secondary" onClick={onCancel} autoFocus>
@@ -270,7 +309,7 @@ export function ConfirmDeleteProjectDialog({
             <Button
               variant="destructive"
               onClick={() => {
-                void onConfirm();
+                void onConfirm(count > 0 && archiveSessions);
               }}
             >
               {copy.projects.deleteProjectAction}

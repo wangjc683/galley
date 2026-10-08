@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  archivableProjectSessions,
   buildSidebarSections,
   findSectionsSlot,
   type SidebarProjectGroupItem,
@@ -208,5 +209,31 @@ describe("buildSidebarSections", () => {
     expect(findSectionsSlot(t, "x")).toBe("week");
     expect(findSectionsSlot(t, "old")).toBe("earlier");
     expect(findSectionsSlot(t, "missing")).toBeUndefined();
+  });
+});
+
+describe("archivableProjectSessions", () => {
+  it("is the group's sessions plus its 更早 tail, as 归档全部对话 archives", () => {
+    const sessions = [
+      session("today", 0, { projectId: "p" }),
+      session("month", 20, { projectId: "p" }),
+      session("old", 60, { projectId: "p" }),
+      session("pinned", 1, { projectId: "p", pinned: true }),
+      session("gone", 2, { projectId: "p", status: "archived" }),
+      session("other", 1, { projectId: "q" }),
+      session("loose", 1),
+    ];
+    const visible = sessions.filter((s) => s.status !== "archived");
+    const group = buildSidebarSections(visible, [project("p"), project("q")], {
+      now: NOW,
+    }).projects.find((item) => item.project.id === "p");
+    const fromGroup = [
+      ...(group?.sessions ?? []),
+      ...(group?.olderSessions ?? []),
+    ].map((s) => s.id);
+
+    const ids = archivableProjectSessions(sessions, "p").map((s) => s.id);
+    expect(ids).toEqual(["today", "month", "old"]);
+    expect([...ids].sort()).toEqual([...fromGroup].sort());
   });
 });

@@ -8,6 +8,18 @@
 
 ---
 
+## 项目整体归档
+
+- **状态**：暂缓（2026-10-08 JC 按推荐：这次只在删除确认框里加「同时归档」）。
+- **提出**：2026-10-08，项目菜单「归档全部对话」与「删除项目」的困惑讨论（[devlog](./2026-10-08-sidebar-project-groups.md)、[PRD](../../.scratch/project-archive/PRD.md)）。
+- **启动信号**：Supervisor 拆出来的项目开始堆积、分区里常年挂着做完的项目；或有人从「已归档」恢复对话时想要它回到原项目。
+- **方案**：项目加归档态，归档时一并归档组内对话且保留 `project_id`；分区与书眉菜单不列已归档项目；「已归档」对话框按项目分组、整组恢复。CLI / Agent API 只增不改（`project archive` / `project restore`）。
+- **实施要点**：Core 迁移（`core/tests` 与 `cli/tests` 里手写的迁移列表要一起补）；外置 / 内置两种运行时无差别，只动 Galley 自己的库。
+- **待定**：置顶的项目会话随不随项目归档；单条恢复遇到已归档项目怎么处理；有了整体归档后删除确认框的「同时归档」是否保留。
+- **关联**：`core/src/db/project.rs` · `gui/src/components/screens/archived/ArchivedDialog.tsx` · [layout-and-chrome「删除项目」](../design/layout-and-chrome.md)
+
+---
+
 ## macOS 菜单栏与托盘菜单本地化
 
 - **状态**：暂缓（2026-10-08 Settings 逐页第五批，JC 按推荐：补进台账，这次不做）。

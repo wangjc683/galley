@@ -1856,10 +1856,21 @@ export const enCopy: AppCopy = {
     turns: (count) => `${count} step${count === 1 ? "" : "s"}`,
     deleteProject: "Delete project",
     deleteProjectHint:
-      "Conversations inside it are kept and moved back to the timeline",
+      "Conversations inside are kept; you can archive them when you confirm",
     deleteProjectTitle: (name) => `Delete project "${name}"?`,
-    deleteProjectBody:
-      "Conversations in this project will not be deleted. They will move back to the timeline.",
+    deleteProjectCannotUndo: "Deleting the project can't be undone.",
+    deleteProjectArchiveSessions: (count) =>
+      count === 1
+        ? "Also archive its 1 conversation"
+        : `Also archive its ${count} conversations`,
+    deleteProjectArchiveBody: (runningCount) =>
+      runningCount === 0
+        ? "Archived conversations can be restored from Archived, but won't return to this project."
+        : runningCount === 1
+          ? "Archived conversations can be restored from Archived, but won't return to this project. 1 is still running: archiving won't stop it, but you won't see its progress."
+          : `Archived conversations can be restored from Archived, but won't return to this project. ${runningCount} are still running: archiving won't stop them, but you won't see their progress.`,
+    deleteProjectKeepBody:
+      "Conversations return to the sidebar, sorted into Today, This week and the other groups by last activity.",
     cannotUndo: "This cannot be undone.",
     deleteProjectAction: "Delete project",
     permanentlyDeleteConversation: "Permanently delete this conversation?",

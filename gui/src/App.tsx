@@ -54,6 +54,7 @@ import {
   resolveConfiguredEffort,
 } from "@/lib/reasoning-effort";
 import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
+import { archivableProjectSessions } from "@/lib/sidebar-timeline";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useBrowserControlStore } from "@/stores/browser-control";
 import { useManagedModelsStore } from "@/stores/managed-models";
@@ -447,6 +448,15 @@ function App() {
   const earlierSessions = useMemo(
     () => backfillRecentSessions(groupSessions(visibleSessions)).earlier,
     [visibleSessions],
+  );
+  // What the delete-project dialog's 「同时归档」 would archive — the
+  // same set as the project group's 归档全部对话.
+  const deletingProjectSessions = useMemo(
+    () =>
+      deletingProject
+        ? archivableProjectSessions(visibleSessions, deletingProject.id)
+        : [],
+    [deletingProject, visibleSessions],
   );
   // Settings-driven Onboarding re-entry (Re-run Health Check / Setup
   // Assistant) + the return flows out of the takeover. State + logic
@@ -849,10 +859,16 @@ function App() {
       />
 
       <ConfirmDeleteProjectDialog
+        key={deletingProject?.id ?? "closed"}
         project={deletingProject}
+        sessions={deletingProjectSessions}
+        sessionGoalStatus={sessionGoalStatus}
         onCancel={() => setDeletingProjectId(null)}
-        onConfirm={async () => {
+        onConfirm={async (archiveSessions) => {
           if (!deletingProject) return;
+          if (archiveSessions) {
+            archiveSessionsBulk(deletingProjectSessions.map((s) => s.id));
+          }
           await deleteProject(deletingProject.id);
           setDeletingProjectId(null);
           setEditingProjectId(null);

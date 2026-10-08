@@ -180,3 +180,16 @@ export function findSectionsSlot(
     ? "earlier"
     : undefined;
 }
+
+/** The sessions a project group's 归档全部对话 archives — its listed
+ * sessions plus the 更早 tail's: unarchived, unpinned (pinned ones sit
+ * in 置顶, outside the group). The delete-project dialog's
+ * 「同时归档里面的 N 个对话」 uses the same set, so both counts agree. */
+export function archivableProjectSessions(
+  sessions: Session[],
+  projectId: string,
+): Session[] {
+  return sessions.filter(
+    (s) => s.projectId === projectId && !s.pinned && s.status !== "archived",
+  );
+}

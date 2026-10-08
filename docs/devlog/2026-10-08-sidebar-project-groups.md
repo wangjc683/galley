@@ -134,6 +134,32 @@ JC 问：项目分区能折，顺着这个操作逻辑，置顶和时间桶是�
 - 计数偏一个 caret 宽（上一节第一点）仍未改。修法可以不动 caret 惯例：让 caret 伸进右侧 18px 边距，数字回到网格。JC 真机看着
   别扭再做。
 
+## 后续：删除项目的确认框加「同时归档」（同日）
+
+JC 问：项目菜单里「归档全部对话」和「删除项目」会不会让用户困惑。会，而且后果撤不回来：
+
+- 删除项目不删对话，对话脱离项目（外键置空）、按最后活动时间倒回今天 / 本周 / 本月；重新归组只能逐条「移到项目」（GUI
+  与 CLI `session move` 都是单条）。已归档的对话也一并脱离项目。
+- 「删文件夹连内容一起删」是通用直觉，ChatGPT 删项目即连对话一起删（第三方指南，未找到官方文档）。想清理的人选了最彻底的
+  红色按钮，得到的是被刷满的时间桶：拿 JC 的回归项目算，19 条倒回本周 / 本月，正是这一轮做项目分区要解决的事。
+- 原确认框没说清后果：不写数量，「解绑」「时间线」是开发者词，侧栏上没有叫「时间线」的东西；按钮写「删除 Project」，违反
+  文案规范（中文界面写「项目」）。
+
+选项：A 只改文案；**B 确认框加勾选「同时归档里面的 N 个对话」、默认勾上（推荐，JC 按推荐）**；C 菜单项改名「解散项目」
+（一个词说不清对话去哪，确认框照样要写，可叠加不单做）；D 项目整体归档（最正确的模型，要动 Core 数据结构与 CLI 契约，进
+[deferred](./deferred.md#项目整体归档)，PRD 在 `.scratch/project-archive/`）。推荐 B 的理由：困惑发生在做决定的那一刻，确认框
+是唯一一定会被读到的地方，B 把藏着的分叉摆成带数量的选择。默认勾上是推测（删项目的人多半想让它消失），库里不记删除动作，
+没有数据。
+
+实现（纯 GUI，Core / CLI / Agent API 零变化，外置 / 内置两种运行时一致）：
+
+- `archivableProjectSessions`（`gui/src/lib/sidebar-timeline.ts`）：未归档、未置顶的项目会话，与组行「归档全部对话」同一组；
+  vitest 断言它与 `buildSidebarSections` 的组会话 + 尾行一致，两处计数不会分家。
+- `ConfirmDeleteProjectDialog`：「项目删除后无法恢复。」+ ArchivedDialog「清空」同款的下沉勾选框，第二行随勾选切换后果文案，
+  勾上且有运行中的会话时接上归档全部对话的同一句提醒（`useSessionsAttention` 的 `runningCount`）；N 为 0 不出勾选框。
+  App 以项目 id 作 key，每次打开都从勾上开始。确认时先 `archiveSessionsBulk` 再 `deleteProject`。
+- 编辑项目对话框里删除按钮下的提示改为「里面的对话不会被删除，确认时可以一并归档」；「删除 Project」改为「删除项目」。
+
 ## 实现
 
 - `gui/src/lib/sidebar-timeline.ts`：`buildSidebarSections` 在既有会话分桶（`groupSessions` + `backfillRecentSessions`）之上
