@@ -389,7 +389,6 @@ function App() {
     deletingProject,
     editingProject,
     expandedProjectIds,
-    openProject,
     openProjectInSidebar,
     projectReveal,
     setCreateProjectOpen,
@@ -521,7 +520,7 @@ function App() {
               // commits to a first message.
               //
               // 注意：这里不再清 activeProjectFilter。New Chat 落在
-              // 最后进入的项目里（由项目组的 +、项目菜单或选中项目里的
+              // 最后进入的项目里（由项目组的 +、空项目的入口或选中项目里的
               // 对话设置），文案自动变成「新对话 · XXX」。没有 filter 时
               // 仍是普通新对话。展开项目组不设置它（D8）。
               setActiveSession(undefined);
@@ -558,7 +557,6 @@ function App() {
             expandedProjectIds={expandedProjectIds}
             projectReveal={projectReveal}
             onNewProject={() => setCreateProjectOpen(true)}
-            onOpenProject={openProject}
             onToggleProjectExpanded={toggleProjectExpanded}
             onStartProjectConversation={startProjectConversation}
             onAssignSessionToProject={assignSessionToProjectWithToast}

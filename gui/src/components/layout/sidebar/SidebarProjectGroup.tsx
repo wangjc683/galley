@@ -148,7 +148,9 @@ export function SidebarProjectGroup({
               <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
             ))}
             {olderSessions.length > 0 && (
-              <ProjectOlderToggle
+              <SidebarTailToggle
+                label={copy.sidebar.bucketEarlier}
+                ariaLabel={copy.sidebar.groupOlder(olderSessions.length)}
                 count={olderSessions.length}
                 open={olderOpen}
                 onToggle={() => setOlderOpen((open) => !open)}
@@ -579,19 +581,22 @@ function ProjectGroupDrawer({
   );
 }
 
-/** The drawer's last row when the project has sessions behind 更早:
- * the 更早 entry's register (10px label + count + caret), expanding in
- * place (D4). */
-function ProjectOlderToggle({
+/** A fold that closes a list and expands in place, in the 更早 entry's
+ * register (10px label + count + caret): a drawer's 「更早 N 个」 tail
+ * (D4), and the 项目 section's 「其他项目」 row. */
+export function SidebarTailToggle({
+  label,
+  ariaLabel,
   count,
   open,
   onToggle,
 }: {
+  label: string;
+  ariaLabel: string;
   count: number;
   open: boolean;
   onToggle: () => void;
 }) {
-  const copy = useCopy();
   return (
     <button
       type="button"
@@ -599,7 +604,7 @@ function ProjectOlderToggle({
       onMouseDown={preventMouseFocus}
       onClick={onToggle}
       aria-expanded={open}
-      aria-label={copy.sidebar.groupOlder(count)}
+      aria-label={ariaLabel}
       className={cn(
         "mx-1.5 mt-1 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
         "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
@@ -607,9 +612,7 @@ function ProjectOlderToggle({
         "outline-none",
       )}
     >
-      <span className="min-w-0 flex-1 truncate">
-        {copy.sidebar.bucketEarlier}
-      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
       <span className="flex items-center gap-0.5 tabular-nums normal-case tracking-normal">
         {count}
         <CaretRight

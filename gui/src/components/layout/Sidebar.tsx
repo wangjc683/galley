@@ -30,8 +30,8 @@ export interface SidebarProps {
   /** Project ids whose 项目 section groups are expanded (this run only).
    * Several can be open, to watch work across projects. */
   expandedProjectIds?: string[];
-  /** Bring this project's group into view — set by creating a project,
-   * a toast's 查看项目, or the 项目 menu. `seq` re-fires a repeat ask. */
+  /** Bring this project's group into view — set by creating a project
+   * or a toast's 查看项目. `seq` re-fires a repeat ask. */
   projectReveal?: { id: string; seq: number } | null;
   onSelectSession?: (id: string) => void;
   onNewChat?: () => void;
@@ -40,10 +40,8 @@ export interface SidebarProps {
   /** Scheduled items needing action (failed last fires) — badge on
    * the 定时 icon. */
   scheduledActionCount?: number;
-  /** Open the CreateProjectDialog. Wired to the 项目 menu's 新建项目. */
+  /** Open the CreateProjectDialog: the masthead's 新建项目 icon. */
   onNewProject?: () => void;
-  /** 项目 menu → a project: a new chat in it, its group expanded. */
-  onOpenProject?: (id: string) => void;
   /** Click a project group row → expand/collapse that one project. */
   onToggleProjectExpanded?: (id: string) => void;
   /** Click a project's inline + → prepare a new conversation whose
@@ -138,7 +136,6 @@ export function Sidebar({
   onOpenScheduled,
   scheduledActionCount,
   onNewProject,
-  onOpenProject,
   onToggleProjectExpanded,
   onStartProjectConversation,
   onArchiveSession,
@@ -177,6 +174,7 @@ export function Sidebar({
     sections.earlier.length === 0 &&
     sections.pinned.length === 0 &&
     sections.projects.length === 0 &&
+    sections.otherProjects.length === 0 &&
     SIDEBAR_TIME_BUCKETS.every(
       (bucket) => sections.buckets[bucket].length === 0,
     );
@@ -190,14 +188,25 @@ export function Sidebar({
   );
   const [projectsCollapsed, setProjectsCollapsed] =
     useSidebarProjectsCollapsed();
-  // A project asked into view (new project / 查看项目 / the 项目 menu)
-  // opens a collapsed 项目 section first, or there is no group to show.
-  // Render-time adjustment keyed on the request, not an effect: the
-  // reveal effect below must find the group in the same commit.
+  // The 其他项目 row's drawer: this run only, like a group's.
+  const [othersOpen, setOthersOpen] = useState(false);
+  // A project asked into view (new project / 查看项目) opens a
+  // collapsed 项目 section first — and the 其他项目 row when the
+  // project sits behind it — or there is no group to show. Render-time
+  // adjustment keyed on the request, not an effect: the reveal effect
+  // below must find the group in the same commit.
   const [seenRevealSeq, setSeenRevealSeq] = useState(projectReveal?.seq);
   if (projectReveal?.seq !== seenRevealSeq) {
     setSeenRevealSeq(projectReveal?.seq);
     if (projectReveal && projectsCollapsed) setProjectsCollapsed(false);
+    if (
+      projectReveal &&
+      sections.otherProjects.some(
+        (item) => item.project.id === projectReveal.id,
+      )
+    ) {
+      setOthersOpen(true);
+    }
   }
   const navigationProjects = useMemo(
     () => sortProjectsForNavigation(projects, sessions),
@@ -275,7 +284,7 @@ export function Sidebar({
   }, [activeId, activeSlot]);
 
   // Bring a project's group into view when asked from outside the list
-  // (a new project, a toast's 查看项目, the 项目 menu). A drawer that
+  // (a new project, a toast's 查看项目). A drawer that
   // just opened nudges its own sessions into view after its animation.
   useEffect(() => {
     if (!projectReveal) return;
@@ -323,18 +332,14 @@ export function Sidebar({
         onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
-        projects={navigationProjects}
         onNewProject={onNewProject}
-        onOpenProject={onOpenProject}
       />
       <SidebarQuickActions
         onNewChat={onNewChat}
         onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
-        projects={navigationProjects}
         onNewProject={onNewProject}
-        onOpenProject={onOpenProject}
         activeProjectName={activeProject?.name}
         newChatActive={newChatActive}
         listScrolled={listScrolled}
@@ -356,6 +361,8 @@ export function Sidebar({
             onToggleProjectsCollapsed={() =>
               setProjectsCollapsed(!projectsCollapsed)
             }
+            othersOpen={othersOpen}
+            onToggleOthers={() => setOthersOpen((open) => !open)}
             onOpenEarlier={onOpenEarlier}
             groupWiring={groupWiring}
             {...rowWiring}

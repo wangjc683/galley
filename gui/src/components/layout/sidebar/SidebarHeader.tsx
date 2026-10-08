@@ -2,7 +2,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import type { Project } from "@/types/session";
 
 import { SIDEBAR_HEADER_PR } from "./sidebar-width";
 import { SidebarNavIcons } from "./SidebarNavIcons";
@@ -11,19 +10,15 @@ export function SidebarHeader({
   onSearch,
   onOpenScheduled,
   scheduledActionCount,
-  projects,
   onNewProject,
-  onOpenProject,
 }: {
   onSearch?: () => void;
   onOpenScheduled?: () => void;
   scheduledActionCount?: number;
-  projects: Project[];
   onNewProject?: () => void;
-  onOpenProject?: (id: string) => void;
 }) {
   // Masthead row (2026-10-03): the "Galley" wordmark left, 搜索 / 定时 /
-  // 项目 as 28px icons right — the same TopBarIconButton rhythm as
+  // 新建项目 as 28px icons right — the same TopBarIconButton rhythm as
   // MainHeader's utility cluster, so the two column headers read as one
   // top strip. The engine indicator and Supervisor SOP that used to sit
   // here moved to MainHeader's status / utility clusters.
@@ -94,9 +89,7 @@ export function SidebarHeader({
         onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
-        projects={projects}
         onNewProject={onNewProject}
-        onOpenProject={onOpenProject}
       />
     </div>
   );

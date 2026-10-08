@@ -1,4 +1,4 @@
-import { Clock, MagnifyingGlass } from "@phosphor-icons/react";
+import { Clock, FolderPlus, MagnifyingGlass } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
@@ -7,13 +7,11 @@ import { IconTooltip } from "@/components/ui/tooltip";
 import { type AppCopy, useCopy } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
-import type { Project } from "@/types/session";
 
 import {
   HEADER_NAV_ICONS_DISPLAY,
   ROW_NAV_ICONS_DISPLAY,
 } from "./sidebar-width";
-import { SidebarProjectsMenu } from "./SidebarProjectsMenu";
 
 /** Mono, muted shortcut text — the tooltip's "⌘K" and the new-chat
  * row's ⌘N hint. Render the text through `ShortcutGlyphs` so the
@@ -24,7 +22,7 @@ export const SHORTCUT_TEXT_CLASS =
 type NavIconsPlacement = "header" | "row";
 
 /**
- * 搜索 / 定时 / 项目 as icons, name and shortcut in their tooltips. The
+ * 搜索 / 定时 / 新建项目 as icons, name and shortcut in their tooltips. The
  * group renders twice — once in SidebarHeader, once in the new-chat row
  * — and the sidebar width decides which copy is displayed (see
  * sidebar-width.ts). The other copy is display:none, so it is neither
@@ -35,17 +33,16 @@ type NavIconsPlacement = "header" | "row";
  * - row: the 32px QuickIconButton with 14px icons, gap-0.5 — the
  *   2026-09-28 one-row layout, unchanged.
  *
- * The 定时 badge rides along in both; 项目 opens the same menu from
- * either (SidebarProjectsMenu).
+ * The 定时 badge rides along in both. The third icon creates a project
+ * (2026-10-09; it was the 项目 menu): the projects themselves are all in
+ * the 项目 section, the quiet ones behind its 「其他项目」 row.
  */
 export function SidebarNavIcons({
   placement,
   onSearch,
   onOpenScheduled,
   scheduledActionCount = 0,
-  projects,
   onNewProject,
-  onOpenProject,
 }: {
   placement: NavIconsPlacement;
   onSearch?: () => void;
@@ -56,10 +53,7 @@ export function SidebarNavIcons({
    * Action-only by design: no idle total-count, so the position stays
    * meaningful (a number here always means "handle something"). */
   scheduledActionCount?: number;
-  /** The 项目 menu's list, already in navigation order. */
-  projects: Project[];
   onNewProject?: () => void;
-  onOpenProject?: (id: string) => void;
 }) {
   const copy = useCopy();
   const inHeader = placement === "header";
@@ -98,12 +92,13 @@ export function SidebarNavIcons({
         <Clock size={iconSize} weight="thin" />
         <ScheduledBadge count={scheduledActionCount} placement={placement} />
       </NavButton>
-      <SidebarProjectsMenu
-        placement={placement}
-        projects={projects}
-        onNewProject={onNewProject}
-        onOpenProject={onOpenProject}
-      />
+      <NavButton
+        label={copy.sidebar.newProject}
+        tooltip={copy.sidebar.newProject}
+        onClick={onNewProject}
+      >
+        <FolderPlus size={iconSize} weight="thin" />
+      </NavButton>
     </div>
   );
 }

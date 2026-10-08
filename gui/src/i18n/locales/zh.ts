@@ -222,6 +222,9 @@ export const zhCopy = {
       `${count} 个未读 · 共 ${total} 个`,
     groupTotal: (total: number) => `共 ${total} 个对话`,
     groupOlder: (count: number) => `更早 ${count} 个`,
+    // 项目分区末尾一行（2026-10-09）：30 天窗口外、未置顶的项目，就地展开。
+    otherProjects: "其他项目",
+    otherProjectsCount: (count: number) => `其他 ${count} 个项目`,
     archiveProjectSessions: "归档全部对话",
     archiveProjectSessionsTitle: (projectName: string, count: number) =>
       `归档「${projectName}」里的 ${count} 个对话？`,

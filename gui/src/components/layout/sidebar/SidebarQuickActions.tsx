@@ -5,7 +5,6 @@ import { IconTooltip } from "@/components/ui/tooltip";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
-import type { Project } from "@/types/session";
 
 import { NEW_CHAT_HINT_DISPLAY, NEW_CHAT_LABEL_HIDDEN } from "./sidebar-width";
 import {
@@ -16,23 +15,21 @@ import {
 
 /**
  * The new-chat row under SidebarHeader. Wide sidebars: 新对话 spans the
- * row with a ⌘N hint at its end, while 搜索 / 定时 / 项目 sit in the
+ * row with a ⌘N hint at its end, while 搜索 / 定时 / 新建项目 sit in the
  * header. Narrow sidebars: the header can't fit them, so the icons
  * come down into this row as 32px icons right of 新对话 — the
  * 2026-09-28 one-row layout. The width switch is in sidebar-width.ts;
  * this row exists in both states, so the session list never jumps.
  * Only 新对话 is high-frequency here; the other three are demoted, not
- * hidden (community usage is unknown). 新建项目 is the 项目 menu's
- * first item; the command palette has it too.
+ * hidden (community usage is unknown). The command palette has
+ * 新建项目 too.
  */
 export function SidebarQuickActions({
   onNewChat,
   onSearch,
   onOpenScheduled,
   scheduledActionCount = 0,
-  projects,
   onNewProject,
-  onOpenProject,
   activeProjectName,
   newChatActive = false,
   listScrolled = false,
@@ -42,10 +39,7 @@ export function SidebarQuickActions({
   onOpenScheduled?: () => void;
   /** Badge count on the 定时 icon; see SidebarNavIcons. */
   scheduledActionCount?: number;
-  /** The 项目 menu's list; see SidebarNavIcons. */
-  projects: Project[];
   onNewProject?: () => void;
-  onOpenProject?: (id: string) => void;
   /** When set, the "+ New Chat" label appends project context so the
    * user knows the first message will be filed into that project.
    * Without this hint the action was technically correct but
@@ -81,9 +75,7 @@ export function SidebarQuickActions({
           onSearch={onSearch}
           onOpenScheduled={onOpenScheduled}
           scheduledActionCount={scheduledActionCount}
-          projects={projects}
           onNewProject={onNewProject}
-          onOpenProject={onOpenProject}
         />
       </div>
     </div>

@@ -68,8 +68,8 @@ export function useProjectNavigation({
   );
 
   // Expanding or collapsing a group never touches project context (D8):
-  // in the sidebar it is usually a glance. The row's +, the empty
-  // project's CTA and the 项目 menu set it.
+  // in the sidebar it is usually a glance. The row's + and the empty
+  // project's CTA set it.
   const toggleProjectExpanded = (projectId: string) => {
     setExpandedProjectIds((ids) =>
       ids.includes(projectId)
@@ -94,12 +94,6 @@ export function useProjectNavigation({
     setActiveSession(undefined);
     setScreen("empty");
     setEmptyComposerFocusTick((tick) => tick + 1);
-  };
-
-  // 项目 menu → a project: a new chat in it, and its group opened.
-  const openProject = (projectId: string) => {
-    startProjectConversation(projectId);
-    openProjectInSidebar(projectId);
   };
 
   const assignSessionToProjectWithToast = (
@@ -168,7 +162,6 @@ export function useProjectNavigation({
     deletingProject,
     editingProject,
     expandedProjectIds,
-    openProject,
     openProjectInSidebar,
     projectReveal,
     setCreateProjectOpen,

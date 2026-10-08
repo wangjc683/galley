@@ -232,6 +232,9 @@ export const enCopy: AppCopy = {
     groupTotal: (total) =>
       `${total} ${total === 1 ? "conversation" : "conversations"}`,
     groupOlder: (count) => `${count} earlier`,
+    otherProjects: "Other projects",
+    otherProjectsCount: (count) =>
+      count === 1 ? "1 other project" : `${count} other projects`,
     archiveProjectSessions: "Archive all conversations",
     archiveProjectSessionsTitle: (projectName, count) =>
       `Archive ${count} ${count === 1 ? "conversation" : "conversations"} in "${projectName}"?`,

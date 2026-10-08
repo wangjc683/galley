@@ -161,9 +161,15 @@ describe("buildSidebarSections", () => {
       "fresh",
       "kept",
     ]);
-    // The dormant project's session stays behind 更早, ungrouped.
+    // The rest sit behind 其他项目; a quiet project's session stays
+    // behind 更早 and is grouped (its fold shows it).
+    expect(t.otherProjects.map((g) => g.project.id).sort()).toEqual([
+      "dormant",
+      "pinnedOnly",
+      "stale",
+    ]);
     expect(ids(t.earlier)).toEqual(["d1"]);
-    expect(t.groupedSessionIds.has("d1")).toBe(false);
+    expect(t.groupedSessionIds.has("d1")).toBe(true);
   });
 
   it("orders pinned projects first, then by content activity", () => {

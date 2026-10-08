@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Session } from "@/types/session";
 
-import { SidebarProjectGroup } from "./SidebarProjectGroup";
+import { SidebarProjectGroup, SidebarTailToggle } from "./SidebarProjectGroup";
 import {
   SidebarTimelineRow,
   type SidebarTimelineRowWiring,
@@ -128,6 +128,8 @@ export function SidebarSectionsList({
   sections,
   projectsCollapsed,
   onToggleProjectsCollapsed,
+  othersOpen,
+  onToggleOthers,
   onOpenEarlier,
   groupWiring,
   ...rowWiring
@@ -135,6 +137,8 @@ export function SidebarSectionsList({
   sections: SidebarSections;
   projectsCollapsed: boolean;
   onToggleProjectsCollapsed: () => void;
+  othersOpen: boolean;
+  onToggleOthers: () => void;
   onOpenEarlier?: () => void;
   groupWiring: SidebarProjectGroupWiring;
 } & SidebarTimelineRowWiring) {
@@ -154,8 +158,11 @@ export function SidebarSectionsList({
       />
       <SidebarProjectsSection
         groups={sections.projects}
+        otherGroups={sections.otherProjects}
         collapsed={projectsCollapsed}
         onToggleCollapsed={onToggleProjectsCollapsed}
+        othersOpen={othersOpen}
+        onToggleOthers={onToggleOthers}
         groupWiring={groupWiring}
         {...rowWiring}
       />
@@ -199,45 +206,66 @@ function SidebarSessionBucket({
 /**
  * The 项目 section (S2 / S3 / S5): a time-bucket-style header whose count
  * is the listed projects and whose caret folds the section, then one
- * group per project. No section when nothing is listed; no 新建项目 + on
- * the header (S6).
+ * group per project, then — when any project isn't listed — a closing
+ * 「其他项目 N」 row that opens their groups in place (2026-10-09). No
+ * section when there is no project at all; no 新建项目 + on the header
+ * (S6).
  *
- * Collapsed (persisted, see useSidebarProjectsCollapsed), the groups are
- * not mounted; project sessions that need the user — erroring / waiting
- * for a reply — and the selected one hang directly under the header as
- * plain rows, the way a time bucket lists its rows. That keeps each
- * session mounted once, so `data-session-id` stays unique and the
- * reveal-active-row effect finds it.
+ * Folds hang what needs the user. Collapsed (persisted, see
+ * useSidebarProjectsCollapsed), no group is mounted; project sessions
+ * that need the user — erroring / waiting for a reply — and the selected
+ * one hang directly under the header as plain rows, the way a time
+ * bucket lists its rows. The 其他项目 row, shut, does the same for its
+ * projects. That keeps each session mounted once, so `data-session-id`
+ * stays unique and the reveal-active-row effect finds it.
  */
 function SidebarProjectsSection({
   groups,
+  otherGroups,
   collapsed,
   onToggleCollapsed,
+  othersOpen,
+  onToggleOthers,
   groupWiring,
   ...rowWiring
 }: {
   groups: SidebarProjectGroupItem[];
+  otherGroups: SidebarProjectGroupItem[];
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  othersOpen: boolean;
+  onToggleOthers: () => void;
   groupWiring: SidebarProjectGroupWiring;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
   const { activeId, sessionGoalStatus } = rowWiring;
-  const allSessions = groups.flatMap((g) => [
-    ...g.sessions,
-    ...g.olderSessions,
-  ]);
+  const sessionsOf = (items: SidebarProjectGroupItem[]) =>
+    items.flatMap((g) => [...g.sessions, ...g.olderSessions]);
+  const listedSessions = sessionsOf(groups);
+  const otherSessions = sessionsOf(otherGroups);
   const attention = useSessionsAttention(
-    allSessions,
+    [...listedSessions, ...otherSessions],
     activeId,
     sessionGoalStatus,
   );
-  if (groups.length === 0) return null;
-  const hanging = collapsed
-    ? allSessions.filter(
-        (s) => attention.needsYouIds.has(s.id) || s.id === activeId,
-      )
-    : [];
+  if (groups.length === 0 && otherGroups.length === 0) return null;
+  const hangs = (sessions: Session[]) =>
+    sessions.filter(
+      (s) => attention.needsYouIds.has(s.id) || s.id === activeId,
+    );
+  const renderRows = (sessions: Session[]) =>
+    sessions.map((s) => (
+      <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
+    ));
+  const renderGroups = (items: SidebarProjectGroupItem[]) =>
+    items.map((item) => (
+      <WiredProjectGroup
+        key={`project:${item.project.id}`}
+        item={item}
+        groupWiring={groupWiring}
+        {...rowWiring}
+      />
+    ));
   return (
     <>
       <SidebarCollapsibleSectionLabel
@@ -246,18 +274,25 @@ function SidebarProjectsSection({
         open={!collapsed}
         onToggle={onToggleCollapsed}
       />
-      {collapsed
-        ? hanging.map((s) => (
-            <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
-          ))
-        : groups.map((item) => (
-            <WiredProjectGroup
-              key={`project:${item.project.id}`}
-              item={item}
-              groupWiring={groupWiring}
-              {...rowWiring}
+      {collapsed ? (
+        renderRows(hangs([...listedSessions, ...otherSessions]))
+      ) : (
+        <>
+          {renderGroups(groups)}
+          {otherGroups.length > 0 && (
+            <SidebarTailToggle
+              label={copy.sidebar.otherProjects}
+              ariaLabel={copy.sidebar.otherProjectsCount(otherGroups.length)}
+              count={otherGroups.length}
+              open={othersOpen}
+              onToggle={onToggleOthers}
             />
-          ))}
+          )}
+          {othersOpen
+            ? renderGroups(otherGroups)
+            : renderRows(hangs(otherSessions))}
+        </>
+      )}
     </>
   );
 }
@@ -294,7 +329,8 @@ function SidebarCollapsibleSectionLabel({
       >
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <span className="flex items-center gap-0.5 tabular-nums normal-case tracking-normal text-ink-muted">
-          {count}
+          {/* 0 when only 其他项目 are left: the row below carries the number. */}
+          {count > 0 && count}
           <CaretRight
             size={9}
             weight="thin"

@@ -715,10 +715,16 @@ Projects are now a 项目 section under 置顶, one collapsible group row per
 project, and Project Review is gone: time buckets hold only sessions outside
 projects, the section header folds (remembered across restarts), the group sums
 its sessions' states on a second line, sessions waiting for a reply or erroring
-(and the selected one) hang under a collapsed group or section, and the header
-项目 icon opens a menu (new project + every project). Interleaving group rows
-into the time buckets was tried first and overturned on the real device the
-same day ([devlog](./devlog/2026-10-08-sidebar-project-groups.md)).
+(and the selected one) hang under a collapsed group or section. Interleaving
+group rows into the time buckets was tried first and overturned on the real
+device the same day ([devlog](./devlog/2026-10-08-sidebar-project-groups.md)).
+Deleting a project offers 「同时归档里面的 N 个对话」 (ticked by default) in its
+confirm, since the conversations otherwise pour back into the time buckets. An
+open group shows its newest five sessions, the rest behind its 「更早 N」 tail
+(sessions there that need the user still show); the masthead's third icon
+creates a project directly, and projects quiet past the 30-day window sit
+behind a 「其他项目 N」 row closing the 项目 section — the 10-08 projects menu
+is gone ([devlog](./devlog/2026-10-09-sidebar-recent-five-and-new-project-icon.md)).
 The README screenshots still show the old sidebar and `projects.png` the old
 Project Review; re-shoot with the next screenshot round.
 Owed for `v0.6.2`: the new update path on a

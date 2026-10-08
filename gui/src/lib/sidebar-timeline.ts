@@ -55,14 +55,20 @@ export interface SidebarSections {
   /** The 项目 section's groups (S3), pinned projects first, then by
    * content activity (S5, `sortProjectsForNavigation`). */
   projects: SidebarProjectGroupItem[];
+  /** Every other project — unpinned, gone quiet past the window, or an
+   * empty one created before it — in the same order, behind the
+   * section's closing 「其他项目 N」 row (2026-10-09; before, only the
+   * masthead 项目 menu reached them). */
+  otherProjects: SidebarProjectGroupItem[];
   /** Time buckets with sessions outside projects only (S4). */
   buckets: Record<SidebarTimeBucket, Session[]>;
   /** Sessions behind the 更早 entry: the EarlierDialog list (a group's
    * older sessions are in here too). */
   earlier: Session[];
-  /** Every session a project group lists (drawer or its 更早 tail). The
-   * 更早 entry's borrowed "you are here" row skips these — their group
-   * shows them. */
+  /** Every session a project group lists (drawer or its 更早 tail),
+   * other projects' included. The 更早 entry's borrowed "you are here"
+   * row skips these — their group, or the fold they hang under, shows
+   * them. */
   groupedSessionIds: Set<string>;
 }
 
@@ -77,15 +83,17 @@ export interface SidebarSectionsOptions {
  *     sessions stay plain rows in 置顶. The 项目 section holds a pinned
  *     project always, an empty project (no visible sessions) while its
  *     `createdAt` is inside the window, and any other project only while
- *     it lists a window session — so one whose window sessions are all
- *     pinned, or that only has old sessions, is left to the 项目 menu.
+ *     it lists a window session. The rest — one whose window sessions
+ *     are all pinned, or that only has old sessions — are
+ *     `otherProjects`, behind the section's 「其他项目」 row.
  *   - D3: every project folds, a single-session one too.
  *   - D4: a group lists its newest PROJECT_GROUP_RECENT_COUNT sessions
  *     flat, newest first; the rest are the drawer's tail. (Which
  *     projects the section lists still goes by the window.)
  *   - S4: time buckets carry no project sessions.
- *   - S5: pinned projects first, then by content activity — the same
- *     order as the 项目 menu.
+ *   - S5: pinned projects first, then by content activity
+ *     (`sortProjectsForNavigation`), in the section and behind
+ *     其他项目 alike.
  *
  * Sessions whose `projectId` names no known project stay plain rows.
  */
@@ -129,6 +137,7 @@ export function buildSidebarSections(
   }
 
   const listedProjects: SidebarProjectGroupItem[] = [];
+  const otherProjects: SidebarProjectGroupItem[] = [];
   const groupedSessionIds = new Set<string>();
   for (const project of sortProjectsForNavigation(projects, sessions)) {
     const draft = drafts.get(project.id);
@@ -142,12 +151,11 @@ export function buildSidebarSections(
       : empty
         ? bucketForTimestamp(project.createdAt, now) !== "earlier"
         : listed.length > 0;
-    if (!inSection) continue;
     for (const s of listed) groupedSessionIds.add(s.id);
     for (const s of older) groupedSessionIds.add(s.id);
     // listed (window) then older (更早), each newest first.
     const all = [...listed, ...older];
-    listedProjects.push({
+    (inSection ? listedProjects : otherProjects).push({
       project,
       sessions: all.slice(0, PROJECT_GROUP_RECENT_COUNT),
       olderSessions: all.slice(PROJECT_GROUP_RECENT_COUNT),
@@ -163,6 +171,7 @@ export function buildSidebarSections(
   return {
     pinned: buckets.pinned,
     projects: listedProjects,
+    otherProjects,
     buckets: timeBuckets,
     earlier: buckets.earlier,
     groupedSessionIds,
@@ -177,7 +186,7 @@ export function findSectionsSlot(
 ): SessionBucket | "projects" | undefined {
   if (sections.pinned.some((s) => s.id === sessionId)) return "pinned";
   if (
-    sections.projects.some(
+    [...sections.projects, ...sections.otherProjects].some(
       (item) =>
         item.sessions.some((s) => s.id === sessionId) ||
         item.olderSessions.some((s) => s.id === sessionId),

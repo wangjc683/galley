@@ -2,7 +2,10 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { buildSidebarSections } from "@/lib/sidebar-timeline";
+import {
+  buildSidebarSections,
+  type SidebarSections,
+} from "@/lib/sidebar-timeline";
 import type { Project, Session } from "@/types/session";
 
 import { SidebarSectionsList } from "./SidebarTimeline";
@@ -35,14 +38,25 @@ const project = {
   updatedAt: ago(5),
 } as Project;
 
+// 「静」 has gone quiet past the window: one of the 其他项目.
+const quiet = {
+  ...project,
+  id: "q",
+  name: "静",
+  lastActivityAt: ago(90),
+  createdAt: ago(90),
+  updatedAt: ago(90),
+} as Project;
+
 const sections = buildSidebarSections(
   [
     session("x"),
     session("pinned", { pinned: true }),
     session("p1", { projectId: "p" }),
     session("p2", { projectId: "p" }),
+    session("q1", { projectId: "q", lastActivityAt: ago(60) }),
   ],
-  [project],
+  [project, quiet],
   { now: NOW },
 );
 
@@ -50,17 +64,21 @@ function render(
   opts: {
     activeId?: string;
     collapsed?: boolean;
+    othersOpen?: boolean;
+    sections?: SidebarSections;
   } = {},
 ) {
   return renderToStaticMarkup(
     <Tooltip.Provider>
       <SidebarSectionsList
-        sections={sections}
+        sections={opts.sections ?? sections}
         projectsCollapsed={opts.collapsed ?? false}
         onToggleProjectsCollapsed={() => {}}
+        othersOpen={opts.othersOpen ?? false}
+        onToggleOthers={() => {}}
         groupWiring={{ expandedProjectIds: new Set() }}
         activeId={opts.activeId}
-        projects={[project]}
+        projects={[project, quiet]}
         onConfirmRename={() => {}}
         onCancelRename={() => {}}
       />
@@ -97,5 +115,35 @@ describe("SidebarSectionsList", () => {
     expect(occurrences(html, 'data-project-id="p"')).toBe(1);
     expect(occurrences(html, 'data-session-id="p2"')).toBe(1);
     expect(occurrences(html, 'data-session-id="p1"')).toBe(1);
+  });
+
+  it("closes the section with 其他项目, its groups behind it", () => {
+    const html = render();
+    expect(html.indexOf(">其他项目<")).toBeGreaterThan(
+      html.indexOf('data-project-id="p"'),
+    );
+    expect(html).toContain('aria-label="其他 1 个项目"');
+    expect(html).not.toContain('data-project-id="q"');
+    // Shut, it hangs the selected session of a quiet project, once.
+    const selected = render({ activeId: "q1" });
+    expect(occurrences(selected, 'data-session-id="q1"')).toBe(1);
+    expect(render({ othersOpen: true })).toContain('data-project-id="q"');
+  });
+
+  it("keeps the section for 其他项目 alone, with no 0 on its header", () => {
+    const html = render({
+      // x keeps the window non-empty (an empty one backfills 最近).
+      sections: buildSidebarSections(
+        [
+          session("x"),
+          session("q1", { projectId: "q", lastActivityAt: ago(60) }),
+        ],
+        [quiet],
+        { now: NOW },
+      ),
+    });
+    expect(html).toContain(">项目<");
+    expect(html).toContain(">其他项目<");
+    expect(html).not.toMatch(/>0</);
   });
 });
