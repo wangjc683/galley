@@ -1,12 +1,33 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Project, Session } from "@/types/session";
 
 import { SidebarProjectGroup } from "./SidebarProjectGroup";
 
 // useCopy falls back to the zh copy without a CopyProvider.
+
+// Static rendering reads the stores' initial state, so a session's
+// erroring bridge can't be seeded there; mark ids as needing the user
+// on top of the real hook instead.
+const needsYou = vi.hoisted(() => new Set<string>());
+vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useSessionsAttention")>();
+  return {
+    ...actual,
+    useSessionsAttention: (
+      ...args: Parameters<typeof actual.useSessionsAttention>
+    ) => {
+      const view = actual.useSessionsAttention(...args);
+      return {
+        ...view,
+        needsYouIds: new Set([...view.needsYouIds, ...needsYou]),
+      };
+    },
+  };
+});
 
 const session = (id: string): Session =>
   ({
@@ -83,6 +104,20 @@ describe("SidebarProjectGroup", () => {
     expect(occurrences(html, "old")).toBe(1);
     expect(occurrences(html, "older")).toBe(0);
     expect(html).toContain("更早 2 个");
+  });
+
+  it("borrows a tail session that needs the user above the shut tail", () => {
+    needsYou.add("broken");
+    const html = render({
+      expanded: true,
+      olderSessions: [session("quiet"), session("broken")],
+    });
+    needsYou.clear();
+    expect(occurrences(html, "broken")).toBe(1);
+    expect(occurrences(html, "quiet")).toBe(0);
+    expect(html.indexOf('data-session-id="broken"')).toBeLessThan(
+      html.indexOf("更早 2 个"),
+    );
   });
 
   it("writes the summary on the row's second line", () => {

@@ -69,9 +69,9 @@ export function SidebarProjectGroup({
   ...rowWiring
 }: {
   project: Project;
-  /** Window sessions, newest first. */
+  /** The newest sessions (PROJECT_GROUP_RECENT_COUNT), newest first. */
   sessions: Session[];
-  /** Sessions behind 更早, newest first — the drawer's tail. */
+  /** The rest, newest first — the drawer's 「更早 N 个」 tail. */
   olderSessions: Session[];
   expanded: boolean;
   onToggleExpanded?: () => void;
@@ -103,12 +103,15 @@ export function SidebarProjectGroup({
     }
   }
   const hanging = allSessions.filter((s) => hangingIds.has(s.id));
-  // Expanded with the tail shut: the selected older session borrows a
-  // slot above the tail row, like the 更早 entry's borrowed row.
+  // Expanded with the tail shut: tail sessions that need the user and
+  // the selected one borrow slots above the tail row — the tail is a
+  // fold too, and nothing that needs you hides behind a fold (D6 / D7).
   const borrowedOlder =
     expanded && !olderOpen
-      ? olderSessions.find((s) => s.id === activeId)
-      : undefined;
+      ? olderSessions.filter(
+          (s) => attention.needsYouIds.has(s.id) || s.id === activeId,
+        )
+      : [];
 
   const total = allSessions.length;
   const archiveAll =
@@ -141,13 +144,9 @@ export function SidebarProjectGroup({
               .map((s) => (
                 <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
               ))}
-            {borrowedOlder && (
-              <SidebarTimelineRow
-                key={borrowedOlder.id}
-                session={borrowedOlder}
-                {...rowWiring}
-              />
-            )}
+            {borrowedOlder.map((s) => (
+              <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
+            ))}
             {olderSessions.length > 0 && (
               <ProjectOlderToggle
                 count={olderSessions.length}

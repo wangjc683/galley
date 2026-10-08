@@ -83,7 +83,25 @@ describe("buildSidebarSections", () => {
     expect(shape(t.projects)).toEqual(["p[p1,p2,p3]"]);
   });
 
-  it("keeps a group's older sessions behind 更早 and in its tail", () => {
+  it("shows a group's newest five, the rest in its tail", () => {
+    const t = buildSidebarSections(
+      [
+        session("old", 45, { projectId: "p" }),
+        ...[0, 1, 2, 3, 4, 5].map((d) =>
+          session(`d${d}`, d, { projectId: "p" }),
+        ),
+      ],
+      [project("p")],
+      { now: NOW },
+    );
+    expect(ids(t.projects[0].sessions)).toEqual(["d0", "d1", "d2", "d3", "d4"]);
+    expect(ids(t.projects[0].olderSessions)).toEqual(["d5", "old"]);
+    // A session past the window stays behind 更早 too; the group shows it.
+    expect(ids(t.earlier)).toEqual(["old"]);
+    expect(t.groupedSessionIds.has("old")).toBe(true);
+  });
+
+  it("shows old sessions in the drawer while a group has fewer than five", () => {
     const t = buildSidebarSections(
       [
         session("p1", 1, { projectId: "p" }),
@@ -92,9 +110,9 @@ describe("buildSidebarSections", () => {
       [project("p")],
       { now: NOW },
     );
-    expect(ids(t.projects[0].olderSessions)).toEqual(["p2"]);
+    expect(ids(t.projects[0].sessions)).toEqual(["p1", "p2"]);
+    expect(t.projects[0].olderSessions).toEqual([]);
     expect(ids(t.earlier)).toEqual(["p2"]);
-    expect(t.groupedSessionIds.has("p2")).toBe(true);
   });
 
   it("keeps pinned project sessions in 置顶", () => {

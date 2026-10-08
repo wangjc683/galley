@@ -31,14 +31,21 @@ export const SIDEBAR_TIME_BUCKETS: SidebarTimeBucket[] = [
   "recent",
 ];
 
+/** How many of a project's sessions its open drawer shows before the
+ * 「更早 N 个」 tail (2026-10-09, JC: K = 5). With several groups open
+ * at once — three projects each with a session in flight — a group's
+ * history no longer pushes the next group's live session off a small
+ * screen. */
+export const PROJECT_GROUP_RECENT_COUNT = 5;
+
 export interface SidebarProjectGroupItem {
   project: Project;
-  /** The project's unpinned sessions inside the timeline window,
-   * newest first. Empty for an empty project (its drawer shows the
-   * 新建项目对话 CTA) or a pinned project whose sessions are all old. */
+  /** The project's newest unpinned sessions, at most
+   * PROJECT_GROUP_RECENT_COUNT, newest first. Empty for an empty
+   * project (its drawer shows the 新建项目对话 CTA). */
   sessions: Session[];
-  /** The project's sessions behind 更早, newest first — the drawer's
-   * trailing 「更早 N 个」 row. They also stay in `earlier`. */
+  /** The rest, newest first — the drawer's trailing 「更早 N 个」 row.
+   * Those older than the window also stay in `earlier`. */
   olderSessions: Session[];
 }
 
@@ -73,8 +80,9 @@ export interface SidebarSectionsOptions {
  *     it lists a window session — so one whose window sessions are all
  *     pinned, or that only has old sessions, is left to the 项目 menu.
  *   - D3: every project folds, a single-session one too.
- *   - D4: a group lists its window sessions flat, newest first; its
- *     older sessions are the drawer's tail.
+ *   - D4: a group lists its newest PROJECT_GROUP_RECENT_COUNT sessions
+ *     flat, newest first; the rest are the drawer's tail. (Which
+ *     projects the section lists still goes by the window.)
  *   - S4: time buckets carry no project sessions.
  *   - S5: pinned projects first, then by content activity — the same
  *     order as the 项目 menu.
@@ -137,7 +145,13 @@ export function buildSidebarSections(
     if (!inSection) continue;
     for (const s of listed) groupedSessionIds.add(s.id);
     for (const s of older) groupedSessionIds.add(s.id);
-    listedProjects.push({ project, sessions: listed, olderSessions: older });
+    // listed (window) then older (更早), each newest first.
+    const all = [...listed, ...older];
+    listedProjects.push({
+      project,
+      sessions: all.slice(0, PROJECT_GROUP_RECENT_COUNT),
+      olderSessions: all.slice(PROJECT_GROUP_RECENT_COUNT),
+    });
   }
 
   const timeBuckets = {} as Record<SidebarTimeBucket, Session[]>;
