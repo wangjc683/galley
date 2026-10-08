@@ -33,6 +33,9 @@ export interface SidebarProps {
   sessions: Session[];
   projects?: Project[];
   activeId?: string;
+  /** The main area shows the empty new-chat composer; the 新对话 row
+   * is then the sidebar's selected row. */
+  newChatActive?: boolean;
   /** Project context for the right-side empty composer. This no
    * longer drives Sidebar filtering; Project Review owns sidebar
    * grouping/expansion independently. */
@@ -137,6 +140,7 @@ export function Sidebar({
   sessions,
   projects = [],
   activeId,
+  newChatActive = false,
   activeProjectFilter,
   projectViewOpen = false,
   expandedProjectIds = [],
@@ -225,6 +229,9 @@ export function Sidebar({
     );
   const previousProjectViewOpenRef = useRef(projectViewOpen);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Drives the new-chat row's scroll-linked divider. Set from onScroll
+  // only (React bails out when the boolean does not change).
+  const [listScrolled, setListScrolled] = useState(false);
   // Last session the user picked by pressing a row in this sidebar
   // (timeline or Project Review). The reveal effect skips that one
   // selection: rows activate on pointerdown, so scrolling a half-visible
@@ -365,10 +372,13 @@ export function Sidebar({
         projectViewOpen={projectViewOpen}
         onToggleProjectView={onToggleProjectView}
         activeProjectName={activeProject?.name}
+        newChatActive={newChatActive}
+        listScrolled={listScrolled}
       />
 
       <div
         ref={scrollContainerRef}
+        onScroll={(e) => setListScrolled(e.currentTarget.scrollTop > 0)}
         className="scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2"
       >
         {projectReviewPhase && (

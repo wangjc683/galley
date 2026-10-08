@@ -707,7 +707,9 @@ Ctrl+N stay Cocoa editing keys); the Report an Issue… menu and tray item open
 Settings → 报告问题; the environment payload drops `deferred_b4` checks and
 gains `ga_commit` for external GA. The sidebar's time-bucket labels moved
 onto the row grid (counts now line up under ⌘N) and truncated session titles
-and sublines fade out instead of ending in a ragged `…`
+and sublines fade out instead of ending in a ragged `…`; the 新对话 row now
+heads the list — it is the selected row while the empty new-chat composer is
+showing, and its divider appears only once the list scrolls
 ([devlog](./devlog/2026-10-08-sidebar-grid-and-fade-truncation.md)).
 Owed for `v0.6.2`: the new update path on a
 real older build (it takes effect from the update after `v0.6.2`, since the

@@ -501,6 +501,7 @@ function App() {
           <Sidebar
             sessions={visibleSessions}
             activeId={effectiveActiveId}
+            newChatActive={screen === "empty"}
             onNewChat={() => {
               // Lazy: New Chat just clears the active selection and
               // shows the empty composer. No session row is created

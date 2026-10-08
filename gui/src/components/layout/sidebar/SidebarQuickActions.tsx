@@ -32,6 +32,8 @@ export function SidebarQuickActions({
   projectViewOpen,
   onToggleProjectView,
   activeProjectName,
+  newChatActive = false,
+  listScrolled = false,
 }: {
   onNewChat?: () => void;
   onSearch?: () => void;
@@ -45,11 +47,31 @@ export function SidebarQuickActions({
    * Without this hint the action was technically correct but
    * invisibly so. */
   activeProjectName?: string;
+  /** The main area shows the empty new-chat composer: 新对话 takes the
+   * selected-row style (see NewChatButton). */
+  newChatActive?: boolean;
+  /** The session list below is scrolled away from its top. */
+  listScrolled?: boolean;
 }) {
+  // No divider at rest (2026-10-08): with the list at its top nothing is
+  // clipped, and a line there only fenced 新对话 off from the list it
+  // heads. Once the list scrolls, rows slide under this row and the line
+  // marks the clip edge — the macOS toolbar's scroll-linked separator.
+  // The 1px border is always there (transparent at rest), so nothing
+  // shifts when it appears.
   return (
-    <div className="border-b border-line/70 py-1">
+    <div
+      className={cn(
+        "border-b py-1",
+        listScrolled ? "border-line/70" : "border-transparent",
+      )}
+    >
       <div className="mx-1.5 flex items-center gap-0.5">
-        <NewChatButton projectName={activeProjectName} onClick={onNewChat} />
+        <NewChatButton
+          projectName={activeProjectName}
+          active={newChatActive}
+          onClick={onNewChat}
+        />
         <SidebarNavIcons
           placement="row"
           onSearch={onSearch}
@@ -65,7 +87,13 @@ export function SidebarQuickActions({
 
 /**
  * 新对话 with its text. Spans the row, or the space left of the icons
- * in the narrow state. The plus is brand-strong so the eye lands on it
+ * in the narrow state.
+ *
+ * It heads the session list as "the next session" (2026-10-08): while
+ * the main area shows the empty new-chat composer it carries the same
+ * selected style as an open session's row, so the sidebar always has
+ * exactly one "you are here" row. After the first message the new
+ * session's row takes the selection over and this one returns to rest. The plus is brand-strong so the eye lands on it
  * first: new session = creation = a brand moment, the same brand
  * language as the active-session row — a quiet hierarchy cue, not a
  * CTA block.
@@ -78,9 +106,11 @@ export function SidebarQuickActions({
  */
 function NewChatButton({
   projectName,
+  active = false,
   onClick,
 }: {
   projectName?: string;
+  active?: boolean;
   onClick?: () => void;
 }) {
   const copy = useCopy();
@@ -104,12 +134,16 @@ function NewChatButton({
         type="button"
         onClick={onClick}
         aria-label={label}
+        aria-current={active ? "page" : undefined}
         className={cn(
           // min-w: pl-3 + the 16px plus column. Not min-w-0 — at the
           // narrowest widths the row must squeeze the icons, not clip
           // the plus.
           "flex h-8 min-w-[28px] flex-1 items-center gap-2 rounded-sm pl-3 text-left text-[13px] text-ink",
-          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover",
+          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          active
+            ? "bg-selected shadow-[var(--shadow-selected)]"
+            : "hover:bg-hover",
           "active:translate-y-px",
           "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         )}
