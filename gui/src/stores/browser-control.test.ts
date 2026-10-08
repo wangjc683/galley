@@ -4,9 +4,14 @@ import {
   BROWSER_BRIDGE_EVENT,
   statusForBridge,
   type BrowserBridgeStatus,
+  type BrowserControlLayout,
   type BrowserControlProbe,
 } from "@/lib/browser-control";
-import { useBrowserControlStore } from "@/stores/browser-control";
+import {
+  BROWSER_CONTROL_READY_TOAST_ID,
+  useBrowserControlStore,
+} from "@/stores/browser-control";
+import { usePrefsStore } from "@/stores/prefs";
 import { useUiStore } from "@/stores/ui";
 import { getTauriMocks } from "@/test/setup";
 
@@ -31,13 +36,42 @@ function probeResult(
 ): BrowserControlProbe {
   return {
     status: "connected",
+    kind: "connected",
     extensionDir: "/data/browser-control/tmwd_cdp_bridge",
     manifestVersion: "1.0.0",
     tabCount: 2,
     sampleTitle: "Example Domain",
     message: "浏览器控制已连接。",
+    detail: null,
     ...patch,
   };
+}
+
+const LAYOUT: BrowserControlLayout = {
+  extensionDir: "/data/browser-control/tmwd_cdp_bridge",
+  sourceDir: "/code/assets/tmwd_cdp_bridge",
+  manifestVersion: "1.0.0",
+  filesCopied: 4,
+};
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Route `invoke` by command; unknown commands resolve undefined. */
+function mockInvoke(
+  handlers: Partial<Record<string, () => unknown | Promise<unknown>>>,
+) {
+  getTauriMocks().invoke.mockImplementation(async (command) => {
+    const handler = handlers[command];
+    return handler ? handler() : undefined;
+  });
 }
 
 function probeCalls() {
@@ -58,7 +92,7 @@ function setVerified(verified: boolean) {
 function readyToasts() {
   return useUiStore
     .getState()
-    .toasts.filter((toast) => toast.id === "browser-control-ready");
+    .toasts.filter((toast) => toast.id === BROWSER_CONTROL_READY_TOAST_ID);
 }
 
 beforeEach(() => {
@@ -67,6 +101,7 @@ beforeEach(() => {
     true,
   );
   useUiStore.setState({ toasts: [] });
+  usePrefsStore.setState({ activeRuntimeKind: "managed" });
 });
 
 describe("statusForBridge", () => {
@@ -117,6 +152,16 @@ describe("browser-control store with the live bridge", () => {
       status: "unknown",
       error: null,
     });
+
+    // No message from the bridge: no detail, and no sentence made up in
+    // the store (the UI words the error status itself).
+    store.applyBridgeStatus(
+      bridge({ state: "error", role: null, errorKind: "exited" }),
+    );
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      status: "error",
+      error: null,
+    });
     expect(probeCalls()).toHaveLength(0);
   });
 
@@ -148,6 +193,11 @@ describe("browser-control store with the live bridge", () => {
     });
     // The live tab count wins over the probe's snapshot.
     expect(useBrowserControlStore.getState().status).toBe("connected");
+    // The automatic run reports its outcome like a manual test.
+    expect(useBrowserControlStore.getState().testOutcome).toEqual({
+      kind: "connected",
+      detail: null,
+    });
 
     // Tab churn after verification never re-probes.
     store.applyBridgeStatus(bridge({ extensionConnected: true, tabCount: 4 }));
@@ -181,12 +231,32 @@ describe("browser-control store with the live bridge", () => {
     const { invoke } = getTauriMocks();
     invoke.mockImplementation(async (command) => {
       if (command === "probe_browser_control") {
-        return probeResult({ status: "error", message: "脚本测试失败" });
+        return probeResult({
+          status: "error",
+          kind: "script_failed",
+          message: "脚本测试失败",
+          detail: "boom",
+        });
       }
       return undefined;
     });
 
     await useBrowserControlStore.getState().probe("auto_verify");
+    expect(readyToasts()).toHaveLength(0);
+  });
+
+  it("offers no demo when the automatic verification lands after a switch to external GA", async () => {
+    setVerified(false);
+    const pending = deferred<BrowserControlProbe>();
+    mockInvoke({ probe_browser_control: () => pending.promise });
+
+    const run = useBrowserControlStore.getState().probe("auto_verify");
+    await vi.waitFor(() => expect(probeCalls()).toHaveLength(1));
+    usePrefsStore.setState({ activeRuntimeKind: "external" });
+    pending.resolve(probeResult());
+    await run;
+
+    expect(useBrowserControlStore.getState().verified).toBe(true);
     expect(readyToasts()).toHaveLength(0);
   });
 
@@ -197,7 +267,9 @@ describe("browser-control store with the live bridge", () => {
       if (command === "probe_browser_control") {
         return probeResult({
           status: "error",
-          message: "扩展已连接，但网页脚本测试失败",
+          kind: "script_failed",
+          message: "插件已连接，但网页脚本测试失败：boom",
+          detail: "boom",
         });
       }
       return undefined;
@@ -206,7 +278,10 @@ describe("browser-control store with the live bridge", () => {
 
     store.applyBridgeStatus(bridge({ extensionConnected: true, tabCount: 1 }));
     await vi.waitFor(() => {
-      expect(useBrowserControlStore.getState().busy).toBe(false);
+      expect(probeCalls()).toHaveLength(1);
+    });
+    await vi.waitFor(() => {
+      expect(useBrowserControlStore.getState().probing).toBe(false);
     });
     expect(useBrowserControlStore.getState()).toMatchObject({
       verified: false,
@@ -251,6 +326,124 @@ describe("browser-control store with the live bridge", () => {
       status: "connected",
       layoutError: "disk full",
     });
+  });
+
+  it("recovers from a folder-sync error once a sync succeeds", async () => {
+    for (const [verified, recovered] of [
+      [true, "offline"],
+      [false, "not_connected"],
+    ] as const) {
+      useBrowserControlStore.setState(
+        useBrowserControlStore.getInitialState(),
+        true,
+      );
+      setVerified(verified);
+      mockInvoke({
+        ensure_browser_control_layout: () => {
+          throw new Error("disk full");
+        },
+      });
+      const store = useBrowserControlStore.getState();
+
+      await store.ensureLayout();
+      expect(useBrowserControlStore.getState()).toMatchObject({
+        status: "error",
+        error: "disk full",
+        layoutError: "disk full",
+        syncingLayout: false,
+      });
+
+      mockInvoke({ ensure_browser_control_layout: () => LAYOUT });
+      await expect(store.ensureLayout()).resolves.toEqual(LAYOUT);
+      expect(useBrowserControlStore.getState()).toMatchObject({
+        layout: LAYOUT,
+        status: recovered,
+        error: null,
+        layoutError: null,
+        syncingLayout: false,
+      });
+    }
+  });
+
+  it("keeps the bridge's own error text through folder syncs", async () => {
+    setVerified(true);
+    const portInUse = "浏览器控制端口 18765 被其他程序占用。";
+    const store = useBrowserControlStore.getState();
+    store.applyBridgeStatus(
+      bridge({
+        state: "error",
+        role: null,
+        errorKind: "port_in_use",
+        error: portInUse,
+      }),
+    );
+
+    // A sync in flight does not blank the detail the topbar menu shows.
+    const pending = deferred<BrowserControlLayout>();
+    mockInvoke({ ensure_browser_control_layout: () => pending.promise });
+    const sync = store.ensureLayout();
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      syncingLayout: true,
+      status: "error",
+      error: portInUse,
+    });
+    pending.resolve(LAYOUT);
+    await sync;
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      syncingLayout: false,
+      status: "error",
+      error: portInUse,
+    });
+
+    // Recovering from a folder error hands the detail back to the bridge.
+    mockInvoke({
+      ensure_browser_control_layout: () => {
+        throw new Error("disk full");
+      },
+    });
+    await store.ensureLayout();
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      status: "error",
+      error: "disk full",
+      layoutError: "disk full",
+    });
+    mockInvoke({ ensure_browser_control_layout: () => LAYOUT });
+    await store.ensureLayout();
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      status: "error",
+      error: portInUse,
+      layoutError: null,
+    });
+  });
+
+  it("keeps probing until the probe ends, whatever the folder sync does", async () => {
+    setVerified(true);
+    const probe = deferred<BrowserControlProbe>();
+    const layout = deferred<BrowserControlLayout>();
+    mockInvoke({
+      probe_browser_control: () => probe.promise,
+      ensure_browser_control_layout: () => layout.promise,
+    });
+    const store = useBrowserControlStore.getState();
+
+    const probing = store.probe("manual");
+    const syncing = store.ensureLayout();
+    await vi.waitFor(() => expect(probeCalls()).toHaveLength(1));
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      probing: true,
+      syncingLayout: true,
+    });
+
+    layout.resolve(LAYOUT);
+    await syncing;
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      probing: true,
+      syncingLayout: false,
+    });
+
+    probe.resolve(probeResult());
+    await probing;
+    expect(useBrowserControlStore.getState().probing).toBe(false);
   });
 
   it("subscribes before reading the snapshot and stops on disconnect", async () => {
@@ -322,4 +515,182 @@ describe("browser-control store with the live bridge", () => {
     await Promise.resolve();
     expect(useBrowserControlStore.getState().status).toBe("connected");
   });
+});
+
+describe("browser-control connection test outcome", () => {
+  it("records each probe's outcome and keeps the raw detail as the error", async () => {
+    setVerified(true);
+    mockInvoke({
+      probe_browser_control: () =>
+        probeResult({
+          status: "error",
+          kind: "script_failed",
+          tabCount: 1,
+          message: "插件已连接，但网页脚本测试失败：boom",
+          detail: "boom",
+        }),
+    });
+    const store = useBrowserControlStore.getState();
+
+    await store.probe("manual");
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      status: "error",
+      error: "boom",
+      testOutcome: { kind: "script_failed", detail: "boom" },
+    });
+
+    // The next test clears the outcome while it runs; the error detail
+    // stays with the status until the result lands.
+    const pending = deferred<BrowserControlProbe>();
+    mockInvoke({ probe_browser_control: () => pending.promise });
+    const run = store.probe("recheck");
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      probing: true,
+      testOutcome: null,
+      status: "error",
+      error: "boom",
+    });
+    pending.resolve(probeResult());
+    await run;
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      probing: false,
+      status: "connected",
+      error: null,
+      testOutcome: { kind: "connected", detail: null },
+    });
+  });
+
+  it("stores no made-up sentence when a failed probe has no detail", async () => {
+    setVerified(true);
+    mockInvoke({
+      probe_browser_control: () =>
+        probeResult({
+          status: "error",
+          kind: "no_result",
+          tabCount: 0,
+          message: "浏览器控制测试没有返回有效结果。",
+          detail: null,
+        }),
+    });
+
+    await useBrowserControlStore.getState().probe("manual");
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      status: "error",
+      error: null,
+      testOutcome: { kind: "no_result", detail: null },
+    });
+  });
+
+  it("records an exception outcome when the probe command fails", async () => {
+    setVerified(true);
+    mockInvoke({
+      probe_browser_control: () => {
+        throw new Error("spawn python3: No such file or directory");
+      },
+    });
+
+    await expect(
+      useBrowserControlStore.getState().probe("manual"),
+    ).resolves.toBeNull();
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      status: "error",
+      error: "spawn python3: No such file or directory",
+      probing: false,
+      testOutcome: {
+        kind: "exception",
+        detail: "spawn python3: No such file or directory",
+      },
+    });
+  });
+
+  it("drops the outcome when the live status changes, not on tab churn", async () => {
+    setVerified(true);
+    mockInvoke({ probe_browser_control: () => probeResult() });
+    const store = useBrowserControlStore.getState();
+    store.applyBridgeStatus(bridge({ extensionConnected: true, tabCount: 1 }));
+
+    await store.probe("manual");
+    expect(useBrowserControlStore.getState().testOutcome).toEqual({
+      kind: "connected",
+      detail: null,
+    });
+
+    store.applyBridgeStatus(bridge({ extensionConnected: true, tabCount: 3 }));
+    expect(useBrowserControlStore.getState().testOutcome).toEqual({
+      kind: "connected",
+      detail: null,
+    });
+
+    store.applyBridgeStatus(bridge());
+    expect(useBrowserControlStore.getState()).toMatchObject({
+      status: "offline",
+      testOutcome: null,
+    });
+
+    useBrowserControlStore.setState({
+      testOutcome: { kind: "not_connected", detail: null },
+    });
+    store.resetLiveStatus();
+    expect(useBrowserControlStore.getState().testOutcome).toBeNull();
+  });
+
+  it("answers a manual test from the running bridge while it does not see the extension", async () => {
+    setVerified(true);
+    mockInvoke({ probe_browser_control: () => probeResult() });
+    const store = useBrowserControlStore.getState();
+    store.applyBridgeStatus(bridge());
+    const before = useBrowserControlStore.getState();
+    expect(before.status).toBe("offline");
+
+    for (const context of ["manual", "recheck"] as const) {
+      useBrowserControlStore.setState({ testOutcome: null });
+      await expect(store.probe(context)).resolves.toBeNull();
+      expect(useBrowserControlStore.getState()).toMatchObject({
+        testOutcome: { kind: "not_connected", detail: null },
+        probing: false,
+        status: "offline",
+        verified: true,
+        lastProbe: null,
+      });
+    }
+    expect(probeCalls()).toHaveLength(0);
+
+    // The automatic verification is never short-circuited.
+    await store.probe("auto_verify");
+    expect(probeCalls()).toHaveLength(1);
+  });
+
+  it.each([
+    ["no report yet", null],
+    ["starting", bridge({ state: "starting", role: null })],
+    ["stopped", bridge({ state: "stopped", role: null })],
+    [
+      "error",
+      bridge({
+        state: "error",
+        role: null,
+        errorKind: "port_in_use",
+        error: "port",
+      }),
+    ],
+  ] as const)(
+    "still probes when the bridge is not running (%s)",
+    async (_label, current) => {
+      setVerified(true);
+      mockInvoke({ probe_browser_control: () => probeResult() });
+      if (current) {
+        useBrowserControlStore.getState().applyBridgeStatus(current);
+      }
+
+      const result = await useBrowserControlStore.getState().probe("manual");
+      expect(result).toMatchObject({ kind: "connected" });
+      expect(probeCalls()).toEqual([
+        ["probe_browser_control", { context: "manual" }],
+      ]);
+      expect(useBrowserControlStore.getState().testOutcome).toEqual({
+        kind: "connected",
+        detail: null,
+      });
+    },
+  );
 });

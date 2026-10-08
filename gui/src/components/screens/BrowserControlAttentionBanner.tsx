@@ -26,7 +26,7 @@ export function BrowserControlAttentionBanner({
         <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-brand/30 bg-elevated text-brand-strong">
           <PuzzlePiece size={15} weight="thin" />
         </span>
-        <p className="min-w-0 truncate text-[12.5px] font-medium text-ink">
+        <p className="min-w-0 truncate text-ui-secondary font-medium text-ink">
           {copy.message}
         </p>
       </div>

@@ -14,6 +14,7 @@ import {
   type BrowserControlProbeContext,
   type BrowserControlProbeStatus,
   type BrowserControlStatus,
+  type BrowserControlTestOutcome,
 } from "@/lib/browser-control";
 import { getPref, setPref } from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
@@ -24,10 +25,17 @@ import { makeAppError } from "@/types/app-error";
 
 const BROWSER_CONTROL_VERIFIED_PREF = "browser_control_verified";
 
-// Probes in flight (manual, recheck or automatic). `busy` cannot gate the
-// automatic one: the startup layout sync also sets it, and an extension
-// that is already connected at launch reports exactly then.
+/** The sticky 「试一试」 toast; switching runtime mode dismisses it
+ * (`switchRuntimeKind`), since its demo would go to the other runtime. */
+export const BROWSER_CONTROL_READY_TOAST_ID = "browser-control-ready";
+
+// Probes in flight (manual, recheck or automatic); `probing` mirrors
+// "any". Counted, not a flag: the automatic probe can overlap a manual
+// one, and the first to finish must not clear `probing` for the other.
 let probesInFlight = 0;
+// Same for the extension-folder sync behind `syncingLayout` (launch and
+// Settings can both start one).
+let layoutSyncsInFlight = 0;
 
 function isSuccessfulProbeStatus(status: BrowserControlProbeStatus): boolean {
   return status === "connected" || status === "connected_no_tabs";
@@ -41,12 +49,16 @@ function isSuccessfulProbeStatus(status: BrowserControlProbeStatus): boolean {
  * page, and a timed toast would be gone before they come back.
  */
 function pushReadyToast() {
+  const prefs = usePrefsStore.getState();
+  // An automatic probe that lands after a switch to external GA must not
+  // offer a demo that would run there (the switch already dismissed it).
+  if (prefs.activeRuntimeKind !== "managed") return;
   const copy = copyForLanguage(
-    resolveLanguagePreference(usePrefsStore.getState().languagePreference),
+    resolveLanguagePreference(prefs.languagePreference),
   );
   useUiStore.getState().pushToast(
     makeAppError({
-      id: "browser-control-ready",
+      id: BROWSER_CONTROL_READY_TOAST_ID,
       category: "business",
       severity: "info",
       title: copy.toasts.browserControlReady,
@@ -84,8 +96,18 @@ interface BrowserControlState {
   layout: BrowserControlLayout | null;
   layoutError: string | null;
   lastProbe: BrowserControlProbe | null;
-  busy: boolean;
+  /** A probe (manual, recheck or automatic) is in flight. */
+  probing: boolean;
+  /** `ensureLayout` (the extension-folder sync) is in flight. */
+  syncingLayout: boolean;
+  /** Detail for the error status, as its source gave it: the bridge's
+   * own message, the folder-sync error, the probe's `detail` or invoke
+   * error; null when the source has none. The store adds no wording of
+   * its own: the UI words the status and shows this as the detail. */
   error: string | null;
+  /** The last connection test's outcome for Settings' inline result
+   * line; null while one runs and once the live status changes. */
+  testOutcome: BrowserControlTestOutcome | null;
   verified: boolean;
   verificationHydrated: boolean;
   /** One automatic verification per connection: re-armed when the bridge
@@ -109,8 +131,10 @@ export const useBrowserControlStore = create<BrowserControlState>(
     layout: null,
     layoutError: null,
     lastProbe: null,
-    busy: false,
+    probing: false,
+    syncingLayout: false,
     error: null,
+    testOutcome: null,
     verified: false,
     verificationHydrated: false,
     autoVerifyArmed: true,
@@ -130,22 +154,34 @@ export const useBrowserControlStore = create<BrowserControlState>(
     },
 
     ensureLayout: async () => {
-      set({ busy: true, error: null, layoutError: null });
+      // Entry leaves `error` / `layoutError` alone: they describe the
+      // current status (the bridge's own message among them), which a
+      // sync in flight has not changed yet.
+      layoutSyncsInFlight += 1;
+      set({ syncingLayout: true });
       try {
         const layout = await ensureBrowserControlLayout();
         const state = get();
-        const recoveredLayoutError = Boolean(state.layoutError);
+        // Read after the await: a folder error still standing now is the
+        // one this success recovers from (one a successful probe already
+        // cleared meanwhile is not, and its result stays).
+        if (state.layoutError === null) {
+          set({ layout });
+          return layout;
+        }
+        const bridge = state.bridge;
         set({
           layout,
           layoutError: null,
-          error: recoveredLayoutError ? null : state.error,
+          error: bridge?.state === "error" ? bridge.error : null,
+          // The folder error was the status only without a bridge; with
+          // one, the status is the bridge's and stays.
           status:
-            recoveredLayoutError && state.status === "error" && !state.bridge
+            state.status === "error" && !bridge
               ? state.verified
                 ? "offline"
                 : "not_connected"
               : state.status,
-          busy: false,
         });
         return layout;
       } catch (e) {
@@ -157,15 +193,40 @@ export const useBrowserControlStore = create<BrowserControlState>(
           status: get().bridge ? get().status : "error",
           error,
           layoutError: error,
-          busy: false,
         });
         return null;
+      } finally {
+        layoutSyncsInFlight -= 1;
+        if (layoutSyncsInFlight === 0) set({ syncingLayout: false });
       }
     },
 
     probe: async (context = "manual") => {
+      // Manual short-circuit (测试连接): with the resident
+      // bridge running and not seeing the extension, a probe would only
+      // wait out the same 35 s reconnect window the bridge is already
+      // waiting on, and report the same 未连接. The bridge is the
+      // "equivalent immediate wake-up path" that
+      // docs/managed-ga-runtime/browser-control.md asks for before the
+      // probe window may shrink: the moment the extension reconnects, the
+      // bridge pushes the new status (and, before setup is verified, the
+      // automatic probe still runs). So answer from the bridge at once
+      // and leave status / verification / lastProbe untouched. With no
+      // running bridge (none yet, starting, stopped, error) the probe
+      // still runs: it is then the only way to find the extension.
+      const liveBridge = get().bridge;
+      if (
+        context !== "auto_verify" &&
+        liveBridge?.state === "running" &&
+        !bridgeSeesExtension(liveBridge)
+      ) {
+        set({ testOutcome: { kind: "not_connected", detail: null } });
+        return null;
+      }
       probesInFlight += 1;
-      set({ busy: true, error: null });
+      // `error` stays until the result lands: it is the detail of the
+      // status, which does not change while the probe runs.
+      set({ probing: true, testOutcome: null });
       try {
         const wasVerified = await get().hydrateVerification();
         const probe = await probeBrowserControl(context);
@@ -196,8 +257,9 @@ export const useBrowserControlStore = create<BrowserControlState>(
             filesCopied: get().layout?.filesCopied ?? 0,
           },
           layoutError: null,
-          error: status === "error" ? (probe.message ?? "测试失败") : null,
-          busy: false,
+          // The raw failure text; the UI words the failure from `kind`.
+          error: status === "error" ? (probe.detail ?? null) : null,
+          testOutcome: { kind: probe.kind, detail: probe.detail ?? null },
         });
         return probe;
       } catch (e) {
@@ -206,11 +268,12 @@ export const useBrowserControlStore = create<BrowserControlState>(
           status: "error",
           error,
           layoutError: get().layout ? get().layoutError : error,
-          busy: false,
+          testOutcome: { kind: "exception", detail: error },
         });
         return null;
       } finally {
         probesInFlight -= 1;
+        if (probesInFlight === 0) set({ probing: false });
       }
     },
 
@@ -221,11 +284,11 @@ export const useBrowserControlStore = create<BrowserControlState>(
       set({
         bridge,
         status,
-        error:
-          bridge.state === "error"
-            ? (bridge.error ?? "浏览器控制服务不可用")
-            : state.layoutError,
+        error: bridge.state === "error" ? bridge.error : state.layoutError,
         autoVerifyArmed: sees ? state.autoVerifyArmed : true,
+        // A test result holds until the live status moves on; tab-count
+        // churn under the same status keeps it.
+        ...(status !== state.status ? { testOutcome: null } : {}),
       });
       // Setup step 3 completes on its own: the first time the extension
       // reaches the resident master and the install is not yet verified,
@@ -281,7 +344,12 @@ export const useBrowserControlStore = create<BrowserControlState>(
     },
 
     resetLiveStatus: () => {
-      set({ bridge: null, status: "unknown", autoVerifyArmed: true });
+      set({
+        bridge: null,
+        status: "unknown",
+        autoVerifyArmed: true,
+        testOutcome: null,
+      });
     },
   }),
 );

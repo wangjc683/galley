@@ -45,13 +45,41 @@ export interface BrowserControlLayout {
   filesCopied: number;
 }
 
+/**
+ * Why a probe ended the way it did. Mirrors `core/src/browser_control.rs`
+ * `BrowserControlProbeKind`; the GUI words each kind itself, so
+ * `message` (Core's Chinese sentence) is never shown as the main line.
+ */
+export type BrowserControlProbeKind =
+  | "connected"
+  | "no_tabs"
+  | "not_connected"
+  | "script_failed"
+  | "no_result"
+  | "exception";
+
 export interface BrowserControlProbe {
   status: BrowserControlProbeStatus;
+  kind: BrowserControlProbeKind;
   extensionDir: string;
   manifestVersion: string;
   tabCount: number;
   sampleTitle?: string | null;
   message?: string | null;
+  /** Raw technical text for the failure kinds (the page-script error,
+   * the probe's stderr tail, the exception); null otherwise. */
+  detail?: string | null;
+}
+
+/**
+ * The outcome of the last connection test, for the Settings page's
+ * inline result line. `not_connected` with no probe run is the manual
+ * test short-circuit (the resident bridge already says the extension is
+ * not there). Cleared when the live status changes.
+ */
+export interface BrowserControlTestOutcome {
+  kind: BrowserControlProbeKind;
+  detail: string | null;
 }
 
 export function ensureBrowserControlLayout(): Promise<BrowserControlLayout> {

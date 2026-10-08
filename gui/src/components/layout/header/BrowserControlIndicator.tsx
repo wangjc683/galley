@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { TopBarIconButton } from "../TopBarIconButton";
 import {
   type BrowserControlIndicatorInput,
+  browserControlErrorRetries,
   browserControlIndicatorView,
 } from "./browser-control-indicator-status";
 import {
@@ -128,14 +129,10 @@ export function BrowserControlIndicator({
       : view.state === "offline"
         ? popoverCopy.offlineHint
         : null;
-  // Bridge failures retry on their own (the bridge with backoff, Core by
-  // restarting it); probe failures do not. The unreachable message
-  // already ends in 正在重试 (`managed_browser_bridge.py`), so it is not
-  // said twice.
+  // Bridge failures retry on their own; probe failures do not (rule
+  // shared with Settings' error card).
   const retrying =
-    view.form === "error" &&
-    Boolean(input.errorKind) &&
-    view.group !== "unreachable";
+    view.form === "error" && browserControlErrorRetries(input.errorKind);
   return (
     <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <TooltipLabel text={tooltip} side="bottom">

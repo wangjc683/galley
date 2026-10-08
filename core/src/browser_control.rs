@@ -36,20 +36,67 @@ pub struct BrowserControlLayout {
 #[serde(rename_all = "camelCase")]
 pub struct BrowserControlProbe {
     pub status: BrowserControlProbeStatus,
+    /// Why the probe ended this way; the GUI words each kind itself.
+    pub kind: BrowserControlProbeKind,
     pub extension_dir: String,
     pub manifest_version: String,
     pub tab_count: usize,
     pub sample_title: Option<String>,
+    /// Core's Chinese sentence: logs and older GUIs only, never the GUI's
+    /// main line.
     pub message: Option<String>,
+    /// Raw technical text for the failure kinds (the page-script error,
+    /// the probe's stderr tail, the exception); `None` otherwise.
+    pub detail: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserControlProbeStatus {
     Connected,
     ConnectedNoTabs,
     NotConnected,
     Error,
+}
+
+/// Mirrored by `gui/src/lib/browser-control.ts` `BrowserControlProbeKind`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserControlProbeKind {
+    /// Tabs listed and the `document.title` round trip worked.
+    Connected,
+    /// The extension reached the master but lists no operable tab.
+    NoTabs,
+    /// No extension connection within the wait window (or the probe
+    /// process overran it).
+    NotConnected,
+    /// Tabs listed but `execute_js` raised.
+    ScriptFailed,
+    /// The probe process printed no parsable result.
+    NoResult,
+    /// The probe script itself raised.
+    Exception,
+}
+
+impl BrowserControlProbeKind {
+    /// The script's `kind`; an older or unknown one falls back to what
+    /// its `status` implies.
+    fn from_probe_output(kind: Option<&str>, status: &str) -> Self {
+        match kind {
+            Some("connected") => Self::Connected,
+            Some("no_tabs") => Self::NoTabs,
+            Some("not_connected") => Self::NotConnected,
+            Some("script_failed") => Self::ScriptFailed,
+            Some("no_result") => Self::NoResult,
+            Some("exception") => Self::Exception,
+            _ => match status {
+                "connected" => Self::Connected,
+                "connected_no_tabs" => Self::NoTabs,
+                "not_connected" => Self::NotConnected,
+                _ => Self::Exception,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -96,6 +143,8 @@ pub enum BrowserControlBrowser {
 const CHROME_EXTENSION_MANAGEMENT_URL: &str = "chrome://extensions";
 const EDGE_EXTENSION_MANAGEMENT_URL: &str = "edge://extensions";
 const BROWSER_CONTROL_TEST_PAGE_URL: &str = "https://example.com";
+const PROBE_STDERR_TAIL_MAX_CHARS: usize = 240;
+const PROBE_NOT_CONNECTED_MESSAGE: &str = "未检测到浏览器插件连接。";
 
 #[cfg(any(target_os = "windows", test))]
 const CHROME_EXTENSION_MANAGEMENT_ARGS: &[&str] = &[CHROME_EXTENSION_MANAGEMENT_URL];
@@ -127,12 +176,17 @@ struct ExtensionManifest {
 #[derive(Debug, Deserialize)]
 struct PythonProbeOutput {
     status: String,
+    /// A string, not the enum: an unknown kind must not drop the line.
+    #[serde(default)]
+    kind: Option<String>,
     #[serde(default)]
     tab_count: usize,
     #[serde(default)]
     sample_title: Option<String>,
     #[serde(default)]
     message: Option<String>,
+    #[serde(default)]
+    detail: Option<String>,
 }
 
 pub fn ensure_for_app(app: &AppHandle) -> std::io::Result<BrowserControlLayout> {
@@ -200,39 +254,57 @@ pub async fn probe_for_app(
 
     let output = match time::timeout(context.process_timeout(), child.wait_with_output()).await {
         Ok(output) => output?,
-        Err(_) => {
-            return Ok(BrowserControlProbe {
-                status: BrowserControlProbeStatus::NotConnected,
-                extension_dir: layout.extension_dir,
-                manifest_version: layout.manifest_version,
-                tab_count: 0,
-                sample_title: None,
-                message: Some(
-                    "未检测到浏览器扩展连接。请打开已安装扩展的 Chrome / Edge 网页，然后重新测试。"
-                        .into(),
-                ),
-            });
-        }
+        Err(_) => return Ok(probe_timed_out(layout)),
     };
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(probe_from_output(
+        layout,
+        &String::from_utf8_lossy(&output.stdout),
+        &String::from_utf8_lossy(&output.stderr),
+    ))
+}
+
+/// The probe process overran its wait window: nothing connected in time.
+fn probe_timed_out(layout: BrowserControlLayout) -> BrowserControlProbe {
+    BrowserControlProbe {
+        status: BrowserControlProbeStatus::NotConnected,
+        kind: BrowserControlProbeKind::NotConnected,
+        extension_dir: layout.extension_dir,
+        manifest_version: layout.manifest_version,
+        tab_count: 0,
+        sample_title: None,
+        message: Some(PROBE_NOT_CONNECTED_MESSAGE.into()),
+        detail: None,
+    }
+}
+
+/// Read the probe script's result: the last stdout line that parses as
+/// its JSON. With none, the result is `NoResult` carrying the stderr tail
+/// (the end of a Python traceback names the error).
+fn probe_from_output(
+    layout: BrowserControlLayout,
+    stdout: &str,
+    stderr: &str,
+) -> BrowserControlProbe {
     let parsed = stdout
         .lines()
         .rev()
         .find_map(|line| serde_json::from_str::<PythonProbeOutput>(line).ok());
     let Some(parsed) = parsed else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Ok(BrowserControlProbe {
+        let tail = stderr_tail(stderr);
+        return BrowserControlProbe {
             status: BrowserControlProbeStatus::Error,
+            kind: BrowserControlProbeKind::NoResult,
             extension_dir: layout.extension_dir,
             manifest_version: layout.manifest_version,
             tab_count: 0,
             sample_title: None,
             message: Some(format!(
                 "浏览器控制测试没有返回有效结果。{}",
-                stderr.trim().chars().take(240).collect::<String>()
+                tail.as_deref().unwrap_or("")
             )),
-        });
+            detail: tail,
+        };
     };
 
     let status = match parsed.status.as_str() {
@@ -241,14 +313,32 @@ pub async fn probe_for_app(
         "not_connected" => BrowserControlProbeStatus::NotConnected,
         _ => BrowserControlProbeStatus::Error,
     };
-    Ok(BrowserControlProbe {
+    let kind = BrowserControlProbeKind::from_probe_output(parsed.kind.as_deref(), &parsed.status);
+    BrowserControlProbe {
         status,
+        kind,
         extension_dir: layout.extension_dir,
         manifest_version: layout.manifest_version,
         tab_count: parsed.tab_count,
         sample_title: parsed.sample_title,
         message: parsed.message,
-    })
+        detail: parsed
+            .detail
+            .map(|detail| detail.trim().to_string())
+            .filter(|detail| !detail.is_empty()),
+    }
+}
+
+fn stderr_tail(stderr: &str) -> Option<String> {
+    let trimmed = stderr.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let skip = trimmed
+        .chars()
+        .count()
+        .saturating_sub(PROBE_STDERR_TAIL_MAX_CHARS);
+    Some(trimmed.chars().skip(skip).collect())
 }
 
 pub async fn open_extensions_page(browser: BrowserControlBrowser) -> io::Result<()> {
@@ -560,14 +650,16 @@ try:
         if bridge_status.get("extension_connected"):
             print(json.dumps({
                 "status": "connected_no_tabs",
+                "kind": "no_tabs",
                 "tab_count": 0,
-                "message": "浏览器插件已连接，但没有可用网页。请在同一浏览器打开一个网页，然后重新测试。"
+                "message": "浏览器插件已连接，但没有可用网页。"
             }, ensure_ascii=True))
             raise SystemExit(0)
         print(json.dumps({
             "status": "not_connected",
+            "kind": "not_connected",
             "tab_count": 0,
-            "message": "未检测到浏览器扩展连接。请打开已安装扩展的 Chrome / Edge 网页，然后重新测试。"
+            "message": "未检测到浏览器插件连接。"
         }, ensure_ascii=True))
     else:
         session_id = str(sessions[0].get("id"))
@@ -579,23 +671,30 @@ try:
             else:
                 title = str(result)
         except Exception as exec_error:
+            detail = str(exec_error) or type(exec_error).__name__
             print(json.dumps({
                 "status": "error",
+                "kind": "script_failed",
                 "tab_count": len(sessions),
-                "message": "扩展已连接，但网页脚本测试失败：" + str(exec_error)
+                "message": "插件已连接，但网页脚本测试失败：" + detail,
+                "detail": detail
             }, ensure_ascii=True))
             raise SystemExit(0)
         print(json.dumps({
             "status": "connected",
+            "kind": "connected",
             "tab_count": len(sessions),
             "sample_title": title,
             "message": "浏览器控制已连接。"
         }, ensure_ascii=True))
 except Exception as e:
+    detail = str(e) or type(e).__name__
     print(json.dumps({
         "status": "error",
+        "kind": "exception",
         "tab_count": 0,
-        "message": str(e)
+        "message": detail,
+        "detail": detail
     }, ensure_ascii=True))
     traceback.print_exc()
 "#
@@ -698,6 +797,148 @@ mod tests {
             fs::read_to_string(extension_dir.join("config.js")).expect("config"),
             config
         );
+    }
+
+    fn test_layout() -> BrowserControlLayout {
+        BrowserControlLayout {
+            extension_dir: "/data/browser-control/tmwd_cdp_bridge".into(),
+            source_dir: "/code/assets/tmwd_cdp_bridge".into(),
+            manifest_version: "1.2.3".into(),
+            files_copied: 2,
+        }
+    }
+
+    #[test]
+    fn probe_output_maps_each_script_branch_to_its_kind() {
+        let cases = [
+            (
+                r#"{"status":"connected","kind":"connected","tab_count":2,"sample_title":"Example Domain","message":"ok"}"#,
+                BrowserControlProbeStatus::Connected,
+                BrowserControlProbeKind::Connected,
+                None,
+            ),
+            (
+                r#"{"status":"connected_no_tabs","kind":"no_tabs","tab_count":0}"#,
+                BrowserControlProbeStatus::ConnectedNoTabs,
+                BrowserControlProbeKind::NoTabs,
+                None,
+            ),
+            (
+                r#"{"status":"not_connected","kind":"not_connected","tab_count":0}"#,
+                BrowserControlProbeStatus::NotConnected,
+                BrowserControlProbeKind::NotConnected,
+                None,
+            ),
+            (
+                r#"{"status":"error","kind":"script_failed","tab_count":1,"detail":"timeout waiting for tab"}"#,
+                BrowserControlProbeStatus::Error,
+                BrowserControlProbeKind::ScriptFailed,
+                Some("timeout waiting for tab"),
+            ),
+            (
+                r#"{"status":"error","kind":"exception","tab_count":0,"detail":"No module named 'bottle'"}"#,
+                BrowserControlProbeStatus::Error,
+                BrowserControlProbeKind::Exception,
+                Some("No module named 'bottle'"),
+            ),
+        ];
+        for (line, status, kind, detail) in cases {
+            // Driver chatter before the result line is ignored.
+            let stdout = format!("[TMWebDriver] remote client\n{line}\n");
+            let probe = probe_from_output(test_layout(), &stdout, "");
+            assert_eq!(probe.status, status, "{line}");
+            assert_eq!(probe.kind, kind, "{line}");
+            assert_eq!(probe.detail.as_deref(), detail, "{line}");
+            assert_eq!(probe.extension_dir, "/data/browser-control/tmwd_cdp_bridge");
+            assert_eq!(probe.manifest_version, "1.2.3");
+        }
+    }
+
+    #[test]
+    fn probe_output_without_kind_falls_back_to_status() {
+        let kind_for = |line: &str| probe_from_output(test_layout(), line, "").kind;
+        assert_eq!(
+            kind_for(r#"{"status":"connected","tab_count":1}"#),
+            BrowserControlProbeKind::Connected
+        );
+        assert_eq!(
+            kind_for(r#"{"status":"connected_no_tabs"}"#),
+            BrowserControlProbeKind::NoTabs
+        );
+        assert_eq!(
+            kind_for(r#"{"status":"not_connected"}"#),
+            BrowserControlProbeKind::NotConnected
+        );
+        assert_eq!(
+            kind_for(r#"{"status":"error","message":"boom"}"#),
+            BrowserControlProbeKind::Exception
+        );
+        // An unknown kind keeps the line instead of turning it into NoResult.
+        assert_eq!(
+            kind_for(r#"{"status":"connected","kind":"from_the_future"}"#),
+            BrowserControlProbeKind::Connected
+        );
+        // A blank detail is no detail.
+        let probe = probe_from_output(
+            test_layout(),
+            r#"{"status":"error","kind":"exception","detail":"  "}"#,
+            "",
+        );
+        assert_eq!(probe.detail, None);
+    }
+
+    #[test]
+    fn probe_output_without_a_result_line_reports_the_stderr_tail() {
+        let traceback = format!(
+            "Traceback (most recent call last):\n{}\nKilledError: probe interrupted\n",
+            "  File \"probe.py\", line 1, in <module>\n".repeat(20)
+        );
+        let probe = probe_from_output(test_layout(), "not json\n", &traceback);
+        assert_eq!(probe.status, BrowserControlProbeStatus::Error);
+        assert_eq!(probe.kind, BrowserControlProbeKind::NoResult);
+        let detail = probe.detail.expect("stderr tail");
+        assert_eq!(detail.chars().count(), PROBE_STDERR_TAIL_MAX_CHARS);
+        assert!(detail.ends_with("KilledError: probe interrupted"));
+        assert!(probe.message.expect("message").ends_with(&detail));
+
+        let silent = probe_from_output(test_layout(), "", "  \n");
+        assert_eq!(silent.kind, BrowserControlProbeKind::NoResult);
+        assert_eq!(silent.detail, None);
+    }
+
+    #[test]
+    fn probe_timeout_reads_as_not_connected_without_detail() {
+        let probe = probe_timed_out(test_layout());
+        assert_eq!(probe.status, BrowserControlProbeStatus::NotConnected);
+        assert_eq!(probe.kind, BrowserControlProbeKind::NotConnected);
+        assert_eq!(probe.detail, None);
+    }
+
+    #[test]
+    fn probe_serializes_kind_and_detail_for_the_gui() {
+        let probe = probe_from_output(
+            test_layout(),
+            r#"{"status":"error","kind":"script_failed","tab_count":1,"message":"m","detail":"boom"}"#,
+            "",
+        );
+        let json = serde_json::to_value(&probe).expect("serialize");
+        assert_eq!(json["status"], "error");
+        assert_eq!(json["kind"], "script_failed");
+        assert_eq!(json["detail"], "boom");
+        assert_eq!(json["tabCount"], 1);
+        assert_eq!(
+            json["extensionDir"],
+            "/data/browser-control/tmwd_cdp_bridge"
+        );
+
+        let connected = serde_json::to_value(probe_from_output(
+            test_layout(),
+            r#"{"status":"connected_no_tabs","kind":"no_tabs"}"#,
+            "",
+        ))
+        .expect("serialize");
+        assert_eq!(connected["kind"], "no_tabs");
+        assert!(connected["detail"].is_null());
     }
 
     #[test]

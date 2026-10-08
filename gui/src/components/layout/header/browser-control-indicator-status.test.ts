@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type BrowserControlIndicatorInput,
   browserControlErrorGroup,
+  browserControlErrorRetries,
   browserControlIndicatorView,
   browserControlInviteVisible,
 } from "./browser-control-indicator-status";
@@ -86,6 +87,27 @@ describe("browserControlErrorGroup", () => {
     }
     expect(browserControlErrorGroup("status_failed")).toBe("generic");
     expect(browserControlErrorGroup(null)).toBe("generic");
+  });
+});
+
+describe("browserControlErrorRetries", () => {
+  it("retries bridge failures except the one that already says so", () => {
+    for (const kind of [
+      "missing_dependency",
+      "port_in_use",
+      "start_failed",
+      "exited",
+      "status_failed",
+    ]) {
+      expect(browserControlErrorRetries(kind)).toBe(true);
+    }
+    // The unreachable message already ends in 正在重试.
+    expect(browserControlErrorRetries("master_unreachable")).toBe(false);
+  });
+
+  it("does not retry probe or folder-sync failures (no kind)", () => {
+    expect(browserControlErrorRetries(null)).toBe(false);
+    expect(browserControlErrorRetries("")).toBe(false);
   });
 });
 

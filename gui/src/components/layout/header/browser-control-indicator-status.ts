@@ -98,6 +98,19 @@ export function browserControlErrorGroup(
 }
 
 /**
+ * Whether an error is being retried on its own, for the 「正在自动重试。」
+ * line (topbar menu and Settings' error card). Bridge failures retry (the
+ * bridge with backoff, Core by restarting it); probe and folder-sync
+ * failures carry no kind and do not. The unreachable message already
+ * ends in 正在重试 (`managed_browser_bridge.py`), so it is not said twice.
+ */
+export function browserControlErrorRetries(errorKind: string | null): boolean {
+  return (
+    Boolean(errorKind) && browserControlErrorGroup(errorKind) !== "unreachable"
+  );
+}
+
+/**
  * The main-area invitation banner shows while setup has never been
  * completed and nothing is connected right now. It follows the persisted
  * flag (not the live status) so it is there from the first frame instead

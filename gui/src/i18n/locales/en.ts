@@ -254,7 +254,6 @@ export const enCopy: AppCopy = {
     },
     browserControlPending: "Browser Control · Unlock",
     browserControlChecking: "Browser Control · Checking",
-    browserControlConnected: "Browser Control · Ready",
     browserControlError: "Browser Control · Needs attention",
     browserControlPendingTitle: "Unlock Browser Control",
     browserControlConnectedTitle: "Browser Control ready",
@@ -365,17 +364,28 @@ export const enCopy: AppCopy = {
   browserControl: {
     folderName: "tmwd_cdp_bridge",
     developerMode: "Developer mode",
+    developerModeEdge: "Developer mode",
     loadUnpacked: "Load unpacked",
     browserLabel: "Browser",
+    browserOther: "Other",
     stepOpen: (browser) => `Open ${browser} extensions page`,
     stepOpenHintPrefix: "Once open, turn on the ",
     stepOpenHintSuffix: " toggle in the top-right.",
+    stepOpenHintNoPositionPrefix: "Once open, turn on the ",
+    stepOpenHintNoPositionSuffix: " toggle.",
+    stepOpenOther: "Open the extensions page",
+    stepOpenOtherHintPrefix:
+      "Enter the address below in the browser address bar (most Chromium browsers accept it), then turn on the ",
+    extensionsAddress: "chrome://extensions",
+    copyAddress: "Copy address",
     openExtensions: "Open extensions page",
     stepDrag: "Drag in the Galley extension",
     stepDragHintPrefix: "Click Reveal folder, then drag ",
     stepDragWholePrefix: "the whole ",
     stepDragWholeSuffix: " folder",
     stepDragHintSuffix: " into the extensions page to install it.",
+    stepDragReloadHint:
+      "Already installed? After a Galley update, find Galley Browser Bridge on the extensions page and click ↻ to reload it.",
     showFolder: "Reveal folder",
     copyPath: "Copy path",
     copied: "Copied",
@@ -386,9 +396,14 @@ export const enCopy: AppCopy = {
     stepTest: "Test the connection",
     stepTestHint:
       "Once the extension is installed, Galley detects the connection on its own. If nothing happens, open any webpage in that browser (or click Open test page), then click Test connection.",
+    stepTestHintRepair:
+      "Once the extension is installed, Galley detects the connection on its own. If nothing happens, open any webpage in that browser (or click Open test page).",
+    stepTestHintRepairOther:
+      "Once the extension is installed, Galley detects the connection on its own. If nothing happens, open any webpage in that browser.",
+    stepTestHintOther:
+      "Once the extension is installed, Galley detects the connection on its own. If nothing happens, open any webpage in that browser, then click Test connection.",
     openTestPage: "Open test page",
     troubleShow: "Having trouble?",
-    troubleHide: "Hide",
     troubleDragFailsPrefix: "If dragging does not work, click ",
     troubleDragFailsSuffix:
       " on the extensions page and choose the folder above.",
@@ -402,33 +417,37 @@ export const enCopy: AppCopy = {
       `Could not open the test page automatically. Enter ${url} in the browser where you installed the extension.`,
     openGuideFallback: (url) =>
       `Could not open the visual guide automatically. Visit ${url}.`,
-    waitingStatus: "Checking the browser extension connection.",
-    offlineStatus: "Waiting for a webpage",
-    offlineStatusDetail: "Open the test page, then click Check again.",
+    notConnectedStatus:
+      "No extension detected yet. It connects on its own once installed.",
+    connectingStatus: "Connecting to the browser control service…",
+    offlineStatus: "Browser not connected",
+    offlineStatusDetail:
+      "Open the browser that has the extension and it connects on its own.",
     connectedStatus: "Browser connected",
-    connectedNoTabsStatus: "Waiting for a webpage",
-    connectedNoTabsStatusDetail: "Open the test page, then click Check again.",
+    connectedNoTabsStatus: "Connected, no webpages",
+    connectedNoTabsStatusDetail: "Open any webpage in the browser and it is ready.",
     connectedStatusDetail: (tabCount) =>
-      tabCount > 0 ? `${tabCount} operable tabs detected` : "",
+      tabCount === 1
+        ? "1 operable tab detected"
+        : tabCount > 0
+          ? `${tabCount} operable tabs detected`
+          : "",
     connectedScope:
       "Galley reads and operates this browser only for tasks you give it, using your signed-in sessions. When it reads a page, it can see the titles and URLs of all your open tabs.",
-    repairTitle: "Reload extension",
     reinstallOrRepair: "Reinstall or repair extension",
-    hideRepair: "Hide",
     test: "Test connection",
-    retest: "Retest",
-    recheck: "Check again",
-    testing: "Testing connection…",
-    later: "Later",
+    testing: "Testing…",
+    testPassed: "Test passed",
+    testScriptFailed: "The extension is connected, but the page script test failed",
+    testNoResult: "The browser control test returned no result",
+    testException: "The browser control test hit an error",
     runDemo: "New test chat",
     runDemoTitle:
       "Create a chat that asks Galley to open the browser and search for weather",
     demoPrompt:
-      "Open Baidu, search for today's weather, and tell me the result. Do not use code or external APIs.",
+      "Open Bing, search for today's weather, and tell me the result. Do not use code or external APIs.",
     tabSubtitle:
       "Let Galley read and operate your browser, using your existing login state",
-    openChromeTestPage: "Chrome",
-    openEdgeTestPage: "Edge",
   },
   composer: {
     askAnything: "Ask anything…",

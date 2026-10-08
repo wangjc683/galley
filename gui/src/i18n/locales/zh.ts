@@ -243,7 +243,6 @@ export const zhCopy = {
     },
     browserControlPending: "浏览器控制 · 待解锁",
     browserControlChecking: "浏览器控制 · 检测中",
-    browserControlConnected: "浏览器控制 · 已可用",
     browserControlError: "浏览器控制 · 需检查",
     browserControlPendingTitle: "解锁浏览器控制",
     browserControlConnectedTitle: "浏览器控制已可用",
@@ -353,17 +352,29 @@ export const zhCopy = {
   browserControl: {
     folderName: "tmwd_cdp_bridge",
     developerMode: "开发者模式",
+    // Edge 中文界面叫「开发人员模式」；开关位置未在真机核对，Edge 的提示不提位置。
+    developerModeEdge: "开发人员模式",
     loadUnpacked: "加载已解压的扩展程序",
     browserLabel: "浏览器",
+    browserOther: "其他",
     stepOpen: (browser: string) => `打开 ${browser} 扩展页`,
     stepOpenHintPrefix: "打开后，把右上角的「",
     stepOpenHintSuffix: "」开关打开。",
+    stepOpenHintNoPositionPrefix: "打开后，把「",
+    stepOpenHintNoPositionSuffix: "」开关打开。",
+    stepOpenOther: "打开扩展管理页",
+    stepOpenOtherHintPrefix:
+      "在浏览器地址栏输入下面的地址（多数 Chromium 浏览器都能打开），再把「",
+    extensionsAddress: "chrome://extensions",
+    copyAddress: "复制地址",
     openExtensions: "打开扩展页",
     stepDrag: "拖入 Galley 插件",
     stepDragHintPrefix: "点「定位文件夹」，把",
     stepDragWholePrefix: "整个 ",
     stepDragWholeSuffix: " 文件夹",
     stepDragHintSuffix: "拖进扩展页窗口即可安装。",
+    stepDragReloadHint:
+      "已经装过的：Galley 更新后，在扩展页找到 Galley Browser Bridge，点 ↻ 重新加载。",
     showFolder: "定位文件夹",
     copyPath: "复制路径",
     copied: "已复制",
@@ -373,9 +384,15 @@ export const zhCopy = {
     stepTest: "测试连接",
     stepTestHint:
       "插件装好后，Galley 会自动检测到连接。没反应时，在该浏览器打开任意网页（或点「打开测试页」），再点「测试连接」。",
+    // 修复卡里没有「测试连接」（验证过后它在状态卡下的维护行），提示不提它。
+    stepTestHintRepair:
+      "插件装好后，Galley 会自动检测到连接。没反应时，在该浏览器打开任意网页（或点「打开测试页」）。",
+    stepTestHintRepairOther:
+      "插件装好后，Galley 会自动检测到连接。没反应时，在该浏览器打开任意网页。",
+    stepTestHintOther:
+      "插件装好后，Galley 会自动检测到连接。没反应时，在该浏览器打开任意网页，再点「测试连接」。",
     openTestPage: "打开测试页",
     troubleShow: "遇到问题？",
-    troubleHide: "收起",
     troubleDragFailsPrefix: "拖拽无效时，点扩展页的「",
     troubleDragFailsSuffix: "」，选择上面的文件夹。",
     openGuide: "查看官方图文安装步骤",
@@ -386,31 +403,30 @@ export const zhCopy = {
     openTestPageFallback: (url: string) =>
       `无法自动打开测试页，请在刚才安装插件的浏览器地址栏输入 ${url}`,
     openGuideFallback: (url: string) => `无法自动打开图文指南，请访问 ${url}`,
-    waitingStatus: "正在检测浏览器扩展连接。",
-    offlineStatus: "等待网页",
-    offlineStatusDetail: "打开测试页后，点击重新检测。",
+    notConnectedStatus: "还没检测到插件，装好后会自动连上。",
+    connectingStatus: "正在连接浏览器控制服务…",
+    offlineStatus: "浏览器未连接",
+    offlineStatusDetail: "打开装了插件的浏览器后会自动连上。",
     connectedStatus: "已连接浏览器",
-    connectedNoTabsStatus: "等待网页",
-    connectedNoTabsStatusDetail: "打开测试页后，点击重新检测。",
+    connectedNoTabsStatus: "已连接，暂无网页",
+    connectedNoTabsStatusDetail: "在浏览器里打开任意网页就能用了。",
     connectedStatusDetail: (tabCount: number) =>
       tabCount > 0 ? `检测到 ${tabCount} 个可操作标签页` : "",
     connectedScope:
       "Galley 只在你交代的任务里读取和操作这个浏览器，沿用你的登录态。读网页时，它能看到你打开的所有标签页的标题和网址。",
-    repairTitle: "重新加载插件",
     reinstallOrRepair: "重新安装或修复插件",
-    hideRepair: "收起",
     test: "测试连接",
-    retest: "重新测试",
-    recheck: "重新检测",
-    testing: "正在测试连接…",
-    later: "稍后再说",
+    testing: "正在测试…",
+    // 手动「测试连接」的结果（探测结果的 kind），出错时原文另起一行做明细。
+    testPassed: "测试通过",
+    testScriptFailed: "插件已连接，但网页脚本测试失败",
+    testNoResult: "浏览器控制测试没有返回结果",
+    testException: "浏览器控制测试出错",
     runDemo: "新建测试对话",
     runDemoTitle: "新建一条对话，让 Galley 打开浏览器搜索天气",
     demoPrompt:
       "请打开百度，搜索今天的天气，并告诉我结果。不要用代码或外部 API 查询。",
     tabSubtitle: "让 Galley 读取和操作你的浏览器，并沿用你的登录态",
-    openChromeTestPage: "Chrome",
-    openEdgeTestPage: "Edge",
   },
   composer: {
     askAnything: "问点什么…",
