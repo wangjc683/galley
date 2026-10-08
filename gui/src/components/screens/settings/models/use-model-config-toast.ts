@@ -43,9 +43,10 @@ export function useModelConfigSavedToast(
       };
 
       // External GA: this page only configures the built-in engine, so
-      // nothing takes effect for new chats until the user switches back,
-      // and the Channels (served by the external GA, their tab hidden)
-      // have nothing to restart — no status probe, no CTA.
+      // nothing takes effect for new chats until the user switches back.
+      // Channels always run on the built-in engine, but external mode
+      // hides their tab and topbar entry, so there is nowhere to send a
+      // restart CTA — no status probe, no CTA.
       if (activeRuntimeKind === "external") {
         push(false, copy.toasts.modelConfigSavedExternalMessage);
         return;

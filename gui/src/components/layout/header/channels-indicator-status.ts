@@ -1,8 +1,5 @@
-import type { AppCopy } from "@/lib/i18n";
 import {
   aggregateChannelsState,
-  type ImSupervisorPlatform,
-  type ImSupervisorState,
   type ImSupervisorStatus,
 } from "@/lib/im-supervisor";
 
@@ -23,7 +20,8 @@ export type ChannelsIndicatorStatus =
  * `not_connected`. `enabled` (the user started it and did not stop it)
  * counts too, so a just-enabled platform is listed even in the instant
  * before its first live state. Settings → Channels uses the same signals:
- * `enabled` gates its restart button, the state drives each card badge.
+ * `enabled` gates its restart button, the state (split by owner pairing,
+ * `im/channel-view.ts`) drives each card badge and each menu row's word.
  */
 export function isChannelConfigured(
   status: ImSupervisorStatus | null | undefined,
@@ -60,35 +58,4 @@ export function channelsIndicatorStatus(
   if (state === "starting") return "connecting";
   if (state === "running") return "connected";
   return configured.length > 0 ? "idle" : "setup";
-}
-
-type ImCopy = AppCopy["settings"]["im"];
-
-export function channelPlatformLabel(
-  platform: ImSupervisorPlatform,
-  imCopy: ImCopy,
-): string {
-  return {
-    wechat: imCopy.wechatTitle,
-    feishu: imCopy.feishuTitle,
-    telegram: imCopy.telegramTitle,
-    discord: imCopy.discordTitle,
-  }[platform];
-}
-
-/** Same words as the Settings → Channels card badges. */
-export function channelStateLabel(
-  state: ImSupervisorState,
-  imCopy: ImCopy,
-): string {
-  return {
-    not_connected: imCopy.notConnected,
-    starting: imCopy.starting,
-    waiting_scan: imCopy.waitingScan,
-    reconnecting: imCopy.reconnecting,
-    running: imCopy.running,
-    expired: imCopy.expired,
-    error: imCopy.error,
-    stopped: imCopy.stopped,
-  }[state];
 }

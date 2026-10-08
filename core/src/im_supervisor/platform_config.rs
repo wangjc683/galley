@@ -397,6 +397,63 @@ pub(super) async fn append_platform_env(
     }
 }
 
+/// The spawn-env entries [`append_platform_env`] puts a channel
+/// credential in, and the credential's key in each JSON. The runner
+/// (`runner/managed_im_supervisor.py`, `SECRET_CONFIG_FIELDS`) masks the
+/// same set in its log and status lines; Core masks it in what reaches it
+/// past the runner (the child's raw stderr).
+const CREDENTIAL_ENV_FIELDS: [(&str, &str); 3] = [
+    ("GALLEY_FEISHU_CONFIG_JSON", "fs_app_secret"),
+    ("GALLEY_TELEGRAM_CONFIG_JSON", "tg_bot_token"),
+    ("GALLEY_DISCORD_CONFIG_JSON", "discord_bot_token"),
+];
+/// Shorter strings are not credentials; masking them would garble text.
+const CREDENTIAL_MIN_CHARS: usize = 8;
+const CREDENTIAL_KEPT_TAIL: usize = 4;
+
+/// The channel credentials in a supervisor's spawn env, longest first
+/// (a credential containing another is masked whole).
+pub(super) fn spawn_env_credentials(env: &[(String, String)]) -> Vec<String> {
+    let mut credentials: Vec<String> = Vec::new();
+    for (env_name, key) in CREDENTIAL_ENV_FIELDS {
+        let Some((_, raw)) = env.iter().find(|(name, _)| name == env_name) else {
+            continue;
+        };
+        let Ok(config) = serde_json::from_str::<serde_json::Value>(raw) else {
+            continue;
+        };
+        let Some(secret) = config.get(key).and_then(|value| value.as_str()) else {
+            continue;
+        };
+        for candidate in [secret, secret.trim()] {
+            if candidate.chars().count() >= CREDENTIAL_MIN_CHARS
+                && !credentials.iter().any(|known| known == candidate)
+            {
+                credentials.push(candidate.to_owned());
+            }
+        }
+    }
+    credentials.sort_by_key(|credential| std::cmp::Reverse(credential.len()));
+    credentials
+}
+
+/// `text` with every credential replaced by `…` plus its last four
+/// characters: enough to tell which credential, not enough to use it.
+/// python-telegram-bot's `InvalidToken`, for one, quotes the whole token.
+pub(super) fn redact_credentials(text: &str, credentials: &[String]) -> String {
+    let mut text = text.to_owned();
+    for credential in credentials {
+        if text.contains(credential.as_str()) {
+            let chars: Vec<char> = credential.chars().collect();
+            let tail: String = chars[chars.len().saturating_sub(CREDENTIAL_KEPT_TAIL)..]
+                .iter()
+                .collect();
+            text = text.replace(credential.as_str(), &format!("…{tail}"));
+        }
+    }
+    text
+}
+
 /// 6-digit pairing code. `RandomState` seeds per-instance from OS
 /// entropy — enough for a code that is only shown on the owner's own
 /// screen, rate-limited on the bot side, and regenerated per connect.
@@ -655,6 +712,73 @@ mod tests {
         assert_eq!(
             decoded.owner_bound_at.as_deref(),
             Some("2026-08-13T00:00:01Z")
+        );
+    }
+
+    fn credential_env() -> Vec<(String, String)> {
+        // Built the way `append_platform_env` builds them.
+        vec![
+            ("GALLEY_IM_PLATFORM".into(), "telegram".into()),
+            (
+                "GALLEY_TELEGRAM_CONFIG_JSON".into(),
+                serde_json::to_string(&json!({
+                    "tg_bot_token": "123456789:AAFakeTelegramTokenForGalleyTestswXyZ",
+                    "tg_allowed_users": Vec::<String>::new(),
+                    "tg_owner_bind_code": "123456",
+                }))
+                .expect("encode telegram config"),
+            ),
+            (
+                "GALLEY_FEISHU_CONFIG_JSON".into(),
+                serde_json::to_string(&json!({
+                    "fs_app_id": "cli_a1b2c3d4e5",
+                    "fs_app_secret": " fakeFeishuAppSecretForTestsf5ec ",
+                }))
+                .expect("encode feishu config"),
+            ),
+            (
+                "GALLEY_DISCORD_CONFIG_JSON".into(),
+                serde_json::to_string(&json!({ "discord_bot_token": "short" }))
+                    .expect("encode discord config"),
+            ),
+        ]
+    }
+
+    #[test]
+    fn spawn_env_credentials_collects_each_channel_secret() {
+        let credentials = spawn_env_credentials(&credential_env());
+        assert_eq!(
+            credentials,
+            vec![
+                "123456789:AAFakeTelegramTokenForGalleyTestswXyZ".to_string(),
+                " fakeFeishuAppSecretForTestsf5ec ".to_string(),
+                "fakeFeishuAppSecretForTestsf5ec".to_string(),
+            ]
+        );
+        // The app id, the pairing code and a too-short value are not
+        // credentials; a malformed config is skipped, not fatal.
+        let malformed = vec![("GALLEY_TELEGRAM_CONFIG_JSON".to_string(), "{".to_string())];
+        assert!(spawn_env_credentials(&malformed).is_empty());
+    }
+
+    #[test]
+    fn redact_credentials_keeps_only_the_last_four_characters() {
+        let credentials = spawn_env_credentials(&credential_env());
+        let line = concat!(
+            "telegram.error.InvalidToken: The token ",
+            "`123456789:AAFakeTelegramTokenForGalleyTestswXyZ` was rejected by the server."
+        );
+        assert_eq!(
+            redact_credentials(line, &credentials),
+            "telegram.error.InvalidToken: The token `…wXyZ` was rejected by the server."
+        );
+        assert_eq!(
+            redact_credentials("secret=fakeFeishuAppSecretForTestsf5ec;", &credentials),
+            "secret=…f5ec;"
+        );
+        assert_eq!(
+            redact_credentials("short 123456", &credentials),
+            "short 123456"
         );
     }
 

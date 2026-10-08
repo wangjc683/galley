@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -20,7 +21,7 @@ use crate::runner_commands::prepare_managed_runtime_context;
 use super::platform_config::{
     append_platform_env, clear_owner_pref, delete_discord_im_config, delete_feishu_im_config,
     delete_telegram_im_config, discord_config_ready, feishu_config_ready, persist_owner,
-    pref_owner, telegram_config_ready,
+    pref_owner, redact_credentials, spawn_env_credentials, telegram_config_ready,
 };
 use super::{
     im_state_dir, latest_wechat_qr_path, managed_python_for_app, materialize_sop_reference,
@@ -33,6 +34,24 @@ use super::{
 struct ProcessSlot {
     child: Option<Arc<Mutex<Child>>>,
     status: ImSupervisorStatus,
+}
+
+/// Why a supervisor did not start: a step every channel shares (the
+/// managed runtime context, the SOP copy, the Python interpreter), so
+/// every other channel would fail the same way, or one of this channel's
+/// own steps (its state dir, its credentials, its spawn).
+#[derive(Debug)]
+enum StartFailure {
+    Shared(String),
+    Channel(String),
+}
+
+impl StartFailure {
+    fn into_message(self) -> String {
+        match self {
+            StartFailure::Shared(message) | StartFailure::Channel(message) => message,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -99,7 +118,9 @@ impl ImSupervisorManager {
         platform: String,
         relogin: bool,
     ) -> Result<ImSupervisorStatus, String> {
-        self.start_inner(app, platform, relogin, false).await
+        self.start_inner(app, platform, relogin, false)
+            .await
+            .map_err(StartFailure::into_message)
     }
 
     async fn start_inner(
@@ -108,8 +129,8 @@ impl ImSupervisorManager {
         platform: String,
         relogin: bool,
         force_restart: bool,
-    ) -> Result<ImSupervisorStatus, String> {
-        let platform = normalize_platform(&platform)?;
+    ) -> Result<ImSupervisorStatus, StartFailure> {
+        let platform = normalize_platform(&platform).map_err(StartFailure::Channel)?;
         let _lifecycle = self.lifecycle_lock(platform).lock().await;
         self.start_locked(app, platform, relogin, force_restart)
             .await
@@ -124,7 +145,7 @@ impl ImSupervisorManager {
         platform: &'static str,
         relogin: bool,
         force_restart: bool,
-    ) -> Result<ImSupervisorStatus, String> {
+    ) -> Result<ImSupervisorStatus, StartFailure> {
         if let Some(status) = self.current_status(platform).await {
             if matches!(
                 status.state,
@@ -154,11 +175,12 @@ impl ImSupervisorManager {
         let model_config_revision = read_model_config_revision().await;
         let context = prepare_managed_runtime_context(&app, None)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| StartFailure::Shared(e.to_string()))?;
         let state_root = PathBuf::from(&context.diagnostics.paths.state_root);
         let state_dir = state_root.join("im").join(platform);
-        let sop_path = materialize_sop_reference(&state_root).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(&state_dir).map_err(|e| e.to_string())?;
+        let sop_path = materialize_sop_reference(&state_root)
+            .map_err(|e| StartFailure::Shared(e.to_string()))?;
+        std::fs::create_dir_all(&state_dir).map_err(|e| StartFailure::Channel(e.to_string()))?;
         if platform == WECHAT {
             remove_wechat_qr_files(&state_dir);
         }
@@ -206,9 +228,14 @@ impl ImSupervisorManager {
         env.push(("GALLEY_SUPERVISOR_ID".into(), supervisor_id));
         env.push(("GALLEY_IM_PLATFORM".into(), platform.into()));
         env.push((GALLEY_CORE_PID_ENV.into(), std::process::id().to_string()));
-        let binding = append_platform_env(platform, &mut env).await?;
+        let binding = append_platform_env(platform, &mut env)
+            .await
+            .map_err(StartFailure::Channel)?;
+        // What the child reads back to Core is masked with the credentials
+        // Core just handed it (its raw stderr bypasses the runner's masking).
+        let credentials = Arc::new(spawn_env_credentials(&env));
 
-        let python = managed_python_for_app(&app)?;
+        let python = managed_python_for_app(&app).map_err(StartFailure::Shared)?;
         let code_root = context.diagnostics.paths.code_root.clone();
         let state_dir_arg = state_dir.to_string_lossy().into_owned();
         let sop_path_arg = sop_path.to_string_lossy().into_owned();
@@ -239,7 +266,9 @@ impl ImSupervisorManager {
             .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|e| format!("starting managed IM supervisor failed: {e}"))?;
+            .map_err(|e| {
+                StartFailure::Channel(format!("starting managed IM supervisor failed: {e}"))
+            })?;
         let pref = ImSupervisorPref {
             enabled: true,
             auto_start: true,
@@ -247,7 +276,7 @@ impl ImSupervisorManager {
         };
         if let Err(e) = write_pref(platform, pref).await {
             let _ = child.start_kill();
-            return Err(e);
+            return Err(StartFailure::Channel(e));
         }
         let pid = child.id();
         let stdout = child.stdout.take();
@@ -274,9 +303,10 @@ impl ImSupervisorManager {
         if let Some(stdout) = stdout {
             let manager = Arc::clone(self);
             let app_for_task = app.clone();
+            let credentials = Arc::clone(&credentials);
             tauri::async_runtime::spawn(async move {
                 manager
-                    .read_stdout(app_for_task, platform, pid, stdout)
+                    .read_stdout(app_for_task, platform, pid, stdout, credentials)
                     .await;
             });
         }
@@ -285,7 +315,7 @@ impl ImSupervisorManager {
             let app_for_task = app.clone();
             tauri::async_runtime::spawn(async move {
                 manager
-                    .read_stderr(app_for_task, platform, pid, stderr)
+                    .read_stderr(app_for_task, platform, pid, stderr, credentials)
                     .await;
             });
         }
@@ -446,7 +476,10 @@ impl ImSupervisorManager {
         }
         clear_owner_pref(platform).await?;
         if live {
-            return self.start_locked(app, platform, false, true).await;
+            return self
+                .start_locked(app, platform, false, true)
+                .await
+                .map_err(StartFailure::into_message);
         }
         let status = self.status(&app, platform.into()).await?;
         let _ = app.emit(EVENT_NAME, status.clone());
@@ -463,41 +496,69 @@ impl ImSupervisorManager {
                     // Record an Error slot so the failure is visible and
                     // retryable from the Channels card.
                     eprintln!("[im-supervisor] autostart {platform} failed: {e}");
-                    let status = ImSupervisorStatus {
-                        platform: platform.into(),
-                        state: ImSupervisorState::Error,
-                        enabled: true,
-                        pid: None,
-                        bot_id: None,
-                        qr_image_path: None,
-                        last_error: Some(e),
-                        model_config_revision: pref.model_config_revision.clone(),
-                        model_config_stale: false,
-                        owner_open_id: pref_owner(platform).await,
-                        bind_code: None,
-                        updated_at: now_iso(),
-                    };
-                    self.set_slot(platform, None, status, &app).await;
+                    self.record_start_failure(&app, platform, &pref, e).await;
                 }
             }
         }
     }
 
+    /// "Restart all channels": one status per enabled channel, in
+    /// platform order. A channel that fails on its own is recorded and
+    /// reported as `error` with the reason, and the rest still restart;
+    /// only a failure in a step every channel shares fails the call.
     pub async fn restart_enabled(
         self: &Arc<Self>,
         app: AppHandle,
     ) -> Result<Vec<ImSupervisorStatus>, String> {
-        let mut statuses = Vec::new();
+        let mut enabled = Vec::new();
         for platform in PLATFORMS {
-            let pref = read_pref(platform).await;
-            if pref.enabled {
-                statuses.push(
-                    self.start_inner(app.clone(), platform.into(), false, true)
-                        .await?,
-                );
+            if read_pref(platform).await.enabled {
+                enabled.push(platform);
             }
         }
-        Ok(statuses)
+        let start_app = app.clone();
+        restart_each(
+            enabled,
+            |platform| self.start_inner(start_app.clone(), platform.into(), false, true),
+            |platform, error| {
+                let app = app.clone();
+                async move {
+                    let pref = read_pref(platform).await;
+                    self.record_start_failure(&app, platform, &pref, error)
+                        .await
+                }
+            },
+        )
+        .await
+    }
+
+    /// A channel that did not start: an `error` slot carrying the
+    /// reason, so the failure is visible and retryable from its card.
+    /// Drops the slot's process generation, so a supervisor killed on
+    /// the way (restart kills the old one first) cannot overwrite it.
+    async fn record_start_failure(
+        &self,
+        app: &AppHandle,
+        platform: &'static str,
+        pref: &ImSupervisorPref,
+        error: String,
+    ) -> ImSupervisorStatus {
+        let status = ImSupervisorStatus {
+            platform: platform.into(),
+            state: ImSupervisorState::Error,
+            enabled: pref.enabled,
+            pid: None,
+            bot_id: None,
+            qr_image_path: None,
+            last_error: Some(error),
+            model_config_revision: pref.model_config_revision.clone(),
+            model_config_stale: false,
+            owner_open_id: pref_owner(platform).await,
+            bind_code: None,
+            updated_at: now_iso(),
+        };
+        self.set_slot(platform, None, status.clone(), app).await;
+        status
     }
 
     pub async fn refresh_model_config_staleness(&self, app: &AppHandle) {
@@ -576,12 +637,18 @@ impl ImSupervisorManager {
         platform: &'static str,
         pid: Option<u32>,
         stdout: tokio::process::ChildStdout,
+        credentials: Arc<Vec<String>>,
     ) {
         let mut lines = BufReader::new(stdout).lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            let Ok(event) = serde_json::from_str::<ImSupervisorLine>(&line) else {
+            let Ok(mut event) = serde_json::from_str::<ImSupervisorLine>(&line) else {
                 continue;
             };
+            // The runner already masks its status lines; this keeps a
+            // credential out of the GUI should one slip past it.
+            event.last_error = event
+                .last_error
+                .map(|error| redact_credentials(&error, &credentials));
             let event_platform = event.platform.as_deref().unwrap_or(platform);
             if event_platform != platform {
                 continue;
@@ -618,6 +685,7 @@ impl ImSupervisorManager {
         platform: &'static str,
         pid: Option<u32>,
         stderr: tokio::process::ChildStderr,
+        credentials: Arc<Vec<String>>,
     ) {
         let mut lines = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = lines.next_line().await {
@@ -625,7 +693,10 @@ impl ImSupervisorManager {
             if line.is_empty() {
                 continue;
             }
-            self.update_error(&app, platform, pid, line.to_string())
+            // Raw stderr (a traceback from before the runner's redirect, a
+            // subprocess, the interpreter itself) never went through the
+            // runner's masking, and it becomes the card's last error.
+            self.update_error(&app, platform, pid, redact_credentials(line, &credentials))
                 .await;
         }
     }
@@ -762,6 +833,39 @@ impl ImSupervisorManager {
         latest_wechat_qr_path(&im_state_dir(app, WECHAT).ok()?)
             .map(|path| path.to_string_lossy().into_owned())
     }
+}
+
+/// The body of [`ImSupervisorManager::restart_enabled`]: start each
+/// channel in turn. A channel's own failure is handed to `record_failure`
+/// and its returned status reported in that channel's place; a shared
+/// failure is recorded the same way for the channel it hit (restart had
+/// already stopped that channel's supervisor), then stops the loop and
+/// fails the call, leaving the channels after it untouched.
+async fn restart_each<Start, Started, Record, Recorded>(
+    platforms: Vec<&'static str>,
+    mut start: Start,
+    mut record_failure: Record,
+) -> Result<Vec<ImSupervisorStatus>, String>
+where
+    Start: FnMut(&'static str) -> Started,
+    Started: Future<Output = Result<ImSupervisorStatus, StartFailure>>,
+    Record: FnMut(&'static str, String) -> Recorded,
+    Recorded: Future<Output = ImSupervisorStatus>,
+{
+    let mut statuses = Vec::with_capacity(platforms.len());
+    for platform in platforms {
+        match start(platform).await {
+            Ok(status) => statuses.push(status),
+            Err(StartFailure::Channel(error)) => {
+                statuses.push(record_failure(platform, error).await);
+            }
+            Err(StartFailure::Shared(error)) => {
+                record_failure(platform, error.clone()).await;
+                return Err(error);
+            }
+        }
+    }
+    Ok(statuses)
 }
 
 /// Apply a stdout status event from process generation `pid` to the
@@ -924,6 +1028,130 @@ mod tests {
         let parsed: ImSupervisorLine = serde_json::from_str(plain).expect("parse plain");
         assert!(parsed.owner_open_id.is_none());
         assert_eq!(parsed.state, ImSupervisorState::Starting);
+    }
+
+    fn restarted(platform: &'static str) -> ImSupervisorStatus {
+        ImSupervisorStatus {
+            platform: platform.into(),
+            state: ImSupervisorState::Starting,
+            pid: Some(100),
+            bind_code: None,
+            ..running_status(None)
+        }
+    }
+
+    fn failed(platform: &'static str, error: String) -> ImSupervisorStatus {
+        ImSupervisorStatus {
+            platform: platform.into(),
+            state: ImSupervisorState::Error,
+            pid: None,
+            bot_id: None,
+            last_error: Some(error),
+            bind_code: None,
+            ..running_status(None)
+        }
+    }
+
+    #[tokio::test]
+    async fn restart_reports_a_failed_channel_as_error_and_restarts_the_rest() {
+        let mut attempted = Vec::new();
+        let mut recorded = Vec::new();
+        let statuses = restart_each(
+            vec![WECHAT, FEISHU, TELEGRAM, DISCORD],
+            |platform| {
+                attempted.push(platform);
+                std::future::ready(if platform == FEISHU {
+                    Err(StartFailure::Channel(
+                        "Feishu App ID and App Secret are required before connecting".into(),
+                    ))
+                } else {
+                    Ok(restarted(platform))
+                })
+            },
+            |platform, error| {
+                recorded.push(platform);
+                std::future::ready(failed(platform, error))
+            },
+        )
+        .await
+        .expect("one channel failing on its own does not fail the restart");
+
+        assert_eq!(attempted, vec![WECHAT, FEISHU, TELEGRAM, DISCORD]);
+        assert_eq!(recorded, vec![FEISHU]);
+        let summary: Vec<(&str, ImSupervisorState, Option<&str>)> = statuses
+            .iter()
+            .map(|s| {
+                (
+                    s.platform.as_str(),
+                    s.state.clone(),
+                    s.last_error.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            summary,
+            vec![
+                (WECHAT, ImSupervisorState::Starting, None),
+                (
+                    FEISHU,
+                    ImSupervisorState::Error,
+                    Some("Feishu App ID and App Secret are required before connecting"),
+                ),
+                (TELEGRAM, ImSupervisorState::Starting, None),
+                (DISCORD, ImSupervisorState::Starting, None),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_fails_whole_on_a_shared_step_and_leaves_later_channels_alone() {
+        let mut attempted = Vec::new();
+        let mut recorded = Vec::new();
+        let result = restart_each(
+            vec![WECHAT, FEISHU, TELEGRAM],
+            |platform| {
+                attempted.push(platform);
+                std::future::ready(if platform == FEISHU {
+                    Err(StartFailure::Shared(
+                        "managed GA code is missing agentmain.py".into(),
+                    ))
+                } else {
+                    Ok(restarted(platform))
+                })
+            },
+            |platform, error| {
+                recorded.push((platform, error.clone()));
+                std::future::ready(failed(platform, error))
+            },
+        )
+        .await;
+
+        assert_eq!(
+            result.expect_err("a shared step failing fails the restart"),
+            "managed GA code is missing agentmain.py"
+        );
+        // The channel it hit had its supervisor stopped already: it is
+        // recorded as failed. Telegram is never touched.
+        assert_eq!(attempted, vec![WECHAT, FEISHU]);
+        assert_eq!(
+            recorded,
+            vec![(
+                FEISHU,
+                "managed GA code is missing agentmain.py".to_string()
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_with_nothing_enabled_reports_nothing() {
+        let statuses = restart_each(
+            Vec::new(),
+            |platform| std::future::ready(Ok(restarted(platform))),
+            |platform, error| std::future::ready(failed(platform, error)),
+        )
+        .await
+        .expect("nothing to restart");
+        assert!(statuses.is_empty());
     }
 
     #[test]

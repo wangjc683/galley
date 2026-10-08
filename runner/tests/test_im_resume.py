@@ -1104,6 +1104,26 @@ def test_wechat_stopped_run_leaves_the_notice_for_the_next_answer(wx: WxWorld) -
     assert wx.texts()[-1] == f"{NOTICE}\n好的。\n\n[任务已完成]"
 
 
+def test_wechat_help_and_status_never_reach_upstream_or_take_the_notice(wx: WxWorld) -> None:
+    """Upstream wechatapp has neither command and would run them as tasks;
+    like ``/llm``, their replies leave the notice to the next answer."""
+    wx.say("/help")
+    wx.say("/status")
+    wx.agent.is_running = True
+    wx.say("/status")
+    assert wx.texts() == [
+        managed_im_supervisor.WECHAT_HELP_REPLY,
+        "状态：🟢 空闲\nLLM：[0] NativeClaude/test",
+        "状态：🔴 运行中\nLLM：[0] NativeClaude/test",
+    ]
+    assert wx.agent.tasks == []
+    wx.agent.is_running = False
+    wx.agent.scripts.append([{"done": "好的。", "outputs": ["好的。"]}])
+    wx.say("换个话题")
+    wait_for(lambda: len(wx.bot.sent) == 4)
+    assert wx.texts()[-1] == f"{NOTICE}\n好的。\n\n[任务已完成]"
+
+
 def test_wechat_new_stops_the_running_task_and_starts_a_new_log(wx: WxWorld) -> None:
     wx.say("长任务")
     wait_for(lambda: bool(wx.agent.tasks))

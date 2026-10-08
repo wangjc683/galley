@@ -1,54 +1,39 @@
-import type { ImCopy } from "./types";
+import { useCopy } from "@/lib/i18n";
+import type { ImSupervisorPlatform } from "@/lib/im-supervisor";
+import { cn } from "@/lib/utils";
 
-export function FeishuCommandReference({ imCopy }: { imCopy: ImCopy }) {
-  return (
-    <TextCommandReference
-      title={imCopy.feishuTextCommandsTitle}
-      hint={imCopy.feishuTextCommandsHint}
-      commands={imCopy.feishuTextCommands}
-    />
-  );
-}
+import { INLINE_CODE_CLASS } from "../inline-code";
+import { channelCommands } from "./channel-view";
 
-export function TelegramCommandReference({ imCopy }: { imCopy: ImCopy }) {
-  return (
-    <TextCommandReference
-      title={imCopy.telegramTextCommandsTitle}
-      hint={imCopy.telegramTextCommandsHint}
-      commands={imCopy.telegramTextCommands}
-    />
-  );
-}
-
-export function DiscordCommandReference({ imCopy }: { imCopy: ImCopy }) {
-  return (
-    <TextCommandReference
-      title={imCopy.discordTextCommandsTitle}
-      hint={imCopy.discordTextCommandsHint}
-      commands={imCopy.discordTextCommands}
-    />
-  );
-}
-
-export function WeChatCommandReference({ imCopy }: { imCopy: ImCopy }) {
-  return (
-    <TextCommandReference
-      title={imCopy.wechatTextCommandsTitle}
-      hint={imCopy.wechatTextCommandsHint}
-      commands={imCopy.wechatTextCommands}
-    />
-  );
-}
-
-function TextCommandReference({
-  title,
-  hint,
-  commands,
+/**
+ * The running channel's text-command table: one shared command set
+ * (`channelCommands`), with the platform's own title and hint.
+ */
+export function ChannelCommandReference({
+  platform,
 }: {
-  title: string;
-  hint: string;
-  commands: { command: string; description: string }[];
+  platform: ImSupervisorPlatform;
 }) {
+  const imCopy = useCopy().settings.im;
+  const { title, hint } = {
+    wechat: {
+      title: imCopy.wechatTextCommandsTitle,
+      hint: imCopy.wechatTextCommandsHint,
+    },
+    feishu: {
+      title: imCopy.feishuTextCommandsTitle,
+      hint: imCopy.feishuTextCommandsHint,
+    },
+    telegram: {
+      title: imCopy.telegramTextCommandsTitle,
+      hint: imCopy.telegramTextCommandsHint,
+    },
+    discord: {
+      title: imCopy.discordTextCommandsTitle,
+      hint: imCopy.discordTextCommandsHint,
+    },
+  }[platform];
+
   return (
     <div className="min-w-0 rounded-sm bg-hover/35 px-2.5 py-2">
       <div className="space-y-1">
@@ -58,12 +43,17 @@ function TextCommandReference({
         <p className="text-ui-meta leading-dense text-ink-muted">{hint}</p>
       </div>
       <ul className="mt-2 grid min-w-0 gap-x-4 gap-y-1.5 sm:grid-cols-2">
-        {commands.map((item) => (
+        {channelCommands(platform, imCopy).map((item) => (
           <li
             key={item.command}
             className="grid min-w-0 gap-1 sm:grid-cols-[max-content_minmax(0,1fr)] sm:items-baseline sm:gap-2"
           >
-            <code className="w-fit max-w-full whitespace-nowrap rounded-sm border border-line/70 bg-surface px-1.5 py-[1px] font-mono text-ui-tertiary leading-notice text-ink">
+            <code
+              className={cn(
+                INLINE_CODE_CLASS,
+                "w-fit max-w-full whitespace-nowrap leading-notice",
+              )}
+            >
               {item.command}
             </code>
             <span className="min-w-0 text-ui-meta leading-notice text-ink-muted">

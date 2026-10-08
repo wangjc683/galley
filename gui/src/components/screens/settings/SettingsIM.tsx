@@ -6,6 +6,7 @@ import {
 import { useState } from "react";
 
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import { restartEnabledChannels } from "@/components/screens/settings/im/channels-restart";
 import { DiscordCard } from "@/components/screens/settings/im/DiscordCard";
 import { FeishuCard } from "@/components/screens/settings/im/FeishuCard";
 import { TelegramCard } from "@/components/screens/settings/im/TelegramCard";
@@ -16,14 +17,13 @@ import { Button } from "@/components/ui/button";
 import { useImSupervisorStatus } from "@/hooks/useImSupervisorStatus";
 import {
   logoutImSupervisor,
-  restartEnabledImSupervisors,
   startImSupervisor,
   stopImSupervisor,
+  type ImSupervisorPlatform,
   type ImSupervisorStatus,
 } from "@/lib/im-supervisor";
 import { useCopy } from "@/lib/i18n";
 import { useUiStore } from "@/stores/ui";
-import { makeAppError } from "@/types/app-error";
 
 export function SettingsIM({
   hasManagedRuntimeConfigured,
@@ -87,60 +87,25 @@ export function SettingsIM({
 
   const restartChannels = async () => {
     setBusyAction("restart");
+    const setters: Record<
+      ImSupervisorPlatform,
+      (status: ImSupervisorStatus) => void
+    > = {
+      wechat: setWechatStatus,
+      feishu: setFeishuStatus,
+      telegram: setTelegramStatus,
+      discord: setDiscordStatus,
+    };
+    // Restart failures report through the toast (and each failed card's
+    // own status). Writing them into `invokeError` would surface a
+    // cross-channel failure inside the WeChat card's error block — wrong
+    // attribution.
     try {
-      const statuses = await restartEnabledImSupervisors();
-      const wechat = statuses.find((item) => item.platform === "wechat");
-      if (wechat) {
-        setWechatStatus(wechat);
-      }
-      const feishu = statuses.find((item) => item.platform === "feishu");
-      if (feishu) {
-        setFeishuStatus(feishu);
-      }
-      const telegram = statuses.find((item) => item.platform === "telegram");
-      if (telegram) {
-        setTelegramStatus(telegram);
-      }
-      const discord = statuses.find((item) => item.platform === "discord");
-      if (discord) {
-        setDiscordStatus(discord);
-      }
-      useUiStore.getState().pushToast(
-        makeAppError({
-          id: "channels-restarted",
-          category: "business",
-          severity: "info",
-          title:
-            statuses.length > 0
-              ? copy.toasts.channelsRestarted
-              : copy.toasts.channelsRestartNone,
-          message:
-            statuses.length > 0 ? copy.toasts.channelsRestartedMessage : "",
-          hint: null,
-          retryable: false,
-          context: "restart_enabled_im_supervisors",
-          traceback: null,
-          autoDismissMs: 4200,
-        }),
-      );
-    } catch (e) {
-      // Restart failures report through the toast only. Writing them
-      // into `invokeError` would surface a cross-channel failure
-      // inside the WeChat card's error block — wrong attribution.
-      const message = e instanceof Error ? e.message : String(e);
-      useUiStore.getState().pushToast(
-        makeAppError({
-          id: "channels-restart-failed",
-          category: "business",
-          severity: "error",
-          title: copy.toasts.channelsRestartFailed,
-          message,
-          hint: null,
-          retryable: false,
-          context: "restart_enabled_im_supervisors",
-          traceback: null,
-        }),
-      );
+      await restartEnabledChannels({
+        copy,
+        pushToast: (toast) => useUiStore.getState().pushToast(toast),
+        setStatus: (status) => setters[status.platform](status),
+      });
     } finally {
       setBusyAction(null);
     }

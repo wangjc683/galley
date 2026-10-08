@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import {
   deleteTelegramImConfig,
+  getImSupervisorStatus,
   getTelegramImConfig,
   saveTelegramImConfig,
   startImSupervisor,
@@ -20,14 +21,28 @@ import { SettingsInput } from "../models/ModelPrimitives";
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelCard } from "./ChannelCard";
 import { ChannelErrorBlock } from "./ChannelErrorBlock";
+import {
+  ChannelFold,
+  ChannelPrimaryButton,
+  ChannelSecurityNote,
+  ChannelStatusHint,
+} from "./ChannelParts";
+import {
+  canPauseChannel,
+  channelBadgeKind,
+  channelCardView,
+  configuredPrimaryAction,
+  errorReplacesStatusHint,
+  isChannelSetUp,
+} from "./channel-view";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import { TelegramCommandReference } from "./CommandReference";
+import { ChannelCommandReference } from "./CommandReference";
 import { ConnectionSteps } from "./ConnectionSteps";
 import { stepWithLink } from "./step-link";
 import { TelegramGlyph } from "./Glyphs";
 import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
-import { shouldAutoExpand, telegramStatusHintForState } from "./status";
+import { channelStatusHint, shouldAutoExpand } from "./status";
 
 /**
  * Telegram channel card. Same owner-paired flow as Feishu with a much
@@ -95,8 +110,7 @@ export function TelegramCard({
   const derivedState: ImSupervisorState =
     status?.state ?? (config?.hasBotToken ? "stopped" : "not_connected");
   const expanded = expandedOverride ?? shouldAutoExpand(derivedState);
-  const running = derivedState === "running";
-  const canPause = derivedState === "running";
+  const canPause = canPauseChannel(status);
   const canDisconnect =
     derivedState === "running" ||
     derivedState === "expired" ||
@@ -126,7 +140,9 @@ export function TelegramCard({
       });
       setConfig(saved);
       setBotToken("");
-      onStatusChange(null);
+      // Saving does not touch Core's run state (a failed channel stays
+      // failed until restarted), so re-read it rather than guess.
+      onStatusChange(await getImSupervisorStatus("telegram").catch(() => null));
       setExpandedOverride(true);
     });
 
@@ -160,6 +176,84 @@ export function TelegramCard({
   const ownerUserId = status?.ownerOpenId ?? config?.ownerUserId ?? null;
   const ownerBoundAt = config?.ownerBoundAt ?? null;
   const bindCode = ownerUserId ? null : (status?.bindCode ?? null);
+  const setUp = isChannelSetUp("telegram", derivedState, ownerUserId);
+  const view = channelCardView("telegram", derivedState, setUp);
+  const errorText = localError ?? statusLoadError ?? status?.lastError ?? null;
+  const statusHint = errorReplacesStatusHint(derivedState, errorText)
+    ? null
+    : channelStatusHint("telegram", derivedState, setUp, imCopy);
+  const primaryAction = configuredPrimaryAction(derivedState);
+
+  const setupSteps = imCopy.telegramSetupSteps.map((step) =>
+    stepWithLink(step, "@BotFather", "https://t.me/BotFather"),
+  );
+  const tokenInput = (
+    <div className="max-w-[460px]">
+      <SettingsInput
+        label={imCopy.telegramBotTokenLabel}
+        type="password"
+        value={botToken}
+        onChange={setBotToken}
+        placeholder={
+          config?.hasBotToken
+            ? imCopy.telegramTokenSavedPlaceholder
+            : imCopy.telegramBotTokenPlaceholder
+        }
+      />
+    </div>
+  );
+  const saveButton = (
+    <Button
+      type="button"
+      // Primary tracks the current actionable step, same rule as the
+      // Feishu card: saving is the next step until the token is stored,
+      // then starting (or the set-up view's resume / retry) takes it.
+      variant={canStartService || setUp ? "secondary" : "primary"}
+      size="sm"
+      disabled={busy || !canSaveCredentials}
+      leadingIcon={
+        localBusy === "save" ? (
+          <CircleNotch size={13} weight="thin" className="spin" />
+        ) : (
+          <Check size={13} weight="thin" />
+        )
+      }
+      onClick={saveCredentials}
+    >
+      {localBusy === "save" ? imCopy.working : imCopy.save}
+    </Button>
+  );
+  const loadingNote =
+    localBusy === "load" ? (
+      <span className="text-ui-meta text-ink-muted">
+        {imCopy.telegramConfigLoading}
+      </span>
+    ) : null;
+  const owner = ownerUserId ? (
+    <OwnerBoundRow
+      ownerId={ownerUserId}
+      boundAt={ownerBoundAt}
+      busy={busy}
+      working={localBusy === "unbind"}
+      onUnbind={() => setConfirmUnbindOpen(true)}
+    />
+  ) : bindCode ? (
+    <BindCodeCallout
+      lead={imCopy.telegramBindWaitingLead}
+      code={bindCode}
+      afterCode={imCopy.telegramBindWaitingAfterCode}
+    />
+  ) : null;
+  const errorBlock = (
+    <ChannelErrorBlock
+      platform="telegram"
+      state={derivedState}
+      error={errorText}
+    />
+  );
+  const securityNote = (
+    <ChannelSecurityNote others={imCopy.telegramOwnerScope} />
+  );
 
   return (
     <>
@@ -170,17 +264,7 @@ export function TelegramCard({
         title={imCopy.telegramTitle}
         badge={
           <StatusBadge
-            state={derivedState}
-            iconStateOverride={
-              derivedState === "stopped" ? "not_connected" : undefined
-            }
-            labelOverride={
-              derivedState === "running"
-                ? imCopy.telegramServiceStarted
-                : derivedState === "stopped"
-                  ? imCopy.telegramNotStarted
-                  : undefined
-            }
+            kind={channelBadgeKind("telegram", derivedState, setUp)}
           />
         }
         busy={busy}
@@ -197,56 +281,48 @@ export function TelegramCard({
         }
       >
         <div className="space-y-4 pl-8 pr-1">
-          <ConnectionSteps
-            steps={
-              running
-                ? imCopy.telegramConnectedSteps
-                : imCopy.telegramSetupSteps.map((step) =>
-                    stepWithLink(step, "@BotFather", "https://t.me/BotFather"),
-                  )
-            }
-            status={telegramStatusHintForState(derivedState, imCopy)}
-          />
-
-          {running ? (
-            <TelegramCommandReference imCopy={imCopy} />
+          {view === "running" ? (
+            <>
+              {statusHint ? (
+                <ChannelStatusHint>{statusHint}</ChannelStatusHint>
+              ) : null}
+              {errorBlock}
+              <ChannelCommandReference platform="telegram" />
+              {owner}
+              {securityNote}
+            </>
+          ) : view === "configured" ? (
+            <>
+              {statusHint ? (
+                <ChannelStatusHint>{statusHint}</ChannelStatusHint>
+              ) : null}
+              {errorBlock}
+              {primaryAction ? (
+                <ChannelPrimaryButton
+                  action={primaryAction}
+                  disabled={busy}
+                  pending={localBusy === "connect"}
+                  onClick={connect}
+                />
+              ) : null}
+              <ChannelFold title={imCopy.changeBotTokenOrSteps}>
+                <ConnectionSteps steps={setupSteps} />
+                {tokenInput}
+                <div className="flex flex-wrap items-center gap-2">
+                  {saveButton}
+                  {loadingNote}
+                </div>
+              </ChannelFold>
+              {owner}
+              {securityNote}
+            </>
           ) : (
             <>
-              <div className="max-w-[460px]">
-                <SettingsInput
-                  label={imCopy.telegramBotTokenLabel}
-                  type="password"
-                  value={botToken}
-                  onChange={setBotToken}
-                  placeholder={
-                    config?.hasBotToken
-                      ? imCopy.telegramTokenSavedPlaceholder
-                      : imCopy.telegramBotTokenPlaceholder
-                  }
-                />
-              </div>
+              <ConnectionSteps steps={setupSteps} status={statusHint} />
+              {errorBlock}
+              {tokenInput}
               <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  // Primary tracks the current actionable step, same rule
-                  // as the Feishu card: saving is the next step until the
-                  // token is stored, then starting takes primary.
-                  variant={canStartService ? "secondary" : "primary"}
-                  size="sm"
-                  disabled={busy || !canSaveCredentials}
-                  leadingIcon={
-                    localBusy === "save" ? (
-                      <CircleNotch size={13} weight="thin" className="spin" />
-                    ) : (
-                      <Check size={13} weight="thin" />
-                    )
-                  }
-                  onClick={saveCredentials}
-                >
-                  {localBusy === "save"
-                    ? imCopy.working
-                    : imCopy.telegramSaveCredentials}
-                </Button>
+                {saveButton}
                 <Button
                   type="button"
                   variant={canStartService ? "primary" : "secondary"}
@@ -265,43 +341,12 @@ export function TelegramCard({
                     ? imCopy.working
                     : imCopy.telegramStartService}
                 </Button>
-                {localBusy === "load" ? (
-                  <span className="text-ui-meta text-ink-muted">
-                    {imCopy.telegramConfigLoading}
-                  </span>
-                ) : null}
+                {loadingNote}
               </div>
+              {owner}
+              {securityNote}
             </>
           )}
-
-          {ownerUserId ? (
-            <OwnerBoundRow
-              ownerId={ownerUserId}
-              boundAt={ownerBoundAt}
-              boundLabel={imCopy.telegramBoundLabel}
-              boundAtLabel={imCopy.telegramBoundAt}
-              unbindLabel={imCopy.telegramUnbind}
-              workingLabel={imCopy.working}
-              busy={busy}
-              working={localBusy === "unbind"}
-              onUnbind={() => setConfirmUnbindOpen(true)}
-            />
-          ) : bindCode ? (
-            <BindCodeCallout
-              title={imCopy.telegramBindWaitingTitle}
-              lead={imCopy.telegramBindWaitingLead}
-              code={bindCode}
-              afterCode={imCopy.telegramBindWaitingAfterCode}
-            />
-          ) : null}
-
-          <p className="text-ui-tertiary leading-notice text-ink-muted">
-            {imCopy.telegramOwnerSecurityNote}
-          </p>
-
-          <ChannelErrorBlock
-            error={localError ?? statusLoadError ?? status?.lastError ?? null}
-          />
         </div>
       </ChannelCard>
 
@@ -311,7 +356,7 @@ export function TelegramCard({
         busy={busy}
         title={imCopy.telegramUnbindDialogTitle}
         body={imCopy.telegramUnbindDialogBody}
-        confirmLabel={imCopy.telegramUnbind}
+        confirmLabel={imCopy.ownerUnbind}
         onConfirm={() => {
           setConfirmUnbindOpen(false);
           void unbind();

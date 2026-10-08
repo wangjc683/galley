@@ -141,9 +141,9 @@ export const zhCopy = {
   firstClose: {
     title: "Galley 可以在后台继续工作",
     bodyMac:
-      "收进菜单栏后，已接入的 Channel 保持在线、后台任务继续运行，有需要你的事会通知你。要彻底退出，随时可以从菜单栏的 Galley 图标选择 Quit Galley。",
+      "收进菜单栏后，已接入的渠道保持在线、后台任务继续运行，有需要你的事会通知你。要彻底退出，随时可以从菜单栏的 Galley 图标选择 Quit Galley。",
     bodyWindows:
-      "收进系统托盘后，已接入的 Channel 保持在线、后台任务继续运行，有需要你的事会通知你。要彻底退出，随时可以从托盘的 Galley 图标选择 Quit Galley。",
+      "收进系统托盘后，已接入的渠道保持在线、后台任务继续运行，有需要你的事会通知你。要彻底退出，随时可以从托盘的 Galley 图标选择 Quit Galley。",
     keep: "保持后台运行（推荐）",
     quit: "退出 Galley",
     footnote: "以后可在 设置 → 通用 中修改这个行为。",
@@ -296,6 +296,7 @@ export const zhCopy = {
     channelsNeedsAttentionBadge: "Channels · 需处理",
     channelsPopover: {
       loadFailed: "读取 Channels 状态失败",
+      restart: "重启 Channels",
       settings: "设置…",
     },
     configureModels: "配置模型",
@@ -642,7 +643,7 @@ export const zhCopy = {
       launchSectionTitle: "启动",
       launchAtLogin: "开机自动启动",
       launchAtLoginDescription:
-        "登录系统后，Galley 自动在后台待命（菜单栏 / 托盘），不弹出窗口。已连接的 IM 渠道和远程指挥随开机可用。",
+        "登录系统后，Galley 自动在后台待命（菜单栏 / 托盘），不弹出窗口。已连接的渠道和远程指挥随开机可用。",
       launchAtLoginError: (detail: string) => `无法更新开机自启设置：${detail}`,
       notificationsSectionTitle: "通知",
       notifyGoalEndTitle: "Goal 结束或需要介入时通知",
@@ -1057,20 +1058,16 @@ export const zhCopy = {
         "接入完成后，直接在微信里给 Galley 发消息。",
         "保持 Galley 运行，微信入口会持续可用。",
       ],
-      connectedSteps: [
-        "在微信里给 Galley 发消息。",
-        "Galley 会在本机处理请求，并把结果回复到微信。",
-        "保持 Galley 运行，微信入口会持续可用。",
+      textCommands: [
+        { command: "/new", description: "开始新对话" },
+        { command: "/stop", description: "停止当前任务" },
+        { command: "/status", description: "查看运行状态和当前模型" },
+        { command: "/llm", description: "查看可用模型" },
+        { command: "/llm n", description: "切换到第 n 个模型" },
+        { command: "/help", description: "查看全部命令" },
       ],
       wechatTextCommandsTitle: "微信文本命令",
       wechatTextCommandsHint: "在微信聊天里直接发送这些文本命令。",
-      wechatTextCommands: [
-        { command: "/llm", description: "查看可用模型" },
-        { command: "/llm 0", description: "切换到第 0 个模型" },
-        { command: "/llm 1", description: "切换到第 1 个模型" },
-        { command: "/stop", description: "停止当前任务" },
-        { command: "/new", description: "开启新对话并清空当前上下文" },
-      ],
       feishuSetupSections: [
         {
           title: "飞书开放平台 · 准备应用",
@@ -1110,7 +1107,7 @@ export const zhCopy = {
           ],
         },
         {
-          title: "Galley 设置 · 保存凭证",
+          title: "Galley 设置 · 填入 App ID 和 App Secret",
           steps: [
             {
               parts: [
@@ -1124,7 +1121,7 @@ export const zhCopy = {
             {
               parts: [
                 { text: "点击 " },
-                { text: "保存凭证", emphasis: true },
+                { text: "保存", emphasis: true },
                 { text: "，然后启动 Galley 飞书服务。" },
               ],
             },
@@ -1257,26 +1254,7 @@ export const zhCopy = {
       copyFeishuPermissions: "复制全部",
       feishuPermissionsCopied: "已复制",
       feishuTextCommandsTitle: "飞书文本命令",
-      feishuTextCommandsHint:
-        "在飞书聊天里直接发送这些文本命令。也可以发送 /help 查看完整列表。",
-      feishuTextCommands: [
-        { command: "/help", description: "显示完整帮助" },
-        { command: "/status", description: "查看运行状态和当前模型" },
-        { command: "/llm", description: "查看可用模型" },
-        { command: "/llm 0", description: "切换到第 0 个模型" },
-        { command: "/llm 1", description: "切换到第 1 个模型" },
-        { command: "/new", description: "开启新对话并清空当前上下文" },
-        { command: "/stop", description: "停止当前任务" },
-        { command: "/continue", description: "列出可恢复会话" },
-        { command: "/continue 1", description: "恢复列表中的第 1 个会话" },
-        { command: "/restore", description: "恢复上次对话历史" },
-      ],
-      feishuConnectedSteps: [
-        "在飞书客户端给机器人发消息。",
-        "从飞书委托的任务完成后，Galley 会主动发消息告诉你。",
-        "如果没有回复，检查长连接、事件、权限和应用发布状态。",
-        "保持 Galley 运行，飞书服务会持续接收消息。",
-      ],
+      feishuTextCommandsHint: "在飞书聊天里直接发送这些文本命令。",
       notConnected: "未接入",
       starting: "正在接入",
       waitingScan: "等待扫码",
@@ -1285,6 +1263,7 @@ export const zhCopy = {
       expired: "接入已失效",
       error: "异常",
       stopped: "已暂停",
+      notStarted: "未启动",
       notConnectedHint: "接入后，微信会变成 Galley 的一个聊天入口。",
       startingHint: "Galley 正在准备微信入口。",
       waitingScanHint: "用手机微信扫描二维码完成接入。",
@@ -1293,28 +1272,33 @@ export const zhCopy = {
       errorHint: "微信接入异常，可以重试。",
       stoppedHint: "已暂停接收微信消息。",
       feishuNotConnectedHint:
-        "先保存凭证并启动飞书服务，再回到飞书开放平台配置长连接和事件。",
+        "先保存 App ID 和 App Secret 并启动飞书服务，再回到飞书开放平台配置长连接和事件。",
       feishuStartingHint: "正在启动飞书服务。",
       feishuReconnectingHint: "飞书连接正在重试。",
-      feishuRunningHint: "飞书服务运行中。在飞书客户端发消息即可使用。",
+      feishuRunningHint: "飞书入口已可用，可以直接在飞书里给 Galley 发消息。",
+      feishuRunningUnboundHint:
+        "服务已启动。回到飞书开放平台完成第 4–6 节，然后在飞书私聊机器人发送配对码。",
       feishuErrorHint:
         "接入异常。检查 App ID / App Secret、权限、长连接、事件和应用发布状态后重试。",
       feishuStoppedHint:
-        "凭证已保存。先点击启动飞书服务，再回到飞书开放平台配置长连接和事件。",
+        "App Secret 已保存。先点击启动飞书服务，再回到飞书开放平台配置长连接和事件。",
+      feishuPausedHint: "已暂停接收飞书消息。",
       connect: "接入微信",
-      feishuSaveCredentials: "保存凭证",
+      save: "保存",
+      resumeReceiving: "恢复接收",
       feishuStartService: "启动飞书服务",
       feishuServiceStarted: "服务已启动",
-      feishuNotStarted: "未启动",
       openFeishuConsole: "打开飞书开放平台",
       feishuSetupCollapsed: "查看飞书配置步骤",
+      feishuChangeCredentials: "更换 App ID / App Secret 或查看配置步骤",
+      changeBotTokenOrSteps: "更换 Bot Token 或查看配置步骤",
+      feishuAppIdChangeUnbinds: "换应用会解绑当前使用者，需要重新配对。",
       feishuAppIdLabel: "App ID",
       feishuAppSecretLabel: "App Secret",
       feishuAppIdPlaceholder: "cli_xxxxxxxxxxxxxxxx",
       feishuAppSecretPlaceholder: "粘贴 App Secret",
       feishuSecretSavedPlaceholder: "已保存，留空保持不变",
       feishuConfigLoading: "正在读取飞书配置…",
-      continueScan: "继续扫码",
       reconnect: "重新接入",
       retry: "重试",
       regenerateQr: "重新生成二维码",
@@ -1325,90 +1309,86 @@ export const zhCopy = {
       qrAlt: "微信接入二维码",
       noQrYet: "二维码生成中…",
       lastError: "错误详情",
+      errorTitles: {
+        botTokenInvalid: "Bot Token 无效或已被重置",
+        feishuCredentialsInvalid: "App ID 或 App Secret 不正确",
+        intentDisabled: "没有打开 MESSAGE CONTENT INTENT",
+        // 拉丁字母开头的平台名（Telegram / Discord）前后留空格，微信、飞书不留。
+        network: (platform: string) =>
+          `连不上${/^[A-Za-z]/.test(platform) ? " " : ""}${platform}，检查网络或代理`,
+        qrExpired: "二维码已过期，重新生成后再扫",
+        runtimeMissing: "内置内核缺少运行组件，重新安装 Galley 可修复",
+        alreadyRunning: "另一个 Galley 正在运行这个渠道",
+      },
       disconnectDialogTitle: "解除微信接入？",
       disconnectDialogBody:
-        "这只会让 Galley 停止通过当前微信会话收发消息，不会退出你手机上的微信账号。",
+        "这会停止微信接入并清空接回的对话，下次接入要重新扫码；不会退出你手机上的微信。",
       feishuDisconnectDialogTitle: "解除飞书接入？",
       feishuDisconnectDialogBody:
-        "这会停止飞书接入；下次重新接入需要再粘贴 App Secret。",
-      restartChannelsDialogTitle: "重启 Channels？",
+        "这会停止飞书接入，删除已保存的 App ID 和 App Secret，解绑使用者，并清空接回的对话。下次接入要重新填写并配对。",
+      restartChannelsDialogTitle: "重启全部渠道？",
       restartChannelsDialogBody:
-        "这会重启所有已启用的 Channels，可能中断当前回复；不会退出登录。",
-      staleConfigTitle: "Channels 正在使用旧模型配置",
+        "这会重启所有已启用的渠道，可能中断当前回复；不会退出登录。",
+      staleConfigTitle: "渠道正在使用旧模型配置",
       staleConfigBody: "模型配置已更新，重启后新回复会使用最新配置。",
       openModels: "先去配置模型",
       modelRequired:
-        "Channels 会使用 Galley 已配置的模型。接入前，需要先在 设置 → 模型 里配置一个可用模型。",
-      feishuBindWaitingTitle: "等待绑定使用者",
+        "渠道会使用 Galley 已配置的模型。接入前，需要先在 设置 → 模型 里配置一个可用模型。",
+      ownerBindWaitingTitle: "等待绑定使用者",
+      ownerBoundLabel: "已绑定使用者",
+      ownerBoundAt: "绑定于",
+      ownerUnbind: "解绑",
+      ownerSecurityNote: (others: string) =>
+        `Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，其他人（${others}）的消息会被忽略，也不会收到回复。`,
       feishuBindWaitingLead: "在飞书私聊中向机器人发送配对码：",
       feishuBindWaitingAfterCode:
         "发送配对码的人将成为机器人唯一响应的使用者。",
-      feishuOwnerSecurityNote:
-        "Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，其他人（包括群聊中 @ 它的成员）的消息会被忽略，也不会收到回复。",
+      feishuOwnerScope: "包括群聊里 @ 它的成员",
       feishuOwnerScopeAdvice:
         "建议在飞书开放平台把应用可用范围设置为仅自己，进一步收窄暴露面。",
-      feishuBoundLabel: "已绑定使用者",
-      feishuBoundAt: "绑定于",
-      feishuUnbind: "解绑",
       feishuUnbindDialogTitle: "解绑飞书使用者？",
       feishuUnbindDialogBody:
         "解绑后机器人立即停止响应当前使用者。若服务正在运行，会自动重启并生成新的配对码，在飞书私聊中发送新码即可重新绑定。",
       telegramTitle: "Telegram",
       telegramSetupSteps: [
-        "在 Telegram 打开 {link}，发送 /newbot 创建机器人并获取 Bot Token。",
-        "把 Bot Token 粘贴到下面并保存凭证。",
+        "在 Telegram 打开 {link}，发送 `/newbot` 创建机器人并获取 Bot Token。",
+        "把 Bot Token 粘贴到下面并保存。",
         "启动服务，然后私聊机器人发送配对码完成绑定。",
-      ],
-      telegramConnectedSteps: [
-        "在 Telegram 里给机器人发消息。",
-        "Galley 会在本机处理请求，并把结果回复到 Telegram。",
-        "保持 Galley 运行，Telegram 入口会持续可用。",
       ],
       telegramNotConnectedHint:
         "先从 @BotFather 获取 Bot Token，保存后启动服务。",
       telegramStartingHint: "正在启动 Telegram 服务。",
       telegramReconnectingHint: "Telegram 连接正在重试。",
       telegramRunningHint:
-        "Telegram 服务运行中。在 Telegram 里给机器人发消息即可使用。",
+        "Telegram 入口已可用，可以直接在 Telegram 里给 Galley 发消息。",
       telegramErrorHint:
         "接入异常。检查 Bot Token 与网络环境（需要能访问 Telegram）后重试。",
       telegramStoppedHint: "Bot Token 已保存。点击启动服务即可接入。",
-      telegramServiceStarted: "服务已启动",
-      telegramNotStarted: "未启动",
+      telegramPausedHint: "已暂停接收 Telegram 消息。",
       telegramBotTokenLabel: "Bot Token",
       telegramBotTokenPlaceholder: "123456789:ABC…",
       telegramTokenSavedPlaceholder: "已保存，留空保持不变",
-      telegramSaveCredentials: "保存凭证",
       telegramStartService: "启动 Telegram 服务",
       telegramConfigLoading: "正在读取 Telegram 配置…",
       telegramTextCommandsTitle: "Telegram 文本命令",
-      telegramTextCommandsHint: "在 Telegram 聊天里直接发送这些文本命令。",
-      telegramTextCommands: [
-        { command: "/llm", description: "查看并切换模型" },
-        { command: "/stop", description: "停止当前任务" },
-        { command: "/new", description: "开始新对话" },
-        { command: "/status", description: "查看运行状态" },
-      ],
-      telegramBindWaitingTitle: "等待绑定使用者",
+      telegramTextCommandsHint:
+        "在 Telegram 聊天里直接发送这些文本命令。输入 / 也可以从命令菜单选。",
+      telegramLlmCommandDescription: "查看并切换模型",
       telegramBindWaitingLead: "在 Telegram 私聊中向机器人发送配对码：",
       telegramBindWaitingAfterCode:
         "发送配对码的人将成为机器人唯一响应的使用者。",
-      telegramOwnerSecurityNote:
-        "Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，其他人的消息会被忽略，也不会收到回复。",
-      telegramBoundLabel: "已绑定使用者",
-      telegramBoundAt: "绑定于",
-      telegramUnbind: "解绑",
+      telegramOwnerScope: "包括群组里的成员",
       telegramUnbindDialogTitle: "解绑 Telegram 使用者？",
       telegramUnbindDialogBody:
         "解绑后机器人立即停止响应当前使用者。若服务正在运行，会自动重启并生成新的配对码，在 Telegram 私聊中发送新码即可重新绑定。",
       telegramDisconnectDialogTitle: "解除 Telegram 接入？",
       telegramDisconnectDialogBody:
-        "这会停止 Telegram 接入并删除已保存的 Bot Token；下次重新接入需要再粘贴 Token。",
+        "这会停止 Telegram 接入，删除已保存的 Bot Token，解绑使用者，并清空接回的对话。下次接入要重新粘贴 Token 并配对。",
       discordTitle: "Discord",
       discordSetupSteps: [
         "在 {link} 新建应用，进入 Bot 页复制 Token。",
-        "同页打开 MESSAGE CONTENT INTENT 开关。",
-        "在 OAuth2 页勾选 bot 作用域和 Administrator 权限，用生成的邀请链接把机器人加进你的 Server。",
+        "同页打开 `MESSAGE CONTENT INTENT` 开关。",
+        "在 OAuth2 页勾选 `bot` 作用域和 Administrator 权限，用生成的邀请链接把机器人加进你的 Server。",
         "启动服务后，私聊机器人发送配对码完成绑定；再到频道里 @ 它激活。",
       ],
       discordConnectedSteps: [
@@ -1421,48 +1401,37 @@ export const zhCopy = {
       discordStartingHint: "正在启动 Discord 服务。",
       discordReconnectingHint: "Discord 连接正在重试。",
       discordRunningHint:
-        "Discord 服务运行中。在 Server 频道里 @ 提及机器人即可激活该频道。",
+        "Discord 入口已可用。在 Server 频道里 @ 提及机器人即可激活该频道。",
       discordErrorHint:
         "接入异常。检查 Bot Token、MESSAGE CONTENT INTENT 是否开启，以及网络环境（需要能访问 Discord）后重试。",
       discordStoppedHint: "Bot Token 已保存。点击启动服务即可接入。",
-      discordServiceStarted: "服务已启动",
-      discordNotStarted: "未启动",
+      discordPausedHint: "已暂停接收 Discord 消息。",
       discordBotTokenLabel: "Bot Token",
       discordBotTokenPlaceholder: "MTA1…",
       discordTokenSavedPlaceholder: "已保存，留空保持不变",
-      discordSaveCredentials: "保存凭证",
       discordStartService: "启动 Discord 服务",
       discordConfigLoading: "正在读取 Discord 配置…",
       discordTextCommandsTitle: "Discord 频道与文本命令",
       discordTextCommandsHint:
         "@ 提及用于激活频道；其余命令在已激活的频道里直接发送。",
-      discordTextCommands: [
+      discordChannelCommands: [
         { command: "@机器人", description: "激活该频道或子区" },
         { command: "退出频道", description: "退出当前频道或子区" },
-        { command: "/llm", description: "查看并切换模型" },
-        { command: "/stop", description: "停止当前任务" },
-        { command: "/new", description: "开始新对话" },
-        { command: "/status", description: "查看运行状态" },
       ],
-      discordBindWaitingTitle: "等待绑定使用者",
       discordBindWaitingLead: "在 Discord 私聊中向机器人发送配对码：",
       discordBindWaitingAfterCode:
         "配对只在私聊中生效；发送配对码的人将成为机器人唯一响应的使用者。",
-      discordOwnerSecurityNote:
-        "Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，Server 内其他人的消息会被静默忽略。",
+      discordOwnerScope: "包括同一 Server 里的成员",
       discordChannelVisibilityNote:
         "机器人在频道里的回复、生成的文件与完成报告，对该频道所有可见成员公开；私密内容请放在只有你可见的频道。",
       discordChannelScopeNote:
         "频道一旦激活，你在该频道的全部发言都会交给 Galley，重启后依然生效；发送「退出频道」即可退出，子区同样适用。",
-      discordBoundLabel: "已绑定使用者",
-      discordBoundAt: "绑定于",
-      discordUnbind: "解绑",
       discordUnbindDialogTitle: "解绑 Discord 使用者？",
       discordUnbindDialogBody:
         "解绑后机器人立即停止响应当前使用者。若服务正在运行，会自动重启并生成新的配对码，在 Discord 私聊中发送新码即可重新绑定。",
       discordDisconnectDialogTitle: "解除 Discord 接入？",
       discordDisconnectDialogBody:
-        "这会停止 Discord 接入并删除已保存的 Bot Token；下次重新接入需要再粘贴 Token。",
+        "这会停止 Discord 接入，删除已保存的 Bot Token，解绑使用者，并清空接回的对话和已激活的频道。下次接入要重新粘贴 Token 并配对。",
     },
   },
   onboarding: {
@@ -1718,13 +1687,19 @@ export const zhCopy = {
     modelConfigSaved: "模型配置已保存",
     modelConfigSavedMessage: "新对话立即生效；已启动的对话重启 Galley 后生效。",
     modelConfigSavedExternalMessage: "已保存，切回内置内核后生效。",
-    modelConfigSavedChannelsMessage: "已启用 Channels 重启后使用新模型配置。",
-    modelConfigSavedChannelsSuffix: "已启用 Channels 重启后使用新模型配置。",
-    restartChannels: "重启 Channels",
-    channelsRestarted: "Channels 已重启",
-    channelsRestartedMessage: "已启用 Channels 已重新启动。",
-    channelsRestartFailed: "重启 Channels 失败",
-    channelsRestartNone: "没有已启用的 Channel。",
+    modelConfigSavedChannelsMessage: "已启用的渠道重启后使用新模型配置。",
+    modelConfigSavedChannelsSuffix: "已启用的渠道重启后使用新模型配置。",
+    restartChannels: "重启全部渠道",
+    channelsRestarted: "渠道已重启",
+    channelsRestartedMessage: "已启用的渠道已重新启动。",
+    channelsRestartFailed: "重启渠道失败",
+    channelsRestartNone: "没有已启用的渠道。",
+    channelsRestartPartial: "部分渠道重启失败",
+    channelsRestartPartialMessage: (restarted: number, failures: string) =>
+      `已重启 ${restarted} 个渠道；${failures}`,
+    channelsRestartFailureItem: (platform: string, reason: string) =>
+      `${platform}：${reason}`,
+    channelsRestartFailureSeparator: "；",
     browserControlReady: "浏览器控制已连接",
     browserControlReadyMessage: "新建对话，让 Galley 用浏览器查天气。",
     tryBrowserControl: "试一试",

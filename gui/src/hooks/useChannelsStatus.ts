@@ -1,10 +1,10 @@
+import { restartEnabledChannels } from "@/components/screens/settings/im/channels-restart";
 import type { AppCopy } from "@/lib/i18n";
-import {
-  restartEnabledImSupervisors,
-  type ImSupervisorStatus,
+import type {
+  ImSupervisorPlatform,
+  ImSupervisorStatus,
 } from "@/lib/im-supervisor";
 import { useImSupervisorStatus } from "@/hooks/useImSupervisorStatus";
-import { makeAppError } from "@/types/app-error";
 import type { AppError } from "@/types/app-error";
 
 /**
@@ -47,60 +47,21 @@ export function useChannelsStatus({
       discordChannelsStatus.loadError)
     : null;
 
-  const restartChannels = async () => {
-    try {
-      const statuses = await restartEnabledImSupervisors();
-      const wechat = statuses.find((status) => status.platform === "wechat");
-      if (wechat) {
-        wechatChannelsStatus.setStatus(wechat);
-      }
-      const feishu = statuses.find((status) => status.platform === "feishu");
-      if (feishu) {
-        feishuChannelsStatus.setStatus(feishu);
-      }
-      const telegram = statuses.find(
-        (status) => status.platform === "telegram",
-      );
-      if (telegram) {
-        telegramChannelsStatus.setStatus(telegram);
-      }
-      const discord = statuses.find((status) => status.platform === "discord");
-      if (discord) {
-        discordChannelsStatus.setStatus(discord);
-      }
-      pushToast(
-        makeAppError({
-          id: "channels-restarted",
-          category: "business",
-          severity: "info",
-          title:
-            statuses.length > 0
-              ? copy.toasts.channelsRestarted
-              : copy.toasts.channelsRestartNone,
-          message:
-            statuses.length > 0 ? copy.toasts.channelsRestartedMessage : "",
-          hint: null,
-          retryable: false,
-          context: "restart_enabled_im_supervisors",
-          traceback: null,
-          autoDismissMs: 4200,
-        }),
-      );
-    } catch (e) {
-      pushToast(
-        makeAppError({
-          id: "channels-restart-failed",
-          category: "business",
-          severity: "error",
-          title: copy.toasts.channelsRestartFailed,
-          message: e instanceof Error ? e.message : String(e),
-          hint: null,
-          retryable: false,
-          context: "restart_enabled_im_supervisors",
-          traceback: null,
-        }),
-      );
-    }
+  const restartChannels = () => {
+    const setters: Record<
+      ImSupervisorPlatform,
+      (status: ImSupervisorStatus) => void
+    > = {
+      wechat: wechatChannelsStatus.setStatus,
+      feishu: feishuChannelsStatus.setStatus,
+      telegram: telegramChannelsStatus.setStatus,
+      discord: discordChannelsStatus.setStatus,
+    };
+    return restartEnabledChannels({
+      copy,
+      pushToast,
+      setStatus: (status) => setters[status.platform](status),
+    });
   };
 
   return { channelStatuses, channelsLoadError, restartChannels };

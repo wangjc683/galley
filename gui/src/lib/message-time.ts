@@ -151,7 +151,17 @@ export function formatMessageTime(
   if (day === yesterdayDate.getTime()) {
     return options.words.yesterday(clock);
   }
-  const sameYear = date.getFullYear() === new Date(today).getFullYear();
+  return dateWithClock(date, today, zh, clock);
+}
+
+/** Month, day and clock, with the year only when it is not this year's. */
+function dateWithClock(
+  date: Date,
+  todayStartMs: number,
+  zh: boolean,
+  clock: string,
+): string {
+  const sameYear = date.getFullYear() === new Date(todayStartMs).getFullYear();
   if (zh) {
     const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
     return sameYear
@@ -159,6 +169,28 @@ export function formatMessageTime(
       : `${date.getFullYear()}年${monthDay} ${clock}`;
   }
   return (sameYear ? EN_DATE_TIME : EN_YEAR_DATE_TIME).format(date);
+}
+
+/**
+ * The same date and time shapes without the 今天 / 昨天 words, for a
+ * timestamp that follows a label (Settings → Channels「绑定于 10月8日
+ * 14:32」/ "Paired at Oct 8, 2:32 PM"), where a day word reads oddly
+ * mid-sentence. Always carries the date; the year only when it is not
+ * the current one. Null when unparseable.
+ */
+export function formatMessageDateTime(
+  iso: string,
+  todayStartMs: number,
+  language: ResolvedLanguage,
+): string | null {
+  const ms = parseTime(iso);
+  if (ms === null) return null;
+  const date = new Date(ms);
+  const zh = language === "zh-CN";
+  const clock = zh
+    ? `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+    : EN_TIME.format(date);
+  return dateWithClock(date, localDayStart(todayStartMs), zh, clock);
 }
 
 const FULL_FORMATS: Record<ResolvedLanguage, Intl.DateTimeFormat> = {

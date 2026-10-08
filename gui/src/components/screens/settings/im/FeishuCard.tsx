@@ -7,6 +7,7 @@ import { useCopy } from "@/lib/i18n";
 import {
   deleteFeishuImConfig,
   getFeishuImConfig,
+  getImSupervisorStatus,
   saveFeishuImConfig,
   startImSupervisor,
   stopImSupervisor,
@@ -21,13 +22,27 @@ import { SettingsInput } from "../models/ModelPrimitives";
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelCard } from "./ChannelCard";
 import { ChannelErrorBlock } from "./ChannelErrorBlock";
+import {
+  ChannelFold,
+  ChannelPrimaryButton,
+  ChannelSecurityNote,
+  ChannelStatusHint,
+} from "./ChannelParts";
+import {
+  canPauseChannel,
+  channelBadgeKind,
+  channelCardView,
+  configuredPrimaryAction,
+  errorReplacesStatusHint,
+  isChannelSetUp,
+} from "./channel-view";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import { FeishuCommandReference } from "./CommandReference";
+import { ChannelCommandReference } from "./CommandReference";
 import { FeishuSetupGuide } from "./FeishuSetupGuide";
 import { FeishuGlyph } from "./Glyphs";
 import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
-import { feishuStatusHintForState, shouldAutoExpand } from "./status";
+import { channelStatusHint, shouldAutoExpand } from "./status";
 
 /** Last-loaded config, module-level for the same reason as the
  * status cache in useImSupervisorStatus: re-entering Channels should
@@ -56,7 +71,14 @@ export function FeishuCard({
   const [appId, setAppId] = useState(cachedFeishuConfig?.appId ?? "");
   const [appSecret, setAppSecret] = useState("");
   const [localBusy, setLocalBusy] = useState<
-    "load" | "open" | "save" | "connect" | "stop" | "disconnect" | "unbind" | null
+    | "load"
+    | "open"
+    | "save"
+    | "connect"
+    | "stop"
+    | "disconnect"
+    | "unbind"
+    | null
   >(cachedFeishuConfig ? null : "load");
   const [localError, setLocalError] = useState<string | null>(null);
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(
@@ -101,7 +123,7 @@ export function FeishuCard({
     status?.state ??
     (config?.appId && config.hasAppSecret ? "stopped" : "not_connected");
   const expanded = expandedOverride ?? shouldAutoExpand(derivedState);
-  const canPause = derivedState === "running";
+  const canPause = canPauseChannel(status);
   const canDisconnect =
     derivedState === "running" ||
     derivedState === "expired" ||
@@ -132,7 +154,10 @@ export function FeishuCard({
       });
       setConfig(saved);
       setAppSecret("");
-      onStatusChange(null);
+      // Saving does not touch Core's run state (a failed channel stays
+      // failed until restarted), and a new App ID clears the owner, so
+      // re-read the status rather than guess.
+      onStatusChange(await getImSupervisorStatus("feishu").catch(() => null));
       setExpandedOverride(true);
     });
 
@@ -164,15 +189,124 @@ export function FeishuCard({
   // Owner binding view state. The live status wins (it carries the
   // pairing code while running unbound); the persisted config covers
   // the stopped-but-bound case.
-  const ownerOpenId =
-    status?.ownerOpenId ?? config?.ownerOpenId ?? null;
+  const ownerOpenId = status?.ownerOpenId ?? config?.ownerOpenId ?? null;
   const ownerBoundAt = config?.ownerBoundAt ?? null;
   const bindCode = ownerOpenId ? null : (status?.bindCode ?? null);
+  const setUp = isChannelSetUp("feishu", derivedState, ownerOpenId);
+  const view = channelCardView("feishu", derivedState, setUp);
+  const errorText = localError ?? statusLoadError ?? status?.lastError ?? null;
+  const statusHint = errorReplacesStatusHint(derivedState, errorText)
+    ? null
+    : channelStatusHint("feishu", derivedState, setUp, imCopy);
+  const primaryAction = configuredPrimaryAction(derivedState);
 
   const openFeishuConsole = () =>
     run("open", async () => {
       await openUrl("https://open.feishu.cn/");
     });
+
+  const credentialsForm = (
+    <div className="grid gap-3 md:grid-cols-2">
+      <div>
+        <SettingsInput
+          label={imCopy.feishuAppIdLabel}
+          value={appId}
+          onChange={setAppId}
+          placeholder={imCopy.feishuAppIdPlaceholder}
+        />
+        {/* Core clears the owner when the App ID changes (open_id is
+            per app), so say so before the save, not after. */}
+        {ownerOpenId ? (
+          <p className="mt-1.5 text-ui-tertiary leading-notice text-ink-muted">
+            {imCopy.feishuAppIdChangeUnbinds}
+          </p>
+        ) : null}
+      </div>
+      <SettingsInput
+        label={imCopy.feishuAppSecretLabel}
+        type="password"
+        value={appSecret}
+        onChange={setAppSecret}
+        placeholder={
+          hasSavedSecretForApp
+            ? imCopy.feishuSecretSavedPlaceholder
+            : imCopy.feishuAppSecretPlaceholder
+        }
+      />
+    </div>
+  );
+  const saveAction = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        // Primary tracks the current actionable step: while credentials
+        // aren't saved yet, saving IS the next step; once the service can
+        // start (or the set-up view shows resume / retry), save demotes to
+        // a secondary re-save.
+        variant={canStartService || setUp ? "secondary" : "primary"}
+        size="sm"
+        disabled={busy || !canSaveCredentials}
+        leadingIcon={
+          localBusy === "save" ? (
+            <CircleNotch size={13} weight="thin" className="spin" />
+          ) : (
+            <Check size={13} weight="thin" />
+          )
+        }
+        onClick={saveCredentials}
+      >
+        {localBusy === "save" ? imCopy.working : imCopy.save}
+      </Button>
+      {localBusy === "load" ? (
+        <span className="text-ui-meta text-ink-muted">
+          {imCopy.feishuConfigLoading}
+        </span>
+      ) : null}
+    </div>
+  );
+  const startAction = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant={canStartService ? "primary" : "secondary"}
+        size="sm"
+        disabled={busy || !canStartService}
+        leadingIcon={
+          localBusy === "connect" ? (
+            <CircleNotch size={13} weight="thin" className="spin" />
+          ) : (
+            <Power size={13} weight="thin" />
+          )
+        }
+        onClick={connect}
+      >
+        {localBusy === "connect" ? imCopy.working : imCopy.feishuStartService}
+      </Button>
+    </div>
+  );
+  const owner = ownerOpenId ? (
+    <OwnerBoundRow
+      ownerId={ownerOpenId}
+      boundAt={ownerBoundAt}
+      busy={busy}
+      working={localBusy === "unbind"}
+      onUnbind={() => setConfirmUnbindOpen(true)}
+    />
+  ) : bindCode ? (
+    <BindCodeCallout
+      lead={imCopy.feishuBindWaitingLead}
+      code={bindCode}
+      afterCode={`${imCopy.feishuBindWaitingAfterCode} ${imCopy.feishuOwnerScopeAdvice}`}
+    />
+  ) : null;
+  const errorBlock = (
+    <ChannelErrorBlock
+      platform="feishu"
+      state={derivedState}
+      error={errorText}
+    />
+  );
+  const securityNote = <ChannelSecurityNote others={imCopy.feishuOwnerScope} />;
 
   return (
     <>
@@ -182,19 +316,7 @@ export function FeishuCard({
         glyph={<FeishuGlyph active={expanded} />}
         title={imCopy.feishuTitle}
         badge={
-          <StatusBadge
-            state={derivedState}
-            iconStateOverride={
-              derivedState === "stopped" ? "not_connected" : undefined
-            }
-            labelOverride={
-              derivedState === "running"
-                ? imCopy.feishuServiceStarted
-                : derivedState === "stopped"
-                  ? imCopy.feishuNotStarted
-                  : undefined
-            }
-          />
+          <StatusBadge kind={channelBadgeKind("feishu", derivedState, setUp)} />
         }
         busy={busy}
         actions={
@@ -210,127 +332,88 @@ export function FeishuCard({
         }
       >
         <div className="space-y-4 pl-8 pr-1">
-          {derivedState === "running" ? (
-            <FeishuSetupGuide
-              imCopy={imCopy}
-              status={feishuStatusHintForState(derivedState, imCopy)}
-              onOpenConsole={openFeishuConsole}
-              openDisabled={busy}
-              statusPlacement="top"
-              afterStatus={<FeishuCommandReference imCopy={imCopy} />}
-              collapsible
-            />
+          {view === "running" ? (
+            <>
+              {statusHint ? (
+                <ChannelStatusHint>{statusHint}</ChannelStatusHint>
+              ) : null}
+              {errorBlock}
+              <ChannelCommandReference platform="feishu" />
+              {/* Read-only reference once paired: the Open Platform side
+                  is done, but its steps stay a click away. */}
+              <ChannelFold title={imCopy.feishuSetupCollapsed}>
+                <FeishuSetupGuide
+                  imCopy={imCopy}
+                  onOpenConsole={openFeishuConsole}
+                  openDisabled={busy}
+                />
+              </ChannelFold>
+              {owner}
+              {securityNote}
+            </>
+          ) : view === "configured" ? (
+            <>
+              {statusHint ? (
+                <ChannelStatusHint>{statusHint}</ChannelStatusHint>
+              ) : null}
+              {errorBlock}
+              {primaryAction ? (
+                <ChannelPrimaryButton
+                  action={primaryAction}
+                  disabled={busy}
+                  pending={localBusy === "connect"}
+                  onClick={connect}
+                />
+              ) : null}
+              <ChannelFold title={imCopy.feishuChangeCredentials}>
+                <FeishuSetupGuide
+                  imCopy={imCopy}
+                  onOpenConsole={openFeishuConsole}
+                  openDisabled={busy}
+                  credentialsForm={credentialsForm}
+                  saveAction={saveAction}
+                />
+              </ChannelFold>
+              {owner}
+              {securityNote}
+            </>
+          ) : view === "feishu_first_run" ? (
+            <>
+              {/* Running but nobody paired yet: sections 4–6 (long
+                  connection, events, publishing) happen now, against
+                  the live service, so the guide stays open. */}
+              {statusHint ? (
+                <ChannelStatusHint>{statusHint}</ChannelStatusHint>
+              ) : null}
+              {errorBlock}
+              <FeishuSetupGuide
+                imCopy={imCopy}
+                onOpenConsole={openFeishuConsole}
+                openDisabled={busy}
+                credentialsForm={credentialsForm}
+                saveAction={saveAction}
+              />
+              {owner}
+              {securityNote}
+            </>
           ) : (
-            <FeishuSetupGuide
-              imCopy={imCopy}
-              status={feishuStatusHintForState(derivedState, imCopy)}
-              onOpenConsole={openFeishuConsole}
-              openDisabled={busy}
-              credentialsForm={
-                <div className="grid gap-3 md:grid-cols-2">
-                  <SettingsInput
-                    label={imCopy.feishuAppIdLabel}
-                    value={appId}
-                    onChange={setAppId}
-                    placeholder={imCopy.feishuAppIdPlaceholder}
-                  />
-                  <SettingsInput
-                    label={imCopy.feishuAppSecretLabel}
-                    type="password"
-                    value={appSecret}
-                    onChange={setAppSecret}
-                    placeholder={
-                      hasSavedSecretForApp
-                        ? imCopy.feishuSecretSavedPlaceholder
-                        : imCopy.feishuAppSecretPlaceholder
-                    }
-                  />
-                </div>
-              }
-              saveAction={
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    // Primary tracks the current actionable step: while
-                    // credentials aren't saved yet, saving IS the next
-                    // step; once the service can start, save demotes to
-                    // a secondary re-save and start takes primary.
-                    variant={canStartService ? "secondary" : "primary"}
-                    size="sm"
-                    disabled={busy || !canSaveCredentials}
-                    leadingIcon={
-                      localBusy === "save" ? (
-                        <CircleNotch size={13} weight="thin" className="spin" />
-                      ) : (
-                        <Check size={13} weight="thin" />
-                      )
-                    }
-                    onClick={saveCredentials}
-                  >
-                    {localBusy === "save"
-                      ? imCopy.working
-                      : imCopy.feishuSaveCredentials}
-                  </Button>
-                  {localBusy === "load" ? (
-                    <span className="text-ui-meta text-ink-muted">
-                      {imCopy.feishuConfigLoading}
-                    </span>
-                  ) : null}
-                </div>
-              }
-              startAction={
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant={canStartService ? "primary" : "secondary"}
-                    size="sm"
-                    disabled={busy || !canStartService}
-                    leadingIcon={
-                      localBusy === "connect" ? (
-                        <CircleNotch size={13} weight="thin" className="spin" />
-                      ) : (
-                        <Power size={13} weight="thin" />
-                      )
-                    }
-                    onClick={connect}
-                  >
-                    {localBusy === "connect"
-                      ? imCopy.working
-                      : imCopy.feishuStartService}
-                  </Button>
-                </div>
-              }
-            />
+            <>
+              <FeishuSetupGuide
+                imCopy={imCopy}
+                onOpenConsole={openFeishuConsole}
+                openDisabled={busy}
+                credentialsForm={credentialsForm}
+                saveAction={saveAction}
+                startAction={startAction}
+              />
+              {statusHint ? (
+                <ChannelStatusHint indent>{statusHint}</ChannelStatusHint>
+              ) : null}
+              {errorBlock}
+              {owner}
+              {securityNote}
+            </>
           )}
-
-          {ownerOpenId ? (
-            <OwnerBoundRow
-              ownerId={ownerOpenId}
-              boundAt={ownerBoundAt}
-              boundLabel={imCopy.feishuBoundLabel}
-              boundAtLabel={imCopy.feishuBoundAt}
-              unbindLabel={imCopy.feishuUnbind}
-              workingLabel={imCopy.working}
-              busy={busy}
-              working={localBusy === "unbind"}
-              onUnbind={() => setConfirmUnbindOpen(true)}
-            />
-          ) : bindCode ? (
-            <BindCodeCallout
-              title={imCopy.feishuBindWaitingTitle}
-              lead={imCopy.feishuBindWaitingLead}
-              code={bindCode}
-              afterCode={`${imCopy.feishuBindWaitingAfterCode} ${imCopy.feishuOwnerScopeAdvice}`}
-            />
-          ) : null}
-
-          <p className="text-ui-tertiary leading-notice text-ink-muted">
-            {imCopy.feishuOwnerSecurityNote}
-          </p>
-
-          <ChannelErrorBlock
-            error={localError ?? statusLoadError ?? status?.lastError ?? null}
-          />
         </div>
       </ChannelCard>
 
@@ -340,7 +423,7 @@ export function FeishuCard({
         busy={busy}
         title={imCopy.feishuUnbindDialogTitle}
         body={imCopy.feishuUnbindDialogBody}
-        confirmLabel={imCopy.feishuUnbind}
+        confirmLabel={imCopy.ownerUnbind}
         onConfirm={() => {
           setConfirmUnbindOpen(false);
           void unbind();

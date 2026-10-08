@@ -1,13 +1,16 @@
-import { Check } from "@phosphor-icons/react";
+import { CheckCircle } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
+import { useDayStamp } from "@/hooks/useDayStamp";
+import { useCopy, useLanguage } from "@/lib/i18n";
+import { formatMessageDateTime } from "@/lib/message-time";
 
 /**
  * Owner-pairing blocks shared by the owner-locked channels (Feishu /
- * Telegram): the "bound owner" row with an unbind action, and the
- * "waiting for pairing" callout showing the active bind code. Copy is
- * passed in per channel; the visual grammar stays identical so a third
- * paired channel never invents a new one.
+ * Telegram / Discord): the "bound owner" row with an unbind action, and
+ * the "waiting for pairing" callout showing the active bind code. The
+ * labels are shared; only the pairing instructions differ per channel,
+ * so a new paired channel never invents a new grammar.
  */
 
 function maskOwnerId(id: string): string {
@@ -17,35 +20,38 @@ function maskOwnerId(id: string): string {
 export function OwnerBoundRow({
   ownerId,
   boundAt,
-  boundLabel,
-  boundAtLabel,
-  unbindLabel,
-  workingLabel,
   busy,
   working,
   onUnbind,
 }: {
   ownerId: string;
   boundAt?: string | null;
-  boundLabel: string;
-  boundAtLabel: string;
-  unbindLabel: string;
-  workingLabel: string;
   busy: boolean;
   working: boolean;
   onUnbind: () => void;
 }) {
+  const imCopy = useCopy().settings.im;
+  const language = useLanguage();
+  // Local midnight, so the year shows once the binding is from an
+  // earlier year without reading the clock during render.
+  const dayStamp = useDayStamp();
+  const boundAtText = boundAt
+    ? formatMessageDateTime(boundAt, dayStamp, language)
+    : null;
   return (
     <div className="rounded-sm border border-line bg-surface px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Check size={13} weight="bold" className="text-success" />
-        <span className="text-ui-meta font-semibold text-ink">{boundLabel}</span>
+        {/* Filled: Settings' success check is always the solid one. */}
+        <CheckCircle size={14} weight="fill" className="text-success" />
+        <span className="text-ui-meta font-semibold text-ink">
+          {imCopy.ownerBoundLabel}
+        </span>
         <span className="select-text font-mono text-ui-tertiary text-ink-soft">
           {maskOwnerId(ownerId)}
         </span>
-        {boundAt ? (
+        {boundAtText ? (
           <span className="text-ui-tertiary text-ink-muted">
-            {boundAtLabel} {new Date(boundAt).toLocaleString()}
+            {imCopy.ownerBoundAt} {boundAtText}
           </span>
         ) : null}
         <Button
@@ -56,7 +62,7 @@ export function OwnerBoundRow({
           disabled={busy}
           onClick={onUnbind}
         >
-          {working ? workingLabel : unbindLabel}
+          {working ? imCopy.working : imCopy.ownerUnbind}
         </Button>
       </div>
     </div>
@@ -64,21 +70,24 @@ export function OwnerBoundRow({
 }
 
 export function BindCodeCallout({
-  title,
   lead,
   code,
   afterCode,
 }: {
-  title: string;
   lead: string;
   code: string;
   afterCode: string;
 }) {
+  const imCopy = useCopy().settings.im;
   return (
     <div className="rounded-sm border border-brand/25 bg-brand/[var(--opacity-subtle)] px-3 py-2.5">
-      <div className="text-ui-tertiary font-medium text-brand">{title}</div>
+      <div className="text-ui-tertiary font-medium text-brand">
+        {imCopy.ownerBindWaitingTitle}
+      </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-2 text-ui-secondary text-ink">
         <span>{lead}</span>
+        {/* 15px: the one code meant to be read off the screen and typed
+            on a phone; no chrome token sits between 13px and 18px. */}
         <code className="select-text rounded-sm border border-line bg-surface px-2 py-0.5 font-mono text-[15px] font-bold tracking-[0.2em] text-ink">
           {code}
         </code>

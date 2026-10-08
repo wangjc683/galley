@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 import sys
+import types
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
@@ -34,6 +36,13 @@ def _write_fake_wechatapp(ga_path: Path, body: str) -> None:
     (frontends / "wechatapp.py").write_text(body, encoding="utf-8")
 
 
+def _write_fake_tgapp(ga_path: Path, body: str) -> None:
+    frontends = ga_path / "frontends"
+    frontends.mkdir(parents=True, exist_ok=True)
+    (frontends / "__init__.py").write_text("", encoding="utf-8")
+    (frontends / "tgapp.py").write_text(body, encoding="utf-8")
+
+
 def _args(ga_path: Path, state_dir: Path, platform: str = "feishu") -> Namespace:
     return Namespace(
         platform=platform,
@@ -55,6 +64,7 @@ def _clear_frontends_modules() -> None:
     sys.modules.pop("frontends.fsapp", None)
     sys.modules.pop("frontends.dcapp", None)
     sys.modules.pop("frontends.wechatapp", None)
+    sys.modules.pop("frontends.tgapp", None)
     sys.modules.pop("frontends", None)
 
 
@@ -746,3 +756,329 @@ def on_message(bot, msg):
     ]
     events = [json.loads(line) for line in out.getvalue().splitlines()]
     assert [event["state"] for event in events] == ["starting", "running", "stopped"]
+
+
+# ── Credential masking ─────────────────────────────────────────────────
+
+TG_TOKEN = "123456789:AAFakeTelegramTokenForGalleyTestswXyZ"
+DC_TOKEN = "MTAfake.discord-token.ForGalleyTestsd1sc"
+FS_SECRET = "fakeFeishuAppSecretForTestsf5ec"
+WX_TOKEN = "fake-wechat-bot-token-for-tests@im.bot:w3ch"
+
+
+def _credential_env(monkeypatch: Any) -> None:
+    monkeypatch.setenv(
+        "GALLEY_TELEGRAM_CONFIG_JSON",
+        json.dumps({"tg_bot_token": TG_TOKEN, "tg_allowed_users": []}),
+    )
+    monkeypatch.setenv(
+        "GALLEY_DISCORD_CONFIG_JSON",
+        json.dumps({"discord_bot_token": DC_TOKEN, "discord_allowed_users": []}),
+    )
+    monkeypatch.setenv(
+        "GALLEY_FEISHU_CONFIG_JSON",
+        json.dumps({"fs_app_id": "cli_test", "fs_app_secret": FS_SECRET}),
+    )
+
+
+@pytest.fixture
+def redactor(monkeypatch: Any) -> managed_im_supervisor._SecretRedactor:
+    """A fresh process-wide redactor, so no test sees another's secrets."""
+    fresh = managed_im_supervisor._SecretRedactor()
+    monkeypatch.setattr(managed_im_supervisor, "_REDACTOR", fresh)
+    return fresh
+
+
+def test_redactor_masks_config_env_credentials_keeping_the_last_four(
+    monkeypatch: Any, redactor: managed_im_supervisor._SecretRedactor
+) -> None:
+    _credential_env(monkeypatch)
+    # Too short to be a credential: left alone rather than garbling text.
+    monkeypatch.setenv("GALLEY_FEISHU_CONFIG_JSON", json.dumps({"fs_app_secret": "short"}))
+    redactor.load_env()
+    text = f"tg={TG_TOKEN} dc={DC_TOKEN} again {TG_TOKEN} short"
+    assert redactor.redact(text) == "tg=…wXyZ dc=…d1sc again …wXyZ short"
+    # Malformed or missing config never breaks the channel.
+    monkeypatch.setenv("GALLEY_TELEGRAM_CONFIG_JSON", "{")
+    monkeypatch.delenv("GALLEY_DISCORD_CONFIG_JSON")
+    redactor.load_env()
+    assert redactor.redact(text) == text
+
+
+def test_emit_masks_credentials_in_the_status_line(
+    monkeypatch: Any, redactor: managed_im_supervisor._SecretRedactor
+) -> None:
+    _credential_env(monkeypatch)
+    redactor.load_env()
+    out = io.StringIO()
+    managed_im_supervisor._emit(
+        out,
+        platform="telegram",
+        state="error",
+        lastError=(
+            f"Telegram bot token rejected: The token `{TG_TOKEN}` was rejected by the server."
+        ),
+        logPath="/tmp/telegram.log",
+    )
+    line = out.getvalue()
+    assert TG_TOKEN not in line
+    event = json.loads(line)
+    assert event["lastError"] == (
+        "Telegram bot token rejected: The token `…wXyZ` was rejected by the server."
+    )
+    assert event["logPath"] == "/tmp/telegram.log"
+
+
+def test_redirect_logs_masks_credentials_before_they_reach_the_log(
+    monkeypatch: Any, tmp_path: Path, redactor: managed_im_supervisor._SecretRedactor
+) -> None:
+    _credential_env(monkeypatch)
+    log_path = tmp_path / "state" / "discord.log"
+    saved = (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+    try:
+        writer = managed_im_supervisor._redirect_logs(log_path)
+        print(f"polling crashed: {DC_TOKEN}")
+        sys.stderr.write(f"Traceback ... {FS_SECRET}\n")
+        print(f"[WX] {TG_TOKEN}", file=sys.__stdout__)
+        sys.stdout.writelines([f"a {DC_TOKEN}\n", "b\n"])
+        assert sys.stdout is sys.stderr is sys.__stdout__ is sys.__stderr__ is writer
+        assert writer.isatty() is False
+        assert writer.encoding.lower().replace("-", "") == "utf8"
+        writer.flush()
+    finally:
+        _restore_stdio(*saved)
+    logged = log_path.read_text(encoding="utf-8")
+    for secret in (DC_TOKEN, FS_SECRET, TG_TOKEN):
+        assert secret not in logged
+    assert logged.splitlines() == [
+        "polling crashed: …d1sc",
+        "Traceback ... …f5ec",
+        "[WX] …wXyZ",
+        "a …d1sc",
+        "b",
+    ]
+
+
+def test_rebind_logging_streams_moves_handlers_made_before_the_redirect(
+    monkeypatch: Any, redactor: managed_im_supervisor._SecretRedactor
+) -> None:
+    _credential_env(monkeypatch)
+    redactor.load_env()
+    started_with = io.StringIO()  # the stderr a handler bound before redirect
+    log = io.StringIO()
+    writer: Any = managed_im_supervisor._RedactingWriter(log, redactor)
+    logger = logging.getLogger("galley-test.pre-redirect")
+    early = logging.StreamHandler(started_with)
+    elsewhere = logging.StreamHandler(io.StringIO())  # not stdio: untouched
+    logger.addHandler(early)
+    logger.addHandler(elsewhere)
+    logger.propagate = False
+    try:
+        assert managed_im_supervisor._rebind_logging_streams(writer, [started_with, None]) == 1
+        logger.warning("InvalidToken: %s", TG_TOKEN)
+    finally:
+        logger.removeHandler(early)
+        logger.removeHandler(elsewhere)
+        logger.propagate = True
+    assert early.stream is writer and elsewhere.stream is not writer
+    assert started_with.getvalue() == ""
+    assert log.getvalue() == "InvalidToken: …wXyZ\n"
+
+
+def test_run_telegram_masks_a_rejected_token_in_status_and_log(
+    monkeypatch: Any, tmp_path: Path, redactor: managed_im_supervisor._SecretRedactor
+) -> None:
+    """The reported bug: python-telegram-bot's InvalidToken quotes the whole
+    token, and tgapp both prints it and reports it as the last error."""
+    ga_path = tmp_path / "ga"
+    state_dir = tmp_path / "state"
+    _write_fake_tgapp(
+        ga_path,
+        """
+import json
+import os
+
+TOKEN = json.loads(os.environ["GALLEY_TELEGRAM_CONFIG_JSON"])["tg_bot_token"]
+
+
+class Agent:
+    verbose = True
+
+
+agent = Agent()
+
+
+def check_config():
+    return {"ready": True}
+
+
+def main():
+    e = f"The token `{TOKEN}` was rejected by the server."
+    print(f"[10-08 12:00] polling crashed: {e}", flush=True)
+    GALLEY_STATUS_HOOK("error", f"Telegram bot token rejected: {e}")
+    return 1
+""",
+    )
+    _credential_env(monkeypatch)
+    monkeypatch.setattr(managed_runtime, "install_managed_mykey_loader", lambda: None)
+    monkeypatch.setattr(managed_runtime, "managed_state_root", lambda: None)
+    monkeypatch.setattr(
+        managed_runtime, "install_managed_prompt_profile", lambda agent, extra_env_names: None
+    )
+    monkeypatch.setattr(managed_im_supervisor, "_start_resume", lambda platform, state: None)
+    monkeypatch.setattr(im_reporter, "start_telegram_reporter", lambda tgapp, state: None)
+    _clear_frontends_modules()
+    out = io.StringIO()
+    saved = (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+    cwd = os.getcwd()
+    try:
+        code = managed_im_supervisor._run_telegram(
+            _args(ga_path, state_dir, platform="telegram"), out
+        )
+    finally:
+        os.chdir(cwd)
+        _restore_stdio(*saved)
+        _clear_frontends_modules()
+
+    assert code == 1
+    assert TG_TOKEN not in out.getvalue()
+    events = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert [event["state"] for event in events] == ["starting", "error"]
+    assert events[-1]["lastError"] == (
+        "Telegram bot token rejected: The token `…wXyZ` was rejected by the server."
+    )
+    logged = (state_dir / "telegram.log").read_text(encoding="utf-8")
+    assert TG_TOKEN not in logged
+    assert "polling crashed: The token `…wXyZ` was rejected by the server." in logged
+
+
+def test_run_wechat_masks_the_saved_login_token(
+    monkeypatch: Any, tmp_path: Path, redactor: managed_im_supervisor._SecretRedactor
+) -> None:
+    """WeChat's credential is not in the env: the launcher masks the token
+    WxBotClient loaded from token.json."""
+    ga_path = tmp_path / "ga"
+    state_dir = tmp_path / "state"
+    _write_fake_wechatapp(
+        ga_path,
+        f"""
+import sys
+
+_TEMP_DIR = "unset"
+_MODE = "conductor"
+
+
+class AuthExpired(Exception):
+    pass
+
+
+class Agent:
+    verbose = True
+
+    def run(self):
+        pass
+
+
+agent = Agent()
+
+
+class WxBotClient:
+    bot_id = "bot-test"
+    token = {WX_TOKEN!r}
+
+    def __init__(self, token_file):
+        self.token_file = token_file
+
+    def run_loop(self, on_message, poll_timeout=30):
+        print(f"[WX] Authorization: Bearer {{self.token}}", file=sys.__stdout__)
+        raise RuntimeError(f"getupdates failed for {{self.token}}")
+""",
+    )
+    monkeypatch.setattr(managed_runtime, "install_managed_mykey_loader", lambda: None)
+    monkeypatch.setattr(managed_runtime, "managed_state_root", lambda: None)
+    monkeypatch.setattr(
+        managed_runtime, "install_managed_prompt_profile", lambda agent, extra_env_names: None
+    )
+    monkeypatch.setattr(managed_im_supervisor, "_start_resume", lambda platform, state: None)
+    _clear_frontends_modules()
+    out = io.StringIO()
+    saved = (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+    cwd = os.getcwd()
+    try:
+        code = managed_im_supervisor._run_wechat(
+            _args(ga_path, state_dir, platform="wechat"), out
+        )
+    finally:
+        os.chdir(cwd)
+        _restore_stdio(*saved)
+        _clear_frontends_modules()
+
+    assert code == 1
+    assert WX_TOKEN not in out.getvalue()
+    events = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert events[-1]["state"] == "error"
+    assert events[-1]["lastError"] == "getupdates failed for …w3ch"
+    logged = (state_dir / "wechat.log").read_text(encoding="utf-8")
+    assert WX_TOKEN not in logged
+    assert "[WX] Authorization: Bearer …w3ch" in logged
+
+
+# ── WeChat /help and /status ───────────────────────────────────────────
+
+
+class _WxAgent:
+    def __init__(self) -> None:
+        self.llmclient: object | None = object()
+        self.llm_no = 1
+        self.is_running = False
+
+    def get_llm_name(self) -> str:
+        return "NativeClaude/test"
+
+
+class _WxBot:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, str]] = []
+
+    @staticmethod
+    def extract_text(msg: dict[str, Any]) -> str:
+        return str(msg["text"])
+
+    def send_text(self, uid: str, text: str, context_token: str = "") -> None:
+        self.sent.append((uid, text, context_token))
+
+
+def test_wechat_help_and_status_are_answered_without_resume_or_upstream() -> None:
+    """Upstream wechatapp has neither: it would hand ``/help`` to the agent
+    as a task. They answer even when restart continuity is off."""
+    forwarded: list[str] = []
+    agent = _WxAgent()
+    wechatapp = types.SimpleNamespace(
+        agent=agent, on_message=lambda bot, msg: forwarded.append(msg["text"])
+    )
+    on_message = managed_im_supervisor._managed_wechat_on_message(wechatapp, None)
+    bot = _WxBot()
+
+    def say(text: str) -> str:
+        on_message(bot, {"text": text, "from_user_id": "u1", "context_token": "c1"})
+        return bot.sent[-1][1]
+
+    assert say(" /help ") == managed_im_supervisor.WECHAT_HELP_REPLY
+    assert managed_im_supervisor.WECHAT_HELP_REPLY == (
+        "📖 命令列表：\n"
+        "/new - 开始新对话\n"
+        "/stop - 停止当前任务\n"
+        "/status - 查看运行状态和当前模型\n"
+        "/llm - 查看可用模型\n"
+        "/llm n - 切换到第 n 个模型\n"
+        "/help - 查看全部命令"
+    )
+    assert say("/status") == "状态：🟢 空闲\nLLM：[1] NativeClaude/test"
+    agent.is_running = True
+    assert say("/status") == "状态：🔴 运行中\nLLM：[1] NativeClaude/test"
+    agent.llmclient = None
+    assert say("/status") == "状态：🔴 运行中\nLLM：[1] 未配置"
+    assert bot.sent[0] == ("u1", managed_im_supervisor.WECHAT_HELP_REPLY, "c1")
+    assert forwarded == []
+    on_message(bot, {"text": "/llm", "from_user_id": "u1", "context_token": "c2"})
+    assert forwarded == ["/llm"]

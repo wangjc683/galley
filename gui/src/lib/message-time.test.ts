@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatMessageDateTime,
   formatMessageTime,
   formatMessageTimeFull,
   userTimeMarks,
@@ -203,6 +204,37 @@ describe("formatMessageTime", () => {
         words: ZH_WORDS,
       }),
     ).toBeNull();
+  });
+});
+
+describe("formatMessageDateTime", () => {
+  const today = local(2026, 9, 28).getTime();
+
+  it("always carries the date, with no today / yesterday words", () => {
+    const at = local(2026, 9, 28, 9, 10);
+    expect(formatMessageDateTime(iso(at), today, "zh-CN")).toBe(
+      "9月28日 09:10",
+    );
+    expect(plain(formatMessageDateTime(iso(at), today, "en-US"))).toBe(
+      "Sep 28, 9:10 AM",
+    );
+    expect(
+      formatMessageDateTime(iso(local(2026, 9, 27, 21, 14)), today, "zh-CN"),
+    ).toBe("9月27日 21:14");
+  });
+
+  it("adds the year for an earlier year, and drops seconds", () => {
+    const at = local(2025, 7, 3, 11, 34, 47);
+    expect(formatMessageDateTime(iso(at), today, "zh-CN")).toBe(
+      "2025年7月3日 11:34",
+    );
+    expect(plain(formatMessageDateTime(iso(at), today, "en-US"))).toBe(
+      "Jul 3, 2025, 11:34 AM",
+    );
+  });
+
+  it("returns null for an unparseable timestamp", () => {
+    expect(formatMessageDateTime("nope", today, "zh-CN")).toBeNull();
   });
 });
 

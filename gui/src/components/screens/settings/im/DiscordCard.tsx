@@ -6,6 +6,7 @@ import { useCopy } from "@/lib/i18n";
 import {
   deleteDiscordImConfig,
   getDiscordImConfig,
+  getImSupervisorStatus,
   saveDiscordImConfig,
   startImSupervisor,
   stopImSupervisor,
@@ -20,14 +21,28 @@ import { SettingsInput } from "../models/ModelPrimitives";
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelCard } from "./ChannelCard";
 import { ChannelErrorBlock } from "./ChannelErrorBlock";
+import {
+  ChannelFold,
+  ChannelPrimaryButton,
+  ChannelSecurityNote,
+  ChannelStatusHint,
+} from "./ChannelParts";
+import {
+  canPauseChannel,
+  channelBadgeKind,
+  channelCardView,
+  configuredPrimaryAction,
+  errorReplacesStatusHint,
+  isChannelSetUp,
+} from "./channel-view";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import { DiscordCommandReference } from "./CommandReference";
+import { ChannelCommandReference } from "./CommandReference";
 import { ConnectionSteps } from "./ConnectionSteps";
 import { stepWithLink } from "./step-link";
 import { DiscordGlyph } from "./Glyphs";
 import { OwnerBoundRow, BindCodeCallout } from "./OwnerBinding";
 import { StatusBadge } from "./StatusBadge";
-import { discordStatusHintForState, shouldAutoExpand } from "./status";
+import { channelStatusHint, shouldAutoExpand } from "./status";
 
 /**
  * Discord channel card. Same single-token, owner-paired shape as the
@@ -97,8 +112,7 @@ export function DiscordCard({
   const derivedState: ImSupervisorState =
     status?.state ?? (config?.hasBotToken ? "stopped" : "not_connected");
   const expanded = expandedOverride ?? shouldAutoExpand(derivedState);
-  const running = derivedState === "running";
-  const canPause = derivedState === "running";
+  const canPause = canPauseChannel(status);
   const canDisconnect =
     derivedState === "running" ||
     derivedState === "expired" ||
@@ -128,7 +142,9 @@ export function DiscordCard({
       });
       setConfig(saved);
       setBotToken("");
-      onStatusChange(null);
+      // Saving does not touch Core's run state (a failed channel stays
+      // failed until restarted), so re-read it rather than guess.
+      onStatusChange(await getImSupervisorStatus("discord").catch(() => null));
       setExpandedOverride(true);
     });
 
@@ -162,6 +178,95 @@ export function DiscordCard({
   const ownerUserId = status?.ownerOpenId ?? config?.ownerUserId ?? null;
   const ownerBoundAt = config?.ownerBoundAt ?? null;
   const bindCode = ownerUserId ? null : (status?.bindCode ?? null);
+  const setUp = isChannelSetUp("discord", derivedState, ownerUserId);
+  const view = channelCardView("discord", derivedState, setUp);
+  const errorText = localError ?? statusLoadError ?? status?.lastError ?? null;
+  const statusHint = errorReplacesStatusHint(derivedState, errorText)
+    ? null
+    : channelStatusHint("discord", derivedState, setUp, imCopy);
+  const primaryAction = configuredPrimaryAction(derivedState);
+
+  const setupSteps = imCopy.discordSetupSteps.map((step) =>
+    stepWithLink(
+      step,
+      "Discord Developer Portal",
+      "https://discord.com/developers/applications",
+    ),
+  );
+  const tokenInput = (
+    <div className="max-w-[460px]">
+      <SettingsInput
+        label={imCopy.discordBotTokenLabel}
+        type="password"
+        value={botToken}
+        onChange={setBotToken}
+        placeholder={
+          config?.hasBotToken
+            ? imCopy.discordTokenSavedPlaceholder
+            : imCopy.discordBotTokenPlaceholder
+        }
+      />
+    </div>
+  );
+  const saveButton = (
+    <Button
+      type="button"
+      // One primary per card: saving is the next step until the token
+      // is stored, then starting (or the set-up view's resume / retry)
+      // takes it.
+      variant={canStartService || setUp ? "secondary" : "primary"}
+      size="sm"
+      disabled={busy || !canSaveCredentials}
+      leadingIcon={
+        localBusy === "save" ? (
+          <CircleNotch size={13} weight="thin" className="spin" />
+        ) : (
+          <Check size={13} weight="thin" />
+        )
+      }
+      onClick={saveCredentials}
+    >
+      {localBusy === "save" ? imCopy.working : imCopy.save}
+    </Button>
+  );
+  const loadingNote =
+    localBusy === "load" ? (
+      <span className="text-ui-meta text-ink-muted">
+        {imCopy.discordConfigLoading}
+      </span>
+    ) : null;
+  const owner = ownerUserId ? (
+    <OwnerBoundRow
+      ownerId={ownerUserId}
+      boundAt={ownerBoundAt}
+      busy={busy}
+      working={localBusy === "unbind"}
+      onUnbind={() => setConfirmUnbindOpen(true)}
+    />
+  ) : bindCode ? (
+    <BindCodeCallout
+      lead={imCopy.discordBindWaitingLead}
+      code={bindCode}
+      afterCode={imCopy.discordBindWaitingAfterCode}
+    />
+  ) : null;
+  const errorBlock = (
+    <ChannelErrorBlock
+      platform="discord"
+      state={derivedState}
+      error={errorText}
+    />
+  );
+  // The two declarations the setup guide is the only line of defence for
+  // (PRD 外审票 1 / 2): channel output is visible to everyone who can see
+  // the channel, and everything the owner says in an activated channel
+  // goes to the agent. They stay visible in every state (OAS Channels).
+  const securityNote = (
+    <ChannelSecurityNote others={imCopy.discordOwnerScope}>
+      <p>{imCopy.discordChannelVisibilityNote}</p>
+      <p>{imCopy.discordChannelScopeNote}</p>
+    </ChannelSecurityNote>
+  );
 
   return (
     <>
@@ -172,17 +277,7 @@ export function DiscordCard({
         title={imCopy.discordTitle}
         badge={
           <StatusBadge
-            state={derivedState}
-            iconStateOverride={
-              derivedState === "stopped" ? "not_connected" : undefined
-            }
-            labelOverride={
-              derivedState === "running"
-                ? imCopy.discordServiceStarted
-                : derivedState === "stopped"
-                  ? imCopy.discordNotStarted
-                  : undefined
-            }
+            kind={channelBadgeKind("discord", derivedState, setUp)}
           />
         }
         busy={busy}
@@ -199,59 +294,51 @@ export function DiscordCard({
         }
       >
         <div className="space-y-4 pl-8 pr-1">
-          <ConnectionSteps
-            steps={
-              running
-                ? imCopy.discordConnectedSteps
-                : imCopy.discordSetupSteps.map((step) =>
-                    stepWithLink(
-                      step,
-                      "Discord Developer Portal",
-                      "https://discord.com/developers/applications",
-                    ),
-                  )
-            }
-            status={discordStatusHintForState(derivedState, imCopy)}
-          />
-
-          {running ? (
-            <DiscordCommandReference imCopy={imCopy} />
+          {view === "running" ? (
+            <>
+              {statusHint ? (
+                <ChannelStatusHint>{statusHint}</ChannelStatusHint>
+              ) : null}
+              {errorBlock}
+              {/* Discord keeps its running steps: they explain channel
+                  activation, which the other platforms don't have. */}
+              <ConnectionSteps steps={imCopy.discordConnectedSteps} />
+              <ChannelCommandReference platform="discord" />
+              {owner}
+              {securityNote}
+            </>
+          ) : view === "configured" ? (
+            <>
+              {statusHint ? (
+                <ChannelStatusHint>{statusHint}</ChannelStatusHint>
+              ) : null}
+              {errorBlock}
+              {primaryAction ? (
+                <ChannelPrimaryButton
+                  action={primaryAction}
+                  disabled={busy}
+                  pending={localBusy === "connect"}
+                  onClick={connect}
+                />
+              ) : null}
+              <ChannelFold title={imCopy.changeBotTokenOrSteps}>
+                <ConnectionSteps steps={setupSteps} />
+                {tokenInput}
+                <div className="flex flex-wrap items-center gap-2">
+                  {saveButton}
+                  {loadingNote}
+                </div>
+              </ChannelFold>
+              {owner}
+              {securityNote}
+            </>
           ) : (
             <>
-              <div className="max-w-[460px]">
-                <SettingsInput
-                  label={imCopy.discordBotTokenLabel}
-                  type="password"
-                  value={botToken}
-                  onChange={setBotToken}
-                  placeholder={
-                    config?.hasBotToken
-                      ? imCopy.discordTokenSavedPlaceholder
-                      : imCopy.discordBotTokenPlaceholder
-                  }
-                />
-              </div>
+              <ConnectionSteps steps={setupSteps} status={statusHint} />
+              {errorBlock}
+              {tokenInput}
               <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  // One primary per card: saving is the next step until the
-                  // token is stored, then starting takes primary.
-                  variant={canStartService ? "secondary" : "primary"}
-                  size="sm"
-                  disabled={busy || !canSaveCredentials}
-                  leadingIcon={
-                    localBusy === "save" ? (
-                      <CircleNotch size={13} weight="thin" className="spin" />
-                    ) : (
-                      <Check size={13} weight="thin" />
-                    )
-                  }
-                  onClick={saveCredentials}
-                >
-                  {localBusy === "save"
-                    ? imCopy.working
-                    : imCopy.discordSaveCredentials}
-                </Button>
+                {saveButton}
                 <Button
                   type="button"
                   variant={canStartService ? "primary" : "secondary"}
@@ -270,49 +357,12 @@ export function DiscordCard({
                     ? imCopy.working
                     : imCopy.discordStartService}
                 </Button>
-                {localBusy === "load" ? (
-                  <span className="text-ui-meta text-ink-muted">
-                    {imCopy.discordConfigLoading}
-                  </span>
-                ) : null}
+                {loadingNote}
               </div>
+              {owner}
+              {securityNote}
             </>
           )}
-
-          {ownerUserId ? (
-            <OwnerBoundRow
-              ownerId={ownerUserId}
-              boundAt={ownerBoundAt}
-              boundLabel={imCopy.discordBoundLabel}
-              boundAtLabel={imCopy.discordBoundAt}
-              unbindLabel={imCopy.discordUnbind}
-              workingLabel={imCopy.working}
-              busy={busy}
-              working={localBusy === "unbind"}
-              onUnbind={() => setConfirmUnbindOpen(true)}
-            />
-          ) : bindCode ? (
-            <BindCodeCallout
-              title={imCopy.discordBindWaitingTitle}
-              lead={imCopy.discordBindWaitingLead}
-              code={bindCode}
-              afterCode={imCopy.discordBindWaitingAfterCode}
-            />
-          ) : null}
-
-          {/* The two declarations the setup guide is the only line of
-              defence for (PRD 外审票 1 / 2): channel output is visible to
-              everyone who can see the channel, and everything the owner
-              says in an activated channel goes to the agent. */}
-          <div className="space-y-1.5 text-ui-tertiary leading-notice text-ink-muted">
-            <p>{imCopy.discordOwnerSecurityNote}</p>
-            <p>{imCopy.discordChannelVisibilityNote}</p>
-            <p>{imCopy.discordChannelScopeNote}</p>
-          </div>
-
-          <ChannelErrorBlock
-            error={localError ?? statusLoadError ?? status?.lastError ?? null}
-          />
         </div>
       </ChannelCard>
 
@@ -322,7 +372,7 @@ export function DiscordCard({
         busy={busy}
         title={imCopy.discordUnbindDialogTitle}
         body={imCopy.discordUnbindDialogBody}
-        confirmLabel={imCopy.discordUnbind}
+        confirmLabel={imCopy.ownerUnbind}
         onConfirm={() => {
           setConfirmUnbindOpen(false);
           void unbind();

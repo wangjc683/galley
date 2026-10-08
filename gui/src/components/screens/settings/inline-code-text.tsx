@@ -1,12 +1,6 @@
 import { Fragment } from "react";
 
-/**
- * Same chip as the inline code in Settings prose elsewhere (Feishu setup
- * steps, `im/FeishuSetupGuide.tsx`): sunk `bg-app` with a hairline, so it
- * reads on both the page and a `bg-surface` list row.
- */
-const INLINE_CODE_CLASS =
-  "rounded-sm border border-line/80 bg-app px-1 py-[1px] font-mono text-ui-tertiary text-ink";
+import { INLINE_CODE_CLASS } from "./inline-code";
 
 /**
  * Renders a copy string whose command names are wrapped in backticks

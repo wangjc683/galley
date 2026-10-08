@@ -305,6 +305,7 @@ export const enCopy: AppCopy = {
     channelsNeedsAttentionBadge: "Channels · Needs attention",
     channelsPopover: {
       loadFailed: "Couldn't read Channels status",
+      restart: "Restart Channels",
       settings: "Settings…",
     },
     configureModels: "Set up model",
@@ -1094,23 +1095,16 @@ export const enCopy: AppCopy = {
         "After connecting, send Galley a message directly in WeChat.",
         "Keep Galley running to keep the WeChat entry available.",
       ],
-      connectedSteps: [
-        "Send Galley a message in WeChat.",
-        "Galley handles the request on this computer and replies in WeChat.",
-        "Keep Galley running to keep the WeChat entry available.",
+      textCommands: [
+        { command: "/new", description: "Start a new chat" },
+        { command: "/stop", description: "Stop the current task" },
+        { command: "/status", description: "Show status and current model" },
+        { command: "/llm", description: "List available models" },
+        { command: "/llm n", description: "Switch to model n" },
+        { command: "/help", description: "Show all commands" },
       ],
       wechatTextCommandsTitle: "WeChat text commands",
       wechatTextCommandsHint: "Send these text commands directly in WeChat.",
-      wechatTextCommands: [
-        { command: "/llm", description: "List available models" },
-        { command: "/llm 0", description: "Switch to model 0" },
-        { command: "/llm 1", description: "Switch to model 1" },
-        { command: "/stop", description: "Stop the current task" },
-        {
-          command: "/new",
-          description: "Start a new chat and clear current context",
-        },
-      ],
       feishuSetupSections: [
         {
           title: "Feishu Open Platform · Prepare app",
@@ -1150,7 +1144,7 @@ export const enCopy: AppCopy = {
           ],
         },
         {
-          title: "Galley Settings · Save credentials",
+          title: "Galley Settings · Enter App ID and App Secret",
           steps: [
             {
               parts: [
@@ -1164,7 +1158,7 @@ export const enCopy: AppCopy = {
             {
               parts: [
                 { text: "Click " },
-                { text: "Save credentials", emphasis: true },
+                { text: "Save", emphasis: true },
                 { text: ", then start the Galley Feishu service." },
               ],
             },
@@ -1304,32 +1298,7 @@ export const enCopy: AppCopy = {
       copyFeishuPermissions: "Copy all",
       feishuPermissionsCopied: "Copied",
       feishuTextCommandsTitle: "Feishu text commands",
-      feishuTextCommandsHint:
-        "Send these text commands directly in Feishu. Send /help for the full list.",
-      feishuTextCommands: [
-        { command: "/help", description: "Show full help" },
-        { command: "/status", description: "Show status and current model" },
-        { command: "/llm", description: "List available models" },
-        { command: "/llm 0", description: "Switch to model 0" },
-        { command: "/llm 1", description: "Switch to model 1" },
-        {
-          command: "/new",
-          description: "Start a new chat and clear current context",
-        },
-        { command: "/stop", description: "Stop the current task" },
-        { command: "/continue", description: "List restorable sessions" },
-        {
-          command: "/continue 1",
-          description: "Restore the first listed session",
-        },
-        { command: "/restore", description: "Restore the last chat history" },
-      ],
-      feishuConnectedSteps: [
-        "Message the bot in the Feishu client.",
-        "Tasks you delegate from Feishu report back here automatically when they finish.",
-        "If there is no reply, check long connection, events, permissions, and app publishing.",
-        "Keep Galley running so the Feishu service keeps receiving messages.",
-      ],
+      feishuTextCommandsHint: "Send these text commands directly in Feishu.",
       notConnected: "Not connected",
       starting: "Connecting",
       waitingScan: "Waiting for scan",
@@ -1338,6 +1307,7 @@ export const enCopy: AppCopy = {
       expired: "Connection expired",
       error: "Issue",
       stopped: "Paused",
+      notStarted: "Not started",
       notConnectedHint: "After setup, WeChat becomes a chat entry for Galley.",
       startingHint: "Galley is preparing the WeChat entry.",
       waitingScanHint: "Scan the QR code with WeChat on your phone to connect.",
@@ -1347,29 +1317,35 @@ export const enCopy: AppCopy = {
       errorHint: "The WeChat connection has an issue. You can retry.",
       stoppedHint: "Receiving WeChat messages is paused.",
       feishuNotConnectedHint:
-        "Save credentials and start the Feishu service first, then return to Feishu Open Platform to configure long connection and events.",
+        "Save the App ID and App Secret and start the Feishu service first, then return to Feishu Open Platform to configure long connection and events.",
       feishuStartingHint: "Starting the Feishu service.",
       feishuReconnectingHint: "The Feishu connection is retrying.",
       feishuRunningHint:
-        "The Feishu service is running. Send a message in your Feishu client to start.",
+        "Feishu is connected. Message Galley directly in Feishu.",
+      feishuRunningUnboundHint:
+        "Service running. Return to Feishu Open Platform to finish sections 4–6, then DM the bot the pairing code in Feishu.",
       feishuErrorHint:
-        "Connection issue. Check App ID / App Secret, permissions, long connection, events, and app publishing, then retry.",
+        "Connection problem. Check App ID / App Secret, permissions, long connection, events, and app publishing, then retry.",
       feishuStoppedHint:
-        "Credentials are saved. Start the Feishu service first, then return to Feishu Open Platform to configure long connection and events.",
+        "App Secret saved. Start the Feishu service first, then return to Feishu Open Platform to configure long connection and events.",
+      feishuPausedHint: "Receiving Feishu messages is paused.",
       connect: "Connect WeChat",
-      feishuSaveCredentials: "Save credentials",
+      save: "Save",
+      resumeReceiving: "Resume receiving",
       feishuStartService: "Start Feishu service",
       feishuServiceStarted: "Service running",
-      feishuNotStarted: "Not started",
       openFeishuConsole: "Open Feishu Open Platform",
       feishuSetupCollapsed: "View Feishu setup steps",
+      feishuChangeCredentials: "Change App ID / App Secret or view setup steps",
+      changeBotTokenOrSteps: "Change Bot Token or view setup steps",
+      feishuAppIdChangeUnbinds:
+        "Switching apps unpairs the current owner; you will need to pair again.",
       feishuAppIdLabel: "App ID",
       feishuAppSecretLabel: "App Secret",
       feishuAppIdPlaceholder: "cli_xxxxxxxxxxxxxxxx",
       feishuAppSecretPlaceholder: "Paste App Secret",
-      feishuSecretSavedPlaceholder: "Saved. Leave blank to keep it.",
+      feishuSecretSavedPlaceholder: "Saved — leave blank to keep it",
       feishuConfigLoading: "Loading Feishu config…",
-      continueScan: "Continue scanning",
       reconnect: "Reconnect",
       retry: "Retry",
       regenerateQr: "Regenerate QR code",
@@ -1380,93 +1356,88 @@ export const enCopy: AppCopy = {
       qrAlt: "WeChat connection QR code",
       noQrYet: "Generating QR code…",
       lastError: "Error details",
+      errorTitles: {
+        botTokenInvalid: "The Bot Token is invalid or was reset",
+        feishuCredentialsInvalid: "The App ID or App Secret is incorrect",
+        intentDisabled: "MESSAGE CONTENT INTENT is not turned on",
+        network: (platform) =>
+          `Can't reach ${platform} — check your network or proxy`,
+        qrExpired: "The QR code expired — generate a new one and scan again",
+        runtimeMissing:
+          "The bundled engine is missing a component — reinstalling Galley fixes it",
+        alreadyRunning: "Another Galley is already running this channel",
+      },
       disconnectDialogTitle: "Disconnect WeChat?",
       disconnectDialogBody:
-        "This only stops Galley from sending and receiving through the current WeChat session. It will not log you out of WeChat on your phone.",
+        "This stops WeChat and clears the resumed conversation; connecting again needs a new scan. It will not log you out of WeChat on your phone.",
       feishuDisconnectDialogTitle: "Disconnect Feishu?",
       feishuDisconnectDialogBody:
-        "This stops Feishu. To connect again, paste the App Secret again.",
-      restartChannelsDialogTitle: "Restart Channels?",
+        "This stops Feishu, deletes the saved App ID and App Secret, unpairs the owner, and clears the resumed conversation. Connecting again means entering them and pairing again.",
+      restartChannelsDialogTitle: "Restart all channels?",
       restartChannelsDialogBody:
-        "This restarts all enabled Channels. It may interrupt the current reply, but will not log you out.",
+        "This restarts every enabled channel. It may interrupt the current reply, but will not log you out.",
       staleConfigTitle: "Channels are using an outdated model config",
       staleConfigBody:
         "The model config changed. Restart so new replies use the latest config.",
       openModels: "Configure models first",
       modelRequired:
         "Channels use Galley's configured models. Add a usable model in Models before connecting.",
-      feishuBindWaitingTitle: "Waiting for owner pairing",
+      ownerBindWaitingTitle: "Waiting for owner pairing",
+      ownerBoundLabel: "Paired owner",
+      ownerBoundAt: "Paired at",
+      ownerUnbind: "Unpair",
+      ownerSecurityNote: (others) =>
+        `Galley is a personal assistant: for security, the bot only responds to its paired owner. Messages from anyone else (${others}) are ignored without a reply.`,
       feishuBindWaitingLead: "DM the bot this pairing code in Feishu:",
       feishuBindWaitingAfterCode:
-        "Whoever sends the code becomes the only user the bot answers.",
-      feishuOwnerSecurityNote:
-        "Galley is a personal assistant: for security, the bot only responds to its paired owner. Messages from anyone else — including group members who @ it — are ignored without a reply.",
+        "Whoever sends the code becomes the only user the bot responds to.",
+      feishuOwnerScope: "including group members who @ it",
       feishuOwnerScopeAdvice:
         "Tip: in the Feishu developer console, set the app's availability scope to just yourself to shrink exposure further.",
-      feishuBoundLabel: "Paired owner",
-      feishuBoundAt: "paired",
-      feishuUnbind: "Unpair",
       feishuUnbindDialogTitle: "Unpair the Feishu owner?",
       feishuUnbindDialogBody:
         "The bot immediately stops responding to the current owner. If the service is running, it restarts with a fresh pairing code — DM the new code to pair again.",
       telegramTitle: "Telegram",
       telegramSetupSteps: [
-        "Open {link} in Telegram, send /newbot to create a bot and get its Bot Token.",
+        "Open {link} in Telegram, send `/newbot` to create a bot and get its Bot Token.",
         "Paste the Bot Token below and save it.",
-        "Start the service, then DM the pairing code to the bot to pair.",
-      ],
-      telegramConnectedSteps: [
-        "Message the bot in Telegram.",
-        "Galley handles requests on this machine and replies in Telegram.",
-        "Keep Galley running to keep the Telegram entry available.",
+        "Start the service, then DM the bot the pairing code to pair.",
       ],
       telegramNotConnectedHint:
         "Get a Bot Token from @BotFather first, save it, then start the service.",
       telegramStartingHint: "Starting the Telegram service.",
       telegramReconnectingHint: "Telegram connection is retrying.",
       telegramRunningHint:
-        "Telegram service is running. Message the bot in Telegram to use it.",
+        "Telegram is connected. Message Galley directly in Telegram.",
       telegramErrorHint:
         "Connection problem. Check the Bot Token and your network (Telegram must be reachable), then retry.",
       telegramStoppedHint:
         "Bot Token saved. Click Start to bring the service up.",
-      telegramServiceStarted: "Service running",
-      telegramNotStarted: "Not started",
+      telegramPausedHint: "Receiving Telegram messages is paused.",
       telegramBotTokenLabel: "Bot Token",
       telegramBotTokenPlaceholder: "123456789:ABC…",
       telegramTokenSavedPlaceholder: "Saved — leave blank to keep it",
-      telegramSaveCredentials: "Save credentials",
       telegramStartService: "Start Telegram service",
       telegramConfigLoading: "Loading Telegram config…",
       telegramTextCommandsTitle: "Telegram text commands",
       telegramTextCommandsHint:
-        "Send these text commands directly in the Telegram chat.",
-      telegramTextCommands: [
-        { command: "/llm", description: "List and switch models" },
-        { command: "/stop", description: "Stop the current task" },
-        { command: "/new", description: "Start a new conversation" },
-        { command: "/status", description: "Show runtime status" },
-      ],
-      telegramBindWaitingTitle: "Waiting for owner pairing",
-      telegramBindWaitingLead: "DM the pairing code to the bot in Telegram:",
+        "Send these text commands directly in Telegram. You can also type / to pick from the command menu.",
+      telegramLlmCommandDescription: "List and switch models",
+      telegramBindWaitingLead: "DM the bot this pairing code in Telegram:",
       telegramBindWaitingAfterCode:
-        "Whoever sends the pairing code becomes the only user the bot responds to.",
-      telegramOwnerSecurityNote:
-        "Galley is a personal assistant: for safety the bot only responds to its paired owner. Messages from anyone else are ignored without a reply.",
-      telegramBoundLabel: "Paired owner",
-      telegramBoundAt: "Paired at",
-      telegramUnbind: "Unpair",
+        "Whoever sends the code becomes the only user the bot responds to.",
+      telegramOwnerScope: "including members of a group",
       telegramUnbindDialogTitle: "Unpair the Telegram owner?",
       telegramUnbindDialogBody:
         "The bot immediately stops responding to the current owner. If the service is running, it restarts with a fresh pairing code — DM the new code to pair again.",
       telegramDisconnectDialogTitle: "Disconnect Telegram?",
       telegramDisconnectDialogBody:
-        "This stops the Telegram channel and deletes the saved Bot Token; reconnecting later needs the token again.",
+        "This stops Telegram, deletes the saved Bot Token, unpairs the owner, and clears the resumed conversation. Connecting again means pasting the token and pairing again.",
       discordTitle: "Discord",
       discordSetupSteps: [
         "Create an application in the {link}, open its Bot page and copy the token.",
-        "On the same page, turn on the MESSAGE CONTENT INTENT switch.",
-        "On the OAuth2 page, check the bot scope and the Administrator permission, then use the generated invite link to add the bot to your server.",
+        "On the same page, turn on the `MESSAGE CONTENT INTENT` switch.",
+        "On the OAuth2 page, check the `bot` scope and the Administrator permission, then use the generated invite link to add the bot to your server.",
         "Start the service, DM the bot the pairing code to pair, then @-mention it in a channel to activate.",
       ],
       discordConnectedSteps: [
@@ -1479,51 +1450,40 @@ export const enCopy: AppCopy = {
       discordStartingHint: "Starting the Discord service.",
       discordReconnectingHint: "Discord connection is retrying.",
       discordRunningHint:
-        "Discord service is running. @-mention the bot in a server channel to activate that channel.",
+        "Discord is connected. @-mention the bot in a server channel to activate that channel.",
       discordErrorHint:
         "Connection problem. Check the Bot Token, that MESSAGE CONTENT INTENT is on, and your network (Discord must be reachable), then retry.",
       discordStoppedHint: "Bot Token saved. Click Start to bring the service up.",
-      discordServiceStarted: "Service running",
-      discordNotStarted: "Not started",
+      discordPausedHint: "Receiving Discord messages is paused.",
       discordBotTokenLabel: "Bot Token",
       discordBotTokenPlaceholder: "MTA1…",
       discordTokenSavedPlaceholder: "Saved — leave blank to keep it",
-      discordSaveCredentials: "Save credentials",
       discordStartService: "Start Discord service",
       discordConfigLoading: "Loading Discord config…",
       discordTextCommandsTitle: "Discord channel and text commands",
       discordTextCommandsHint:
         "An @-mention activates a channel; the rest are sent as plain text in an activated channel.",
-      discordTextCommands: [
+      discordChannelCommands: [
         { command: "@bot", description: "Activate this channel or thread" },
         {
           command: "退出频道",
           description: "Leave the current channel or thread",
         },
-        { command: "/llm", description: "List and switch models" },
-        { command: "/stop", description: "Stop the current task" },
-        { command: "/new", description: "Start a new conversation" },
-        { command: "/status", description: "Show runtime status" },
       ],
-      discordBindWaitingTitle: "Waiting for owner pairing",
-      discordBindWaitingLead: "DM the pairing code to the bot in Discord:",
+      discordBindWaitingLead: "DM the bot this pairing code in Discord:",
       discordBindWaitingAfterCode:
         "Pairing only works in a DM; whoever sends the code becomes the only user the bot responds to.",
-      discordOwnerSecurityNote:
-        "Galley is a personal assistant: for safety the bot only responds to its paired owner. Messages from anyone else in the server are ignored without a reply.",
+      discordOwnerScope: "including members of the same server",
       discordChannelVisibilityNote:
         "In a channel, the bot's replies, generated files and completion reports are visible to every member who can see that channel — keep private work in a channel only you can see.",
       discordChannelScopeNote:
         "Once a channel is activated, everything you say there goes to Galley, across restarts too; send 退出频道 to leave (it works in threads as well).",
-      discordBoundLabel: "Paired owner",
-      discordBoundAt: "Paired at",
-      discordUnbind: "Unpair",
       discordUnbindDialogTitle: "Unpair the Discord owner?",
       discordUnbindDialogBody:
         "The bot immediately stops responding to the current owner. If the service is running, it restarts with a fresh pairing code — DM the new code to pair again.",
       discordDisconnectDialogTitle: "Disconnect Discord?",
       discordDisconnectDialogBody:
-        "This stops the Discord channel and deletes the saved Bot Token; reconnecting later needs the token again.",
+        "This stops Discord, deletes the saved Bot Token, unpairs the owner, and clears the resumed conversation and activated channels. Connecting again means pasting the token and pairing again.",
     },
   },
   onboarding: {
@@ -1768,14 +1728,19 @@ export const enCopy: AppCopy = {
     modelConfigSavedExternalMessage:
       "Saved. Takes effect after switching back to the bundled engine.",
     modelConfigSavedChannelsMessage:
-      "Enabled Channels use the new model config after restart.",
+      "Enabled channels use the new model config after restart.",
     modelConfigSavedChannelsSuffix:
-      "Enabled Channels use the new model config after restart.",
-    restartChannels: "Restart Channels",
+      "Enabled channels use the new model config after restart.",
+    restartChannels: "Restart all channels",
     channelsRestarted: "Channels restarted",
-    channelsRestartedMessage: "Enabled Channels restarted.",
-    channelsRestartFailed: "Could not restart Channels",
-    channelsRestartNone: "No enabled Channel.",
+    channelsRestartedMessage: "Enabled channels restarted.",
+    channelsRestartFailed: "Could not restart channels",
+    channelsRestartNone: "No enabled channels.",
+    channelsRestartPartial: "Some channels failed to restart",
+    channelsRestartPartialMessage: (restarted, failures) =>
+      `Restarted ${restarted} ${restarted === 1 ? "channel" : "channels"}; ${failures}`,
+    channelsRestartFailureItem: (platform, reason) => `${platform}: ${reason}`,
+    channelsRestartFailureSeparator: "; ",
     browserControlReady: "Browser Control connected",
     browserControlReadyMessage:
       "Start a chat where Galley checks the weather in your browser.",

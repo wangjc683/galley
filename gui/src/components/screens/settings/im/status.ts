@@ -1,4 +1,7 @@
-import type { ImSupervisorState } from "@/lib/im-supervisor";
+import type {
+  ImSupervisorPlatform,
+  ImSupervisorState,
+} from "@/lib/im-supervisor";
 
 import type { ImCopy } from "./types";
 
@@ -18,71 +21,68 @@ export function shouldAutoExpand(state: ImSupervisorState) {
   return state === "waiting_scan" || state === "expired" || state === "error";
 }
 
-export function stepsForState(state: ImSupervisorState, imCopy: ImCopy) {
-  if (state === "running") return imCopy.connectedSteps;
-  return imCopy.setupSteps;
-}
-
-export function statusHintForState(state: ImSupervisorState, imCopy: ImCopy) {
-  return {
-    not_connected: imCopy.notConnectedHint,
-    starting: imCopy.startingHint,
-    waiting_scan: imCopy.waitingScanHint,
-    reconnecting: imCopy.startingHint,
-    running: imCopy.runningHint,
-    expired: imCopy.expiredHint,
-    error: imCopy.errorHint,
-    stopped: imCopy.stoppedHint,
-  }[state];
-}
-
-export function feishuStatusHintForState(
+/**
+ * The card's status line. `setUp` (see `channel-view.ts`) splits two
+ * states: `stopped` after setup is a pause (「已暂停接收…」), before it a
+ * saved credential waiting for its first start; Feishu `running` before
+ * pairing still has Open Platform sections to finish.
+ *
+ * `waiting_scan` / `expired` are WeChat-only and `reconnecting` never
+ * comes from WeChat; the unreachable cells reuse the nearest hint
+ * (Discord / Telegram fold `waiting_scan` into `starting`, OAS Channels).
+ */
+export function channelStatusHint(
+  platform: ImSupervisorPlatform,
   state: ImSupervisorState,
+  setUp: boolean,
   imCopy: ImCopy,
-) {
-  return {
-    not_connected: imCopy.feishuNotConnectedHint,
-    starting: imCopy.feishuStartingHint,
-    waiting_scan: imCopy.feishuStartingHint,
-    reconnecting: imCopy.feishuReconnectingHint,
-    running: imCopy.feishuRunningHint,
-    expired: imCopy.feishuErrorHint,
-    error: imCopy.feishuErrorHint,
-    stopped: imCopy.feishuStoppedHint,
-  }[state];
-}
-
-export function telegramStatusHintForState(
-  state: ImSupervisorState,
-  imCopy: ImCopy,
-) {
-  return {
-    not_connected: imCopy.telegramNotConnectedHint,
-    starting: imCopy.telegramStartingHint,
-    waiting_scan: imCopy.telegramStartingHint,
-    reconnecting: imCopy.telegramReconnectingHint,
-    running: imCopy.telegramRunningHint,
-    expired: imCopy.telegramErrorHint,
-    error: imCopy.telegramErrorHint,
-    stopped: imCopy.telegramStoppedHint,
-  }[state];
-}
-
-export function discordStatusHintForState(
-  state: ImSupervisorState,
-  imCopy: ImCopy,
-) {
-  return {
-    not_connected: imCopy.discordNotConnectedHint,
-    starting: imCopy.discordStartingHint,
-    // Same as Telegram: `waiting_scan` is the WeChat QR state and no
-    // Discord bridge ever reports it. Owner pairing surfaces through the
-    // pairing-code callout, not through a state hint.
-    waiting_scan: imCopy.discordStartingHint,
-    reconnecting: imCopy.discordReconnectingHint,
-    running: imCopy.discordRunningHint,
-    expired: imCopy.discordErrorHint,
-    error: imCopy.discordErrorHint,
-    stopped: imCopy.discordStoppedHint,
-  }[state];
+): string {
+  switch (platform) {
+    case "wechat":
+      return {
+        not_connected: imCopy.notConnectedHint,
+        starting: imCopy.startingHint,
+        waiting_scan: imCopy.waitingScanHint,
+        reconnecting: imCopy.startingHint,
+        running: imCopy.runningHint,
+        expired: imCopy.expiredHint,
+        error: imCopy.errorHint,
+        stopped: imCopy.stoppedHint,
+      }[state];
+    case "feishu":
+      return {
+        not_connected: imCopy.feishuNotConnectedHint,
+        starting: imCopy.feishuStartingHint,
+        waiting_scan: imCopy.feishuStartingHint,
+        reconnecting: imCopy.feishuReconnectingHint,
+        running: setUp
+          ? imCopy.feishuRunningHint
+          : imCopy.feishuRunningUnboundHint,
+        expired: imCopy.feishuErrorHint,
+        error: imCopy.feishuErrorHint,
+        stopped: setUp ? imCopy.feishuPausedHint : imCopy.feishuStoppedHint,
+      }[state];
+    case "telegram":
+      return {
+        not_connected: imCopy.telegramNotConnectedHint,
+        starting: imCopy.telegramStartingHint,
+        waiting_scan: imCopy.telegramStartingHint,
+        reconnecting: imCopy.telegramReconnectingHint,
+        running: imCopy.telegramRunningHint,
+        expired: imCopy.telegramErrorHint,
+        error: imCopy.telegramErrorHint,
+        stopped: setUp ? imCopy.telegramPausedHint : imCopy.telegramStoppedHint,
+      }[state];
+    case "discord":
+      return {
+        not_connected: imCopy.discordNotConnectedHint,
+        starting: imCopy.discordStartingHint,
+        waiting_scan: imCopy.discordStartingHint,
+        reconnecting: imCopy.discordReconnectingHint,
+        running: imCopy.discordRunningHint,
+        expired: imCopy.discordErrorHint,
+        error: imCopy.discordErrorHint,
+        stopped: setUp ? imCopy.discordPausedHint : imCopy.discordStoppedHint,
+      }[state];
+  }
 }

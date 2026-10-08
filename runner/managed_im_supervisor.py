@@ -8,14 +8,15 @@ from __future__ import annotations
 import argparse
 import errno
 import json
+import logging
 import os
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, TextIO, cast
 
 from runner import _watchdog, im_resume, managed_runtime
 
@@ -32,6 +33,144 @@ IM_SUPERVISOR_LOCK_NAME = "supervisor.lock"
 # in-process agent and refuses ``/switch`` instead of patching the child.
 WECHAT_MANAGED_MODE = "agent"
 WECHAT_SWITCH_BLOCKED_REPLY = "Galley 托管的微信渠道固定由 supervisor 处理消息，不支持 /switch。"
+# Upstream wechatapp knows /switch, /stop and /llm only; Galley answers
+# /new, /status and /help itself so every channel takes the same commands.
+WECHAT_HELP_COMMANDS = (
+    ("/new", "开始新对话"),
+    ("/stop", "停止当前任务"),
+    ("/status", "查看运行状态和当前模型"),
+    ("/llm", "查看可用模型"),
+    ("/llm n", "切换到第 n 个模型"),
+    ("/help", "查看全部命令"),
+)
+WECHAT_HELP_REPLY = "📖 命令列表：\n" + "\n".join(
+    f"{command} - {description}" for command, description in WECHAT_HELP_COMMANDS
+)
+
+# The channel credentials Galley Core hands the frontends: the env var it
+# sets before spawn and the key of the secret in that JSON (written in
+# core/src/im_supervisor/platform_config.rs). WeChat's token is not in the
+# env: the launcher adds it once WxBotClient has it.
+SECRET_CONFIG_FIELDS = (
+    ("GALLEY_FEISHU_CONFIG_JSON", "fs_app_secret"),
+    ("GALLEY_TELEGRAM_CONFIG_JSON", "tg_bot_token"),
+    ("GALLEY_DISCORD_CONFIG_JSON", "discord_bot_token"),
+)
+# Shorter strings are not credentials, and masking them would garble
+# ordinary text.
+SECRET_MIN_LENGTH = 8
+SECRET_KEPT_TAIL = 4
+
+
+def _mask_secret(secret: str) -> str:
+    return "…" + secret[-SECRET_KEPT_TAIL:]
+
+
+class _SecretRedactor:
+    """Masks the channel credentials in what this process reports and logs.
+
+    A frontend error can quote its credential verbatim (python-telegram-bot's
+    ``InvalidToken`` reads "The token `<token>` was rejected by the
+    server."), and both the status line (the Settings error block, the
+    menu bar) and the channel log would carry it. Each credential becomes
+    ``…`` plus its last four characters: enough to tell which one, not
+    enough to use it."""
+
+    def __init__(self) -> None:
+        self._secrets: tuple[str, ...] = ()
+
+    def load_env(self, environ: Mapping[str, str] | None = None) -> None:
+        """Start over from the credentials in this process's config env."""
+        environ = os.environ if environ is None else environ
+        self._secrets = ()
+        for env_name, key in SECRET_CONFIG_FIELDS:
+            raw = environ.get(env_name)
+            if not raw:
+                continue
+            try:
+                config = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(config, dict):
+                self.add(config.get(key))
+
+    def add(self, secret: object) -> None:
+        if not isinstance(secret, str):
+            return
+        found = {s for s in (secret, secret.strip()) if len(s) >= SECRET_MIN_LENGTH}
+        if found <= set(self._secrets):
+            return
+        # Longest first: a credential that contains another is masked whole.
+        self._secrets = tuple(
+            sorted(set(self._secrets) | found, key=len, reverse=True)
+        )
+
+    def redact(self, text: str) -> str:
+        for secret in self._secrets:
+            if secret in text:
+                text = text.replace(secret, _mask_secret(secret))
+        return text
+
+
+_REDACTOR = _SecretRedactor()
+
+
+class _RedactingWriter:
+    """``sys.stdout`` / ``sys.stderr`` of a channel: every write reaches the
+    log masked. Anything else (``encoding``, ``fileno``, ``reconfigure``…)
+    is the log file's own."""
+
+    def __init__(self, target: IO[str], redactor: _SecretRedactor) -> None:
+        self._target = target
+        self._redactor = redactor
+
+    def write(self, text: str) -> int:
+        self._target.write(self._redactor.redact(text) if isinstance(text, str) else text)
+        return len(text)
+
+    def writelines(self, lines: Iterable[str]) -> None:
+        for line in lines:
+            self.write(line)
+
+    def flush(self) -> None:
+        self._target.flush()
+
+    def isatty(self) -> bool:
+        return self._target.isatty()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._target, name)
+
+
+def _rebind_logging_streams(writer: TextIO, stale: Iterable[object]) -> int:
+    """Point every ``logging`` stream handler still writing to one of
+    ``stale`` (the stdio this process started with) at ``writer``.
+
+    Nothing in the launcher or the frontends' import chain sets one up
+    before the redirect today: the frontends add no handlers, lark_oapi's
+    ``StreamHandler(sys.stdout)`` and any handler made later bind to
+    ``sys.stdout`` / ``sys.stderr`` after they already are the writer, and
+    ``logging.lastResort`` looks ``sys.stderr`` up on every record. This
+    covers a handler that would otherwise send unmasked text down Core's
+    stderr pipe (Core shows stderr lines as the channel's last error)."""
+    streams = [stream for stream in stale if stream is not None and stream is not writer]
+    loggers: list[logging.Logger] = [logging.getLogger()]
+    loggers.extend(
+        logger
+        for logger in list(logging.Logger.manager.loggerDict.values())
+        if isinstance(logger, logging.Logger)
+    )
+    rebound = 0
+    for logger in loggers:
+        for handler in list(logger.handlers):
+            if (
+                isinstance(handler, logging.StreamHandler)
+                and not isinstance(handler, logging.FileHandler)
+                and any(handler.stream is stream for stream in streams)
+            ):
+                handler.setStream(writer)
+                rebound += 1
+    return rebound
 
 
 def _capture_real_stdout() -> IO[str]:
@@ -46,6 +185,11 @@ def _emit(out: IO[str], **payload: Any) -> None:
         .isoformat(timespec="milliseconds")
         .replace("+00:00", "Z"),
     )
+    # lastError above all: a frontend's error can quote its credential.
+    payload = {
+        key: _REDACTOR.redact(value) if isinstance(value, str) else value
+        for key, value in payload.items()
+    }
     try:
         print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), file=out)
     except BrokenPipeError:
@@ -173,14 +317,21 @@ def _install_paths(ga_path: str) -> None:
 
 
 def _redirect_logs(log_path: Path) -> IO[str]:
+    """Send this process's prints to the channel log, masked. Every channel
+    runs this before it imports its frontend, so the credentials Core put
+    in the env are masked from then on, in the log and in status lines."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     logf = open(log_path, "a", encoding="utf-8", buffering=1)
-    sys.stdout = sys.stderr = logf
+    _REDACTOR.load_env()
+    writer = cast(TextIO, _RedactingWriter(logf, _REDACTOR))
+    started_with = (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+    sys.stdout = sys.stderr = writer
     # Some GA frontends explicitly write to sys.__stdout__; keep the JSON line
     # channel private to this launcher and send frontend prints to the log.
-    sys.__stdout__ = logf  # type: ignore[misc]
-    sys.__stderr__ = logf  # type: ignore[misc]
-    return logf
+    sys.__stdout__ = writer  # type: ignore[misc,assignment]
+    sys.__stderr__ = writer  # type: ignore[misc,assignment]
+    _rebind_logging_streams(writer, started_with)
+    return writer
 
 
 def _flush_and_release_lock(logf: IO[str], lock: _SupervisorLock) -> None:
@@ -202,20 +353,35 @@ def _start_resume(platform: str, state_dir: Path) -> im_resume.ChannelResume | N
         return None
 
 
+def _wechat_status_reply(agent: Any) -> str:
+    """The other channels' ``/status`` (chatapp_common's), for wechatapp's
+    single agent: running or idle, and the current model."""
+    llm = agent.get_llm_name() if getattr(agent, "llmclient", None) else "未配置"
+    state = "🔴 运行中" if getattr(agent, "is_running", False) else "🟢 空闲"
+    return f"状态：{state}\nLLM：[{agent.llm_no}] {llm}"
+
+
 def _managed_wechat_on_message(
     wechatapp: Any, resume: im_resume.ChannelResume | None = None
 ) -> Callable[[Any, Any], None]:
     """Wrap upstream ``on_message``: ``/switch`` cannot leave the managed
-    agent mode, ``/new`` (which upstream lacks) starts a new conversation,
-    and a context that could not be picked back up after a restart says so
-    on the next answer."""
+    agent mode, ``/help`` / ``/status`` / ``/new`` (which upstream lacks)
+    are answered here, and a context that could not be picked back up
+    after a restart says so on the next answer."""
 
     def on_message(bot: Any, msg: Any) -> None:
         text = bot.extract_text(msg).strip()
+        reply: str | None = None
         if text == "/switch":
+            reply = WECHAT_SWITCH_BLOCKED_REPLY
+        elif text == "/help":
+            reply = WECHAT_HELP_REPLY
+        elif text == "/status":
+            reply = _wechat_status_reply(wechatapp.agent)
+        if reply is not None:
             bot.send_text(
                 msg.get("from_user_id", ""),
-                WECHAT_SWITCH_BLOCKED_REPLY,
+                reply,
                 context_token=msg.get("context_token", ""),
             )
             return
@@ -293,6 +459,8 @@ def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
         qr_file.unlink(missing_ok=True)
 
     bot = wechatapp.WxBotClient(token_file=str(token_file))
+    # The saved login's token (token.json), masked like the env credentials.
+    _REDACTOR.add(getattr(bot, "token", None))
     if args.relogin or not bot.token:
         qr_file.unlink(missing_ok=True)
         _emit(
@@ -329,6 +497,8 @@ def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
             _emit(out, platform="wechat", state="error", lastError=str(login_result["error"]))
             _flush_and_release_lock(logf, lock)
             return 1
+        # The token this QR login just obtained.
+        _REDACTOR.add(getattr(bot, "token", None))
 
     threading.Thread(target=wechatapp.agent.run, daemon=True).start()
     _emit(

@@ -2,21 +2,23 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowsClockwise, ChatCircleText, Gear } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 
+import {
+  channelBadgeLabel,
+  channelBadgeTone,
+  channelPlatformLabel,
+  channelStatusBadgeKind,
+} from "@/components/screens/settings/im/channel-view";
 import { ChannelPlatformMark } from "@/components/screens/settings/im/Glyphs";
+import type { SettingsStatusTone } from "@/components/screens/settings/settings-badges";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
-import type {
-  ImSupervisorState,
-  ImSupervisorStatus,
-} from "@/lib/im-supervisor";
+import type { ImSupervisorStatus } from "@/lib/im-supervisor";
 import { cn } from "@/lib/utils";
 
 import { TopBarIconButton } from "../TopBarIconButton";
 import {
-  channelPlatformLabel,
   channelsIndicatorStatus,
-  channelStateLabel,
   configuredChannels,
 } from "./channels-indicator-status";
 import {
@@ -41,10 +43,11 @@ import {
  *     keep their text badges. Either form opens a status menu
  *     (`status-menu.ts`): one row per configured platform — its mark
  *     (the Settings card glyph, monochrome, 14px so it shares the action
- *     icons' column), name, and state (the Settings card words) in a
- *     right-hand column, with a paused platform's mark and name dimmed
- *     (the lamp's grammar per row) — then a separator, 重启 Channels
- *     behind the same confirm Settings uses, and 设置…. Only platforms
+ *     icons' column), name, and state (the Settings card badge's word and
+ *     colour, both from `channel-view.ts`) in a right-hand column, with a
+ *     paused platform's mark and name dimmed (the lamp's grammar per
+ *     row) — then a separator, 重启 Channels behind the same confirm
+ *     Settings uses, and 设置…. Only platforms
  *     the user set up are listed — no placeholders for the rest
  *     (2026-05-31: not a platform inventory).
  *
@@ -170,6 +173,7 @@ export function ChannelsIndicator({
               const dimmed =
                 channel.state === "stopped" ||
                 channel.state === "not_connected";
+              const badgeKind = channelStatusBadgeKind(channel);
               return (
                 <div key={channel.platform} className={STATUS_MENU_ROW}>
                   <div className="flex items-center gap-2">
@@ -188,10 +192,10 @@ export function ChannelsIndicator({
                       <span
                         className={cn(
                           "shrink-0 text-ui-meta",
-                          channelStateClass(channel.state),
+                          STATE_TONE_CLASS[channelBadgeTone(badgeKind)],
                         )}
                       >
-                        {channelStateLabel(channel.state, imCopy)}
+                        {channelBadgeLabel(badgeKind, imCopy)}
                       </span>
                     </div>
                   </div>
@@ -200,7 +204,7 @@ export function ChannelsIndicator({
                       abnormal case, and the full text beats tidiness. */}
                   {(channel.state === "error" || channel.state === "expired") &&
                     channel.lastError && (
-                      <div className="mt-0.5 line-clamp-2 select-text break-words pl-5.5 text-ui-tertiary leading-snug text-ink-muted">
+                      <div className="mt-0.5 line-clamp-2 select-text break-words pl-5.5 text-ui-tertiary leading-dense text-ink-muted">
                         {channel.lastError}
                       </div>
                     )}
@@ -221,7 +225,7 @@ export function ChannelsIndicator({
                   weight="thin"
                   className="text-ink-soft"
                 />
-                <span>{fullCopy.toasts.restartChannels}</span>
+                <span>{copy.channelsPopover.restart}</span>
               </DropdownMenu.Item>
             )}
             <DropdownMenu.Item
@@ -250,7 +254,7 @@ export function ChannelsIndicator({
         body={imCopy.restartChannelsDialogBody}
         confirmLabel={fullCopy.toasts.restartChannels}
         confirmVariant="warning"
-        confirmIcon={<ArrowsClockwise size={13} />}
+        confirmIcon={<ArrowsClockwise size={13} weight="thin" />}
         onConfirm={() => {
           setConfirmRestartOpen(false);
           onRestart?.();
@@ -261,14 +265,15 @@ export function ChannelsIndicator({
 }
 
 /**
- * The Settings card badge colours, so a word reads the same in both
- * places: 已接入 in the restrained success green (JC, 2026-10-04: a
- * glance down the rows should show health by colour), failures red, a
- * QR to scan amber; paused and the rest stay muted ink.
+ * The Settings card badge tone as a text colour, so a word reads the same
+ * in both places (the tone itself comes from `channelBadgeTone`): 已接入 in
+ * the restrained success green (JC, 2026-10-04: a glance down the rows
+ * should show health by colour), failures red, a QR to scan amber; paused
+ * and the rest stay muted ink.
  */
-function channelStateClass(state: ImSupervisorState) {
-  if (state === "error" || state === "expired") return "text-error";
-  if (state === "waiting_scan") return "text-warning";
-  if (state === "running") return "text-success";
-  return "text-ink-muted";
-}
+const STATE_TONE_CLASS: Record<SettingsStatusTone, string> = {
+  success: "text-success",
+  error: "text-error",
+  warning: "text-warning",
+  neutral: "text-ink-muted",
+};

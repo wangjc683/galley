@@ -1,4 +1,4 @@
-import { CaretDown, CaretRight, ChatCircleText, Check, Copy } from "@phosphor-icons/react";
+import { ChatCircleText, ClipboardText } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -6,42 +6,30 @@ import { COPY_FEEDBACK_MS, copyTextToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 import { ExternalLinkIcon } from "../external-link";
-import type {
-  FeishuSetupStep,
-  FeishuSetupStepPart,
-  ImCopy,
-} from "./types";
+import { INLINE_CODE_CLASS } from "../inline-code";
+import type { FeishuSetupStep, FeishuSetupStepPart, ImCopy } from "./types";
 
+/**
+ * The six-section Feishu setup guide. The card decides where it sits
+ * (open in onboarding and first run, folded once set up) and which
+ * controls it carries: the App ID / App Secret form in section 2, the
+ * start button in section 3. Without them it is the read-only reference.
+ */
 export function FeishuSetupGuide({
   imCopy,
-  status,
   credentialsForm,
   saveAction,
   startAction,
   openDisabled,
   onOpenConsole,
-  startSectionIndex = 0,
-  statusPlacement = "bottom",
-  afterStatus,
-  collapsible = false,
 }: {
   imCopy: ImCopy;
-  status: string;
   credentialsForm?: ReactNode;
   saveAction?: ReactNode;
   startAction?: ReactNode;
   openDisabled: boolean;
   onOpenConsole: () => void;
-  startSectionIndex?: number;
-  statusPlacement?: "top" | "bottom";
-  afterStatus?: ReactNode;
-  /** When true, wrap the setup sections in a collapsed-by-default
-   * disclosure. Used for the running state, where the steps are a
-   * reference fallback rather than the primary content — keeps the
-   * "service running" view focused on status, not onboarding. */
-  collapsible?: boolean;
 }) {
-  const [stepsExpanded, setStepsExpanded] = useState(false);
   const [permissionsCopied, setPermissionsCopied] = useState(false);
   const permissionsTimerRef = useRef<number | null>(null);
 
@@ -69,18 +57,16 @@ export function FeishuSetupGuide({
     }
   };
 
-  const sectionsInner = imCopy.feishuSetupSections
-    .slice(startSectionIndex)
-    .map((section, index) => {
-      const originalIndex = startSectionIndex + index;
-      return (
+  return (
+    <div className="max-w-[76ch] divide-y divide-line/70">
+      {imCopy.feishuSetupSections.map((section, index) => (
         <FeishuSetupSection
           key={section.title}
-          index={originalIndex + 1}
+          index={index + 1}
           title={section.title}
           steps={section.steps}
           afterStep={
-            originalIndex === 0
+            index === 0
               ? {
                   stepIndex: 2,
                   content: (
@@ -96,7 +82,7 @@ export function FeishuSetupGuide({
               : null
           }
         >
-          {originalIndex === 0 ? (
+          {index === 0 ? (
             <Button
               type="button"
               variant="secondary"
@@ -109,52 +95,15 @@ export function FeishuSetupGuide({
               {imCopy.openFeishuConsole}
             </Button>
           ) : null}
-          {originalIndex === 1 && (credentialsForm || saveAction) ? (
+          {index === 1 && (credentialsForm || saveAction) ? (
             <div className="space-y-3">
               {credentialsForm}
               {saveAction}
             </div>
           ) : null}
-          {originalIndex === 2 ? startAction : null}
+          {index === 2 ? startAction : null}
         </FeishuSetupSection>
-      );
-    });
-
-  return (
-    <div className="max-w-[76ch] space-y-3">
-      {statusPlacement === "top" ? (
-        <p className="pl-7 text-ui-meta leading-dense text-ink-muted">
-          {status}
-        </p>
-      ) : null}
-      {afterStatus}
-      {collapsible ? (
-        <div>
-          <button
-            type="button"
-            onClick={() => setStepsExpanded((v) => !v)}
-            aria-expanded={stepsExpanded}
-            className="group/disclosure flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-ui-meta font-medium text-ink-muted hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/35"
-          >
-            {stepsExpanded ? (
-              <CaretDown size={11} weight="bold" />
-            ) : (
-              <CaretRight size={11} weight="bold" />
-            )}
-            <span>{imCopy.feishuSetupCollapsed}</span>
-          </button>
-          {stepsExpanded ? (
-            <div className="mt-2 divide-y divide-line/70">{sectionsInner}</div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="divide-y divide-line/70">{sectionsInner}</div>
-      )}
-      {statusPlacement === "bottom" ? (
-        <p className="pl-7 text-ui-meta leading-dense text-ink-muted">
-          {status}
-        </p>
-      ) : null}
+      ))}
     </div>
   );
 }
@@ -190,7 +139,9 @@ function FeishuSetupSection({
                   <span className="block min-w-0 break-words">
                     <FeishuSetupStepText step={step} />
                   </span>
-                  {afterStep?.stepIndex === stepIndex ? afterStep.content : null}
+                  {afterStep?.stepIndex === stepIndex
+                    ? afterStep.content
+                    : null}
                 </div>
               </li>
             ))}
@@ -214,11 +165,7 @@ function FeishuSetupStepText({ step }: { step: FeishuSetupStep }) {
 
 function FeishuSetupStepPart({ part }: { part: FeishuSetupStepPart }) {
   if ("code" in part && part.code) {
-    return (
-      <code className="rounded-sm border border-line/80 bg-app px-1 py-[1px] font-mono text-ui-tertiary text-ink">
-        {part.text}
-      </code>
-    );
+    return <code className={INLINE_CODE_CLASS}>{part.text}</code>;
   }
 
   if ("emphasis" in part && part.emphasis) {
@@ -243,32 +190,30 @@ function FeishuPermissionsList({
 }) {
   return (
     <div className="relative min-w-0 rounded-sm bg-hover/35 px-2.5 py-2">
-      <button
+      {/* Same control as Browser Control's address copy: a ghost button
+          whose label flips to 已复制 for COPY_FEEDBACK_MS. */}
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
+        className="absolute right-1 top-1"
+        leadingIcon={<ClipboardText size={13} weight="thin" />}
         onClick={onCopy}
-        className={cn(
-          "absolute right-2 top-2 inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-sm border px-1.5 text-ui-label font-medium",
-          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-          copied
-            ? "border-success/30 bg-success/[var(--opacity-subtle)] text-success"
-            : "border-line bg-surface text-ink-muted hover:border-line-strong hover:bg-hover hover:text-ink",
-        )}
       >
-        {copied ? (
-          <Check size={11} weight="bold" />
-        ) : (
-          <Copy size={11} weight="thin" />
-        )}
         {copied ? copiedLabel : copyLabel}
-      </button>
-      <ul className="space-y-1.5 sm:pr-20">
+      </Button>
+      <ul className="space-y-1.5 sm:pr-24">
         {items.map((item) => (
           <li
             key={item.name}
             className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,240px)_1fr] sm:items-baseline sm:gap-3"
           >
-            <code className="min-w-0 break-all rounded-sm border border-line/70 bg-surface px-1.5 py-[1px] font-mono text-ui-tertiary leading-notice text-ink sm:break-normal">
+            <code
+              className={cn(
+                INLINE_CODE_CLASS,
+                "min-w-0 break-all leading-notice sm:break-normal",
+              )}
+            >
               {item.name}
             </code>
             <span className="min-w-0 text-ui-meta leading-notice text-ink-muted">
