@@ -323,7 +323,7 @@ function SidebarProjectGroupToggle({
       onClick={onToggle}
       aria-expanded={open}
       className={cn(
-        "mx-1.5 mt-3 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
+        "mx-1.5 mt-3 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
         action && "mx-0 mt-0 w-auto min-w-0 flex-1",
         "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
         "active:translate-y-px",

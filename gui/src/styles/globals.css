@@ -1445,6 +1445,22 @@ code {
   font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
+/* Single-line sidebar text cut by a fade instead of `…` (session row
+   title and subline): clip at the box edge, and only while the line is
+   actually cut fade the last 22px, so every truncated line ends on the
+   same right edge. `data-truncated` is kept by lib/truncation-fade.ts.
+   The mask sits on the text element, never on the row, so selected /
+   hover backgrounds are untouched (2026-10-08). */
+.truncate-fade {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+.truncate-fade[data-truncated] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+}
+
 /* Git review inherits Galley's colors in both themes. */
 .git-review-diff {
   --diff-background-color: var(--color-app);

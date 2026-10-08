@@ -61,10 +61,11 @@ export const NEW_CHAT_HINT_DISPLAY = isMac
  * Where 新对话's text hides, leaving only the plus. Only the narrow
  * state can need this: alone, the row needs ~96px (zh) / ~116px (en),
  * under the 134px minimum sidebar. With the icons in the row it needs
- * row mx-1.5 12 + [pl-3 12 + plus 15 + gap-2.5 10 + text + pr-2 8] +
- * 3 gaps × 2 + 3 icons × 32 = 159px + text: 新对话 is 3 × 13 = 39px
- * -> 198px; New chat is 58.8px (Inter 500 13px, measured) -> 217.8,
- * rounded up to 220px. Each value is capped at the platform's narrow
+ * row mx-1.5 12 + [pl-3 12 + plus column 16 + gap-2 8 + text + pr-2 8] +
+ * 3 gaps × 2 + 3 icons × 32 = 158px + text: 新对话 is 3 × 13 = 39px
+ * -> 197px, kept at 198; New chat is 58.8px (Inter 500 13px, measured)
+ * -> 216.8, rounded up to 220px. (Before 2026-10-08 the plus was 15px
+ * + gap-2.5, 1px more.) Each value is capped at the platform's narrow
  * threshold, since above that the icons have left the row: on mac
  * both fit under 251 and stand as is; Windows (189) and other (179)
  * cap both locales, so the narrow state there is always plus-only.

@@ -105,15 +105,21 @@ function NewChatButton({
         onClick={onClick}
         aria-label={label}
         className={cn(
-          // min-w: pl-3 + the 15px plus. Not min-w-0 — at the narrowest
-          // widths the row must squeeze the icons, not clip the plus.
-          "flex h-8 min-w-[27px] flex-1 items-center gap-2.5 rounded-sm pl-3 text-left text-[13px] text-ink",
+          // min-w: pl-3 + the 16px plus column. Not min-w-0 — at the
+          // narrowest widths the row must squeeze the icons, not clip
+          // the plus.
+          "flex h-8 min-w-[28px] flex-1 items-center gap-2 rounded-sm pl-3 text-left text-[13px] text-ink",
           "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover",
           "active:translate-y-px",
           "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         )}
       >
-        <Plus size={15} weight="bold" className="shrink-0 text-brand-strong" />
+        {/* The session rows' grid (2026-10-08): the 15px plus centred
+            in a 16px column like their status icons (centre 26px), gap-2,
+            so the label starts on their 42px title edge (it sat at 43). */}
+        <span className="flex w-4 shrink-0 justify-center">
+          <Plus size={15} weight="bold" className="text-brand-strong" />
+        </span>
         {/* The action text shows whole or not at all — never cut in
             half. It can only run out of room in the narrow state, with
             the icons beside it; the thresholds and their arithmetic
@@ -121,7 +127,7 @@ function NewChatButton({
             the whole label goes and only the plus stays, its tooltip
             carrying the full label. In a project only " · 项目名"
             truncates. pr-2 sits on the label so it vanishes with it:
-            at the 134px minimum the plus needs 27px and the icons
+            at the 134px minimum the plus needs 28px and the icons
             squeeze to ~29px each. */}
         <span
           className={cn(

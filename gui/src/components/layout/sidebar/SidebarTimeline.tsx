@@ -180,8 +180,11 @@ export function SidebarSectionLabel({
   children: React.ReactNode;
   count?: number;
 }) {
+  // mx-1.5 + px-3 puts the label on the session rows' grid (2026-10-08):
+  // it starts on the 18px status-icon edge and the count ends on the
+  // 18px text edge, under the new-chat row's ⌘N. It was px-4 (16px).
   return (
-    <div className="flex items-center gap-1.5 px-4 pb-1.5 pt-3.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+    <div className="mx-1.5 flex items-center gap-1.5 px-3 pb-1.5 pt-3.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {count != null && (
         <span className="shrink-0 tabular-nums normal-case tracking-normal text-ink-muted">
@@ -214,7 +217,7 @@ function SidebarEarlierEntry({
       onClick={onClick}
       aria-label={copy.sidebar.showAll}
       className={cn(
-        "mx-1.5 mt-2 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
+        "mx-1.5 mt-2 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
         "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
         "active:translate-y-px",
         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",

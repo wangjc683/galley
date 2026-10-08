@@ -188,6 +188,7 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 - **EARLIER 折叠成单行入口**：sidebar 是当前工作面，不是无限历史列表；完整旧 session 浏览进入 `EarlierDialog`（文案「N 个 30 天前的对话」）。Earlier 入口沿用同一 header + count 视觉族，只多一个 caret 表达可打开。
 - **选中行必在侧栏里**（2026-10-03）：当前会话属于「更早」时（从搜索 / ⌘K / EarlierDialog 打开，打开不刷新最后活动时间），它借位挂在 Earlier 入口正下方，是一条普通会话行（选中三通道、⋯ 菜单齐全），入口计数不变，切走即消失、无动效。选中从侧栏以外来、或当前会话换了桶（旧会话发一句话跳进今天）时，行不完全可见就瞬时 `scrollIntoView({ block: "nearest" })`（行带 `scroll-my-2`）；侧栏里点行不滚——行在 pointerdown 激活，滚动会让半露的行在指针下滑走。折叠的项目抽屉里的行不滚（`data-collapsed-drawer`）。
 - **永不空侧栏**：置顶 / 今天 / 本周 / 本月全空但有更早会话时，自动把最近 10 条提出来标为「最近」（2026-09-09 从 5 条提到 10 条，条件从「本周为空」扩到「整窗为空」——本月有内容时正常显示本月桶，不叠加回填）。提出来的行离开「更早」，计数与 dialog 保持一致。
+- **侧栏网格**（2026-10-08 补齐）：三条竖线——左 18px（新对话加号、状态图标、时间桶标题与「更早」入口、项目视图分组标题的左缘）、文字列 42px（新对话文字、会话标题与状态行、已归档）、右 18px（顶行「项目」图标、⌘N、时间桶计数、会话行文字边）。时间桶标题此前是 `px-4`（16px，05-18 遗留），比网格左右各外凸 2px，计数与 ⌘N 差约 2.5px；新对话文字此前起于 43px。**Windows 的代价**：列表有 10px 常驻滚动条通道（`scrollbar-stable`），列表里的右缘比 ⌘N 所在的新对话行再往里 10px，对齐只在 mac 成立；没有为此让列表内容吃进滚动条通道。
 - **Archived 不叫 Trash**：archive 是保留数据；真正永久删除只在 Archived dialog 里出现。底部「已归档」行对齐会话行网格（2026-10-03）：图标中心 26px、文字起点 42px（`pl-4.5` + 12px 图标居中于 `w-4` + `gap-2`），按钮仍满宽。
 - Sidebar 不可折叠；可拖拽调整宽度。`⌘K` 全局 Command Palette。对象级低频操作由右键菜单和 row hover `⋯` 共同承载：session row 提供 pin / rename / move to project / archive（2026-09-16 置顶提到首项：本机 111 个 session 零置顶，按可发现性问题处理；行内专属 hover 图钉按钮被否，理由见 deferred「session 行 hover 置顶按钮」），project row 提供 pin / edit / delete。右键是熟练用户快捷入口，`⋯` 是可发现入口；两者必须共享同一组动作、排序和 destructive 样式，菜单视觉与 MainHeader 会话菜单同语域（`galley-pop-in` / 200px / 13px）。row contextual actions 使用 overlay，不在非 hover 状态制造额外右侧 gutter；hover / menu open 时文字临时让位给操作按钮。重命名进行中右键菜单禁用（右击边距会 blur-commit 编辑，再叠一个菜单是双重歧义）。
 - **归档运行中的会话需确认**（2026-07-05 决策）：会话自身 running 或作为 goal master 时，归档前弹 alertdialog——归档不停止运行，但会把还在跑的工作从状态板上藏起来；对话框文案如实陈述这两点。已结算会话保持一键归档（可逆，无需确认）。
@@ -239,6 +240,7 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 ##### 4. 标题字重 + 入场 pop
 
 - 标题 13px Inter，进行中 / 未读 / 各 blocking 状态 `font-semibold`，其余 `font-medium`。
+- **截断用渐隐，不用省略号**（2026-10-08）：标题与状态行排到 18px 文字边为止，真被截断时最后 22px 淡出（`.truncate-fade` + `lib/truncation-fade.ts` 维护的 `data-truncated`；放得下的行不渐隐，免得末字落进渐隐区像被截了）。浏览器的 `…` 只能在整字处截断，汉字 13px 一个，截断的行右缘散在约 10px 的带里，截在全角逗号后还会出现浮着的「，…」。遮罩只加在文字上，选中 / 悬停底色不受影响。
 - 标题与状态行截断时用原生 `title` 补全文（§4.1 icon-only 不用原生 `title` 的例外），且**只在确实截断时**挂：悬停时量 `scrollWidth > clientWidth`（`lib/truncated-title.ts`），放得下的文字不再弹一个重复自己的系统提示框（2026-10-03）。悬停时量是有意的：悬停时行右侧给 ⋯ 让出 28px，静止时放得下的标题悬停时可能被截。
 - **一次性入场 pop**（`sidebar-state-pop`）：进入 error / ask / unread 时图标弹一下（keyed on `attentionKey`，replay on entry，不在 in-state 时循环）。强 overshoot（scale 0.42→1.38→0.94→1，0.44s `cubic-bezier(0.22,1,0.36,1)`）确保在繁忙状态板上是明确的「看这里」一拍。**running 不 pop**（它已有呼吸 rail + 旋转图标）。**挂载不 pop**（2026-07-05）：entry 指状态迁移；启动或从 Project Review 返回时全列齐射「看这里」不是信息，是噪音。
 - 所有 sidebar 状态动效都遵守 §2.7 与 reduced-motion：呼吸 rail 属外围 liveness 例外保留；pop / step-tick 是一次性入场，禁止无限闪烁 / shimmer / 大面积背景呼吸；`prefers-reduced-motion` 下 `sidebar-liveness-rail` / `sidebar-liveness-tick` / `sidebar-step-tick` / `sidebar-state-pop` 全部关停。

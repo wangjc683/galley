@@ -705,7 +705,11 @@ Menlo fallback; the Shortcuts table drops a Tab row that was never wired and
 adds three real keys; on macOS only ⌘ triggers the global shortcuts (Ctrl+K /
 Ctrl+N stay Cocoa editing keys); the Report an Issue… menu and tray item open
 Settings → 报告问题; the environment payload drops `deferred_b4` checks and
-gains `ga_commit` for external GA. Owed for `v0.6.2`: the new update path on a
+gains `ga_commit` for external GA. The sidebar's time-bucket labels moved
+onto the row grid (counts now line up under ⌘N) and truncated session titles
+and sublines fade out instead of ending in a ragged `…`
+([devlog](./devlog/2026-10-08-sidebar-grid-and-fade-truncation.md)).
+Owed for `v0.6.2`: the new update path on a
 real older build (it takes effect from the update after `v0.6.2`, since the
 installed build runs its own updater) and the Windows App update smoke items.
 Owed from the `v0.6.1` smoke (JC approved

@@ -26,6 +26,7 @@ import {
 } from "@/lib/session-summary";
 import { StatusIcon } from "@/lib/status-icon";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
+import { truncationFadeRef } from "@/lib/truncation-fade";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
@@ -432,14 +433,18 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             />
           ) : (
             <div
-              // Native title only while the ellipsis is actually
-              // clipping (measured on hover — see syncTruncatedTitle);
-              // a fully visible title gets no OS tooltip repeating it.
+              // Cut lines fade out instead of ending in `…`, so every
+              // truncated title stops at the same right edge (see
+              // lib/truncation-fade.ts). Native title only while the
+              // text is actually clipped (measured on hover — see
+              // syncTruncatedTitle); a fully visible title gets no OS
+              // tooltip repeating it.
+              ref={truncationFadeRef}
               onPointerEnter={(e) =>
                 syncTruncatedTitle(e.currentTarget, session.title)
               }
               className={cn(
-                "min-w-0 flex-1 truncate text-[13px]",
+                "truncate-fade min-w-0 flex-1 text-[13px]",
                 // Subtractive focus: the selected row keeps full-strength
                 // ink and every other row steps back to ink-soft. Dimming
                 // the many is a quieter way to raise the one than shouting
@@ -508,13 +513,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             // title above, and likewise only while truncated — at 14%
             // width the status line clips to almost nothing and was
             // otherwise unrecoverable.
+            ref={truncationFadeRef}
             onPointerEnter={(e) =>
               syncTruncatedTitle(e.currentTarget, sublineText)
             }
             className={cn(
               // tabular-nums: the subline carries live counts (第 N 步 /
-              // 出错 · N) that tick while visible.
-              "mt-0.5 truncate text-[11px] leading-[1.4] tabular-nums",
+              // 出错 · N) that tick while visible. Fades like the title.
+              "truncate-fade mt-0.5 text-[11px] leading-[1.4] tabular-nums",
               sublineTone === "warning"
                 ? "font-medium text-warning"
                 : sublineTone === "error"
