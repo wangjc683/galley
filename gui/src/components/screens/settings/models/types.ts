@@ -26,6 +26,15 @@ export type ModelDraftState = {
   advancedOverrides: Record<string, unknown>;
 };
 
+/** An editor that just refused to be replaced because it holds unsaved
+ * input: `flash` = the one-shot highlight (on for a moment, then off —
+ * a transition, not a keyframe loop); `hint` = the 「先保存或关闭当前编辑」
+ * line, kept until the next edit / save / close of that editor. */
+export type EditorBlockedState = {
+  flash: boolean;
+  hint: boolean;
+};
+
 export type ModelMoveDirection = "up" | "down";
 
 export type ModelMoveFeedbackState = {

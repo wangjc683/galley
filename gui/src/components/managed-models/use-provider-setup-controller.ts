@@ -23,15 +23,17 @@ import {
   connectionSuccessMessage,
   effectiveProviderAuthKind,
   formToProbeInput,
-  freshModelEffectiveOptions,
+  isProviderFormDirty,
   newProviderForm,
   planAutoPick,
   providerConnectionFingerprint,
   providerFormFromPreset,
   providerFormFromRecord,
+  providerFormModelTestInput,
   providerListFingerprint,
   runCodexComplete,
   runProviderCommit,
+  shouldAutoOpenNewProviderForm,
   type ProbeAction,
   type ProbeState,
   type ProviderFormState,
@@ -55,6 +57,7 @@ import type {
  */
 export function useProviderSetupController({
   loading,
+  loadFailed = false,
   providers,
   models,
   defaults,
@@ -75,6 +78,11 @@ export function useProviderSetupController({
   rememberProviderModelOptions,
 }: {
   loading: boolean;
+  /** The store's last load failed (Settings): an empty provider list
+   * then says nothing about what is configured, so it must not open
+   * the create form on its own. Off = the historical "empty list after
+   * loading → create form" (onboarding always wants the form). */
+  loadFailed?: boolean;
   providers: ManagedModelProviderRecord[];
   models: ManagedModelRecord[];
   /** The global defaults layer, for the probes' effective options.
@@ -102,7 +110,8 @@ export function useProviderSetupController({
    * success probe status and keep the form (onboarding, which leaves
    * the screen via `onSaved` anyway). Also selects whether commit
    * errors surface as probe status ("success-status") or stay silent
-   * for the store's inline error line ("reset"). */
+   * here and keep the form ("reset") — the store rethrows, and the
+   * caller's wrapped store actions report it (settings: error toast). */
   postSaveForm?: "reset" | "success-status";
   onSaved?: (ctx: { providerId: string; isNewProvider: boolean }) => void;
   /** Post-success strategy for the codex login / import flows. */
@@ -145,12 +154,21 @@ export function useProviderSetupController({
 
   const visibleProviderForm =
     providerForm ??
-    (!loading && providers.length === 0 ? newProviderForm() : null);
+    (shouldAutoOpenNewProviderForm({
+      loading,
+      loadFailed,
+      providerCount: providers.length,
+    })
+      ? newProviderForm()
+      : null);
   const editingProvider = visibleProviderForm?.id
     ? providers.find((item) => item.id === visibleProviderForm.id)
     : undefined;
   const providerHasSavedKey =
     !!editingProvider && editingProvider.credentialStatus !== "missing";
+  // Settings-only consumer (the add / edit / close guards); the
+  // untouched auto-opened form is `providerForm === null`, i.e. clean.
+  const providerFormDirty = isProviderFormDirty(providerForm, editingProvider);
   const isCreatingProvider = !!visibleProviderForm && !visibleProviderForm.id;
   const providerFormIsInlineEdit = !!visibleProviderForm?.id;
   const isCodexProviderForm =
@@ -469,7 +487,13 @@ export function useProviderSetupController({
     resetConnectionTest();
   };
 
-  const handleProviderFormTest = async () => {
+  /** `target` names a saved model to test instead of the form's own
+   * model field — the edit form's 「测试模型」 (Settings), which has no
+   * model field. Omitted = the create-form behavior. */
+  const handleProviderFormTest = async (target?: {
+    model: string;
+    advancedOptions?: Record<string, unknown>;
+  }) => {
     if (
       !visibleProviderForm ||
       !canTestProvider ||
@@ -477,32 +501,20 @@ export function useProviderSetupController({
     ) {
       return;
     }
-    const testModel = visibleProviderForm.model.trim();
-    const action: ProbeAction = testModel ? "model-test" : "model-list";
+    const testInput = providerFormModelTestInput(visibleProviderForm, {
+      authKind: providerFormEffectiveAuthKind,
+      defaults,
+      target,
+    });
+    const action: ProbeAction = testInput ? "model-test" : "model-list";
     setProviderFormProbeState({
       kind: "loading",
       action,
     });
     try {
-      const message = testModel
+      const message = testInput
         ? connectionSuccessMessage(
-            await testManagedModelConnectionWithLatency({
-              id: visibleProviderForm.id,
-              providerId: visibleProviderForm.id,
-              protocol: visibleProviderForm.protocol,
-              authKind: providerFormEffectiveAuthKind,
-              apiKey: visibleProviderForm.apiKey || undefined,
-              apiBase: visibleProviderForm.apiBase,
-              model: testModel,
-              advancedOptions: freshModelEffectiveOptions(
-                {
-                  protocol: visibleProviderForm.protocol,
-                  authKind: providerFormEffectiveAuthKind,
-                  apiBase: visibleProviderForm.apiBase,
-                },
-                defaults,
-              ),
-            }),
+            await testManagedModelConnectionWithLatency(testInput),
             "setup-model",
             modelCopy,
           )
@@ -644,7 +656,8 @@ export function useProviderSetupController({
           message: managedModelProbeErrorMessage(e, modelCopy),
         });
       }
-      // Otherwise: store-level error is shown inline.
+      // Otherwise the form stays as typed; the caller's wrapped store
+      // action reports the failure (settings: error toast).
     }
   };
 
@@ -682,7 +695,7 @@ export function useProviderSetupController({
       );
       onSaved?.({ providerId: provider.id, isNewProvider: false });
     } catch {
-      // Store-level error is shown inline.
+      // Reported by the caller's wrapped store action (settings: toast).
     }
   };
 
@@ -794,7 +807,7 @@ export function useProviderSetupController({
       setProviderFormProbeState({
         kind: "success",
         action: "provider-test",
-        message: modelCopy.keyNeedsResaveShort,
+        message: modelCopy.codexSignedOut,
       });
     } catch (e) {
       setProviderFormProbeState({
@@ -832,6 +845,7 @@ export function useProviderSetupController({
     handleProviderFormTest,
     handleProviderSave,
     isCodexProviderForm,
+    providerFormDirty,
     providerFormIsInlineEdit,
     providerFormModelOptions,
     providerFormProbeState,

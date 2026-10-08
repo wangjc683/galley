@@ -140,6 +140,18 @@ export function ErrorLine({ message }: { message: string }) {
   );
 }
 
+/** The line a blocked editor shows: it refused to be replaced (another
+ * editor was asked for) because it holds unsaved input. */
+export function EditorBlockedHint() {
+  const copy = useCopy().settings.models;
+  return (
+    <div className="mt-1 flex items-center gap-1 text-ui-meta text-warning">
+      <WarningCircle size={12} weight="fill" className="shrink-0" />
+      <span>{copy.editorBlockedHint}</span>
+    </div>
+  );
+}
+
 export function InfoLine({ message }: { message: string }) {
   return (
     <div className="flex items-start gap-1.5 rounded-sm border border-line bg-elevated/55 px-3 py-2 text-ui-secondary leading-dense text-ink-soft">
@@ -193,11 +205,17 @@ export function CredentialBadge({
     return <SettingsTag>{copy.noAuthBadge}</SettingsTag>;
   }
   if (status === "present") return null;
+  // Codex signs in with ChatGPT — there is no key to be missing.
+  const isCodex = authKind === "chatgpt_codex_oauth";
   return (
     <SettingsStatusBadge tone="warning" icon={WarningCircle}>
       {status === "unknown"
-        ? copy.keyStatusUnknownShort
-        : copy.keyNeedsResaveShort}
+        ? isCodex
+          ? copy.codexLoginStatusUnknownShort
+          : copy.keyStatusUnknownShort
+        : isCodex
+          ? copy.codexLoginNeededShort
+          : copy.keyNeedsResaveShort}
     </SettingsStatusBadge>
   );
 }

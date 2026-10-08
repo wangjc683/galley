@@ -1,5 +1,6 @@
 import * as Popover from "@radix-ui/react-popover";
 import { CaretDown, Check } from "@phosphor-icons/react";
+import { useRef, useState } from "react";
 
 import {
   CUSTOM_ENDPOINT_PRESET_ID,
@@ -43,14 +44,31 @@ export function ManagedModelProviderPicker({
         : protocol
           ? managedModelProtocolLabel(copy, protocol)
           : null;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // The dialog that hosts the picker (Settings), resolved when the list
+  // opens. Positioning against it keeps the list inside the dialog's
+  // frame — against the viewport it ran ~105px past the Settings
+  // bottom edge and hid the last preset (「自定义」) below it. Null
+  // outside a dialog, which keeps Radix's default viewport boundary.
+  const [dialogBoundary, setDialogBoundary] = useState<Element | null>(null);
 
   // `modal`: this picker lives inside the Settings Dialog, whose scroll
   // lock swallows wheel events on portaled content. A modal Popover
   // pushes its own lock on top so the list can scroll.
   return (
-    <Popover.Root modal>
+    <Popover.Root
+      modal
+      onOpenChange={(open) => {
+        if (open) {
+          setDialogBoundary(
+            triggerRef.current?.closest('[role="dialog"]') ?? null,
+          );
+        }
+      }}
+    >
       <Popover.Trigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           aria-label={ariaLabel ?? copy.provider}
           className={cn(
@@ -72,7 +90,10 @@ export function ManagedModelProviderPicker({
                 : copy.chooseProvider}
             </span>
             {badgeLabel && (
-              <span className="mt-1 inline-flex rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-micro text-ink-muted">
+              // 11.5px, not text-ui-micro: these badges are Han text
+              // (「OpenAI 兼容」「ChatGPT 登录」), and Han never goes below
+              // 11.5px (2026-10-07).
+              <span className="mt-1 inline-flex rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-tertiary text-ink-muted">
                 {badgeLabel}
               </span>
             )}
@@ -91,6 +112,9 @@ export function ManagedModelProviderPicker({
         <Popover.Content
           align="start"
           sideOffset={6}
+          // Flips above the trigger when the dialog has more room there;
+          // the max height below is measured against the same boundary.
+          collisionBoundary={dialogBoundary ?? []}
           collisionPadding={12}
           style={{
             maxHeight:

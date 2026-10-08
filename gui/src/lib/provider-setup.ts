@@ -118,6 +118,104 @@ export function providerFormFromRecord(
   };
 }
 
+/**
+ * Whether replacing the provider form would lose input — the guard
+ * behind Settings' 「添加」, 「⋯ → 编辑」 and card-header close. An edit
+ * form compares against the record it was opened from (its key field
+ * starts blank, so any typed key counts); a create form against its
+ * card's own pre-fill, so picking a card is not an edit but typing into
+ * it is. No form (including the untouched auto-opened one, which lives
+ * only as a render-time default) is clean, and so is an edit form whose
+ * record is gone.
+ */
+export function isProviderFormDirty(
+  form: ProviderFormState | null,
+  saved?: Pick<
+    ManagedModelProviderRecord,
+    "id" | "protocol" | "authKind" | "apiBase" | "displayName"
+  >,
+): boolean {
+  if (!form) return false;
+  const baseline = form.id
+    ? saved?.id === form.id
+      ? providerFormFromRecord(saved)
+      : null
+    : form.providerPresetId
+      ? providerFormFromPreset(form.providerPresetId)
+      : newProviderForm();
+  if (!baseline) return false;
+  return (
+    form.apiKey.trim() !== "" ||
+    form.protocol !== baseline.protocol ||
+    form.authKind !== baseline.authKind ||
+    form.apiBase.trim() !== baseline.apiBase.trim() ||
+    form.model.trim() !== baseline.model.trim() ||
+    form.displayName.trim() !== baseline.displayName.trim()
+  );
+}
+
+/** Whether an empty provider list opens the create form on its own (the
+ * zero-provider page). Not while loading, and not when the load failed:
+ * that empty list says nothing about what is configured, and Settings
+ * shows the failure with a retry instead of inviting a fresh setup. */
+export function shouldAutoOpenNewProviderForm(args: {
+  loading: boolean;
+  loadFailed: boolean;
+  providerCount: number;
+}): boolean {
+  return !args.loading && !args.loadFailed && args.providerCount === 0;
+}
+
+/**
+ * Probe input for the provider form's 「测试模型」. Creating: the form's
+ * own model, with the options a fresh model on this endpoint would get.
+ * Editing (the form has no model field — models have their own editor):
+ * the caller names the saved model to test, with that model's stored
+ * effective options, which is what it will actually run with after the
+ * save (a provider edit never rewrites a model's preset layer). The id
+ * lets Core fall back to the saved key when the key field is blank.
+ * Null when there is no protocol or no model to test.
+ */
+export function providerFormModelTestInput(
+  form: ProviderFormState,
+  args: {
+    authKind: ManagedModelAuthKind;
+    defaults: Record<string, unknown>;
+    target?: { model: string; advancedOptions?: Record<string, unknown> };
+  },
+): {
+  id?: string;
+  providerId?: string;
+  protocol: ManagedModelProtocol;
+  authKind: ManagedModelAuthKind;
+  apiKey?: string;
+  apiBase: string;
+  model: string;
+  advancedOptions: Record<string, unknown>;
+} | null {
+  const model = (args.target?.model ?? form.model).trim();
+  if (!form.protocol || model === "") return null;
+  return {
+    id: form.id,
+    providerId: form.id,
+    protocol: form.protocol,
+    authKind: args.authKind,
+    apiKey: form.apiKey || undefined,
+    apiBase: form.apiBase,
+    model,
+    advancedOptions:
+      args.target?.advancedOptions ??
+      freshModelEffectiveOptions(
+        {
+          protocol: form.protocol,
+          authKind: args.authKind,
+          apiBase: form.apiBase,
+        },
+        args.defaults,
+      ),
+  };
+}
+
 export function connectionSuccessMessage(
   result: TimedManagedModelConnectionResult,
   context: "provider" | "setup-model" | "saved-model",

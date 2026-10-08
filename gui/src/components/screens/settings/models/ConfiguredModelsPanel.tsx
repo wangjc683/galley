@@ -31,11 +31,12 @@ import { useState } from "react";
 import { Button, IconButton } from "@/components/ui/button";
 import { SettingsTag } from "@/components/screens/settings/settings-badges";
 import { SettingsSectionLabel } from "@/components/screens/settings/settings-ui";
-import { TooltipLabel } from "@/components/ui/tooltip";
+import { IconTooltip, TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isChineseLanguage } from "@/lib/language";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
+import { useManagedModelsStore } from "@/stores/managed-models";
 import type {
   ManagedModelProviderRecord,
   ManagedModelRecord,
@@ -54,6 +55,7 @@ import type {
   ProbeState,
 } from "./types";
 
+
 /**
  * "我的模型 / Your Models" — the primary, cross-provider, ordered model
  * list. This is the single source of truth for what the user can
@@ -61,9 +63,11 @@ import type {
  * All per-model actions (reorder / set default / edit / test / remove)
  * live here. Providers below own only credentials + which models exist.
  *
- * Reordering has two paths that write the same full id list: the ↑ ↓
- * buttons (one step, keyboard-reachable) and the row-start drag handle
- * (any distance — the path that scales past a handful of models).
+ * Reordering has two paths that write the same full id list: the
+ * row-start drag handle (any distance — the path that scales past a
+ * handful of models) and 上移 / 下移 in the row's ⋯ menu (one exact
+ * step, with the swap animation), so the row end carries a single
+ * resting control.
  */
 export function ConfiguredModelsPanel({
   models,
@@ -115,6 +119,9 @@ export function ConfiguredModelsPanel({
 }) {
   const appCopy = useCopy();
   const copy = appCopy.settings.models;
+  // With the config unreadable an empty list says nothing about what
+  // is configured, so the empty box must not invite adding a provider.
+  const loadFailed = useManagedModelsStore((s) => s.loadError !== null);
   // Pointer drags need a few px of travel before they start so a plain
   // click on the handle never turns into a drag; the keyboard sensor
   // gives the focused handle Space + Arrow reordering.
@@ -145,13 +152,17 @@ export function ConfiguredModelsPanel({
         <span aria-hidden="true" className="text-ui-tertiary text-ink-muted/45">
           ·
         </span>
-        <span className="text-ui-meta tabular-nums text-ink-muted">
+        {/* Same size step as the section label it annotates — a count
+            set larger than its own heading read as the heading. */}
+        <span className="text-ui-label tabular-nums text-ink-muted">
           {models.length > 0
             ? copy.enabledModelsCount(models.length)
             : copy.noEnabledModels}
         </span>
       </div>
-      <div className="mt-1 text-ui-label leading-snug text-ink-muted/60">
+      {/* Same register as the 默认高级配置 section note at the page
+          foot: one section-note style per page. */}
+      <div className="mt-1 text-ui-meta text-ink-muted">
         {copy.myModelsSubtitle}
       </div>
       {models.length > 0 ? (
@@ -214,7 +225,11 @@ export function ConfiguredModelsPanel({
         </DndContext>
       ) : (
         <div className="mt-2 rounded-sm border border-line bg-surface px-3 py-3 text-ui-secondary text-ink-muted">
-          {copy.myModelsEmpty}
+          {providers.length > 0
+            ? copy.myModelsEmpty
+            : loadFailed
+              ? copy.loadFailed
+              : copy.myModelsEmptyNoProviders}
         </div>
       )}
     </div>
@@ -247,18 +262,15 @@ function ModelScopeHint({
         </>
       }
     >
+      {/* Not ModelPrimitives' InfoTooltip: that one takes a single
+          string, and this tip needs its title + body pair. The trigger
+          matches InfoTooltip's exactly so the page has one Info button. */}
       <button
         type="button"
         aria-label={copy.sessionModelScopeTitle}
-        className={cn(
-          "inline-flex size-5 items-center justify-center rounded-sm border border-transparent",
-          "text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
-          "hover:border-line hover:bg-hover hover:text-ink",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-          "active:translate-y-px",
-        )}
+        className="inline-flex size-5 items-center justify-center rounded-sm text-ink-muted hover:bg-hover hover:text-ink"
       >
-        <Info size={12} weight="bold" />
+        <Info size={11} weight="bold" />
       </button>
     </TooltipLabel>
   );
@@ -351,24 +363,27 @@ function ConfiguredModelRow({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          aria-label={copy.dragToReorder(display.title)}
-          title={copy.dragToReorder(display.title)}
-          disabled={!canDrag}
-          className={cn(
-            "-ml-1 flex size-5 shrink-0 touch-none items-center justify-center rounded-sm outline-none",
-            "text-ink-muted/45 group-hover:text-ink-muted hover:text-ink",
-            "focus-visible:ring-2 focus-visible:ring-brand/30",
-            "disabled:cursor-default disabled:opacity-40",
-            canDrag && (isDragging ? "cursor-grabbing" : "cursor-grab"),
-          )}
-          {...attributes}
-          {...listeners}
-        >
-          <DotsSixVertical size={13} weight="bold" />
-        </button>
+        {/* Same quick tooltip as the ⋯ button at the row end (the
+            native `title` it replaced was slow and system-styled). */}
+        <IconTooltip text={copy.dragToReorder(display.title)}>
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            aria-label={copy.dragToReorder(display.title)}
+            disabled={!canDrag}
+            className={cn(
+              "-ml-1 flex size-5 shrink-0 touch-none items-center justify-center rounded-sm outline-none",
+              "text-ink-muted/45 group-hover:text-ink-muted hover:text-ink",
+              "focus-visible:ring-2 focus-visible:ring-brand/30",
+              "disabled:cursor-default disabled:opacity-40",
+              canDrag && (isDragging ? "cursor-grabbing" : "cursor-grab"),
+            )}
+            {...attributes}
+            {...listeners}
+          >
+            <DotsSixVertical size={13} weight="bold" />
+          </button>
+        </IconTooltip>
         <DefaultModelRadio
           isDefault={isDefault}
           disabled={saving}
@@ -440,24 +455,6 @@ function ConfiguredModelRow({
             </span>
           )}
           <InlineProbeStatus state={probeState} action="model-test" />
-          <IconButton
-            ariaLabel={copy.moveUp(display.title)}
-            size="xs"
-            disabled={!canMoveUp}
-            onClick={onMoveUp}
-            className="text-ink-muted/45 group-hover:text-ink-muted hover:text-ink"
-          >
-            <ArrowUp size={11} weight="bold" />
-          </IconButton>
-          <IconButton
-            ariaLabel={copy.moveDown(display.title)}
-            size="xs"
-            disabled={!canMoveDown}
-            onClick={onMoveDown}
-            className="text-ink-muted/45 group-hover:text-ink-muted hover:text-ink"
-          >
-            <ArrowDown size={11} weight="bold" />
-          </IconButton>
           <ModelRowActionsMenu
             canTest={!keyMissing && !saving && !testing}
             canRemove={!isDefault && !saving}
@@ -469,6 +466,14 @@ function ConfiguredModelRow({
               onTest();
             }}
             onRemove={() => setConfirmingRemove(true)}
+            move={{
+              canMoveUp,
+              canMoveDown,
+              upLabel: copy.moveUpAction,
+              downLabel: copy.moveDownAction,
+              onMoveUp,
+              onMoveDown,
+            }}
           />
         </div>
       </div>
@@ -546,42 +551,62 @@ function DefaultModelRadio({
   onSetDefault: () => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={isDefault}
-      aria-label={isDefault ? defaultStatusLabel : setDefaultLabel}
-      title={isDefault ? defaultStatusLabel : setDefaultLabel}
-      disabled={disabled || isDefault}
-      onClick={onSetDefault}
-      className={cn(
-        "group/radio flex size-5 shrink-0 items-center justify-center rounded-full outline-none",
-        "focus-visible:ring-2 focus-visible:ring-brand/30",
-        "disabled:cursor-default",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-3.5 items-center justify-center rounded-full border",
-          isDefault
-            ? "border-brand-strong"
-            : "border-line-strong group-hover/radio:border-brand-strong",
-        )}
-      >
-        <span
+    // The tooltip hangs on a wrapper because the default row's radio is
+    // disabled, and a disabled button gets no pointer events to open
+    // one; `disabled:pointer-events-none` lets the hover reach the span.
+    <IconTooltip text={isDefault ? defaultStatusLabel : setDefaultLabel}>
+      <span className="flex shrink-0">
+        <button
+          type="button"
+          aria-pressed={isDefault}
+          aria-label={isDefault ? defaultStatusLabel : setDefaultLabel}
+          disabled={disabled || isDefault}
+          onClick={onSetDefault}
           className={cn(
-            "size-1.5 rounded-full",
-            isDefault
-              ? "bg-brand-strong"
-              : "bg-transparent group-hover/radio:bg-brand-strong/35",
+            "group/radio flex size-5 shrink-0 items-center justify-center rounded-full outline-none",
+            "focus-visible:ring-2 focus-visible:ring-brand/30",
+            "disabled:pointer-events-none",
           )}
-        />
+        >
+          <span
+            className={cn(
+              "flex size-3.5 items-center justify-center rounded-full border",
+              isDefault
+                ? "border-brand-strong"
+                : "border-line-strong group-hover/radio:border-brand-strong",
+            )}
+          >
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                isDefault
+                  ? "bg-brand-strong"
+                  : "bg-transparent group-hover/radio:bg-brand-strong/35",
+              )}
+            />
+          </span>
+        </button>
       </span>
-    </button>
+    </IconTooltip>
   );
 }
 
-/** Low-frequency per-model actions (test / remove), collapsed behind
- * the same ⋯ menu grammar as the provider cards below. */
+/** One-step reorder entries for the ⋯ menu. The swap animation and
+ * optimistic reorder come from `onMoveUp` / `onMoveDown` (the ordering
+ * controller), same as the drag path's write. */
+type ModelRowMoveActions = {
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  upLabel: string;
+  downLabel: string;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+};
+
+/** Low-frequency per-model actions (test / one-step move / remove),
+ * collapsed behind the same ⋯ menu grammar as the provider cards
+ * below. Setting the default is NOT here — the radio keeps it one
+ * click away (2026-07-17). */
 function ModelRowActionsMenu({
   canTest,
   canRemove,
@@ -590,6 +615,7 @@ function ModelRowActionsMenu({
   moreLabel,
   onTest,
   onRemove,
+  move,
 }: {
   canTest: boolean;
   canRemove: boolean;
@@ -598,6 +624,7 @@ function ModelRowActionsMenu({
   moreLabel: string;
   onTest: () => void;
   onRemove: () => void;
+  move?: ModelRowMoveActions;
 }) {
   const itemClass =
     "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none data-[highlighted]:bg-hover data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50";
@@ -630,14 +657,37 @@ function ModelRowActionsMenu({
             <PlugsConnected size={13} weight="thin" />
             {testLabel}
           </DropdownMenu.Item>
+          {move && (
+            <>
+              <DropdownMenu.Item
+                disabled={!move.canMoveUp}
+                onSelect={move.onMoveUp}
+                className={itemClass}
+              >
+                <ArrowUp size={13} weight="thin" />
+                {move.upLabel}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={!move.canMoveDown}
+                onSelect={move.onMoveDown}
+                className={itemClass}
+              >
+                <ArrowDown size={13} weight="thin" />
+                {move.downLabel}
+              </DropdownMenu.Item>
+            </>
+          )}
           {canRemove && (
-            <DropdownMenu.Item
-              onSelect={onRemove}
-              className={cn(itemClass, "text-error")}
-            >
-              <Trash size={13} weight="thin" />
-              {removeLabel}
-            </DropdownMenu.Item>
+            <>
+              {move && <DropdownMenu.Separator className="my-1 h-px bg-line" />}
+              <DropdownMenu.Item
+                onSelect={onRemove}
+                className={cn(itemClass, "text-error")}
+              >
+                <Trash size={13} weight="thin" />
+                {removeLabel}
+              </DropdownMenu.Item>
+            </>
           )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

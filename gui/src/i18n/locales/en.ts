@@ -737,7 +737,7 @@ export const enCopy: AppCopy = {
       noProviders: "No model providers yet.",
       addProvider: "Add",
       addProviderAria: "Add model provider",
-      editProvider: "Edit configuration",
+      editProvider: "Edit provider",
       provider: "Model provider",
       chooseProvider: "Choose provider",
       openaiPresetDescription: "Official API",
@@ -797,15 +797,14 @@ export const enCopy: AppCopy = {
       noAuthBadge: "No auth",
       noAuthConfirmTitle: "Confirm no authentication?",
       noAuthConfirmBody:
-        "No API key was entered. After saving, Galley will call this endpoint without authentication (for local services such as Ollama). If the service needs a key, go back and enter it.",
+        "No API key was entered. After saving, Galley will call this endpoint without authentication (for local services such as Ollama). If the provider needs a key, go back and enter it.",
       noAuthConfirmAction: "Save anyway",
       clearApiKey: "Clear key",
-      clearKeyDialogTitle: "Clear the saved API key?",
+      clearKeyDialogTitle: "Clear the saved key?",
       clearKeyDialogBody:
         "After clearing, this provider is called without authentication and the locally saved key is deleted; enter a key again to restore auth any time.",
       showApiKey: "Show API Key",
       hideApiKey: "Hide API Key",
-      testConnection: "Test connection",
       autoTestingConnection: "Testing connection…",
       retryConnectionTest: "Retry test",
       modelTestCostHint: "Model tests use at most 1 output token",
@@ -813,7 +812,7 @@ export const enCopy: AppCopy = {
       errorUnauthorized:
         "401 Unauthorized: the API Key is invalid or cannot access this model.",
       errorForbidden:
-        "403 Forbidden: this key cannot access the service or model.",
+        "403 Forbidden: this key cannot access the provider or model.",
       errorRateLimited:
         "429 Rate limited: try again later, or check quota and rate limits.",
       errorNotFound: "404 Not found: the API URL or model name may not match.",
@@ -831,26 +830,27 @@ export const enCopy: AppCopy = {
       filterModels: "Filter models",
       closeProviderEditor: "Close model provider editor",
       closeModelEditor: "Close model editor",
-      editProviderAria: "Edit model provider",
-      deleteProviderAria: "Delete model provider",
       editProviderAction: "Edit",
       deleteProviderAction: "Delete",
       editModel: "Edit model",
       removeModel: "Remove model",
       removeModelInlineConfirm: "Remove this model?",
+      editorBlockedHint: "Save or close the current edit first",
+      loadFailed: "Couldn't load model settings",
+      retryLoad: "Retry",
       setupComplete: "Setup complete",
       foundModels: (count) => `Found ${count} models`,
       connectedNoModels: "Connected, but no model list was returned",
       actionFailed: "Action failed",
-      configuredModels: "Configured models",
       myModels: "Your Models",
       myModelsSubtitle:
         "Models you can switch between in chat, in order — the first is the default.",
       myModelsEmpty: "No models yet — add one from a provider below.",
+      myModelsEmptyNoProviders: "Models you add from a provider will show up here.",
       providersLabel: "Providers",
-      enabledFromProvider: "Enabled:",
+      enabledFromProvider: "Added:",
       enabledModelsCount: (count) => `${count} model${count === 1 ? "" : "s"}`,
-      noEnabledModels: "No enabled models yet",
+      noEnabledModels: "No models added yet",
       sessionModelScopeTitle: "Scope",
       sessionModelScopeHint:
         "New models apply to new conversations immediately; already-started conversations update after a Galley restart.",
@@ -859,25 +859,25 @@ export const enCopy: AppCopy = {
       moveUp: (name) => `Move ${name} up`,
       moveDown: (name) => `Move ${name} down`,
       dragToReorder: (name) => `Drag to reorder ${name}`,
-      saveService: "Save service",
-      saveAndEnableModel: "Save and enable model",
+      moveUpAction: "Move up",
+      moveDownAction: "Move down",
+      saveService: "Save",
+      saveAndEnableModel: "Save and add model",
       providerCreatedToastMessage:
-        "Provider connected and 1 model enabled; you can keep adding models under this provider.",
-      check: "Check",
+        "Provider connected and 1 model added; you can keep adding models under this provider.",
       checkService: "Check provider",
-      keyNeedsResave: "This service needs its API Key saved again.",
+      keyNeedsResave: "This provider needs its API key saved again.",
       addManually: "Add manually",
       availableModels: "Available models",
       noMatchingModels: "No matching models.",
       visibleOptionsHint: (count) =>
         `Showing the first ${count}; keep typing to narrow the list.`,
-      test: "Test",
       setDefault: "Set as default (move to top)",
       enabled: "Added",
       enable: "Add",
       manualAddModel: "Add model manually",
       autoDefaultHint: "Saved models become the default automatically",
-      saveModel: "Save model",
+      saveModel: "Save",
       enableModel: "Add model",
       testModel: "Test model",
       advancedConfig: "Advanced",
@@ -901,7 +901,7 @@ export const enCopy: AppCopy = {
       apiModeResponses: "Responses",
       reasoningEffort: "Reasoning effort",
       reasoningEffortInfo:
-        "When unset the parameter is not sent and the provider picks the actual effort: OpenAI-family APIs usually default to medium, Claude allocates adaptively by difficulty. On the Claude protocol XHigh and Max are the same top tier. Whether third-party compatible endpoints support the parameter depends on their implementation.",
+        "When unset the parameter is not sent and the provider picks the actual effort: OpenAI-family APIs usually default to medium, Claude allocates adaptively by difficulty. On the Claude protocol xhigh and max are the same top tier. Whether third-party compatible endpoints support the parameter depends on their implementation.",
       reasoningDefault: "Provider decides",
       reasoningFollowDefaults: (tier) =>
         tier ? `Following defaults (${tier})` : "Following defaults (unset)",
@@ -913,6 +913,8 @@ export const enCopy: AppCopy = {
       promoteToDefaultsInfo:
         "Writes this model’s network settings and reasoning effort into the default advanced settings, so every model without its own value follows them. Other models’ existing overrides are untouched.",
       defaultsSectionTitle: "Default advanced settings",
+      defaultsCardTitle: "Reasoning, retries and timeouts",
+      editDefaults: "Edit defaults",
       defaultsSectionHint:
         "Models without their own value follow these defaults; each model can override them in its editor. Changes apply to new conversations.",
       reasoningNone: "none",
@@ -927,17 +929,20 @@ export const enCopy: AppCopy = {
       thinkingDisabled: "Disabled",
       claudeCodePassthrough: "Claude Code passthrough",
       claudeCodePassthroughInfo:
-        "CC passthrough relays must set this to True; official Anthropic usually does not need it.",
-      loading: "Loading…",
-      keyNeedsResaveShort: "Needs credential",
-      keyStatusUnknownShort: "Credential status unknown",
+        "Claude Code passthrough relays need this on; official Anthropic usually does not.",
+      keyNeedsResaveShort: "Key missing",
+      keyStatusUnknownShort: "Key status unknown",
+      codexLoginNeededShort: "Sign-in needed",
+      codexLoginStatusUnknownShort: "Sign-in status unknown",
+      codexLoginNeeded: "Sign in to ChatGPT again.",
+      codexSignedOut: "Signed out",
       connectionUsable: "Connection works",
       modelUsable: "Model works",
       connectionUsableCanSave: "Connection works; you can keep saving",
       deleteProviderDialogTitle: "Delete model provider?",
       deleteProviderDialogBody: (name, modelCount) =>
         modelCount > 0
-          ? `This will delete ${name}, remove ${modelCount} enabled model${modelCount === 1 ? "" : "s"}, and delete the API Key saved locally by Galley.`
+          ? `This will delete ${name}, remove ${modelCount} added model${modelCount === 1 ? "" : "s"}, and delete the API Key saved locally by Galley.`
           : `This will delete ${name} and delete the API Key saved locally by Galley.`,
       deleteProviderDialogAction: "Delete provider",
       cannotUndo: "This cannot be undone.",
@@ -1728,6 +1733,8 @@ export const enCopy: AppCopy = {
     modelConfigSaved: "Model config saved",
     modelConfigSavedMessage:
       "New conversations apply it immediately; running ones update after a Galley restart.",
+    modelConfigSavedExternalMessage:
+      "Saved. Takes effect after switching back to the bundled engine.",
     modelConfigSavedChannelsMessage:
       "Enabled Channels use the new model config after restart.",
     modelConfigSavedChannelsSuffix:

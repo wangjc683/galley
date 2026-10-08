@@ -30,7 +30,15 @@ interface ManagedModelsState {
   defaults: Record<string, unknown>;
   loading: boolean;
   saving: boolean;
-  error: string | null;
+  /** Raw text of the last `load()` failure; null once a load succeeds.
+   * Empty when the thrown value carried no text — the store never
+   * invents copy, the UI owns the localized fallback. The lists keep
+   * whatever the previous successful load put there (stale-while-
+   * revalidate), so with this set an empty list says nothing about
+   * what is configured. Write failures are not stored: every write
+   * action rethrows, and the caller reports it where the action
+   * happened (Settings → 模型: an error toast). */
+  loadError: string | null;
 }
 
 interface ManagedModelsActions {
@@ -49,7 +57,6 @@ interface ManagedModelsActions {
   saveDefaults: (defaults: Record<string, unknown>) => Promise<void>;
   reorderModels: (modelIds: string[]) => Promise<void>;
   deleteModel: (id: string) => Promise<void>;
-  clearError: () => void;
 }
 
 export type ManagedModelsStore = ManagedModelsState & ManagedModelsActions;
@@ -60,10 +67,10 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
   defaults: {},
   loading: false,
   saving: false,
-  error: null,
+  loadError: null,
 
   load: async () => {
-    set({ loading: true, error: null });
+    set({ loading: true, loadError: null });
     try {
       const [providers, models, defaults] = await Promise.all([
         listManagedModelProviders(),
@@ -73,14 +80,21 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
       set({ providers, models, defaults, loading: false });
       return { providers, models, defaults, loadError: null };
     } catch (e) {
-      const loadError = errorMessage(e);
-      set({ loading: false, error: loadError });
-      return { providers: [], models: [], defaults: {}, loadError };
+      const loadError = managedModelsErrorText(e);
+      set({ loading: false, loadError });
+      // Callers branch on this being truthy (hydrate), so a failure
+      // whose thrown value carried no text must still read as one.
+      return {
+        providers: [],
+        models: [],
+        defaults: {},
+        loadError: loadError || String(e),
+      };
     }
   },
 
   saveProvider: async (input) => {
-    set({ saving: true, error: null });
+    set({ saving: true });
     try {
       const provider = await saveManagedModelProvider(input);
       const [providers, models] = await Promise.all([
@@ -91,13 +105,13 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
       void refreshManagedRuntimeDiagnostics();
       return provider;
     } catch (e) {
-      set({ saving: false, error: errorMessage(e) });
+      set({ saving: false });
       throw e;
     }
   },
 
   deleteProvider: async (id) => {
-    set({ saving: true, error: null });
+    set({ saving: true });
     try {
       await deleteManagedModelProvider(id);
       const [providers, models] = await Promise.all([
@@ -107,20 +121,20 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
       set({ providers, models, saving: false });
       void refreshManagedRuntimeDiagnostics();
     } catch (e) {
-      set({ saving: false, error: errorMessage(e) });
+      set({ saving: false });
       throw e;
     }
   },
 
   saveModel: async (input) => {
-    set({ saving: true, error: null });
+    set({ saving: true });
     try {
       await saveManagedModel(input);
       const models = await listManagedModels();
       set({ models, saving: false });
       void refreshManagedRuntimeDiagnostics();
     } catch (e) {
-      set({ saving: false, error: errorMessage(e) });
+      set({ saving: false });
       throw e;
     }
   },
@@ -129,45 +143,43 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
   // so a successful write has to be followed by a re-list — Core
   // recomputed them all.
   saveDefaults: async (defaults) => {
-    set({ saving: true, error: null });
+    set({ saving: true });
     try {
       const stored = await setManagedModelDefaults(defaults);
       const models = await listManagedModels();
       set({ defaults: stored, models, saving: false });
       void refreshManagedRuntimeDiagnostics();
     } catch (e) {
-      set({ saving: false, error: errorMessage(e) });
+      set({ saving: false });
       throw e;
     }
   },
 
   reorderModels: async (modelIds) => {
-    set({ saving: true, error: null });
+    set({ saving: true });
     try {
       await reorderManagedModels({ modelIds });
       const models = await listManagedModels();
       set({ models, saving: false });
       void refreshManagedRuntimeDiagnostics();
     } catch (e) {
-      set({ saving: false, error: errorMessage(e) });
+      set({ saving: false });
       throw e;
     }
   },
 
   deleteModel: async (id) => {
-    set({ saving: true, error: null });
+    set({ saving: true });
     try {
       await deleteManagedModel(id);
       const models = await listManagedModels();
       set({ models, saving: false });
       void refreshManagedRuntimeDiagnostics();
     } catch (e) {
-      set({ saving: false, error: errorMessage(e) });
+      set({ saving: false });
       throw e;
     }
   },
-
-  clearError: () => set({ error: null }),
 }));
 
 async function refreshManagedRuntimeDiagnostics(): Promise<void> {
@@ -181,15 +193,20 @@ async function refreshManagedRuntimeDiagnostics(): Promise<void> {
   }
 }
 
-function errorMessage(e: unknown): string {
+/** Raw text of a managed-model IPC failure: Core errors arrive as JSON
+ * strings carrying `message`, plain strings pass through, `Error`s give
+ * their message. Empty when the thrown value carries no text — no
+ * fallback copy here (it used to be a hard-coded Chinese 「操作失败」
+ * that English UI showed verbatim); callers localize. */
+export function managedModelsErrorText(e: unknown): string {
   if (typeof e === "string") {
     try {
-      const parsed = JSON.parse(e) as { message?: string };
-      return parsed.message ?? e;
+      const parsed = JSON.parse(e) as { message?: unknown };
+      return typeof parsed.message === "string" ? parsed.message : e;
     } catch {
       return e;
     }
   }
   if (e instanceof Error) return e.message;
-  return "操作失败";
+  return "";
 }

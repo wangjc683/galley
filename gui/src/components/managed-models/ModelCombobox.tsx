@@ -214,7 +214,7 @@ export function ModelCombobox({
             className="max-h-[280px] overflow-auto"
           >
             {visibleOptions.length === 0 && (
-              <div className="px-2.5 py-2 text-[12px] text-ink-muted">
+              <div className="px-2.5 py-2 text-ui-meta text-ink-muted">
                 {copy.noMatchingModels}
               </div>
             )}
@@ -249,7 +249,7 @@ export function ModelCombobox({
                       />
                     )}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">
+                  <span className="min-w-0 flex-1 truncate font-mono text-ui-secondary">
                     {option}
                   </span>
                 </button>
@@ -257,7 +257,7 @@ export function ModelCombobox({
             })}
           </div>
           {filteredOptions.length > visibleOptions.length && (
-            <div className="px-2.5 pb-1 pt-1.5 text-[11px] text-ink-muted">
+            <div className="px-2.5 pb-1 pt-1.5 text-ui-label text-ink-muted">
               {copy.visibleOptionsHint(visibleOptions.length)}
             </div>
           )}

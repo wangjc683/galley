@@ -1,4 +1,11 @@
-import { useState, type ReactNode } from "react";
+import {
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { SettingsDisclosureCard } from "@/components/screens/settings/settings-disclosure";
 import { Button } from "@/components/ui/button";
@@ -22,6 +29,7 @@ import type {
   ManagedModelProtocol,
 } from "@/types/managed-models";
 
+import { EditModelDefaultsContext } from "./edit-model-defaults-context";
 import { InfoTooltip } from "./ModelPrimitives";
 
 /** The five layered keys that render as ordinary fields (reasoning
@@ -81,6 +89,7 @@ export function ModelAdvancedOptionsPanel({
   ) => void;
 }) {
   const copy = useCopy().settings.models;
+  const editDefaults = useContext(EditModelDefaultsContext);
   const isCodexOauth = authKind === "chatgpt_codex_oauth";
   const baseline = modelLayerBaseline(presetOptions, defaults);
   const effective = effectiveAdvancedOptions(
@@ -154,6 +163,7 @@ export function ModelAdvancedOptionsPanel({
         <AdvancedSwitchRow
           label={copy.streamResponse}
           checked={booleanAdvancedOption(effective.stream, true)}
+          inherited={!isOwn("stream")}
           onCheckedChange={(checked) => setOption("stream", checked)}
         />
       )}
@@ -187,6 +197,7 @@ export function ModelAdvancedOptionsPanel({
               effective.fake_cc_system_prompt,
               false,
             )}
+            inherited={!isOwn("fake_cc_system_prompt")}
             onCheckedChange={(checked) =>
               setOption("fake_cc_system_prompt", checked)
             }
@@ -223,6 +234,16 @@ export function ModelAdvancedOptionsPanel({
             text={copy.promoteToDefaultsInfo}
           />
         </span>
+        {editDefaults && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="px-0 text-ink-muted"
+            onClick={editDefaults}
+          >
+            {copy.editDefaults}
+          </Button>
+        )}
       </div>
     </OptionsFold>
   );
@@ -241,12 +262,20 @@ export function ModelAdvancedOptionsPanel({
 export function ModelDefaultsPanel({
   defaults,
   onChange,
+  open: openProp,
+  onOpenChange,
 }: {
   defaults: Record<string, unknown>;
   onChange: (defaults: Record<string, unknown>) => void;
+  /** Controlled open state, so 「编辑默认配置」 in a model editor can
+   * expand it; uncontrolled when omitted. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const copy = useCopy().settings.models;
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = onOpenChange ?? setOpenState;
   const values = { ...FACTORY_MODEL_DEFAULTS, ...defaults };
   const customCount = defaultsCustomCount(defaults);
   const setOption = (key: string, value: string | number | boolean | null) => {
@@ -257,7 +286,7 @@ export function ModelDefaultsPanel({
     <OptionsFold
       open={open}
       onOpenChange={setOpen}
-      title={copy.advancedConfig}
+      title={copy.defaultsCardTitle}
       rightText={
         customCount > 0
           ? copy.advancedConfigSetCount(customCount)
@@ -282,12 +311,7 @@ export function ModelDefaultsPanel({
         onChange={(value) => setOption("reasoning_effort", value || null)}
       />
 
-      <LayeredNumberGrid
-        copy={copy}
-        options={values}
-        commitOnBlur
-        onChange={setOption}
-      />
+      <LayeredNumberGrid copy={copy} options={values} onChange={setOption} />
 
       <AdvancedSwitchRow
         label={copy.streamResponse}
@@ -313,14 +337,12 @@ function LayeredNumberGrid({
   copy,
   options,
   isOwn,
-  commitOnBlur = false,
   onChange,
 }: {
   copy: SettingsModelsCopy;
   options: Record<string, unknown>;
   /** Model layer only: which keys this model overrides itself. */
   isOwn?: (key: string) => boolean;
-  commitOnBlur?: boolean;
   onChange: (key: string, value: number) => void;
 }) {
   const inherited = (key: string) => (isOwn ? !isOwn(key) : false);
@@ -331,7 +353,6 @@ function LayeredNumberGrid({
         value={numberAdvancedOption(options.max_retries, 3)}
         min={0}
         inherited={inherited("max_retries")}
-        commitOnBlur={commitOnBlur}
         onChange={(value) => onChange("max_retries", value)}
       />
       <AdvancedNumberField
@@ -340,7 +361,6 @@ function LayeredNumberGrid({
         min={5}
         suffix={copy.secondsSuffix}
         inherited={inherited("read_timeout")}
-        commitOnBlur={commitOnBlur}
         onChange={(value) => onChange("read_timeout", value)}
       />
       <AdvancedNumberField
@@ -353,7 +373,6 @@ function LayeredNumberGrid({
         suffix={copy.secondsSuffix}
         info={copy.maxRetryAfterInfo}
         inherited={inherited("max_retry_after")}
-        commitOnBlur={commitOnBlur}
         onChange={(value) => onChange("max_retry_after", value)}
       />
       <AdvancedNumberField
@@ -363,7 +382,6 @@ function LayeredNumberGrid({
         suffix={copy.messagesSuffix}
         info={copy.trimKeepPrefixInfo}
         inherited={inherited("trim_keep_prefix")}
-        commitOnBlur={commitOnBlur}
         onChange={(value) => onChange("trim_keep_prefix", value)}
       />
     </div>
@@ -489,7 +507,6 @@ function AdvancedNumberField({
   suffix,
   info,
   inherited = false,
-  commitOnBlur = false,
   onChange,
 }: {
   label: string;
@@ -500,22 +517,55 @@ function AdvancedNumberField({
   /** Model layer: the value comes from a lower layer — one ink step
    * lighter. */
   inherited?: boolean;
-  /** Autosaving surfaces (the defaults panel) must not fire a write
-   * per keystroke: keep the text local until blur / Enter. */
-  commitOnBlur?: boolean;
+  /** Fires only on commit (blur / Enter / a press elsewhere), already
+   * clamped to `min`, and only when the value actually changes. The
+   * defaults panel saves on it; the model layer only updates its
+   * editor draft. */
   onChange: (value: number) => void;
 }) {
   // null = "showing the committed value"; a string = the user is
   // typing. Never synced from props in an effect — there is nothing to
-  // sync, the draft simply wins while it exists.
+  // sync, the draft simply wins while it exists. Both layers keep the
+  // text local: clamping per keystroke turned a read-timeout backspace
+  // to "1" into "5" (min 5), so retyping "60" gave "560", and an
+  // emptied field snapped back before it could be retyped.
   const [draft, setDraft] = useState<string | null>(null);
-  const commit = (raw: string) => {
+  const fieldRef = useRef<HTMLLabelElement>(null);
+  const commit = () => {
+    if (draft === null) return;
     setDraft(null);
-    const next = Number.parseInt(raw, 10);
-    if (Number.isFinite(next) && next !== value) onChange(Math.max(min, next));
+    // Empty or unparsable text just falls back to the current value.
+    const next = Number.parseInt(draft, 10);
+    if (!Number.isFinite(next)) return;
+    const clamped = Math.max(min, next);
+    if (clamped !== value) onChange(clamped);
   };
+  // Galley's Buttons keep focus where it is on mouse press
+  // (`preventMouseFocus`), so pressing 「保存模型」 or 「恢复推荐值」
+  // right after typing never blurs this input — the save would read
+  // the old value and the stale draft would land on a later blur.
+  // While a draft exists, any press outside the field commits it
+  // first, as the blur would have.
+  const commitBeforeOutsidePress = useEffectEvent(commit);
+  const typing = draft !== null;
+  useEffect(() => {
+    if (!typing) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        fieldRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      commitBeforeOutsidePress();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [typing]);
   return (
-    <label className="block">
+    <label ref={fieldRef} className="block">
       <span className="mb-1.5 flex items-center gap-1.5 text-ui-meta font-medium text-ink-soft">
         <span>{label}</span>
         {info && <InfoTooltip label={label} text={info} />}
@@ -524,21 +574,11 @@ function AdvancedNumberField({
         <input
           type="number"
           min={min}
-          value={commitOnBlur ? (draft ?? String(value)) : value}
-          onChange={(event) => {
-            const raw = event.currentTarget.value;
-            if (commitOnBlur) {
-              setDraft(raw);
-              return;
-            }
-            const next = Number.parseInt(raw, 10);
-            if (Number.isFinite(next)) onChange(Math.max(min, next));
-          }}
-          onBlur={(event) => {
-            if (commitOnBlur) commit(event.currentTarget.value);
-          }}
+          value={draft ?? String(value)}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          onBlur={commit}
           onKeyDown={(event) => {
-            if (commitOnBlur && event.key === "Enter") {
+            if (event.key === "Enter") {
               event.preventDefault();
               event.currentTarget.blur();
             }
@@ -615,15 +655,25 @@ function AdvancedSwitchRow({
   checked,
   onCheckedChange,
   info,
+  inherited = false,
 }: {
   label: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   info?: string;
+  /** Model layer: the value comes from a lower layer. A switch has no
+   * value text to lighten, so its label takes the inherited ink —
+   * the same `ink-muted` step as an inherited number or choice. */
+  inherited?: boolean;
 }) {
   return (
     <div className="flex min-h-8 items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-1.5 text-ui-secondary text-ink">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 text-ui-secondary",
+          inherited ? "text-ink-muted" : "text-ink",
+        )}
+      >
         <span>{label}</span>
         {info && <InfoTooltip label={label} text={info} />}
       </div>

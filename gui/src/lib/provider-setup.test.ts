@@ -9,15 +9,19 @@ import {
   canCommitProviderSetup,
   effectiveProviderAuthKind,
   formToProbeInput,
+  isProviderFormDirty,
+  newProviderForm,
   planAutoPick,
   providerConnectionFingerprint,
   providerFormFromPreset,
   providerFormFromRecord,
+  providerFormModelTestInput,
   providerHostFallback,
   providerHostnameFallback,
   providerListFingerprint,
   runCodexComplete,
   runProviderCommit,
+  shouldAutoOpenNewProviderForm,
   type ProviderFormState,
 } from "@/lib/provider-setup";
 
@@ -645,5 +649,183 @@ describe("runCodexComplete", () => {
       ),
     ).rejects.toThrow("expired");
     expect(loadManagedModels).not.toHaveBeenCalled();
+  });
+});
+
+describe("isProviderFormDirty", () => {
+  const record = {
+    id: "prov-1",
+    protocol: "anthropic" as const,
+    authKind: "api_key" as const,
+    apiBase: "https://api.deepseek.com/anthropic",
+    displayName: "DeepSeek",
+  };
+
+  it("treats no form (and the untouched auto-opened one) as clean", () => {
+    expect(isProviderFormDirty(null)).toBe(false);
+    expect(isProviderFormDirty(newProviderForm())).toBe(false);
+  });
+
+  it("create form: picking a card is not an edit, typing into it is", () => {
+    const picked = providerFormFromPreset("deepseek");
+    expect(isProviderFormDirty(picked)).toBe(false);
+    expect(isProviderFormDirty({ ...picked, apiKey: "sk-new" })).toBe(true);
+    expect(isProviderFormDirty({ ...picked, apiKey: "   " })).toBe(false);
+    expect(
+      isProviderFormDirty({ ...picked, apiBase: "https://relay.example" }),
+    ).toBe(true);
+    expect(isProviderFormDirty({ ...picked, model: "deepseek-v4-flash" })).toBe(
+      true,
+    );
+    expect(isProviderFormDirty({ ...picked, displayName: "Mine" })).toBe(true);
+    // Whitespace-only differences don't count.
+    expect(
+      isProviderFormDirty({ ...picked, apiBase: `${picked.apiBase} ` }),
+    ).toBe(false);
+  });
+
+  it("create form on the Custom card: the protocol switch counts", () => {
+    const custom = providerFormFromPreset(CUSTOM_ENDPOINT_PRESET_ID);
+    expect(isProviderFormDirty(custom)).toBe(false);
+    expect(isProviderFormDirty({ ...custom, protocol: "anthropic" })).toBe(
+      true,
+    );
+  });
+
+  it("edit form compares against the record it was opened from", () => {
+    const opened = providerFormFromRecord(record);
+    expect(isProviderFormDirty(opened, record)).toBe(false);
+    // The key field starts blank: any typed key is an edit.
+    expect(
+      isProviderFormDirty({ ...opened, apiKey: "sk-rotated" }, record),
+    ).toBe(true);
+    expect(
+      isProviderFormDirty({ ...opened, displayName: "DeepSeek 2" }, record),
+    ).toBe(true);
+    expect(
+      isProviderFormDirty(
+        { ...opened, apiBase: "https://relay.example/anthropic" },
+        record,
+      ),
+    ).toBe(true);
+  });
+
+  it("edit form whose record is gone has nothing to protect", () => {
+    const opened = providerFormFromRecord(record);
+    expect(isProviderFormDirty({ ...opened, apiKey: "sk-x" })).toBe(false);
+    expect(
+      isProviderFormDirty(
+        { ...opened, apiKey: "sk-x" },
+        { ...record, id: "other" },
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("shouldAutoOpenNewProviderForm", () => {
+  it("opens the create form only for a loaded, readable, empty list", () => {
+    expect(
+      shouldAutoOpenNewProviderForm({
+        loading: false,
+        loadFailed: false,
+        providerCount: 0,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoOpenNewProviderForm({
+        loading: true,
+        loadFailed: false,
+        providerCount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoOpenNewProviderForm({
+        loading: false,
+        loadFailed: false,
+        providerCount: 2,
+      }),
+    ).toBe(false);
+  });
+
+  it("a failed load's empty list does not invite a fresh setup", () => {
+    expect(
+      shouldAutoOpenNewProviderForm({
+        loading: false,
+        loadFailed: true,
+        providerCount: 0,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("providerFormModelTestInput", () => {
+  it("create form: tests its own model with fresh-model options", () => {
+    const create = form({ model: "  claude-sonnet-5  ", apiKey: "sk-a" });
+    const input = providerFormModelTestInput(create, {
+      authKind: "api_key",
+      defaults: { max_retries: 7 },
+    });
+    expect(input).toMatchObject({
+      id: undefined,
+      providerId: undefined,
+      protocol: "anthropic",
+      authKind: "api_key",
+      apiKey: "sk-a",
+      apiBase: "https://api.anthropic.com",
+      model: "claude-sonnet-5",
+    });
+    expect(input?.advancedOptions).toMatchObject({ max_retries: 7 });
+  });
+
+  it("no model to test → null (the caller lists models instead)", () => {
+    expect(
+      providerFormModelTestInput(form({ model: " " }), {
+        authKind: "api_key",
+        defaults: {},
+      }),
+    ).toBeNull();
+    expect(
+      providerFormModelTestInput(form({ protocol: null }), {
+        authKind: "api_key",
+        defaults: {},
+      }),
+    ).toBeNull();
+  });
+
+  it("edit form: tests the named saved model with its stored options, saved key on blank", () => {
+    const edit = form({ id: "prov-3", model: "", apiKey: "" });
+    const stored = { reasoning_effort: "medium", stream: false };
+    const input = providerFormModelTestInput(edit, {
+      authKind: "api_key",
+      defaults: { max_retries: 7 },
+      target: { model: "glm-5.3", advancedOptions: stored },
+    });
+    expect(input).toEqual({
+      id: "prov-3",
+      providerId: "prov-3",
+      protocol: "anthropic",
+      authKind: "api_key",
+      // Blank key → omitted, so Core resolves the saved one by id.
+      apiKey: undefined,
+      apiBase: "https://api.anthropic.com",
+      model: "glm-5.3",
+      advancedOptions: stored,
+    });
+  });
+
+  it("edit form: a typed key is what gets tested", () => {
+    const input = providerFormModelTestInput(
+      form({ id: "prov-3", model: "", apiKey: "sk-rotated" }),
+      {
+        authKind: "api_key",
+        defaults: {},
+        target: { model: "glm-5.3" },
+      },
+    );
+    expect(input?.apiKey).toBe("sk-rotated");
+    // No stored options passed → fresh-model options for the endpoint.
+    expect(input?.advancedOptions).toEqual(
+      formToProbeInput(form())?.advancedOptions,
+    );
   });
 });

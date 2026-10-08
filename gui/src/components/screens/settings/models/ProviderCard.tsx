@@ -42,8 +42,10 @@ import type { ModelDraftState, ProbeAction, ProbeState } from "./types";
  * list toggles both ways (enable, and remove with the same inline
  * confirm as "我的模型"; the default model stays non-removable). Per-model
  * *arrangement* (order / default / edit / test) lives in the "我的模型"
- * list above; this card deliberately does not duplicate it, showing
- * enabled models only as read-only chips.
+ * list above; this card deliberately does not duplicate it. Read-only
+ * 「已添加」 chips appear only for what the list can't show: every added
+ * model while there is no list to show them in, or the ones the list
+ * doesn't contain.
  */
 export function ProviderCard({
   provider,
@@ -102,6 +104,7 @@ export function ProviderCard({
 }) {
   const copy = useCopy().settings.models;
   const keyMissing = provider.credentialStatus === "missing";
+  const isCodex = provider.authKind === "chatgpt_codex_oauth";
   const providerProbeAction: ProbeAction = "model-test";
   const headerProbeState = providerProbeState;
   const providerProbeLoading =
@@ -119,6 +122,24 @@ export function ProviderCard({
     option.toLowerCase().includes(normalizedFilter),
   );
   const visibleOptions = filteredOptions.slice(0, 80);
+  // The 「已添加」 chips cover what the 可添加模型 list can't: with a list,
+  // only the added models it lacks (typed by hand); without one (Codex,
+  // missing key, failed / empty read, not read yet), all of them. While
+  // a first read is in flight the answer isn't known yet, so nothing
+  // shows rather than every chip flashing up and vanishing as the list
+  // lands.
+  const listPending =
+    modelOptions.length === 0 &&
+    modelProbeState.kind === "loading" &&
+    modelProbeState.action === "model-list";
+  const chipModels = listPending
+    ? []
+    : modelOptions.length > 0
+      ? models.filter((item) => !modelOptions.includes(item.model))
+      : models;
+  // Header clicks while this card's editor is open are routed by the
+  // page (close the editor; a dirty one refuses), so `open` still
+  // follows the editor.
   const open = expanded || !!providerEditor;
 
   // Expand-triggered scroll: the card grows downward, and in a small
@@ -163,7 +184,7 @@ export function ProviderCard({
       autoFetchedRef.current ||
       keyMissing ||
       saving ||
-      provider.authKind === "chatgpt_codex_oauth" ||
+      isCodex ||
       modelOptions.length > 0 ||
       modelProbeState.kind === "loading"
     ) {
@@ -177,7 +198,7 @@ export function ProviderCard({
     expanded,
     keyMissing,
     saving,
-    provider.authKind,
+    isCodex,
     modelOptions.length,
     modelProbeState.kind,
   ]);
@@ -263,14 +284,18 @@ export function ProviderCard({
         {providerEditor}
         {expanded && (
           <>
-            {keyMissing && <ErrorLine message={copy.keyNeedsResave} />}
+            {keyMissing && (
+              <ErrorLine
+                message={isCodex ? copy.codexLoginNeeded : copy.keyNeedsResave}
+              />
+            )}
 
-            {models.length > 0 && (
+            {chipModels.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 py-0.5">
                 <span className="text-ui-tertiary text-ink-muted">
                   {copy.enabledFromProvider}
                 </span>
-                {models.map((model) => (
+                {chipModels.map((model) => (
                   <span
                     key={model.id}
                     className="inline-flex max-w-[200px] shrink-0 truncate rounded-sm bg-ink-muted/10 px-1.5 py-px font-mono text-ui-label leading-4 text-ink-muted/85"

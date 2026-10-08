@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { COPY_FEEDBACK_MS, copyTextToClipboard } from "@/lib/clipboard";
-import type { AppCopy } from "@/lib/i18n";
+import { useLanguage, type AppCopy } from "@/lib/i18n";
+import { isChineseLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
 
 type ModelsCopy = AppCopy["settings"]["models"];
@@ -20,6 +21,10 @@ export function CodexDeviceCodeCard({
   className,
 }: CodexDeviceCodeCardProps) {
   const [copied, setCopied] = useState(false);
+  // Uppercase + tracking is a Latin eyebrow treatment only, as in
+  // SettingsSectionLabel (2026-10-07): on 「设备码」 it only spreads the
+  // Han characters apart.
+  const latinEyebrow = !isChineseLanguage(useLanguage());
   const copyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -55,7 +60,12 @@ export function CodexDeviceCodeCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+          <div
+            className={cn(
+              "text-ui-label font-semibold text-ink-muted",
+              latinEyebrow && "uppercase tracking-[0.08em]",
+            )}
+          >
             {copy.chatgptCodexDeviceCode}
           </div>
           <div

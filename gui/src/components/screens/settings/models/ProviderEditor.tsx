@@ -10,7 +10,7 @@ import {
   SignOut,
   X,
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
 import { ManagedModelProviderPicker } from "@/components/managed-models/ManagedModelProviderPicker";
@@ -25,18 +25,29 @@ import {
   modelPlaceholderForManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
+import {
+  managedModelProtocolLabel,
+  providerPresetLabel,
+} from "@/lib/managed-model-preset-copy";
 import type { CodexDeviceLoginStart } from "@/lib/managed-models";
 import { cn } from "@/lib/utils";
 import type { ManagedModelProtocol } from "@/types/managed-models";
 
 import { ExternalLinkIcon, ExternalTextLink } from "../external-link";
 import {
+  EditorBlockedHint,
   InfoLine,
   InlineProbeStatus,
   ProbeErrorLine,
   SettingsInput,
 } from "./ModelPrimitives";
-import type { ProbeAction, ProbeState, ProviderFormState } from "./types";
+import type {
+  EditorBlockedState,
+  ProbeAction,
+  ProbeState,
+  ProviderFormState,
+} from "./types";
+import { editorBlockedFlashClass } from "./use-provider-model-controller";
 
 export function ProviderEditor({
   form,
@@ -51,6 +62,8 @@ export function ProviderEditor({
   onClearKey,
   probeState,
   modelOptions,
+  editTestModel,
+  blocked,
   codexLoginStart,
   codexPolling = false,
   onChange,
@@ -80,6 +93,11 @@ export function ProviderEditor({
   onClearKey?: () => void;
   probeState: ProbeState;
   modelOptions: string[];
+  /** Editing only: the saved model 「测试模型」 probes (the provider's
+   * first added model). Absent = no test button on the edit form. */
+  editTestModel?: string;
+  /** Set when this form just refused to be replaced (unsaved input). */
+  blocked?: EditorBlockedState;
   codexLoginStart?: CodexDeviceLoginStart | null;
   codexPolling?: boolean;
   onChange: (patch: Partial<ProviderFormState>) => void;
@@ -112,14 +130,20 @@ export function ProviderEditor({
   const apiKeyRevealLabel = apiKeyVisible ? copy.hideApiKey : copy.showApiKey;
   const trimmedModel = form.model.trim();
   const secondaryProbeAction: ProbeAction =
-    trimmedModel === "" ? "model-list" : "model-test";
+    isCreatingProvider && trimmedModel === "" ? "model-list" : "model-test";
   const secondaryProbeLabel =
     secondaryProbeAction === "model-list"
       ? copy.fetchModelList
       : copy.testModel;
   const secondaryProbeLoading =
     probeState.kind === "loading" && probeState.action === secondaryProbeAction;
-  const showSecondaryProbe = isCreatingProvider && trimmedModel !== "";
+  // Creating: tests the model being added. Editing: tests the
+  // provider's first saved model against the form's (unsaved) key and
+  // endpoint, so a new key can be checked before it's written; a blank
+  // key falls back to the saved one.
+  const showSecondaryProbe = isCreatingProvider
+    ? trimmedModel !== ""
+    : !!editTestModel;
   const selectedModelOutsideFetchedList =
     isCreatingProvider &&
     modelOptions.length > 0 &&
@@ -131,14 +155,32 @@ export function ProviderEditor({
     probeState.action === "model-list" &&
     (probeState.kind === "error" ||
       (probeState.kind === "success" && modelOptions.length === 0));
+  // Editing keeps the card it was saved under: switching cards would
+  // reset the endpoint while the provider's models keep the old card's
+  // preset layer. Only the Custom card's protocol stays switchable.
+  const editIdentityProtocolLabel = isCodexProvider
+    ? copy.chatgptCodexBadge
+    : isCustomEndpoint || !form.protocol
+      ? null
+      : managedModelProtocolLabel(copy, form.protocol);
+
+  const blockedFlash = blocked?.flash ?? false;
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (blockedFlash) {
+      rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [blockedFlash]);
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         // Same editing-surface grammar as ModelDraftEditor: brand left
         // rail + elevated bg, no shadow. One visual language for "you
         // are editing something inline" across the tab.
         "rounded-sm border border-line-strong/70 border-l-[3px] border-l-brand bg-elevated px-3 py-3",
+        editorBlockedFlashClass(blockedFlash),
         className,
       )}
     >
@@ -153,6 +195,7 @@ export function ProviderEditor({
                 {isNoAuthProvider ? copy.noAuthActive : copy.leaveKeyBlank}
               </div>
             )}
+            {blocked?.hint && <EditorBlockedHint />}
           </div>
           {canCancel && (
             <IconButton
@@ -163,6 +206,12 @@ export function ProviderEditor({
               <X size={12} weight="thin" />
             </IconButton>
           )}
+        </div>
+      )}
+
+      {isCreatingProvider && blocked?.hint && (
+        <div className="-mt-1 mb-3">
+          <EditorBlockedHint />
         </div>
       )}
 
@@ -187,11 +236,18 @@ export function ProviderEditor({
             )}
           </div>
         ) : (
-          <ManagedModelProviderPicker
-            value={form.providerPresetId}
-            protocol={form.protocol}
-            onChange={onSelectProviderPreset}
-          />
+          selectedPreset && (
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="min-w-0 truncate text-ui-secondary font-medium text-ink">
+                {providerPresetLabel(copy, selectedPreset)}
+              </span>
+              {editIdentityProtocolLabel && (
+                <span className="shrink-0 text-ui-tertiary text-ink-muted">
+                  {editIdentityProtocolLabel}
+                </span>
+              )}
+            </div>
+          )
         )}
 
         {providerSelected && selectedPreset && form.protocol && isCodexProvider && (
@@ -388,9 +444,15 @@ export function ProviderEditor({
                 ) : null
               }
             />
-            {isCreatingProvider && form.apiKey.trim() === "" && (
-              <InfoLine message={copy.noAuthKeyHint} />
-            )}
+            {/* Keyless endpoints live behind the Custom card (no shipped
+                preset is one), so only it carries the "may stay blank"
+                note; on a cloud card it just sat there until a key was
+                pasted. */}
+            {isCreatingProvider &&
+              isCustomEndpoint &&
+              form.apiKey.trim() === "" && (
+                <InfoLine message={copy.noAuthKeyHint} />
+              )}
             {!isCustomEndpoint && (
               <SettingsInput
                 label={copy.apiUrl}
@@ -497,7 +559,8 @@ export function ProviderEditor({
                     <span className="spin">
                       <CircleNotch size={12} weight="thin" />
                     </span>
-                  ) : (
+                  ) : form.id ? undefined : (
+                    // 「+」 only when the save adds a model.
                     <Plus size={12} weight="bold" />
                   )
                 }

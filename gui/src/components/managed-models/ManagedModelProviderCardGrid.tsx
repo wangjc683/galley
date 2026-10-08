@@ -58,7 +58,7 @@ export function ManagedModelProviderCardGrid({
             <span className="flex items-center justify-between gap-2">
               <span
                 className={cn(
-                  "min-w-0 truncate text-[13px] font-medium",
+                  "min-w-0 truncate text-ui-compact font-medium",
                   selected ? "text-ink" : "text-ink-soft",
                 )}
               >
@@ -73,7 +73,7 @@ export function ManagedModelProviderCardGrid({
               )}
             </span>
             {description && (
-              <span className="mt-0.5 block truncate text-[11.5px] leading-4 text-ink-muted">
+              <span className="mt-0.5 block truncate text-ui-tertiary leading-4 text-ink-muted">
                 {description}
               </span>
             )}

@@ -1,5 +1,5 @@
 import { CircleNotch, PlugsConnected, Plus, X } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 
 import { Button, IconButton } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
@@ -12,11 +12,17 @@ import type {
 
 import { ModelAdvancedOptionsPanel } from "./AdvancedModelOptions";
 import {
+  EditorBlockedHint,
   InlineProbeStatus,
   ProbeErrorLine,
   SettingsInput,
 } from "./ModelPrimitives";
 import type { ModelDraftState, ProbeState } from "./types";
+import { useModelConfigErrorToast } from "./use-model-config-toast";
+import {
+  editorBlockedFlashClass,
+  ModelDraftBlockedContext,
+} from "./use-provider-model-controller";
 
 export function ModelDraftEditor({
   draft,
@@ -49,7 +55,19 @@ export function ModelDraftEditor({
   const copy = appCopy.settings.models;
   const defaults = useManagedModelsStore((s) => s.defaults);
   const saveDefaults = useManagedModelsStore((s) => s.saveDefaults);
+  const reportActionError = useModelConfigErrorToast();
+  const blocked = useContext(ModelDraftBlockedContext);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // A blocked manual-add draft has no 我的模型 row to scroll back to
+  // (an existing model's draft does — Settings scrolls that row), so it
+  // brings itself into view.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const isNewDraft = !draft.id;
+  useEffect(() => {
+    if (blocked.flash && isNewDraft) {
+      rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [blocked.flash, isNewDraft]);
   const canTest =
     !keyMissing &&
     draft.model.trim() !== "" &&
@@ -58,14 +76,16 @@ export function ModelDraftEditor({
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         "space-y-3 rounded-sm border border-line-strong/70 border-l-brand",
         "border-l-[3px] bg-elevated px-3 py-3",
+        editorBlockedFlashClass(blocked.flash),
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-ui-secondary font-medium text-ink">
+          <div className="text-ui-compact font-medium text-ink">
             {draft.id ? copy.editModel : copy.manualAddModel}
           </div>
           {title && (
@@ -78,6 +98,7 @@ export function ModelDraftEditor({
               {copy.autoDefaultHint}
             </div>
           )}
+          {blocked.hint && <EditorBlockedHint />}
         </div>
         <IconButton
           ariaLabel={copy.closeModelEditor}
@@ -114,7 +135,9 @@ export function ModelDraftEditor({
         // the move (the promoted keys leaving its overrides) is just a
         // draft patch and still rides the editor's Save button.
         onPromoteToDefaults={(nextDefaults, nextOverrides) => {
-          void saveDefaults(nextDefaults).catch(() => undefined);
+          void saveDefaults(nextDefaults).catch((e: unknown) =>
+            reportActionError(e, "set_managed_model_defaults"),
+          );
           onChange({ advancedOverrides: nextOverrides });
         }}
       />
@@ -148,7 +171,9 @@ export function ModelDraftEditor({
               <span className="spin">
                 <CircleNotch size={12} weight="thin" />
               </span>
-            ) : (
+            ) : draft.id ? undefined : (
+              // 「+」 only when this adds a model; saving an edit adds
+              // nothing.
               <Plus size={12} weight="bold" />
             )
           }

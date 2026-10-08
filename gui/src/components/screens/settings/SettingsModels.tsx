@@ -1,4 +1,4 @@
-import { Info, Plus } from "@phosphor-icons/react";
+import { Info, Plus, WarningCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -20,15 +20,23 @@ import {
   type ProviderDeleteCandidate,
 } from "./models/DeleteProviderConfirmDialog";
 import { ModelDefaultsPanel } from "./models/AdvancedModelOptions";
-import { EmptyRow, ErrorLine, LoadingRow } from "./models/ModelPrimitives";
+import { EditModelDefaultsContext } from "./models/edit-model-defaults-context";
+import { EmptyRow, LoadingRow } from "./models/ModelPrimitives";
 import { ConfiguredModelsPanel } from "./models/ConfiguredModelsPanel";
 import { ProviderEditor } from "./models/ProviderEditor";
 import { ProviderCard } from "./models/ProviderCard";
-import { useModelConfigSavedToast } from "./models/use-model-config-toast";
+import {
+  useModelConfigErrorToast,
+  useModelConfigSavedToast,
+} from "./models/use-model-config-toast";
 import { useModelOrderingController } from "./models/use-model-ordering-controller";
 import { useProviderConnectionController } from "./models/use-provider-connection-controller";
 import { useProviderExpansion } from "./models/use-provider-expansion";
-import { useProviderModelController } from "./models/use-provider-model-controller";
+import {
+  ModelDraftBlockedContext,
+  useEditorBlockedSignal,
+  useProviderModelController,
+} from "./models/use-provider-model-controller";
 
 export function SettingsModels({
   activeRuntimeKind = "managed",
@@ -42,27 +50,75 @@ export function SettingsModels({
   const defaults = useManagedModelsStore((s) => s.defaults);
   const loading = useManagedModelsStore((s) => s.loading);
   const saving = useManagedModelsStore((s) => s.saving);
-  const error = useManagedModelsStore((s) => s.error);
+  const loadError = useManagedModelsStore((s) => s.loadError);
   const load = useManagedModelsStore((s) => s.load);
-  const saveProvider = useManagedModelsStore((s) => s.saveProvider);
-  const deleteProvider = useManagedModelsStore((s) => s.deleteProvider);
-  const saveModel = useManagedModelsStore((s) => s.saveModel);
-  const saveDefaults = useManagedModelsStore((s) => s.saveDefaults);
-  const reorderModels = useManagedModelsStore((s) => s.reorderModels);
-  const deleteModel = useManagedModelsStore((s) => s.deleteModel);
+  const storeSaveProvider = useManagedModelsStore((s) => s.saveProvider);
+  const storeDeleteProvider = useManagedModelsStore((s) => s.deleteProvider);
+  const storeSaveModel = useManagedModelsStore((s) => s.saveModel);
+  const storeSaveDefaults = useManagedModelsStore((s) => s.saveDefaults);
+  const storeReorderModels = useManagedModelsStore((s) => s.reorderModels);
+  const storeDeleteModel = useManagedModelsStore((s) => s.deleteModel);
+  const reportError = useModelConfigErrorToast();
+  // Every write on this page reports a failure as an error toast (the
+  // store keeps no write-error state and rethrows). The controllers get
+  // these wrapped actions, so ordering, model and provider flows all
+  // report the same way while keeping their own catch-and-stay
+  // behavior (a failed editor save leaves the editor open, draft
+  // intact).
+  const saveProvider = reportingFailures(storeSaveProvider, (e) =>
+    reportError(e, "save_managed_model_provider"),
+  );
+  const deleteProvider = reportingFailures(storeDeleteProvider, (e) =>
+    reportError(e, "delete_managed_model_provider"),
+  );
+  const saveModel = reportingFailures(storeSaveModel, (e) =>
+    reportError(e, "save_managed_model"),
+  );
+  const saveDefaults = reportingFailures(storeSaveDefaults, (e) =>
+    reportError(e, "set_managed_model_defaults"),
+  );
+  const reorderModels = reportingFailures(storeReorderModels, (e) =>
+    reportError(e, "reorder_managed_models"),
+  );
+  const deleteModel = reportingFailures(storeDeleteModel, (e) =>
+    reportError(e, "delete_managed_model"),
+  );
   const modelRowRefs = useRef<Record<string, HTMLButtonElement>>({});
   const [pendingFocusModelId, setPendingFocusModelId] = useState<string | null>(
     null,
   );
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
+  const defaultsSectionRef = useRef<HTMLDivElement>(null);
+  const editDefaults = useCallback(() => {
+    setDefaultsOpen(true);
+    window.requestAnimationFrame(() => {
+      defaultsSectionRef.current?.scrollIntoView({
+        block: "start",
+        behavior: "smooth",
+      });
+    });
+  }, []);
   const [providerDeleteCandidate, setProviderDeleteCandidate] = useState<
     (ProviderDeleteCandidate & { id: string }) | null
   >(null);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // Re-read on every tab entry (and on 「重试」). A failure over data
+  // already on screen keeps that data and says so in a toast; with
+  // nothing on screen the 服务商 section shows the failure inline.
+  const reloadModels = useCallback(async () => {
+    const result = await load();
+    if (result.loadError === null) return;
+    const state = useManagedModelsStore.getState();
+    if (state.providers.length > 0 || state.models.length > 0) {
+      reportError(state.loadError, "list_managed_models", "load");
+    }
+  }, [load, reportError]);
 
-  const showModelConfigSavedToast = useModelConfigSavedToast();
+  useEffect(() => {
+    void reloadModels();
+  }, [reloadModels]);
+
+  const showModelConfigSavedToast = useModelConfigSavedToast(activeRuntimeKind);
   const { expandProvider, isProviderExpanded, toggleProvider } =
     useProviderExpansion();
   const {
@@ -111,8 +167,14 @@ export function SettingsModels({
     showModelConfigSavedToast,
   });
   const providerConnectionController = useProviderConnectionController();
+  // The provider form's counterpart of the model draft's blocked state
+  // (that one lives in useProviderModelController): set when 「添加」,
+  // 「⋯ → 编辑」 or the card header was refused because the open form
+  // holds unsaved input.
+  const providerEditorBlocked = useEditorBlockedSignal();
   const providerFormController = useProviderSetupController({
     loading,
+    loadFailed: loadError !== null,
     providers,
     models: orderedModels,
     defaults,
@@ -127,6 +189,7 @@ export function SettingsModels({
     // clear both probe maps for the saved provider, expand its card,
     // and confirm with the saved toast.
     onSaved: ({ providerId, isNewProvider }) => {
+      providerEditorBlocked.clear();
       providerConnectionController.clearProviderProbeState(providerId);
       providerModelController.clearModelProbeState(providerId);
       expandProvider(providerId);
@@ -137,6 +200,7 @@ export function SettingsModels({
       );
     },
     onCodexComplete: (providerId) => {
+      providerEditorBlocked.clear();
       expandProvider(providerId);
       showModelConfigSavedToast(modelCopy.providerCreatedToastMessage);
     },
@@ -189,6 +253,7 @@ export function SettingsModels({
     handleProviderFormFetchModels,
     handleProviderFormTest,
     handleProviderSave,
+    providerFormDirty,
     providerFormIsInlineEdit,
     providerFormModelOptions,
     providerFormProbeState,
@@ -211,23 +276,135 @@ export function SettingsModels({
   };
 
   const handleDeleteModel = (model: ManagedModelRecord) => {
-    void deleteModel(model.id).catch(() => undefined);
+    void deleteModel(model.id).then(
+      () => {
+        // A draft left on a removed model has no row to show it, yet
+        // would still block every other editor as "unsaved".
+        if (providerModelController.modelDraft?.id === model.id) {
+          providerModelController.resetModelDraft();
+        }
+      },
+      () => undefined,
+    );
   };
+
+  // ---- Provider form: the page-level guards (D2, plan A) ----------
+  // 「添加」, another card's 「⋯ → 编辑」 and this card's header would each
+  // replace the open form; with unsaved input they refuse instead and
+  // flag it (highlight + 「先保存或关闭当前编辑」). Switching cards inside
+  // the create form is the user's own choice and is not guarded.
+  const closeProviderEditor = () => {
+    providerEditorBlocked.clear();
+    resetProviderForm();
+  };
+
+  const providerFormReplaceable = () => {
+    if (!providerFormDirty) return true;
+    providerEditorBlocked.signal();
+    return false;
+  };
+
+  const handleAddProvider = () => {
+    if (!providerFormReplaceable()) return;
+    providerEditorBlocked.clear();
+    startNewProvider();
+  };
+
+  const handleEditProvider = (provider: ManagedModelProviderRecord) => {
+    // Already editing this one: keep what's typed.
+    if (visibleProviderForm?.id === provider.id) {
+      expandProvider(provider.id);
+      return;
+    }
+    if (!providerFormReplaceable()) return;
+    providerEditorBlocked.clear();
+    startEditProvider(provider);
+  };
+
+  // While a card's editor is open the card can't fold under it, so its
+  // header closes the editor (a dirty one refuses) and folds the card.
+  const handleToggleProviderCard = (provider: ManagedModelProviderRecord) => {
+    if (visibleProviderForm?.id !== provider.id) {
+      toggleProvider(provider.id);
+      return;
+    }
+    if (!providerFormReplaceable()) return;
+    closeProviderEditor();
+    if (isProviderExpanded(provider.id)) toggleProvider(provider.id);
+  };
+
+  const changeProviderForm = (
+    patch: Parameters<typeof updateProviderForm>[0],
+  ) => {
+    providerEditorBlocked.clear();
+    updateProviderForm(patch);
+  };
+
+  const changeProviderPreset = (
+    providerPresetId: Parameters<typeof selectProviderPreset>[0],
+  ) => {
+    providerEditorBlocked.clear();
+    selectProviderPreset(providerPresetId);
+  };
+
+  // The edit form's 「测试模型」 probes the provider's first added model
+  // (the same one the card header's check uses), with that model's
+  // stored options.
+  const editTestModel = visibleProviderForm?.id
+    ? modelsByProvider[visibleProviderForm.id]?.[0]
+    : undefined;
 
   const focusProtectedDraft = (modelId?: string) => {
     if (modelId) {
       setPendingFocusModelId(modelId);
+      return;
     }
+    // A manual-add draft lives inside its provider's card, which may
+    // have been folded since: reopen it so the flagged editor is seen
+    // (the editor scrolls itself into view).
+    const draft = providerModelController.modelDraft;
+    if (draft && !draft.id) expandProvider(draft.providerId);
   };
 
   const confirmDeleteProvider = () => {
     const candidate = providerDeleteCandidate;
     if (!candidate) return;
     setProviderDeleteCandidate(null);
-    void deleteProvider(candidate.id).catch(() => undefined);
+    void deleteProvider(candidate.id).then(
+      () => {
+        // Editors left on the deleted provider have nothing to save to;
+        // an orphaned provider form would also, with no providers left,
+        // stand in for the create form that should open by itself.
+        if (visibleProviderForm?.id === candidate.id) closeProviderEditor();
+        if (providerModelController.modelDraft?.providerId === candidate.id) {
+          providerModelController.resetModelDraft();
+        }
+      },
+      () => undefined,
+    );
   };
 
-  return (
+  const providerListEmpty = providers.length === 0;
+  // A failed load with nothing to show: the section is only the failure
+  // and a retry — no 「还没有模型服务商。」, no create form (it would read
+  // as "nothing configured" when the list simply couldn't be read).
+  const loadFailedWithoutData =
+    loadError !== null && !loading && providerListEmpty;
+  // Zero providers: the create form opens by itself and can't be closed,
+  // so it IS the empty state — no empty row under it, and no 「添加」,
+  // which would only clear what was typed.
+  const autoNewProviderForm =
+    providerListEmpty && !!visibleProviderForm && !visibleProviderForm.id;
+  const showAddProvider =
+    !providerListEmpty ||
+    (!loading && !loadFailedWithoutData && !autoNewProviderForm);
+  const showNoProviders =
+    providerListEmpty &&
+    !loading &&
+    !loadFailedWithoutData &&
+    !autoNewProviderForm;
+
+  const page = (
     <div className="space-y-7">
       <SettingsPanelHeader
         title={copy.settings.tabs.models.title}
@@ -284,18 +461,21 @@ export function SettingsModels({
               {modelCopy.providersLabel}
             </SettingsSectionLabel>
           </div>
-          <Button
-            // primary = the current actionable next step: with zero
-            // providers, adding one IS the next step; once configured,
-            // adding another is routine maintenance.
-            variant={providers.length === 0 ? "primary" : "secondary"}
-            size="sm"
-            aria-label={modelCopy.addProviderAria}
-            onClick={startNewProvider}
-            leadingIcon={<Plus size={12} weight="bold" />}
-          >
-            {modelCopy.addProvider}
-          </Button>
+          {showAddProvider && (
+            <Button
+              // primary = the current actionable next step: with zero
+              // providers, adding one IS the next step; once configured,
+              // adding another is routine maintenance. (The usual zero-
+              // provider page hides it: its create form is already open.)
+              variant={providerListEmpty ? "primary" : "secondary"}
+              size="sm"
+              aria-label={modelCopy.addProviderAria}
+              onClick={handleAddProvider}
+              leadingIcon={<Plus size={12} weight="bold" />}
+            >
+              {modelCopy.addProvider}
+            </Button>
+          )}
         </div>
         <div className="mt-3 space-y-2">
           {visibleProviderForm && !providerFormIsInlineEdit && (
@@ -312,10 +492,11 @@ export function SettingsModels({
               onClearKey={handleProviderClearKey}
               probeState={providerFormProbeState}
               modelOptions={providerFormModelOptions}
+              blocked={providerEditorBlocked.state}
               codexLoginStart={codexLoginStart}
               codexPolling={codexPolling}
-              onChange={updateProviderForm}
-              onSelectProviderPreset={selectProviderPreset}
+              onChange={changeProviderForm}
+              onSelectProviderPreset={changeProviderPreset}
               onTest={() => void handleProviderFormTest()}
               onFetchModels={() => void handleProviderFormFetchModels()}
               onCodexLogin={() => void handleCodexLogin()}
@@ -324,11 +505,16 @@ export function SettingsModels({
               onCodexImport={() => void handleCodexImport()}
               onCodexLogout={() => void handleCodexLogout()}
               onSave={() => void handleProviderSave()}
-              onCancel={resetProviderForm}
+              onCancel={closeProviderEditor}
             />
           )}
 
-          {error && <ErrorLine message={error} />}
+          {loadFailedWithoutData && (
+            <LoadFailedRow
+              detail={loadError}
+              onRetry={() => void reloadModels()}
+            />
+          )}
 
           {/* Stale-while-revalidate: `load()` re-runs on every tab
               entry, but the store keeps the previous providers, so
@@ -341,7 +527,7 @@ export function SettingsModels({
               <LoadingRow />
             </div>
           )}
-          {!loading && providers.length === 0 && (
+          {showNoProviders && (
             <div className="rounded-sm border border-line bg-surface">
               <EmptyRow text={modelCopy.noProviders} />
             </div>
@@ -389,11 +575,20 @@ export function SettingsModels({
                       onClearKey={handleProviderClearKey}
                       probeState={providerFormProbeState}
                       modelOptions={providerFormModelOptions}
+                      editTestModel={editTestModel?.model}
+                      blocked={providerEditorBlocked.state}
                       codexLoginStart={codexLoginStart}
                       codexPolling={codexPolling}
-                      onChange={updateProviderForm}
-                      onSelectProviderPreset={selectProviderPreset}
-                      onTest={() => void handleProviderFormTest()}
+                      onChange={changeProviderForm}
+                      onSelectProviderPreset={changeProviderPreset}
+                      onTest={() =>
+                        void handleProviderFormTest(
+                          editTestModel && {
+                            model: editTestModel.model,
+                            advancedOptions: editTestModel.advancedOptions,
+                          },
+                        )
+                      }
                       onFetchModels={() => void handleProviderFormFetchModels()}
                       onCodexLogin={() => void handleCodexLogin()}
                       onCodexOpenLoginPage={() =>
@@ -405,12 +600,12 @@ export function SettingsModels({
                       onCodexImport={() => void handleCodexImport()}
                       onCodexLogout={() => void handleCodexLogout()}
                       onSave={() => void handleProviderSave()}
-                      onCancel={resetProviderForm}
+                      onCancel={closeProviderEditor}
                     />
                   ) : null
                 }
-                onToggle={() => toggleProvider(provider.id)}
-                onEditProvider={() => startEditProvider(provider)}
+                onToggle={() => handleToggleProviderCard(provider)}
+                onEditProvider={() => handleEditProvider(provider)}
                 onDeleteProvider={() => handleDeleteProvider(provider)}
                 onTestProvider={() =>
                   void providerConnectionController.handleProviderTest(
@@ -433,12 +628,11 @@ export function SettingsModels({
                   )
                 }
                 onStartModelDraft={() => {
-                  const draft = providerModelController.modelDraft;
-                  if (draft && providerModelController.isModelDraftDirty()) {
-                    focusProtectedDraft(draft.id);
-                    return;
+                  const result =
+                    providerModelController.startModelDraft(provider);
+                  if (result.kind === "blocked-dirty") {
+                    focusProtectedDraft(result.modelId);
                   }
-                  providerModelController.startModelDraft(provider);
                 }}
                 onChangeModelDraft={(patch) =>
                   providerModelController.changeModelDraft(provider.id, patch)
@@ -465,7 +659,7 @@ export function SettingsModels({
         </div>
       </div>
 
-      <div>
+      <div ref={defaultsSectionRef} className="scroll-mt-4">
         <SettingsSectionLabel>
           {modelCopy.defaultsSectionTitle}
         </SettingsSectionLabel>
@@ -475,6 +669,8 @@ export function SettingsModels({
         <div className="mt-2">
           <ModelDefaultsPanel
             defaults={defaults}
+            open={defaultsOpen}
+            onOpenChange={setDefaultsOpen}
             onChange={(next) => void saveDefaults(next).catch(() => undefined)}
           />
         </div>
@@ -512,6 +708,65 @@ export function SettingsModels({
         confirmVariant="warning"
         onConfirm={() => void confirmClearProviderKey()}
       />
+    </div>
+  );
+  return (
+    <EditModelDefaultsContext.Provider value={editDefaults}>
+      <ModelDraftBlockedContext.Provider
+        value={providerModelController.modelDraftBlocked}
+      >
+        {page}
+      </ModelDraftBlockedContext.Provider>
+    </EditModelDefaultsContext.Provider>
+  );
+}
+
+/** Wrap a store write so its failure is reported before it propagates
+ * (callers keep their own catch). */
+function reportingFailures<Args extends unknown[], Result>(
+  action: (...args: Args) => Promise<Result>,
+  report: (error: unknown) => void,
+): (...args: Args) => Promise<Result> {
+  return async (...args) => {
+    try {
+      return await action(...args);
+    } catch (e) {
+      report(e);
+      throw e;
+    }
+  };
+}
+
+/** 服务商 section when the config couldn't be read and nothing is on
+ * screen: the failure, its raw detail, and a way to try again. */
+function LoadFailedRow({
+  detail,
+  onRetry,
+}: {
+  detail: string | null;
+  onRetry: () => void;
+}) {
+  const copy = useCopy().settings.models;
+  return (
+    <div className="flex items-start gap-2.5 rounded-sm border border-error/20 bg-error/[var(--opacity-subtle)] px-3 py-2.5">
+      <WarningCircle
+        size={13}
+        weight="fill"
+        className="mt-0.5 shrink-0 text-error"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-ui-secondary font-medium text-error">
+          {copy.loadFailed}
+        </div>
+        {detail && (
+          <div className="mt-0.5 select-text break-words text-ui-meta text-ink-soft">
+            {detail}
+          </div>
+        )}
+      </div>
+      <Button variant="secondary" size="sm" onClick={onRetry}>
+        {copy.retryLoad}
+      </Button>
     </div>
   );
 }
