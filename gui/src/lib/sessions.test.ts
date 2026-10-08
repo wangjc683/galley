@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   backfillRecentSessions,
   deriveSessionStatus,
-  findSessionBucket,
   groupSessions,
   RECENT_BACKFILL_COUNT,
   toDurableStatus,
@@ -128,45 +127,5 @@ describe("backfillRecentSessions", () => {
   it("does nothing when there are no sessions at all", () => {
     const grouped = groupSessions([], NOW);
     expect(backfillRecentSessions(grouped)).toBe(grouped);
-  });
-});
-
-describe("findSessionBucket", () => {
-  const NOW = new Date("2026-07-17T12:00:00");
-
-  const session = (id: string, daysAgo: number): Session =>
-    ({
-      id,
-      title: id,
-      status: "idle",
-      errorCount: 0,
-      pinned: false,
-      lastActivityAt: new Date(
-        NOW.getTime() - daysAgo * 24 * 3600 * 1000,
-      ).toISOString(),
-    }) as Session;
-
-  it("names the bucket that lists the session", () => {
-    const buckets = groupSessions(
-      [session("now", 0), session("mid", 20), session("old", 40)],
-      NOW,
-    );
-    expect(findSessionBucket(buckets, "now")).toBe("today");
-    expect(findSessionBucket(buckets, "mid")).toBe("month");
-    // Sidebar's reveal effect watches this answer: `earlier` → `today`
-    // is the borrowed row jumping to the top once the session is used.
-    expect(findSessionBucket(buckets, "old")).toBe("earlier");
-  });
-
-  it("follows backfill promotions out of earlier", () => {
-    const buckets = backfillRecentSessions(
-      groupSessions([session("a", 40), session("b", 60)], NOW),
-    );
-    expect(findSessionBucket(buckets, "a")).toBe("recent");
-  });
-
-  it("returns undefined for a session the grouping does not list", () => {
-    const buckets = groupSessions([session("a", 0)], NOW);
-    expect(findSessionBucket(buckets, "missing")).toBeUndefined();
   });
 });

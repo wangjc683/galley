@@ -824,10 +824,10 @@ function App() {
         onOpenChange={setCreateProjectOpen}
         onCreate={async (input) => {
           // Create + immediately open the new project's group in the
-          // sidebar timeline (an empty project sits under 今天 by its
-          // createdAt). Creation is organization, not conversation
-          // creation; the group row's + is the explicit "start a
-          // project conversation" action.
+          // sidebar's 项目 section (a new empty project is listed there
+          // while its createdAt is in the window). Creation is
+          // organization, not conversation creation; the group row's +
+          // is the explicit "start a project conversation" action.
           const created = await createProject(input);
           openProjectInSidebar(created.id);
         }}

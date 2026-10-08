@@ -1,14 +1,15 @@
 import { CaretRight } from "@phosphor-icons/react";
-import { Fragment } from "react";
 
+import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import { useCopy } from "@/lib/i18n";
 import {
-  SIDEBAR_INLINE_BUCKETS,
-  type SidebarInlineBucket,
-  type SidebarTimeline,
-  type SidebarTimelineItem,
+  SIDEBAR_TIME_BUCKETS,
+  type SidebarProjectGroupItem,
+  type SidebarSections,
+  type SidebarTimeBucket,
 } from "@/lib/sidebar-timeline";
 import { cn } from "@/lib/utils";
+import type { Session } from "@/types/session";
 
 import { SidebarProjectGroup } from "./SidebarProjectGroup";
 import {
@@ -16,7 +17,7 @@ import {
   type SidebarTimelineRowWiring,
 } from "./SidebarTimelineRow";
 
-/** Project-level wiring for the timeline's project groups. */
+/** Project-level wiring for the sidebar's project groups. */
 export type SidebarProjectGroupWiring = {
   /** Project ids whose drawers are open (this run only, D9). */
   expandedProjectIds: Set<string>;
@@ -28,85 +29,15 @@ export type SidebarProjectGroupWiring = {
   onArchiveSessions?: (ids: string[]) => void;
 };
 
-export function SidebarTimelineBuckets({
-  timeline,
-  onOpenEarlier,
+/** A project group with the sidebar's wiring bound to its project. */
+function WiredProjectGroup({
+  item,
   groupWiring,
   ...rowWiring
 }: {
-  timeline: SidebarTimeline;
-  onOpenEarlier?: () => void;
+  item: SidebarProjectGroupItem;
   groupWiring: SidebarProjectGroupWiring;
 } & SidebarTimelineRowWiring) {
-  const { activeId } = rowWiring;
-  // `earlier` collapses to a single entry row instead of inline-listing
-  // every old session — the sidebar is the "current work" surface, not
-  // an archive. Browsing the full list happens in EarlierDialog.
-  //
-  // …except the session you're in. Opened from search / ⌘K /
-  // EarlierDialog, an old session would otherwise have no row anywhere
-  // in the sidebar — no "you are here". It borrows one slot directly
-  // under the entry for as long as it's active; the entry's count still
-  // includes it, because it still belongs to 更早 (activation doesn't
-  // bump lastActivityAt). Switching away drops the row, no animation: it
-  // was only ever a position marker. An old session a project group
-  // lists (its 更早 tail) is shown by that group instead. Keyed by id so
-  // hopping between two old sessions remounts the row rather than
-  // carrying one row's local state to the next.
-  const borrowed =
-    activeId && !timeline.groupedSessionIds.has(activeId)
-      ? timeline.earlier.find((s) => s.id === activeId)
-      : undefined;
-  return (
-    <>
-      {SIDEBAR_INLINE_BUCKETS.map((bucket) =>
-        timeline.items[bucket].length === 0 ? null : (
-          <SidebarBucket
-            key={bucket}
-            bucket={bucket}
-            items={timeline.items[bucket]}
-            groupWiring={groupWiring}
-            {...rowWiring}
-          />
-        ),
-      )}
-      {timeline.earlier.length > 0 && (
-        <Fragment key="earlier">
-          <SidebarEarlierEntry
-            count={timeline.earlier.length}
-            onClick={onOpenEarlier}
-          />
-          {borrowed && (
-            <SidebarTimelineRow
-              key={borrowed.id}
-              session={borrowed}
-              {...rowWiring}
-            />
-          )}
-        </Fragment>
-      )}
-    </>
-  );
-}
-
-function SidebarBucket({
-  bucket,
-  items,
-  groupWiring,
-  ...rowWiring
-}: {
-  bucket: SidebarInlineBucket;
-  items: SidebarTimelineItem[];
-  groupWiring: SidebarProjectGroupWiring;
-} & SidebarTimelineRowWiring) {
-  const copy = useCopy();
-  const bucketLabel: Record<SidebarInlineBucket, string> = {
-    pinned: copy.sidebar.bucketPinned,
-    today: copy.sidebar.bucketToday,
-    week: copy.sidebar.bucketWeek,
-    month: copy.sidebar.bucketMonth,
-    recent: copy.sidebar.bucketRecent,
-  };
   const {
     expandedProjectIds,
     onToggleProjectExpanded,
@@ -116,51 +47,265 @@ function SidebarBucket({
     onDeleteProject,
     onArchiveSessions,
   } = groupWiring;
-  // The count is the rows under the label — a project group is one.
+  const id = item.project.id;
+  return (
+    <SidebarProjectGroup
+      project={item.project}
+      sessions={item.sessions}
+      olderSessions={item.olderSessions}
+      expanded={expandedProjectIds.has(id)}
+      onToggleExpanded={
+        onToggleProjectExpanded ? () => onToggleProjectExpanded(id) : undefined
+      }
+      onStartConversation={
+        onStartProjectConversation
+          ? () => onStartProjectConversation(id)
+          : undefined
+      }
+      onTogglePin={
+        onTogglePinProject ? () => onTogglePinProject(id) : undefined
+      }
+      onEdit={onEditProject ? () => onEditProject(id) : undefined}
+      onDelete={onDeleteProject ? () => onDeleteProject(id) : undefined}
+      onArchiveAll={onArchiveSessions}
+      {...rowWiring}
+    />
+  );
+}
+
+/**
+ * The 更早 entry. `earlier` collapses to a single entry row instead of
+ * inline-listing every old session — the sidebar is the "current work"
+ * surface, not an archive. Browsing the full list happens in
+ * EarlierDialog.
+ *
+ * …except the session you're in. Opened from search / ⌘K /
+ * EarlierDialog, an old session would otherwise have no row anywhere in
+ * the sidebar — no "you are here". It borrows one slot directly under
+ * the entry for as long as it's active; the entry's count still includes
+ * it, because it still belongs to 更早 (activation doesn't bump
+ * lastActivityAt). Switching away drops the row, no animation: it was
+ * only ever a position marker. An old session a project group lists (its
+ * 更早 tail) is shown by that group instead. Keyed by id so hopping
+ * between two old sessions remounts the row rather than carrying one
+ * row's local state to the next.
+ */
+function SidebarEarlier({
+  earlier,
+  groupedSessionIds,
+  onOpenEarlier,
+  ...rowWiring
+}: {
+  earlier: Session[];
+  groupedSessionIds: Set<string>;
+  onOpenEarlier?: () => void;
+} & SidebarTimelineRowWiring) {
+  const { activeId } = rowWiring;
+  if (earlier.length === 0) return null;
+  const borrowed =
+    activeId && !groupedSessionIds.has(activeId)
+      ? earlier.find((s) => s.id === activeId)
+      : undefined;
   return (
     <>
-      <SidebarSectionLabel count={items.length}>
-        {bucketLabel[bucket]}
-      </SidebarSectionLabel>
-      {items.map((item) => {
-        if (item.kind === "session") {
-          return (
-            <SidebarTimelineRow
-              key={item.session.id}
-              session={item.session}
+      <SidebarEarlierEntry count={earlier.length} onClick={onOpenEarlier} />
+      {borrowed && (
+        <SidebarTimelineRow
+          key={borrowed.id}
+          session={borrowed}
+          {...rowWiring}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * The sidebar list (S1): 置顶, the 项目 section, then the time buckets
+ * — holding only sessions outside projects (S4) — and the 更早 entry.
+ */
+export function SidebarSectionsList({
+  sections,
+  projectsCollapsed,
+  onToggleProjectsCollapsed,
+  onOpenEarlier,
+  groupWiring,
+  ...rowWiring
+}: {
+  sections: SidebarSections;
+  projectsCollapsed: boolean;
+  onToggleProjectsCollapsed: () => void;
+  onOpenEarlier?: () => void;
+  groupWiring: SidebarProjectGroupWiring;
+} & SidebarTimelineRowWiring) {
+  const copy = useCopy();
+  const labels: Record<SidebarTimeBucket, string> = {
+    today: copy.sidebar.bucketToday,
+    week: copy.sidebar.bucketWeek,
+    month: copy.sidebar.bucketMonth,
+    recent: copy.sidebar.bucketRecent,
+  };
+  return (
+    <>
+      <SidebarSessionBucket
+        label={copy.sidebar.bucketPinned}
+        sessions={sections.pinned}
+        {...rowWiring}
+      />
+      <SidebarProjectsSection
+        groups={sections.projects}
+        collapsed={projectsCollapsed}
+        onToggleCollapsed={onToggleProjectsCollapsed}
+        groupWiring={groupWiring}
+        {...rowWiring}
+      />
+      {SIDEBAR_TIME_BUCKETS.map((bucket) => (
+        <SidebarSessionBucket
+          key={bucket}
+          label={labels[bucket]}
+          sessions={sections.buckets[bucket]}
+          {...rowWiring}
+        />
+      ))}
+      <SidebarEarlier
+        earlier={sections.earlier}
+        groupedSessionIds={sections.groupedSessionIds}
+        onOpenEarlier={onOpenEarlier}
+        {...rowWiring}
+      />
+    </>
+  );
+}
+
+function SidebarSessionBucket({
+  label,
+  sessions,
+  ...rowWiring
+}: {
+  label: string;
+  sessions: Session[];
+} & SidebarTimelineRowWiring) {
+  if (sessions.length === 0) return null;
+  return (
+    <>
+      <SidebarSectionLabel count={sessions.length}>{label}</SidebarSectionLabel>
+      {sessions.map((s) => (
+        <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * The 项目 section (S2 / S3 / S5): a time-bucket-style header whose count
+ * is the listed projects and whose caret folds the section, then one
+ * group per project. No section when nothing is listed; no 新建项目 + on
+ * the header (S6).
+ *
+ * Collapsed (persisted, see useSidebarProjectsCollapsed), the groups are
+ * not mounted; project sessions that need the user — erroring / waiting
+ * for a reply — and the selected one hang directly under the header as
+ * plain rows, the way a time bucket lists its rows. That keeps each
+ * session mounted once, so `data-session-id` stays unique and the
+ * reveal-active-row effect finds it.
+ */
+function SidebarProjectsSection({
+  groups,
+  collapsed,
+  onToggleCollapsed,
+  groupWiring,
+  ...rowWiring
+}: {
+  groups: SidebarProjectGroupItem[];
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  groupWiring: SidebarProjectGroupWiring;
+} & SidebarTimelineRowWiring) {
+  const copy = useCopy();
+  const { activeId, sessionGoalStatus } = rowWiring;
+  const allSessions = groups.flatMap((g) => [
+    ...g.sessions,
+    ...g.olderSessions,
+  ]);
+  const attention = useSessionsAttention(
+    allSessions,
+    activeId,
+    sessionGoalStatus,
+  );
+  if (groups.length === 0) return null;
+  const hanging = collapsed
+    ? allSessions.filter(
+        (s) => attention.needsYouIds.has(s.id) || s.id === activeId,
+      )
+    : [];
+  return (
+    <>
+      <SidebarCollapsibleSectionLabel
+        label={copy.sidebar.projects}
+        count={groups.length}
+        open={!collapsed}
+        onToggle={onToggleCollapsed}
+      />
+      {collapsed
+        ? hanging.map((s) => (
+            <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
+          ))
+        : groups.map((item) => (
+            <WiredProjectGroup
+              key={`project:${item.project.id}`}
+              item={item}
+              groupWiring={groupWiring}
               {...rowWiring}
             />
-          );
-        }
-        const id = item.project.id;
-        return (
-          <SidebarProjectGroup
-            key={`project:${id}`}
-            project={item.project}
-            sessions={item.sessions}
-            olderSessions={item.olderSessions}
-            expanded={expandedProjectIds.has(id)}
-            onToggleExpanded={
-              onToggleProjectExpanded
-                ? () => onToggleProjectExpanded(id)
-                : undefined
-            }
-            onStartConversation={
-              onStartProjectConversation
-                ? () => onStartProjectConversation(id)
-                : undefined
-            }
-            onTogglePin={
-              onTogglePinProject ? () => onTogglePinProject(id) : undefined
-            }
-            onEdit={onEditProject ? () => onEditProject(id) : undefined}
-            onDelete={onDeleteProject ? () => onDeleteProject(id) : undefined}
-            onArchiveAll={onArchiveSessions}
-            {...rowWiring}
-          />
-        );
-      })}
+          ))}
     </>
+  );
+}
+
+/** A section label that folds its section: the time-bucket label's
+ * register and grid (label on the 18px edge, count on the right text
+ * edge), the 更早 entry's quiet hover, and a caret after the count that
+ * turns down while the section is open. */
+function SidebarCollapsibleSectionLabel({
+  label,
+  count,
+  open,
+  onToggle,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  // pt-2 + py-1.5 = the plain label's pt-3.5 / pb-1.5, with the hover
+  // fill hugging the text the way the 更早 entry's does.
+  return (
+    <div className="pt-2">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={cn(
+          "mx-1.5 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
+          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
+          "active:translate-y-px",
+          "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="flex items-center gap-0.5 tabular-nums normal-case tracking-normal text-ink-muted">
+          {count}
+          <CaretRight
+            size={9}
+            weight="thin"
+            className={cn(
+              "opacity-70 transition-transform duration-(--motion-fast)",
+              open && "rotate-90",
+            )}
+          />
+        </span>
+      </button>
+    </div>
   );
 }
 

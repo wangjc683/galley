@@ -39,7 +39,7 @@ import {
 } from "./SidebarTimelineRow";
 
 /**
- * A project folded into the timeline (2026-10-08,
+ * A project in the sidebar's 项目 section (2026-10-08,
  * .scratch/sidebar-project-groups/PRD.md, replacing Project Review): one
  * row for the project, its sessions in a drawer underneath.
  *
@@ -263,9 +263,9 @@ function ProjectGroupRow({
       className={cn(
         // The session rows' grid: the folder in the 16px status column
         // (left edge 18px), the name on the 42px title edge.
-        // Two lines and 48px like a session row: the group is a peer of
-        // the rows around it, its second line the summary (JC's live
-        // pick over a one-line container header, 2026-10-08).
+        // Two lines and 48px like a session row, the second line the
+        // summary (JC picked it on real hardware over a one-line icon +
+        // name + count row, 2026-10-08).
         "group relative mx-1.5 grid min-h-[48px] scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5 text-left outline-none",
         "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
         "active:translate-y-px",

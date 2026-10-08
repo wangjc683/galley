@@ -16,7 +16,7 @@ import type { Project } from "@/types/session";
 
 /**
  * The 项目 icon (2026-10-08): a menu, no longer the Project Review
- * toggle — projects live in the timeline as groups now. Same compact
+ * toggle — projects live in the sidebar's 项目 section now. Same compact
  * menu grammar as the topbar lamps (header/status-menu.ts): 新建项目,
  * a separator, then every project (pinned first, then by content
  * activity). Picking a project starts a new chat in it and opens its

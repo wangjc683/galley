@@ -33,7 +33,7 @@ export function useProjectNavigation({
   setScreen: (screen: Screen) => void;
   visibleSessions: Session[];
 }) {
-  // Expanded project groups in the sidebar timeline — this run only;
+  // Expanded groups in the sidebar's 项目 section — this run only;
   // every group starts collapsed (D9).
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
   // Ask the sidebar to scroll a project's group into view; `seq` lets
@@ -68,7 +68,7 @@ export function useProjectNavigation({
   );
 
   // Expanding or collapsing a group never touches project context (D8):
-  // in the timeline it is usually a glance. The row's +, the empty
+  // in the sidebar it is usually a glance. The row's +, the empty
   // project's CTA and the 项目 menu set it.
   const toggleProjectExpanded = (projectId: string) => {
     setExpandedProjectIds((ids) =>

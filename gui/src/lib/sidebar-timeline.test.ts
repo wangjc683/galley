@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildSidebarTimeline,
-  findTimelineBucket,
-  type SidebarTimelineItem,
+  buildSidebarSections,
+  findSectionsSlot,
+  type SidebarProjectGroupItem,
 } from "@/lib/sidebar-timeline";
 import type { Project, Session } from "@/types/session";
 
@@ -43,47 +43,47 @@ const project = (
     ...extra,
   }) as Project;
 
-/** Compact shape: session rows by id, groups as `[project ids…]`. */
-const shape = (items: SidebarTimelineItem[]) =>
-  items.map((item) =>
-    item.kind === "session"
-      ? item.session.id
-      : `${item.project.id}[${item.sessions.map((s) => s.id).join(",")}]`,
-  );
+const ids = (sessions: Session[]) => sessions.map((s) => s.id);
 
-describe("buildSidebarTimeline", () => {
-  it("keeps sessions outside projects as plain rows in their buckets", () => {
-    const t = buildSidebarTimeline(
+/** Compact shape: each group as `project[listed session ids…]`. */
+const shape = (groups: SidebarProjectGroupItem[]) =>
+  groups.map((g) => `${g.project.id}[${ids(g.sessions).join(",")}]`);
+
+describe("buildSidebarSections", () => {
+  it("keeps sessions outside projects in their time buckets", () => {
+    const t = buildSidebarSections(
       [session("a", 0), session("b", 3), session("c", 20), session("d", 40)],
       [],
       { now: NOW },
     );
-    expect(shape(t.items.today)).toEqual(["a"]);
-    expect(shape(t.items.week)).toEqual(["b"]);
-    expect(shape(t.items.month)).toEqual(["c"]);
-    expect(t.earlier.map((s) => s.id)).toEqual(["d"]);
+    expect(ids(t.buckets.today)).toEqual(["a"]);
+    expect(ids(t.buckets.week)).toEqual(["b"]);
+    expect(ids(t.buckets.month)).toEqual(["c"]);
+    expect(ids(t.earlier)).toEqual(["d"]);
+    expect(t.projects).toEqual([]);
   });
 
-  it("folds a project into one group in its newest session's bucket", () => {
-    const t = buildSidebarTimeline(
+  it("keeps project sessions out of the time buckets", () => {
+    const t = buildSidebarSections(
       [
         session("x", 0.1),
         session("p1", 0.2, { projectId: "p" }),
-        session("y", 0.3),
         session("p2", 3, { projectId: "p" }),
         session("p3", 20, { projectId: "p" }),
+        session("y", 4),
       ],
       [project("p")],
       { now: NOW },
     );
-    // Interleaved by activity, listed flat newest first across buckets.
-    expect(shape(t.items.today)).toEqual(["x", "p[p1,p2,p3]", "y"]);
-    expect(t.items.week).toEqual([]);
-    expect(t.items.month).toEqual([]);
+    expect(ids(t.buckets.today)).toEqual(["x"]);
+    expect(ids(t.buckets.week)).toEqual(["y"]);
+    expect(t.buckets.month).toEqual([]);
+    // Listed flat, newest first, across buckets.
+    expect(shape(t.projects)).toEqual(["p[p1,p2,p3]"]);
   });
 
   it("keeps a group's older sessions behind 更早 and in its tail", () => {
-    const t = buildSidebarTimeline(
+    const t = buildSidebarSections(
       [
         session("p1", 1, { projectId: "p" }),
         session("p2", 45, { projectId: "p" }),
@@ -91,92 +91,94 @@ describe("buildSidebarTimeline", () => {
       [project("p")],
       { now: NOW },
     );
-    const group = t.items.week[0];
-    expect(
-      group.kind === "project" && group.olderSessions.map((s) => s.id),
-    ).toEqual(["p2"]);
-    expect(t.earlier.map((s) => s.id)).toEqual(["p2"]);
+    expect(ids(t.projects[0].olderSessions)).toEqual(["p2"]);
+    expect(ids(t.earlier)).toEqual(["p2"]);
     expect(t.groupedSessionIds.has("p2")).toBe(true);
   });
 
-  it("leaves pinned project sessions as plain rows in 置顶", () => {
-    const t = buildSidebarTimeline(
+  it("keeps pinned project sessions in 置顶", () => {
+    const t = buildSidebarSections(
       [
-        session("pinned", 2, { projectId: "p", pinned: true }),
+        session("pinned", 1, { projectId: "p", pinned: true }),
         session("p1", 0, { projectId: "p" }),
       ],
       [project("p")],
       { now: NOW },
     );
-    expect(shape(t.items.pinned)).toEqual(["pinned"]);
-    expect(shape(t.items.today)).toEqual(["p[p1]"]);
-  });
-
-  it("drops the group when every window session is pinned", () => {
-    const t = buildSidebarTimeline(
-      [session("pinned", 0, { projectId: "p", pinned: true })],
-      [project("p")],
-      { now: NOW },
-    );
-    expect(shape(t.items.pinned)).toEqual(["pinned"]);
-    expect(t.items.today).toEqual([]);
-  });
-
-  it("puts a pinned project's group in 置顶", () => {
-    const t = buildSidebarTimeline(
-      [session("p1", 3, { projectId: "p" }), session("a", 1, { pinned: true })],
-      [project("p", 90, { pinned: true })],
-      { now: NOW },
-    );
-    expect(shape(t.items.pinned)).toEqual(["a", "p[p1]"]);
-    expect(t.items.week).toEqual([]);
-  });
-
-  it("places an empty project by createdAt and hides it once old", () => {
-    const t = buildSidebarTimeline(
-      [],
-      [project("fresh", 0), project("stale", 40)],
-      { now: NOW },
-    );
-    expect(shape(t.items.today)).toEqual(["fresh[]"]);
-    expect(t.items.month).toEqual([]);
-  });
-
-  it("gives a project with only old sessions no group", () => {
-    const t = buildSidebarTimeline(
-      [session("p1", 40, { projectId: "p" }), session("a", 1)],
-      [project("p")],
-      { now: NOW },
-    );
-    expect(shape(t.items.week)).toEqual(["a"]);
-    expect(t.earlier.map((s) => s.id)).toEqual(["p1"]);
-    expect(t.groupedSessionIds.has("p1")).toBe(false);
+    expect(ids(t.pinned)).toEqual(["pinned"]);
+    expect(shape(t.projects)).toEqual(["p[p1]"]);
+    expect(t.buckets.today).toEqual([]);
   });
 
   it("folds a single-session project too", () => {
-    const t = buildSidebarTimeline(
-      [
-        session("solo", 0, { projectId: "s" }),
-        session("q1", 0.1, { projectId: "q" }),
-        session("q2", 0.2, { projectId: "q" }),
-      ],
-      [project("s"), project("q")],
+    const t = buildSidebarSections(
+      [session("solo", 0, { projectId: "s" })],
+      [project("s")],
       { now: NOW },
     );
-    expect(shape(t.items.today)).toEqual(["s[solo]", "q[q1,q2]"]);
+    expect(shape(t.projects)).toEqual(["s[solo]"]);
+    expect(t.buckets.today).toEqual([]);
+  });
+
+  it("lists pinned, active and new empty projects only", () => {
+    const t = buildSidebarSections(
+      [
+        session("a1", 2, { projectId: "active" }),
+        session("d1", 40, { projectId: "dormant" }),
+        session("allPinned", 1, { projectId: "pinnedOnly", pinned: true }),
+      ],
+      [
+        project("active"),
+        project("dormant"),
+        project("pinnedOnly"),
+        project("fresh", 3),
+        project("stale", 40),
+        project("kept", 90, { pinned: true }),
+      ],
+      { now: NOW },
+    );
+    expect(t.projects.map((g) => g.project.id).sort()).toEqual([
+      "active",
+      "fresh",
+      "kept",
+    ]);
+    // The dormant project's session stays behind 更早, ungrouped.
+    expect(ids(t.earlier)).toEqual(["d1"]);
+    expect(t.groupedSessionIds.has("d1")).toBe(false);
+  });
+
+  it("orders pinned projects first, then by content activity", () => {
+    const t = buildSidebarSections(
+      [
+        session("o1", 5, { projectId: "older" }),
+        session("n1", 1, { projectId: "newer" }),
+        session("k1", 20, { projectId: "kept" }),
+      ],
+      [
+        project("older"),
+        project("kept", 90, { pinned: true }),
+        project("newer"),
+      ],
+      { now: NOW },
+    );
+    expect(t.projects.map((g) => g.project.id)).toEqual([
+      "kept",
+      "newer",
+      "older",
+    ]);
   });
 
   it("treats an unknown projectId as no project", () => {
-    const t = buildSidebarTimeline(
+    const t = buildSidebarSections(
       [session("orphan", 0, { projectId: "gone" })],
       [],
       { now: NOW },
     );
-    expect(shape(t.items.today)).toEqual(["orphan"]);
+    expect(ids(t.buckets.today)).toEqual(["orphan"]);
   });
 
-  it("folds backfilled project sessions too", () => {
-    const t = buildSidebarTimeline(
+  it("folds backfilled project sessions into their group", () => {
+    const t = buildSidebarSections(
       [
         session("p1", 40, { projectId: "p" }),
         session("a", 41),
@@ -185,23 +187,26 @@ describe("buildSidebarTimeline", () => {
       [project("p")],
       { now: NOW },
     );
-    expect(shape(t.items.recent)).toEqual(["p[p1,p2]", "a"]);
+    expect(shape(t.projects)).toEqual(["p[p1,p2]"]);
+    expect(ids(t.buckets.recent)).toEqual(["a"]);
     expect(t.earlier).toEqual([]);
   });
 
-  it("finds the bucket of a session listed inside a group", () => {
-    const t = buildSidebarTimeline(
+  it("finds the section of a grouped session, its older ones included", () => {
+    const t = buildSidebarSections(
       [
         session("p1", 0, { projectId: "p" }),
         session("p2", 45, { projectId: "p" }),
+        session("x", 2),
         session("old", 50),
       ],
       [project("p")],
       { now: NOW },
     );
-    expect(findTimelineBucket(t, "p1")).toBe("today");
-    expect(findTimelineBucket(t, "p2")).toBe("today");
-    expect(findTimelineBucket(t, "old")).toBe("earlier");
-    expect(findTimelineBucket(t, "missing")).toBeUndefined();
+    expect(findSectionsSlot(t, "p1")).toBe("projects");
+    expect(findSectionsSlot(t, "p2")).toBe("projects");
+    expect(findSectionsSlot(t, "x")).toBe("week");
+    expect(findSectionsSlot(t, "old")).toBe("earlier");
+    expect(findSectionsSlot(t, "missing")).toBeUndefined();
   });
 });
