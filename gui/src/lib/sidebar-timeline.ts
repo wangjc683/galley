@@ -32,7 +32,7 @@ export const SIDEBAR_TIME_BUCKETS: SidebarTimeBucket[] = [
 ];
 
 /** How many of a project's sessions its open drawer shows before the
- * 「更早 N 个」 tail (2026-10-09, JC: K = 5). With several groups open
+ * 「显示更多」 row (2026-10-09, JC: K = 5). With several groups open
  * at once — three projects each with a session in flight — a group's
  * history no longer pushes the next group's live session off a small
  * screen. */
@@ -44,7 +44,7 @@ export interface SidebarProjectGroupItem {
    * PROJECT_GROUP_RECENT_COUNT, newest first. Empty for an empty
    * project (its drawer shows the 新建项目对话 CTA). */
   sessions: Session[];
-  /** The rest, newest first — the drawer's trailing 「更早 N 个」 row.
+  /** The rest, newest first — behind the drawer's closing 「显示更多」.
    * Those older than the window also stay in `earlier`. */
   olderSessions: Session[];
 }
@@ -57,7 +57,7 @@ export interface SidebarSections {
   projects: SidebarProjectGroupItem[];
   /** Every other project — unpinned, gone quiet past the window, or an
    * empty one created before it — in the same order, behind the
-   * section's closing 「其他项目 N」 row (2026-10-09; before, only the
+   * section's closing 「更多项目 N」 row (2026-10-09; before, only the
    * masthead 项目 menu reached them). */
   otherProjects: SidebarProjectGroupItem[];
   /** Time buckets with sessions outside projects only (S4). */
@@ -65,7 +65,7 @@ export interface SidebarSections {
   /** Sessions behind the 更早 entry: the EarlierDialog list (a group's
    * older sessions are in here too). */
   earlier: Session[];
-  /** Every session a project group lists (drawer or its 更早 tail),
+  /** Every session a project group lists (drawer or its 显示更多 tail),
    * other projects' included. The 更早 entry's borrowed "you are here"
    * row skips these — their group, or the fold they hang under, shows
    * them. */
@@ -85,7 +85,7 @@ export interface SidebarSectionsOptions {
  *     `createdAt` is inside the window, and any other project only while
  *     it lists a window session. The rest — one whose window sessions
  *     are all pinned, or that only has old sessions — are
- *     `otherProjects`, behind the section's 「其他项目」 row.
+ *     `otherProjects`, behind the section's 「更多项目」 row.
  *   - D3: every project folds, a single-session one too.
  *   - D4: a group lists its newest PROJECT_GROUP_RECENT_COUNT sessions
  *     flat, newest first; the rest are the drawer's tail. (Which
@@ -93,7 +93,7 @@ export interface SidebarSectionsOptions {
  *   - S4: time buckets carry no project sessions.
  *   - S5: pinned projects first, then by content activity
  *     (`sortProjectsForNavigation`), in the section and behind
- *     其他项目 alike.
+ *     更多项目 alike.
  *
  * Sessions whose `projectId` names no known project stay plain rows.
  */
@@ -205,7 +205,7 @@ export function findSectionsSlot(
 }
 
 /** The sessions a project group's 归档全部对话 archives — its listed
- * sessions plus the 更早 tail's: unarchived, unpinned (pinned ones sit
+ * sessions plus the 显示更多 tail's: unarchived, unpinned (pinned ones sit
  * in 置顶, outside the group). The delete-project dialog's
  * 「同时归档里面的 N 个对话」 uses the same set, so both counts agree. */
 export function archivableProjectSessions(

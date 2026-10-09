@@ -713,8 +713,8 @@ showing, and its divider appears only once the list scrolls
 ([devlog](./devlog/2026-10-08-sidebar-grid-and-fade-truncation.md)).
 Projects are now a 项目 section under 置顶, one collapsible group row per
 project, and Project Review is gone: time buckets hold only sessions outside
-projects, the section header folds (remembered across restarts), the group sums
-its sessions' states on a second line, sessions waiting for a reply or erroring
+projects, the section header folds (remembered across restarts), the group row
+carries its sessions' states on the rail and title weight, sessions waiting for a reply or erroring
 (and the selected one) hang under a collapsed group or section. Interleaving
 group rows into the time buckets was tried first and overturned on the real
 device the same day ([devlog](./devlog/2026-10-08-sidebar-project-groups.md)).
@@ -725,6 +725,18 @@ open group shows its newest five sessions, the rest behind its 「更早 N」 ta
 creates a project directly, and projects quiet past the 30-day window sit
 behind a 「其他项目 N」 row closing the 项目 section — the 10-08 projects menu
 is gone ([devlog](./devlog/2026-10-09-sidebar-recent-five-and-new-project-icon.md)).
+The same day's polish pass: the project folder field says what binding does
+(the bundled engine shares `project_memory.md` in that folder and keeps drafts
+there; an external GA skips project mode), every way of opening a session sets
+the project context to its project, 加入项目 ends in 新建项目…, and a project
+created from the masthead or ⌘K lands on its new chat
+([devlog](./devlog/2026-10-09-project-ux-polish-pass.md)). Then, adjudicated on
+the real device with a variant switcher: the group tail and the quiet projects
+became list continuations — 「显示更多 N」 / 「更多项目 N」 at the end, 「收起」
+once opened, a quiet project borrowing its whole row when a session needs the
+user — project rows went to one line with the total on the right, and sessions
+inside a group to one line under a guide line hung from the folder icon
+([devlog](./devlog/2026-10-09-project-group-show-more-and-one-line-rows.md)).
 The README screenshots still show the old sidebar and `projects.png` the old
 Project Review; re-shoot with the next screenshot round.
 Owed for `v0.6.2`: the new update path on a

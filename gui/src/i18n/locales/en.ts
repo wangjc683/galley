@@ -223,20 +223,13 @@ export const enCopy: AppCopy = {
     archived: "Archived",
     editProject: "Edit project",
     deleteProject: "Delete project",
-    groupErrored: (count, total) =>
-      `${count} ${count === 1 ? "error" : "errors"} · ${total} ${total === 1 ? "conversation" : "conversations"}`,
-    groupWaiting: (count, total) =>
-      `${count} waiting for you · ${total} ${total === 1 ? "conversation" : "conversations"}`,
-    groupWorking: (count, total) =>
-      `${count} working · ${total} ${total === 1 ? "conversation" : "conversations"}`,
-    groupUnread: (count, total) =>
-      `${count} new ${count === 1 ? "reply" : "replies"} · ${total} ${total === 1 ? "conversation" : "conversations"}`,
-    groupTotal: (total) =>
-      `${total} ${total === 1 ? "conversation" : "conversations"}`,
-    groupOlder: (count) => `${count} earlier`,
-    otherProjects: "Other projects",
-    otherProjectsCount: (count) =>
-      count === 1 ? "1 other project" : `${count} other projects`,
+    showMore: "Show more",
+    showLess: "Show less",
+    moreProjects: "More projects",
+    showMoreSessionsAria: (count) =>
+      `Show ${count} more ${count === 1 ? "chat" : "chats"}`,
+    showMoreProjectsAria: (count) =>
+      `Show ${count} more ${count === 1 ? "project" : "projects"}`,
     archiveProjectSessions: "Archive all conversations",
     archiveProjectSessionsTitle: (projectName, count) =>
       `Archive ${count} ${count === 1 ? "conversation" : "conversations"} in "${projectName}"?`,

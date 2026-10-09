@@ -192,10 +192,10 @@ export function Sidebar({
   );
   const [projectsCollapsed, setProjectsCollapsed] =
     useSidebarProjectsCollapsed();
-  // The 其他项目 row's drawer: this run only, like a group's.
+  // The 更多项目 row's fold: this run only, like a group's.
   const [othersOpen, setOthersOpen] = useState(false);
   // A project asked into view (new project / 查看项目) opens a
-  // collapsed 项目 section first — and the 其他项目 row when the
+  // collapsed 项目 section first — and the 更多项目 row when the
   // project sits behind it — or there is no group to show. Render-time
   // adjustment keyed on the request, not an effect: the reveal effect
   // below must find the group in the same commit.

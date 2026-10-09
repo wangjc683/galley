@@ -51,6 +51,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onRequestRename,
   onConfirmRename,
   onCancelRename,
+  singleLine = false,
 }: {
   session: Session;
   active?: boolean;
@@ -90,6 +91,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onConfirmRename?: (newTitle: string) => void;
   /** Inline input cancels (Esc). */
   onCancelRename?: () => void;
+  /** Title only, 32px, no status line: a project group's children
+   * (2026-10-09, picked on real hardware). The indent says whose they
+   * are and state still rides the rail, the icon and the title weight,
+   * so an open group stays compact. */
+  singleLine?: boolean;
 }) {
   const copy = useCopy();
   const hasRowActions = !!(
@@ -232,6 +238,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 copy.sidebar,
               )
             : null;
+  // A single-line row renders no subline and centers like a row that
+  // has none.
+  const subline = singleLine ? null : sublineText;
   const sublineTone: "running" | "warning" | "error" | "muted" =
     hasBlockingError
       ? "error"
@@ -352,7 +361,8 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       onPointerDown={handleRowPointerDown}
       onClick={handleRowClick}
       className={cn(
-        "group relative mx-1.5 grid min-h-[48px] scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
+        "group relative mx-1.5 grid scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
+        singleLine ? "min-h-8" : "min-h-[48px]",
         // No row-level ring while editing — the input inside carries
         // its own brand ring; two nested rings for one focus state
         // was noisier than the app's quiet register.
@@ -395,7 +405,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           // No-subline rows center their single line in the 48px row
           // instead of hugging the top (dead space below read as
           // misalignment against two-line neighbours).
-          !sublineText && !isEditing && "self-center pt-0",
+          !subline && !isEditing && "self-center pt-0",
           // Pop only on state TRANSITIONS, not on mount (see
           // popEnabled above).
           shouldPopIcon && popEnabled && "sidebar-state-pop",
@@ -420,7 +430,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       <div
         className={cn(
           "min-w-0 flex-1",
-          !sublineText && !isEditing && "self-center",
+          !subline && !isEditing && "self-center",
           showActionTrigger && "group-hover:pr-7",
           actionsOpen && "pr-7",
         )}
@@ -509,17 +519,15 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             </IconTooltip>
           )}
         </div>
-        {sublineText && (
+        {subline && (
           <div
-            key={`${session.id}:${showRunningActivity ? `running:${session.lastStepIndex ?? "thinking"}:${cleanSummary ?? ""}` : `settled:${sublineText}`}`}
+            key={`${session.id}:${showRunningActivity ? `running:${session.lastStepIndex ?? "thinking"}:${cleanSummary ?? ""}` : `settled:${subline}`}`}
             // Same truncated-text native-title exception as the row
             // title above, and likewise only while truncated — at 14%
             // width the status line clips to almost nothing and was
             // otherwise unrecoverable.
             ref={truncationFadeRef}
-            onPointerEnter={(e) =>
-              syncTruncatedTitle(e.currentTarget, sublineText)
-            }
+            onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, subline)}
             className={cn(
               // tabular-nums: the subline carries live counts (第 N 步 /
               // 出错 · N) that tick while visible. Fades like the title.
@@ -533,7 +541,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                     : "text-ink-muted",
             )}
           >
-            {sublineText}
+            {subline}
           </div>
         )}
       </div>

@@ -214,21 +214,13 @@ export const zhCopy = {
     archived: "已归档",
     editProject: "编辑项目",
     deleteProject: "删除项目",
-    // 时间线里的项目组行（2026-10-08）：只说最高优先级的一种状态 + 总数，
-    // 状态词与会话行一致。
-    groupErrored: (count: number, total: number) =>
-      `${count} 个出错 · 共 ${total} 个`,
-    groupWaiting: (count: number, total: number) =>
-      `${count} 个等你回复 · 共 ${total} 个`,
-    groupWorking: (count: number, total: number) =>
-      `${count} 个正在工作 · 共 ${total} 个`,
-    groupUnread: (count: number, total: number) =>
-      `${count} 个未读 · 共 ${total} 个`,
-    groupTotal: (total: number) => `共 ${total} 个对话`,
-    groupOlder: (count: number) => `更早 ${count} 个`,
-    // 项目分区末尾一行（2026-10-09）：30 天窗口外、未置顶的项目，就地展开。
-    otherProjects: "其他项目",
-    otherProjectsCount: (count: number) => `其他 ${count} 个项目`,
+    // 截断列表的末行（2026-10-09）：项目组只露最近 5 个对话，项目分区只露
+    // 30 天内的项目；「显示更多」把其余接在后面，展开后这一行移到最末变成「收起」。
+    showMore: "显示更多",
+    showLess: "收起",
+    moreProjects: "更多项目",
+    showMoreSessionsAria: (count: number) => `再显示 ${count} 个对话`,
+    showMoreProjectsAria: (count: number) => `再显示 ${count} 个项目`,
     archiveProjectSessions: "归档全部对话",
     archiveProjectSessionsTitle: (projectName: string, count: number) =>
       `归档「${projectName}」里的 ${count} 个对话？`,

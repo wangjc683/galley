@@ -161,7 +161,7 @@ describe("buildSidebarSections", () => {
       "fresh",
       "kept",
     ]);
-    // The rest sit behind 其他项目; a quiet project's session stays
+    // The rest sit behind 更多项目; a quiet project's session stays
     // behind 更早 and is grouped (its fold shows it).
     expect(t.otherProjects.map((g) => g.project.id).sort()).toEqual([
       "dormant",
@@ -237,7 +237,7 @@ describe("buildSidebarSections", () => {
 });
 
 describe("archivableProjectSessions", () => {
-  it("is the group's sessions plus its 更早 tail, as 归档全部对话 archives", () => {
+  it("is the group's sessions plus its 显示更多 tail, as 归档全部对话 archives", () => {
     const sessions = [
       session("today", 0, { projectId: "p" }),
       session("month", 20, { projectId: "p" }),

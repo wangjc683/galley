@@ -35,7 +35,7 @@ type NavIconsPlacement = "header" | "row";
  *
  * The 定时 badge rides along in both. The third icon creates a project
  * (2026-10-09; it was the 项目 menu): the projects themselves are all in
- * the 项目 section, the quiet ones behind its 「其他项目」 row.
+ * the 项目 section, the quiet ones behind its 「更多项目」 row.
  */
 export function SidebarNavIcons({
   placement,

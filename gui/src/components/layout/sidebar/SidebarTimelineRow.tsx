@@ -50,7 +50,12 @@ export function SidebarTimelineRow({
   onRequestRename,
   onConfirmRename,
   onCancelRename,
-}: { session: Session } & SidebarTimelineRowWiring) {
+  singleLine,
+}: {
+  session: Session;
+  /** Title only, no status line — a project group's rows. */
+  singleLine?: boolean;
+} & SidebarTimelineRowWiring) {
   return (
     <SidebarSessionRow
       session={s}
@@ -79,6 +84,7 @@ export function SidebarTimelineRow({
       }
       onConfirmRename={(newTitle) => onConfirmRename(s.id, newTitle)}
       onCancelRename={onCancelRename}
+      singleLine={singleLine}
     />
   );
 }

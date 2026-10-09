@@ -2,7 +2,8 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Archive,
-  CaretRight,
+  CaretDown,
+  CaretUp,
   DotsThree,
   Folder,
   FolderOpen,
@@ -12,7 +13,7 @@ import {
   PushPinSlash,
   Trash,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { IconButton } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
@@ -53,12 +54,19 @@ import {
  *   ordinary rows. Each is then mounted ONLY there — the collapsed
  *   drawer leaves it out — so `data-session-id` stays unique and the
  *   sidebar's reveal-active-row effect finds the visible copy.
+ * - Open, the drawer lists the newest sessions and closes with a
+ *   「显示更多」 row (2026-10-09): the rest are the same list's back
+ *   half, so the control sits where the list ends and opening appends
+ *   them in place; the row then moves to the very end as 「收起」.
+ * - Every child row is single-line (2026-10-09): the indent and guide
+ *   line say whose they are.
  * - Expanding never sets project context (D8); the row's `+` does.
  */
 export function SidebarProjectGroup({
   project,
   sessions,
   olderSessions,
+  defaultOlderOpen = false,
   expanded,
   onToggleExpanded,
   onStartConversation,
@@ -71,8 +79,11 @@ export function SidebarProjectGroup({
   project: Project;
   /** The newest sessions (PROJECT_GROUP_RECENT_COUNT), newest first. */
   sessions: Session[];
-  /** The rest, newest first — the drawer's 「更早 N 个」 tail. */
+  /** The rest, newest first — behind the drawer's closing 「显示更多」. */
   olderSessions: Session[];
+  /** Start with the tail open (uncontrolled, like Radix's
+   * `defaultOpen`); 显示更多 / 收起 own it from there. */
+  defaultOlderOpen?: boolean;
   expanded: boolean;
   onToggleExpanded?: () => void;
   onStartConversation?: () => void;
@@ -90,7 +101,7 @@ export function SidebarProjectGroup({
     activeId,
     sessionGoalStatus,
   );
-  const [olderOpen, setOlderOpen] = useState(false);
+  const [olderOpen, setOlderOpen] = useState(defaultOlderOpen);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
 
   // Collapsed: needs-you sessions and the selected one, in list order.
@@ -104,24 +115,31 @@ export function SidebarProjectGroup({
   }
   const hanging = allSessions.filter((s) => hangingIds.has(s.id));
   // Expanded with the tail shut: tail sessions that need the user and
-  // the selected one borrow slots above the tail row — the tail is a
-  // fold too, and nothing that needs you hides behind a fold (D6 / D7).
+  // the selected one borrow slots above 显示更多 — the tail is a fold
+  // too, and nothing that needs you hides behind a fold (D6 / D7). The
+  // row's count leaves them out: it says how many are still hidden.
   const borrowedOlder =
     expanded && !olderOpen
       ? olderSessions.filter(
           (s) => attention.needsYouIds.has(s.id) || s.id === activeId,
         )
       : [];
+  const hiddenOlderCount = olderSessions.length - borrowedOlder.length;
 
   const total = allSessions.length;
   const archiveAll =
     onArchiveAll && total > 0 ? () => setConfirmArchiveOpen(true) : undefined;
+  const notHanging = (s: Session) => !hangingIds.has(s.id);
+  const renderRow = (s: Session) => (
+    <SidebarTimelineRow key={s.id} session={s} singleLine {...rowWiring} />
+  );
 
   return (
     <div data-project-id={project.id}>
       <ProjectGroupRow
         project={project}
         expanded={expanded}
+        connector={(expanded && total > 0) || hanging.length > 0}
         attention={attention}
         total={total}
         onClick={onToggleExpanded}
@@ -139,37 +157,36 @@ export function SidebarProjectGroup({
           />
         ) : (
           <>
-            {sessions
-              .filter((s) => !hangingIds.has(s.id))
-              .map((s) => (
-                <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
-              ))}
-            {borrowedOlder.map((s) => (
-              <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
-            ))}
-            {olderSessions.length > 0 && (
-              <SidebarTailToggle
-                label={copy.sidebar.bucketEarlier}
-                ariaLabel={copy.sidebar.groupOlder(olderSessions.length)}
-                count={olderSessions.length}
-                open={olderOpen}
-                onToggle={() => setOlderOpen((open) => !open)}
-              />
-            )}
-            {olderOpen &&
-              olderSessions
-                .filter((s) => !hangingIds.has(s.id))
-                .map((s) => (
-                  <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
-                ))}
+            {sessions.filter(notHanging).map(renderRow)}
+            {olderOpen
+              ? olderSessions.filter(notHanging).map(renderRow)
+              : borrowedOlder.map(renderRow)}
+            {/* One slot for both modes, so 收起 stays the same instance
+                and its layout effect can hold it under the pointer. */}
+            {olderSessions.length > 0 &&
+              (olderOpen ? (
+                <SidebarShowMoreRow
+                  mode="less"
+                  label={copy.sidebar.showLess}
+                  onToggle={() => setOlderOpen(false)}
+                />
+              ) : hiddenOlderCount > 0 ? (
+                <SidebarShowMoreRow
+                  mode="more"
+                  label={copy.sidebar.showMore}
+                  ariaLabel={copy.sidebar.showMoreSessionsAria(
+                    hiddenOlderCount,
+                  )}
+                  count={hiddenOlderCount}
+                  onToggle={() => setOlderOpen(true)}
+                />
+              ) : null)}
           </>
         )}
       </ProjectGroupDrawer>
       {hanging.length > 0 && (
         <div className={cn(GROUP_CHILDREN_CLASS, "pb-1")}>
-          {hanging.map((s) => (
-            <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
-          ))}
+          {hanging.map(renderRow)}
         </div>
       )}
       {onArchiveAll && (
@@ -191,12 +208,19 @@ export function SidebarProjectGroup({
 }
 
 /** The drawer's indent and guide line — shared by the hanging rows so
- * a collapsed group's hung sessions read as its children. */
-const GROUP_CHILDREN_CLASS = "ml-6 mr-1.5 border-l border-brand/35 pl-1";
+ * a collapsed group's hung sessions read as its children (2026-10-09
+ * geometry, picked on real hardware). The line sits on the folder
+ * icon's center (25.5px: the 16px icon box spans 18–34px), and pl-6
+ * puts a child's status icon on the project name's 42px edge (pl-6 +
+ * the row's mx-1.5 + px-3). A pseudo-element, not a border, so the
+ * line's position doesn't depend on the indent. */
+const GROUP_CHILDREN_CLASS =
+  "relative mr-1.5 pl-6 before:pointer-events-none before:absolute before:inset-y-0 before:left-[25.5px] before:w-px before:bg-brand/35";
 
 function ProjectGroupRow({
   project,
   expanded,
+  connector = false,
   attention,
   total,
   onClick,
@@ -208,6 +232,10 @@ function ProjectGroupRow({
 }: {
   project: Project;
   expanded: boolean;
+  /** Draw the guide line up into the row from under the folder icon,
+   * so the children's line hangs from the project (open with
+   * sessions, or collapsed with hung rows). */
+  connector?: boolean;
   attention: SessionsAttentionView;
   total: number;
   onClick?: () => void;
@@ -224,7 +252,7 @@ function ProjectGroupRow({
   const newConversationTitle = copy.sidebar.newConversationInProjectTitle(
     project.name,
   );
-  const { kind, count } = attention;
+  const { kind } = attention;
 
   // One-shot pop when the group ENTERS a blocking / unread state — the
   // session row's latch: the state a group mounted in is not news.
@@ -235,25 +263,6 @@ function ProjectGroupRow({
     setPopEnabled(true);
   }
   const shouldPop = kind === "error" || kind === "ask" || kind === "unread";
-
-  const summary =
-    kind === "error"
-      ? copy.sidebar.groupErrored(count, total)
-      : kind === "ask"
-        ? copy.sidebar.groupWaiting(count, total)
-        : kind === "running"
-          ? copy.sidebar.groupWorking(count, total)
-          : kind === "unread"
-            ? copy.sidebar.groupUnread(count, total)
-            : copy.sidebar.groupTotal(total);
-  const summaryTone =
-    kind === "error"
-      ? "font-medium text-error"
-      : kind === "ask"
-        ? "font-medium text-warning"
-        : kind === "running"
-          ? "text-brand-strong/85"
-          : "text-ink-muted";
   const showActions = !!(onStartConversation || hasRowActions);
 
   const row = (
@@ -264,15 +273,25 @@ function ProjectGroupRow({
       className={cn(
         // The session rows' grid: the folder in the 16px status column
         // (left edge 18px), the name on the 42px title edge.
-        // Two lines and 48px like a session row, the second line the
-        // summary (JC picked it on real hardware over a one-line icon +
-        // name + count row, 2026-10-08).
-        "group relative mx-1.5 grid min-h-[48px] scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5 text-left outline-none",
+        // One line, 36px, the total on the right text edge (2026-10-09,
+        // picked on real hardware over 10-08's two-line summary row):
+        // state rides the rail, the name's weight and the folder's pop,
+        // with no summary words to read.
+        "group relative mx-1.5 grid min-h-9 scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-center gap-2 overflow-hidden rounded-sm px-3 py-1 text-left outline-none",
         "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
         "active:translate-y-px",
         actionsOpen ? "bg-hover" : "hover:bg-hover",
       )}
     >
+      {connector && (
+        <span
+          aria-hidden
+          // 25.5px in sidebar space minus the row's mx-1.5; starts 2px
+          // under the 14px folder glyph (the 20px icon box centers in
+          // the 36px row at 8px, the glyph at 11–25px).
+          className="pointer-events-none absolute bottom-0 left-[19.5px] top-[27px] w-px bg-brand/35"
+        />
+      )}
       {kind === "running" ? (
         <span
           aria-hidden
@@ -324,14 +343,20 @@ function ProjectGroupRow({
               aria-label="pinned"
             />
           )}
-        </div>
-        <div
-          className={cn(
-            "mt-0.5 truncate text-[11px] leading-[1.4] tabular-nums",
-            summaryTone,
+          {/* The total, on the 18px right text edge like a section
+              label's count; it yields its place to + / ⋯ on hover. An
+              empty project shows none, as the 项目 header drops its 0. */}
+          {total > 0 && (
+            <span
+              className={cn(
+                "shrink-0 text-[11px] tabular-nums text-ink-muted",
+                showActions && "group-hover:invisible",
+                actionsOpen && "invisible",
+              )}
+            >
+              {total}
+            </span>
           )}
-        >
-          {summary}
         </div>
       </div>
       {showActions && (
@@ -581,50 +606,74 @@ function ProjectGroupDrawer({
   );
 }
 
-/** A fold that closes a list and expands in place, in the 更早 entry's
- * register (10px label + count, with the caret hung in the right
- * padding so the count keeps the section labels' edge): a drawer's
- * 「更早 N 个」 tail (D4), and the 项目 section's 「其他项目」 row. */
-export function SidebarTailToggle({
+/** The row that closes a truncated list (2026-10-09): 「显示更多」 + the
+ * hidden count, or 「收起」 at the end of the opened list — a project
+ * group's tail, and the 项目 section's quiet projects. The hidden part
+ * is the same list's back half, so the control sits where the list
+ * ends and opening appends the rest above it; hence a list row on the
+ * status / title columns, not the section-label register: it continues
+ * the list, it doesn't head one. Folding from the bottom keeps the row
+ * under the pointer: the rows above it vanish, and WebKit has no CSS
+ * scroll anchoring to rely on. The caller keeps both modes in one JSX
+ * slot so 收起 → 显示更多 is the same instance. */
+export function SidebarShowMoreRow({
+  mode,
   label,
   ariaLabel,
   count,
-  open,
   onToggle,
 }: {
+  mode: "more" | "less";
   label: string;
-  ariaLabel: string;
-  count: number;
-  open: boolean;
+  /** What the count means (显示更多 says how many); 收起 needs none. */
+  ariaLabel?: string;
+  count?: number;
   onToggle: () => void;
 }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const anchorTopRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const top = anchorTopRef.current;
+    anchorTopRef.current = null;
+    const el = ref.current;
+    if (top == null || !el) return;
+    let scroller: HTMLElement | null = el.parentElement;
+    while (
+      scroller &&
+      !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)
+    ) {
+      scroller = scroller.parentElement;
+    }
+    if (scroller) scroller.scrollTop += el.getBoundingClientRect().top - top;
+  }, [mode]);
+  const Icon = mode === "more" ? CaretDown : CaretUp;
   return (
     <button
+      ref={ref}
       type="button"
       tabIndex={-1}
       onMouseDown={preventMouseFocus}
-      onClick={onToggle}
-      aria-expanded={open}
+      onClick={() => {
+        if (mode === "less" && ref.current) {
+          anchorTopRef.current = ref.current.getBoundingClientRect().top;
+        }
+        onToggle();
+      }}
+      aria-expanded={mode === "less"}
       aria-label={ariaLabel}
       className={cn(
-        "mx-1.5 mt-1 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
+        "mx-1.5 grid min-h-7 w-[calc(100%-12px)] grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 rounded-sm px-3 text-left text-[11px] text-ink-muted",
         "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
-        "active:translate-y-px",
-        "outline-none",
+        "active:translate-y-px outline-none",
       )}
     >
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="-mr-[11px] flex items-center gap-0.5 tabular-nums normal-case tracking-normal">
-        {count}
-        <CaretRight
-          size={9}
-          weight="thin"
-          className={cn(
-            "opacity-70 transition-transform duration-(--motion-fast)",
-            open && "rotate-90",
-          )}
-        />
+      <span className="flex justify-center">
+        <Icon size={10} weight="regular" className="opacity-60" />
       </span>
+      <span className="min-w-0 truncate">{label}</span>
+      {mode === "more" && count != null && (
+        <span className="tabular-nums">{count}</span>
+      )}
     </button>
   );
 }

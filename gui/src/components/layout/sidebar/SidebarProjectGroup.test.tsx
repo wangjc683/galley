@@ -29,7 +29,7 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   };
 });
 
-const session = (id: string): Session =>
+const session = (id: string, extra: Partial<Session> = {}): Session =>
   ({
     id,
     title: `title-${id}`,
@@ -38,6 +38,7 @@ const session = (id: string): Session =>
     lastActivityAt: "2026-10-07T12:00:00.000Z",
     createdAt: "2026-10-07T12:00:00.000Z",
     updatedAt: "2026-10-07T12:00:00.000Z",
+    ...extra,
   }) as Session;
 
 const project = {
@@ -54,15 +55,18 @@ function render(
   opts: {
     expanded?: boolean;
     activeId?: string;
+    sessions?: Session[];
     olderSessions?: Session[];
+    defaultOlderOpen?: boolean;
   } = {},
 ) {
   return renderToStaticMarkup(
     <Tooltip.Provider>
       <SidebarProjectGroup
         project={project}
-        sessions={[session("a"), session("b"), session("c")]}
+        sessions={opts.sessions ?? [session("a"), session("b"), session("c")]}
         olderSessions={opts.olderSessions ?? []}
+        defaultOlderOpen={opts.defaultOlderOpen}
         expanded={opts.expanded ?? false}
         activeId={opts.activeId}
         projects={[project]}
@@ -75,6 +79,8 @@ function render(
 
 const occurrences = (html: string, id: string) =>
   html.split(`data-session-id="${id}"`).length - 1;
+const at = (html: string, id: string) =>
+  html.indexOf(`data-session-id="${id}"`);
 
 describe("SidebarProjectGroup", () => {
   it("hangs the selected session under a collapsed group, mounted once", () => {
@@ -83,9 +89,7 @@ describe("SidebarProjectGroup", () => {
     // The others stay mounted (zero height) inside the collapsed drawer.
     expect(occurrences(html, "a")).toBe(1);
     const drawerStart = html.indexOf("data-collapsed-drawer");
-    expect(html.indexOf('data-session-id="b"')).toBeGreaterThan(
-      html.indexOf('data-session-id="c"'),
-    );
+    expect(at(html, "b")).toBeGreaterThan(at(html, "c"));
     expect(drawerStart).toBeGreaterThan(-1);
   });
 
@@ -95,32 +99,98 @@ describe("SidebarProjectGroup", () => {
     expect(html).not.toContain("data-collapsed-drawer");
   });
 
-  it("borrows the selected older session above the shut tail", () => {
+  it("closes the list with 显示更多 and the hidden count, borrowed rows above it", () => {
+    needsYou.add("o2");
+    const html = render({
+      expanded: true,
+      activeId: "o3",
+      olderSessions: [
+        session("o1"),
+        session("o2"),
+        session("o3"),
+        session("o4"),
+      ],
+    });
+    needsYou.clear();
+    // The tail's needs-you and selected sessions show; the rest hide.
+    for (const id of ["o2", "o3"]) expect(occurrences(html, id)).toBe(1);
+    for (const id of ["o1", "o4"]) expect(occurrences(html, id)).toBe(0);
+    // Borrowed rows follow the newest ones, above 显示更多.
+    const more = html.indexOf(">显示更多<");
+    expect(at(html, "o2")).toBeGreaterThan(at(html, "c"));
+    expect(more).toBeGreaterThan(at(html, "o3"));
+    // The count leaves the borrowed two out, and the row ends the group.
+    expect(html).toContain('aria-label="再显示 2 个对话"');
+    expect(html.slice(more)).toContain('tabular-nums">2<');
+    expect(html.indexOf("data-session-id", more)).toBe(-1);
+    expect(html).not.toContain(">收起<");
+  });
+
+  it("drops 显示更多 when every tail session is borrowed", () => {
     const html = render({
       expanded: true,
       activeId: "old",
-      olderSessions: [session("old"), session("older")],
+      olderSessions: [session("old")],
     });
     expect(occurrences(html, "old")).toBe(1);
-    expect(occurrences(html, "older")).toBe(0);
-    expect(html).toContain("更早 2 个");
+    expect(html).not.toContain(">显示更多<");
   });
 
-  it("borrows a tail session that needs the user above the shut tail", () => {
-    needsYou.add("broken");
+  it("appends the tail after the newest sessions and ends with 收起 when open", () => {
     const html = render({
       expanded: true,
-      olderSessions: [session("quiet"), session("broken")],
+      defaultOlderOpen: true,
+      olderSessions: [session("o1"), session("o2")],
     });
-    needsYou.clear();
-    expect(occurrences(html, "broken")).toBe(1);
-    expect(occurrences(html, "quiet")).toBe(0);
-    expect(html.indexOf('data-session-id="broken"')).toBeLessThan(
-      html.indexOf("更早 2 个"),
-    );
+    const order = ["a", "b", "c", "o1", "o2"].map((id) => at(html, id));
+    expect(order).toEqual([...order].sort((x, y) => x - y));
+    expect(order[0]).toBeGreaterThan(-1);
+    const less = html.indexOf(">收起<");
+    expect(less).toBeGreaterThan(at(html, "o2"));
+    expect(html.indexOf("data-session-id", less)).toBe(-1);
+    expect(html).not.toContain(">显示更多<");
   });
 
-  it("writes the summary on the row's second line", () => {
-    expect(render()).toContain(">共 3 个对话<");
+  it("draws the project row on one line with the total, no summary", () => {
+    const html = render();
+    const row = html.slice(0, html.indexOf("data-collapsed-drawer"));
+    expect(row).toContain("min-h-9");
+    expect(row).toContain(">回归<");
+    expect(row).toContain(">3</span>");
+    // No second line: state rides the rail, weight and folder pop.
+    expect(row).not.toMatch(/共|个/);
+    expect(row).not.toContain("mt-0.5");
+  });
+
+  it("draws drawer, borrowed and hung rows on one line, no subline", () => {
+    const withRecap = (id: string) => session(id, { summary: `recap-${id}` });
+    const sessions = ["a", "b", "c"].map(withRecap);
+    const olderSessions = ["o1", "o2"].map(withRecap);
+    const rows = (html: string) => html.split('data-session-id="').length - 1;
+    // Open, tail open: every row in the drawer.
+    const open = render({
+      expanded: true,
+      defaultOlderOpen: true,
+      sessions,
+      olderSessions,
+    });
+    // Open, tail shut: o2 borrowed above 显示更多.
+    const borrowed = render({
+      expanded: true,
+      activeId: "o2",
+      sessions,
+      olderSessions,
+    });
+    // Collapsed: b hung under the row, a / c in the shut drawer.
+    const hung = render({ activeId: "b", sessions, olderSessions });
+    for (const [html, count] of [
+      [open, 5],
+      [borrowed, 4],
+      [hung, 3],
+    ] as const) {
+      expect(html).not.toContain("recap-");
+      expect(rows(html)).toBe(count);
+      expect(html.split("min-h-8").length - 1).toBe(count);
+    }
   });
 });

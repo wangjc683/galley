@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Session } from "@/types/session";
 
-import { SidebarProjectGroup, SidebarTailToggle } from "./SidebarProjectGroup";
+import { SidebarProjectGroup, SidebarShowMoreRow } from "./SidebarProjectGroup";
 import {
   SidebarTimelineRow,
   type SidebarTimelineRowWiring,
@@ -85,10 +85,10 @@ function WiredProjectGroup({
  * the entry for as long as it's active; the entry's count still includes
  * it, because it still belongs to 更早 (activation doesn't bump
  * lastActivityAt). Switching away drops the row, no animation: it was
- * only ever a position marker. An old session a project group lists (its
- * 更早 tail) is shown by that group instead. Keyed by id so hopping
- * between two old sessions remounts the row rather than carrying one
- * row's local state to the next.
+ * only ever a position marker. An old session a project group lists
+ * (behind its 显示更多) is shown by that group instead. Keyed by id so
+ * hopping between two old sessions remounts the row rather than carrying
+ * one row's local state to the next.
  */
 function SidebarEarlier({
   earlier,
@@ -206,17 +206,21 @@ function SidebarSessionBucket({
 /**
  * The 项目 section (S2 / S3 / S5): a time-bucket-style header whose count
  * is the listed projects and whose caret folds the section, then one
- * group per project, then — when any project isn't listed — a closing
- * 「其他项目 N」 row that opens their groups in place (2026-10-09). No
- * section when there is no project at all; no 新建项目 + on the header
- * (S6).
+ * group per project. The quiet ones (`otherProjects`, outside the
+ * 30-day window) continue the list behind a closing 「更多项目 N」 row
+ * (2026-10-09), like a group's tail: opening appends their groups in
+ * place and the row moves to the end as 「收起」. No section when there
+ * is no project at all; no 新建项目 + on the header (S6).
  *
  * Folds hang what needs the user. Collapsed (persisted, see
  * useSidebarProjectsCollapsed), no group is mounted; project sessions
  * that need the user — erroring / waiting for a reply — and the selected
- * one hang directly under the header as plain rows, the way a time
- * bucket lists its rows. The 其他项目 row, shut, does the same for its
- * projects. That keeps each session mounted once, so `data-session-id`
+ * one hang directly under the header as plain two-line rows, the way a
+ * time bucket lists its rows. 更多项目, shut, lends the slot to the whole
+ * group row of a quiet project holding such a session, above the row and
+ * out of its count: a project list borrows projects, and the session
+ * then hangs indented under its own project, so you can tell whose it
+ * is. Either way each session stays mounted once, so `data-session-id`
  * stays unique and the reveal-active-row effect finds it.
  */
 function SidebarProjectsSection({
@@ -266,6 +270,10 @@ function SidebarProjectsSection({
         {...rowWiring}
       />
     ));
+  const borrowedOthers = othersOpen
+    ? []
+    : otherGroups.filter((g) => hangs(sessionsOf([g])).length > 0);
+  const hiddenOthers = otherGroups.length - borrowedOthers.length;
   return (
     <>
       <SidebarCollapsibleSectionLabel
@@ -279,18 +287,25 @@ function SidebarProjectsSection({
       ) : (
         <>
           {renderGroups(groups)}
-          {otherGroups.length > 0 && (
-            <SidebarTailToggle
-              label={copy.sidebar.otherProjects}
-              ariaLabel={copy.sidebar.otherProjectsCount(otherGroups.length)}
-              count={otherGroups.length}
-              open={othersOpen}
-              onToggle={onToggleOthers}
-            />
-          )}
-          {othersOpen
-            ? renderGroups(otherGroups)
-            : renderRows(hangs(otherSessions))}
+          {renderGroups(othersOpen ? otherGroups : borrowedOthers)}
+          {/* One slot for both modes, so 收起 stays the same instance
+              and its layout effect can hold it under the pointer. */}
+          {otherGroups.length > 0 &&
+            (othersOpen ? (
+              <SidebarShowMoreRow
+                mode="less"
+                label={copy.sidebar.showLess}
+                onToggle={onToggleOthers}
+              />
+            ) : hiddenOthers > 0 ? (
+              <SidebarShowMoreRow
+                mode="more"
+                label={copy.sidebar.moreProjects}
+                ariaLabel={copy.sidebar.showMoreProjectsAria(hiddenOthers)}
+                count={hiddenOthers}
+                onToggle={onToggleOthers}
+              />
+            ) : null)}
         </>
       )}
     </>
@@ -332,7 +347,7 @@ function SidebarCollapsibleSectionLabel({
         {/* -mr-[11px] hangs the caret (9px + gap-0.5) in the px-3
             padding, so the count ends on the plain label's edge. */}
         <span className="-mr-[11px] flex items-center gap-0.5 tabular-nums normal-case tracking-normal text-ink-muted">
-          {/* 0 when only 其他项目 are left: the row below carries the number. */}
+          {/* 0 when only 更多项目 are left: the row below carries the number. */}
           {count > 0 && count}
           <CaretRight
             size={9}
