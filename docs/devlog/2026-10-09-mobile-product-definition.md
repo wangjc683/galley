@@ -67,4 +67,10 @@ JC 裁：主聊天不支持 `/new`，也不归档重开，它是助理与用户�
 推论：上下文健康完全靠自动机制，摘要式压缩从「上线后再补」升为主聊天成立的前提；「聊乱了」的出口只能在对话内；
 基线测量加一项「想按 /new 的时刻是什么触发的」。§5 目标用户改动 JC 认可。Rule 2 拟文尚待 JC 明确接受。
 
+## 续四：Rule 2 落地
+
+JC 接受拟文。宪法单独一提交（`0d59f9a7`；`CLAUDE.md` 是指向 `AGENTS.md` 的符号链接，提交要点名 `AGENTS.md`），PRD 与 architecture 一提交（`18f7fe51`）。
+之后 grep 全文清过时引用：temperament、ipc-protocol、agent-api/transports、architecture-demo、PRD 默认决策表各改一处；archive 与旧 devlog 保留原貌；
+README 的安全模型一段仍然成立（IPC 层没变），随手机端发版再改叙事。
+
 代码未动。

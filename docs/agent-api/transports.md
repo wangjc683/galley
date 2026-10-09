@@ -56,9 +56,11 @@ polls persisted messages rather than subscribing to live events.
   the calling user's namespace.
 
 **No TCP, no token, no TLS.** Auth = filesystem permission (Unix) /
-user-scoped namespace (Windows). Cross-machine access goes through
-GA's IM frontends + Galley CLI on the host machine, not directly to
-this socket. See [AGENTS.md "Localhost Only"](../../AGENTS.md).
+user-scoped namespace (Windows). Cross-machine access never reaches
+this socket: it goes through Core's own outbound, end-to-end encrypted
+remote module (paired devices only, planned 2026-10), or through GA's
+IM frontends + Galley CLI on the host machine. See
+[AGENTS.md "Core Never Listens On The Network"](../../AGENTS.md).
 
 #### Wire format (NDJSON)
 

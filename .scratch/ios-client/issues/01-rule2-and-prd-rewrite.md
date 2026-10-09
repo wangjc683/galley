@@ -1,7 +1,7 @@
 # 01 宪法 Rule 2 修订与 PRD 远程叙事改写：措辞稿
 
 Type: task
-Status: ready-for-human（措辞给 JC 过目；过目后由 agent 落到正文，宪法改动单独一个提交）
+Status: done（JC 2026-10-09 接受；宪法 `0d59f9a7`，PRD 与 architecture `18f7fe51`，live 文档过时引用随后一提交清理；archive 与 devlog 不动）
 
 依据：[iOS PRD](../PRD.md) 裁决 1、19、21；[移动端产品定义](../../mobile-product/PRD.md)。
 原则：只改与远程叙事相关的句子，每处给「现文 → 拟文」，不整节重写；宪法用英文（`CLAUDE.md` 全文英文），PRD 用中文。

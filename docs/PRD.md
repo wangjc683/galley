@@ -596,7 +596,7 @@ migration 失败 → app 拒绝启动 + 显示错误页面：
 | 权威层 | TypeScript (React) | Rust (Galley Core) |
 | Bridge ownership | TypeScript | Rust |
 | 数据持久 | 同 v0.2 | 同 + supervisor / origin_note / created_via 字段 |
-| 远程访问 | non-goal | "由 Supervisor 在外部传输层"（仍 localhost only） |
+| 远程访问 | non-goal | v0.2：由 Supervisor 在外部传输层；2026-10 起：Galley 自己的端到端加密远程模块（Rule 2 修订） |
 | Telemetry | 隐含 no | 显式 no |
 | 目录结构 | src-tauri/desktop/bridge | core/gui/cli/runner |
 | Runtime backend | GA only | GA only (v0.2)，架构允许将来扩展 |

@@ -13,6 +13,9 @@
 ## 1. Localhost only
 
 > Galley Core 永远只 listen on AF_UNIX socket / named pipe，不开 TCP，不持有 token。
+>
+> 2026-10：宪法 Rule 2 改名「Core Never Listens On The Network」，本不变量不变——Core 仍不监听；
+> 新增的远程模块只向外连接（[iOS 客户端](../.scratch/ios-client/PRD.md)），落地时在此补「无 TCP 监听」的 grep 门禁。
 > 远程访问通过 Supervisor Agent 在外部传输层完成，**不是 Galley 的责任**。
 
 ### Code references

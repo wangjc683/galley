@@ -27,7 +27,7 @@ Galley (Galley) bridge 与 desktop 之间的通信契约。本文件是**唯一�
 - **Framing**：NDJSON request line → NDJSON response line（行内 JSON 对象，`\n` 终止）
 - **Schema version**：客户端发 `"schemaVersion": 1`，服务端检查匹配（不匹配返回 `error: "schema_mismatch"`）
 - **Idle timeout**：90 秒无 IO 服务端断开（streaming 子命令的 push 不算 idle）
-- **Auth**：仅文件系统权限（per-UID socket file）。**不开 TCP, 不持 token**（AGENTS.md § Localhost Only）
+- **Auth**：仅文件系统权限（per-UID socket file）。**不开 TCP, 不持 token**（AGENTS.md § Core Never Listens On The Network）
 
 ### Socket request shape
 
