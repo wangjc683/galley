@@ -4,10 +4,12 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 
 来源：2026-10-09 与 JC 讨论。起因是 JC 用 Meta Muse（2026-09-08 发布的 iOS agent app）的体验：简洁的 iOS 原生应用 + 动效，手感很好；
 而现有 IM 渠道都不是为 agent、为 Galley 做的，达不到原生契合。
+上层：[移动端产品定义](../mobile-product/PRD.md)（2026-10-09 第二轮，产品层六问在那里裁；本文只记实现层）。
 
 ## 定位
 
-- 手机是和桌面 GUI 平级的第二个前端；桌面 Galley Core 是两者共同的后端，会话和 agent 仍跑在用户电脑上。两端看到的是同一份状态。
+- 手机是人所在的地方，电脑是助理的工作台；桌面 Galley Core 是两端共同的后端，会话和 agent 仍跑在用户电脑上。两端看到的是同一份状态。
+  （2026-10-09 第二轮改写，原为「与桌面 GUI 平级的第二个前端」；依据见[移动端产品定义](../mobile-product/PRD.md)「关键场景」。）
 - 不走 Agent API / CLI：Agent API 是为 agent 设计的（轮询、Supervisor 身份、写入只有文本、`watch` 无续传、契约冻结），继续只服务 agent。
 - v1 以对话为主：首屏就是主聊天（[主聊天 PRD](../main-chat/PRD.md)）；会话列表退到第二层叫「旁聊」，「待你回答」也在第二层。
 
@@ -99,12 +101,13 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
   脚本：`tools/export-reply-corpus.py` 导出语料（只读；含真实对话，不进 git），`node tools/md-cjk-diff.mjs <语料> gui` 对比。
 - P1 安全：Face ID 解锁、桌面确认配对、一键吊销设备、端到端加密配对（P0 只 JC 自用，用预共享密钥）。
 - 手机协议的版本握手规则（只加不删，对不上提示升级哪一端）。
+- 浏览器任务要人介入（验证码、二次验证、确认支付）在手机上的形态，以及派活后手机上看什么进度；产品层待定见[移动端产品定义](../mobile-product/PRD.md)「待定」。
 
 ## 票（P0）
 
 | # | 内容 | 依赖 | 状态 |
 |---|---|---|---|
-| 01 | 宪法 Rule 2 修订，同步 `docs/PRD.md` §4.2 与 §6.2 非目标、`docs/architecture.md` Localhost Only 一节；顺带改写 PRD §2 / §4.2 的远程叙事与 IM 定位（裁决 19、21） | — | open |
+| 01 | 宪法 Rule 2 修订，同步 `docs/PRD.md` §4.2 与 §6.2 非目标、`docs/architecture.md` Localhost Only 一节；顺带改写 PRD §2 / §4.2 的远程叙事与 IM 定位（裁决 19、21），并把 §2 第 3 条「手机上是管理」换成[移动端产品定义](../mobile-product/PRD.md)的定位与核心价值 | — | open |
 | 02 | Core 接管发送 + 所有写入都广播，拆为 02a–02e（02e 暂缓到 P1），见 [issues/02](./issues/02-core-send-takeover.md) | — | ready-for-agent |
 | 03 | `client` 列迁移（`messages`、`sessions`；补六处手写迁移列表） | — | open |
 | 04 | 保持唤醒开关 | 待定细节 | open |
@@ -124,5 +127,6 @@ JC 用原生端是否比用 IM 多。手机端用户轮次按 `client = ios` 从
 - 构建机：JC 的 Mac 是 Intel，目前只装了 Command Line Tools、没有 Xcode；macOS 15.8.1 可以装 Xcode 26。macOS Tahoe 26 是最后支持 Intel 的版本，
   中期要换 Apple 芯片或用云端 CI。
 - 上架中国区要做 App 备案，AI 类 app 是否另有要求未核实。
+- 专用机场景（北极星里的 24 小时 Mac mini）下「设置只在桌面」（裁决 8）会别扭，见 deferred「专用机的远程设置」；P0 不解决。
 
 ## Comments
