@@ -8,6 +8,34 @@
 
 ---
 
+## IM 渠道并入主聊天
+
+- **状态**：暂缓（2026-10-09 JC 按推荐：先把主聊天在桌面和手机上做出来，IM 并不并进去放到后面谈）。
+- **提出**：2026-10-09 iOS 客户端与主聊天讨论（[devlog](./2026-10-09-ios-client-and-main-chat-direction.md)、[主聊天 PRD](../../.scratch/main-chat/PRD.md)）。
+  今天每个 IM 渠道各有一条长期对话（[09-30](./2026-09-30-im-restart-continuity.md) 起重启续接），但不在 Galley 库里，桌面和手机看不到，也不是「一个」助手。
+- **启动信号**：主聊天一周试用定形、手机 P0 落地之后，仍有用户主要从 IM 用 Galley，且希望 IM 和主聊天是同一条。
+- **方案**：IM 渠道收到的私聊消息作为主聊天会话的用户消息进 Galley（`via = gui`，`client` 记渠道名），回复由主聊天发回渠道；群聊不进个人主聊天。
+- **实施要点**：要重新解释 Rule 4（IM 消息成了 Galley 会话数据，而不是 supervisor 与用户的对话；先例是 08-13 对引擎日志的解释）；
+  09-30 的续接机制与 10-06 的 IM 入口层要跟着改；只在内置内核。
+- **待定**：群聊怎么办；多渠道同时在线时回复发到哪里；`/new` 在 IM 里的语义。
+- **关联**：`runner/im_reporter.py`、`runner/im_resume.py`、`core/src/im_supervisor/`、`core/src/managed_prompt.rs` `im_supervisor_prompt`。
+
+---
+
+## 设置 Agent 页去掉 Supervisor 叙事（SOP 降级）
+
+- **状态**：暂缓（2026-10-09 JC 按推荐：Supervisor 分三层——退远程叙事、降 SOP、留 CLI 契约；降 SOP 这一层不急）。
+- **提出**：2026-10-09（[devlog](./2026-10-09-ios-client-and-main-chat-direction.md)）。移动端替代了「人在外面 → IM → Supervisor → CLI」的远程用法；
+  本机 161 个会话里 CLI / supervisor 建的 42 个，带标签的几乎全是试用和测试；社区 galley#29 / #30 作者仍在用 `session send --supervisor` 派活。
+- **启动信号**：票 01 改写 PRD 远程叙事时顺手做；或主聊天的原生派活工具落地、IM 委派换过去之后。
+- **方案**：设置 → Agent 的「复制 Supervisor SOP」改为「让其他 Agent 操作 Galley」的说法，面向高级用户与开发者；
+  `docs/integrations/galley-supervisor-sop.md` 保留为外部 agent 的参考，不再当产品主叙事。CLI 与 Agent API 契约不动（Rule 3）。
+- **实施要点**：CLAUDE.md / AGENTS.md「Supervisor SOP is copy-first」一段要同步；中英文案按文案规范；galley-supervisor skill 不受影响。
+- **待定**：Agent 页标题要不要改名；本节与上方 galley#30「Supervisor 的队列操作面」的优先级关系（新方向下它更低）。
+- **关联**：[overlays-and-settings「Agent」](../design/overlays-and-settings.md)、`core/src/sop_install.rs`、`docs/integrations/galley-supervisor-sop.md`。
+
+---
+
 ## 项目整体归档
 
 - **状态**：暂缓（2026-10-08 JC 按推荐：这次只在删除确认框里加「同时归档」）。
