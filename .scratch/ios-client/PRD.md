@@ -107,7 +107,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 
 | # | 内容 | 依赖 | 状态 |
 |---|---|---|---|
-| 01 | 宪法 Rule 2 修订，同步 `docs/PRD.md` §4.2 与 §6.2 非目标、`docs/architecture.md` Localhost Only 一节；顺带改写 PRD §2 / §4.2 的远程叙事与 IM 定位（裁决 19、21），并把 §2 第 3 条「手机上是管理」换成[移动端产品定义](../mobile-product/PRD.md)的定位与核心价值 | — | open |
+| 01 | 宪法 Rule 2 修订，同步 `docs/PRD.md` §4.2 与 §6.2 非目标、`docs/architecture.md` Localhost Only 一节；顺带改写 PRD §2 / §4.2 的远程叙事与 IM 定位（裁决 19、21），并把 §2 第 3 条「手机上是管理」换成[移动端产品定义](../mobile-product/PRD.md)的定位与核心价值。[措辞稿](./issues/01-rule2-and-prd-rewrite.md) | JC 过目 | ready-for-human |
 | 02 | Core 接管发送 + 所有写入都广播，拆为 02a–02e（02e 暂缓到 P1），见 [issues/02](./issues/02-core-send-takeover.md) | — | ready-for-agent |
 | 03 | `client` 列迁移（`messages`、`sessions`；补六处手写迁移列表） | — | open |
 | 04 | 保持唤醒开关 | 待定细节 | open |
@@ -115,7 +115,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 | 06 | frankfurt 最小 relay + APNs 推送（做完了 / 在问你） | Apple 账号 | open |
 | 07 | SwiftUI P0：主聊天、旁聊列表、回答提问（约七个方法：列会话、读消息、订阅事件、发送、停止、新建会话、标已读）；回答提问要支持候选项含多选、问题上方一张图（issues/01） | 05、06 | open |
 | 08 | Core 通知判断（「需要关注」事件）+ 桌面系统通知改为接收 + 后台模式且已配对时桌面静默 | 02c | open |
-| 09 | 带图的提问：提示词条款（登录墙 / 扫码 / 图形验证码时截图 + Markdown 图片引用）+ Core 从问题抽本地图片经远程模块送手机 + 桌面真机验 `AskUserBubble` 显示图；A / B 待 JC 裁（[mobile-product/issues/01](../mobile-product/issues/01-browser-intervention.md)） | 05 | open |
+| 09 | 带图的提问（已裁 A 约定式）：提示词条款（登录墙 / 扫码 / 图形验证码时截图 + Markdown 图片引用）+ Core 从问题抽本地图片经远程模块送手机 + 桌面真机验 `AskUserBubble` 显示图；渲染验不过再转 B（[mobile-product/issues/01](../mobile-product/issues/01-browser-intervention.md)） | 05 | open |
 
 ## P0 要回答的问题
 
