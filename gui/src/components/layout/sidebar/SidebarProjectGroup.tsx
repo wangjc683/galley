@@ -427,6 +427,7 @@ function ProjectGroupRow({
                   <ProjectMenuItems
                     kind="dropdown"
                     project={project}
+                    onStartConversation={onStartConversation}
                     onTogglePin={onTogglePin}
                     onEdit={onEdit}
                     onArchiveAll={onArchiveAll}
@@ -451,6 +452,7 @@ function ProjectGroupRow({
           <ProjectMenuItems
             kind="context"
             project={project}
+            onStartConversation={onStartConversation}
             onTogglePin={onTogglePin}
             onEdit={onEdit}
             onArchiveAll={onArchiveAll}
@@ -465,6 +467,7 @@ function ProjectGroupRow({
 function ProjectMenuItems({
   kind,
   project,
+  onStartConversation,
   onTogglePin,
   onEdit,
   onArchiveAll,
@@ -472,6 +475,7 @@ function ProjectMenuItems({
 }: {
   kind: SidebarRowMenuKind;
   project: Project;
+  onStartConversation?: () => void;
   onTogglePin?: () => void;
   onEdit?: () => void;
   onArchiveAll?: () => void;
@@ -491,6 +495,19 @@ function ProjectMenuItems({
 
   return (
     <>
+      {/* The row's + only shows on hover; the menu gives the project's
+          new chat a second, non-hover way in, now that the sidebar's
+          新对话 is always a plain chat (2026-10-09). */}
+      {onStartConversation && (
+        <SidebarRowMenuItem
+          kind={kind}
+          onSelect={onStartConversation}
+          className={itemClass}
+        >
+          <Plus size={13} weight="thin" />
+          {copy.sidebar.newProjectConversation}
+        </SidebarRowMenuItem>
+      )}
       {onTogglePin && (
         <SidebarRowMenuItem
           kind={kind}

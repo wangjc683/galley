@@ -401,7 +401,6 @@ function App() {
   } = useProjectNavigation({
     activeProjectFilter,
     activeSessionBusy,
-    activeSessionId: effectiveActiveId,
     assignSessionToProject,
     copy,
     projects,
@@ -486,14 +485,15 @@ function App() {
   // session has been idle / closed / errored) and switch to main. Other
   // sessions' bridges keep running in background.
   //
-  // 项目上下文跟着 session 走：点哪个项目的对话，New Chat 就落在那个
-  // 项目；不属于任何项目的对话则回到普通新对话。所有打开会话的入口都走
-  // 这里——侧栏行、⌘K 会话与消息搜索、「更早」对话框、定时任务对话框——
-  // 所以「当前项目上下文」在任何 select 之后都与主区那条对话一致。
-  // （⌘K 打开会话曾经清空上下文，那是 Project Review 退出项目模式的
-  // 遗留，10-08 项目视图删除后只剩副作用。）
+  // 打开会话清空项目上下文（2026-10-09）：所有打开会话的入口都走这里——
+  // 侧栏行、⌘K 会话与消息搜索、「更早」对话框、定时任务对话框。项目
+  // 上下文是一次性的，只由明确的「在项目里新建」设置（组行 +、组行菜单、
+  // 空项目入口、建完项目），第一句话发出后就用完了；侧栏「新对话」永远是
+  // 普通新对话。此前（06-18 起）上下文跟着打开的会话走、新对话落在项目
+  // 里，那是为项目视图「连贯工作区」定的，10-08 项目视图删除后，离开
+  // 项目要点新对话再点输入框下的 ×，逃生出口不再恒定。
   const openSession = (id: string) => {
-    setActiveProjectFilter(visibleSessions.find((s) => s.id === id)?.projectId);
+    setActiveProjectFilter(undefined);
     void activateSession(id);
     setScreen("main");
   };
@@ -538,15 +538,15 @@ function App() {
               // createSession + activateSession when the user
               // commits to a first message.
               //
-              // 注意：这里不再清 activeProjectFilter。New Chat 落在
-              // 最后进入的项目里（由项目组的 +、空项目的入口或选中项目里的
-              // 对话设置），文案自动变成「新对话 · XXX」。没有 filter 时
-              // 仍是普通新对话。展开项目组不设置它（D8）。
+              // 侧栏新对话永远是普通新对话，与 ⌘N 一样（2026-10-09，
+              // 逃生出口只有一个去处）：清掉项目上下文。在项目里新建走
+              // 组行 + 或组行菜单。
+              setActiveProjectFilter(undefined);
               setActiveSession(undefined);
               setScreen("empty");
               setEmptyComposerFocusTick((tick) => tick + 1);
             }}
-            // 项目上下文跟着会话走，所有打开会话的入口同一条规则（见
+            // 打开会话清空项目上下文，所有打开会话的入口同一条规则（见
             // openSession）。
             onSelectSession={openSession}
             onArchiveSession={(id) => archiveSession(id)}
@@ -559,7 +559,6 @@ function App() {
             onOpenScheduled={() => setScheduledOpen(true)}
             scheduledActionCount={scheduledActionCount}
             projects={projects}
-            activeProjectFilter={activeProjectFilter}
             expandedProjectIds={expandedProjectIds}
             projectReveal={projectReveal}
             onNewProject={() => setCreateProjectOpen(true)}

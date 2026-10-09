@@ -30,7 +30,6 @@ export function SidebarQuickActions({
   onOpenScheduled,
   scheduledActionCount = 0,
   onNewProject,
-  activeProjectName,
   newChatActive = false,
   listScrolled = false,
 }: {
@@ -40,11 +39,6 @@ export function SidebarQuickActions({
   /** Badge count on the 定时 icon; see SidebarNavIcons. */
   scheduledActionCount?: number;
   onNewProject?: () => void;
-  /** When set, the "+ New Chat" label appends project context so the
-   * user knows the first message will be filed into that project.
-   * Without this hint the action was technically correct but
-   * invisibly so. */
-  activeProjectName?: string;
   /** The main area shows the empty new-chat composer: 新对话 takes the
    * selected-row style (see NewChatButton). */
   newChatActive?: boolean;
@@ -65,11 +59,7 @@ export function SidebarQuickActions({
       )}
     >
       <div className="mx-1.5 flex items-center gap-0.5">
-        <NewChatButton
-          projectName={activeProjectName}
-          active={newChatActive}
-          onClick={onNewChat}
-        />
+        <NewChatButton active={newChatActive} onClick={onNewChat} />
         <SidebarNavIcons
           placement="row"
           onSearch={onSearch}
@@ -95,36 +85,27 @@ export function SidebarQuickActions({
  * language as the active-session row — a quiet hierarchy cue, not a
  * CTA block.
  *
- * ⌘N is shown only without project context. ⌘N always opens a plain
- * new chat (useGlobalShortcuts clears the project filter) while this
- * button lands in the project, so in a project the tooltip is the
- * label alone and the row-end hint is gone — the shortcut would be a
- * false promise there.
+ * It is always a plain new chat, like ⌘N (2026-10-09): the escape
+ * hatch keeps one destination whatever session is open. From 06-18 it
+ * read 「新对话 · 项目名」 and landed in the last entered project — a
+ * rule built for the project view, which 10-08 removed — so leaving a
+ * project took this row plus the composer hint's ×. A project's new
+ * chat is its group row's + (and its menu).
  */
 function NewChatButton({
-  projectName,
   active = false,
   onClick,
 }: {
-  projectName?: string;
   active?: boolean;
   onClick?: () => void;
 }) {
   const copy = useCopy();
   const language = useLanguage();
-  const label = projectName
-    ? copy.sidebar.newConversationInProject(projectName)
-    : copy.sidebar.newConversation;
-  const shortcut = projectName ? null : formatShortcut("Mod+N");
+  const label = copy.sidebar.newConversation;
+  const shortcut = formatShortcut("Mod+N");
   return (
     <IconTooltip
-      text={
-        shortcut ? (
-          <ShortcutTooltipText label={label} shortcut={shortcut} />
-        ) : (
-          label
-        )
-      }
+      text={<ShortcutTooltipText label={label} shortcut={shortcut} />}
       side="bottom"
     >
       <button
@@ -160,8 +141,7 @@ function NewChatButton({
             the icons beside it; the thresholds and their arithmetic
             are in sidebar-width.ts (NEW_CHAT_LABEL_HIDDEN). Below them
             the whole label goes and only the plus stays, its tooltip
-            carrying the full label. In a project only " · 项目名"
-            truncates. pr-2 sits on the label so it vanishes with it:
+            carrying the full label. pr-2 sits on the label so it vanishes with it:
             at the 134px minimum the plus needs 28px and the icons
             squeeze to ~29px each. */}
         <span
@@ -172,33 +152,22 @@ function NewChatButton({
               : NEW_CHAT_LABEL_HIDDEN.zh,
           )}
         >
-          <span className="shrink-0">{copy.sidebar.newConversation}</span>
-          {projectName && (
-            // Same "action · name" shape as newConversationInProject in
-            // both locales. NBSP: a plain leading space would collapse
-            // at the start of this flex item.
-            <span className="min-w-0 truncate">
-              {"\u00a0· "}
-              {projectName}
-            </span>
-          )}
+          <span className="shrink-0">{label}</span>
         </span>
         {/* Row-end ⌘N, only while the row is alone (wide state). pr-3
             ends it 18px from the sidebar edge, on the session rows'
             px-3 text edge. aria-hidden: the button's aria-label is
             the name; the shortcut is a visual hint. */}
-        {shortcut && (
-          <span
-            aria-hidden="true"
-            className={cn(
-              NEW_CHAT_HINT_DISPLAY,
-              "shrink-0 pr-3",
-              SHORTCUT_TEXT_CLASS,
-            )}
-          >
-            <ShortcutGlyphs text={shortcut} />
-          </span>
-        )}
+        <span
+          aria-hidden="true"
+          className={cn(
+            NEW_CHAT_HINT_DISPLAY,
+            "shrink-0 pr-3",
+            SHORTCUT_TEXT_CLASS,
+          )}
+        >
+          <ShortcutGlyphs text={shortcut} />
+        </span>
       </button>
     </IconTooltip>
   );

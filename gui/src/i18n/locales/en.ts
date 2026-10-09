@@ -165,8 +165,6 @@ export const enCopy: AppCopy = {
   },
   sidebar: {
     newConversation: "New chat",
-    newConversationInProject: (projectName) =>
-      `New chat · ${projectName}`,
     search: "Search",
     projects: "Projects",
     newProject: "New project",

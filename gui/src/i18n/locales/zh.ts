@@ -150,8 +150,6 @@ export const zhCopy = {
   },
   sidebar: {
     newConversation: "新对话",
-    newConversationInProject: (projectName: string) =>
-      `新对话 · ${projectName}`,
     search: "搜索",
     projects: "项目",
     newProject: "新建项目",

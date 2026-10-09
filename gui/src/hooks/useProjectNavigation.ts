@@ -8,7 +8,6 @@ import type { Screen } from "@/stores/ui";
 export function useProjectNavigation({
   activeProjectFilter,
   activeSessionBusy,
-  activeSessionId,
   assignSessionToProject,
   copy,
   projects,
@@ -21,10 +20,6 @@ export function useProjectNavigation({
 }: {
   activeProjectFilter: string | undefined;
   activeSessionBusy: boolean;
-  /** The session the main area shows — undefined on the empty screen
-   * (App passes its `effectiveActiveId`), so moving a session never
-   * rewrites the empty composer's project context. */
-  activeSessionId: string | undefined;
   assignSessionToProject: (
     sessionId: string,
     projectId: string | null,
@@ -133,12 +128,6 @@ export function useProjectNavigation({
       ? projects.find((p) => p.id === projectId)
       : undefined;
     const sessionTitle = session?.title ?? copy.toasts.conversationUpdated;
-
-    // The open conversation changed project: 新对话 follows it, the
-    // same rule as opening a session.
-    if (sessionId === activeSessionId) {
-      setActiveProjectFilter(projectId ?? undefined);
-    }
 
     void assignSessionToProject(sessionId, projectId).then(() => {
       if (projectId) {

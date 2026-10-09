@@ -727,8 +727,7 @@ behind a 「其他项目 N」 row closing the 项目 section — the 10-08 proje
 is gone ([devlog](./devlog/2026-10-09-sidebar-recent-five-and-new-project-icon.md)).
 The same day's polish pass: the project folder field says what binding does
 (the bundled engine shares `project_memory.md` in that folder and keeps drafts
-there; an external GA skips project mode), every way of opening a session sets
-the project context to its project, 加入项目 ends in 新建项目…, and a project
+there; an external GA skips project mode), 加入项目 ends in 新建项目…, and a project
 created from the masthead or ⌘K lands on its new chat
 ([devlog](./devlog/2026-10-09-project-ux-polish-pass.md)). Then, adjudicated on
 the real device with a variant switcher: the group tail and the quiet projects
@@ -737,6 +736,11 @@ once opened, a quiet project borrowing its whole row when a session needs the
 user — project rows went to one line with the total on the right, and sessions
 inside a group to one line under a guide line hung from the folder icon
 ([devlog](./devlog/2026-10-09-project-group-show-more-and-one-line-rows.md)).
+The sidebar's 新对话 is now always a plain new chat like ⌘N: opening any
+session clears the project context, which only an explicit "new chat in this
+project" sets (the group's + or its new menu item) — the 06-18 "new chat lands
+in the last entered project" rule outlived the project view it was made for
+([devlog](./devlog/2026-10-09-new-chat-row-always-plain.md)).
 The README screenshots still show the old sidebar and `projects.png` the old
 Project Review; re-shoot with the next screenshot round.
 Owed for `v0.6.2`: the new update path on a

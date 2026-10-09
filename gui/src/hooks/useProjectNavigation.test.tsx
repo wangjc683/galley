@@ -33,7 +33,7 @@ const session = (id: string, projectId?: string) =>
 /** Render the hook once and hand back its result plus the recorded
  * calls. The calls under test touch only the injected callbacks, so
  * they can run after the static render. */
-function setup(activeSessionId: string | undefined) {
+function setup() {
   const setActiveProjectFilter = vi.fn<(id: string | undefined) => void>();
   const pushToast = vi.fn<(error: AppError) => void>();
   const assignSessionToProject = vi.fn(async () => {});
@@ -42,7 +42,6 @@ function setup(activeSessionId: string | undefined) {
     nav = useProjectNavigation({
       activeProjectFilter: undefined,
       activeSessionBusy: false,
-      activeSessionId,
       assignSessionToProject,
       copy: copyForLanguage("zh-CN"),
       projects: [project("a", "回归")],
@@ -65,29 +64,17 @@ function setup(activeSessionId: string | undefined) {
 }
 
 describe("useProjectNavigation · assignSessionToProjectWithToast", () => {
-  it("moves the project context with the open conversation", () => {
-    const moved = setup("open");
+  it("never touches the project context", () => {
+    // Project context is one-shot, set only by an explicit "new chat in
+    // this project" (2026-10-09); moving a session doesn't feed it.
+    const moved = setup();
     moved.nav.assignSessionToProjectWithToast("open", "b");
-    expect(moved.setActiveProjectFilter).toHaveBeenCalledWith("b");
-
-    const removed = setup("open");
-    removed.nav.assignSessionToProjectWithToast("open", null);
-    expect(removed.setActiveProjectFilter).toHaveBeenCalledWith(undefined);
-  });
-
-  it("leaves the context alone for another session or the empty screen", () => {
-    const other = setup("open");
-    other.nav.assignSessionToProjectWithToast("other", "a");
-    expect(other.setActiveProjectFilter).not.toHaveBeenCalled();
-
-    // On the empty screen App passes no active session.
-    const empty = setup(undefined);
-    empty.nav.assignSessionToProjectWithToast("open", null);
-    expect(empty.setActiveProjectFilter).not.toHaveBeenCalled();
+    moved.nav.assignSessionToProjectWithToast("other", null);
+    expect(moved.setActiveProjectFilter).not.toHaveBeenCalled();
   });
 
   it("names a project created this tick in the toast", async () => {
-    const { nav, pushToast, assignSessionToProject } = setup("open");
+    const { nav, pushToast, assignSessionToProject } = setup();
     nav.assignSessionToProjectWithToast("other", "fresh", "新项目");
     expect(assignSessionToProject).toHaveBeenCalledWith("other", "fresh");
     await vi.waitFor(() => expect(pushToast).toHaveBeenCalled());

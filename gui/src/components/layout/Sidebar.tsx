@@ -24,9 +24,6 @@ export interface SidebarProps {
   /** The main area shows the empty new-chat composer; the 新对话 row
    * is then the sidebar's selected row. */
   newChatActive?: boolean;
-  /** Project context for the right-side empty composer — the new-chat
-   * row reads it ("新对话 · 项目名"). It does not filter the list. */
-  activeProjectFilter?: string;
   /** Project ids whose 项目 section groups are expanded (this run only).
    * Several can be open, to watch work across projects. */
   expandedProjectIds?: string[];
@@ -130,7 +127,6 @@ export function Sidebar({
   projects = [],
   activeId,
   newChatActive = false,
-  activeProjectFilter,
   expandedProjectIds = [],
   projectReveal,
   onSelectSession,
@@ -157,9 +153,6 @@ export function Sidebar({
   sessionGoalStatus,
 }: SidebarProps) {
   const copy = useCopy();
-  const activeProject = activeProjectFilter
-    ? projects.find((p) => p.id === activeProjectFilter)
-    : undefined;
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -345,7 +338,6 @@ export function Sidebar({
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
-        activeProjectName={activeProject?.name}
         newChatActive={newChatActive}
         listScrolled={listScrolled}
       />
