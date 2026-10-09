@@ -19,12 +19,11 @@
 
 中文：**跑在你电脑上的全能助手。极简 harness，把舞台留给模型，在模型飞速进化的时代押注未来。** 一个助手不够用时，它就是一支 agent 团队，人和 agent 都是一等公民。
 
-它有两个对等的前端：
+它有三个前端，共享同一个 **Galley Core**（Rust 端权威层），数据 / 状态 / 命令调度都从这里走：
 
-- **Galley GUI**——给坐在桌前的 human operator 看进度、写指令
-- **Galley CLI**——给 **Supervisor Agent**（外部 agent，可能是另一个 GA、可能是 Claude，可能是用户自己写的）远程操作整个 session team
-
-两个前端共享同一个 **Galley Core**（Rust 端权威层），数据 / 状态 / 命令调度都从这里走。
+- **Galley GUI**——人在桌前看进度、写指令
+- **Galley 手机端**（规划中，iOS 原生，见 [iOS 客户端](../.scratch/ios-client/PRD.md)）——人在外面时的入口；电脑是助理的工作台，手机是人所在的地方
+- **Galley CLI**——给其他 Agent（可能是另一个 GA、可能是 Claude，可能是用户自己写的）与本机自动化操作整个 session team
 
 > *Galley started as a workbench for GenericAgent. The first two letters of our name are a quiet bow to where we came from.*
 
@@ -34,15 +33,14 @@ GenericAgent (lsdefine/GenericAgent, MIT, ~10K star) 是个能力强、社区活
 
 1. **多 session 并行**：所有 IM 都是单线对话框，几件事必须串在同一个 context 里
 2. **手机 ↔ 桌面 session 是隔离的**：外出用 IM 跟 GA 跑的事不在桌面工作台里，回到桌面看不到
-3. **手机上用户期待是"管理"而不是"工作"**：更像总监 / 管家，而不是工作台
+3. **手机上不是只管理**：现代人手机用得比电脑多；助理有一台可操作的电脑，含用户登录态的真实浏览器，手机上就能真正干活
+   （原「手机上用户期待是管理而不是工作」，2026-10-09 推翻，依据[移动端产品定义](../.scratch/mobile-product/PRD.md)）
 
-v0.1 Galley 解决了第 1 个（multi-session 桌面 GUI），第 2 / 3 个是 v0.2 通过 dual-native 架构解决：
+v0.1 Galley 解决了第 1 个（multi-session 桌面 GUI）；第 2 / 3 个的答案是 Galley 自己的手机端：桌面 Core 是手机的后端，
+两端看到同一份状态；IM 渠道与 Agent 经 CLI 操作继续作为替代入口（2026-10-09 起；此前 v0.2 的答案是「人经 IM 对 Supervisor Agent 说话、
+Supervisor 经 localhost CLI 控制 Galley」，数据上委派为 0 次，见 [10-06 devlog](./devlog/2026-10-06-im-entry-layer-phone-first.md)）。
 
-- **桌面**：human operator 用 Galley GUI 像 v0.1 一样管 session team
-- **远端**：human 通过 IM 跟 Supervisor Agent 对话，Supervisor Agent 通过 localhost CLI 控制 Galley，所有 session 落到同一个 Galley 数据库
-- **回桌面**：所有外面派的任务都在 Galley GUI 里一目了然，可以手动接管继续
-
-Galley 自身永远是本地应用，远程传输不是 Galley 的责任——那部分由 Supervisor Agent 的外部传输层（如 GA 自己的 IM frontend）负责。
+Galley 自身永远是本地应用；远程传输由 Galley 自己的远程模块经端到端加密中转完成（宪法 Rule 2，2026-10 修订）。
 
 ## 3. 产品定位
 
@@ -50,8 +48,8 @@ Galley 自身永远是本地应用，远程传输不是 Galley 的责任——�
 
 - **本地 agent team orchestrator**（macOS + Windows，long-term Linux）
 - **dual-native**：GUI 和 CLI 是对等消费端
-- **agent-friendly platform**：Supervisor Agent 通过公开 CLI 契约面控制整个 team
-- **Local-first**：所有数据在用户机器，远程传输由 Supervisor 在外部完成
+- **agent-friendly platform**：其他 Agent 通过公开 CLI 契约面操作整个 team
+- **Local-first**：所有数据与积累在用户机器；远程访问经 Galley 自己的端到端加密中转，中转不存数据
 - **自有引擎（owns its engine）**：内置 managed runtime（上游 GA + Galley patch stack）是产品引擎与开发重心
 - **Non-invasive to attached runtime**：attach 外部 GA 是兼容模式，严格非侵入；架构上（runner/ 目录与宪法）仍允许将来接入其他 runtime——这是架构余量，不是产品身份
 
@@ -80,33 +78,29 @@ Galley **可以**做（即「扩展式 attach」）：
 
 **保证**：用户随时可以删除 Galley，GA 独立运行不受影响。
 
-### 4.2 Localhost only
+### 4.2 Core 永不监听网络（2026-10 修订，原「Localhost only」）
 
-**Galley Core 永远 only listen on AF_UNIX / named pipe，不开 TCP，不持有 token。**
+**Galley Core 永远只在 AF_UNIX / named pipe 上接受本地控制，不开 TCP 监听，不持有远程登录 token。**
 
-远程访问通过 Supervisor Agent 在外部传输层（IM frontend / SSH / 其他）完成。这是责任边界，不是 v0.2 简化：
+远程访问只经过 Galley 自己的远程模块：它在 Core 进程内、由桌面向外连接到中转、端到端加密、只与用户在桌面上配对过的设备通话。
+中转只看到密文与路由元数据，不存用户数据，也发不出命令。
 
 ```
-┌──────────────────────────────┐
-│  手机 / 远端                  │
-│  ↓ IM / SSH / 其他           │   ← 远程传输：Supervisor Agent 的责任
-└────────────┬─────────────────┘
-             ↓
-┌────────────┴─────────────────┐
-│  桌面（同一台机器）           │
-│  Supervisor Agent            │
-│  ↓ localhost (unix socket)   │
-│  Galley CLI / GUI            │
-│  ↓                           │
-│  Galley Core                 │   ← 本地编排：Galley 的责任
-└──────────────────────────────┘
+┌──────────────────────┐   端到端加密   ┌──────────────────────┐   桌面向外连接   ┌──────────────────────┐
+│ 手机（已配对设备）    │ ◄───────────► │ 中转（只见密文）      │ ◄────────────── │ 桌面 Galley Core      │
+│ 呈现桌面的状态        │               │ 无状态、不存数据      │                 │ 远程模块在进程内      │
+└──────────────────────┘               └──────────────────────┘                 └──────────────────────┘
 ```
+
+IM 渠道、SSH 等外部传输继续支持，不再是唯一远程路径。
 
 收益：
 
-- 安全模型 = OS user filesystem permission，无 TLS / token / 证书
-- 复用 Supervisor 平台已有的远程传输（GA 的 IM frontends、Claude 的 web、SSH 等）
-- "Galley 是本地的、数据不离开你的机器" brand 守住
+- 安全模型 = 设备配对 + 端到端加密，中转不在信任链里
+- 桌面不开端口，局域网与公网都扫不到
+- 「积累在你自己的电脑上」照旧，中转不存任何数据
+
+修订叙事见 [2026-10-09 devlog](./devlog/2026-10-09-ios-client-and-main-chat-direction.md)。
 
 ### 4.3 CLI surface 是公开契约
 
@@ -121,6 +115,7 @@ Galley CLI 输出的 JSON schema 是 Galley 对 agent 生态的公开承诺：
 
 V1.0 优先服务：
 
+- 把 Galley 当个人助理、经常在手机上和它沟通的内置内核用户（2026-10-09 起优先）
 - 现有 GA 重度用户（v0.1 已经在用 Galley 的人，自然过渡）
 - 想用 supervisor agent 远程控制 session team 的 power user
 - 能接受本地配置、关心工具执行透明度的开发者
@@ -130,7 +125,6 @@ V1.0 优先服务：
 - 完全不懂本地配置的轻度用户
 - 需要团队协作的企业用户
 - 需要托管服务的用户
-- 不写代码 / 不用 IM agent 的用户
 
 ## 6. Goals / Non-goals
 
@@ -159,12 +153,12 @@ V1.0 优先服务：
 
 ### 6.2 V1.0 Non-goals
 
-- **远程认证 / token 系统**：永远 localhost only（宪法 Rule 2）
+- **远程登录 / token 系统**：不做；远程只有设备配对（宪法 Rule 2）
 - **Supervisor 注册 / capability 声明 / permission system**：仍未做，留 v0.6++
 - **Galley 作 chat platform**：不存 Supervisor ↔ human 对话，只存动作 + reason
   （宪法 Rule 4）
 - **多 agent runtime 同时支持**：仍是 GA only。架构允许将来扩展，尚未实施
-- **Web / mobile / remote 前端**：仍未做
+- **Web 前端**：不做。手机端已立项（[iOS 客户端](../.scratch/ios-client/PRD.md)）
 - **Telemetry / 用量统计**：永远 no telemetry
 - **Homebrew tap / 包管理**：仍未做，v0.6+ 候选
 
@@ -578,9 +572,8 @@ migration 失败 → app 拒绝启动 + 显示错误页面：
 继承 v0.2 PRD §22 的 future direction。新增候选：
 
 - Multi-runtime backend (Claude SDK / OpenAI Agents 作为 alternative runner)
-- Web view / mobile thin client（直接跟 Galley Core 通信，不需要 Supervisor 中转）
+- 手机端已立项（2026-10-09，见 §6.2）
 - Supervisor capability registration / permission system
-- 远程访问层（如果证据上需要，但仍坚持 localhost only 是默认）
 - Homebrew tap / package managers
 - Galley Plugin marketplace (扩展 supervisor adapter)
 - Persistent Supervisor session（如果 dogfood 信号支持）
