@@ -101,7 +101,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
   脚本：`tools/export-reply-corpus.py` 导出语料（只读；含真实对话，不进 git），`node tools/md-cjk-diff.mjs <语料> gui` 对比。
 - P1 安全：Face ID 解锁、桌面确认配对、一键吊销设备、端到端加密配对（P0 只 JC 自用，用预共享密钥）。
 - 手机协议的版本握手规则（只加不删，对不上提示升级哪一端）。
-- 浏览器任务要人介入（验证码、二次验证、确认支付）在手机上的形态，以及派活后手机上看什么进度；产品层待定见[移动端产品定义](../mobile-product/PRD.md)「待定」。
+- 浏览器任务要人介入：研究已做（[mobile-product/issues/01](../mobile-product/issues/01-browser-intervention.md)），缺口只有「带图的提问」，方案 A / B 待裁；派活后手机上看什么进度仍待定。
 
 ## 票（P0）
 
@@ -113,8 +113,9 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 | 04 | 保持唤醒开关 | 待定细节 | open |
 | 05 | `Notifier` 扇出 + Core 内远程模块（向外 WSS，预共享密钥） | 02 | open |
 | 06 | frankfurt 最小 relay + APNs 推送（做完了 / 在问你） | Apple 账号 | open |
-| 07 | SwiftUI P0：主聊天、旁聊列表、回答提问（约七个方法：列会话、读消息、订阅事件、发送、停止、新建会话、标已读） | 05、06 | open |
+| 07 | SwiftUI P0：主聊天、旁聊列表、回答提问（约七个方法：列会话、读消息、订阅事件、发送、停止、新建会话、标已读）；回答提问要支持候选项含多选、问题上方一张图（issues/01） | 05、06 | open |
 | 08 | Core 通知判断（「需要关注」事件）+ 桌面系统通知改为接收 + 后台模式且已配对时桌面静默 | 02c | open |
+| 09 | 带图的提问：提示词条款（登录墙 / 扫码 / 图形验证码时截图 + Markdown 图片引用）+ Core 从问题抽本地图片经远程模块送手机 + 桌面真机验 `AskUserBubble` 显示图；A / B 待 JC 裁（[mobile-product/issues/01](../mobile-product/issues/01-browser-intervention.md)） | 05 | open |
 
 ## P0 要回答的问题
 
