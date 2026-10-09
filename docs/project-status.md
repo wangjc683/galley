@@ -9,18 +9,18 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.6.1`.
-- Git tag / GitHub Release: `v0.6.1` is the current published stable release
-  (tagged at `36dba190` on 2026-10-07, GitHub Latest).
+- Package version: `0.6.2`.
+- Git tag / GitHub Release: `v0.6.2` is the current published stable release
+  (tagged at `1bc4900d` on 2026-10-09, GitHub Latest).
 - Agent API schema: `schemaVersion: 2` (since the Goal v2 rework on
   2026-09-16, first shipped in `v0.5.0`). The server keeps answering `1` for
   every command that did not change; only the `goal` family is `2`-only, and
   the retired v1 goal commands are `unknown_command` under every version.
-- Release tier: stable patch; default update channel points at `v0.6.1`.
+- Release tier: stable patch; default update channel points at `v0.6.2`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `f308ee7` (audited 2026-10-06, first shipped in
-  `v0.6.1`) — the memory-distill prompt now lets the model merge and
-  compress existing memory entries. The previous `1b6442f` shipped
+  `v0.6.1`, again in `v0.6.2`) — the memory-distill prompt now lets the
+  model merge and compress existing memory entries. The previous `1b6442f` shipped
   `v0.5.1` … `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. See
   [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
@@ -28,6 +28,31 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.6.2` (2026-10-09) is a patch two days after `v0.6.1`, 26 commits. The
+sidebar's projects became a 项目 section under 置顶 — one row per project, its
+five newest sessions with 「显示更多」 for the rest, quiet projects behind
+「更多项目」, sessions that need the user hung under a folded group or section
+— and Project Review is retired; 新对话 and ⌘N always start a plain chat, and
+deleting a project can archive its conversations in the same confirm. The
+Settings per-tab second pass shipped all five batches: Models; Runtime +
+Agent, with the packaged-build fix that stops 「使用外部 Python」 leaking into
+bundled-engine GUI sessions; Browser Control; Channels, with channel secrets
+redacted in status lines, logs and captured stderr; and General / Shortcuts /
+Report an Issue / About, where an update now installs at 重启并更新 instead of
+right after download. The dark theme turned cool blue-grey. Graded patch:
+Project Review's capability moved into the sidebar rather than going away, so
+"removals grade too" does not apply; no migration, no Agent API change. No dev
+regression round (no prompt or engine change, every batch had real-device
+acceptance); the bundled-runtime gate passed on `mac-x64` (the runner changed
+for WeChat `/help` `/status`); upstream was still the audited `f308ee7`.
+`check.yml` was green on the pre-bump head (run 37882729376, all six jobs);
+JC approved publish without an item-by-item smoke report; stable promoted and
+verified the same session (run 37886938865). The `v0.6.1` → `v0.6.2` hop
+still runs `v0.6.1`'s own updater (on macOS the channels and browser bridge
+stop at install until a restart), which the notes say; the new path is first
+testable on the next hop. Full narrative: devlog
+[2026-10-09-v0.6.2-release](./devlog/2026-10-09-v0.6.2-release.md).
 
 `v0.6.1` (2026-10-07) is a patch two days after `v0.6.0`, 16 commits. It
 ships the GA baseline `f308ee7` and three managed prompt rounds: the runtime
@@ -528,17 +553,22 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.6.1` is published and promoted as the live stable release (published
-2026-10-07 14:39 UTC). The default `updates/stable/latest.json` channel points
-at `v0.6.1`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.6.2` is published and promoted as the live stable release (published
+2026-10-09 05:05 UTC). The default `updates/stable/latest.json` channel points
+at `v0.6.2`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed with
 `--cache-bust` for both channels across all three platforms (darwin-aarch64,
 darwin-x86_64, windows-x86_64), in the promote run and again locally (channel
-branch at `30cd4405`). One draft cut (release run 37632655144); JC approved
-publishing it without reporting smoke items, so the Windows items under
+branch at `c5975333`). One draft cut (release run 37883912570); JC approved
+publishing it without reporting smoke items, so the smoke items under
 Unreleased On Main are still owed. The bundled-runtime gate passed on
-`mac-x64`; `check.yml` was green on the release head (run 37631144963, all
+`mac-x64`; `check.yml` was green on the pre-bump head (run 37882729376, all
 six jobs).
+
+`v0.6.1` (2026-10-07) went through the same path: one draft cut (release run
+37632655144), JC approved publishing without reporting smoke items, both
+channels verified with `--cache-bust`, bundled-runtime gate passed on
+`mac-x64`.
 
 `v0.6.0` (2026-10-05) went through the same path: one draft cut (release run
 37333557134), JC approved publishing without reporting smoke items, both
@@ -614,9 +644,12 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.6.0` → `v0.6.1` is owed (wait at
-   least 5 minutes after the 2026-10-07 promote); `v0.5.6` → `v0.6.0` was
-   never reported; `v0.5.5` → `v0.5.6` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.6.1` → `v0.6.2` is owed (wait at
+   least 5 minutes after the 2026-10-09 promote). It runs `v0.6.1`'s own
+   updater, so on macOS the channels and browser bridge stopping at install
+   until a restart is expected; the install-at-restart path is first
+   testable on the `v0.6.2` → next hop. `v0.6.0` → `v0.6.1` and
+   `v0.5.6` → `v0.6.0` were never reported; `v0.5.5` → `v0.5.6` passed on JC's
    Windows machine (2026-10-01, same session; the bundled CLI came out at
    0.5.6 too); `v0.5.4` → `v0.5.5` passed on an
    installed build (JC reported 2026-10-01, same session as the release);
@@ -657,117 +690,40 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Since `v0.6.1`: the dark theme's ground and ink turned cool blue-grey
-(H ~260, L unchanged); the browser focus-steal fix was deferred with its probe
-findings; and the Settings per-tab second pass shipped its first batch,
-Models (2026-10-08, [devlog](./devlog/2026-10-08-settings-models-tab-pass.md)):
-the row end is a single ⋯ with 上移 / 下移 inside (drag is the main path), the
-provider form gets the model draft's dirty guard and both editors flag a
-refused switch, write failures are error toasts and a failed load is its own
-state, 「保存 / 添加 / 密钥」 wording, provider edit can test first with the
-preset read-only, 「编辑默认配置」 lands 09-22's dropped header link, and the
-model-layer number fields stop clamping per keystroke. The second batch,
-Runtime + Agent ([devlog](./devlog/2026-10-08-settings-runtime-agent-tab-pass.md)),
-fixes a packaged-build bug where 「使用外部 Python」 leaked into bundled-engine
-sessions started from the GUI, shows the GA version card only for data from an
-external session, lets the first Esc in a Settings field leave the field
-instead of closing Settings, validates the external GA path before saying
-「外部 GA 已可用」, routes the Setup Assistant's runtime switch through the same
-action as Settings, drops the two Command Palette entries that only logged,
-and gives Windows a manual PATH hint for `galley`. The third batch, Browser
-Control ([devlog](./devlog/2026-10-08-settings-browser-control-tab-pass.md)),
-keeps a verified install on its status card when the bridge errors or
-restarts (it used to fall back to the three-step install guide), words the
-two waiting states apart and drops 「重新检测」, adds 「其他」 for Vivaldi /
-Brave / Arc, folds repair into a disclosure card with a reload-after-update
-line, has the GUI word probe results from a new `kind` field (no Core Chinese
-in the English UI), and skips the 35 s wait when the bridge already says the
-extension is not there. The new-user flow is still not walked end to end on a
-real machine. The fourth batch, Channels
-([devlog](./devlog/2026-10-08-settings-channels-tab-pass.md)), redacts channel
-secrets in status lines, logs and Core-captured stderr (a rejected Telegram
-token used to appear in full), gives set-up channels a configured view
-instead of falling back to onboarding on error / pause / reconnect, words
-the running badge by pairing (「已接入」; Feishu before pairing keeps
-「服务已启动」), shares one command table across the four cards (WeChat gains
-`/help` and `/status` in the runner), names the module 「渠道」 in Chinese
-body copy, lets every enabled channel pause, and restarts channels one by
-one. The fifth batch, General / Shortcuts / Report an Issue / About
-([devlog](./devlog/2026-10-08-settings-general-shortcuts-feedback-about-pass.md)),
-moves the update install to the 重启并更新 click: the background step only
-downloads and verifies (it no longer waits for tasks), because installing
-right after download stopped the channels and browser bridge on macOS with
-nothing bringing them back, and on Windows the updater's install exits the
-app. The About version row now names the target version and offers
-「下载更新」 when auto-download is off (it used to spin 「正在下载更新」 with
-nothing downloading); ⌘ ⌥ ← → key caps use the system font instead of the
-Menlo fallback; the Shortcuts table drops a Tab row that was never wired and
-adds three real keys; on macOS only ⌘ triggers the global shortcuts (Ctrl+K /
-Ctrl+N stay Cocoa editing keys); the Report an Issue… menu and tray item open
-Settings → 报告问题; the environment payload drops `deferred_b4` checks and
-gains `ga_commit` for external GA. The sidebar's time-bucket labels moved
-onto the row grid (counts now line up under ⌘N) and truncated session titles
-and sublines fade out instead of ending in a ragged `…`; the 新对话 row now
-heads the list — it is the selected row while the empty new-chat composer is
-showing, and its divider appears only once the list scrolls
-([devlog](./devlog/2026-10-08-sidebar-grid-and-fade-truncation.md)).
-Projects are now a 项目 section under 置顶, one collapsible group row per
-project, and Project Review is gone: time buckets hold only sessions outside
-projects, the section header folds (remembered across restarts), the group row
-carries its sessions' states on the rail and title weight, sessions waiting for a reply or erroring
-(and the selected one) hang under a collapsed group or section. Interleaving
-group rows into the time buckets was tried first and overturned on the real
-device the same day ([devlog](./devlog/2026-10-08-sidebar-project-groups.md)).
-Deleting a project offers 「同时归档里面的 N 个对话」 (ticked by default) in its
-confirm, since the conversations otherwise pour back into the time buckets. An
-open group shows its newest five sessions, the rest behind its 「更早 N」 tail
-(sessions there that need the user still show); the masthead's third icon
-creates a project directly, and projects quiet past the 30-day window sit
-behind a 「其他项目 N」 row closing the 项目 section — the 10-08 projects menu
-is gone ([devlog](./devlog/2026-10-09-sidebar-recent-five-and-new-project-icon.md)).
-The same day's polish pass: the project folder field says what binding does
-(the bundled engine shares `project_memory.md` in that folder and keeps drafts
-there; an external GA skips project mode), 加入项目 ends in 新建项目…, and a project
-created from the masthead or ⌘K lands on its new chat
-([devlog](./devlog/2026-10-09-project-ux-polish-pass.md)). Then, adjudicated on
-the real device with a variant switcher: the group tail and the quiet projects
-became list continuations — 「显示更多 N」 / 「更多项目 N」 at the end, 「收起」
-once opened, a quiet project borrowing its whole row when a session needs the
-user — project rows went to one line with the total on the right, and sessions
-inside a group to one line under a guide line hung from the folder icon
-([devlog](./devlog/2026-10-09-project-group-show-more-and-one-line-rows.md)).
-The sidebar's 新对话 is now always a plain new chat like ⌘N: opening any
-session clears the project context, which only an explicit "new chat in this
-project" sets (the group's + or its new menu item) — the 06-18 "new chat lands
-in the last entered project" rule outlived the project view it was made for
-([devlog](./devlog/2026-10-09-new-chat-row-always-plain.md)).
-The README screenshots still show the old sidebar and `projects.png` the old
-Project Review; re-shoot with the next screenshot round.
-Owed for `v0.6.2`: the new update path on a
-real older build (it takes effect from the update after `v0.6.2`, since the
-installed build runs its own updater) and the Windows App update smoke items.
-Owed from the `v0.6.1` smoke (JC approved
-publish without an item-by-item report): on Windows, F5 / Ctrl+R mid-run
-(steps and final answer kept, the run not restarted; that WebView2 reloads on
-these keys is inferred, not observed) and a first session on the `f308ee7`
-engine. Still owed from `v0.6.0`: the resident browser bridge (stdin EOF
-exit, the `GALLEY_CORE_PID` watchdog, a port held by another program), the
+Nothing since `v0.6.2` yet; release-scope truth is `git log v0.6.2..HEAD`.
+
+Carried forward. The README screenshots still show the old sidebar, and
+`projects.png` the retired project view (its caption still says 项目视图);
+re-shoot with the next screenshot round (kept out of `v0.6.2`).
+`.scratch/sidebar-project-groups/issues/03` (ready-for-agent) holds two
+follow-ups from the 10-09 project passes: the edit dialog's folder hint should
+follow `workspaceEnabled` (a CLI-created project without
+`--enable-workspace` gets the wrong line), and 「收起」 vanishes when every
+tail session is borrowed. Owed from the `v0.6.2` smoke (JC approved publish
+without an item-by-item report): the packaged-build external-Python fix, the
+composer focus after creating a project and 加入项目 → 新建项目…; on Windows a
+first session (also the `f308ee7` engine's first Windows run, owed since
+`v0.6.1`), F5 / Ctrl+R mid-run (steps and final answer kept, the run not
+restarted; owed since `v0.6.1`, and that WebView2 reloads on these keys is
+inferred, not observed) and the CLI-directory PATH hint in Settings → 智能体接入.
+The new update path (download only, install at 重启并更新, Windows no longer
+exiting after download) and the Windows App update smoke items wait for the
+`v0.6.2` → next hop, since an installed build runs its own updater.
+Still owed from `v0.6.0`: the resident browser bridge (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another program), the
 browser new-user flow (待解锁 → install → auto-verify → 试一试), which has not
 been walked live on any platform, the ＋ menu's native file and folder
 pickers, and the thin sidebar check circle on a 100% display. Watch the first
 managed memory distillations on `f308ee7`: the one that ran in the `v0.6.1`
 regression wrote nothing, so the merge-and-compress path is still unobserved
-(fallback: a one-line managed patch back to minimal updates). Settings: the
-per-tab second pass continues with 运行环境 + 智能体接入, then 浏览器控制,
-聊天软件, and 通用 / 快捷键 / 报告问题 / 关于; the 2026-10-08 dark sweep of all
-nine tabs on the cool ground found nothing cross-tab (快捷键's small `⌘`
-keycap glyph and 浏览器控制's faint connected-card title wait for their
-batches). Windows drag-to-reorder in Settings → Models has still not been
-reported on. The README social preview image
+(fallback: a one-line managed patch back to minimal updates). Windows
+drag-to-reorder in Settings → Models has still not been reported on, nor has
+WeChat `/help` / `/status` on a paired account. The README social preview image
 waits for JC to upload it in the repo settings. Regression leftovers to
 delete (JC: after the release): the project 「v0.6.1 发版回归」 with its 19
-sessions and a Chrome tab; the `~/Downloads` test files went to the Trash on
-2026-10-07. Small observations from the regression, none acted on: over IM,
+sessions and a Chrome tab (the `v0.6.2` delete confirm's 「同时归档里面的 N
+个对话」 clears the project in one step); the `~/Downloads` test files went to
+the Trash on 2026-10-07. Small observations from the regression, none acted
+on: over IM,
 「现在 Galley 里在跑什么？」 ran the plain `sessions list` as the prompt says,
 then filtered it and ran `status` (3 steps where `status` alone would do); a
 reattached live runner does not replay `ready`, so its model list keeps the
@@ -803,7 +759,6 @@ to the end of the Discord / Telegram polish). The three open judgment calls
 from the IM dogfood (subtext on one-step answers, narration kept in the
 answered-question echo, the typing indicator lingering up to ~10 s) stay as
 built.
-Release-scope truth remains `git log v0.6.1..HEAD`.
 
 Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
 row stacked above the commission marker's eyebrow) reads cluttered has not
@@ -846,7 +801,8 @@ running that baseline audit on its own, outside a release; whether and when
 is JC's call. At `v0.6.0` upstream was still `f308ee7` and the audit was
 skipped a sixth time on the same reasoning. On 2026-10-06 the audit ran on
 its own, outside a release, and `f308ee7` became the audited baseline; it
-shipped in `v0.6.1`, when upstream was still `f308ee7`. Upstream's default-constant line (`default_context_win`) has now
+shipped in `v0.6.1` and again in `v0.6.2`, both times with upstream still at
+`f308ee7`. Upstream's default-constant line (`default_context_win`) has now
 collided with patch `0007` twice in a row — expect it again.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
@@ -891,7 +847,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.6.1 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.6.2 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
 | GA baseline | Audited upstream `f308ee7` (2026-10-06), shipped since `v0.6.1` (`1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
@@ -917,7 +873,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.6.1`. For the next release, bump every
+- Current package metadata uses `0.6.2`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
