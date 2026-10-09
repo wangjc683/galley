@@ -104,16 +104,26 @@ runtime, under the managed-runtime rules in
 - Managed-runtime changes must never write into or depend on a user-owned
   external GA checkout.
 
-### 2. Localhost Only
+### 2. Core Never Listens On The Network
 
-Galley Core listens only on AF_UNIX socket / Windows named pipe. It does not
-open TCP, expose HTTP, or hold remote auth tokens.
+Galley Core accepts local control only on an AF_UNIX socket / Windows named
+pipe. It does not open a TCP listener, expose HTTP, or hold remote login
+tokens.
 
-Remote use cases belong to the external Supervisor transport layer, such as an
-IM bot, SSH, or another agent frontend.
+Remote access exists only through Galley's own remote module (since
+2026-10-09, see [iOS client](./.scratch/ios-client/PRD.md)): it runs inside
+the Core process, connects outward from the desktop to a relay, is
+end-to-end encrypted, and talks only to devices the user paired on the
+desktop. The relay sees ciphertext and routing metadata, stores no user
+data, and cannot issue commands. The desktop is the only place Core runs;
+a phone is a presenter of the desktop's state, never a second authority.
 
-Any proposal to add HTTP server, token auth, remote login, or TLS must first
-change this constitution.
+IM bots, SSH, and other agent frontends remain supported transports; they
+are no longer the only remote path.
+
+Any proposal to add a TCP / HTTP listener on Core, a relay that can read
+plaintext, or a login that is not device pairing must first change this
+constitution.
 
 ### 3. CLI Surface Is Public Contract
 
