@@ -200,7 +200,11 @@ export const zhCopy = {
     pin: "置顶",
     unpin: "取消置顶",
     addToProject: "加入项目",
+    // 会话已在某个项目里时，菜单项叫「移到项目」（toast 也分加入 / 移到）。
+    moveToProject: "移到项目",
     noProjects: "还没有项目",
+    // 「加入项目」子菜单底部：建一个项目，并把这条会话移进去。
+    newProjectForSession: "新建项目…",
     removeFromProject: "从项目移除",
     archive: "归档",
     newConversationInProjectTitle: (projectName: string) =>
@@ -1780,11 +1784,20 @@ export const zhCopy = {
     editProject: "编辑项目",
     name: "名称",
     projectName: "项目名",
-    workspaceFolder: "工作区文件夹",
+    workspaceFolder: "项目文件夹",
     chooseFolder: "选择文件夹",
     clearFolder: "清除",
-    workspacePlaceholder: "暂无项目工作区",
-    chooseWorkspaceFolderTitle: "选择项目工作区文件夹",
+    workspacePlaceholder: "未选择",
+    chooseWorkspaceFolderTitle: "选择项目文件夹",
+    // 文件夹字段下的说明（2026-10-09）：选了文件夹 = 内置内核的项目模式，
+    // 会在文件夹里建 project_memory.md、草稿与产物落在这里；外置 GA 没有
+    // Galley 状态根，项目模式被跳过，文件夹只给「改动」认仓库。
+    folderHintNone:
+      "选一个文件夹，项目里的对话会共享一份项目记忆，AI 也会把草稿和产物放进去。不选就只在侧栏里归类对话。",
+    folderHintChosen:
+      "项目里的对话会共享这个文件夹里的 project_memory.md 作为项目记忆（没有会自动新建），AI 也会把草稿和产物放在这里。",
+    folderHintExternal:
+      "外置 GA 不启用项目记忆，文件夹只用来识别仓库、查看改动。",
     close: "关闭",
     filterArchive: "按标题或摘要过滤…",
     archivedTitle: "已归档",

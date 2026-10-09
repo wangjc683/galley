@@ -18,6 +18,10 @@ export interface CheckboxProps
   onCheckedChange?: (checked: boolean) => void;
   size?: CheckboxSize;
   children?: ReactNode;
+  /** Classes for the box's wrapper — e.g. a top margin that centers the
+   * box on the first text line when the label is `items-start`
+   * (multi-line labels), since a top-aligned box sits 1–2px high. */
+  boxClassName?: string;
 }
 
 const BOX_SIZE_CLASSES: Record<CheckboxSize, string> = {
@@ -38,6 +42,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
       size = "md",
       children,
       className,
+      boxClassName,
       disabled,
       onClick,
       ...rest
@@ -52,7 +57,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           className,
         )}
       >
-        <span className="relative inline-flex shrink-0">
+        <span className={cn("relative inline-flex shrink-0", boxClassName)}>
           <input
             ref={ref}
             type="checkbox"

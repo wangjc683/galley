@@ -5,12 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { Button, DialogActionRow } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
+import { DialogField } from "@/components/ui/dialog-field";
+import { FolderPathText } from "@/components/ui/folder-path";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import { useCopy } from "@/lib/i18n";
 import { pickFolder } from "@/lib/pick-folder";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
-import type { Project, Session } from "@/types/session";
+import type { Project, RuntimeKind, Session } from "@/types/session";
 
 export interface EditProjectDialogProps {
   /** Project to edit. `null` = closed. The parent owns this state so
@@ -29,12 +31,16 @@ export interface EditProjectDialogProps {
    * the confirm step (parent owns it for consistency with the
    * existing ConfirmDelete* pattern in ArchivedDialog). */
   onRequestDelete: (project: Project) => void;
+  /** Which GA the project's sessions run on. Only changes the folder
+   * hint: an external GA skips project mode, so the folder there only
+   * locates the repo for 改动. Defaults to `managed`. */
+  runtimeKind?: RuntimeKind;
 }
 
 /**
  * Edit Project. Same 420px
  * frame as CreateProjectDialog so the two read as siblings; the
- * only structural difference is the destructive "删除 Project" row
+ * only structural difference is the destructive "删除项目" row
  * at the bottom (separated by a divider so a stray click doesn't
  * slip into it).
  *
@@ -47,6 +53,7 @@ export function EditProjectDialog({
   onClose,
   onSave,
   onRequestDelete,
+  runtimeKind = "managed",
 }: EditProjectDialogProps) {
   const copy = useCopy();
   const [name, setName] = useState("");
@@ -129,7 +136,7 @@ export function EditProjectDialog({
             }}
             className="mt-5 space-y-4"
           >
-            <Field label={copy.projects.name} required>
+            <DialogField label={copy.projects.name} required>
               <input
                 ref={nameInputRef}
                 type="text"
@@ -137,12 +144,14 @@ export function EditProjectDialog({
                 onChange={(e) => setName(e.target.value)}
                 className={cn(
                   "h-9 w-full rounded-sm border border-line bg-app px-3 text-[13px] text-ink",
-                  "placeholder:text-ink-muted focus:border-line-strong focus:outline-none",
+                  // App-wide text-input focus register (ScheduledTasksDialog
+                  // INPUT_CLASS, Composer focus-within).
+                  "placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
                 )}
               />
-            </Field>
+            </DialogField>
 
-            <Field label={copy.projects.workspaceFolder}>
+            <DialogField label={copy.projects.workspaceFolder}>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <div
                   className={cn(
@@ -153,9 +162,13 @@ export function EditProjectDialog({
                   )}
                   title={rootPath || copy.projects.workspacePlaceholder}
                 >
-                  <span className="truncate">
-                    {rootPath || copy.projects.workspacePlaceholder}
-                  </span>
+                  {rootPath ? (
+                    <FolderPathText path={rootPath} />
+                  ) : (
+                    <span className="truncate">
+                      {copy.projects.workspacePlaceholder}
+                    </span>
+                  )}
                 </div>
                 <Button
                   type="button"
@@ -182,7 +195,14 @@ export function EditProjectDialog({
                   </Button>
                 )}
               </div>
-            </Field>
+              <p className="mt-1.5 text-ui-tertiary leading-[1.5] text-ink-muted">
+                {runtimeKind === "external"
+                  ? copy.projects.folderHintExternal
+                  : rootPath
+                    ? copy.projects.folderHintChosen
+                    : copy.projects.folderHintNone}
+              </p>
+            </DialogField>
           </form>
 
           <div className="mt-6 border-t border-line pt-4">
@@ -290,6 +310,9 @@ export function ConfirmDeleteProjectDialog({
               checked={archiveSessions}
               onCheckedChange={setArchiveSessions}
               className="mt-4 flex items-start gap-2 rounded-sm border border-line bg-app px-3 py-2.5 text-[12.5px] leading-[1.55] text-ink hover:border-line-strong"
+              // Center the 16px box on the first text line:
+              // (12.5px × 1.55 − 16px) / 2 = 1.6875px.
+              boxClassName="mt-[1.6875px]"
             >
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span>{copy.projects.deleteProjectArchiveSessions(count)}</span>
@@ -318,25 +341,5 @@ export function ConfirmDeleteProjectDialog({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-        {label}
-        {required && <span className="ml-0.5 text-error">*</span>}
-      </label>
-      <div className="mt-1.5">{children}</div>
-    </div>
   );
 }

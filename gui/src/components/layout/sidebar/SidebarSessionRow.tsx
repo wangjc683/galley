@@ -46,6 +46,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onArchive,
   onTogglePin,
   onAssignToProject,
+  onCreateProjectForSession,
   isEditing = false,
   onRequestRename,
   onConfirmRename,
@@ -78,6 +79,8 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onTogglePin?: () => void;
   /** Assign / remove from project. `null` = unassign. */
   onAssignToProject?: (projectId: string | null) => void;
+  /** 加入项目 submenu → 新建项目…: create a project for this session. */
+  onCreateProjectForSession?: () => void;
   /** When true, replace the title span with an inline input. */
   isEditing?: boolean;
   /** Right-click "重命名" handler — flips the row into edit mode.
@@ -582,6 +585,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                   onArchive={handleArchiveSelect}
                   onTogglePin={onTogglePin}
                   onAssignToProject={onAssignToProject}
+                  onCreateProjectForSession={onCreateProjectForSession}
                   onRequestRename={onRequestRename}
                 />
               </SidebarRowMenuContent>
@@ -630,6 +634,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               onArchive={handleArchiveSelect}
               onTogglePin={onTogglePin}
               onAssignToProject={onAssignToProject}
+              onCreateProjectForSession={onCreateProjectForSession}
               onRequestRename={onRequestRename}
             />
           </ContextMenu.Content>

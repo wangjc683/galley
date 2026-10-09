@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, DialogActionRow, IconButton } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
+import { DialogField } from "@/components/ui/dialog-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import { useCopy, useLanguage, type AppCopy } from "@/lib/i18n";
@@ -664,7 +665,7 @@ function TaskForm({
       }}
       className="space-y-4 px-5 pb-5"
     >
-      <Field label={copy.scheduled.promptLabel} required>
+      <DialogField label={copy.scheduled.promptLabel} required>
         <textarea
           autoFocus
           value={form.prompt}
@@ -673,10 +674,10 @@ function TaskForm({
           rows={4}
           className={cn(INPUT_CLASS, "resize-none py-2 leading-relaxed")}
         />
-      </Field>
+      </DialogField>
 
       <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
-        <Field label={copy.scheduled.repeatLabel}>
+        <DialogField label={copy.scheduled.repeatLabel}>
           <div className="space-y-2">
             <SegmentedControl
               size="sm"
@@ -761,9 +762,9 @@ function TaskForm({
                 </p>
               )}
           </div>
-        </Field>
+        </DialogField>
 
-        <Field label={copy.scheduled.timeLabel}>
+        <DialogField label={copy.scheduled.timeLabel}>
           <input
             type="time"
             required
@@ -773,7 +774,7 @@ function TaskForm({
             }
             className={cn(INPUT_CLASS, "h-9 w-[110px]")}
           />
-        </Field>
+        </DialogField>
       </div>
 
       {preview && (
@@ -793,7 +794,7 @@ function TaskForm({
       )}
 
       <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
-        <Field label={copy.scheduled.projectLabel}>
+        <DialogField label={copy.scheduled.projectLabel}>
           {/* appearance-none strips the native chevron, so the pr-8 slot
               carries an explicit CaretDown — without it the select reads
               as a plain text input with no open affordance. */}
@@ -816,9 +817,9 @@ function TaskForm({
               className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted"
             />
           </div>
-        </Field>
+        </DialogField>
 
-        <Field label={copy.scheduled.modelLabel}>
+        <DialogField label={copy.scheduled.modelLabel}>
           <div className="relative w-fit">
             <select
               value={form.llmName}
@@ -846,7 +847,7 @@ function TaskForm({
               className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted"
             />
           </div>
-        </Field>
+        </DialogField>
       </div>
 
       <DialogActionRow className="mt-0 pt-1">
@@ -858,25 +859,5 @@ function TaskForm({
         </Button>
       </DialogActionRow>
     </form>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-        {label}
-        {required && <span className="ml-0.5 text-error">*</span>}
-      </label>
-      <div className="mt-1.5">{children}</div>
-    </div>
   );
 }

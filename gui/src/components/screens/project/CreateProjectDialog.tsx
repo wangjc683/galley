@@ -4,9 +4,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button, DialogActionRow } from "@/components/ui/button";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
+import { DialogField } from "@/components/ui/dialog-field";
+import { FolderPathText } from "@/components/ui/folder-path";
 import { useCopy } from "@/lib/i18n";
 import { pickFolder } from "@/lib/pick-folder";
 import { cn } from "@/lib/utils";
+import type { RuntimeKind } from "@/types/session";
 
 export interface CreateProjectDialogProps {
   open: boolean;
@@ -20,6 +23,10 @@ export interface CreateProjectDialogProps {
     name: string;
     rootPath?: string;
   }) => Promise<void>;
+  /** Which GA the project's sessions run on. Only changes the folder
+   * hint: an external GA skips project mode, so the folder there only
+   * locates the repo for 改动. Defaults to `managed`. */
+  runtimeKind?: RuntimeKind;
 }
 
 /**
@@ -33,6 +40,7 @@ export function CreateProjectDialog({
   open,
   onOpenChange,
   onCreate,
+  runtimeKind = "managed",
 }: CreateProjectDialogProps) {
   const copy = useCopy();
   const [name, setName] = useState("");
@@ -108,7 +116,7 @@ export function CreateProjectDialog({
             }}
             className="mt-5 space-y-4"
           >
-            <Field label={copy.projects.name} required>
+            <DialogField label={copy.projects.name} required>
               <input
                 ref={nameInputRef}
                 type="text"
@@ -117,12 +125,14 @@ export function CreateProjectDialog({
                 placeholder={copy.projects.projectName}
                 className={cn(
                   "h-9 w-full rounded-sm border border-line bg-app px-3 text-[13px] text-ink",
-                  "placeholder:text-ink-muted focus:border-line-strong focus:outline-none",
+                  // App-wide text-input focus register (ScheduledTasksDialog
+                  // INPUT_CLASS, Composer focus-within).
+                  "placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
                 )}
               />
-            </Field>
+            </DialogField>
 
-            <Field label={copy.projects.workspaceFolder}>
+            <DialogField label={copy.projects.workspaceFolder}>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <div
                   className={cn(
@@ -133,9 +143,13 @@ export function CreateProjectDialog({
                   )}
                   title={rootPath || copy.projects.workspacePlaceholder}
                 >
-                  <span className="truncate">
-                    {rootPath || copy.projects.workspacePlaceholder}
-                  </span>
+                  {rootPath ? (
+                    <FolderPathText path={rootPath} />
+                  ) : (
+                    <span className="truncate">
+                      {copy.projects.workspacePlaceholder}
+                    </span>
+                  )}
                 </div>
                 <Button
                   type="button"
@@ -162,7 +176,14 @@ export function CreateProjectDialog({
                   </Button>
                 )}
               </div>
-            </Field>
+              <p className="mt-1.5 text-ui-tertiary leading-[1.5] text-ink-muted">
+                {runtimeKind === "external"
+                  ? copy.projects.folderHintExternal
+                  : rootPath
+                    ? copy.projects.folderHintChosen
+                    : copy.projects.folderHintNone}
+              </p>
+            </DialogField>
 
             <DialogActionRow className="mt-0 pt-1">
               <Button variant="secondary" onClick={() => onOpenChange(false)}>
@@ -176,25 +197,5 @@ export function CreateProjectDialog({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-        {label}
-        {required && <span className="ml-0.5 text-error">*</span>}
-      </label>
-      <div className="mt-1.5">{children}</div>
-    </div>
   );
 }

@@ -582,8 +582,9 @@ function ProjectGroupDrawer({
 }
 
 /** A fold that closes a list and expands in place, in the 更早 entry's
- * register (10px label + count + caret): a drawer's 「更早 N 个」 tail
- * (D4), and the 项目 section's 「其他项目」 row. */
+ * register (10px label + count, with the caret hung in the right
+ * padding so the count keeps the section labels' edge): a drawer's
+ * 「更早 N 个」 tail (D4), and the 项目 section's 「其他项目」 row. */
 export function SidebarTailToggle({
   label,
   ariaLabel,
@@ -613,7 +614,7 @@ export function SidebarTailToggle({
       )}
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="flex items-center gap-0.5 tabular-nums normal-case tracking-normal">
+      <span className="-mr-[11px] flex items-center gap-0.5 tabular-nums normal-case tracking-normal">
         {count}
         <CaretRight
           size={9}

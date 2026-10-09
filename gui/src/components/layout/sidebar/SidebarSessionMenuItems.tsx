@@ -3,6 +3,7 @@ import {
   CaretRight,
   Check,
   Folder,
+  FolderPlus,
   Pencil,
   PushPin,
   PushPinSlash,
@@ -37,6 +38,11 @@ import {
  * the ⋯ target and pinning is a once-per-session action — so the
  * promotion is the cheapest one: first item in the menu both entry
  * points share.
+ *
+ * The project submenu (2026-10-09) reads 移到项目 once the session has a
+ * project, and — when the host wires `onCreateProjectForSession` — ends
+ * in 新建项目… so zero projects is no longer a dead end: the submenu is
+ * then that one item instead of 「还没有项目」.
  */
 export function SidebarSessionMenuItems({
   kind,
@@ -45,6 +51,7 @@ export function SidebarSessionMenuItems({
   onArchive,
   onTogglePin,
   onAssignToProject,
+  onCreateProjectForSession,
   onRequestRename,
 }: {
   kind: SidebarRowMenuKind;
@@ -53,6 +60,8 @@ export function SidebarSessionMenuItems({
   onArchive?: () => void;
   onTogglePin?: () => void;
   onAssignToProject?: (projectId: string | null) => void;
+  /** Submenu → 新建项目…: create a project and move this session in. */
+  onCreateProjectForSession?: () => void;
   onRequestRename?: () => void;
 }) {
   const copy = useCopy();
@@ -104,7 +113,9 @@ export function SidebarSessionMenuItems({
             )}
           >
             <Folder size={13} weight="thin" />
-            {copy.sidebar.addToProject}
+            {session.projectId
+              ? copy.sidebar.moveToProject
+              : copy.sidebar.addToProject}
             <CaretRight
               size={10}
               weight="thin"
@@ -117,52 +128,66 @@ export function SidebarSessionMenuItems({
               className="galley-pop-in z-50 min-w-[200px] rounded-md border border-line bg-elevated p-1 shadow-elevated"
               sideOffset={4}
             >
-              {projects.length === 0 ? (
+              {/* With 新建项目… wired, that item alone fills an empty
+                  submenu. */}
+              {projects.length === 0 && !onCreateProjectForSession && (
                 <div className="px-2.5 py-1.5 text-[12px] italic text-ink-muted">
                   {copy.sidebar.noProjects}
                 </div>
-              ) : (
-                projects.map((p) => {
-                  const isCurrent = session.projectId === p.id;
-                  return (
-                    <SidebarRowMenuItem
-                      key={p.id}
-                      kind={kind}
-                      onSelect={() => onAssignToProject(p.id)}
-                      disabled={isCurrent}
-                      className={cn(
-                        itemClass,
-                        "data-[disabled]:cursor-default data-[disabled]:opacity-50",
-                      )}
-                    >
-                      <Folder size={13} weight="thin" />
-                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                      {isCurrent && (
-                        <Check
-                          size={11}
-                          weight="bold"
-                          className="text-brand-strong"
-                        />
-                      )}
-                    </SidebarRowMenuItem>
-                  );
-                })
               )}
-              {session.projectId && (
-                <>
+              {projects.map((p) => {
+                const isCurrent = session.projectId === p.id;
+                return (
+                  <SidebarRowMenuItem
+                    key={p.id}
+                    kind={kind}
+                    onSelect={() => onAssignToProject(p.id)}
+                    disabled={isCurrent}
+                    className={cn(
+                      itemClass,
+                      "data-[disabled]:cursor-default data-[disabled]:opacity-50",
+                    )}
+                  >
+                    <Folder size={13} weight="thin" />
+                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                    {isCurrent && (
+                      <Check
+                        size={11}
+                        weight="bold"
+                        className="text-brand-strong"
+                      />
+                    )}
+                  </SidebarRowMenuItem>
+                );
+              })}
+              {/* One separator closes the project list; 新建项目… and
+                  从项目移除 share it. */}
+              {projects.length > 0 &&
+                (onCreateProjectForSession || session.projectId) && (
                   <SidebarRowMenuSeparator
                     kind={kind}
                     className="my-1 h-px bg-line"
                   />
-                  <SidebarRowMenuItem
-                    kind={kind}
-                    onSelect={() => onAssignToProject(null)}
-                    className={itemClass}
-                  >
-                    <XIcon size={13} weight="thin" />
-                    {copy.sidebar.removeFromProject}
-                  </SidebarRowMenuItem>
-                </>
+                )}
+              {onCreateProjectForSession && (
+                <SidebarRowMenuItem
+                  kind={kind}
+                  onSelect={onCreateProjectForSession}
+                  className={itemClass}
+                >
+                  <FolderPlus size={13} weight="thin" />
+                  {copy.sidebar.newProjectForSession}
+                </SidebarRowMenuItem>
+              )}
+              {session.projectId && (
+                <SidebarRowMenuItem
+                  kind={kind}
+                  onSelect={() => onAssignToProject(null)}
+                  className={itemClass}
+                >
+                  <XIcon size={13} weight="thin" />
+                  {copy.sidebar.removeFromProject}
+                </SidebarRowMenuItem>
               )}
             </SidebarRowMenuSubContent>
           </SidebarRowMenuPortal>

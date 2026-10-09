@@ -211,7 +211,9 @@ export const enCopy: AppCopy = {
     pin: "Pin",
     unpin: "Unpin",
     addToProject: "Add to project",
+    moveToProject: "Move to project",
     noProjects: "No projects yet",
+    newProjectForSession: "New project…",
     removeFromProject: "Remove from project",
     archive: "Archive",
     newConversationInProjectTitle: (projectName) =>
@@ -1830,11 +1832,17 @@ export const enCopy: AppCopy = {
     editProject: "Edit project",
     name: "Name",
     projectName: "Project name",
-    workspaceFolder: "Workspace folder",
+    workspaceFolder: "Project folder",
     chooseFolder: "Choose folder",
     clearFolder: "Clear",
-    workspacePlaceholder: "No Project Workspace",
-    chooseWorkspaceFolderTitle: "Choose project workspace folder",
+    workspacePlaceholder: "None selected",
+    chooseWorkspaceFolderTitle: "Choose project folder",
+    folderHintNone:
+      "Pick a folder and the project's chats share one project memory; the AI also keeps drafts and outputs there. Without one, the project only groups chats in the sidebar.",
+    folderHintChosen:
+      "The project's chats share project_memory.md in this folder as their project memory (created if missing); the AI also keeps drafts and outputs here.",
+    folderHintExternal:
+      "With an external GA, project memory is off; the folder only identifies the repository for reviewing changes.",
     close: "Close",
     filterArchive: "Filter by title or summary…",
     archivedTitle: "Archived",

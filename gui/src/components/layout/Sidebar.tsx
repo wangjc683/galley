@@ -69,6 +69,9 @@ export interface SidebarProps {
     sessionId: string,
     projectId: string | null,
   ) => void;
+  /** 加入项目 submenu → 新建项目…: open CreateProjectDialog; the new
+   * project takes this session in. */
+  onCreateProjectForSession?: (sessionId: string) => void;
   /** Right-click project → Pin / Unpin. Toggles `project.pinned`. */
   onTogglePinProject?: (id: string) => void;
   /** Right-click project → Edit. Parent opens EditProjectDialog. */
@@ -142,6 +145,7 @@ export function Sidebar({
   onRenameSession,
   onTogglePinSession,
   onAssignSessionToProject,
+  onCreateProjectForSession,
   onTogglePinProject,
   onEditProject,
   onDeleteProject,
@@ -303,6 +307,7 @@ export function Sidebar({
     onArchiveSession,
     onTogglePinSession,
     onAssignSessionToProject,
+    onCreateProjectForSession,
     editingSessionId,
     onRequestRename: onRenameSession
       ? (id: string) => setEditingSessionId(id)

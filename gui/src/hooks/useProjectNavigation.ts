@@ -8,6 +8,7 @@ import type { Screen } from "@/stores/ui";
 export function useProjectNavigation({
   activeProjectFilter,
   activeSessionBusy,
+  activeSessionId,
   assignSessionToProject,
   copy,
   projects,
@@ -20,6 +21,10 @@ export function useProjectNavigation({
 }: {
   activeProjectFilter: string | undefined;
   activeSessionBusy: boolean;
+  /** The session the main area shows — undefined on the empty screen
+   * (App passes its `effectiveActiveId`), so moving a session never
+   * rewrites the empty composer's project context. */
+  activeSessionId: string | undefined;
   assignSessionToProject: (
     sessionId: string,
     projectId: string | null,
@@ -45,7 +50,12 @@ export function useProjectNavigation({
   // CreateProjectDialog open state. Local for the same reason as the
   // other dialogs in App — modal visibility should not persist across
   // launches.
-  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [createProjectOpen, setCreateProjectOpenState] = useState(false);
+  // The session a 「新建项目…」 from its 加入项目 submenu will move into
+  // the new project. null = a plain create (masthead icon / ⌘K).
+  const [createProjectSessionId, setCreateProjectSessionId] = useState<
+    string | null
+  >(null);
   // EditProjectDialog stores the full project being edited so the dialog
   // can reset its inputs from the row that triggered it. null = closed.
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
@@ -96,9 +106,24 @@ export function useProjectNavigation({
     setEmptyComposerFocusTick((tick) => tick + 1);
   };
 
+  // Closing always forgets the pending session, so the next plain open
+  // starts clean.
+  const setCreateProjectOpen = (open: boolean) => {
+    setCreateProjectOpenState(open);
+    if (!open) setCreateProjectSessionId(null);
+  };
+
+  const openCreateProjectForSession = (sessionId: string) => {
+    setCreateProjectSessionId(sessionId);
+    setCreateProjectOpenState(true);
+  };
+
   const assignSessionToProjectWithToast = (
     sessionId: string,
     projectId: string | null,
+    // A project created this tick is not in this render's `projects`
+    // yet; the caller names it so the toast doesn't fall back to 「项目」.
+    nextProjectName?: string,
   ) => {
     const session = visibleSessions.find((s) => s.id === sessionId);
     const previousProject = session?.projectId
@@ -109,9 +134,16 @@ export function useProjectNavigation({
       : undefined;
     const sessionTitle = session?.title ?? copy.toasts.conversationUpdated;
 
+    // The open conversation changed project: 新对话 follows it, the
+    // same rule as opening a session.
+    if (sessionId === activeSessionId) {
+      setActiveProjectFilter(projectId ?? undefined);
+    }
+
     void assignSessionToProject(sessionId, projectId).then(() => {
       if (projectId) {
-        const projectName = nextProject?.name ?? copy.projects.fallbackProject;
+        const projectName =
+          nextProjectName ?? nextProject?.name ?? copy.projects.fallbackProject;
         const title =
           session?.projectId && session.projectId !== projectId
             ? copy.toasts.movedTo(projectName)
@@ -159,9 +191,11 @@ export function useProjectNavigation({
     activeProject,
     assignSessionToProjectWithToast,
     createProjectOpen,
+    createProjectSessionId,
     deletingProject,
     editingProject,
     expandedProjectIds,
+    openCreateProjectForSession,
     openProjectInSidebar,
     projectReveal,
     setCreateProjectOpen,

@@ -9,6 +9,7 @@ import {
   type ImageBlockReason,
 } from "@/components/conversation/Composer";
 import { Epigraph } from "@/components/screens/Epigraph";
+import { FolderPathText } from "@/components/ui/folder-path";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   conversationTypographyStyle,
@@ -68,6 +69,10 @@ export interface EmptyStateProps {
   conversationFontSize?: ConversationFontSize;
   /** Active project context for the next lazily-created session. */
   projectName?: string;
+  /** The active project's bound folder, shown after the name in the
+   * "将创建到 X" hint so the binding is visible before the first send
+   * (2026-10-09). Omitted when the project has no folder. */
+  projectRootPath?: string;
   /**
    * Clears the project context so the next new chat is a plain,
    * project-less conversation. When provided, the "将创建到 X" hint
@@ -121,6 +126,7 @@ export function EmptyState({
   conversationWidth = "compact",
   conversationFontSize = "standard",
   projectName,
+  projectRootPath,
   onClearProjectContext,
   focusTick = 0,
   epigraphCondition = "quiet",
@@ -204,8 +210,26 @@ export function EmptyState({
             projectName ? (
               <span className="flex min-w-0 items-center gap-1.5">
                 <FolderOpen size={11} weight="thin" className="shrink-0" />
-                <span className="min-w-0 truncate">
-                  {copy.composer.willCreateIn(projectName)}
+                {/* Squeeze order: the folder path goes first, then the
+                    name; the × never leaves. The name is capped at the
+                    group width (max-w-full) instead of shrinking, and
+                    the path group clips its separator once it reaches
+                    zero width. Same face as the sentence, not mono. */}
+                <span className="flex min-w-0 items-center">
+                  <span className="max-w-full shrink-0 truncate">
+                    {copy.composer.willCreateIn(projectName)}
+                  </span>
+                  {projectRootPath && (
+                    <span className="flex min-w-0 overflow-hidden">
+                      <span
+                        aria-hidden
+                        className="shrink-0 whitespace-pre text-ink-muted"
+                      >
+                        {" · "}
+                      </span>
+                      <FolderPathText path={projectRootPath} />
+                    </span>
+                  )}
                 </span>
                 {onClearProjectContext && (
                   <TooltipLabel text={copy.composer.clearProjectContext}>

@@ -299,8 +299,9 @@ function SidebarProjectsSection({
 
 /** A section label that folds its section: the time-bucket label's
  * register and grid (label on the 18px edge, count on the right text
- * edge), the 更早 entry's quiet hover, and a caret after the count that
- * turns down while the section is open. */
+ * edge, in line with 本周 / 本月's), the 更早 entry's quiet hover, and a
+ * caret hung in the button's right padding past the count that turns
+ * down while the section is open. */
 function SidebarCollapsibleSectionLabel({
   label,
   count,
@@ -328,7 +329,9 @@ function SidebarCollapsibleSectionLabel({
         )}
       >
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className="flex items-center gap-0.5 tabular-nums normal-case tracking-normal text-ink-muted">
+        {/* -mr-[11px] hangs the caret (9px + gap-0.5) in the px-3
+            padding, so the count ends on the plain label's edge. */}
+        <span className="-mr-[11px] flex items-center gap-0.5 tabular-nums normal-case tracking-normal text-ink-muted">
           {/* 0 when only 其他项目 are left: the row below carries the number. */}
           {count > 0 && count}
           <CaretRight
@@ -380,9 +383,10 @@ function SidebarEarlierEntry({
   // (the sidebar is current-work, not infinite history). So instead of
   // a foreign button row, it stays in the SAME section-label family as
   // 今天/本周/本月 — identical 10px uppercase register + left inset —
-  // and just carries its overflow affordance inline: a right-aligned
-  // count + caret, the whole label clickable with a quiet hover. The
-  // buckets read as one family; this one happens to be actionable.
+  // and just carries its overflow affordance inline: the count on the
+  // buckets' count edge with a caret hung in the right padding past it,
+  // the whole label clickable with a quiet hover. The buckets read as
+  // one family; this one happens to be actionable.
   return (
     <button
       type="button"
@@ -398,7 +402,7 @@ function SidebarEarlierEntry({
       <span className="min-w-0 flex-1 truncate">
         {copy.sidebar.bucketEarlier}
       </span>
-      <span className="flex items-center gap-0.5 tabular-nums normal-case tracking-normal text-ink-muted">
+      <span className="-mr-[11px] flex items-center gap-0.5 tabular-nums normal-case tracking-normal text-ink-muted">
         {count}
         <CaretRight size={9} weight="thin" className="opacity-70" />
       </span>

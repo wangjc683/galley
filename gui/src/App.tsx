@@ -386,9 +386,11 @@ function App() {
     activeProject,
     assignSessionToProjectWithToast,
     createProjectOpen,
+    createProjectSessionId,
     deletingProject,
     editingProject,
     expandedProjectIds,
+    openCreateProjectForSession,
     openProjectInSidebar,
     projectReveal,
     setCreateProjectOpen,
@@ -399,6 +401,7 @@ function App() {
   } = useProjectNavigation({
     activeProjectFilter,
     activeSessionBusy,
+    activeSessionId: effectiveActiveId,
     assignSessionToProject,
     copy,
     projects,
@@ -479,6 +482,22 @@ function App() {
       verificationHydrated: browserControlVerificationHydrated,
     });
 
+  // Open a session from anywhere: activate (re-spawns the bridge if this
+  // session has been idle / closed / errored) and switch to main. Other
+  // sessions' bridges keep running in background.
+  //
+  // 项目上下文跟着 session 走：点哪个项目的对话，New Chat 就落在那个
+  // 项目；不属于任何项目的对话则回到普通新对话。所有打开会话的入口都走
+  // 这里——侧栏行、⌘K 会话与消息搜索、「更早」对话框、定时任务对话框——
+  // 所以「当前项目上下文」在任何 select 之后都与主区那条对话一致。
+  // （⌘K 打开会话曾经清空上下文，那是 Project Review 退出项目模式的
+  // 遗留，10-08 项目视图删除后只剩副作用。）
+  const openSession = (id: string) => {
+    setActiveProjectFilter(visibleSessions.find((s) => s.id === id)?.projectId);
+    void activateSession(id);
+    setScreen("main");
+  };
+
   // Onboarding takeover: no AppShell, no overlays besides the dev
   // toggle.
   if (screen === "onboarding") {
@@ -527,22 +546,9 @@ function App() {
               setScreen("empty");
               setEmptyComposerFocusTick((tick) => tick + 1);
             }}
-            onSelectSession={(id) => {
-              // Activate (re-spawns the bridge if this session has
-              // been idle / closed / errored) and switch to main.
-              // Other sessions' bridges keep running in background.
-              //
-              // 项目上下文跟着 session 走:点哪个项目的对话,New Chat
-              // 就落在那个项目;不属于任何项目的对话则回到普通新对话。
-              // 这让「当前项目上下文」在 select / New Chat 入口下保持
-              // 一致。
-              const sessionProjectId = visibleSessions.find(
-                (s) => s.id === id,
-              )?.projectId;
-              setActiveProjectFilter(sessionProjectId);
-              void activateSession(id);
-              setScreen("main");
-            }}
+            // 项目上下文跟着会话走，所有打开会话的入口同一条规则（见
+            // openSession）。
+            onSelectSession={openSession}
             onArchiveSession={(id) => archiveSession(id)}
             onRenameSession={(id, newTitle) => renameSession(id, newTitle)}
             onTogglePinSession={(id) => togglePinSession(id)}
@@ -560,6 +566,7 @@ function App() {
             onToggleProjectExpanded={toggleProjectExpanded}
             onStartProjectConversation={startProjectConversation}
             onAssignSessionToProject={assignSessionToProjectWithToast}
+            onCreateProjectForSession={openCreateProjectForSession}
             onTogglePinProject={(id) => {
               const p = projects.find((x) => x.id === id);
               if (p) void updateProject(id, { pinned: !p.pinned });
@@ -618,6 +625,7 @@ function App() {
                     conversationWidth={conversationWidth}
                     conversationFontSize={conversationFontSize}
                     projectName={activeProject?.name}
+                    projectRootPath={activeProject?.rootPath ?? undefined}
                     onClearProjectContext={() =>
                       setActiveProjectFilter(undefined)
                     }
@@ -719,19 +727,13 @@ function App() {
           setEmptyComposerFocusTick((tick) => tick + 1);
         }}
         onNewProject={() => setCreateProjectOpen(true)}
-        onOpenSession={(id) => {
-          setActiveProjectFilter(undefined);
-          void activateSession(id);
-          setScreen("main");
-        }}
+        onOpenSession={openSession}
         onOpenMessage={(sessionId, messageId, query) => {
           // File the locate first: useStickyScroll's session-switch
           // snap reads it to stand down, then consumes it once the
           // restored turns are on screen.
           requestLocate(sessionId, messageId, query);
-          setActiveProjectFilter(undefined);
-          void activateSession(sessionId);
-          setScreen("main");
+          openSession(sessionId);
         }}
         onSwitchLLM={(idx) => {
           // Route to the active session's bridge. The palette is a
@@ -799,11 +801,7 @@ function App() {
         open={earlierOpen}
         onOpenChange={setEarlierOpen}
         sessions={earlierSessions}
-        onSelectSession={(id) => {
-          setActiveProjectFilter(undefined);
-          void activateSession(id);
-          setScreen("main");
-        }}
+        onSelectSession={openSession}
         onArchiveSession={(id) => archiveSession(id)}
         onTogglePinSession={(id) => togglePinSession(id)}
         onArchiveSessionsBulk={(ids) => archiveSessionsBulk(ids)}
@@ -815,33 +813,41 @@ function App() {
         projects={projects}
         sessions={visibleSessions}
         llms={llms}
-        onSelectSession={(id) => {
-          // Mirror the Sidebar row click: project context follows the
-          // session, then activate and land in the conversation.
-          const sessionProjectId = visibleSessions.find(
-            (s) => s.id === id,
-          )?.projectId;
-          setActiveProjectFilter(sessionProjectId);
-          void activateSession(id);
-          setScreen("main");
-        }}
+        onSelectSession={openSession}
       />
 
       <CreateProjectDialog
         open={createProjectOpen}
         onOpenChange={setCreateProjectOpen}
+        runtimeKind={activeRuntimeKind}
         onCreate={async (input) => {
-          // Create + immediately open the new project's group in the
-          // sidebar's 项目 section (a new empty project is listed there
-          // while its createdAt is in the window). Creation is
-          // organization, not conversation creation; the group row's +
-          // is the explicit "start a project conversation" action.
+          // Create + open the new project's group in the sidebar's 项目
+          // section (a new empty project is listed there while its
+          // createdAt is in the window).
+          //
+          // From a session's 加入项目 → 新建项目…: move that session in
+          // and stay put — the user is looking at it. Otherwise (masthead
+          // icon, ⌘K) land on 「新对话 · 项目名」 with the composer
+          // focused, as the group row's + does; with a run in flight
+          // that only sets the context. 05-22's "creating a project does
+          // not create a conversation" still holds: the empty screen
+          // makes no session until the first message.
           const created = await createProject(input);
           openProjectInSidebar(created.id);
+          if (createProjectSessionId) {
+            assignSessionToProjectWithToast(
+              createProjectSessionId,
+              created.id,
+              created.name,
+            );
+            return;
+          }
+          startProjectConversation(created.id);
         }}
       />
 
       <EditProjectDialog
+        runtimeKind={activeRuntimeKind}
         project={editingProject}
         onClose={() => setEditingProjectId(null)}
         onSave={async (id, partial) => {

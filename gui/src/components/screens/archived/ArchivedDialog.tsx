@@ -479,6 +479,10 @@ function ConfirmEmptyAllDialog({
             checked={acknowledged}
             onCheckedChange={setAcknowledged}
             className="mt-4 flex select-none items-start gap-2 rounded-sm border border-line bg-app px-3 py-2.5 text-ui-secondary text-ink hover:border-line-strong"
+            // Center the 16px box on the first text line. text-ui-secondary
+            // sets no line-height, so it inherits preflight's 1.5:
+            // (12.5px × 1.5 − 16px) / 2 = 1.375px.
+            boxClassName="mt-[1.375px]"
           >
             <span>{copy.projects.acknowledgeCannotUndo}</span>
           </Checkbox>

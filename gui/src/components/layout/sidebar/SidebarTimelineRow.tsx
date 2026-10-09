@@ -20,6 +20,9 @@ export type SidebarTimelineRowWiring = {
     sessionId: string,
     projectId: string | null,
   ) => void;
+  /** 加入项目 submenu → 新建项目…: create a project and move this
+   * session into it. */
+  onCreateProjectForSession?: (sessionId: string) => void;
   /** Session currently in inline-edit mode (one at a time across the
    * whole sidebar). Tracked by the parent `Sidebar`. */
   editingSessionId?: string | null;
@@ -42,6 +45,7 @@ export function SidebarTimelineRow({
   onArchiveSession,
   onTogglePinSession,
   onAssignSessionToProject,
+  onCreateProjectForSession,
   editingSessionId,
   onRequestRename,
   onConfirmRename,
@@ -62,6 +66,11 @@ export function SidebarTimelineRow({
       onAssignToProject={
         onAssignSessionToProject
           ? (projectId) => onAssignSessionToProject(s.id, projectId)
+          : undefined
+      }
+      onCreateProjectForSession={
+        onCreateProjectForSession
+          ? () => onCreateProjectForSession(s.id)
           : undefined
       }
       isEditing={editingSessionId === s.id}
