@@ -691,7 +691,22 @@ Post-release follow-up:
 ## Unreleased On Main
 
 Release-scope truth is `git log v0.6.2..HEAD`; besides the iOS-client and
-main-chat planning docs (no product change), main has:
+main-chat planning docs, main has:
+
+- **Core send takeover and remote-access groundwork** (2026-10-10,
+  `.scratch/ios-client/`, devlog
+  [2026-10-10-remote-access-protocol-and-first-tickets](./devlog/2026-10-10-remote-access-protocol-and-first-tickets.md)).
+  Ticket 02a–02d: Core owns ensure-runner, history replay (fixes Goal
+  cold start), the unified send (ADR-0003) and broadcasts every write; GUI
+  behavior is meant to be unchanged, JC's GUI acceptance is still open.
+  Then 05c (remote sink on the notifier, `session-run-state`, a
+  turn-persist broadcast the GUI skips, attachment read by id, the pairing
+  key, migration **043** adding a nullable `client` column, message
+  paging), 05a `remote-protocol/`, 05b `core/src/remote/`, 06a `relay/`,
+  07a `ios/GalleyRemote/`. The remote module only exists when a relay URL
+  is configured: `GALLEY_REMOTE_RELAY_URL` is not set in the release
+  workflow yet, so a release cut now ships migration 043 with remote access
+  off.
 
 - **WeChat conversation aligned with the desktop** (2026-10-10,
   `.scratch/wechat-ux/`, devlog
