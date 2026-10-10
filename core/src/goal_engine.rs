@@ -136,6 +136,7 @@ fn continuation_origin(reason: String) -> Origin {
         via: OriginVia::System,
         supervisor: None,
         reason: Some(reason),
+        client: None,
     }
 }
 

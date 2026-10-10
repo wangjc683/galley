@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { listenCoreRowEvents } from "@/lib/core-row-events";
+import { listenCoreRowEvents, VIA_TURN_PERSIST } from "@/lib/core-row-events";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -635,6 +635,79 @@ describe("Core row events", () => {
     unlisten();
     expect(detached).toBe(handlers.size);
     expect(tauriMocks.invoke).not.toHaveBeenCalled();
+  });
+
+  describe("Core's turn-persistence announcement (ticket 05c)", () => {
+    /** Route `session-updated-external` with `via` as Core sends it. */
+    async function routed() {
+      const handlers = new Map<string, (e: { payload: unknown }) => void>();
+      tauriMocks.listen.mockImplementation(async (event, handler) => {
+        handlers.set(event, handler as (e: { payload: unknown }) => void);
+        return () => {};
+      });
+      await listenCoreRowEvents();
+      return (session: SessionBriefWire, via = VIA_TURN_PERSIST) =>
+        handlers.get("session-updated-external")!({
+          payload: { session, via },
+        });
+    }
+
+    /** Core's row after persisting turn 3 of a session at 2. */
+    function persisted(local: Session) {
+      return eventRow(local, {
+        turnCount: 3,
+        summary: "第三轮的回答",
+        lastActivityAt: "2026-10-10T09:00:00.000Z",
+        updatedAt: "2026-10-10T09:00:00.000Z",
+      });
+    }
+
+    it("after the page's own bump: the guard keeps the count and the summary", () => {
+      seed([hydrated({ id: "b", turnCount: 2, summary: "第二轮" })], "b");
+      useSessionsStore
+        .getState()
+        .bumpSessionAfterTurn("b", "第三轮的回答", 3, false);
+      useSessionsStore
+        .getState()
+        .applyExternalSessionUpdated(persisted(row("b")));
+      expect(row("b")).toMatchObject({
+        turnCount: 3,
+        summary: "第三轮的回答",
+      });
+    });
+
+    it("before the page's own bump the store alone would count the turn twice", () => {
+      seed([hydrated({ id: "b", turnCount: 2, summary: "第二轮" })], "b");
+      useSessionsStore
+        .getState()
+        .applyExternalSessionUpdated(persisted(row("b")));
+      useSessionsStore
+        .getState()
+        .bumpSessionAfterTurn("b", "第三轮的回答", 3, false);
+      expect(row("b").turnCount).toBe(4);
+    });
+
+    it("so the page does not apply it, in either order", async () => {
+      const announce = await routed();
+      seed([hydrated({ id: "b", turnCount: 2, summary: "第二轮" })], "b");
+      const before = row("b");
+      // Announcement first, then the page's turn_end.
+      expectEchoIsNoop(() => announce(persisted(before)));
+      useSessionsStore
+        .getState()
+        .bumpSessionAfterTurn("b", "第三轮的回答", 3, false);
+      expect(row("b")).toMatchObject({ turnCount: 3, summary: "第三轮的回答" });
+      // turn_end first, then the announcement.
+      expectEchoIsNoop(() => announce(persisted(row("b"))));
+      expect(row("b").turnCount).toBe(3);
+    });
+
+    it("every other session-updated-external still applies", async () => {
+      const announce = await routed();
+      seed([hydrated({ id: "b", title: "旧" })], "b");
+      announce(eventRow(row("b"), { title: "新" }), "llm.set");
+      expect(row("b").title).toBe("新");
+    });
   });
 });
 

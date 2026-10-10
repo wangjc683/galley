@@ -41,7 +41,8 @@ pub(crate) async fn start_session_goal(
         input.session_id,
         input.objective,
         input.budget_seconds,
-        Origin::gui(),
+        // The objective is a message a human typed at the desktop.
+        Origin::desktop(),
     )
     .await
     .map_err(stringify_error)

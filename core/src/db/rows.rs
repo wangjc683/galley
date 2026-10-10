@@ -48,6 +48,7 @@ impl SessionRow {
                         via: parse_origin_via(&via)?,
                         supervisor: self.created_by_supervisor,
                         reason: self.created_origin_note,
+                        client: None,
                     })
                 })
                 .transpose()?
@@ -123,6 +124,7 @@ impl MessageRow {
                         via: parse_origin_via(&via)?,
                         supervisor: self.supervisor,
                         reason: self.origin_note,
+                        client: None,
                     })
                 })
                 .transpose()?,
@@ -494,6 +496,7 @@ impl GoalRow {
             via: parse_origin_via(&self.created_via)?,
             supervisor: self.supervisor,
             reason: self.origin_note,
+            client: None,
         };
         Ok(GoalBrief {
             id: GoalId(self.id),

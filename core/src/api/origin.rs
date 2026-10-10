@@ -43,6 +43,30 @@ impl OriginVia {
     }
 }
 
+/// Which app a human used for a write (iOS PRD ruling 9): stored in
+/// `messages.client` / `sessions.client` (migration 043), next to `via`,
+/// which keeps saying who acted (`gui` = a human). `None` — and the
+/// column NULL — for everything no app stands behind: CLI, IM, agents,
+/// schedules, Goal continuations, and rows older than the column. The
+/// column has no CHECK, so a new client needs no table rebuild.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OriginClient {
+    /// The Galley desktop window (its Tauri commands).
+    Desktop,
+    /// The iOS app, through the remote module (ticket 05b).
+    Ios,
+}
+
+impl OriginClient {
+    /// The stored value.
+    pub fn as_sql(&self) -> &'static str {
+        match self {
+            Self::Desktop => "desktop",
+            Self::Ios => "ios",
+        }
+    }
+}
+
 /// Metadata about the source of a command. Required on every B2+ write;
 /// optional on the read APIs in B1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +80,15 @@ pub struct Origin {
     /// audit / log views.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// The app behind a human's write ([`OriginClient`]), set by Core
+    /// itself where the write comes in — the GUI's Tauri send / create
+    /// commands, the remote module. Written to the `client` columns and
+    /// carried with a queued message to its dispatch. Never on the wire:
+    /// `Origin` is part of the CLI's JSON (Agent API, Rule 3), so the
+    /// field is not serialized, and not deserialized either — no caller
+    /// can claim a client. Not read back from the database.
+    #[serde(skip)]
+    pub client: Option<OriginClient>,
 }
 
 impl Origin {
@@ -67,6 +100,22 @@ impl Origin {
             via: OriginVia::Gui,
             supervisor: None,
             reason: None,
+            client: None,
+        }
+    }
+
+    /// A human at the desktop window: [`Self::gui`] stamped with
+    /// [`OriginClient::Desktop`]. For the GUI's writes that store a
+    /// client — a sent message, a created session.
+    pub fn desktop() -> Self {
+        Self::gui().with_client(OriginClient::Desktop)
+    }
+
+    /// The same origin, stamped with the app the write came through.
+    pub fn with_client(self, client: OriginClient) -> Self {
+        Self {
+            client: Some(client),
+            ..self
         }
     }
 
@@ -78,6 +127,7 @@ impl Origin {
             via: OriginVia::Cli,
             supervisor,
             reason,
+            client: None,
         }
     }
 }
@@ -108,5 +158,24 @@ mod tests {
         let o = Origin::gui();
         let s = serde_json::to_string(&o).unwrap();
         assert_eq!(s, r#"{"via":"gui"}"#);
+    }
+
+    #[test]
+    fn client_is_never_on_the_wire() {
+        // Not serialized: `Origin` is in the CLI's JSON (Rule 3).
+        let o = Origin::desktop();
+        assert_eq!(o.client, Some(OriginClient::Desktop));
+        assert_eq!(serde_json::to_string(&o).unwrap(), r#"{"via":"gui"}"#);
+        let o = Origin::cli(Some("ga-1".into()), None).with_client(OriginClient::Ios);
+        assert!(!serde_json::to_string(&o).unwrap().contains("client"));
+        // Not deserialized: a caller cannot claim one.
+        let o: Origin = serde_json::from_str(r#"{"via":"gui","client":"ios"}"#).unwrap();
+        assert_eq!(o.client, None);
+    }
+
+    #[test]
+    fn client_sql_values() {
+        assert_eq!(OriginClient::Desktop.as_sql(), "desktop");
+        assert_eq!(OriginClient::Ios.as_sql(), "ios");
     }
 }

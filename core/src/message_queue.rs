@@ -92,6 +92,7 @@ pub async fn dispatch_queued_message(
         via: OriginVia::Gui,
         supervisor: None,
         reason: None,
+        client: None,
     });
     let brief = match galley
         .send_message(SessionId(session_id.to_string()), item.text.clone(), origin)

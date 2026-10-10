@@ -263,5 +263,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/042_managed_model_advanced_layers.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 43,
+            description: "add messages.client and sessions.client (which app a human used)",
+            sql: include_str!("../migrations/043_message_session_client.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

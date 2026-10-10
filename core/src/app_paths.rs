@@ -34,6 +34,13 @@ fn app_config_dir_from_base(base_config_dir: &Path) -> PathBuf {
     base_config_dir.join(APP_IDENTIFIER)
 }
 
+/// The directory holding every session's attachment directory
+/// (`conversation-attachments/` next to `workbench.db`).
+pub(crate) fn conversation_attachments_root() -> Option<PathBuf> {
+    let db = db_path()?;
+    Some(db.parent()?.join(CONVERSATION_ATTACHMENTS_DIR))
+}
+
 /// Galley-owned durable media directory for conversation attachments.
 /// Kept next to `workbench.db` so backups and `GALLEY_DB_PATH`-based test
 /// runs keep the database and attachment files together.
@@ -53,8 +60,10 @@ pub(crate) fn conversation_attachment_dir(session_id: &str, message_id: &str) ->
     ))
 }
 
+const CONVERSATION_ATTACHMENTS_DIR: &str = "conversation-attachments";
+
 fn conversation_attachment_session_dir_from_base(base: &Path, session_id: &str) -> PathBuf {
-    base.join("conversation-attachments").join(session_id)
+    base.join(CONVERSATION_ATTACHMENTS_DIR).join(session_id)
 }
 
 fn conversation_attachment_dir_from_base(

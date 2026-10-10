@@ -150,7 +150,7 @@ impl From<SessionBrief> for SessionBriefEvent {
 pub struct SessionEventPayload {
     pub session: SessionBriefEvent,
     /// Who wrote: `"gui"`, a socket command (`"session.archive"`), or a
-    /// Core task (`"title-derive"`, `"auto-title"`).
+    /// Core task (`"title-derive"`, `"auto-title"`, `"turn-persist"`).
     pub via: &'static str,
 }
 
@@ -230,7 +230,8 @@ pub struct ProjectDeletedPayload {
 
 /// Broadcast a session row as `event` (one of the `session-*-external`
 /// events) — for writers outside [`Writes`] that own their own write:
-/// socket `session.new`, the derived and the auto title.
+/// socket `session.new`, the derived and the auto title, a turn's session
+/// bump (`crate::turn_persistence`, `via: "turn-persist"`).
 pub fn announce_session(
     notifier: &dyn Notifier,
     event: &str,

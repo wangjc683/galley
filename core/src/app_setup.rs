@@ -248,14 +248,27 @@ fn open_shared_galley(app: &tauri::App) -> Result<(), String> {
 
 /// Core-owned turn persistence: hand the shared pool to the
 /// RunnerManager so every runner's `turn_end` is written by Core, GUI or
-/// no GUI (`crate::turn_persistence`). Must run before the socket listener
-/// starts — a CLI `session new` can spawn a runner from then on.
+/// no GUI, and each session bump announced (`crate::turn_persistence`).
+/// Also start the `session-run-state` publisher
+/// (`runner_manager::run_state_events`). Must run before the socket
+/// listener starts — a CLI `session new` can spawn a runner from then on.
 fn wire_turn_persistence(app: &tauri::App) {
     let manager: std::sync::Arc<runner_manager::RunnerManager> = app
         .state::<std::sync::Arc<runner_manager::RunnerManager>>()
         .inner()
         .clone();
-    manager.set_turn_store(app.state::<SqliteGalley>().inner().clone());
+    let notifier = crate::notify::TauriNotifier::new(app.handle().clone());
+    manager.set_turn_store(
+        app.state::<SqliteGalley>().inner().clone(),
+        notifier.clone(),
+    );
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    manager.set_run_state_feed(tx);
+    tauri::async_runtime::spawn(runner_manager::publish_run_states(
+        manager.clone(),
+        notifier,
+        rx,
+    ));
 }
 
 /// Seed the first-close-choice guard from the persisted flag, now that

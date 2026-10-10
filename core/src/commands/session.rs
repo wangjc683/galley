@@ -1,4 +1,5 @@
 use super::*;
+use crate::api::OriginClient;
 use base64::Engine as _;
 
 const MAX_MESSAGE_IMAGES: usize = 4;
@@ -47,8 +48,10 @@ pub(crate) async fn create_session(
     origin: Origin,
 ) -> std::result::Result<SessionBrief, String> {
     let notifier = TauriNotifier::new(app);
+    // The page created it: `client = desktop`, whatever origin it sent
+    // (`Origin.client` is never deserialized).
     gui_writes(&galley, &notifier)
-        .create_session(input, origin)
+        .create_session(input, origin.with_client(OriginClient::Desktop))
         .await
         .map_err(stringify_error)
 }

@@ -3,7 +3,7 @@
 //! the remote module the same way.
 
 use super::*;
-use crate::api::{MessageBrief, OriginVia};
+use crate::api::MessageBrief;
 use crate::runner_commands::{await_session_row, gui_error_json, EnsureSessionRunnerResult};
 use crate::runner_manager::RunnerManager;
 use crate::session_runner::{EnsureOutcome, GaConfigPref, LlmChoice, RunnerHost};
@@ -112,11 +112,9 @@ pub(crate) async fn send_user_message(
             text,
             images,
             client_request_id,
-            origin: Origin {
-                via: OriginVia::Gui,
-                supervisor: None,
-                reason: None,
-            },
+            // A human at the desktop window (`client = desktop`); a send
+            // that waits in the queue carries it to its dispatch.
+            origin: Origin::desktop(),
             via: "gui",
             llm_override,
             ga_config,

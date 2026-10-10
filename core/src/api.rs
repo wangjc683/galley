@@ -36,7 +36,7 @@ pub use model::{
     ReorderManagedModelsInput, SaveManagedModelInput, SaveManagedProviderInput,
     SetManagedModelDefaultsInput,
 };
-pub use origin::{Origin, OriginVia};
+pub use origin::{Origin, OriginClient, OriginVia};
 pub use project::{CreateProjectInput, ProjectBrief, ProjectId, ProjectPatch};
 pub use queue::{QueuedMessage, SessionQueueChangedPayload, SESSION_QUEUE_CHANGED_EVENT};
 pub use schedule::{

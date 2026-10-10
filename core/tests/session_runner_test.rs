@@ -63,6 +63,7 @@ fn cli_origin() -> Origin {
         via: OriginVia::Cli,
         supervisor: None,
         reason: None,
+        client: None,
     }
 }
 

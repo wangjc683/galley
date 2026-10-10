@@ -298,9 +298,9 @@ pub(super) async fn insert_session_row_inner(
         "INSERT INTO sessions (id, project_id, title, title_source, status, summary, turn_count, \
             pending_approval_count, error_count, pinned, has_unread, \
             llm_index, llm_key, llm_display_name, last_activity_at, created_at, updated_at, \
-            created_via, created_by_supervisor, created_origin_note, \
+            created_via, created_by_supervisor, created_origin_note, client, \
             ga_runtime_kind, ga_runtime_id, prompt_profile) \
-         VALUES (?, ?, ?, ?, 'idle', NULL, 0, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, 'idle', NULL, 0, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(id)
     .bind(&input.project_id)
@@ -315,6 +315,7 @@ pub(super) async fn insert_session_row_inner(
     .bind(origin.via.as_sql())
     .bind(&origin.supervisor)
     .bind(&origin.reason)
+    .bind(origin.client.map(|c| c.as_sql()))
     .bind(runtime_kind_value)
     .bind(&input.ga_runtime_id)
     .bind(&prompt_profile)
@@ -458,8 +459,8 @@ pub(super) async fn insert_message_inner(
     sqlx::query(
         "INSERT INTO messages \
          (id, session_id, turn_index, sequence, role, content, created_at, \
-          created_via, supervisor, origin_note, visibility, goal_id) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          created_via, supervisor, origin_note, client, visibility, goal_id) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&msg_id)
     .bind(&session_id.0)
@@ -471,6 +472,7 @@ pub(super) async fn insert_message_inner(
     .bind(origin.via.as_sql())
     .bind(&origin.supervisor)
     .bind(&origin.reason)
+    .bind(origin.client.map(|c| c.as_sql()))
     .bind(message_visibility_sql(visibility))
     .bind(goal_id)
     .execute(&mut *conn)

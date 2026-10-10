@@ -17,6 +17,7 @@ pub(super) fn origin_from_args(supervisor: Option<String>, reason: Option<String
         },
         supervisor,
         reason,
+        client: None,
     }
 }
 

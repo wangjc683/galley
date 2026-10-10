@@ -14,6 +14,15 @@
 //! closes the run gate — so a run never reads as ended ahead of its
 //! final answer.
 //!
+//! Each bump is announced as `session-updated-external` with `via:
+//! "turn-persist"` ([`VIA_TURN_PERSIST`], ticket 05c), the post-bump row
+//! in the event form every other session write uses — so a phone's
+//! session list keeps up with runs it is not watching. The GUI does not
+//! apply this one: a page bumps its own row on each `turn_end` it
+//! receives, and the two can reach it in either order (two emitting
+//! tasks), so applying both would count the turn twice
+//! (`gui/src/lib/core-row-events.ts`; ticket 02e unifies them).
+//!
 //! What stays in the GUI: rendering, the unread flag (it alone knows
 //! which session is on screen; `mark_session_unread`), notifications.
 //!
@@ -28,9 +37,15 @@ use crate::api::{GalleyApi, MessageTelemetry, MessageVisibility, SessionId};
 use crate::db::{PersistAssistantMessage, SqliteGalley};
 use crate::error::GalleyError;
 use crate::ipc::{TurnEndEvent, TurnTelemetry};
+use crate::notify::Notifier;
+use crate::session_writes::{announce_session, SESSION_UPDATED_EXTERNAL_EVENT};
 use serde_json::Value;
 use std::future::Future;
 use std::time::Duration;
+
+/// `via` of the `session-updated-external` that announces a turn's
+/// session bump.
+pub const VIA_TURN_PERSIST: &str = "turn-persist";
 
 /// The derived columns of one assistant row — everything it holds
 /// besides its id, turn index and `created_at`.
@@ -114,10 +129,13 @@ fn message_telemetry(t: &TurnTelemetry) -> MessageTelemetry {
 
 /// Write one `turn_end`: the assistant row (upsert on the deterministic
 /// `msg_{session}_{turn}_assistant` id, so a repeat is harmless), then —
-/// visible turns only — the session bump. Failures are logged, never
-/// raised: the runner's event stream must keep flowing.
+/// visible turns only — the session bump, announced through `notifier`
+/// with the row as the bump left it. Failures are logged, never raised
+/// (and a failed bump announces nothing): the runner's event stream must
+/// keep flowing.
 pub(crate) async fn persist_turn_end(
     galley: &SqliteGalley,
+    notifier: &dyn Notifier,
     session_id: &str,
     event: &TurnEndEvent,
 ) {
@@ -158,7 +176,7 @@ pub(crate) async fn persist_turn_end(
         // Raw summary, like the GUI's bump: the DB layer trims, keeps
         // the previous summary on an empty one, and truncates to 80.
         // Unread stays with the GUI (`mark_session_unread`).
-        with_contention_retry("session bump", &ids, || {
+        let bumped = with_contention_retry("session bump", &ids, || {
             galley.bump_session_after_turn(
                 SessionId(session_id.to_string()),
                 Some(event.summary.clone()),
@@ -167,6 +185,14 @@ pub(crate) async fn persist_turn_end(
             )
         })
         .await;
+        if let Some(session) = bumped {
+            announce_session(
+                notifier,
+                SESSION_UPDATED_EXTERNAL_EVENT,
+                session,
+                VIA_TURN_PERSIST,
+            );
+        }
     }
 }
 

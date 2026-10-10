@@ -152,4 +152,4 @@ pub use rows::{
     ManagedModelSecretRow, MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage,
     PersistedMessageRow, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
 };
-pub use session::RenameTitleSource;
+pub use session::{MessageCursor, PersistedMessagePage, RenameTitleSource, MESSAGE_PAGE_MAX};

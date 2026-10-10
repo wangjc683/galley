@@ -6,12 +6,14 @@
 use crate::api::QueuedMessage;
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, IpcEvent};
+use crate::notify::Notifier;
 use crate::runner_manager::error::{RunnerSpawnError, SendCommandError, ShutdownError};
 use crate::runner_manager::process::{BroadcastItem, HeldClose, RunnerProcess};
 use crate::runner_manager::queue::{
     mint_queue_id, now_iso, QueueJump, QueueOffer, RunKind, RunOutcome, SessionQueueState,
 };
 use crate::runner_manager::ready::ReadySnapshot;
+use crate::runner_manager::run_state_events::RunStateFeed;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -65,8 +67,14 @@ pub struct RunnerManager {
     run_signal_tx: std::sync::RwLock<Option<mpsc::UnboundedSender<RunSignal>>>,
     /// Core-owned turn persistence, wired once at app init
     /// ([`Self::set_turn_store`]): each spawn's watcher writes the
-    /// runner's `turn_end`s to this database ([`crate::turn_persistence`]).
-    turn_store: std::sync::RwLock<Option<SqliteGalley>>,
+    /// runner's `turn_end`s to this database ([`crate::turn_persistence`])
+    /// and announces each session bump through the notifier.
+    turn_store: std::sync::RwLock<Option<(SqliteGalley, Arc<dyn Notifier>)>>,
+    /// Where every change to a session's [`RunState`] is reported for
+    /// the `session-run-state` event, wired once at app init
+    /// ([`Self::set_run_state_feed`]). Shared with
+    /// [`RunnerCommandHandle`]s.
+    run_state_feed: RunStateFeed,
 }
 
 /// Live run-state snapshot for one session ([`RunnerManager::run_state`]).
@@ -133,6 +141,7 @@ impl RunnerManager {
             queues: Arc::new(Mutex::new(HashMap::new())),
             run_signal_tx: std::sync::RwLock::new(None),
             turn_store: std::sync::RwLock::new(None),
+            run_state_feed: RunStateFeed::default(),
         }
     }
 
@@ -146,10 +155,24 @@ impl RunnerManager {
     /// Wire Core-owned turn persistence: every runner spawned afterwards
     /// has its `turn_end`s written to `galley` by Core itself, whether or
     /// not a GUI page is listening (2026-10-07 — a webview reload used to
-    /// drop whole runs). Called once at app init, before anything can
-    /// spawn; headless tests that skip it get no persistence.
-    pub fn set_turn_store(&self, galley: SqliteGalley) {
-        *self.turn_store.write().expect("turn_store poisoned") = Some(galley);
+    /// drop whole runs), and each visible turn's session bump announced
+    /// through `notifier` (`session-updated-external`, ticket 05c).
+    /// Called once at app init, before anything can spawn; headless tests
+    /// that skip it get no persistence.
+    pub fn set_turn_store(&self, galley: SqliteGalley, notifier: Arc<dyn Notifier>) {
+        *self.turn_store.write().expect("turn_store poisoned") = Some((galley, notifier));
+    }
+
+    /// Wire the `session-run-state` feed: from now on every change to a
+    /// session's [`RunState`] — the run gate, the queue, the ask-user
+    /// hold, a runner registered or gone, a turn starting or ending —
+    /// sends the session id on `tx`, for
+    /// [`crate::runner_manager::publish_run_states`]. Called once at app
+    /// init, before anything can spawn (a runner spawned earlier gets no
+    /// watcher for its turn changes); headless callers that skip it
+    /// report nothing.
+    pub fn set_run_state_feed(&self, tx: mpsc::UnboundedSender<String>) {
+        self.run_state_feed.wire(tx);
     }
 
     /// Spawn a new runner subprocess for `args.session_id`. Returns its PID.
@@ -223,6 +246,7 @@ impl RunnerManager {
             map.insert(session_id.clone(), Arc::new(Mutex::new(process)));
         }
         self.touch(&session_id).await;
+        self.run_state_feed.touch(&session_id);
 
         // Attach the runner watcher: persists every turn_end (Core-owned
         // turn persistence) and keeps the queue state + global drain
@@ -241,22 +265,26 @@ impl RunnerManager {
     /// Subscribe to the just-spawned process and act on its events in
     /// stream order, without a GUI:
     ///
-    /// - `turn_end` → the assistant row + session bump
-    ///   ([`crate::turn_persistence`]), when a turn store is wired;
+    /// - `turn_end` → the assistant row + session bump, the bump
+    ///   announced ([`crate::turn_persistence`]), when a turn store is
+    ///   wired;
     /// - queue bookkeeping, when a run-signal channel is wired: `ask_user`
     ///   flips the hold flag (before the same stream's RunComplete reaches
     ///   the drain), RunComplete / close go to the global drain task via
     ///   [`RunSignal`]. A quiet close (a runner Core retired, or one that
     ///   closed while held — see [`BroadcastItem::Closed`]) sends no
     ///   `Closed`: the run gate and an active goal belong to whoever is
-    ///   replacing the runner, and a held close is announced on release.
+    ///   replacing the runner, and a held close is announced on release;
+    /// - a run-state report after each event and the close, when the
+    ///   run-state feed is wired: these are where `agent_running`,
+    ///   `ask_pending` and `last_exit` change.
     ///
-    /// One ordered consumer does both, so a run's rows are in SQLite
+    /// One ordered consumer does all of it, so a run's rows are in SQLite
     /// before its RunComplete closes the run gate — `session wait
     /// --until-idle` and `session show` never see a run as ended ahead of
     /// its final answer. The broadcast is drained by a separate pump
     /// ([`pump_watched_events`]) so a slow write cannot make this
-    /// subscriber lag and skip events. No-op when neither is wired.
+    /// subscriber lag and skip events. No-op when nothing is wired.
     async fn attach_runner_watcher(&self, session_id: &str) {
         let mut signal_tx = self
             .run_signal_tx
@@ -264,7 +292,8 @@ impl RunnerManager {
             .expect("run_signal_tx poisoned")
             .clone();
         let store = self.turn_store.read().expect("turn_store poisoned").clone();
-        if signal_tx.is_none() && store.is_none() {
+        let feed = self.run_state_feed.clone();
+        if signal_tx.is_none() && store.is_none() && !feed.is_wired() {
             return;
         }
         let Some(rx) = self.subscribe(session_id).await else {
@@ -283,12 +312,19 @@ impl RunnerManager {
                                 session_id: sid.clone(),
                             });
                         }
+                        feed.touch(&sid);
                         break;
                     }
                     BroadcastItem::Malformed(_) => continue,
                 };
-                if let (IpcEvent::TurnEnd(turn), Some(store)) = (&event, &store) {
-                    crate::turn_persistence::persist_turn_end(store, &sid, turn).await;
+                if let (IpcEvent::TurnEnd(turn), Some((galley, notifier))) = (&event, &store) {
+                    crate::turn_persistence::persist_turn_end(
+                        galley,
+                        notifier.as_ref(),
+                        &sid,
+                        turn,
+                    )
+                    .await;
                 }
                 if let Some(tx) = &signal_tx {
                     if !queue_bookkeeping(&queues, &sid, tx, event).await {
@@ -297,6 +333,7 @@ impl RunnerManager {
                         signal_tx = None;
                     }
                 }
+                feed.touch(&sid);
             }
         });
     }
@@ -473,6 +510,8 @@ impl RunnerManager {
             drop(p);
             let mut order = self.lru_order.lock().await;
             order.retain(|s| s != session_id);
+            drop(order);
+            self.run_state_feed.touch(session_id);
         }
         true
     }
@@ -497,6 +536,7 @@ impl RunnerManager {
         RunnerCommandHandle {
             processes: self.processes.clone(),
             queues: self.queues.clone(),
+            run_state_feed: self.run_state_feed.clone(),
         }
     }
 
@@ -567,7 +607,14 @@ impl RunnerManager {
         session_id: &str,
         cmd: &IpcCommand,
     ) -> Result<(), SendCommandError> {
-        send_command_via(&self.processes, &self.queues, session_id, cmd).await
+        send_command_via(
+            &self.processes,
+            &self.queues,
+            &self.run_state_feed,
+            session_id,
+            cmd,
+        )
+        .await
     }
 
     /// Whether a command starts a main-agent run. `/btw` side questions
@@ -620,6 +667,8 @@ impl RunnerManager {
         // Remove from LRU.
         let mut order = self.lru_order.lock().await;
         order.retain(|s| s != session_id);
+        drop(order);
+        self.run_state_feed.touch(session_id);
         Ok(())
     }
 
@@ -638,7 +687,9 @@ impl RunnerManager {
 
         // Fan out shutdown calls concurrently.
         let mut joins = Vec::with_capacity(processes.len());
-        for (_, proc) in processes {
+        let mut session_ids = Vec::with_capacity(processes.len());
+        for (session_id, proc) in processes {
+            session_ids.push(session_id);
             joins.push(tokio::spawn(async move {
                 let mut p = proc.lock().await;
                 let graceful = p.shutdown(timeout).await;
@@ -649,6 +700,9 @@ impl RunnerManager {
         }
         for j in joins {
             let _ = j.await;
+        }
+        for session_id in &session_ids {
+            self.run_state_feed.touch(session_id);
         }
     }
 
@@ -679,26 +733,30 @@ impl RunnerManager {
         text: String,
         origin: Option<crate::api::Origin>,
     ) -> QueueOffer {
-        let mut q = self.queues.lock().await;
-        let state = q.entry(session_id.to_string()).or_default();
-        // With no run open, a pending question lets this message past the
-        // held items as the answer (see above).
-        if !state.may_dispatch_now() {
-            let queue_id = mint_queue_id();
-            state.items.push_back(QueuedMessage {
-                queue_id: queue_id.clone(),
-                text,
-                origin,
-                queued_at: now_iso(),
-            });
-            QueueOffer::Queued {
-                queue_id,
-                position: state.items.len() - 1,
+        let offer = {
+            let mut q = self.queues.lock().await;
+            let state = q.entry(session_id.to_string()).or_default();
+            // With no run open, a pending question lets this message past
+            // the held items as the answer (see above).
+            if !state.may_dispatch_now() {
+                let queue_id = mint_queue_id();
+                state.items.push_back(QueuedMessage {
+                    queue_id: queue_id.clone(),
+                    text,
+                    origin,
+                    queued_at: now_iso(),
+                });
+                QueueOffer::Queued {
+                    queue_id,
+                    position: state.items.len() - 1,
+                }
+            } else {
+                state.open_run = true;
+                QueueOffer::DispatchNow
             }
-        } else {
-            state.open_run = true;
-            QueueOffer::DispatchNow
-        }
+        };
+        self.run_state_feed.touch(session_id);
+        offer
     }
 
     /// [`Self::queue_offer`]'s dispatch-now branch without its queue
@@ -709,23 +767,32 @@ impl RunnerManager {
     /// (`crate::session_send`, ticket 02c). On `true` the caller must
     /// dispatch or release via [`Self::queue_release_run`].
     pub async fn queue_try_reserve(&self, session_id: &str) -> bool {
-        let mut q = self.queues.lock().await;
-        let state = q.entry(session_id.to_string()).or_default();
-        if state.may_dispatch_now() {
-            state.open_run = true;
-            true
-        } else {
-            false
+        let reserved = {
+            let mut q = self.queues.lock().await;
+            let state = q.entry(session_id.to_string()).or_default();
+            if state.may_dispatch_now() {
+                state.open_run = true;
+                true
+            } else {
+                false
+            }
+        };
+        if reserved {
+            self.run_state_feed.touch(session_id);
         }
+        reserved
     }
 
     /// Release a run-gate reservation after a failed dispatch, so the
     /// queue does not wait for a `RunComplete` that will never come.
     pub async fn queue_release_run(&self, session_id: &str) {
-        let mut q = self.queues.lock().await;
-        if let Some(state) = q.get_mut(session_id) {
-            state.open_run = false;
+        {
+            let mut q = self.queues.lock().await;
+            if let Some(state) = q.get_mut(session_id) {
+                state.open_run = false;
+            }
         }
+        self.run_state_feed.touch(session_id);
     }
 
     /// Jump a queued item to the front ("插队"). If a run is open the
@@ -733,40 +800,53 @@ impl RunnerManager {
     /// the front item); on an idle session the item is popped with the
     /// run gate reserved and the caller dispatches it directly.
     pub async fn queue_jump(&self, session_id: &str, queue_id: &str) -> QueueJump {
-        let mut q = self.queues.lock().await;
-        let Some(state) = q.get_mut(session_id) else {
-            return QueueJump::NotFound;
+        let jump = {
+            let mut q = self.queues.lock().await;
+            let Some(state) = q.get_mut(session_id) else {
+                return QueueJump::NotFound;
+            };
+            let Some(pos) = state.items.iter().position(|m| m.queue_id == queue_id) else {
+                return QueueJump::NotFound;
+            };
+            let item = state.items.remove(pos).expect("position just found");
+            if state.open_run {
+                state.items.push_front(item);
+                QueueJump::AbortThenDrain
+            } else {
+                state.open_run = true;
+                QueueJump::DispatchNow(item)
+            }
         };
-        let Some(pos) = state.items.iter().position(|m| m.queue_id == queue_id) else {
-            return QueueJump::NotFound;
-        };
-        let item = state.items.remove(pos).expect("position just found");
-        if state.open_run {
-            state.items.push_front(item);
-            QueueJump::AbortThenDrain
-        } else {
-            state.open_run = true;
-            QueueJump::DispatchNow(item)
-        }
+        self.run_state_feed.touch(session_id);
+        jump
     }
 
     /// Push a popped item back to the front — the undo of
     /// [`QueueJump::DispatchNow`] / [`Self::queue_take_next`] when the
     /// dispatch failed. Releases the run gate.
     pub async fn queue_requeue_front(&self, session_id: &str, item: QueuedMessage) {
-        let mut q = self.queues.lock().await;
-        let state = q.entry(session_id.to_string()).or_default();
-        state.items.push_front(item);
-        state.open_run = false;
+        {
+            let mut q = self.queues.lock().await;
+            let state = q.entry(session_id.to_string()).or_default();
+            state.items.push_front(item);
+            state.open_run = false;
+        }
+        self.run_state_feed.touch(session_id);
     }
 
     /// Remove a queued item. Returns the removed item so the GUI's
     /// "edit = remove + refill composer" flow gets the verbatim text.
     pub async fn queue_remove(&self, session_id: &str, queue_id: &str) -> Option<QueuedMessage> {
-        let mut q = self.queues.lock().await;
-        let state = q.get_mut(session_id)?;
-        let pos = state.items.iter().position(|m| m.queue_id == queue_id)?;
-        state.items.remove(pos)
+        let removed = {
+            let mut q = self.queues.lock().await;
+            let state = q.get_mut(session_id)?;
+            let pos = state.items.iter().position(|m| m.queue_id == queue_id)?;
+            state.items.remove(pos)
+        };
+        if removed.is_some() {
+            self.run_state_feed.touch(session_id);
+        }
+        removed
     }
 
     /// Snapshot of one session's queued items (front first).
@@ -789,16 +869,21 @@ impl RunnerManager {
             // A run starting changes nothing about the gate or the queue.
             RunSignal::UserRunStarted { .. } => return None,
         };
-        let mut q = self.queues.lock().await;
-        let state = q.entry(session_id.clone()).or_default();
-        state.open_run = false;
-        if !may_pop || state.ask_pending || state.items.is_empty() {
-            return None;
-        }
-        let item = state.items.pop_front();
-        if item.is_some() {
-            state.open_run = true;
-        }
+        let item = {
+            let mut q = self.queues.lock().await;
+            let state = q.entry(session_id.clone()).or_default();
+            state.open_run = false;
+            if !may_pop || state.ask_pending || state.items.is_empty() {
+                None
+            } else {
+                let item = state.items.pop_front();
+                if item.is_some() {
+                    state.open_run = true;
+                }
+                item
+            }
+        };
+        self.run_state_feed.touch(session_id);
         item
     }
 
@@ -811,14 +896,20 @@ impl RunnerManager {
     /// caller sends nothing; on `true` the caller must dispatch or
     /// release via [`Self::queue_release_run`].
     pub async fn try_reserve_run(&self, session_id: &str) -> bool {
-        let mut q = self.queues.lock().await;
-        let state = q.entry(session_id.to_string()).or_default();
-        if state.open_run || state.ask_pending || !state.items.is_empty() {
-            false
-        } else {
-            state.open_run = true;
-            true
+        let reserved = {
+            let mut q = self.queues.lock().await;
+            let state = q.entry(session_id.to_string()).or_default();
+            if state.open_run || state.ask_pending || !state.items.is_empty() {
+                false
+            } else {
+                state.open_run = true;
+                true
+            }
+        };
+        if reserved {
+            self.run_state_feed.touch(session_id);
         }
+        reserved
     }
 
     /// Stamp the run just opened on `session_id` as a Goal continuation
@@ -933,6 +1024,7 @@ pub fn is_side_question(text: &str) -> bool {
 async fn send_command_via(
     processes: &ProcessMap,
     queues: &QueueMap,
+    run_state_feed: &RunStateFeed,
     session_id: &str,
     cmd: &IpcCommand,
 ) -> Result<(), SendCommandError> {
@@ -950,16 +1042,19 @@ async fn send_command_via(
     let result = p.send_command(cmd).await;
     drop(p);
     if result.is_ok() && RunnerManager::opens_run_gate(cmd) {
-        let mut q = queues.lock().await;
-        let state = q.entry(session_id.to_string()).or_default();
-        state.open_run = true;
-        state.ask_pending = false;
-        // `last_exit` is deliberately left alone: it keeps saying why
-        // the previous run ended until this one completes (galley#30).
-        // Every gate-opening dispatch is a user turn until the Goal
-        // engine says otherwise (`mark_goal_continuation`).
-        state.run_kind = RunKind::UserTurn;
-        state.draft = Default::default();
+        {
+            let mut q = queues.lock().await;
+            let state = q.entry(session_id.to_string()).or_default();
+            state.open_run = true;
+            state.ask_pending = false;
+            // `last_exit` is deliberately left alone: it keeps saying why
+            // the previous run ended until this one completes (galley#30).
+            // Every gate-opening dispatch is a user turn until the Goal
+            // engine says otherwise (`mark_goal_continuation`).
+            state.run_kind = RunKind::UserTurn;
+            state.draft = Default::default();
+        }
+        run_state_feed.touch(session_id);
     }
     result
 }
@@ -994,6 +1089,7 @@ impl RunnerCommandSink for RunnerManager {
 pub struct RunnerCommandHandle {
     processes: Arc<ProcessMap>,
     queues: Arc<QueueMap>,
+    run_state_feed: RunStateFeed,
 }
 
 #[async_trait]
@@ -1003,7 +1099,14 @@ impl RunnerCommandSink for RunnerCommandHandle {
         session_id: &str,
         cmd: &IpcCommand,
     ) -> Result<(), SendCommandError> {
-        send_command_via(&self.processes, &self.queues, session_id, cmd).await
+        send_command_via(
+            &self.processes,
+            &self.queues,
+            &self.run_state_feed,
+            session_id,
+            cmd,
+        )
+        .await
     }
 }
 
@@ -1587,5 +1690,128 @@ mod tests {
         assert!(asking.ask_pending && !asking.open_run);
         assert_eq!(asking.queued_count, 1);
         assert_eq!(asking.last_exit.as_deref(), Some("EXITED"));
+    }
+
+    // ---------------- session-run-state (ticket 05c) ----------------
+
+    #[derive(Default)]
+    struct RecordingNotifier {
+        events: std::sync::Mutex<Vec<(String, serde_json::Value)>>,
+    }
+
+    impl Notifier for RecordingNotifier {
+        fn emit(&self, event: &str, payload: serde_json::Value) {
+            self.events
+                .lock()
+                .unwrap()
+                .push((event.to_string(), payload));
+        }
+    }
+
+    impl RecordingNotifier {
+        fn run_states(&self) -> Vec<serde_json::Value> {
+            self.events
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(name, _)| name == crate::runner_manager::SESSION_RUN_STATE_EVENT)
+                .map(|(_, payload)| payload.clone())
+                .collect()
+        }
+
+        /// Wait for the `n`th run-state event and return all of them.
+        async fn wait_for(&self, n: usize) -> Vec<serde_json::Value> {
+            for _ in 0..200 {
+                let states = self.run_states();
+                if states.len() >= n {
+                    return states;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            panic!(
+                "expected {n} run-state events, got {:#?}",
+                self.run_states()
+            );
+        }
+    }
+
+    fn publishing_manager() -> (Arc<RunnerManager>, Arc<RecordingNotifier>) {
+        let mgr = Arc::new(RunnerManager::new());
+        let notifier = Arc::new(RecordingNotifier::default());
+        let (tx, rx) = mpsc::unbounded_channel();
+        mgr.set_run_state_feed(tx);
+        tokio::spawn(crate::runner_manager::publish_run_states(
+            mgr.clone(),
+            notifier.clone(),
+            rx,
+        ));
+        (mgr, notifier)
+    }
+
+    /// `(openRun, queuedCount, askPending)` of a payload.
+    fn gate(p: &serde_json::Value) -> (bool, u64, bool) {
+        (
+            p["openRun"].as_bool().unwrap(),
+            p["queuedCount"].as_u64().unwrap(),
+            p["askPending"].as_bool().unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn run_state_events_follow_the_gate_and_queue_once_per_change() {
+        let (mgr, notifier) = publishing_manager();
+
+        // A change that changes nothing: an idle session stays silent.
+        mgr.queue_release_run("s").await;
+        let _ = offer(&mgr, "s", "a").await; // gate open
+        let states = notifier.wait_for(1).await;
+        assert_eq!(
+            states[0],
+            serde_json::json!({
+                "sessionId": "s",
+                "runnerAlive": false,
+                "agentRunning": false,
+                "openRun": true,
+                "queuedCount": 0,
+                "askPending": false,
+                "lastExit": null,
+            })
+        );
+
+        let queued = match offer(&mgr, "s", "b").await {
+            QueueOffer::Queued { queue_id, .. } => queue_id,
+            other => panic!("expected queued, got {other:?}"),
+        };
+        assert_eq!(gate(&notifier.wait_for(2).await[1]), (true, 1, false));
+
+        // The run ends on a question: one event, with the hold and the
+        // reason the run ended.
+        set_ask_pending(&mgr, "s", true).await;
+        settle(
+            &mgr,
+            "s",
+            serde_json::json!({"result": "EXITED", "data": null}),
+        )
+        .await;
+        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
+        let states = notifier.wait_for(3).await;
+        assert_eq!(gate(&states[2]), (false, 1, true));
+        assert_eq!(states[2]["lastExit"], "EXITED");
+
+        // Repeats are dropped: releasing an already closed gate and a
+        // second drain step change nothing.
+        mgr.queue_release_run("s").await;
+        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
+        // The next real change is the very next event.
+        assert!(mgr.queue_remove("s", &queued).await.is_some());
+        let states = notifier.wait_for(4).await;
+        assert_eq!(gate(&states[3]), (false, 0, true));
+        assert_eq!(states.len(), 4, "no repeated snapshot: {states:#?}");
+
+        // A second session is tracked on its own.
+        assert!(mgr.try_reserve_run("t").await);
+        let states = notifier.wait_for(5).await;
+        assert_eq!(states[4]["sessionId"], "t");
+        assert_eq!(gate(&states[4]), (true, 0, false));
     }
 }

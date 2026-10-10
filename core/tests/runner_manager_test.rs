@@ -971,6 +971,12 @@ for line in sys.stdin:
               "severity": "error", "retryable": False, "hint": None,
               "context": "task_end", "traceback": None})
         run_complete("DONE_WITHOUT_EXIT", vis)
+    elif text == "release":
+        # Ends the turn a "hold" left going (any other text only starts
+        # one and leaves it open).
+        turn_end(1, base, vis, "收尾", "好了。",
+                 exit_reason={"result": "CURRENT_TASK_DONE", "data": None})
+        run_complete("CURRENT_TASK_DONE", vis)
 "##;
     fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
 }
@@ -1018,7 +1024,7 @@ fn persisting_manager(
     galley: &SqliteGalley,
 ) -> (RunnerManager, mpsc::UnboundedReceiver<RunSignal>) {
     let mgr = RunnerManager::new();
-    mgr.set_turn_store(galley.clone());
+    mgr.set_turn_store(galley.clone(), galley_core_lib::notify::NullNotifier::arc());
     let (tx, rx) = mpsc::unbounded_channel();
     mgr.set_run_signal(tx);
     (mgr, rx)
@@ -1041,6 +1047,7 @@ async fn dispatch(
                 via: OriginVia::Cli,
                 supervisor: None,
                 reason: None,
+                client: None,
             },
             visibility,
         )
@@ -1305,6 +1312,7 @@ async fn turn_without_absolute_index_keys_on_the_latest_user_row() {
                     via: OriginVia::Cli,
                     supervisor: None,
                     reason: None,
+                    client: None,
                 },
             )
             .await
@@ -1850,6 +1858,7 @@ async fn replay_session(
                     via: OriginVia::Cli,
                     supervisor: None,
                     reason: None,
+                    client: None,
                 },
             )
             .await
@@ -2104,6 +2113,7 @@ async fn a_goal_survives_the_quiet_restart_of_its_runner() {
                 via: OriginVia::Cli,
                 supervisor: None,
                 reason: None,
+                client: None,
             },
         )
         .await
@@ -2147,4 +2157,208 @@ async fn a_goal_survives_the_quiet_restart_of_its_runner() {
     ));
 
     mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+// ---------------- what Core announces about runs (ticket 05c) ----------------
+
+use galley_core_lib::runner_manager::{publish_run_states, SESSION_RUN_STATE_EVENT};
+use galley_core_lib::turn_persistence::VIA_TURN_PERSIST;
+use serde_json::json;
+
+/// [`persisting_manager`] plus everything `app_setup` wires for the
+/// phone: turn bumps announced and the `session-run-state` publisher,
+/// both into one recording notifier.
+fn announcing_manager(
+    galley: &SqliteGalley,
+) -> (
+    Arc<RunnerManager>,
+    mpsc::UnboundedReceiver<RunSignal>,
+    Arc<RecordingNotifier>,
+) {
+    let mgr = Arc::new(RunnerManager::new());
+    let notifier = Arc::new(RecordingNotifier::default());
+    mgr.set_turn_store(galley.clone(), notifier.clone());
+    let (tx, rx) = mpsc::unbounded_channel();
+    mgr.set_run_signal(tx);
+    let (feed_tx, feed_rx) = mpsc::unbounded_channel();
+    mgr.set_run_state_feed(feed_tx);
+    tokio::spawn(publish_run_states(mgr.clone(), notifier.clone(), feed_rx));
+    (mgr, rx, notifier)
+}
+
+/// Payloads of one event name, in emit order.
+fn payloads_of(notifier: &RecordingNotifier, event: &str) -> Vec<serde_json::Value> {
+    notifier
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(name, _)| name == event)
+        .map(|(_, payload)| payload.clone())
+        .collect()
+}
+
+/// The `session-run-state` payloads of one session, in emit order.
+fn run_states(notifier: &RecordingNotifier, sid: &str) -> Vec<serde_json::Value> {
+    payloads_of(notifier, SESSION_RUN_STATE_EVENT)
+        .into_iter()
+        .filter(|p| p["sessionId"] == sid)
+        .collect()
+}
+
+/// Wait until `pred` holds for the run states of `sid`.
+async fn wait_run_states(
+    notifier: &RecordingNotifier,
+    sid: &str,
+    pred: impl Fn(&[serde_json::Value]) -> bool,
+) -> Vec<serde_json::Value> {
+    for _ in 0..200 {
+        let states = run_states(notifier, sid);
+        if pred(&states) {
+            return states;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    panic!("run states never matched: {:#?}", run_states(notifier, sid));
+}
+
+/// What the drain task does with a RunComplete: close the run gate.
+async fn settle(mgr: &RunnerManager, sid: &str) {
+    mgr.queue_take_next(&RunSignal::RunComplete {
+        session_id: sid.to_string(),
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn each_visible_turn_bump_is_announced_with_the_bumped_row() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let bridge = TempDir::new().expect("tempdir");
+    write_persisting_runner(bridge.path());
+    let (_db, pool, galley) = persistence_db().await;
+    seed_session(&pool, "s-ann").await;
+    let (mgr, mut signals, notifier) = announcing_manager(&galley);
+    spawn_persisting(&mgr, "s-ann", bridge.path()).await;
+
+    dispatch(&mgr, &galley, "s-ann", "run:3", MessageVisibility::Visible).await;
+    next_run_complete(&mut signals).await;
+
+    let bumps: Vec<serde_json::Value> = payloads_of(&notifier, "session-updated-external")
+        .into_iter()
+        .filter(|p| p["via"] == VIA_TURN_PERSIST)
+        .collect();
+    assert_eq!(bumps.len(), 3, "one announcement per visible turn_end");
+    let counts: Vec<u64> = bumps
+        .iter()
+        .map(|p| p["session"]["turnCount"].as_u64().unwrap())
+        .collect();
+    assert_eq!(counts, vec![1, 2, 3], "each carries the row after its bump");
+    let last = &bumps[2]["session"];
+    assert_eq!(last["id"], "s-ann");
+    assert_eq!(last["summary"], "给出答案");
+    // The event form: optional fields present, null when empty.
+    assert!(last.get("projectId").is_some_and(|v| v.is_null()));
+    assert!(last.get("reasoningEffort").is_some_and(|v| v.is_null()));
+    let brief = galley
+        .session_brief(SessionId("s-ann".into()))
+        .await
+        .unwrap();
+    assert_eq!(last["lastActivityAt"], brief.last_activity_at.as_str());
+
+    // Internal turns bump nothing, so announce nothing.
+    dispatch(&mgr, &galley, "s-ann", "run:2", MessageVisibility::Internal).await;
+    next_run_complete(&mut signals).await;
+    let after = payloads_of(&notifier, "session-updated-external");
+    assert_eq!(after.len(), 3);
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn run_state_events_follow_a_run_and_an_ask_without_repeats() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let bridge = TempDir::new().expect("tempdir");
+    write_persisting_runner(bridge.path());
+    let (_db, pool, galley) = persistence_db().await;
+    seed_session(&pool, "s-rs").await;
+    let (mgr, mut signals, notifier) = announcing_manager(&galley);
+    spawn_persisting(&mgr, "s-rs", bridge.path()).await;
+
+    // Registered runner: the first change away from idle.
+    let states = wait_run_states(&notifier, "s-rs", |s| !s.is_empty()).await;
+    assert_eq!(
+        states[0],
+        json!({
+            "sessionId": "s-rs",
+            "runnerAlive": true,
+            "agentRunning": false,
+            "openRun": false,
+            "queuedCount": 0,
+            "askPending": false,
+            "lastExit": null,
+        })
+    );
+
+    // A turn left going is seen going …
+    dispatch(&mgr, &galley, "s-rs", "hold", MessageVisibility::Visible).await;
+    wait_run_states(&notifier, "s-rs", |s| {
+        s.last()
+            .is_some_and(|p| p["agentRunning"] == true && p["openRun"] == true)
+    })
+    .await;
+    // … and its end settles everything. The publisher reads the state
+    // when it gets to a report, so a run this mock finishes within a
+    // millisecond may show no `agentRunning: true` of its own: events
+    // carry states, not every edge; the last one is always current.
+    dispatch(&mgr, &galley, "s-rs", "release", MessageVisibility::Visible).await;
+    next_run_complete(&mut signals).await;
+    settle(&mgr, "s-rs").await;
+    let states = wait_run_states(&notifier, "s-rs", |s| {
+        s.last()
+            .is_some_and(|p| p["openRun"] == false && p["lastExit"] == "CURRENT_TASK_DONE")
+    })
+    .await;
+    assert_eq!(
+        states.last().unwrap(),
+        &json!({
+            "sessionId": "s-rs",
+            "runnerAlive": true,
+            "agentRunning": false,
+            "openRun": false,
+            "queuedCount": 0,
+            "askPending": false,
+            "lastExit": "CURRENT_TASK_DONE",
+        })
+    );
+
+    // An ask_user run ends asking; the answer's dispatch clears it.
+    dispatch(&mgr, &galley, "s-rs", "ask", MessageVisibility::Visible).await;
+    next_run_complete(&mut signals).await;
+    settle(&mgr, "s-rs").await;
+    let states = wait_run_states(&notifier, "s-rs", |s| {
+        s.last()
+            .is_some_and(|p| p["askPending"] == true && p["openRun"] == false)
+    })
+    .await;
+    assert_eq!(states.last().unwrap()["lastExit"], "EXITED");
+
+    // Shut down: the runner is gone (the queue state stays).
+    mgr.shutdown("s-rs", Some(Duration::from_secs(1)))
+        .await
+        .unwrap();
+    let states = wait_run_states(&notifier, "s-rs", |s| {
+        s.last().is_some_and(|p| p["runnerAlive"] == false)
+    })
+    .await;
+
+    // Deduplicated: no two consecutive events say the same thing.
+    for pair in states.windows(2) {
+        assert_ne!(pair[0], pair[1], "repeated snapshot in {states:#?}");
+    }
 }

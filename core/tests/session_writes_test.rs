@@ -49,6 +49,7 @@ fn gui() -> Origin {
         via: OriginVia::Gui,
         supervisor: None,
         reason: None,
+        client: None,
     }
 }
 
@@ -781,6 +782,7 @@ fn all_some_brief() -> SessionBrief {
             via: OriginVia::Cli,
             supervisor: None,
             reason: None,
+            client: None,
         }),
         selected_llm_index: Some(1),
         selected_llm_key: Some("k".into()),

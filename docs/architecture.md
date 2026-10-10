@@ -193,9 +193,11 @@ frontend could have seen them.
 | create / update a project | `project-created-external` / `project-updated-external` | `{ project, via }` |
 | delete a project | `project-deleted-external` | `{ projectId, detachedSessions, detachedSessionIds }` |
 | create / update / delete a scheduled task, a fire | `scheduled-tasks:changed` | none (pages refetch) |
+| a visible turn's session bump (turn persistence, below) | `session-updated-external`, `via: "turn-persist"` | `{ session, via }` |
 
-`via` is `"gui"` for the GUI's writes and the command name for the
-socket's (`"session.archive"`, `"llm.set"`, …). `session` and `project`
+`via` is `"gui"` for the GUI's writes, the command name for the
+socket's (`"session.archive"`, `"llm.set"`, …), and the task's name for
+Core's own (`"title-derive"`, `"auto-title"`, `"turn-persist"`). `session` and `project`
 are the rows in Core's **event form** (`SessionBriefEvent`,
 `ProjectBriefEvent`): every optional field written, `null` when empty, so
 a cleared field — reasoning effort back to the model's own, a session
@@ -218,7 +220,35 @@ nothing visible: a created session the page already holds is left as it
 is, a row that matches stays the same object, turn progress (count,
 summary, last activity) is taken only from a row at least as far along as
 the page's (the page bumps it on `turn_end` itself), and no mirror action
-writes back to Core.
+writes back to Core. The page skips the `turn-persist` announcement
+altogether (`gui/src/lib/core-row-events.ts`): it comes from a different
+Core task than the `runner-event` carrying the same `turn_end`, so it can
+arrive first, and the page's own bump would then count the turn twice —
+the guard above only covers a row that is behind.
+
+Every event a `TauriNotifier` emits — these, `runner-event`,
+`user-message-persisted`, `runner-history-replay`, `goal-updated`,
+`session-queue:changed`, `session-run-state` — is also handed, after the
+webview, to the process-wide remote sink when one is registered
+(`notify::register_remote_sink`, ticket 05c): the remote module's single
+tap for paired phones. The sink must not block (bounded queue, drop when
+full). Events emitted straight through `AppHandle` — `browser-bridge-updated`,
+`im-supervisor-updated`, `app-update-progress`, `first-close-requested`,
+the `menu:*` events — are desktop-only and do not reach it.
+
+`session-run-state` (`runner_manager::run_state_events`) carries a
+session's whole live `RunState` — runner registered, mid-turn, run gate
+open, queue length, `ask_user` pending, last exit — whenever it changes,
+deduplicated per session. One publisher task reads the state afresh for
+each reported change, so the last event is always the current state and
+bursts collapse; a change undone before it reads may not appear. The GUI
+does not listen yet.
+
+A message or session a human created through an app also records which
+app: `messages.client` / `sessions.client` (migration 043), `desktop` from
+the GUI's Tauri send, create and Goal start, `ios` from the remote module,
+NULL otherwise. It rides on `Origin.client`, which is never serialized, so
+the CLI's JSON is unchanged.
 
 #### Runner events and turn persistence
 
@@ -228,11 +258,13 @@ subscribers:
 - **Core's runner watcher**, attached in `RunnerManager::spawn` so every
   spawn path (GUI, CLI `session new`, Goal, scheduler) gets one. It writes
   every `turn_end` as an assistant `messages` row and, for visible turns,
-  bumps the session (`turn_count`, `summary`, `last_activity_at`)
+  bumps the session (`turn_count`, `summary`, `last_activity_at`) and
+  announces the bumped row (`session-updated-external`, `via:
+  "turn-persist"`)
   ([`core/src/turn_persistence`](../core/src/turn_persistence/mod.rs)),
-  then does the outbound-queue bookkeeping. One ordered consumer does
-  both, so a run's rows are in SQLite before its `run_complete` closes the
-  run gate.
+  then does the outbound-queue bookkeeping and reports the run-state
+  change. One ordered consumer does all of it, so a run's rows are in
+  SQLite before its `run_complete` closes the run gate.
 - **Presentation subscribers**: the `runner-event` emit task (GUI pages)
   and the auto-title watcher, both attached by the ensure path above.
   Nothing durable depends on a page receiving an event.

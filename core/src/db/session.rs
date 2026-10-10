@@ -38,25 +38,143 @@ impl RenameTitleSource {
     }
 }
 
+/// Columns of a [`PersistedMessageRowRecord`].
+const PERSISTED_MESSAGE_COLS: &str = "id, session_id, turn_index, sequence, role, content, \
+    tool_calls, tool_results, thinking, final_answer, summary, \
+    preamble, created_via, supervisor, origin_note, visibility, \
+    telemetry_json, goal_id, created_at";
+
+/// Largest page [`SqliteGalley::persisted_message_rows_page`] returns.
+pub const MESSAGE_PAGE_MAX: usize = 500;
+
+/// A position in a session's visible transcript, for paging backwards
+/// through it ([`SqliteGalley::persisted_message_rows_page`]): the read
+/// order key `(turn_index, sequence, id)` of a row — in practice the
+/// oldest row the caller already holds ([`Self::of`]).
+///
+/// Why this key, and not the SQLite rowid or a turn index alone:
+///
+/// - The transcript is read in `(turn_index, sequence)` order
+///   ([`SqliteGalley::persisted_message_rows`]), and insertion order —
+///   the rowid — is not guaranteed to follow it (rows the GUI used to
+///   write, tables rebuilt by migrations), so a rowid cursor could skip
+///   or repeat rows of that order.
+/// - A turn index is shared: a user row and the first step of its reply
+///   are one turn (sequence 0 and 1), so a page boundary inside a turn
+///   would lose or repeat the rest of it.
+/// - `id` breaks ties the schema does not rule out.
+///
+/// The cursor is a position, not a row, so it stays valid whatever
+/// happens to that row. Rows a run appends land after the tail (Core
+/// numbers a new turn past the session's highest), so paging back from a
+/// cursor neither skips nor repeats while a session is being written to;
+/// new rows are the caller's to pick up from the tail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageCursor {
+    pub turn_index: i64,
+    pub sequence: i64,
+    pub id: String,
+}
+
+impl MessageCursor {
+    /// The position of `row`.
+    pub fn of(row: &PersistedMessageRow) -> Self {
+        Self {
+            turn_index: row.turn_index,
+            sequence: row.sequence,
+            id: row.id.clone(),
+        }
+    }
+}
+
+/// One page of a session's visible transcript, oldest first.
+#[derive(Debug, Clone)]
+pub struct PersistedMessagePage {
+    pub rows: Vec<PersistedMessageRow>,
+    /// Older rows exist before the first one here.
+    pub has_more: bool,
+}
+
+impl PersistedMessagePage {
+    /// The cursor for the page before this one (`None` when empty).
+    pub fn before(&self) -> Option<MessageCursor> {
+        self.rows.first().map(MessageCursor::of)
+    }
+}
+
 impl SqliteGalley {
     pub async fn persisted_message_rows(
         &self,
         session_id: &SessionId,
     ) -> Result<Vec<PersistedMessageRow>> {
         let records: Vec<PersistedMessageRowRecord> =
-            sqlx::query_as::<_, PersistedMessageRowRecord>(
-                "SELECT id, session_id, turn_index, sequence, role, content, \
-                    tool_calls, tool_results, thinking, final_answer, summary, \
-                    preamble, created_via, supervisor, origin_note, visibility, \
-                    telemetry_json, goal_id, created_at \
-             FROM messages \
-             WHERE session_id = ? AND visibility = 'visible' \
-             ORDER BY turn_index ASC, sequence ASC",
-            )
+            sqlx::query_as::<_, PersistedMessageRowRecord>(&format!(
+                "SELECT {PERSISTED_MESSAGE_COLS} \
+                 FROM messages \
+                 WHERE session_id = ? AND visibility = 'visible' \
+                 ORDER BY turn_index ASC, sequence ASC"
+            ))
             .bind(session_id.as_str())
             .fetch_all(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
+        self.with_attachments(records).await
+    }
+
+    /// The paged [`Self::persisted_message_rows`]: up to `limit` visible
+    /// rows (clamped to `1..=`[`MESSAGE_PAGE_MAX`]) immediately before
+    /// `before` — or the transcript's tail when `before` is `None` — in
+    /// ascending order, with `has_more` when older rows remain. Open a
+    /// session with `None`, then pass the page's [`PersistedMessagePage::before`]
+    /// to go further back. See [`MessageCursor`] for why paging is stable
+    /// while the session is appended to.
+    pub async fn persisted_message_rows_page(
+        &self,
+        session_id: &SessionId,
+        before: Option<&MessageCursor>,
+        limit: usize,
+    ) -> Result<PersistedMessagePage> {
+        let limit = limit.clamp(1, MESSAGE_PAGE_MAX);
+        let cursor_clause = if before.is_some() {
+            " AND (turn_index, sequence, id) < (?, ?, ?)"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT {PERSISTED_MESSAGE_COLS} \
+             FROM messages \
+             WHERE session_id = ? AND visibility = 'visible'{cursor_clause} \
+             ORDER BY turn_index DESC, sequence DESC, id DESC \
+             LIMIT ?"
+        );
+        let mut query =
+            sqlx::query_as::<_, PersistedMessageRowRecord>(&sql).bind(session_id.as_str());
+        if let Some(cursor) = before {
+            query = query
+                .bind(cursor.turn_index)
+                .bind(cursor.sequence)
+                .bind(cursor.id.as_str());
+        }
+        // One extra row tells whether older ones remain.
+        let mut records = query
+            .bind(limit as i64 + 1)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        let has_more = records.len() > limit;
+        records.truncate(limit);
+        records.reverse();
+        Ok(PersistedMessagePage {
+            rows: self.with_attachments(records).await?,
+            has_more,
+        })
+    }
+
+    /// Rows with their attachments.
+    async fn with_attachments(
+        &self,
+        records: Vec<PersistedMessageRowRecord>,
+    ) -> Result<Vec<PersistedMessageRow>> {
         let message_ids: Vec<String> = records.iter().map(|row| row.id.clone()).collect();
         let attachments = self.attachment_map_for_message_ids(&message_ids).await?;
         Ok(records
@@ -143,15 +261,16 @@ impl SqliteGalley {
             "INSERT INTO messages (
                id, session_id, turn_index, sequence, role, content,
                tool_calls, tool_results, thinking, final_answer, created_at,
-               created_via, supervisor, origin_note, visibility
+               created_via, supervisor, origin_note, client, visibility
              ) VALUES (?, ?, ?, 0, 'user', ?,
                        NULL, NULL, NULL, NULL, ?,
-                       ?, ?, ?, 'visible')
+                       ?, ?, ?, ?, 'visible')
              ON CONFLICT(id) DO UPDATE SET
                content = excluded.content,
                created_via = excluded.created_via,
                supervisor = excluded.supervisor,
-               origin_note = excluded.origin_note",
+               origin_note = excluded.origin_note,
+               client = excluded.client",
         )
         .bind(&id)
         .bind(session_id.as_str())
@@ -161,6 +280,7 @@ impl SqliteGalley {
         .bind(origin.via.as_sql())
         .bind(&origin.supervisor)
         .bind(&origin.reason)
+        .bind(origin.client.map(|c| c.as_sql()))
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -1309,6 +1429,24 @@ impl SqliteGalley {
             });
         }
         Ok(saved)
+    }
+
+    /// The stored file path of attachment `attachment_id`, when it
+    /// belongs to session `session_id` (`None` otherwise — an unknown id
+    /// and another session's attachment read the same).
+    pub async fn attachment_file_path(
+        &self,
+        session_id: &str,
+        attachment_id: &str,
+    ) -> Result<Option<String>> {
+        sqlx::query_scalar(
+            "SELECT file_path FROM message_attachments WHERE id = ? AND session_id = ?",
+        )
+        .bind(attachment_id)
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
     }
 
     async fn attach_message_attachments(&self, messages: &mut [MessageBrief]) -> Result<()> {

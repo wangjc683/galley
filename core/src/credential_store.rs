@@ -35,12 +35,19 @@ pub async fn set_secret(galley: &SqliteGalley, api_key_ref: &str, secret: &str) 
 }
 
 pub async fn get_secret(galley: &SqliteGalley, api_key_ref: &str) -> Result<String> {
-    let row = galley
-        .managed_model_secret(api_key_ref)
+    try_get_secret(galley, api_key_ref)
         .await?
         .ok_or_else(|| GalleyError::InvalidArgs {
             message: format!("credential missing for {api_key_ref}"),
-        })?;
+        })
+}
+
+/// [`get_secret`] for a credential that may be absent: `Ok(None)` when
+/// nothing is stored under `api_key_ref`.
+pub async fn try_get_secret(galley: &SqliteGalley, api_key_ref: &str) -> Result<Option<String>> {
+    let Some(row) = galley.managed_model_secret(api_key_ref).await? else {
+        return Ok(None);
+    };
     let key_material = galley
         .managed_model_secret_key(&row.key_id)
         .await?
@@ -48,9 +55,11 @@ pub async fn get_secret(galley: &SqliteGalley, api_key_ref: &str) -> Result<Stri
             message: format!("credential key {} is missing", row.key_id),
         })?;
     let plaintext = decrypt_row(&key_material, api_key_ref, row)?;
-    String::from_utf8(plaintext).map_err(|e| GalleyError::Internal {
-        message: format!("credential plaintext is not valid UTF-8 for {api_key_ref}: {e}"),
-    })
+    String::from_utf8(plaintext)
+        .map(Some)
+        .map_err(|e| GalleyError::Internal {
+            message: format!("credential plaintext is not valid UTF-8 for {api_key_ref}: {e}"),
+        })
 }
 
 pub async fn delete_secret(galley: &SqliteGalley, api_key_ref: &str) -> Result<()> {

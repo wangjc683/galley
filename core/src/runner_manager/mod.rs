@@ -37,6 +37,7 @@ pub mod manager;
 pub mod process;
 pub mod queue;
 pub mod ready;
+pub mod run_state_events;
 
 pub use error::{RunnerSpawnError, SendCommandError, ShutdownError};
 pub use manager::{
@@ -46,3 +47,4 @@ pub use manager::{
 pub use process::{BroadcastItem, HeldClose, RunnerProcess};
 pub use queue::{QueueJump, QueueOffer, RunKind, RunOutcome};
 pub use ready::ReadySnapshot;
+pub use run_state_events::{publish_run_states, SessionRunStatePayload, SESSION_RUN_STATE_EVENT};

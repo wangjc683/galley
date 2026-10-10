@@ -23,6 +23,18 @@ interface SessionRowPayload {
   via: string;
 }
 
+/**
+ * `via` of the session row Core announces after persisting a turn
+ * (`core/src/turn_persistence`, VIA_TURN_PERSIST). This page does not
+ * apply it: it bumps the row itself on each `turn_end` it receives
+ * (`bumpSessionAfterTurn`), and the two arrive from separate Core tasks
+ * in either order. Applied first, the announcement would be counted
+ * again by the page's own bump; the turn-progress guard only protects
+ * against an announcement that is behind. The phone reads it; ticket
+ * 02e moves the page onto it.
+ */
+export const VIA_TURN_PERSIST = "turn-persist";
+
 interface SessionDeletedPayload {
   sessionId: string;
   via: string;
@@ -53,9 +65,10 @@ export async function listenCoreRowEvents(): Promise<() => void> {
     on<SessionRowPayload>("session-created-external", (p) =>
       store().applyExternalSessionCreated(p.session),
     ),
-    on<SessionRowPayload>("session-updated-external", (p) =>
-      store().applyExternalSessionUpdated(p.session),
-    ),
+    on<SessionRowPayload>("session-updated-external", (p) => {
+      if (p.via === VIA_TURN_PERSIST) return;
+      store().applyExternalSessionUpdated(p.session);
+    }),
     on<SessionRowPayload>("session-archived-external", (p) =>
       store().applyExternalSessionUpdated(p.session),
     ),
