@@ -1,6 +1,6 @@
 # 04 集成验收 + 真机
 
-Status: ready-for-human
+Status: done
 Blocked by: 01, 02, 03
 PRD：[../PRD.md](../PRD.md)
 
@@ -29,3 +29,5 @@ PRD：[../PRD.md](../PRD.md)
     再委派一次、不说话等它完成 → 汇报照到（owner 持久化）。
 
 ## Comments
+
+- JC 真机验收（2026-10-10）：未发现问题。按 `wechat.log` 与 `reporter_state.json` 核对实际走过的项——闲聊 1 步（无末行）、两步任务（末行步数与用时）、ask_user 两轮都回序号「2」（续跑累加到 6 步）、委派查天气并收到完成汇报（`reporter_state.json` 记已汇报）、新代码启动时重启续接正常。日志里**没有出现**、留待日常使用观察的：运行中与空闲时的 `/stop`、两条排队、发文件、运行中 `/new`；语音从日志分不出来。

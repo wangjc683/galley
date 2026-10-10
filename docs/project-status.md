@@ -708,8 +708,12 @@ main-chat planning docs (no product change), main has:
   now gets completion reports (`WechatChannel`; the owner is whoever spoke
   last, `wechat_owner.json`, cleared on Disconnect and re-scan), and the IM
   entry layer drops its WeChat link / `1.` note (budget 1503 → 1383).
-  Quoted messages are deferred (Rule 4). Real-device acceptance is owed
-  (`.scratch/wechat-ux/issues/04`).
+  Quoted messages are deferred (Rule 4). JC's real-device round passed
+  (2026-10-10): a one-step chat, a two-step answer, two ask_user rounds
+  answered by number, a delegation with its completion report, resume on
+  restart. Not seen in the log, so still to observe: `/stop` (running and
+  idle), two queued messages, a file sent back, `/new` mid-run; voice
+  cannot be told from typing in the log.
 
 Carried forward. The README screenshots still show the old sidebar, and
 `projects.png` the retired project view (its caption still says 项目视图);

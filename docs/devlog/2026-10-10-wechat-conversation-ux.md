@@ -101,4 +101,4 @@ TG / DC 的 live 窗口靠「编辑不推送、删除不留痕」。微信能不
   的微信部分按新模块重写），mypy strict、ruff、`git diff --check` 绿。
 - Core：`cargo test --workspace` 全绿（含 `remove_conversation_state` 微信断言、提示词 18 条）；动过的 Rust 文件 `rustfmt --check` 只剩 `manager.rs` 一处既有差异。
 - 补丁栈未动（`managed-ga/` 零改动）。
-- **真机验收待 JC**（`.scratch/wechat-ux/issues/04` 清单）。
+- **真机**：JC 真机验收（2026-10-10）：未发现问题。按 `wechat.log` 与 `reporter_state.json` 核对实际走过的项——闲聊 1 步（无末行）、两步任务（末行步数与用时）、ask_user 两轮都回序号「2」（续跑累加到 6 步）、委派查天气并收到完成汇报（`reporter_state.json` 记已汇报）、新代码启动时重启续接正常。日志里**没有出现**、留待日常使用观察的：运行中与空闲时的 `/stop`、两条排队、发文件、运行中 `/new`；语音从日志分不出来。

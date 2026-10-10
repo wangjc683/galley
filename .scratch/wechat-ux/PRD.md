@@ -1,6 +1,6 @@
 # PRD：微信对话体验对齐桌面端
 
-Status: in-progress
+Status: done
 Date: 2026-10-10
 来源：Telegram / Discord 打磨完，JC 提议打磨微信；读码诊断 + 官方 iLink 插件源码核实平台机制后，JC「按建议推进」（五个裁决点全按推荐，裁决 2 按探针结果走第三支）
 关联：[Telegram 对齐 devlog](../../docs/devlog/2026-09-30-telegram-conversation-ux.md)、[Discord 对齐 devlog](../../docs/devlog/2026-09-30-discord-conversation-ux.md)（形态母本）·
