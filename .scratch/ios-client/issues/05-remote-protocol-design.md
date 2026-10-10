@@ -1,6 +1,6 @@
 # 05 / 06 — 远程模块与 relay 协议设计稿
 
-Status: ready-for-agent（第 12 节裁决点全部落定，2026-10-10；实现拆分见第 13 节，05a `4b53f751`、05c `01d67d44`、06a 已合入）
+Status: ready-for-agent（第 12 节裁决点全部落定，2026-10-10；实现拆分见第 13 节，05a `4b53f751`、05c `01d67d44`、06a `28601618`、07a `8fb2601b` 已合入）
 
 来源：2026-10-10 JC 裁决「iOS 端开源，单仓按建议推进，先出协议设计稿」。上游：PRD 裁决 1、2、6、8、9、17、18、22、23（`../PRD.md`）；
 宪法 Rule 2（`AGENTS.md:107-126`）。依据两份调研：
@@ -536,7 +536,7 @@ CI：`.github/workflows/ios-protocol.yml`（07a），macOS runner（`macos-26`�
 - `ios/GalleyRemote/`（SwiftPM）：CryptoKit 上的 `NNpsk0`（裁决点 2 A）、外层帧、填充、推送解密、应用层 `Codable` 类型。
 - 测试：cacophony 向量；解码 05a 的全部 golden；与 Rust 固定临时钥的握手结果逐字节一致。用 `swift test` 在 macOS 上跑；
   本机只有 Command Line Tools、没装 Xcode，测试框架能不能用待验。
-- CI：按路径过滤的 macOS job；加 `check-remote-protocol-drift`（第 10 节）。
+- CI：按路径过滤的 macOS job（`.github/workflows/ios-protocol.yml`）。漂移检查并进了 Swift 测试，不另写 `check-remote-protocol-drift`（第 10 节）。
 
 iOS 的工程与界面（票 07 其余部分）仍按产品定义的次序，等主聊天桌面形态定了再开（移动端产品定义「方案总览与次序」）。
 

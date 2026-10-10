@@ -19,6 +19,7 @@ galley/
 ├── cli/                     # Rust `galley` CLI
 ├── remote-protocol/         # Wire formats shared by Core, relay and iOS app
 ├── relay/                   # Remote-access relay server
+├── ios/                     # iOS app side (GalleyRemote protocol package)
 ├── gui/                     # React / Tauri frontend
 ├── managed-ga/              # Galley-managed GenericAgent runtime (code, patches, manifest)
 ├── scripts/                 # Build, bundle, and release / update-channel scripts
@@ -39,6 +40,8 @@ Key directories:
 - `relay/`: the relay between a desktop Core and its paired phones. Sees only
   ciphertext and routing metadata, stores nothing, sends APNs pushes; its
   deployment lives outside this repo.
+- `ios/`: the iOS app side. So far `ios/GalleyRemote/`, the Swift protocol
+  package on CryptoKit, tested against `remote-protocol/`'s golden fixtures.
 - `gui/`: React 19 + Tauri frontend, Zustand domain stores, visual components.
 - `managed-ga/`: Galley-managed GenericAgent runtime — vendored code, Galley
   patches, and the runtime manifest.

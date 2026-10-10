@@ -182,6 +182,7 @@ core/             Rust Galley Core + Tauri backend
 cli/              Rust `galley` command for agents
 remote-protocol/  Wire formats shared by Core, relay and iOS app (remote access)
 relay/            Remote-access relay server (forwards ciphertext, sends pushes)
+ios/              iOS app side (so far the GalleyRemote Swift protocol package)
 gui/              React / Tauri frontend
 managed-ga/       Galley-managed GenericAgent runtime (code, patches, manifest)
 scripts/          Build, bundle, and release / update-channel scripts
