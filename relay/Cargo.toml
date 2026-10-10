@@ -13,13 +13,20 @@ workspace = "../core"
 [lib]
 name = "galley_relay"
 
+[features]
+# A test-only `ApnsClient` constructor that points at fake APNs endpoints
+# over plain HTTP/2 (h2c). Never on in the shipped binary; this crate's
+# own tests turn it on through the self dev-dependency below.
+test-hooks = []
+
 [[bin]]
 name = "galley-relay"
 path = "src/main.rs"
 
 [dependencies]
-# Frames and the channel key. The relay never touches the Noise, push or
-# app modules: it holds no key that opens them.
+# Frames, the channel key, and the APNs payload around a sealed push
+# (`push::apns_payload`). The relay holds no key that opens Noise or push
+# content, and never touches the app module.
 galley-remote-protocol = { path = "../remote-protocol" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
 # The same tokio-tungstenite as Core's remote module (ticket 05b), so the
@@ -29,9 +36,26 @@ tokio-tungstenite = { version = "0.30.0", default-features = false, features = [
 # HTTP/1 server for the upgrade and the metrics endpoint. Versions already
 # in core/Cargo.lock through reqwest; hyper's `server` feature adds
 # `httpdate`.
-hyper = { version = "1", features = ["server", "http1"] }
-hyper-util = { version = "0.1", features = ["tokio"] }
+#
+# The APNs sender (ticket 06b) is hyper-util's pooled client over HTTP/2
+# (`client-legacy`, `http2`, which adds `h2`, the one new crate) with
+# hyper-rustls: the rustls 0.23 + ring stack and the Mozilla roots
+# (webpki-roots) reqwest already builds, so no second TLS stack. Not
+# reqwest's own `http2` feature: features unify across the workspace, and
+# that one would turn on HTTP/2 negotiation for Core's reqwest calls in
+# workspace builds.
+hyper = { version = "1", features = ["server", "http1", "client", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "client-legacy", "http2"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http2", "ring", "tls12", "webpki-tokio"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 http-body-util = "0.1"
+# ES256 for the APNs provider token (ECDSA P-256, SHA-256, fixed-size
+# signature), from the `.p8` key (PKCS#8). The ring Core and rustls use.
+ring = "0.17"
+# PEM body of the `.p8` and base64url for the JWT; the base64 Core uses.
+base64 = "0.22"
+# Wipes the `.p8` text and DER after parsing; already in the lockfile.
+zeroize = "1"
 bytes = "1"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 # `ApnsSender` is a trait object; Core uses the same crate.
@@ -41,5 +65,8 @@ serde_json = "1"
 clap = { version = "4", features = ["derive", "env"] }
 
 [dev-dependencies]
+galley-relay = { path = ".", features = ["test-hooks"] }
 # Test peers dial the relay as plain WebSocket clients.
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect"] }
+# A `.p8` file for the configuration tests; the tempfile Core's tests use.
+tempfile = "3"

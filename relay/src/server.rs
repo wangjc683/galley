@@ -65,7 +65,9 @@ impl Server {
 
     /// The counters, as the metrics port serves them.
     pub fn metrics(&self) -> Value {
-        self.state.metrics.snapshot(self.state.channel_count())
+        self.state
+            .metrics
+            .snapshot(self.state.channel_count(), self.state.apns.jwt_refreshes())
     }
 
     /// Serve until `shutdown` resolves; then stop accepting, close every

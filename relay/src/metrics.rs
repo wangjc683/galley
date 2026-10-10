@@ -203,9 +203,10 @@ impl Metrics {
         self.dropped.inc(label);
     }
 
-    /// The JSON the metrics port serves. `channels` is passed in because
-    /// the channel table, not this struct, knows it.
-    pub(crate) fn snapshot(&self, channels: usize) -> Value {
+    /// The JSON the metrics port serves. `channels` and `jwt_refreshes`
+    /// are passed in because the channel table and the APNs sender, not
+    /// this struct, know them.
+    pub(crate) fn snapshot(&self, channels: usize, jwt_refreshes: u64) -> Value {
         json!({
             "version": env!("CARGO_PKG_VERSION"),
             "uptimeSeconds": self.started.elapsed().as_secs(),
@@ -228,6 +229,9 @@ impl Metrics {
                 "ok": self.pushes_ok.load(Relaxed),
                 "unregistered": self.pushes_unregistered.load(Relaxed),
                 "failed": self.pushes_failed.load(Relaxed),
+                // Provider tokens signed, the first one included: about one
+                // per 50 minutes of pushing, more when APNs rejected one.
+                "jwtRefreshes": jwt_refreshes,
             },
             "errors": self.errors.to_json(),
             "rejected": self.rejected.to_json(),
@@ -263,7 +267,7 @@ mod tests {
         let m = Metrics::default();
         m.error("truncated");
         m.rejected("channel_full");
-        let snap = m.snapshot(0);
+        let snap = m.snapshot(0, 3);
         assert_eq!(snap["errors"]["truncated"], 1);
         assert_eq!(snap["errors"]["empty"], 0);
         assert_eq!(snap["rejected"]["channel_full"], 1);
@@ -272,5 +276,6 @@ mod tests {
             ERROR_LABELS.len()
         );
         assert_eq!(snap["dropped"]["no_host"], 0);
+        assert_eq!(snap["pushes"]["jwtRefreshes"], 3);
     }
 }

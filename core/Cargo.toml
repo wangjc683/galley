@@ -52,6 +52,10 @@ async-trait = "0.1"
 # DST-transition tests for the scheduled-task next-fire math only —
 # production code resolves against chrono::Local.
 chrono-tz = "0.10"
+# The real relay, in process, for `tests/remote_e2e_test.rs` (ticket 06b):
+# Core's remote module and a fake phone talk through it. Test-only; the
+# desktop app never links the relay.
+galley-relay = { path = "../relay" }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-png"] }

@@ -147,6 +147,10 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
   - 不用停更的 `a2`；
   - 用 `reqwest`（Core 已在用 0.12，`core/Cargo.toml:115`）加 `jsonwebtoken` 自己写，或者用 Threema 在维护的 `apns-h2`（外部 §4）。
   - 推荐自己写：只发一种推送，代码量小，依赖与 Core 一致。
+  - 06b 落定：自己写，但不用 `reqwest` 和 `jsonwebtoken`。JWT 用 `ring`（Core 已在用 0.17）签，几十行；HTTP/2 用 hyper-util 的连接池客户端加 hyper-rustls，
+    TLS 仍是 Core 已有的 rustls 0.23 加 ring、Mozilla 根证书（webpki-roots），不引入第二套 TLS。新增的 crate 只有 `h2`。
+    不开 `reqwest` 的 `http2` feature 是因为 feature 在 workspace 里合并：开了它，workspace 构建里 Core 自己的 reqwest 请求也会协商 HTTP/2，
+    测试构建与发版构建的行为就分叉了。
 - **载荷**（≤ 4096 字节，外部 §4）：
 
   ```json
@@ -167,6 +171,29 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
   - 字节级样例（固定 nonce）：`remote-protocol/tests/golden/push.json`。
 - **兜底**：NSE 30 秒内解不开，或者超时，系统显示外层的占位文案（外部 §4）。不申请静默丢弃推送的 entitlement。
 - **设备 token**：手机经端到端通道调 `device.registerPush` 交给桌面，桌面存在 prefs，以后 P1 改为按设备存。收到 410 就删掉。relay 不存 token。
+- **relay 侧发送**（06b 落定，2026-10-10；用法见 `relay/README.md`「APNs」）：
+  - JWT：header `{"alg":"ES256","kid":<key id>}`，claims `{"iss":<team id>,"iat":<当前秒>}`，ECDSA P-256 SHA-256 签名取 64 字节的 `r ‖ s`，
+    base64url 不带填充。所有推送共用一个缓存的 token，满 50 分钟才换，落在 Apple 要求的 20～60 分钟窗口里，留 10 分钟给时钟偏差。
+    APNs 回 403 `ExpiredProviderToken` 或 `InvalidProviderToken` 时立即换一个、这条推送重试一次；这种强制更换 20 分钟内最多一次，
+    因为新 token 治不了 key id 填错、密钥吊销或时钟偏差，不能每条推送都签一个（刷得太勤 Apple 回 429 `TooManyProviderTokenUpdates`）。
+  - 连接：只走 HTTP/2（ALPN 只报 `h2`）；生产与沙盒按 `PUSH` 帧的 `env` 选端点。全进程一个客户端，每个 APNs 主机一条多路复用连接；
+    空闲时每 5 分钟发一次 HTTP/2 `PING`，20 秒没回就换连接，免得推送撞上已经悄悄断掉的连接；一小时没有推送就关，下次推送再建
+    （Apple 不建议的是频繁断开重连，推送稀少时隔段时间重建没有问题）。
+  - 请求头：`authorization: bearer <JWT>`、`apns-topic`（bundle id）、`apns-push-type: alert`、`apns-priority`（取帧里的值）、
+    `apns-expiration`（24 小时后）、帧里有 collapse id 时带 `apns-collapse-id`。过期时间取 24 小时：手机关机一夜或长途飞行都盖得住；
+    APNs 对离线设备每个 App 只留最新一条，过了一天，手机重连后的重新同步比一条旧通知更说明情况。
+  - 载荷就是 `push::apns_payload` 的输出，发前再查一次不超过 4096 字节（帧已限制密文长度，正常走不到）。
+  - 回应：200 为成功；410 为 token 失效（Core 删 token）；其他状态码为「其他失败」，reason 取 APNs 返回 JSON 的 `reason`，
+    只留可打印 ASCII、截到 255 字节。10 秒没有回应回 `apns_timeout`，连不上回 `apns_unreachable`，`apns_status` 都是 0。
+  - 配置：`GALLEY_RELAY_APNS_KEY_PATH`、`_KEY_ID`、`_TEAM_ID`、`_TOPIC` 四个（也有同名命令行参数）全有才发推送，全无就回 `push_unavailable`，
+    只配一部分则拒绝启动并列出缺哪几个。密钥在启动时读取并校验，读不了或不是 PKCS#8 的 P-256 私钥也拒绝启动。
+    密钥是 Apple 开发者账号里下载的 `.p8`，它在服务器上的位置记在 inkstone-ops，不写进本仓。
+  - 计数器：`pushes` 下加 `jwtRefreshes`（签过的 token 数，含第一个）。日志不记任何一条推送的 token、JWT、载荷或 APNs 的回应。
+  - 对照 Rule 2：relay 现在持有一把密钥，即 APNs 的签名密钥。凭它能让 APNs 给 App 发通知，但发不出手机解得开的内容，
+    手机只会显示占位文案；Core 与手机之间的任何东西它仍然解不开、伪造不了。
+  - 测试端点：假 APNs 的地址和明文 HTTP/2（h2c）只有 `test-hooks` feature 才有，relay 自己的测试经自身 dev-dependency 打开；发版的二进制只连 Apple 的 HTTPS。
+  - 未核实：没有 Apple 账号，没连过真 APNs，全部对着本地假服务器测。Apple 发的 `.p8` 在私钥结构里带曲线参数，这一点按公开样例的前缀构造了测试用密钥，
+    没拿真密钥试过；APNs 证书链的根（USERTrust RSA）在 webpki-roots 1.0.7 里。
 - **哪些事件推送**：裁决 17 的四类「需要关注」由 Core 判断（票 08）。本票只负责把推送发得出去、解得开。
 
 ### 4.4 实现、部署与容量
@@ -189,7 +216,7 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
     （默认 `127.0.0.1:8788`，必须是回环地址）；APNs 的密钥路径、key id、team id、bundle id 留了 `GALLEY_RELAY_APNS_*` 四个变量给 06b。
     「环境」不做成 relay 配置，因为每条 `PUSH` 自带生产或沙盒；「文件」就是 systemd 的 `EnvironmentFile`（06c）。
   - 计数器：独立端口的 `GET /metrics` 回 JSON，键固定。内容是频道数、按角色的在线与累计连接数、被挤掉的 host 数、进出字节与帧数、
-    推送（请求、成功、410、失败）、按标签的错误、升级前的拒绝、因对端不在而丢的帧；不含频道键、peer 编号、IP、token。
+    推送（请求、成功、410、失败、JWT 换签次数，06b）、按标签的错误、升级前的拒绝、因对端不在而丢的帧；不含频道键、peer 编号、IP、token。
     计数从进程启动算起，「每日」由部署侧两次读数相减（06c）。
   - 日志：不记访问日志；stderr 只写启动、关停和服务器错误（如 accept 失败），不带任何标识。收到 SIGTERM 或 Ctrl-C 就停止接新连接，
     以 1001 关闭全部连接，最多等 5 秒。
@@ -411,6 +438,13 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
     慢接收方被断开、host 推送回 `push_unavailable`、假 `ApnsSender` 的 410 回报、client 推送被拒、计数器不含标识、关停。
   - 定时器靠缩小 `Limits` 提速，不用 tokio 的暂停时钟：时钟暂停时，运行时一等真实 socket 就会把时间往前拨。
   - 走 HTTP/2 的 410 回报（假 APNs 服务器）归 06b。
+  - 06b 落定：`relay/tests/apns.rs` 起两个进程内的假 APNs（生产、沙盒各一，明文 HTTP/2，记录每个请求、按脚本回应），用测试里现生成的 P-256 密钥。
+    7 个用例覆盖 JWT 的 header、claims 和签名（用公钥验）、每个请求头、载荷逐字节、环境选端点、token 与连接复用、200 / 410 / 400 / 403 / 429 / 500 的映射、
+    403 换 token 后只重试一次、超时、连不上、经 relay 帧路径发 `PUSH` 收回对应的 `PUSH_RESULT`。另有单元测试覆盖密钥解析（含 Apple 的密钥结构、
+    P-384 与 Ed25519 被拒）、token 的复用与更换窗口、配置的全有 / 全无 / 半套。
+  - 端到端：`core/tests/remote_e2e_test.rs` 把真 relay 当库起在 `127.0.0.1:0`，APNs 的位置放一个记录用的 `ApnsSender`，配对后的 Core 远程模块连上去，
+    假手机经 relay 握手、`hello`、`sessions.list`、`session.send`、订阅后收 `runner.event`；`send_push` 到达记录器，用手机的 `push_key` 从载荷的 `g` 解开、核对内容；
+    再回一次 410，Core 删掉 token。05b 的假手机、假 runner 等辅助挪进 `core/tests/common/remote.rs`，两边共用，05b 测试的断言不变。
 
 ## 9. iOS 侧的协议要点（票 07 的一部分）
 
@@ -567,6 +601,8 @@ CI：`.github/workflows/ios-protocol.yml`（07a），macOS runner（`macos-26`�
 ### 06b — APNs（依赖 06a；真机验证等 Apple 账号）
 
 - 第 4.3 节：自己写 ES256 JWT，用 reqwest 走 HTTP/2；`PUSH` 转发给 APNs，`PUSH_RESULT` 回报结果（含 410）；用假 APNs 服务器测试。
+- 实现（2026-10-10）：JWT 用 `ring` 签，HTTP/2 改用 hyper-util 加 hyper-rustls，不开 `reqwest` 的 `http2`（理由见第 4.3 节「APNs 客户端选型」）；
+  细节见第 4.3 节「relay 侧发送」，测试见第 8 节。真机验证仍等 Apple 账号。
 
 ### 06c — 部署（依赖 06a、06b）
 
@@ -595,3 +631,6 @@ iOS 的工程与界面（票 07 其余部分）仍按产品定义的次序，等
   不另写 `check-remote-protocol-drift`（第 10 节）；第 9 节记了与 Rust 的差异和本机只有 Command Line Tools 时的测试办法。
 - 2026-10-10 05b 实现：第 7 节补「05b 落定」，第 6.7 节记手机看得到的决定（两个新错误码、`via` 为 `ios` 等）；
   按 06a 的接口说明，relay 的关闭码一律退避重连，4001 只记一次日志。
+- 2026-10-10 06b（APNs）实现：第 4.3 节补「relay 侧发送」（JWT 缓存与强制更换的频率上限、HTTP/2 连接、请求头与 24 小时过期、回应映射、
+  四个变量全有或全无、计数器、relay 持有 APNs 密钥对 Rule 2 的影响）和选型的落定（`ring` 加 hyper-util，不开 `reqwest` 的 `http2`）；
+  第 8 节记假 APNs 测试与 Core 的端到端测试；第 13 节 06b 记实现。未连真 APNs。

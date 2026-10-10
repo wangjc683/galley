@@ -8,6 +8,8 @@
 //! - It sees relay frames ([`galley_remote_protocol::frame`]): Noise
 //!   ciphertext it cannot open, plus routing metadata (channel key, role,
 //!   peer ids, sizes, timing, push requests with their sealed content).
+//!   It wraps a push's sealed content into the APNs payload and sends it
+//!   ([`apns`]); it holds no key that opens it.
 //! - It stores nothing: one in-memory channel table and counters without
 //!   identifiers ([`metrics`]). No access log; stderr carries startup,
 //!   shutdown and server errors only.
@@ -28,7 +30,7 @@ pub mod limits;
 pub mod metrics;
 mod server;
 
-pub use apns::{ApnsResponse, ApnsSender, PushUnavailable};
+pub use apns::{ApnsClient, ApnsConfig, ApnsResponse, ApnsSender, PushUnavailable};
 pub use limits::Limits;
 pub use server::Server;
 

@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use clap::Parser;
-use galley_relay::{Limits, PushUnavailable, Server};
+use galley_relay::{ApnsClient, ApnsConfig, ApnsSender, Limits, PushUnavailable, Server};
 
 /// Galley relay: forwards end-to-end encrypted frames between a desktop
 /// Core and its paired phones. Plain HTTP / WebSocket; put a TLS proxy
@@ -30,12 +30,13 @@ struct Cli {
     apns: ApnsArgs,
 }
 
-/// APNs settings, read now and used once ticket 06b adds the sender. The
-/// APNs environment (production / sandbox) is per push, in the `PUSH`
-/// frame, not a relay setting.
+/// APNs settings: all four, or none (pushes are then answered
+/// `push_unavailable`). The APNs environment (production / sandbox) is
+/// per push, in the `PUSH` frame, not a relay setting.
 #[derive(Debug, clap::Args)]
 struct ApnsArgs {
-    /// Path of the APNs auth key (`.p8`).
+    /// Path of the APNs auth key (`.p8`, PKCS#8 P-256, from the Apple
+    /// developer account).
     #[arg(long, env = "GALLEY_RELAY_APNS_KEY_PATH")]
     apns_key_path: Option<PathBuf>,
     /// Key ID of that key.
@@ -50,11 +51,25 @@ struct ApnsArgs {
 }
 
 impl ApnsArgs {
-    fn any_set(&self) -> bool {
+    /// The sender these settings ask for; an error refuses to start.
+    fn sender(&self) -> Result<Arc<dyn ApnsSender>, String> {
+        let config = ApnsConfig::from_settings(
+            self.apns_key_path.as_deref(),
+            self.apns_key_id.as_deref(),
+            self.apns_team_id.as_deref(),
+            self.apns_topic.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+        match config {
+            Some(config) => ApnsClient::new(config)
+                .map(|client| Arc::new(client) as Arc<dyn ApnsSender>)
+                .map_err(|e| format!("cannot set up TLS for APNs: {e}")),
+            None => Ok(Arc::new(PushUnavailable)),
+        }
+    }
+
+    fn is_configured(&self) -> bool {
         self.apns_key_path.is_some()
-            || self.apns_key_id.is_some()
-            || self.apns_team_id.is_some()
-            || self.apns_topic.is_some()
     }
 }
 
@@ -74,14 +89,15 @@ fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> ExitCode {
-    let server = match Server::bind(
-        cli.listen,
-        cli.metrics_listen,
-        Limits::default(),
-        Arc::new(PushUnavailable),
-    )
-    .await
-    {
+    // Checked before listening: a relay with a broken key does not start.
+    let apns = match cli.apns.sender() {
+        Ok(apns) => apns,
+        Err(e) => {
+            eprintln!("galley-relay: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let server = match Server::bind(cli.listen, cli.metrics_listen, Limits::default(), apns).await {
         Ok(server) => server,
         Err(e) => {
             eprintln!("galley-relay: cannot listen: {e}");
@@ -99,15 +115,12 @@ async fn run(cli: Cli) -> ExitCode {
         "galley-relay {}: relay on {relay_addr}, metrics on {metrics_addr}",
         env!("CARGO_PKG_VERSION")
     );
-    // Ticket 06b adds the APNs sender; until then every push fails.
-    eprintln!(
-        "galley-relay: no APNs sender in this build, pushes are answered with push_unavailable{}",
-        if cli.apns.any_set() {
-            " (APNs settings ignored)"
-        } else {
-            ""
-        }
-    );
+    // Neither the key nor its ids: whether pushes go out, nothing more.
+    if cli.apns.is_configured() {
+        eprintln!("galley-relay: APNs key loaded, pushes go to APNs");
+    } else {
+        eprintln!("galley-relay: APNs not configured, pushes are answered with push_unavailable");
+    }
     server.run(shutdown_signal()).await;
     eprintln!("galley-relay: stopped");
     ExitCode::SUCCESS

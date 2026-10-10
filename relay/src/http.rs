@@ -70,7 +70,10 @@ pub(crate) async fn serve_metrics(stream: TcpStream, state: Arc<State>) {
             } else if req.method() != Method::GET {
                 plain(StatusCode::METHOD_NOT_ALLOWED, "method not allowed")
             } else {
-                let body = state.metrics.snapshot(state.channel_count()).to_string();
+                let body = state
+                    .metrics
+                    .snapshot(state.channel_count(), state.apns.jwt_refreshes())
+                    .to_string();
                 let mut response = Response::new(Body::from(body));
                 response
                     .headers_mut()
