@@ -36,6 +36,8 @@ pub mod runner_commands;
 pub mod runner_manager;
 pub mod scheduler;
 pub mod session_runner;
+pub mod session_send;
+pub mod session_title;
 pub mod socket_listener;
 pub mod sop_install;
 mod tray;
@@ -200,8 +202,9 @@ pub fn run() {
             mark_session_unread,
             clear_session_unread,
             session_message_rows,
-            persist_user_message,
-            queue_or_dispatch_user_message,
+            // Core-owned send / stop (ticket 02c)
+            send_user_message,
+            stop_session_run,
             queue_jump_message,
             queue_remove_message,
             session_queue_snapshot,

@@ -5,13 +5,14 @@ import {
   applyRunnerHistoryReplay,
   type RunnerHistoryReplayPayload,
 } from "@/lib/ipc/history-replay";
+import type { UserMessagePersistedPayload } from "@/lib/session-send";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 
 export function useExternalCoreEvents(): void {
-  const appendUserTurnExternal = useMessagesStore(
-    (s) => s.appendUserTurnExternal,
+  const applyUserMessagePersisted = useMessagesStore(
+    (s) => s.applyUserMessagePersisted,
   );
   const appendSystemTurn = useMessagesStore((s) => s.appendSystemTurn);
   const attachExternalBridge = useRuntimeStore((s) => s.attachExternalBridge);
@@ -32,44 +33,23 @@ export function useExternalCoreEvents(): void {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     void (async () => {
-      const fn = await listen<{
-        sessionId: string;
-        dispatch?: "dispatched" | "persisted_only" | "spawn_failed";
-        message: {
-          content: string;
-          createdAt?: string;
-          turnIndex?: number;
-          role?: "user" | "agent" | "system";
-          /** Set on a Goal's objective row (goal v2). Passed through so
-           * the in-thread commission marker matches by id instead of
-           * falling back to objective-text equality. */
-          goalId?: string;
-          origin?: {
-            via: "gui" | "cli" | "supervisor" | "system";
-            supervisor?: string;
-            reason?: string;
-          };
-        };
-      }>("user-message-persisted", (e) => {
-        const { sessionId, message, dispatch } = e.payload;
-        if (message.role === "system") {
-          appendSystemTurn(sessionId, {
-            role: "system",
-            content: message.content,
-            variant: "goal",
-          });
-          return;
-        }
-        appendUserTurnExternal(
-          sessionId,
-          message.content,
-          message.origin,
-          message.createdAt,
-          dispatch === undefined ? true : dispatch === "dispatched",
-          message.turnIndex,
-          message.goalId,
-        );
-      });
+      const fn = await listen<UserMessagePersistedPayload>(
+        "user-message-persisted",
+        (e) => {
+          const { sessionId, message } = e.payload;
+          if (message.role === "system") {
+            appendSystemTurn(sessionId, {
+              role: "system",
+              content: message.content,
+              variant: "goal",
+            });
+            return;
+          }
+          // Claims this page's own optimistic echo, dedupes a row's
+          // second broadcast, appends anyone else's (ticket 02c).
+          applyUserMessagePersisted(e.payload);
+        },
+      );
       if (cancelled) {
         fn();
       } else {
@@ -80,7 +60,7 @@ export function useExternalCoreEvents(): void {
       cancelled = true;
       unlisten?.();
     };
-  }, [appendUserTurnExternal, appendSystemTurn]);
+  }, [applyUserMessagePersisted, appendSystemTurn]);
 
   useEffect(() => {
     let cancelled = false;

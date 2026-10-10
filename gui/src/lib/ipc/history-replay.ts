@@ -17,7 +17,7 @@ export interface RunnerHistoryReplayPayload {
  * waiting on. Only for a session whose run the page already shows as
  * started (`agentRunning`, set when the user's turn is appended) — a
  * replay on activation alone, or for a side question, shows nothing.
- * The send path moves the phase on once Core's ensure returns.
+ * The phase moves on to working once Core dispatches the send.
  */
 export function applyRunnerHistoryReplay(
   payload: RunnerHistoryReplayPayload,

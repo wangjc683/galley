@@ -777,6 +777,7 @@ bridge:   { kind: "turn_start", ... }
 - 一次失败（见 §4.11）就静默重启 runner 一次，用同一份参数重新 spawn 后再回放；仍失败，ensure 报 `HistoryReplay` 错误（Tauri 命令返回 `{"error":"history_replay","detail":…}`，GUI 显示「恢复超时」文案）。被替换的 runner 关闭时不发 `runner-closed`，也不向运行闸门报 `Closed`。
 - 每次发送前后经 Tauri 事件 `runner-history-replay` 广播 `{ sessionId, phase: "started" | "done" | "failed" }`，GUI 据此显示「恢复中」。
 - socket `session send` 不走这条路：runner 不在时只落库（`persisted_only`）。
+- 02c 起，GUI（以后的手机端）的发送也由 Core 驱动（`core/src/session_send.rs`）：先预留运行闸门再 ensure，回放期间到达的 socket `session send` 因此排队，不会抢在 `load_history` 之前派发；有待回答的 `ask_user` 时 Core 发 `ask_user_response`，否则发 `user_message`。见 [ADR-0003](./adr/0003-gui-and-phone-send-through-core.md)。
 
 ## 8. Error Handling
 

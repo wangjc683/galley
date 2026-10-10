@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import type { MessageRow } from "@/types/db";
 import type { RuntimeKind } from "@/types/session";
-import type { MessageAttachment, PendingImageAttachment } from "@/types/conversation";
 
 /**
  * Thin GUI wrappers over Galley Core Tauri commands. The GUI does not
@@ -61,12 +60,13 @@ export async function deleteDemoSessions(): Promise<number> {
 //
 // Stage 3 Task 3 (Session Restore) — `messages` is the source of truth
 // for conversation history that survives restart. The two logical writers
-// are still:
+// are both in Core now:
 //
-//   - `persistUserMessage` (this file, routed through Rust Core) — called from
-//     store `appendUserTurn` the moment the user submits, so a crash before
-//     turn_end doesn't lose the question. Core assigns the durable
-//     `turn_index` and returns it to the GUI.
+//   - Core's unified send (`send_user_message`, ticket 02c; the GUI calls
+//     it from hooks/useMessageSend) — persists the user row the moment the
+//     user submits, before it starts the run, so a crash before turn_end
+//     doesn't lose the question. Core assigns the durable `turn_index` and
+//     broadcasts the row (`user-message-persisted`).
 //   - Core's runner watcher (core/src/turn_persistence, since 2026-10-07;
 //     the GUI no longer writes it) — on every `turn_end`, with or without
 //     a page listening, writes the assistant row with thinking /
@@ -74,35 +74,13 @@ export async function deleteDemoSessions(): Promise<number> {
 //     (the latter is what the bridge replays on `load_history`).
 //
 // `turn_index` is the absolute message-loop index Core persisted for this
-// session. GA still emits 1-based per-loop step numbers; the GUI sends the
-// Core-assigned `absoluteTurnIndex` to the runner so assistant rows land beside
-// the matching user row.
+// session. GA still emits 1-based per-loop step numbers; Core sends its
+// `absoluteTurnIndex` to the runner so assistant rows land beside the
+// matching user row.
 //
 // `sequence` is the order *within* a turn: user is always 0, assistant
 // always 1. Tool rows would be 2+ but V0.1 collapses them into the
 // assistant row's tool_calls / tool_results JSON columns.
-
-export interface PersistUserMessageParams {
-  sessionId: string;
-  content: string;
-  attachments?: PendingImageAttachment[];
-}
-
-export interface PersistedUserMessage {
-  turnIndex?: number | null;
-  attachments?: MessageAttachment[];
-}
-
-export async function persistUserMessage(
-  p: PersistUserMessageParams,
-): Promise<PersistedUserMessage> {
-  return invoke<PersistedUserMessage>("persist_user_message", {
-    sessionId: p.sessionId,
-    content: p.content,
-    origin: { via: "gui" },
-    attachments: p.attachments ?? [],
-  });
-}
 
 /**
  * One-time backfill of messages_fts from existing messages rows.

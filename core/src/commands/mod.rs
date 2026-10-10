@@ -28,6 +28,7 @@ mod managed_model;
 mod project;
 mod queue;
 mod schedule;
+mod send;
 mod session;
 mod system;
 
@@ -36,6 +37,7 @@ pub(crate) use managed_model::*;
 pub(crate) use project::*;
 pub(crate) use queue::*;
 pub(crate) use schedule::*;
+pub(crate) use send::*;
 pub(crate) use session::*;
 pub(crate) use system::*;
 

@@ -23,6 +23,11 @@
 //!    returns the live runner (with its latest `ready` state) or starts
 //!    one from the session row and prefs
 //!
+//! Sending a user message and stopping a run are Core's own paths since
+//! ticket 02c (`send_user_message` / `stop_session_run` in
+//! `commands/send.rs`, over [`crate::session_send`]); `send_to_runner`
+//! stays for the commands the GUI still sends directly.
+//!
 //! External-runtime spawn-arg preparation lives in the `external_spawn`
 //! submodule; the managed-runtime spawn path stays in this file. Session
 //! runners resolve their arguments in [`crate::session_runner`], which
@@ -665,8 +670,8 @@ pub async fn ensure_session_runner(
             active_session_id: active_session_id.as_deref(),
             llm_override,
             ga_config,
-            // The GUI does not reserve the run gate before a send (yet —
-            // ticket 02c moves that into Core's send).
+            // Activation holds no run gate; a send goes through Core's
+            // send (`send_user_message`), which reserves it first.
             holds_run_gate: false,
             timeouts: Default::default(),
         },
@@ -688,10 +693,11 @@ pub async fn ensure_session_runner(
 }
 
 /// The GUI creates a session row fire-and-forget (`createSession`) and
-/// may activate it right away; before 02a its spawn did not need the row.
-/// Give an in-flight `create_session` a moment to land (bounded, 1s)
-/// before the ensure reads it. Any other outcome is left to the ensure.
-async fn await_session_row(galley: &SqliteGalley, session_id: &str) {
+/// may activate it — or send its first message — right away; before 02a
+/// its spawn did not need the row. Give an in-flight `create_session` a
+/// moment to land (bounded, 1s) before the ensure (or the send) reads it.
+/// Any other outcome is left to the caller.
+pub(crate) async fn await_session_row(galley: &SqliteGalley, session_id: &str) {
     for _ in 0..20 {
         match galley
             .session_brief(crate::api::SessionId(session_id.to_string()))
@@ -709,7 +715,7 @@ async fn await_session_row(galley: &SqliteGalley, session_id: &str) {
 /// always reached it, so `formatInvokeError`'s actionable messages keep
 /// matching. A blank / missing GA path is what the old GUI spawn reported
 /// for an empty `gaConfig.gaPath`.
-fn gui_error_json(e: SessionRunnerError) -> String {
+pub(crate) fn gui_error_json(e: SessionRunnerError) -> String {
     match e {
         SessionRunnerError::Db(e) => crate::commands::stringify_error(e),
         SessionRunnerError::Spawn(e) => err_to_json(e),

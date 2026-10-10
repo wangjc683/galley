@@ -27,7 +27,7 @@ use crate::goal_engine::GoalEngine;
 use crate::ipc::{IpcCommand, UserMessageCommand};
 use crate::notify::Notifier;
 use crate::runner_manager::{RunSignal, RunnerManager};
-use crate::socket_listener::{DbSource, HandlerCtx};
+use crate::socket_listener::{DbSource, HandlerCtx, RunnerPort};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::AppHandle;
@@ -53,9 +53,20 @@ pub async fn notify_queue_changed(
     notifier: &Arc<dyn Notifier>,
     session_id: &str,
 ) {
-    let items = manager.queue_snapshot(session_id).await;
+    notify_queue_changed_via(manager, notifier.as_ref(), session_id).await;
+}
+
+/// [`notify_queue_changed`] over the registry seam, for callers that
+/// hold a [`RunnerPort`] rather than the manager (Core's send,
+/// `crate::session_send`).
+pub async fn notify_queue_changed_via(
+    runner: &dyn RunnerPort,
+    notifier: &dyn Notifier,
+    session_id: &str,
+) {
+    let items = runner.queue_snapshot(session_id).await;
     crate::notify::notify(
-        notifier.as_ref(),
+        notifier,
         SESSION_QUEUE_CHANGED_EVENT,
         &SessionQueueChangedPayload {
             session_id: session_id.to_string(),
@@ -124,6 +135,10 @@ pub async fn dispatch_queued_message(
             dispatch,
         },
     );
+    // A session's first message may well be a queued one (ticket 02c:
+    // Core derives the title wherever it persists a user message).
+    crate::session_title::derive_and_announce(galley, notifier.as_ref(), session_id, &item.text)
+        .await;
     notify_queue_changed(manager, notifier, session_id).await;
 }
 

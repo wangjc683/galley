@@ -49,7 +49,10 @@ import { createSessionProjectSlice } from "./sessions/project-slice";
 import type { SessionsStore } from "./sessions/shared";
 
 export type { SessionsStore } from "./sessions/shared";
-export { DEFAULT_NEW_SESSION_TITLE } from "./sessions/lifecycle-slice";
+export {
+  DEFAULT_NEW_SESSION_TITLE,
+  takePendingLLMPick,
+} from "./sessions/lifecycle-slice";
 
 export const useSessionsStore = create<SessionsStore>()((...a) => ({
   ...createSessionLifecycleSlice(...a),

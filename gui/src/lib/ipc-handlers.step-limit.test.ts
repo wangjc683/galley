@@ -24,11 +24,9 @@ import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { makeSession } from "@/test/factories";
 import { resetStores } from "@/test/store-reset";
-import { getTauriMocks } from "@/test/setup";
 import type { ExitReason, IPCEvent } from "@/types/ipc";
 
 const SID = "s-cap";
-const tauriMocks = getTauriMocks();
 
 const STEP_LIMIT: ExitReason = {
   result: "MAX_TURNS_EXCEEDED",
@@ -49,9 +47,11 @@ function seed(): void {
 }
 
 function startRun(): void {
-  useMessagesStore
-    .getState()
-    .appendUserTurnExternal(SID, "跑完整套测试", undefined, undefined, true, 1);
+  useMessagesStore.getState().applyUserMessagePersisted({
+    sessionId: SID,
+    message: { content: "跑完整套测试", turnIndex: 1 },
+    dispatch: "dispatched",
+  });
 }
 
 function turnStart(turnIndex = 1): IPCEvent {
@@ -180,9 +180,11 @@ describe("step-limit stop (#29)", () => {
     dispatchIPCEvent(finalTurnEnd(STEP_LIMIT));
     dispatchIPCEvent(runComplete(STEP_LIMIT));
 
-    useMessagesStore
-      .getState()
-      .appendUserTurnExternal(SID, "继续", undefined, undefined, true, 3);
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: SID,
+      message: { content: "继续", turnIndex: 3 },
+      dispatch: "dispatched",
+    });
     expect(slice()).toMatchObject({
       pausedAtStepLimit: false,
       nextSuggestion: null,
@@ -190,18 +192,13 @@ describe("step-limit stop (#29)", () => {
     });
   });
 
-  it("clears on a composer send", async () => {
-    tauriMocks.invoke.mockImplementation(async (cmd: string) =>
-      cmd === "persist_user_message"
-        ? { turnIndex: 3, attachments: [] }
-        : undefined,
-    );
+  it("clears on a composer send", () => {
     startRun();
     dispatchIPCEvent(finalTurnEnd(STEP_LIMIT));
     dispatchIPCEvent(runComplete(STEP_LIMIT));
     expect(slice().pausedAtStepLimit).toBe(true);
 
-    await useMessagesStore.getState().appendUserTurn(SID, "继续");
+    useMessagesStore.getState().appendUserTurn(SID, "继续", "req-continue");
     expect(slice()).toMatchObject({
       pausedAtStepLimit: false,
       nextSuggestion: null,

@@ -203,3 +203,36 @@ dev 模式两端 Python 是否一致；外置模式 `pendingLLMIndex` 语义；`
   - 02b：按 10-09 的复现步骤重跑。CLI 建会话记「蓝鲸 4721」→ 合入 02b 后 dev 重启 Core，会话 `runnerAlive: false` → `goal start` 问暗号 → 回答「蓝鲸 4721」并宣告完成。
     内置记忆目录里没有「4721」，排除凭记忆作答。发现 2 修复确认。两个测试会话已归档。
   - 未在 GUI 里点验（留给 JC）：冷会话点开后发送、运行中 Cmd+R 重载、EmptyState 选模型后首发。
+- 2026-10-10 02c-core 完成（执行代理，worktree `ios-02c-core-send`，未提交；GUI 半边由另一代理按同一契约做 02c-gui）。
+  - 实现：新模块 `core/src/session_send.rs`（不依赖 Tauri `State`，远程模块可直接调）。顺序：可写检查 → `/btw`（不落库、不碰闸门，ensure 用
+    `holds_run_gate: false` 后直接派发；带图报 `images_not_allowed`）→ 闸门（纯文本走 `queue_offer`，排队即广播 `session-queue:changed`、返回
+    `queued`；带图走新的 `queue_try_reserve`，不能立即派发就报 `images_not_queueable`，不入队、不改队列状态）→ 持闸后读 `ask_pending`（为真则本次是回答，
+    派发 `AskUserResponse`，带图报 `images_not_allowed`）与图片能力（外置运行时 + 存活 runner + 快照 `imagesSupported: false` 报
+    `images_not_supported`；内置与冷会话放行）→ 带附件落库 → 广播 `pending` → 标题派生 → ensure（`holds_run_gate: true`）→ 派发 → 广播
+    `dispatched`。持闸后任何失败都释放闸门；落库后的失败再广播一次 `persisted_only`，同一消息 id，都带 `clientRequestId`。
+  - `/btw` 判断抽成 `runner_manager::is_side_question`，`opens_run_gate` 与新 send 共用；`RunnerManager::queue_try_reserve` 与 `queue_offer` 共用
+    `SessionQueueState::may_dispatch_now`，经 `RunnerPort` 暴露（默认 `true`，与默认 offer 一致）。
+  - 标题：`core/src/session_title.rs`，截断逐字照搬 `deriveTitleFromText`（UTF-16 码元计数、JS `\s` 集合：含 U+FEFF、不含 U+0085）；fixture
+    `core/tests/fixtures/title-derive-cases.json` 共 23 条，期望值由 node 跑 HEAD 的 TS 原函数生成。DB 写入是 CAS `try_apply_derived_title`
+    （`WHERE title_source = 'seed'`），成功后广播 `session-updated-external`（`via: "title-derive"`）。接入：新 send、socket `session.send`
+    （`send_now`）、socket `session.new`、队列 drain（`dispatch_queued_message`）、Goal 目标行。Goal 目标行核实为 role user、visible
+    （`send_message_for_goal` → `insert_user_message_inner`），在 `GoalEngine::start` 里派生，socket `goal.start` 与 Tauri `start_session_goal`
+    都经过它；续写行是 internal，不派生。
+  - Tauri：新文件 `core/src/commands/send.rs`，`send_user_message`、`stop_session_run`；`persist_user_message`、`queue_or_dispatch_user_message`
+    连同注册删除；`await_session_row`、`gui_error_json` 改为 `pub(crate)` 供复用。socket 命令的请求、返回体、错误 tag 与文案未改，既有断言未改。
+  - 偏离：（1）socket `session.new` 不单独广播 `session-updated-external`，派生后的行随 `session-created-external` 带出：
+    `socket_write_handlers_test.rs` 钉住了事件序列 created → spawned → persisted；返回体仍是创建时的行（标题「新对话」），库里是派生标题。
+    （2）新 send 的事件顺序按测试清单取 pending → session-updated-external → dispatched，即落库 → 广播 pending → 派生标题（票面第 5 步写的是先派生
+    再广播）。其他路径同样是消息事件在前、标题事件在后。（3）派生依据本次落库的消息文本（与 GUI 的 `maybeDeriveTitle(sid, text)` 一致），不回查库里
+    第一条；`seed` 会话只会在第一条消息时派生。空白文本（只有图片）不派生。（4）JS `slice(0, 80)` 切在代理对中间时留下孤立高位代理，Rust 字符串装
+    不下，Core 丢掉这半个字符；fixture 单列一条并附 JS 原输出。（5）`SendRequest` 多一个 `timeouts`（回放超时，Tauri 传默认值），供测试缩短。
+    （6）ensure 的 `active_session_id` 传发送目标会话本身（LRU 保护）。（7）旧 `queue_or_dispatch_user_message` 的不可写错误是纯文本，新命令按契约
+    返回 `{error, message}` JSON。
+  - 竞态：`a_socket_send_during_the_replay_window_is_queued` 证明新 send 回放中并发的 socket `session.send` 得到 `queued`，runner 只收到一条
+    `user_message` 且在 `history_loaded` 之后。抽查：把闸门改成 ensure 前释放（02c 前的 GUI 行为），该测试变红（socket send 得到
+    `dispatched`）；去掉失败时释放闸门，5 条失败路径测试变红；均已还原。
+  - 验证：cargo test --workspace 671 通过 0 失败（基线 646 / 0，新增 `core/tests/session_send_test.rs` 22 条与 3 条单元测试）；cargo check、
+    三个门禁脚本、`git diff --check` 通过。未真机 dogfood。
+  - 留给后续：GUI 删掉 `maybeDeriveTitle` 后，`rename_session` 的 `titleSource: "derived"` 参数无人调用，暂留；`stop_session_run` 在新 send 已预留
+    闸门之后、派发之前按下时拦不住这次发送：拉起中没有存活 runner，返回 `already_stopped`；回放中 `abort` 落在还没有运行的 runner 上。
+    那次发送随后照常派发，需要真机看是否要处理。

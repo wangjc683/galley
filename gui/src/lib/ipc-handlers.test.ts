@@ -119,9 +119,11 @@ describe("dispatchIPCEvent", () => {
   });
 
   it("routes visible turn lifecycle events into messages state", async () => {
-    useMessagesStore
-      .getState()
-      .appendUserTurnExternal("s-test", "Question", undefined, undefined, true, 10);
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: "s-test",
+      message: { content: "Question", turnIndex: 10 },
+      dispatch: "dispatched",
+    });
 
     dispatchIPCEvent({
       kind: "turn_start",
@@ -327,16 +329,11 @@ describe("dispatchIPCEvent", () => {
     // Two steps, the second an ask_user pause; the reply starts a fresh
     // GA loop whose turn_start / turn_end arrive as step 1 again. The
     // in-flight marker and the sidebar's "第 N 步" must read 3.
-    useMessagesStore
-      .getState()
-      .appendUserTurnExternal(
-        "s-test",
-        "Question",
-        undefined,
-        undefined,
-        true,
-        10,
-      );
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: "s-test",
+      message: { content: "Question", turnIndex: 10 },
+      dispatch: "dispatched",
+    });
     const turnEnd = (
       turnIndex: number,
       extra: Partial<IPCEvent> = {},
@@ -369,9 +366,11 @@ describe("dispatchIPCEvent", () => {
 
     // The reply (composer or CLI) is a user turn appended before the
     // new loop's first turn_start.
-    useMessagesStore
-      .getState()
-      .appendUserTurnExternal("s-test", "选 A", undefined, undefined, true, 13);
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: "s-test",
+      message: { content: "选 A", turnIndex: 13 },
+      dispatch: "dispatched",
+    });
     expect(useMessagesStore.getState().byId["s-test"].runStepBase).toBe(2);
 
     dispatchIPCEvent({
@@ -398,16 +397,11 @@ describe("dispatchIPCEvent", () => {
     });
 
     // A fresh question after the run settles starts from 1 again.
-    useMessagesStore
-      .getState()
-      .appendUserTurnExternal(
-        "s-test",
-        "New question",
-        undefined,
-        undefined,
-        true,
-        15,
-      );
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: "s-test",
+      message: { content: "New question", turnIndex: 15 },
+      dispatch: "dispatched",
+    });
     expect(useMessagesStore.getState().byId["s-test"].runStepBase).toBe(0);
   });
 

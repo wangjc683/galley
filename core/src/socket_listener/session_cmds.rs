@@ -28,9 +28,9 @@ use crate::runner_manager::{QueueJump, QueueOffer, RunState};
 /// row into the in-memory store so the conversation view renders the
 /// message even though it wasn't typed in the Composer.
 ///
-/// The GUI's own Composer path skips this — it persists locally via
-/// `persistUserMessage` and mutates the store synchronously, so emitting
-/// here would double-render.
+/// The GUI's own Composer sends through Core's send
+/// (`crate::session_send`, ticket 02c), which announces its rows with the
+/// same event plus a `clientRequestId` the page matches to its echo.
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct UserMessagePersistedPayload {
@@ -216,6 +216,15 @@ async fn send_now(
     // Best-effort: emit failure (no listeners registered yet, or app
     // handle gone) does not roll back the persist + dispatch above.
     emit_user_message_persisted(ctx, &brief.session_id.0, &brief, dispatch_status);
+    // A session's first message names it (ticket 02c). The database only:
+    // the response below is the frozen contract and stays as it was.
+    crate::session_title::derive_and_announce(
+        galley,
+        ctx.notifier.as_ref(),
+        &brief.session_id.0,
+        &brief.content,
+    )
+    .await;
 
     let result = serde_json::json!({
         "message": brief,

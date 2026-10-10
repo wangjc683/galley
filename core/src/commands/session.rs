@@ -213,22 +213,8 @@ pub(crate) async fn session_message_rows(
         .map_err(stringify_error)
 }
 
-#[tauri::command]
-pub(crate) async fn persist_user_message(
-    galley: State<'_, SqliteGalley>,
-    session_id: SessionId,
-    content: String,
-    origin: Origin,
-    attachments: Option<Vec<PersistUserMessageAttachmentInput>>,
-) -> std::result::Result<api::MessageBrief, String> {
-    let attachments =
-        decode_message_attachments(attachments.unwrap_or_default()).map_err(stringify_error)?;
-    galley
-        .send_message_with_attachments_db(session_id, content, origin, attachments)
-        .await
-        .map_err(stringify_error)
-}
-
+/// One image of a user message as the page sends it: a base64 `data:`
+/// URL plus the dimensions it measured (`send_user_message`).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PersistUserMessageAttachmentInput {
@@ -237,7 +223,9 @@ pub(crate) struct PersistUserMessageAttachmentInput {
     height: Option<u32>,
 }
 
-fn decode_message_attachments(
+/// Decode a message's images, enforcing the per-message limits (count,
+/// per-image and total size, PNG / JPEG / WebP only).
+pub(crate) fn decode_message_attachments(
     inputs: Vec<PersistUserMessageAttachmentInput>,
 ) -> error::Result<Vec<MessageAttachmentCreate>> {
     if inputs.len() > MAX_MESSAGE_IMAGES {

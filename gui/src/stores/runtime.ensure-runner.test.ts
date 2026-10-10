@@ -376,57 +376,61 @@ describe("attaching to a runner started elsewhere fills in its ready state", () 
   });
 });
 
-describe("confirmSessionHistory — the send path's gate (ticket 02b)", () => {
+describe("Core's send and the page's listeners (ticket 02c)", () => {
   beforeEach(() => {
     resetStores();
+    useMessagesStore.setState({ restoreSessionTurns: async () => {} });
   });
 
-  it("with this page listening, asks Core's ensure directly — no second listener set", async () => {
-    coreEnsures({ pid: 81, spawned: true, ready: null });
-    const runtime = useRuntimeStore.getState();
-    await runtime.ensureSessionRunner({ sessionId: "s-conf-1" });
-    expect(tauriMocks.listen).toHaveBeenCalledTimes(3);
-
-    coreEnsures({ pid: 81, spawned: false, ready: null });
-    const failure = await runtime.confirmSessionHistory("s-conf-1");
-
-    expect(failure).toBeNull();
-    expect(calls("ensure_session_runner")).toHaveLength(2);
-    expect(calls("ensure_session_runner")[1]).toEqual({
-      sessionId: "s-conf-1",
-      gaConfig: usePrefsStore.getState().gaConfig,
-    });
-    expect(tauriMocks.listen).toHaveBeenCalledTimes(3);
-    expect(runtime.hasBridgeClient("s-conf-1")).toBe(true);
-  });
-
-  it("reports Core's history_replay error as a history failure", async () => {
-    coreEnsures({ pid: 82, spawned: true, ready: null });
-    const runtime = useRuntimeStore.getState();
-    await runtime.ensureSessionRunner({ sessionId: "s-conf-2" });
+  it("a send during an activation's ensure waits for its listeners, then just invokes", async () => {
+    const answer = deferred<EnsureResult>();
     tauriMocks.invoke.mockImplementation(async (command) => {
-      if (command === "ensure_session_runner") throw HISTORY_REPLAY_ERROR;
+      if (command === "list_live_runners") return [];
+      if (command === "ensure_session_runner") return answer.promise;
+      if (command === "send_user_message") {
+        return {
+          outcome: "side_question",
+          message: null,
+          queue: null,
+          runner: { pid: 91, spawned: false, ready: null },
+        };
+      }
       return undefined;
     });
+    const runtime = useRuntimeStore.getState();
 
-    const failure = await runtime.confirmSessionHistory("s-conf-2");
+    const ensuring = runtime.ensureSessionRunner({ sessionId: "s-send-1" });
+    await Promise.resolve();
+    const sending = runtime.deliverUserMessage({
+      sessionId: "s-send-1",
+      text: "/btw hi",
+    });
+    await Promise.resolve();
+    // Not before the activation's listeners are up.
+    expect(calls("send_user_message")).toHaveLength(0);
+    answer.resolve({ pid: 91, spawned: true, ready: null });
+    await Promise.all([ensuring, sending]);
 
-    expect(failure).toMatchObject({ historyReplay: true });
-    expect(failure?.message).toContain("History restore failed");
-    // The listeners stay: Core's runner (or its quiet replacement) still
-    // belongs to this session.
-    expect(runtime.hasBridgeClient("s-conf-2")).toBe(true);
+    expect(tauriMocks.listen).toHaveBeenCalledTimes(3);
+    expect(calls("send_user_message")).toHaveLength(1);
+    expect(runtime.hasBridgeClient("s-send-1")).toBe(true);
   });
 
-  it("without a listening page, runs a full ensure with listeners", async () => {
-    coreEnsures({ pid: 83, spawned: true, ready: null });
+  it("an activation whose send brings the runner asks Core for none", async () => {
+    useSessionsStore.setState({
+      sessions: [makeSession({ id: "s-send-2", turnCount: 0 })],
+    });
+    useRuntimeStore.setState({ pendingLLMIndex: 1 });
 
-    const failure = await useRuntimeStore
+    await useSessionsStore
       .getState()
-      .confirmSessionHistory("s-conf-3");
+      .activateSession("s-send-2", { ensureRunner: false });
 
-    expect(failure).toBeNull();
-    expect(tauriMocks.listen).toHaveBeenCalledTimes(3);
-    expect(useRuntimeStore.getState().hasBridgeClient("s-conf-3")).toBe(true);
+    expect(calls("ensure_session_runner")).toHaveLength(0);
+    expect(calls("list_live_runners")).toHaveLength(0);
+    expect(useSessionsStore.getState().activeSessionId).toBe("s-send-2");
+    expect(useRuntimeStore.getState().byId["s-send-2"]).toBeDefined();
+    // The pick is the send's to take.
+    expect(useRuntimeStore.getState().pendingLLMIndex).toBe(1);
   });
 });

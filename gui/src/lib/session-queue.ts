@@ -2,9 +2,11 @@
  * Outbound message queue (galley#19 / #20) — wire types + invoke
  * wrappers. Core owns the queue (in-memory, per session); the GUI is a
  * presenter: it renders snapshots pushed via SESSION_QUEUE_CHANGED and
- * calls the queue commands below. Queued items are not persisted —
- * they reach SQLite (and the transcript) only when Core dispatches
- * them at dequeue time, arriving back through `user-message-persisted`.
+ * calls the queue commands below. A send lands here when Core's
+ * `send_user_message` finds a run open (lib/session-send). Queued items
+ * are not persisted — they reach SQLite (and the transcript) only when
+ * Core dispatches them at dequeue time, arriving back through
+ * `user-message-persisted`.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -27,30 +29,6 @@ export interface QueuedMessage {
 export interface SessionQueueChangedPayload {
   sessionId: string;
   items: QueuedMessage[];
-}
-
-/** Result of queue_or_dispatch_user_message. */
-export interface QueueSendOutcome {
-  /** True when the message entered the queue; false when Core
-   * persisted + dispatched it immediately (the row arrives via the
-   * `user-message-persisted` event — the GUI must NOT append it
-   * locally). */
-  queued: boolean;
-  queueId?: string;
-  position?: number;
-}
-
-/** Queue-or-dispatch for a main-agent message while a run is open.
- * Core decides atomically; the race "run completed right before this
- * call" degrades to an immediate Core-side dispatch. */
-export function queueOrDispatchUserMessage(
-  sessionId: string,
-  text: string,
-): Promise<QueueSendOutcome> {
-  return invoke<QueueSendOutcome>("queue_or_dispatch_user_message", {
-    sessionId,
-    text,
-  });
 }
 
 /** 插队: abort the open run (if any) and run this item first. */

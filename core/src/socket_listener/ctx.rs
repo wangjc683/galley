@@ -136,6 +136,14 @@ pub trait RunnerPort: Send + Sync {
     ) -> QueueOffer {
         QueueOffer::DispatchNow
     }
+    /// `queue_offer`'s dispatch-now branch without its queue branch
+    /// (`RunnerManager::queue_try_reserve`): reserve the run gate when an
+    /// offer would dispatch now, else change nothing. Core's send uses it
+    /// for a message with images, which may not wait in the queue.
+    /// Default says "reserved", like the default offer.
+    async fn queue_try_reserve(&self, _session_id: &str) -> bool {
+        true
+    }
     async fn queue_release_run(&self, _session_id: &str) {}
     async fn queue_jump(&self, _session_id: &str, _queue_id: &str) -> QueueJump {
         QueueJump::NotFound
@@ -246,6 +254,9 @@ impl RunnerPort for RunnerManager {
         origin: Option<crate::api::Origin>,
     ) -> QueueOffer {
         RunnerManager::queue_offer(self, session_id, text, origin).await
+    }
+    async fn queue_try_reserve(&self, session_id: &str) -> bool {
+        RunnerManager::queue_try_reserve(self, session_id).await
     }
     async fn queue_release_run(&self, session_id: &str) {
         RunnerManager::queue_release_run(self, session_id).await

@@ -37,17 +37,17 @@ describe("messages store", () => {
     });
   });
 
-  it("appendUserTurnExternal appends, derives title, leaves row status durable", () => {
-    useMessagesStore
-      .getState()
-      .appendUserTurnExternal(
-        "s-test",
-        "Summarize the release notes",
-        { via: "supervisor", supervisor: "ga-claude" },
-        "2026-06-18T08:02:00.000Z",
-        true,
-        8,
-      );
+  it("a socket row (one broadcast) appends, leaves the title and row status to Core", () => {
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: "s-test",
+      message: {
+        content: "Summarize the release notes",
+        origin: { via: "supervisor", supervisor: "ga-claude" },
+        createdAt: "2026-06-18T08:02:00.000Z",
+        turnIndex: 8,
+      },
+      dispatch: "dispatched",
+    });
 
     const messages = useMessagesStore.getState();
     const session = useSessionsStore.getState().sessions[0];
@@ -62,14 +62,17 @@ describe("messages store", () => {
     expect(messages.byId["s-test"].turns[0]).toMatchObject({
       role: "user",
       content: "Summarize the release notes",
+      messageId: "msg_s-test_8_user",
       createdAt: "2026-06-18T08:02:00.000Z",
       origin: { via: "supervisor", supervisor: "ga-claude" },
     });
-    // Title is still derived onto the row. Running is NOT mirrored — the
-    // row keeps its durable status; running is derived at read time from
-    // the slice's agentRunning (see useSessionStatusView).
+    // The seed title is Core's to derive (ticket 02c): it arrives as
+    // `session-updated-external`, never written from here. Running is
+    // NOT mirrored either — the row keeps its durable status; running is
+    // derived at read time from the slice's agentRunning (see
+    // useSessionStatusView).
     expect(session).toMatchObject({
-      title: "Summarize the release notes",
+      title: DEFAULT_NEW_SESSION_TITLE,
       status: "idle",
     });
     expect(deriveSessionStatus(session, { agentRunning: true })).toBe(
@@ -139,11 +142,126 @@ describe("nextSuggestion (composer ghost text)", () => {
 
     // External user turn (CLI / supervisor dispatch) spends it too.
     store.setNextSuggestion("s-ghost", "帮我提交");
-    useMessagesStore
-      .getState()
-      .appendUserTurnExternal("s-ghost", "继续", undefined, undefined, true);
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: "s-ghost",
+      message: { content: "继续" },
+      dispatch: "dispatched",
+    });
     expect(
       useMessagesStore.getState().byId["s-ghost"].nextSuggestion,
     ).toBeNull();
+  });
+});
+
+describe("applyUserMessagePersisted — a row's broadcasts (ticket 02c)", () => {
+  const SID = "s-test";
+  const row = (turnIndex: number, content: string) => ({
+    id: `msg_${SID}_${turnIndex}_user`,
+    sessionId: SID,
+    role: "user" as const,
+    content,
+    createdAt: "2026-10-10T08:00:00.000Z",
+    turnIndex,
+    origin: { via: "gui" as const },
+  });
+
+  beforeEach(() => {
+    resetStores();
+    seedSession();
+  });
+
+  function slice() {
+    return useMessagesStore.getState().byId[SID];
+  }
+
+  it("another page's send: pending appends once (starting), dispatched only moves it on", () => {
+    const store = useMessagesStore.getState();
+    // Another frontend's send carries its own clientRequestId — not ours.
+    store.applyUserMessagePersisted({
+      sessionId: SID,
+      message: row(3, "from the phone"),
+      dispatch: "pending",
+      clientRequestId: "someone-else",
+    });
+    expect(slice()).toMatchObject({
+      agentRunning: true,
+      sendPhase: "starting",
+      turnIndexOffset: 2,
+    });
+
+    store.applyUserMessagePersisted({
+      sessionId: SID,
+      message: row(3, "from the phone"),
+      dispatch: "dispatched",
+      clientRequestId: "someone-else",
+    });
+
+    expect(slice().turns).toHaveLength(1);
+    expect(slice()).toMatchObject({
+      agentRunning: true,
+      sendPhase: "waiting_agent",
+    });
+    expect(useMessagesStore.getState().userSubmitTick).toBe(1);
+  });
+
+  it("pending then persisted_only: shown once, the run that never started ends", () => {
+    const store = useMessagesStore.getState();
+    store.applyUserMessagePersisted({
+      sessionId: SID,
+      message: row(1, "hi"),
+      dispatch: "pending",
+    });
+    store.applyUserMessagePersisted({
+      sessionId: SID,
+      message: row(1, "hi"),
+      dispatch: "persisted_only",
+    });
+
+    expect(slice().turns).toHaveLength(1);
+    expect(slice()).toMatchObject({ agentRunning: false, sendPhase: null });
+  });
+
+  it("a late broadcast for an older row leaves the current run alone", () => {
+    const store = useMessagesStore.getState();
+    store.applyUserMessagePersisted({
+      sessionId: SID,
+      message: row(1, "first"),
+      dispatch: "dispatched",
+    });
+    store.applyUserMessagePersisted({
+      sessionId: SID,
+      message: row(2, "second"),
+      dispatch: "pending",
+    });
+    store.applyUserMessagePersisted({
+      sessionId: SID,
+      message: row(1, "first"),
+      dispatch: "persisted_only",
+    });
+
+    expect(slice().turns).toHaveLength(2);
+    expect(slice()).toMatchObject({
+      agentRunning: true,
+      sendPhase: "starting",
+    });
+  });
+
+  it("a claimed echo is no longer retractable", () => {
+    const store = useMessagesStore.getState();
+    store.appendUserTurn(SID, "hi", "req-1");
+    store.applyUserMessagePersisted({
+      sessionId: SID,
+      message: row(1, "hi"),
+      dispatch: "pending",
+      clientRequestId: "req-1",
+    });
+
+    useMessagesStore.getState().retractUserTurn(SID, "req-1");
+
+    expect(slice().turns).toHaveLength(1);
+    expect(slice()).toMatchObject({
+      agentRunning: true,
+      sendPhase: "starting",
+    });
   });
 });

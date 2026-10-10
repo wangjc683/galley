@@ -228,9 +228,13 @@ impl GoalEngine<'_> {
                 .unwrap_or(goal);
             self.notify_goal(&failed);
             self.notify_message(session_id.as_str(), message, "persisted_only");
+            self.derive_title(session_id.as_str(), &failed.objective)
+                .await;
             return Err(GalleyError::RunnerError { message: reason });
         }
         self.notify_message(session_id.as_str(), message.clone(), "dispatched");
+        self.derive_title(session_id.as_str(), &goal.objective)
+            .await;
         Ok(GoalStartResult {
             goal,
             message,
@@ -489,6 +493,20 @@ impl GoalEngine<'_> {
             GOAL_UPDATED_EVENT,
             &GoalUpdatedPayload { goal: goal.clone() },
         );
+    }
+
+    /// The objective is a visible user row, so on a session still
+    /// wearing its creation default it names the session (ticket 02c,
+    /// [`crate::session_title`]). Continuation rows are internal and never
+    /// do.
+    async fn derive_title(&self, session_id: &str, objective: &str) {
+        crate::session_title::derive_and_announce(
+            self.galley,
+            self.ctx.notifier.as_ref(),
+            session_id,
+            objective,
+        )
+        .await;
     }
 
     fn notify_message(&self, session_id: &str, message: MessageBrief, dispatch: &'static str) {

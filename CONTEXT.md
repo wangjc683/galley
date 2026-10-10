@@ -93,6 +93,9 @@ both the Composer stop gate and `useMessageSend`'s routing call it, so
 the two ends of the send path cannot disagree (before 2026-07-27 they
 did, on the tab form). Any predicate change lands in the bridge and
 that module together; `side-question.test.ts` pins the lockstep cases.
+Core's copy is `runner_manager::is_side_question`: the run gate never
+opens for a side question, and Core's send (below) neither persists nor
+queues one.
 
 The composer's run-state **display policies** sit beside it in `lib/`:
 placeholder register in
@@ -154,7 +157,8 @@ silently dropped argument (2026-07-11 decision; see devlog).
   `HistoryReplay` error. Single-flight per session, replay included; a
   running runner is never replaced (`RunnerManager::spawn` would kill
   its run). Callers: the GUI (Tauri `ensure_session_runner`, on
-  activation and before every `user_message`), Goal dispatch, and —
+  activation), Core's send (below, before every dispatch), Goal dispatch,
+  and —
   spawn-only, since the session is new and so confirmed at once —
   socket `session.new` (`spawn_and_attach`). Every runner it starts gets
   the emit task, the auto-title watcher and a `runner-spawned-external`
@@ -167,3 +171,36 @@ silently dropped argument (2026-07-11 decision; see devlog).
   (`ensure_session_runner`, `list_live_runners`), and read by the ensure
   to know a runner is ready before it replays. It updates stores only;
   neither it nor a `ready` event makes a page send anything.
+
+## Send
+
+- **Send** — Core's one path for a user message from the GUI or the
+  phone (`core/src/session_send.rs`, ticket 02c, 2026-10-10; Tauri
+  `send_user_message`): writable check → `/btw` side question dispatched
+  as is → **run gate** (text is offered to the queue and waits behind an
+  open run; images take the gate at once or are refused) → persist →
+  **pending broadcast** → **derived title** → ensure a runner → dispatch
+  `user_message`, or `ask_user_response` when a question is pending.
+  Every failure releases the gate. Not socket `session send`: that one is
+  frozen (no runner → `persisted_only`, never starts one); ADR-0003 keeps
+  the two apart on purpose.
+- **Run gate** — the session's `open_run` flag in the outbound queue
+  state (`runner_manager::queue`): a dispatched run holds it until its
+  `run_complete`. Whoever dispatches reserves it first (`queue_offer`,
+  `queue_try_reserve`, `try_reserve_run`), so everyone else queues or
+  backs off. Core's send reserves it before ensuring the runner, which is
+  what keeps a CLI send out of the spawn-and-replay window.
+- **Pending broadcast** — `user-message-persisted` with
+  `dispatch: "pending"`: Core's send announces the message once it is
+  persisted, then again (same `message.id`) as `dispatched` or
+  `persisted_only`, both carrying the sender's `clientRequestId` so the
+  page that sent it can claim its optimistic echo. Socket paths send the
+  event once, without `clientRequestId`.
+- **Derived title** — the first title of a session still wearing the
+  creation default `新对话` (`title_source = 'seed'`): its first user
+  message collapsed to one line and cut at 80 UTF-16 units + `…`
+  (`core/src/session_title.rs`, the GUI's old rule to the letter, pinned
+  by `core/tests/fixtures/title-derive-cases.json`). Stamped `derived`
+  by a compare-and-swap on `seed`, so it happens once; the auto-title may
+  replace it, a `user` title is never touched. Derived in Core on every
+  path that persists a user message; never written from a page.

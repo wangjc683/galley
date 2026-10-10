@@ -165,8 +165,9 @@ export interface EnsureBridgeResult {
  * Core could not restore the session's history into its runner, even
  * after restarting it once (`{"error":"history_replay"}` from
  * `ensure_session_runner`, ticket 02b). The runner may still be alive,
- * unconfirmed; the send path reports this with its "restore timed out"
- * copy instead of a bridge failure.
+ * unconfirmed. Not a bridge failure: an activation stays quiet, and a
+ * send (`send_user_message` fails with the same tag) shows its "restore
+ * timed out" copy.
  */
 export class HistoryReplayError extends Error {
   constructor(message: string) {
@@ -176,7 +177,7 @@ export class HistoryReplayError extends Error {
 }
 
 /** The Rust error tag of an invoke failure, when it carries one. */
-function invokeErrorTag(e: unknown): string | null {
+export function invokeErrorTag(e: unknown): string | null {
   const raw =
     typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
   try {
@@ -187,8 +188,12 @@ function invokeErrorTag(e: unknown): string | null {
   }
 }
 
-/** `runner_commands::EnsureSessionRunnerResult`. */
-interface EnsureSessionRunnerResultJson {
+/**
+ * The runner a Core command hands back: `ensure_session_runner`'s whole
+ * result (`runner_commands::EnsureSessionRunnerResult`), and the `runner`
+ * of a `send_user_message` that needed one. `ready` only when not spawned.
+ */
+export interface RunnerHandle {
   pid: number;
   spawned: boolean;
   ready: ReadySnapshot | null;
@@ -476,6 +481,43 @@ async function listenToRunner(
 }
 
 /**
+ * Run a Core command that may start — or hand back — `sessionId`'s
+ * runner, with this page's listeners up before it, so a runner it starts
+ * cannot slip its first events (`ready`) past them. `runnerOf` picks the
+ * runner out of the command's result; with none (e.g. a send Core
+ * queued) the listeners come down again, as they do when the command
+ * fails — its error is rethrown untouched for the caller to classify.
+ */
+export async function listenThenInvoke<T>(
+  sessionId: string,
+  handlers: BridgeHandlers,
+  command: () => Promise<T>,
+  runnerOf: (result: T) => RunnerHandle | null,
+): Promise<{ result: T; runner: EnsureBridgeResult | null }> {
+  const listeners = await listenToRunner(sessionId, handlers);
+  let result: T;
+  try {
+    result = await command();
+  } catch (e) {
+    listeners.teardown();
+    throw e;
+  }
+  const handle = runnerOf(result);
+  if (!handle) {
+    listeners.teardown();
+    return { result, runner: null };
+  }
+  return {
+    result,
+    runner: {
+      client: listeners.clientFor(handle.pid),
+      spawned: handle.spawned,
+      ready: handle.ready ?? null,
+    },
+  };
+}
+
+/**
  * Make sure a session has a live runner, through Core's shared path
  * (`ensure_session_runner`): Core returns the runner it already holds, or
  * starts one from the session row and prefs. Listeners go up before the
@@ -490,21 +532,22 @@ export async function ensureBridge(
 ): Promise<EnsureBridgeResult> {
   const startedAt = perfNow();
   const { sessionId } = args;
-  const listeners = await listenToRunner(sessionId, handlers);
-  let outcome: EnsureSessionRunnerResultJson;
+  let runner: EnsureBridgeResult | null;
   try {
-    outcome = await invoke<EnsureSessionRunnerResultJson>(
-      "ensure_session_runner",
-      {
-        sessionId,
-        llmIndex: args.llmIndex,
-        llmKey: args.llmKey,
-        activeSessionId: args.activeSessionId,
-        gaConfig: args.gaConfig,
-      },
-    );
+    ({ runner } = await listenThenInvoke(
+      sessionId,
+      handlers,
+      () =>
+        invoke<RunnerHandle>("ensure_session_runner", {
+          sessionId,
+          llmIndex: args.llmIndex,
+          llmKey: args.llmKey,
+          activeSessionId: args.activeSessionId,
+          gaConfig: args.gaConfig,
+        }),
+      (handle) => handle,
+    ));
   } catch (e) {
-    listeners.teardown();
     const msg = formatInvokeError(e);
     if (invokeErrorTag(e) === "history_replay") {
       // Not a bridge failure: Core has (or had) a runner, it only could
@@ -518,42 +561,16 @@ export async function ensureBridge(
     // eslint-disable-next-line preserve-caught-error
     throw new Error(msg);
   }
+  if (!runner) {
+    // Core's ensure always answers with a runner; guard the type.
+    throw new Error("Core's ensure_session_runner returned no runner.");
+  }
   logPerf("bridge.ensureBridge", startedAt, {
     sessionId,
-    pid: outcome.pid,
-    spawned: outcome.spawned,
+    pid: runner.client.pid,
+    spawned: runner.spawned,
   });
-  return {
-    client: listeners.clientFor(outcome.pid),
-    spawned: outcome.spawned,
-    ready: outcome.ready ?? null,
-  };
-}
-
-/**
- * Ask Core to confirm the history of a runner this page already listens
- * to — the same `ensure_session_runner`, without a second listener set.
- * Core answers at once for a confirmed runner and replays into an idle
- * unconfirmed one first (restarting it once if that fails; the page's
- * listeners are per session, so they follow the replacement). Throws
- * [`HistoryReplayError`] when the history could not be restored.
- */
-export async function confirmRunnerHistory(
-  args: Pick<EnsureBridgeArgs, "sessionId" | "gaConfig">,
-): Promise<void> {
-  try {
-    await invoke<EnsureSessionRunnerResultJson>("ensure_session_runner", {
-      sessionId: args.sessionId,
-      gaConfig: args.gaConfig,
-    });
-  } catch (e) {
-    const msg = formatInvokeError(e);
-    if (invokeErrorTag(e) === "history_replay") {
-      throw new HistoryReplayError(msg);
-    }
-    // eslint-disable-next-line preserve-caught-error
-    throw new Error(msg);
-  }
+  return runner;
 }
 
 /** Listen to a runner Core already holds (started elsewhere). */
@@ -660,7 +677,7 @@ export async function resolvePythonPath(
  * (when the error wasn't a typed variant). Try to parse the JSON form
  * and surface a readable message either way.
  */
-function formatInvokeError(e: unknown): string {
+export function formatInvokeError(e: unknown): string {
   const raw =
     typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
   try {
@@ -718,6 +735,12 @@ function humanizeErrorTag(tag: string): string {
       return "Subprocess pipe unavailable";
     case "history_replay":
       return "History restore failed";
+    case "dispatch_failed":
+      return "Message dispatch failed";
+    case "images_not_supported":
+    case "images_not_queueable":
+    case "images_not_allowed":
+      return "Images not accepted";
     case "process_gone":
       return "Bridge process is gone";
     case "serialize":

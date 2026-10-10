@@ -572,14 +572,11 @@ impl RunnerManager {
 
     /// Whether a command starts a main-agent run. `/btw` side questions
     /// ride the UserMessage kind but are handled by the bridge's
-    /// interruption-free bypass (workbench_bridge.dispatch_command —
-    /// keep the prefix rule in sync) and never open a run.
+    /// interruption-free bypass and never open a run
+    /// ([`is_side_question`]).
     fn opens_run_gate(cmd: &IpcCommand) -> bool {
         match cmd {
-            IpcCommand::UserMessage(m) => {
-                let t = m.text.trim_start();
-                !(t == "/btw" || t.starts_with("/btw ") || t.starts_with("/btw\t"))
-            }
+            IpcCommand::UserMessage(m) => !is_side_question(&m.text),
             IpcCommand::AskUserResponse(_) => true,
             _ => false,
         }
@@ -686,7 +683,7 @@ impl RunnerManager {
         let state = q.entry(session_id.to_string()).or_default();
         // With no run open, a pending question lets this message past the
         // held items as the answer (see above).
-        if state.open_run || (!state.items.is_empty() && !state.ask_pending) {
+        if !state.may_dispatch_now() {
             let queue_id = mint_queue_id();
             state.items.push_back(QueuedMessage {
                 queue_id: queue_id.clone(),
@@ -701,6 +698,24 @@ impl RunnerManager {
         } else {
             state.open_run = true;
             QueueOffer::DispatchNow
+        }
+    }
+
+    /// [`Self::queue_offer`]'s dispatch-now branch without its queue
+    /// branch: reserve the run gate when the offer would dispatch now,
+    /// otherwise change nothing and return `false`. For a message that
+    /// must not wait in the queue — one with images (queued items are
+    /// text only, PRD 定案 6) — so the caller can refuse it instead
+    /// (`crate::session_send`, ticket 02c). On `true` the caller must
+    /// dispatch or release via [`Self::queue_release_run`].
+    pub async fn queue_try_reserve(&self, session_id: &str) -> bool {
+        let mut q = self.queues.lock().await;
+        let state = q.entry(session_id.to_string()).or_default();
+        if state.may_dispatch_now() {
+            state.open_run = true;
+            true
+        } else {
+            false
         }
     }
 
@@ -898,6 +913,19 @@ impl RunnerManager {
             }
         }
     }
+}
+
+/// Whether a `user_message` text is a `/btw` side question: after
+/// leading whitespace, exactly `/btw`, or `/btw` followed by a space or a
+/// tab. The bridge's rule (`runner/workbench_bridge.py`,
+/// `dispatch_command`'s UserMessageCommand branch) is authoritative; this
+/// is Core's one copy of it — the run gate ([`RunnerManager::send_command`]
+/// never opens one for a side question) and Core's send
+/// (`crate::session_send`, which neither persists nor queues one) both
+/// call it.
+pub fn is_side_question(text: &str) -> bool {
+    let t = text.trim_start();
+    t == "/btw" || t.starts_with("/btw ") || t.starts_with("/btw\t")
 }
 
 /// The body of [`RunnerManager::send_command`], shared with
@@ -1426,6 +1454,40 @@ mod tests {
         let snap = mgr.queue_snapshot("s").await;
         assert_eq!(snap[0].text, "b");
         assert_eq!(snap[1].text, "c");
+    }
+
+    #[tokio::test]
+    async fn queue_try_reserve_follows_the_offer_rule_but_never_enqueues() {
+        let mgr = RunnerManager::new();
+        // Idle: reserved, exactly like an offer's dispatch-now.
+        assert!(mgr.queue_try_reserve("s").await);
+        assert!(mgr.run_state("s").await.open_run);
+        // Run open: refused, and nothing was queued.
+        assert!(!mgr.queue_try_reserve("s").await);
+        assert!(mgr.queue_snapshot("s").await.is_empty());
+        // Gate closed but items waiting: an offer would queue behind
+        // them, so this refuses (and still queues nothing).
+        let _ = offer(&mgr, "s", "b").await; // queued behind the open run
+        mgr.queue_release_run("s").await;
+        assert!(!mgr.queue_try_reserve("s").await);
+        assert_eq!(texts(mgr.queue_snapshot("s").await), ["b"]);
+        assert!(!mgr.run_state("s").await.open_run, "gate untouched");
+        // A pending question lets it past the held items as the answer,
+        // the same exception the offer makes (galley#30).
+        set_ask_pending(&mgr, "s", true).await;
+        assert!(mgr.queue_try_reserve("s").await);
+        assert_eq!(texts(mgr.queue_snapshot("s").await), ["b"]);
+        assert!(mgr.run_state("s").await.open_run);
+    }
+
+    #[test]
+    fn side_question_prefix_rule() {
+        for text in ["/btw", "/btw what?", "/btw\twhat?", "  /btw x", "\n/btw"] {
+            assert!(is_side_question(text), "{text:?}");
+        }
+        for text in ["/btwx", "/BTW x", "x /btw", "", "/bt w", "/btw\nx"] {
+            assert!(!is_side_question(text), "{text:?}");
+        }
     }
 
     #[tokio::test]

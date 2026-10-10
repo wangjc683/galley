@@ -57,7 +57,7 @@ export class ImageError extends Error {
  *      {@link IMAGE_RESAMPLE_QUALITY}. Images already within the cap
  *      skip the canvas entirely (zero re-encode loss).
  *   4. Produce a compact `dataUrl` (for the IPC round-trip into
- *      `persist_user_message`) and a `previewUrl` object URL (for the
+ *      `send_user_message`) and a `previewUrl` object URL (for the
  *      thumbnail tile + dialog, so the 16×16 preview no longer decodes
  *      a full-resolution image). Caller owns the `previewUrl` lifetime.
  */

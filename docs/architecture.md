@@ -98,8 +98,9 @@ resolves spawn arguments from the session row and prefs and starts one —
 single-flight per session, and never over a running runner
 (`RunnerManager::spawn` shuts an existing one down first, which would kill
 its run). The GUI calls it through the Tauri command
-`ensure_session_runner` when it activates a session and again before
-every `user_message`; Goal dispatch through the socket layer's wrapper;
+`ensure_session_runner` when it activates a session, and Core's send
+(below) calls it before every dispatch; Goal dispatch through the socket
+layer's wrapper;
 socket `session.new` uses its spawn half (`spawn_and_attach`) for the
 session it just created. Every runner started this way gets the
 `runner-event` emit task, the auto-title watcher and a
@@ -139,6 +140,36 @@ page that attaches after `ready` went by (`ensure_session_runner`,
 `list_live_runners`), and which the ensure reads to know a runner is
 ready before replaying. A page applies a `ready` (event or snapshot) to
 its stores only; it never sends `load_history` itself.
+
+#### How a user message is sent
+
+Core sends it (ticket 02c,
+[`core/src/session_send.rs`](../core/src/session_send.rs)): the GUI calls
+the Tauri command `send_user_message`, and the phone will reach the same
+function through the remote module. After checking the session is
+writable, a `/btw` side question is dispatched as it is, neither persisted
+nor queued. Any other text is offered to the session's queue and waits
+there while a run is open; a message with images may not wait (queued
+items are text only), so it either takes the run gate at once or is
+refused. With the gate held, Core persists the message with its
+attachments, announces it as `user-message-persisted` with
+`dispatch: "pending"` and the sender's `clientRequestId`, gives a session
+still titled `新对话` a title from it
+([`session_title.rs`](../core/src/session_title.rs)), ensures the runner,
+and dispatches `user_message` — or `ask_user_response` when the agent's
+question is pending — announcing the same message again as `dispatched` or
+`persisted_only`. Every failure releases the gate. Because the gate is
+taken before the ensure, a CLI send that arrives while Core spawns and
+replays queues behind it instead of reaching the runner ahead of its
+history. Stopping is `stop_session_run`: `abort` when a run is open or a
+turn is going.
+
+Socket `session send` keeps its own contract next to this one;
+[ADR-0003](./adr/0003-gui-and-phone-send-through-core.md) records why. The
+first-message title is shared: every path that persists a user message
+(this send, socket `session send` and `session new`, the queue drain, a
+Goal's objective) derives it in Core, once, and the auto-title may upgrade
+it after the first finished run.
 
 #### Runner events and turn persistence
 

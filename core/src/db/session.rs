@@ -719,10 +719,11 @@ impl SqliteGalley {
             .await
     }
 
-    /// Rename + stamp `title_source`. `Derived` is reserved for the GUI's
+    /// Rename + stamp `title_source`. `Derived` was reserved for the GUI's
     /// first-message truncation (`maybeDeriveTitle`) so auto-title can still
-    /// upgrade it later; every other rename is `User` and locks the title
-    /// for good. An empty title falls back to the seed default AND resets
+    /// upgrade it later; since ticket 02c Core derives that title itself
+    /// ([`Self::try_apply_derived_title`]). Every other rename is `User`
+    /// and locks the title for good. An empty title falls back to the seed default AND resets
     /// the source to 'seed' — clearing the field means "give it back to
     /// Galley".
     pub async fn rename_session_with_source(
@@ -774,6 +775,38 @@ impl SqliteGalley {
         let res = sqlx::query(
             "UPDATE sessions SET title = ?, title_source = 'auto', updated_at = ? \
              WHERE id = ? AND title_source IN ('seed', 'derived')",
+        )
+        .bind(trimmed)
+        .bind(&now)
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if res.rows_affected() == 0 {
+            return Ok(None);
+        }
+        self.session_brief(id.clone()).await.map(Some)
+    }
+
+    /// Compare-and-swap write for Core's first-message title
+    /// ([`crate::session_title`]): replaces the title and stamps
+    /// `derived` only while the row still wears the creation default
+    /// (`seed`). `None` when the row is gone or already has any other
+    /// title — the derivation happens once, and never over an `auto` or
+    /// `user` title.
+    pub async fn try_apply_derived_title(
+        &self,
+        id: &SessionId,
+        title: &str,
+    ) -> Result<Option<SessionBrief>> {
+        let trimmed = title.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+        let now = chrono_now_iso();
+        let res = sqlx::query(
+            "UPDATE sessions SET title = ?, title_source = 'derived', updated_at = ? \
+             WHERE id = ? AND title_source = 'seed'",
         )
         .bind(trimmed)
         .bind(&now)

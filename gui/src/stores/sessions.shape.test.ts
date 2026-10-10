@@ -28,7 +28,6 @@ describe("useSessionsStore shape", () => {
       "setSessionReasoningEffort",
       "bumpSessionAfterTurn",
       "setSessionLlm",
-      "maybeDeriveTitle",
       "setLastStepIndex",
       "setSessionImagesSupported",
       "applyExternalSessionCreated",

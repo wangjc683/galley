@@ -1,0 +1,123 @@
+{
+  "source": "gui/src/stores/sessions/lifecycle-slice.ts deriveTitleFromText (HEAD f79c430e), expected values produced by running it under node",
+  "maxUtf16Units": 80,
+  "cases": [
+    {
+      "name": "ascii short",
+      "input": "fix the login bug",
+      "expected": "fix the login bug"
+    },
+    {
+      "name": "cjk short",
+      "input": "帮我修一下登录页的样式",
+      "expected": "帮我修一下登录页的样式"
+    },
+    {
+      "name": "mixed cjk and latin",
+      "input": "用 Rust 重写 parser，并补上 unit tests",
+      "expected": "用 Rust 重写 parser，并补上 unit tests"
+    },
+    {
+      "name": "leading and trailing whitespace",
+      "input": "   hello world \n\t ",
+      "expected": "hello world"
+    },
+    {
+      "name": "newlines collapse to one space",
+      "input": "第一行\n第二行\r\n\r\n第三行",
+      "expected": "第一行 第二行 第三行"
+    },
+    {
+      "name": "tabs collapse to one space",
+      "input": "col1\tcol2\t\tcol3",
+      "expected": "col1 col2 col3"
+    },
+    {
+      "name": "mixed whitespace runs",
+      "input": "a \t\n b\u000b\fc",
+      "expected": "a b c"
+    },
+    {
+      "name": "ideographic space and nbsp count as whitespace",
+      "input": "中文\u3000空格\u00a0和 nbsp",
+      "expected": "中文 空格 和 nbsp"
+    },
+    {
+      "name": "bom counts as whitespace in JS",
+      "input": "\ufeffstart\ufeffend",
+      "expected": "start end"
+    },
+    {
+      "name": "nel is not JS whitespace",
+      "input": "keep\u0085this",
+      "expected": "keep\u0085this"
+    },
+    {
+      "name": "line and paragraph separators",
+      "input": "one\u2028two\u2029three",
+      "expected": "one two three"
+    },
+    {
+      "name": "exactly 80 ascii",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "81 ascii truncates",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…"
+    },
+    {
+      "name": "80 cjk units kept",
+      "input": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中",
+      "expected": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中"
+    },
+    {
+      "name": "81 cjk truncates",
+      "input": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中",
+      "expected": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中…"
+    },
+    {
+      "name": "emoji counts two units, exactly 80",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀"
+    },
+    {
+      "name": "emoji keeps whole pairs below the cut",
+      "input": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀x",
+      "expected": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀…"
+    },
+    {
+      "name": "emoji at the end of a long title",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀😀😀😀😀😀",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀😀😀😀😀…"
+    },
+    {
+      "name": "whitespace collapse brings it under the limit",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\n\n\n\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "long mixed message",
+      "input": "请帮我检查一下这个仓库里所有的 TypeScript 文件，找出没有被使用的导出，然后生成一份报告，按目录分组，并且对每一项给出删除建议和风险评估。",
+      "expected": "请帮我检查一下这个仓库里所有的 TypeScript 文件，找出没有被使用的导出，然后生成一份报告，按目录分组，并且对每一项给出删除建议和风险评估。"
+    },
+    {
+      "name": "whitespace only",
+      "input": " \n\t ",
+      "expected": ""
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "name": "cut inside a surrogate pair drops the half character",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀tail",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…",
+      "jsOutput": "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\ud83d…\"",
+      "note": "JS slice(0, 80) keeps a lone high surrogate here, which no Rust string (and no JSON Galley Core accepts) can hold; Core drops the half character instead"
+    }
+  ]
+}

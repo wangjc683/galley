@@ -3,22 +3,29 @@ import { invoke } from "@tauri-apps/api/core";
 import { applyReadySnapshot, dispatchIPCEvent } from "@/lib/ipc-handlers";
 import {
   attachBridge as attachBridgeProcess,
-  confirmRunnerHistory,
   ensureBridge as ensureBridgeProcess,
   HistoryReplayError,
+  listenThenInvoke,
   type BridgeClient,
   type BridgeHandlers,
   type EnsureBridgeArgs,
+  type EnsureBridgeResult,
   type ReadySnapshot,
 } from "@/lib/bridge";
 import { clearReplyNotifyPending } from "@/lib/notify";
 import { logPerf, perfNow } from "@/lib/perf";
 import {
+  isRunnerStartFailure,
+  SendUserMessageError,
+  sendUserMessageCommand,
+  type SendUserMessageArgs,
+  type SendUserMessageResult,
+} from "@/lib/session-send";
+import {
   DEFAULT_LLM_DISPLAY_NAME,
   DEFAULT_LLMS,
 } from "@/stores/defaults";
 import { useMessagesStore } from "@/stores/messages";
-import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
@@ -35,8 +42,9 @@ import {
 /**
  * Why Core's ensure did not give this page a runner with its history
  * confirmed. `historyReplay`: the runner exists (or did), but Core could
- * not restore the session's history into it even after one restart — the
- * send path reports that with its "restore timed out" copy.
+ * not restore the session's history into it even after one restart — an
+ * activation stays quiet about it; a send (whose own Core command fails
+ * the same way) reports it with its "restore timed out" copy.
  */
 export interface RunnerEnsureFailure {
   historyReplay: boolean;
@@ -66,13 +74,19 @@ export interface BridgeSlice {
     args: EnsureBridgeArgs,
   ) => Promise<RunnerEnsureFailure | null>;
   /**
-   * The send path's gate (ticket 02b): resolve once Core confirms that
-   * `sid`'s runner holds the session's history — replaying (and, once,
-   * restarting) as needed — or with the failure. With this page already
-   * listening it asks Core directly; otherwise it runs (or joins) a full
-   * `ensureSessionRunner`.
+   * Hand a user message to Core's unified send (`send_user_message`,
+   * ticket 02c), which reserves the run, persists, starts / restores the
+   * runner and dispatches — or queues, or forwards a `/btw` — by itself.
+   * Like `ensureSessionRunner`, a page that does not listen to the
+   * session yet puts its listeners up before the invoke (Core may start
+   * the runner inside it) and keeps them for the runner the result hands
+   * back; a page already listening just invokes. Throws Core's failure as
+   * a `SendUserMessageError`; a runner that could not start also leaves
+   * the session in `error`, as an ensure failure does.
    */
-  confirmSessionHistory: (sid: string) => Promise<RunnerEnsureFailure | null>;
+  deliverUserMessage: (
+    args: SendUserMessageArgs,
+  ) => Promise<SendUserMessageResult>;
   /**
    * Attach JS listeners to a runner started elsewhere (`galley session
    * new`, a Goal turn, another page). The process already exists in Rust;
@@ -335,6 +349,46 @@ function _bridgeFieldsUpdate(
   };
 }
 
+/**
+ * Keep the runner a Core command handed back (ensure or send) as this
+ * page's client. A runner Core just started reports `ready` as an event
+ * (it may already have); an already-live one never will again, so it
+ * reads as connected at once with its ready state from Core's snapshot
+ * (stores only, never a replay).
+ */
+function _registerRunner(sessionId: string, runner: EnsureBridgeResult): void {
+  const { client, spawned, ready } = runner;
+  _bridgeClients.set(sessionId, client);
+  _lruTouch(sessionId);
+  if (spawned) {
+    // Status flips to "connected" only after the runner sends its
+    // `ready` event (handled in ipc-handlers, which may already have
+    // happened). Keep "spawning" so the UI shows a loading affordance.
+    useRuntimeStore.setState((state) => ({
+      byId: {
+        ...state.byId,
+        [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+          bridgePid: client.pid,
+        }),
+      },
+    }));
+  } else {
+    _bridgeSpawnStartedAt.delete(sessionId);
+    useRuntimeStore.setState((state) => ({
+      byId: {
+        ...state.byId,
+        [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+          bridgeStatus: "connected",
+          bridgeError: null,
+          bridgePid: client.pid,
+        }),
+      },
+    }));
+    if (ready) applyReadySnapshot(sessionId, ready);
+  }
+  void _enforceLRUCap();
+}
+
 function makeBridgeHandlers(sessionId: string): BridgeHandlers {
   const copy = currentCopy();
   return {
@@ -468,47 +522,15 @@ export const createBridgeSlice: RuntimeSliceCreator<BridgeSlice> = (
         },
       }));
       try {
-        const { client, spawned, ready } = await ensureBridgeProcess(
+        const runner = await ensureBridgeProcess(
           args,
           makeBridgeHandlers(sessionId),
         );
-        _bridgeClients.set(sessionId, client);
-        _lruTouch(sessionId);
-        if (spawned) {
-          // Status flips to "connected" only after the runner sends its
-          // `ready` event (handled in ipc-handlers, which may already
-          // have happened). Keep "spawning" so the UI shows a loading
-          // affordance.
-          set((state) => ({
-            byId: {
-              ...state.byId,
-              [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
-                bridgePid: client.pid,
-              }),
-            },
-          }));
-        } else {
-          // Already alive: its `ready` went by long ago and will not
-          // come again — nothing may wait for it. Connected now, ready
-          // state from Core's snapshot (stores only, never a replay).
-          _bridgeSpawnStartedAt.delete(sessionId);
-          set((state) => ({
-            byId: {
-              ...state.byId,
-              [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
-                bridgeStatus: "connected",
-                bridgeError: null,
-                bridgePid: client.pid,
-              }),
-            },
-          }));
-          if (ready) applyReadySnapshot(sessionId, ready);
-        }
-        void _enforceLRUCap();
+        _registerRunner(sessionId, runner);
         logPerf("runtime.ensureSessionRunner", startedAt, {
           sessionId,
-          pid: client.pid,
-          result: spawned ? "spawned" : "attached",
+          pid: runner.client.pid,
+          result: runner.spawned ? "spawned" : "attached",
         });
         return null;
       } catch (e) {
@@ -543,19 +565,104 @@ export const createBridgeSlice: RuntimeSliceCreator<BridgeSlice> = (
     }
   },
 
-  confirmSessionHistory: async (sessionId) => {
-    const gaConfig = usePrefsStore.getState().gaConfig;
-    if (!_bridgeClients.has(sessionId)) {
-      return await get().ensureSessionRunner({ sessionId, gaConfig });
+  deliverUserMessage: async (args) => {
+    const { sessionId } = args;
+    const command = () => sendUserMessageCommand(args);
+    if (_bridgeClients.has(sessionId)) {
+      // Already listening: whatever runner Core uses (a quiet restart
+      // included) reports through this page's per-session listeners.
+      return await command();
     }
+    // An activation (or another send) is putting listeners up right
+    // now; let it, then use them.
+    for (
+      let inFlight = _attachesInFlight.get(sessionId);
+      inFlight;
+      inFlight = _attachesInFlight.get(sessionId)
+    ) {
+      await inFlight;
+      if (_bridgeClients.has(sessionId)) return await command();
+    }
+    // Listen before the invoke: Core may start the runner inside the
+    // send. Registered as an attach in flight so the
+    // `runner-spawned-external` Core broadcasts for that start — and an
+    // activation racing this send — attach nothing more.
+    let settle!: (failure: RunnerEnsureFailure | null) => void;
+    const attach = new Promise<RunnerEnsureFailure | null>((resolve) => {
+      settle = resolve;
+    });
+    _attachesInFlight.set(sessionId, attach);
+    const startedAt = perfNow();
+    const statusBefore = get().byId[sessionId]?.bridgeStatus ?? "idle";
+    const restoreStatus = () =>
+      set((state) => ({
+        byId: {
+          ...state.byId,
+          [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+            bridgeStatus: statusBefore,
+          }),
+        },
+      }));
+    _bridgeSpawnStartedAt.set(sessionId, startedAt);
+    set((state) => ({
+      byId: {
+        ...state.byId,
+        [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+          bridgeStatus: "spawning",
+          bridgeError: null,
+        }),
+      },
+    }));
+    const handlers = makeBridgeHandlers(sessionId);
     try {
-      await confirmRunnerHistory({ sessionId, gaConfig });
-      return null;
+      const { result, runner } = await listenThenInvoke(
+        sessionId,
+        handlers,
+        command,
+        (sent) => sent.runner,
+      );
+      if (runner) {
+        _registerRunner(sessionId, runner);
+      } else {
+        // Queued: Core needed no runner, this page keeps none.
+        _bridgeSpawnStartedAt.delete(sessionId);
+        restoreStatus();
+      }
+      logPerf("runtime.deliverUserMessage", startedAt, {
+        sessionId,
+        outcome: result.outcome,
+        runner: runner ? (runner.spawned ? "spawned" : "attached") : "none",
+      });
+      settle(null);
+      return result;
     } catch (e) {
-      return {
-        historyReplay: e instanceof HistoryReplayError,
-        message: e instanceof Error ? e.message : String(e),
-      };
+      const message = e instanceof Error ? e.message : String(e);
+      _bridgeSpawnStartedAt.delete(sessionId);
+      if (isRunnerStartFailure(e)) {
+        // Same as an ensure that could not start the runner: error
+        // state + the bridge-failed toast.
+        handlers.onError?.(message);
+        set((state) => ({
+          byId: {
+            ...state.byId,
+            [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+              bridgePid: null,
+            }),
+          },
+        }));
+      } else {
+        restoreStatus();
+      }
+      settle({
+        historyReplay:
+          e instanceof SendUserMessageError && e.tag === "history_replay",
+        message,
+      });
+      throw e;
+    } finally {
+      if (_attachesInFlight.get(sessionId) === attach) {
+        _attachesInFlight.delete(sessionId);
+      }
     }
   },
 

@@ -70,6 +70,16 @@ pub(super) struct SessionQueueState {
 }
 
 impl SessionQueueState {
+    /// The dispatch-now rule of [`RunnerManager::queue_offer`], shared
+    /// with [`RunnerManager::queue_try_reserve`]: no run open, and either
+    /// nothing queued or a pending question this message answers.
+    ///
+    /// [`RunnerManager::queue_offer`]: crate::runner_manager::RunnerManager::queue_offer
+    /// [`RunnerManager::queue_try_reserve`]: crate::runner_manager::RunnerManager::queue_try_reserve
+    pub(super) fn may_dispatch_now(&self) -> bool {
+        !self.open_run && (self.items.is_empty() || self.ask_pending)
+    }
+
     /// Fold a `RunCompleteEvent`'s `exitReason` into the state (called by
     /// the per-spawn forwarder): settle the run's draft into
     /// [`RunOutcome`], record [`Self::last_exit`], and reset the per-run

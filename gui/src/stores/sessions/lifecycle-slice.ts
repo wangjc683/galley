@@ -50,19 +50,6 @@ interface LlmSelectionSnapshot {
   displayName: string;
 }
 
-/**
- * Safety cap for auto-derived persisted titles. Sidebar rows decide visible
- * width with CSS truncation, so keep enough source text for wide sidebars while
- * avoiding unbounded prompt-sized titles in rename/search surfaces.
- */
-const TITLE_DERIVE_MAX = 80;
-
-function deriveTitleFromText(text: string): string {
-  const oneLine = text.replace(/\s+/g, " ").trim();
-  if (oneLine.length <= TITLE_DERIVE_MAX) return oneLine;
-  return oneLine.slice(0, TITLE_DERIVE_MAX) + "…";
-}
-
 /** "新对话" — seed title set by `createSession`. */
 export const DEFAULT_NEW_SESSION_TITLE = "新对话";
 
@@ -121,6 +108,36 @@ function currentLLMSelectionForNewSession(
   );
 }
 
+/**
+ * Consume the EmptyState picker's pending model (`pendingLLMIndex`) for a
+ * runner Core is about to start for `sessionId` — by an activation's
+ * ensure or by a send (ticket 02c). The pick applies only to a genuinely
+ * fresh session (no completed turns, nothing in the transcript); it is
+ * cleared either way, so an abandoned pick (user picked a model, then
+ * opened an existing session) cannot leak into a later unrelated start.
+ * Call it before the send's optimistic echo lands in the transcript.
+ *
+ * Without a pick Core starts the runner on the session row's persisted
+ * choice (its stable key, else its index), so a fresh session keeps the
+ * model the user switched to and a respawned one keeps its own `set_llm`
+ * history. A pick wins when present because the user just made it.
+ */
+export function takePendingLLMPick(
+  sessionId: string,
+  session: Pick<Session, "turnCount" | "selectedLlmKey"> | undefined,
+): { llmIndex?: number; llmKey?: string } {
+  const pendingLLMIndex = useRuntimeStore.getState().pendingLLMIndex;
+  if (pendingLLMIndex === undefined) return {};
+  useRuntimeStore.setState({ pendingLLMIndex: undefined });
+  const messages = useMessagesStore.getState().byId[sessionId];
+  const isFreshSession =
+    (session?.turnCount ?? 0) === 0 &&
+    (!messages || messages.turns.length === 0);
+  return isFreshSession
+    ? { llmIndex: pendingLLMIndex, llmKey: session?.selectedLlmKey }
+    : {};
+}
+
 export interface SessionLifecycleSlice {
   sessions: Session[];
   activeSessionId: string | undefined;
@@ -144,9 +161,17 @@ export interface SessionLifecycleSlice {
    *
    * Resolves to the runner failure when this activation asked Core for
    * a runner and did not get one with its history confirmed; `null`
-   * otherwise. Most callers ignore it; the send path reports it.
+   * otherwise. Most callers ignore it.
+   *
+   * `ensureRunner: false` stops after the in-memory part (slots, restore,
+   * active pointer): for a caller whose next Core command brings the
+   * runner itself — a send (ticket 02c) — so the runner starts once, on
+   * the send's terms (including the EmptyState pick it passes).
    */
-  activateSession: (id: string) => Promise<RunnerEnsureFailure | null>;
+  activateSession: (
+    id: string,
+    opts?: { ensureRunner?: boolean },
+  ) => Promise<RunnerEnsureFailure | null>;
   /** Synchronous create — returns the new id for chaining. Rust write
    * happens fire-and-forget; in-memory state updates immediately. */
   createSession: (projectId?: string) => string;
@@ -191,16 +216,6 @@ export interface SessionLifecycleSlice {
     displayName: string,
   ) => Promise<void>;
   /**
-   * Used by messagesStore.appendUserTurn / appendUserTurnExternal on
-   * the first user message in a fresh session: if the title is still
-   * the seed placeholder, auto-derive from the message text. Server
-   * write is fire-and-forget.
-   *
-   * No-op when the title has already been edited or the text trims to
-   * empty. Returns the new title for the caller to log / scroll-snap.
-   */
-  maybeDeriveTitle: (sessionId: string, text: string) => string | null;
-  /**
    * Used by IPC turn_end handler to refresh `lastStepIndex` on the
    * session row. In-memory only — transient field, not persisted (see
    * Session.lastStepIndex doc).
@@ -221,7 +236,9 @@ export interface SessionLifecycleSlice {
   // the GUI. These actions are the listener-side mirrors: they update
   // in-memory state to match the row that's already on disk, **without**
   // invoking a Rust command back (the row is already correct). Mirror of
-  // `appendUserTurnExternal` over in messagesStore.
+  // `applyUserMessagePersisted` over in messagesStore. The seed title a
+  // first user message derives arrives this way too: Core writes it and
+  // broadcasts `session-updated-external` (ticket 02c).
 
   /** Insert a freshly-created (CLI / supervisor) session into the list.
    * No-op if a row with the same id is already present — covers the
@@ -265,7 +282,7 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     }
   },
 
-  activateSession: async (id) => {
+  activateSession: async (id, opts) => {
     const activateStartedAt = perfNow();
     const epoch = ++_activationEpoch;
     const session = get().sessions.find((s) => s.id === id);
@@ -363,10 +380,11 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       useRuntimeStore.getState().byId[id]?.bridgeStatus ?? "idle";
     const hasBridgeClient = useRuntimeStore.getState().hasBridgeClient(id);
     const needsBridge =
-      bridgeStatus === "idle" ||
-      bridgeStatus === "closed" ||
-      bridgeStatus === "error" ||
-      (bridgeStatus === "connected" && !hasBridgeClient);
+      opts?.ensureRunner !== false &&
+      (bridgeStatus === "idle" ||
+        bridgeStatus === "closed" ||
+        bridgeStatus === "error" ||
+        (bridgeStatus === "connected" && !hasBridgeClient));
     // This page holding no bridge does not mean Core holds none: after
     // a webview reload (or a dev HMR, or a CLI spawn whose event this
     // page missed) the runner is still alive and may be mid-run. Core's
@@ -385,34 +403,11 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       // rollback).
       //
       // EmptyState's inline LLM picker stashes `pendingLLMIndex`
-      // because there was no live bridge to set_llm against. Apply
-      // it here only when the session is genuinely fresh. Otherwise
-      // use the session row's own persisted choice. Always clear
-      // pending after this activation so an abandoned pick (user
-      // picked LLM, then clicked an existing session) doesn't leak
-      // into a later unrelated spawn.
-      const runtimeStoreSnap = useRuntimeStore.getState();
-      const pendingLLMIndex = runtimeStoreSnap.pendingLLMIndex;
-      const msgsNow = useMessagesStore.getState().byId[id];
-      const isFreshSession =
-        (session?.turnCount ?? 0) === 0 &&
-        (!msgsNow || msgsNow.turns.length === 0);
-      const consumePending = isFreshSession && pendingLLMIndex !== undefined;
-      if (pendingLLMIndex !== undefined) {
-        useRuntimeStore.setState({ pendingLLMIndex: undefined });
-      }
-      // Without a pending pick Core starts the runner on the session
-      // row's persisted choice (its stable key, else its index), so a
-      // fresh session keeps the model the user switched to and a
-      // respawned one keeps its own `set_llm` history. A pending pick
-      // (Empty State LLM picker) wins when present because the user just
-      // made a fresh choice.
+      // because there was no live bridge to set_llm against.
       const spawnStartedAt = perfNow();
       runnerFailure = await useRuntimeStore.getState().ensureSessionRunner({
         sessionId: id,
-        ...(consumePending
-          ? { llmIndex: pendingLLMIndex, llmKey: session?.selectedLlmKey }
-          : {}),
+        ...takePendingLLMPick(id, session),
         // prefsStore is a leaf in the slice DAG (AD-09) — no cycle
         // concern with the cross-store static import block at the top
         // of this file.
@@ -737,36 +732,6 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     } catch (e) {
       console.debug("[sessions] set_session_llm invoke failed.", e);
     }
-  },
-
-  maybeDeriveTitle: (sessionId, text) => {
-    let derived: string | null = null;
-    set((state) => {
-      const idx = state.sessions.findIndex((s) => s.id === sessionId);
-      if (idx === -1) return {};
-      const s = state.sessions[idx];
-      if (s.title !== DEFAULT_NEW_SESSION_TITLE || !text.trim()) return {};
-      const newTitle = deriveTitleFromText(text);
-      const sessions = state.sessions.slice();
-      sessions[idx] = { ...s, title: newTitle };
-      derived = newTitle;
-      return { sessions };
-    });
-    if (derived) {
-      const out = derived as string;
-      // "derived" keeps the row auto-title-upgradable (title_source
-      // semantics, migration 038) — a plain rename would lock it as a
-      // user title and the LLM auto-title would never fire.
-      void invoke("rename_session", {
-        id: sessionId,
-        title: out,
-        origin: GUI_ORIGIN,
-        titleSource: "derived",
-      }).catch((e) =>
-        console.debug("[sessions] maybeDeriveTitle invoke failed.", e),
-      );
-    }
-    return derived;
   },
 
   setLastStepIndex: (sessionId, step) => {

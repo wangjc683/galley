@@ -1,11 +1,9 @@
 import { create } from "zustand";
 
-import {
-  loadMessagesBySession,
-  persistUserMessage,
-} from "@/lib/db";
+import { loadMessagesBySession } from "@/lib/db";
 import { logPerf, perfNow } from "@/lib/perf";
 import { pendingReplyStepBase } from "@/lib/run-groups";
+import type { UserMessagePersistedPayload } from "@/lib/session-send";
 import { useSessionsStore } from "@/stores/sessions";
 import {
   derivePendingAskUser,
@@ -14,7 +12,6 @@ import {
 import type {
   AgentTurn,
   MessageAttachment,
-  Origin,
   PendingAskUser,
   PendingImageAttachment,
   SendPhase,
@@ -102,7 +99,14 @@ export interface PerSessionMessages {
    * app launch never loaded restarts at 1 (no turns to count).
    */
   runStepBase: number;
-  lastUserPersistRequestId: number;
+  /**
+   * `clientRequestId` of the optimistic send that set the run fields
+   * (`agentRunning`, `sendPhase`, …) and still owns them: set by
+   * `appendUserTurn`, cleared when Core's broadcast claims the turn or
+   * another user row takes the run over. A send Core queued instead
+   * (`retractUserTurn`) hands the run state back only while it owns it.
+   */
+  optimisticRequestId: string | null;
   /**
    * User-voice next-step suggestion from the latest final reply
    * (turn_end.nextSuggestion, managed runtime only). Rendered as
@@ -134,7 +138,7 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   restoring: false,
   turnIndexOffset: 0,
   runStepBase: 0,
-  lastUserPersistRequestId: 0,
+  optimisticRequestId: null,
   nextSuggestion: null,
   pausedAtStepLimit: false,
 }) as PerSessionMessages;
@@ -154,7 +158,7 @@ function emptyMessages(): PerSessionMessages {
     restoring: false,
     turnIndexOffset: 0,
     runStepBase: 0,
-    lastUserPersistRequestId: 0,
+    optimisticRequestId: null,
     nextSuggestion: null,
     pausedAtStepLimit: false,
   };
@@ -168,7 +172,7 @@ interface MessagesState {
   byId: Record<string, PerSessionMessages>;
   /**
    * Global monotonic counter incremented every time the user submits
-   * a message (via `appendUserTurn` / `appendUserTurnExternal` /
+   * a message (via `appendUserTurn` / `applyUserMessagePersisted` /
    * `appendSideQuestionUserTurn`) in ANY session. MainView's
    * stick-to-top scroll effect uses this as a trigger. Lives at the
    * store root rather than per-session because session switching
@@ -209,32 +213,45 @@ interface MessagesActions {
   restoreSessionTurns: (sid: string) => Promise<void>;
 
   // ---- conversation writes ----
+  /**
+   * The optimistic echo of a send this page hands to Core's
+   * `send_user_message` (ticket 02c): append the user turn with its
+   * images as data URLs, tagged with the send's `clientRequestId`, and
+   * show the run as starting (`sendPhase: "saving"`). Nothing is written
+   * here — Core persists the row (and derives the seed title) and claims
+   * this turn through `applyUserMessagePersisted`.
+   */
   appendUserTurn: (
     sid: string,
     text: string,
+    clientRequestId: string,
     attachments?: PendingImageAttachment[],
-  ) => Promise<PersistedUserTurn>;
-  /**
-   * Append a user turn that was persisted out-of-band by Rust core
-   * (`socket_listener::dispatch_session_send`). Skips the SQLite write
-   * that `appendUserTurn` does because the row is already in DB.
-   * Triggered by the `user-message-persisted` Tauri event whenever CLI
-   * / supervisor agents call `galley session send`.
-   *
-   * Otherwise close to `appendUserTurn`: appends a UserTurn, sets
-   * `agentRunning=true` only when the bridge has been dispatched, bumps
-   * `userSubmitTick` so the conversation scrolls to the new message,
-   * derives the sidebar title on first message.
-   */
-  appendUserTurnExternal: (
-    sid: string,
-    text: string,
-    origin?: Origin,
-    createdAt?: string,
-    dispatched?: boolean,
-    turnIndex?: number | null,
-    goalId?: string,
   ) => void;
+  /**
+   * Take back the optimistic echo of a send Core queued instead (the
+   * page thought the session idle, Core found a run open — the queue bar
+   * shows it now). Hands the run state back only if that send still
+   * owns it. No-op once the turn was claimed.
+   */
+  retractUserTurn: (sid: string, clientRequestId: string) => void;
+  /**
+   * Apply Core's `user-message-persisted` for a user row — this page's
+   * own sends through `send_user_message`, and rows other writers
+   * persisted (CLI / supervisor `session send`, queue drain, Goal):
+   *
+   *   - a row already shown (same `message.id`) only moves its run state
+   *     along (`dispatched` → working; `persisted_only` / `spawn_failed`
+   *     → stopped), never back and never twice;
+   *   - this page's optimistic echo (same `clientRequestId`) is claimed:
+   *     it gets the row id, the persisted image attachments and the
+   *     durable `turnIndexOffset` — before Core dispatches, so before any
+   *     `turn_start` — and the send moves from "saving" to "starting";
+   *   - any other row is appended once, as starting (`pending`), working
+   *     (`dispatched`) or stopped.
+   *
+   * Bumps `userSubmitTick` only for an append into the active session.
+   */
+  applyUserMessagePersisted: (payload: UserMessagePersistedPayload) => void;
   /**
    * Append a transient user message for `/btw` side questions.
    * Distinct from `appendUserTurn`:
@@ -291,11 +308,6 @@ interface MessagesActions {
 
 export type MessagesStore = MessagesState & MessagesActions;
 
-export interface PersistedUserTurn {
-  turnIndex: number;
-  attachments: MessageAttachment[];
-}
-
 // ============================================================
 // Internal helpers
 // ============================================================
@@ -319,21 +331,74 @@ function patchMessages(
   };
 }
 
-function replaceLastPendingUserAttachments(
+type PersistDispatch = NonNullable<UserMessagePersistedPayload["dispatch"]>;
+
+/** Index of the last user turn matching `pred`, or -1. */
+function findLastUserTurn(
   turns: Turn[],
-  content: string,
-  attachments: MessageAttachment[],
-): Turn[] {
-  if (attachments.length === 0) return turns;
-  const next = turns.slice();
-  for (let i = next.length - 1; i >= 0; i -= 1) {
-    const turn = next[i];
-    if (turn.role !== "user") continue;
-    if (turn.content !== content) break;
-    next[i] = { ...turn, attachments };
-    return next;
+  pred: (turn: UserTurn) => boolean,
+): number {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const turn = turns[i];
+    if (turn.role === "user" && pred(turn)) return i;
   }
-  return turns;
+  return -1;
+}
+
+/** Whether the user turn at `index` opened the latest main-agent run:
+ * no main user turn (persisted, or an optimistic send) came after it.
+ * `/btw` turns carry neither key and do not count. */
+function isLatestRunTurn(turns: Turn[], index: number): boolean {
+  for (let i = index + 1; i < turns.length; i += 1) {
+    const turn = turns[i];
+    if (
+      turn.role === "user" &&
+      (turn.messageId !== undefined || turn.clientRequestId !== undefined)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isPreDispatchPhase(phase: SendPhase | null): boolean {
+  return phase === "saving" || phase === "starting" || phase === "restoring";
+}
+
+/**
+ * Move a run along for a later broadcast of the row that opened it —
+ * forward only: `pending` → starting, `dispatched` → working (unless
+ * the runner's own events already took the phase over), a failed start
+ * → stopped.
+ */
+function withDispatch(
+  m: PerSessionMessages,
+  dispatch: PersistDispatch,
+): PerSessionMessages {
+  switch (dispatch) {
+    case "pending":
+      return {
+        ...m,
+        agentRunning: true,
+        currentRunStartedAtMs: m.currentRunStartedAtMs ?? Date.now(),
+        sendPhase: m.sendPhase === "saving" ? "starting" : m.sendPhase,
+      };
+    case "dispatched":
+      return m.agentRunning && isPreDispatchPhase(m.sendPhase)
+        ? { ...m, sendPhase: "waiting_agent" }
+        : m;
+    case "persisted_only":
+    case "spawn_failed":
+      return {
+        ...m,
+        agentRunning: false,
+        currentRunStartedAtMs: null,
+        currentTurnIndex: null,
+        inFlightContent: "",
+        sendPhase: null,
+        isStopping: false,
+      };
+  }
 }
 
 function createdAtToMs(createdAt?: string): number | null {
@@ -424,12 +489,12 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
 
   // ---- conversation writes ----
 
-  appendUserTurn: (sid, text, attachments = []) => {
-    // Optimistically snapshot turnCount before any state mutation. Core is
-    // still the authority for the durable turn_index; this value is only the
-    // temporary UI offset until persistUserMessage returns the real row.
+  appendUserTurn: (sid, text, clientRequestId, attachments = []) => {
+    // `turnIndexOffset` starts as a guess (the completed-turn count) and
+    // becomes durable when Core's `pending` broadcast claims this turn,
+    // which happens before Core dispatches it.
     //
-    // Why: GA's `agent_runner_loop` (agent_loop.py) declares
+    // Why an offset: GA's `agent_runner_loop` (agent_loop.py) declares
     // `turn = 0` locally and increments per LLM call within one
     // invocation. Each new `put_task(user_message)` starts a fresh
     // loop, so the very first turn of every user message arrives as
@@ -444,13 +509,11 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     //
     // For old rows and bridge events that do not carry absoluteTurnIndex,
     // offset = userRowTurnIndex - 1 maps GA step 1 back onto the user row's
-    // absolute turn_index. Core now returns that userRowTurnIndex after the
-    // write; until then, currentTurnCount remains the best visual guess.
+    // absolute turn_index (see lib/turn-index.ts).
     const sessionsState = useSessionsStore.getState();
     const currentTurnCount =
       sessionsState.sessions.find((s) => s.id === sid)?.turnCount ?? 0;
     const state = get();
-    const persistRequestId = state.userSubmitTick + 1;
     const optimisticAttachments: MessageAttachment[] = attachments.map((image) => ({
       id: image.id,
       messageId: "",
@@ -470,9 +533,11 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
         {
           role: "user",
           content: text,
+          clientRequestId,
           attachments: optimisticAttachments,
           // Send time for the message time label (lib/message-time)
-          // until a restore reads the row's own created_at.
+          // until Core's broadcast (or a restore) brings the row's own
+          // created_at.
           createdAt: new Date().toISOString(),
         } as UserTurn,
       ],
@@ -500,109 +565,151 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       isStopping: false,
       turnIndexOffset: currentTurnCount,
       runStepBase: pendingReplyStepBase(m.turns),
-      lastUserPersistRequestId: persistRequestId,
+      optimisticRequestId: clientRequestId,
     }));
-    set({ byId, userSubmitTick: state.userSubmitTick + 1 });    // Derive a Sidebar title from the first user message — but only
-    // once, and only when the row is still wearing the seed "新对话"
-    // placeholder. sessionsStore handles the trim / fallback / Rust
-    // persist; this call is a no-op when the title has been edited.
-    useSessionsStore.getState().maybeDeriveTitle(sid, text);
-    // Persist the user message to SQLite for Session Restore. Core assigns
-    // the durable turn_index and returns it so the runner command can carry
-    // the same absoluteTurnIndex.
-    return persistUserMessage({
-      sessionId: sid,
-      content: text,
-      attachments,
-    })
-      .then((message) => {
-        const persistedTurnIndex =
-          typeof message.turnIndex === "number" ? message.turnIndex : null;
-        if (persistedTurnIndex === null) {
-          throw new Error("Core did not return a durable turnIndex.");
-        }
-        const persistedOffset = persistedTurnIndex - 1;
-        const persistedAttachments = message.attachments ?? [];
-        const latest = get();
-        const latestMessages = latest.byId[sid];
-        if (
-          persistedOffset !== currentTurnCount &&
-          latestMessages?.lastUserPersistRequestId === persistRequestId
-        ) {
-          const { byId: adjusted } = patchMessages(latest, sid, (m) => ({
-            ...m,
-            turns: replaceLastPendingUserAttachments(
-              m.turns,
-              text,
-              persistedAttachments,
-            ),
-            turnIndexOffset: persistedOffset,
-            sendPhase: m.sendPhase === "saving" ? "starting" : m.sendPhase,
-          }));
-          set({ byId: adjusted });
-        } else if (latestMessages?.lastUserPersistRequestId === persistRequestId) {
-          const { byId: adjusted } = patchMessages(latest, sid, (m) => ({
-            ...m,
-            turns: replaceLastPendingUserAttachments(
-              m.turns,
-              text,
-              persistedAttachments,
-            ),
-            sendPhase: m.sendPhase === "saving" ? "starting" : m.sendPhase,
-          }));
-          set({ byId: adjusted });
-        }
-        return {
-          turnIndex: persistedTurnIndex,
-          attachments: persistedAttachments,
-        };
-      });
+    set({ byId, userSubmitTick: state.userSubmitTick + 1 });
   },
 
-  appendUserTurnExternal: (
-    sid,
-    text,
-    origin,
-    createdAt,
-    dispatched = true,
-    turnIndex,
-    goalId,
-  ) => {
-    // Mirror of appendUserTurn — see that action's comments for
-    // rationale on each field. Difference: skips `persistUserMessage`
-    // because Rust already wrote the row before emitting
-    // `user-message-persisted`. Carries the Origin triple through from
-    // the socket envelope (B4 M7) so MessageUser can render the
-    // supervisor provenance marker in the live path the same way
-    // rowsToTurns reconstructs it on restore.
+  retractUserTurn: (sid, clientRequestId) => {
+    const state = get();
+    const m = state.byId[sid];
+    if (!m) return;
+    const index = findLastUserTurn(
+      m.turns,
+      (turn) =>
+        turn.clientRequestId === clientRequestId &&
+        turn.messageId === undefined,
+    );
+    if (index === -1) return;
+    const owned = m.optimisticRequestId === clientRequestId;
+    const { byId } = patchMessages(state, sid, (current) => {
+      const turns = current.turns.slice();
+      turns.splice(index, 1);
+      if (!owned) return { ...current, turns };
+      // The page thought the session idle when it echoed this send;
+      // hand that state back. Core's open run reports through its own
+      // events.
+      return {
+        ...current,
+        turns,
+        agentRunning: false,
+        currentRunStartedAtMs: null,
+        currentTurnIndex: null,
+        inFlightContent: "",
+        sendPhase: null,
+        isStopping: false,
+        optimisticRequestId: null,
+      };
+    });
+    set({ byId });
+  },
+
+  applyUserMessagePersisted: (payload) => {
+    const { sessionId: sid, message, clientRequestId } = payload;
+    // Older Cores sent no `dispatch`; their rows were dispatched.
+    const dispatch: PersistDispatch = payload.dispatch ?? "dispatched";
+    const turnIndex =
+      typeof message.turnIndex === "number" ? message.turnIndex : null;
+    const messageId =
+      message.id ??
+      (turnIndex !== null ? `msg_${sid}_${turnIndex}_user` : undefined);
+    const state = get();
+    const turns = state.byId[sid]?.turns ?? EMPTY_TURNS;
+
+    // 1. A row this page already shows: a later broadcast for it (the
+    //    second of a send's two), or a restore that read it first.
+    const shownAt =
+      messageId === undefined
+        ? -1
+        : findLastUserTurn(turns, (turn) => turn.messageId === messageId);
+    if (shownAt !== -1) {
+      if (!isLatestRunTurn(turns, shownAt)) return;
+      const { byId } = patchMessages(state, sid, (m) =>
+        withDispatch(m, dispatch),
+      );
+      set({ byId });
+      return;
+    }
+
+    // 2. This page's optimistic echo of it: claim, don't append.
+    const ownAt =
+      clientRequestId === undefined
+        ? -1
+        : findLastUserTurn(
+            turns,
+            (turn) =>
+              turn.clientRequestId === clientRequestId &&
+              turn.messageId === undefined,
+          );
+    if (ownAt !== -1) {
+      const persistedAttachments = message.attachments ?? [];
+      const { byId } = patchMessages(state, sid, (m) => {
+        const claimed = m.turns.slice();
+        const turn = claimed[ownAt] as UserTurn;
+        claimed[ownAt] = {
+          ...turn,
+          messageId,
+          createdAt: message.createdAt ?? turn.createdAt,
+          // The data URLs give way to the files Core stored.
+          attachments:
+            persistedAttachments.length > 0
+              ? persistedAttachments
+              : turn.attachments,
+        };
+        return withDispatch(
+          {
+            ...m,
+            turns: claimed,
+            // Durable now — and set before Core dispatches, so before
+            // the runner's first turn_start.
+            turnIndexOffset:
+              turnIndex !== null ? turnIndex - 1 : m.turnIndexOffset,
+            optimisticRequestId:
+              m.optimisticRequestId === clientRequestId
+                ? null
+                : m.optimisticRequestId,
+          },
+          dispatch,
+        );
+      });
+      set({ byId });
+      return;
+    }
+
+    // 3. First sight of a row another writer persisted (or one whose
+    //    echo this page no longer holds).
     const currentTurnCount =
       useSessionsStore.getState().sessions.find((s) => s.id === sid)
         ?.turnCount ?? 0;
-    const offset =
-      typeof turnIndex === "number" ? turnIndex - 1 : currentTurnCount;
-    const userTurn: UserTurn = { role: "user", content: text };
-    if (typeof turnIndex === "number") {
-      userTurn.messageId = `msg_${sid}_${turnIndex}_user`;
+    const userTurn: UserTurn = { role: "user", content: message.content };
+    if (messageId !== undefined) userTurn.messageId = messageId;
+    if (message.attachments && message.attachments.length > 0) {
+      userTurn.attachments = message.attachments;
     }
-    if (origin) userTurn.origin = origin;
-    if (createdAt) userTurn.createdAt = createdAt;
-    if (goalId) userTurn.goalId = goalId;
-    const runStartedAtMs = dispatched
-      ? (createdAtToMs(createdAt) ?? Date.now())
-      : null;
-    const state = get();
+    if (message.origin) userTurn.origin = message.origin;
+    if (message.createdAt) userTurn.createdAt = message.createdAt;
+    if (message.goalId) userTurn.goalId = message.goalId;
+    const running = dispatch === "pending" || dispatch === "dispatched";
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [...m.turns, userTurn],
-      agentRunning: dispatched,
-      currentRunStartedAtMs: runStartedAtMs,
+      agentRunning: running,
+      currentRunStartedAtMs: running
+        ? (createdAtToMs(message.createdAt) ?? Date.now())
+        : null,
       inFlightContent: "",
       currentTurnIndex: null,
       pendingAskUser: null,
-      sendPhase: dispatched ? "waiting_agent" : null,
-      turnIndexOffset: offset,
+      sendPhase:
+        dispatch === "pending"
+          ? "starting"
+          : dispatch === "dispatched"
+            ? "waiting_agent"
+            : null,
+      turnIndexOffset: turnIndex !== null ? turnIndex - 1 : currentTurnCount,
       runStepBase: pendingReplyStepBase(m.turns),
-      lastUserPersistRequestId: 0,
+      // This row owns the run state now, not an earlier optimistic echo.
+      optimisticRequestId: null,
       nextSuggestion: null,
       pausedAtStepLimit: false,
     }));
@@ -617,7 +724,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       isActiveSession
         ? { byId, userSubmitTick: state.userSubmitTick + 1 }
         : { byId },
-    );    useSessionsStore.getState().maybeDeriveTitle(sid, text);
+    );
   },
 
   appendSideQuestionUserTurn: (sid, text) => {

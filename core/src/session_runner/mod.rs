@@ -8,6 +8,8 @@
 //! through here:
 //!
 //! - the GUI, via the Tauri command `runner_commands::ensure_session_runner`;
+//! - Core's send for the GUI and the phone ([`crate::session_send`],
+//!   ticket 02c), with the run gate already reserved;
 //! - Goal dispatch, via `socket_listener::ensure_runner_for_session`;
 //! - socket `session.new`, via [`spawn_and_attach`] (it always spawns: the
 //!   session did not exist a moment ago);
@@ -117,9 +119,9 @@ pub struct EnsureOptions<'a> {
     /// (GUI transition, see [`SpawnRequest::ga_config`]).
     pub ga_config: Option<GaConfigPref>,
     /// The caller reserved the session's run gate before calling (Goal
-    /// dispatch). An open gate is then the caller's own, not a run going
-    /// on the runner, so it does not keep an idle live runner from being
-    /// replayed into or restarted.
+    /// dispatch, Core's send). An open gate is then the caller's own, not
+    /// a run going on the runner, so it does not keep an idle live runner
+    /// from being replayed into or restarted.
     pub holds_run_gate: bool,
     /// Bounds of each replay attempt.
     pub timeouts: ReplayTimeouts,

@@ -152,7 +152,7 @@ export interface MessageTelemetry {
 export interface PendingImageAttachment {
   id: string;
   /** Base64 data URL of the (downsampled) image — crosses the IPC
-   * boundary into `persist_user_message`. Kept compact so the React
+   * boundary into `send_user_message`. Kept compact so the React
    * state and the Tauri invoke payload stay small. */
   dataUrl: string;
   /** Object URL for on-screen preview (thumbnail tile + dialog).
@@ -176,6 +176,13 @@ export interface UserTurn {
    * Absent on a not-yet-persisted optimistic turn.
    */
   messageId?: string;
+  /**
+   * This page's key for an optimistic turn it sent through Core's
+   * `send_user_message` (ticket 02c). The `user-message-persisted`
+   * broadcast carrying the same id claims the turn (sets `messageId`)
+   * instead of appending a second one. In memory only.
+   */
+  clientRequestId?: string;
   attachments?: MessageAttachment[];
   /** Audit origin for the user message. When `origin.via ===
    * "supervisor"`, MessageUser renders a small provenance icon (B4 M7).

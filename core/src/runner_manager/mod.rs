@@ -40,7 +40,8 @@ pub mod ready;
 
 pub use error::{RunnerSpawnError, SendCommandError, ShutdownError};
 pub use manager::{
-    RunSignal, RunState, RunnerCommandHandle, RunnerCommandSink, RunnerManager, SpawnArgs,
+    is_side_question, RunSignal, RunState, RunnerCommandHandle, RunnerCommandSink, RunnerManager,
+    SpawnArgs,
 };
 pub use process::{BroadcastItem, HeldClose, RunnerProcess};
 pub use queue::{QueueJump, QueueOffer, RunKind, RunOutcome};

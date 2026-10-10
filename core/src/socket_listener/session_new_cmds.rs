@@ -178,13 +178,28 @@ async fn dispatch_session_new_inner(
         );
     }
 
+    // The task names the session (ticket 02c: Core derives a seed
+    // session's title from its first user message). The database row and
+    // the sidebar get it; the response keeps the created row as it always
+    // was (frozen contract), and the derived title rides on the created
+    // event instead of a second one (the GUI event order is pinned).
+    let created =
+        match crate::session_title::derive_title_if_seed(&galley, &brief.id.0, &task).await {
+            Ok(Some(derived)) => derived,
+            Ok(None) => brief.clone(),
+            Err(e) => {
+                eprintln!("[title-derive {}] {e}", brief.id.0);
+                brief.clone()
+            }
+        };
+
     // Notify GUI early so the sidebar can show the session while we
     // start the runner. The first message event is emitted below after
     // we know whether it actually reached the bridge.
     ctx.notify(
         "session-created-external",
         &SessionExternalPayload {
-            session: brief.clone(),
+            session: created,
             via: command_name,
         },
     );

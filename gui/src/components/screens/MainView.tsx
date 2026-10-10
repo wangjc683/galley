@@ -561,7 +561,7 @@ function MainViewContent({
               agent has EXITED its run loop so `isRunning` is false
               and the placeholder / streaming partial above won't
               render. Submitting (chip OR Composer text) clears this
-              via store.appendUserTurn. */}
+              via the send's echo (store.appendUserTurn). */}
             {pendingAskUser && (
               <AskUserBubble
                 pending={pendingAskUser}
