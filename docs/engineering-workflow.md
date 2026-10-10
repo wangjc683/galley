@@ -17,6 +17,7 @@ galley/
 ├── runner/                  # Python bridge into GenericAgent
 ├── core/                    # Rust Galley Core + Tauri backend
 ├── cli/                     # Rust `galley` CLI
+├── remote-protocol/         # Wire formats shared by Core, relay and iOS app
 ├── gui/                     # React / Tauri frontend
 ├── managed-ga/              # Galley-managed GenericAgent runtime (code, patches, manifest)
 ├── scripts/                 # Build, bundle, and release / update-channel scripts
@@ -31,6 +32,9 @@ Key directories:
 - `core/`: Rust authoritative layer, SQLite migrations, Tauri commands,
   socket / named pipe listener, bundled resources.
 - `cli/`: Agent-facing `galley` command.
+- `remote-protocol/`: remote-access wire formats (pairing keys, relay frames,
+  Noise session, push sealing, app protocol) shared by Core, the relay and
+  the iOS app; no Tauri or tokio.
 - `gui/`: React 19 + Tauri frontend, Zustand domain stores, visual components.
 - `managed-ga/`: Galley-managed GenericAgent runtime — vendored code, Galley
   patches, and the runtime manifest.

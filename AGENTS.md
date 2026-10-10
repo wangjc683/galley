@@ -177,13 +177,14 @@ The Tauri identifier controls the user data directory. Do not change
 ## Repo Map
 
 ```text
-runner/      Python bridge into GenericAgent
-core/        Rust Galley Core + Tauri backend
-cli/         Rust `galley` command for agents
-gui/         React / Tauri frontend
-managed-ga/  Galley-managed GenericAgent runtime (code, patches, manifest)
-scripts/     Build, bundle, and release / update-channel scripts
-docs/        Product, architecture, workflow, and history
+runner/           Python bridge into GenericAgent
+core/             Rust Galley Core + Tauri backend
+cli/              Rust `galley` command for agents
+remote-protocol/  Wire formats shared by Core, relay and iOS app (remote access)
+gui/              React / Tauri frontend
+managed-ga/       Galley-managed GenericAgent runtime (code, patches, manifest)
+scripts/          Build, bundle, and release / update-channel scripts
+docs/             Product, architecture, workflow, and history
 ```
 
 ## Read On Demand
