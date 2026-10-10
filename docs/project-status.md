@@ -801,8 +801,9 @@ session twice in a row; the likely cause, found 2026-10-07 and fixed in
 first turn (`last_run_session_id` is `ON DELETE SET NULL`), not yet confirmed
 with a real scheduled task (see deferred); issues #26 and #27
 stay open by JC's ruling, with the #27 commenter still owing a clarification
-of their sidebar / project report; real WeChat end-to-end acceptance of the
-supervisor-side fix is still owed from a machine with a paired WeChat account.
+of their sidebar / project report. The managed WeChat channel's end-to-end
+reply (the 2026-09-08 supervisor-side fix) was confirmed on JC's paired account
+on 2026-10-10.
 
 The GA baseline `1b6442f` (audited 2026-09-18) shipped again in `v0.5.2`
 and `v0.5.3` without a re-audit — the pre-release audit was missed both times
