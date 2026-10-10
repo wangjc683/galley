@@ -48,90 +48,83 @@ export function SettingsSidebar({
       : { label: entry.label, subLabel: undefined };
   return (
     <nav className="flex w-[180px] shrink-0 flex-col border-r border-line bg-app py-3">
-      {/* Three groups, separated by space only (no rules): everyday setup
-          (general / models / browser / channels / phone), agent and
-          engine plumbing (agent access / runtime / shortcuts), then meta
-          (feedback / about). Browser and Channels exist only on the
-          managed runtime; general and models keep group one non-empty
-          in external mode, so no gap ever renders without tabs. Phone
-          sits next to Channels (both reach Galley from elsewhere) and
-          exists only in a build with remote access; it ignores the
-          runtime mode, because while a phone is paired its unpair button
-          must stay reachable. */}
-      <div className="flex flex-col gap-3">
-        <div>
-          <SettingsTabButton
-            active={tab === "general"}
-            Icon={Gear}
-            {...labelsFor(tabCopy.general)}
-            onClick={() => onChange("general")}
-          />
-          <SettingsTabButton
-            active={tab === "models"}
-            Icon={Key}
-            {...labelsFor(tabCopy.models)}
-            onClick={() => onChange("models")}
-          />
-          {showBrowserTab && (
-            <SettingsTabButton
-              active={tab === "browser"}
-              Icon={PuzzlePiece}
-              {...labelsFor(tabCopy.browser)}
-              onClick={() => onChange("browser")}
-            />
-          )}
-          {showImTab && (
-            <SettingsTabButton
-              active={tab === "im"}
-              Icon={ChatCircleText}
-              {...labelsFor(tabCopy.im)}
-              onClick={() => onChange("im")}
-            />
-          )}
-          {showPhoneTab && (
-            <SettingsTabButton
-              active={tab === "phone"}
-              Icon={DeviceMobile}
-              {...labelsFor(tabCopy.phone)}
-              onClick={() => onChange("phone")}
-            />
-          )}
-        </div>
-        <div>
-          <SettingsTabButton
-            active={tab === "integration"}
-            Icon={PlugsConnected}
-            {...labelsFor(tabCopy.agent)}
-            onClick={() => onChange("integration")}
-          />
-          <SettingsTabButton
-            active={tab === "runtime"}
-            Icon={Cpu}
-            {...labelsFor(tabCopy.runtime)}
-            onClick={() => onChange("runtime")}
-          />
-          <SettingsTabButton
-            active={tab === "shortcuts"}
-            Icon={Keyboard}
-            {...labelsFor(tabCopy.shortcuts)}
-            onClick={() => onChange("shortcuts")}
-          />
-        </div>
-        <div>
-          <SettingsTabButton
-            active={tab === "feedback"}
-            Icon={Megaphone}
-            {...labelsFor(tabCopy.feedback)}
-            onClick={() => onChange("feedback")}
-          />
-          <SettingsTabButton
-            active={tab === "about"}
-            Icon={Info}
-            {...labelsFor(tabCopy.about)}
-            onClick={() => onChange("about")}
-          />
-        </div>
-      </div>
+      {/* One evenly spaced list in order of use (2026-10-07 order,
+          2026-10-10 spacing): everyday setup (general / models / browser /
+          channels / phone), agent and engine plumbing (agent access /
+          runtime / shortcuts), then support (feedback / about). The 10-07
+          groups had 12px between them; on the 50px two-line Chinese rows
+          that read as misaligned spacing, not as groups, so they went.
+          Browser and Channels exist only on the managed runtime. Phone sits
+          next to Channels (both reach Galley from elsewhere) and exists
+          only in a build with remote access; it ignores the runtime mode,
+          because while a phone is paired its unpair button must stay
+          reachable. */}
+      <SettingsTabButton
+        active={tab === "general"}
+        Icon={Gear}
+        {...labelsFor(tabCopy.general)}
+        onClick={() => onChange("general")}
+      />
+      <SettingsTabButton
+        active={tab === "models"}
+        Icon={Key}
+        {...labelsFor(tabCopy.models)}
+        onClick={() => onChange("models")}
+      />
+      {showBrowserTab && (
+        <SettingsTabButton
+          active={tab === "browser"}
+          Icon={PuzzlePiece}
+          {...labelsFor(tabCopy.browser)}
+          onClick={() => onChange("browser")}
+        />
+      )}
+      {showImTab && (
+        <SettingsTabButton
+          active={tab === "im"}
+          Icon={ChatCircleText}
+          {...labelsFor(tabCopy.im)}
+          onClick={() => onChange("im")}
+        />
+      )}
+      {showPhoneTab && (
+        <SettingsTabButton
+          active={tab === "phone"}
+          Icon={DeviceMobile}
+          {...labelsFor(tabCopy.phone)}
+          onClick={() => onChange("phone")}
+        />
+      )}
+      <SettingsTabButton
+        active={tab === "integration"}
+        Icon={PlugsConnected}
+        {...labelsFor(tabCopy.agent)}
+        onClick={() => onChange("integration")}
+      />
+      <SettingsTabButton
+        active={tab === "runtime"}
+        Icon={Cpu}
+        {...labelsFor(tabCopy.runtime)}
+        onClick={() => onChange("runtime")}
+      />
+      <SettingsTabButton
+        active={tab === "shortcuts"}
+        Icon={Keyboard}
+        {...labelsFor(tabCopy.shortcuts)}
+        onClick={() => onChange("shortcuts")}
+      />
+      <SettingsTabButton
+        active={tab === "feedback"}
+        Icon={Megaphone}
+        {...labelsFor(tabCopy.feedback)}
+        onClick={() => onChange("feedback")}
+      />
+      <SettingsTabButton
+        active={tab === "about"}
+        Icon={Info}
+        {...labelsFor(tabCopy.about)}
+        onClick={() => onChange("about")}
+      />
     </nav>
   );
 }
