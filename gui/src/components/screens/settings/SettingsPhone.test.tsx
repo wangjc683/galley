@@ -18,6 +18,8 @@ function phone(status: Partial<RemoteStatus>, keepInBackground = true) {
     <SettingsPhone
       status={{
         paired: false,
+        pairing: false,
+        pairingError: null,
         relayConnected: false,
         onlinePhones: 0,
         lastPhoneConnectedAt: null,
@@ -37,6 +39,26 @@ describe("SettingsPhone", () => {
     expect(out).not.toContain("<img");
     expect(out).not.toContain("解除配对");
     expect(out).not.toContain("关闭窗口后 Galley 会退出");
+  });
+
+  it("pairing: still the pairing layout until the first phone connects", () => {
+    const out = phone({ pairing: true, relayConnected: true });
+    expect(out).toContain("配对手机");
+    expect(out).not.toContain("解除配对");
+    expect(out).not.toContain("没有手机在线");
+  });
+
+  it("pairing: says so when the key could not be saved", () => {
+    const out = phone({
+      pairing: true,
+      relayConnected: true,
+      pairingError: "db: disk full",
+    });
+    expect(out).toContain("配对没能保存，手机没有连上：db: disk full");
+    // Not once the pairing is over.
+    expect(phone({ pairingError: "db: disk full" })).not.toContain(
+      "配对没能保存",
+    );
   });
 
   it("paired: status, add a phone, unpair", () => {

@@ -20,15 +20,25 @@
 //!
 //! Lifecycle: the app builds one [`RemoteModule`] when a relay URL is
 //! configured ([`RemoteModule::for_app`]) and starts it at launch only if
-//! this desktop is paired (a pairing master key exists,
+//! this desktop is paired (a pairing master key is stored,
 //! [`crate::remote_pairing`]). The settings page (ticket 05d) drives
-//! [`RemoteModule::pair`] / [`RemoteModule::unpair`] /
-//! [`RemoteModule::status`] through the Tauri commands in
-//! `commands/remote.rs` — Tauri only: pairing shows the master key, so no
-//! socket or CLI path reaches it; the tray's quit stops it. While running it
-//! registers its event sink with [`crate::notify`], so every
-//! `TauriNotifier` emit can reach the phones, and announces its own state
-//! as [`REMOTE_STATUS_EVENT`].
+//! [`RemoteModule::pair`] / [`RemoteModule::cancel_pairing`] /
+//! [`RemoteModule::unpair`] / [`RemoteModule::status`] through the Tauri
+//! commands in `commands/remote.rs` — Tauri only: pairing shows the master
+//! key, so no socket or CLI path reaches it; the tray's quit stops it.
+//! While running it registers its event sink with [`crate::notify`], so
+//! every `TauriNotifier` emit can reach the phones, and announces its own
+//! state as [`REMOTE_STATUS_EVENT`].
+//!
+//! Pairing (design §3.1): the first pairing makes a key that lives only in
+//! memory while the module connects and waits for a phone (`pairing` in
+//! the status). The first phone to complete its handshake makes it real:
+//! the key is stored and the desktop is paired. Until then cancelling
+//! ([`RemoteModule::cancel_pairing`], the page hiding its code) or
+//! [`RemoteTuning::pairing_timeout`] without a phone disconnects and
+//! forgets the key, so a code shown and never scanned leaves nothing
+//! behind. Pairing, cancelling, unpairing, starting and stopping take one
+//! lock in turn, so none of them sees another half done.
 //!
 //! Logs name peers by the relay's number and never carry keys, the QR
 //! string, plaintext or message content.
@@ -42,7 +52,8 @@ mod phone;
 pub mod push;
 
 pub use config::{
-    desktop_name, relay_url_from_env, resolve_relay_url, RemoteConfig, RemoteTuning, RELAY_URL_ENV,
+    desktop_name, relay_url_from_env, resolve_relay_url, RemoteConfig, RemoteTuning,
+    PAIRING_TIMEOUT, RELAY_URL_ENV,
 };
 pub use methods::{SESSION_NOT_MANAGED, TOO_MANY_SUBSCRIPTIONS, VIA_IOS};
 
@@ -61,7 +72,7 @@ use galley_remote_protocol::noise::CloseReason;
 use galley_remote_protocol::push::{self as push_seal, PushContent, PushError};
 use serde::Serialize;
 use std::fmt;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -93,8 +104,17 @@ pub struct RemoteDeps {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteStatus {
-    /// A pairing master key exists (the module connects only then).
+    /// A pairing master key is stored (the module connects at launch only
+    /// then).
     pub paired: bool,
+    /// A new pairing code is out and waiting for its first phone: the key
+    /// is only in memory, the module is connected for it. Never together
+    /// with `paired`.
+    pub pairing: bool,
+    /// Storing the key failed when a phone answered the pending code (the
+    /// phone was not let in; the code stays valid). Cleared when the
+    /// pairing ends or a new one starts.
+    pub pairing_error: Option<String>,
     /// The WebSocket to the relay is up.
     pub relay_connected: bool,
     /// Phones with an established end-to-end session.
@@ -223,6 +243,69 @@ impl fmt::Debug for PairingQr {
     }
 }
 
+/// A pairing whose key is not stored yet. Dropping it zeroes the key.
+struct Pending {
+    id: u64,
+    key: PairingMasterKey,
+    /// Ends the pairing after [`RemoteTuning::pairing_timeout`].
+    timeout: JoinHandle<()>,
+}
+
+/// The pending pairing, if any. Its lock is the lifecycle lock: pairing,
+/// cancelling, unpairing, starting and stopping hold it throughout.
+type PairingSlot = Arc<tokio::sync::Mutex<Option<Pending>>>;
+
+/// What a connection run for a new pairing calls when a phone completes
+/// its handshake: store the key, once.
+pub(crate) struct PairingGate {
+    id: u64,
+    confirmed: AtomicBool,
+    slot: PairingSlot,
+    galley: SqliteGalley,
+    status: Arc<StatusCell>,
+}
+
+impl PairingGate {
+    /// The key is stored: phones need not wait any more.
+    pub(crate) fn is_confirmed(&self) -> bool {
+        self.confirmed.load(Ordering::Acquire)
+    }
+
+    /// Store this pairing's key, making the desktop paired. `Err` when
+    /// the pairing ended first (cancelled, timed out, unpaired) or the
+    /// write failed; then the phone is not let in. A failed write keeps
+    /// the pairing and its code (the next phone tries again) and says so
+    /// in the status.
+    pub(crate) async fn confirm(&self) -> Result<(), &'static str> {
+        if self.is_confirmed() {
+            return Ok(());
+        }
+        let mut slot = self.slot.lock().await;
+        if self.is_confirmed() {
+            return Ok(());
+        }
+        let Some(pending) = slot.as_ref().filter(|pending| pending.id == self.id) else {
+            return Err("the pairing ended");
+        };
+        if let Err(e) = remote_pairing::store_master_key(&self.galley, &pending.key).await {
+            // The error names the store, never the key.
+            eprintln!("[remote] saving the pairing key failed: {e}");
+            let error = e.to_string();
+            self.status.update(|s| s.pairing_error = Some(error));
+            return Err("the pairing key could not be saved");
+        }
+        let pending = slot.take().expect("checked above");
+        pending.timeout.abort();
+        self.confirmed.store(true, Ordering::Release);
+        self.status.update(|s| {
+            s.paired = true;
+            s.pairing = false;
+            s.pairing_error = None;
+        });
+        Ok(())
+    }
+}
+
 /// A running connection task and what talks to it.
 struct Running {
     control: mpsc::Sender<Control>,
@@ -237,6 +320,8 @@ struct Shared {
     config: RemoteConfig,
     status: Arc<StatusCell>,
     run: tokio::sync::Mutex<Option<Running>>,
+    pairing: PairingSlot,
+    pairing_ids: AtomicU64,
     generations: Arc<AtomicU64>,
     push_request_ids: AtomicU32,
 }
@@ -257,6 +342,8 @@ impl RemoteModule {
                 config,
                 status,
                 run: tokio::sync::Mutex::new(None),
+                pairing: Arc::new(tokio::sync::Mutex::new(None)),
+                pairing_ids: AtomicU64::new(1),
                 generations: Arc::new(AtomicU64::new(1)),
                 push_request_ids: AtomicU32::new(1),
             }),
@@ -288,46 +375,108 @@ impl RemoteModule {
         Some(Self::new(deps, RemoteConfig::new(relay)))
     }
 
-    /// Start if this desktop is paired. Returns whether it is running.
+    /// Start if this desktop is paired (a key is stored; a pairing that
+    /// never got its first phone died with the process). Returns whether
+    /// it is running.
     pub async fn start_if_paired(&self) -> Result<bool, RemoteError> {
+        let _lifecycle = self.shared.pairing.lock().await;
         let Some(key) = remote_pairing::read_master_key(&self.shared.deps.galley).await? else {
             self.shared.status.update(|s| s.paired = false);
             return Ok(false);
         };
-        self.start_with(&key).await;
+        self.start_with(&key, None).await;
         Ok(true)
     }
 
-    /// Pair a phone: make sure a master key exists (the first pairing
-    /// creates it), make sure the connection runs, and return the QR
-    /// string for the phone to scan. Pairing again shows the same key, so
-    /// phones already paired stay connected.
+    /// The QR string for a phone to scan, making sure the connection runs.
+    ///
+    /// - Paired: the stored key (Add a phone), so phones already paired
+    ///   stay connected; nothing expires.
+    /// - Not paired: a new key, kept only in memory while the module
+    ///   connects and waits for the first phone (`pairing`); the first
+    ///   phone to complete its handshake stores it. Asking again while it
+    ///   waits shows the same code. Without a phone it ends after
+    ///   [`RemoteTuning::pairing_timeout`], or on [`Self::cancel_pairing`].
     pub async fn pair(&self) -> Result<PairingQr, RemoteError> {
-        let key = remote_pairing::ensure_master_key(&self.shared.deps.galley).await?;
-        let code = PairingCode::new(
-            self.shared.config.relay.clone(),
-            MasterKey::from_bytes(*key.as_bytes()),
-            self.shared.config.desktop_name.clone(),
-        )
-        .map_err(|e| RemoteError::Pairing(e.to_string()))?;
-        self.start_with(&key).await;
-        Ok(PairingQr(code.to_qr_string()))
+        let shared = &self.shared;
+        let mut slot = shared.pairing.lock().await;
+        if let Some(key) = remote_pairing::read_master_key(&shared.deps.galley).await? {
+            let qr = self.qr_for(&key)?;
+            self.start_with(&key, None).await;
+            return Ok(qr);
+        }
+        if let Some(pending) = slot.as_ref() {
+            return self.qr_for(&pending.key);
+        }
+        let key = remote_pairing::generate_master_key()?;
+        // Built first: a desktop name the code rejects starts nothing.
+        let qr = self.qr_for(&key)?;
+        let id = shared.pairing_ids.fetch_add(1, Ordering::Relaxed);
+        let gate = Arc::new(PairingGate {
+            id,
+            confirmed: AtomicBool::new(false),
+            slot: shared.pairing.clone(),
+            galley: shared.deps.galley.clone(),
+            status: shared.status.clone(),
+        });
+        self.start_with(&key, Some(gate)).await;
+        let module = self.clone();
+        let after = shared.config.tuning.pairing_timeout;
+        let timeout = tokio::spawn(async move {
+            tokio::time::sleep(after).await;
+            if module.end_pairing(Some(id)).await {
+                eprintln!("[remote] no phone paired within {after:?}; the pairing code expired");
+            }
+        });
+        *slot = Some(Pending { id, key, timeout });
+        eprintln!("[remote] pairing: waiting for the first phone");
+        Ok(qr)
+    }
+
+    /// End a pairing that is still waiting for its first phone: disconnect
+    /// and forget its key (the code on screen stops working). Nothing
+    /// otherwise — a paired desktop stays paired and connected, so hiding
+    /// the code after Add a phone is harmless. Returns whether a pairing
+    /// ended.
+    pub async fn cancel_pairing(&self) -> bool {
+        let ended = self.end_pairing(None).await;
+        if ended {
+            eprintln!("[remote] pairing cancelled");
+        }
+        ended
     }
 
     /// Unpair every phone: tell the connected ones (`CLOSE Unpaired`),
-    /// stop, and delete the master key. A later [`Self::pair`] makes a new
-    /// key, so every phone has to scan again (design §3.1).
+    /// stop, and delete the master key (and drop a pending one). A later
+    /// [`Self::pair`] makes a new key, so every phone has to scan again
+    /// (design §3.1).
     pub async fn unpair(&self) -> Result<(), RemoteError> {
+        let mut slot = self.shared.pairing.lock().await;
+        if let Some(pending) = slot.take() {
+            pending.timeout.abort();
+        }
         self.stop_with(CloseReason::Unpaired).await;
+        self.shared.status.update(|s| {
+            s.pairing = false;
+            s.pairing_error = None;
+        });
         remote_pairing::clear_master_key(&self.shared.deps.galley).await?;
         self.shared.status.update(|s| s.paired = false);
         Ok(())
     }
 
     /// Stop (quit): close every phone's session (`CLOSE Normal`) and the
-    /// connection. The pairing stays.
+    /// connection. A stored pairing stays; a pending one is dropped.
     pub async fn stop(&self) {
+        let mut slot = self.shared.pairing.lock().await;
+        if let Some(pending) = slot.take() {
+            pending.timeout.abort();
+        }
         self.stop_with(CloseReason::Normal).await;
+        self.shared.status.update(|s| {
+            s.pairing = false;
+            s.pairing_error = None;
+        });
     }
 
     pub fn status(&self) -> RemoteStatus {
@@ -399,11 +548,51 @@ impl RemoteModule {
         }
     }
 
-    /// Start the connection for `key` unless it already runs.
-    async fn start_with(&self, key: &PairingMasterKey) {
+    /// The pairing code for `key`.
+    fn qr_for(&self, key: &PairingMasterKey) -> Result<PairingQr, RemoteError> {
+        let code = PairingCode::new(
+            self.shared.config.relay.clone(),
+            MasterKey::from_bytes(*key.as_bytes()),
+            self.shared.config.desktop_name.clone(),
+        )
+        .map_err(|e| RemoteError::Pairing(e.to_string()))?;
+        Ok(PairingQr(code.to_qr_string()))
+    }
+
+    /// End the pending pairing (`only`: if it is that one — the timeout's
+    /// own), stopping its connection. Returns whether one ended.
+    async fn end_pairing(&self, only: Option<u64>) -> bool {
+        let mut slot = self.shared.pairing.lock().await;
+        let Some(pending) = slot.take_if(|pending| only.is_none_or(|id| pending.id == id)) else {
+            return false;
+        };
+        if only.is_none() {
+            // The timeout task itself is the caller otherwise: aborting
+            // it would cut this stop short.
+            pending.timeout.abort();
+        }
+        drop(pending);
+        self.stop_with(CloseReason::Normal).await;
+        self.shared.status.update(|s| {
+            s.pairing = false;
+            s.pairing_error = None;
+        });
+        true
+    }
+
+    /// Start the connection for `key` unless it already runs: for a
+    /// stored key (`gate` `None`, paired) or a new pairing's (`gate`,
+    /// pairing). The caller holds the lifecycle lock; a connection runs
+    /// only while paired or pairing, so one already running is for `key`.
+    async fn start_with(&self, key: &PairingMasterKey, gate: Option<Arc<PairingGate>>) {
         let shared = &self.shared;
         let mut run = shared.run.lock().await;
-        shared.status.update(|s| s.paired = true);
+        let pairing = gate.is_some();
+        shared.status.update(|s| {
+            s.paired = !pairing;
+            s.pairing = pairing;
+            s.pairing_error = None;
+        });
         if run
             .as_ref()
             .is_some_and(|running| !running.supervisor.is_finished())
@@ -448,6 +637,7 @@ impl RemoteModule {
             status: shared.status.clone(),
             filter,
             generations: shared.generations.clone(),
+            pairing: gate,
         });
         let (control, control_rx) = mpsc::channel(16);
         let supervisor = tokio::spawn(connection::supervise(ctx, control_rx, events_rx));

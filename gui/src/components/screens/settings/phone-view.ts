@@ -18,19 +18,40 @@ type PhoneCopy = AppCopy["settings"]["phone"];
 /** The QR code on screen, and what it was shown against. */
 export interface ShownQr {
   svg: string;
-  /** `lastPhoneConnectedAt` when it was shown: a phone connecting after
-   * that (the time moves) is the scan, and the code folds away. */
+  /** `lastPhoneConnectedAt` when it was shown: once paired, a phone
+   * connecting after that (the time moves) is the scan, and the code
+   * folds away. */
   since: string | null;
-  /** Shown while unpaired: the first pairing, which keeps the pairing
-   * layout until a phone connects even though Core is paired from the
-   * moment the code exists. */
-  firstPairing: boolean;
+  /** Core has reported the pairing this code started (`pairing`). The
+   * command's answer can arrive before that report, so until then a
+   * `pairing` of false is not yet the end of it. */
+  pairingSeen: boolean;
 }
 
-/** The code stays up until a phone connects after it was shown. Leaving
- * the page or unpairing drops it in the component. */
-export function qrStillShown(status: RemoteStatus, qr: ShownQr): boolean {
-  return status.lastPhoneConnectedAt === qr.since;
+/**
+ * The code still on screen after `status`, or `null` once it is done;
+ * the same object when nothing changed.
+ *
+ * - Not paired, the code is a pending pairing's: it lives as long as
+ *   Core's `pairing` — gone when that turns false (timed out, cancelled).
+ * - Paired: it stays until a phone connects after it was shown. That is
+ *   also how the first pairing's code goes: its phone made Core paired.
+ *
+ * Hide pairing code, leaving the page and unpairing drop it in the
+ * component.
+ */
+export function settleQr(
+  status: RemoteStatus,
+  qr: ShownQr | null,
+): ShownQr | null {
+  if (qr === null) return null;
+  if (status.paired) {
+    return status.lastPhoneConnectedAt === qr.since ? qr : null;
+  }
+  if (status.pairing) {
+    return qr.pairingSeen ? qr : { ...qr, pairingSeen: true };
+  }
+  return qr.pairingSeen ? null : qr;
 }
 
 /** Where a paired desktop's phones stand. */
@@ -45,7 +66,8 @@ export interface PhoneStatusRow {
 
 export interface PhonePageView {
   /**
-   * - `pair`: not paired, or pairing the first phone — one row
+   * Core's `paired`, nothing else:
+   * - `pair`: not paired (pairing the first phone included) — one row
    *   (Pair a phone, with the show-code button as the primary action)
    *   and the code under it.
    * - `paired`: the status row, Add a phone (the code under it when
@@ -55,6 +77,11 @@ export interface PhonePageView {
   /** `null` in the `pair` layout. */
   status: PhoneStatusRow | null;
   showQr: boolean;
+  /** The code on screen expires (a new pairing's; Add a phone shows the
+   * stored key, which does not). */
+  showQrExpiry: boolean;
+  /** Core could not store the key when a phone answered the code. */
+  pairingError: string | null;
   /** "Keep running when the window closes" is off: closing the window
    * quits Galley and the phones lose this computer. */
   showBackgroundHint: boolean;
@@ -100,18 +127,23 @@ export function phonePageView({
   copy,
 }: {
   status: RemoteStatus;
-  /** The code on screen, already checked with {@link qrStillShown}. */
+  /** The code on screen, already settled with {@link settleQr}. */
   qr: ShownQr | null;
   keepInBackgroundOnClose: boolean;
   /** `status.lastPhoneConnectedAt` in the app's date format. */
   lastConnectedText: string | null;
   copy: PhoneCopy;
 }): PhonePageView {
-  const pairing = !status.paired || (qr !== null && qr.firstPairing);
+  const paired = status.paired;
   return {
-    layout: pairing ? "pair" : "paired",
-    status: pairing ? null : phoneStatusRow(status, lastConnectedText, copy),
+    layout: paired ? "paired" : "pair",
+    status: paired ? phoneStatusRow(status, lastConnectedText, copy) : null,
     showQr: qr !== null,
+    showQrExpiry: qr !== null && !paired,
+    pairingError:
+      !paired && status.pairing && status.pairingError
+        ? copy.pairingNotSaved(status.pairingError)
+        : null,
     showBackgroundHint: !keepInBackgroundOnClose,
   };
 }

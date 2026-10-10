@@ -7,7 +7,7 @@ import type { RemoteStatus } from "@/lib/remote";
 import {
   phonePageView,
   phoneStatusRow,
-  qrStillShown,
+  settleQr,
   svgDataUrl,
   type ShownQr,
 } from "./phone-view";
@@ -16,13 +16,24 @@ const copy = zhCopy.settings.phone;
 
 const UNPAIRED: RemoteStatus = {
   paired: false,
+  pairing: false,
+  pairingError: null,
   relayConnected: false,
   onlinePhones: 0,
   lastPhoneConnectedAt: null,
 };
 
+/** A new code is out, Core waits for its first phone. */
+const PAIRING: RemoteStatus = {
+  ...UNPAIRED,
+  pairing: true,
+  relayConnected: true,
+};
+
 const IDLE: RemoteStatus = {
   paired: true,
+  pairing: false,
+  pairingError: null,
   relayConnected: true,
   onlinePhones: 0,
   lastPhoneConnectedAt: null,
@@ -31,8 +42,8 @@ const IDLE: RemoteStatus = {
 const T1 = "2026-10-10T12:43:36.763Z";
 const T2 = "2026-10-10T12:44:04.911Z";
 
-function shown(since: string | null, firstPairing: boolean): ShownQr {
-  return { svg: "<svg/>", since, firstPairing };
+function shown(since: string | null, pairingSeen = false): ShownQr {
+  return { svg: "<svg/>", since, pairingSeen };
 }
 
 function view(
@@ -50,20 +61,35 @@ function view(
   });
 }
 
-describe("qrStillShown", () => {
-  it("keeps the code up until a phone connects after it was shown", () => {
-    expect(qrStillShown(IDLE, shown(null, true))).toBe(true);
-    expect(
-      qrStillShown({ ...IDLE, lastPhoneConnectedAt: T1 }, shown(T1, false)),
-    ).toBe(true);
+describe("settleQr", () => {
+  it("keeps a new pairing's code while Core waits for its phone", () => {
+    const qr = shown(null);
+    // Core's report of the pairing can arrive after the command's answer.
+    expect(settleQr(UNPAIRED, qr)).toBe(qr);
+    const seen = settleQr(PAIRING, qr);
+    expect(seen).toEqual({ ...qr, pairingSeen: true });
+    expect(settleQr(PAIRING, seen)).toBe(seen);
   });
 
-  it("folds the code away once a phone has connected since", () => {
-    const scanned = { ...IDLE, onlinePhones: 1, lastPhoneConnectedAt: T1 };
-    expect(qrStillShown(scanned, shown(null, true))).toBe(false);
+  it("folds a new pairing's code once Core ends the pairing (timed out, cancelled)", () => {
+    expect(settleQr(UNPAIRED, shown(null, true))).toBeNull();
+  });
+
+  it("folds the first pairing's code when its phone connects", () => {
+    const paired = { ...IDLE, onlinePhones: 1, lastPhoneConnectedAt: T1 };
+    expect(settleQr(paired, shown(null, true))).toBeNull();
+  });
+
+  it("keeps Add a phone's code until a phone connects after it was shown", () => {
+    const qr = shown(T1);
+    expect(settleQr({ ...IDLE, lastPhoneConnectedAt: T1 }, qr)).toBe(qr);
     expect(
-      qrStillShown({ ...scanned, lastPhoneConnectedAt: T2 }, shown(T1, false)),
-    ).toBe(false);
+      settleQr({ ...IDLE, onlinePhones: 2, lastPhoneConnectedAt: T2 }, qr),
+    ).toBeNull();
+  });
+
+  it("has nothing to settle without a code", () => {
+    expect(settleQr(PAIRING, null)).toBeNull();
   });
 });
 
@@ -73,26 +99,42 @@ describe("phonePageView", () => {
       layout: "pair",
       status: null,
       showQr: false,
+      showQrExpiry: false,
+      pairingError: null,
       showBackgroundHint: false,
     });
   });
 
-  it("keeps the pairing layout while the first code is up, though Core is paired already", () => {
-    expect(view(IDLE, shown(null, true))).toEqual({
+  it("keeps the pairing layout while the first code waits, and says it expires", () => {
+    expect(view(PAIRING, shown(null, true))).toEqual({
       layout: "pair",
       status: null,
       showQr: true,
+      showQrExpiry: true,
+      pairingError: null,
       showBackgroundHint: false,
     });
   });
 
-  it("shows status, add and unpair once paired; the code sits under add", () => {
-    const paired = view(IDLE, shown(null, false));
+  it("follows Core's paired alone", () => {
+    expect(view(PAIRING).layout).toBe("pair");
+    expect(view(IDLE).layout).toBe("paired");
+  });
+
+  it("shows status, add and unpair once paired; Add a phone's code does not expire", () => {
+    const paired = view(IDLE, shown(null));
     expect(paired.layout).toBe("paired");
     expect(paired.showQr).toBe(true);
+    expect(paired.showQrExpiry).toBe(false);
     expect(paired.status?.kind).toBe("idle");
-    // A first-pairing code hidden by hand leaves the paired layout.
-    expect(view(IDLE).layout).toBe("paired");
+  });
+
+  it("says when the key could not be saved, while the pairing lasts", () => {
+    const failed = { ...PAIRING, pairingError: "db: disk full" };
+    expect(view(failed, shown(null, true)).pairingError).toBe(
+      "配对没能保存，手机没有连上：db: disk full",
+    );
+    expect(view({ ...failed, pairing: false }).pairingError).toBeNull();
   });
 
   it("asks to keep Galley running in the background when closing quits it", () => {

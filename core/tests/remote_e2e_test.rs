@@ -141,17 +141,20 @@ async fn core_and_a_phone_talk_through_the_real_relay_and_pushes_reach_apns() {
     let relay = RealRelay::start(apns.clone()).await;
     let core = Core::new(&relay.url, fast()).await;
 
-    // Pairing: the QR carries the relay's base URL; Core connects as host.
+    // Pairing: the QR carries the relay's base URL; Core connects as host,
+    // the key only in memory until the first phone completes its handshake.
     let qr = core.module.pair().await.unwrap();
     let code = PairingCode::parse(qr.as_str()).unwrap();
     assert_eq!(code.relay().as_str(), relay.url);
     let keys = code.master_key().derive();
     wait_until(|| core.module.status().relay_connected).await;
+    assert!(core.module.status().pairing);
     *core.notifier.sink.lock().unwrap() = core.module.event_sink().await;
 
-    // Handshake and hello through the relay.
+    // Handshake and hello through the relay; the handshake pairs.
     let mut phone = FakePhone::connect(&relay.url, &keys).await;
     let hello = phone.handshake(&keys).await;
+    assert!(core.module.status().paired && !core.module.status().pairing);
     assert_eq!(hello.protocol, PROTOCOL_VERSION);
     assert_eq!(hello.desktop_name, "Test Mac");
     let again = phone.call::<phone::Hello>(&hello_params(1)).await.unwrap();

@@ -24,12 +24,18 @@
 //! A dropped connection drops every phone with it: their sessions end
 //! without `CLOSE` (truncated, design §5), and each phone re-handshakes
 //! and re-syncs once Core is back (`PEER` host online).
+//!
+//! A run for a new pairing (the key only in memory, [`super::PairingGate`])
+//! holds the first phone that completes its handshake: nothing goes out to
+//! it until the key is stored, on a task of its own so the loop keeps
+//! serving; a phone whose pairing was not saved is dropped before it ever
+//! gets its handshake answer.
 
 use super::events::{PhoneEvent, PhoneFilter};
 use super::methods::{self, Effect, MethodCtx};
 use super::phone::{Inbound, Kind, Phone};
 use super::push::remove_push_device;
-use super::{RemoteTuning, StatusCell};
+use super::{PairingGate, RemoteTuning, StatusCell};
 use futures_util::{SinkExt, StreamExt};
 use galley_remote_protocol::app::{error_code, Envelope, ErrorBody, Request, Response};
 use galley_remote_protocol::frame::{
@@ -96,6 +102,8 @@ pub(super) struct RunCtx {
     pub(super) filter: Arc<PhoneFilter>,
     /// Phone session numbering, unique for the module's life.
     pub(super) generations: Arc<AtomicU64>,
+    /// Set for a new pairing whose key is not stored yet.
+    pub(super) pairing: Option<Arc<PairingGate>>,
 }
 
 /// A request's answer on its way back to the loop.
@@ -104,6 +112,13 @@ struct Answer {
     generation: u64,
     response: Response,
     effect: Effect,
+}
+
+/// Whether a held phone's pairing was saved (`Err`: why not).
+struct Held {
+    peer: PeerId,
+    generation: u64,
+    saved: Result<(), &'static str>,
 }
 
 /// Run until stopped: connect, serve, reconnect.
@@ -285,10 +300,13 @@ struct Connection<'a> {
     pending_pushes: HashMap<u32, String>,
     last_pong: Instant,
     ping_nonce: u64,
+    held_tx: mpsc::UnboundedSender<Held>,
+    held_rx: Option<mpsc::UnboundedReceiver<Held>>,
 }
 
 impl<'a> Connection<'a> {
     fn new(ctx: &'a RunCtx, answer_tx: mpsc::UnboundedSender<Answer>) -> Self {
+        let (held_tx, held_rx) = mpsc::unbounded_channel();
         Self {
             ctx,
             answer_tx,
@@ -297,6 +315,8 @@ impl<'a> Connection<'a> {
             pending_pushes: HashMap::new(),
             last_pong: Instant::now(),
             ping_nonce: 0,
+            held_tx,
+            held_rx: Some(held_rx),
         }
     }
 
@@ -308,6 +328,7 @@ impl<'a> Connection<'a> {
         answers: &mut mpsc::UnboundedReceiver<Answer>,
     ) -> Exit {
         let (sink, mut stream) = ws.split();
+        let mut held_rx = self.held_rx.take().expect("a connection runs once");
         let (writer_tx, writer_rx) = mpsc::channel::<Message>(WRITER_QUEUE);
         let mut writer = tokio::spawn(write_frames(sink, writer_rx));
         let ctx = self.ctx;
@@ -351,6 +372,7 @@ impl<'a> Connection<'a> {
                     }
                 },
                 Some(answer) = answers.recv() => self.on_answer(answer),
+                Some(held) = held_rx.recv() => self.on_held(held),
                 Some(event) = events.recv() => self.on_event(event),
                 permit = writer_tx.reserve(), if pending => match permit {
                     Ok(permit) => {
@@ -398,7 +420,7 @@ impl<'a> Connection<'a> {
             || self
                 .phones
                 .values()
-                .any(|phone| !phone.closed && !phone.queue.is_empty())
+                .any(|phone| !phone.closed && !phone.held && !phone.queue.is_empty())
     }
 
     /// The next frame to write: control frames first, then the phone
@@ -411,7 +433,7 @@ impl<'a> Connection<'a> {
             let peer = self
                 .phones
                 .iter()
-                .filter(|(_, phone)| !phone.closed && !phone.queue.is_empty())
+                .filter(|(_, phone)| !phone.closed && !phone.held && !phone.queue.is_empty())
                 .min_by_key(|(_, phone)| phone.sent)
                 .map(|(peer, _)| *peer)?;
             let phone = self.phones.get_mut(&peer).expect("picked above");
@@ -487,7 +509,34 @@ impl<'a> Connection<'a> {
         }
         match phone.receive(&self.ctx.psk, &self.ctx.hello, payload) {
             Inbound::Established => {
-                eprintln!("[remote] phone {} connected", peer.0);
+                // The first phone of a new pairing waits for its key to be
+                // stored; it counts as online meanwhile, so the status that
+                // says "paired" already shows it.
+                if let Some(gate) = self
+                    .ctx
+                    .pairing
+                    .as_ref()
+                    .filter(|gate| !gate.is_confirmed())
+                {
+                    phone.held = true;
+                    let generation = phone.generation;
+                    eprintln!(
+                        "[remote] phone {} answered the pairing code; saving the pairing",
+                        peer.0
+                    );
+                    let gate = gate.clone();
+                    let held_tx = self.held_tx.clone();
+                    tokio::spawn(async move {
+                        let saved = gate.confirm().await;
+                        let _ = held_tx.send(Held {
+                            peer,
+                            generation,
+                            saved,
+                        });
+                    });
+                } else {
+                    eprintln!("[remote] phone {} connected", peer.0);
+                }
                 self.ctx.status.update(|s| {
                     s.last_phone_connected_at = Some(
                         chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
@@ -506,6 +555,27 @@ impl<'a> Connection<'a> {
                 eprintln!("[remote] phone {} dropped: {why}", peer.0);
                 self.remove_phone(peer, why);
             }
+        }
+    }
+
+    /// A held phone's pairing was saved (let its handshake answer out) or
+    /// not (drop it).
+    fn on_held(&mut self, held: Held) {
+        let Some(phone) = self.phones.get_mut(&held.peer) else {
+            return;
+        };
+        if phone.generation != held.generation || !phone.held {
+            return;
+        }
+        match held.saved {
+            Ok(()) => {
+                phone.held = false;
+                eprintln!(
+                    "[remote] phone {} connected; this desktop is paired",
+                    held.peer.0
+                );
+            }
+            Err(why) => self.remove_phone(held.peer, why),
         }
     }
 
@@ -672,7 +742,8 @@ impl<'a> Connection<'a> {
     /// (the module is stopping or unpairing). Bounded by [`CLOSE_GRACE`].
     async fn close_all(&mut self, reason: CloseReason, writer: &mpsc::Sender<Message>) {
         let mut frames = Vec::new();
-        for (peer, phone) in &mut self.phones {
+        // A held phone never got its handshake answer: nothing to close.
+        for (peer, phone) in self.phones.iter_mut().filter(|(_, phone)| !phone.held) {
             if let Some(payload) = phone.seal_close_now(reason) {
                 if let Ok(frame) = (Frame::Data {
                     peer: *peer,

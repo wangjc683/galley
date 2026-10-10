@@ -43,9 +43,12 @@ pub(crate) async fn get_remote_status(
     Ok(module(&app).map(|remote| remote.status()))
 }
 
-/// Pair a phone: makes sure a pairing master key exists and the
-/// connection runs, and returns the QR code to scan. Showing it again
-/// gives the same code, so paired phones stay paired.
+/// Pair a phone: returns the QR code to scan, with the connection
+/// running for it. Paired: the stored key's code (paired phones stay
+/// paired). Not paired: a new key held in memory until the first phone
+/// completes its handshake (then it is stored), for at most
+/// [`crate::remote::PAIRING_TIMEOUT`]; showing it again meanwhile gives
+/// the same code.
 #[tauri::command]
 pub(crate) async fn pair_remote_phone(
     app: tauri::AppHandle,
@@ -54,6 +57,20 @@ pub(crate) async fn pair_remote_phone(
     let qr = remote.pair().await.map_err(|e| e.to_string())?;
     let qr_svg = qr.to_svg().map_err(|e| e.to_string())?;
     Ok(RemotePairing { qr_svg })
+}
+
+/// End a pairing still waiting for its first phone: disconnect and forget
+/// its key. The page calls it whenever its code goes away (Hide pairing
+/// code, leaving the Phone page, closing Settings); once paired it does
+/// nothing, and without remote access there is nothing to end.
+#[tauri::command]
+pub(crate) async fn cancel_remote_pairing(
+    app: tauri::AppHandle,
+) -> std::result::Result<(), String> {
+    if let Some(remote) = module(&app) {
+        remote.cancel_pairing().await;
+    }
+    Ok(())
 }
 
 /// Unpair every phone: they are disconnected and the master key is

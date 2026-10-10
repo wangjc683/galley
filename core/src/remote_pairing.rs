@@ -1,18 +1,23 @@
 //! The phone pairing master key (ticket 05c;
 //! `.scratch/ios-client/issues/05-remote-protocol-design.md` §3.1).
 //!
-//! 32 random bytes from the OS RNG, kept in Core's credential store
-//! ([`crate::credential_store`], AES-256-GCM like the IM channel secrets)
-//! under [`PAIRING_MASTER_KEY_REF`]. The desktop shows it to the phone
-//! once, in the pairing QR code; both sides derive the relay channel, the
-//! Noise PSK and the push key from it (`remote-protocol`). Holding it is
-//! remote control of this computer, so:
+//! 32 random bytes from the OS RNG ([`generate_master_key`]). The desktop
+//! shows it to the phone in the pairing QR code; both sides derive the
+//! relay channel, the Noise PSK and the push key from it
+//! (`remote-protocol`). A new key lives only in memory while the remote
+//! module waits for the first phone; once that phone completes its
+//! handshake the module stores it ([`store_master_key`]) in Core's
+//! credential store ([`crate::credential_store`], AES-256-GCM like the IM
+//! channel secrets) under [`PAIRING_MASTER_KEY_REF`], and from then on
+//! this desktop is paired (design §3.1). Holding it is remote control of
+//! this computer, so:
 //!
 //! - it never reaches a log, a file or a `Debug` string from here
-//!   ([`PairingMasterKey`] prints as `PairingMasterKey(..)`);
-//! - unpairing is [`rotate_master_key`]: every paired phone has to scan
-//!   again. [`clear_master_key`] removes it altogether (remote access
-//!   off — the remote module connects only while a key exists).
+//!   ([`PairingMasterKey`] prints as `PairingMasterKey(..)`), and its bytes
+//!   are zeroed when it is dropped;
+//! - unpairing is [`clear_master_key`]: remote access is off (the remote
+//!   module connects at launch only while a key is stored), and the next
+//!   pairing makes a new key, so every phone has to scan again.
 //!
 //! Not a system keychain: the credential store keeps its own key in the
 //! same SQLite database (`credential_store.rs` module docs). P1 moves this
@@ -25,6 +30,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use ring::rand::{SecureRandom, SystemRandom};
 use std::fmt;
+use zeroize::{Zeroize, Zeroizing};
 
 /// Credential-store key of the master key.
 pub const PAIRING_MASTER_KEY_REF: &str = "remote:pairing:mk";
@@ -33,7 +39,7 @@ pub const PAIRING_MASTER_KEY_REF: &str = "remote:pairing:mk";
 pub const PAIRING_MASTER_KEY_LEN: usize = 32;
 
 /// The pairing master key. No `Debug` of the bytes, no `Display`, no
-/// equality (compare [`Self::as_bytes`] in tests only).
+/// equality (compare [`Self::as_bytes`] in tests only); zeroed on drop.
 #[derive(Clone)]
 pub struct PairingMasterKey([u8; PAIRING_MASTER_KEY_LEN]);
 
@@ -75,6 +81,12 @@ impl fmt::Debug for PairingMasterKey {
     }
 }
 
+impl Drop for PairingMasterKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 /// The stored master key; `None` when this desktop is not paired.
 pub async fn read_master_key(galley: &SqliteGalley) -> Result<Option<PairingMasterKey>> {
     credential_store::try_get_secret(galley, PAIRING_MASTER_KEY_REF)
@@ -83,22 +95,17 @@ pub async fn read_master_key(galley: &SqliteGalley) -> Result<Option<PairingMast
         .transpose()
 }
 
-/// The stored master key, generated and stored first if there is none
-/// (the first pairing). Two concurrent first calls may each store one,
-/// the later replacing the earlier; the settings page is the only caller.
-pub async fn ensure_master_key(galley: &SqliteGalley) -> Result<PairingMasterKey> {
-    match read_master_key(galley).await? {
-        Some(key) => Ok(key),
-        None => rotate_master_key(galley).await,
-    }
+/// A fresh master key, not stored: the remote module holds it in memory
+/// until the first phone pairs with it.
+pub fn generate_master_key() -> Result<PairingMasterKey> {
+    PairingMasterKey::generate()
 }
 
-/// Replace the master key with a fresh one ("unpair": every phone paired
-/// with the old key must scan again) and return it.
-pub async fn rotate_master_key(galley: &SqliteGalley) -> Result<PairingMasterKey> {
-    let key = PairingMasterKey::generate()?;
-    credential_store::set_secret(galley, PAIRING_MASTER_KEY_REF, &key.encode()).await?;
-    Ok(key)
+/// Store `key` as this desktop's master key (the first phone completed
+/// its handshake with it), replacing any stored one.
+pub async fn store_master_key(galley: &SqliteGalley, key: &PairingMasterKey) -> Result<()> {
+    let encoded = Zeroizing::new(key.encode());
+    credential_store::set_secret(galley, PAIRING_MASTER_KEY_REF, &encoded).await
 }
 
 /// Remove the master key. Idempotent.
@@ -124,38 +131,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn no_key_until_the_first_pairing_then_the_same_key() {
+    async fn a_generated_key_is_stored_only_when_asked() {
         let g = galley().await;
-        assert!(read_master_key(&g).await.unwrap().is_none());
-        let first = ensure_master_key(&g).await.unwrap();
+        let first = generate_master_key().unwrap();
         assert_ne!(first.as_bytes(), &[0_u8; PAIRING_MASTER_KEY_LEN]);
-        let again = ensure_master_key(&g).await.unwrap();
-        assert_eq!(again.as_bytes(), first.as_bytes());
+        assert!(read_master_key(&g).await.unwrap().is_none());
+        store_master_key(&g, &first).await.unwrap();
         let read = read_master_key(&g).await.unwrap().expect("stored");
         assert_eq!(read.as_bytes(), first.as_bytes());
+        // Each generated key is new.
+        assert_ne!(generate_master_key().unwrap().as_bytes(), first.as_bytes());
     }
 
     #[tokio::test]
-    async fn rotating_replaces_the_key_and_clearing_removes_it() {
+    async fn storing_replaces_the_key_and_clearing_removes_it() {
         let g = galley().await;
-        let first = ensure_master_key(&g).await.unwrap();
-        let rotated = rotate_master_key(&g).await.unwrap();
-        assert_ne!(rotated.as_bytes(), first.as_bytes());
+        let first = generate_master_key().unwrap();
+        store_master_key(&g, &first).await.unwrap();
+        let second = generate_master_key().unwrap();
+        store_master_key(&g, &second).await.unwrap();
         let read = read_master_key(&g).await.unwrap().expect("stored");
-        assert_eq!(read.as_bytes(), rotated.as_bytes());
+        assert_eq!(read.as_bytes(), second.as_bytes());
 
         clear_master_key(&g).await.unwrap();
         clear_master_key(&g).await.unwrap();
         assert!(read_master_key(&g).await.unwrap().is_none());
-        // A new pairing after clearing gets a new key.
-        let next = ensure_master_key(&g).await.unwrap();
-        assert_ne!(next.as_bytes(), rotated.as_bytes());
     }
 
     #[tokio::test]
     async fn stored_encrypted_under_its_own_ref() {
         let g = galley().await;
-        let key = ensure_master_key(&g).await.unwrap();
+        let key = generate_master_key().unwrap();
+        store_master_key(&g, &key).await.unwrap();
         let row = g
             .managed_model_secret(PAIRING_MASTER_KEY_REF)
             .await

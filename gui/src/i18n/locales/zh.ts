@@ -654,6 +654,7 @@ export const zhCopy = {
         "在 iPhone 上打开 Galley，扫描这个二维码。",
         "扫码后手机就会连上这台电脑，以后打开 Galley 都会自动连上。",
       ],
+      qrExpiry: "配对码 10 分钟内有效。",
       scanWarning:
         "这个二维码等于这台电脑的使用权：只用自己的手机扫，不要截图或发给别人。",
       badgeOnline: "已连接",
@@ -674,6 +675,8 @@ export const zhCopy = {
       unpairDialogBody:
         "所有已配对的手机会立即断开，现在的配对码随之作废。之后每台手机都要扫描新的配对码才能再连上。",
       pairFailed: (detail: string) => `无法显示配对码：${detail}`,
+      pairingNotSaved: (detail: string) =>
+        `配对没能保存，手机没有连上：${detail}`,
       unpairFailed: (detail: string) => `解除配对失败：${detail}`,
       backgroundHintTitle: "关闭窗口后 Galley 会退出",
       backgroundHintBody:

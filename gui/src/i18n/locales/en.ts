@@ -672,6 +672,7 @@ export const enCopy: AppCopy = {
         "Open Galley on your iPhone and scan this code.",
         "Your phone then connects to this computer, and again whenever you open Galley on it.",
       ],
+      qrExpiry: "This code works for 10 minutes.",
       scanWarning:
         "This code gives access to this computer. Scan it only with your own phone, and don't screenshot or share it.",
       badgeOnline: "Connected",
@@ -696,6 +697,8 @@ export const enCopy: AppCopy = {
         "Every paired phone disconnects now and the current pairing code stops working. Each phone has to scan a new code to connect again.",
       pairFailed: (detail: string) =>
         `Couldn't show the pairing code: ${detail}`,
+      pairingNotSaved: (detail: string) =>
+        `Couldn't save the pairing, so the phone didn't connect: ${detail}`,
       unpairFailed: (detail: string) => `Couldn't unpair: ${detail}`,
       backgroundHintTitle: "Closing the window quits Galley",
       backgroundHintBody:

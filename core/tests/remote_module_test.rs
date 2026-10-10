@@ -28,7 +28,8 @@ use galley_core_lib::ipc::IpcCommand;
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::remote::{
     push::{push_devices, PUSH_DEVICES_PREF},
-    resolve_relay_url, RemoteModule, RemoteStatus, RemoteTuning, SESSION_NOT_MANAGED,
+    resolve_relay_url, RemoteConfig, RemoteDeps, RemoteModule, RemoteStatus, RemoteTuning,
+    SESSION_NOT_MANAGED,
 };
 use galley_core_lib::remote_pairing;
 use galley_core_lib::runner_manager::RunState;
@@ -37,7 +38,7 @@ use galley_remote_protocol::frame::{
     Frame, PeerId, PushEnv, PushRequest, PushResult, PushStatus, Role, HEADER_CHANNEL,
     HEADER_RELAY_VERSION, HEADER_ROLE,
 };
-use galley_remote_protocol::keys::{DerivedKeys, MasterKey, PairingCode};
+use galley_remote_protocol::keys::{DerivedKeys, MasterKey, PairingCode, RelayUrl};
 use galley_remote_protocol::noise::CloseReason;
 use galley_remote_protocol::push as push_seal;
 use serde_json::{json, Value};
@@ -395,8 +396,9 @@ impl Fixture {
         }
     }
 
-    /// Pair (the module starts and connects) and return the keys a phone
-    /// gets from scanning the code.
+    /// Show a pairing code (the module starts and connects, pairing until
+    /// the first phone completes its handshake) and return the keys a
+    /// phone gets from scanning it.
     async fn paired(tuning: RemoteTuning) -> (Self, DerivedKeys) {
         let fixture = Self::new(tuning).await;
         let qr = fixture.module.pair().await.unwrap();
@@ -887,6 +889,8 @@ async fn unpairing_closes_phones_and_forgets_the_key() {
         fx.module.status(),
         RemoteStatus {
             paired: false,
+            pairing: false,
+            pairing_error: None,
             relay_connected: false,
             online_phones: 0,
             last_phone_connected_at: fx.module.status().last_phone_connected_at,
@@ -908,6 +912,7 @@ async fn unpairing_closes_phones_and_forgets_the_key() {
         fresh.noise_psk.expose_secret(),
         keys.noise_psk.expose_secret()
     );
+    assert!(fx.module.status().pairing);
 }
 
 #[tokio::test]
@@ -1006,4 +1011,233 @@ async fn a_session_past_its_age_is_closed_as_expired() {
     // The phone reconnects (re-handshakes) and is served again.
     phone.handshake(&keys).await;
     phone.call::<phone::Hello>(&hello_params(1)).await.unwrap();
+}
+
+// ---------------- pairing lifecycle (design §3.1) ----------------
+
+/// The master key a pairing code carries.
+fn code_key(qr: &str) -> [u8; 32] {
+    *PairingCode::parse(qr).unwrap().master_key().expose_secret()
+}
+
+async fn stored_key(galley: &SqliteGalley) -> Option<[u8; 32]> {
+    remote_pairing::read_master_key(galley)
+        .await
+        .unwrap()
+        .map(|key| *key.as_bytes())
+}
+
+#[tokio::test]
+async fn a_new_pairing_is_stored_only_when_the_first_phone_handshakes() {
+    let fx = Fixture::new(fast()).await;
+    let qr = fx.module.pair().await.unwrap();
+    let key = code_key(qr.as_str());
+    fx.relay.wait_host_connects(1).await;
+    // Pairing: connected for the code, nothing stored, not paired.
+    let status = fx.module.status();
+    assert!(status.pairing && !status.paired && status.relay_connected);
+    assert_eq!(stored_key(&fx.galley).await, None);
+    // Showing the code again while it waits gives the same code.
+    let again = fx.module.pair().await.unwrap();
+    assert_eq!(again.as_str(), qr.as_str());
+    assert_eq!(fx.relay.host_connects(), 1);
+
+    let keys = PairingCode::parse(qr.as_str())
+        .unwrap()
+        .master_key()
+        .derive();
+    let mut first = fx.phone(&keys).await;
+    // The phone has its answer only once the key is stored.
+    let status = fx.module.status();
+    assert!(status.paired && !status.pairing, "{status:?}");
+    assert_eq!(status.pairing_error, None);
+    assert_eq!(stored_key(&fx.galley).await, Some(key));
+    first.call::<phone::Hello>(&hello_params(1)).await.unwrap();
+    wait_until(|| fx.module.status().online_phones == 1).await;
+    // The status that said "paired" already counted the phone.
+    let paired_at = fx
+        .notifier
+        .statuses()
+        .into_iter()
+        .find(|status| status["paired"] == true)
+        .unwrap();
+    assert_eq!(paired_at["onlinePhones"], 1);
+    assert!(paired_at["lastPhoneConnectedAt"].is_string());
+
+    // Paired: a second phone gets straight in, and Add a phone shows the
+    // stored key's code.
+    let mut second = fx.phone(&keys).await;
+    second.call::<phone::Hello>(&hello_params(1)).await.unwrap();
+    wait_until(|| fx.module.status().online_phones == 2).await;
+    let add = fx.module.pair().await.unwrap();
+    assert_eq!(add.as_str(), qr.as_str());
+    assert!(!fx.module.status().pairing);
+    assert_eq!(fx.relay.host_connects(), 1);
+}
+
+#[tokio::test]
+async fn cancelling_a_pairing_disconnects_and_forgets_its_key() {
+    let fx = Fixture::new(fast()).await;
+    let qr = fx.module.pair().await.unwrap();
+    let old = PairingCode::parse(qr.as_str())
+        .unwrap()
+        .master_key()
+        .derive();
+    fx.relay.wait_host_connects(1).await;
+
+    assert!(fx.module.cancel_pairing().await);
+    let status = fx.module.status();
+    assert!(!status.pairing && !status.paired && !status.relay_connected);
+    assert_eq!(stored_key(&fx.galley).await, None);
+    wait_until(|| !fx.relay.host_online()).await;
+    // Nothing left to cancel; no reconnect.
+    assert!(!fx.module.cancel_pairing().await);
+    tokio::time::sleep(QUIET).await;
+    assert_eq!(fx.relay.host_connects(), 1);
+    assert!(fx.module.event_sink().await.is_none());
+
+    // The next code is a new key; the old code no longer gets in.
+    let fresh = fx.module.pair().await.unwrap();
+    assert_ne!(code_key(fresh.as_str()), code_key(qr.as_str()));
+    assert!(fx.module.status().pairing);
+    fx.relay.wait_host_connects(2).await;
+    let mut stale = FakePhone::connect(&fx.relay.url, &old).await;
+    assert!(stale.try_handshake(&old.noise_psk, QUIET).await.is_none());
+    assert_eq!(stored_key(&fx.galley).await, None);
+    assert!(!fx.module.status().paired);
+}
+
+#[tokio::test]
+async fn a_pairing_without_a_phone_ends_by_itself() {
+    let fx = Fixture::new(RemoteTuning {
+        pairing_timeout: Duration::from_millis(300),
+        ..fast()
+    })
+    .await;
+    let qr = fx.module.pair().await.unwrap();
+    let keys = PairingCode::parse(qr.as_str())
+        .unwrap()
+        .master_key()
+        .derive();
+    fx.relay.wait_host_connects(1).await;
+    assert!(fx.module.status().pairing);
+
+    wait_until(|| !fx.module.status().pairing).await;
+    let status = fx.module.status();
+    assert!(!status.paired && !status.relay_connected);
+    wait_until(|| !fx.relay.host_online()).await;
+    assert_eq!(stored_key(&fx.galley).await, None);
+    let mut late = FakePhone::connect(&fx.relay.url, &keys).await;
+    assert!(late.try_handshake(&keys.noise_psk, QUIET).await.is_none());
+    assert!(!fx.module.cancel_pairing().await);
+    assert_eq!(fx.relay.host_connects(), 1);
+}
+
+#[tokio::test]
+async fn once_paired_cancelling_and_the_timeout_change_nothing() {
+    let (fx, keys) = Fixture::paired(RemoteTuning {
+        pairing_timeout: Duration::from_secs(1),
+        ..fast()
+    })
+    .await;
+    let mut phone = fx.phone(&keys).await;
+    wait_until(|| fx.module.status().paired).await;
+
+    // Hiding the code after Add a phone calls cancel too: nothing happens.
+    let add = fx.module.pair().await.unwrap();
+    assert!(!fx.module.cancel_pairing().await);
+    // Well past the pairing timeout.
+    tokio::time::sleep(Duration::from_millis(1300)).await;
+    let status = fx.module.status();
+    assert!(status.paired && !status.pairing && status.relay_connected);
+    assert_eq!(status.online_phones, 1);
+    phone.call::<phone::Hello>(&hello_params(1)).await.unwrap();
+    assert_eq!(stored_key(&fx.galley).await, Some(code_key(add.as_str())));
+    assert_eq!(fx.relay.host_connects(), 1);
+}
+
+#[tokio::test]
+async fn a_key_that_cannot_be_saved_keeps_the_phone_out_and_says_so() {
+    let (fx, keys) = Fixture::paired(fast()).await;
+    sqlx::raw_sql(
+        "CREATE TRIGGER no_secrets BEFORE INSERT ON managed_model_secrets \
+         BEGIN SELECT RAISE(ABORT, 'disk full (test)'); END;",
+    )
+    .execute(&fx.pool)
+    .await
+    .unwrap();
+
+    // The phone never gets its handshake answer.
+    let mut refused = FakePhone::connect(&fx.relay.url, &keys).await;
+    assert!(refused
+        .try_handshake(&keys.noise_psk, QUIET)
+        .await
+        .is_none());
+    let status = fx.module.status();
+    assert!(status.pairing && !status.paired, "{status:?}");
+    let error = status.pairing_error.expect("the failure is in the status");
+    assert!(error.contains("disk full (test)"), "{error}");
+    assert_eq!(status.online_phones, 0);
+    assert_eq!(stored_key(&fx.galley).await, None);
+
+    // The code still works: once the store does, the next phone pairs.
+    sqlx::raw_sql("DROP TRIGGER no_secrets")
+        .execute(&fx.pool)
+        .await
+        .unwrap();
+    let mut phone = fx.phone(&keys).await;
+    phone.call::<phone::Hello>(&hello_params(1)).await.unwrap();
+    let status = fx.module.status();
+    assert!(status.paired && !status.pairing);
+    assert_eq!(status.pairing_error, None);
+    assert!(stored_key(&fx.galley).await.is_some());
+}
+
+#[tokio::test]
+async fn a_restart_keeps_a_stored_pairing_and_forgets_a_pending_one() {
+    let fx = Fixture::new(fast()).await;
+    let restart = |tuning: RemoteTuning| {
+        RemoteModule::new(
+            RemoteDeps {
+                galley: fx.galley.clone(),
+                runner: fx.runner.clone(),
+                notifier: Arc::new(TestNotifier::default()),
+                env: None,
+            },
+            RemoteConfig {
+                relay: RelayUrl::parse(&fx.relay.url).unwrap(),
+                desktop_name: "Test Mac".into(),
+                core_version: "0.0.0-test".into(),
+                tuning,
+                register_global_sink: false,
+            },
+        )
+    };
+
+    // A pending pairing dies with its process (the tray's quit stops it).
+    fx.module.pair().await.unwrap();
+    fx.relay.wait_host_connects(1).await;
+    fx.module.stop().await;
+    assert!(!fx.module.status().pairing);
+    let next = restart(fast());
+    assert!(!next.start_if_paired().await.unwrap());
+    tokio::time::sleep(QUIET).await;
+    assert_eq!(fx.relay.host_connects(), 1);
+    assert!(!next.status().paired && !next.status().pairing);
+
+    // A stored one connects at launch.
+    let qr = next.pair().await.unwrap();
+    let keys = PairingCode::parse(qr.as_str())
+        .unwrap()
+        .master_key()
+        .derive();
+    fx.relay.wait_host_connects(2).await;
+    let mut phone = FakePhone::connect(&fx.relay.url, &keys).await;
+    phone.handshake(&keys).await;
+    next.stop().await;
+    let after = restart(fast());
+    assert!(after.start_if_paired().await.unwrap());
+    assert!(after.status().paired);
+    fx.relay.wait_host_connects(3).await;
+    after.stop().await;
 }

@@ -7,7 +7,7 @@ import {
   WarningCircle,
   type Icon as PhosphorIcon,
 } from "@phosphor-icons/react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { SettingsPanelHeader } from "@/components/screens/settings/settings-ui";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { useDayStamp } from "@/hooks/useDayStamp";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatMessageDateTime } from "@/lib/message-time";
 import {
+  cancelRemotePairing,
   pairRemotePhone,
   unpairRemotePhones,
   type RemoteStatus,
@@ -24,7 +25,7 @@ import {
 import { ErrorLine } from "./models/ModelPrimitives";
 import {
   phonePageView,
-  qrStillShown,
+  settleQr,
   svgDataUrl,
   type PhoneConnectionKind,
   type ShownQr,
@@ -39,19 +40,33 @@ const STATUS_ICON: Record<PhoneConnectionKind, PhosphorIcon> = {
 
 type Busy = "pair" | "unpair" | null;
 
+/** End a pairing still waiting for its first phone (Core ignores it once
+ * paired). Nothing to tell the user if it fails: the pairing ends by
+ * itself after 10 minutes. */
+function cancelPairing() {
+  cancelRemotePairing().catch((e: unknown) => {
+    console.warn("[remote] cancelling the pairing failed", e);
+  });
+}
+
 /**
  * Settings → Phone (ticket 05d): pair an iPhone with this desktop, see
  * whether it is connected, unpair. Core's remote module owns all of it;
- * the page asks (`pair_remote_phone`, `unpair_remote_phones`) and shows
- * the status it is given, live from `remote-status`.
+ * the page asks (`pair_remote_phone`, `cancel_remote_pairing`,
+ * `unpair_remote_phones`) and shows the status it is given, live from
+ * `remote-status`. The layout follows Core's `paired` alone: the desktop
+ * is paired once the first phone has connected, not when a code exists.
  *
  * The pairing QR code appears only after Show pairing code and folds
- * away when a phone connects (the scan), on Hide pairing code, or when
- * the page goes away (it is local state). Core draws it as an SVG, so
- * the code — it carries the pairing key — is never text in this page;
- * there is deliberately no copy button. The wording never names the
- * relay: the phone connects to this computer, and the relay being down
- * reads as the network.
+ * away when a phone connects (the scan), when Core ends a pairing that
+ * got no phone (10 minutes), on Hide pairing code, or when the page goes
+ * away (it is local state). Hiding it and leaving the page also cancel
+ * the pairing in Core, so a code nobody scanned stops working at once
+ * (after Add a phone that is a no-op: the stored code stays). Core draws
+ * it as an SVG, so the code — it carries the pairing key — is never text
+ * in this page; there is deliberately no copy button. The wording never
+ * names the relay: the phone connects to this computer, and the relay
+ * being down reads as the network.
  *
  * Decision 10's background check: with "Keep running when the window
  * closes" off, closing the window quits Galley and the phones lose it,
@@ -76,33 +91,38 @@ export function SettingsPhone({
   const [error, setError] = useState<string | null>(null);
   const [confirmUnpairOpen, setConfirmUnpairOpen] = useState(false);
 
-  // A phone connected since the code went up: that was the scan.
-  const qrVisible = qr !== null && qrStillShown(status, qr);
-  if (qr !== null && !qrVisible) setQr(null);
+  // The scan, Core ending the pairing: the code goes.
+  const shownQr = settleQr(status, qr);
+  if (shownQr !== qr) setQr(shownQr);
+
+  // Leaving the page (another tab, Settings closing) ends a pairing that
+  // is still waiting for its phone.
+  useEffect(() => cancelPairing, []);
 
   const lastConnectedText = status.lastPhoneConnectedAt
     ? formatMessageDateTime(status.lastPhoneConnectedAt, dayStamp, language)
     : null;
   const view = phonePageView({
     status,
-    qr: qrVisible ? qr : null,
+    qr: shownQr,
     keepInBackgroundOnClose,
     lastConnectedText,
     copy,
   });
+  const errorLine = error ?? view.pairingError;
 
   const toggleQr = async () => {
-    if (qrVisible) {
+    if (shownQr !== null) {
       setQr(null);
+      cancelPairing();
       return;
     }
     const since = status.lastPhoneConnectedAt;
-    const firstPairing = !status.paired;
     setBusy("pair");
     setError(null);
     try {
       const { qrSvg } = await pairRemotePhone();
-      setQr({ svg: qrSvg, since, firstPairing });
+      setQr({ svg: qrSvg, since, pairingSeen: false });
     } catch (e) {
       setError(copy.pairFailed(String(e)));
     } finally {
@@ -143,11 +163,11 @@ export function SettingsPhone({
   );
 
   const qrBlock =
-    view.showQr && qr !== null ? (
+    view.showQr && shownQr !== null ? (
       <div className="flex flex-wrap items-center gap-5 px-3 py-3">
         <div className="flex h-[168px] w-[168px] shrink-0 items-center justify-center rounded-sm border border-line bg-elevated">
           <img
-            src={svgDataUrl(qr.svg)}
+            src={svgDataUrl(shownQr.svg)}
             alt={copy.qrAlt}
             draggable={false}
             className="h-[148px] w-[148px] select-none"
@@ -157,6 +177,7 @@ export function SettingsPhone({
           {copy.scanSteps.map((step) => (
             <p key={step}>{step}</p>
           ))}
+          {view.showQrExpiry && <p>{copy.qrExpiry}</p>}
           <p className="text-ui-meta leading-dense text-ink-muted">
             {copy.scanWarning}
           </p>
@@ -223,7 +244,7 @@ export function SettingsPhone({
           </div>
         )}
 
-        {error && <ErrorLine message={error} />}
+        {errorLine && <ErrorLine message={errorLine} />}
 
         {view.showBackgroundHint && (
           <div className="flex flex-wrap items-center gap-3 rounded-sm border border-warning/25 bg-warning/[var(--opacity-subtle)] px-3 py-2.5">

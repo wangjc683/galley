@@ -313,6 +313,11 @@ pub(super) struct Phone {
     closing: bool,
     /// A `CLOSE` was sealed: drop the phone once it is out.
     pub(super) closed: bool,
+    /// The first phone of a new pairing, established while the pairing
+    /// key is being saved: nothing goes out to it — not even its
+    /// handshake answer — until the key is stored, and it is dropped if
+    /// that fails.
+    pub(super) held: bool,
 }
 
 impl Phone {
@@ -325,6 +330,7 @@ impl Phone {
             sent: 0,
             closing: false,
             closed: false,
+            held: false,
         }
     }
 

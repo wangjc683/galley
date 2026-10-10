@@ -18,6 +18,11 @@ pub const RELAY_URL_ENV: &str = "GALLEY_REMOTE_RELAY_URL";
 /// Name used when the machine reports none.
 const FALLBACK_DESKTOP_NAME: &str = "Galley";
 
+/// How long a new pairing code waits for its first phone before Core
+/// drops it (design §3.1). The settings page says so ("works for 10
+/// minutes"); change both together.
+pub const PAIRING_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
 /// The relay URL from the runtime environment, else from the build.
 /// `Ok(None)`: not configured, remote access is off. `Err`: configured
 /// but not a valid relay URL (also off; the caller logs it).
@@ -113,6 +118,9 @@ pub struct RemoteTuning {
     pub phone_queue_events: usize,
     /// Per phone: the same bound in bytes.
     pub phone_queue_bytes: usize,
+    /// A pairing still waiting for its first phone ends after this
+    /// ([`PAIRING_TIMEOUT`]).
+    pub pairing_timeout: Duration,
 }
 
 impl Default for RemoteTuning {
@@ -132,6 +140,7 @@ impl Default for RemoteTuning {
             sink_capacity: 1024,
             phone_queue_events: 512,
             phone_queue_bytes: 4 * 1024 * 1024,
+            pairing_timeout: PAIRING_TIMEOUT,
         }
     }
 }

@@ -161,6 +161,7 @@ pub fn run() {
             // Settings → Phone (ticket 05d); Tauri only, see commands/remote.rs
             get_remote_status,
             pair_remote_phone,
+            cancel_remote_pairing,
             unpair_remote_phones,
             open_browser_control_extensions_page,
             open_browser_control_test_page,

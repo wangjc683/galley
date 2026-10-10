@@ -110,8 +110,8 @@ GALLEY_REMOTE_RELAY_URL=ws://127.0.0.1:8787 pnpm --dir gui tauri dev
 Release builds bake the variable in at compile time
 (`option_env!`), so setting or clearing it rebuilds Core once.
 
-Then Settings → Phone → Show pairing code, and connect a fake phone,
-Core's example `fake_phone`:
+Then Settings → Phone → Show pairing code, and within 10 minutes connect
+a fake phone, Core's example `fake_phone`:
 
 ```bash
 cargo run --manifest-path core/Cargo.toml -p galley-core --example fake_phone -- --scan
@@ -128,14 +128,22 @@ prints or stores it.
 The fake phone connects to the relay named in the code, runs the
 handshake, says `hello`, lists the sessions and stays online, printing
 what happens, until Ctrl-C or until the desktop unpairs it. It reconnects
-by itself when the relay or the desktop goes away. The page's states:
+by itself when the relay or the desktop goes away.
+
+The desktop is paired only once the first phone has connected. Until
+then the code's key lives in Core's memory alone: Hide pairing code,
+leaving the Phone tab or closing Settings drops it (and Core's relay
+connection), and so do 10 minutes without a phone. A fake phone started
+on a dropped code waits forever for a desktop that never comes; stop it
+and scan a new code. The page's states:
 
 | State | How |
 |---|---|
-| not paired | before the first Show pairing code, or after Unpair |
-| paired, no phone online | hide the code without scanning, or stop the fake phone |
+| not paired | before the first Show pairing code, after Unpair, or after hiding a code nobody scanned |
+| pairing (code up, waiting) | Show pairing code and don't scan; it folds away by itself after 10 minutes |
+| paired, no phone online | pair with the fake phone, then stop it (Ctrl-C) |
 | phones online | the fake phone running; a second one after Add a phone |
-| network down (Connecting) | stop the relay; start it again to reconnect |
+| network down (Connecting) | once paired, stop the relay; start it again to reconnect |
 
 The fake phone is an example, so no shipped build contains it.
 

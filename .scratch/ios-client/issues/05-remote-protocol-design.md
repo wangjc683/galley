@@ -62,9 +62,15 @@ iOS App ──WSS(TLS)──▶ Caddy ──▶ relay（127.0.0.1，systemd）�
 
 ### 3.1 P0：一把配对主密钥
 
-- 桌面「设置 → 手机」生成 32 字节随机**配对主密钥** MK，存进 Core 现有的凭据存储，键 `remote:pairing:mk`（`core/src/credential_store.rs:28-58`，
-  AES-256-GCM，与 IM 渠道密钥同一机制）。它不在 macOS 钥匙串里：凭据存储的密文和主密钥都在同一个 SQLite 里（`credential_store.rs:1-7`），
-  P1 再迁到钥匙串。
+- 桌面「设置 → 手机」点「显示配对码」时生成 32 字节随机**配对主密钥** MK。**第一台手机连上才算配对**（2026-10-10 JC 裁定）：
+  - 配对中：MK 只在 Core 内存里（随进程消失、清零后丢弃、不进日志），Core 用它连上 relay 等手机，状态里 `pairing` 为真、`paired` 仍为假；
+    这期间再要配对码，给的是同一把 MK 的码。
+  - 第一台手机完成 Noise 握手时，Core 才把 MK 存进现有的凭据存储，键 `remote:pairing:mk`（`core/src/credential_store.rs:28-58`，
+    AES-256-GCM，与 IM 渠道密钥同一机制），此后才算已配对，启动时也只认存下的这把。存之前这台手机收不到握手回应；存不进去就不放它进来、
+    在状态里报原因（`pairingError`），码仍有效，下一台手机再试。
+  - 取消：页面收起配对码、离开「手机」页、关闭设置时调 `cancel_remote_pairing`；配对中 10 分钟没有手机握手，Core 自己取消。
+    取消就是断开 relay、丢掉 MK，屏幕上的码随之作废。已配对时取消是空操作，「添加手机」给的是存下的 MK，也不过期。
+  - 凭据存储不在 macOS 钥匙串里：密文和它的主密钥都在同一个 SQLite 里（`credential_store.rs:1-7`），P1 再迁到钥匙串。
 - 二维码内容：`galley-pair:1?relay=<relay URL>&mk=<base64url(MK)>&name=<桌面显示名>`。只在屏幕上展示，不落文件、不进日志。
 - 派生（HKDF-SHA256，salt 为 `galley-remote-v1`，每个用途一个 info 标签）。Noise 规范要求 PSK 只用在 Noise 里（外部 §1，规范 §14），
   所以各用途分开派生：
@@ -76,7 +82,7 @@ iOS App ──WSS(TLS)──▶ Caddy ──▶ relay（127.0.0.1，systemd）�
 | `push_key`（32 字节） | `push` | 推送内容加密（第 4.3 节） | 只有两端和 NSE |
 
 - 手机把 MK 存进钥匙串，access group 与 NSE 共享，可访问性设为 `AfterFirstUnlock`。否则锁屏或重启后 NSE 读不到密钥，只能显示占位文案（外部 §4、建议 6）。
-- **「解除配对」就是轮换 MK**：桌面删掉旧 MK、断开连接，所有手机要重新扫码。P0 只有 JC 一台手机，代价可接受。
+- **「解除配对」等于轮换 MK**：桌面删掉旧 MK、断开连接，下次配对生成新的，所有手机要重新扫码。P0 只有 JC 一台手机，代价可接受。
 - **安全底线**：持有 MK 就等于能在这台电脑上远程执行任意操作（PRD 风险第一条；审批已在 10-05 移除）。P0 的缓解只有两条：二维码只在桌面现场展示，
   以及随时可解除配对。
 
@@ -392,9 +398,11 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
   tungstenite 0.30 新带进 13 个包（sha1 0.11 一系与 rand 0.10 一系）。
 - **桌面名**：系统里的电脑名（macOS 的「电脑名称」），取不到用主机名，再取不到用 `Galley`，截到 128 字节。
 - **生命周期**：没有 relay 地址就不建模块（`RemoteModule::for_app` 返回 `None`）；有地址时作为 Tauri 状态托管，启动时只在已有配对主密钥时连，
-  托盘退出时先给在线手机发 `CLOSE Normal` 再断开（最多等 3 秒）。给 05d 的接口：`pair()` 确保有主密钥、确保在连、返回二维码串；
-  `unpair()` 给在线手机发 `CLOSE Unpaired`、停止、删除主密钥；`status()` 返回是否已配对、relay 是否在连、在线手机数、最近一次手机握手的时间，
-  有变化就发 Tauri 事件 `remote-status`。再次配对沿用同一把主密钥，已连的手机不受影响；解除配对后再配对才生成新密钥。
+  托盘退出时先给在线手机发 `CLOSE Normal` 再断开（最多等 3 秒）。给 05d 的接口：`pair()` 返回二维码串并确保在连
+  （已配对时用存下的主密钥；未配对时生成只在内存里的新密钥、进入配对中，第一台手机握手后才存下，见第 3.1 节，05d 补）；
+  `cancel_pairing()` 只在配对中生效；`unpair()` 给在线手机发 `CLOSE Unpaired`、停止、删除主密钥；`status()` 返回是否已配对、
+  是否配对中、存密钥失败的原因、relay 是否在连、在线手机数、最近一次手机握手的时间，有变化就发 Tauri 事件 `remote-status`。
+  再次配对沿用同一把主密钥，已连的手机不受影响；解除配对后再配对才生成新密钥。
 - **连接**：环境变量里是 relay 的基础 URL，连接地址用 `RelayUrl::connect_url()` 拼；三个请求头照第 4.2 节，不带 `Sec-WebSocket-Extensions`。
   每 25 秒一个 `PING`，60 秒收不到 `PONG` 就重连。重连指数退避：1 秒起、上限 60 秒，每次在当前步长的后一半里随机取；连接活过 30 秒才把退避清零。
   relay 的关闭码一律按「退避重连」处理；4001（新 host 挤掉了旧的）不清零退避，同一轮只记一次日志，免得两台用同一把密钥的桌面互相挤时刷屏。
@@ -593,11 +601,21 @@ CI：`.github/workflows/ios-protocol.yml`（07a），macOS runner（`macos-26`�
 ### 05d — 设置「手机」页（依赖 05b）
 
 - 二维码、解除配对、连接状态；配对页检查「接通电源时保持唤醒」（票 04）和「关闭窗口时保持后台运行」（裁决 10）。视觉先本地预览给 JC。
-- 实现（2026-10-10）：三个 Tauri 命令 `get_remote_status`（没有远程模块回 `null`，页面据此不出「手机」项）、`pair_remote_phone`、
-  `unpair_remote_phones`，只走 Tauri、不进 `GalleyApi`，二维码只能出现在桌面屏幕上；二维码在 Core 用 `qrcode` 0.14.1（关默认特性、只开 `svg`，
+- 实现（2026-10-10）：四个 Tauri 命令 `get_remote_status`（没有远程模块回 `null`，页面据此不出「手机」项）、`pair_remote_phone`、
+  `cancel_remote_pairing`、`unpair_remote_phones`，只走 Tauri、不进 `GalleyApi`，二维码只能出现在桌面屏幕上；二维码在 Core 用 `qrcode` 0.14.1（关默认特性、只开 `svg`，
   零传递依赖）画成 SVG 交给页面，二维码串不以文字进 JS。页面规范见 `docs/design/overlays-and-settings.md`「Phone」。
   「接通电源时保持唤醒」随票 04 再加，本票只查「关闭窗口时保持后台运行」。预览用的假手机是 Core 的 example `fake_phone`，
   从屏幕上的二维码读码（macOS 自带的 Core Image 识别），用法见 `relay/README.md`「Preview Settings → Phone」。
+- 配对生命周期（2026-10-10 JC 裁定「第一台手机连上才算配对」，此前点「显示配对码」就存下密钥、不扫也算已配对）：规则见第 3.1 节。
+  - Core：待定密钥与 10 分钟计时放在一把生命周期锁里，配对、取消、解除配对、启动、停止依次拿它，互相看不到半截状态。
+    连接任务把第一台握手完成的手机先扣住（握手回应不发出），另起任务存密钥，存好才放行，存不进去就丢掉这台手机；
+    这台手机扣住期间已计入在线数和上次连接时间，所以说「已配对」的那条状态里已经是「1 台手机在线」，页面不会闪一下「没有手机在线」。
+    超时时长是常量 `PAIRING_TIMEOUT`（10 分钟），测试经 `RemoteTuning::pairing_timeout` 注入短值。
+  - 状态新增 `pairing`（配对中）与 `pairingError`（存密钥失败的原因）；新增命令 `cancel_remote_pairing`，配对中才生效。
+  - 页面：版式只看 `paired`，去掉了原先「首次配对时版式停在配对」的补丁；配对中的码随 `pairing` 变假收起，码下写有效期；
+    收起配对码、离开「手机」页、关闭设置时都调取消。细节见 `docs/design/overlays-and-settings.md`「Phone」。
+  - 测试：`core/tests/remote_module_test.rs` 加 6 条（配对中不存、首台握手才存、取消、超时、已配对时取消与超时都不生效、
+    存不进去时手机进不来且状态报错、重启后只认存下的密钥），端到端测试补了配对中与已配对的断言。
 
 ### 06a — relay（依赖 05a）
 
@@ -639,3 +657,5 @@ iOS 的工程与界面（票 07 其余部分）仍按产品定义的次序，等
 - 2026-10-10 06b（APNs）实现：第 4.3 节补「relay 侧发送」（JWT 缓存与强制更换的频率上限、HTTP/2 连接、请求头与 24 小时过期、回应映射、
   四个变量全有或全无、计数器、relay 持有 APNs 密钥对 Rule 2 的影响）和选型的落定（`ring` 加 hyper-util，不开 `reqwest` 的 `http2`）；
   第 8 节记假 APNs 测试与 Core 的端到端测试；第 13 节 06b 记实现。未连真 APNs。
+- 2026-10-10 JC 裁定 05d 改为「第一台手机连上才算配对」：此前点「显示配对码」就把密钥存下，不扫直接收起也变成「已配对 · 没有手机在线」，
+  Core 一直连着 relay。改为配对中密钥只在内存里、首台手机握手后才存，收起或离开即取消，10 分钟超时；第 3.1、7 节与第 13 节 05d 已同步。
