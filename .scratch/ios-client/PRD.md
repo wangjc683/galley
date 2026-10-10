@@ -120,7 +120,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 | 02 | Core 接管发送 + 所有写入都广播，拆为 02a–02e（02e 暂缓到 P1），见 [issues/02](./issues/02-core-send-takeover.md) | — | done 2026-10-10（02a–02d；02e 暂缓到 P1） |
 | 03 | `client` 列迁移（`messages`、`sessions`；补六处手写迁移列表） | — | done（并入 05c，`01d67d44`） |
 | 04 | 保持唤醒开关 | 待定细节 | open |
-| 05 | `Notifier` 扇出 + Core 内远程模块（向外 WSS，预共享密钥）；协议设计稿见 [issues/05](./issues/05-remote-protocol-design.md) | 02 | 设计已全部裁定（裁决 24）；拆为 05a–05d，05a、05c 已合入（2026-10-10） |
+| 05 | `Notifier` 扇出 + Core 内远程模块（向外 WSS，预共享密钥）；协议设计稿见 [issues/05](./issues/05-remote-protocol-design.md) | 02 | 设计已全部裁定（裁决 24）；拆为 05a–05d，05a、05b、05c 已合入（2026-10-10），余 05d |
 | 06 | frankfurt 最小 relay + APNs 推送（做完了 / 在问你）；设计同 [issues/05](./issues/05-remote-protocol-design.md) | Apple 账号（只挡推送） | 设计已全部裁定（裁决 24）；拆为 06a–06c，06a 已合入（2026-10-10） |
 | 07 | SwiftUI P0：主聊天、旁聊列表、回答提问（约七个方法：列会话、读消息、订阅事件、发送、停止、新建会话、标已读）；回答提问要支持候选项含多选、问题上方一张图（issues/01）；其中 Swift 协议包 07a 没有界面，先做，已合入（2026-10-10，[issues/05](./issues/05-remote-protocol-design.md) 第 13 节） | 05、06（07a 只依赖 05a） | open |
 | 08 | Core 通知判断（「需要关注」事件）+ 桌面系统通知改为接收 + 后台模式且已配对时桌面静默 | 02c | open |
