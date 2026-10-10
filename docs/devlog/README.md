@@ -18,7 +18,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ### 2026-10-10
 
-- [远程访问：协议设计稿与第一批实现](./2026-10-10-remote-access-protocol-and-first-tickets.md) — 票 02 P0 合完后转远程访问；裁决 22 单仓、iOS 端 MIT 开源，23 relay 部署归 inkstone-ops；协议设计稿五点：P0 `NNpsk0` 先简后升、手机侧 Noise 用 CryptoKit 自写（补漏列的「Rust 经 UniFFI 编进 App」作出口）、推送端到端加密显示真实内容、原票 03 与轮次广播并进 05、relay 域名撤销（初稿「App 写死地址」与二维码带地址矛盾，认错；桌面编译期注入）；当天合入 05a 协议 crate、05c Core 缺口（迁移 043 不用 041、`client` 不进 CLI JSON、GUI 跳过 turn-persist 防重复计数）、05b 远程模块、06a relay（背压限速、CI 加 Linux）、07a Swift 包（漂移检查并进测试、本机用 swift-test.sh）；06b 进行中，05d、06c 未开
+- [远程访问：协议设计稿与第一批实现](./2026-10-10-remote-access-protocol-and-first-tickets.md) — 票 02 P0 合完后转远程访问；裁决 22 单仓、iOS 端 MIT 开源，23 relay 部署归 inkstone-ops；协议设计稿五点：P0 `NNpsk0` 先简后升、手机侧 Noise 用 CryptoKit 自写（补漏列的「Rust 经 UniFFI 编进 App」作出口）、推送端到端加密显示真实内容、原票 03 与轮次广播并进 05、relay 域名撤销（初稿「App 写死地址」与二维码带地址矛盾，认错；桌面编译期注入）；当天合入 05a 协议 crate、05c Core 缺口（迁移 043 不用 041、`client` 不进 CLI JSON、GUI 跳过 turn-persist 防重复计数）、05b 远程模块、06a relay（背压限速、CI 加 Linux）、07a Swift 包（漂移检查并进测试、本机用 swift-test.sh）、06b APNs（hyper-rustls 不开 reqwest http2、relay 多持 APNs 签名密钥只能弹占位）；05d、06c 未开
 - [微信对话体验对齐桌面端：只留「对方正在输入」+ 一条回答](./2026-10-10-wechat-conversation-ux.md) — 微信是上游 `wechatapp` 原样：每步一推、`[任务已完成]`、ask_user 题干被吞，另有 5 分钟即「完成」、空闲 `/stop` 误伤下一条、长回答截头三个缺陷；读官方 iLink 插件源码后先跑真机探针：不能编辑删除（同 `client_id` 被丢）、原生工具进度不显示、Markdown 全渲染、语音自带转写、不带 token 也能主动发；JC 按推荐五点全过：运行中只留「正在输入」、一轮一条消息、≥ 2 步末行 `N 步 · 用时 X`（与 TG / DC 有意分叉）、补完成汇报（翻 10-08 暂缓）、runner 侧 `im_wechat.py` 接管 `on_message` 不加补丁；入口层删微信注记；引用消息进 deferred（Rule 4）；真机通过（`/stop`、排队、发文件、运行中 `/new` 日志未出现，留观察）
 
 ### 2026-10-09

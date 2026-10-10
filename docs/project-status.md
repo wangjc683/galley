@@ -703,7 +703,7 @@ main-chat planning docs, main has:
   turn-persist broadcast the GUI skips, attachment read by id, the pairing
   key, migration **043** adding a nullable `client` column, message
   paging), 05a `remote-protocol/`, 05b `core/src/remote/`, 06a `relay/`,
-  07a `ios/GalleyRemote/`. The remote module only exists when a relay URL
+  06b APNs sending (not yet tried against real APNs), 07a `ios/GalleyRemote/`. The remote module only exists when a relay URL
   is configured: `GALLEY_REMOTE_RELAY_URL` is not set in the release
   workflow yet, so a release cut now ships migration 043 with remote access
   off.

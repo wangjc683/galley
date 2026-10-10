@@ -11,8 +11,8 @@
 - 仓库布局：iOS App 与 relay 的源码都进 galley 单仓，iOS 端随仓以 MIT 开源（裁决 22）；relay 的部署归私有的 inkstone-ops（裁决 23）。
 - 协议设计稿五个裁决点（裁决 24）：P0 握手用 `Noise_NNpsk0_25519_ChaChaPoly_SHA256`、P1 再升 `XXpsk3` + `KK`；手机侧 Noise 用 CryptoKit 自己写；
   推送端到端加密、显示真实内容；原票 03（`client` 列）与「轮次落库广播」并进 05；relay 域名一项撤销。
-- 当天合入五张实现票：05a 协议 crate `remote-protocol/`、05c Core 缺口、05b Core 远程模块 `core/src/remote/`、06a relay `relay/`、07a Swift 协议包
-  `ios/GalleyRemote/`。06b（APNs）进行中；05d（设置「手机」页）、06c（部署）未开。
+- 当天合入六张实现票：05a 协议 crate `remote-protocol/`、05c Core 缺口、05b Core 远程模块 `core/src/remote/`、06a relay `relay/`、06b APNs 发送、
+  07a Swift 协议包 `ios/GalleyRemote/`。05d（设置「手机」页）、06c（部署）未开。
 
 ## 裁决与否掉的路
 
@@ -48,18 +48,22 @@
 - **本机跑 Swift 测试要用 `ios/GalleyRemote/swift-test.sh`**：JC 的 Mac 只有 Command Line Tools，SwiftPM 6.2 不把其中的 Testing.framework 加进测试目标；
   CI 的 macOS 26 有 Xcode，直接 `swift test`。
 - **CI 加了 Linux 的 relay job**：relay 正式跑在 frankfurt 的 Debian 上，原有 Core 矩阵只有 macOS 与 Windows。
+- **APNs 走 hyper-util + hyper-rustls，不开 reqwest 的 `http2`**：Cargo feature 在 workspace 里合并，开了会让 Core 自己的 reqwest 在整体构建与测试里协商 HTTP/2，
+  而发布的 App 不会，两边行为不一致。JWT 每 50 分钟换签，遇 403 过期强制换签最多 20 分钟一次，防 key id 写错时每条推送都换签触发 Apple 的 429。
+- **relay 多持有一把密钥**：APNs 签名密钥。拿到它的人能让 App 弹通知，但只能弹占位文案「有新消息」，内容仍封在推送密文里；已写进 relay README 与设计稿第 4.3 节。
 
 ## 验证
 
 - 每张票在 worktree 里由主会话复跑：05c 全量 722、05a 61、06a 20、07a 74（Swift Testing）、05b 合并 06a 后全量 835，均 0 失败；
+  06b 的 relay 与 APNs 38 个、端到端 1 个、05b 远程模块 14 个复跑通过（代理报全量 854）；
   合入主树前都查过 `galley status` 的 `busy:0`，push 前本地跑六个门禁脚本。
 - 迁移 043 已应用到 JC 的 dev 库，迁移前自动备份 `app.galley.backup.20261010T084620Z`。
 - 远程模块在没配 relay 地址的构建里不创建，dev 与下一个发布在设 CI 变量前行为不变。
-- CI：06a / 07a 那一轮的 `Relay (Linux)` 与 `iOS protocol` 两个 job 都绿。
+- CI：06a / 07a 那一轮的 `Relay (Linux)` 与 `iOS protocol` 两个 job 都绿；05b 合入那一轮 7 个 job 全绿（含 Windows）。
 
 ## 未完
 
-- 06b APNs 真发送（假 APNs 服务器测试 + 真 relay 端到端测试），进行中。
+- 06b 没连过真 APNs，也没试过 Apple 发的真 `.p8`（按 Apple 公布的格式造了一把，ring 能读），等 Apple 开发者账号。
 - 05d 设置「手机」页：视觉改动，先本地合入不 push、本机起 relay 让 JC 带环境变量重启 dev 预览，看过再 push。
 - 06c 部署：等 Apple 开发者账号，与推送密钥一次部署；动 frankfurt 与 DNS 前问 JC。Caddy 对 WebSocket 的空闲超时可先在本机装同版本 Caddy 验。
 - 手机 App 本体（票 07 其余部分）按移动端次序，等 10-16 主聊天复盘与第 4 步之后。
