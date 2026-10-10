@@ -1,6 +1,6 @@
 # 05 / 06 — 远程模块与 relay 协议设计稿
 
-Status: needs-info（设计稿；第 12 节裁决点 1、4、5 已裁，3 撤销，2 待 JC 确认，2026-10-10；确认后拆实现票）
+Status: ready-for-agent（第 12 节裁决点全部落定，2026-10-10；实现拆分见第 13 节，05a、05c 进行中）
 
 来源：2026-10-10 JC 裁决「iOS 端开源，单仓按建议推进，先出协议设计稿」。上游：PRD 裁决 1、2、6、8、9、17、18、22、23（`../PRD.md`）；
 宪法 Rule 2（`AGENTS.md:107-126`）。依据两份调研：
@@ -312,15 +312,15 @@ CI：iOS 用单独的 workflow，按路径过滤（`ios/**`、`remote-protocol/*
 - `snow` 没有正式审计。缓解：锁版本、关注 RUSTSEC 公告、只用规范推荐的模式。
 - relay 是全天候生产服务，只有 JC 一人运维。它无状态，换机器只要改一条 DNS；层台转正式生产时考虑把 relay 迁到独立小机器，与客户的生产环境隔离。
 
-## 12. 裁决点（2026-10-10 JC 已裁 1、4、5，3 撤销，2 待确认）
+## 12. 裁决点（2026-10-10 JC 已裁 1、2、4、5，3 撤销）
 
 1. **P0 握手先简后升，还是一步到位？** 已裁 A。
    - **A（已裁）**：P0 用 NNpsk0，一把共享主密钥；P1 升级 XXpsk3 配对加 KK 会话，迁移时重扫一次码。P0 实现最少，P0 只有你一台手机，吊销需求还不存在。
    - B：P0 直接上 XXpsk3 配对加 KK 会话加设备白名单。省掉一次迁移，但 P0 要多做公钥生成存储、白名单和两种握手。
-2. **手机这头的 Noise 代码从哪来？** 待 JC 确认（JC 问「什么是 iOS 侧的 Noise」，补了解释和选项 C）。
+2. **手机这头的 Noise 代码从哪来？** 已裁 A（JC 先问「什么是 iOS 侧的 Noise」，补了解释和选项 C 后裁定）。
    Noise 是端到端加密那一层的公开协议（WireGuard、WhatsApp 都用它），规定两端怎么握手协商出会话密钥、之后每条消息怎么加密。
    两端要各有一份实现、逐字节一致：电脑这头是 Rust，用现成的 `snow`；手机这头是 Swift，没有像样的现成库。
-   - **A（推荐）**：用 iOS 自带的 CryptoKit 提供的原语（X25519、ChaChaPoly、SHA256、HMAC）自己拼，只实现用到的模式，估计三四百行（推理，按规范 §5 伪代码的规模）。
+   - **A（已裁）**：用 iOS 自带的 CryptoKit 提供的原语（X25519、ChaChaPoly、SHA256、HMAC）自己拼，只实现用到的模式，估计三四百行（推理，按规范 §5 伪代码的规模）。
      两侧跑同一套 cacophony 向量，再加 Rust↔Swift 互通用例。没有第三方依赖，iOS 工程保持纯 Swift，开源后别人也好审。
    - B：vendor `swift-libp2p/swift-noise` 并锁定提交。现成，但只有 4 star、1 个贡献者，向量来源不明。
    - C（初稿漏列，补）：把 Rust 这一份编译成 iOS 库，Swift 经绑定（UniFFI）调用。只有一份实现，两端不可能不一致；先例有 Signal 的 `libsignal`、
@@ -337,22 +337,86 @@ CI：iOS 用单独的 workflow，按路径过滤（`ios/**`、`remote-protocol/*
 5. **范围合并**：票 03（`client` 列迁移）和 02e 里「轮次落库广播」一项并进 05。已裁并进。
    前者是手机用量统计（PRD「P0 要回答的问题」）的前提，后者是手机会话列表正确的前提。两者都很小，单独排期反而多一轮合入和验收。
 
-裁完后拆实现票：
+## 13. 实现拆分（2026-10-10）
 
-| 票 | 内容 |
-|---|---|
-| 05a | `remote-protocol` crate（外层帧、应用层数据结构、Noise 封装与向量测试） |
-| 05b | Core 远程模块 |
-| 05c | Core 缺口：扇出、轮次广播、运行状态事件、附件接口、`client` 列 |
-| 05d | 设置「手机」页 |
-| 06a | relay |
-| 06b | APNs 发送 |
-| 06c | 部署（inkstone-ops） |
+次序：05a、05c 先并行；05a 合入后 06a、07a 并行；05b 等 05a 与 05c；05d 等 05b；06b 等 06a；06c 等 06a、06b。
+都在 scratchpad 的 git worktree 里做，合入主树前查 `galley status` 的 `busy:0`（合入会让 JC 开着的 dev 重启 Core）。
 
-iOS 的工程与 UI 仍按产品定义的次序，等主聊天桌面形态定了再开（移动端产品定义「方案总览与次序」）。
+### 05a — `remote-protocol` crate（无依赖）
+
+- 位置：仓根 `remote-protocol/`，加进 `core/Cargo.toml` 的 workspace members。不依赖 tokio、Tauri 和 Core，因为 relay 也要用。
+- 内容：
+  - 密钥：配对主密钥经 HKDF 派生三把钥匙、频道键、二维码串的生成与严格解析（第 3.1 节）；
+  - 外层帧：六种帧的字节布局与编解码，布局以字节表写回第 4.2 节；
+  - Noise：snow 0.10.0 封装 `NNpsk0`，含 prologue、两步握手、传输加解密、结束标记、单条上限（第 5 节）；
+  - 填充：256 字节下限加 Padmé；
+  - 推送：用 `push_key` 加解密推送明文，按桶长填充，保证 APNs 载荷 ≤ 4096 字节（第 4.3 节）；
+  - 应用层：信封（req / res / evt / chunk）、P0 各方法的参数与结果、事件载荷、协议版本常量（第 6 节），camelCase；分片与重组。
+- 测试：
+  - cacophony 向量，只收用到的套件，记下来源与许可；
+  - golden 文件：外层帧字节、应用层 JSON 样例、固定临时钥的握手与推送密文，供 07a 的 Swift 侧解码；改了结构不改 golden 就红。
+- CI：`check.yml` 加 `cargo test -p remote-protocol`。现有步骤只跑 `-p galley-core` 和 `-p galley-cli`（`check.yml:204-217`），不会自动带上新 crate。
+- 不做：网络、Core 接线。
+
+### 05c — Core 缺口（无依赖，与 05a 并行）
+
+第 7 节的五个缺口，加两项数据层：
+
+1. 通知扇出：`TauriNotifier::emit` 发给页面之后，转给进程级的远程接收端。接收端不得阻塞调用方（有界队列，满了就丢）；没注册时什么都不做；35 处构造不动。
+2. 轮次落库后广播：`turn_persistence` 在 `bump_session_after_turn` 之后发 02d 同款的会话更新事件（`turn_persistence/mod.rs:157-170`）。
+   GUI 侧 02d 已有守卫，要核对收到后不会把轮次重复加一。
+3. `session-run-state` 事件：`RunState`（`runner_manager/manager.rs:76-94`）任一字段变化时发出，camelCase。GUI 暂不监听；IPC 类型镜像按
+   `check-ipc-protocol-drift` 的要求补。
+4. 附件只读：按会话 id 加文件名，只读 `conversation-attachments/<session>/` 下的文件（`app_paths.rs:57`），拒绝越界路径和符号链接逃逸，
+   返回字节与类型。只是 Core 函数，不接传输。
+5. 配对主密钥：凭据存储键 `remote:pairing:mk` 的生成、读取、轮换。
+6. `client` 列（原票 03，裁决 9）：迁移给 `messages`、`sessions` 加可空的 `client`，无 CHECK。桌面 GUI 发送与新建写 `desktop`，
+   CLI、IM、agent 留空，手机的 `ios` 由 05b 写。补六处手写迁移列表；CLI JSON 不暴露，Rule 3 不动。
+7. 消息分页：`persisted_message_rows` 加一个按 `before` / `limit` 取尾部的版本（第 6.3 节 `session.messages`）。
+
+不做：远程模块本身、Tauri 命令、GUI 改动（IPC 类型镜像除外）。
+
+### 05b — Core 远程模块（依赖 05a、05c）
+
+- `core/src/remote/`：
+  - 连接任务（tokio-tungstenite + rustls）、心跳与退避、`PEER` 处理；
+  - 每台手机一个 Noise 响应方会话；
+  - 第 6.3 节的方法分发，`device.registerPush` 存 prefs，`mint_session_id` 放宽可见性；
+  - 第 6.4 节的事件转发：订阅、100ms 合批、按手机分开的有界队列、丢过增量就让手机重拉；
+  - 推送发送接口，给票 08 用。
+- relay 地址：编译期 `option_env!("GALLEY_REMOTE_RELAY_URL")`，运行时同名环境变量覆盖；两者都没有就不启动（第 2 节）。
+- 只在已配对时连；启动和停止挂在 `start_background_services` 与托盘退出（第 7 节）。
+- 测试：进程内起 relay（06a 已合入就直接用，否则写个最小的假 relay）加 Rust 写的假手机，跑通握手、`hello`、列会话、发送、事件、断线重连。
+
+### 05d — 设置「手机」页（依赖 05b）
+
+- 二维码、解除配对、连接状态；配对页检查「接通电源时保持唤醒」（票 04）和「关闭窗口时保持后台运行」（裁决 10）。视觉先本地预览给 JC。
+
+### 06a — relay（依赖 05a）
+
+- 第 4、8 节：频道表、外层帧转发、新 host 挤掉旧的、client 上限、限速、心跳超时、只听 127.0.0.1 的计数器、不记日志；进程内集成测试。
+
+### 06b — APNs（依赖 06a；真机验证等 Apple 账号）
+
+- 第 4.3 节：自己写 ES256 JWT，用 reqwest 走 HTTP/2；`PUSH` 转发给 APNs，`PUSH_RESULT` 回报结果（含 410）；用假 APNs 服务器测试。
+
+### 06c — 部署（依赖 06a、06b）
+
+- galley 的 CI 出 `relay-v*` 构建产物；inkstone-ops 写 systemd 服务、Caddy 站点文件（`stream_close_delay`、不记访问日志）、DNS 子域、APNs 密钥在哪取。
+- 动 frankfurt 和 DNS 之前问 JC，挑层台低峰。
+
+### 07a — Swift 协议包（依赖 05a 的 golden；属票 07，没有界面所以先做）
+
+- `ios/GalleyRemote/`（SwiftPM）：CryptoKit 上的 `NNpsk0`（裁决点 2 A）、外层帧、填充、推送解密、应用层 `Codable` 类型。
+- 测试：cacophony 向量；解码 05a 的全部 golden；与 Rust 固定临时钥的握手结果逐字节一致。用 `swift test` 在 macOS 上跑；
+  本机只有 Command Line Tools、没装 Xcode，测试框架能不能用待验。
+- CI：按路径过滤的 macOS job；加 `check-remote-protocol-drift`（第 10 节）。
+
+iOS 的工程与界面（票 07 其余部分）仍按产品定义的次序，等主聊天桌面形态定了再开（移动端产品定义「方案总览与次序」）。
 
 ## Comments
 
 - 2026-10-10 JC 裁第 12 节：1、4、5 按推荐；2 问「什么是 iOS 侧的 Noise」，补了解释和漏列的选项 C（Rust 编译进 App），推荐仍是 A，待确认；
   3 JC 指出用户不接触 relay、不该是产品决策，核对后初稿「App 里会写死地址」与第 3.1 节二维码带地址自相矛盾，撤销该点，
   第 2 节补「relay 地址从哪来」（照更新地址先例编译期注入、二维码带给手机、运行时环境变量覆盖）。
+- 2026-10-10 JC 裁第 2 点按推荐（A：CryptoKit 自写）；拆出第 13 节实现票，05a、05c 开工。

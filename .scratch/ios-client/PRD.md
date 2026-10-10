@@ -98,7 +98,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
     这是 inkstone-ops「租户部署归租户仓」的例外，理由是 galley 是公开仓，部署细节属于砚石的实例而不是产品；类比网站：内容在站点仓，托管在 inkstone-ops。
 24. 远程协议设计稿（2026-10-10，[issues/05](./issues/05-remote-protocol-design.md) 第 12 节）：P0 握手用 `NNpsk0` 一把配对主密钥，P1 再升 `XXpsk3` + `KK`；
     通知显示真实内容（会话标题加回复摘要或「在问你：问题」），推送端到端加密；票 03 与 02e 的「轮次落库广播」并入 05。
-    relay 域名不是产品决策：手机从二维码拿地址，桌面编译期注入，用户不接触。手机这头的 Noise 实现方式待确认。
+    relay 域名不是产品决策：手机从二维码拿地址，桌面编译期注入，用户不接触。手机这头的 Noise 用 CryptoKit 自己写，两侧跑同一套测试向量。
 
 ## 待定
 
@@ -120,9 +120,9 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 | 02 | Core 接管发送 + 所有写入都广播，拆为 02a–02e（02e 暂缓到 P1），见 [issues/02](./issues/02-core-send-takeover.md) | — | done 2026-10-10（02a–02d；02e 暂缓到 P1） |
 | 03 | `client` 列迁移（`messages`、`sessions`；补六处手写迁移列表） | — | 并入 05（裁决 24） |
 | 04 | 保持唤醒开关 | 待定细节 | open |
-| 05 | `Notifier` 扇出 + Core 内远程模块（向外 WSS，预共享密钥）；协议设计稿见 [issues/05](./issues/05-remote-protocol-design.md) | 02 | 设计稿已裁（裁决 24），Noise 实现方式待确认 |
-| 06 | frankfurt 最小 relay + APNs 推送（做完了 / 在问你）；设计同 [issues/05](./issues/05-remote-protocol-design.md) | Apple 账号（只挡推送） | 设计稿已裁（裁决 24） |
-| 07 | SwiftUI P0：主聊天、旁聊列表、回答提问（约七个方法：列会话、读消息、订阅事件、发送、停止、新建会话、标已读）；回答提问要支持候选项含多选、问题上方一张图（issues/01） | 05、06 | open |
+| 05 | `Notifier` 扇出 + Core 内远程模块（向外 WSS，预共享密钥）；协议设计稿见 [issues/05](./issues/05-remote-protocol-design.md) | 02 | 设计已全部裁定（裁决 24）；拆为 05a–05d，05a、05c 进行中 |
+| 06 | frankfurt 最小 relay + APNs 推送（做完了 / 在问你）；设计同 [issues/05](./issues/05-remote-protocol-design.md) | Apple 账号（只挡推送） | 设计已全部裁定（裁决 24）；拆为 06a–06c |
+| 07 | SwiftUI P0：主聊天、旁聊列表、回答提问（约七个方法：列会话、读消息、订阅事件、发送、停止、新建会话、标已读）；回答提问要支持候选项含多选、问题上方一张图（issues/01）；其中 Swift 协议包 07a 没有界面，先做（[issues/05](./issues/05-remote-protocol-design.md) 第 13 节） | 05、06（07a 只依赖 05a） | open |
 | 08 | Core 通知判断（「需要关注」事件）+ 桌面系统通知改为接收 + 后台模式且已配对时桌面静默 | 02c | open |
 | 09 | 带图的提问（已裁 A 约定式）：提示词条款（登录墙 / 扫码 / 图形验证码时截图 + Markdown 图片引用）+ Core 从问题抽本地图片经远程模块送手机 + 桌面真机验 `AskUserBubble` 显示图；渲染验不过再转 B（[mobile-product/issues/01](../mobile-product/issues/01-browser-intervention.md)） | 05 | open |
 
