@@ -1,6 +1,10 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
 
+import {
+  applyRunnerHistoryReplay,
+  type RunnerHistoryReplayPayload,
+} from "@/lib/ipc/history-replay";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
@@ -100,6 +104,28 @@ export function useExternalCoreEvents(): void {
       unlisten?.();
     };
   }, [attachExternalBridge]);
+
+  // Core replays a session's history into its runner (ticket 02b) and
+  // announces each attempt; a send waiting on it shows "restoring".
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      const fn = await listen<RunnerHistoryReplayPayload>(
+        "runner-history-replay",
+        (e) => applyRunnerHistoryReplay(e.payload),
+      );
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

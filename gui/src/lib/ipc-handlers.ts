@@ -6,11 +6,6 @@ import {
   extractThinking,
   stripGATags,
 } from "@/lib/ipc/ga-output-cleaning";
-import {
-  ensureHistoryReplayComplete,
-  finishHistoryReplay,
-  markHistoryReplayStale,
-} from "@/lib/ipc/history-replay";
 import { resolveLanguagePreference } from "@/lib/language";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
 import {
@@ -27,7 +22,6 @@ import { isStepLimitExit } from "@/lib/step-limit";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
 import type { AgentTurn } from "@/types/conversation";
-import type { Session } from "@/types/session";
 import type {
   IPCEvent,
   MessageVisibility,
@@ -48,7 +42,6 @@ export {
   extractPreamble,
   stripGATags,
 } from "@/lib/ipc/ga-output-cleaning";
-export { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
 
 function eventVisibility(event: { visibility?: MessageVisibility }): MessageVisibility {
   return event.visibility ?? "visible";
@@ -62,16 +55,13 @@ function currentCopy() {
 
 /**
  * The store half of a runner's `ready`: per-session model list, connected
- * status, image capability, reasoning effort, runtime info. Returns the
- * session row it read (the caller's replay check needs it).
+ * status, image capability, reasoning effort, runtime info. That is all a
+ * `ready` does on this page — history replay is Core's (ticket 02b).
  *
  * Shared by the real `ready` event and by the snapshot Core hands a page
  * that attaches after `ready` went by ([`applyReadySnapshot`]).
  */
-function applyReadyState(
-  sessionId: string,
-  ready: ReadySnapshot,
-): Session | undefined {
+function applyReadyState(sessionId: string, ready: ReadySnapshot): void {
   // Per-session LLM list — N-active multi-session means each
   // bridge has its own currently-selected LLM. The active session's
   // pair projects up to top-level `llms` / `llmDisplayName` for
@@ -138,17 +128,13 @@ function applyReadyState(
   } else {
     useRuntimeStore.getState().patchRuntimeInfo({ bridgePid: ready.pid });
   }
-  return sessionForRuntime;
 }
 
 /**
  * Apply a ready snapshot (`ReadySnapshot`, from Core's
  * `ensure_session_runner` / `list_live_runners`) to the stores, exactly as
- * a `ready` event would — and nothing else. In particular it NEVER replays
- * history: a snapshot describes a runner that was already running, whose
- * GA history may be mid-run, and `load_history` replaces that history
- * wholesale (the runner refuses it mid-run). Replay stays tied to a real
- * `ready` event, which only a freshly started runner emits.
+ * a `ready` event would. Neither sends anything to the runner: Core
+ * replays history inside its ensure (ticket 02b).
  */
 export function applyReadySnapshot(
   sessionId: string,
@@ -199,21 +185,11 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         llm: event.llmName,
         availableLLMs: event.availableLLMs.length,
       });
-      const sessionForRuntime = applyReadyState(event.sessionId, event);
-      // Session Restore (Stage 3 Task 3). If this session has prior
-      // turn history on disk, replay it into GA `backend.history` via
-      // load_history. The MainView submit path waits on the same gate
-      // before it writes a fresh `user_message`, so a quick submit
-      // after opening history cannot race ahead of load_history.
-      //
-      // The session-list check uses `turnCount > 0` rather than the
-      // SQLite query result so we skip the round-trip for newly
-      // created sessions (the common case). For the cold-start case
-      // turnCount comes from `loadSessions` during hydrate.
-      if (sessionForRuntime && (sessionForRuntime.turnCount ?? 0) > 0) {
-        markHistoryReplayStale(event.sessionId);
-        void ensureHistoryReplayComplete(event.sessionId);
-      }
+      // Stores only. Session Restore (replaying the persisted history
+      // into GA `backend.history`) is Core's since ticket 02b: its
+      // ensure sends `load_history` and waits for `history_loaded`
+      // before a send may dispatch.
+      applyReadyState(event.sessionId, event);
       return;
     }
 
@@ -274,9 +250,6 @@ export function dispatchIPCEvent(event: IPCEvent): void {
 
     case "error": {
       console.warn("[ipc] error", event);
-      if (event.context === "load_history") {
-        finishHistoryReplay(event.sessionId, false);
-      }
       useUiStore.getState().pushToast(fromIPCError(event));
       // Bridge errors usually mean turn_end won't arrive — clear the
       // running flag so the thinking placeholder + Stop-mode Composer
@@ -658,7 +631,7 @@ export function dispatchIPCEvent(event: IPCEvent): void {
     }
 
     case "history_loaded": {
-      finishHistoryReplay(event.sessionId, true);
+      // Core's ensure waits for this itself (ticket 02b).
       console.debug(`[ipc] ${event.kind}`, event);
       return;
     }

@@ -316,7 +316,7 @@ async fn next_closed(
 ) -> Option<(Option<i32>, Option<i32>)> {
     loop {
         match timeout(Duration::from_secs(5), rx.recv()).await {
-            Ok(Ok(BroadcastItem::Closed { code, signal })) => return Some((code, signal)),
+            Ok(Ok(BroadcastItem::Closed { code, signal, .. })) => return Some((code, signal)),
             Ok(Ok(BroadcastItem::Event(_))) | Ok(Ok(BroadcastItem::Malformed(_))) => continue,
             Ok(Err(RecvError::Lagged(_))) => continue,
             Ok(Err(RecvError::Closed)) | Err(_) => return None,
@@ -1651,6 +1651,8 @@ async fn concurrent_ensures_start_one_real_runner_and_later_ones_get_its_ready()
         active_session_id: None,
         llm_override: None,
         ga_config: None,
+        holds_run_gate: false,
+        timeouts: Default::default(),
     };
 
     let (a, b) = tokio::join!(
@@ -1681,6 +1683,468 @@ async fn concurrent_ensures_start_one_real_runner_and_later_ones_get_its_ready()
     assert!(!again.spawned);
     assert_eq!(again.pid, a.pid);
     assert_eq!(again.ready.expect("snapshot").llm_name, "mock-llm");
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+// ---------------- history replay on real processes (ticket 02b) ----------------
+//
+// The mock bridge below answers `load_history` from a plan file in its
+// directory (one behavior per attempt, across processes) and logs every
+// `load_history` / `user_message` it receives, so a test can see what a
+// restarted runner got.
+
+use galley_core_lib::api::{GoalId, GoalStatus};
+use galley_core_lib::db::PersistAssistantMessage;
+use galley_core_lib::goal_engine::GoalEngine;
+use galley_core_lib::notify::Notifier;
+use galley_core_lib::session_runner::SessionRunnerError;
+use galley_core_lib::socket_listener::{DbSource, HandlerCtx};
+use std::sync::{Arc, Mutex};
+
+fn write_replaying_runner(dir: &std::path::Path, plan: &str) {
+    let runner_dir = dir.join("runner");
+    fs::create_dir_all(&runner_dir).expect("mkdir runner");
+    fs::write(runner_dir.join("__init__.py"), "").expect("write __init__");
+    fs::write(dir.join("plan"), plan).expect("write plan");
+    let script = r##"
+import argparse
+import json
+import os
+import sys
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ga-path", required=True)
+parser.add_argument("--session-id", required=True)
+args, _ = parser.parse_known_args()
+HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def emit(obj):
+    obj["sessionId"] = args.session_id
+    obj.setdefault("timestamp", "2026-10-10T00:00:00+00:00")
+    print(json.dumps(obj), flush=True)
+
+def log(name, record):
+    with open(os.path.join(HOME, name), "a") as f:
+        f.write(json.dumps(record) + "\n")
+
+def attempts():
+    try:
+        with open(os.path.join(HOME, "load_history.jsonl")) as f:
+            return sum(1 for _ in f)
+    except FileNotFoundError:
+        return 0
+
+emit({"kind": "ready", "protocolVersion": "0.1", "gaCommit": "mock",
+      "gaCommitDate": "2026-10-10T00:00:00+00:00", "gaPath": args.ga_path,
+      "llmName": "mock-llm", "cwd": os.getcwd(), "pid": os.getpid(),
+      "availableLLMs": []})
+
+def load_history_error(severity):
+    emit({"kind": "error", "message": "History restore: " + severity,
+          "category": "business", "severity": severity, "retryable": False,
+          "hint": None, "context": "load_history", "traceback": None})
+
+for line in sys.stdin:
+    try:
+        cmd = json.loads(line)
+    except ValueError:
+        continue
+    kind = cmd.get("kind")
+    if kind == "shutdown":
+        break
+    if kind == "load_history":
+        with open(os.path.join(HOME, "plan")) as f:
+            plan = f.read().strip().split(",")
+        n = attempts()
+        step = plan[n] if n < len(plan) else "loaded"
+        log("load_history.jsonl", {"pid": os.getpid(), "messages": cmd["messages"]})
+        if step == "refuse":
+            load_history_error("error")
+        elif step == "warn":
+            load_history_error("warning")
+            emit({"kind": "history_loaded", "messageCount": len(cmd["messages"])})
+        elif step == "exit":
+            sys.exit(3)
+        elif step == "loaded":
+            emit({"kind": "history_loaded", "messageCount": len(cmd["messages"])})
+    elif kind == "user_message":
+        log("user_messages.jsonl", {"pid": os.getpid(), "text": cmd.get("text")})
+        # The run starts and stays open.
+        emit({"kind": "turn_start", "turnIndex": 1})
+"##;
+    fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
+}
+
+fn read_log(dir: &std::path::Path, name: &str) -> Vec<serde_json::Value> {
+    fs::read_to_string(dir.join(name))
+        .unwrap_or_default()
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("log line"))
+        .collect()
+}
+
+/// The log once it has `lines` entries (the mock writes it as it reads
+/// stdin, after the send already returned).
+async fn wait_for_log(dir: &std::path::Path, name: &str, lines: usize) -> Vec<serde_json::Value> {
+    for _ in 0..100 {
+        let log = read_log(dir, name);
+        if log.len() >= lines {
+            return log;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    read_log(dir, name)
+}
+
+#[derive(Default)]
+struct RecordingNotifier {
+    events: Mutex<Vec<(String, serde_json::Value)>>,
+}
+
+impl Notifier for RecordingNotifier {
+    fn emit(&self, event: &str, payload: serde_json::Value) {
+        self.events
+            .lock()
+            .unwrap()
+            .push((event.to_string(), payload));
+    }
+}
+
+impl RecordingNotifier {
+    fn names(&self) -> Vec<String> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+    fn replay_phases(&self) -> Vec<String> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(name, _)| name == "runner-history-replay")
+            .map(|(_, p)| p["phase"].as_str().unwrap().to_string())
+            .collect()
+    }
+}
+
+/// A session with two completed exchanges, written the way Core writes
+/// them, and a ga_config pointing at the mock bridge.
+async fn replay_session(
+    pool: &SqlitePool,
+    galley: &SqliteGalley,
+    sid: &str,
+    python: &str,
+    bridge: &std::path::Path,
+) {
+    seed_session(pool, sid).await;
+    for (user, reply) in [("记住暗号：蓝鲸 4721", "好"), ("复述一遍", "蓝鲸 4721")] {
+        let row = galley
+            .send_message(
+                SessionId(sid.into()),
+                user.into(),
+                Origin {
+                    via: OriginVia::Cli,
+                    supervisor: None,
+                    reason: None,
+                },
+            )
+            .await
+            .expect("user row");
+        galley
+            .persist_assistant_message(PersistAssistantMessage {
+                session_id: SessionId(sid.into()),
+                turn_index: row.turn_index.expect("turn index"),
+                content: reply.into(),
+                tool_calls: None,
+                tool_results: None,
+                thinking: None,
+                final_answer: Some(reply.into()),
+                summary: None,
+                preamble: None,
+                visibility: MessageVisibility::Visible,
+                telemetry: None,
+            })
+            .await
+            .expect("assistant row");
+        galley
+            .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()), None, false)
+            .await
+            .expect("bump");
+    }
+    galley
+        .set_pref_json(
+            "ga_config",
+            serde_json::json!({
+                "gaPath": bridge.to_str().unwrap(),
+                "bridgeCwd": bridge.to_str().unwrap(),
+                "python": python,
+            }),
+        )
+        .await
+        .expect("seed ga_config");
+}
+
+fn replayed_history() -> serde_json::Value {
+    serde_json::json!([
+        {"role": "user", "content": "记住暗号：蓝鲸 4721"},
+        {"role": "assistant", "content": "好"},
+        {"role": "user", "content": "复述一遍"},
+        {"role": "assistant", "content": "蓝鲸 4721"},
+    ])
+}
+
+/// Every signal the watchers sent so far (after a short settle).
+async fn drain_signals(signals: &mut mpsc::UnboundedReceiver<RunSignal>) -> Vec<RunSignal> {
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let mut out = Vec::new();
+    while let Ok(signal) = signals.try_recv() {
+        out.push(signal);
+    }
+    out
+}
+
+#[tokio::test]
+async fn ensure_replays_into_a_real_runner_and_restarts_it_quietly_once() {
+    let Some(python) = mock_python_path() else {
+        eprintln!("[skip] no python on this machine");
+        return;
+    };
+    let bridge = TempDir::new().expect("tempdir");
+    write_replaying_runner(bridge.path(), "refuse,loaded");
+    let (_db_dir, pool, galley) = persistence_db().await;
+    replay_session(&pool, &galley, "s_replay", &python, bridge.path()).await;
+    let (mgr, mut signals) = persisting_manager(&galley);
+    let notifier = Arc::new(RecordingNotifier::default());
+    let host = RunnerHost {
+        galley: &galley,
+        runner: &mgr,
+        notifier: notifier.clone(),
+        env: None,
+    };
+
+    let outcome = ensure_session_runner(
+        &host,
+        "s_replay",
+        EnsureOptions {
+            via: "gui",
+            active_session_id: None,
+            llm_override: None,
+            ga_config: None,
+            holds_run_gate: false,
+            timeouts: Default::default(),
+        },
+    )
+    .await
+    .expect("ensure");
+
+    assert!(outcome.spawned);
+    let attempts = read_log(bridge.path(), "load_history.jsonl");
+    assert_eq!(attempts.len(), 2, "refused once, restarted, loaded");
+    assert_ne!(attempts[0]["pid"], attempts[1]["pid"], "a fresh process");
+    assert_eq!(attempts[1]["pid"], outcome.pid);
+    for attempt in &attempts {
+        assert_eq!(attempt["messages"], replayed_history());
+    }
+    assert_eq!(
+        mgr.live_runners().await,
+        vec![("s_replay".to_string(), outcome.pid)]
+    );
+    assert!(mgr.history_confirmed("s_replay", outcome.pid).await);
+    assert_eq!(
+        notifier.replay_phases(),
+        ["started", "failed", "started", "done"]
+    );
+    // The retired runner's close reached neither the drain task nor a
+    // page; its replacement was announced.
+    assert!(!drain_signals(&mut signals)
+        .await
+        .iter()
+        .any(|s| matches!(s, RunSignal::Closed { .. })));
+    assert!(!notifier.names().iter().any(|n| n == "runner-closed"));
+    assert_eq!(
+        notifier
+            .names()
+            .iter()
+            .filter(|n| *n == "runner-spawned-external")
+            .count(),
+        2
+    );
+
+    // A second ensure finds it confirmed and sends nothing.
+    let again = ensure_session_runner(
+        &host,
+        "s_replay",
+        EnsureOptions {
+            via: "gui",
+            active_session_id: None,
+            llm_override: None,
+            ga_config: None,
+            holds_run_gate: false,
+            timeouts: Default::default(),
+        },
+    )
+    .await
+    .expect("second ensure");
+    assert!(!again.spawned);
+    assert_eq!(read_log(bridge.path(), "load_history.jsonl").len(), 2);
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn a_real_runner_that_keeps_refusing_is_a_history_replay_error() {
+    let Some(python) = mock_python_path() else {
+        eprintln!("[skip] no python on this machine");
+        return;
+    };
+    let bridge = TempDir::new().expect("tempdir");
+    write_replaying_runner(bridge.path(), "refuse,refuse");
+    let (_db_dir, pool, galley) = persistence_db().await;
+    replay_session(&pool, &galley, "s_refuse", &python, bridge.path()).await;
+    let mgr = RunnerManager::new();
+    let host = RunnerHost {
+        galley: &galley,
+        runner: &mgr,
+        notifier: galley_core_lib::notify::NullNotifier::arc(),
+        env: None,
+    };
+
+    let err = ensure_session_runner(
+        &host,
+        "s_refuse",
+        EnsureOptions {
+            via: "gui",
+            active_session_id: None,
+            llm_override: None,
+            ga_config: None,
+            holds_run_gate: false,
+            timeouts: Default::default(),
+        },
+    )
+    .await
+    .expect_err("refused twice");
+    assert!(
+        matches!(err, SessionRunnerError::HistoryReplay(_)),
+        "{err:?}"
+    );
+    // The second runner is left alive and unconfirmed.
+    let live = mgr.live_runners().await;
+    assert_eq!(live.len(), 1);
+    assert!(!mgr.history_confirmed("s_refuse", live[0].1).await);
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+/// What the app's drain task does with one signal
+/// (`message_queue::spawn_queue_drain_task`): close / reopen the gate,
+/// then let the Goal engine react.
+async fn drain_like_the_app(
+    galley: &SqliteGalley,
+    mgr: &RunnerManager,
+    notifier: Arc<dyn Notifier>,
+    signal: RunSignal,
+) {
+    let session_id = match &signal {
+        RunSignal::RunComplete { session_id }
+        | RunSignal::Closed { session_id }
+        | RunSignal::UserRunStarted { session_id } => session_id.clone(),
+    };
+    if mgr.queue_take_next(&signal).await.is_some() {
+        return;
+    }
+    let db = DbSource::Pool(galley.clone());
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: mgr,
+        notifier,
+        app: None,
+    };
+    let engine = GoalEngine { galley, ctx: &ctx };
+    match signal {
+        RunSignal::RunComplete { .. } => engine.on_run_settled(&session_id).await,
+        RunSignal::Closed { .. } => engine.on_runner_closed(&session_id).await,
+        RunSignal::UserRunStarted { .. } => engine.on_user_run_started(&session_id).await,
+    }
+}
+
+#[tokio::test]
+async fn a_goal_survives_the_quiet_restart_of_its_runner() {
+    let Some(python) = mock_python_path() else {
+        eprintln!("[skip] no python on this machine");
+        return;
+    };
+    let bridge = TempDir::new().expect("tempdir");
+    write_replaying_runner(bridge.path(), "refuse,loaded");
+    let (_db_dir, pool, galley) = persistence_db().await;
+    replay_session(&pool, &galley, "s_goal_race", &python, bridge.path()).await;
+    let (mgr, mut signals) = persisting_manager(&galley);
+    let notifier: Arc<dyn Notifier> = Arc::new(RecordingNotifier::default());
+    let db = DbSource::Pool(galley.clone());
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: &mgr,
+        notifier: notifier.clone(),
+        app: None,
+    };
+    let engine = GoalEngine {
+        galley: &galley,
+        ctx: &ctx,
+    };
+
+    let started = engine
+        .start(
+            SessionId("s_goal_race".into()),
+            "暗号是什么？".into(),
+            None,
+            Origin {
+                via: OriginVia::Cli,
+                supervisor: None,
+                reason: None,
+            },
+        )
+        .await
+        .expect("goal start");
+    assert_eq!(started.dispatch, "dispatched");
+    let goal_id: GoalId = started.goal.id.clone();
+
+    // The objective reached the restarted runner, after its history.
+    let attempts = read_log(bridge.path(), "load_history.jsonl");
+    assert_eq!(attempts.len(), 2);
+    let sent = wait_for_log(bridge.path(), "user_messages.jsonl", 1).await;
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0]["pid"], attempts[1]["pid"]);
+    assert!(sent[0]["text"].as_str().unwrap().contains("暗号是什么？"));
+
+    // Feed whatever the watchers reported through the drain, as the app
+    // would. The retired runner must have reported nothing.
+    let reported = drain_signals(&mut signals).await;
+    assert!(
+        !reported
+            .iter()
+            .any(|s| matches!(s, RunSignal::Closed { .. })),
+        "the quiet restart sent no Closed: {reported:?}"
+    );
+    for signal in reported {
+        drain_like_the_app(&galley, &mgr, notifier.clone(), signal).await;
+    }
+
+    // The gate the goal reserved is still the open run, and the goal is
+    // still active — not paused by the runner it replaced.
+    let state = mgr.run_state("s_goal_race").await;
+    assert!(state.open_run, "{state:?}");
+    assert_eq!(
+        galley.get_goal(goal_id).await.expect("goal").status,
+        GoalStatus::Active
+    );
+    // A user message offered now queues behind the goal's run.
+    assert!(matches!(
+        mgr.queue_offer("s_goal_race", "插话".into(), None).await,
+        galley_core_lib::runner_manager::QueueOffer::Queued { .. }
+    ));
 
     mgr.shutdown_all(Duration::from_secs(1)).await;
 }

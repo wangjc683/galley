@@ -1,40 +1,47 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
 import { useMessagesStore } from "@/stores/messages";
-import { useRuntimeStore } from "@/stores/runtime";
+import { useRuntimeStore, type RunnerEnsureFailure } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { resetStores } from "@/test/store-reset";
 
 import { ensureBridgeThenSend } from "./useMessageSend";
 
-vi.mock("@/lib/ipc/history-replay", () => ({
-  ensureHistoryReplayComplete: vi.fn(),
-}));
-
-const replayMock = vi.mocked(ensureHistoryReplayComplete);
-
 const SID = "s-test";
 
+const REPLAY_FAILED: RunnerEnsureFailure = {
+  historyReplay: true,
+  message: "History restore failed: the runner refused load_history",
+};
+
 /** Recorded calls + store fakes for one scenario. The phase machine's
- * dependencies are all store fields, so faking them is a setState. */
-function arm(opts: { connected: boolean }) {
+ * dependencies are all store fields, so faking them is a setState. Core's
+ * history confirmation answers from `confirm` in order (default: ok). */
+function arm(opts: {
+  connected: boolean;
+  activation?: RunnerEnsureFailure | null;
+  confirm?: Array<RunnerEnsureFailure | null>;
+}) {
   const phases: string[] = [];
   const sent: string[] = [];
   const activated: string[] = [];
+  const confirmed: string[] = [];
   const shutdown: string[] = [];
+  const answers = [...(opts.confirm ?? [])];
   useMessagesStore.setState({
     setSendPhase: (_sid: string, phase: string | null) => {
       if (phase) phases.push(phase);
     },
   } as never);
   useRuntimeStore.setState({
-    byId: opts.connected
-      ? { [SID]: { bridgeStatus: "connected" } }
-      : {},
+    byId: opts.connected ? { [SID]: { bridgeStatus: "connected" } } : {},
     hasBridgeClient: () => opts.connected,
     sendIPCCommand: async (_sid: string, cmd: { kind: string }) => {
       sent.push(cmd.kind);
+    },
+    confirmSessionHistory: async (sid: string) => {
+      confirmed.push(sid);
+      return answers.shift() ?? null;
     },
     shutdownBridge: async (sid: string) => {
       shutdown.push(sid);
@@ -43,22 +50,21 @@ function arm(opts: { connected: boolean }) {
   useSessionsStore.setState({
     activateSession: async (sid: string) => {
       activated.push(sid);
+      return opts.activation ?? null;
     },
   } as never);
-  return { phases, sent, activated, shutdown };
+  return { phases, sent, activated, confirmed, shutdown };
 }
 
 const OPTS = { restoreTimeoutMessage: "restore timed out" };
 
 beforeEach(() => {
   resetStores();
-  replayMock.mockReset();
 });
 
 describe("ensureBridgeThenSend", () => {
-  it("connected bridge + confirmed replay: restore → dispatch, no activation", async () => {
+  it("connected bridge: asks Core to confirm the history, then dispatches", async () => {
     const r = arm({ connected: true });
-    replayMock.mockResolvedValue(true);
 
     await ensureBridgeThenSend(
       SID,
@@ -67,13 +73,14 @@ describe("ensureBridgeThenSend", () => {
     );
 
     expect(r.activated).toEqual([]);
-    expect(r.phases).toEqual(["restoring", "waiting_agent", "sent"]);
+    expect(r.confirmed).toEqual([SID]);
+    // "restoring" is Core's to announce (`runner-history-replay`).
+    expect(r.phases).toEqual(["waiting_agent", "sent"]);
     expect(r.sent).toEqual(["user_message"]);
   });
 
-  it("cold bridge: acquires one before replaying", async () => {
+  it("cold bridge: activates (Core restores while starting it), confirms, dispatches", async () => {
     const r = arm({ connected: false });
-    replayMock.mockResolvedValue(true);
 
     await ensureBridgeThenSend(
       SID,
@@ -82,34 +89,13 @@ describe("ensureBridgeThenSend", () => {
     );
 
     expect(r.activated).toEqual([SID]);
-    expect(r.phases).toEqual(["starting", "restoring", "waiting_agent", "sent"]);
-  });
-
-  it("unconfirmed replay: one silent bridge restart, then dispatch", async () => {
-    const r = arm({ connected: true });
-    replayMock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-
-    await ensureBridgeThenSend(
-      SID,
-      { kind: "user_message", text: "hi", images: [] },
-      OPTS,
-    );
-
-    expect(r.shutdown).toEqual([SID]);
-    expect(r.activated).toEqual([SID]);
-    expect(r.phases).toEqual([
-      "restoring",
-      "starting",
-      "restoring",
-      "waiting_agent",
-      "sent",
-    ]);
+    expect(r.confirmed).toEqual([SID]);
+    expect(r.phases).toEqual(["starting", "waiting_agent", "sent"]);
     expect(r.sent).toEqual(["user_message"]);
   });
 
-  it("replay unconfirmed after the restart too: throws, nothing dispatched", async () => {
-    const r = arm({ connected: true });
-    replayMock.mockResolvedValue(false);
+  it("Core could not restore the history: restore-timeout copy, nothing dispatched, no GUI restart", async () => {
+    const r = arm({ connected: true, confirm: [REPLAY_FAILED] });
 
     await expect(
       ensureBridgeThenSend(
@@ -119,9 +105,59 @@ describe("ensureBridgeThenSend", () => {
       ),
     ).rejects.toThrow("restore timed out");
     expect(r.sent).toEqual([]);
+    // The one quiet restart is Core's; the page neither shuts the bridge
+    // down nor asks again.
+    expect(r.shutdown).toEqual([]);
+    expect(r.activated).toEqual([]);
+    expect(r.confirmed).toEqual([SID]);
   });
 
-  it("ask_user_response skips replay — the run is live, history is current", async () => {
+  it("another confirmation failure keeps its own message", async () => {
+    arm({
+      connected: true,
+      confirm: [{ historyReplay: false, message: "GA path invalid: gone" }],
+    });
+
+    await expect(
+      ensureBridgeThenSend(
+        SID,
+        { kind: "user_message", text: "hi", images: [] },
+        OPTS,
+      ),
+    ).rejects.toThrow("GA path invalid: gone");
+  });
+
+  it("an activation whose restore failed ends the send without asking again", async () => {
+    const r = arm({ connected: false, activation: REPLAY_FAILED });
+
+    await expect(
+      ensureBridgeThenSend(
+        SID,
+        { kind: "user_message", text: "hi", images: [] },
+        OPTS,
+      ),
+    ).rejects.toThrow("restore timed out");
+    expect(r.confirmed).toEqual([]);
+    expect(r.sent).toEqual([]);
+  });
+
+  it("an activation that could not start the runner reports its error", async () => {
+    const r = arm({
+      connected: false,
+      activation: { historyReplay: false, message: "Python not found: x" },
+    });
+
+    await expect(
+      ensureBridgeThenSend(
+        SID,
+        { kind: "user_message", text: "hi", images: [] },
+        OPTS,
+      ),
+    ).rejects.toThrow("Python not found: x");
+    expect(r.sent).toEqual([]);
+  });
+
+  it("ask_user_response skips the history check — the run is live, history is current", async () => {
     const r = arm({ connected: true });
 
     await ensureBridgeThenSend(
@@ -130,14 +166,13 @@ describe("ensureBridgeThenSend", () => {
       OPTS,
     );
 
-    expect(replayMock).not.toHaveBeenCalled();
+    expect(r.confirmed).toEqual([]);
     expect(r.phases).toEqual(["waiting_agent", "sent"]);
     expect(r.sent).toEqual(["ask_user_response"]);
   });
 
-  it("showPhase false (/btw): full machine, silent phases", async () => {
+  it("showPhase false (/btw): history still confirmed, phases silent", async () => {
     const r = arm({ connected: true });
-    replayMock.mockResolvedValue(true);
 
     await ensureBridgeThenSend(
       SID,
@@ -145,6 +180,7 @@ describe("ensureBridgeThenSend", () => {
       { ...OPTS, showPhase: false },
     );
 
+    expect(r.confirmed).toEqual([SID]);
     expect(r.phases).toEqual([]);
     expect(r.sent).toEqual(["user_message"]);
   });

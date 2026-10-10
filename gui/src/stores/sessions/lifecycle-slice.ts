@@ -11,7 +11,7 @@ import { useManagedModelsStore } from "@/stores/managed-models";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
-import type { LLMOption } from "@/stores/runtime";
+import type { LLMOption, RunnerEnsureFailure } from "@/stores/runtime";
 import type { RuntimeKind, Session } from "@/types/session";
 
 import {
@@ -137,11 +137,16 @@ export interface SessionLifecycleSlice {
    * entry point for "switch to this session" UX events.
    *
    * The runner comes from Core's `ensure_session_runner` (ticket 02a):
-   * Core resolves the spawn arguments from the session row and prefs.
-   * This page only adds the EmptyState picker's pending model and its
-   * in-memory `prefsStore.gaConfig` (transitional, see the command).
+   * Core resolves the spawn arguments from the session row and prefs,
+   * and restores the session's history into a runner it starts (ticket
+   * 02b). This page only adds the EmptyState picker's pending model and
+   * its in-memory `prefsStore.gaConfig` (transitional, see the command).
+   *
+   * Resolves to the runner failure when this activation asked Core for
+   * a runner and did not get one with its history confirmed; `null`
+   * otherwise. Most callers ignore it; the send path reports it.
    */
-  activateSession: (id: string) => Promise<void>;
+  activateSession: (id: string) => Promise<RunnerEnsureFailure | null>;
   /** Synchronous create — returns the new id for chaining. Rust write
    * happens fire-and-forget; in-memory state updates immediately. */
   createSession: (projectId?: string) => string;
@@ -352,8 +357,8 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     // no live bridge for it. Re-ensuring on `closed` / `error` lets a
     // kill or crash recover by simply re-clicking the session. `closed`
     // is also how the LRU governor signals "suspended" — re-activation
-    // regenerates the runner and the IPC `ready` handler replays SQLite
-    // history.
+    // regenerates the runner and Core's ensure replays SQLite history
+    // into it (ticket 02b).
     const bridgeStatus =
       useRuntimeStore.getState().byId[id]?.bridgeStatus ?? "idle";
     const hasBridgeClient = useRuntimeStore.getState().hasBridgeClient(id);
@@ -371,6 +376,7 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     const attachedLive =
       needsBridge && (await useRuntimeStore.getState().attachLiveRunner(id));
     const needsSpawn = needsBridge && !attachedLive;
+    let runnerFailure: RunnerEnsureFailure | null = null;
     if (needsSpawn) {
       // Project = pure grouping: Core passes a workspace-enabled
       // project's root as `--workspace-root`, never as the GA cwd —
@@ -402,7 +408,7 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       // (Empty State LLM picker) wins when present because the user just
       // made a fresh choice.
       const spawnStartedAt = perfNow();
-      await useRuntimeStore.getState().ensureSessionRunner({
+      runnerFailure = await useRuntimeStore.getState().ensureSessionRunner({
         sessionId: id,
         ...(consumePending
           ? { llmIndex: pendingLLMIndex, llmKey: session?.selectedLlmKey }
@@ -424,6 +430,7 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     });
     // Already alive — runtimeStore.ensureSessionRunner internally
     // LRU-touches on each call, so the alive-bridge branch is a no-op.
+    return runnerFailure;
   },
 
   createSession: (projectId) => {

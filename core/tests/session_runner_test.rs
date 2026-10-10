@@ -4,28 +4,38 @@
 //! between the GUI's and the socket's entry points, the frozen socket
 //! error wording, and the auto-title watcher on socket-started runners.
 //!
+//! Since ticket 02b also history replay: what ensure sends as
+//! `load_history`, the one quiet restart, the `HistoryReplay` error, the
+//! live-runner rules, the `runner-history-replay` events, and a Goal on a
+//! cold session getting its history before its objective.
+//!
 //! The real `RunnerManager` + mock bridge side (ready cache, concurrent
-//! ensure on real processes) lives in `runner_manager_test.rs`.
+//! ensure on real processes, replay end to end, the run-gate race) lives
+//! in `runner_manager_test.rs`.
 
 use async_trait::async_trait;
 use galley_core_lib::api::{
-    CreateProjectInput, CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionId,
+    CreateProjectInput, CreateSessionInput, GalleyApi, MessageVisibility, Origin, OriginVia,
+    RuntimeKind, SessionId,
 };
-use galley_core_lib::db::SqliteGalley;
-use galley_core_lib::ipc::{IpcCommand, IpcEvent, ReadyEvent, RunCompleteEvent};
+use galley_core_lib::db::{PersistAssistantMessage, SqliteGalley};
+use galley_core_lib::ipc::{
+    ErrorEvent, HistoryLoadedEvent, IpcCommand, IpcEvent, ReadyEvent, RunCompleteEvent,
+};
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
-    BroadcastItem, ReadySnapshot, RunnerCommandSink, RunnerSpawnError, SendCommandError,
-    ShutdownError, SpawnArgs,
+    BroadcastItem, HeldClose, ReadySnapshot, RunState, RunnerCommandSink, RunnerSpawnError,
+    SendCommandError, ShutdownError, SpawnArgs,
 };
 use galley_core_lib::session_runner::{
-    ensure_session_runner, resolve_user_python, EnsureOptions, GaConfigPref, RunnerHost, SpawnEnv,
+    ensure_session_runner, resolve_user_python, EnsureOptions, GaConfigPref, ReplayTimeouts,
+    RunnerHost, SessionRunnerError, SpawnEnv,
 };
 use galley_core_lib::socket_listener::{
     dispatch_line_with, DbSource, DispatchResult, HandlerCtx, RunnerPort, SocketResponse,
 };
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -170,9 +180,26 @@ impl RunnerCommandSink for RecordingSink {
     }
 }
 
+/// How the scripted runner answers one `load_history`.
+#[derive(Debug, Clone, Copy)]
+enum Reply {
+    /// `history_loaded`.
+    Loaded,
+    /// An `error` with `context: "load_history"` (severity `error`).
+    Refuse,
+    /// The unvalidated-backend warning, then `history_loaded` anyway.
+    WarnThenLoaded,
+    /// The runner exits (its close was held: broadcast quiet).
+    Exit,
+    /// No answer at all.
+    Silent,
+}
+
 /// Scripted runner registry. `spawn` yields (so a racing caller gets a
 /// chance to interleave), optionally parks on a per-session gate, then
 /// registers a live pid and a broadcast channel the test can feed.
+/// `load_history` is answered from a per-session script (default
+/// `Loaded`); `auto_ready` puts a `ready` in the cache at spawn.
 #[derive(Default)]
 struct ScriptedRunner {
     spawns: Mutex<Vec<(SpawnArgs, Option<String>)>>,
@@ -184,6 +211,17 @@ struct ScriptedRunner {
     gates: Mutex<HashMap<String, Arc<Notify>>>,
     next_pid: AtomicU32,
     sink: Option<Arc<RecordingSink>>,
+    auto_ready: bool,
+    /// Every command sent, in order (the auto-title sink is separate).
+    sent: Mutex<Vec<(String, IpcCommand)>>,
+    /// Commands sent and replies played, as one ordered log.
+    timeline: Mutex<Vec<String>>,
+    replies: Mutex<HashMap<String, VecDeque<Reply>>>,
+    /// Session → the pid recorded as confirmed.
+    confirmed: Mutex<HashMap<String, u32>>,
+    /// Ensure-side hook calls, in order (`spawn_held:5000`, ...).
+    hooks: Mutex<Vec<String>>,
+    run_states: Mutex<HashMap<String, RunState>>,
 }
 
 impl ScriptedRunner {
@@ -242,14 +280,89 @@ impl ScriptedRunner {
         tx.send(BroadcastItem::Event(Box::new(event)))
             .expect("someone subscribed");
     }
-}
-
-#[async_trait]
-impl RunnerPort for ScriptedRunner {
-    async fn spawn(
+    fn ready_on_spawn() -> Self {
+        Self {
+            auto_ready: true,
+            ..Self::default()
+        }
+    }
+    fn script(&self, session_id: &str, replies: &[Reply]) {
+        self.replies
+            .lock()
+            .unwrap()
+            .insert(session_id.into(), replies.iter().copied().collect());
+    }
+    fn set_run_state(&self, session_id: &str, state: RunState) {
+        self.run_states
+            .lock()
+            .unwrap()
+            .insert(session_id.into(), state);
+    }
+    fn hooks(&self) -> Vec<String> {
+        self.hooks.lock().unwrap().clone()
+    }
+    fn hook(&self, entry: String) {
+        self.hooks.lock().unwrap().push(entry);
+    }
+    fn timeline(&self) -> Vec<String> {
+        self.timeline.lock().unwrap().clone()
+    }
+    fn load_histories(&self, session_id: &str) -> Vec<Vec<Value>> {
+        self.sent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(sid, _)| sid == session_id)
+            .filter_map(|(_, cmd)| match cmd {
+                IpcCommand::LoadHistory(load) => Some(load.messages.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+    fn confirmed_pid(&self, session_id: &str) -> Option<u32> {
+        self.confirmed.lock().unwrap().get(session_id).copied()
+    }
+    fn broadcast(&self, session_id: &str, item: BroadcastItem) {
+        let tx = self.channels.lock().unwrap().get(session_id).cloned();
+        if let Some(tx) = tx {
+            let _ = tx.send(item);
+        }
+    }
+    fn play(&self, session_id: &str, reply: Reply) {
+        let event = |e: IpcEvent| BroadcastItem::Event(Box::new(e));
+        match reply {
+            Reply::Loaded => {
+                self.timeline.lock().unwrap().push("history_loaded".into());
+                self.broadcast(session_id, event(history_loaded(session_id)));
+            }
+            Reply::Refuse => {
+                self.broadcast(session_id, event(load_history_error(session_id, "error")));
+            }
+            Reply::WarnThenLoaded => {
+                self.broadcast(session_id, event(load_history_error(session_id, "warning")));
+                self.timeline.lock().unwrap().push("history_loaded".into());
+                self.broadcast(session_id, event(history_loaded(session_id)));
+            }
+            Reply::Exit => {
+                self.alive.lock().unwrap().remove(session_id);
+                self.ready.lock().unwrap().remove(session_id);
+                self.broadcast(
+                    session_id,
+                    BroadcastItem::Closed {
+                        code: Some(1),
+                        signal: None,
+                        quiet: true,
+                    },
+                );
+            }
+            Reply::Silent => {}
+        }
+    }
+    async fn spawn_inner(
         &self,
         args: SpawnArgs,
         active_session_id: Option<&str>,
+        held: bool,
     ) -> Result<u32, RunnerSpawnError> {
         let session_id = args.session_id.clone();
         self.spawns
@@ -263,16 +376,144 @@ impl RunnerPort for ScriptedRunner {
         tokio::time::sleep(Duration::from_millis(30)).await;
         let pid = 5000 + self.next_pid.fetch_add(1, Ordering::SeqCst);
         self.mark_alive(&session_id, pid);
+        // A new process: no confirmation, a fresh ready cache.
+        self.confirmed.lock().unwrap().remove(&session_id);
+        if self.auto_ready {
+            self.ready
+                .lock()
+                .unwrap()
+                .insert(session_id.clone(), ready_event(&session_id));
+        } else {
+            self.ready.lock().unwrap().remove(&session_id);
+        }
         let (tx, _) = broadcast::channel(64);
         self.channels.lock().unwrap().insert(session_id, tx);
+        self.hook(format!(
+            "{}:{pid}",
+            if held { "spawn_held" } else { "spawn" }
+        ));
         Ok(pid)
+    }
+}
+
+fn history_loaded(session_id: &str) -> IpcEvent {
+    IpcEvent::HistoryLoaded(HistoryLoadedEvent {
+        session_id: session_id.into(),
+        message_count: 0,
+        timestamp: "t".into(),
+    })
+}
+
+fn load_history_error(session_id: &str, severity: &str) -> IpcEvent {
+    IpcEvent::Error(ErrorEvent {
+        session_id: session_id.into(),
+        message: format!("History restore: {severity}"),
+        category: "business".into(),
+        severity: severity.into(),
+        retryable: false,
+        hint: None,
+        context: Some("load_history".into()),
+        traceback: None,
+        visibility: None,
+        timestamp: "t".into(),
+    })
+}
+
+fn command_kind(cmd: &IpcCommand) -> String {
+    serde_json::to_value(cmd).unwrap()["kind"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+#[async_trait]
+impl RunnerPort for ScriptedRunner {
+    async fn spawn(
+        &self,
+        args: SpawnArgs,
+        active_session_id: Option<&str>,
+    ) -> Result<u32, RunnerSpawnError> {
+        self.spawn_inner(args, active_session_id, false).await
+    }
+    async fn spawn_held(
+        &self,
+        args: SpawnArgs,
+        active_session_id: Option<&str>,
+    ) -> Result<u32, RunnerSpawnError> {
+        self.spawn_inner(args, active_session_id, true).await
     }
     async fn send_command(
         &self,
-        _session_id: &str,
-        _cmd: &IpcCommand,
+        session_id: &str,
+        cmd: &IpcCommand,
     ) -> Result<(), SendCommandError> {
+        self.sent
+            .lock()
+            .unwrap()
+            .push((session_id.to_string(), cmd.clone()));
+        self.timeline.lock().unwrap().push(command_kind(cmd));
+        if let IpcCommand::LoadHistory(_) = cmd {
+            let reply = self
+                .replies
+                .lock()
+                .unwrap()
+                .get_mut(session_id)
+                .and_then(VecDeque::pop_front)
+                .unwrap_or(Reply::Loaded);
+            self.play(session_id, reply);
+        }
         Ok(())
+    }
+    async fn hold_close(&self, session_id: &str, pid: u32) -> bool {
+        self.hook(format!("hold:{pid}"));
+        self.alive.lock().unwrap().get(session_id) == Some(&pid)
+    }
+    async fn release_close(
+        &self,
+        session_id: &str,
+        pid: u32,
+        history_confirmed: bool,
+    ) -> Option<HeldClose> {
+        self.hook(format!("release:{pid}:{history_confirmed}"));
+        if history_confirmed {
+            self.confirmed
+                .lock()
+                .unwrap()
+                .insert(session_id.into(), pid);
+        }
+        // A runner that exited while held hands its close back.
+        (self.alive.lock().unwrap().get(session_id) != Some(&pid)).then_some(HeldClose {
+            code: Some(1),
+            signal: None,
+        })
+    }
+    async fn retire(&self, session_id: &str, pid: u32) -> bool {
+        self.hook(format!("retire:{pid}"));
+        // A retired runner's close is quiet, like the real registry's.
+        self.broadcast(
+            session_id,
+            BroadcastItem::Closed {
+                code: Some(0),
+                signal: None,
+                quiet: true,
+            },
+        );
+        self.alive.lock().unwrap().remove(session_id);
+        self.registered.lock().unwrap().remove(session_id);
+        self.ready.lock().unwrap().remove(session_id);
+        true
+    }
+    async fn history_confirmed(&self, session_id: &str, pid: u32) -> bool {
+        self.confirmed_pid(session_id) == Some(pid)
+            && self.alive.lock().unwrap().get(session_id) == Some(&pid)
+    }
+    async fn run_state(&self, session_id: &str) -> RunState {
+        self.run_states
+            .lock()
+            .unwrap()
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default()
     }
     async fn subscribe(&self, session_id: &str) -> Option<broadcast::Receiver<BroadcastItem>> {
         *self
@@ -348,6 +589,8 @@ fn gui_options(ga_config: Option<GaConfigPref>) -> EnsureOptions<'static> {
         active_session_id: None,
         llm_override: None,
         ga_config,
+        holds_run_gate: false,
+        timeouts: Default::default(),
     }
 }
 
@@ -644,6 +887,8 @@ async fn gui_and_socket_resolve_the_same_spawn_args_managed() {
             active_session_id: Some("s-man"),
             llm_override: None,
             ga_config: None,
+            holds_run_gate: true,
+            timeouts: Default::default(),
         },
     )
     .await
@@ -746,6 +991,8 @@ async fn an_explicit_llm_choice_overrides_the_session_row() {
                 key: None,
             }),
             ga_config: None,
+            holds_run_gate: false,
+            timeouts: Default::default(),
         },
     )
     .await
@@ -985,4 +1232,578 @@ async fn goal_dispatch_runner_gets_the_auto_title_watcher() {
     assert!(resp.ok, "{resp:?}");
     assert_eq!(runner.spawn_count(), 1);
     assert_eq!(runner.subscribe_count("s-goal-title"), 2);
+}
+
+// ---------------- history replay (ticket 02b) ----------------
+
+/// Short bounds so the timeout cases finish quickly.
+fn fast() -> ReplayTimeouts {
+    ReplayTimeouts {
+        ready: Duration::from_secs(2),
+        history: Duration::from_millis(300),
+    }
+}
+
+fn replay_options(holds_run_gate: bool) -> EnsureOptions<'static> {
+    EnsureOptions {
+        via: "gui",
+        active_session_id: None,
+        llm_override: None,
+        ga_config: None,
+        holds_run_gate,
+        timeouts: fast(),
+    }
+}
+
+/// One completed exchange, written the way Core writes it: the user row,
+/// the one-step reply on the same turn index, the session bump.
+async fn seed_exchange(galley: &SqliteGalley, sid: &str, user: &str, reply: &str) {
+    let row = galley
+        .send_message(SessionId(sid.into()), user.into(), cli_origin())
+        .await
+        .expect("user row");
+    galley
+        .persist_assistant_message(PersistAssistantMessage {
+            session_id: SessionId(sid.into()),
+            turn_index: row.turn_index.expect("turn index"),
+            content: reply.into(),
+            tool_calls: None,
+            tool_results: None,
+            thinking: None,
+            final_answer: Some(reply.into()),
+            summary: None,
+            preamble: None,
+            visibility: MessageVisibility::Visible,
+            telemetry: None,
+        })
+        .await
+        .expect("assistant row");
+    galley
+        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()), None, false)
+        .await
+        .expect("bump");
+}
+
+/// A session with two completed exchanges and a ga_config to spawn with.
+async fn session_with_history(sid: &str) -> (tempfile::TempDir, SqliteGalley) {
+    let dir = tempfile::tempdir().unwrap();
+    let galley = fresh_galley().await;
+    seed_ga_config(&galley, dir.path()).await;
+    seed_session(&galley, SessionSeed::external(sid)).await;
+    seed_exchange(&galley, sid, "记住暗号：蓝鲸 4721", "好").await;
+    seed_exchange(&galley, sid, "复述一遍", "蓝鲸 4721").await;
+    (dir, galley)
+}
+
+fn expected_history() -> Vec<Value> {
+    vec![
+        json!({"role": "user", "content": "记住暗号：蓝鲸 4721"}),
+        json!({"role": "assistant", "content": "好"}),
+        json!({"role": "user", "content": "复述一遍"}),
+        json!({"role": "assistant", "content": "蓝鲸 4721"}),
+    ]
+}
+
+fn replay_phases(notifier: &RecordingNotifier, sid: &str) -> Vec<String> {
+    notifier
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(name, payload)| name == "runner-history-replay" && payload["sessionId"] == sid)
+        .map(|(_, payload)| payload["phase"].as_str().unwrap().to_string())
+        .collect()
+}
+
+fn host<'a>(
+    galley: &'a SqliteGalley,
+    runner: &'a ScriptedRunner,
+    notifier: &Arc<RecordingNotifier>,
+) -> RunnerHost<'a> {
+    RunnerHost {
+        galley,
+        runner,
+        notifier: notifier.clone(),
+        env: None,
+    }
+}
+
+#[tokio::test]
+async fn a_spawned_runner_gets_the_history_before_ensure_returns() {
+    let (_dir, galley) = session_with_history("s-rp-ok").await;
+    // The message persisted for the dispatch this ensure precedes: input,
+    // not history.
+    galley
+        .send_message(
+            SessionId("s-rp-ok".into()),
+            "暗号是什么？".into(),
+            cli_origin(),
+        )
+        .await
+        .unwrap();
+    let runner = ScriptedRunner::ready_on_spawn();
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    let outcome = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-ok",
+        replay_options(false),
+    )
+    .await
+    .expect("ensure");
+
+    assert!(outcome.spawned);
+    assert_eq!(runner.load_histories("s-rp-ok"), vec![expected_history()]);
+    assert_eq!(runner.confirmed_pid("s-rp-ok"), Some(outcome.pid));
+    assert_eq!(
+        runner.hooks(),
+        vec![
+            format!("spawn_held:{}", outcome.pid),
+            format!("release:{}:true", outcome.pid),
+        ]
+    );
+    assert_eq!(replay_phases(&notifier, "s-rp-ok"), ["started", "done"]);
+    assert_eq!(notifier.count("runner-closed"), 0);
+
+    // Confirmed: the next ensure returns at once and sends nothing.
+    let again = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-ok",
+        replay_options(false),
+    )
+    .await
+    .expect("second ensure");
+    assert_eq!(again.pid, outcome.pid);
+    assert!(!again.spawned);
+    assert_eq!(runner.load_histories("s-rp-ok").len(), 1);
+}
+
+#[tokio::test]
+async fn ensure_waits_for_a_ready_that_is_not_cached_yet() {
+    let (_dir, galley) = session_with_history("s-rp-wait").await;
+    let runner = ScriptedRunner::default();
+    let notifier = Arc::new(RecordingNotifier::default());
+    let h = host(&galley, &runner, &notifier);
+
+    let feeder = async {
+        // Ensure has spawned and subscribed (emit + title-less + replay).
+        for _ in 0..100 {
+            if runner.subscribe_count("s-rp-wait") >= 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            runner.load_histories("s-rp-wait").is_empty(),
+            "not before ready"
+        );
+        runner.feed("s-rp-wait", IpcEvent::Ready(ready_event("s-rp-wait")));
+    };
+    let (outcome, ()) = tokio::join!(
+        ensure_session_runner(&h, "s-rp-wait", replay_options(false)),
+        feeder
+    );
+    outcome.expect("ensure");
+    assert_eq!(runner.load_histories("s-rp-wait"), vec![expected_history()]);
+}
+
+async fn restarts_once_after(first: Reply, sid: &str) {
+    let (_dir, galley) = session_with_history(sid).await;
+    let runner = ScriptedRunner::ready_on_spawn();
+    runner.script(sid, &[first, Reply::Loaded]);
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    let outcome = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        sid,
+        replay_options(false),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{first:?}: {e:?}"));
+
+    assert!(outcome.spawned);
+    assert_eq!(runner.spawn_count(), 2, "{first:?}: one restart");
+    let (a, b) = (5000, 5001);
+    assert_eq!(outcome.pid, b);
+    assert_eq!(
+        runner.hooks(),
+        vec![
+            format!("spawn_held:{a}"),
+            format!("retire:{a}"),
+            format!("spawn_held:{b}"),
+            format!("release:{b}:true"),
+        ],
+        "{first:?}"
+    );
+    // The same args both times.
+    let args = runner.spawned_args();
+    assert_eq!(args[0], args[1]);
+    assert_eq!(
+        runner.load_histories(sid),
+        vec![expected_history(), expected_history()]
+    );
+    assert_eq!(runner.confirmed_pid(sid), Some(b));
+    assert_eq!(
+        replay_phases(&notifier, sid),
+        ["started", "failed", "started", "done"],
+        "{first:?}"
+    );
+    // The replacement is announced as a spawn, the retired runner's close
+    // is not announced at all.
+    assert_eq!(notifier.count("runner-spawned-external"), 2);
+    assert_eq!(notifier.count("runner-closed"), 0, "{first:?}");
+}
+
+#[tokio::test]
+async fn a_refused_replay_restarts_the_runner_once() {
+    restarts_once_after(Reply::Refuse, "s-rp-refuse").await;
+}
+
+#[tokio::test]
+async fn an_unanswered_replay_restarts_the_runner_once() {
+    restarts_once_after(Reply::Silent, "s-rp-silent").await;
+}
+
+#[tokio::test]
+async fn a_runner_exiting_during_replay_is_restarted_once() {
+    restarts_once_after(Reply::Exit, "s-rp-exit").await;
+}
+
+#[tokio::test]
+async fn two_failed_replays_are_a_history_replay_error() {
+    let (_dir, galley) = session_with_history("s-rp-twice").await;
+    let runner = ScriptedRunner::ready_on_spawn();
+    runner.script("s-rp-twice", &[Reply::Refuse, Reply::Refuse]);
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    let err = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-twice",
+        replay_options(false),
+    )
+    .await
+    .expect_err("history replay fails");
+
+    let SessionRunnerError::HistoryReplay(reason) = err else {
+        panic!("expected HistoryReplay, got {err:?}");
+    };
+    assert!(reason.contains("refused load_history"), "{reason}");
+    assert_eq!(runner.spawn_count(), 2, "one restart, not two");
+    // The second runner is left alive, unconfirmed, with Core's hold over.
+    assert_eq!(
+        runner.hooks().last().map(String::as_str),
+        Some("release:5001:false")
+    );
+    assert_eq!(runner.confirmed_pid("s-rp-twice"), None);
+    assert_eq!(
+        replay_phases(&notifier, "s-rp-twice"),
+        ["started", "failed", "started", "failed"]
+    );
+    assert_eq!(notifier.count("runner-closed"), 0, "the runner lives");
+}
+
+#[tokio::test]
+async fn a_held_runner_that_exits_for_good_is_announced_closed() {
+    let (_dir, galley) = session_with_history("s-rp-dead").await;
+    let runner = ScriptedRunner::ready_on_spawn();
+    runner.script("s-rp-dead", &[Reply::Exit, Reply::Exit]);
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    let err = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-dead",
+        replay_options(false),
+    )
+    .await
+    .expect_err("history replay fails");
+    assert!(matches!(err, SessionRunnerError::HistoryReplay(_)));
+    // The first exit was replaced (quiet); the last one is announced once
+    // Core lets go of the runner.
+    assert_eq!(notifier.count("runner-closed"), 1);
+    assert_eq!(
+        notifier.payload_of("runner-closed").unwrap(),
+        json!({"sessionId": "s-rp-dead", "code": 1, "signal": null})
+    );
+}
+
+#[tokio::test]
+async fn a_load_history_warning_is_not_a_failure() {
+    let (_dir, galley) = session_with_history("s-rp-warn").await;
+    let runner = ScriptedRunner::ready_on_spawn();
+    runner.script("s-rp-warn", &[Reply::WarnThenLoaded]);
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    let outcome = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-warn",
+        replay_options(false),
+    )
+    .await
+    .expect("a warning still loads");
+
+    assert_eq!(runner.spawn_count(), 1);
+    assert_eq!(runner.confirmed_pid("s-rp-warn"), Some(outcome.pid));
+    assert_eq!(replay_phases(&notifier, "s-rp-warn"), ["started", "done"]);
+}
+
+#[tokio::test]
+async fn no_completed_turns_sends_no_load_history_and_waits_for_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let galley = fresh_galley().await;
+    seed_ga_config(&galley, dir.path()).await;
+    seed_session(&galley, SessionSeed::external("s-rp-new")).await;
+    // The first message is persisted before the ensure; nothing completed.
+    galley
+        .send_message(SessionId("s-rp-new".into()), "第一条".into(), cli_origin())
+        .await
+        .unwrap();
+    // No `ready` will ever come: an ensure that waited would time out.
+    let runner = ScriptedRunner::default();
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    let outcome = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-new",
+        replay_options(false),
+    )
+    .await
+    .expect("ensure");
+
+    assert!(outcome.spawned);
+    assert!(runner.sent.lock().unwrap().is_empty());
+    assert_eq!(
+        runner.hooks(),
+        vec![
+            format!("spawn:{}", outcome.pid),
+            format!("release:{}:true", outcome.pid),
+        ],
+        "plain spawn, confirmed as it starts"
+    );
+    assert!(replay_phases(&notifier, "s-rp-new").is_empty());
+}
+
+#[tokio::test]
+async fn completed_turns_that_convert_to_nothing_send_no_load_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let galley = fresh_galley().await;
+    seed_ga_config(&galley, dir.path()).await;
+    seed_session(&galley, SessionSeed::external("s-rp-empty")).await;
+    // A completed turn whose reply never landed: the lone user message is
+    // dropped as a trailing user turn, leaving nothing to send.
+    galley
+        .send_message(SessionId("s-rp-empty".into()), "q".into(), cli_origin())
+        .await
+        .unwrap();
+    galley
+        .bump_session_after_turn(SessionId("s-rp-empty".into()), None, None, false)
+        .await
+        .unwrap();
+    let runner = ScriptedRunner::ready_on_spawn();
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    let outcome = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-empty",
+        replay_options(false),
+    )
+    .await
+    .expect("ensure");
+    assert!(runner.sent.lock().unwrap().is_empty());
+    assert_eq!(runner.confirmed_pid("s-rp-empty"), Some(outcome.pid));
+    assert!(replay_phases(&notifier, "s-rp-empty").is_empty());
+}
+
+#[tokio::test]
+async fn a_live_unconfirmed_idle_runner_is_replayed_into() {
+    let (_dir, galley) = session_with_history("s-rp-live").await;
+    let runner = ScriptedRunner::default();
+    runner.mark_alive("s-rp-live", 4242);
+    runner
+        .ready
+        .lock()
+        .unwrap()
+        .insert("s-rp-live".into(), ready_event("s-rp-live"));
+    let (tx, _) = broadcast::channel(64);
+    runner
+        .channels
+        .lock()
+        .unwrap()
+        .insert("s-rp-live".into(), tx);
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    let outcome = ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-live",
+        replay_options(false),
+    )
+    .await
+    .expect("ensure");
+
+    assert_eq!(outcome.pid, 4242);
+    assert!(!outcome.spawned);
+    assert!(outcome.ready.is_some());
+    assert_eq!(runner.spawn_count(), 0);
+    assert_eq!(runner.load_histories("s-rp-live"), vec![expected_history()]);
+    assert_eq!(
+        runner.hooks(),
+        vec!["hold:4242".to_string(), "release:4242:true".to_string()]
+    );
+    assert_eq!(runner.confirmed_pid("s-rp-live"), Some(4242));
+}
+
+#[tokio::test]
+async fn a_live_runner_mid_run_is_left_alone() {
+    let (_dir, galley) = session_with_history("s-rp-busy").await;
+    let runner = ScriptedRunner::default();
+    runner.mark_alive("s-rp-busy", 4242);
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    for state in [
+        RunState {
+            agent_running: true,
+            ..RunState::default()
+        },
+        // A run the caller did not reserve.
+        RunState {
+            open_run: true,
+            ..RunState::default()
+        },
+    ] {
+        runner.set_run_state("s-rp-busy", state.clone());
+        let outcome = ensure_session_runner(
+            &host(&galley, &runner, &notifier),
+            "s-rp-busy",
+            replay_options(false),
+        )
+        .await
+        .expect("ensure");
+        assert_eq!(outcome.pid, 4242, "{state:?}");
+        assert!(!outcome.spawned);
+        assert!(runner.sent.lock().unwrap().is_empty(), "{state:?}");
+        assert!(runner.hooks().is_empty(), "{state:?}: no hold, no confirm");
+        assert_eq!(runner.confirmed_pid("s-rp-busy"), None);
+    }
+}
+
+#[tokio::test]
+async fn an_open_gate_the_caller_holds_does_not_block_the_replay() {
+    let (_dir, galley) = session_with_history("s-rp-gate").await;
+    let runner = ScriptedRunner::default();
+    runner.mark_alive("s-rp-gate", 4242);
+    runner
+        .ready
+        .lock()
+        .unwrap()
+        .insert("s-rp-gate".into(), ready_event("s-rp-gate"));
+    let (tx, _) = broadcast::channel(64);
+    runner
+        .channels
+        .lock()
+        .unwrap()
+        .insert("s-rp-gate".into(), tx);
+    // The Goal engine reserved the gate before calling ensure.
+    runner.set_run_state(
+        "s-rp-gate",
+        RunState {
+            open_run: true,
+            ..RunState::default()
+        },
+    );
+    let notifier = Arc::new(RecordingNotifier::default());
+
+    ensure_session_runner(
+        &host(&galley, &runner, &notifier),
+        "s-rp-gate",
+        replay_options(true),
+    )
+    .await
+    .expect("ensure");
+    assert_eq!(runner.load_histories("s-rp-gate"), vec![expected_history()]);
+    assert_eq!(runner.confirmed_pid("s-rp-gate"), Some(4242));
+}
+
+#[tokio::test]
+async fn concurrent_ensures_wait_for_the_replay_to_finish() {
+    let (_dir, galley) = session_with_history("s-rp-race").await;
+    let runner = ScriptedRunner::ready_on_spawn();
+    // The answer comes from the test, once the second ensure is waiting.
+    runner.script("s-rp-race", &[Reply::Silent]);
+    let notifier = Arc::new(RecordingNotifier::default());
+    let h = host(&galley, &runner, &notifier);
+    let options = || EnsureOptions {
+        timeouts: ReplayTimeouts {
+            ready: Duration::from_secs(5),
+            history: Duration::from_secs(5),
+        },
+        ..replay_options(false)
+    };
+
+    let second_done = std::sync::atomic::AtomicBool::new(false);
+    let answer = async {
+        for _ in 0..200 {
+            if !runner.load_histories("s-rp-race").is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            !second_done.load(Ordering::SeqCst),
+            "the second ensure waits for the replay"
+        );
+        runner.feed("s-rp-race", history_loaded("s-rp-race"));
+    };
+    let second = async {
+        // Let the first ensure take the slot.
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let outcome = ensure_session_runner(&h, "s-rp-race", options()).await;
+        second_done.store(true, Ordering::SeqCst);
+        outcome
+    };
+    let (first, second, ()) = tokio::join!(
+        ensure_session_runner(&h, "s-rp-race", options()),
+        second,
+        answer
+    );
+    let (first, second) = (first.expect("first"), second.expect("second"));
+    assert_eq!(first.pid, second.pid);
+    assert!(first.spawned && !second.spawned);
+    assert_eq!(runner.spawn_count(), 1);
+    assert_eq!(runner.load_histories("s-rp-race").len(), 1);
+}
+
+#[tokio::test]
+async fn goal_on_a_cold_session_gets_its_history_before_the_objective() {
+    let (_dir, galley) = session_with_history("s-rp-goal").await;
+    let runner = ScriptedRunner::ready_on_spawn();
+    let db = DbSource::Pool(galley.clone());
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: &runner,
+        notifier: Arc::new(RecordingNotifier::default()),
+        app: None,
+    };
+
+    let resp = dispatch(
+        &ctx,
+        json!({"command": "goal.start",
+               "args": {"sessionId": "s-rp-goal", "objective": "暗号是什么？"},
+               "schemaVersion": 2, "requestId": "g"}),
+    )
+    .await;
+    assert!(resp.ok, "{resp:?}");
+    assert_eq!(resp.result.unwrap()["dispatch"], "dispatched");
+
+    assert_eq!(
+        runner.timeline(),
+        ["load_history", "history_loaded", "user_message"],
+        "the objective goes out only after the runner confirmed the history"
+    );
+    // The objective row is persisted before the dispatch, but it is the
+    // turn being started, not history.
+    let history = runner.load_histories("s-rp-goal");
+    assert_eq!(history, vec![expected_history()]);
+    assert!(!serde_json::to_string(&history)
+        .unwrap()
+        .contains("暗号是什么"));
 }

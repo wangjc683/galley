@@ -27,7 +27,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 
 function stubBridge(): void {
   useRuntimeStore.setState({
-    ensureSessionRunner: async () => {},
+    ensureSessionRunner: async () => null,
     hasBridgeClient: () => false,
   });
 }

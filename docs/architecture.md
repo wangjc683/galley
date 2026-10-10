@@ -95,24 +95,50 @@ Core does, through one path: **ensure a runner**
 ([`core/src/session_runner`](../core/src/session_runner/mod.rs), since
 2026-10-10). It returns the runner Core already holds for the session or
 resolves spawn arguments from the session row and prefs and starts one —
-single-flight per session, and never over a live runner
+single-flight per session, and never over a running runner
 (`RunnerManager::spawn` shuts an existing one down first, which would kill
 its run). The GUI calls it through the Tauri command
-`ensure_session_runner` when it activates a session; Goal dispatch through
-the socket layer's wrapper; socket `session.new` uses its spawn half
-(`spawn_and_attach`) for the session it just created. Every runner started
-this way gets the `runner-event` emit task, the auto-title watcher and a
+`ensure_session_runner` when it activates a session and again before
+every `user_message`; Goal dispatch through the socket layer's wrapper;
+socket `session.new` uses its spawn half (`spawn_and_attach`) for the
+session it just created. Every runner started this way gets the
+`runner-event` emit task, the auto-title watcher and a
 `runner-spawned-external` broadcast, so a page that did not ask attaches
 too. Before this, the GUI assembled spawn arguments in TypeScript and
 called `spawn_runner`, which now only serves its LLM-list warmup (a runner
-with no session).
+with no session, `__warmup__`).
+
+A runner starts with an empty GA history, so ensuring one also means
+**restoring history** (ticket 02b,
+[`replay.rs`](../core/src/session_runner/replay.rs)): for a session with
+completed turns Core waits for the runner's `ready`, sends the persisted
+conversation as `load_history` (the GUI's old conversion, pinned by
+`core/tests/fixtures/history-replay-cases.json`), and answers only after
+`history_loaded`. The runner is then **confirmed** — a flag on the
+process, gone with it — and later ensures return at once. An idle live
+runner that is not confirmed is replayed into the same way; a running one
+is left alone, since `load_history` replaces the history its run is
+using. A failed attempt (refusal, exit, or no answer within 8 s of
+sending) restarts the runner once; a second failure is a `HistoryReplay`
+error, which the GUI shows as its "restore timed out" copy. Each attempt
+is announced as `runner-history-replay` (`started`, then `done` /
+`failed`); the GUI shows "restoring" on it. The restart is quiet: while
+it replays, Core holds the runner's close, and a runner it replaces is
+retired, so neither reaches the drain task as `RunSignal::Closed` (which
+would release the run gate a Goal reserved before calling ensure and
+park the goal as paused) nor a page as `runner-closed` (which would tear
+down the listeners of the page waiting on this ensure). A held runner
+that exits and is not replaced is announced when the ensure lets go. A
+Goal on a cold session therefore gets the session's history before its
+objective. Socket `session send` is unchanged: with no runner it only
+persists (ADR-0002, ruling 1 of the ticket).
 
 Each runner keeps a **ready snapshot** — its latest `ready`, folded with
 later `llm_changed` / `reasoning_effort_changed` — which Core hands to a
 page that attaches after `ready` went by (`ensure_session_runner`,
-`list_live_runners`). History replay into a fresh runner is still sent by
-the GUI on the real `ready` event; moving it into the same path is ticket
-02b (`.scratch/ios-client/issues/02-core-send-takeover.md`).
+`list_live_runners`), and which the ensure reads to know a runner is
+ready before replaying. A page applies a `ready` (event or snapshot) to
+its stores only; it never sends `load_history` itself.
 
 #### Runner events and turn persistence
 

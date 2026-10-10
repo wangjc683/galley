@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { EnsureBridgeArgs } from "@/lib/bridge";
 import { useMessagesStore } from "@/stores/messages";
-import { useRuntimeStore } from "@/stores/runtime";
+import { useRuntimeStore, type RunnerEnsureFailure } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { makeSession } from "@/test/factories";
 import { getTauriMocks } from "@/test/setup";
@@ -39,11 +39,13 @@ function invoked(command: string): number {
 }
 
 describe("re-attaching to runners Core still holds", () => {
-  let ensureSessionRunner: Mock<(args: EnsureBridgeArgs) => Promise<void>>;
+  let ensureSessionRunner: Mock<
+    (args: EnsureBridgeArgs) => Promise<RunnerEnsureFailure | null>
+  >;
 
   beforeEach(() => {
     resetStores();
-    ensureSessionRunner = vi.fn(async (_args: EnsureBridgeArgs) => {});
+    ensureSessionRunner = vi.fn(async (_args: EnsureBridgeArgs) => null);
     useRuntimeStore.setState({ ensureSessionRunner });
   });
 

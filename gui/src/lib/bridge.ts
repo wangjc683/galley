@@ -153,11 +153,38 @@ export interface EnsureBridgeArgs {
 
 export interface EnsureBridgeResult {
   client: BridgeClient;
-  /** True when Core started the runner (its `ready` is on the way);
-   * false when it was already alive — no `ready` will come. */
+  /** True when Core started the runner (its `ready` arrives as an event
+   * — already arrived when Core had history to replay first); false when
+   * it was already alive — no `ready` will come. */
   spawned: boolean;
   /** The live runner's latest `ready` state (only when not spawned). */
   ready: ReadySnapshot | null;
+}
+
+/**
+ * Core could not restore the session's history into its runner, even
+ * after restarting it once (`{"error":"history_replay"}` from
+ * `ensure_session_runner`, ticket 02b). The runner may still be alive,
+ * unconfirmed; the send path reports this with its "restore timed out"
+ * copy instead of a bridge failure.
+ */
+export class HistoryReplayError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HistoryReplayError";
+  }
+}
+
+/** The Rust error tag of an invoke failure, when it carries one. */
+function invokeErrorTag(e: unknown): string | null {
+  const raw =
+    typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+  try {
+    const parsed = JSON.parse(raw) as { error?: unknown };
+    return typeof parsed.error === "string" ? parsed.error : null;
+  } catch {
+    return null;
+  }
 }
 
 /** `runner_commands::EnsureSessionRunnerResult`. */
@@ -479,6 +506,12 @@ export async function ensureBridge(
   } catch (e) {
     listeners.teardown();
     const msg = formatInvokeError(e);
+    if (invokeErrorTag(e) === "history_replay") {
+      // Not a bridge failure: Core has (or had) a runner, it only could
+      // not confirm the history. No bridge-failed toast; whoever needs
+      // the history reports it.
+      throw new HistoryReplayError(msg);
+    }
     handlers.onError?.(msg);
     // Same as spawnBridge: `msg` already carries the typed discriminant
     // and detail.
@@ -495,6 +528,32 @@ export async function ensureBridge(
     spawned: outcome.spawned,
     ready: outcome.ready ?? null,
   };
+}
+
+/**
+ * Ask Core to confirm the history of a runner this page already listens
+ * to — the same `ensure_session_runner`, without a second listener set.
+ * Core answers at once for a confirmed runner and replays into an idle
+ * unconfirmed one first (restarting it once if that fails; the page's
+ * listeners are per session, so they follow the replacement). Throws
+ * [`HistoryReplayError`] when the history could not be restored.
+ */
+export async function confirmRunnerHistory(
+  args: Pick<EnsureBridgeArgs, "sessionId" | "gaConfig">,
+): Promise<void> {
+  try {
+    await invoke<EnsureSessionRunnerResultJson>("ensure_session_runner", {
+      sessionId: args.sessionId,
+      gaConfig: args.gaConfig,
+    });
+  } catch (e) {
+    const msg = formatInvokeError(e);
+    if (invokeErrorTag(e) === "history_replay") {
+      throw new HistoryReplayError(msg);
+    }
+    // eslint-disable-next-line preserve-caught-error
+    throw new Error(msg);
+  }
 }
 
 /** Listen to a runner Core already holds (started elsewhere). */
@@ -657,6 +716,8 @@ function humanizeErrorTag(tag: string): string {
       return "Subprocess spawn failed";
     case "pipe_unavailable":
       return "Subprocess pipe unavailable";
+    case "history_replay":
+      return "History restore failed";
     case "process_gone":
       return "Bridge process is gone";
     case "serialize":

@@ -122,6 +122,10 @@ impl SocketResponseLite {
             E::SubscribeFailed => SocketResponseLite::runner_error(format!(
                 "{via}: runner subscribe failed after spawn"
             )),
+            // New with ticket 02b; only the Goal path can meet it.
+            E::HistoryReplay(reason) => SocketResponseLite::runner_error(format!(
+                "{via}: history replay failed: {reason}"
+            )),
         }
     }
     pub(super) fn into_galley_error(self) -> crate::error::GalleyError {

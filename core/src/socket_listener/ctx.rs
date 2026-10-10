@@ -24,8 +24,8 @@ use crate::error::GalleyError;
 use crate::ipc::IpcCommand;
 use crate::notify::{notify, Notifier};
 use crate::runner_manager::{
-    BroadcastItem, QueueJump, QueueOffer, ReadySnapshot, RunOutcome, RunState, RunnerCommandSink,
-    RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
+    BroadcastItem, HeldClose, QueueJump, QueueOffer, ReadySnapshot, RunOutcome, RunState,
+    RunnerCommandSink, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
 };
 use crate::session_runner::{RunnerHost, SpawnEnv};
 use async_trait::async_trait;
@@ -79,6 +79,47 @@ pub trait RunnerPort: Send + Sync {
     /// auto-title watcher). `None` = attach no watcher.
     fn command_sink(&self) -> Option<Arc<dyn RunnerCommandSink>> {
         None
+    }
+
+    // ---- History replay (`crate::session_runner`, ticket 02b) ----
+    //
+    // Defaults keep the pre-02b fakes behaving as before: a held spawn is
+    // a plain spawn, there is no close to hold or announce, a retire is a
+    // shutdown, and nothing is ever confirmed (so a fake's live runner on
+    // a session with completed turns gets a replay attempt).
+
+    /// Spawn with the new runner's close held until
+    /// [`Self::release_close`] (`RunnerManager::spawn_held`).
+    async fn spawn_held(
+        &self,
+        args: SpawnArgs,
+        active_session_id: Option<&str>,
+    ) -> Result<u32, RunnerSpawnError> {
+        self.spawn(args, active_session_id).await
+    }
+    /// Hold the close of live runner `pid`. Default: held.
+    async fn hold_close(&self, _session_id: &str, _pid: u32) -> bool {
+        true
+    }
+    /// End the hold on runner `pid`, recording its history as confirmed
+    /// when asked; returns a close that happened during the hold (now
+    /// announced to the run gate). Default: nothing held.
+    async fn release_close(
+        &self,
+        _session_id: &str,
+        _pid: u32,
+        _history_confirmed: bool,
+    ) -> Option<HeldClose> {
+        None
+    }
+    /// Shut runner `pid` down to replace it, announcing no close.
+    /// Default: a plain shutdown.
+    async fn retire(&self, session_id: &str, _pid: u32) -> bool {
+        self.shutdown(session_id, None).await.is_ok()
+    }
+    /// Whether live runner `pid`'s GA history is confirmed. Default: no.
+    async fn history_confirmed(&self, _session_id: &str, _pid: u32) -> bool {
+        false
     }
 
     // ---- Outbound message queue (galley#19/#20) ----
@@ -172,6 +213,30 @@ impl RunnerPort for RunnerManager {
     }
     fn command_sink(&self) -> Option<Arc<dyn RunnerCommandSink>> {
         Some(Arc::new(self.command_handle()))
+    }
+    async fn spawn_held(
+        &self,
+        args: SpawnArgs,
+        active_session_id: Option<&str>,
+    ) -> Result<u32, RunnerSpawnError> {
+        RunnerManager::spawn_held(self, args, active_session_id).await
+    }
+    async fn hold_close(&self, session_id: &str, pid: u32) -> bool {
+        RunnerManager::hold_close(self, session_id, pid).await
+    }
+    async fn release_close(
+        &self,
+        session_id: &str,
+        pid: u32,
+        history_confirmed: bool,
+    ) -> Option<HeldClose> {
+        RunnerManager::release_close(self, session_id, pid, history_confirmed).await
+    }
+    async fn retire(&self, session_id: &str, pid: u32) -> bool {
+        RunnerManager::retire(self, session_id, pid).await
+    }
+    async fn history_confirmed(&self, session_id: &str, pid: u32) -> bool {
+        RunnerManager::history_confirmed(self, session_id, pid).await
     }
 
     async fn queue_offer(

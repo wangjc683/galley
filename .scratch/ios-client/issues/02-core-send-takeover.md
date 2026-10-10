@@ -152,3 +152,49 @@ dev 模式两端 Python 是否一致；外置模式 `pendingLLMIndex` 语义；`
     发送路径对已存活 runner 仍会经 `ensureHistoryReplayComplete` 回放一次（与今天的 attach 路径相同）；Goal 冷启动 bug 未修。
   - 验证：cargo test --workspace 627 通过 0 失败（基线 604 / 0）；vitest 934 / 0（基线 906 / 0）；typecheck、lint、三个门禁脚本、
     `git diff --check` 通过。未真机 dogfood。
+- 2026-10-10 02b 完成（执行代理，worktree `ios-02b-core-replay`，未提交）。
+  - 实现：回放内容移植到 `core/src/session_runner/replay.rs`（`rows_to_conversation_messages`，规则逐条照搬 GUI）。共享样例
+    `core/tests/fixtures/history-replay-cases.json` 共 19 条，先用临时 vitest 证明当时的 TS 实现逐条通过（改一条期望值即变红），
+    再由 cargo test 读同一份；TS 函数与临时 vitest 已删，样例留作 Rust 的 golden。行数据复用 `session_message_rows` 的同一查询
+    （`persisted_message_rows`），已完成轮次取会话行的 `turn_count`。
+  - ensure 的新语义：成功＝runner 存活且历史已确认。新起的 runner 在会话有已完成轮次时：等 `ready`（订阅后查 ready 缓存，30 秒）→
+    读库转换 → 发 `load_history` → 从发出起 8 秒内等 `history_loaded`；`context: "load_history"` 且 severity 非 `warning` 的
+    error、进程退出、超时算失败。失败就静默重启一次（同一份 args），仍失败返回新变体 `SessionRunnerError::HistoryReplay`
+    （socket 渲染为 `runner_error`「{via}: history replay failed: …」，只有 Goal 路径会遇到；Tauri 命令返回
+    `{"error":"history_replay","detail"}`）。「已确认」记在 `RunnerProcess` 上，随进程消亡。已存活未确认的 runner：空闲就回放（失败同样
+    重启一次），在跑就不碰、照旧返回。整个回放持有单飞槽。每次发送前后经 `Notifier` 广播 `runner-history-replay`
+    `{ sessionId, phase }`。`session.new`（`spawn_and_attach`）新建的会话没有历史，拉起即确认。
+  - 静默：进程级「关闭闸」。ensure 回放期间 hold 住 runner 的关闭（新起的用 `spawn_held`，从第一刻起；已存活的用 `hold_close`），
+    主动替换时 `retire`。这两种关闭在 `BroadcastItem::Closed` 上带 `quiet: true`：runner watcher 不发 `RunSignal::Closed`，GUI 发射任务
+    不发 `runner-closed`。hold 期间退出且没被替换的，ensure 放手时（`release_close`）补发两者。
+  - GUI：`ready` 只更新 store；删掉 `case "ready"` 末尾的回放触发和 `error` / `history_loaded` 里的 `finishHistoryReplay`。
+    `ensureBridgeThenSend` 对 `user_message` 改调新动作 `confirmSessionHistory`（本页已挂监听就直接调 Core ensure，否则走完整的
+    `ensureSessionRunner`），Core 报 `history_replay` 时抛 `restoreTimeoutMessage`；GUI 自己的重启逻辑删除。`restoring` 只由
+    `runner-history-replay` 的 `started` 驱动（`agentRunning` 为真时）。`history-replay.ts` 只剩这个事件的处理；
+    `messages.ts` 里只给 GUI 回放读的行缓存（`remember…` / `getCached…` / `invalidate…`）一并删除，grep 核实无其他读者。
+  - 偏离：（1）新起 runner 只在有已完成轮次时等 `ready`；没有历史就不等，新会话首条消息的时延与 02a 一致，也免得假 runner 都要发
+    `ready`。（2）`EnsureOptions` 加 `holds_run_gate`：Goal 先预留闸门再 ensure，按票面「`open_run || agent_running` 为假才算空闲」，
+    Goal 自己的预留会让存活未确认的 runner 永远不回放；调用方持有闸门时只看 `agent_running` 和别人开的运行。Goal 传 true，GUI 传 false，
+    02c 统一 send 先预留后应传 true。（3）存活未确认的 runner 回放失败也重启一次（GUI 旧策略如此），重启前再查一次是否有人派发了运行，
+    有就不重启、直接报错，不杀别人的运行。（4）没用 `expected_close`：它只把退出码改成 0，watcher 照样发 `Closed`；改为上面的关闭闸，
+    同时盖住「回放中崩溃→重启」和「ensure 主动替换」两种关闭，也避免 GUI 收到 `runner-closed` 后拆掉正在等这次 ensure 的监听。
+    （5）`activateSession` 返回 ensure 失败（成功为 `null`），发送路径在激活失败时直接报错，不再立刻重试，一次发送最多两次回放尝试，
+    与旧 GUI 相同；激活阶段的 `history_replay` 失败静默（会话置 `idle`、无 bridge 失败 toast），与旧的尽力回放一致。
+    （6）顺手修 GUI 潜在 bug：旧 `case "error"` 对任何 `context: "load_history"` 的 error 都判回放失败，未验证 backend 的 warning
+    （随后照样 `history_loaded`）会让冷会话首发必然「恢复超时」；Core 现在把 warning 当非致命。
+  - 「存活但未确认」入口核实：`RunnerManager::spawn` 只有两个调用点——`runner_commands::spawn_runner`（`runner_commands.rs:430`，
+    只剩 GUI 预热，会话 id 固定 `__warmup__`，`gui/src/stores/runtime/llm-slice.ts:450`，不是真实会话，从不走 ensure）和
+    `session_runner::attach_spawned`（ensure 与 `spawn_and_attach`，前者按上面的规则确认，后者拉起即确认）。scheduler 走 socket
+    `session.new`。02b 之后剩下的未确认存活 runner 只有：两次回放都失败后留下的、以及从未确认过且一直在跑的，下次空闲 ensure 时回放。
+  - 闸门与 Goal 竞态核实（02b 前）：watcher 对任何 `Closed` 都发 `RunSignal::Closed`（HEAD `manager.rs:253-259`），
+    `queue_take_next` 收到就把 `open_run` 置假（HEAD `manager.rs:648`），drain 随后调 `on_runner_closed`（`message_queue.rs:180`）把
+    Active 的 goal 判 Paused（`goal_engine.rs:361-366`）；`expected_close` 只改退出码（HEAD `process.rs:331`）。Goal 在 ensure 前已预留
+    闸门（`goal_engine.rs:164`、`:401`，ensure 在 `:463`），而 drain 异步处理信号，旧 runner 的 `Closed` 可能在 Goal 派发后才到，
+    放掉正在跑的运行的闸门。真进程测试复现了这一点：把关闭闸改回旧行为，`a_goal_survives_the_quiet_restart_of_its_runner` 收到
+    `[Closed, UserRunStarted]` 而失败。修后同一测试断言无 `Closed`、闸门仍开、goal 仍 Active、此时的用户消息排队。
+  - 留给 02c 的口子：socket `session send`（冻结）不走单飞，在 Core 回放新 runner 的几秒里，若 runner 已登记它就直接派发；派发早于
+    `load_history` 时回放被拒，ensure 见到别人开的运行不重启、报 `HistoryReplay`，那条运行跑在空历史上。Goal 持闸时 socket send 会排队，
+    GUI 发送不预留闸门（发现 6），所以 GUI 路径仍有这个窗口；02c 统一 send 先 `queue_offer` 再 ensure（`holds_run_gate: true`）可关掉
+    GUI 与手机这一侧。ensure 持单飞槽贯穿回放，最坏约 2×（30＋8）秒，同会话的激活与发送会等。
+  - 验证：cargo test --workspace 646 通过 0 失败（基线 627 / 0）；vitest 944 / 0（基线 934 / 0）；typecheck、lint、三个门禁脚本、
+    `git diff --check` 通过。抽查：去掉「先回放再派发」，Goal 顺序测试变红；把关闭闸改回旧行为，两条真进程测试变红；均已还原。未真机 dogfood。

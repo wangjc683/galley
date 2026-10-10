@@ -54,7 +54,7 @@ export function useGoalActions({
   ) => Promise<string>;
   setScreen: (s: "empty" | "main" | "onboarding") => void;
   setActiveProjectFilter: (id: string | undefined) => void;
-  activateSession: (id: string) => Promise<void>;
+  activateSession: (id: string) => Promise<unknown>;
   setActiveGoals: Dispatch<SetStateAction<GoalBrief[]>>;
   pushToast: (error: ReturnType<typeof makeAppError>) => void;
   openModelsForMissingConfig: () => void;

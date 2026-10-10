@@ -1,0 +1,324 @@
+{
+  "about": "Golden cases for history replay (ticket 02b): the persisted message rows of a session (the `session_message_rows` shape, only the fields the conversion reads) plus the session's completed turn count, and the `load_history` messages Core sends for them (session_runner::replay::rows_to_conversation_messages, cargo test). The cases were first proven against the GUI's own rowsToConversationMessages, which Core's port replaced; this file is now the Rust side's golden.",
+  "cases": [
+    {
+      "name": "no rows",
+      "completedTurnCount": 0,
+      "rows": [],
+      "messages": []
+    },
+    {
+      "name": "one completed exchange",
+      "completedTurnCount": 1,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "你好", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "<thinking>t</thinking>你好！", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "你好" },
+        { "role": "assistant", "content": "<thinking>t</thinking>你好！" }
+      ]
+    },
+    {
+      "name": "roles other than user and assistant are dropped",
+      "completedTurnCount": 2,
+      "rows": [
+        { "role": "system", "turn_index": 1, "content": "goal commissioned", "attachments": [] },
+        { "role": "user", "turn_index": 1, "content": "q1", "attachments": [] },
+        { "role": "agent", "turn_index": 1, "content": "not a stored role", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "a1", "attachments": [] },
+        { "role": "tool", "turn_index": 2, "content": "tool output", "attachments": [] },
+        { "role": "user", "turn_index": 2, "content": "q2", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "a2", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "q1" },
+        { "role": "assistant", "content": "a1" },
+        { "role": "user", "content": "q2" },
+        { "role": "assistant", "content": "a2" }
+      ]
+    },
+    {
+      "name": "rows past the completed turn count are pending input, not history",
+      "completedTurnCount": 2,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "q1", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "a1", "attachments": [] },
+        { "role": "user", "turn_index": 2, "content": "q2", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "a2", "attachments": [] },
+        { "role": "user", "turn_index": 3, "content": "the goal objective just persisted", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "q1" },
+        { "role": "assistant", "content": "a1" },
+        { "role": "user", "content": "q2" },
+        { "role": "assistant", "content": "a2" }
+      ]
+    },
+    {
+      "name": "a late assistant row past the count is dropped too",
+      "completedTurnCount": 1,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "q1", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "a1", "attachments": [] },
+        { "role": "user", "turn_index": 2, "content": "q2", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "step of a run still going", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "q1" },
+        { "role": "assistant", "content": "a1" }
+      ]
+    },
+    {
+      "name": "user image attachments become images",
+      "completedTurnCount": 1,
+      "rows": [
+        {
+          "role": "user",
+          "turn_index": 1,
+          "content": "看这张图",
+          "attachments": [{ "kind": "image", "path": "/att/s1/a.png" }]
+        },
+        { "role": "assistant", "turn_index": 1, "content": "是一只猫。", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "看这张图", "images": ["/att/s1/a.png"] },
+        { "role": "assistant", "content": "是一只猫。" }
+      ]
+    },
+    {
+      "name": "image and non-image attachments mixed keep only the images, in order",
+      "completedTurnCount": 1,
+      "rows": [
+        {
+          "role": "user",
+          "turn_index": 1,
+          "content": "两张图一个文件",
+          "attachments": [
+            { "kind": "image", "path": "/att/s1/a.png" },
+            { "kind": "file", "path": "/att/s1/notes.pdf" },
+            { "kind": "image", "path": "/att/s1/b.jpg" }
+          ]
+        },
+        { "role": "assistant", "turn_index": 1, "content": "收到。", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "两张图一个文件", "images": ["/att/s1/a.png", "/att/s1/b.jpg"] },
+        { "role": "assistant", "content": "收到。" }
+      ]
+    },
+    {
+      "name": "only non-image attachments leave an empty images list",
+      "completedTurnCount": 1,
+      "rows": [
+        {
+          "role": "user",
+          "turn_index": 1,
+          "content": "一个文件",
+          "attachments": [{ "kind": "file", "path": "/att/s1/notes.pdf" }]
+        },
+        { "role": "assistant", "turn_index": 1, "content": "读完了。", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "一个文件", "images": [] },
+        { "role": "assistant", "content": "读完了。" }
+      ]
+    },
+    {
+      "name": "assistant attachments are ignored",
+      "completedTurnCount": 1,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "画一张", "attachments": [] },
+        {
+          "role": "assistant",
+          "turn_index": 1,
+          "content": "画好了。",
+          "attachments": [{ "kind": "image", "path": "/att/s1/out.png" }]
+        }
+      ],
+      "messages": [
+        { "role": "user", "content": "画一张" },
+        { "role": "assistant", "content": "画好了。" }
+      ]
+    },
+    {
+      "name": "a multi-step run merges into one assistant message",
+      "completedTurnCount": 3,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "读 README", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "当前阶段：读文件。", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "继续读。", "attachments": [] },
+        { "role": "assistant", "turn_index": 3, "content": "答案是 42。", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "读 README" },
+        { "role": "assistant", "content": "当前阶段：读文件。\n\n继续读。\n\n答案是 42。" }
+      ]
+    },
+    {
+      "name": "adjacent user rows merge content and concatenate images",
+      "completedTurnCount": 3,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "第一条", "attachments": [] },
+        {
+          "role": "user",
+          "turn_index": 2,
+          "content": "第二条",
+          "attachments": [{ "kind": "image", "path": "/att/s1/a.png" }]
+        },
+        {
+          "role": "user",
+          "turn_index": 3,
+          "content": "第三条",
+          "attachments": [
+            { "kind": "image", "path": "/att/s1/b.png" },
+            { "kind": "image", "path": "/att/s1/c.png" }
+          ]
+        },
+        { "role": "assistant", "turn_index": 3, "content": "都看到了。", "attachments": [] }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": "第一条\n\n第二条\n\n第三条",
+          "images": ["/att/s1/a.png", "/att/s1/b.png", "/att/s1/c.png"]
+        },
+        { "role": "assistant", "content": "都看到了。" }
+      ]
+    },
+    {
+      "name": "merging a non-image row keeps the earlier images untouched",
+      "completedTurnCount": 2,
+      "rows": [
+        {
+          "role": "user",
+          "turn_index": 1,
+          "content": "图",
+          "attachments": [{ "kind": "image", "path": "/att/s1/a.png" }]
+        },
+        {
+          "role": "user",
+          "turn_index": 2,
+          "content": "文件",
+          "attachments": [{ "kind": "file", "path": "/att/s1/notes.pdf" }]
+        },
+        { "role": "user", "turn_index": 2, "content": "纯文字", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "好。", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "图\n\n文件\n\n纯文字", "images": ["/att/s1/a.png"] },
+        { "role": "assistant", "content": "好。" }
+      ]
+    },
+    {
+      "name": "a trailing user message is dropped",
+      "completedTurnCount": 2,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "q1", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "a1", "attachments": [] },
+        { "role": "user", "turn_index": 2, "content": "q2 whose run was aborted", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "q1" },
+        { "role": "assistant", "content": "a1" }
+      ]
+    },
+    {
+      "name": "trailing user rows merge first, then the merged message is dropped",
+      "completedTurnCount": 3,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "q1", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "a1", "attachments": [] },
+        { "role": "user", "turn_index": 2, "content": "q2", "attachments": [] },
+        {
+          "role": "user",
+          "turn_index": 3,
+          "content": "q3",
+          "attachments": [{ "kind": "image", "path": "/att/s1/a.png" }]
+        }
+      ],
+      "messages": [
+        { "role": "user", "content": "q1" },
+        { "role": "assistant", "content": "a1" }
+      ]
+    },
+    {
+      "name": "a lone user row is no history",
+      "completedTurnCount": 1,
+      "rows": [{ "role": "user", "turn_index": 1, "content": "q1", "attachments": [] }],
+      "messages": []
+    },
+    {
+      "name": "nothing completed yet: the first message is not history",
+      "completedTurnCount": 0,
+      "rows": [{ "role": "user", "turn_index": 1, "content": "first", "attachments": [] }],
+      "messages": []
+    },
+    {
+      "name": "history may start with an assistant message",
+      "completedTurnCount": 2,
+      "rows": [
+        { "role": "assistant", "turn_index": 1, "content": "orphan step", "attachments": [] },
+        { "role": "user", "turn_index": 2, "content": "q2", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "a2", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "assistant", "content": "orphan step" },
+        { "role": "user", "content": "q2" },
+        { "role": "assistant", "content": "a2" }
+      ]
+    },
+    {
+      "name": "several turns with images and multi-step runs",
+      "completedTurnCount": 6,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "开始", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "第一步", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "第二步", "attachments": [] },
+        {
+          "role": "user",
+          "turn_index": 3,
+          "content": "看图",
+          "attachments": [
+            { "kind": "image", "path": "/att/s1/x.png" },
+            { "kind": "file", "path": "/att/s1/y.txt" }
+          ]
+        },
+        { "role": "assistant", "turn_index": 3, "content": "看到了", "attachments": [] },
+        { "role": "user", "turn_index": 4, "content": "再来", "attachments": [] },
+        { "role": "assistant", "turn_index": 4, "content": "好的", "attachments": [] },
+        { "role": "assistant", "turn_index": 5, "content": "做完了", "attachments": [] },
+        { "role": "user", "turn_index": 6, "content": "最后", "attachments": [] },
+        { "role": "assistant", "turn_index": 6, "content": "完毕", "attachments": [] },
+        { "role": "user", "turn_index": 7, "content": "还没回复", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "开始" },
+        { "role": "assistant", "content": "第一步\n\n第二步" },
+        { "role": "user", "content": "看图", "images": ["/att/s1/x.png"] },
+        { "role": "assistant", "content": "看到了" },
+        { "role": "user", "content": "再来" },
+        { "role": "assistant", "content": "好的\n\n做完了" },
+        { "role": "user", "content": "最后" },
+        { "role": "assistant", "content": "完毕" }
+      ]
+    },
+    {
+      "name": "content is kept verbatim, whitespace and empty strings included",
+      "completedTurnCount": 2,
+      "rows": [
+        { "role": "user", "turn_index": 1, "content": "  前后空格  \n", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "<tool_use>{}</tool_use>", "attachments": [] },
+        { "role": "user", "turn_index": 2, "content": "", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "ok", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "  前后空格  \n" },
+        { "role": "assistant", "content": "\n\n<tool_use>{}</tool_use>" },
+        { "role": "user", "content": "" },
+        { "role": "assistant", "content": "ok" }
+      ]
+    }
+  ]
+}

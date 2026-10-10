@@ -1,11 +1,10 @@
 import type { AppCopy } from "@/lib/i18n";
-import { ensureHistoryReplayComplete } from "@/lib/ipc/history-replay";
 import { markReplyNotifyPending } from "@/lib/notify";
 import { queueOrDispatchUserMessage } from "@/lib/session-queue";
 import { logPerf, perfNow } from "@/lib/perf";
 import { isSideQuestion } from "@/lib/side-question";
 import { useMessagesStore } from "@/stores/messages";
-import { useRuntimeStore } from "@/stores/runtime";
+import { useRuntimeStore, type RunnerEnsureFailure } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
@@ -14,7 +13,7 @@ import type { Session } from "@/types/session";
 
 /** The two main-agent commands the send machine can deliver. `/btw`
  * side questions ride `user_message` too (the bridge intercepts them);
- * only `user_message` needs history replay before dispatch. */
+ * only `user_message` needs the history confirmed before dispatch. */
 type MainSendCommand =
   | {
       kind: "user_message";
@@ -30,16 +29,18 @@ type MainSendCommand =
 
 /**
  * THE send-phase machine — the one place a user-visible send acquires a
- * bridge, replays history, and dispatches. Both composers go through it
- * (main view via `sendUserMessage`, empty screen via `submitFromEmpty`),
- * so the phase choreography and the replay-failure policy cannot drift
- * between them again (before 2026-07-28 the empty path had a weaker
- * throw-on-first-failure copy of this logic; the restart-retry below is
- * now the single policy).
+ * bridge, makes sure its history is in place, and dispatches. Both
+ * composers go through it (main view via `sendUserMessage`, empty screen
+ * via `submitFromEmpty`), so the phase choreography and the replay
+ * policy cannot drift between them again.
  *
- * Replay policy: a `user_message` must land on a bridge that has
- * confirmed history replay, or GA would run the task on a truncated
- * conversation. One silent restart is attempted before giving up.
+ * Replay policy: a `user_message` must land on a runner whose GA history
+ * holds the session's conversation, or GA would run the task on a
+ * truncated one. Core owns that since ticket 02b: its ensure replays the
+ * persisted history (restarting the runner once, quietly, if the replay
+ * fails) and answers only when the runner confirmed it. This page asks
+ * and waits; Core's `runner-history-replay` event shows "restoring"
+ * meanwhile. A Core that could not restore → `restoreTimeoutMessage`.
  *
  * Exported for `useMessageSend.test.ts` — this function is the
  * module's deep core; the hook around it is React binding.
@@ -58,6 +59,10 @@ export async function ensureBridgeThenSend(
       useMessagesStore.getState().setSendPhase(sid, phase);
     }
   };
+  const failed = (failure: RunnerEnsureFailure) =>
+    new Error(
+      failure.historyReplay ? opts.restoreTimeoutMessage : failure.message,
+    );
   const runtime = useRuntimeStore.getState();
   const latestStatus = runtime.byId[sid]?.bridgeStatus ?? "idle";
   if (
@@ -65,23 +70,22 @@ export async function ensureBridgeThenSend(
     (latestStatus !== "connected" || !runtime.hasBridgeClient(sid))
   ) {
     setSendPhase("starting");
-    await useSessionsStore.getState().activateSession(sid);
+    // A cold session's runner comes up with its history already restored
+    // (Core's ensure inside the activation); a failure there ends the
+    // send — asking again right away would only repeat it.
+    const failure = await useSessionsStore.getState().activateSession(sid);
+    if (failure) throw failed(failure);
   }
   if (cmd.kind === "user_message") {
-    setSendPhase("restoring");
-    let historyReady = await ensureHistoryReplayComplete(sid);
-    if (!historyReady) {
-      console.warn("[main] history replay did not confirm; restarting bridge.", {
+    // Immediate for a runner Core already confirmed; otherwise Core
+    // replays (and restarts the runner once) before it answers.
+    const failure = await useRuntimeStore.getState().confirmSessionHistory(sid);
+    if (failure) {
+      console.warn("[main] Core could not confirm the history.", {
         sid,
+        failure,
       });
-      await useRuntimeStore.getState().shutdownBridge(sid);
-      setSendPhase("starting");
-      await useSessionsStore.getState().activateSession(sid);
-      setSendPhase("restoring");
-      historyReady = await ensureHistoryReplayComplete(sid);
-      if (!historyReady) {
-        throw new Error(opts.restoreTimeoutMessage);
-      }
+      throw failed(failure);
     }
   }
   setSendPhase("waiting_agent");
@@ -96,7 +100,7 @@ export async function ensureBridgeThenSend(
 
 /**
  * Everything that turns a user action into a bridge command: the
- * main-view send path (with lazy bridge spawn + history replay),
+ * main-view send path (with lazy bridge spawn + Core's history replay),
  * `/btw` side questions, the empty-screen first-message path, Stop, and
  * the Browser Control demo. Pulled out of App so the entry component
  * stops carrying ~300 lines of dense IPC choreography inline.

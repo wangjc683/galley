@@ -109,7 +109,7 @@ desktop                             bridge subprocess
   │                                       │ install WorkbenchHandler
   │  ◄──── { kind: "ready", ... }         │
   │                                       │
-  │  { kind: "load_history", ... }        │  (可选，仅恢复 session 时)
+  │  { kind: "load_history", ... }        │  (Core 发，仅会话已有完成轮次时，见 §7)
   │ ───────────────────────────────────► │
   │  ◄──── { kind: "history_loaded" }     │
   │                                       │
@@ -384,7 +384,7 @@ agent 主动调用 `ask_user` 工具时发出。bridge 此时 agent_runner_loop 
 
 ### 4.11 `history_loaded`
 
-`load_history` 命令完成的响应。
+`load_history` 命令完成的响应。Core 的 ensure 等这条事件来确认回放（§7）；等不到时看下列结果判失败：`context: "load_history"` 且 `severity` 不是 `"warning"` 的 `error`（运行中拒绝、注入抛异常）、进程退出、发出 `load_history` 起 8 秒内没有回应。`severity: "warning"` 的那条（未验证的 backend 类，`set_history` 照写并告警）不算失败，bridge 随后照样发 `history_loaded`。
 
 ```json
 {
@@ -575,29 +575,27 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 
 ### 5.5 `load_history`
 
-注入历史会话上下文。**只能在 ready 之后、第一个 user_message 之前调用**。注入到 `client.backend.history`。
+注入历史会话上下文。**只能在 ready 之后、第一个 user_message 之前调用**；bridge 在运行中收到会拒绝（`category: "business"`、`context: "load_history"` 的 `error`）。注入到 `client.backend.history`，整体替换。
+
+发送方是 Core（2026-10-10 起，票 02b；此前由 GUI 在每个 `ready` 上发）：确保 runner 的共享路径（`core/src/session_runner/`）在会话已有完成轮次时，等 runner `ready` 后读库、转换、发送，并等 `history_loaded`。GUI 与其他调用方不再发这条命令。
 
 ```json
 {
   "kind": "load_history",
   "messages": [
-    {
-      "role": "user",
-      "content": "...",
-      "toolCalls": [],
-      "toolResults": []
-    },
-    {
-      "role": "assistant",
-      "content": "...",
-      "toolCalls": [...],
-      "toolResults": [...]
-    }
+    { "role": "user", "content": "看这张图", "images": ["/…/attachments/a.png"] },
+    { "role": "assistant", "content": "<thinking>…</thinking>是一只猫。" }
   ]
 }
 ```
 
-`messages` 顺序与历史一致；bridge 直接构造对应的 GA history 结构注入。完成后回 `history_loaded`。
+`messages` 顺序与历史一致；bridge 直接构造对应的 GA history 结构注入。完成后回 `history_loaded`。Core 实际发出的字段只有 `role`（`user` / `assistant`）、`content`（字符串：用户行原文，assistant 行是落库的原始 `responseContent`）和用户消息上可选的 `images`（附件路径）。由落库行转换的规则（`session_runner::replay::rows_to_conversation_messages`，黄金样例 `core/tests/fixtures/history-replay-cases.json`）：
+
+- 只取 `user` / `assistant` 行；
+- `turn_index` 大于会话 `turn_count`（已完成轮次，一轮结束才 +1）的行是还在等回复的输入，不算历史；
+- 用户行有附件时带 `images`，只收 `kind: "image"` 的路径（全是非图片附件时为空数组）；
+- 相邻同角色合并：`content` 用空行（`\n\n`）拼接，`images` 依次拼接；
+- 末尾是用户消息就去掉；结果为空就不发。
 
 ### 5.6 `set_approval_rules`（已删除）
 
@@ -761,15 +759,24 @@ bridge 不再在 dispatch 前阻塞等待用户决定。`tool_call_pending` 事�
 ## 7. Session Resume Flow
 
 ```
-spawn bridge with sessionId="sess_old"
+Core:     spawn bridge with sessionId="sess_old"
 bridge:   { kind: "ready", ... }
-desktop:  { kind: "load_history", messages: [...] }
+Core:     { kind: "load_history", messages: [...] }
 bridge:   { kind: "history_loaded", messageCount: 12 }
-desktop:  { kind: "user_message", text: "继续之前的话题" }
+Core:     ensure 返回：runner 存活且历史已确认
+caller:   { kind: "user_message", text: "继续之前的话题" }   （GUI / Goal / 以后的手机端）
           (agent_runner_loop 启动，client.backend.history 已含 12 条历史)
 bridge:   { kind: "turn_start", ... }
           ...
 ```
+
+由 Core 的确保 runner 路径驱动（2026-10-10 起，票 02b；`core/src/session_runner/`）：
+
+- 回放在 ensure 内完成，持有该会话的单飞槽，并发的 ensure 等它结束；成功后按进程记「已确认」，之后的 ensure 立即返回。
+- 已存活但未确认的 runner：空闲时照样回放；正在跑（`agent_running`，或不是调用方自己预留的运行闸门）时不碰。
+- 一次失败（见 §4.11）就静默重启 runner 一次，用同一份参数重新 spawn 后再回放；仍失败，ensure 报 `HistoryReplay` 错误（Tauri 命令返回 `{"error":"history_replay","detail":…}`，GUI 显示「恢复超时」文案）。被替换的 runner 关闭时不发 `runner-closed`，也不向运行闸门报 `Closed`。
+- 每次发送前后经 Tauri 事件 `runner-history-replay` 广播 `{ sessionId, phase: "started" | "done" | "failed" }`，GUI 据此显示「恢复中」。
+- socket `session send` 不走这条路：runner 不在时只落库（`persisted_only`）。
 
 ## 8. Error Handling
 
@@ -780,6 +787,7 @@ bridge:   { kind: "turn_start", ... }
 | GA import 失败 | emit `error` 后 exit(1) | 标记 session error |
 | LLM 调用失败 | 由 GA agent 内部处理；可能 emit 多个 `error` | 透传给用户 |
 | bridge 进程崩溃 | stdout EOF + exit code != 0 | 标记 session error，可选重启 |
+| `load_history` 被拒 / 超时 / 期间退出 | emit `error`（`context: "load_history"`）或不回应 | Core 静默重启 runner 一次；仍失败，ensure 报 `HistoryReplay`（§7） |
 | 用户 close session | 发 `shutdown` | 等 stdout EOF + reap |
 
 ## 9. Versioning

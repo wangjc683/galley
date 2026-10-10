@@ -118,14 +118,17 @@ pub use wire::{ErrorTag, SocketRequest, SocketResponse, ACCEPTED_SCHEMA_VERSIONS
 #[allow(unused_imports)]
 pub(crate) use llm_cmds::{resolve_llm_selection_for_runtime, ResolvedLlmSelection};
 
-/// Make sure `session_id` has a live runner, through Core's shared path
+/// Make sure `session_id` has a live runner with its history restored,
+/// through Core's shared path
 /// ([`crate::session_runner::ensure_session_runner`]): a session nobody
 /// has opened since Core started (or whose runner the LRU cap reclaimed)
-/// has no process to receive a dispatch. The Goal v2 engine dispatches
-/// every objective / continuation turn through this. Errors are
-/// flattened to the message the engine always recorded on the goal (the
-/// `Debug` form of the socket error carrier); it never answers a wire
-/// request.
+/// has no process to receive a dispatch, and a fresh one has an empty GA
+/// history until Core replays the session into it (ticket 02b). The Goal
+/// v2 engine dispatches every objective / continuation turn through
+/// this, always holding the session's run gate (`holds_run_gate`).
+/// Errors are flattened to the message the engine always recorded on the
+/// goal (the `Debug` form of the socket error carrier); it never answers
+/// a wire request.
 pub(crate) async fn ensure_runner_for_session(
     ctx: &HandlerCtx<'_>,
     galley: &SqliteGalley,
@@ -141,6 +144,8 @@ pub(crate) async fn ensure_runner_for_session(
             active_session_id: Some(session_id),
             llm_override: None,
             ga_config: None,
+            holds_run_gate: true,
+            timeouts: Default::default(),
         },
     )
     .await

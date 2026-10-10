@@ -22,19 +22,44 @@
 //! [`ensure_session_runner`] is single-flight per session: concurrent
 //! calls for one session spawn once and all get the same pid; calls for
 //! different sessions never wait on each other. Inside the critical
-//! section a live runner is returned as-is — `RunnerManager::spawn` shuts
-//! a session's existing runner down first, so spawning over a live one
-//! would kill its run.
+//! section a live runner is never spawned over — `RunnerManager::spawn`
+//! shuts a session's existing runner down first, so that would kill its
+//! run.
+//!
+//! Success means more than "alive" since ticket 02b: the runner's GA
+//! history holds the session's persisted conversation. A runner starts
+//! empty, so for a session with completed turns ensure replays them
+//! ([`replay`]: wait for `ready`, send `load_history`, wait for
+//! `history_loaded`) before it returns, and records the runner as
+//! confirmed (in the process, so it dies with it). A live runner that is
+//! not confirmed gets the same replay when it is idle; one that is running
+//! is left alone (`load_history` replaces the history a run is using, and
+//! the runner refuses it mid-run). A failed replay restarts the runner
+//! once, quietly; a second failure is [`SessionRunnerError::HistoryReplay`].
+//! The whole replay holds the single-flight slot, so a concurrent ensure
+//! finds a confirmed runner.
+//!
+//! "Quietly" is load-bearing. While ensure replays into a runner it holds
+//! that runner's close (`RunnerPort::spawn_held` / `hold_close`), and a
+//! runner it replaces is retired (`RunnerPort::retire`): neither close
+//! reaches the drain task as `RunSignal::Closed` — which would release the
+//! run gate a Goal reserved before calling ensure and park its goal as
+//! paused — nor the GUI as `runner-closed`, which would tear down the
+//! listeners of the page waiting on this very ensure. A held runner that
+//! exits and is not replaced has its close announced when ensure lets go
+//! (`RunnerPort::release_close`).
 //!
 //! Dependencies are seams, not transports: [`RunnerPort`] (the registry,
 //! faked in tests), [`Notifier`], and [`SpawnEnv`] (the Tauri app). No
 //! socket wire types, no Tauri `State`.
-//!
-//! Not here yet (02b): history replay. A freshly spawned runner starts
-//! with an empty GA history; the GUI still sends `load_history` when the
-//! real `ready` arrives.
 
+mod replay;
 mod spawn_config;
+
+pub use replay::{
+    rows_to_conversation_messages, ConversationMessage, HistoryReplayPayload, HistoryReplayPhase,
+    ReplayAttachment, ReplayRow, ReplayTimeouts, RUNNER_HISTORY_REPLAY_EVENT,
+};
 
 pub use spawn_config::{
     resolve_spawn_args, resolve_user_python, GaConfigPref, SpawnEnv, SpawnRequest,
@@ -91,14 +116,23 @@ pub struct EnsureOptions<'a> {
     /// Config to resolve with instead of the stored `ga_config` pref
     /// (GUI transition, see [`SpawnRequest::ga_config`]).
     pub ga_config: Option<GaConfigPref>,
+    /// The caller reserved the session's run gate before calling (Goal
+    /// dispatch). An open gate is then the caller's own, not a run going
+    /// on the runner, so it does not keep an idle live runner from being
+    /// replayed into or restarted.
+    pub holds_run_gate: bool,
+    /// Bounds of each replay attempt.
+    pub timeouts: ReplayTimeouts,
 }
 
 /// Result of [`ensure_session_runner`].
 #[derive(Debug, Clone)]
 pub struct EnsureOutcome {
     pub pid: u32,
-    /// `true` when this call started the runner — its `ready` is still to
-    /// come. `false` when a live runner was already there.
+    /// `true` when this call started the runner (including one it
+    /// restarted after a failed replay). Its `ready` went out as an event
+    /// — before this returns when there was history to replay, since the
+    /// replay waits for it. `false` when a live runner was already there.
     pub spawned: bool,
     /// The live runner's latest `ready` state; only on `spawned: false`
     /// (and `None` there too if it has not reported yet).
@@ -131,6 +165,9 @@ pub enum SessionRunnerError {
     /// The runner was spawned but its broadcast was gone before Core
     /// could subscribe (it exited at once).
     SubscribeFailed,
+    /// The session's history could not be restored into its runner, even
+    /// after one restart; the reason is the last attempt's.
+    HistoryReplay(String),
 }
 
 /// The two ways [`spawn_and_attach`] fails.
@@ -149,8 +186,10 @@ impl From<AttachError> for SessionRunnerError {
     }
 }
 
-/// Make sure `session_id` has a live runner: return the one it has, or
-/// start one from the session's persisted configuration.
+/// Make sure `session_id` has a live runner whose GA history holds the
+/// session's conversation: return the one it has (replaying into it if it
+/// is idle and unconfirmed), or start one from the session's persisted
+/// configuration and replay into that. See the module docs for the rules.
 pub async fn ensure_session_runner(
     host: &RunnerHost<'_>,
     session_id: &str,
@@ -159,22 +198,197 @@ pub async fn ensure_session_runner(
     let _flight = single_flight::enter(session_id).await;
 
     if let Some(pid) = host.runner.live_pid(session_id).await {
+        return ensure_live_history(host, session_id, pid, &opts).await;
+    }
+
+    let session = read_session(host, session_id).await?;
+    let args = spawn_args_for(host, session_id, &session, &opts).await?;
+    if completed_turns(&session) == 0 {
+        // Nothing to replay: the runner's empty history is the session's.
+        let pid = attach_spawned(host, args, opts.active_session_id, opts.via, false).await?;
+        host.runner.release_close(session_id, pid, true).await;
         return Ok(EnsureOutcome {
+            pid,
+            spawned: true,
+            ready: None,
+        });
+    }
+    let pid = attach_spawned(host, args.clone(), opts.active_session_id, opts.via, true).await?;
+    let pid = replay_or_restart(host, session_id, pid, Some(args), &opts).await?;
+    Ok(EnsureOutcome {
+        pid,
+        spawned: true,
+        ready: None,
+    })
+}
+
+/// The live-runner half of [`ensure_session_runner`].
+async fn ensure_live_history(
+    host: &RunnerHost<'_>,
+    session_id: &str,
+    pid: u32,
+    opts: &EnsureOptions<'_>,
+) -> Result<EnsureOutcome, SessionRunnerError> {
+    let live = |pid| async move {
+        Ok(EnsureOutcome {
             pid,
             spawned: false,
             ready: host.runner.ready_snapshot(session_id).await,
-        });
+        })
+    };
+    if host.runner.history_confirmed(session_id, pid).await {
+        return live(pid).await;
     }
+    let session = read_session(host, session_id).await?;
+    if completed_turns(&session) == 0 {
+        // Nothing completed yet, so whatever this runner holds is all the
+        // session has — and every later turn completes on it.
+        host.runner.release_close(session_id, pid, true).await;
+        return live(pid).await;
+    }
+    if run_in_progress(host, session_id, opts).await {
+        // Not ours to replace: `load_history` would swap out the history
+        // the run is using (the runner refuses it mid-run anyway). It stays
+        // unconfirmed; an ensure on the idle runner replays.
+        return live(pid).await;
+    }
+    // An exit before the hold fails the attempt below, which restarts.
+    host.runner.hold_close(session_id, pid).await;
+    let confirmed = replay_or_restart(host, session_id, pid, None, opts).await?;
+    if confirmed == pid {
+        live(pid).await
+    } else {
+        Ok(EnsureOutcome {
+            pid: confirmed,
+            spawned: true,
+            ready: None,
+        })
+    }
+}
 
-    let session = host
-        .galley
+/// Replay into held runner `pid`; on failure restart it once (same args
+/// for a runner this ensure started, the session row's otherwise) and
+/// replay again. Returns the confirmed runner's pid. Every path ends
+/// Core's hold on the runner it leaves behind.
+async fn replay_or_restart(
+    host: &RunnerHost<'_>,
+    session_id: &str,
+    pid: u32,
+    args: Option<SpawnArgs>,
+    opts: &EnsureOptions<'_>,
+) -> Result<u32, SessionRunnerError> {
+    let reason = match replay::replay_once(host, session_id, pid, opts.timeouts).await {
+        Ok(replay::Attempt::Confirmed) => {
+            let_go(host, session_id, pid, true).await;
+            return Ok(pid);
+        }
+        Ok(replay::Attempt::Failed(reason)) => reason,
+        Err(e) => {
+            let_go(host, session_id, pid, false).await;
+            return Err(SessionRunnerError::Db(e));
+        }
+    };
+    if run_in_progress(host, session_id, opts).await {
+        // Something dispatched a run onto it meanwhile: a restart would
+        // kill that run.
+        eprintln!(
+            "[session_runner {session_id}] history replay into pid {pid} failed ({reason}); \
+             a run is going on it, not restarting"
+        );
+        let_go(host, session_id, pid, false).await;
+        return Err(SessionRunnerError::HistoryReplay(reason));
+    }
+    eprintln!(
+        "[session_runner {session_id}] history replay into pid {pid} failed ({reason}); \
+         restarting the runner once"
+    );
+    let args = match args {
+        Some(args) => args,
+        None => {
+            let session = match read_session(host, session_id).await {
+                Ok(session) => session,
+                Err(e) => {
+                    let_go(host, session_id, pid, false).await;
+                    return Err(e);
+                }
+            };
+            match spawn_args_for(host, session_id, &session, opts).await {
+                Ok(args) => args,
+                Err(e) => {
+                    let_go(host, session_id, pid, false).await;
+                    return Err(e);
+                }
+            }
+        }
+    };
+    host.runner.retire(session_id, pid).await;
+    let pid = attach_spawned(host, args, opts.active_session_id, opts.via, true).await?;
+    match replay::replay_once(host, session_id, pid, opts.timeouts).await {
+        Ok(replay::Attempt::Confirmed) => {
+            let_go(host, session_id, pid, true).await;
+            Ok(pid)
+        }
+        Ok(replay::Attempt::Failed(reason)) => {
+            let_go(host, session_id, pid, false).await;
+            Err(SessionRunnerError::HistoryReplay(reason))
+        }
+        Err(e) => {
+            let_go(host, session_id, pid, false).await;
+            Err(SessionRunnerError::Db(e))
+        }
+    }
+}
+
+/// End Core's hold on runner `pid` (recording its history as confirmed
+/// when it is). If it exited during the hold, the run gate has been told
+/// by the registry; tell the GUI here.
+async fn let_go(host: &RunnerHost<'_>, session_id: &str, pid: u32, confirmed: bool) {
+    if let Some(closed) = host.runner.release_close(session_id, pid, confirmed).await {
+        crate::runner_commands::notify_runner_closed(
+            host.notifier.as_ref(),
+            session_id,
+            closed.code,
+            closed.signal,
+        );
+    }
+}
+
+/// A run is going on the session that the caller did not reserve itself.
+async fn run_in_progress(
+    host: &RunnerHost<'_>,
+    session_id: &str,
+    opts: &EnsureOptions<'_>,
+) -> bool {
+    let state = host.runner.run_state(session_id).await;
+    state.agent_running || (state.open_run && !opts.holds_run_gate)
+}
+
+fn completed_turns(session: &SessionBrief) -> u32 {
+    session.turn_count.unwrap_or(0)
+}
+
+async fn read_session(
+    host: &RunnerHost<'_>,
+    session_id: &str,
+) -> Result<SessionBrief, SessionRunnerError> {
+    host.galley
         .session_brief(SessionId(session_id.to_string()))
         .await
-        .map_err(SessionRunnerError::Db)?;
+        .map_err(SessionRunnerError::Db)
+}
+
+/// Spawn arguments from the session row (or the caller's overrides).
+async fn spawn_args_for(
+    host: &RunnerHost<'_>,
+    session_id: &str,
+    session: &SessionBrief,
+    opts: &EnsureOptions<'_>,
+) -> Result<SpawnArgs, SessionRunnerError> {
     let llm = opts
         .llm_override
-        .unwrap_or_else(|| persisted_llm_choice(&session));
-    let args = resolve_spawn_args(
+        .clone()
+        .unwrap_or_else(|| persisted_llm_choice(session));
+    resolve_spawn_args(
         host.galley,
         host.env,
         SpawnRequest {
@@ -186,31 +400,30 @@ pub async fn ensure_session_runner(
             // An existing session carries its reasoning-effort override
             // into the fresh runner.
             reasoning_effort: session.reasoning_effort.clone(),
-            ga_config: opts.ga_config,
+            ga_config: opts.ga_config.clone(),
         },
     )
-    .await?;
-    let pid = attach_spawned(host, args, opts.active_session_id, opts.via).await?;
-    Ok(EnsureOutcome {
-        pid,
-        spawned: true,
-        ready: None,
-    })
+    .await
 }
 
-/// Spawn a runner from ready-made args and attach Core's presentation
-/// subscribers to it. Always spawns — callers that may meet a live
-/// runner go through [`ensure_session_runner`] instead. Holds the
-/// session's single-flight slot while it works, so a concurrent ensure
-/// waits for this spawn and then finds it alive.
+/// Spawn a runner for a session created a moment ago (socket
+/// `session.new`) and attach Core's presentation subscribers to it.
+/// Always spawns — callers that may meet a live runner go through
+/// [`ensure_session_runner`] instead. The session has no history yet, so
+/// the runner is confirmed as it starts. Holds the session's
+/// single-flight slot while it works, so a concurrent ensure waits for
+/// this spawn and then finds it alive and confirmed.
 pub async fn spawn_and_attach(
     host: &RunnerHost<'_>,
     args: SpawnArgs,
     active_session_id: Option<&str>,
     via: &'static str,
 ) -> Result<u32, AttachError> {
-    let _flight = single_flight::enter(&args.session_id).await;
-    attach_spawned(host, args, active_session_id, via).await
+    let session_id = args.session_id.clone();
+    let _flight = single_flight::enter(&session_id).await;
+    let pid = attach_spawned(host, args, active_session_id, via, false).await?;
+    host.runner.release_close(&session_id, pid, true).await;
+    Ok(pid)
 }
 
 /// The session row's persisted model choice, by the rule the GUI applied
@@ -230,26 +443,32 @@ pub fn persisted_llm_choice(session: &SessionBrief) -> LlmChoice {
 }
 
 /// Spawn + subscribe + emit task + auto-title watcher + broadcast. The
-/// caller holds the session's single-flight slot.
+/// caller holds the session's single-flight slot. `held`: spawn with the
+/// close held, for a runner ensure is about to replay into.
 async fn attach_spawned(
     host: &RunnerHost<'_>,
     args: SpawnArgs,
     active_session_id: Option<&str>,
     via: &'static str,
+    held: bool,
 ) -> Result<u32, AttachError> {
     let session_id = args.session_id.clone();
-    let pid = host
-        .runner
-        .spawn(args, active_session_id)
-        .await
-        .map_err(AttachError::Spawn)?;
+    let spawned = if held {
+        host.runner.spawn_held(args, active_session_id).await
+    } else {
+        host.runner.spawn(args, active_session_id).await
+    };
+    let pid = spawned.map_err(AttachError::Spawn)?;
     // Subscribe before anything else awaits so the emit task cannot miss
     // the runner's `ready` (~430ms after spawn).
-    let rx = host
-        .runner
-        .subscribe(&session_id)
-        .await
-        .ok_or(AttachError::SubscribeFailed)?;
+    let Some(rx) = host.runner.subscribe(&session_id).await else {
+        if held {
+            // Nobody will replay into it: hand its close back to the
+            // registry's usual announcements.
+            let_go(host, &session_id, pid, false).await;
+        }
+        return Err(AttachError::SubscribeFailed);
+    };
     // Second, independent subscriber: the auto-title watcher. Registries
     // without a command sink (test fakes) get none.
     let title = match host.runner.command_sink() {

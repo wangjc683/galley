@@ -41,7 +41,11 @@
 //!
 //! `runner-closed` fires when the subprocess exits. `code` is captured when
 //! available; user-initiated shutdown / kill maps to a clean close so the GUI
-//! does not show a crash toast for deliberate lifecycle transitions.
+//! does not show a crash toast for deliberate lifecycle transitions. A
+//! quiet close (`BroadcastItem::Closed { quiet: true }`) is not sent: Core
+//! is replacing that runner during an ensure, and a page keeps listening to
+//! the session for the replacement; a close Core held is sent by the ensure
+//! when it releases the hold ([`notify_runner_closed`]).
 //!
 //! Stderr is NOT pushed event-by-event. The TS side pulls the tail buffer
 //! via [`runner_stderr_tail`] when it needs to surface a toast — this is
@@ -589,8 +593,10 @@ pub async fn list_live_runners(
 #[serde(rename_all = "camelCase")]
 pub struct EnsureSessionRunnerResult {
     pub pid: u32,
-    /// `true`: this call started the runner and its `ready` event is on
-    /// the way. `false`: it was already alive — no `ready` will come, use
+    /// `true`: this call started the runner (or restarted it after a
+    /// failed history replay); its `ready` goes out as an event — already
+    /// gone out when there was history to replay, since the replay waits
+    /// for it. `false`: it was already alive — no `ready` will come, use
     /// `ready` below.
     pub spawned: bool,
     /// Latest `ready` state of an already-live runner (`null` when
@@ -599,12 +605,18 @@ pub struct EnsureSessionRunnerResult {
     pub ready: Option<ReadySnapshot>,
 }
 
-/// Make sure `session_id` has a live runner — Core's shared path
+/// Make sure `session_id` has a live runner whose GA history holds the
+/// session's conversation — Core's shared path
 /// ([`crate::session_runner::ensure_session_runner`]), single-flight per
-/// session. A live runner is returned as-is, never replaced. A started
-/// one is announced with `runner-spawned-external` (`via: "gui"`); the
-/// page that asked attaches its listeners before invoking and must not
-/// attach a second set on that broadcast.
+/// session. A live, confirmed runner is returned at once; an idle,
+/// unconfirmed one is replayed into first; a running one is returned
+/// as-is. A started one (also a restart after a failed replay) is
+/// announced with `runner-spawned-external` (`via: "gui"`); the page that
+/// asked attaches its listeners before invoking and must not attach a
+/// second set on that broadcast. Replays are announced with
+/// `runner-history-replay`. Since ticket 02b this resolves only after the
+/// replay, so for a session with history it outlasts the runner's
+/// `ready`.
 ///
 /// - `llm_index` / `llm_key`: start a brand-new session on this model
 ///   instead of the session row's persisted choice (the EmptyState
@@ -619,7 +631,8 @@ pub struct EnsureSessionRunnerResult {
 /// Errors are JSON strings like [`spawn_runner`]'s: a
 /// [`RunnerSpawnError`] (`{"error","detail"}`) for runtime / spawn
 /// problems, a [`crate::error::GalleyError`] (`{"error","message"}`) for
-/// DB ones.
+/// DB ones, and `{"error":"history_replay","detail"}` when the history
+/// could not be restored even after a restart.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn ensure_session_runner(
@@ -652,6 +665,10 @@ pub async fn ensure_session_runner(
             active_session_id: active_session_id.as_deref(),
             llm_override,
             ga_config,
+            // The GUI does not reserve the run gate before a send (yet —
+            // ticket 02c moves that into Core's send).
+            holds_run_gate: false,
+            timeouts: Default::default(),
         },
     )
     .await
@@ -727,6 +744,10 @@ fn gui_error_json(e: SessionRunnerError) -> String {
             })
         }
         SessionRunnerError::SubscribeFailed => "subscribe failed after spawn (race?)".to_string(),
+        // The send path maps this tag to its "restore timed out" copy.
+        SessionRunnerError::HistoryReplay(detail) => {
+            serde_json::json!({ "error": "history_replay", "detail": detail }).to_string()
+        }
     }
 }
 
@@ -761,13 +782,14 @@ pub(crate) fn spawn_emit_task(
                     };
                     crate::notify::notify(notifier.as_ref(), "runner-malformed", &payload);
                 }
-                Ok(BroadcastItem::Closed { code, signal }) => {
-                    let payload = RunnerClosedPayload {
-                        session_id: session_id.clone(),
-                        code,
-                        signal,
-                    };
-                    crate::notify::notify(notifier.as_ref(), "runner-closed", &payload);
+                Ok(BroadcastItem::Closed {
+                    code,
+                    signal,
+                    quiet,
+                }) => {
+                    if !quiet {
+                        notify_runner_closed(notifier.as_ref(), &session_id, code, signal);
+                    }
                     break;
                 }
                 Err(RecvError::Lagged(skipped)) => {
@@ -797,6 +819,26 @@ pub(crate) fn spawn_emit_task(
             }
         }
     });
+}
+
+/// Tell the GUI a session's runner exited (`runner-closed`). The emit
+/// task sends it for every announced close; Core's ensure sends it for a
+/// close it held and then released (`session_runner`).
+pub(crate) fn notify_runner_closed(
+    notifier: &dyn crate::notify::Notifier,
+    session_id: &str,
+    code: Option<i32>,
+    signal: Option<i32>,
+) {
+    crate::notify::notify(
+        notifier,
+        "runner-closed",
+        &RunnerClosedPayload {
+            session_id: session_id.to_string(),
+            code,
+            signal,
+        },
+    );
 }
 
 // Re-export IpcEvent locally so the envelope type can name it.

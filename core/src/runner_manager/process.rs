@@ -54,7 +54,41 @@ pub enum BroadcastItem {
     Closed {
         code: Option<i32>,
         signal: Option<i32>,
+        /// Core handles this close itself, so the subscribers that
+        /// announce closes — the run-gate watcher (`RunSignal::Closed`)
+        /// and the GUI emit task (`runner-closed`) — stay silent. Set
+        /// for a runner Core retired to replace it, and for one that
+        /// closed while held ([`RunnerProcess::spawn_held`]); a held
+        /// close is announced later, when the hold is released
+        /// (`RunnerManager::release_close`), unless the runner was
+        /// retired first.
+        quiet: bool,
     },
+}
+
+/// Exit status of a runner that closed while its close was held
+/// ([`RunnerProcess::release_close`] hands it back for announcing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeldClose {
+    pub code: Option<i32>,
+    pub signal: Option<i32>,
+}
+
+/// Who announces this runner's close (ticket 02b). Shared between the
+/// process handle and its stdout reader, which consults it once, when it
+/// builds the `Closed` item.
+#[derive(Debug, Default)]
+struct CloseGate {
+    /// Core's ensure owns the runner for now (history replay in
+    /// progress): a close is deferred, not announced.
+    held: bool,
+    /// Core replaced the runner on purpose: its close is never announced.
+    retired: bool,
+    /// The close that happened while held, waiting for the release.
+    deferred: Option<HeldClose>,
+    /// The stdout reader has decided how this runner's close is broadcast;
+    /// holding it from here on would hold nothing.
+    decided: bool,
 }
 
 /// Arguments to [`RunnerProcess::spawn`].
@@ -128,6 +162,12 @@ pub struct RunnerProcess {
     /// `reasoning_effort_changed` ([`super::ready`]). Written by the
     /// stdout reader before it broadcasts the event; cleared on exit.
     ready: Arc<std::sync::Mutex<Option<ReadySnapshot>>>,
+    /// Who announces the close ([`CloseGate`]).
+    close_gate: Arc<std::sync::Mutex<CloseGate>>,
+    /// Core confirmed that this process's GA history holds the session's
+    /// persisted conversation (ticket 02b). Lives and dies with the
+    /// process — a respawn starts unconfirmed.
+    history_confirmed: bool,
     /// Rolling buffer of the last [`STDERR_TAIL_MAX`] stderr lines. Used to
     /// surface "bridge died with this Python error" toasts on abnormal exit
     /// (the prod-build failure mode hit 2026-05-15 on first .dmg dogfood,
@@ -144,6 +184,21 @@ impl RunnerProcess {
     /// pre-subscribed receiver is held in the manager and handed to the
     /// first subscriber (same pattern as the prototype's `preload_rx`).
     pub async fn spawn(args: SpawnArgs) -> Result<Self, RunnerSpawnError> {
+        Self::spawn_with_gate(args, false).await
+    }
+
+    /// [`Self::spawn`] with the close held from the first instant
+    /// ([`CloseGate`]): if the child exits before
+    /// [`Self::release_close`], its `Closed` is broadcast quiet and the
+    /// exit status kept for the release to announce. Core's ensure spawns
+    /// this way while it replays history into the runner, so a runner it
+    /// restarts or gives up on never looks like a crashed session in
+    /// between (ticket 02b).
+    pub async fn spawn_held(args: SpawnArgs) -> Result<Self, RunnerSpawnError> {
+        Self::spawn_with_gate(args, true).await
+    }
+
+    async fn spawn_with_gate(args: SpawnArgs, held: bool) -> Result<Self, RunnerSpawnError> {
         // Path validation: surface a clear error rather than letting the
         // subprocess fail with a cryptic GA traceback. We don't validate
         // that `bridge_cwd` contains a `runner/` package — that's the
@@ -251,6 +306,10 @@ impl RunnerProcess {
         let closed_flag = Arc::new(AtomicBool::new(false));
         let ready_cache: Arc<std::sync::Mutex<Option<ReadySnapshot>>> =
             Arc::new(std::sync::Mutex::new(None));
+        let close_gate = Arc::new(std::sync::Mutex::new(CloseGate {
+            held,
+            ..CloseGate::default()
+        }));
         let stderr_tail = Arc::new(Mutex::new(VecDeque::with_capacity(STDERR_TAIL_MAX)));
         let child = Arc::new(Mutex::new(child));
 
@@ -265,6 +324,7 @@ impl RunnerProcess {
             let expected_close = expected_close.clone();
             let closed_flag = closed_flag.clone();
             let ready_cache = ready_cache.clone();
+            let close_gate = close_gate.clone();
             let sid_for_log = args.session_id.clone();
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stdout).lines();
@@ -327,19 +387,30 @@ impl RunnerProcess {
                             }
                         }
                     };
-                    match status {
-                        Some(_) if expected_close.load(Ordering::SeqCst) => BroadcastItem::Closed {
-                            code: Some(0),
-                            signal: None,
-                        },
-                        Some(status) => BroadcastItem::Closed {
-                            code: status.code(),
-                            signal: exit_signal(&status),
-                        },
-                        None => BroadcastItem::Closed {
-                            code: None,
-                            signal: None,
-                        },
+                    let (code, signal) = match status {
+                        Some(_) if expected_close.load(Ordering::SeqCst) => (Some(0), None),
+                        Some(status) => (status.code(), exit_signal(&status)),
+                        None => (None, None),
+                    };
+                    // One decision, under the gate's lock, so a concurrent
+                    // release either sees this close deferred or finds the
+                    // gate open before it is decided.
+                    let quiet = {
+                        let mut gate = lock_gate(&close_gate);
+                        gate.decided = true;
+                        if gate.retired {
+                            true
+                        } else if gate.held {
+                            gate.deferred = Some(HeldClose { code, signal });
+                            true
+                        } else {
+                            false
+                        }
+                    };
+                    BroadcastItem::Closed {
+                        code,
+                        signal,
+                        quiet,
                     }
                 };
                 *lock_ready(&ready_cache) = None;
@@ -377,6 +448,8 @@ impl RunnerProcess {
             expected_close,
             closed: closed_flag,
             ready: ready_cache,
+            close_gate,
+            history_confirmed: false,
             stderr_tail,
         })
     }
@@ -404,6 +477,49 @@ impl RunnerProcess {
             return None;
         }
         lock_ready(&self.ready).clone()
+    }
+
+    /// Hold the close of a live runner ([`CloseGate`]): from now until
+    /// [`Self::release_close`], an exit is deferred instead of announced.
+    /// `false` when the child has already exited (nothing to hold).
+    pub fn hold_close(&self) -> bool {
+        let mut gate = lock_gate(&self.close_gate);
+        if gate.decided {
+            return false;
+        }
+        gate.held = true;
+        true
+    }
+
+    /// End a hold. Returns the close that happened during it — now the
+    /// caller's to announce — or `None` while the child lives (its later
+    /// exit is announced as usual). No-op without a hold.
+    pub fn release_close(&self) -> Option<HeldClose> {
+        let mut gate = lock_gate(&self.close_gate);
+        gate.held = false;
+        if gate.retired {
+            return None;
+        }
+        gate.deferred.take()
+    }
+
+    /// Mark the runner as replaced on purpose: its close — past (while
+    /// held) or future — is never announced. Call before shutting it down.
+    pub fn retire(&self) {
+        let mut gate = lock_gate(&self.close_gate);
+        gate.retired = true;
+        gate.deferred = None;
+    }
+
+    /// Whether Core confirmed this process's GA history (ticket 02b).
+    pub fn history_confirmed(&self) -> bool {
+        self.history_confirmed
+    }
+
+    /// Record that this process's GA history holds the session's
+    /// persisted conversation.
+    pub fn confirm_history(&mut self) {
+        self.history_confirmed = true;
     }
 
     /// Subscribe to the broadcast channel. Each subscriber gets its own
@@ -530,6 +646,12 @@ impl RunnerProcess {
         let mut child = self.child.lock().await;
         child.wait().await
     }
+}
+
+/// The close gate is only ever held for a few field writes, so a
+/// poisoned lock still holds a consistent value — keep using it.
+fn lock_gate(gate: &std::sync::Mutex<CloseGate>) -> std::sync::MutexGuard<'_, CloseGate> {
+    gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// The ready cache is only ever held for a clone or an in-place fold, so

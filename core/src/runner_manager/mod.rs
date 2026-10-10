@@ -42,6 +42,6 @@ pub use error::{RunnerSpawnError, SendCommandError, ShutdownError};
 pub use manager::{
     RunSignal, RunState, RunnerCommandHandle, RunnerCommandSink, RunnerManager, SpawnArgs,
 };
-pub use process::{BroadcastItem, RunnerProcess};
+pub use process::{BroadcastItem, HeldClose, RunnerProcess};
 pub use queue::{QueueJump, QueueOffer, RunKind, RunOutcome};
 pub use ready::ReadySnapshot;

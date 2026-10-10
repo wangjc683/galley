@@ -27,6 +27,7 @@ export type {
   RuntimeSeedHints,
   RuntimeStore,
 } from "./runtime/shared";
+export type { RunnerEnsureFailure } from "./runtime/bridge-slice";
 
 export const useRuntimeStore = create<RuntimeStore>()((...a) => ({
   ...createLlmSlice(...a),

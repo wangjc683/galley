@@ -45,44 +45,11 @@ import type { MessageRow } from "@/types/db";
 // `readonly never[]` which doesn't overlap with `Turn[]`.
 export const EMPTY_TURNS: Turn[] = Object.freeze([] as Turn[]) as Turn[];
 
-type MessageRowsCacheEntry = {
-  completedTurnCount: number;
-  rows: MessageRow[];
-};
-
-const _messageRowsCache = new Map<string, MessageRowsCacheEntry>();
-
 function sessionCompletedTurnCount(sid: string): number {
   return (
     useSessionsStore.getState().sessions.find((session) => session.id === sid)
       ?.turnCount ?? 0
   );
-}
-
-export function rememberMessageRowsForSession(
-  sid: string,
-  rows: MessageRow[],
-  completedTurnCount: number = sessionCompletedTurnCount(sid),
-): void {
-  _messageRowsCache.set(sid, {
-    completedTurnCount,
-    rows: rows.slice(),
-  });
-}
-
-export function getCachedMessageRowsForSession(
-  sid: string,
-  completedTurnCount: number,
-): MessageRow[] | null {
-  const cached = _messageRowsCache.get(sid);
-  if (!cached || cached.completedTurnCount !== completedTurnCount) {
-    return null;
-  }
-  return cached.rows.slice();
-}
-
-export function invalidateMessageRowsCache(sid: string): void {
-  _messageRowsCache.delete(sid);
 }
 
 // ============================================================
@@ -394,7 +361,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
 
   clearSessionMessages: (sid) =>
     set((state) => {
-      invalidateMessageRowsCache(sid);
       if (!state.byId[sid]) return {};
       const byId = { ...state.byId };
       delete byId[sid];
@@ -428,7 +394,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
         console.debug("[messages] restoreSessionTurns: SQLite unavailable.", e);
         return;
       }
-      rememberMessageRowsForSession(sid, rows);
       logPerf("messages.restoreSessionTurns", startedAt, {
         sessionId: sid,
         rowCount: rows.length,
@@ -676,7 +641,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     set({ byId, userSubmitTick: state.userSubmitTick + 1 });  },
 
   appendAgentTurn: (sid, turn) => {
-    invalidateMessageRowsCache(sid);
     const state = get();
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
@@ -808,7 +772,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     set({ byId });  },
 
   clearConversation: (sid) => {
-    invalidateMessageRowsCache(sid);
     const state = get();
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,

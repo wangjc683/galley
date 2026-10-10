@@ -7,7 +7,7 @@ use crate::api::QueuedMessage;
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, IpcEvent};
 use crate::runner_manager::error::{RunnerSpawnError, SendCommandError, ShutdownError};
-use crate::runner_manager::process::{BroadcastItem, RunnerProcess};
+use crate::runner_manager::process::{BroadcastItem, HeldClose, RunnerProcess};
 use crate::runner_manager::queue::{
     mint_queue_id, now_iso, QueueJump, QueueOffer, RunKind, RunOutcome, SessionQueueState,
 };
@@ -169,6 +169,26 @@ impl RunnerManager {
         args: SpawnArgs,
         active_session_id: Option<&str>,
     ) -> Result<u32, RunnerSpawnError> {
+        self.spawn_inner(args, active_session_id, false).await
+    }
+
+    /// [`Self::spawn`] with the new runner's close held
+    /// ([`RunnerProcess::spawn_held`]) until [`Self::release_close`] —
+    /// Core's ensure replays history into it first (ticket 02b).
+    pub async fn spawn_held(
+        &self,
+        args: SpawnArgs,
+        active_session_id: Option<&str>,
+    ) -> Result<u32, RunnerSpawnError> {
+        self.spawn_inner(args, active_session_id, true).await
+    }
+
+    async fn spawn_inner(
+        &self,
+        args: SpawnArgs,
+        active_session_id: Option<&str>,
+        held: bool,
+    ) -> Result<u32, RunnerSpawnError> {
         let session_id = args.session_id.clone();
 
         // If an old process exists for this session, take it out and shut
@@ -191,7 +211,11 @@ impl RunnerManager {
             }
         }
 
-        let process = RunnerProcess::spawn(args).await?;
+        let process = if held {
+            RunnerProcess::spawn_held(args).await?
+        } else {
+            RunnerProcess::spawn(args).await?
+        };
         let pid = process.pid().unwrap_or(0);
 
         {
@@ -222,7 +246,10 @@ impl RunnerManager {
     /// - queue bookkeeping, when a run-signal channel is wired: `ask_user`
     ///   flips the hold flag (before the same stream's RunComplete reaches
     ///   the drain), RunComplete / close go to the global drain task via
-    ///   [`RunSignal`].
+    ///   [`RunSignal`]. A quiet close (a runner Core retired, or one that
+    ///   closed while held — see [`BroadcastItem::Closed`]) sends no
+    ///   `Closed`: the run gate and an active goal belong to whoever is
+    ///   replacing the runner, and a held close is announced on release.
     ///
     /// One ordered consumer does both, so a run's rows are in SQLite
     /// before its RunComplete closes the run gate — `session wait
@@ -250,8 +277,8 @@ impl RunnerManager {
             while let Some(item) = events.recv().await {
                 let event = match item {
                     BroadcastItem::Event(boxed) => *boxed,
-                    BroadcastItem::Closed { .. } => {
-                        if let Some(tx) = &signal_tx {
+                    BroadcastItem::Closed { quiet, .. } => {
+                        if let (false, Some(tx)) = (quiet, &signal_tx) {
                             let _ = tx.send(RunSignal::Closed {
                                 session_id: sid.clone(),
                             });
@@ -356,6 +383,110 @@ impl RunnerManager {
         drop(map);
         let p = proc.lock().await;
         p.ready_snapshot()
+    }
+
+    /// The registered process for `session_id` when its pid is `pid` —
+    /// the guard every ensure-side call below goes through, so a call
+    /// meant for one runner never touches its replacement.
+    async fn process_with_pid(
+        &self,
+        session_id: &str,
+        pid: u32,
+    ) -> Option<Arc<Mutex<RunnerProcess>>> {
+        let map = self.processes.read().await;
+        let proc = map.get(session_id)?.clone();
+        // Release before the per-process Mutex — see `pid`.
+        drop(map);
+        let matches = proc.lock().await.pid() == Some(pid);
+        matches.then_some(proc)
+    }
+
+    /// Hold the close of the live runner `pid` (ticket 02b): until
+    /// [`Self::release_close`], its exit is deferred rather than
+    /// announced. `false` when it is not registered or already closed.
+    pub async fn hold_close(&self, session_id: &str, pid: u32) -> bool {
+        match self.process_with_pid(session_id, pid).await {
+            Some(proc) => proc.lock().await.hold_close(),
+            None => false,
+        }
+    }
+
+    /// End Core's hold on runner `pid` and, when `history_confirmed`,
+    /// record that its GA history holds the session's conversation. A
+    /// close that happened during the hold is announced now: the run-gate
+    /// watcher stayed silent, so the drain task gets its `Closed` here,
+    /// and the returned exit status is the caller's to send to the GUI
+    /// (`runner-closed`). `None` while the runner lives.
+    pub async fn release_close(
+        &self,
+        session_id: &str,
+        pid: u32,
+        history_confirmed: bool,
+    ) -> Option<HeldClose> {
+        let proc = self.process_with_pid(session_id, pid).await?;
+        let held = {
+            let mut p = proc.lock().await;
+            if history_confirmed {
+                p.confirm_history();
+            }
+            p.release_close()
+        };
+        if held.is_some() {
+            let tx = self
+                .run_signal_tx
+                .read()
+                .expect("run_signal_tx poisoned")
+                .clone();
+            if let Some(tx) = tx {
+                let _ = tx.send(RunSignal::Closed {
+                    session_id: session_id.to_string(),
+                });
+            }
+        }
+        held
+    }
+
+    /// Shut runner `pid` down to replace it, without announcing the
+    /// close: no `RunSignal::Closed` (the run gate and an active goal are
+    /// the replacing caller's) and no `runner-closed` (a listening page
+    /// keeps its listeners for the replacement). `false` when `pid` is
+    /// not the session's registered runner.
+    pub async fn retire(&self, session_id: &str, pid: u32) -> bool {
+        let Some(proc) = self.process_with_pid(session_id, pid).await else {
+            return false;
+        };
+        proc.lock().await.retire();
+        // Unregister it unless something replaced it meanwhile.
+        let removed = {
+            let mut map = self.processes.write().await;
+            match map.get(session_id) {
+                Some(current) if Arc::ptr_eq(current, &proc) => map.remove(session_id),
+                _ => None,
+            }
+        };
+        if let Some(proc) = removed {
+            let mut p = proc.lock().await;
+            if !p.shutdown(DEFAULT_SHUTDOWN_TIMEOUT).await {
+                // Same fallback as `shutdown` / `spawn`'s replace path.
+                let _ = p.kill().await;
+            }
+            drop(p);
+            let mut order = self.lru_order.lock().await;
+            order.retain(|s| s != session_id);
+        }
+        true
+    }
+
+    /// Whether runner `pid` is the session's registered, still-running
+    /// runner and Core confirmed its GA history (ticket 02b).
+    pub async fn history_confirmed(&self, session_id: &str, pid: u32) -> bool {
+        match self.process_with_pid(session_id, pid).await {
+            Some(proc) => {
+                let p = proc.lock().await;
+                p.history_confirmed() && !p.has_closed()
+            }
+            None => false,
+        }
     }
 
     /// An owned handle that sends commands exactly like

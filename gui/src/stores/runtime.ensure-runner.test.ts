@@ -2,10 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ReadySnapshot } from "@/lib/bridge";
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
-import {
-  ensureHistoryReplayComplete,
-  markHistoryReplayStale,
-} from "@/lib/ipc/history-replay";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -13,6 +9,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import { makeSession } from "@/test/factories";
 import { getTauriMocks } from "@/test/setup";
 import { resetStores } from "@/test/store-reset";
+import { useUiStore } from "@/stores/ui";
 
 /**
  * Ticket 02a: a session's runner comes from Core's `ensure_session_runner`
@@ -22,19 +19,13 @@ import { resetStores } from "@/test/store-reset";
  * `ready` that will not come, and does not attach twice when Core
  * broadcasts `runner-spawned-external` for the page's own ensure.
  *
+ * Ticket 02b: Core also restores the session's history inside that
+ * ensure; the page never sends `load_history` itself, not even on a real
+ * `ready`, and the send path asks Core to confirm the history.
+ *
  * The bridge slice keeps its client map at module level, so every test
  * uses its own session ids.
  */
-
-vi.mock("@/lib/ipc/history-replay", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/ipc/history-replay")>();
-  return {
-    ...actual,
-    ensureHistoryReplayComplete: vi.fn(async () => true),
-    markHistoryReplayStale: vi.fn(),
-  };
-});
 
 const tauriMocks = getTauriMocks();
 
@@ -75,6 +66,19 @@ function coreEnsures(result: EnsureResult | Promise<EnsureResult>): void {
   });
 }
 
+/** `load_history` commands this page sent itself (none, since 02b). */
+function pageLoadHistories(): unknown[] {
+  return calls("send_to_runner").filter(
+    (args) => (args?.command as { kind?: string })?.kind === "load_history",
+  );
+}
+
+/** Rust's JSON for a history-restore failure. */
+const HISTORY_REPLAY_ERROR = JSON.stringify({
+  error: "history_replay",
+  detail: "the runner refused load_history: boom",
+});
+
 function calls(command: string): Array<Record<string, unknown> | undefined> {
   return tauriMocks.invoke.mock.calls
     .filter(([c]) => c === command)
@@ -92,8 +96,6 @@ function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
 describe("activateSession → Core's ensure_session_runner", () => {
   beforeEach(() => {
     resetStores();
-    vi.mocked(ensureHistoryReplayComplete).mockClear();
-    vi.mocked(markHistoryReplayStale).mockClear();
     useMessagesStore.setState({ restoreSessionTurns: async () => {} });
   });
 
@@ -184,15 +186,8 @@ describe("activateSession → Core's ensure_session_runner", () => {
       useSessionsStore.getState().sessions.find((s) => s.id === "s-ens-live")
         ?.imagesSupported,
     ).toBe(false);
-    // The snapshot is NOT a `ready`: the runner may be mid-run, and
-    // load_history would replace its GA history wholesale.
-    expect(markHistoryReplayStale).not.toHaveBeenCalled();
-    expect(ensureHistoryReplayComplete).not.toHaveBeenCalled();
-    expect(
-      calls("send_to_runner").filter(
-        (args) => (args?.command as { kind?: string })?.kind === "load_history",
-      ),
-    ).toHaveLength(0);
+    // History is Core's to restore: the page sends no load_history.
+    expect(pageLoadHistories()).toHaveLength(0);
 
     // No `ready` will come — a user-visible send goes straight through
     // (the 30s ready wait would hit `window.setTimeout`, absent here).
@@ -207,16 +202,51 @@ describe("activateSession → Core's ensure_session_runner", () => {
     });
   });
 
-  it("the replay spies do fire for a real `ready` (control)", () => {
+  it("a real `ready` only updates the stores — Core replays, not the page", async () => {
     useSessionsStore.setState({
       sessions: [makeSession({ id: "s-ens-ctrl", turnCount: 4 })],
     });
     dispatchIPCEvent({ kind: "ready", ...snapshot("s-ens-ctrl") });
-    expect(markHistoryReplayStale).toHaveBeenCalledWith("s-ens-ctrl");
-    expect(ensureHistoryReplayComplete).toHaveBeenCalledWith("s-ens-ctrl");
+    await Promise.resolve();
+
+    expect(useRuntimeStore.getState().byId["s-ens-ctrl"]?.bridgeStatus).toBe(
+      "connected",
+    );
+    expect(calls("session_message_rows")).toHaveLength(0);
+    expect(pageLoadHistories()).toHaveLength(0);
+  });
+
+  it("Core failing to restore the history leaves the session idle and quiet", async () => {
+    useSessionsStore.setState({
+      sessions: [makeSession({ id: "s-ens-rp", turnCount: 3 })],
+    });
+    tauriMocks.invoke.mockImplementation(async (command) => {
+      if (command === "list_live_runners") return [];
+      if (command === "ensure_session_runner") throw HISTORY_REPLAY_ERROR;
+      return undefined;
+    });
+    const unlisten = vi.fn();
+    tauriMocks.listen.mockResolvedValue(unlisten);
+
+    const failure = await useSessionsStore
+      .getState()
+      .activateSession("s-ens-rp");
+
+    expect(failure).toMatchObject({ historyReplay: true });
+    const runtime = useRuntimeStore.getState();
+    expect(runtime.hasBridgeClient("s-ens-rp")).toBe(false);
+    // Not a bridge failure: no error state, no bridge-failed toast — the
+    // next activation attaches to Core's runner, the next send asks again.
+    expect(runtime.byId["s-ens-rp"]).toMatchObject({
+      bridgeStatus: "idle",
+      bridgeError: null,
+    });
+    expect(useUiStore.getState().toasts).toHaveLength(0);
+    expect(unlisten).toHaveBeenCalledTimes(3);
   });
 
   it("an ensure failure leaves the session in error with no listeners kept", async () => {
+    // (and reports it to the caller as a non-history failure)
     useSessionsStore.setState({
       sessions: [makeSession({ id: "s-ens-fail", turnCount: 0 })],
     });
@@ -234,7 +264,10 @@ describe("activateSession → Core's ensure_session_runner", () => {
     const unlisten = vi.fn();
     tauriMocks.listen.mockResolvedValue(unlisten);
 
-    await useSessionsStore.getState().activateSession("s-ens-fail");
+    const failure = await useSessionsStore
+      .getState()
+      .activateSession("s-ens-fail");
+    expect(failure).toMatchObject({ historyReplay: false });
 
     const runtime = useRuntimeStore.getState();
     expect(runtime.hasBridgeClient("s-ens-fail")).toBe(false);
@@ -281,8 +314,6 @@ describe("runner-spawned-external for the page's own ensure", () => {
 describe("attaching to a runner started elsewhere fills in its ready state", () => {
   beforeEach(() => {
     resetStores();
-    vi.mocked(markHistoryReplayStale).mockClear();
-    vi.mocked(ensureHistoryReplayComplete).mockClear();
   });
 
   it("a runner-spawned-external attach reads the snapshot from list_live_runners", async () => {
@@ -309,8 +340,7 @@ describe("attaching to a runner started elsewhere fills in its ready state", () 
         .getState()
         .byId["s-ext-1"]?.llms.find((llm) => llm.isCurrent)?.name,
     ).toBe("B/model-b");
-    expect(markHistoryReplayStale).not.toHaveBeenCalled();
-    expect(ensureHistoryReplayComplete).not.toHaveBeenCalled();
+    expect(pageLoadHistories()).toHaveLength(0);
   });
 
   it("a reload's re-attach applies each live runner's snapshot", async () => {
@@ -342,6 +372,61 @@ describe("attaching to a runner started elsewhere fills in its ready state", () 
     ).toBe(false);
     // One list call: the row already carried the snapshot.
     expect(calls("list_live_runners")).toHaveLength(1);
-    expect(markHistoryReplayStale).not.toHaveBeenCalled();
+    expect(pageLoadHistories()).toHaveLength(0);
+  });
+});
+
+describe("confirmSessionHistory — the send path's gate (ticket 02b)", () => {
+  beforeEach(() => {
+    resetStores();
+  });
+
+  it("with this page listening, asks Core's ensure directly — no second listener set", async () => {
+    coreEnsures({ pid: 81, spawned: true, ready: null });
+    const runtime = useRuntimeStore.getState();
+    await runtime.ensureSessionRunner({ sessionId: "s-conf-1" });
+    expect(tauriMocks.listen).toHaveBeenCalledTimes(3);
+
+    coreEnsures({ pid: 81, spawned: false, ready: null });
+    const failure = await runtime.confirmSessionHistory("s-conf-1");
+
+    expect(failure).toBeNull();
+    expect(calls("ensure_session_runner")).toHaveLength(2);
+    expect(calls("ensure_session_runner")[1]).toEqual({
+      sessionId: "s-conf-1",
+      gaConfig: usePrefsStore.getState().gaConfig,
+    });
+    expect(tauriMocks.listen).toHaveBeenCalledTimes(3);
+    expect(runtime.hasBridgeClient("s-conf-1")).toBe(true);
+  });
+
+  it("reports Core's history_replay error as a history failure", async () => {
+    coreEnsures({ pid: 82, spawned: true, ready: null });
+    const runtime = useRuntimeStore.getState();
+    await runtime.ensureSessionRunner({ sessionId: "s-conf-2" });
+    tauriMocks.invoke.mockImplementation(async (command) => {
+      if (command === "ensure_session_runner") throw HISTORY_REPLAY_ERROR;
+      return undefined;
+    });
+
+    const failure = await runtime.confirmSessionHistory("s-conf-2");
+
+    expect(failure).toMatchObject({ historyReplay: true });
+    expect(failure?.message).toContain("History restore failed");
+    // The listeners stay: Core's runner (or its quiet replacement) still
+    // belongs to this session.
+    expect(runtime.hasBridgeClient("s-conf-2")).toBe(true);
+  });
+
+  it("without a listening page, runs a full ensure with listeners", async () => {
+    coreEnsures({ pid: 83, spawned: true, ready: null });
+
+    const failure = await useRuntimeStore
+      .getState()
+      .confirmSessionHistory("s-conf-3");
+
+    expect(failure).toBeNull();
+    expect(tauriMocks.listen).toHaveBeenCalledTimes(3);
+    expect(useRuntimeStore.getState().hasBridgeClient("s-conf-3")).toBe(true);
   });
 });
