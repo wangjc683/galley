@@ -690,7 +690,26 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing since `v0.6.2` yet; release-scope truth is `git log v0.6.2..HEAD`.
+Release-scope truth is `git log v0.6.2..HEAD`; besides the iOS-client and
+main-chat planning docs (no product change), main has:
+
+- **WeChat conversation aligned with the desktop** (2026-10-10,
+  `.scratch/wechat-ux/`, devlog
+  [2026-10-10-wechat-conversation-ux](./devlog/2026-10-10-wechat-conversation-ux.md)).
+  A device probe first: iLink cannot edit or delete (a reused `client_id` is
+  dropped), its native tool-progress items do not show, Markdown renders,
+  voice carries a transcription, sends without a context token arrive. So a
+  run shows only 「对方正在输入」 and posts one message: the closing step
+  with a `N 步 · 用时 X` last line from two steps on, the ask_user question
+  with numbered candidates (a number answers), or `⏹ 已停止 · …`; no
+  `[任务已完成]`, no answer cut at 3000, no 5-minute "done", no stale stop
+  flag. Galley-owned `runner/im_wechat.py` replaces upstream's
+  `on_message` (no managed patch; `docs/ga-baseline.md` item 19). WeChat
+  now gets completion reports (`WechatChannel`; the owner is whoever spoke
+  last, `wechat_owner.json`, cleared on Disconnect and re-scan), and the IM
+  entry layer drops its WeChat link / `1.` note (budget 1503 → 1383).
+  Quoted messages are deferred (Rule 4). Real-device acceptance is owed
+  (`.scratch/wechat-ux/issues/04`).
 
 Carried forward. The README screenshots still show the old sidebar, and
 `projects.png` the retired project view (its caption still says 项目视图);

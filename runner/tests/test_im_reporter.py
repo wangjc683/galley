@@ -1,18 +1,20 @@
 """Tests for the proactive completion reporter (runner/im_reporter.py).
 
 Pure decision logic is tested directly; the tick/deliver flow runs against
-stub fsapp / tgapp modules and a stubbed CLI, mirroring the stub-lark
-approach used in test_managed_feishu_fsapp.py.
+stub fsapp / tgapp modules (and a fake WeChat conversation) and a stubbed
+CLI, mirroring the stub-lark approach used in test_managed_feishu_fsapp.py.
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import email.message
+import importlib.util
 import io
 import json
 import queue
 import re
+import sys
 import threading
 import types
 import urllib.error
@@ -30,6 +32,7 @@ from runner.im_reporter import (
     Report,
     ReporterState,
     TelegramReporter,
+    WechatReporter,
     build_report_prompt,
     is_skip_reply,
     latest_final_output,
@@ -1472,7 +1475,7 @@ def test_reporter_strips_workbench_suggestion_tag(
 def test_feishu_reports_still_go_through_send(
     monkeypatch: Any, tmp_path: Path
 ) -> None:
-    """Only Discord and Telegram dress reports up; Feishu inherits the
+    """Only Discord, Telegram and WeChat dress reports up; Feishu inherits the
     default send_report, which is exactly the old send call. (Telegram
     without its tgapp seams is pinned by
     test_telegram_without_seams_sends_byte_identical_payload.)"""
@@ -1488,3 +1491,325 @@ def test_feishu_reports_still_go_through_send(
     delivered = reporter.tick()
     assert [r.kind for r in delivered] == ["cancelled"]
     assert fsapp._sent == [("ou_owner", "任务已取消。")]
+
+
+# ── WeChat channel adapter (ticket 01's conversation contract) ───────
+
+_FRONTENDS = Path(__file__).resolve().parents[2] / "managed-ga" / "code" / "frontends"
+WX_SUP = "galley-im/wechat"
+WX_OWNER = "o9cq80_owner@im.wechat"
+# A WeChat report turn's whole `done` as GA streams it for the channel's
+# agent (verbose=False): every step opens with a turn marker; tool echoes
+# follow the step's prose.
+WX_REPORT_DONE = (
+    "\nLLM Running (Turn 1) ...\n\n"
+    "<summary>查会话状态</summary>先看一下会话。\n"
+    '🛠️ code_run({"script": "galley session show s1"})\n'
+    "\nLLM Running (Turn 2) ...\n\n"
+    "<summary>汇报</summary>周报已整理好：\n\n"
+    "1. 本周进展\n2. 下周计划\n\n"
+    "| 项目 | 结果 |\n|---|---|\n| 周报 | **已整理** |\n\n"
+    "详见 [FILE:/Users/me/temp/weekly.md]，[原文](https://example.com/a)。\n"
+    "![图](https://example.com/a.png)\n"
+)
+WX_REPORT_BODY = (
+    "周报已整理好：\n\n"
+    "1. 本周进展\n2. 下周计划\n\n"
+    "| 项目 | 结果 |\n|---|---|\n| 周报 | **已整理** |\n\n"
+    "详见 weekly.md，[原文](https://example.com/a)。"
+)
+
+
+def _exec_frontend(monkeypatch: Any, name: str) -> Any:
+    spec = importlib.util.spec_from_file_location(name, _FRONTENDS / f"{name}.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def wx_display(monkeypatch: Any) -> Any:
+    """The shipped ``galley_im_display`` over the real ``chatapp_common``,
+    under the flat names the channel process imports them by. The GA
+    modules chatapp_common patches at import are stubbed."""
+    monkeypatch.setattr(sys, "path", list(sys.path))  # chatapp_common prepends the code root
+    for name, attrs in (
+        ("agentmain", {"GeneraticAgent": type("GeneraticAgent", (), {})}),
+        (
+            "continue_cmd",
+            {
+                "handle_frontend_command": lambda *_a, **_k: None,
+                "install": lambda _cls: None,
+                "reset_conversation": lambda *_a, **_k: None,
+            },
+        ),
+        ("btw_cmd", {"handle_frontend_command": lambda *_a: None, "install": lambda _cls: None}),
+        ("review_cmd", {"install": lambda _cls: None}),
+    ):
+        stub = types.ModuleType(name)
+        for key, value in attrs.items():
+            setattr(stub, key, value)
+        monkeypatch.setitem(sys.modules, name, stub)
+    _exec_frontend(monkeypatch, "chatapp_common")
+    return _exec_frontend(monkeypatch, "galley_im_display")
+
+
+class _FakeWechatConversation:
+    """Ticket 01's conversation contract and nothing more: ``agent``,
+    ``connected()``, ``owner_id()``, ``busy()``, and a ``send_text`` that
+    raises on failure."""
+
+    def __init__(self, replies: list[str], owner: str | None = WX_OWNER) -> None:
+        self.agent = _StubAgent(replies)
+        self.owner = owner
+        self.is_connected = True
+        self.is_busy = False
+        self.failure: Exception | None = None
+        self.sent: list[tuple[str, str]] = []
+
+    def connected(self) -> bool:
+        return self.is_connected
+
+    def owner_id(self) -> str | None:
+        return self.owner
+
+    def busy(self) -> bool:
+        return self.is_busy
+
+    def send_text(self, user_id: str, text: str) -> None:
+        if self.failure is not None:
+            raise self.failure
+        self.sent.append((user_id, text))
+
+
+def _wechat_reporter(
+    monkeypatch: Any,
+    tmp_path: Path,
+    conversation: _FakeWechatConversation,
+    *,
+    status: str = "idle",
+) -> WechatReporter:
+    """A running (non-baseline) WeChat reporter over a stubbed CLI: session
+    s1, delegated from WeChat, settled with ``status``."""
+    state_path = tmp_path / "reporter_state.json"
+    state_path.write_text('{"sessions":{}}', encoding="utf-8")
+    messages = [_user_msg("u1", supervisor=WX_SUP, turn=1)]
+    if status == "idle":
+        messages.append(_agent_msg("a1", "done!", turn=1))
+    _fake_cli(
+        monkeypatch,
+        {"sessions": [_session("s1", status=status, supervisor=WX_SUP)], "show s1": messages},
+    )
+    reporter = WechatReporter(conversation, WX_SUP, state_path)
+    reporter.cli = "/stub/galley"
+    return reporter
+
+
+def _wx_report(kind: str = "completed", title: str | None = "Task s1") -> Report:
+    session = _session("s1", supervisor=WX_SUP)
+    session["title"] = title
+    return Report(kind=kind, session=session, message=None)
+
+
+@pytest.mark.parametrize(
+    ("kind", "head", "foot"),
+    [
+        ("completed", "✅ Task s1", "已完成 · s1"),
+        ("cancelled", "⏹ Task s1", "已停止 · s1"),
+        ("error", "❌ Task s1", "出错 · s1"),
+        ("some-future-dead-status", "❌ Task s1", "出错 · s1"),
+    ],
+)
+def test_wechat_report_text_title_body_and_last_line(kind: str, head: str, foot: str) -> None:
+    conversation = _FakeWechatConversation([])
+    channel = im_reporter.WechatChannel(conversation)
+    body = "第一段\n\n1. 磁盘：49.2%"
+    channel.send_report(WX_OWNER, body, "raw", _wx_report(kind))
+    # One plain-text message: no bold title, no italic footer.
+    assert conversation.sent == [(WX_OWNER, f"{head}\n\n{body}\n\n{foot}")]
+
+
+@pytest.mark.parametrize(
+    ("title", "shown"),
+    [
+        ("", "s1"),
+        ("   ", "s1"),
+        (None, "s1"),
+        ("整理\n周报\r\n  第二版 ", "整理 周报 第二版"),
+        ("修复 **im_reporter**", "修复 **im_reporter**"),
+    ],
+)
+def test_wechat_report_title_falls_back_to_id_and_stays_one_line(
+    title: str | None, shown: str
+) -> None:
+    text = im_reporter.wechat_report_text("正文", _wx_report(title=title))
+    assert text.splitlines()[0] == f"✅ {shown}"
+    assert text.endswith("\n\n正文\n\n已完成 · s1")
+
+
+def test_wechat_render_keeps_the_closing_step_cleaned(wx_display: Any) -> None:
+    channel = im_reporter.WechatChannel(_FakeWechatConversation([]))
+    # Closing step only: no turn marker, no earlier prose, no tool echo, no
+    # <summary>; [FILE:] as the file name; Markdown kept except the image.
+    assert channel.render(WX_REPORT_DONE) == WX_REPORT_BODY
+    # A tool echo in the closing step itself goes too, multi-line ask_user
+    # echoes included.
+    echoed = WX_REPORT_DONE + '🛠️ ask_user(要发吗\ncandidates:\n- 发\n- 不发)\n'
+    assert channel.render(echoed) == WX_REPORT_BODY
+    # The backend-error block GA appends after the last step is that step's.
+    failed = WX_REPORT_DONE + "\n```\nRateLimitError: 429\n```"
+    # (The dropped image leaves the blank line before it.)
+    assert channel.render(failed) == WX_REPORT_BODY + "\n\n```\nRateLimitError: 429\n```"
+    # The shared rule, not a copy of it: the display module's answer_body
+    # of the closing step, file names in, minus the image.
+    step = WX_REPORT_DONE[WX_REPORT_DONE.rindex("LLM Running") :]
+    step = step.replace("[FILE:/Users/me/temp/weekly.md]", "weekly.md")
+    shared = wx_display.answer_body(step, "")
+    assert shared.replace("\n![图](https://example.com/a.png)", "") == WX_REPORT_BODY
+    # Bold markers (verbose agents) split the same way.
+    bold = WX_REPORT_DONE.replace("LLM Running (Turn 2) ...", "**LLM Running (Turn 2) ...**")
+    assert channel.render(bold) == WX_REPORT_BODY
+
+
+def test_wechat_render_of_nothing_visible_is_empty(wx_display: Any) -> None:
+    channel = im_reporter.WechatChannel(_FakeWechatConversation([]))
+    assert channel.render("") == ""
+    assert channel.render("  \n") == ""
+    assert channel.render('\nLLM Running (Turn 1) ...\n\n🛠️ code_run({"script": "x"})\n') == ""
+
+
+def test_wechat_report_through_real_display_rules(
+    monkeypatch: Any, tmp_path: Path, wx_display: Any
+) -> None:
+    """Reporter and the shipped galley_im_display end to end: a report
+    turn's multi-step `done` reaches the owner as one message, closing
+    step only, between the title line and the status line."""
+    conversation = _FakeWechatConversation([WX_REPORT_DONE])
+    reporter = _wechat_reporter(monkeypatch, tmp_path, conversation)
+    assert len(reporter.tick()) == 1
+    assert conversation.agent.prompts and "Task s1" in conversation.agent.prompts[0]
+    assert conversation.sent == [
+        (WX_OWNER, f"✅ Task s1\n\n{WX_REPORT_BODY}\n\n已完成 · s1"),
+    ]
+    # Delivered once: no new activity, nothing re-sent.
+    assert reporter.tick() == []
+    assert len(conversation.sent) == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "head", "foot"),
+    [("cancelled", "⏹ Task s1", "已停止 · s1"), ("error", "❌ Task s1", "出错 · s1")],
+)
+def test_wechat_dead_session_reports_its_outcome(
+    monkeypatch: Any, tmp_path: Path, wx_display: Any, status: str, head: str, foot: str
+) -> None:
+    conversation = _FakeWechatConversation(["\nLLM Running (Turn 1) ...\n\n会话没跑完。\n"])
+    reporter = _wechat_reporter(monkeypatch, tmp_path, conversation, status=status)
+    assert [report.kind for report in reporter.tick()] == [status]
+    assert conversation.sent == [(WX_OWNER, f"{head}\n\n会话没跑完。\n\n{foot}")]
+
+
+def test_wechat_skip_reply_in_closing_step_sends_nothing(
+    monkeypatch: Any, tmp_path: Path, wx_display: Any
+) -> None:
+    done = WX_REPORT_DONE[: WX_REPORT_DONE.rindex("<summary>汇报")] + "SKIP_REPORT\n"
+    conversation = _FakeWechatConversation([done])
+    reporter = _wechat_reporter(monkeypatch, tmp_path, conversation)
+    assert len(reporter.tick()) == 1
+    assert conversation.sent == []
+    assert reporter.state.entry("s1")["lastReportedMessageId"] == "a1"
+
+
+def test_wechat_send_failure_is_a_retry_not_a_delivery(
+    monkeypatch: Any, tmp_path: Path, wx_display: Any
+) -> None:
+    conversation = _FakeWechatConversation(["报告一", "报告二"])
+    conversation.failure = RuntimeError("iLink sendmessage failed")
+    reporter = _wechat_reporter(monkeypatch, tmp_path, conversation)
+    assert reporter.tick() == []
+    entry = reporter.state.entry("s1")
+    assert entry["reportAttempts"] == 1
+    assert "lastReportedMessageId" not in entry
+    assert conversation.sent == []
+    # Not marked seen: the next tick runs the report again and delivers.
+    conversation.failure = None
+    assert len(reporter.tick()) == 1
+    assert conversation.sent == [(WX_OWNER, "✅ Task s1\n\n报告二\n\n已完成 · s1")]
+    assert "reportAttempts" not in reporter.state.entry("s1")
+
+
+def test_wechat_without_owner_or_connection_holds_the_report(
+    monkeypatch: Any, tmp_path: Path, wx_display: Any
+) -> None:
+    """No one has messaged the bot yet (no owner), or the login is not
+    polling yet: no report turn, and the report is held, not consumed."""
+    conversation = _FakeWechatConversation(["报告"], owner=None)
+    reporter = _wechat_reporter(monkeypatch, tmp_path, conversation)
+    assert reporter.owner_open_id() is None
+    assert reporter.tick() == []
+    conversation.owner = ""
+    assert reporter.owner_open_id() is None
+    assert reporter.tick() == []
+    conversation.owner = WX_OWNER
+    conversation.is_connected = False
+    assert reporter.tick() == []
+    assert conversation.agent.prompts == []
+    assert reporter.state.data["sessions"] == {}
+    conversation.is_connected = True
+    assert reporter.owner_open_id() == WX_OWNER
+    assert len(reporter.tick()) == 1
+    assert conversation.sent == [(WX_OWNER, "✅ Task s1\n\n报告\n\n已完成 · s1")]
+
+
+def test_wechat_busy_conversation_defers_without_a_report_turn(
+    monkeypatch: Any, tmp_path: Path, wx_display: Any
+) -> None:
+    conversation = _FakeWechatConversation(["报告"])
+    reporter = _wechat_reporter(monkeypatch, tmp_path, conversation)
+    conversation.is_busy = True
+    assert reporter.tick() == []
+    assert reporter.tick() == []
+    assert conversation.agent.prompts == []
+    assert conversation.sent == []
+    conversation.is_busy = False
+    assert len(reporter.tick()) == 1
+    assert len(conversation.agent.prompts) == 1
+    assert conversation.sent == [(WX_OWNER, "✅ Task s1\n\n报告\n\n已完成 · s1")]
+
+
+def test_wechat_report_with_no_text_raises_instead_of_sending() -> None:
+    """A report with nothing to say must not go out as a bare title (and
+    returning quietly would mark it delivered)."""
+    conversation = _FakeWechatConversation([])
+    channel = im_reporter.WechatChannel(conversation)
+    for text in ("", "  \n "):
+        with pytest.raises(im_reporter.ReporterCliError, match="no text"):
+            channel.send_report(WX_OWNER, text, "raw", _wx_report())
+    assert conversation.sent == []
+
+
+def test_start_wechat_reporter_registers_the_conversation(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    conversation = _FakeWechatConversation([])
+    monkeypatch.delenv("GALLEY_SUPERVISOR_ID", raising=False)
+    assert im_reporter.start_wechat_reporter(conversation, tmp_path) is None
+    started: list[ImReporter] = []
+
+    def start(reporter: ImReporter) -> ImReporter:
+        started.append(reporter)
+        return reporter
+
+    monkeypatch.setattr(im_reporter, "_start_reporter", start)
+    monkeypatch.setenv("GALLEY_SUPERVISOR_ID", f" {WX_SUP} ")
+    reporter = im_reporter.start_wechat_reporter(conversation, tmp_path)
+    assert isinstance(reporter, WechatReporter)
+    assert started == [reporter]
+    assert list(reporter.channels()) == [WX_SUP]
+    assert reporter.state.path == tmp_path / "reporter_state.json"
+    assert reporter.owner_open_id() == WX_OWNER
+    channel = reporter.channels()[WX_SUP]
+    assert channel.agent() is conversation.agent
+    assert channel.connected() and not channel.busy()

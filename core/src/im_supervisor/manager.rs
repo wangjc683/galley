@@ -186,6 +186,10 @@ impl ImSupervisorManager {
         }
         if platform == WECHAT && relogin {
             let _ = std::fs::remove_file(state_dir.join("token.json"));
+            // A re-scan may be another WeChat account. Without an owner the
+            // reporter holds completion reports until someone speaks,
+            // instead of retrying them into the old account until it gives up.
+            let _ = std::fs::remove_file(state_dir.join("wechat_owner.json"));
         }
 
         let mut env = context.env;

@@ -853,9 +853,11 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
 15. The display queue and ask_user payload the managed Discord and
     Telegram frontends read (Discord: patches `0023` and `0026`; Telegram:
     patch `0024`; all 2026-09-30; see their rows in the
-    [patch ledger](../managed-ga/patches/manifest.md)). A drift here still
-    applies cleanly and compiles, and the dcapp / tgapp tests run on
-    hand-written fake agents, so nothing but a real run catches it.
+    [patch ledger](../managed-ga/patches/manifest.md)), and Galley's WeChat
+    conversation reads the same way (`runner/im_wechat.py`, 2026-10-10, no
+    patch; item 19). A drift here still applies cleanly and compiles, and
+    the dcapp / tgapp / WeChat tests run on hand-written fake agents, so
+    nothing but a real run catches it.
     Re-check on upgrade: (a) `agentmain.GenericAgent.run()` items: `next` /
     `done` carrying `turn` and `outputs` (`turn_resps[-2:]` on `next`,
     every step on `done`; `outputs` holds whole step texts either way), a
@@ -864,21 +866,24 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     in `next`'s text alone: dcapp's channel agents run with `inc_out` off
     (cumulative text), tgapp's agent with `inc_out = True` (only the new
     text since the last item); both read steps from `outputs`, never from
-    `next`. (b) the ask_user exit reaching `_turn_end_hooks` as
+    `next`, and so does the WeChat conversation (upstream's `inc_out`
+    default). (b) the ask_user exit reaching `_turn_end_hooks` as
     `exit_reason = {"result": "EXITED", "data": {"status": "INTERRUPT",
     "intent": "HUMAN_INTERVENTION", "data": {question, candidates}}}` with
     `tool_calls` alongside (`ga.py` `ask_user` / `turn_end_callback`,
     `agent_loop.py` EXITED branch); (c) `agent._current_queue` pointing at
     the running task's display queue when the hook fires, and staying on it
-    while `agent.is_running` (tgapp also reads the pair to tell a
-    completion-reporter turn from its own task: `·· 排队中`, `/stop`); (d)
+    while `agent.is_running` (tgapp and the WeChat conversation also read
+    the pair to tell a completion-reporter turn from their own task:
+    `·· 排队中`, `/stop`); (d)
     `review_cmd` still intercepting `/review` through `_handle_slash_cmd`
     only when the query starts with it (dcapp sends `/review` raw), and
     `review_cmd.handle(agent, body, display_queue)` still returning the
     prompt or putting a `done` itself (tgapp calls it directly); (e)
     `continue_cmd.reset_conversation` still aborting through
-    `agent.abort()`, which tgapp's `/continue n` wraps for one call to learn
-    whether the running task was aborted. (f) the engine log a Discord
+    `agent.abort()`, which tgapp's and the WeChat conversation's
+    `/continue n` wrap for one call to learn whether the running task was
+    aborted. (f) the engine log a Discord
     channel is picked back up from after a restart or an eviction (`0026`):
     `agent.log_path` minted in `GenericAgent.__init__` as
     `temp/model_responses/model_responses_<logid>.txt` and pushed onto
@@ -932,12 +937,11 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `_handle_continue_frontend` on the module that defines
     `AgentChatMixin` (`frontends.chatapp_common`, looked up by
     `AgentChatMixin.handle_command`; dcapp binds the same names at import
-    from the top-level `chatapp_common`, so Discord is unaffected); and
-    wechatapp's `on_message(bot, msg)` answering through the `bot` it is
-    handed (`_handle` sends the task's messages with `bot.send_text` from
-    its own thread, the last one ending in `[已停止]` when stopped), plus
-    `_task_aborted` and `agent.is_running` for the added `/new`. A renamed
-    global is logged as `missing; not wrapped` and the channel runs
+    from the top-level `chatapp_common`, so Discord is unaffected). WeChat
+    replaces no upstream global: since 2026-10-10 its conversation is
+    Galley's (`runner/im_wechat.py`, item 19), which calls
+    `ChannelResume.take_notice` / `fresh` / `continue_session` itself. A
+    renamed global is logged as `missing; not wrapped` and the channel runs
     without that piece, so nothing but the restart checks in Step 8 catch
     it; (d) upstream's IM `/new` (`reset_conversation`) and `/continue N`
     (`handle_frontend_command`) still not retargeting `agent.log_path`:
@@ -981,6 +985,30 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     (if it fixed version qualifiers, drop `0027` and keep the shared test
     green); known gap outside this item: Core strips a trailing `/models` /
     `/responses` / `/messages` before joining, the engine does not.
+19. Galley's WeChat conversation over upstream's transport (2026-10-10,
+    `.scratch/wechat-ux/`, [devlog](./devlog/2026-10-10-wechat-conversation-ux.md);
+    managed runtime only, no managed patch). `runner/im_wechat.py`
+    replaces `wechatapp.on_message` / `_handle` and keeps the rest of the
+    module: `_run_wechat` hands `WechatConversation.on_message` to
+    `WxBotClient.run_loop`, whose callback is still `(bot, msg)` on the
+    polling thread. Upstream changes `wechatapp.py` more than any other IM
+    frontend, which is why this is not a patch; the price is that upstream
+    fixes to its conversation no longer reach Galley. Re-check on upgrade:
+    (a) `WxBotClient`'s `send_text(to, text, context_token=)` minting a new
+    `client_id` per call (iLink drops a second message reusing one,
+    2026-10-10 device probe), `get_typing_ticket(uid, ctx)`,
+    `send_typing(uid, ticket, cancel=)`, `send_image` / `send_video` /
+    `send_file(uid, path, context_token=)`, all returning iLink's JSON
+    body (HTTP 200 with a non-zero `ret` or an `errcode` is a refusal);
+    (b) `_dl_media(items)` returning local paths, `_TEMP_DIR`,
+    `ITEM_TEXT`, and the message shape (`item_list`, `text_item.text`,
+    `voice_item.text` as iLink's own transcription); (c) upstream's
+    `on_message` gaining behavior Galley should mirror (a new item type, a
+    new command) — read its diff even though it no longer runs; (d) the
+    display-queue and ask_user contract of item 15. Importing
+    `galley_im_display` pulls in `chatapp_common`, which installs
+    `/continue` / `/btw` / `/review` on the GA class in the WeChat process,
+    as on the other channels.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1030,11 +1058,17 @@ start the audit there instead of grepping the bridge:
   (`continue_cmd`'s loader and locks, `agent.log_path`,
   `_turn_end_hooks`; one to one with `0026`'s `_resume_channel` /
   `_record_channel_log` / `/new` branch / `_continue_session`), and the
-  per-frontend seams: `install_feishu`, `install_telegram`,
-  `WechatNoticeBot`, `wechat_new_conversation`. The call sites (the
-  module-level agents, fsapp's `get_agent` wrapper, the WeChat
-  `on_message` wrapper) are in `_run_feishu` / `_run_telegram` /
-  `_run_wechat` of `runner/managed_im_supervisor.py`.
+  per-frontend seams: `install_feishu`, `install_telegram` (WeChat's
+  conversation calls `ChannelResume` directly). The call sites (the
+  module-level agents, fsapp's `get_agent` wrapper) are in `_run_feishu` /
+  `_run_telegram` / `_run_wechat` of `runner/managed_im_supervisor.py`.
+- **[`runner/im_wechat.py`](../runner/im_wechat.py)** — items 15 and 19:
+  `WechatConversation` (`_Run.observe` for the item shape,
+  `_on_turn_end` / `_take_ask_event` for the ask payload and
+  `_current_queue`, `_running_run` and `_stopping_on_abort`), the
+  transport calls listed in its module docstring, and `_check_sent`
+  (iLink's `ret` / `errcode`). The completion reporter's `WechatChannel`
+  (`runner/im_reporter.py`) renders through its `answer_text`.
 
 GA *public* API usage (items 8, plus `next_llm` / `verbose` / `inc_out`
 / `put_task`) is deliberately not wrapped — verify against upstream
@@ -1187,8 +1221,13 @@ already-generated bundle without rebuilding it. The smoke must verify
   what was said before: the answer picks it up (item 16).
 - Managed Feishu channel (item 16): say something to remember, restart
   Channels (「重启 Channels」), then ask about it: the answer picks it up.
-- Managed WeChat channel (item 16): say something to remember, restart
-  Channels (「重启 Channels」), then ask about it: the answer picks it up.
+- Managed WeChat channel (items 15, 16, 19; same caveat about an installed
+  Galley): a multi-step request (only 「对方正在输入」 while it runs, then
+  one message: the answer with a `N 步 · 用时 X` last line, the indicator
+  gone with it), an ask_user question answered with a number, and `/stop`
+  during a long step (one `⏹ 已停止 · …`, no answer after it). Say
+  something to remember, restart Channels (「重启 Channels」), then ask
+  about it: the answer picks it up.
   Then send `/new`: the reply is `🆕 已开启新对话，当前上下文已清空`, the
   next answer no longer knows it, and neither does one after another
   restart.

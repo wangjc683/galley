@@ -158,9 +158,11 @@ says four things:
 - **Reply shape for a phone screen**: open with the answer or outcome; only
   the details the user needs next; no closing summary that repeats it; no
   tables (one item per line instead) and no headings; short paragraphs,
-  short code blocks. WeChat's variant adds that its frontend keeps only a
-  Markdown link's text and strips `1.` list numbers (`wechatapp.py`
-  `_strip_md`), so URLs go bare and steps are numbered `1、`.
+  short code blocks. No platform has its own note: WeChat's variant once
+  asked for bare URLs and `1、` numbering because upstream's `_strip_md`
+  dropped link targets and `1.` numbers; Galley's WeChat handler
+  (`runner/im_wechat.py`, 2026-10-10) no longer calls it, and the phone
+  renders both.
 - **Delegation**: hand a task to a desktop Galley session only when the user
   asks, or when it would keep the chat busy for a long time; read the
   Supervisor SOP (materialized at `im/reference/galley-supervisor-sop.md`,
@@ -256,5 +258,5 @@ in a real managed session after any prompt change:
 16. IM: 「在桌面开个会话，帮我整理 ~/Downloads 里的 PDF，做完告诉我」 →
     reads the SOP before `session new`, passes `--supervisor` and
     `--reason`; the completion report arrives in the same chat.
-17. WeChat: a reply with a link or numbered steps → bare URL, steps numbered
-    `1、`, not `1.`.
+17. WeChat: a reply with a link or numbered steps → the link and the `1.`
+    numbers arrive intact (Galley's handler passes Markdown through).

@@ -5,14 +5,14 @@ import json
 import logging
 import os
 import sys
-import types
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from runner import _watchdog, im_reporter, managed_im_supervisor, managed_runtime
+from runner import _watchdog, im_reporter, im_wechat, managed_im_supervisor, managed_runtime
+from runner.tests.test_managed_wechat import load_display
 
 
 def _write_fake_fsapp(ga_path: Path, body: str) -> None:
@@ -666,21 +666,28 @@ def main():
     assert "load Galley Feishu config failed" in events[-1]["lastError"]
 
 
-def test_run_wechat_pins_agent_mode_and_blocks_switch(
+def test_run_wechat_pins_agent_mode_and_runs_galleys_conversation(
     monkeypatch: Any,
     tmp_path: Path,
 ) -> None:
     """Upstream wechatapp defaults to forwarding into a detached conductor
     child that has no managed mykey loader and no Galley prompt, so it never
-    replies. The supervisor must pin the in-process agent mode before the
-    poll loop starts and must not let ``/switch`` toggle back."""
+    replies. The supervisor pins the in-process agent mode before the poll
+    loop starts, and polls with Galley's conversation (runner/im_wechat.py)
+    instead of upstream's on_message: ``/switch`` is refused, a message is a
+    GA task answered once, and the completion reporter gets the
+    conversation."""
     ga_path = tmp_path / "ga"
     state_dir = tmp_path / "state"
     _write_fake_wechatapp(
         ga_path,
         """
+import queue
+import time
+
 _TEMP_DIR = "unset"
 _MODE, _cond_seq = "conductor", 0
+ITEM_TEXT = 1
 SEEN = []
 
 
@@ -690,12 +697,31 @@ class AuthExpired(Exception):
 
 class Agent:
     verbose = True
+    is_running = False
+
+    def __init__(self):
+        self.tasks = []
 
     def run(self):
         pass
 
+    def put_task(self, query, source="user", images=None):
+        dq = queue.Queue()
+        dq.put({"done": "你好。", "turn": 1, "outputs": ["你好。"]})
+        self.tasks.append((query, source))
+        return dq
+
 
 agent = Agent()
+
+
+def _dl_media(items):
+    return []
+
+
+def _message(text, context_token):
+    item = {"type": ITEM_TEXT, "text_item": {"text": text}}
+    return {"from_user_id": "u1", "context_token": context_token, "item_list": [item]}
 
 
 class WxBotClient:
@@ -706,20 +732,23 @@ class WxBotClient:
     def __init__(self, token_file):
         self.token_file = token_file
 
-    def extract_text(self, msg):
-        return msg["text"]
-
     def send_text(self, uid, text, context_token=""):
         self.sent.append((uid, text, context_token))
 
+    def get_typing_ticket(self, uid, context_token=""):
+        return ""
+
     def run_loop(self, on_message, poll_timeout=30):
-        on_message(self, {"text": "/switch", "from_user_id": "u1", "context_token": "c1"})
-        on_message(self, {"text": "hello", "from_user_id": "u1", "context_token": "c2"})
+        on_message(self, _message("/switch", "c1"))
+        on_message(self, _message("hello", "c2"))
+        deadline = time.monotonic() + 5
+        while len(self.sent) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
         raise KeyboardInterrupt()
 
 
 def on_message(bot, msg):
-    SEEN.append((msg["text"], _MODE))
+    SEEN.append(msg)
 """,
     )
     monkeypatch.setattr(managed_runtime, "install_managed_mykey_loader", lambda: None)
@@ -729,6 +758,14 @@ def on_message(bot, msg):
         "install_managed_prompt_profile",
         lambda agent, extra_env_names: None,
     )
+    monkeypatch.setattr(managed_im_supervisor, "_start_resume", lambda platform, state: None)
+    reporters: list[Any] = []
+    monkeypatch.setattr(
+        im_reporter,
+        "start_wechat_reporter",
+        lambda conversation, state: reporters.append((conversation, state)),
+    )
+    load_display(monkeypatch)
     _clear_frontends_modules()
     out = io.StringIO()
     stdout, stderr, real_stdout, real_stderr = (
@@ -750,10 +787,16 @@ def on_message(bot, msg):
 
     assert code == 0
     assert wechatapp._MODE == "agent"
-    assert wechatapp.SEEN == [("hello", "agent")]
+    assert wechatapp.SEEN == []  # upstream's on_message never runs
     assert wechatapp.WxBotClient.sent == [
-        ("u1", managed_im_supervisor.WECHAT_SWITCH_BLOCKED_REPLY, "c1")
+        ("u1", im_wechat.SWITCH_BLOCKED_REPLY, "c1"),
+        ("u1", "你好。", "c2"),
     ]
+    assert wechatapp.agent.tasks == [(im_wechat.FILE_HINT + "\n\nhello", "wechat")]
+    ((conversation, reporter_state),) = reporters
+    assert isinstance(conversation, im_wechat.WechatConversation)
+    assert conversation.agent is wechatapp.agent and reporter_state == state_dir.resolve()
+    assert conversation.owner_id() == "u1" and not conversation.connected()
     events = [json.loads(line) for line in out.getvalue().splitlines()]
     assert [event["state"] for event in events] == ["starting", "running", "stopped"]
 
@@ -1000,6 +1043,7 @@ class WxBotClient:
         managed_runtime, "install_managed_prompt_profile", lambda agent, extra_env_names: None
     )
     monkeypatch.setattr(managed_im_supervisor, "_start_resume", lambda platform, state: None)
+    monkeypatch.setattr(im_reporter, "start_wechat_reporter", lambda conversation, state: None)
     _clear_frontends_modules()
     out = io.StringIO()
     saved = (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
@@ -1021,64 +1065,3 @@ class WxBotClient:
     logged = (state_dir / "wechat.log").read_text(encoding="utf-8")
     assert WX_TOKEN not in logged
     assert "[WX] Authorization: Bearer …w3ch" in logged
-
-
-# ── WeChat /help and /status ───────────────────────────────────────────
-
-
-class _WxAgent:
-    def __init__(self) -> None:
-        self.llmclient: object | None = object()
-        self.llm_no = 1
-        self.is_running = False
-
-    def get_llm_name(self) -> str:
-        return "NativeClaude/test"
-
-
-class _WxBot:
-    def __init__(self) -> None:
-        self.sent: list[tuple[str, str, str]] = []
-
-    @staticmethod
-    def extract_text(msg: dict[str, Any]) -> str:
-        return str(msg["text"])
-
-    def send_text(self, uid: str, text: str, context_token: str = "") -> None:
-        self.sent.append((uid, text, context_token))
-
-
-def test_wechat_help_and_status_are_answered_without_resume_or_upstream() -> None:
-    """Upstream wechatapp has neither: it would hand ``/help`` to the agent
-    as a task. They answer even when restart continuity is off."""
-    forwarded: list[str] = []
-    agent = _WxAgent()
-    wechatapp = types.SimpleNamespace(
-        agent=agent, on_message=lambda bot, msg: forwarded.append(msg["text"])
-    )
-    on_message = managed_im_supervisor._managed_wechat_on_message(wechatapp, None)
-    bot = _WxBot()
-
-    def say(text: str) -> str:
-        on_message(bot, {"text": text, "from_user_id": "u1", "context_token": "c1"})
-        return bot.sent[-1][1]
-
-    assert say(" /help ") == managed_im_supervisor.WECHAT_HELP_REPLY
-    assert managed_im_supervisor.WECHAT_HELP_REPLY == (
-        "📖 命令列表：\n"
-        "/new - 开始新对话\n"
-        "/stop - 停止当前任务\n"
-        "/status - 查看运行状态和当前模型\n"
-        "/llm - 查看可用模型\n"
-        "/llm n - 切换到第 n 个模型\n"
-        "/help - 查看全部命令"
-    )
-    assert say("/status") == "状态：🟢 空闲\nLLM：[1] NativeClaude/test"
-    agent.is_running = True
-    assert say("/status") == "状态：🔴 运行中\nLLM：[1] NativeClaude/test"
-    agent.llmclient = None
-    assert say("/status") == "状态：🔴 运行中\nLLM：[1] 未配置"
-    assert bot.sent[0] == ("u1", managed_im_supervisor.WECHAT_HELP_REPLY, "c1")
-    assert forwarded == []
-    on_message(bot, {"text": "/llm", "from_user_id": "u1", "context_token": "c2"})
-    assert forwarded == ["/llm"]

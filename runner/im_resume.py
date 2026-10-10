@@ -49,8 +49,6 @@ LOG_NAME_RE = re.compile(r"model_responses_[0-9A-Za-z_]+\.txt")
 # Lock owner (continue_cmd agent_id) of each channel: "galley-telegram", ...
 LOCK_OWNER_PREFIX = "galley-"
 LOG_PREFIX = "[galley-im-resume]"
-WECHAT_STOPPED_TAG = "[已停止]"  # wechatapp._handle's tag on a stopped task's last message
-WECHAT_TEXT_LIMIT = 3000  # wechatapp._handle cuts every message it sends to this
 _CONTINUE_N_RE = re.compile(r"/continue\s+(\d+)\s*$")
 
 
@@ -393,59 +391,3 @@ def install_telegram(tgapp: Any, resume: ChannelResume) -> None:
     _replace(tgapp, "_post_ask", arming)
     _replace(tgapp, "_reply_markdown", reply_markdown_with_notice)
     _replace(tgapp, "_reply", reply_with_notice)
-
-
-# -- WeChat --------------------------------------------------------------
-
-
-class WechatNoticeBot:
-    """The WxBotClient handed to wechatapp.on_message for one message.
-
-    wechatapp answers from a worker thread (``_handle``) with plain
-    ``send_text`` calls: the turns' texts as they settle, then the rest with
-    ``[任务已完成]``. The first of them carries the notice. Command replies
-    (``/llm``) go out on the caller's thread and a stopped task's last
-    message ends in ``[已停止]``: neither takes it. A message already at
-    wechatapp's length cut gets the notice as a short message of its own,
-    just before it. Everything else is the real bot's."""
-
-    def __init__(self, bot: Any, resume: ChannelResume) -> None:
-        self._bot = bot
-        self._resume = resume
-        self._caller = threading.current_thread()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._bot, name)
-
-    def send_text(self, to_user_id: Any, text: Any, *args: Any, **kwargs: Any) -> Any:
-        notice = ""
-        if threading.current_thread() is not self._caller and not str(text or "").rstrip().endswith(
-            WECHAT_STOPPED_TAG
-        ):
-            notice = self._resume.take_notice()
-        if not notice:
-            return self._bot.send_text(to_user_id, text, *args, **kwargs)
-        try:
-            if len(notice) + 1 + len(str(text)) <= WECHAT_TEXT_LIMIT:
-                return self._bot.send_text(to_user_id, f"{notice}\n{text}", *args, **kwargs)
-            self._bot.send_text(to_user_id, notice, *args, **kwargs)
-        except BaseException:
-            self._resume.restore_notice()
-            raise
-        return self._bot.send_text(to_user_id, text, *args, **kwargs)
-
-
-def wechat_new_conversation(wechatapp: Any, resume: ChannelResume, bot: Any, msg: Any) -> None:
-    """WeChat's /new (upstream wechatapp has none): the same reset as the
-    other channels' /new plus a new log, answered with upstream's
-    reset_conversation receipt. A running task is aborted the way /stop
-    does it: marked in ``_task_aborted`` for the sender, so its last
-    message reads ``[已停止]``; queued tasks run on in the new context."""
-    uid = msg.get("from_user_id", "")
-    agent = wechatapp.agent
-    aborted = getattr(wechatapp, "_task_aborted", None)
-    if getattr(agent, "is_running", False) and isinstance(aborted, dict):
-        aborted[uid] = True
-    reply = resume.cc.reset_conversation(agent)
-    resume.fresh(agent)
-    bot.send_text(uid, reply, context_token=msg.get("context_token", ""))

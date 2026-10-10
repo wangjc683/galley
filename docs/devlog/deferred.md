@@ -91,14 +91,15 @@
 - **实施要点**：菜单项 id 不变（GUI 监听的 `menu:*` 事件名不变）；macOS 应用菜单里系统自带的项（Hide / Quit 等）由系统本地化，只改 Galley 自己加的项。同一轮可以顺带决定 07-15 另一条 Open「⌘K 缺菜单栏入口」。
 - **关联**：`core/src/app_menu.rs` · `core/src/tray.rs` · [第五批 devlog](./2026-10-08-settings-general-shortcuts-feedback-about-pass.md)
 
-## 微信渠道的任务完成汇报
+## 微信引用消息
 
-- **状态**：暂缓（2026-10-08 Settings 逐页第四批 D9，JC 按推荐：先补台账，微信不跟写成显式代价）。
-- **提出**：2026-10-08 聊天软件页审计 X27：飞书 / Telegram / Discord 有委派任务完成后的汇报（`runner/im_reporter.py`），微信没有；08-13 Discord 上线时只写了一句「微信缺席是历史遗留，不是范本」（[devlog](./2026-08-13-discord-channel-shipped.md)），没进台账。
-- **显式代价**：微信用户委派出去的任务做完不会收到消息，要自己回桌面看。为什么现在不跟：微信渠道 0 人在用（JC 也没启用）；10-06 起 IM 定位是「同一个助手，从手机上对话」，委派只在用户要求时，汇报的价值随之下降；真机验证要扫码。
-- **启动信号**：有人开始用微信渠道委派任务，或微信渠道的使用量起来。
-- **方案**：`im_reporter` 加一个微信 channel（发送走 runner 已持有的 bot 客户端）；先核实能否零补丁。
-- **关联**：`runner/im_reporter.py` · `runner/managed_im_supervisor.py` · [第四批 devlog](./2026-10-08-settings-channels-tab-pass.md)
+- **状态**：暂缓（2026-10-10 微信对话体验对齐桌面端时裁决不做，范围之外）。
+- **提出**：2026-10-10 读腾讯官方 iLink 插件源码（`@tencent-weixin/openclaw-weixin` 2.4.9）：用户在微信里引用一条消息回复时，消息带 `ref_msg`；Galley 的微信对话（`runner/im_wechat.py`）只读文字与语音转写，引用的内容到不了模型。
+- **显式代价**：用户引用机器人之前的某条回答说「这个再展开一下」，模型只看到「这个再展开一下」，要靠上下文猜指的是哪条。
+- **为什么不做**：新版微信的引用往往只带一个 `svr_id`，不带原文；官方插件 2.4.9 是在本地 SQLite 里存下收发消息的原文，再按 id 还原。Galley 存 IM 原文与 Rule 4（Galley 不存 IM 对话）冲突。
+- **启动信号**：JC 或用户在微信里用引用回复、并抱怨它没看懂指的是哪条。
+- **方案**：①先只用随消息带来的引用内容（`ref_msg.title` / `ref_msg.message_item` 的文字），作为「引用：…」前缀交给模型；②只带 `svr_id` 的引用告诉模型「用户引用了一条消息，内容没随消息带来」；③要完整还原就得存原文，须先重新解释 Rule 4（先例：2026-08-13 对引擎日志的解释）。
+- **关联**：`runner/im_wechat.py` · [微信对齐 devlog](./2026-10-10-wechat-conversation-ux.md)
 
 ## Windows 上一键安装 `galley` 命令（用户级 PATH）
 

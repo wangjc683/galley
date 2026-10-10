@@ -13,12 +13,12 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Any, TextIO, cast
 
-from runner import _watchdog, im_resume, managed_runtime
+from runner import _watchdog, im_resume, im_wechat, managed_runtime
 
 IM_SUPERVISOR_PROMPT_ENV = "GALLEY_IM_SUPERVISOR_PROMPT_TEXT"
 # Same prompt body with the supervisor id left unresolved. Core injects it
@@ -30,22 +30,9 @@ IM_SUPERVISOR_LOCK_NAME = "supervisor.lock"
 # incoming message to a detached ``conductor.py`` child on a fixed port. That
 # child carries neither the managed mykey loader nor the Galley supervisor
 # prompt, so under the managed runtime it never answers. Galley pins the
-# in-process agent and refuses ``/switch`` instead of patching the child.
+# in-process agent (upstream's on_message no longer runs, but other code may
+# read ``_MODE``) and ``runner/im_wechat.py`` refuses ``/switch``.
 WECHAT_MANAGED_MODE = "agent"
-WECHAT_SWITCH_BLOCKED_REPLY = "Galley 托管的微信渠道固定由 supervisor 处理消息，不支持 /switch。"
-# Upstream wechatapp knows /switch, /stop and /llm only; Galley answers
-# /new, /status and /help itself so every channel takes the same commands.
-WECHAT_HELP_COMMANDS = (
-    ("/new", "开始新对话"),
-    ("/stop", "停止当前任务"),
-    ("/status", "查看运行状态和当前模型"),
-    ("/llm", "查看可用模型"),
-    ("/llm n", "切换到第 n 个模型"),
-    ("/help", "查看全部命令"),
-)
-WECHAT_HELP_REPLY = "📖 命令列表：\n" + "\n".join(
-    f"{command} - {description}" for command, description in WECHAT_HELP_COMMANDS
-)
 
 # The channel credentials Galley Core hands the frontends: the env var it
 # sets before spawn and the key of the secret in that JSON (written in
@@ -353,49 +340,6 @@ def _start_resume(platform: str, state_dir: Path) -> im_resume.ChannelResume | N
         return None
 
 
-def _wechat_status_reply(agent: Any) -> str:
-    """The other channels' ``/status`` (chatapp_common's), for wechatapp's
-    single agent: running or idle, and the current model."""
-    llm = agent.get_llm_name() if getattr(agent, "llmclient", None) else "未配置"
-    state = "🔴 运行中" if getattr(agent, "is_running", False) else "🟢 空闲"
-    return f"状态：{state}\nLLM：[{agent.llm_no}] {llm}"
-
-
-def _managed_wechat_on_message(
-    wechatapp: Any, resume: im_resume.ChannelResume | None = None
-) -> Callable[[Any, Any], None]:
-    """Wrap upstream ``on_message``: ``/switch`` cannot leave the managed
-    agent mode, ``/help`` / ``/status`` / ``/new`` (which upstream lacks)
-    are answered here, and a context that could not be picked back up
-    after a restart says so on the next answer."""
-
-    def on_message(bot: Any, msg: Any) -> None:
-        text = bot.extract_text(msg).strip()
-        reply: str | None = None
-        if text == "/switch":
-            reply = WECHAT_SWITCH_BLOCKED_REPLY
-        elif text == "/help":
-            reply = WECHAT_HELP_REPLY
-        elif text == "/status":
-            reply = _wechat_status_reply(wechatapp.agent)
-        if reply is not None:
-            bot.send_text(
-                msg.get("from_user_id", ""),
-                reply,
-                context_token=msg.get("context_token", ""),
-            )
-            return
-        if resume is None:
-            wechatapp.on_message(bot, msg)
-            return
-        if text == "/new":
-            im_resume.wechat_new_conversation(wechatapp, resume, bot, msg)
-            return
-        wechatapp.on_message(im_resume.WechatNoticeBot(bot, resume), msg)
-
-    return on_message
-
-
 def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
     state_dir = Path(args.state_dir).expanduser().resolve()
     temp_dir = state_dir / "temp"
@@ -500,6 +444,9 @@ def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
         # The token this QR login just obtained.
         _REDACTOR.add(getattr(bot, "token", None))
 
+    # Galley's conversation replaces upstream's on_message (no managed
+    # patch); its ask_user hook is in place before the agent runs a task.
+    conversation = im_wechat.WechatConversation(wechatapp, bot, state_dir, resume)
     threading.Thread(target=wechatapp.agent.run, daemon=True).start()
     _emit(
         out,
@@ -510,8 +457,18 @@ def _run_wechat(args: argparse.Namespace, out: IO[str]) -> int:
         logPath=str(state_dir / "wechat.log"),
     )
 
+    # Proactive completion reporter. Failure to start must never take the
+    # channel down — the reporter is an enhancement, the inbound message
+    # path is the product.
     try:
-        bot.run_loop(_managed_wechat_on_message(wechatapp, resume))
+        from runner import im_reporter
+
+        im_reporter.start_wechat_reporter(conversation, state_dir)
+    except Exception as e:
+        print(f"[galley-im-reporter] disabled: {e}")
+
+    try:
+        conversation.run()
     except wechatapp.AuthExpired:
         _emit(out, platform="wechat", state="expired", lastError="WeChat login expired")
         return 2

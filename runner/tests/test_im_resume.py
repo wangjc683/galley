@@ -11,8 +11,9 @@ tests). Three layers:
 - The launcher's ``_run_*`` functions over fake frontend modules (the
   ``test_managed_im_supervisor.py`` style): the resume happens before the
   reporter and ``main()``, the mapping follows every turn end, ``/new``.
-- The notice and command seams against the real tgapp / fsapp / wechatapp
-  payload, with their network and GA dependencies stubbed.
+- The notice and command seams against the real tgapp / fsapp payload, and
+  Galley's WeChat conversation (``runner/im_wechat.py``) over the real
+  wechatapp transport, with their network and GA dependencies stubbed.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ from typing import Any
 
 import pytest
 
-from runner import im_reporter, im_resume, managed_im_supervisor, managed_runtime
+from runner import im_reporter, im_resume, im_wechat, managed_im_supervisor, managed_runtime
 from runner.tests import test_managed_feishu_fsapp as fst
 from runner.tests import test_managed_telegram_tgapp as tgt
 from runner.tests.test_managed_discord_dcapp import (
@@ -46,6 +47,7 @@ from runner.tests.test_managed_discord_dcapp import (
     native_log,
 )
 from runner.tests.test_managed_im_supervisor import _args, _restore_stdio
+from runner.tests.test_managed_wechat import load_display, load_wechatapp
 
 _FRONTENDS = Path(__file__).resolve().parents[2] / "managed-ga" / "code" / "frontends"
 LOG_NAME = "model_responses_424242.txt"
@@ -663,7 +665,7 @@ import galley_resume_fakes as fakes
 
 _TEMP_DIR = "unset"
 _MODE, _cond_seq = "conductor", 0
-_task_aborted = {}
+ITEM_TEXT = 1
 SEEN = []
 
 
@@ -674,6 +676,15 @@ class AuthExpired(Exception):
 agent = fakes.Agent()
 
 
+def _dl_media(items):
+    return []
+
+
+def _message(text, context_token):
+    item = {"type": ITEM_TEXT, "text_item": {"text": text}}
+    return {"from_user_id": "u1", "context_token": context_token, "item_list": [item]}
+
+
 class WxBotClient:
     bot_id = "bot-test"
     token = "tok"
@@ -682,27 +693,26 @@ class WxBotClient:
         self.sent = []
         fakes.SAW["bot"] = self
 
-    @staticmethod
-    def extract_text(msg):
-        return msg["text"]
-
     def send_text(self, uid, text, context_token=""):
         self.sent.append((uid, text, context_token))
+
+    def get_typing_ticket(self, uid, context_token=""):
+        return ""
 
     def run_loop(self, on_message, poll_timeout=30):
         fakes.wait_for(lambda: agent.run_saw is not None)
         fakes.SAW["loop"] = list(agent.llmclient.backend.history)
-        on_message(self, {"text": "/switch", "from_user_id": "u1", "context_token": "c1"})
-        on_message(self, {"text": "hello", "from_user_id": "u1", "context_token": "c2"})
+        agent.scripts.append([{"done": "你好。", "turn": 1, "outputs": ["你好。"]}])
+        on_message(self, _message("/switch", "c1"))
+        on_message(self, _message("hello", "c2"))
+        fakes.wait_for(lambda: len(self.sent) == 2)
         fakes.SAW["before_new"] = agent.log_path
-        on_message(self, {"text": "/new", "from_user_id": "u1", "context_token": "c3"})
+        on_message(self, _message("/new", "c3"))
         raise KeyboardInterrupt()
 
 
 def on_message(bot, msg):
-    SEEN.append((msg["text"], _MODE, type(bot).__name__))
-    # A command reply goes out on the caller's thread: never the notice.
-    bot.send_text(msg["from_user_id"], "sync reply", context_token=msg["context_token"])
+    SEEN.append(msg)  # upstream's: Galley's conversation replaces it
 '''
 
 
@@ -712,21 +722,25 @@ def test_wechat_launcher_resumes_before_the_agent_runs_and_adds_new(
 ) -> None:
     state_dir = tmp_path / "state"
     seed_scenario(scenario, cc, state_dir, "galley-wechat")
+    load_display(monkeypatch, Agent, cc)
+    monkeypatch.setattr(im_reporter, "start_wechat_reporter", lambda conversation, state: None)
     run = launch(monkeypatch, tmp_path, fakes, "wechat", WECHAT_BODY)
     assert run.code == 0
     assert [event["state"] for event in run.events] == ["starting", "running", "stopped"]
     agent = run.module.agent
     assert agent.run_saw == run.saw["loop"] == expected_history(scenario)
     assert run.module._MODE == "agent"
-    assert run.module.SEEN == [("hello", "agent", "WechatNoticeBot")]
+    assert run.module.SEEN == []
+    # A context that could not be picked back up says so on the first answer.
+    answer = f"{NOTICE}\n\n你好。" if scenario == "missing" else "你好。"
     assert run.saw["bot"].sent == [
-        ("u1", managed_im_supervisor.WECHAT_SWITCH_BLOCKED_REPLY, "c1"),
-        ("u1", "sync reply", "c2"),
+        ("u1", im_wechat.SWITCH_BLOCKED_REPLY, "c1"),
+        ("u1", answer, "c2"),
         ("u1", NEW_CHAT_TEXT, "c3"),
     ]
-    # /new: upstream's reset (nothing running, nothing marked stopped), a
-    # new log, no mapping until something is said in it, no notice left.
-    assert agent.aborted >= 1 and run.module._task_aborted == {}
+    # /new: upstream's reset, a new log, no mapping until something is said
+    # in it, no notice left.
+    assert agent.aborted >= 1
     assert agent.log_path != run.saw["before_new"]
     assert agent.llmclient.backend.history == [] and agent.history == []
     assert mapping(state_dir) is None
@@ -1008,111 +1022,102 @@ class FakeWxBot:
     def __init__(self) -> None:
         self.sent: list[tuple[str, str, str]] = []
 
-    @staticmethod
-    def extract_text(msg: dict[str, Any]) -> str:
-        return str(msg["text"])
-
     def send_text(self, to_user_id: str, text: str, context_token: str = "") -> None:
         self.sent.append((to_user_id, text, context_token))
 
     def get_typing_ticket(self, _to_user_id: str, context_token: str = "") -> str:
-        return ""  # no typing loop
+        return ""  # no typing indicator
 
 
 @dataclass
 class WxWorld:
-    wx: Any
     agent: Agent
     resume: im_resume.ChannelResume
     state_dir: Path
     bot: FakeWxBot
-    on_message: Callable[[Any, Any], None]
+    conv: im_wechat.WechatConversation
 
     def say(self, text: str) -> None:
-        self.on_message(self.bot, {"text": text, "from_user_id": "u1", "context_token": "c1"})
+        item = {"type": 1, "text_item": {"text": text}}
+        self.conv.on_message(
+            self.bot, {"from_user_id": "u1", "context_token": "c1", "item_list": [item]}
+        )
 
     def texts(self) -> list[str]:
         return [text for _uid, text, _ctx in self.bot.sent]
 
+    def running(self) -> queue.Queue[dict[str, Any]]:
+        """The run GA works on: its first item read, GA busy on its task."""
+        dq = self.agent.tasks[-1][2]
+        dq.put({"next": "…", "turn": 1, "outputs": ["…"]})
+        wait_for(lambda: bool(self.conv._runs) and self.conv._runs[0].state == "running")
+        self.agent.is_running = True
+        self.agent._current_queue = dq  # type: ignore[attr-defined]
+        return dq
+
 
 @pytest.fixture
 def wx(monkeypatch: Any, tmp_path: Path) -> WxWorld:
+    """The real wechatapp transport module and the real ChannelResume over
+    the payload's continue_cmd, as the launcher wires them."""
     cc = load_continue_cmd(monkeypatch, tmp_path)
-    agentmain = types.ModuleType("agentmain")
-    agentmain.GeneraticAgent = Agent  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "agentmain", agentmain)
-    cipher = types.ModuleType("Crypto.Cipher")
-    cipher.AES = types.SimpleNamespace(MODE_ECB=1, new=None)  # type: ignore[attr-defined]
-    crypto = types.ModuleType("Crypto")
-    crypto.Cipher = cipher  # type: ignore[attr-defined]
-    for name, module in (
-        ("requests", types.ModuleType("requests")), ("qrcode", types.ModuleType("qrcode")),
-        ("Crypto", crypto), ("Crypto.Cipher", cipher),
-    ):
-        monkeypatch.setitem(sys.modules, name, module)
-    # wechatapp pops these at import; monkeypatch puts them back afterwards.
-    monkeypatch.delenv("HTTPS_PROXY", raising=False)
-    monkeypatch.delenv("https_proxy", raising=False)
-    monkeypatch.setenv("GALLEY_WECHAT_TEMP_DIR", str(tmp_path / "wx-temp"))
-    monkeypatch.setenv("GALLEY_WECHAT_TOKEN_FILE", str(tmp_path / "wx" / "token.json"))
-    monkeypatch.setattr(sys, "path", list(sys.path))
-    monkeypatch.setitem(sys.__dict__, "__stdout__", io.StringIO())  # wechatapp logs there
-    wechatapp = _exec_module(monkeypatch, "_galley_test_wechatapp", _FRONTENDS / "wechatapp.py")
-    wechatapp._MODE = managed_im_supervisor.WECHAT_MANAGED_MODE
+    load_display(monkeypatch, Agent, cc)
+    wechatapp = load_wechatapp(monkeypatch, tmp_path)
     seed_log(text="")
     state_dir = tmp_path / "state"
     seed_mapping(state_dir)
     resume = im_resume.ChannelResume(cc, state_dir, "galley-wechat")
     resume.attach(wechatapp.agent)
-    on_message = managed_im_supervisor._managed_wechat_on_message(wechatapp, resume)
-    return WxWorld(wechatapp, wechatapp.agent, resume, state_dir, FakeWxBot(), on_message)
+    bot = FakeWxBot()
+    conv = im_wechat.WechatConversation(wechatapp, bot, state_dir, resume, clock=lambda: 100.0)
+    conv.poll_seconds = 0.01
+    return WxWorld(wechatapp.agent, resume, state_dir, bot, conv)
 
 
 def test_wechat_first_message_of_a_run_leads_with_the_notice_once(wx: WxWorld) -> None:
-    wx.say("/llm")  # a command reply on the caller's thread
+    wx.say("/llm")  # a command reply never takes it
     assert wx.texts() == ["LLMs:\n→ [0] NativeClaude/test"]
     wx.agent.scripts.append([{"done": "好的。", "outputs": ["好的。"]}])
     wx.say("换个话题")
     wait_for(lambda: len(wx.bot.sent) == 2)
-    assert wx.texts()[-1] == f"{NOTICE}\n好的。\n\n[任务已完成]"
+    assert wx.texts()[-1] == f"{NOTICE}\n\n好的。"
     wx.agent.scripts.append([{"done": "嗯。", "outputs": ["嗯。"]}])
     wx.say("继续")
     wait_for(lambda: len(wx.bot.sent) == 3)
-    assert wx.texts()[-1] == "嗯。\n\n[任务已完成]"
+    assert wx.texts()[-1] == "嗯。"
 
 
-def test_wechat_notice_goes_just_before_a_message_at_the_length_cut(wx: WxWorld) -> None:
-    long_answer = "内容" * 2000  # wechatapp keeps the last 3000 characters
+def test_wechat_notice_rides_the_first_part_of_a_long_answer(wx: WxWorld) -> None:
+    long_answer = "内容" * 3000
     wx.agent.scripts.append([{"done": long_answer, "outputs": [long_answer]}])
     wx.say("长")
     wait_for(lambda: len(wx.bot.sent) == 2)
-    notice, answer = wx.texts()
-    assert notice == NOTICE
-    assert len(answer) == im_resume.WECHAT_TEXT_LIMIT and answer.endswith("[任务已完成]")
+    first, second = wx.texts()
+    assert first.startswith(f"{NOTICE}\n\n内容") and second.startswith("内容")
+    assert max(len(first), len(second)) <= im_wechat.TEXT_LIMIT
+    assert first[len(NOTICE) + 2:] + second == long_answer
 
 
 def test_wechat_stopped_run_leaves_the_notice_for_the_next_answer(wx: WxWorld) -> None:
     wx.say("长任务")
-    wait_for(lambda: bool(wx.agent.tasks))
+    running = wx.running()
     wx.say("/stop")
-    wx.agent.tasks[-1][2].put({"done": "做了一半", "outputs": ["做了一半"]})
-    wait_for(lambda: len(wx.bot.sent) == 1)
-    assert wx.texts() == ["做了一半\n\n[已停止]"]
+    assert wx.texts() == ["⏹ 已停止 · 1 步"]
+    wx.agent.is_running = False
+    running.put({"done": "做了一半", "outputs": ["做了一半"]})
     wx.agent.scripts.append([{"done": "好的。", "outputs": ["好的。"]}])
     wx.say("换个话题")
     wait_for(lambda: len(wx.bot.sent) == 2)
-    assert wx.texts()[-1] == f"{NOTICE}\n好的。\n\n[任务已完成]"
+    assert wx.texts()[-1] == f"{NOTICE}\n\n好的。"
 
 
-def test_wechat_help_and_status_never_reach_upstream_or_take_the_notice(wx: WxWorld) -> None:
-    """Upstream wechatapp has neither command and would run them as tasks;
-    like ``/llm``, their replies leave the notice to the next answer."""
+def test_wechat_help_and_status_never_reach_ga_or_take_the_notice(wx: WxWorld) -> None:
     wx.say("/help")
     wx.say("/status")
     wx.agent.is_running = True
     wx.say("/status")
     assert wx.texts() == [
-        managed_im_supervisor.WECHAT_HELP_REPLY,
+        im_wechat.HELP_REPLY,
         "状态：🟢 空闲\nLLM：[0] NativeClaude/test",
         "状态：🔴 运行中\nLLM：[0] NativeClaude/test",
     ]
@@ -1121,30 +1126,26 @@ def test_wechat_help_and_status_never_reach_upstream_or_take_the_notice(wx: WxWo
     wx.agent.scripts.append([{"done": "好的。", "outputs": ["好的。"]}])
     wx.say("换个话题")
     wait_for(lambda: len(wx.bot.sent) == 4)
-    assert wx.texts()[-1] == f"{NOTICE}\n好的。\n\n[任务已完成]"
+    assert wx.texts()[-1] == f"{NOTICE}\n\n好的。"
 
 
 def test_wechat_new_stops_the_running_task_and_starts_a_new_log(wx: WxWorld) -> None:
     wx.say("长任务")
-    wait_for(lambda: bool(wx.agent.tasks))
-    running = wx.agent.tasks[-1][2]
-    wx.agent.is_running = True
+    running = wx.running()
     wx.agent.history = ["[USER]: 长任务"]
     failed_over = wx.agent.log_path
     aborted = wx.agent.aborted
 
     wx.say("/new")
-    assert wx.texts() == [NEW_CHAT_TEXT]
-    assert wx.agent.aborted > aborted and wx.wx._task_aborted == {"u1": True}
+    assert wx.texts() == ["⏹ 已停止 · 1 步", NEW_CHAT_TEXT]
+    assert wx.agent.aborted > aborted
     assert wx.agent.history == [] and wx.agent.llmclient.backend.history == []
     assert wx.agent.log_path != failed_over and mapping(wx.state_dir) is None
-    # The aborted task ends the way /stop leaves it.
+    # The aborted task's `done` is dropped.
     wx.agent.is_running = False
     running.put({"done": "做了一半", "outputs": ["做了一半"]})
-    wait_for(lambda: len(wx.bot.sent) == 2)
-    assert wx.texts()[-1] == "做了一半\n\n[已停止]"
     # /new dropped the notice.
     wx.agent.scripts.append([{"done": "好的。", "outputs": ["好的。"]}])
     wx.say("hi")
     wait_for(lambda: len(wx.bot.sent) == 3)
-    assert wx.texts()[-1] == "好的。\n\n[任务已完成]"
+    assert wx.texts()[-1] == "好的。"

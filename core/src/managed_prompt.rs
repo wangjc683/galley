@@ -276,14 +276,6 @@ pub(crate) fn im_supervisor_prompt(sop_path: &str, platform: &str, supervisor_id
         "discord" => "Discord",
         _ => "the current IM channel",
     };
-    // WeChat's frontend keeps only a Markdown link's text and strips `1.`
-    // list numbers (`frontends/wechatapp.py` `_strip_md`); the other three
-    // keep both.
-    let platform_note = if platform == "wechat" {
-        "\n- WeChat shows only a Markdown link's text and drops `1.` list\n  numbers: write URLs bare and number steps `1、` `2、`."
-    } else {
-        ""
-    };
     format!(
         r#"## Galley IM Entry Layer
 
@@ -296,7 +288,7 @@ Your replies are read on a phone screen:
   the user needs next, and do not repeat the answer as a closing summary.
 - No tables: they wrap or break on a phone. Put one item per line, such as
   `内存：20 GB（63%）`. No headings; use bold sparingly.
-- Keep paragraphs and lists short, and code blocks to a few lines.{platform_note}
+- Keep paragraphs and lists short, and code blocks to a few lines.
 
 Hand a task to a desktop Galley session only when the user asks for one, or
 when it would keep this chat busy for a long time. Before your first Galley
@@ -565,24 +557,27 @@ mod tests {
     }
 
     /// Replies are read on a phone: 7 of 21 IM final answers in the
-    /// 2026-09-30 logs were tables. WeChat additionally loses link targets
-    /// and `1.` numbers in its frontend, so only its prompt says so.
+    /// 2026-09-30 logs were tables. No platform gets its own note: WeChat's
+    /// once lost link targets and `1.` numbers in upstream's `_strip_md`,
+    /// which Galley's handler (`runner/im_wechat.py`) no longer calls.
     #[test]
     fn im_supervisor_prompt_shapes_replies_for_a_phone() {
         for platform in ["wechat", "feishu", "telegram", "discord"] {
             let prompt = im_supervisor_prompt("/tmp/sop.md", platform, "galley-im/x");
             assert!(prompt.contains("No tables"));
             assert!(prompt.contains("Open with the answer"));
-            assert_eq!(prompt.contains("write URLs bare"), platform == "wechat");
+            assert!(!prompt.contains("write URLs bare"));
         }
     }
 
     /// Byte cap on the IM entry layer, same rule as
-    /// `STATIC_PROMPT_BUDGET_BYTES`: set with no headroom at the 2026-10-06
-    /// slimming, on the longest platform variant (WeChat, which carries the
-    /// link note), measured on the template with an empty SOP path so the
-    /// user's state-root path does not count. `\r` is not counted.
-    const IM_PROMPT_BUDGET_BYTES: usize = 1503;
+    /// `STATIC_PROMPT_BUDGET_BYTES`: set with no headroom on the longest
+    /// platform variant (Telegram, the longest channel name), measured on the
+    /// template with an empty SOP path so the user's state-root path does not
+    /// count. `\r` is not counted. 1503 at the 2026-10-06 slimming, when
+    /// WeChat carried a link note; lowered when the 2026-10-10 WeChat pass
+    /// dropped it.
+    const IM_PROMPT_BUDGET_BYTES: usize = 1383;
 
     #[test]
     fn im_supervisor_prompt_stays_within_budget() {

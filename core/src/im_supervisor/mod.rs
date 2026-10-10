@@ -120,12 +120,18 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
 /// restarts, so reconnecting (possibly as another account or bot) starts
 /// clean. `context_log.json` maps a single-agent channel to its engine log
 /// (`runner/im_resume.py`); Discord keeps its activated channels, each with
-/// its log, in `discord_active_channels.json` (managed patch `0026`). The
-/// engine logs themselves stay: they are GA runtime state.
+/// its log, in `discord_active_channels.json` (managed patch `0026`).
+/// WeChat has no owner binding: the owner the completion reporter pushes
+/// to is whoever spoke last, kept in `wechat_owner.json`
+/// (`runner/im_wechat.py`), and a reconnect may be another WeChat account.
+/// The engine logs themselves stay: they are GA runtime state.
 fn remove_conversation_state(state_dir: &Path, platform: &str) {
     let _ = std::fs::remove_file(state_dir.join("context_log.json"));
     if platform == DISCORD {
         let _ = std::fs::remove_file(state_dir.join("discord_active_channels.json"));
+    }
+    if platform == WECHAT {
+        let _ = std::fs::remove_file(state_dir.join("wechat_owner.json"));
     }
 }
 
@@ -297,6 +303,7 @@ mod tests {
         for name in [
             "context_log.json",
             "discord_active_channels.json",
+            "wechat_owner.json",
             "token.json",
             "reporter_state.json",
         ] {
@@ -304,13 +311,24 @@ mod tests {
         }
         remove_conversation_state(dir, TELEGRAM);
         assert!(!dir.join("context_log.json").exists());
-        // Only Discord owns an activated-channel file.
+        // Only Discord owns an activated-channel file, only WeChat an
+        // owner file.
         assert!(dir.join("discord_active_channels.json").exists());
+        assert!(dir.join("wechat_owner.json").exists());
         assert!(dir.join("token.json").exists());
         assert!(dir.join("reporter_state.json").exists());
 
         remove_conversation_state(dir, DISCORD);
         assert!(!dir.join("discord_active_channels.json").exists());
+        assert!(dir.join("wechat_owner.json").exists());
+        assert!(dir.join("reporter_state.json").exists());
+
+        std::fs::write(dir.join("context_log.json"), "{}").expect("seed");
+        remove_conversation_state(dir, WECHAT);
+        assert!(!dir.join("context_log.json").exists());
+        assert!(!dir.join("wechat_owner.json").exists());
+        // The login token is the disconnect path's call, not this one's.
+        assert!(dir.join("token.json").exists());
         assert!(dir.join("reporter_state.json").exists());
         // Nothing left to remove is not an error.
         remove_conversation_state(dir, WECHAT);

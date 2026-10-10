@@ -7,7 +7,7 @@ a short IM report to the bound owner. One ``ImReporter`` per process — a
 single poll loop and a single state-file writer — dispatching to a
 registry of ``ChannelAdapter`` seams keyed by supervisor id (connection
 state, owner lookup, busy check, text rendering, outbound send).
-Feishu and Telegram register exactly one channel; multi-context
+Feishu, Telegram and WeChat register exactly one channel; multi-context
 platforms (Discord: one supervisor id per channel) register many.
 Design: docs/devlog/2026-07-03-supervisor-proactive-reporting-design.md
 
@@ -50,7 +50,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from runner import process_command
+from runner import im_wechat, process_command
 
 POLL_INTERVAL_SEC = 20.0
 REPORT_TURN_TIMEOUT_SEC = 300.0
@@ -327,10 +327,10 @@ def _single_owner(public_access: Any, allowed: Any) -> str | None:
 
 def report_status_word(kind: str) -> str:
     """The word a report's outcome reads as, shared by every channel that
-    labels its reports (Discord card footer, Telegram footer line) so the
-    platforms never disagree. Anything that is neither completed nor
-    cancelled is a dead run and reads as an error, so a future dead status
-    still gets a truthful label."""
+    labels its reports (Discord card footer, Telegram and WeChat footer
+    lines) so the platforms never disagree. Anything that is neither
+    completed nor cancelled is a dead run and reads as an error, so a
+    future dead status still gets a truthful label."""
     if kind == "completed":
         return "已完成"
     if kind == "cancelled":
@@ -374,10 +374,10 @@ class ChannelAdapter:
         """Deliver the report with its outcome at hand — the entry point
         the dispatcher calls. ``send`` only sees rendered text, but a
         channel that dresses reports differently from ordinary replies
-        (Discord's embed card, Telegram's title and footer lines) needs the
-        kind and the session. Defaults to ``send`` so channels without such
-        a surface (Feishu) keep their exact behavior; same MUST-raise
-        contract as ``send``."""
+        (Discord's embed card, Telegram's and WeChat's title and footer
+        lines) needs the kind and the session. Defaults to ``send`` so
+        channels without such a surface (Feishu) keep their exact behavior;
+        same MUST-raise contract as ``send``."""
         self.send(owner, text, raw)
 
 
@@ -746,6 +746,60 @@ class DiscordChannel(ChannelAdapter):
             text_future.result(DISCORD_SEND_TIMEOUT_SEC)
 
 
+def wechat_report_text(text: str, report: Report) -> str:
+    """A WeChat report: a title line naming the session (Telegram's outcome
+    icons), the rendered report body, and a ``{status} · {session id}``
+    last line. Plain text although WeChat renders Markdown: metadata stays
+    as quiet as the ``N 步 · 用时 X`` last line of a WeChat answer. A title
+    is one line, so line breaks in it become spaces."""
+    session_id = str(report.session.get("id") or "")
+    title = re.sub(r"\s+", " ", str(report.session.get("title") or "")).strip()
+    icon, word = telegram_report_outcome(report.kind)
+    return f"{icon} {title or session_id}\n\n{text}\n\n{word} · {session_id}"
+
+
+class WechatChannel(ChannelAdapter):
+    """WeChat through the conversation object of ``runner/im_wechat.py``
+    (connection state, owner, busy check, splitting send). WeChat has no
+    pairing: the owner is whoever messaged the bot last, which the
+    conversation persists, so a restart can still report before anyone
+    speaks. Reports are text-only, as on Telegram: generated files stay in
+    the Galley session."""
+
+    def __init__(self, conversation: Any) -> None:
+        self.conversation = conversation
+
+    def connected(self) -> bool:
+        return bool(self.conversation.connected())
+
+    def owner_id(self) -> str | None:
+        owner = self.conversation.owner_id()
+        return str(owner) if owner else None
+
+    def busy(self) -> bool:
+        return bool(self.conversation.busy())
+
+    def agent(self) -> Any:
+        return self.conversation.agent
+
+    def render(self, raw: str) -> str:
+        """The report turn's closing step, cleaned exactly like a WeChat
+        answer (``im_wechat.answer_text``: the reporter gets ``done``
+        without per-step ``outputs``, so it splits on GA's turn markers)."""
+        return im_wechat.answer_text(raw)
+
+    def send(self, owner: str, text: str, raw: str) -> None:
+        # The conversation splits at WeChat's 4000 characters, gives every
+        # message its own client_id, and raises on failure.
+        self.conversation.send_text(owner, text)
+
+    def send_report(self, owner: str, text: str, raw: str, report: Report) -> None:
+        if not (text or "").strip():
+            # Sending a bare title and returning would mark it delivered.
+            raise ReporterCliError("WeChat report rendered to no text")
+        self.conversation.send_text(owner, wechat_report_text(text, report))
+
+
 # ── reporter core ────────────────────────────────────────────────────
 
 
@@ -996,6 +1050,20 @@ class TelegramReporter(ImReporter):
         self.tgapp = tgapp
 
 
+class WechatReporter(ImReporter):
+    def __init__(
+        self,
+        conversation: Any,
+        supervisor_id: str,
+        state_path: Path,
+        poll_interval: float = POLL_INTERVAL_SEC,
+    ) -> None:
+        super().__init__(
+            {supervisor_id: WechatChannel(conversation)}, state_path, poll_interval
+        )
+        self.conversation = conversation
+
+
 class DiscordReporter(ImReporter):
     """Discord dispatcher: a channel registry that grows and shrinks with
     the activated channels, keyed by ``<base id>/ch:<channel_id>``.
@@ -1088,6 +1156,18 @@ def start_telegram_reporter(tgapp: Any, state_dir: Path) -> TelegramReporter | N
         print("[galley-im-reporter] disabled: GALLEY_SUPERVISOR_ID not set")
         return None
     reporter = TelegramReporter(tgapp, supervisor_id, Path(state_dir) / STATE_FILE_NAME)
+    _start_reporter(reporter)
+    return reporter
+
+
+def start_wechat_reporter(conversation: Any, state_dir: Path) -> WechatReporter | None:
+    supervisor_id = (os.environ.get("GALLEY_SUPERVISOR_ID") or "").strip()
+    if not supervisor_id:
+        print("[galley-im-reporter] disabled: GALLEY_SUPERVISOR_ID not set")
+        return None
+    reporter = WechatReporter(
+        conversation, supervisor_id, Path(state_dir) / STATE_FILE_NAME
+    )
     _start_reporter(reporter)
     return reporter
 
