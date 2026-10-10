@@ -241,3 +241,51 @@ dev 模式两端 Python 是否一致；外置模式 `pendingLLMIndex` 语义；`
   - GUI 发送路径要在真机里实际发消息，属写操作，留给 JC 验收：冷会话首发不出现两条、首条消息后侧栏标题、EmptyState 选模型后首发、带图、运行中排队、GUI 发送同时 CLI 抢先（GUI 回显撤回、进排队条）、回答提问、运行中 `/btw`、停止（含「准备中」时）。
   - 已知缺口（不比旧行为差）：发送已预留闸门、尚未派发时点停止拦不住这次发送；以前同一时机直接报「停止失败」。是否处理待真机实感再定。
   - `rename_session` 的 `titleSource: "derived"` 参数已无调用方，暂留。
+- 2026-10-10 02d 完成（执行代理，worktree `ios-02d-broadcast-writes`，未提交）。
+  - 实现：新模块 `core/src/session_writes.rs`。`Writes { galley, notifier, via }` 每种写入一个方法：写库、取回行、经 `Notifier` 广播恰好一次，
+    失败不广播。socket 处理器（`session.archive` / `restore` / `move`、`llm.set`、`project.create` / `delete`）与 Tauri 命令共用它；Tauri 命令只建
+    `TauriNotifier`、传 `via: "gui"`、把错误串成 JSON。会话事件改用新类型 `SessionBriefEvent`（`SessionBrief` 的所有 Option 字段显式写出，空为 `null`，
+    字段解构穷举，`SessionBrief` 加字段而这里不加就编不过），项目事件用 `ProjectBriefEvent`；socket `session.new`、派生标题、自动标题经同一个
+    `announce_session` 发。`SessionBrief` / `ProjectBrief` 的序列化未改，CLI 输出仍跳过 None（测试钉住）。
+  - 事件表：`create_session` → `session-created-external`；`rename_session`、`set_session_pinned`、`set_session_reasoning_effort`、
+    `mark_session_unread`、`clear_session_unread`、`set_session_llm` → `session-updated-external`；`archive` / `unarchive` 与批量 →
+    `session-archived-external` / `session-unarchived-external`，批量只为真正变了的会话各发一条（`UPDATE … RETURNING`，按入参顺序）；
+    `delete_session`、`bulk_delete_sessions`、`delete_demo_sessions`、`delete_empty_new_sessions` → 新事件 `session-deleted-external`
+    `{ sessionId, via }`，每个真删掉的会话一条（`DELETE … RETURNING id`）；`assign_session_to_project` → `session-moved-external`；
+    `create_project` → `project-created-external`；`update_project` → 新事件 `project-updated-external` `{ project, via }`；`delete_project` →
+    `project-deleted-external`，载荷照 socket 原形状 `{ projectId, detachedSessions, detachedSessionIds }`；定时任务增删改 →
+    `scheduled-tasks:changed`（载荷 `null`，与原 `app.emit(…, ())` 相同），fire 原本就走 `Notifier`。
+  - `set_session_llm`：Tauri 命令新增可选参数 `runnerReported`。用户选模型（`selectLLMForSession`）即使行里已是该值也调用，Core 写库、广播，
+    有存活 runner 就转发 `SetLlm { llmIndex: index }`，失败只记日志；`App.tsx` 两处直接发的 `set_llm` 删除。runner 自己报的模型（`replaceLLMs`，
+    `ready` / `llm_changed`）传 `runnerReported: true`，只在与行不同时落库，不回发——否则旧的回报可能压过刚发出的新选择。socket `llm.set`
+    仍是自己的写库 + 派发 + 错误映射，只把写库与广播换成共用方法。
+  - GUI：`applyExternalSessionUpdated` 改为「键在且为 null → 清空，键缺失 → 保留」（`projectId`、`summary`、`pinned`、`hasUnread`、
+    `reasoningEffort`、`selectedLlm*`、`gaRuntimeId`、`promptProfile`）；`sessionFromBrief` / `projectFromBrief` 把 `null` 归一成 `undefined`。
+    新增 `applyExternalSessionDeleted`（复用抽出的 `forgetDeletedSessions`：删行、清当前会话指针、清 messages，不 invoke；删除动作自己也调它）、
+    `applyExternalProjectUpdated`。行事件的订阅搬到 `gui/src/lib/core-row-events.ts`（`listenCoreRowEvents`），钩子只管挂载与卸载。
+  - 回声：（1）`applyExternalSessionCreated` 遇到已有同 id 的行不再合并：那只能是本页自己建的，合并会把 EmptyState 预选的推理强度、
+    已派生的标题回滚成创建时的值。（2）轮次进度（`turnCount`、`summary`、`lastActivityAt`）只从「不比本页落后」的行取：本页在 `turn_end`
+    上自己加一，`mark_session_unread` 的回声若在 Core 的轮次落库前读行，会把本页刚加的一轮滚回去；Core 不广播轮次落库（02e），滚回去就不会
+    再被纠正，而 `turnCount` 参与轮次下标偏移。（3）与本地一致的更新保留原对象，不触发渲染。（4）所有 mirror 动作都不写 Core，不会成环。
+  - 逐字段核实读回函数：`session_brief`（及 `list_sessions`、`RETURNING` 版）走 `SESSIONS_SELECT_COLS`，`SessionRow::into_brief` 每个字段都从列
+    读出；`turn_count` / `pinned` / `has_unread` 永远是 `Some`。`create_session` 的返回由入参拼出，`summary`、`reasoning_effort` 写的就是 NULL，
+    与库一致。没有「本有值却因没查而成 None」的字段。两处语义需要知道：`origin` 对 GUI 建的会话恒为 None（`into_brief` 有意滤掉 `gui`），GUI
+    的更新不应用 `origin`，不受影响；负数 `llm_index` 读成 None，与 CLI 输出一致。项目行 `ProjectRow::into_brief` 同样逐列读出。
+  - 偏离：（1）删项目时「一并归档的会话」不是 `delete_project` 做的：GUI 确认框勾选归档时先调 `bulk_archive_sessions`（`App.tsx` 删项目流程），
+    由它逐个发 `session-archived-external`，`delete_project` 只发 `project-deleted-external`。（2）socket `llm.set` 的广播从派发之后挪到写库之后，
+    派发报非 `ProcessGone` 错时也会广播（行确实变了）；返回体与错误不变。（3）`set_session_reasoning_effort` 判断存活 runner 改用 `live_pid`
+    （排除已崩溃仍登记的进程，原来对它发送也会失败）。（4）`project-created-external` 的载荷也换成显式 null 的形状。（5）定时任务的写入也收进
+    `Writes`，方便逐条断言。
+  - 测试：新增 `core/tests/session_writes_test.rs` 16 条（每种写入恰好一条事件与载荷、失败不发、批量逐个且跳过未变的、清空推理强度与移出项目
+    是显式 null 而 CLI JSON 仍跳过、事件形与 brief 的键一致、选模型转发 `SetLlm` / runner 回报不转发 / 无 runner 不转发、socket 各写入只发一次
+    且仍派发）；`gui/src/stores/sessions.core-broadcast.test.ts` 26 条（null 清空与缺键保留、轮次进度守卫、删除幂等且清内存、项目更新、
+    改名 / 置顶 / 推理强度 / 移出项目 / 标未读 / 点开未读 / 归档 / 批量归档 / 恢复 / 删除 / 新建 / 选模型 / 项目增改删各自回声无副作用、事件路由、
+    页面不再发 `set_llm`）；`runtime.test.ts` 的 `replaceLLMs` 断言补 `runnerReported: true`，`sessions.shape.test.ts` 补两个新动作。
+    `socket_write_handlers_test.rs` 未改，全部通过。
+  - 抽查：去掉 `Writes` 里归档与删除的广播，3 条「恰好一次」测试变红；GUI 去掉轮次守卫并恢复「已有行就合并」，4 条测试变红；均已还原。
+  - 验证：cargo test --workspace 687 / 0（基线 671 / 0）；vitest 985 / 0（基线 959 / 0）；cargo check、typecheck、lint、三个门禁脚本、
+    `git diff --check` 通过。未真机 dogfood。
+  - 留给后续：（1）Core 的删除不关 runner（GUI 删除前自己调 `shutdownBridge`）；手机删会话时要由 Core 关掉，否则桌面上那个 runner 还活着。
+    （2）启动清理 `delete_empty_new_sessions` 现在会把刚被删的空会话从侧栏移走；它与「用户刚点新对话、首条消息还没落库」之间的竞态早已存在
+    （库里行被删），只是现在侧栏也跟着消失。（3）GUI 自建的行 `pinned` / `hasUnread` / `turnCount` 是 `undefined`，收到第一条回声后变成
+    `false` / `0`，不可见。（4）乐观更新与回声交错（例如先置顶、紧接着改名，置顶的回声晚到）会短暂闪回，由 02e 解决。

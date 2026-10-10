@@ -22,25 +22,32 @@ pub(crate) async fn list_sessions(
     galley.list_sessions(filter).await.map_err(stringify_error)
 }
 
-// ============= B3 M4a · session/project CRUD Tauri commands =============
+// ============= session / project write Tauri commands =============
 //
-// Each command is a thin wrapper around the matching `GalleyApi` trait
-// method:
-//   1. open the Sqlite pool (lazy — `SqliteGalley::open` is cheap; the
-//      pool is internally Arc-shared and re-used);
-//   2. forward the args;
-//   3. stringify the `GalleyError` envelope for the invoke wire.
-//
-// The GUI routes through these commands instead of opening SQLite
-// directly; CLI/socket transports wrap the same Core layer.
+// Each write command is a thin wrapper over Core's write path
+// ([`crate::session_writes::Writes`], ticket 02d): the write and its one
+// broadcast through the `Notifier` (`via: "gui"`) happen there, shared
+// with the socket handlers, so a phone and every other page hear about
+// the GUI's writes too. The command only builds the notifier and
+// stringifies the `GalleyError` envelope for the invoke wire.
+
+/// Core's write path for a GUI write, broadcasting through the app.
+fn gui_writes<'a>(
+    galley: &'a SqliteGalley,
+    notifier: &'a std::sync::Arc<dyn Notifier>,
+) -> Writes<'a> {
+    Writes::new(galley, notifier.as_ref(), VIA_GUI)
+}
 
 #[tauri::command]
 pub(crate) async fn create_session(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     input: CreateSessionInput,
     origin: Origin,
 ) -> std::result::Result<SessionBrief, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .create_session(input, origin)
         .await
         .map_err(stringify_error)
@@ -48,11 +55,13 @@ pub(crate) async fn create_session(
 
 #[tauri::command]
 pub(crate) async fn archive_session(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: SessionId,
     origin: Origin,
 ) -> std::result::Result<SessionBrief, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .archive_session(id, origin)
         .await
         .map_err(stringify_error)
@@ -60,11 +69,13 @@ pub(crate) async fn archive_session(
 
 #[tauri::command]
 pub(crate) async fn unarchive_session(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: SessionId,
     origin: Origin,
 ) -> std::result::Result<SessionBrief, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .unarchive_session(id, origin)
         .await
         .map_err(stringify_error)
@@ -72,6 +83,7 @@ pub(crate) async fn unarchive_session(
 
 #[tauri::command]
 pub(crate) async fn rename_session(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: SessionId,
     title: String,
@@ -85,20 +97,23 @@ pub(crate) async fn rename_session(
         Some("derived") => crate::db::RenameTitleSource::Derived,
         _ => crate::db::RenameTitleSource::User,
     };
-    galley
-        .rename_session_with_source(id, title, source, origin)
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
+        .rename_session(id, title, source, origin)
         .await
         .map_err(stringify_error)
 }
 
 #[tauri::command]
 pub(crate) async fn set_session_pinned(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: SessionId,
     pinned: bool,
     origin: Origin,
 ) -> std::result::Result<SessionBrief, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .set_session_pinned(id, pinned, origin)
         .await
         .map_err(stringify_error)
@@ -113,38 +128,29 @@ pub(crate) async fn set_session_pinned(
 /// its next spawn.
 #[tauri::command]
 pub(crate) async fn set_session_reasoning_effort(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     manager: State<'_, std::sync::Arc<crate::runner_manager::RunnerManager>>,
     id: SessionId,
     value: Option<String>,
     origin: Origin,
 ) -> std::result::Result<SessionBrief, String> {
-    let brief = galley
-        .set_session_reasoning_effort(id.clone(), value, origin)
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
+        .set_session_reasoning_effort(manager.inner().as_ref(), id, value, origin)
         .await
-        .map_err(stringify_error)?;
-    if manager.pid(id.as_str()).await.is_some() {
-        let cmd =
-            crate::ipc::IpcCommand::SetReasoningEffort(crate::ipc::SetReasoningEffortCommand {
-                value: brief.reasoning_effort.clone(),
-            });
-        if let Err(e) = manager.send_command(id.as_str(), &cmd).await {
-            eprintln!(
-                "[reasoning-effort] forward to runner {} failed (DB kept): {e}",
-                id.as_str()
-            );
-        }
-    }
-    Ok(brief)
+        .map_err(stringify_error)
 }
 
 #[tauri::command]
 pub(crate) async fn delete_session(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: SessionId,
     origin: Origin,
 ) -> std::result::Result<(), String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .delete_session(id, origin)
         .await
         .map_err(stringify_error)
@@ -152,27 +158,49 @@ pub(crate) async fn delete_session(
 
 #[tauri::command]
 pub(crate) async fn assign_session_to_project(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     session_id: SessionId,
     project_id: Option<String>,
     origin: Origin,
 ) -> std::result::Result<SessionBrief, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .assign_session_to_project(session_id, project_id, origin)
         .await
         .map_err(stringify_error)
 }
 
+/// Persist the session's model choice and, when the user picked it,
+/// forward `set_llm` (`index`) to the session's live runner — Core does,
+/// the GUI no longer talks to the bridge for this (ticket 02d). Pass
+/// `runner_reported: true` when the runner itself reported the choice
+/// (`ready` / `llm_changed`, the GUI's mirror of it): persist only, so an
+/// older report cannot overtake a newer pick on its way to the runner.
+/// A forward failure is logged, as the GUI's own send used to be best
+/// effort.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn set_session_llm(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
+    manager: State<'_, std::sync::Arc<crate::runner_manager::RunnerManager>>,
     id: SessionId,
     index: Option<u32>,
     key: Option<String>,
     display_name: Option<String>,
+    runner_reported: Option<bool>,
 ) -> std::result::Result<SessionBrief, String> {
-    galley
-        .set_session_llm(id, index, key, display_name)
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
+        .pick_session_llm(
+            manager.inner().as_ref(),
+            id,
+            index,
+            key,
+            display_name,
+            !runner_reported.unwrap_or(false),
+        )
         .await
         .map_err(stringify_error)
 }
@@ -182,10 +210,12 @@ pub(crate) async fn set_session_llm(
 /// reply unread when its session is not on screen.
 #[tauri::command]
 pub(crate) async fn mark_session_unread(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: SessionId,
 ) -> std::result::Result<(), String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .mark_session_unread(id)
         .await
         .map_err(stringify_error)
@@ -193,10 +223,12 @@ pub(crate) async fn mark_session_unread(
 
 #[tauri::command]
 pub(crate) async fn clear_session_unread(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: SessionId,
 ) -> std::result::Result<(), String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .clear_session_unread(id)
         .await
         .map_err(stringify_error)
@@ -361,9 +393,11 @@ mod tests {
 
 #[tauri::command]
 pub(crate) async fn delete_empty_new_sessions(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
 ) -> std::result::Result<u32, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .delete_empty_new_sessions()
         .await
         .map_err(stringify_error)
@@ -371,9 +405,14 @@ pub(crate) async fn delete_empty_new_sessions(
 
 #[tauri::command]
 pub(crate) async fn delete_demo_sessions(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
 ) -> std::result::Result<u32, String> {
-    galley.delete_demo_sessions().await.map_err(stringify_error)
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
+        .delete_demo_sessions()
+        .await
+        .map_err(stringify_error)
 }
 
 #[tauri::command]
@@ -437,11 +476,13 @@ pub(crate) async fn set_pref_json(
 
 #[tauri::command]
 pub(crate) async fn bulk_archive_sessions(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     ids: Vec<SessionId>,
     origin: Origin,
 ) -> std::result::Result<u32, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .bulk_archive_sessions(ids, origin)
         .await
         .map_err(stringify_error)
@@ -449,11 +490,13 @@ pub(crate) async fn bulk_archive_sessions(
 
 #[tauri::command]
 pub(crate) async fn bulk_unarchive_sessions(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     ids: Vec<SessionId>,
     origin: Origin,
 ) -> std::result::Result<u32, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .bulk_unarchive_sessions(ids, origin)
         .await
         .map_err(stringify_error)
@@ -461,11 +504,13 @@ pub(crate) async fn bulk_unarchive_sessions(
 
 #[tauri::command]
 pub(crate) async fn bulk_delete_sessions(
+    app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     ids: Vec<SessionId>,
     origin: Origin,
 ) -> std::result::Result<u32, String> {
-    galley
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .bulk_delete_sessions(ids, origin)
         .await
         .map_err(stringify_error)

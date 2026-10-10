@@ -9,30 +9,43 @@ impl SqliteGalley {
     /// turn (app launch beside a scheduler catch-up, a webview reload)
     /// used to delete a live session and, by cascade, its message.
     pub async fn delete_empty_new_sessions(&self) -> Result<u32> {
-        let res = sqlx::query(
+        Ok(self.delete_empty_new_session_ids().await?.len() as u32)
+    }
+
+    /// [`Self::delete_empty_new_sessions`], returning the ids it deleted
+    /// (Core broadcasts each, [`crate::session_writes`]).
+    pub async fn delete_empty_new_session_ids(&self) -> Result<Vec<SessionId>> {
+        let ids: Vec<String> = sqlx::query_scalar(
             "DELETE FROM sessions \
              WHERE title = ? \
                AND turn_count = 0 \
                AND status != 'archived' \
-               AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.session_id = sessions.id)",
+               AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.session_id = sessions.id) \
+             RETURNING id",
         )
         .bind(DEFAULT_NEW_SESSION_TITLE)
-        .execute(&self.pool)
+        .fetch_all(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
-        Ok(res.rows_affected() as u32)
+        Ok(ids.into_iter().map(SessionId).collect())
     }
 
     pub async fn delete_demo_sessions(&self) -> Result<u32> {
-        let res = sqlx::query(
+        Ok(self.delete_demo_session_ids().await?.len() as u32)
+    }
+
+    /// [`Self::delete_demo_sessions`], returning the ids it deleted.
+    pub async fn delete_demo_session_ids(&self) -> Result<Vec<SessionId>> {
+        let ids: Vec<String> = sqlx::query_scalar(
             "DELETE FROM sessions \
              WHERE id IN ('s-today-1','s-today-2','s-today-3', \
-                          's-week-1','s-week-2','s-earlier-1')",
+                          's-week-1','s-week-2','s-earlier-1') \
+             RETURNING id",
         )
-        .execute(&self.pool)
+        .fetch_all(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
-        Ok(res.rows_affected() as u32)
+        Ok(ids.into_iter().map(SessionId).collect())
     }
 
     pub async fn backfill_fts_if_empty(&self) -> Result<u32> {

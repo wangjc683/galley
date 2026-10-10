@@ -18,6 +18,7 @@ import {
   GUI_ORIGIN,
   MANAGED_PROMPT_PROFILE,
   briefRuntimeKind,
+  forgetDeletedSessions,
   patchSessionInList,
   sessionFromBrief,
   type SessionBriefWire,
@@ -71,6 +72,15 @@ function truncateSummary(text: string): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   if (oneLine.length <= SUMMARY_TRUNCATE_MAX) return oneLine;
   return oneLine.slice(0, SUMMARY_TRUNCATE_MAX) + "…";
+}
+
+/** Shallow field equality of two session rows. */
+function sameSessionRow(a: Session, b: Session): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (a[key as keyof Session] !== b[key as keyof Session]) return false;
+  }
+  return true;
 }
 
 function llmStableKey(llm: LLMOption): string {
@@ -207,13 +217,24 @@ export interface SessionLifecycleSlice {
     stepNumber?: number,
     markUnread?: boolean,
   ) => void;
-  /** Update the persisted per-session LLM choice. Called from
-   * runtimeStore.replaceLLMs whenever a bridge picks a current LLM. */
+  /**
+   * Update the persisted per-session LLM choice. Two callers:
+   *
+   * - the user's pick (`runtimeStore.selectLLMForSession`): always sent
+   *   to Core, which persists it and forwards `set_llm` to the session's
+   *   live runner (ticket 02d — the page no longer talks to the bridge
+   *   for this);
+   * - the runner's own report (`replaceLLMs` on `ready` / `llm_changed`,
+   *   `runnerReported: true`): persisted only when it differs from the
+   *   row, and never sent back to the runner — it already runs it, and
+   *   an older report must not overtake a newer pick.
+   */
   setSessionLlm: (
     sessionId: string,
     index: number,
     key: string,
     displayName: string,
+    opts?: { runnerReported?: boolean },
   ) => Promise<void>;
   /**
    * Used by IPC turn_end handler to refresh `lastStepIndex` on the
@@ -231,25 +252,35 @@ export interface SessionLifecycleSlice {
 
   // ---- B4 M1 · external mirror entry points ----
   //
-  // CLI / supervisor writes go through Galley Core's socket transport,
-  // which writes the SQLite row and then emits a Tauri event to notify
-  // the GUI. These actions are the listener-side mirrors: they update
-  // in-memory state to match the row that's already on disk, **without**
-  // invoking a Rust command back (the row is already correct). Mirror of
-  // `applyUserMessagePersisted` over in messagesStore. The seed title a
-  // first user message derives arrives this way too: Core writes it and
-  // broadcasts `session-updated-external` (ticket 02c).
+  // Every session write — CLI / supervisor through the socket, this page
+  // and any other frontend through Tauri commands (ticket 02d) — goes
+  // through Galley Core, which writes the SQLite row and then broadcasts
+  // it once (`core/src/session_writes.rs`). These actions are the
+  // listener-side mirrors: they update in-memory state to match the row
+  // that's already on disk, **without** invoking a Rust command back (the
+  // row is already correct). Mirror of `applyUserMessagePersisted` over in
+  // messagesStore. The seed title a first user message derives arrives
+  // this way too (ticket 02c).
+  //
+  // This page still applies its own writes optimistically first (02e is
+  // P1), so it also receives the broadcast of each of them. Applying that
+  // echo must change nothing: no second row, no switch away from the open
+  // session, no toast, no write in response.
 
-  /** Insert a freshly-created (CLI / supervisor) session into the list.
-   * No-op if a row with the same id is already present — covers the
-   * narrow race where the GUI created it itself and the external event
-   * arrives second. */
+  /** Insert a freshly-created session (CLI / supervisor / another
+   * frontend) into the list. No-op if a row with the same id is already
+   * present: that is this page's own create, whose row is at least as
+   * current as the broadcast (a later write has its own event). */
   applyExternalSessionCreated: (brief: SessionBriefWire) => void;
-  /** Patch the in-memory row from `session.archive` / `session.restore` /
-   * `session.move` / `llm.set` (`session-updated-external`) socket
-   * emits. No-op if the id isn't known yet (will land via
-   * `applyExternalSessionCreated` first). */
+  /** Patch the in-memory row from `session-updated-external` /
+   * `-archived-` / `-unarchived-` / `-moved-`. A field sent as `null` is
+   * cleared; a field the payload lacks keeps its value. No-op if the id
+   * isn't known yet (will land via `applyExternalSessionCreated` first)
+   * or nothing changes. */
   applyExternalSessionUpdated: (brief: SessionBriefWire) => void;
+  /** Forget a session Core deleted (`session-deleted-external`), as the
+   * delete actions do locally. Idempotent; writes nothing to Core. */
+  applyExternalSessionDeleted: (sessionId: string) => void;
 }
 
 export const createSessionLifecycleSlice: SessionsSliceCreator<
@@ -696,13 +727,16 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     );
   },
 
-  setSessionLlm: async (sessionId, index, key, displayName) => {
+  setSessionLlm: async (sessionId, index, key, displayName, opts) => {
+    const runnerReported = opts?.runnerReported === true;
+    let known = false;
     let didUpdate = false;
     set((state) => {
       const { sessions, changed } = patchSessionInList(
         state.sessions,
         sessionId,
         (s) => {
+          known = true;
           if (
             s.selectedLlmIndex === index &&
             s.selectedLlmKey === key &&
@@ -719,15 +753,18 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
           };
         },
       );
-      return changed ? { sessions } : {};
+      return didUpdate && changed ? { sessions } : {};
     });
-    if (!didUpdate) return;
+    // A pick goes to Core even when the row already says so: Core is
+    // what forwards it to the runner now.
+    if (!known || (runnerReported && !didUpdate)) return;
     try {
       await invoke("set_session_llm", {
         id: sessionId,
         index,
         key,
         displayName,
+        runnerReported,
       });
     } catch (e) {
       console.debug("[sessions] set_session_llm invoke failed.", e);
@@ -764,6 +801,10 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
 
   // ---- B4 M1 · external mirror entry points ----
 
+  applyExternalSessionDeleted: (sessionId) => {
+    forgetDeletedSessions(set, [sessionId]);
+  },
+
   applyExternalSessionCreated: (brief) => {
     set((state) => {
       const activeRuntimeKind = usePrefsStore.getState().activeRuntimeKind;
@@ -778,18 +819,13 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
           ? {}
           : { sessions, activeSessionId };
       }
-      // Race guard: GUI may have just created the same id locally. The
-      // SessionBriefWire from Rust is authoritative for durable fields
-      // (status / title / project_id) but the GUI's local insert already
-      // carries runtime-only defaults; replace in place when we find a
-      // match, otherwise prepend.
-      const idx = state.sessions.findIndex((s) => s.id === brief.id);
-      if (idx === -1) {
-        return { sessions: [sessionFromBrief(brief), ...state.sessions] };
-      }
-      const next = state.sessions.slice();
-      next[idx] = { ...next[idx], ...sessionFromBrief(brief) };
-      return { sessions: next };
+      // A row with this id already exists only when this page created
+      // the session itself: its row went in first and has been kept
+      // current since (an EmptyState effort pick, a derived title), while
+      // this broadcast is the row as created — merging it would roll
+      // those back.
+      if (state.sessions.some((s) => s.id === brief.id)) return {};
+      return { sessions: [sessionFromBrief(brief), ...state.sessions] };
     });
   },
 
@@ -807,36 +843,68 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
           ? {}
           : { sessions, activeSessionId };
       }
-      const { sessions, changed } = patchSessionInList(
-        state.sessions,
-        brief.id,
-        (s) => ({
+      // Core's events send every field, `null` for a cleared one; an
+      // older payload leaves a key out, which keeps the local value.
+      const sent = (key: keyof SessionBriefWire) =>
+        Object.prototype.hasOwnProperty.call(brief, key);
+      let changed = false;
+      const { sessions } = patchSessionInList(state.sessions, brief.id, (s) => {
+        // Turn progress (count, summary, last activity) only from a
+        // row at least as far along as this page's: the page bumps it
+        // on each turn_end itself, and the broadcast of a write that
+        // read the row just before Core's own bump would roll it back.
+        const incomingTurns = brief.turnCount ?? undefined;
+        const turnsCurrent =
+          incomingTurns === undefined || incomingTurns >= (s.turnCount ?? 0);
+        const next: Session = {
           ...s,
           title: brief.title,
           status: toDurableStatus(brief.status),
-          projectId: brief.projectId,
-          summary: brief.summary ?? s.summary,
-          turnCount: brief.turnCount ?? s.turnCount,
-          pinned: brief.pinned ?? s.pinned,
-          hasUnread: brief.hasUnread ?? s.hasUnread,
-          // Absent (serde skips None) keeps the local value: Core
-          // drops None off the wire, and the GUI already patched
-          // optimistically when the user picked a tier.
-          reasoningEffort: brief.reasoningEffort ?? s.reasoningEffort,
-          // M1.3 llm.set rides the session-updated channel — patch the
-          // persisted LLM fields so the Composer pill / Inspector pick
-          // up CLI-driven changes immediately.
-          selectedLlmIndex: brief.selectedLlmIndex ?? s.selectedLlmIndex,
-          selectedLlmKey: brief.selectedLlmKey ?? s.selectedLlmKey,
-          selectedLlmDisplayName:
-            brief.selectedLlmDisplayName ?? s.selectedLlmDisplayName,
+          projectId: sent("projectId")
+            ? (brief.projectId ?? undefined)
+            : s.projectId,
+          summary:
+            turnsCurrent && sent("summary")
+              ? (brief.summary ?? undefined)
+              : s.summary,
+          turnCount: turnsCurrent
+            ? (incomingTurns ?? s.turnCount)
+            : s.turnCount,
+          pinned: sent("pinned") ? (brief.pinned ?? false) : s.pinned,
+          hasUnread: sent("hasUnread")
+            ? (brief.hasUnread ?? false)
+            : s.hasUnread,
+          reasoningEffort: sent("reasoningEffort")
+            ? (brief.reasoningEffort ?? null)
+            : s.reasoningEffort,
+          // llm.set / the model picker ride this channel — the Composer
+          // pill / Inspector pick up the persisted choice.
+          selectedLlmIndex: sent("selectedLlmIndex")
+            ? (brief.selectedLlmIndex ?? undefined)
+            : s.selectedLlmIndex,
+          selectedLlmKey: sent("selectedLlmKey")
+            ? (brief.selectedLlmKey ?? undefined)
+            : s.selectedLlmKey,
+          selectedLlmDisplayName: sent("selectedLlmDisplayName")
+            ? (brief.selectedLlmDisplayName ?? undefined)
+            : s.selectedLlmDisplayName,
           gaRuntimeKind: briefRuntimeKind(brief),
-          gaRuntimeId: brief.gaRuntimeId,
-          promptProfile: brief.promptProfile,
-          lastActivityAt: brief.lastActivityAt,
+          gaRuntimeId: sent("gaRuntimeId")
+            ? (brief.gaRuntimeId ?? undefined)
+            : s.gaRuntimeId,
+          promptProfile: sent("promptProfile")
+            ? (brief.promptProfile ?? undefined)
+            : s.promptProfile,
+          lastActivityAt: turnsCurrent
+            ? brief.lastActivityAt
+            : s.lastActivityAt,
           updatedAt: brief.updatedAt,
-        }),
-      );
+        };
+        // An echo that matches the row keeps the same object.
+        if (sameSessionRow(s, next)) return s;
+        changed = true;
+        return next;
+      });
       // Clear active selection if the active session was just archived
       // away from view (mirror archiveSession's existing behavior).
       if (

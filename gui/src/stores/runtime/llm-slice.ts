@@ -107,9 +107,11 @@ export interface LlmSlice {
    */
   selectLLMForNewSession: (index: number) => void;
   /**
-   * Optimistically switch the visible LLM for an existing session.
-   * Bridge `llm_changed` will later confirm the same state when a
-   * live bridge is available.
+   * Optimistically switch the visible LLM for an existing session and
+   * persist the pick through Core, which forwards `set_llm` to the
+   * session's live runner (ticket 02d; the page sends no bridge command).
+   * Bridge `llm_changed` will later confirm the same state when a live
+   * bridge is available.
    */
   selectLLMForSession: (sid: string, index: number) => void;
   /**
@@ -227,11 +229,17 @@ function readGAConfigFromPrefs() {
   return usePrefsStore.getState().gaConfig;
 }
 
-async function mirrorSelectedLLMOnSession(sid: string, current: LLMOption) {
-  // Route through sessionsStore.setSessionLlm which invokes the
-  // Rust `set_session_llm` trait method. The store action mutates the
-  // in-memory row + fires the invoke; we don't have to round-trip a
-  // separate persistSession call.
+async function mirrorSelectedLLMOnSession(
+  sid: string,
+  current: LLMOption,
+  opts: { runnerReported: boolean },
+) {
+  // Route through sessionsStore.setSessionLlm which invokes Core's
+  // `set_session_llm`. The store action mutates the in-memory row + fires
+  // the invoke; we don't have to round-trip a separate persistSession
+  // call. For a user pick Core also forwards `set_llm` to the session's
+  // live runner (ticket 02d); a choice the runner reported is persisted
+  // only.
   await useSessionsStore
     .getState()
     .setSessionLlm(
@@ -239,6 +247,7 @@ async function mirrorSelectedLLMOnSession(sid: string, current: LLMOption) {
       current.index,
       llmStableKey(current),
       current.displayName,
+      opts,
     );
 }
 
@@ -337,10 +346,13 @@ export const createLlmSlice: RuntimeSliceCreator<LlmSlice> = (set, get) => ({
     // Mirror the user's current LLM onto the session row via
     // sessionsStore.setSessionLlm so the choice survives app
     // restart (routes through the Rust `set_session_llm` trait
-    // method for SQLite persistence).
+    // method for SQLite persistence). The runner reported this one, so
+    // it is not sent back to it.
     if (current) {
       maybeToastMissingSelectedLLM(sid, llms, current);
-      void mirrorSelectedLLMOnSession(sid, current).catch((e) => {
+      void mirrorSelectedLLMOnSession(sid, current, {
+        runnerReported: true,
+      }).catch((e) => {
         console.debug("[runtime] replaceLLMs session mirror failed.", e);
       });
     }
@@ -426,8 +438,12 @@ export const createLlmSlice: RuntimeSliceCreator<LlmSlice> = (set, get) => ({
           : state.cachedLLMDisplayName,
       };
     });
+    // Persisting the pick is also what reaches the runner: Core forwards
+    // `set_llm` to the session's live runner (ticket 02d).
     if (picked) {
-      void mirrorSelectedLLMOnSession(sid, picked).catch((e) => {
+      void mirrorSelectedLLMOnSession(sid, picked, {
+        runnerReported: false,
+      }).catch((e) => {
         console.debug("[runtime] selectLLMForSession mirror failed.", e);
       });
     }

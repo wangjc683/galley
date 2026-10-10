@@ -56,8 +56,8 @@
 //! process's bind (~ms; OS-level atomic bind would close this fully).
 
 use crate::api::message::MessageBrief;
-use crate::api::project::{CreateProjectInput, ProjectBrief, ProjectId};
-use crate::api::session::{CreateSessionInput, SessionBrief};
+use crate::api::project::{CreateProjectInput, ProjectId};
+use crate::api::session::CreateSessionInput;
 use crate::api::{GalleyApi, GoalId, Origin, OriginVia, RuntimeKind, SessionFilter, SessionId};
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};

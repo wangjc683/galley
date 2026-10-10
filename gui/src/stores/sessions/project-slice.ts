@@ -42,10 +42,17 @@ export interface SessionProjectSlice {
   setActiveProjectFilter: (projectId: string | undefined) => void;
 
   // ---- B4 M1 · external mirror entry points (project side) ----
+  //
+  // Core broadcasts every project write, this page's own included
+  // (ticket 02d); applying the echo of this page's write changes nothing.
 
   /** Insert a CLI / supervisor-created project. Merge-replaces if the
    * GUI just created the same id locally. */
   applyExternalProjectCreated: (brief: ProjectBriefWire) => void;
+  /** Patch a known project from `project-updated-external`. A field sent
+   * as `null` is cleared, one the payload lacks keeps its value. No-op
+   * for an unknown id. */
+  applyExternalProjectUpdated: (brief: ProjectBriefWire) => void;
   /** Mirror the FK SET NULL detach: drops the project row + nulls
    * `projectId` on any sessions that were attached to it. Clears the
    * active filter if it pointed at this project. */
@@ -211,6 +218,33 @@ export const createSessionProjectSlice: SessionsSliceCreator<
       const next = state.projects.slice();
       next[idx] = { ...next[idx], ...projectFromBrief(brief) };
       return { projects: next };
+    });
+  },
+
+  applyExternalProjectUpdated: (brief) => {
+    set((state) => {
+      const idx = state.projects.findIndex((p) => p.id === brief.id);
+      if (idx === -1) return {};
+      const p = state.projects[idx];
+      const sent = (key: keyof ProjectBriefWire) =>
+        Object.prototype.hasOwnProperty.call(brief, key);
+      const next: Project = {
+        ...p,
+        name: brief.name,
+        rootPath: sent("rootPath") ? (brief.rootPath ?? undefined) : p.rootPath,
+        workspaceEnabled: brief.workspaceEnabled ?? p.workspaceEnabled,
+        icon: sent("icon") ? (brief.icon ?? undefined) : p.icon,
+        color: sent("color") ? (brief.color ?? undefined) : p.color,
+        pinned: brief.pinned,
+        lastActivityAt: brief.lastActivityAt,
+        createdAt: brief.createdAt,
+        updatedAt: brief.updatedAt,
+      };
+      const keys = Object.keys(next) as (keyof Project)[];
+      if (keys.every((k) => next[k] === p[k])) return {};
+      const projects = state.projects.slice();
+      projects[idx] = next;
+      return { projects };
     });
   },
 

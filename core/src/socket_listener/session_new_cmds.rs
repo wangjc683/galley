@@ -12,9 +12,10 @@
 
 use super::common::{map_galley_err, origin_from_args, SocketResponseLite};
 use super::llm_cmds::resolve_llm_selection;
-use super::session_cmds::{emit_user_message_persisted, mint_session_id, SessionExternalPayload};
+use super::session_cmds::{emit_user_message_persisted, mint_session_id};
 use super::*;
 use crate::session_runner::{resolve_spawn_args, spawn_and_attach, AttachError, SpawnRequest};
+use crate::session_writes::{announce_session, SESSION_CREATED_EXTERNAL_EVENT};
 
 /// Default title for `session.new` — matches the GUI's localized seed
 /// so a CLI-created row + a GUI-created row look identical in the
@@ -196,12 +197,11 @@ async fn dispatch_session_new_inner(
     // Notify GUI early so the sidebar can show the session while we
     // start the runner. The first message event is emitted below after
     // we know whether it actually reached the bridge.
-    ctx.notify(
-        "session-created-external",
-        &SessionExternalPayload {
-            session: created,
-            via: command_name,
-        },
+    announce_session(
+        ctx.notifier.as_ref(),
+        SESSION_CREATED_EXTERNAL_EVENT,
+        created,
+        command_name,
     );
 
     // Spawn + subscribe + emit task + auto-title watcher, then

@@ -11,13 +11,17 @@
 //! All write handlers share the same shape:
 //!   1. parse args (camelCase JSON from CLI / supervisor)
 //!   2. open SqliteGalley (db_unavailable on connect fail)
-//!   3. validate / execute via GalleyApi trait
+//!   3. validate / execute via GalleyApi trait — session row writes
+//!      through Core's write path ([`crate::session_writes::Writes`],
+//!      ticket 02d), which the GUI's Tauri commands share
 //!   4. on side-effecting state changes, emit a Tauri event so the GUI
 //!      can mirror the row into its in-memory stores without polling
+//!      (for the row writes, step 3 already did, once)
 
 use super::common::{map_galley_err, origin_from_args};
 use super::*;
 use crate::runner_manager::{QueueJump, QueueOffer, RunState};
+use crate::session_writes::Writes;
 // Args shapes live in `crate::protocol` (imported via super::*) — the
 // single home for schemaVersion 1 command shapes shared with the CLI.
 // Do not declare per-command arg structs in this module.
@@ -40,20 +44,6 @@ struct UserMessagePersistedPayload {
     /// GUI uses this to avoid showing "thinking" for saved-but-not-run
     /// messages.
     dispatch: &'static str,
-}
-
-/// Tauri event payload broadcast when a CLI / supervisor creates or
-/// mutates a session row (`session.new` / archive / restore / move).
-/// GUI's sidebar listener applies the row without a list_sessions
-/// round-trip.
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct SessionExternalPayload {
-    pub(super) session: SessionBrief,
-    /// Stable discriminant so a single listener can demultiplex multiple
-    /// event types if we collapse the four event names into one in the
-    /// future. Kept now for symmetry with `user-message-persisted`.
-    pub(super) via: &'static str,
 }
 
 pub(super) fn emit_user_message_persisted(
@@ -628,20 +618,11 @@ pub(super) async fn dispatch_session_archive(
         }
     };
     let origin = origin_from_args(parsed.supervisor, parsed.reason);
-    match galley
+    match Writes::new(&galley, ctx.notifier.as_ref(), "session.archive")
         .archive_session(SessionId(parsed.session_id), origin)
         .await
     {
-        Ok(brief) => {
-            ctx.notify(
-                "session-archived-external",
-                &SessionExternalPayload {
-                    session: brief.clone(),
-                    via: "session.archive",
-                },
-            );
-            SocketResponse::ok(request_id, serde_json::json!({ "session": brief }))
-        }
+        Ok(brief) => SocketResponse::ok(request_id, serde_json::json!({ "session": brief })),
         Err(e) => map_galley_err(request_id, e),
     }
 }
@@ -668,20 +649,11 @@ pub(super) async fn dispatch_session_restore(
         }
     };
     let origin = origin_from_args(parsed.supervisor, parsed.reason);
-    match galley
+    match Writes::new(&galley, ctx.notifier.as_ref(), "session.restore")
         .unarchive_session(SessionId(parsed.session_id), origin)
         .await
     {
-        Ok(brief) => {
-            ctx.notify(
-                "session-unarchived-external",
-                &SessionExternalPayload {
-                    session: brief.clone(),
-                    via: "session.restore",
-                },
-            );
-            SocketResponse::ok(request_id, serde_json::json!({ "session": brief }))
-        }
+        Ok(brief) => SocketResponse::ok(request_id, serde_json::json!({ "session": brief })),
         Err(e) => map_galley_err(request_id, e),
     }
 }
@@ -708,20 +680,11 @@ pub(super) async fn dispatch_session_move(
         }
     };
     let origin = origin_from_args(parsed.supervisor, parsed.reason);
-    match galley
+    match Writes::new(&galley, ctx.notifier.as_ref(), "session.move")
         .assign_session_to_project(SessionId(parsed.session_id), parsed.to, origin)
         .await
     {
-        Ok(brief) => {
-            ctx.notify(
-                "session-moved-external",
-                &SessionExternalPayload {
-                    session: brief.clone(),
-                    via: "session.move",
-                },
-            );
-            SocketResponse::ok(request_id, serde_json::json!({ "session": brief }))
-        }
+        Ok(brief) => SocketResponse::ok(request_id, serde_json::json!({ "session": brief })),
         Err(e) => map_galley_err(request_id, e),
     }
 }

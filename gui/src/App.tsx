@@ -160,7 +160,6 @@ function App() {
   const dismissToast = useUiStore((s) => s.dismissToast);
   const [emptyComposerFocusTick, setEmptyComposerFocusTick] = useState(0);
 
-  const bridgeStatus = useActiveRuntime((r) => r.bridgeStatus, "idle");
   // Reasoning effort: the model's configured tier (and whether any
   // runner has reported it yet) is live runtime state; the override
   // itself is a persisted session field. The pill does NOT wait for the
@@ -175,7 +174,6 @@ function App() {
     false,
   );
   const managedModels = useManagedModelsStore((s) => s.models);
-  const sendIPCCommand = useRuntimeStore((s) => s.sendIPCCommand);
   const setGAConfig = usePrefsStore((s) => s.setGAConfig);
   const setActiveRuntimeKind = usePrefsStore((s) => s.setActiveRuntimeKind);
   const gaConfig = usePrefsStore((s) => s.gaConfig);
@@ -669,19 +667,10 @@ function App() {
                       if (!activeSessionId) return;
                       // Flip local + persisted state immediately so the
                       // picker never depends on a bridge round-trip for
-                      // visible feedback. The live bridge, when available,
-                      // still receives set_llm and will confirm via
+                      // visible feedback. Core forwards set_llm to the
+                      // live runner (ticket 02d), which confirms via
                       // llm_changed.
                       selectLLMForSession(activeSessionId, idx);
-                      if (
-                        bridgeStatus === "connected" ||
-                        bridgeStatus === "spawning"
-                      ) {
-                        void sendIPCCommand(activeSessionId, {
-                          kind: "set_llm",
-                          llmIndex: idx,
-                        });
-                      }
                     }}
                     onOpenLLMSwitcher={openLLMSwitcherFallback}
                     reasoningEffort={mainReasoningEffortState}
@@ -735,31 +724,17 @@ function App() {
           openSession(sessionId);
         }}
         onSwitchLLM={(idx) => {
-          // Route to the active session's bridge. The palette is a
-          // global affordance but `set_llm` is per-bridge; the user
+          // Route to the active session. The palette is a global
+          // affordance but the choice is per session; the user
           // intuitively expects "the LLM I see in the Composer" to
           // be the one switched, which matches activeSessionId.
           if (!activeSessionId) {
             console.info("[palette] switch llm: no active session, idx=", idx);
             return;
           }
+          // Same path as MainView's onSelectLLM: Core persists the pick
+          // and forwards set_llm to the live runner, best effort.
           selectLLMForSession(activeSessionId, idx);
-          // Same relaxed gate as MainView's onSelectLLM — allow during
-          // spawning so users don't get silent drops in the cold-start
-          // window. set_llm remains best-effort if no live bridge appears.
-          if (bridgeStatus === "connected" || bridgeStatus === "spawning") {
-            void sendIPCCommand(activeSessionId, {
-              kind: "set_llm",
-              llmIndex: idx,
-            });
-          } else {
-            console.info(
-              "[palette] switch llm: bridge not ready, idx=",
-              idx,
-              "status=",
-              bridgeStatus,
-            );
-          }
         }}
         // LocalFileWorkspace owns the review and listens on the UI
         // store; the palette renders outside its provider.

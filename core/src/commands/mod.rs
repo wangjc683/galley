@@ -10,6 +10,8 @@ use crate::db::{
     MessageAttachmentCreate, MessageSearchHit, PersistedMessageRow, SqliteGalley,
     UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
 };
+use crate::notify::{Notifier, TauriNotifier};
+use crate::session_writes::{Writes, VIA_GUI};
 use crate::{
     browser_bridge, browser_control, codex_oauth, credential_store, error, im_supervisor,
     managed_model_config, managed_model_layers, managed_model_probe, managed_runtime, path_install,

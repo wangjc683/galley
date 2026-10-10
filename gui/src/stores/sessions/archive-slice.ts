@@ -7,8 +7,8 @@ import type { DurableSessionStatus } from "@/types/session";
 
 import {
   GUI_ORIGIN,
-  clearSessionMessages,
   currentCopy,
+  forgetDeletedSessions,
   patchSessionInList,
   pushDeleteFailedToast,
   type SessionsSliceCreator,
@@ -112,15 +112,9 @@ export const createSessionArchiveSlice: SessionsSliceCreator<
       pushDeleteFailedToast("deleteSessionPermanently", e);
       throw e;
     }
-    set((state) => {
-      const sessions = state.sessions.filter((s) => s.id !== sessionId);
-      const out: Partial<SessionsState> = { sessions };
-      if (state.activeSessionId === sessionId) {
-        out.activeSessionId = undefined;
-      }
-      return out;
-    });
-    clearSessionMessages(sessionId);
+    // Core's `session-deleted-external` for this delete may land first;
+    // forgetting is idempotent.
+    forgetDeletedSessions(set, [sessionId]);
   },
 
   archiveSessionsBulk: (sessionIds) => {
@@ -211,16 +205,7 @@ export const createSessionArchiveSlice: SessionsSliceCreator<
       pushDeleteFailedToast("deleteSessionsPermanentlyBulk", e);
       throw e;
     }
-    const idSet = new Set(sessionIds);
-    set((state) => {
-      const sessions = state.sessions.filter((s) => !idSet.has(s.id));
-      const out: Partial<SessionsState> = { sessions };
-      if (state.activeSessionId && idSet.has(state.activeSessionId)) {
-        out.activeSessionId = undefined;
-      }
-      return out;
-    });
-    sessionIds.forEach((id) => clearSessionMessages(id));
+    forgetDeletedSessions(set, sessionIds);
   },
 
   emptyArchive: async () => {

@@ -26,27 +26,18 @@
 //! run. A `user` title is never touched (the CAS only replaces `seed` /
 //! `derived`).
 
-use crate::api::{SessionBrief, SessionId};
+use crate::api::SessionId;
 use crate::db::SqliteGalley;
 use crate::ipc::{GenerateTitleCommand, IpcCommand, IpcEvent, RunCompleteEvent};
 use crate::notify::Notifier;
 use crate::runner_manager::{BroadcastItem, RunnerCommandSink};
-use serde::Serialize;
+use crate::session_writes::{announce_session, SESSION_UPDATED_EXTERNAL_EVENT};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
 /// Char cap for each prompt context snippet sent to the runner. Chars,
 /// not bytes — titles are routinely CJK.
 const TITLE_CONTEXT_MAX_CHARS: usize = 500;
-
-/// Same wire shape as the socket layer's `SessionExternalPayload` — the
-/// GUI listener demultiplexes on `via`.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionAutoTitledPayload {
-    session: SessionBrief,
-    via: &'static str,
-}
 
 /// A run qualifies for a title attempt when it is user-visible and was
 /// not aborted mid-flight (an aborted first exchange retries next run).
@@ -98,13 +89,11 @@ pub(crate) fn spawn_auto_title_task(
                         let sid = SessionId(session_id.clone());
                         match galley.try_apply_auto_title(&sid, &event.title).await {
                             Ok(Some(brief)) => {
-                                crate::notify::notify(
+                                announce_session(
                                     notifier.as_ref(),
-                                    "session-updated-external",
-                                    &SessionAutoTitledPayload {
-                                        session: brief,
-                                        via: "auto-title",
-                                    },
+                                    SESSION_UPDATED_EXTERNAL_EVENT,
+                                    brief,
+                                    "auto-title",
                                 );
                             }
                             Ok(None) => {} // lost the race to a user rename — drop

@@ -171,6 +171,55 @@ first-message title is shared: every path that persists a user message
 Goal's objective) derives it in Core, once, and the auto-title may upgrade
 it after the first finished run.
 
+#### Every write is broadcast by Core
+
+Every session, project and scheduled-task write is announced by Core, once,
+through the `Notifier` (`core/src/notify.rs`) — the seam the remote module
+will fan out to paired phones — whoever made it (ticket 02d,
+[`core/src/session_writes.rs`](../core/src/session_writes.rs)). The socket
+handlers (CLI / supervisor) and the GUI's Tauri commands call the same
+write-and-announce method, so neither can forget the broadcast or send it
+twice. Before 02d only socket writes were announced; the GUI's own writes
+changed the database and its own stores and nothing else, so no other
+frontend could have seen them.
+
+| Write | Event | Payload |
+|---|---|---|
+| create a session | `session-created-external` | `{ session, via }` |
+| rename, pin, reasoning effort, mark / clear unread, model choice; derived and auto title | `session-updated-external` | `{ session, via }` |
+| archive / unarchive (bulk: one per session it changed) | `session-archived-external` / `session-unarchived-external` | `{ session, via }` |
+| move to a project or out of one | `session-moved-external` | `{ session, via }` |
+| delete, bulk delete, the launch sweeps of empty and demo sessions (one per session) | `session-deleted-external` | `{ sessionId, via }` |
+| create / update a project | `project-created-external` / `project-updated-external` | `{ project, via }` |
+| delete a project | `project-deleted-external` | `{ projectId, detachedSessions, detachedSessionIds }` |
+| create / update / delete a scheduled task, a fire | `scheduled-tasks:changed` | none (pages refetch) |
+
+`via` is `"gui"` for the GUI's writes and the command name for the
+socket's (`"session.archive"`, `"llm.set"`, …). `session` and `project`
+are the rows in Core's **event form** (`SessionBriefEvent`,
+`ProjectBriefEvent`): every optional field written, `null` when empty, so
+a cleared field — reasoning effort back to the model's own, a session
+moved out of its project, a project's root removed — reaches a page as
+cleared. The CLI's `SessionBrief` / `ProjectBrief` JSON still leaves empty
+fields out (Agent API, unchanged); the event form is for pages and phones
+only. Deleting a project detaches its sessions (FK `SET NULL`); when the
+GUI also archives them, that is its own bulk archive, announced as such.
+
+A model the user picks (`set_session_llm`) is also forwarded by Core to
+the session's live runner as `set_llm`, best effort — the GUI no longer
+sends it. A model the runner itself reported (`ready` / `llm_changed`) is
+persisted and announced, not sent back. The reasoning effort works the
+same way (`set_reasoning_effort`), as it has since 2026-09-22.
+
+The GUI still applies its own writes to its stores first and then
+receives their broadcast (applying it from the event, and dropping the
+echo by `clientRequestId`, is ticket 02e, P1). Applying the echo changes
+nothing visible: a created session the page already holds is left as it
+is, a row that matches stays the same object, turn progress (count,
+summary, last activity) is taken only from a row at least as far along as
+the page's (the page bumps it on `turn_end` itself), and no mirror action
+writes back to Core.
+
 #### Runner events and turn persistence
 
 Each runner's stdout becomes a broadcast inside Core, with two kinds of

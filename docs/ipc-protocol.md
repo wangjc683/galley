@@ -609,6 +609,9 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 
 切换当前 session 使用的 LLM。bridge 调 `agent.next_llm(llmIndex)` 后立即 emit `llm_changed`。
 
+只有 Core 发这条命令（2026-10-10 起，票 02d）：GUI 调 Tauri 命令 `set_session_llm`，Core 写库、广播后转发给存活的 runner，失败只记日志；
+socket `llm.set` 同样写库后转发。runner 自己报的选择（`ready` / `llm_changed`）GUI 只落库（`runnerReported: true`），不再发回 runner。
+
 ```json
 {
   "kind": "set_llm",

@@ -1115,23 +1115,17 @@ impl SqliteGalley {
         ids: Vec<SessionId>,
         _origin: Origin,
     ) -> Result<u32> {
-        if ids.is_empty() {
-            return Ok(0);
-        }
-        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
-        let placeholders = vec!["?"; ids.len()].join(",");
-        let now = chrono_now_iso();
-        let sql = format!(
-            "UPDATE sessions SET status = 'archived', updated_at = ? \
-             WHERE id IN ({placeholders}) AND status != 'archived'",
-        );
-        let mut q = sqlx::query(&sql).bind(&now);
-        for id in &ids {
-            q = q.bind(id.as_str());
-        }
-        let res = q.execute(&mut *tx).await.map_err(map_sqlx_err)?;
-        tx.commit().await.map_err(map_sqlx_err)?;
-        Ok(res.rows_affected() as u32)
+        Ok(self.bulk_archive_session_rows(&ids).await?.len() as u32)
+    }
+
+    /// Archive every listed session that is not archived yet, in one
+    /// transaction; returns the rows it archived (as they are now), in
+    /// `ids` order — what Core broadcasts one by one
+    /// ([`crate::session_writes`]). Unknown and already-archived ids are
+    /// left out.
+    pub async fn bulk_archive_session_rows(&self, ids: &[SessionId]) -> Result<Vec<SessionBrief>> {
+        self.bulk_set_status_rows(ids, "archived", "status != 'archived'")
+            .await
     }
 
     pub(super) async fn bulk_unarchive_sessions_db(
@@ -1139,23 +1133,50 @@ impl SqliteGalley {
         ids: Vec<SessionId>,
         _origin: Origin,
     ) -> Result<u32> {
+        Ok(self.bulk_unarchive_session_rows(&ids).await?.len() as u32)
+    }
+
+    /// Inverse of [`Self::bulk_archive_session_rows`]: the archived rows
+    /// among `ids`, now `idle`.
+    pub async fn bulk_unarchive_session_rows(
+        &self,
+        ids: &[SessionId],
+    ) -> Result<Vec<SessionBrief>> {
+        self.bulk_set_status_rows(ids, "idle", "status = 'archived'")
+            .await
+    }
+
+    async fn bulk_set_status_rows(
+        &self,
+        ids: &[SessionId],
+        status: &str,
+        only_where: &str,
+    ) -> Result<Vec<SessionBrief>> {
         if ids.is_empty() {
-            return Ok(0);
+            return Ok(Vec::new());
         }
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         let placeholders = vec!["?"; ids.len()].join(",");
         let now = chrono_now_iso();
         let sql = format!(
-            "UPDATE sessions SET status = 'idle', updated_at = ? \
-             WHERE id IN ({placeholders}) AND status = 'archived'",
+            "UPDATE sessions SET status = ?, updated_at = ? \
+             WHERE id IN ({placeholders}) AND {only_where} \
+             RETURNING {SESSIONS_SELECT_COLS}",
         );
-        let mut q = sqlx::query(&sql).bind(&now);
-        for id in &ids {
+        let mut q = sqlx::query_as::<_, SessionRow>(&sql)
+            .bind(status)
+            .bind(&now);
+        for id in ids {
             q = q.bind(id.as_str());
         }
-        let res = q.execute(&mut *tx).await.map_err(map_sqlx_err)?;
+        let rows = q.fetch_all(&mut *tx).await.map_err(map_sqlx_err)?;
         tx.commit().await.map_err(map_sqlx_err)?;
-        Ok(res.rows_affected() as u32)
+        let mut briefs = rows
+            .into_iter()
+            .map(SessionRow::into_brief)
+            .collect::<Result<Vec<_>>>()?;
+        briefs.sort_by_key(|b| ids.iter().position(|id| *id == b.id));
+        Ok(briefs)
     }
 
     pub(super) async fn bulk_delete_sessions_db(
@@ -1163,8 +1184,15 @@ impl SqliteGalley {
         ids: Vec<SessionId>,
         _origin: Origin,
     ) -> Result<u32> {
+        Ok(self.bulk_delete_session_ids(&ids).await?.len() as u32)
+    }
+
+    /// Delete every listed session (CASCADE takes its messages), in one
+    /// transaction; returns the ids it deleted, in `ids` order. Unknown
+    /// ids are left out.
+    pub async fn bulk_delete_session_ids(&self, ids: &[SessionId]) -> Result<Vec<SessionId>> {
         if ids.is_empty() {
-            return Ok(0);
+            return Ok(Vec::new());
         }
         let attachment_dirs: Vec<PathBuf> = ids
             .iter()
@@ -1172,17 +1200,21 @@ impl SqliteGalley {
             .collect();
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         let placeholders = vec!["?"; ids.len()].join(",");
-        let sql = format!("DELETE FROM sessions WHERE id IN ({placeholders})");
-        let mut q = sqlx::query(&sql);
-        for id in &ids {
+        let sql = format!("DELETE FROM sessions WHERE id IN ({placeholders}) RETURNING id");
+        let mut q = sqlx::query_scalar::<_, String>(&sql);
+        for id in ids {
             q = q.bind(id.as_str());
         }
-        let res = q.execute(&mut *tx).await.map_err(map_sqlx_err)?;
+        let deleted: Vec<String> = q.fetch_all(&mut *tx).await.map_err(map_sqlx_err)?;
         tx.commit().await.map_err(map_sqlx_err)?;
         for dir in attachment_dirs {
             cleanup_attachment_dir(&dir).await;
         }
-        Ok(res.rows_affected() as u32)
+        Ok(ids
+            .iter()
+            .filter(|id| deleted.iter().any(|d| d == id.as_str()))
+            .cloned()
+            .collect())
     }
 
     pub(super) async fn create_session_in_tx_db<'c>(

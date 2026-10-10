@@ -59,38 +59,46 @@ export interface SessionsState {
 // the durable fields that ship over the Tauri invoke wire. The GUI's
 // `Session` type adds runtime-only fields (pid, currentTool, etc.)
 // that this slice initialises to defaults.
+//
+// Two forms arrive here. Invoke results (`list_sessions`, …) are the
+// brief itself, which leaves empty fields out. Core's `session-*-external`
+// events carry its event form (`SessionBriefEvent`, ticket 02d), which
+// writes every optional field and sends `null` for an empty one — so an
+// event can say "cleared", and a key it lacks (an older payload) means
+// "not sent, keep yours".
 export interface SessionBriefWire {
   id: string;
-  projectId?: string;
+  projectId?: string | null;
   title: string;
   status: SessionStatus;
-  summary?: string;
-  turnCount?: number;
+  summary?: string | null;
+  turnCount?: number | null;
   lastActivityAt: string;
   createdAt: string;
   updatedAt: string;
-  pinned?: boolean;
-  hasUnread?: boolean;
-  origin?: Origin;
+  pinned?: boolean | null;
+  hasUnread?: boolean | null;
+  origin?: Origin | null;
   reasoningEffort?: string | null;
-  selectedLlmIndex?: number;
-  selectedLlmKey?: string;
-  selectedLlmDisplayName?: string;
+  selectedLlmIndex?: number | null;
+  selectedLlmKey?: string | null;
+  selectedLlmDisplayName?: string | null;
   runtimeKind?: RuntimeKind;
   runtimeLabel?: string;
   gaRuntimeKind?: RuntimeKind;
-  gaRuntimeId?: string;
-  promptProfile?: string;
+  gaRuntimeId?: string | null;
+  promptProfile?: string | null;
 }
 
-// Mirror of Rust `ProjectBrief`.
+// Mirror of Rust `ProjectBrief`; Core's `project-*-external` events send
+// `null` for an empty optional field (`ProjectBriefEvent`, ticket 02d).
 export interface ProjectBriefWire {
   id: string;
   name: string;
-  rootPath?: string;
+  rootPath?: string | null;
   workspaceEnabled?: boolean;
-  icon?: string;
-  color?: string;
+  icon?: string | null;
+  color?: string | null;
   pinned: boolean;
   lastActivityAt: string;
   createdAt: string;
@@ -141,13 +149,13 @@ export function sessionFromBrief(b: SessionBriefWire): Session {
   const gaRuntimeKind = b.gaRuntimeKind ?? "external";
   return {
     id: b.id,
-    projectId: b.projectId,
+    projectId: b.projectId ?? undefined,
     title: b.title,
     // Collapse any stale runtime status from Core's persisted column to
     // the durable subset — the row never holds a live status; that's
     // derived at read time (see useSessionStatusView).
     status: toDurableStatus(b.status),
-    summary: b.summary,
+    summary: b.summary ?? undefined,
     turnCount: b.turnCount ?? 0,
     errorCount: 0,
     currentTool: undefined,
@@ -155,20 +163,20 @@ export function sessionFromBrief(b: SessionBriefWire): Session {
     cwd: undefined,
     pinned: b.pinned ?? false,
     hasUnread: b.hasUnread ?? false,
-    origin: b.origin,
+    origin: b.origin ?? undefined,
     reasoningEffort: b.reasoningEffort ?? null,
     lastActivityAt: b.lastActivityAt,
     createdAt: b.createdAt,
     updatedAt: b.updatedAt,
-    selectedLlmIndex: b.selectedLlmIndex,
-    selectedLlmKey: b.selectedLlmKey,
-    selectedLlmDisplayName: b.selectedLlmDisplayName,
+    selectedLlmIndex: b.selectedLlmIndex ?? undefined,
+    selectedLlmKey: b.selectedLlmKey ?? undefined,
+    selectedLlmDisplayName: b.selectedLlmDisplayName ?? undefined,
     runtimeKind: b.runtimeKind ?? gaRuntimeKind,
     runtimeLabel:
       b.runtimeLabel ?? (gaRuntimeKind === "managed" ? "内置内核" : "外部 GA"),
     gaRuntimeKind,
-    gaRuntimeId: b.gaRuntimeId,
-    promptProfile: b.promptProfile,
+    gaRuntimeId: b.gaRuntimeId ?? undefined,
+    promptProfile: b.promptProfile ?? undefined,
   };
 }
 
@@ -180,10 +188,10 @@ export function projectFromBrief(b: ProjectBriefWire): Project {
   return {
     id: b.id,
     name: b.name,
-    rootPath: b.rootPath,
+    rootPath: b.rootPath ?? undefined,
     workspaceEnabled: b.workspaceEnabled ?? false,
-    icon: b.icon,
-    color: b.color,
+    icon: b.icon ?? undefined,
+    color: b.color ?? undefined,
     pinned: b.pinned,
     lastActivityAt: b.lastActivityAt,
     createdAt: b.createdAt,
@@ -218,4 +226,30 @@ export function patchSessionInList(
  */
 export function clearSessionMessages(sid: string): void {
   useMessagesStore.getState().clearSessionMessages(sid);
+}
+
+/**
+ * Forget deleted sessions in memory: their rows, the active pointer when
+ * it named one of them, and their conversation state. Writes nothing to
+ * Core. Idempotent, because a delete arrives twice: the delete action
+ * applies it once Core confirms, and Core's `session-deleted-external`
+ * broadcast of the same delete applies it again (ticket 02d) — as it
+ * does for a delete made anywhere else.
+ */
+export function forgetDeletedSessions(
+  set: (fn: (state: SessionsState) => Partial<SessionsState>) => void,
+  ids: readonly string[],
+): void {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  set((state) => {
+    const out: Partial<SessionsState> = {};
+    const sessions = state.sessions.filter((s) => !idSet.has(s.id));
+    if (sessions.length !== state.sessions.length) out.sessions = sessions;
+    if (state.activeSessionId && idSet.has(state.activeSessionId)) {
+      out.activeSessionId = undefined;
+    }
+    return out;
+  });
+  ids.forEach((id) => clearSessionMessages(id));
 }

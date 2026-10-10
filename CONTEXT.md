@@ -204,3 +204,26 @@ silently dropped argument (2026-07-11 decision; see devlog).
   by a compare-and-swap on `seed`, so it happens once; the auto-title may
   replace it, a `user` title is never touched. Derived in Core on every
   path that persists a user message; never written from a page.
+
+## Writes
+
+- **Write broadcast** — every session, project and scheduled-task write is
+  announced once by Core through the `Notifier`, whoever made it: CLI /
+  supervisor through the socket, the GUI (and later a phone) through Tauri
+  commands (`core/src/session_writes.rs`, ticket 02d, 2026-10-10). The
+  socket handler and the Tauri command call the same write-and-announce
+  method (`Writes`), so it happens once. Events: `session-created-` /
+  `-updated-` / `-archived-` / `-unarchived-` / `-moved-` / `-deleted-external`,
+  `project-created-` / `-updated-` / `-deleted-external`,
+  `scheduled-tasks:changed`; the table is in
+  [architecture](./docs/architecture.md). Not the Agent API.
+- **Event form** — a row as these events carry it (`SessionBriefEvent`,
+  `ProjectBriefEvent`): every optional field written, `null` when empty, so
+  a cleared field reads as cleared. A page applies `null` as "clear" and a
+  missing key (an older payload) as "keep". The CLI's `SessionBrief` JSON
+  keeps leaving empty fields out.
+- **Echo** — the broadcast of a write that the page receiving it made
+  itself. The GUI still applies its writes optimistically first (02e,
+  which applies them from the event and drops the echo by
+  `clientRequestId`, is P1), so applying an echo must change nothing
+  visible and must never trigger another write.

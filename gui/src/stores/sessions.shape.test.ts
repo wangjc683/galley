@@ -32,6 +32,7 @@ describe("useSessionsStore shape", () => {
       "setSessionImagesSupported",
       "applyExternalSessionCreated",
       "applyExternalSessionUpdated",
+      "applyExternalSessionDeleted",
       // archive / delete
       "archiveSession",
       "unarchiveSession",
@@ -47,6 +48,7 @@ describe("useSessionsStore shape", () => {
       "assignSessionToProject",
       "setActiveProjectFilter",
       "applyExternalProjectCreated",
+      "applyExternalProjectUpdated",
       "applyExternalProjectDeleted",
       // hydrate
       "hydrate",

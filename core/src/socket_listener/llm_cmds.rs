@@ -1,6 +1,6 @@
 use super::common::{map_galley_err, SocketResponseLite};
-use super::session_cmds::SessionExternalPayload;
 use super::*;
+use crate::session_writes::Writes;
 
 pub(crate) struct ResolvedLlmSelection {
     pub(crate) index: Option<u32>,
@@ -171,6 +171,12 @@ async fn resolve_managed_llm_name(
 /// `SetLlm` to any live runner. Two-step semantics mirror `session.send`:
 /// the DB row is the source of truth; runner dispatch is opportunistic.
 /// `dispatch` field in the response tells the caller which path ran.
+///
+/// The write and its `session-updated-external` broadcast go through
+/// Core's write path ([`Writes::set_session_llm`], ticket 02d), shared
+/// with the GUI's `set_session_llm`; since then the broadcast precedes the
+/// dispatch and also goes out when the dispatch fails — the row changed
+/// either way. The response is unchanged.
 pub(super) async fn dispatch_llm_set(
     request_id: Option<String>,
     args: Value,
@@ -219,7 +225,7 @@ pub(super) async fn dispatch_llm_set(
         );
     };
 
-    let brief = match galley
+    let brief = match Writes::new(&galley, ctx.notifier.as_ref(), "llm.set")
         .set_session_llm(
             sid,
             Some(index),
@@ -256,17 +262,6 @@ pub(super) async fn dispatch_llm_set(
             );
         }
     };
-
-    // 4. Mirror to GUI so the Composer pill / Inspector reflect the
-    //    new persisted choice. Reuses the session-updated channel that
-    //    the M1.2 listener handles via `applyExternalSessionUpdated`.
-    ctx.notify(
-        "session-updated-external",
-        &SessionExternalPayload {
-            session: brief.clone(),
-            via: "llm.set",
-        },
-    );
 
     SocketResponse::ok(
         request_id,

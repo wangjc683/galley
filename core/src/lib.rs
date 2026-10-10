@@ -38,6 +38,7 @@ pub mod scheduler;
 pub mod session_runner;
 pub mod session_send;
 pub mod session_title;
+pub mod session_writes;
 pub mod socket_listener;
 pub mod sop_install;
 mod tray;

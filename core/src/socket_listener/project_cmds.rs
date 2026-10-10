@@ -1,28 +1,12 @@
 use super::common::{map_galley_err, origin_from_args};
 use super::*;
+use crate::session_writes::Writes;
 
 // ---------------- B4 M1.3 · project + llm write handlers ----------------
-
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct ProjectExternalPayload {
-    project: ProjectBrief,
-    via: &'static str,
-}
-
-/// `project.delete` carries extra payload that `ProjectExternalPayload`
-/// can't express — the affected child sessions get their `project_id`
-/// auto-detached (FK SET NULL), and the GUI needs to mirror that.
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct ProjectDeletedPayload {
-    project_id: String,
-    /// Number of sessions whose `project_id` was just set to NULL.
-    /// CLI returns this in the response too so a supervisor agent can
-    /// surface the side effect in its action log.
-    detached_sessions: u32,
-    detached_session_ids: Vec<String>,
-}
+//
+// The writes and their broadcasts (`project-created-external`,
+// `project-deleted-external`) go through Core's write path
+// ([`Writes`], ticket 02d), shared with the GUI's Tauri commands.
 
 pub(super) async fn dispatch_project_create(
     request_id: Option<String>,
@@ -71,17 +55,11 @@ pub(super) async fn dispatch_project_create(
     };
     let origin = origin_from_args(parsed.supervisor, parsed.reason);
 
-    match galley.create_project(input, origin).await {
-        Ok(brief) => {
-            ctx.notify(
-                "project-created-external",
-                &ProjectExternalPayload {
-                    project: brief.clone(),
-                    via: "project.create",
-                },
-            );
-            SocketResponse::ok(request_id, serde_json::json!({ "project": brief }))
-        }
+    match Writes::new(&galley, ctx.notifier.as_ref(), "project.create")
+        .create_project(input, origin)
+        .await
+    {
+        Ok(brief) => SocketResponse::ok(request_id, serde_json::json!({ "project": brief })),
         Err(e) => map_galley_err(request_id, e),
     }
 }
@@ -114,38 +92,17 @@ pub(super) async fn dispatch_project_delete(
         }
     };
 
-    // Snapshot child sessions BEFORE the delete so we can surface
-    // `detachedSessions` to the caller + GUI listener. SQLite SET NULL
-    // is atomic with the row drop, so a list-then-delete sequence races
-    // against concurrent GUI writes only by the few ms between the two
-    // queries — acceptable for a count meant for human-readable feedback.
-    let detached_ids: Vec<String> = match galley
-        .list_sessions(SessionFilter {
-            project_id: Some(parsed.project_id.clone()),
-            status: None,
-            archived: None,
-            runtime_kind: None,
-        })
+    // `detachedSessions` (the sessions FK SET NULL is about to detach,
+    // listed before the delete) is surfaced to the caller + GUI listener
+    // so a supervisor agent can log the side effect.
+    let origin = origin_from_args(parsed.supervisor, parsed.reason);
+    let payload = match Writes::new(&galley, ctx.notifier.as_ref(), "project.delete")
+        .delete_project(ProjectId(parsed.project_id), origin)
         .await
     {
-        Ok(rows) => rows.into_iter().map(|s| s.id.0).collect(),
+        Ok(p) => p,
         Err(e) => return map_galley_err(request_id, e),
     };
-
-    let origin = origin_from_args(parsed.supervisor, parsed.reason);
-    if let Err(e) = galley
-        .delete_project(ProjectId(parsed.project_id.clone()), origin)
-        .await
-    {
-        return map_galley_err(request_id, e);
-    }
-
-    let payload = ProjectDeletedPayload {
-        project_id: parsed.project_id,
-        detached_sessions: detached_ids.len() as u32,
-        detached_session_ids: detached_ids.clone(),
-    };
-    ctx.notify("project-deleted-external", &payload);
     SocketResponse::ok(
         request_id,
         serde_json::json!({

@@ -25,8 +25,8 @@
 use crate::api::{SessionBrief, SessionId};
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
-use crate::notify::{notify, Notifier};
-use serde::Serialize;
+use crate::notify::Notifier;
+use crate::session_writes::announce_session;
 
 /// Upper bound of a derived title, in UTF-16 code units (JS `length`),
 /// before the ellipsis. Sidebar rows truncate visually; this only keeps
@@ -34,20 +34,12 @@ use serde::Serialize;
 pub const TITLE_DERIVE_MAX: usize = 80;
 
 /// Broadcast after a derived title lands — the same event (and payload
-/// shape) every other external title change uses, so a page applies it
-/// with `applyExternalSessionUpdated`.
-pub const SESSION_UPDATED_EXTERNAL_EVENT: &str = "session-updated-external";
+/// shape) every other session change uses, so a page applies it with
+/// `applyExternalSessionUpdated`.
+pub use crate::session_writes::SESSION_UPDATED_EXTERNAL_EVENT;
 
 /// `via` of the broadcast.
 pub const TITLE_DERIVE_VIA: &str = "title-derive";
-
-/// Same wire shape as the socket layer's `SessionExternalPayload`.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionTitleDerivedPayload {
-    session: SessionBrief,
-    via: &'static str,
-}
 
 /// The GUI's `deriveTitleFromText`: collapse every whitespace run to one
 /// space and trim; keep the result when it is at most
@@ -148,13 +140,11 @@ pub async fn derive_and_announce(
 
 /// Broadcast a derived title (`session-updated-external`).
 pub fn announce_derived_title(notifier: &dyn Notifier, session: SessionBrief) {
-    notify(
+    announce_session(
         notifier,
         SESSION_UPDATED_EXTERNAL_EVENT,
-        &SessionTitleDerivedPayload {
-            session,
-            via: TITLE_DERIVE_VIA,
-        },
+        session,
+        TITLE_DERIVE_VIA,
     );
 }
 

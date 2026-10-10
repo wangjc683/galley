@@ -84,11 +84,14 @@ describe("runtime store", () => {
       key: "llm_list",
       value: incoming,
     });
+    // The runner reported this model: persisted, not forwarded back to it
+    // (ticket 02d).
     expect(tauriMocks.invoke).toHaveBeenCalledWith("set_session_llm", {
       id: "s-test",
       index: 1,
       key: "beta",
       displayName: "Beta",
+      runnerReported: true,
     });
   });
 
