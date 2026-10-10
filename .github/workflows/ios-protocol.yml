@@ -1,0 +1,53 @@
+name: iOS protocol
+
+# The phone side of the remote-access wire protocol (ios/GalleyRemote,
+# ticket 07a): Noise on CryptoKit, relay frames, padding, push sealing and
+# the app protocol types, tested against remote-protocol's vendored
+# cacophony vectors and golden fixtures.
+#
+# It runs on changes to either side. The Swift tests read the Rust crate's
+# golden files in place and fail on any section, field, enum value, method
+# or event the Swift side does not mirror, so this job is also the drift
+# gate between the Rust crate and the Swift package (design §10); there is
+# no separate drift script.
+#
+# macos-26 for Xcode 26 (Swift 6.2, the same compiler as local
+# development) and the iOS 26 SDK the app will need. `swift test` runs the
+# Swift Testing suites on the macOS host; no simulator.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - "remote-protocol/**"
+      - ".github/workflows/ios-protocol.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - "remote-protocol/**"
+      - ".github/workflows/ios-protocol.yml"
+
+jobs:
+  swift-protocol:
+    name: Swift protocol package
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Swift test
+        run: swift test --package-path ios/GalleyRemote

@@ -376,18 +376,54 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
 - 钥匙串 access group 与 NSE 共享，可访问性 `AfterFirstUnlock`。
 - 进后台就主动断开；回前台重连并重新同步（第 6.5 节）。
 - NSE 预算按 30 秒、24MB 估。24MB 只有 Apple DTS 论坛的口径，未核实（外部 §4）。
+- **协议包（07a，2026-10-10）**：`ios/GalleyRemote/`，SwiftPM，纯 Swift 加 CryptoKit，没有第三方依赖，平台 iOS 26（PRD 裁决 12），
+  另声明 macOS 14 只为在 Mac 上跑 `swift test`。没有界面和网络。结构与用法见包内 README。
+  - Noise 按裁决点 2 A 在 CryptoKit 原语上自写，照规范第 34 版：`CipherState` / `SymmetricState` / `HandshakeState` 对握手模式泛型，
+    支持 `NNpsk0`，以及 P1 要用的 `XXpsk3`、`KK`（三者都有 vendored 向量，通用部分是同一套），共约 430 行，不含会话层。
+    X25519 用 `Curve25519.KeyAgreement`；ChaChaPoly 的 nonce 是 4 个零字节加 64 位小端计数；Noise 自己的 HKDF 照规范第 4.3 节用 `HMAC<SHA256>` 拼，
+    不是 RFC 5869。CryptoKit 的 `HKDF<SHA256>`（RFC 5869）只用于第 3.1 节的配对密钥派生，与 Rust 的 `hkdf` crate 一致。
+  - 手机侧会话接口对齐 Rust 的 client 一侧：`NoiseSession.clientStart` 产出 48 字节的握手请求，`ClientHandshake.finish` 读 Core 的 hello 并解填充，
+    `Transport` 封、拆 `APP` 和 `CLOSE` 记录，任何一条拆失败，之后的拆都报会话已作废。固定临时钥的入口和 host 一侧只给测试用（`internal`）。
+  - 其余与 Rust 一一对应：配对密钥派生与二维码严格解析（含 relay 地址里 IPv4 / IPv6 字面量的判定，照搬 Rust 标准库解析器的接受集合）、
+    六种外层帧、填充、推送 `g` 的解密、应用层 `Codable` 类型、分片与重组。超出 Rust 单测的边界用例，预期结果都在 Rust crate 上手工跑过核对。
+  - 与 Rust 的差异：
+    - JSON 用 Foundation 的 `JSONDecoder` 解码，整数写成 `1.0`、`1e2` 也按整数读，对象里键重复时取第一个而不报错，比 serde_json 宽松；
+      两端都不会产出这种输入。字段有无、`null`、未知字段和枚举值的处理与 Rust 相同。
+    - `ClientHandshake`、`Transport` 是类：Rust 的移动语义变成「第二次 `finish` 报错」和「会话不能被复制」。
+    - 推送明文的 JSON 手写序列化，字段顺序和转义照 serde_json，保证填充后的明文与 Rust 逐字节相同。
+  - 测试框架：本机只有 Command Line Tools，Swift Testing 能用，但 SwiftPM 6.2 不给测试目标加 `Testing.framework` 的搜索路径，
+    框架附带的 `_Testing_Foundation`（cross-import overlay）也缺模块文件，直接 `swift test` 报 `no such module 'Testing'`。
+    包里的 `swift-test.sh` 在只有 Command Line Tools 时补上路径并关掉 cross-import overlay，其余情况就是 `swift test`；CI 装了 Xcode，直接 `swift test`。
+  - 实现中查出并修掉一处 Swift 特有的坑：CryptoKit 的 `SealedBox.ciphertext` 是切片、下标从 12 起，拼出的 `Data` 若不复制，调用方按 0 起的下标访问会崩。
+    线上字节不受影响，Rust 的 fixture 也没有改动。
 
 ## 10. 测试与门禁
 
 | 层 | 钉法 |
 |---|---|
-| Noise | 两侧都跑 cacophony 向量；Rust↔Swift 固定临时钥互通用例 |
-| 外层帧 | `remote-protocol` 的 golden 帧字节，Rust 与 Swift 两侧解码同一份 |
-| 应用层数据结构 | Rust 类型生成 JSON 样例（golden fixtures），Swift `Codable` 逐条解码；照 `scripts/check-ipc-protocol-drift.mjs` 的先例写 `check-remote-protocol-drift` |
+| Noise | 两侧都跑 cacophony 向量；Rust↔Swift 固定临时钥互通用例（07a 已落：Swift 侧两端都跑，`noise-nnpsk0.json` 的两条握手消息、两条 APP 和 CLOSE 逐字节一致） |
+| 外层帧 | `remote-protocol` 的 golden 帧字节，Rust 与 Swift 两侧解码同一份；Swift 还逐字节重新编码，非法样例的错误标签逐条对上 |
+| 密钥、填充、推送 | golden 的派生值、二维码串、填充长度、固定 nonce 的推送密文，Swift 逐字节复现；二维码的非法样例与 Rust 错误的 `Debug` 文本逐条对上 |
+| 应用层数据结构 | Rust 类型生成 JSON 样例（golden fixtures），Swift `Codable` 逐条解码再编码回去，按 JSON 值比较。这就是漂移门禁，不另写 `check-remote-protocol-drift` 脚本（见表后） |
 | relay | 进程内集成测试 |
 | 端到端 | dev 环境：本机起 relay、Core 连本机 relay、iOS 模拟器连本机；真机再连 frankfurt |
 
-CI：iOS 用单独的 workflow，按路径过滤（`ios/**`、`remote-protocol/**`、桌面样式与文案源）；公开仓用 GitHub 托管的 macOS runner 不计费。
+漂移门禁（07a 定，2026-10-10）：
+
+- Swift 测试原地读取 Rust crate 的 golden 文件和向量文件，不复制，所以 Rust 侧重新生成的 fixture 直接进 Swift 测试。
+- 对到字段级，下列情况 Swift 测试都会红：
+  - golden 目录多一个文件，或某个文件多一个顶层段；
+  - 样例多一个字段：Swift 解码时丢掉，编码回去就对不上；
+  - 枚举多一个取值：Swift 解成 `unknown`，编码回去也对不上；
+  - 多一个方法或事件：方法、事件清单对不上，或样例找不到 Swift 类型。
+- Rust 侧的 golden 测试保证「改了结构不改 golden 就红」，两段接起来就是 Rust 类型到 Swift 类型的完整链条。
+- `check-ipc-protocol-drift.mjs` 之所以要单独解析 Python、Rust、TS 三份源码，是因为没有哪一侧的测试会读另一侧的输出；这里 Swift 测试本身就读 Rust 的输出，
+  再写一个脚本只会重复同一项检查。
+- 漏得过去的只有样例里看不出的变化：没被样例用到的新枚举值（开放集合，旧版解成 `unknown`）、新的错误码常量（手机按通用失败处理），这两种不影响解码；
+  数值字段变宽而样例值没变（比如 `u32` 改 `u64`），要等真出现超出旧范围的值才会暴露，所以改数值类型时要同步改 Swift。
+
+CI：`.github/workflows/ios-protocol.yml`（07a），macOS runner（`macos-26`，Xcode 26），按路径过滤 `ios/**`、`remote-protocol/**` 和 workflow 自身，
+所以 Rust 侧改协议也会跑 Swift 测试。等 App 工程进来，再把桌面样式与文案源加进过滤。公开仓用 GitHub 托管的 macOS runner 不计费。
 
 ## 11. 未核实与风险
 
@@ -513,3 +549,5 @@ iOS 的工程与界面（票 07 其余部分）仍按产品定义的次序，等
 - 2026-10-10 06a（relay）实现：第 4.2 节补「client 连上先收到 host 在不在线」「挤掉旧 host 时 client 先收下线、再收上线」；
   第 4.4 节写定限速为背压、慢接收方 10 秒无进展即断、关闭码、推送接口、配置与计数器形状；第 8 节记测试覆盖。
   待 05b 对齐：`GALLEY_REMOTE_RELAY_URL` 按 05a 的 `RelayUrl` 填基础地址（开发时 `ws://127.0.0.1:8787`，不带 `/v1/connect`）。
+- 2026-10-10 07a 完成 Swift 协议包 `ios/GalleyRemote/`：cacophony 三条向量和全部 golden 逐字节通过；漂移检查并入 Swift 测试，
+  不另写 `check-remote-protocol-drift`（第 10 节）；第 9 节记了与 Rust 的差异和本机只有 Command Line Tools 时的测试办法。
