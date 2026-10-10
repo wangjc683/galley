@@ -1,6 +1,6 @@
 # 02 — Core 接管发送 + 所有写入都广播
 
-Status: in-progress（02a `0df5de5c`、02b `1ab69b51` 已合入 main，2026-10-10；下一张 02c；02e 暂缓到 P1）
+Status: in-progress（02a `0df5de5c`、02b `1ab69b51`、02c `8d9bd79e` 已合入 main，2026-10-10；下一张 02d；02e 暂缓到 P1）
 
 来源：PRD 裁决 7。调研 2026-10-09（子代理只读调研，主会话逐条复核了标 ✓ 的事实）。
 
@@ -236,3 +236,8 @@ dev 模式两端 Python 是否一致；外置模式 `pendingLLMIndex` 语义；`
   - 留给后续：GUI 删掉 `maybeDeriveTitle` 后，`rename_session` 的 `titleSource: "derived"` 参数无人调用，暂留；`stop_session_run` 在新 send 已预留
     闸门之后、派发之前按下时拦不住这次发送：拉起中没有存活 runner，返回 `already_stopped`；回放中 `abort` 落在还没有运行的 runner 上。
     那次发送随后照常派发，需要真机看是否要处理。
+- 2026-10-10 02c 合入（`8d9bd79e`，Core 与 GUI 两张票并行，主会话集成验收）：cargo 671 / 0，vitest 959 / 0，六个门禁脚本通过。
+  - 真机（CLI）：`session new` 后库里标题立即为首条消息截断（`title_source = derived`），首轮跑完换成自动标题「秋日散步赏叶品茶」，侧栏随 `session-updated-external` 更新；dev 窗口截图正常。测试会话已归档。
+  - GUI 发送路径要在真机里实际发消息，属写操作，留给 JC 验收：冷会话首发不出现两条、首条消息后侧栏标题、EmptyState 选模型后首发、带图、运行中排队、GUI 发送同时 CLI 抢先（GUI 回显撤回、进排队条）、回答提问、运行中 `/btw`、停止（含「准备中」时）。
+  - 已知缺口（不比旧行为差）：发送已预留闸门、尚未派发时点停止拦不住这次发送；以前同一时机直接报「停止失败」。是否处理待真机实感再定。
+  - `rename_session` 的 `titleSource: "derived"` 参数已无调用方，暂留。
