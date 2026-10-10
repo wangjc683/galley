@@ -1110,17 +1110,19 @@ async fn cancelling_a_pairing_disconnects_and_forgets_its_key() {
 #[tokio::test]
 async fn a_pairing_without_a_phone_ends_by_itself() {
     let fx = Fixture::new(RemoteTuning {
-        pairing_timeout: Duration::from_millis(300),
+        // Long enough that a slow runner still sees the pairing and its
+        // connection before it ends.
+        pairing_timeout: Duration::from_secs(1),
         ..fast()
     })
     .await;
     let qr = fx.module.pair().await.unwrap();
+    assert!(fx.module.status().pairing);
     let keys = PairingCode::parse(qr.as_str())
         .unwrap()
         .master_key()
         .derive();
     fx.relay.wait_host_connects(1).await;
-    assert!(fx.module.status().pairing);
 
     wait_until(|| !fx.module.status().pairing).await;
     let status = fx.module.status();
