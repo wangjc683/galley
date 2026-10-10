@@ -263,47 +263,109 @@ pub(crate) struct PersistUserMessageAttachmentInput {
 pub(crate) fn decode_message_attachments(
     inputs: Vec<PersistUserMessageAttachmentInput>,
 ) -> error::Result<Vec<MessageAttachmentCreate>> {
-    if inputs.len() > MAX_MESSAGE_IMAGES {
-        return Err(error::GalleyError::InvalidArgs {
-            message: format!("too many images: max {MAX_MESSAGE_IMAGES}"),
-        });
-    }
+    check_image_count(inputs.len())?;
     let mut total = 0usize;
     let mut decoded = Vec::with_capacity(inputs.len());
     for input in inputs {
         let (mime_type, encoded) = parse_image_data_url(&input.data_url)?;
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(encoded)
-            .map_err(|e| error::GalleyError::InvalidArgs {
-                message: format!("invalid image data: {e}"),
-            })?;
-        if bytes.is_empty() {
-            return Err(error::GalleyError::InvalidArgs {
-                message: "image data is empty".into(),
-            });
-        }
-        if bytes.len() > MAX_IMAGE_BYTES {
-            return Err(error::GalleyError::InvalidArgs {
-                message: format!("image too large: max {} MB", MAX_IMAGE_BYTES / 1024 / 1024),
-            });
-        }
-        total = total.saturating_add(bytes.len());
-        if total > MAX_MESSAGE_IMAGE_BYTES {
-            return Err(error::GalleyError::InvalidArgs {
-                message: format!(
-                    "message images too large: max {} MB total",
-                    MAX_MESSAGE_IMAGE_BYTES / 1024 / 1024
-                ),
-            });
-        }
-        decoded.push(MessageAttachmentCreate {
+        decoded.push(decode_image(
             mime_type,
-            bytes,
-            width: input.width,
-            height: input.height,
-        });
+            encoded,
+            input.width,
+            input.height,
+            &mut total,
+        )?);
     }
     Ok(decoded)
+}
+
+/// One image as the phone sends it (remote `session.send`, ticket 05b):
+/// a MIME type and a bare base64 payload instead of a `data:` URL.
+pub(crate) struct ImageUpload {
+    pub mime_type: String,
+    pub base64: String,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+/// [`decode_message_attachments`] for [`ImageUpload`]s: the same limits
+/// and the same errors.
+pub(crate) fn decode_image_uploads(
+    uploads: Vec<ImageUpload>,
+) -> error::Result<Vec<MessageAttachmentCreate>> {
+    check_image_count(uploads.len())?;
+    let mut total = 0usize;
+    let mut decoded = Vec::with_capacity(uploads.len());
+    for upload in uploads {
+        check_image_mime(&upload.mime_type)?;
+        decoded.push(decode_image(
+            upload.mime_type,
+            &upload.base64,
+            upload.width,
+            upload.height,
+            &mut total,
+        )?);
+    }
+    Ok(decoded)
+}
+
+fn check_image_count(count: usize) -> error::Result<()> {
+    if count > MAX_MESSAGE_IMAGES {
+        return Err(error::GalleyError::InvalidArgs {
+            message: format!("too many images: max {MAX_MESSAGE_IMAGES}"),
+        });
+    }
+    Ok(())
+}
+
+fn check_image_mime(mime_type: &str) -> error::Result<()> {
+    if !matches!(mime_type, "image/png" | "image/jpeg" | "image/webp") {
+        return Err(error::GalleyError::InvalidArgs {
+            message: format!("unsupported image type: {mime_type}"),
+        });
+    }
+    Ok(())
+}
+
+/// Decode one image's base64 payload, enforcing the per-image cap and
+/// adding its size to the message's running `total`.
+fn decode_image(
+    mime_type: String,
+    encoded: &str,
+    width: Option<u32>,
+    height: Option<u32>,
+    total: &mut usize,
+) -> error::Result<MessageAttachmentCreate> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|e| error::GalleyError::InvalidArgs {
+            message: format!("invalid image data: {e}"),
+        })?;
+    if bytes.is_empty() {
+        return Err(error::GalleyError::InvalidArgs {
+            message: "image data is empty".into(),
+        });
+    }
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(error::GalleyError::InvalidArgs {
+            message: format!("image too large: max {} MB", MAX_IMAGE_BYTES / 1024 / 1024),
+        });
+    }
+    *total = total.saturating_add(bytes.len());
+    if *total > MAX_MESSAGE_IMAGE_BYTES {
+        return Err(error::GalleyError::InvalidArgs {
+            message: format!(
+                "message images too large: max {} MB total",
+                MAX_MESSAGE_IMAGE_BYTES / 1024 / 1024
+            ),
+        });
+    }
+    Ok(MessageAttachmentCreate {
+        mime_type,
+        bytes,
+        width,
+        height,
+    })
 }
 
 fn parse_image_data_url(data_url: &str) -> error::Result<(String, &str)> {
@@ -320,11 +382,7 @@ fn parse_image_data_url(data_url: &str) -> error::Result<(String, &str)> {
     };
     let mut parts = meta.split(';');
     let mime_type = parts.next().unwrap_or_default();
-    if !matches!(mime_type, "image/png" | "image/jpeg" | "image/webp") {
-        return Err(error::GalleyError::InvalidArgs {
-            message: format!("unsupported image type: {mime_type}"),
-        });
-    }
+    check_image_mime(mime_type)?;
     if !parts.any(|part| part.eq_ignore_ascii_case("base64")) {
         return Err(error::GalleyError::InvalidArgs {
             message: "image data URL must be base64 encoded".into(),

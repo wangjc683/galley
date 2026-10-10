@@ -331,6 +331,18 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
   - 每片原始数据 1～48000 字节，base64 之后仍装得进一条记录；重组出来必须是一条完整的、非 `chunk` 的消息；
   - 接收方同时最多收 4 条流，在途合计不超过 40MiB（够装 25MB 图片的 base64 加 JSON），超了就报错并丢掉该流。
 
+### 6.7 05b 落定的细节（2026-10-10）
+
+手机看得到的几条，Core 实现时定下：
+
+- **错误码**：新增 `session_not_managed`（会话属于外置 GA，手机不显示）和 `too_many_subscriptions`（一台手机同时最多订阅 16 个会话）。
+  会话不存在、`before` 指向的消息不存在都回 `not_found`；附件读取失败沿用 05c 的 `attachment_*` 标签；图片不合规回 `invalid_args`，文案与桌面相同。
+- **写入的来源**：手机的发送与新建是 `origin.via = gui`、`client = ios`（裁决 9）；由此产生的会话事件里 `via` 是 `ios`。
+- **`session.create`**：不带标题就用「新对话」，第一条消息会给它起名，与桌面一致；模型留空，起 runner 时用内置运行时的默认模型。
+- **顺序**：Core 不强制 `hello` 在先；`session.unsubscribe` 总是成功。
+- **事件过滤**：`goal.updated` 按 `goal.sessionId` 判断是否内置会话；`project.deleted` 的 `detachedSessionIds` 只列内置会话；
+  `session.deleted` 只要不是已知的外置会话就转发（行已删，查不到运行时）。
+
 ## 7. Core 改动（票 05）
 
 **结构**：新模块 `core/src/remote/`，包括：
@@ -342,6 +354,36 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
 
 在 `start_background_services`（`core/src/app_setup.rs:396-451`）里、单实例检查之后启动；在托盘退出清理时停止（`tray.rs:118-137`）。
 发送要拿到 `AppHandle` 作为 `SpawnEnv`（`session_runner/mod.rs:92-99`），远程模块在 Core 进程内，天然有。
+
+**05b 落定（2026-10-10）**：
+
+- **分文件**：`config`（relay 地址、桌面名、时序与上限）、`connection`（连接、重连、心跳、帧收发、按手机扇出）、
+  `phone`（每台手机的 Noise 会话、分片重组、有上限的发送队列）、`methods`（第 6.3 节各方法）、`convert`（Core 类型转手机类型）、
+  `events`（接收端、过滤、合批）、`push`（设备 token 与推送序号）。
+- **依赖**：`tokio-tungstenite` 锁 `=0.30.0`（与 relay 同版本），开 `connect` 与 `rustls-tls-native-roots`，用的是 Core 已有的
+  rustls 0.23、tokio-rustls 0.26、rustls-native-certs 0.8，没有引入 webpki-roots。`futures-util`、`whoami`、`zeroize` 原本就在 lockfile 里；
+  tungstenite 0.30 新带进 13 个包（sha1 0.11 一系与 rand 0.10 一系）。
+- **桌面名**：系统里的电脑名（macOS 的「电脑名称」），取不到用主机名，再取不到用 `Galley`，截到 128 字节。
+- **生命周期**：没有 relay 地址就不建模块（`RemoteModule::for_app` 返回 `None`）；有地址时作为 Tauri 状态托管，启动时只在已有配对主密钥时连，
+  托盘退出时先给在线手机发 `CLOSE Normal` 再断开（最多等 3 秒）。给 05d 的接口：`pair()` 确保有主密钥、确保在连、返回二维码串；
+  `unpair()` 给在线手机发 `CLOSE Unpaired`、停止、删除主密钥；`status()` 返回是否已配对、relay 是否在连、在线手机数、最近一次手机握手的时间，
+  有变化就发 Tauri 事件 `remote-status`。再次配对沿用同一把主密钥，已连的手机不受影响；解除配对后再配对才生成新密钥。
+- **连接**：环境变量里是 relay 的基础 URL，连接地址用 `RelayUrl::connect_url()` 拼；三个请求头照第 4.2 节，不带 `Sec-WebSocket-Extensions`。
+  每 25 秒一个 `PING`，60 秒收不到 `PONG` 就重连。重连指数退避：1 秒起、上限 60 秒，每次在当前步长的后一半里随机取；连接活过 30 秒才把退避清零。
+  relay 的关闭码一律按「退避重连」处理；4001（新 host 挤掉了旧的）不清零退避，同一轮只记一次日志，免得两台用同一把密钥的桌面互相挤时刷屏。
+- **每台手机**：按 relay 的 peer 编号建，第一条 `DATA` 当握手；`PEER` 上线或下线都丢掉这个编号原有的会话；任何一条记录解不开就丢掉这台手机；
+  会话满 24 小时发 `CLOSE Expired`。发送队列里放明文，出队时才加密，所以丢事件不会让手机少收一个 nonce。
+- **事件**：接收端只做过滤和拷贝：没有手机在线就什么都不拷，`runner-event` 只拷有手机订阅的会话；队列（1024 条）满了就丢，
+  下一条事件时让所有手机全量重读。转换任务用 Core 自己的类型解码载荷（为此给 `SessionRunStatePayload`、`HistoryReplayPayload` 加了 `Deserialize`），
+  只留内置会话（按会话 id 缓存运行时）；关于某会话的状态事件会先把该会话攒着的 `runner.event` 发出去，保持 Core 的先后顺序。
+- **每台手机的队列**：事件预算 512 条或 4MiB，响应不计入、也不丢。超了先丢排着的 `runner.event`，按会话补 `sync.required`；
+  状态事件本身也装不下时，丢掉所有未发出的事件，补一条 `sessionId` 为 `null` 的 `sync.required`。已经开始发的分片消息会发完。
+- **数据层**：新增 `SqliteGalley::message_cursor`，把手机给的消息 id 换成分页游标；`commands::session` 拆出 `decode_image_uploads`，
+  手机的图片与桌面走同一套限额和错误；`mint_session_id` 放宽到 `pub(crate)`。
+- **推送**：设备存 prefs 键 `remote_push_devices`（按 token 去重，最多 8 台），序号存 `remote_push_seq`，先写后用。
+  `send_push` 封一次、每台设备发一个 `PUSH`，优先级 10，不带 collapse id；没在运行回 `remote_not_running`，relay 没连上回 `relay_offline`。收到 410 就删 token。
+- **测试**：`core/tests/remote_module_test.rs` 14 条，进程内假 relay（127.0.0.1）加用 05a 客户端函数写的假手机；内部逻辑另有 18 条单元测试。
+  `session.send` 走 Core 真实的发送路径，runner 用测试替身（已在跑、历史已确认），所以测到落库、广播和派发的 `user_message`，不起 Python。
 
 **要补的缺口**（代码事实）：
 
@@ -551,3 +593,5 @@ iOS 的工程与界面（票 07 其余部分）仍按产品定义的次序，等
   待 05b 对齐：`GALLEY_REMOTE_RELAY_URL` 按 05a 的 `RelayUrl` 填基础地址（开发时 `ws://127.0.0.1:8787`，不带 `/v1/connect`）。
 - 2026-10-10 07a 完成 Swift 协议包 `ios/GalleyRemote/`：cacophony 三条向量和全部 golden 逐字节通过；漂移检查并入 Swift 测试，
   不另写 `check-remote-protocol-drift`（第 10 节）；第 9 节记了与 Rust 的差异和本机只有 Command Line Tools 时的测试办法。
+- 2026-10-10 05b 实现：第 7 节补「05b 落定」，第 6.7 节记手机看得到的决定（两个新错误码、`via` 为 `ios` 等）；
+  按 06a 的接口说明，relay 的关闭码一律退避重连，4001 只记一次日志。

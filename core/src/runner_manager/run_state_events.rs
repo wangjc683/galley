@@ -22,7 +22,7 @@
 
 use crate::notify::{notify, Notifier};
 use crate::runner_manager::{RunState, RunnerManager};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -32,8 +32,9 @@ pub const SESSION_RUN_STATE_EVENT: &str = "session-run-state";
 
 /// Payload of [`SESSION_RUN_STATE_EVENT`]: the session's whole
 /// [`RunState`] after a change, every field present (`lastExit` is
-/// `null` until a run has completed in this Core process).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// `null` until a run has completed in this Core process). `Deserialize`
+/// for the remote module, which reads it back off the event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionRunStatePayload {
     pub session_id: String,

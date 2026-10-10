@@ -33,6 +33,7 @@ pub mod notify;
 pub mod path_install;
 mod process_command;
 pub mod protocol;
+pub mod remote;
 pub mod remote_pairing;
 pub mod runner_commands;
 pub mod runner_manager;

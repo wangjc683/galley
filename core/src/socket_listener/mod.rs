@@ -117,6 +117,7 @@ pub use wire::{ErrorTag, SocketRequest, SocketResponse, ACCEPTED_SCHEMA_VERSIONS
 
 #[allow(unused_imports)]
 pub(crate) use llm_cmds::{resolve_llm_selection_for_runtime, ResolvedLlmSelection};
+pub(crate) use session_cmds::mint_session_id;
 
 /// Make sure `session_id` has a live runner with its history restored,
 /// through Core's shared path

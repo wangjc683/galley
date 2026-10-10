@@ -35,14 +35,14 @@ use tokio::time::Instant;
 /// will too.
 pub const RUNNER_HISTORY_REPLAY_EVENT: &str = "runner-history-replay";
 
-#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryReplayPayload {
     pub session_id: String,
     pub phase: HistoryReplayPhase,
 }
 
-#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum HistoryReplayPhase {
     Started,

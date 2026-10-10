@@ -407,8 +407,8 @@ fn prune_engine_logs(app: &tauri::App) {
 }
 
 /// Fire-and-forget background services: IM supervisor autostart, the
-/// resident browser bridge (managed runtime only), and parking goals
-/// left `active` by the previous Core process. Goal v2's
+/// resident browser bridge (managed runtime only), parking goals left
+/// `active` by the previous Core process, and the remote module. Goal v2's
 /// continuation loop lives in this process, so after a restart nothing
 /// is driving those goals; `paused` is the honest state and the user's
 /// next message on the session resumes them (goal-simplify PRD §3.3).
@@ -461,6 +461,25 @@ fn start_background_services(app: &tauri::App) {
     }
 
     crate::scheduler::start(app);
+
+    start_remote_module(app);
+}
+
+/// Remote access for paired phones (ticket 05b): exists only when a relay
+/// URL is configured, connects only when this desktop is paired. Managed
+/// as app state for the settings page and the tray's quit.
+fn start_remote_module(app: &tauri::App) {
+    let Some(remote) = crate::remote::RemoteModule::for_app(app.handle()) else {
+        return;
+    };
+    app.manage(remote.clone());
+    tauri::async_runtime::spawn(async move {
+        match remote.start_if_paired().await {
+            Ok(true) => eprintln!("[remote] paired; connecting to the relay"),
+            Ok(false) => {}
+            Err(e) => eprintln!("[remote] not started: {e}"),
+        }
+    });
 }
 
 /// Windows-only custom chrome: drop native decorations and restore the

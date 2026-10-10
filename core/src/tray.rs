@@ -129,6 +129,10 @@ fn cleanup_and_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
         {
             bridge.stop_all().await;
         }
+        // Tell connected phones the desktop is going (`CLOSE`), bounded.
+        if let Some(remote) = app.try_state::<crate::remote::RemoteModule>() {
+            remote.stop().await;
+        }
         let manager = app.state::<std::sync::Arc<runner_manager::RunnerManager>>();
         manager.shutdown_all(Duration::from_secs(5)).await;
         ALLOW_APP_EXIT.store(true, Ordering::SeqCst);

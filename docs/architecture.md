@@ -298,7 +298,7 @@ managed-runtime only and all spawned, restarted and stopped by Core:
   extension's connection state is live. See
   [browser control](./managed-ga-runtime/browser-control.md).
 
-## Localhost Only
+## Core Never Listens On The Network
 
 Galley Core accepts local control through:
 
@@ -306,11 +306,18 @@ Galley Core accepts local control through:
 - Windows named pipe on Windows
 
 It does not expose a TCP server, HTTP API, token auth, OAuth flow, or remote
-login. Remote access goes through Core's own remote module, which connects
-outward to an end-to-end encrypted relay and talks only to paired devices
-(constitution Rule 2, revised 2026-10). IM transports and agent frontends
-remain supported. The section title stays "Localhost Only" until the remote
-module lands; then it becomes "Core Never Listens On The Network".
+login. Remote access goes through Core's own remote module
+([`core/src/remote`](../core/src/remote/mod.rs), ticket 05b), which connects
+outward to the relay over WSS and talks only to devices paired on the
+desktop, each over its own end-to-end Noise session (constitution Rule 2,
+revised 2026-10). The module exists only in a build that knows a relay URL
+(`GALLEY_REMOTE_RELAY_URL`, compiled in by CI or set in the environment) and
+connects only while this desktop is paired. A phone reaches the same Core
+functions the GUI does — the send path, the write path, paged message rows,
+the attachment reader — never a Tauri command; it sees managed-runtime
+sessions only; and it hears Core's events through the remote sink (above),
+filtered, converted to its own types and batched. IM transports and agent
+frontends remain supported.
 
 The managed GA engine's own browser driver binds 127.0.0.1:18765 / 18766
 (TMWebDriver, for the browser extension and for GA processes talking to its

@@ -170,6 +170,31 @@ impl SqliteGalley {
         })
     }
 
+    /// The paging position of visible message `message_id` of
+    /// `session_id`, for a caller that names the oldest row it holds by id
+    /// (the phone's `session.messages` `before`, ticket 05b). `None` when
+    /// the session has no such visible row.
+    pub async fn message_cursor(
+        &self,
+        session_id: &SessionId,
+        message_id: &str,
+    ) -> Result<Option<MessageCursor>> {
+        let row: Option<(i64, i64, String)> = sqlx::query_as(
+            "SELECT turn_index, sequence, id FROM messages \
+             WHERE session_id = ? AND id = ? AND visibility = 'visible'",
+        )
+        .bind(session_id.as_str())
+        .bind(message_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(row.map(|(turn_index, sequence, id)| MessageCursor {
+            turn_index,
+            sequence,
+            id,
+        }))
+    }
+
     /// Rows with their attachments.
     async fn with_attachments(
         &self,

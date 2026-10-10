@@ -121,6 +121,19 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # Decode OAuth JWT claims locally for expiry and ChatGPT account-id routing.
 base64 = "0.22"
 
+# Remote access for paired phones (ticket 05b, `src/remote/`): the wire
+# formats shared with the relay and the iOS app, an outbound WebSocket to
+# the relay (rustls, the OS trust store; the rustls 0.23 / tokio-rustls
+# 0.26 / rustls-native-certs 0.8 Core already builds), and the machine's
+# name for the pairing code. tokio-tungstenite is pinned exactly: the
+# relay (ticket 06a) uses the same version. `whoami` (through sqlx) and
+# `zeroize` (the pairing QR string) are already in the lockfile.
+galley-remote-protocol = { path = "../remote-protocol" }
+tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+whoami = { version = "1.6", default-features = false }
+zeroize = "1"
+
 [features]
 # Enables the bridge-owner-experiment binary. Not part of any default set.
 # Use: `cargo build --features experiments --bin bridge-owner-experiment`.

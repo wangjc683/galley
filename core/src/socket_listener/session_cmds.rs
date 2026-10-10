@@ -726,8 +726,9 @@ pub(super) async fn dispatch_sessions_list(
 /// Mint a session id matching the GUI's `s-<base36-time>-<base36-rand>`
 /// shape. Kept here (rather than in `db::SqliteGalley`) because
 /// id-minting is a caller concern — `create_session_in_tx` accepts a
-/// caller-supplied id and validates the row insert.
-pub(super) fn mint_session_id() -> String {
+/// caller-supplied id and validates the row insert. Crate-visible for the
+/// remote module's `session.create` (ticket 05b), where Core mints the id.
+pub(crate) fn mint_session_id() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
     static SESSION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
