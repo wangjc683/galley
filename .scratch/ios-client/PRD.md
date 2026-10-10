@@ -90,6 +90,12 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
     - 降：设置 Agent 页的「复制 Supervisor SOP」与 SOP 文档改为「让其他 Agent 操作 Galley」，面向高级用户；不急（见 deferred）。
     - 留：CLI 与 Agent API 契约（Rule 3）；IM 汇报、IM 委派、galley-supervisor skill 和社区用户都靠它。
     - SOP 在内部退场的时机：主聊天派活改用内置原生工具（主聊天 PRD 裁决 5），IM 委派随之换过去。
+22. 仓库布局（2026-10-10）：iOS App 与 relay 的源码都进 galley 单仓（`ios/`、`relay/`，外加 Core 与 relay 共用的协议 crate），iOS 端随仓以 MIT 开源。
+    依据：裁决 14、16 要求 CI 在同一提交里核对桌面源文件生成的 token / 文案与一致性语料；手机协议三方（Core、relay、iOS）要能原子改动，
+    照 `scripts/check-ipc-protocol-drift.mjs` 的先例加漂移门禁；端到端加密的承诺要客户端与 relay 都开源才可审计。
+    否决：iOS 单独私有仓（token、语料、协议都要跨仓同步）；relay 与 iOS 各自独立仓。
+23. relay 的部署（Caddy 站点文件、服务定义、DNS 子域、APNs 密钥在哪取）归 inkstone-ops（私有）；galley 只放 relay 源码并由 CI 出构建产物。
+    这是 inkstone-ops「租户部署归租户仓」的例外，理由是 galley 是公开仓，部署细节属于砚石的实例而不是产品；类比网站：内容在站点仓，托管在 inkstone-ops。
 
 ## 待定
 
@@ -111,8 +117,8 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 | 02 | Core 接管发送 + 所有写入都广播，拆为 02a–02e（02e 暂缓到 P1），见 [issues/02](./issues/02-core-send-takeover.md) | — | done 2026-10-10（02a–02d；02e 暂缓到 P1） |
 | 03 | `client` 列迁移（`messages`、`sessions`；补六处手写迁移列表） | — | open |
 | 04 | 保持唤醒开关 | 待定细节 | open |
-| 05 | `Notifier` 扇出 + Core 内远程模块（向外 WSS，预共享密钥） | 02 | open |
-| 06 | frankfurt 最小 relay + APNs 推送（做完了 / 在问你） | Apple 账号 | open |
+| 05 | `Notifier` 扇出 + Core 内远程模块（向外 WSS，预共享密钥）；协议设计稿见 [issues/05](./issues/05-remote-protocol-design.md) | 02 | 设计稿待裁（2026-10-10） |
+| 06 | frankfurt 最小 relay + APNs 推送（做完了 / 在问你）；设计同 [issues/05](./issues/05-remote-protocol-design.md) | Apple 账号（只挡推送） | 设计稿待裁（2026-10-10） |
 | 07 | SwiftUI P0：主聊天、旁聊列表、回答提问（约七个方法：列会话、读消息、订阅事件、发送、停止、新建会话、标已读）；回答提问要支持候选项含多选、问题上方一张图（issues/01） | 05、06 | open |
 | 08 | Core 通知判断（「需要关注」事件）+ 桌面系统通知改为接收 + 后台模式且已配对时桌面静默 | 02c | open |
 | 09 | 带图的提问（已裁 A 约定式）：提示词条款（登录墙 / 扫码 / 图形验证码时截图 + Markdown 图片引用）+ Core 从问题抽本地图片经远程模块送手机 + 桌面真机验 `AskUserBubble` 显示图；渲染验不过再转 B（[mobile-product/issues/01](../mobile-product/issues/01-browser-intervention.md)） | 05 | open |

@@ -1,0 +1,339 @@
+# 05 / 06 — 远程模块与 relay 协议设计稿
+
+Status: needs-info（设计稿；待 JC 裁第 12 节五个裁决点，裁完拆实现票）
+
+来源：2026-10-10 JC 裁决「iOS 端开源，单仓按建议推进，先出协议设计稿」。上游：PRD 裁决 1、2、6、8、9、17、18、22、23（`../PRD.md`）；
+宪法 Rule 2（`AGENTS.md:107-126`）。依据两份调研：
+
+- 代码事实：只读子代理 2026-10-10 盘点，本文引用处都带 `file:line`（以 `0df5de5c..ea5f780d` 之后的 main 为准）。
+- 外部事实：[research/2026-10-10-remote-protocol-external-facts.md](../research/2026-10-10-remote-protocol-external-facts.md)，每条附一手来源 URL，
+  本文以「外部 §N」引用。
+
+## 结论先行
+
+- **链路**：iOS App ⇄ relay（frankfurt，Caddy 终结 TLS）⇄ Core 远程模块（在 Core 进程内、只向外连 WSS）。TLS 之上再套一层端到端的 Noise 会话；
+  relay 只按「频道」转发不透明的帧，外加替桌面代发 APNs 推送。
+- **加密**：P0 用 `Noise_NNpsk0_25519_ChaChaPoly_SHA256`，手机发起、Core 响应；预共享密钥来自桌面二维码给的 32 字节配对主密钥，经 HKDF 按用途分别派生。
+  P1 升级为 `XXpsk3` 配对加 `KK` 会话，按设备吊销。P0 的协议版本写进 Noise prologue，升级时不会被降级。
+- **relay 无状态**：内存里一张「频道 → 连接」表；不存消息、不存设备推送 token（token 由手机经端到端通道告诉桌面，桌面发推送时带上）；
+  只记字节数、连接数这类计数。逐条对照 Rule 2 见第 4.1 节。
+- **应用层**：端到端通道里跑 JSON 请求 / 响应 / 事件，约十个方法加会话订阅。断线重连就全量重拉会话列表与当前会话的消息尾部；
+  事件尽力送达，与 `Notifier` 的既有约定一致（`core/src/notify.rs:16-23`）。
+- **推送**：桌面判定「需要关注」后用推送密钥加密内容，经 relay 发 APNs；手机的 Notification Service Extension 解密显示，解不开就显示占位文案。
+- **Core 要补五个缺口**（第 7 节）：通知扇出、轮次落库广播、运行状态事件、附件只读接口、配对密钥存储。
+- **仓库**（裁决 22）：`remote-protocol/`（Core 与 relay 共用的 crate）、`relay/`、`ios/`；CI 用 cacophony 测试向量和 Rust↔Swift 互通用例钉住加密层，
+  用漂移门禁钉住应用层的数据结构。
+
+## 1. 范围与非目标
+
+P0 范围：票 05（通知扇出 + Core 远程模块）、票 06（relay + APNs）、票 07 用到的应用层接口定义；票 03（`client` 列）建议并入（第 12 节裁决点 5）。
+
+P0 非目标：
+
+- 多手机、吊销单台设备、Face ID 解锁、桌面确认配对（PRD 待定「P1 安全」）。P0 技术上允许同一配对密钥的多台设备同时在线，但不做设备管理。
+- 离线排队发送（移动端产品定义：P1）。
+- 手机改设置（裁决 8）、外置 GA 会话（裁决 18）。
+- 任何形式的桌面直连或 Core 监听网络（Rule 2）。
+
+## 2. 拓扑
+
+```
+iOS App ──WSS(TLS)──▶ Caddy ──▶ relay（127.0.0.1，systemd）◀── Caddy ◀──WSS(TLS)── Core 远程模块
+   │                         │  频道表（内存）                                │
+   └──── Noise 端到端会话（relay 看不懂）──────────────────────────────────────┘
+                             │
+                             └──HTTP/2──▶ APNs ──▶ 手机通知（NSE 解密）
+```
+
+- **Core 远程模块**：已配对时才连（第 7 节）。出站 `wss://<relay 域名>/v1/connect`，角色 `host`。应用层心跳不超过 25 秒，断线指数退避加抖动。
+- **手机**：只在前台连，角色 `client`。进后台就视为随时会断：iOS 进后台约 5 秒后挂起，挂起后 socket 可能被回收，官方建议改用推送（外部 §5）。
+  WebSocket 按 Apple 的建议用 Network framework 写（外部 §5，TN3151）。
+- **Caddy**：`reverse_proxy` 自动支持 WebSocket。但 reload 默认会关闭已建立的 WebSocket（v2.6.0 起），所以 relay 站点要配 `stream_close_delay 5m`
+  （v2.7.0 起有）。Caddy 要 ≥ 2.11.7，因为 2.11.6 引入的默认一分钟空闲超时是否作用于 WebSocket 尚未核实，靠 25 秒心跳兜底（外部 §6）。
+  frankfurt 上层台的维护页开关会 reload Caddy（`inkstone-ops/docs/machines/frankfurt.md` 第五节），客户端必须能无感重连。
+
+## 3. 密钥与身份
+
+### 3.1 P0：一把配对主密钥
+
+- 桌面「设置 → 手机」生成 32 字节随机**配对主密钥** MK，存进 Core 现有的凭据存储，键 `remote:pairing:mk`（`core/src/credential_store.rs:28-58`，
+  AES-256-GCM，与 IM 渠道密钥同一机制）。它不在 macOS 钥匙串里：凭据存储的密文和主密钥都在同一个 SQLite 里（`credential_store.rs:1-7`），
+  P1 再迁到钥匙串。
+- 二维码内容：`galley-pair:1?relay=<relay URL>&mk=<base64url(MK)>&name=<桌面显示名>`。只在屏幕上展示，不落文件、不进日志。
+- 派生（HKDF-SHA256，salt 为 `galley-remote-v1`，每个用途一个 info 标签）。Noise 规范要求 PSK 只用在 Noise 里（外部 §1，规范 §14），
+  所以各用途分开派生：
+
+| 派生值 | info | 用途 | 谁看得到 |
+|---|---|---|---|
+| `channel_secret`（32 字节） | `channel` | 连 relay 时出示；relay 用 `SHA-256(channel_secret)` 作频道键 | relay 看得到，但它只是随机串，推不出其他密钥 |
+| `noise_psk`（32 字节） | `noise-psk` | Noise 握手的 psk | 只有两端 |
+| `push_key`（32 字节） | `push` | 推送内容加密（第 4.3 节） | 只有两端和 NSE |
+
+- 手机把 MK 存进钥匙串，access group 与 NSE 共享，可访问性设为 `AfterFirstUnlock`。否则锁屏或重启后 NSE 读不到密钥，只能显示占位文案（外部 §4、建议 6）。
+- **「解除配对」就是轮换 MK**：桌面删掉旧 MK、断开连接，所有手机要重新扫码。P0 只有 JC 一台手机，代价可接受。
+- **安全底线**：持有 MK 就等于能在这台电脑上远程执行任意操作（PRD 风险第一条；审批已在 10-05 移除）。P0 的缓解只有两条：二维码只在桌面现场展示，
+  以及随时可解除配对。
+
+### 3.2 P1 升级路径（P0 不实现，但不能堵死）
+
+- **配对**：`XXpsk3`，二维码给一次性 32 字节配对码作 psk，担保双方首次交换的长期公钥；桌面维护手机公钥白名单，手机记下桌面公钥。
+- **常规会话**：`KK`，或加每设备 psk 的 `KKpsk2`；`IKpsk2` 是 WireGuard 用过的备选（外部 §1）。
+- **吊销**：从白名单删掉该设备公钥。
+- **推送**：每台设备自己的推送密钥对，桌面用 HPKE（iOS 17 起有）或 Noise 单向模式加密，桌面被攻破也解不开旧推送（外部建议 5）。
+- **共存**：协议版本在 prologue 里，P0 和 P1 的握手不会被互相降级；迁移时手机重扫一次码即可。
+
+## 4. relay
+
+### 4.1 它看到什么、能做什么（对照 Rule 2）
+
+Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no user data, and cannot issue commands.」（`AGENTS.md:107-126`）
+
+| 项 | 设计 | 是否符合 |
+|---|---|---|
+| 内容 | 只见 Noise 密文；推送载荷也是密文 | 符合「只见密文」 |
+| 路由元数据 | 频道键（随机串的哈希）、角色、连接起止时间、帧大小与时序、推送请求（设备 token、不透明的 collapse id） | 属于 routing metadata；帧大小会泄露「有人在看 / 在跑」，用填充减少（第 5 节） |
+| IP | TCP 层不可避免；relay 与 Caddy 都不记访问日志（Caddy 默认就不记，外部 §6） | 不落盘 |
+| 存储 | 只有内存里的频道表和计数器；设备 token 不在 relay 上存 | 符合「不存用户数据」 |
+| 发命令 | 没有任何密钥，伪造帧过不了 AEAD 校验；推送只能转发桌面给的密文 | 符合「不能发命令」 |
+| 只和已配对设备通话 | 握手要 `noise_psk`，只有扫过码的设备有 | 符合 |
+
+### 4.2 接口
+
+- **建连**：`GET /v1/connect` 升级 WebSocket，鉴权放请求头，不放 URL query，以免日后开访问日志被记下（外部建议 8）：
+  - `X-Galley-Channel: <base64url(channel_secret)>`
+  - `X-Galley-Role: host | client`
+  - `X-Galley-Relay: 1`（relay 外层协议版本）
+- **外层帧**（WebSocket 二进制消息，首字节为类型；`remote-protocol` crate 定义，Core、relay、iOS 三方共用）：
+
+| 类型 | 方向 | 内容 |
+|---|---|---|
+| `DATA` | 双向 | 一条 Noise 消息（≤ 65535 字节，外部 §1）。host 发出的带目标 `peer`，client 发出的由 relay 标上来源 `peer` |
+| `PEER` | relay → 端 | 对端上线 / 下线。手机据此显示「电脑已离线」；Core 据此决定要不要往外推事件 |
+| `PUSH` | host → relay | `{deviceToken, env, collapseId, priority, ciphertext}` |
+| `PUSH_RESULT` | relay → host | 成功，或 APNs 410（token 失效，桌面删掉），或其他错误 |
+| `PING` / `PONG` | 双向 | 心跳，25 秒 |
+
+- **规则**：
+  - 一个频道一个 host，新 host 连上就挤掉旧的（桌面重启的情形）；
+  - client 上限 4 个；
+  - 单连接限速，持续 512KB/s、突发 2MB；
+  - 90 秒没心跳就断。
+
+### 4.3 推送
+
+- **APNs 通道**：token 认证。`.p8` 密钥签 ES256 的 JWT，每 20～60 分钟换一次；HTTP/2 长连接复用；生产端点 `api.push.apple.com`，开发构建用沙盒（外部 §4）。
+- **APNs 客户端选型**：
+  - 不用停更的 `a2`；
+  - 用 `reqwest`（Core 已在用 0.12，`core/Cargo.toml:115`）加 `jsonwebtoken` 自己写，或者用 Threema 在维护的 `apns-h2`（外部 §4）。
+  - 推荐自己写：只发一种推送，代码量小，依赖与 Core 一致。
+- **载荷**（≤ 4096 字节，外部 §4）：
+
+  ```json
+  { "aps": { "alert": { "title": "Galley", "body": "有新消息" }, "mutable-content": 1, "sound": "default" },
+    "g": "<base64(nonce ‖ ChaChaPoly(push_key, 明文))>" }
+  ```
+
+  - 明文是 `{seq, sessionId, kind, title, body}` 的 JSON，填充到固定桶长；
+  - `seq` 单调递增，NSE 在 App Group 里记已收到的最大 `seq`，拒绝 relay 重放的旧推送；
+  - `collapse-id` 用不透明值。
+- **兜底**：NSE 30 秒内解不开，或者超时，系统显示外层的占位文案（外部 §4）。不申请静默丢弃推送的 entitlement。
+- **设备 token**：手机经端到端通道调 `device.registerPush` 交给桌面，桌面存在 prefs，以后 P1 改为按设备存。收到 410 就删掉。relay 不存 token。
+- **哪些事件推送**：裁决 17 的四类「需要关注」由 Core 判断（票 08）。本票只负责把推送发得出去、解得开。
+
+### 4.4 实现、部署与容量
+
+- **实现**：Rust 二进制 `relay/`，tokio，配合 axum 或 hyper 加 tokio-tungstenite；只依赖 `remote-protocol` 的外层帧模块。
+  - 配置走环境变量和文件：APNs 密钥路径、team id、key id、bundle id、环境；
+  - 计数器只监听 127.0.0.1，记每日进出字节、连接数、推送数、错误数，不含频道键。
+- **部署**（归 inkstone-ops，裁决 23）：
+  - 用 systemd 跑二进制，不进 docker：frankfurt 上 docker 会被无人值守升级重启（frankfurt 档案第三节）；
+  - Caddy 站点文件配 `stream_close_delay`、关访问日志；
+  - DNS 子域；APNs 密钥只写「在哪取」。
+  - galley 的 CI 出 relay 构建产物，tag 用 `relay-v*`。
+- **容量**：frankfurt 端口 200Mbps、流量不限（档案第一节，2026-10-10）。按 relay 用一半带宽、每人在看时 2～10KB/s 估：同时约 1200～6000 人在看。
+  先撞到的是大件传输（图片、历史）的延迟，所以第 6 节做了这几件事：
+  - 历史分页；
+  - 图片在手机端先压缩；
+  - 流式事件 100ms 合批；
+  - 按连接限速。
+
+## 5. 端到端会话（Noise）
+
+- **模式**：`Noise_NNpsk0_25519_ChaChaPoly_SHA256`。iOS 的 CryptoKit 没有 BLAKE2，所以选 SHA256 套件（外部 §3）。
+- **角色**：手机是发起方，Core 是响应方。
+- **prologue**：`galley-remote/1` ‖ relay 外层版本 ‖ 双方角色，把版本绑进握手，防降级。
+- **握手两步**：
+  1. 手机 → Core：`psk, e`，载荷为空。这条消息只靠 psk 保护，可被重放、没有前向保密，所以什么都不放（外部建议 1）。
+     relay 重放它也没用：Core 会回一个新的 `e`，重放者没有手机的临时私钥，算不出会话密钥。
+  2. Core → 手机：`e, ee`，载荷是 Core 的 hello（见第 6 节）。
+- **传输**：
+  - 每条手机连接一个会话，重连就重新握手，开销很小；
+  - 会话最长 24 小时，到点主动重连换密钥；
+  - 每条 Noise 消息 ≤ 65535 字节，应用层超过就分片（第 6 节 `chunk`）；
+  - 会话结束显式发结束标记，防截断（外部建议 10）。
+- **不压缩，只填充**：
+  - agent 读的网页由外部攻击者控制，又和对话内容在同一压缩上下文里，relay 看得到密文长度，满足 BREACH / VORACLE 类攻击的前提。
+    RFC 9113 §10.6 的结论是不压缩（外部 §7）。
+  - WebSocket 的 permessage-deflate 关掉。
+  - 明文填充：小于 256 字节的补到 256，更大的按 Padmé（额外开销 ≤ 12%，外部 §7）。
+- **库**：
+  - Rust 用 `snow` 0.10.0。它支持 psk；没有正式审计；0.9.5 修过一个 nonce DoS（外部 §2）。
+  - Swift 两条路：用 CryptoKit 原语写一个薄的 Noise（iOS 13 起原语齐全，规范 §5 有伪代码），或者 vendor `swift-libp2p/swift-noise` 并锁定提交（4 star，1 个贡献者）。
+    见第 12 节裁决点 2。
+- **测试**：Rust 和 Swift 两侧都跑 cacophony 向量（944 条，覆盖 NNpsk0、XXpsk3、KK 等的 ChaChaPoly_SHA256 组合）。
+  另加一条固定临时钥的 Rust↔Swift 互通用例；snow 有 `fixed_ephemeral_key_for_testing_only`（外部 §3）。
+
+## 6. 应用层协议（端到端通道内）
+
+### 6.1 消息形状
+
+JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后再解析。
+
+- 请求：`{"t":"req","id":7,"m":"session.send","p":{...}}`
+- 响应：`{"t":"res","id":7,"ok":true,"r":{...}}`；失败为 `{"t":"res","id":7,"ok":false,"e":{"code":"history_replay","message":"..."}}`。
+  错误码沿用 Core 已有的稳定标签，例如 02c 的 `images_not_queueable`（`core/src/session_send.rs:143-151`）。
+- 事件：`{"t":"evt","n":"session.updated","p":{...}}`
+- 分片：`{"t":"chunk","id":7,"i":0,"last":false,"data":"<base64>"}`
+
+**数据结构单独定义**：在 `remote-protocol` 里显式定义手机用的类型（camelCase），不直接序列化 Core 的内部类型，由 Core 负责转换。这样做的理由：
+
+- Core 内部类型改了不会意外破坏手机；
+- `PersistedMessageRow` 甚至是 snake_case（`core/src/db/rows.rs:157-179`）。
+
+### 6.2 版本握手（补 PRD 待定「手机协议的版本握手规则」）
+
+- Core 的 hello：`{protocol: {major: 1, minor: n}, coreVersion, desktopName}`；手机的第一条请求是 `hello`，带 `{protocol, appVersion}`。
+- 同一 major 内只加不删。未知字段忽略，未知方法回 `unknown_method`，未知事件忽略。
+- major 不同：两端都提示该升级哪一边（「请升级 Galley 桌面」或「请到 App Store 更新」），然后断开。
+
+### 6.3 方法（P0）
+
+| 方法 | Core 实现（代码事实） | 说明 |
+|---|---|---|
+| `hello` | — | 版本握手 |
+| `sessions.list` | `GalleyApi::list_sessions`（`core/src/api.rs:76`），按 `runtimeKind = managed` 过滤（裁决 18）；附每个会话的运行状态 | 全量。P0 约 125 条，几十 KB；没有增量查询，删除是硬删除、没有墓碑（`db/session.rs:259`，`api.rs:248-252`），全量最简单 |
+| `session.messages` | `persisted_message_rows`（`db/session.rs:42-70`）转换成手机的类型，加分页参数 `before` / `limit` | 原函数不分页，要加分页；打开会话先取尾部，往上翻再取 |
+| `session.send` | `session_send::send_user_message`（`session_send.rs:173-214`），`origin.via = gui`、`client = ios`（裁决 9） | 图片 ≤ 4 张、单张 ≤ 10MB（`commands/session.rs:4-6`），手机先压缩，大的走 `chunk` 上传；带 `clientRequestId`，认领规则同 GUI（02c） |
+| `session.stop` | `stop_session_run`（`session_send.rs:385-398`） | |
+| `session.create` | `Writes::create_session`（`session_writes.rs:304-312`），会话 id 由 Core 生成 | `mint_session_id` 现在是 `pub(super)`（`socket_listener/session_cmds.rs:726-750`），要放宽可见性 |
+| `session.markRead` | `Writes::clear_session_unread`（`session_writes.rs:423-427`） | 写库后会自动广播 |
+| `session.subscribe` / `unsubscribe` | 远程模块记下该手机正在看的会话 | 只给订阅的会话转发 `runner-event` |
+| `attachment.read` | **新增**：按附件 id 读，只允许 `conversation-attachments/` 下的文件（`app_paths.rs:37-66`），分片返回 | **不开放 `access_local_file`**：它接受任意绝对路径（`local_file.rs:80-96`） |
+| `device.registerPush` | 新增：把手机的 APNs token 存进 prefs | |
+
+### 6.4 事件（经通知扇出转给已连接的手机）
+
+| 事件 | 来源 | 说明 |
+|---|---|---|
+| `session.created/updated/archived/unarchived/moved/deleted` | 02d 的 `*-external`（`session_writes.rs:52-60`），`SessionBriefEvent` 显式带 null | 只转内置会话 |
+| `project.created/updated/deleted` | 同上 | 侧栏分组 |
+| `message.persisted` | `user-message-persisted`（四处来源，见代码事实第 2 节） | 带 `clientRequestId` |
+| `runner.event` | `runner-event`，只转订阅的会话 | `turn_progress` 按 100ms 合批；单条最大的是 `turn_end`，带完整工具调用与结果（`core/src/ipc.rs:184-219`） |
+| `session.runState` | **新增**的 Core 事件（第 7 节缺口 3） | 「在跑 / 在问你 / 排队」 |
+| `history.replay`、`goal.updated`、`queue.changed` | 已有 | |
+
+### 6.5 重新同步
+
+- 连上或重连时依次做：
+  1. `hello`；
+  2. `sessions.list`（含运行状态）；
+  3. 若正在看某会话：`session.messages` 取尾部，再 `subscribe`。
+- 事件漏了就以重读为准，与 `notify.rs:16-23`「GUI 漏了事件从数据库重读」同一个约定。
+- 转发队列按手机分开、有上限。手机跟不上时先丢 `runner.event` 的增量，状态类事件保留；丢过就让手机重拉当前会话。
+
+## 7. Core 改动（票 05）
+
+**结构**：新模块 `core/src/remote/`，包括：
+
+- 连接任务：tokio-tungstenite 加 rustls，这是**新依赖**，Core 目前没有任何 tungstenite（`core/Cargo.toml`）；
+- Noise 会话：snow；
+- 请求分发：调用第 6.3 节列出的函数，不经 Tauri 命令层；
+- 事件转发：按手机分订阅、合批、限流。
+
+在 `start_background_services`（`core/src/app_setup.rs:396-451`）里、单实例检查之后启动；在托盘退出清理时停止（`tray.rs:118-137`）。
+发送要拿到 `AppHandle` 作为 `SpawnEnv`（`session_runner/mod.rs:92-99`），远程模块在 Core 进程内，天然有。
+
+**要补的缺口**（代码事实）：
+
+1. **通知扇出**：现在没有组合用的 Notifier，`TauriNotifier::new` 在 `core/src` 里有 35 处临时构造，有些在长期任务里一直捕获着
+   （runner 的 emit 任务、自动标题任务、排队消费者）。推荐让 `TauriNotifier` 在发给页面之后，再转给一个进程级的「远程接收端」
+   （`OnceLock`，远程模块启动时注册，没注册就什么都不做）。35 处构造一处都不用改，长期任务也自动带上。
+   备选是统一工厂、替换 35 处：改动面大，收益只是不用全局变量。
+2. **轮次落库后广播会话更新**：Core 写完一轮不广播 `turn_count / summary / last_activity_at`（`turn_persistence/mod.rs:157-170`），
+   手机的会话列表会过时。把 02e 里「让 `turn_persistence` 广播会话更新」这一项提前做。GUI 侧 02d 已经加了「只取不落后于本页的轮次进度」的守卫，
+   收到这条广播不会重复加一。
+3. **运行状态事件**：`RunState` 只在内存里，也没有变化事件（`runner_manager/manager.rs:72-94,846-869`）。新增 `session-run-state`，
+   在闸门、`agent_running`、`ask_pending`、队列长度变化时发出。手机靠它显示状态，不必像 GUI 那样从 runner 事件里推断。
+4. **附件只读接口**：见第 6.3 节 `attachment.read`。
+5. **配对密钥**：见第 3.1 节，存凭据存储；`client` 列见第 12 节裁决点 5。
+
+**桌面界面**：设置里新开「手机」页，含配对二维码、解除配对、连接状态（在线手机数、最近一次连接）。按裁决 10，同页检查「接通电源时保持唤醒」
+和「关闭窗口时保持后台运行」（`tray.rs:47-58`）。
+
+## 8. relay 实现（票 06）
+
+- `relay/`：频道表 `HashMap<频道键, {host, clients}>`，按外层帧转发，代发 APNs，计数器。不依赖 Core。
+- 测试：进程内起 relay，加两个假端点，覆盖转发、挤掉旧 host、限速、心跳超时、推送 410 回报；APNs 用假服务器。
+
+## 9. iOS 侧的协议要点（票 07 的一部分）
+
+- Network framework 写 WebSocket；Noise 的实现方式见第 12 节裁决点 2。
+- 钥匙串 access group 与 NSE 共享，可访问性 `AfterFirstUnlock`。
+- 进后台就主动断开；回前台重连并重新同步（第 6.5 节）。
+- NSE 预算按 30 秒、24MB 估。24MB 只有 Apple DTS 论坛的口径，未核实（外部 §4）。
+
+## 10. 测试与门禁
+
+| 层 | 钉法 |
+|---|---|
+| Noise | 两侧都跑 cacophony 向量；Rust↔Swift 固定临时钥互通用例 |
+| 外层帧 | `remote-protocol` 的 golden 帧字节，Rust 与 Swift 两侧解码同一份 |
+| 应用层数据结构 | Rust 类型生成 JSON 样例（golden fixtures），Swift `Codable` 逐条解码；照 `scripts/check-ipc-protocol-drift.mjs` 的先例写 `check-remote-protocol-drift` |
+| relay | 进程内集成测试 |
+| 端到端 | dev 环境：本机起 relay、Core 连本机 relay、iOS 模拟器连本机；真机再连 frankfurt |
+
+CI：iOS 用单独的 workflow，按路径过滤（`ios/**`、`remote-protocol/**`、桌面样式与文案源）；公开仓用 GitHub 托管的 macOS runner 不计费。
+
+## 11. 未核实与风险
+
+- 未核实（外部调研列出）：
+  - NSE 的 24MB 内存上限；
+  - time-sensitive 中断级别的 entitlement 键名；
+  - Caddy 2.11.6 起的空闲超时是否作用于已升级的 WebSocket；
+  - `swift-noise` 测试向量的来源；
+  - Signal 的 NSE 是否去服务器拉内容。
+- 中国区上架的 App 备案对跨境转发有无额外要求：未核实（PRD 风险已列）。
+- `snow` 没有正式审计。缓解：锁版本、关注 RUSTSEC 公告、只用规范推荐的模式。
+- relay 是全天候生产服务，只有 JC 一人运维。它无状态，换机器只要改一条 DNS；层台转正式生产时考虑把 relay 迁到独立小机器，与客户的生产环境隔离。
+
+## 12. 需要 JC 裁的五点
+
+1. **P0 握手先简后升，还是一步到位？**
+   - **A（推荐）**：P0 用 NNpsk0，一把共享主密钥；P1 升级 XXpsk3 配对加 KK 会话，迁移时重扫一次码。P0 实现最少，P0 只有你一台手机，吊销需求还不存在。
+   - B：P0 直接上 XXpsk3 配对加 KK 会话加设备白名单。省掉一次迁移，但 P0 要多做公钥生成存储、白名单和两种握手。
+2. **Swift 侧 Noise 怎么来？**
+   - **A（推荐）**：用 CryptoKit 原语自己写一个薄实现，只实现用到的模式，两侧跑 cacophony 向量钉住。没有第三方依赖，开源后别人也好审。
+   - B：vendor `swift-libp2p/swift-noise` 并锁定提交。现成，但只有 4 star、1 个贡献者，向量来源不明。
+3. **relay 用什么域名？** 例如 `relay.inkstone.xyz`。DNS 在 inkstone-ops（`docs/domains.md`）。若打算给 Galley 单独注册品牌域名，现在就该决定，
+   因为 App 里会写死这个地址，以后改要发版。
+4. **通知里显示什么？**
+   - **A（推荐）**：显示真实内容，标题是会话标题，正文是回复摘要或「在问你：问题」。推送是端到端加密的，只有手机能解开；锁屏是否显示预览交给 iOS 系统设置。
+   - B：只显示「Galley：有新消息」，内容要点开 App 才看到。更保守，但「它来找你」这个场景（移动端产品定义）会弱很多。
+5. **范围合并**：票 03（`client` 列迁移）和 02e 里「轮次落库广播」一项，都并进 05 一起做？
+   - **推荐并进**：前者是手机用量统计（PRD「P0 要回答的问题」）的前提，后者是手机会话列表正确的前提。两者都很小，单独排期反而多一轮合入和验收。
+
+裁完后拆实现票：
+
+| 票 | 内容 |
+|---|---|
+| 05a | `remote-protocol` crate（外层帧、应用层数据结构、Noise 封装与向量测试） |
+| 05b | Core 远程模块 |
+| 05c | Core 缺口：扇出、轮次广播、运行状态事件、附件接口、`client` 列 |
+| 05d | 设置「手机」页 |
+| 06a | relay |
+| 06b | APNs 发送 |
+| 06c | 部署（inkstone-ops） |
+
+iOS 的工程与 UI 仍按产品定义的次序，等主聊天桌面形态定了再开（移动端产品定义「方案总览与次序」）。
+
+## Comments
