@@ -1,6 +1,6 @@
 # 02 — Core 接管发送 + 所有写入都广播
 
-Status: ready-for-agent（2026-10-09 JC 裁决全按推荐，见「裁决」；02a 起按序做，02e 暂缓到 P1）
+Status: in-progress（02a `0df5de5c`、02b `1ab69b51` 已合入 main，2026-10-10；下一张 02c；02e 暂缓到 P1）
 
 来源：PRD 裁决 7。调研 2026-10-09（子代理只读调研，主会话逐条复核了标 ✓ 的事实）。
 
@@ -198,3 +198,8 @@ dev 模式两端 Python 是否一致；外置模式 `pendingLLMIndex` 语义；`
     GUI 与手机这一侧。ensure 持单飞槽贯穿回放，最坏约 2×（30＋8）秒，同会话的激活与发送会等。
   - 验证：cargo test --workspace 646 通过 0 失败（基线 627 / 0）；vitest 944 / 0（基线 934 / 0）；typecheck、lint、三个门禁脚本、
     `git diff --check` 通过。抽查：去掉「先回放再派发」，Goal 顺序测试变红；把关闭闸改回旧行为，两条真进程测试变红；均已还原。未真机 dogfood。
+- 2026-10-10 真机 dogfood（主会话，用户的 `tauri dev` + CLI）：
+  - 02a：CLI `session new` 建的内置会话首轮跑完，标题自动改为「天空为什么是蓝色」（`title_source = auto`），以前只会截断首条消息；runner 解释器与 `ga_config` 一致。
+  - 02b：按 10-09 的复现步骤重跑。CLI 建会话记「蓝鲸 4721」→ 合入 02b 后 dev 重启 Core，会话 `runnerAlive: false` → `goal start` 问暗号 → 回答「蓝鲸 4721」并宣告完成。
+    内置记忆目录里没有「4721」，排除凭记忆作答。发现 2 修复确认。两个测试会话已归档。
+  - 未在 GUI 里点验（留给 JC）：冷会话点开后发送、运行中 Cmd+R 重载、EmptyState 选模型后首发。

@@ -108,7 +108,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 | # | 内容 | 依赖 | 状态 |
 |---|---|---|---|
 | 01 | 宪法 Rule 2 修订，同步 `docs/PRD.md` §4.2 与 §6.2 非目标、`docs/architecture.md` Localhost Only 一节；顺带改写 PRD §2 / §4.2 的远程叙事与 IM 定位（裁决 19、21），并把 §2 第 3 条「手机上是管理」换成[移动端产品定义](../mobile-product/PRD.md)的定位与核心价值。[措辞稿](./issues/01-rule2-and-prd-rewrite.md) | — | done（`0d59f9a7`、`18f7fe51`） |
-| 02 | Core 接管发送 + 所有写入都广播，拆为 02a–02e（02e 暂缓到 P1），见 [issues/02](./issues/02-core-send-takeover.md) | — | ready-for-agent |
+| 02 | Core 接管发送 + 所有写入都广播，拆为 02a–02e（02e 暂缓到 P1），见 [issues/02](./issues/02-core-send-takeover.md) | — | 进行中（02a、02b done 2026-10-10） |
 | 03 | `client` 列迁移（`messages`、`sessions`；补六处手写迁移列表） | — | open |
 | 04 | 保持唤醒开关 | 待定细节 | open |
 | 05 | `Notifier` 扇出 + Core 内远程模块（向外 WSS，预共享密钥） | 02 | open |
