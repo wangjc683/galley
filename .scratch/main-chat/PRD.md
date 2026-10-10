@@ -92,6 +92,10 @@ Status: needs-info（方向已定，2026-10-09 第二轮升为 Galley 下一步�
 - 要回答：长线索在 GA 裁剪下还好不好用；冷启动回放有多慢；不同话题混在一条里会不会乱；什么时候想开旁聊。
 - 复盘看：这个会话的用户轮次；每轮 `telemetry_json` 的 `inputTokens`、`cacheReadTokens`、`contextUsedChars` 怎么涨、何时第一次触达
   `contextLimitChars`；JC 往里放什么、什么时候想开旁聊（直接决定入口层的委派规则）；JC 的实感。
+- 查数：`python3 -I .scratch/main-chat/baseline-snapshot.py`（只读 `workbench.db`）。不带参数列出候选会话，`--session <id>` 逐轮出数，
+  并列出同期在桌面另开的会话（旁聊信号）。注意 `turn_index` 数的是内核步数、不是人的轮次，脚本按用户消息重新编号。
+- 2026-10-10 中期快照：本机库里没有置顶会话；10-09 起桌面只开过 1 个会话（1 轮），其余是 CLI、IM 与测试会话。
+  测量要么没在这台 Mac 上进行，要么还没开始，待 JC 确认。
 
 ## 待定
 
