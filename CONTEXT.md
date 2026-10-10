@@ -131,8 +131,28 @@ silently dropped argument (2026-07-11 decision; see devlog).
   dropped session id (2026-07-27 decision).
 - **`HandlerCtx`** — what a Core socket write handler may touch
   (`core/src/socket_listener/ctx.rs`): `DbSource` (global on-disk DB or
-  injected test pool), **`RunnerPort`** (the 6-method trait that IS the
-  socket→runner coupling), **`Notifier`** (`core/src/notify.rs`, GUI
+  injected test pool), **`RunnerPort`** (the trait that IS the
+  socket→runner coupling, also the registry seam of the shared session
+  runner path below), **`Notifier`** (`core/src/notify.rs`, GUI
   event seam replacing `AppHandle` reach-ins). Production composes at
   `dispatch_line`; tests enter via `dispatch_line_with` with fakes —
   see `core/tests/socket_write_handlers_test.rs`.
+
+## Session runner
+
+- **Ensure a runner** — Core's one path for "this session needs a live
+  runner" (`core/src/session_runner/`, ticket 02a, 2026-10-10): return
+  the runner Core already holds, or resolve spawn arguments from the
+  session row + prefs and start one. Single-flight per session; a live
+  runner is never replaced (`RunnerManager::spawn` would kill its run).
+  Callers: the GUI (Tauri `ensure_session_runner`), Goal dispatch, and —
+  spawn-only, since the session is new — socket `session.new`
+  (`spawn_and_attach`). Every runner it starts gets the emit task, the
+  auto-title watcher and a `runner-spawned-external` broadcast. Not
+  "spawn": spawning is the registry primitive that replaces.
+- **Ready snapshot** — a live runner's latest `ready` report folded with
+  later `llm_changed` / `reasoning_effort_changed`
+  (`core/src/runner_manager/ready.rs`), cleared when the runner exits.
+  Handed to a page that attaches after `ready` went by
+  (`ensure_session_runner`, `list_live_runners`). It updates stores only;
+  history replay stays tied to a real `ready` event.

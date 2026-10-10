@@ -1,9 +1,11 @@
 //! Tauri-command surface that wraps [`crate::runner_manager::RunnerManager`].
 //!
-//! Eight `#[tauri::command]`s are registered:
+//! Nine `#[tauri::command]`s are registered:
 //!
 //! 1. [`spawn_runner`] — spawn a new Python runner subprocess + start an
-//!    emit task that fans broadcast events to the GUI
+//!    emit task that fans broadcast events to the GUI. Since ticket 02a
+//!    only the GUI's LLM-list warmup uses it (a runner with no session);
+//!    session runners go through [`ensure_session_runner`]
 //! 2. [`send_to_runner`] — write a typed [`IpcCommand`] to the subprocess
 //! 3. [`shutdown_runner`] — graceful shutdown (send `{kind:"shutdown"}` +
 //!    wait), with a kill fallback on timeout
@@ -16,9 +18,15 @@
 //! 8. [`list_live_runners`] — every runner Core still holds, so a GUI page
 //!    that lost its listeners (webview reload) re-attaches instead of
 //!    re-spawning
+//! 9. [`ensure_session_runner`] — the GUI's entry to Core's shared
+//!    "ensure a runner for this session" path ([`crate::session_runner`]):
+//!    returns the live runner (with its latest `ready` state) or starts
+//!    one from the session row and prefs
 //!
 //! External-runtime spawn-arg preparation lives in the `external_spawn`
-//! submodule; the managed-runtime spawn path stays in this file.
+//! submodule; the managed-runtime spawn path stays in this file. Session
+//! runners resolve their arguments in [`crate::session_runner`], which
+//! calls both.
 //!
 //! ## Event channel contract
 //!
@@ -52,7 +60,11 @@ use crate::api::{GalleyApi, ManagedModelAuthKind, ManagedModelProtocol, RuntimeK
 use crate::db::SqliteGalley;
 use crate::ipc::IpcCommand;
 use crate::runner_manager::{
-    BroadcastItem, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
+    BroadcastItem, ReadySnapshot, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError,
+    SpawnArgs,
+};
+use crate::session_runner::{
+    EnsureOptions, GaConfigPref, LlmChoice, RunnerHost, SessionRunnerError,
 };
 use crate::{codex_oauth, credential_store, managed_model_config, managed_prompt, managed_runtime};
 use serde::{Deserialize, Serialize};
@@ -431,8 +443,9 @@ pub async fn spawn_runner(
         .await
         .ok_or_else(|| "subscribe failed after spawn (race?)".to_string())?;
 
-    // Second, independent subscriber: the auto-title watcher (v1 scope:
-    // GUI spawn path only — see core/src/auto_title.rs module docs).
+    // Second, independent subscriber: the auto-title watcher (see
+    // core/src/auto_title.rs module docs; session runners get theirs from
+    // `crate::session_runner`).
     if let Some(title_rx) = manager.subscribe(&session_id).await {
         crate::auto_title::spawn_auto_title_task(
             app.state::<SqliteGalley>().inner().clone(),
@@ -541,6 +554,11 @@ pub struct LiveRunnerPayload {
     /// session as running and restores its history before the next
     /// live event lands.
     pub run_open: bool,
+    /// The runner's latest `ready` state (2026-10-10, additive): a page
+    /// attaching after `ready` went by applies it instead of waiting for
+    /// an event that will not come again. `null` until the runner
+    /// reports. Never a reason to replay history.
+    pub ready: Option<ReadySnapshot>,
 }
 
 /// Every runner Core still holds. A webview reload drops the page's
@@ -555,13 +573,161 @@ pub async fn list_live_runners(
     let mut out = Vec::new();
     for (session_id, pid) in manager.live_runners().await {
         let state = manager.run_state(&session_id).await;
+        let ready = manager.ready_snapshot(&session_id).await;
         out.push(LiveRunnerPayload {
             session_id,
             pid,
             run_open: state.open_run || state.agent_running,
+            ready,
         });
     }
     Ok(out)
+}
+
+/// Result of [`ensure_session_runner`].
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct EnsureSessionRunnerResult {
+    pub pid: u32,
+    /// `true`: this call started the runner and its `ready` event is on
+    /// the way. `false`: it was already alive — no `ready` will come, use
+    /// `ready` below.
+    pub spawned: bool,
+    /// Latest `ready` state of an already-live runner (`null` when
+    /// `spawned`, or when it has not reported yet). Apply it to the
+    /// stores only — it must never trigger a history replay.
+    pub ready: Option<ReadySnapshot>,
+}
+
+/// Make sure `session_id` has a live runner — Core's shared path
+/// ([`crate::session_runner::ensure_session_runner`]), single-flight per
+/// session. A live runner is returned as-is, never replaced. A started
+/// one is announced with `runner-spawned-external` (`via: "gui"`); the
+/// page that asked attaches its listeners before invoking and must not
+/// attach a second set on that broadcast.
+///
+/// - `llm_index` / `llm_key`: start a brand-new session on this model
+///   instead of the session row's persisted choice (the EmptyState
+///   picker's pending pick).
+/// - `active_session_id`: the eviction-protected session for the LRU cap.
+/// - `ga_config`: transitional. The page's in-memory `gaConfig`, used in
+///   place of the stored `ga_config` pref so a spawn resolves exactly as
+///   the GUI's own spawn did: the page applies a Settings change to
+///   memory before its pref write lands (and keeps it if that write
+///   fails). Drop it once Settings writes go through Core.
+///
+/// Errors are JSON strings like [`spawn_runner`]'s: a
+/// [`RunnerSpawnError`] (`{"error","detail"}`) for runtime / spawn
+/// problems, a [`crate::error::GalleyError`] (`{"error","message"}`) for
+/// DB ones.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn ensure_session_runner(
+    session_id: String,
+    llm_index: Option<i64>,
+    llm_key: Option<String>,
+    active_session_id: Option<String>,
+    ga_config: Option<GaConfigPref>,
+    manager: State<'_, std::sync::Arc<RunnerManager>>,
+    galley: State<'_, SqliteGalley>,
+    app: AppHandle,
+) -> Result<EnsureSessionRunnerResult, String> {
+    let started_at = Instant::now();
+    await_session_row(galley.inner(), &session_id).await;
+    let host = RunnerHost {
+        galley: galley.inner(),
+        runner: manager.inner().as_ref(),
+        notifier: crate::notify::TauriNotifier::new(app.clone()),
+        env: Some(&app),
+    };
+    let llm_override = (llm_index.is_some() || llm_key.is_some()).then_some(LlmChoice {
+        index: llm_index,
+        key: llm_key,
+    });
+    let outcome = crate::session_runner::ensure_session_runner(
+        &host,
+        &session_id,
+        EnsureOptions {
+            via: "gui",
+            active_session_id: active_session_id.as_deref(),
+            llm_override,
+            ga_config,
+        },
+    )
+    .await
+    .map_err(gui_error_json)?;
+    eprintln!(
+        "[perf] core.ensure_session_runner session_id={} pid={} spawned={} elapsed_ms={:.1}",
+        session_id,
+        outcome.pid,
+        outcome.spawned,
+        elapsed_ms(started_at)
+    );
+    Ok(EnsureSessionRunnerResult {
+        pid: outcome.pid,
+        spawned: outcome.spawned,
+        ready: outcome.ready,
+    })
+}
+
+/// The GUI creates a session row fire-and-forget (`createSession`) and
+/// may activate it right away; before 02a its spawn did not need the row.
+/// Give an in-flight `create_session` a moment to land (bounded, 1s)
+/// before the ensure reads it. Any other outcome is left to the ensure.
+async fn await_session_row(galley: &SqliteGalley, session_id: &str) {
+    for _ in 0..20 {
+        match galley
+            .session_brief(crate::api::SessionId(session_id.to_string()))
+            .await
+        {
+            Err(crate::error::GalleyError::NotFound { .. }) => {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            _ => return,
+        }
+    }
+}
+
+/// Render a shared-path error for the GUI the way `spawn_runner` errors
+/// always reached it, so `formatInvokeError`'s actionable messages keep
+/// matching. A blank / missing GA path is what the old GUI spawn reported
+/// for an empty `gaConfig.gaPath`.
+fn gui_error_json(e: SessionRunnerError) -> String {
+    match e {
+        SessionRunnerError::Db(e) => crate::commands::stringify_error(e),
+        SessionRunnerError::Spawn(e) => err_to_json(e),
+        SessionRunnerError::GaConfigMissing
+        | SessionRunnerError::GaConfigShape(_)
+        | SessionRunnerError::GaConfigKeyMissing("gaPath") => {
+            err_to_json(RunnerSpawnError::GaPathInvalid {
+                detail: "ga_path is empty".into(),
+            })
+        }
+        SessionRunnerError::GaConfigKeyMissing(key) => {
+            err_to_json(RunnerSpawnError::BridgeCwdInvalid {
+                detail: format!("runner config missing {key}"),
+            })
+        }
+        SessionRunnerError::BridgeCwdNotDir(path) => {
+            err_to_json(RunnerSpawnError::BridgeCwdInvalid {
+                detail: format!("not a directory: {}", path.display()),
+            })
+        }
+        SessionRunnerError::BridgeCwdResolve(e) => {
+            err_to_json(RunnerSpawnError::BridgeCwdInvalid {
+                detail: format!("resolving Galley bridge cwd failed: {e}"),
+            })
+        }
+        SessionRunnerError::NonUtf8Path(label) => err_to_json(RunnerSpawnError::PathEncoding {
+            detail: format!("{label} path contains non-UTF-8 characters"),
+        }),
+        SessionRunnerError::ManagedNeedsApp => {
+            err_to_json(RunnerSpawnError::ManagedRuntimeInvalid {
+                detail: "managed runtime is unavailable without a Galley app handle".into(),
+            })
+        }
+        SessionRunnerError::SubscribeFailed => "subscribe failed after spawn (race?)".to_string(),
+    }
 }
 
 /// Background task that subscribes to a session's broadcast and re-emits

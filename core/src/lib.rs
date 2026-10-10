@@ -35,6 +35,7 @@ pub mod protocol;
 pub mod runner_commands;
 pub mod runner_manager;
 pub mod scheduler;
+pub mod session_runner;
 pub mod socket_listener;
 pub mod sop_install;
 mod tray;
@@ -246,6 +247,7 @@ pub fn run() {
             runner_commands::probe_ga_runtime,
             runner_commands::shutdown_all_runners,
             runner_commands::list_live_runners,
+            runner_commands::ensure_session_runner,
         ])
         .setup(move |app| app_setup::setup_app(app, migrations, latest_migration_version))
         .build(tauri::generate_context!())

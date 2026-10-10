@@ -221,7 +221,7 @@ interface MessagesActions {
    * Bridge close-side cleanup. Resets only the streaming/in-flight
    * fields — leaves `turns` intact so the user can still read the
    * conversation while the bridge is down. Called from
-   * runtimeStore.spawnBridge onClose.
+   * the runtime bridge slice's onClose handler.
    */
   clearStreamingOnBridgeClose: (sid: string) => void;
 

@@ -12,6 +12,11 @@
 //! ADR-0002 note: this changes where dependencies COME FROM, not what the
 //! handlers do. Each command keeps its own explicit, contract-bound
 //! failure behavior.
+//!
+//! The same seam serves Core's shared runner path
+//! ([`crate::session_runner`], via [`HandlerCtx::runner_host`]): the GUI's
+//! Tauri `ensure_session_runner` hands it the real `RunnerManager`, socket
+//! handlers hand it whatever this ctx carries.
 
 use crate::api::QueuedMessage;
 use crate::db::SqliteGalley;
@@ -19,9 +24,10 @@ use crate::error::GalleyError;
 use crate::ipc::IpcCommand;
 use crate::notify::{notify, Notifier};
 use crate::runner_manager::{
-    BroadcastItem, QueueJump, QueueOffer, RunOutcome, RunState, RunnerManager, RunnerSpawnError,
-    SendCommandError, ShutdownError, SpawnArgs,
+    BroadcastItem, QueueJump, QueueOffer, ReadySnapshot, RunOutcome, RunState, RunnerCommandSink,
+    RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
 };
+use crate::session_runner::{RunnerHost, SpawnEnv};
 use async_trait::async_trait;
 use serde::Serialize;
 use std::sync::Arc;
@@ -52,6 +58,28 @@ pub trait RunnerPort: Send + Sync {
         session_id: &str,
         grace: Option<Duration>,
     ) -> Result<(), ShutdownError>;
+
+    // ---- Shared runner path (`crate::session_runner`, ticket 02a) ----
+    //
+    // Defaults keep the pre-02a fakes compiling and behaving as before:
+    // every registered pid counts as alive, there is no ready cache, and
+    // no auto-title watcher is attached.
+
+    /// Pid of a runner that is still alive — a crashed runner the
+    /// registry still holds does not count. Default: [`Self::pid`].
+    async fn live_pid(&self, session_id: &str) -> Option<u32> {
+        self.pid(session_id).await
+    }
+    /// The runner's latest `ready` state
+    /// ([`crate::runner_manager::ready`]). Default: none.
+    async fn ready_snapshot(&self, _session_id: &str) -> Option<ReadySnapshot> {
+        None
+    }
+    /// Owned send-only handle for a task that outlives this call (the
+    /// auto-title watcher). `None` = attach no watcher.
+    fn command_sink(&self) -> Option<Arc<dyn RunnerCommandSink>> {
+        None
+    }
 
     // ---- Outbound message queue (galley#19/#20) ----
     //
@@ -136,6 +164,15 @@ impl RunnerPort for RunnerManager {
     ) -> Result<(), ShutdownError> {
         RunnerManager::shutdown(self, session_id, grace).await
     }
+    async fn live_pid(&self, session_id: &str) -> Option<u32> {
+        RunnerManager::live_pid(self, session_id).await
+    }
+    async fn ready_snapshot(&self, session_id: &str) -> Option<ReadySnapshot> {
+        RunnerManager::ready_snapshot(self, session_id).await
+    }
+    fn command_sink(&self) -> Option<Arc<dyn RunnerCommandSink>> {
+        Some(Arc::new(self.command_handle()))
+    }
 
     async fn queue_offer(
         &self,
@@ -214,5 +251,20 @@ impl HandlerCtx<'_> {
     /// `if let Some(app) = app { let _ = app.emit(...) }` blocks.
     pub fn notify<T: Serialize>(&self, event: &str, payload: &T) {
         notify(self.notifier.as_ref(), event, payload);
+    }
+
+    /// This ctx's dependencies, as the shared runner path takes them.
+    pub fn runner_host<'b>(&'b self, galley: &'b SqliteGalley) -> RunnerHost<'b> {
+        RunnerHost {
+            galley,
+            runner: self.runner,
+            notifier: self.notifier.clone(),
+            env: self.spawn_env(),
+        }
+    }
+
+    /// The app as spawn-resolution environment (`None` when headless).
+    pub fn spawn_env(&self) -> Option<&dyn SpawnEnv> {
+        self.app.map(|app| app as &dyn SpawnEnv)
     }
 }

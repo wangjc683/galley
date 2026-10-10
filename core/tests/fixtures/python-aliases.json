@@ -1,0 +1,24 @@
+{
+  "about": "Shared by Core (session_runner::resolve_user_python, cargo test) and the GUI (lib/bridge.ts resolvePythonPath via python-probe.ts, vitest): how a configured ga_config.python value becomes the interpreter a runner is spawned with, on macOS / Linux. $HOME and $FALLBACK are placeholders each side substitutes ($FALLBACK = the platform default, python3 here). Edit both resolvers together; either test goes red when only one follows.",
+  "home": "/Users/fixture",
+  "cases": [
+    { "input": "python-ga-venv", "expected": "$HOME/Documents/GenericAgent/.venv/bin/python" },
+    { "input": "python-ga-venv-alt", "expected": "$HOME/Documents/GenericAgent/venv/bin/python" },
+    { "input": "python-brew-arm", "expected": "/opt/homebrew/bin/python3" },
+    { "input": "python-brew-intel", "expected": "/usr/local/bin/python3" },
+    { "input": "python-framework-3-14", "expected": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3" },
+    { "input": "python-framework-3-13", "expected": "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3" },
+    { "input": "python-framework-3-12", "expected": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" },
+    { "input": "python-framework-3-11", "expected": "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3" },
+    { "input": "python3", "expected": "python3" },
+    { "input": "python", "expected": "python" },
+    { "input": "/opt/venv/bin/python", "expected": "/opt/venv/bin/python" },
+    { "input": "\\\\server\\share\\python.exe", "expected": "\\\\server\\share\\python.exe" },
+    { "input": "C:\\Python311\\python.exe", "expected": "C:\\Python311\\python.exe" },
+    { "input": "d:/tools/python.exe", "expected": "d:/tools/python.exe" },
+    { "input": "C:python", "expected": "C:python" },
+    { "input": "c:python", "expected": "$FALLBACK" },
+    { "input": "python-pyenv", "expected": "$FALLBACK" },
+    { "input": "", "expected": "$FALLBACK" }
+  ]
+}

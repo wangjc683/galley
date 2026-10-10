@@ -1,3 +1,4 @@
+import type { ReadySnapshot } from "@/lib/bridge";
 import { copyForLanguage } from "@/lib/i18n";
 import {
   cleanFinalAnswer,
@@ -26,6 +27,7 @@ import { isStepLimitExit } from "@/lib/step-limit";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
 import type { AgentTurn } from "@/types/conversation";
+import type { Session } from "@/types/session";
 import type {
   IPCEvent,
   MessageVisibility,
@@ -56,6 +58,108 @@ function currentCopy() {
   return copyForLanguage(
     resolveLanguagePreference(usePrefsStore.getState().languagePreference),
   );
+}
+
+/**
+ * The store half of a runner's `ready`: per-session model list, connected
+ * status, image capability, reasoning effort, runtime info. Returns the
+ * session row it read (the caller's replay check needs it).
+ *
+ * Shared by the real `ready` event and by the snapshot Core hands a page
+ * that attaches after `ready` went by ([`applyReadySnapshot`]).
+ */
+function applyReadyState(
+  sessionId: string,
+  ready: ReadySnapshot,
+): Session | undefined {
+  // Per-session LLM list — N-active multi-session means each
+  // bridge has its own currently-selected LLM. The active session's
+  // pair projects up to top-level `llms` / `llmDisplayName` for
+  // Composer / Command Palette / Inspector reads.
+  const sessionForRuntime = useSessionsStore
+    .getState()
+    .sessions.find((item) => item.id === sessionId);
+  const runtimeKind =
+    sessionForRuntime?.gaRuntimeKind ??
+    usePrefsStore.getState().activeRuntimeKind;
+  const currentIndex = ready.availableLLMs.find((l) => l.isCurrent)?.index;
+  const managedLLMs =
+    runtimeKind === "managed"
+      ? managedModelsToLLMs(
+          useManagedModelsStore.getState().models,
+          currentIndex,
+        )
+      : [];
+  useRuntimeStore.getState().replaceLLMs(
+    sessionId,
+    managedLLMs.length > 0
+      ? managedLLMs
+      : ready.availableLLMs.map((l) => ({
+          index: l.index,
+          name: l.name,
+          key: l.name,
+          displayName: l.displayName,
+          isCurrent: l.isCurrent,
+        })),
+  );
+  useRuntimeStore.getState().setBridgeStatus(sessionId, "connected");
+  // Image-input capability of the freshly-spawned runtime. Older
+  // runners omit the field; `?? true` keeps the composer open for
+  // them rather than silently disabling image intake.
+  useSessionsStore
+    .getState()
+    .setSessionImagesSupported(sessionId, ready.imagesSupported ?? true);
+  // Reasoning effort as the fresh runtime sees it: the effective
+  // tier on the backend plus the tier the model configuration
+  // carries. Record only — the session override was already handed
+  // to the runner as a spawn argument by Core, so there is nothing
+  // to replay from here (PRD 裁决 3). Must run after replaceLLMs,
+  // which is what creates the session's runtime slot.
+  useRuntimeStore.getState().setReasoningEffortReport(sessionId, {
+    reasoningEffort: ready.reasoningEffort ?? null,
+    configuredReasoningEffort: ready.configuredReasoningEffort ?? null,
+  });
+  // Sync the user's actual GA HEAD into runtimeInfo so the
+  // Settings → 运行环境 → 接入外部 GA version card shows
+  // "当前版本 cf65515 · 2026-05-11" against the verified baseline.
+  // Only external sessions report the user's checkout — every
+  // external bridge runs the same ga_path, so N-active background
+  // bridges don't conflict. A bundled-engine `ready` reports the
+  // engine's own manifest commit; letting it write here made the
+  // card describe the engine as "your GA" (and hid a real external
+  // version after any bundled session started).
+  if (runtimeKind === "external") {
+    useRuntimeStore.getState().patchRuntimeInfo({
+      gaCommit: ready.gaCommit,
+      gaCommitDate: ready.gaCommitDate,
+      gaCommitRuntimeKind: "external",
+      bridgePid: ready.pid,
+    });
+  } else {
+    useRuntimeStore.getState().patchRuntimeInfo({ bridgePid: ready.pid });
+  }
+  return sessionForRuntime;
+}
+
+/**
+ * Apply a ready snapshot (`ReadySnapshot`, from Core's
+ * `ensure_session_runner` / `list_live_runners`) to the stores, exactly as
+ * a `ready` event would — and nothing else. In particular it NEVER replays
+ * history: a snapshot describes a runner that was already running, whose
+ * GA history may be mid-run, and `load_history` replaces that history
+ * wholesale (the runner refuses it mid-run). Replay stays tied to a real
+ * `ready` event, which only a freshly started runner emits.
+ */
+export function applyReadySnapshot(
+  sessionId: string,
+  snapshot: ReadySnapshot,
+): void {
+  console.info("[ipc] ready snapshot", {
+    sessionId,
+    llm: snapshot.llmName,
+    availableLLMs: snapshot.availableLLMs.length,
+  });
+  applyReadyState(sessionId, snapshot);
 }
 
 /**
@@ -95,75 +199,7 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         llm: event.llmName,
         availableLLMs: event.availableLLMs.length,
       });
-      // Per-session LLM list — N-active multi-session means each
-      // bridge has its own currently-selected LLM. The active session's
-      // pair projects up to top-level `llms` / `llmDisplayName` for
-      // Composer / Command Palette / Inspector reads.
-      const sessionForRuntime = useSessionsStore
-        .getState()
-        .sessions.find((item) => item.id === event.sessionId);
-      const runtimeKind =
-        sessionForRuntime?.gaRuntimeKind ??
-        usePrefsStore.getState().activeRuntimeKind;
-      const currentIndex = event.availableLLMs.find((l) => l.isCurrent)?.index;
-      const managedLLMs =
-        runtimeKind === "managed"
-          ? managedModelsToLLMs(
-              useManagedModelsStore.getState().models,
-              currentIndex,
-            )
-          : [];
-      useRuntimeStore.getState().replaceLLMs(
-        event.sessionId,
-        managedLLMs.length > 0
-          ? managedLLMs
-          : event.availableLLMs.map((l) => ({
-              index: l.index,
-              name: l.name,
-              key: l.name,
-              displayName: l.displayName,
-              isCurrent: l.isCurrent,
-            })),
-      );
-      useRuntimeStore.getState().setBridgeStatus(event.sessionId, "connected");
-      // Image-input capability of the freshly-spawned runtime. Older
-      // runners omit the field; `?? true` keeps the composer open for
-      // them rather than silently disabling image intake.
-      useSessionsStore
-        .getState()
-        .setSessionImagesSupported(
-          event.sessionId,
-          event.imagesSupported ?? true,
-        );
-      // Reasoning effort as the fresh runtime sees it: the effective
-      // tier on the backend plus the tier the model configuration
-      // carries. Record only — the session override was already handed
-      // to the runner as a spawn argument by Core, so there is nothing
-      // to replay from here (PRD 裁决 3). Must run after replaceLLMs,
-      // which is what creates the session's runtime slot.
-      useRuntimeStore.getState().setReasoningEffortReport(event.sessionId, {
-        reasoningEffort: event.reasoningEffort ?? null,
-        configuredReasoningEffort: event.configuredReasoningEffort ?? null,
-      });
-      // Sync the user's actual GA HEAD into runtimeInfo so the
-      // Settings → 运行环境 → 接入外部 GA version card shows
-      // "当前版本 cf65515 · 2026-05-11" against the verified baseline.
-      // Only external sessions report the user's checkout — every
-      // external bridge runs the same ga_path, so N-active background
-      // bridges don't conflict. A bundled-engine `ready` reports the
-      // engine's own manifest commit; letting it write here made the
-      // card describe the engine as "your GA" (and hid a real external
-      // version after any bundled session started).
-      if (runtimeKind === "external") {
-        useRuntimeStore.getState().patchRuntimeInfo({
-          gaCommit: event.gaCommit,
-          gaCommitDate: event.gaCommitDate,
-          gaCommitRuntimeKind: "external",
-          bridgePid: event.pid,
-        });
-      } else {
-        useRuntimeStore.getState().patchRuntimeInfo({ bridgePid: event.pid });
-      }
+      const sessionForRuntime = applyReadyState(event.sessionId, event);
       // Session Restore (Stage 3 Task 3). If this session has prior
       // turn history on disk, replay it into GA `backend.history` via
       // load_history. The MainView submit path waits on the same gate

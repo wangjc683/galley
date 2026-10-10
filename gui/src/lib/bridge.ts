@@ -4,7 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { logPerf, perfNow } from "@/lib/perf";
 import { isWindows } from "@/lib/platform";
 import { findCandidateByAlias } from "@/lib/python-probe";
-import type { IPCCommand, IPCEvent } from "@/types/ipc";
+import type { IPCCommand, IPCEvent, ReadyEvent } from "@/types/ipc";
 import type { RuntimeKind } from "@/types/session";
 
 /**
@@ -123,6 +123,50 @@ interface RunnerClosedPayload {
   signal: number | null;
 }
 
+/**
+ * A live runner's latest `ready`, folded with every later `llm_changed` /
+ * `reasoning_effort_changed` (Core's `runner_manager::ready`). Same shape
+ * as the `ready` event without `kind`. Handed out when a page attaches
+ * after `ready` went by — apply it to the stores only
+ * (`applyReadySnapshot`); it never triggers a history replay.
+ */
+export type ReadySnapshot = Omit<ReadyEvent, "kind">;
+
+/** Arguments of Core's `ensure_session_runner` Tauri command. */
+export interface EnsureBridgeArgs {
+  sessionId: string;
+  /** Start a brand-new session on this model instead of the session
+   * row's persisted choice (the EmptyState picker's pending pick). */
+  llmIndex?: number;
+  llmKey?: string;
+  /** Eviction-protected session for Core's LRU cap. */
+  activeSessionId?: string;
+  /** Transitional: the page's in-memory `gaConfig`, which Core resolves
+   * with instead of the stored pref (see the Rust command's docs). */
+  gaConfig?: {
+    python: string;
+    gaPath: string;
+    bridgeCwd: string;
+    useExternalPython: boolean;
+  };
+}
+
+export interface EnsureBridgeResult {
+  client: BridgeClient;
+  /** True when Core started the runner (its `ready` is on the way);
+   * false when it was already alive — no `ready` will come. */
+  spawned: boolean;
+  /** The live runner's latest `ready` state (only when not spawned). */
+  ready: ReadySnapshot | null;
+}
+
+/** `runner_commands::EnsureSessionRunnerResult`. */
+interface EnsureSessionRunnerResultJson {
+  pid: number;
+  spawned: boolean;
+  ready: ReadySnapshot | null;
+}
+
 interface SpawnRunnerArgsJson {
   python: string;
   gaPath: string;
@@ -147,9 +191,12 @@ interface SpawnRunnerArgsJson {
  *   an attach-runtime setting; the bundled engine shipping on its own
  *   Python is a release contract (devlog 2026-06-04). GUI callers
  *   spread the whole `gaConfig` into the spawn args, so the flag must
- *   be ignored here rather than at each call site. Core's socket / CLI
- *   path already pins managed spawns the same way
- *   (`core/src/socket_listener/spawn_config.rs`, `GaConfigPref::default()`).
+ *   be ignored here rather than at each call site.
+ *
+ * Session runners resolve their interpreter in Core since ticket 02a
+ * (`core/src/session_runner/spawn_config.rs`, `wants_bundled_python` —
+ * the same rule); this copy still serves the LLM-list warmup spawn. Keep
+ * the two in step.
  * - External (attach) sessions — and callers that omit `runtimeKind`,
  *   which is the legacy external default — honor `useExternalPython`.
  */
@@ -319,11 +366,16 @@ export async function spawnBridge(
   };
 }
 
-export async function attachBridge(
+/**
+ * Listen for one session's runner events. Registered BEFORE anything that
+ * can make the runner emit, so the first event (`ready`) is not missed.
+ * The listeners stay up until the runner closes (or the returned client
+ * shuts it down).
+ */
+async function listenToRunner(
   sessionId: string,
-  pid: number,
   handlers: BridgeHandlers,
-): Promise<BridgeClient> {
+): Promise<{ teardown: () => void; clientFor: (pid: number) => BridgeClient }> {
   const unlistenFns: UnlistenFn[] = [];
   let alreadyClosed = false;
 
@@ -372,7 +424,7 @@ export async function attachBridge(
     }),
   );
 
-  return {
+  const clientFor = (pid: number): BridgeClient => ({
     pid,
     send: async (cmd) => {
       try {
@@ -391,7 +443,68 @@ export async function attachBridge(
       }
       void onClosedSafe(0, null);
     },
+  });
+
+  return { teardown, clientFor };
+}
+
+/**
+ * Make sure a session has a live runner, through Core's shared path
+ * (`ensure_session_runner`): Core returns the runner it already holds, or
+ * starts one from the session row and prefs. Listeners go up before the
+ * invoke so a freshly started runner's `ready` cannot slip past.
+ *
+ * Core never replaces a live runner here, so this is safe to call for a
+ * session that may be mid-run elsewhere (CLI, Goal, a reloaded page).
+ */
+export async function ensureBridge(
+  args: EnsureBridgeArgs,
+  handlers: BridgeHandlers,
+): Promise<EnsureBridgeResult> {
+  const startedAt = perfNow();
+  const { sessionId } = args;
+  const listeners = await listenToRunner(sessionId, handlers);
+  let outcome: EnsureSessionRunnerResultJson;
+  try {
+    outcome = await invoke<EnsureSessionRunnerResultJson>(
+      "ensure_session_runner",
+      {
+        sessionId,
+        llmIndex: args.llmIndex,
+        llmKey: args.llmKey,
+        activeSessionId: args.activeSessionId,
+        gaConfig: args.gaConfig,
+      },
+    );
+  } catch (e) {
+    listeners.teardown();
+    const msg = formatInvokeError(e);
+    handlers.onError?.(msg);
+    // Same as spawnBridge: `msg` already carries the typed discriminant
+    // and detail.
+    // eslint-disable-next-line preserve-caught-error
+    throw new Error(msg);
+  }
+  logPerf("bridge.ensureBridge", startedAt, {
+    sessionId,
+    pid: outcome.pid,
+    spawned: outcome.spawned,
+  });
+  return {
+    client: listeners.clientFor(outcome.pid),
+    spawned: outcome.spawned,
+    ready: outcome.ready ?? null,
   };
+}
+
+/** Listen to a runner Core already holds (started elsewhere). */
+export async function attachBridge(
+  sessionId: string,
+  pid: number,
+  handlers: BridgeHandlers,
+): Promise<BridgeClient> {
+  const listeners = await listenToRunner(sessionId, handlers);
+  return listeners.clientFor(pid);
 }
 
 /**
@@ -415,6 +528,10 @@ export async function attachBridge(
  * v0.2 plan: retire the capability alias list entirely (now that we
  * spawn through Rust, arbitrary absolute paths just work). Until then,
  * this shim keeps existing dogfood `gaConfig.python` values working.
+ *
+ * Core resolves session runners with a Rust copy of this rule
+ * (`session_runner::resolve_user_python`); the shared fixture
+ * `core/tests/fixtures/python-aliases.json` holds both to the same table.
  */
 export async function resolvePythonPath(
   userPath: string | undefined,
@@ -488,12 +605,20 @@ function formatInvokeError(e: unknown): string {
   const raw =
     typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
   try {
-    const parsed = JSON.parse(raw) as { error?: string; detail?: string };
+    const parsed = JSON.parse(raw) as {
+      error?: string;
+      detail?: string;
+      message?: string;
+    };
     if (parsed.error) {
       const specific = actionableInvokeError(parsed.error);
       if (specific) return specific;
       const human = humanizeErrorTag(parsed.error);
-      return parsed.detail ? `${human}: ${parsed.detail}` : human;
+      // Runner errors carry `detail`; Core API errors (`GalleyError`,
+      // e.g. a session row ensure_session_runner could not read) carry
+      // `message`.
+      const detail = parsed.detail ?? parsed.message;
+      return detail ? `${human}: ${detail}` : human;
     }
   } catch {
     // not JSON — fall through

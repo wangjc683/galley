@@ -28,7 +28,7 @@ import { create } from "zustand";
  *   - `clearSessionMessages` (shared helper) drops a session's
  *     conversation entry from messagesStore on delete + bulk delete.
  *   - `activateSession` orchestrates messagesStore.ensureMessages +
- *     restoreSessionTurns + runtimeStore.spawnBridge.
+ *     restoreSessionTurns + runtimeStore.ensureSessionRunner.
  *
  * The store body lives in `sessions/` as four StateCreator slices
  * sharing one `create()` — cross-domain writes (deleteProject touching

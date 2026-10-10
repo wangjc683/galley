@@ -1,12 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { dispatchIPCEvent } from "@/lib/ipc-handlers";
+import { applyReadySnapshot, dispatchIPCEvent } from "@/lib/ipc-handlers";
 import {
   attachBridge as attachBridgeProcess,
-  spawnBridge as spawnBridgeProcess,
+  ensureBridge as ensureBridgeProcess,
   type BridgeClient,
-  type BridgeSpawnArgs,
   type BridgeHandlers,
+  type EnsureBridgeArgs,
+  type ReadySnapshot,
 } from "@/lib/bridge";
 import { clearReplyNotifyPending } from "@/lib/notify";
 import { logPerf, perfNow } from "@/lib/perf";
@@ -32,18 +33,30 @@ export interface BridgeSlice {
   /** Set bridge status. Used by ipc-handlers ready event. */
   setBridgeStatus: (sid: string, status: BridgeStatus) => void;
   /**
-   * Spawn a GA bridge subprocess for `args.sessionId`. If that session
-   * already has a live bridge, shut it down first. LRU eviction
-   * enforced inside this action via the runtime-private
+   * Make sure `args.sessionId` has a runner and this page listens to it,
+   * through Core's `ensure_session_runner` (ticket 02a): Core returns the
+   * runner it already holds — never replacing it, so a run in progress
+   * survives — or starts one from the session row and prefs. Listeners go
+   * up before the invoke. A runner Core started reports `ready` as usual;
+   * an already-live one does not, so its ready snapshot is applied here
+   * (stores only, no history replay) and the bridge reads as connected at
+   * once. LRU eviction runs inside this action via the runtime-private
    * `_bridgeClients` / `_lruOrder` maps (LRU_CAP = 20 active bridges).
    */
-  spawnBridge: (args: BridgeSpawnArgs) => Promise<void>;
+  ensureSessionRunner: (args: EnsureBridgeArgs) => Promise<void>;
   /**
-   * Attach JS listeners to a runner spawned by the socket transport
-   * (`galley session new`). The process already exists in Rust; this
-   * action just registers event handlers and tracks the client locally.
+   * Attach JS listeners to a runner started elsewhere (`galley session
+   * new`, a Goal turn, another page). The process already exists in Rust;
+   * this action just registers event handlers and tracks the client
+   * locally, then fills in the runner's ready state — from `ready` when
+   * the caller already has it, else from `list_live_runners` — since its
+   * `ready` event may have gone by before the listeners were up.
    */
-  attachExternalBridge: (sessionId: string, pid: number) => Promise<void>;
+  attachExternalBridge: (
+    sessionId: string,
+    pid: number,
+    ready?: ReadySnapshot | null,
+  ) => Promise<void>;
   /**
    * Attach to the runner Core still holds for `sessionId`, if any —
    * instead of spawning, which would shut that runner down first and
@@ -83,9 +96,11 @@ export interface BridgeSlice {
 //   avoids triggering subscribers on every spawn/touch.
 
 const _bridgeClients = new Map<string, BridgeClient>();
-// In-flight attaches, so a reload's bulk re-attach, an activation and a
-// late `runner-spawned-external` cannot register two listener sets for
-// one runner (every event would then render twice).
+// In-flight attaches and ensures, so a reload's bulk re-attach, an
+// activation, and the `runner-spawned-external` broadcast — including
+// the one Core sends for this page's own ensure (`via: "gui"`) — cannot
+// register two listener sets for one runner (every event would then
+// render twice).
 const _attachesInFlight = new Map<string, Promise<void>>();
 const _stderrTails = new Map<string, string[]>();
 const _bridgeSpawnStartedAt = new Map<string, number>();
@@ -227,6 +242,9 @@ interface LiveRunner {
   pid: number;
   /** A run is open or the agent is mid-turn. */
   runOpen: boolean;
+  /** Its latest `ready` state; null until it reports (older Cores omit
+   * the field). */
+  ready?: ReadySnapshot | null;
 }
 
 async function _listLiveRunners(): Promise<LiveRunner[]> {
@@ -253,7 +271,9 @@ async function _attachLive(runner: LiveRunner): Promise<void> {
       await messages.restoreSessionTurns(sessionId);
     }
   }
-  await useRuntimeStore.getState().attachExternalBridge(sessionId, runner.pid);
+  await useRuntimeStore
+    .getState()
+    .attachExternalBridge(sessionId, runner.pid, runner.ready ?? null);
   if (runner.runOpen && _bridgeClients.has(sessionId)) {
     useMessagesStore.getState().setAgentRunning(sessionId, true);
   }
@@ -389,78 +409,105 @@ export const createBridgeSlice: RuntimeSliceCreator<BridgeSlice> = (
     }));
   },
 
-  spawnBridge: async (args) => {
-    const sessionId = args.sessionId;
-    let spawnStartedAt = perfNow();
+  ensureSessionRunner: async (args) => {
+    const { sessionId } = args;
     if (_bridgeClients.has(sessionId)) {
+      // This page already listens to the session; Core keeps whatever
+      // runner it holds. Nothing to attach.
       console.warn(
-        `[runtime] spawnBridge(${sessionId}) called while a bridge for that session is alive; shutting down first.`,
+        `[runtime] ensureSessionRunner(${sessionId}) called while this page already holds its bridge; keeping it.`,
       );
-      await useRuntimeStore.getState().shutdownBridge(sessionId);
-      spawnStartedAt = perfNow();
+      return;
     }
-    _bridgeSpawnStartedAt.set(sessionId, spawnStartedAt);
-    set((state) => ({
-      byId: {
-        ...state.byId,
-        [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
-          bridgeStatus: "spawning",
-          bridgeError: null,
-        }),
-      },
-    }));
-
+    const inFlight = _attachesInFlight.get(sessionId);
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+    const run = (async () => {
+      const startedAt = perfNow();
+      _bridgeSpawnStartedAt.set(sessionId, startedAt);
+      set((state) => ({
+        byId: {
+          ...state.byId,
+          [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+            bridgeStatus: "spawning",
+            bridgeError: null,
+          }),
+        },
+      }));
+      try {
+        const { client, spawned, ready } = await ensureBridgeProcess(
+          args,
+          makeBridgeHandlers(sessionId),
+        );
+        _bridgeClients.set(sessionId, client);
+        _lruTouch(sessionId);
+        if (spawned) {
+          // Status flips to "connected" only after the runner sends its
+          // `ready` event (handled in ipc-handlers, which may already
+          // have happened). Keep "spawning" so the UI shows a loading
+          // affordance.
+          set((state) => ({
+            byId: {
+              ...state.byId,
+              [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+                bridgePid: client.pid,
+              }),
+            },
+          }));
+        } else {
+          // Already alive: its `ready` went by long ago and will not
+          // come again — nothing may wait for it. Connected now, ready
+          // state from Core's snapshot (stores only, never a replay).
+          _bridgeSpawnStartedAt.delete(sessionId);
+          set((state) => ({
+            byId: {
+              ...state.byId,
+              [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+                bridgeStatus: "connected",
+                bridgeError: null,
+                bridgePid: client.pid,
+              }),
+            },
+          }));
+          if (ready) applyReadySnapshot(sessionId, ready);
+        }
+        void _enforceLRUCap();
+        logPerf("runtime.ensureSessionRunner", startedAt, {
+          sessionId,
+          pid: client.pid,
+          result: spawned ? "spawned" : "attached",
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        _bridgeClients.delete(sessionId);
+        _bridgeSpawnStartedAt.delete(sessionId);
+        set((state) => ({
+          byId: {
+            ...state.byId,
+            [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
+              bridgeStatus: "error",
+              bridgeError: msg,
+              bridgePid: null,
+            }),
+          },
+        }));
+        logPerf("runtime.ensureSessionRunner", startedAt, {
+          sessionId,
+          result: "failed",
+        });
+      }
+    })();
+    _attachesInFlight.set(sessionId, run);
     try {
-      const processStartedAt = perfNow();
-      const client = await spawnBridgeProcess(
-        args,
-        makeBridgeHandlers(sessionId),
-      );
-      logPerf("runtime.spawnBridge.process", processStartedAt, {
-        sessionId,
-        pid: client.pid,
-      });
-      _bridgeClients.set(sessionId, client);
-      _lruTouch(sessionId);
-      // Status flips to "connected" only after the bridge sends its
-      // `ready` event (handled in ipc-handlers). Keep "spawning"
-      // here so the UI knows to show a loading affordance.
-      set((state) => ({
-        byId: {
-          ...state.byId,
-          [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
-            bridgePid: client.pid,
-          }),
-        },
-      }));
-      void _enforceLRUCap();
-      logPerf("runtime.spawnBridge", spawnStartedAt, {
-        sessionId,
-        pid: client.pid,
-        result: "spawned",
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      _bridgeClients.delete(sessionId);
-      _bridgeSpawnStartedAt.delete(sessionId);
-      set((state) => ({
-        byId: {
-          ...state.byId,
-          [sessionId]: _bridgeFieldsUpdate(state.byId[sessionId], {
-            bridgeStatus: "error",
-            bridgeError: msg,
-            bridgePid: null,
-          }),
-        },
-      }));
-      logPerf("runtime.spawnBridge", spawnStartedAt, {
-        sessionId,
-        result: "failed",
-      });
+      await run;
+    } finally {
+      _attachesInFlight.delete(sessionId);
     }
   },
 
-  attachExternalBridge: async (sessionId, pid) => {
+  attachExternalBridge: async (sessionId, pid, ready) => {
     if (_bridgeClients.has(sessionId)) {
       return;
     }
@@ -489,6 +536,15 @@ export const createBridgeSlice: RuntimeSliceCreator<BridgeSlice> = (
           },
         }));
         void _enforceLRUCap();
+        // The runner's `ready` may have gone by before the listeners
+        // above were up (a late `runner-spawned-external`, a reload).
+        // A ready that arrives from here on is handled as an event.
+        const snapshot =
+          ready !== undefined
+            ? ready
+            : ((await _listLiveRunners()).find((r) => r.sessionId === sessionId)
+                ?.ready ?? null);
+        if (snapshot) applyReadySnapshot(sessionId, snapshot);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         set((state) => ({

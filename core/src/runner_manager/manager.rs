@@ -11,10 +11,15 @@ use crate::runner_manager::process::{BroadcastItem, RunnerProcess};
 use crate::runner_manager::queue::{
     mint_queue_id, now_iso, QueueJump, QueueOffer, RunKind, RunOutcome, SessionQueueState,
 };
+use crate::runner_manager::ready::ReadySnapshot;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
+
+type ProcessMap = RwLock<HashMap<String, Arc<Mutex<RunnerProcess>>>>;
+type QueueMap = Mutex<HashMap<String, SessionQueueState>>;
 
 /// Default cap on concurrent alive runner subprocesses. Mirrored on the
 /// TS side as `LRU_CAP` in `gui/src/stores/runtime.ts` — keep the two in
@@ -324,6 +329,46 @@ impl RunnerManager {
         p.pid()
     }
 
+    /// PID of a runner whose child is still alive. Unlike [`Self::pid`],
+    /// a crashed runner the manager still holds (it stays registered
+    /// until a shutdown or respawn) reads as absent — the liveness rule
+    /// [`Self::live_runners`] uses, and what "ensure a runner" means.
+    pub async fn live_pid(&self, session_id: &str) -> Option<u32> {
+        let map = self.processes.read().await;
+        let proc = map.get(session_id)?.clone();
+        // Release before the per-process Mutex — see `pid`.
+        drop(map);
+        let p = proc.lock().await;
+        if p.has_closed() {
+            return None;
+        }
+        p.pid()
+    }
+
+    /// The runner's latest `ready` state, folded with later
+    /// `llm_changed` / `reasoning_effort_changed`
+    /// ([`crate::runner_manager::ready`]). `None` when no live runner is
+    /// registered or it has not reported `ready` yet.
+    pub async fn ready_snapshot(&self, session_id: &str) -> Option<ReadySnapshot> {
+        let map = self.processes.read().await;
+        let proc = map.get(session_id)?.clone();
+        // Release before the per-process Mutex — see `pid`.
+        drop(map);
+        let p = proc.lock().await;
+        p.ready_snapshot()
+    }
+
+    /// An owned handle that sends commands exactly like
+    /// [`Self::send_command`], for tasks that outlive the borrow they
+    /// were started from (the auto-title watcher started by
+    /// [`crate::session_runner`] holds one).
+    pub fn command_handle(&self) -> RunnerCommandHandle {
+        RunnerCommandHandle {
+            processes: self.processes.clone(),
+            queues: self.queues.clone(),
+        }
+    }
+
     /// Whether a session's runner is mid-turn. Used by [`enforce_cap`] to
     /// protect long-running tasks. Returns `false` if the session id has
     /// no registered process.
@@ -391,32 +436,7 @@ impl RunnerManager {
         session_id: &str,
         cmd: &IpcCommand,
     ) -> Result<(), SendCommandError> {
-        let map = self.processes.read().await;
-        let proc = map
-            .get(session_id)
-            .ok_or_else(|| SendCommandError::ProcessGone {
-                session_id: session_id.to_string(),
-            })?;
-        let proc = proc.clone();
-        // Release the outer read lock before awaiting the per-process
-        // Mutex — otherwise long writes would block siblings' reads.
-        drop(map);
-        let mut p = proc.lock().await;
-        let result = p.send_command(cmd).await;
-        drop(p);
-        if result.is_ok() && Self::opens_run_gate(cmd) {
-            let mut q = self.queues.lock().await;
-            let state = q.entry(session_id.to_string()).or_default();
-            state.open_run = true;
-            state.ask_pending = false;
-            // `last_exit` is deliberately left alone: it keeps saying why
-            // the previous run ended until this one completes (galley#30).
-            // Every gate-opening dispatch is a user turn until the Goal
-            // engine says otherwise (`mark_goal_continuation`).
-            state.run_kind = RunKind::UserTurn;
-            state.draft = Default::default();
-        }
-        result
+        send_command_via(&self.processes, &self.queues, session_id, cmd).await
     }
 
     /// Whether a command starts a main-agent run. `/btw` side questions
@@ -746,6 +766,85 @@ impl RunnerManager {
                 order.retain(|s| s != &sid);
             }
         }
+    }
+}
+
+/// The body of [`RunnerManager::send_command`], shared with
+/// [`RunnerCommandHandle`] so both funnel through the same run gate.
+async fn send_command_via(
+    processes: &ProcessMap,
+    queues: &QueueMap,
+    session_id: &str,
+    cmd: &IpcCommand,
+) -> Result<(), SendCommandError> {
+    let map = processes.read().await;
+    let proc = map
+        .get(session_id)
+        .ok_or_else(|| SendCommandError::ProcessGone {
+            session_id: session_id.to_string(),
+        })?;
+    let proc = proc.clone();
+    // Release the outer read lock before awaiting the per-process
+    // Mutex — otherwise long writes would block siblings' reads.
+    drop(map);
+    let mut p = proc.lock().await;
+    let result = p.send_command(cmd).await;
+    drop(p);
+    if result.is_ok() && RunnerManager::opens_run_gate(cmd) {
+        let mut q = queues.lock().await;
+        let state = q.entry(session_id.to_string()).or_default();
+        state.open_run = true;
+        state.ask_pending = false;
+        // `last_exit` is deliberately left alone: it keeps saying why
+        // the previous run ended until this one completes (galley#30).
+        // Every gate-opening dispatch is a user turn until the Goal
+        // engine says otherwise (`mark_goal_continuation`).
+        state.run_kind = RunKind::UserTurn;
+        state.draft = Default::default();
+    }
+    result
+}
+
+/// Send-only view of the runner registry for a long-lived task
+/// (the auto-title watcher). The width of this trait is all such a
+/// task may do to a runner.
+#[async_trait]
+pub trait RunnerCommandSink: Send + Sync {
+    async fn send_command(
+        &self,
+        session_id: &str,
+        cmd: &IpcCommand,
+    ) -> Result<(), SendCommandError>;
+}
+
+#[async_trait]
+impl RunnerCommandSink for RunnerManager {
+    async fn send_command(
+        &self,
+        session_id: &str,
+        cmd: &IpcCommand,
+    ) -> Result<(), SendCommandError> {
+        RunnerManager::send_command(self, session_id, cmd).await
+    }
+}
+
+/// Owned [`RunnerCommandSink`] over a manager's registry
+/// ([`RunnerManager::command_handle`]). Shares the manager's maps, so it
+/// reaches whatever runner the session holds when the command is sent.
+#[derive(Clone)]
+pub struct RunnerCommandHandle {
+    processes: Arc<ProcessMap>,
+    queues: Arc<QueueMap>,
+}
+
+#[async_trait]
+impl RunnerCommandSink for RunnerCommandHandle {
+    async fn send_command(
+        &self,
+        session_id: &str,
+        cmd: &IpcCommand,
+    ) -> Result<(), SendCommandError> {
+        send_command_via(&self.processes, &self.queues, session_id, cmd).await
     }
 }
 

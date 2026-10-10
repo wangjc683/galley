@@ -61,7 +61,6 @@ use crate::api::session::{CreateSessionInput, SessionBrief};
 use crate::api::{GalleyApi, GoalId, Origin, OriginVia, RuntimeKind, SessionFilter, SessionId};
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};
-use crate::managed_runtime;
 use crate::protocol::{
     goal_family_requires_v2, GoalActiveArgs, GoalExtendArgs, GoalStartArgs, GoalStatusArgs,
     GoalStopArgs,
@@ -69,18 +68,15 @@ use crate::protocol::{
     SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
     SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
 };
-use crate::runner_commands::{
-    normalize_external_ga_path, prepare_managed_spawn_args, spawn_emit_task,
-};
 use crate::runner_manager::{
-    BroadcastItem, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
+    BroadcastItem, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::sync::broadcast;
 
 #[cfg(windows)]
@@ -107,7 +103,6 @@ mod llm_cmds;
 mod project_cmds;
 mod session_cmds;
 mod session_new_cmds;
-mod spawn_config;
 mod wire;
 
 use crate::notify::{NullNotifier, TauriNotifier};
@@ -123,19 +118,39 @@ pub use wire::{ErrorTag, SocketRequest, SocketResponse, ACCEPTED_SCHEMA_VERSIONS
 #[allow(unused_imports)]
 pub(crate) use llm_cmds::{resolve_llm_selection_for_runtime, ResolvedLlmSelection};
 
-/// Crate-visible entry to [`session_cmds::ensure_session_runner`] for
-/// callers outside the socket layer (the Goal v2 engine dispatches its
-/// continuations through it). Errors are flattened to a message: the
-/// engine records them on the goal, it never answers a wire request.
+/// Make sure `session_id` has a live runner, through Core's shared path
+/// ([`crate::session_runner::ensure_session_runner`]): a session nobody
+/// has opened since Core started (or whose runner the LRU cap reclaimed)
+/// has no process to receive a dispatch. The Goal v2 engine dispatches
+/// every objective / continuation turn through this. Errors are
+/// flattened to the message the engine always recorded on the goal (the
+/// `Debug` form of the socket error carrier); it never answers a wire
+/// request.
 pub(crate) async fn ensure_runner_for_session(
     ctx: &HandlerCtx<'_>,
     galley: &SqliteGalley,
     session_id: &str,
     via: &'static str,
 ) -> Result<(), String> {
-    session_cmds::ensure_session_runner(galley, ctx, session_id, via)
-        .await
-        .map_err(|e| format!("{e:?}"))
+    crate::session_runner::ensure_session_runner(
+        &ctx.runner_host(galley),
+        session_id,
+        crate::session_runner::EnsureOptions {
+            via,
+            // The socket path protects the session it spawns for.
+            active_session_id: Some(session_id),
+            llm_override: None,
+            ga_config: None,
+        },
+    )
+    .await
+    .map(|_| ())
+    .map_err(|e| {
+        format!(
+            "{:?}",
+            common::SocketResponseLite::from_session_runner(e, via)
+        )
+    })
 }
 
 

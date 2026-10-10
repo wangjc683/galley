@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import type { BridgeSpawnArgs } from "@/lib/bridge";
+import type { EnsureBridgeArgs } from "@/lib/bridge";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
@@ -12,7 +12,9 @@ import { resetStores } from "@/test/store-reset";
  * Webview-reload recovery (2026-10-07). A reload drops every
  * `runner-event` listener while Core's runners keep going; the page must
  * re-attach to them, never re-spawn (RunnerManager::spawn shuts the live
- * runner down first — killing its run).
+ * runner down first — killing its run). Since ticket 02a a session with
+ * no live runner goes through Core's `ensure_session_runner` instead of
+ * a GUI-side spawn (`runtime.ensure-runner.test.ts`).
  *
  * The bridge slice keeps its client map at module level, so every test
  * uses its own session ids.
@@ -37,12 +39,12 @@ function invoked(command: string): number {
 }
 
 describe("re-attaching to runners Core still holds", () => {
-  let spawnBridge: Mock<(args: BridgeSpawnArgs) => Promise<void>>;
+  let ensureSessionRunner: Mock<(args: EnsureBridgeArgs) => Promise<void>>;
 
   beforeEach(() => {
     resetStores();
-    spawnBridge = vi.fn(async (_args: BridgeSpawnArgs) => {});
-    useRuntimeStore.setState({ spawnBridge });
+    ensureSessionRunner = vi.fn(async (_args: EnsureBridgeArgs) => {});
+    useRuntimeStore.setState({ ensureSessionRunner });
   });
 
   it("activating a session with a live runner attaches instead of spawning", async () => {
@@ -53,7 +55,7 @@ describe("re-attaching to runners Core still holds", () => {
 
     await useSessionsStore.getState().activateSession("s-live-1");
 
-    expect(spawnBridge).not.toHaveBeenCalled();
+    expect(ensureSessionRunner).not.toHaveBeenCalled();
     expect(useRuntimeStore.getState().hasBridgeClient("s-live-1")).toBe(true);
     expect(useRuntimeStore.getState().byId["s-live-1"]).toMatchObject({
       bridgeStatus: "connected",
@@ -61,7 +63,7 @@ describe("re-attaching to runners Core still holds", () => {
     });
   });
 
-  it("activating a session Core holds no runner for still spawns", async () => {
+  it("activating a session Core holds no runner for asks Core to ensure one", async () => {
     useSessionsStore.setState({
       sessions: [makeSession({ id: "s-live-2", turnCount: 0 })],
     });
@@ -69,8 +71,8 @@ describe("re-attaching to runners Core still holds", () => {
 
     await useSessionsStore.getState().activateSession("s-live-2");
 
-    expect(spawnBridge).toHaveBeenCalledTimes(1);
-    expect(spawnBridge.mock.calls[0][0]).toMatchObject({
+    expect(ensureSessionRunner).toHaveBeenCalledTimes(1);
+    expect(ensureSessionRunner.mock.calls[0][0]).toMatchObject({
       sessionId: "s-live-2",
     });
   });
@@ -110,7 +112,7 @@ describe("re-attaching to runners Core still holds", () => {
     expect(
       useMessagesStore.getState().byId["s-live-idle"]?.agentRunning ?? false,
     ).toBe(false);
-    expect(spawnBridge).not.toHaveBeenCalled();
+    expect(ensureSessionRunner).not.toHaveBeenCalled();
   });
 
   it("concurrent attaches register one listener set", async () => {

@@ -83,6 +83,47 @@ impl SocketResponseLite {
             GalleyError::Internal { message } => SocketResponseLite::Internal(message),
         }
     }
+    /// Render a shared-runner-path error ([`crate::session_runner`]) as
+    /// the socket transport always has. The texts below are the frozen
+    /// Agent API wording from before the path moved out of this module
+    /// (`spawn_config.rs` / `session_cmds::ensure_session_runner`) —
+    /// change none of them; the `session.new` wording appears on the
+    /// Goal path too, as it always did.
+    pub(super) fn from_session_runner(
+        e: crate::session_runner::SessionRunnerError,
+        via: &str,
+    ) -> Self {
+        use crate::session_runner::SessionRunnerError as E;
+        match e {
+            E::Db(e) => SocketResponseLite::from_err(e),
+            E::ManagedNeedsApp => SocketResponseLite::runner_error(
+                "managed runtime is unavailable without a Galley app handle",
+            ),
+            E::GaConfigMissing => SocketResponseLite::runner_error(
+                "session.new runner config is missing; open Galley Settings once to save runtime paths",
+            ),
+            E::GaConfigShape(e) => {
+                SocketResponseLite::runner_error(format!("ga_config pref shape mismatch: {e}"))
+            }
+            E::GaConfigKeyMissing(key) => {
+                SocketResponseLite::runner_error(format!("session.new runner config missing {key}"))
+            }
+            E::BridgeCwdNotDir(path) => SocketResponseLite::runner_error(format!(
+                "bridge cwd invalid: not a directory: {}",
+                path.display()
+            )),
+            E::BridgeCwdResolve(e) => {
+                SocketResponseLite::runner_error(format!("resolving Galley bridge cwd failed: {e}"))
+            }
+            E::NonUtf8Path(label) => SocketResponseLite::runner_error(format!(
+                "{label} path contains non-UTF-8 characters"
+            )),
+            E::Spawn(e) => SocketResponseLite::runner_spawn_error(e),
+            E::SubscribeFailed => SocketResponseLite::runner_error(format!(
+                "{via}: runner subscribe failed after spawn"
+            )),
+        }
+    }
     pub(super) fn into_galley_error(self) -> crate::error::GalleyError {
         use crate::error::GalleyError;
         match self {

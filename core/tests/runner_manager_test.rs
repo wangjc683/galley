@@ -1459,3 +1459,228 @@ async fn live_runners_leaves_out_a_crashed_runner() {
     assert!(mgr.live_runners().await.is_empty());
     mgr.shutdown_all(Duration::from_secs(1)).await;
 }
+
+// ---------------- Ready cache + shared ensure path (ticket 02a) ----------------
+//
+// A page that attaches after a runner's `ready` went by gets the folded
+// state from Core instead of waiting for an event that will not come
+// again; and concurrent "ensure a runner" calls for one session must
+// start exactly one real process.
+
+use galley_core_lib::ipc::{SetLlmCommand, SetReasoningEffortCommand};
+use galley_core_lib::session_runner::{ensure_session_runner, EnsureOptions, RunnerHost};
+
+/// Mock that reports two models on `ready` and answers `set_llm` /
+/// `set_reasoning_effort` like the real bridge (§4.12 / §4.18).
+fn write_model_switching_runner(dir: &std::path::Path) {
+    let runner_dir = dir.join("runner");
+    fs::create_dir_all(&runner_dir).expect("mkdir runner");
+    fs::write(runner_dir.join("__init__.py"), "").expect("write __init__");
+    let script = r#"
+import argparse
+import json
+import os
+import sys
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ga-path", required=True)
+parser.add_argument("--session-id", required=True)
+parser.add_argument("--cwd", required=False)
+parser.add_argument("--llm-no", type=int, default=0)
+args = parser.parse_args()
+
+def emit(obj):
+    obj["sessionId"] = args.session_id
+    obj.setdefault("timestamp", "2026-10-10T00:00:00+00:00")
+    print(json.dumps(obj), flush=True)
+
+NAMES = ["A/model-a", "B/model-b"]
+emit({"kind": "ready", "protocolVersion": "0.1", "gaCommit": "mock",
+      "gaCommitDate": "2026-10-10T00:00:00+00:00", "gaPath": args.ga_path,
+      "llmName": NAMES[0], "cwd": os.getcwd(), "pid": os.getpid(),
+      "availableLLMs": [
+          {"index": i, "name": n, "displayName": n, "isCurrent": i == 0}
+          for i, n in enumerate(NAMES)],
+      "imagesSupported": True, "reasoningEffort": "high",
+      "configuredReasoningEffort": "medium"})
+
+for line in sys.stdin:
+    cmd = json.loads(line)
+    kind = cmd.get("kind")
+    if kind == "shutdown":
+        break
+    if kind == "set_llm":
+        i = cmd["llmIndex"]
+        emit({"kind": "llm_changed", "index": i, "name": NAMES[i],
+              "displayName": NAMES[i], "imagesSupported": False,
+              "reasoningEffort": "high", "configuredReasoningEffort": "low"})
+    elif kind == "set_reasoning_effort":
+        emit({"kind": "reasoning_effort_changed", "reasoningEffort": cmd["value"],
+              "configuredReasoningEffort": "low"})
+"#;
+    fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
+}
+
+async fn next_event_of(
+    rx: &mut tokio::sync::broadcast::Receiver<BroadcastItem>,
+    kind: &str,
+) -> IpcEvent {
+    loop {
+        let event = next_event(rx).await.expect("event before timeout");
+        let matches = matches!(
+            (&event, kind),
+            (IpcEvent::Ready(_), "ready")
+                | (IpcEvent::LlmChanged(_), "llm_changed")
+                | (
+                    IpcEvent::ReasoningEffortChanged(_),
+                    "reasoning_effort_changed"
+                )
+        );
+        if matches {
+            return event;
+        }
+    }
+}
+
+#[tokio::test]
+async fn ready_snapshot_follows_ready_llm_changed_and_effort_changes() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let bridge = TempDir::new().expect("tempdir");
+    write_model_switching_runner(bridge.path());
+    let mgr = RunnerManager::new();
+    mgr.spawn(make_args("s_ready", bridge.path().to_path_buf()), None)
+        .await
+        .expect("spawn");
+    let mut rx = mgr.subscribe("s_ready").await.expect("subscribe");
+
+    next_event_of(&mut rx, "ready").await;
+    let snapshot = mgr.ready_snapshot("s_ready").await.expect("after ready");
+    assert_eq!(snapshot.llm_name, "A/model-a");
+    assert_eq!(snapshot.available_llms.len(), 2);
+    assert_eq!(snapshot.available_llms[0]["isCurrent"], true);
+    assert!(snapshot.images_supported);
+    assert_eq!(snapshot.reasoning_effort.as_deref(), Some("high"));
+
+    mgr.send_command(
+        "s_ready",
+        &IpcCommand::SetLlm(SetLlmCommand { llm_index: 1 }),
+    )
+    .await
+    .expect("set_llm");
+    next_event_of(&mut rx, "llm_changed").await;
+    let snapshot = mgr.ready_snapshot("s_ready").await.expect("after switch");
+    assert_eq!(snapshot.llm_name, "B/model-b");
+    assert_eq!(snapshot.available_llms[0]["isCurrent"], false);
+    assert_eq!(snapshot.available_llms[1]["isCurrent"], true);
+    assert!(!snapshot.images_supported);
+    assert_eq!(snapshot.configured_reasoning_effort.as_deref(), Some("low"));
+
+    mgr.send_command(
+        "s_ready",
+        &IpcCommand::SetReasoningEffort(SetReasoningEffortCommand {
+            value: Some("xhigh".into()),
+        }),
+    )
+    .await
+    .expect("set_reasoning_effort");
+    next_event_of(&mut rx, "reasoning_effort_changed").await;
+    let snapshot = mgr.ready_snapshot("s_ready").await.expect("after effort");
+    assert_eq!(snapshot.reasoning_effort.as_deref(), Some("xhigh"));
+    assert_eq!(snapshot.llm_name, "B/model-b");
+
+    mgr.shutdown("s_ready", Some(Duration::from_secs(2)))
+        .await
+        .expect("shutdown");
+    assert!(mgr.ready_snapshot("s_ready").await.is_none());
+}
+
+#[tokio::test]
+async fn ready_snapshot_is_cleared_when_the_runner_exits() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let bridge = TempDir::new().expect("tempdir");
+    write_exiting_runner(bridge.path(), 3);
+    let mgr = RunnerManager::new();
+    mgr.spawn(make_args("s_ready_exit", bridge.path().to_path_buf()), None)
+        .await
+        .expect("spawn");
+    let mut rx = mgr.subscribe("s_ready_exit").await.expect("subscribe");
+    next_closed(&mut rx).await.expect("closed");
+    // Still registered, but dead: no snapshot, no live pid.
+    assert!(mgr.pid("s_ready_exit").await.is_some());
+    assert!(mgr.live_pid("s_ready_exit").await.is_none());
+    assert!(mgr.ready_snapshot("s_ready_exit").await.is_none());
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn concurrent_ensures_start_one_real_runner_and_later_ones_get_its_ready() {
+    let Some(python) = mock_python_path() else {
+        eprintln!("[skip] no python on this machine");
+        return;
+    };
+    let bridge = TempDir::new().expect("tempdir");
+    write_mock_runner(bridge.path());
+    let (_db_dir, pool, galley) = persistence_db().await;
+    seed_session(&pool, "s_ensure").await;
+    galley
+        .set_pref_json(
+            "ga_config",
+            serde_json::json!({
+                "gaPath": bridge.path().to_str().unwrap(),
+                "bridgeCwd": bridge.path().to_str().unwrap(),
+                "python": python,
+            }),
+        )
+        .await
+        .expect("seed ga_config");
+    let mgr = RunnerManager::new();
+    let host = RunnerHost {
+        galley: &galley,
+        runner: &mgr,
+        notifier: galley_core_lib::notify::NullNotifier::arc(),
+        env: None,
+    };
+    let options = || EnsureOptions {
+        via: "gui",
+        active_session_id: None,
+        llm_override: None,
+        ga_config: None,
+    };
+
+    let (a, b) = tokio::join!(
+        ensure_session_runner(&host, "s_ensure", options()),
+        ensure_session_runner(&host, "s_ensure", options()),
+    );
+    let (a, b) = (a.expect("first"), b.expect("second"));
+    assert_eq!(a.pid, b.pid);
+    assert_ne!(a.spawned, b.spawned);
+    assert_eq!(
+        mgr.live_runners().await,
+        vec![("s_ensure".to_string(), a.pid)]
+    );
+
+    // Once the runner has reported, an ensure hands its state out.
+    let mut snapshot = None;
+    for _ in 0..100 {
+        snapshot = mgr.ready_snapshot("s_ensure").await;
+        if snapshot.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(snapshot.is_some(), "mock runner reported ready");
+    let again = ensure_session_runner(&host, "s_ensure", options())
+        .await
+        .expect("third");
+    assert!(!again.spawned);
+    assert_eq!(again.pid, a.pid);
+    assert_eq!(again.ready.expect("snapshot").llm_name, "mock-llm");
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}

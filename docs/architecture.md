@@ -89,6 +89,31 @@ Galley Core lives in `core/`. It owns:
 This is the authoritative layer. New write behavior should be modeled here
 first, then exposed to GUI and CLI.
 
+#### Who starts a session runner
+
+Core does, through one path: **ensure a runner**
+([`core/src/session_runner`](../core/src/session_runner/mod.rs), since
+2026-10-10). It returns the runner Core already holds for the session or
+resolves spawn arguments from the session row and prefs and starts one —
+single-flight per session, and never over a live runner
+(`RunnerManager::spawn` shuts an existing one down first, which would kill
+its run). The GUI calls it through the Tauri command
+`ensure_session_runner` when it activates a session; Goal dispatch through
+the socket layer's wrapper; socket `session.new` uses its spawn half
+(`spawn_and_attach`) for the session it just created. Every runner started
+this way gets the `runner-event` emit task, the auto-title watcher and a
+`runner-spawned-external` broadcast, so a page that did not ask attaches
+too. Before this, the GUI assembled spawn arguments in TypeScript and
+called `spawn_runner`, which now only serves its LLM-list warmup (a runner
+with no session).
+
+Each runner keeps a **ready snapshot** — its latest `ready`, folded with
+later `llm_changed` / `reasoning_effort_changed` — which Core hands to a
+page that attaches after `ready` went by (`ensure_session_runner`,
+`list_live_runners`). History replay into a fresh runner is still sent by
+the GUI on the real `ready` event; moving it into the same path is ticket
+02b (`.scratch/ios-client/issues/02-core-send-takeover.md`).
+
 #### Runner events and turn persistence
 
 Each runner's stdout becomes a broadcast inside Core, with two kinds of
@@ -103,8 +128,8 @@ subscribers:
   both, so a run's rows are in SQLite before its `run_complete` closes the
   run gate.
 - **Presentation subscribers**: the `runner-event` emit task (GUI pages)
-  and the auto-title watcher. Nothing durable depends on a page receiving
-  an event.
+  and the auto-title watcher, both attached by the ensure path above.
+  Nothing durable depends on a page receiving an event.
 
 The GUI renders, flags unread (only it knows which session is on screen;
 `mark_session_unread`) and notifies. Until 2026-10-07 the assistant row and

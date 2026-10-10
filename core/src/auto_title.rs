@@ -13,16 +13,24 @@
 //!       zero GUI-side changes.
 //!
 //! Failure at any step is silent by design: the session simply keeps its
-//! current title and the next run_complete retries. v1 scope: attached on
-//! the GUI spawn path only (`runner_commands::spawn_runner`) — socket
-//! spawns keep `HandlerCtx`'s narrow `RunnerPort` seam untouched, and
-//! CLI / Goal sessions carry real titles by contract anyway.
+//! current title and the next run_complete retries.
+//!
+//! Scope (2026-10-10, ticket 02a): attached to every runner Core starts
+//! for a session — the shared path in [`crate::session_runner`] (GUI
+//! activation, Goal dispatch, socket `session.new`) and the legacy GUI
+//! `runner_commands::spawn_runner` (LLM warmup). The earlier GUI-only
+//! scope assumed CLI / Goal sessions carry real titles; they do not:
+//! `session.new` seeds the default title `新对话`, and most agent-created
+//! sessions ended up with a truncated first message instead. The cost is
+//! one short model call after an agent-created session's first finished
+//! run. A `user` title is never touched (the CAS only replaces `seed` /
+//! `derived`).
 
 use crate::api::{SessionBrief, SessionId};
 use crate::db::SqliteGalley;
 use crate::ipc::{GenerateTitleCommand, IpcCommand, IpcEvent, RunCompleteEvent};
 use crate::notify::Notifier;
-use crate::runner_manager::{BroadcastItem, RunnerManager};
+use crate::runner_manager::{BroadcastItem, RunnerCommandSink};
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -55,7 +63,7 @@ fn truncate_chars(s: &str, max_chars: usize) -> String {
 
 pub(crate) fn spawn_auto_title_task(
     galley: SqliteGalley,
-    manager: Arc<RunnerManager>,
+    runner: Arc<dyn RunnerCommandSink>,
     notifier: Arc<dyn Notifier>,
     session_id: String,
     mut rx: broadcast::Receiver<BroadcastItem>,
@@ -82,7 +90,7 @@ pub(crate) fn spawn_auto_title_task(
                             first_user_message: truncate_chars(&first, TITLE_CONTEXT_MAX_CHARS),
                             final_answer: (!final_answer.is_empty()).then_some(final_answer),
                         });
-                        if let Err(e) = manager.send_command(&session_id, &cmd).await {
+                        if let Err(e) = runner.send_command(&session_id, &cmd).await {
                             eprintln!("[auto-title {session_id}] send generate_title: {e}");
                         }
                     }

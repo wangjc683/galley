@@ -2,15 +2,19 @@
 //! message, then spawn a runner and dispatch that first message. The DB writes commit together; runner
 //! failures after commit surface as `runner_error` so callers know the
 //! delegated task did not actually start.
+//!
+//! Spawn arguments and the spawn itself go through Core's shared runner
+//! path ([`crate::session_runner`]: `resolve_spawn_args`,
+//! `spawn_and_attach`), so the runner gets the same emit task, auto-title
+//! watcher and `runner-spawned-external` broadcast as every other
+//! Core-started runner. The failure narration and messages below are
+//! this command's own and unchanged.
 
-use super::common::{map_galley_err, origin_from_args};
+use super::common::{map_galley_err, origin_from_args, SocketResponseLite};
 use super::llm_cmds::resolve_llm_selection;
-use super::session_cmds::{
-    emit_user_message_persisted, mint_session_id, RunnerSpawnedExternalPayload,
-    SessionExternalPayload,
-};
-use super::spawn_config::spawn_args_for_session_new;
+use super::session_cmds::{emit_user_message_persisted, mint_session_id, SessionExternalPayload};
 use super::*;
+use crate::session_runner::{resolve_spawn_args, spawn_and_attach, AttachError, SpawnRequest};
 
 /// Default title for `session.new` — matches the GUI's localized seed
 /// so a CLI-created row + a GUI-created row look identical in the
@@ -112,19 +116,26 @@ async fn dispatch_session_new_inner(
     };
 
     let id = mint_session_id();
-    let spawn_args = match spawn_args_for_session_new(
+    let spawn_args = match resolve_spawn_args(
         &galley,
-        ctx.app,
-        &id,
-        project_id.as_deref(),
-        llm_selection.index,
-        llm_selection.key.clone(),
-        target_runtime_kind,
+        ctx.spawn_env(),
+        SpawnRequest {
+            session_id: &id,
+            project_id: project_id.as_deref(),
+            runtime_kind: target_runtime_kind,
+            llm_index: llm_selection.index.map(i64::from),
+            llm_key: llm_selection.key.clone(),
+            reasoning_effort: None,
+            ga_config: None,
+        },
     )
     .await
     {
         Ok(args) => args,
-        Err(resp) => return resp.with_request_id(request_id),
+        Err(e) => {
+            return SocketResponseLite::from_session_runner(e, command_name)
+                .with_request_id(request_id)
+        }
     };
 
     let input = CreateSessionInput {
@@ -178,9 +189,19 @@ async fn dispatch_session_new_inner(
         },
     );
 
-    let pid = match ctx.runner.spawn(spawn_args, Some(&brief.id.0)).await {
-        Ok(pid) => pid,
-        Err(e) => {
+    // Spawn + subscribe + emit task + auto-title watcher, then
+    // `runner-spawned-external` (the event order is part of the GUI
+    // contract: created → runner up → message narration).
+    match spawn_and_attach(
+        &ctx.runner_host(&galley),
+        spawn_args,
+        Some(&brief.id.0),
+        command_name,
+    )
+    .await
+    {
+        Ok(_pid) => {}
+        Err(AttachError::Spawn(e)) => {
             emit_user_message_persisted(ctx, &brief.id.0, &msg, "spawn_failed");
             return SocketResponse::err(
                 request_id,
@@ -188,25 +209,15 @@ async fn dispatch_session_new_inner(
                 format!("{command_name} runner spawn: {e}"),
             );
         }
-    };
-
-    let Some(rx) = ctx.runner.subscribe(&brief.id.0).await else {
-        emit_user_message_persisted(ctx, &brief.id.0, &msg, "spawn_failed");
-        return SocketResponse::err(
-            request_id,
-            ErrorTag::RunnerError,
-            format!("{command_name} runner subscribe failed after spawn"),
-        );
-    };
-    ctx.notify(
-        "runner-spawned-external",
-        &RunnerSpawnedExternalPayload {
-            session_id: brief.id.0.clone(),
-            pid,
-            via: command_name,
-        },
-    );
-    spawn_emit_task(ctx.notifier.clone(), brief.id.0.clone(), rx);
+        Err(AttachError::SubscribeFailed) => {
+            emit_user_message_persisted(ctx, &brief.id.0, &msg, "spawn_failed");
+            return SocketResponse::err(
+                request_id,
+                ErrorTag::RunnerError,
+                format!("{command_name} runner subscribe failed after spawn"),
+            );
+        }
+    }
 
     match ctx
         .runner

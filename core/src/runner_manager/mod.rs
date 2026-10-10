@@ -23,6 +23,7 @@
 //! - [`manager`]: the multi-session orchestrator (keyed by `session_id`) with
 //!   LRU eviction
 //! - [`error`]: typed errors for spawn / send / shutdown paths
+//! - [`ready`]: the per-runner cache of the latest `ready` report
 //!
 //! ## Lifetime contract (B2-I6 / invariants.md I11)
 //!
@@ -35,8 +36,12 @@ pub mod error;
 pub mod manager;
 pub mod process;
 pub mod queue;
+pub mod ready;
 
 pub use error::{RunnerSpawnError, SendCommandError, ShutdownError};
-pub use manager::{RunSignal, RunState, RunnerManager, SpawnArgs};
+pub use manager::{
+    RunSignal, RunState, RunnerCommandHandle, RunnerCommandSink, RunnerManager, SpawnArgs,
+};
 pub use process::{BroadcastItem, RunnerProcess};
 pub use queue::{QueueJump, QueueOffer, RunKind, RunOutcome};
+pub use ready::ReadySnapshot;

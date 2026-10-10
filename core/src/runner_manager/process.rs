@@ -6,6 +6,7 @@
 use crate::ipc::{IpcCommand, IpcEvent};
 use crate::process_command;
 use crate::runner_manager::error::{RunnerSpawnError, SendCommandError};
+use crate::runner_manager::ready::{self, ReadySnapshot};
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
@@ -62,7 +63,7 @@ pub enum BroadcastItem {
 /// ([`gui/src/lib/bridge.ts`]) so a 1:1 port is achievable in B2 M2. The
 /// caller (Tauri command handler) is responsible for resolving the bundled-
 /// vs-external Python question and supplying the right `python` path.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpawnArgs {
     /// Path to the Python interpreter. Caller decides whether this is the
     /// bundled `$RESOURCE/python/bin/python3` or a user-supplied external
@@ -123,6 +124,10 @@ pub struct RunnerProcess {
     /// [`RunnerManager::live_runners`](super::manager::RunnerManager::live_runners)
     /// tell a crashed runner from a live one.
     closed: Arc<AtomicBool>,
+    /// The runner's latest `ready`, folded with later `llm_changed` /
+    /// `reasoning_effort_changed` ([`super::ready`]). Written by the
+    /// stdout reader before it broadcasts the event; cleared on exit.
+    ready: Arc<std::sync::Mutex<Option<ReadySnapshot>>>,
     /// Rolling buffer of the last [`STDERR_TAIL_MAX`] stderr lines. Used to
     /// surface "bridge died with this Python error" toasts on abnormal exit
     /// (the prod-build failure mode hit 2026-05-15 on first .dmg dogfood,
@@ -244,6 +249,8 @@ impl RunnerProcess {
         let agent_running = Arc::new(AtomicBool::new(false));
         let expected_close = Arc::new(AtomicBool::new(false));
         let closed_flag = Arc::new(AtomicBool::new(false));
+        let ready_cache: Arc<std::sync::Mutex<Option<ReadySnapshot>>> =
+            Arc::new(std::sync::Mutex::new(None));
         let stderr_tail = Arc::new(Mutex::new(VecDeque::with_capacity(STDERR_TAIL_MAX)));
         let child = Arc::new(Mutex::new(child));
 
@@ -257,6 +264,7 @@ impl RunnerProcess {
             let child = child.clone();
             let expected_close = expected_close.clone();
             let closed_flag = closed_flag.clone();
+            let ready_cache = ready_cache.clone();
             let sid_for_log = args.session_id.clone();
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stdout).lines();
@@ -277,6 +285,10 @@ impl RunnerProcess {
                                         }
                                         _ => {}
                                     }
+                                    // Fold before the broadcast: whoever
+                                    // has seen the event can rely on the
+                                    // snapshot already carrying it.
+                                    ready::fold(&mut lock_ready(&ready_cache), &event);
                                     BroadcastItem::Event(Box::new(event))
                                 }
                                 Err(_) => BroadcastItem::Malformed(line),
@@ -330,6 +342,7 @@ impl RunnerProcess {
                         },
                     }
                 };
+                *lock_ready(&ready_cache) = None;
                 closed_flag.store(true, Ordering::SeqCst);
                 let _ = tx.send(closed);
             });
@@ -363,6 +376,7 @@ impl RunnerProcess {
             agent_running,
             expected_close,
             closed: closed_flag,
+            ready: ready_cache,
             stderr_tail,
         })
     }
@@ -381,6 +395,15 @@ impl RunnerProcess {
     /// though the manager may still hold this entry.
     pub fn has_closed(&self) -> bool {
         self.closed.load(Ordering::SeqCst)
+    }
+
+    /// The runner's latest `ready` state ([`super::ready`]). `None` before
+    /// the first `ready` and once the child has exited.
+    pub fn ready_snapshot(&self) -> Option<ReadySnapshot> {
+        if self.has_closed() {
+            return None;
+        }
+        lock_ready(&self.ready).clone()
     }
 
     /// Subscribe to the broadcast channel. Each subscriber gets its own
@@ -507,6 +530,16 @@ impl RunnerProcess {
         let mut child = self.child.lock().await;
         child.wait().await
     }
+}
+
+/// The ready cache is only ever held for a clone or an in-place fold, so
+/// a poisoned lock still holds a consistent value — keep using it.
+fn lock_ready(
+    cache: &std::sync::Mutex<Option<ReadySnapshot>>,
+) -> std::sync::MutexGuard<'_, Option<ReadySnapshot>> {
+    cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn exit_signal(status: &ExitStatus) -> Option<i32> {

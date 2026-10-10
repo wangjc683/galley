@@ -127,3 +127,28 @@ dev 模式两端 Python 是否一致；外置模式 `pendingLLMIndex` 语义；`
   该会话 `runnerAlive: false`；`goal start` 问暗号 → 回答「当前可见对话中没有暗号记录。不知道。」。GA 记忆里没有写入暗号（`memory/` 无匹配），
   排除凭记忆作答的干扰。坐实：Goal 冷启动在空历史上开工。测试会话 `s-mv0sqb9j-5l4w0q5e` 已归档，Galley 已退出恢复原状。
   顺带：退出后 IM 渠道进程短暂存活，几秒内被 `GALLEY_CORE_PID` 看门狗清掉，不是孤儿。
+- 2026-10-10 02a 完成（执行代理，worktree `ios-02a-ensure-runner`，未提交）。
+  - 实现：共享模块 `core/src/session_runner/`——`ensure_session_runner`（按会话单飞；临界区内先看 `live_pid`，活着就返回 pid 与 ready 快照，
+    绝不在存活 runner 上 spawn）、`spawn_and_attach`（spawn → subscribe → emit task → 自动标题 watcher → `runner-spawned-external`）、
+    `spawn_config.rs`（两套参数解析合一，GUI 规则优先）。错误用 `SessionRunnerError`；socket 层在 `common.rs` 的
+    `SocketResponseLite::from_session_runner` 逐字节还原旧 tag 与文案（`core/tests/session_runner_test.rs` 钉住），Goal 记录的失败文案也不变。
+    `socket_listener/spawn_config.rs` 删除；socket `session new` 与 Goal 派发都走共享模块。
+  - ready 缓存：`core/src/runner_manager/ready.rs`，stdout 读取任务在广播前折叠 `ready` / `llm_changed` / `reasoning_effort_changed`，
+    子进程退出即清空。`list_live_runners` 每行加 `ready`（只加字段）；新 Tauri 命令 `ensure_session_runner` 返回
+    `{ pid, spawned, ready }`，`spawned: false` 时带快照。GUI 用 `applyReadySnapshot` 只更新 store，不触发回放。
+  - `RunnerPort` 只加默认方法：`live_pid`（排除已崩溃仍登记的 runner）、`ready_snapshot`、`command_sink`（自动标题 watcher 的窄 trait
+    `RunnerCommandSink`）。既有假实现不用改。自动标题 watcher 挂到所有 Core 拉起的 runner，模块注释已改写。
+  - GUI：`activateSession` 的 spawn 分支改调 `runtimeStore.ensureSessionRunner`（先挂监听再 invoke）；`spawnBridge` 动作删除，
+    `warmupLLMList` 仍用 `spawn_runner`。自己的 ensure 进行中收到 `runner-spawned-external` 时复用 `_attachesInFlight` 去重；
+    `spawned: false` 立即置 connected，不等 ready。`attachExternalBridge` / `reattachLiveRunners` 用快照补模型列表。
+  - Python 别名表一致性：共享 fixture `core/tests/fixtures/python-aliases.json`，cargo 与 vitest 各断言一遍。
+  - 偏离：（1）Tauri 命令多一个过渡参数 `gaConfig`：`setGAConfig` 先改内存再写库、写失败只告警（`gui/src/stores/prefs.ts:407`、`:419`），
+    GUI 可能持有未落库的 gaConfig，故按票面允许的过渡方案传内存值；等 Settings 写入经 Core 后删掉。（2）GUI 今天从不传
+    `activeSessionId`（`gui/src/lib/bridge.ts:198-209`），保持不传，socket 仍保护自身；代价是全部其他 runner 都在跑时 LRU 会回收刚拉起的
+    这个，原样保留。（3）Rust 的路径判定对齐 TS（`C:python` 直通、`1:\x` 不直通）。（4）Tauri 命令对 `NotFound` 的会话行最多等 1 秒，
+    兜住 `createSession` 的火后不管写入（`useMessageSend.ts:156` 建会话后立即激活）。（5）socket `ensure` 遇到已崩溃仍登记的 runner 会重拉
+    （旧实现只看 `pid`，会直接向死进程派发）。
+  - 留给 02b：回放仍由 GUI 在真实 `ready` 上发（`ipc-handlers.ts` 未动）；`ensure_session_runner` 的 `spawned: true` 分支是挂 Core 回放的位置；
+    发送路径对已存活 runner 仍会经 `ensureHistoryReplayComplete` 回放一次（与今天的 attach 路径相同）；Goal 冷启动 bug 未修。
+  - 验证：cargo test --workspace 627 通过 0 失败（基线 604 / 0）；vitest 934 / 0（基线 906 / 0）；typecheck、lint、三个门禁脚本、
+    `git diff --check` 通过。未真机 dogfood。

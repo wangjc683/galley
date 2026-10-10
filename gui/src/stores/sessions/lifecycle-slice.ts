@@ -130,13 +130,16 @@ export interface SessionLifecycleSlice {
   /**
    * Orchestrator: refresh the active session pointer, lazy-init the
    * runtime + messages slots, restore SQLite turns on first touch,
-   * and auto-spawn the bridge when the session has no live one.
+   * and make sure the session has a runner this page listens to.
    *
    * Spans three slices (sessions / runtime / messages) — kept here
    * because sessionsStore owns the active id and is the natural
    * entry point for "switch to this session" UX events.
    *
-   * Reads `prefsStore.gaConfig` for the spawn args.
+   * The runner comes from Core's `ensure_session_runner` (ticket 02a):
+   * Core resolves the spawn arguments from the session row and prefs.
+   * This page only adds the EmptyState picker's pending model and its
+   * in-memory `prefsStore.gaConfig` (transitional, see the command).
    */
   activateSession: (id: string) => Promise<void>;
   /** Synchronous create — returns the new id for chaining. Rust write
@@ -345,12 +348,12 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
         get().setActiveSession(id);
       }
     }
-    // Step 5: auto-spawn the bridge when this session has no live
-    // one. Re-spawn on `closed` / `error` lets a kill or crash
-    // recover by simply re-clicking the session. `closed` is also
-    // how the LRU governor signals "suspended" — re-activation
-    // regenerates the bridge and the IPC `ready` handler replays
-    // SQLite history.
+    // Step 5: make sure the session has a runner when this page holds
+    // no live bridge for it. Re-ensuring on `closed` / `error` lets a
+    // kill or crash recover by simply re-clicking the session. `closed`
+    // is also how the LRU governor signals "suspended" — re-activation
+    // regenerates the runner and the IPC `ready` handler replays SQLite
+    // history.
     const bridgeStatus =
       useRuntimeStore.getState().byId[id]?.bridgeStatus ?? "idle";
     const hasBridgeClient = useRuntimeStore.getState().hasBridgeClient(id);
@@ -361,18 +364,19 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       (bridgeStatus === "connected" && !hasBridgeClient);
     // This page holding no bridge does not mean Core holds none: after
     // a webview reload (or a dev HMR, or a CLI spawn whose event this
-    // page missed) the runner is still alive and may be mid-run.
-    // Spawning would shut it down first (RunnerManager::spawn) — killing
-    // the run — so attach to it instead.
+    // page missed) the runner is still alive and may be mid-run. Core's
+    // ensure below never replaces a live runner either; attaching here
+    // first additionally restores a running session's history before
+    // its live events land and shows it as running.
     const attachedLive =
       needsBridge && (await useRuntimeStore.getState().attachLiveRunner(id));
     const needsSpawn = needsBridge && !attachedLive;
     if (needsSpawn) {
-      // Project = pure grouping. We deliberately do NOT inject the
-      // project's rootPath as the bridge cwd here — doing so would
-      // chdir away from the GA install dir and silently break GA's
-      // relative `./memory/...` reads (memory_management_sop, any
-      // user SOP, etc.). See devlog 2026-05-14 rootPath rollback.
+      // Project = pure grouping: Core passes a workspace-enabled
+      // project's root as `--workspace-root`, never as the GA cwd —
+      // chdir-ing away from the GA install dir would silently break
+      // GA's relative `./memory/...` reads (devlog 2026-05-14 rootPath
+      // rollback).
       //
       // EmptyState's inline LLM picker stashes `pendingLLMIndex`
       // because there was no live bridge to set_llm against. Apply
@@ -391,41 +395,24 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       if (pendingLLMIndex !== undefined) {
         useRuntimeStore.setState({ pendingLLMIndex: undefined });
       }
-      // Restore the persisted LLM choice on spawn. Without this a
-      // fresh session created after the user switched models still
-      // boots the bridge with mykey.py's default, and a respawned
-      // historical session loses its own `set_llm` history. Pending
-      // pick (Empty State LLM picker) wins when present because the
-      // user just made a fresh choice.
-      const restoredLlmIndex =
-        !consumePending && !session?.selectedLlmKey
-          ? session?.selectedLlmIndex
-          : undefined;
-      const restoredLlmKey = !consumePending
-        ? session?.selectedLlmKey
-        : undefined;
-      // prefsStore is a leaf in the slice DAG (AD-09) — no cycle
-      // concern with the cross-store static import block at the
-      // top of this file.
-      const gaConfig = usePrefsStore.getState().gaConfig;
-      const workspaceProject = session?.projectId
-        ? get().projects.find((p) => p.id === session.projectId)
-        : undefined;
-      const workspaceRoot =
-        workspaceProject?.workspaceEnabled && workspaceProject.rootPath
-          ? workspaceProject.rootPath
-          : undefined;
+      // Without a pending pick Core starts the runner on the session
+      // row's persisted choice (its stable key, else its index), so a
+      // fresh session keeps the model the user switched to and a
+      // respawned one keeps its own `set_llm` history. A pending pick
+      // (Empty State LLM picker) wins when present because the user just
+      // made a fresh choice.
       const spawnStartedAt = perfNow();
-      await useRuntimeStore.getState().spawnBridge({
-        ...gaConfig,
+      await useRuntimeStore.getState().ensureSessionRunner({
         sessionId: id,
-        cwd: undefined,
-        workspaceRoot,
-        llmIndex: consumePending ? pendingLLMIndex : restoredLlmIndex,
-        llmKey: consumePending ? session?.selectedLlmKey : restoredLlmKey,
-        runtimeKind,
+        ...(consumePending
+          ? { llmIndex: pendingLLMIndex, llmKey: session?.selectedLlmKey }
+          : {}),
+        // prefsStore is a leaf in the slice DAG (AD-09) — no cycle
+        // concern with the cross-store static import block at the top
+        // of this file.
+        gaConfig: usePrefsStore.getState().gaConfig,
       });
-      logPerf("sessions.activateSession.spawnBridge", spawnStartedAt, {
+      logPerf("sessions.activateSession.ensureRunner", spawnStartedAt, {
         sessionId: id,
         runtimeKind,
       });
@@ -435,8 +422,8 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       hasHistory,
       needsSpawn,
     });
-    // Already alive — runtimeStore.spawnBridge internally LRU-touches
-    // on each call, so the alive-bridge branch is now a no-op here.
+    // Already alive — runtimeStore.ensureSessionRunner internally
+    // LRU-touches on each call, so the alive-bridge branch is a no-op.
   },
 
   createSession: (projectId) => {
